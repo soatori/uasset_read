@@ -21,7 +21,11 @@ def _properties_by_name(properties: list[Any]) -> dict[str, Any]:
 
 def _size(value: Any) -> dict[str, int] | None:
     if isinstance(value, dict):
-        x, y = value.get("X", value.get("x")), value.get("Y", value.get("y"))
+        fields = value
+    else:
+        fields = getattr(value, "fields", None)
+    if isinstance(fields, dict):
+        x, y = fields.get("X", fields.get("x")), fields.get("Y", fields.get("y"))
     else:
         x, y = getattr(value, "X", None), getattr(value, "Y", None)
     if isinstance(x, int) and isinstance(y, int):
@@ -85,7 +89,7 @@ def build_property_metadata(
     elif class_name == "Texture2D":
         imported_size = _size(values.get("ImportedSize"))
         if imported_size is not None:
-            data["imported_size"] = imported_size
+            project("imported_size", imported_size)
         for property_name, field_name in (
             ("CompressionSettings", "compression_settings"),
             ("SRGB", "srgb"),

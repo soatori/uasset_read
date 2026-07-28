@@ -7,6 +7,9 @@ import struct
 from types import SimpleNamespace
 
 from uasset_read.archive import ByteArchive
+from uasset_read.constants import PKG_UnversionedProperties
+from uasset_read.ir_builder import _build_export_ir
+from uasset_read.models.properties import PropertyValue, StructValue
 from uasset_read.parsers import property_parser
 from uasset_read.parsers.asset_types import PropertyMetadataHandler
 from uasset_read.parsers.asset_types.property_metadata import build_property_metadata
@@ -81,6 +84,45 @@ def test_asset_handler_runs_once_after_property_loop(monkeypatch) -> None:
     )
 
     assert calls == ["Material"]
+
+
+def test_unversioned_asset_handler_runs_once_with_complete_properties(monkeypatch) -> None:
+    """Unversioned properties converge on the same single handler dispatch."""
+    calls: list[tuple[str, list[PropertyValue]]] = []
+    export = SimpleNamespace(
+        serial_offset=0,
+        serial_size=8,
+        class_index=1,
+        object_name="T_Unversioned",
+    )
+    summary = SimpleNamespace(
+        file_version_ue5=1000,
+        package_flags=PKG_UnversionedProperties,
+    )
+    monkeypatch.setattr(
+        "uasset_read.serializers.object_resources.resolve_class_name",
+        lambda *_: "Texture2D",
+    )
+    monkeypatch.setattr(
+        property_parser,
+        "_try_asset_type_handler",
+        lambda _export, _archive, _names, class_name, **kwargs: calls.append(
+            (class_name, kwargs["parsed_properties"])
+        ),
+    )
+
+    properties = property_parser.parse_properties_from_export(
+        export,
+        ByteArchive(b"opaque!!"),
+        summary,
+        [],
+        [],
+        import_map=[object()],
+    )
+
+    assert len(properties) == 1
+    assert properties[0].type == "UnversionedOpaque"
+    assert calls == [("Texture2D", properties)]
 
 
 def test_ue5_property_metadata_uses_only_serialized_values() -> None:
@@ -266,6 +308,91 @@ def test_standard_json_recursively_removes_raw_asset_type_payloads() -> None:
     }
     assert "raw_bytes" not in json.dumps(metadata)
     assert "raw_data" not in json.dumps(metadata)
+
+
+def test_struct_value_imported_size_reaches_public_json_as_partial_metadata() -> None:
+    reset_class_registry()
+    try:
+        export = SimpleNamespace(
+            object_name="T_RuntimeShape",
+            object_class="Texture2D",
+            serial_offset=10,
+            serial_size=50,
+            properties=[
+                PropertyValue(
+                    name="ImportedSize",
+                    type="StructProperty",
+                    value=StructValue(
+                        struct_type="IntPoint",
+                        fields={"X": 512, "Y": 256},
+                    ),
+                ),
+            ],
+            graphs=[],
+            parse_status="opaque",
+            fallback_reason="opaque_payload:Texture2D",
+            error_message=None,
+            custom_data={},
+        )
+        archive = ByteArchive(b"\0" * 100)
+        archive.seek(40)
+
+        property_parser._try_asset_type_handler(
+            export,
+            archive,
+            [],
+            "Texture2D",
+            parsed_properties=export.properties,
+        )
+        result = SimpleNamespace(
+            blueprint=None,
+            linker=None,
+            import_map=[],
+            export_map=[],
+        )
+        export_ir = _build_export_ir(0, export, result)
+        header = SimpleNamespace(
+            package_name="/Game/T_RuntimeShape",
+            package_class="Texture2D",
+            package_flags=0,
+            total_export_count=1,
+            total_import_count=0,
+            ue_version="5.7",
+            saved_hash=None,
+            total_properties=1,
+            total_name_entries=0,
+        )
+        ir = SimpleNamespace(
+            header=header,
+            diagnostics_data=None,
+            exports=[export_ir],
+            import_map=[],
+            name_map_entries=[],
+            name_map=(),
+            blueprint=None,
+            decompiled_functions=[],
+            execution_chains=[],
+            variables=[],
+            dependencies=None,
+            logic_sources=[],
+            diagnostics=[],
+            animation=None,
+            debug=None,
+            function_graphs=[],
+            statistics={},
+        )
+
+        rendered = json.loads(JSONRenderer().render(ir, RenderOptions()))
+        rendered_export = rendered["exports"][0]
+
+        assert rendered_export["parse_status"] == "partial_metadata"
+        assert rendered_export["asset_type_data"]["parse_status"] == "partial_metadata"
+        assert rendered_export["asset_type_data"]["imported_size"] == {
+            "x": 512,
+            "y": 256,
+        }
+    finally:
+        reset_class_registry()
 
 
 def test_legacy_sound_cue_function_never_reads_a_native_prefix() -> None:
