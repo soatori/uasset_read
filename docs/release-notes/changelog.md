@@ -1,5 +1,66 @@
 # Changelog
 
+## [0.5.4.45] — 2026-07-23
+
+Major release since v0.5.3.23 — comprehensive code quality, security hardening, and feature expansion.
+
+### Breaking Changes
+- Removed `--text` format and TextRenderer — use `--markdown` instead
+- Removed `--cpp-skeleton`, `--blueprint-text`, `--blueprint-ue-text`, `--summary` CLI flags
+- Removed `_compat.py` deprecated export mappings (415→20 lines)
+- Removed `core.py` dead code (368 lines, shadowed by `core/` package)
+
+### New Features
+- 28+ asset type handlers: DataTable, UCurveTable, USkeleton, USoundCue, ULevelSequence, etc. (#166, #193-#206)
+- AnimBlueprint/AnimMontage/AnimSequence full support
+- CFG structured output (#265), Git textconv integration (#266)
+- HexView debugging system (#182, #268)
+- JSON Schema versioning (#267), import_map/name_map/resolved_name in JSON (#510)
+- Standard mode: Pin dedup + Diagnostics folding (~17% size reduction) (#435)
+- BPGC bytecode extraction with confidence metrics (#426)
+- UE4 Legacy asset versions support (#397)
+- World Partition import hashed path normalization
+- Lazy raw-byte retention, ResourceBudget live runtime ownership
+- `--full-parse` CLI flag, `--log-level off` support
+
+### Security & Memory
+- Decompression bomb prevention (ratio cap + output size limit)
+- IoStore resource limits, cycle detection, depth limits
+- usmap/mappings recursion depth limit, ResourceBudget protection
+- Process RSS monitoring, parser checkpoints, memory strategy modes
+- Kismet recursion constraints, batch worker process isolation
+- #108: Memory safety audit — file handle leak and cache growth fixes
+- #389: Linker/IOStore/PAK security fixes
+- #399: FileSystemPackageProvider root containment + PackageArchive short-read validation
+
+### Bug Fixes
+- #341: PropertyTag type tree parsing per UE5 version, recovery scan, window-end rejection
+- #422: LevelSequence tagged properties path
+- #423: Batch failure traceback logging
+- #424: Fake EExprToken heuristic filtering
+- #425-#429: PropertyTag recovery enhancements (unknown bits, scan window, size_exceeded)
+- #426: BPGC bytecode extraction format and clamp fixes
+- #427: Graph node script_serial tolerance
+- #248: SubGraphs support, hardcoded hack removal, DFS cycle detection
+- #249: Pin ID normalization, start event name path handling
+- #250: get_full_name recursion, Kismet EX_NameConst alignment
+- #286: UEdGraph offset reading — SKIP_CLASS_PREFIXES cleanup
+- #243: CPF_* property flags aligned with UE ObjectMacros.h
+- #244-#246: Pak/IoStore binary format alignment
+- #172: BlueprintVariable.var_type extraction
+- #175: Non-blueprint asset JSON, package_name, BoxSphereBounds
+- #315: Unified status model — heuristic recovery degradation, warnings propagation
+- #32: Status model boundary conditions — partial export affects package level
+- #381-#415: Various archive, serialization, batch, and CLI fixes
+
+### Improvements
+- Dead code cleanup: -790 lines (core.py, _compat.py, sanitize_identifier consolidation)
+- Test suite streamlined: 249→38 files, 4098→100 test cases
+- 235 new integration tests (coverage 28% → 50%)
+- Unified log management with RotatingFileHandler (#323, #373)
+- All Chinese source text translated to English (#465)
+- Complete P0 documentation: FPropertyTag, UPROPERTY, CDO, K2Node reference
+
 ## [0.5.4.44] — 2026-07-19
 
 Code quality, report quality, and test consolidation release.
