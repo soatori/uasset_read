@@ -4,7 +4,7 @@
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
-> 📦 **v0.5.4** — Zero runtime dependencies · Python 3.10+ · 181 source files · 28 asset types
+> 📦 **v0.5.5** — Zero runtime dependencies · Python 3.10+ · 183 source files · 28 asset types
 
 ## Why uasset_read?
 
@@ -22,9 +22,9 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 |--------|-------|
-| Version | 0.5.4 |
+| Version | 0.5.5 |
 | Source | Python parser for Unreal Engine .uasset files |
-| Modules | 181 source files across 21 subpackages |
+| Modules | 183 source files across 20 subpackages |
 
 ## Features
 
@@ -240,6 +240,7 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | FArchive | `archive.py` | Binary reader with byte swapping, mmap |
 | Constants | `constants.py` | Version numbers, property type thresholds, CPF/PropertyTag flags |
 | Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
+| Config | `config.py` | `ParseConfig`, `LogConfig` dataclasses |
 | Main Parser | `parse_uasset.py` | `parse_package()`, `parse_uasset()`, `parse_uasset_with_linker()` |
 | Core API | `core/` | `parse_single()`, `parse_batch()`, `diff_single()`, `list_formats()` |
 | Package Mgmt | `package.py` | `PackageBundle`, `PackageProvider` (filesystem/Pak/IoStore) |
@@ -254,7 +255,9 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | Batch Worker | `batch_worker.py` | Subprocess-isolated per-asset batch worker |
 | Providers | `providers.py` | GameDirectoryProvider for game asset scanning |
 | Project Logging | `project_logging.py` | Structured logging with rotation |
+| Report Summary | `report_summary.py` | Structured batch summary generation |
 | Debug | `debug/hex_view.py` | HexView debug system for binary field inspection |
+| **Pipeline** | `pipeline/` | Parsing pipeline orchestration: stages, memory, error handling |
 | **IR** | `ir_builder.py` | Package-level intermediate representation builder |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult, Status, Diagnostics |
@@ -270,7 +273,6 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing, compression, AES decryption |
 | **IoStore** | `iostore/` | IoStore container reader, Chunk ID, offset/size structures |
 | **Bulk Data** | `bulk/` | BulkData header parsing, flag definitions |
-| **UObject** | `objects/` | UObject type system, type registry, export types (StaticMesh/SkeletalMesh/Texture2D/Material/MaterialInstance) |
 | **Renderers** | `renderers/` | Pluggable IRenderer ABC with format registry (JSON, Markdown) |
 
 ## Testing
