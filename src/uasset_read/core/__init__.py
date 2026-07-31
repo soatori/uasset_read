@@ -457,7 +457,6 @@ def parse_batch(
     if output_dir is None:
         output_dir = str(input_path / "output")
     output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
 
     result = BatchResult(total=len(package_files))
     policy = memory_policy or MemoryPolicy()
@@ -469,6 +468,24 @@ def parse_batch(
         extension = ".md"
     else:
         extension = f".{format}"
+
+    output_files = {pf: output_path / f"{pf.stem}{extension}" for pf in package_files}
+    output_collisions: dict[Path, list[Path]] = {}
+    for pf, out_file in output_files.items():
+        output_collisions.setdefault(out_file, []).append(pf)
+    colliding_outputs = {
+        out_file: inputs
+        for out_file, inputs in output_collisions.items()
+        if len(inputs) > 1
+    }
+    if colliding_outputs:
+        details = "; ".join(
+            f"{out_file}: {', '.join(str(pf) for pf in inputs)}"
+            for out_file, inputs in colliding_outputs.items()
+        )
+        raise ValueError(f"Multiple input files resolve to the same output path: {details}")
+
+    output_path.mkdir(parents=True, exist_ok=True)
 
     parse_options = {
         "format": format,
@@ -506,7 +523,7 @@ def parse_batch(
                 result.skipped.append((str(remaining), reason))
             break
 
-        out_file = output_path / f"{pf.stem}{extension}"
+        out_file = output_files[pf]
         try:
             # #346: Smart hybrid mode
             if isolate_assets == "auto":

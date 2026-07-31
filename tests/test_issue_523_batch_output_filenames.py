@@ -61,3 +61,36 @@ def test_parse_batch_replaces_input_suffix_in_success_paths_and_files(
             f"rendered:{input_name}"
         )
         assert not (output_dir / f"{input_name}{extension}").exists()
+
+
+def test_parse_batch_rejects_inputs_with_colliding_output_stems(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Batch mode rejects a .uasset/.umap pair that would overwrite one output."""
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "output"
+    input_dir.mkdir()
+    for name in ("Shared.uasset", "Shared.umap"):
+        (input_dir / name).write_bytes(b"fixture")
+
+    monkeypatch.setattr(
+        "uasset_read.memory_safety.get_memory_stats",
+        lambda: SimpleNamespace(usage_percent=0.0),
+    )
+    monkeypatch.setattr(
+        core,
+        "_parse_and_render",
+        lambda *_args, **_kwargs: ("unexpected", SimpleNamespace(status="success", export_map=[])),
+    )
+
+    with pytest.raises(ValueError, match="same output path"):
+        core.parse_batch(
+            str(input_dir),
+            format="json",
+            output_dir=str(output_dir),
+            isolate_assets=False,
+            log_enabled=False,
+        )
+
+    assert not output_dir.exists()
