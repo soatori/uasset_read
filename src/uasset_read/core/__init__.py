@@ -506,7 +506,7 @@ def parse_batch(
                 result.skipped.append((str(remaining), reason))
             break
 
-        out_file = output_path / f"{pf.name}{extension}"
+        out_file = output_path / f"{pf.stem}{extension}"
         try:
             # #346: Smart hybrid mode
             if isolate_assets == "auto":
