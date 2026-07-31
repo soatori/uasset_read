@@ -387,7 +387,7 @@ def _monitor_worker(
     started_at = monotonic()
     while process.is_alive():
         elapsed = monotonic() - started_at
-        if elapsed > limits.timeout_seconds:
+        if elapsed >= limits.timeout_seconds:
             _terminate_worker(process)
             return BatchWorkerOutcome(
                 False,
