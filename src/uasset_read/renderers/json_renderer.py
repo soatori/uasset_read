@@ -589,9 +589,18 @@ class JSONRenderer(IRenderer):
 
     def _decompiled_function_to_dict(self, func) -> dict[str, Any]:
         """Serialize DecompiledFunctionIR to a dictionary."""
-        d = {"name": func.name, "signature": func.signature, "cpp_code": func.cpp_code, "parameters": func.parameters, "return_type": func.return_type}
-        if func.fallback_reasons:
-            d["fallback_reasons"] = func.fallback_reasons
+        d = {
+            "name": func.name,
+            "signature": func.signature,
+            "cpp_code": func.cpp_code,
+            "parameters": func.parameters,
+            "return_type": func.return_type,
+            "bytecode_status": func.bytecode_status,
+            "bytecode_source": func.bytecode_source,
+            "logic_source": func.logic_source,
+            "warnings": func.warnings,
+            "fallback_reasons": func.fallback_reasons,
+        }
         if func.bytecode_confidence != "verified":
             d["bytecode_confidence"] = func.bytecode_confidence
         return d

@@ -9,6 +9,27 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+def infer_bytecode_confidence(
+    fallback_reasons: list[str],
+    bytecode_status: str = "unknown",
+    logic_source: str = "current_asset",
+) -> str:
+    """Classify the confidence of a public function body.
+
+    Keep this shared by direct Kismet serialization and PackageIR projection so
+    callers cannot receive conflicting provenance for the same function body.
+    """
+    if logic_source == "graph_topology":
+        return "graph_topology"
+    if bytecode_status == "failed":
+        return "failed"
+    if "serial_scan_recovery" in fallback_reasons:
+        return "heuristic"
+    if "bpgc_bytecode_extraction" in fallback_reasons:
+        return "fallback"
+    return "verified"
+
+
 @dataclass
 class KismetDecompiledResult:
     """
@@ -52,6 +73,11 @@ class KismetDecompiledResult:
             "cpp_code": self.cpp_code,
             "bytecode_source": self.bytecode_source,
             "bytecode_status": self.bytecode_status,
+            "bytecode_confidence": infer_bytecode_confidence(
+                self.fallback_reasons,
+                bytecode_status=self.bytecode_status,
+                logic_source=self.logic_source,
+            ),
             "warnings": self.warnings,
             "fallback_reasons": self.fallback_reasons,
             "semantic_calls": self.semantic_calls,
@@ -73,4 +99,4 @@ class KismetDecompiledResult:
         return self.cpp_code
 
 
-__all__ = ["KismetDecompiledResult"]
+__all__ = ["KismetDecompiledResult", "infer_bytecode_confidence"]

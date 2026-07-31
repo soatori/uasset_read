@@ -47,6 +47,7 @@ from uasset_read.constants import (
 )
 from uasset_read.models.status import _result_status
 from uasset_read.serializers.object_resources import PackageIndex, resolve_class_name
+from uasset_read.kismet.result import infer_bytecode_confidence
 
 def _classify_variable(var) -> str:
     """Classify blueprint variables."""
@@ -914,7 +915,11 @@ def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFuncti
         # Parse return_type from signature (format: "ReturnType FuncName(params)")
         return_type = _extract_return_type(func.signature)
         parameters = _extract_parameters(func)
-        confidence = _infer_bytecode_confidence(func.fallback_reasons)
+        confidence = _infer_bytecode_confidence(
+            func.fallback_reasons,
+            bytecode_status=func.bytecode_status,
+            logic_source=func.logic_source,
+        )
         decompiled.append(DecompiledFunctionIR(
             name=func.function_name,
             signature=func.signature,
@@ -923,22 +928,24 @@ def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFuncti
             return_type=return_type,
             fallback_reasons=func.fallback_reasons,
             bytecode_confidence=confidence,
+            bytecode_status=func.bytecode_status,
+            bytecode_source=func.bytecode_source,
+            logic_source=func.logic_source,
+            warnings=func.warnings,
         ))
     return decompiled
 
-def _infer_bytecode_confidence(fallback_reasons: list[str]) -> str:
-    """Infer bytecode confidence level from fallback_reasons.
-
-    Confidence levels (high to low):
-    - verified: Standard UStruct extraction path, no fallback
-    - fallback: BPGC extraction (normal degradation for cooked assets)
-    - heuristic: Serialized byte stream heuristic scan recovery (lowest confidence)
-    """
-    if "serial_scan_recovery" in fallback_reasons:
-        return "heuristic"
-    if "bpgc_bytecode_extraction" in fallback_reasons:
-        return "fallback"
-    return "verified"
+def _infer_bytecode_confidence(
+    fallback_reasons: list[str],
+    bytecode_status: str = "unknown",
+    logic_source: str = "current_asset",
+) -> str:
+    """Backward-compatible local alias for shared provenance inference."""
+    return infer_bytecode_confidence(
+        fallback_reasons,
+        bytecode_status=bytecode_status,
+        logic_source=logic_source,
+    )
 
 
 def _extract_return_type(signature: str) -> str:
@@ -1139,9 +1146,13 @@ def _bind_single_implementation(
             "cpp_code": matched_decompiled.cpp_code,
             "parameters": matched_decompiled.parameters,
             "return_type": matched_decompiled.return_type,
+            "bytecode_confidence": matched_decompiled.bytecode_confidence,
+            "bytecode_status": matched_decompiled.bytecode_status,
+            "bytecode_source": matched_decompiled.bytecode_source,
+            "logic_source": matched_decompiled.logic_source,
+            "warnings": matched_decompiled.warnings,
         }
-        if matched_decompiled.fallback_reasons:
-            item.implementation["fallback_reasons"] = matched_decompiled.fallback_reasons
+        item.implementation["fallback_reasons"] = matched_decompiled.fallback_reasons
         item.implementation_status = "decompiled"
         if match_count > 1:
             item.implementation["ambiguous_match"] = True

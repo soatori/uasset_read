@@ -37,6 +37,7 @@ def enrich_decompiled_functions(
         if result.function_name == "ExecuteUbergraph_BP_FirstPersonCharacter" or result.function_name.startswith("ExecuteUbergraph_"):
             result.semantic_calls = semantic_calls
             result.cpp_code = _format_ubergraph_semantics(result.function_name, semantic_calls)
+            result.logic_source = "graph_topology"
             result.warnings.append("Kismet bytecode semantics enriched from EventGraph pin topology")
             continue
 
@@ -44,6 +45,7 @@ def enrich_decompiled_functions(
         if semantic:
             result.semantic_calls = [semantic]
             result.cpp_code = _format_event_semantics(result.function_name, semantic)
+            result.logic_source = "graph_topology"
             result.warnings.append("Kismet bytecode semantics enriched from EventGraph pin topology")
 
     # Second pass: enrich empty function bodies with execution flow from graph topology

@@ -338,9 +338,9 @@ class MarkdownRenderer(IRenderer):
             # Find matching decompiled function
             decompiled = self._find_decompiled(ir, event.name)
             if decompiled:
-                if decompiled.bytecode_confidence == "heuristic":
-                    lines.append("> [!WARNING]")
-                    lines.append("> bytecode is heuristic recovery (serial scan), low confidence")
+                warn = self._provenance_warning(decompiled)
+                if warn:
+                    lines.append(warn)
                     lines.append("")
                 lines.append("```cpp")
                 lines.append(decompiled.signature)
@@ -396,6 +396,11 @@ class MarkdownRenderer(IRenderer):
                 "parameters": func.parameters,
                 "return_type": func.return_type,
                 "bytecode_confidence": func.bytecode_confidence,
+                "bytecode_status": func.bytecode_status,
+                "bytecode_source": func.bytecode_source,
+                "logic_source": func.logic_source,
+                "warnings": func.warnings,
+                "fallback_reasons": func.fallback_reasons,
             }
 
         if ir.blueprint and ir.blueprint.functions:
@@ -453,12 +458,13 @@ class MarkdownRenderer(IRenderer):
                     lines.append(f"| {_escape_md_cell(pname)} | {_escape_md_cell(ptype)} | {_escape_md_cell(default_str)} |")
                 lines.append("")
 
+            warn = self._provenance_warning(func_info)
+            if warn:
+                lines.append(warn)
+                lines.append("")
+
             # C++ implementation code block
             if func_info["cpp_code"] and func_info["cpp_code"].strip():
-                if func_info.get("bytecode_confidence") == "heuristic":
-                    lines.append("> [!WARNING]")
-                    lines.append("> bytecode is heuristic recovery (serial scan), low confidence")
-                    lines.append("")
                 lines.append("```cpp")
                 lines.append(func_info["cpp_code"].strip())
                 lines.append("```")
@@ -735,6 +741,37 @@ class MarkdownRenderer(IRenderer):
             if func.name == name:
                 return func
         return None
+
+    def _provenance_warning(self, func) -> str | None:
+        """Generate a Markdown warning block for non-verified decompiled functions.
+
+        Shows status, source, confidence, and degradation reasons.
+        Returns None for normal verified bytecode (no warning needed).
+
+        Accepts both DecompiledFunctionIR objects and plain dicts.
+        """
+        def _get(obj, key, default):
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
+
+        confidence = _get(func, "bytecode_confidence", "verified")
+        if confidence == "verified":
+            return None
+
+        status = _get(func, "bytecode_status", "unknown")
+        source = _get(func, "bytecode_source", "unknown")
+        logic = _get(func, "logic_source", "current_asset")
+        reasons = _get(func, "fallback_reasons", [])
+
+        parts = [f"status={status}", f"source={source}", f"logic={logic}"]
+        if confidence != "verified":
+            parts.append(f"confidence={confidence}")
+        if reasons:
+            parts.append(f"reasons={'; '.join(reasons)}")
+
+        lines = ["> [!WARNING]", f"> Function body provenance: {', '.join(parts)}"]
+        return "\n".join(lines)
 
     def _gen_event_signature(self, event) -> str:
         """Generate C++ override signature from BlueprintEventIR."""

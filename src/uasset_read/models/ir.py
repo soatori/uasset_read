@@ -421,7 +421,12 @@ class DecompiledFunctionIR:
     parameters: list[dict]
     return_type: str
     fallback_reasons: list[str] = field(default_factory=list)
-    bytecode_confidence: str = "verified"  # "verified" | "fallback" | "heuristic"
+    bytecode_confidence: str = "verified"
+    # "verified" | "fallback" | "heuristic" | "graph_topology" | "failed"
+    bytecode_status: str = "unknown"   # "parsed" | "failed" | "unknown"
+    bytecode_source: str = "unknown"   # "function_export" | "fallback_or_serial_scan" | "unknown"
+    logic_source: str = "current_asset"  # "current_asset" | "graph_topology"
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass

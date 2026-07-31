@@ -574,7 +574,10 @@
           "description": "是否为静态函数"
         },
         "implementation": {
-          "type": ["object", "null"],
+          "oneOf": [
+            { "$ref": "#/$defs/DecompiledFunction" },
+            { "type": "null" }
+          ],
           "description": "实现关联信息"
         },
         "function_graph": {
@@ -616,7 +619,10 @@
           "description": "覆写的父类"
         },
         "implementation": {
-          "type": ["object", "null"],
+          "oneOf": [
+            { "$ref": "#/$defs/DecompiledFunction" },
+            { "type": "null" }
+          ],
           "description": "实现关联信息"
         },
         "function_graph": {
@@ -675,7 +681,7 @@
     },
     "DecompiledFunction": {
       "type": "object",
-      "required": ["name", "signature", "cpp_code", "parameters", "return_type"],
+      "required": ["name", "signature", "cpp_code", "parameters", "return_type", "bytecode_status", "bytecode_source", "logic_source", "warnings", "fallback_reasons"],
       "properties": {
         "name": {
           "type": "string",
@@ -700,9 +706,36 @@
           "type": "string",
           "description": "返回类型"
         },
+        "bytecode_status": {
+          "type": "string",
+          "enum": ["parsed", "failed", "unknown"],
+          "description": "Bytecode extraction/parsing status"
+        },
+        "bytecode_source": {
+          "type": "string",
+          "enum": ["function_export", "fallback_or_serial_scan", "unknown"],
+          "description": "Bytecode extraction source path"
+        },
+        "logic_source": {
+          "type": "string",
+          "enum": ["current_asset", "graph_topology"],
+          "description": "Origin of the function body logic"
+        },
+        "bytecode_confidence": {
+          "type": "string",
+          "enum": ["verified", "fallback", "heuristic", "graph_topology", "failed"],
+          "description": "Confidence level of the decompiled function body"
+        },
         "fallback_reasons": {
           "type": "array",
           "description": "降级原因列表",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "description": "Translation and degradation warnings",
           "items": {
             "type": "string"
           }
