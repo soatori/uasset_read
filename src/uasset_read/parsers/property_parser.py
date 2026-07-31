@@ -889,7 +889,8 @@ def _read_property_loop(
                     ),
                     array_index=tag.array_index,
                 ))
-                continue
+                setattr(export, "parse_status", validate_parse_status("partial"))
+                break
 
             # Boundary check: PropertyTag.Size should not exceed remaining property data range
             remaining = property_end - archive.tell()
