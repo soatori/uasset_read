@@ -3,11 +3,12 @@
 import json
 from pathlib import Path
 import struct
+import sys
 
 import pytest
 
-from uasset_read import parse_single
-from uasset_read.cli import create_parser, resolve_format
+from uasset_read import list_formats, parse_single
+from uasset_read.cli import create_parser, main, resolve_format
 from uasset_read.compat.uasset_reader_js import (
     _bigint_json_string,
     _guid_slot_to_js,
@@ -46,6 +47,25 @@ def test_cli_selects_uasset_reader_js_format() -> None:
     ])
 
     assert resolve_format(args) == "uasset-reader-js"
+
+
+def test_public_format_discovery_includes_uasset_reader_js() -> None:
+    assert "uasset-reader-js" in list_formats()
+
+
+def test_cli_format_discovery_shows_usable_uasset_reader_js_invocation(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["uasset_read", "--list-formats"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "  --format uasset-reader-js\n" in output
+    assert "--uasset-reader-js" not in output
 
 
 def test_normal_json_root_keys_are_unchanged() -> None:

@@ -643,7 +643,7 @@ def parse_batch(
 
 def list_formats() -> list[str]:
     """Return list of all supported format names."""
-    return _list_renderer_formats()
+    return sorted({*_list_renderer_formats(), "uasset-reader-js"})
 
 
 @scoped_project_logging
