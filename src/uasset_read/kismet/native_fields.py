@@ -24,9 +24,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 PKG_FilterEditorOnly = 0x80000000
 
-# Release custom-version GUID for gating replication condition
-RELEASE_GUID = "22d5549cbe4f26a846072194d082b461"
-
 # FReleaseObjectVersion threshold for replication condition byte
 _PROPERTIES_SERIALIZE_REP_CONDITION_VERSION = 21
 
@@ -92,20 +89,20 @@ def _resolve_package_index(
     Index 0 is a legitimate null (returns None).
     Positive indices are export table entries (1-based).
     Negative indices are import table entries (-1-based).
-    Out-of-range indices return None.
+    Out-of-range nonzero indices raise ValueError.
     """
     if raw_index == 0:
         return None
     if raw_index > 0:
         export_idx = raw_index - 1
-        if export_idx < len(context.export_map):
-            return context.export_map[export_idx].object_name
-        return None
+        if export_idx >= len(context.export_map):
+            raise ValueError(f"Out-of-range package index {raw_index}")
+        return context.export_map[export_idx].object_name
     # raw_index < 0 → import
     import_idx = -raw_index - 1
-    if import_idx < len(context.import_map):
-        return context.import_map[import_idx].object_name
-    return None
+    if import_idx >= len(context.import_map):
+        raise ValueError(f"Out-of-range package index {raw_index}")
+    return context.import_map[import_idx].object_name
 
 
 def _read_fname_ref(archive: ByteArchive, context: NativeFieldContext) -> FNameRef:
