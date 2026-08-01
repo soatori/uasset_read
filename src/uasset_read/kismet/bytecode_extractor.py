@@ -482,7 +482,6 @@ def _validate_jump_targets(expressions: list[KismetExpression]) -> None:
     EX_AutoRtfmTransact targets.
     """
     from uasset_read.kismet.tokens import EExprToken as _EExprToken
-    from uasset_read.kismet.expressions.control_flow import EX_Skip
 
     top_level_indices = {expr.StatementIndex for expr in expressions}
 

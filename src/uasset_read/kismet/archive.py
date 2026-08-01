@@ -10,6 +10,7 @@ from uasset_read.kismet.expressions.base import KismetExpression
 from uasset_read.kismet.expressions import EXPR_CLASS_MAP
 from uasset_read.kismet.property_pointer import FFieldPath, FFieldPathSegment
 from uasset_read.kismet.value_types import FNameRef
+from uasset_read.serializers.package_summary import PackageFileSummary
 from uasset_read.serializers.object_resources import PackageIndex
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class FKismetArchive(FArchive):
         self.release_version: int = -1
 
         # Package summary reference (set by parse_bytecode_stream for LWC version checks)
-        self.summary: object | None = None
+        self.summary: PackageFileSummary | None = None
 
     @classmethod
     def reset_warned_offsets(cls) -> None:
