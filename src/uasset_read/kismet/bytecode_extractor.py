@@ -120,11 +120,11 @@ def extract_bytecode_bytes(
     # T-62-01: Verify class is in UStruct whitelist
     class_name = resolve_class_name(export.class_index, import_map, export_map)
     if class_name not in FUNCTION_EXPORT_CLASSES:
-        return None, "none"
+        return None, "none", 0
 
     # No script data
     if not export.has_script_serialization:
-        return None, "none"
+        return None, "none", 0
 
     # Calculate script start position
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
@@ -153,7 +153,7 @@ def extract_bytecode_bytes(
 
     # T-62-02: Validate serializedScriptSize bounds
     if serialized_script_size <= 0:
-        return None, "none"
+        return None, "none", 0
 
     if serialized_script_size > export.script_serialization_size:
         raise ParseError(

@@ -438,6 +438,10 @@ def _validate_script_sizes(
     """Validate the script size pair.
 
     Returns (error_code, error_message) if invalid, or None if valid.
+
+    In UE, BytecodeBufferSize is the logical buffer size and
+    SerializedScriptSize is the physical size. BytecodeBufferSize=0
+    is valid when SerializedScriptSize > 0 (no logical validation needed).
     """
     # Negative sizes
     if bytecode_buffer_size < 0 or serialized_script_size < 0:
@@ -446,12 +450,12 @@ def _validate_script_sizes(
             f"Negative size: BytecodeBufferSize={bytecode_buffer_size}, "
             f"SerializedScriptSize={serialized_script_size}",
         )
-    # One-sided zero (one is 0, the other is not)
-    if (bytecode_buffer_size == 0) != (serialized_script_size == 0):
+    # Both zero is valid (no script)
+    # SerializedScriptSize=0 with BytecodeBufferSize>0 is invalid
+    if serialized_script_size == 0 and bytecode_buffer_size > 0:
         return (
             "invalid_script_size",
-            f"One-sided zero: BytecodeBufferSize={bytecode_buffer_size}, "
-            f"SerializedScriptSize={serialized_script_size}",
+            f"SerializedScriptSize=0 but BytecodeBufferSize={bytecode_buffer_size}",
         )
     return None
 
@@ -525,6 +529,10 @@ def read_ufunction_script(
                 export_offset=export.serial_offset,
             ),
         )
+
+    # Check for script serialization data
+    if not export.has_script_serialization:
+        return FunctionScriptReadResult(status="no_script")
 
     try:
         window, native_start = _read_native_payload_start(

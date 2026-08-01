@@ -38,28 +38,171 @@ def _extract_kismet_decompiled(
 
     Tolerant mode: failures return empty list for that function, never crash.
     Per D-10: Kismet decompilation failure does NOT block the main pipeline.
+
+    Uses read_ufunction_script for native Function/UFunction exports to correctly
+    handle the UStruct prefix (SuperStruct, Children, NativePropertyCount, native
+    fields) before the bytecode header.
     """
     from uasset_read.kismet.bytecode_extractor import FUNCTION_EXPORT_CLASSES
+    from uasset_read.kismet.ufunction_reader import read_ufunction_script
+    from uasset_read.kismet.bytecode_extractor import parse_bytecode_stream
+    from uasset_read.kismet.result import KismetDecompiledResult
     from uasset_read.serializers.object_resources import resolve_class_name
-    from uasset_read.kismet.pipeline import decompile_single_function
 
     results = []
-    for export in export_map:
+    for export_idx, export in enumerate(export_map):
         class_name = resolve_class_name(export.class_index, import_map, export_map)
         if class_name not in FUNCTION_EXPORT_CLASSES:
             continue
         try:
-            result = decompile_single_function(
+            # Use the native UFunction reader to extract script bytes and native fields
+            script_result = read_ufunction_script(
                 archive, export, summary, name_map, import_map, export_map,
-                tolerant=tolerant, linker=linker,
+                export_index=export_idx,
             )
-            if result is not None:
+
+            if script_result.status == "no_script":
+                # No bytecode - create a result with no_script status
+                result = KismetDecompiledResult(
+                    function_name=export.object_name,
+                    signature=f"void {export.object_name}()",
+                    local_variables=[],
+                    cpp_code="",
+                    bytecode_source="unknown",
+                    bytecode_status="no_script",
+                    translation_status="not_applicable",
+                )
                 results.append(result)
+                continue
+
+            if script_result.status == "failed":
+                reason = script_result.failure.error_message if script_result.failure else "unknown"
+                result = KismetDecompiledResult(
+                    function_name=export.object_name,
+                    signature=f"void {export.object_name}()",
+                    local_variables=[],
+                    cpp_code="",
+                    bytecode_source="unknown",
+                    bytecode_status="failed",
+                    warnings=[],
+                    fallback_reasons=[f"UFunction script read failed: {reason}"],
+                )
+                results.append(result)
+                continue
+
+            # script_result.status == "extracted"
+            # Parse the bytecode from the serialized script
+            expressions: list = []
+            parse_error: str | None = None
+            if script_result.serialized_script:
+                try:
+                    expressions = parse_bytecode_stream(
+                        script_result.serialized_script, name_map, summary,
+                        bytecode_buffer_size=script_result.bytecode_buffer_size,
+                        tolerant=tolerant,
+                    )
+                except (ParseError, ValueError) as exc:
+                    parse_error = str(exc)
+
+            if parse_error or not expressions:
+                reason = parse_error if parse_error else "no bytecode expressions extracted"
+                result = KismetDecompiledResult(
+                    function_name=export.object_name,
+                    signature=f"void {export.object_name}()",
+                    local_variables=[],
+                    cpp_code="",
+                    bytecode_source="unknown",
+                    bytecode_status="failed",
+                    warnings=[],
+                    fallback_reasons=[f"bytecode extraction error: {reason}"],
+                )
+                results.append(result)
+                continue
+
+            # Build C++ pseudocode from the parsed expressions
+            from uasset_read.kismet.body_builder import FunctionBodyBuilder
+            from uasset_read.kismet.translator import TypeRegistry
+
+            type_registry = TypeRegistry()
+            builder = FunctionBodyBuilder(type_registry, linker=linker)
+            cpp_code = builder.to_function_body_structured(
+                expressions, func_name=export.object_name,
+            )
+            warnings = _collect_pipeline_translation_warnings(cpp_code)
+
+            # Extract structured rate metrics
+            structured_rate: float | None = None
+            try:
+                from uasset_read.kismet.jump_analyzer import JumpAnalyzer
+                rate_analyzer = JumpAnalyzer(expressions)
+                rate_report = rate_analyzer.analyze_structured_rate()
+                structured_rate = rate_report.rate
+            except (ImportError, AttributeError, TypeError, ValueError):
+                structured_rate = None
+
+            # Extract function reference resolution statistics
+            func_ref_stats: dict = {}
+            if builder._translator._func_resolver is not None:
+                func_ref_stats = builder._translator._func_resolver.get_statistics()
+                unresolved_report = builder._translator._func_resolver.get_unresolved_report()
+                if unresolved_report:
+                    warnings.append(unresolved_report)
+
+            # Use native fields to derive structured signature data
+            native_params: list[dict[str, object]] = []
+            native_return_type = "void"
+            native_signature_used = False
+            if script_result.native_fields:
+                try:
+                    from uasset_read.kismet.native_fields import build_native_function_signature
+                    sig_str, native_params, native_return_type = build_native_function_signature(
+                        export.object_name, script_result.native_fields,
+                    )
+                    signature = sig_str
+                    native_signature_used = True
+                except (ValueError, KeyError, IndexError):
+                    signature = cpp_code.split("{")[0].strip() if "{" in cpp_code else f"void {export.object_name}()"
+            else:
+                signature = cpp_code.split("{")[0].strip() if "{" in cpp_code else f"void {export.object_name}()"
+
+            # Capture local variables from TypeRegistry snapshot
+            local_vars: list[dict[str, str]] = []
+            for var_name, cpp_type in type_registry._types.items():
+                local_vars.append({"name": var_name, "type": cpp_type})
+
+            result = KismetDecompiledResult(
+                function_name=export.object_name,
+                signature=signature,
+                local_variables=local_vars,
+                cpp_code=cpp_code,
+                expressions=expressions,
+                bytecode_source="function_export",
+                bytecode_status="parsed",
+                translation_status="complete",
+                warnings=warnings,
+                function_ref_stats=func_ref_stats,
+                structured_rate=structured_rate,
+                parameters=native_params,
+                return_type=native_return_type,
+                native_signature=native_signature_used,
+            )
+            results.append(result)
+
         except (ParseError, OSError, struct.error, ValueError, KeyError, AttributeError) as e:
             # Per D-10: failure does NOT block pipeline
             # Log warning so caller can diagnose if needed
             logger.debug("Kismet decompile failed for export '%s': %s", export.object_name, e)
     return results
+
+
+def _collect_pipeline_translation_warnings(cpp_code: str) -> list[str]:
+    """Report low-confidence bytecode translations."""
+    warnings: list[str] = []
+    if "/* unknown:" in cpp_code:
+        warnings.append("Kismet translation contains unsupported expression tokens")
+    if "Function_" in cpp_code or "LocalFunction_" in cpp_code:
+        warnings.append("Kismet translation contains unresolved function references")
+    return warnings
 
 
 def _extract_blueprint_graphs_and_metadata(
