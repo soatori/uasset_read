@@ -412,8 +412,7 @@
           "type": "array",
           "description": "执行链",
           "items": {
-            "type": "array",
-            "items": { "type": "string" }
+            "$ref": "#/$defs/GraphExecutionChain"
           }
         },
         "subgraphs": {
@@ -421,6 +420,25 @@
           "description": "子图列表",
           "items": {
             "$ref": "#/$defs/GraphEntry"
+          }
+        }
+      }
+    },
+    "GraphExecutionChain": {
+      "type": "object",
+      "required": ["start_event", "chains", "has_cycle"],
+      "properties": {
+        "start_event": {"type": "string", "minLength": 1},
+        "chains": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "has_cycle": {"type": "boolean"},
+        "chain_metadata": {
+          "type": "object",
+          "properties": {
+            "branch_count": {"type": "integer", "minimum": 0}
           }
         }
       }

@@ -204,14 +204,14 @@ class GraphIR:
 
     Differences from serialization model UEdGraph:
     - nodes is list[NodeIR] instead of list[UEdGraphNode]
-    - Contains IR-specific fields like execution_chains
+    - Contains IR-specific fields like structured execution_chains entries
     - Does not contain schema/b_editable (not needed by renderers)
     """
     graph_guid: str
     graph_name: str
     graph_class: str
     nodes: list[NodeIR]
-    execution_chains: list[list[str]]
+    execution_chains: list[dict[str, Any]]
     subgraphs: list["GraphIR"] = field(default_factory=list)
     graph_type: str | None = None
 
