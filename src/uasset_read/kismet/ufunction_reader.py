@@ -60,6 +60,26 @@ class FunctionScriptFailure:
     remaining_serialized: int | None = None
 
 
+# ---------------------------------------------------------------------------
+# Custom exception types for UFunction script failures
+# ---------------------------------------------------------------------------
+
+class UnsupportedSerializationVersion(Exception):
+    """Raised when the serialization-control byte contains unknown bits."""
+
+    def __init__(self, failure: FunctionScriptFailure):
+        self.failure = failure
+        super().__init__(failure.error_message)
+
+
+class InvalidScriptPropertyRange(Exception):
+    """Raised when script serialization offsets are mismatched."""
+
+    def __init__(self, failure: FunctionScriptFailure):
+        self.failure = failure
+        super().__init__(failure.error_message)
+
+
 @dataclass
 class FunctionScriptReadResult:
     """Result of reading a native UFunction script."""
@@ -110,6 +130,8 @@ def _read_native_payload_start(
     name_map: list[str],
     import_map: list[ObjectImport],
     export_map: list[ObjectExport],
+    *,
+    export_index: int = 0,
 ) -> tuple[ByteArchive, int]:
     """Read the serialization-control prefix and tagged-property stream,
     returning a bounded ByteArchive positioned after the None terminator.
@@ -124,7 +146,8 @@ def _read_native_payload_start(
         archive where tagged-property data begins.
 
     Raises:
-        ValueError: if script_serialization offsets are mismatched.
+        UnsupportedSerializationVersion: if control bits are unknown.
+        InvalidScriptPropertyRange: if script_serialization offsets are mismatched.
     """
     # Copy exactly the export's serial range into a bounded archive
     archive.seek(export.serial_offset)
@@ -142,7 +165,7 @@ def _read_native_payload_start(
         if ctrl_byte & ~_SER_CTRL_OVERRIDE_OPERATION:
             # Unknown bits set — reject
             raise _make_control_bit_error(
-                ctrl_byte, export, summary, window,
+                ctrl_byte, export, summary, export_index=export_index,
             )
         if ctrl_byte & _SER_CTRL_OVERRIDE_OPERATION:
             # Consume the override-operation byte
@@ -159,7 +182,8 @@ def _read_native_payload_start(
 
         if declared_end != measured_end:
             raise _make_offset_mismatch_error(
-                declared_start, declared_end, measured_end, export, summary, window,
+                declared_start, declared_end, measured_end, export, summary,
+                export_index=export_index,
             )
 
     # Position window at the end of tagged properties (the native payload start)
@@ -191,25 +215,25 @@ def _make_control_bit_error(
     ctrl_byte: int,
     export: ObjectExport,
     summary: PackageFileSummary,
-    window: ByteArchive,
-) -> ValueError:
+    *,
+    export_index: int = 0,
+) -> UnsupportedSerializationVersion:
     """Create an error for unknown serialization-control bits."""
-    # Seek back so the window reflects the error state
-    error = FunctionScriptFailure(
+    failure = FunctionScriptFailure(
         error_code="unsupported_serialization_version",
         error_message=(
             f"Unknown serialization-control bits 0x{ctrl_byte:02X} "
             f"(known: 0x{_SER_CTRL_OVERRIDE_OPERATION:02X})"
         ),
         function_name=export.object_name,
-        export_index=0,
+        export_index=export_index,
         class_name=resolve_class_name(
             export.class_index, [], [export],
         ) or "Unknown",
         package_offset=export.serial_offset,
         export_offset=export.serial_offset,
     )
-    return ValueError(error.error_message)
+    return UnsupportedSerializationVersion(failure)
 
 
 def _make_offset_mismatch_error(
@@ -218,24 +242,25 @@ def _make_offset_mismatch_error(
     measured_end: int,
     export: ObjectExport,
     summary: PackageFileSummary,
-    window: ByteArchive,
-) -> ValueError:
+    *,
+    export_index: int = 0,
+) -> InvalidScriptPropertyRange:
     """Create an error for mismatched script property offsets."""
-    error = FunctionScriptFailure(
+    failure = FunctionScriptFailure(
         error_code="invalid_script_property_range",
         error_message=(
             f"Script serialization offset mismatch: "
             f"declared end={declared_end}, measured end={measured_end}"
         ),
         function_name=export.object_name,
-        export_index=0,
+        export_index=export_index,
         class_name=resolve_class_name(
             export.class_index, [], [export],
         ) or "Unknown",
         package_offset=export.serial_offset,
         export_offset=export.serial_offset,
     )
-    return ValueError(error.error_message)
+    return InvalidScriptPropertyRange(failure)
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +274,8 @@ def read_ufunction_script(
     name_map: list[str],
     import_map: list[ObjectImport],
     export_map: list[ObjectExport],
+    *,
+    export_index: int = 0,
 ) -> FunctionScriptReadResult:
     """Read a native UFunction script from a Function export.
 
@@ -264,6 +291,7 @@ def read_ufunction_script(
         name_map: name table
         import_map: import table
         export_map: export table
+        export_index: index of this export in the export table
 
     Returns:
         FunctionScriptReadResult with status and any failure information.
@@ -277,7 +305,7 @@ def read_ufunction_script(
                 error_code="not_function_export",
                 error_message=f"Export class is {class_name!r}, not Function",
                 function_name=export.object_name,
-                export_index=0,
+                export_index=export_index,
                 class_name=class_name or "Unknown",
                 package_offset=export.serial_offset,
                 export_offset=export.serial_offset,
@@ -287,6 +315,7 @@ def read_ufunction_script(
     try:
         window, native_start = _read_native_payload_start(
             archive, export, summary, name_map, import_map, export_map,
+            export_index=export_index,
         )
         # Read remaining bytes after tagged properties
         remaining = window.read(window.total_size() - window.tell())
@@ -295,24 +324,5 @@ def read_ufunction_script(
             serialized_script=remaining,
             serialized_start=native_start,
         )
-    except ValueError as exc:
-        # Extract error_code from the message pattern
-        error_code = "unsupported_serialization_version"
-        error_msg = str(exc)
-        if "offset mismatch" in error_msg or "invalid_script_property_range" in error_msg:
-            error_code = "invalid_script_property_range"
-        elif "Unknown serialization-control" in error_msg:
-            error_code = "unsupported_serialization_version"
-        else:
-            error_code = "internal_error"
-
-        failure = FunctionScriptFailure(
-            error_code=error_code,
-            error_message=error_msg,
-            function_name=export.object_name,
-            export_index=0,
-            class_name=class_name or "Unknown",
-            package_offset=export.serial_offset,
-            export_offset=export.serial_offset,
-        )
-        return FunctionScriptReadResult(status="failed", failure=failure)
+    except (UnsupportedSerializationVersion, InvalidScriptPropertyRange) as exc:
+        return FunctionScriptReadResult(status="failed", failure=exc.failure)
