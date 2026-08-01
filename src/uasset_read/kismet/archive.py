@@ -37,6 +37,9 @@ class FKismetArchive(FArchive):
         self.fortnite_version: int = -1
         self.release_version: int = -1
 
+        # Package summary reference (set by parse_bytecode_stream for LWC version checks)
+        self.summary: object | None = None
+
     @classmethod
     def reset_warned_offsets(cls) -> None:
         """Reset class-level warning dedup set (called at start of new asset decompilation)."""

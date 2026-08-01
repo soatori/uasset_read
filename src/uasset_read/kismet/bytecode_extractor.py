@@ -125,9 +125,10 @@ def extract_bytecode_bytes(
         export_map: Export table for class name resolution
 
     Returns:
-        Tuple of (bytecode_bytes, fallback_reason).
+        Tuple of (bytecode_bytes, fallback_reason, bytecode_buffer_size).
         fallback_reason is one of: "function_export", "bpgc_bytecode_extraction",
         "serial_scan_recovery", "none"
+        bytecode_buffer_size is the declared logical buffer size (0 when unavailable)
 
     Raises:
         ParseError: If serializedScriptSize is out of bounds
@@ -167,7 +168,7 @@ def extract_bytecode_bytes(
         archive.skip(tag.size)
 
     # Read bytecode header: bytecodeBufferSize + serializedScriptSize
-    _bytecode_buffer_size = archive.read_i32()  # noqa: F841 - protocol read
+    bytecode_buffer_size = archive.read_i32()
     serialized_script_size = archive.read_i32()
 
     # T-62-02: Validate serializedScriptSize bounds
@@ -177,12 +178,12 @@ def extract_bytecode_bytes(
             archive, export, summary, name_map, import_map, export_map
         )
         if fallback is not None:
-            return fallback, "bpgc_bytecode_extraction"
+            return fallback, "bpgc_bytecode_extraction", 0
         result = _scan_export_serial_for_bytecode(
             archive, export, name_map, tolerant=getattr(archive, "_tolerant", False)
         )
         reason = "serial_scan_recovery" if result is not None else "none"
-        return result, reason
+        return result, reason, 0
 
     if serialized_script_size > export.script_serialization_size:
         raise ParseError(
@@ -190,7 +191,7 @@ def extract_bytecode_bytes(
             f"script_serialization_size ({export.script_serialization_size}) for '{export.object_name}'"
         )
 
-    return archive.read_bytes(serialized_script_size), "function_export"
+    return archive.read_bytes(serialized_script_size), "function_export", bytecode_buffer_size
 
 
 def _scan_export_serial_for_bytecode(
@@ -404,34 +405,106 @@ def reset_bpgc_cache() -> None:
 def parse_bytecode_stream(
     bytecode_bytes: bytes,
     name_map: list[str],
+    summary: "PackageFileSummary | None" = None,
+    *,
+    bytecode_buffer_size: int = 0,
     tolerant: bool = False,
 ) -> list[KismetExpression]:
     """
     Parse raw bytecode bytes into a list of KismetExpression trees.
 
-    Uses stream exhaustion (position < length) as loop terminator, matching
-    UStruct.Deserialize() behavior. EX_EndOfScript will naturally
-    be the last expression read.
+    Stops immediately after EX_EndOfScript and validates script closure invariants:
+    - All serialized bytes consumed (serialized_offset == len(bytecode_bytes))
+    - Logical cursor equals declared buffer size (bytecode_index == bytecode_buffer_size)
+    - Last top-level token is EX_EndOfScript
+    - All absolute jump targets are valid top-level StatementIndex values
 
     Args:
         bytecode_bytes: Raw ScriptBytecode data
         name_map: Name table for expression resolution
+        summary: PackageFileSummary for LWC version checks (optional)
+        bytecode_buffer_size: Declared logical bytecode buffer size (0 = skip logical validation)
         tolerant: If True, skip unknown tokens instead of raising ParseError
 
     Returns:
-        List of KismetExpression (may include EX_EndOfScript as last element)
+        List of KismetExpression (last element is EX_EndOfScript)
+
+    Raises:
+        ParseError: On closure invariant violations or invalid jump targets
     """
+    from uasset_read.kismet.tokens import EExprToken as _EExprToken
+
     if not bytecode_bytes:
+        if bytecode_buffer_size != 0:
+            raise ParseError(
+                f"Bytecode size mismatch: logical index 0, expected {bytecode_buffer_size}"
+            )
         return []
 
     archive = FKismetArchive(bytecode_bytes, "ScriptBytecode", name_map, tolerant=tolerant)
+    archive.bytecode_buffer_size = bytecode_buffer_size
+    if summary is not None:
+        archive.summary = summary
     expressions: list[KismetExpression] = []
 
     while archive.tell() < len(bytecode_bytes):
         expr = archive.read_expression()
         expressions.append(expr)
+        if expr.Token == _EExprToken.EX_EndOfScript:
+            break
+
+    # --- Closure invariant checks ---
+    if not expressions or expressions[-1].Token != _EExprToken.EX_EndOfScript:
+        raise ParseError("Missing EX_EndOfScript at end of script")
+
+    if archive.serialized_offset != len(bytecode_bytes):
+        raise ParseError(
+            f"Serialized size mismatch: consumed {archive.serialized_offset} bytes, "
+            f"expected {len(bytecode_bytes)}"
+        )
+
+    if bytecode_buffer_size > 0 and archive.bytecode_index != bytecode_buffer_size:
+        raise ParseError(
+            f"Bytecode size mismatch: logical index {archive.bytecode_index}, "
+            f"expected {bytecode_buffer_size}"
+        )
+
+    # --- Jump target validation ---
+    _validate_jump_targets(expressions)
 
     return expressions
+
+
+def _validate_jump_targets(expressions: list[KismetExpression]) -> None:
+    """Validate that all absolute jump targets are valid top-level StatementIndex values.
+
+    Checks EX_Jump, EX_JumpIfNot, EX_PushExecutionFlow, EX_SwitchValue, and
+    EX_AutoRtfmTransact targets.
+    """
+    from uasset_read.kismet.tokens import EExprToken as _EExprToken
+    from uasset_read.kismet.expressions.control_flow import EX_Skip
+
+    top_level_indices = {expr.StatementIndex for expr in expressions}
+
+    for expr in expressions:
+        targets: list[int] = []
+
+        if expr.Token in (_EExprToken.EX_Jump, _EExprToken.EX_JumpIfNot, _EExprToken.EX_Skip):
+            targets.append(expr.CodeOffset)
+        elif expr.Token == _EExprToken.EX_PushExecutionFlow:
+            targets.append(expr.PushingAddress)
+        elif expr.Token == _EExprToken.EX_SwitchValue:
+            targets.append(expr.EndGotoOffset)
+            for case in (expr.Cases or []):
+                targets.append(case.NextOffset)
+        elif expr.Token == _EExprToken.EX_AutoRtfmTransact:
+            targets.append(expr.CodeOffset)
+
+        for target in targets:
+            if target not in top_level_indices:
+                raise ParseError(
+                    f"Invalid jump target {target} at offset {expr.StatementIndex}"
+                )
 
 
 # ===========================================================================
@@ -476,7 +549,7 @@ def extract_and_parse(
         return ([], None, "none")
 
     try:
-        bytecode_bytes, fallback_reason = extract_bytecode_bytes(
+        bytecode_bytes, fallback_reason, bytecode_buffer_size = extract_bytecode_bytes(
             archive, export, summary, name_map, import_map, export_map
         )
     except ParseError as e:
@@ -486,7 +559,10 @@ def extract_and_parse(
         return ([], None, fallback_reason)
 
     try:
-        expressions = parse_bytecode_stream(bytecode_bytes, name_map, tolerant=tolerant)
+        expressions = parse_bytecode_stream(
+            bytecode_bytes, name_map, summary,
+            bytecode_buffer_size=bytecode_buffer_size, tolerant=tolerant,
+        )
         return (expressions, None, fallback_reason)
     except ParseError as e:
         return ([], str(e), fallback_reason)
