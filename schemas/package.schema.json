@@ -424,6 +424,15 @@
         }
       }
     },
+    "GraphBranchPath": {
+      "type": "object",
+      "required": ["from_node_guid", "output_pin", "to_node_guid"],
+      "properties": {
+        "from_node_guid": {"type": "string", "minLength": 1},
+        "output_pin": {"type": "string", "minLength": 1},
+        "to_node_guid": {"type": "string", "minLength": 1}
+      }
+    },
     "GraphExecutionChain": {
       "type": "object",
       "required": ["start_event", "chains", "has_cycle"],
@@ -440,6 +449,11 @@
           "properties": {
             "branch_count": {"type": "integer", "minimum": 0}
           }
+        },
+        "branch_paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/GraphBranchPath"}
         }
       }
     },

@@ -76,6 +76,31 @@ def build_execution_chains(
             - has_cycle: bool (chains may be incomplete when True)
             - chain_metadata: optional metadata (branch_count, etc.)
     """
+    from uasset_read.graph.flow_builder import build_normalized_edge_indexes
+
+    exec_edges_by_source: Dict[str, List[Dict]] = {}
+    seen_exec_edges: set[tuple[str, str, str]] = set()
+    edges_by_from_pin, _ = build_normalized_edge_indexes(graph)
+    for edges in edges_by_from_pin.values():
+        for edge in edges:
+            from_node_guid = edge.get("from_node_guid")
+            from_pin = edge.get("from_pin")
+            to_node_guid = edge.get("to_node_guid")
+            if not (
+                edge.get("is_exec")
+                and from_node_guid
+                and from_pin
+                and to_node_guid
+            ):
+                continue
+            edge_key = (from_node_guid, from_pin, to_node_guid)
+            if edge_key in seen_exec_edges:
+                continue
+            seen_exec_edges.add(edge_key)
+            exec_edges_by_source.setdefault(from_node_guid, []).append(edge)
+    for edges in exec_edges_by_source.values():
+        edges.sort(key=lambda edge: (edge["from_pin"], edge["to_node_guid"]))
+
     # If execution_flows not provided, call build_execution_flow_entries
     if execution_flows is None:
         from uasset_read.graph.flow_builder import build_execution_flow_entries
@@ -113,6 +138,12 @@ def build_execution_chains(
 
         if not valid_nodes:
             continue
+
+        branch_node_guids = [
+            node_info["node_guid"]
+            for node_info in valid_nodes
+            if node_info.get("branch_type")
+        ]
 
         # Convert to short IDs and collect pin names
         short_ids: List[str] = []
@@ -204,6 +235,17 @@ def build_execution_chains(
         # Optional metadata
         if branch_count > 0:
             entry["chain_metadata"] = {"branch_count": branch_count}
+
+        branch_paths: List[Dict] = []
+        for source_guid in branch_node_guids:
+            for edge in exec_edges_by_source.get(source_guid, []):
+                branch_paths.append({
+                    "from_node_guid": source_guid,
+                    "output_pin": edge["from_pin"],
+                    "to_node_guid": edge["to_node_guid"],
+                })
+        if branch_paths:
+            entry["branch_paths"] = branch_paths
 
         result.append(entry)
 
