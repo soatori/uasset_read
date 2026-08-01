@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from numbers import Integral
 from typing import Any
 
 from uasset_read.models.asset_metadata import (
@@ -109,6 +110,26 @@ def build_property_metadata(
                 if property_name in values:
                     project(field_name, values[property_name])
                     break
+    elif class_name == "CubeBuilder":
+        layer = values.get("Layer")
+        if isinstance(layer, str) and layer:
+            project("layer", layer)
+
+        polygons = values.get("Polys")
+        if isinstance(polygons, list) and polygons:
+            project("polygon_count", len(polygons))
+
+        vertices = values.get("Vertices")
+        if isinstance(vertices, dict):
+            raw_data = vertices.get("raw_data")
+            fallback_size = vertices.get("size")
+        else:
+            raw_data = getattr(vertices, "raw_data", None)
+            fallback_size = getattr(vertices, "size", None)
+        if isinstance(raw_data, (bytes, bytearray, memoryview)) and raw_data:
+            project("vertex_payload_size", len(raw_data))
+        elif isinstance(fallback_size, Integral) and not isinstance(fallback_size, bool) and fallback_size > 0:
+            project("vertex_payload_size", fallback_size)
 
     if business_field_count:
         data["parse_status"] = validate_parse_status("partial_metadata")

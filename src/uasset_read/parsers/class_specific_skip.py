@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 # These classes have serialization data not fully compatible with the generic property parser.
 SKIP_CLASS_PREFIXES = (
     # P0: Builder / Brush
-    "CubeBuilder",
     "GeomModifier_",
     "BrushBuilder",
     # P0: Animation -- migrated to opaque whitelist (#166)

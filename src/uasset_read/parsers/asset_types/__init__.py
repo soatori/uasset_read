@@ -146,6 +146,7 @@ def register_asset_type_handlers() -> None:
     registry = get_class_registry()
 
     handlers = [
+        PropertyMetadataHandler("CubeBuilder"),
         PropertyMetadataHandler("StaticMesh"),
         PropertyMetadataHandler("SkeletalMesh"),
         PropertyMetadataHandler("Material"),

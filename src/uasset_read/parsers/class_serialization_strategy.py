@@ -50,6 +50,7 @@ _TAGGED_PROPERTIES_CLASSES = frozenset({
 
 # Opaque class payload — has dedicated Serialize() but not implemented
 _OPAQUE_CLASSES = frozenset({
+    "CubeBuilder",
     "StaticMesh",
     "SkeletalMesh",
     "Texture2D",
