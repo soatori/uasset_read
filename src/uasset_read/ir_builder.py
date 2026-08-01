@@ -61,23 +61,6 @@ def _classify_variable(var) -> str:
         return "input_action"
     return "user"
 
-def _has_heuristic_recovery(result: "ParseResult | LinkerParseResult") -> bool:
-    """Check if heuristic bytecode recovery is present."""
-    for func in result.decompiled_functions or []:
-        if "serial_scan_recovery" in (func.fallback_reasons or []):
-            return True
-    return False
-
-
-def _count_heuristic_functions(result: "ParseResult | LinkerParseResult") -> int:
-    """Count the number of functions with heuristic recovery."""
-    count = 0
-    for func in result.decompiled_functions or []:
-        if "serial_scan_recovery" in (func.fallback_reasons or []):
-            count += 1
-    return count
-
-
 def _has_kismet_failure(result: "ParseResult | LinkerParseResult") -> bool:
     """Check if any decompiled function has failed bytecode or partial/failed translation."""
     for func in result.decompiled_functions or []:
@@ -214,14 +197,6 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         status_message = (
             f"Lightweight tolerant parse: too many exports "
             f"({getattr(result.summary, 'export_count', '?')}), using degraded mode"
-        )
-    elif status == "partial" and _has_heuristic_recovery(result):
-        status_code = "HEURISTIC_BYTECODE_RECOVERY"
-        heuristic_count = _count_heuristic_functions(result)
-        total_count = len(result.decompiled_functions or [])
-        status_message = (
-            f"Bytecode heuristic recovery: {heuristic_count}/{total_count} functions recovered via serial scan, "
-            f"low confidence"
         )
     elif status == "partial" and _has_kismet_failure(result):
         status_code = "KISMET_PARTIAL"

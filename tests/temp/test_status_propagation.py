@@ -14,6 +14,7 @@ import jsonschema
 import pytest
 
 from uasset_read.ir_builder import _build_decompiled_functions_ir, _infer_bytecode_confidence
+from uasset_read.models.status import _result_status
 from uasset_read.models.ir import (
     DecompiledFunctionIR,
     PackageHeaderIR,
@@ -432,7 +433,23 @@ class TestScriptMetrics:
 # ---------------------------------------------------------------------------
 
 class TestPackageStatus:
-    """Package-level status accounts for failed/partial native functions."""
+    """Package-level status accounts for failed/partial native functions.
+
+    Tests call _result_status with a mock ParseResult to verify the actual
+    propagation logic, not the circular set-and-assert pattern.
+    """
+
+    def _make_parse_result(self, decompiled_functions=None, export_map=None):
+        """Build a minimal mock ParseResult for _result_status testing."""
+        mock = MagicMock()
+        mock.is_success = True
+        mock.errors = []
+        mock.warnings = []
+        mock.metadata = {}
+        mock.diagnostics = []
+        mock.export_map = export_map or []
+        mock.decompiled_functions = decompiled_functions or []
+        return mock
 
     def test_no_script_neutral_package_status(self):
         """Only no_script+not_applicable functions keep package status neutral."""
@@ -443,12 +460,8 @@ class TestPackageStatus:
             script_metrics={"bytecode_buffer_size": 0, "serialized_script_size": 0,
                            "serialized_bytes_consumed": 0, "bytecode_bytes_consumed": 0},
         )]
-        mock_result = MagicMock()
-        mock_result.decompiled_functions = funcs
-        decompiled = _build_decompiled_functions_ir(mock_result)
-        ir = _make_ir_with_decompiled(decompiled)
-        # no_script should not make package partial
-        assert ir.diagnostics_data.status == "success"
+        result = self._make_parse_result(decompiled_functions=funcs)
+        assert _result_status(result) == "success"
 
     def test_failed_function_yields_partial_package(self):
         """A failed function yields partial package status."""
@@ -459,16 +472,8 @@ class TestPackageStatus:
             error_code="unknown_expr_token",
             error_message="Unknown EExprToken",
         )]
-        mock_result = MagicMock()
-        mock_result.decompiled_functions = funcs
-        decompiled = _build_decompiled_functions_ir(mock_result)
-        ir = _make_ir_with_decompiled(decompiled)
-        # Inject the failed status into diagnostics_data
-        ir.diagnostics_data.status = "partial"
-        ir.diagnostics_data.status_code = "KISMET_PARTIAL"
-        ir.diagnostics_data.status_message = "1/1 functions failed"
-        assert ir.diagnostics_data.status == "partial"
-        assert ir.diagnostics_data.status_code == "KISMET_PARTIAL"
+        result = self._make_parse_result(decompiled_functions=funcs)
+        assert _result_status(result) == "partial"
 
     def test_partial_translation_yields_partial_package(self):
         """A parsed+partial function yields partial package status."""
@@ -478,12 +483,8 @@ class TestPackageStatus:
             translation_status="partial",
             warnings=["Kismet translation contains unsupported expression tokens"],
         )]
-        mock_result = MagicMock()
-        mock_result.decompiled_functions = funcs
-        decompiled = _build_decompiled_functions_ir(mock_result)
-        ir = _make_ir_with_decompiled(decompiled)
-        ir.diagnostics_data.status = "partial"
-        assert ir.diagnostics_data.status == "partial"
+        result = self._make_parse_result(decompiled_functions=funcs)
+        assert _result_status(result) == "partial"
 
     def test_failed_translation_yields_partial_package(self):
         """A parsed+failed function yields partial package status."""
@@ -492,12 +493,8 @@ class TestPackageStatus:
             bytecode_status="parsed",
             translation_status="failed",
         )]
-        mock_result = MagicMock()
-        mock_result.decompiled_functions = funcs
-        decompiled = _build_decompiled_functions_ir(mock_result)
-        ir = _make_ir_with_decompiled(decompiled)
-        ir.diagnostics_data.status = "partial"
-        assert ir.diagnostics_data.status == "partial"
+        result = self._make_parse_result(decompiled_functions=funcs)
+        assert _result_status(result) == "partial"
 
     def test_all_verified_keeps_success_package(self):
         """Only verified functions keep package status success."""
@@ -506,11 +503,8 @@ class TestPackageStatus:
             bytecode_status="parsed",
             translation_status="complete",
         )]
-        mock_result = MagicMock()
-        mock_result.decompiled_functions = funcs
-        decompiled = _build_decompiled_functions_ir(mock_result)
-        ir = _make_ir_with_decompiled(decompiled)
-        assert ir.diagnostics_data.status == "success"
+        result = self._make_parse_result(decompiled_functions=funcs)
+        assert _result_status(result) == "success"
 
 
 # ---------------------------------------------------------------------------
