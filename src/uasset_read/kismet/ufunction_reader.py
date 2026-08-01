@@ -264,6 +264,216 @@ def _make_offset_mismatch_error(
 
 
 # ---------------------------------------------------------------------------
+# UStruct prefix and script header reader
+# ---------------------------------------------------------------------------
+
+# Custom version GUIDs for gating
+FRAMEWORK_REMOVE_UFIELD_NEXT_VERSION = 29
+CORE_FPROPERTIES_VERSION = 4
+
+
+def _read_ustruct_prefix_and_script(
+    window: ByteArchive,
+    export: ObjectExport,
+    summary: PackageFileSummary,
+    *,
+    export_index: int = 0,
+    native_start: int = 0,
+) -> FunctionScriptReadResult:
+    """Read the UStruct prefix and script header after tagged properties.
+
+    The window must be positioned immediately after the None terminator.
+    Reads:
+      1. SuperStruct: int32
+      2. Children: int32 (legacy pointer) OR int32 (count) + count * int32 pointers
+      3. NativePropertyCount: int32 (only when Core version >= 4)
+      4. BytecodeBufferSize: int32
+      5. SerializedScriptSize: int32
+      6. SerializedScript: SerializedScriptSize bytes
+
+    Returns FunctionScriptReadResult with status "extracted", "no_script", or "failed".
+    """
+    # Look up custom versions
+    framework_version = get_kismet_custom_version(summary, FRAMEWORK_GUID)
+    core_version = get_kismet_custom_version(summary, CORE_GUID)
+
+    # Check remaining capacity
+    remaining_bytes = window.total_size() - window.tell()
+    max_i32_slots = remaining_bytes // 4
+
+    try:
+        # 1. SuperStruct
+        _super_struct = window.read_i32("SuperStruct")
+
+        # 2. Children
+        if framework_version >= FRAMEWORK_REMOVE_UFIELD_NEXT_VERSION:
+            # Modern: count + pointers
+            children_count = window.read_i32("ChildrenCount")
+            if children_count < 0:
+                return _make_invalid_script_size_failure(
+                    f"Negative Children count: {children_count}",
+                    export, export_index, native_start,
+                )
+            if children_count > max_i32_slots:
+                return _make_invalid_script_size_failure(
+                    f"Children count {children_count} exceeds remaining capacity ({max_i32_slots} slots)",
+                    export, export_index, native_start,
+                )
+            for i in range(children_count):
+                window.read_i32(f"Child[{i}]")
+        else:
+            # Legacy: single pointer
+            _children_ptr = window.read_i32("ChildrenPtr")
+
+        # 3. NativePropertyCount (only when Core version >= 4)
+        native_property_count = 0
+        if core_version >= CORE_FPROPERTIES_VERSION:
+            native_property_count = window.read_i32("NativePropertyCount")
+            if native_property_count < 0:
+                return _make_invalid_script_size_failure(
+                    f"Negative NativePropertyCount: {native_property_count}",
+                    export, export_index, native_start,
+                )
+            if native_property_count > 0:
+                return FunctionScriptReadResult(
+                    status="failed",
+                    failure=FunctionScriptFailure(
+                        error_code="unsupported_native_field",
+                        error_message=f"NativePropertyCount={native_property_count} (non-zero native fields not yet supported)",
+                        function_name=export.object_name,
+                        export_index=export_index,
+                        class_name=resolve_class_name(export.class_index, [], [export]) or "Unknown",
+                        package_offset=export.serial_offset,
+                        export_offset=export.serial_offset,
+                    ),
+                )
+
+        # 4. BytecodeBufferSize
+        bytecode_buffer_size = window.read_i32("BytecodeBufferSize")
+
+        # 5. SerializedScriptSize
+        serialized_script_size = window.read_i32("SerializedScriptSize")
+
+        # Validate size pair
+        validation = _validate_script_sizes(bytecode_buffer_size, serialized_script_size)
+        if validation is not None:
+            return FunctionScriptReadResult(
+                status="failed",
+                failure=FunctionScriptFailure(
+                    error_code=validation[0],
+                    error_message=validation[1],
+                    function_name=export.object_name,
+                    export_index=export_index,
+                    class_name=resolve_class_name(export.class_index, [], [export]) or "Unknown",
+                    package_offset=export.serial_offset,
+                    export_offset=export.serial_offset,
+                ),
+            )
+
+        # 0/0 = no_script
+        if bytecode_buffer_size == 0 and serialized_script_size == 0:
+            return FunctionScriptReadResult(
+                status="no_script",
+                bytecode_buffer_size=0,
+                serialized_script_size=0,
+                serialized_start=native_start,
+            )
+
+        # Check remaining bytes vs declared size
+        remaining_after_header = window.total_size() - window.tell()
+        if serialized_script_size > remaining_after_header:
+            return FunctionScriptReadResult(
+                status="failed",
+                failure=FunctionScriptFailure(
+                    error_code="truncated_script",
+                    error_message=(
+                        f"Declared SerializedScriptSize={serialized_script_size} "
+                        f"but only {remaining_after_header} bytes remain"
+                    ),
+                    function_name=export.object_name,
+                    export_index=export_index,
+                    class_name=resolve_class_name(export.class_index, [], [export]) or "Unknown",
+                    package_offset=export.serial_offset,
+                    export_offset=export.serial_offset,
+                    bytecode_buffer_size=bytecode_buffer_size,
+                    serialized_script_size=serialized_script_size,
+                    remaining_serialized=remaining_after_header,
+                ),
+            )
+
+        # 6. SerializedScript
+        script = window.read(serialized_script_size)
+        return FunctionScriptReadResult(
+            status="extracted",
+            serialized_script=script,
+            bytecode_buffer_size=bytecode_buffer_size,
+            serialized_script_size=serialized_script_size,
+            serialized_start=native_start,
+        )
+
+    except Exception as exc:
+        # Catch any read errors during UStruct prefix parsing
+        return FunctionScriptReadResult(
+            status="failed",
+            failure=FunctionScriptFailure(
+                error_code="read_error",
+                error_message=f"Error reading UStruct prefix: {exc}",
+                function_name=export.object_name,
+                export_index=export_index,
+                class_name=resolve_class_name(export.class_index, [], [export]) or "Unknown",
+                package_offset=export.serial_offset,
+                export_offset=export.serial_offset,
+            ),
+        )
+
+
+def _validate_script_sizes(
+    bytecode_buffer_size: int,
+    serialized_script_size: int,
+) -> tuple[str, str] | None:
+    """Validate the script size pair.
+
+    Returns (error_code, error_message) if invalid, or None if valid.
+    """
+    # Negative sizes
+    if bytecode_buffer_size < 0 or serialized_script_size < 0:
+        return (
+            "invalid_script_size",
+            f"Negative size: BytecodeBufferSize={bytecode_buffer_size}, "
+            f"SerializedScriptSize={serialized_script_size}",
+        )
+    # One-sided zero (one is 0, the other is not)
+    if (bytecode_buffer_size == 0) != (serialized_script_size == 0):
+        return (
+            "invalid_script_size",
+            f"One-sided zero: BytecodeBufferSize={bytecode_buffer_size}, "
+            f"SerializedScriptSize={serialized_script_size}",
+        )
+    return None
+
+
+def _make_invalid_script_size_failure(
+    message: str,
+    export: ObjectExport,
+    export_index: int,
+    native_start: int,
+) -> FunctionScriptReadResult:
+    """Create a failed result for invalid script size."""
+    return FunctionScriptReadResult(
+        status="failed",
+        failure=FunctionScriptFailure(
+            error_code="invalid_script_size",
+            error_message=message,
+            function_name=export.object_name,
+            export_index=export_index,
+            class_name=resolve_class_name(export.class_index, [], [export]) or "Unknown",
+            package_offset=export.serial_offset,
+            export_offset=export.serial_offset,
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -317,12 +527,10 @@ def read_ufunction_script(
             archive, export, summary, name_map, import_map, export_map,
             export_index=export_index,
         )
-        # Read remaining bytes after tagged properties
-        remaining = window.read(window.total_size() - window.tell())
-        return FunctionScriptReadResult(
-            status="extracted",
-            serialized_script=remaining,
-            serialized_start=native_start,
+        return _read_ustruct_prefix_and_script(
+            window, export, summary,
+            export_index=export_index,
+            native_start=native_start,
         )
     except (UnsupportedSerializationVersion, InvalidScriptPropertyRange) as exc:
         return FunctionScriptReadResult(status="failed", failure=exc.failure)

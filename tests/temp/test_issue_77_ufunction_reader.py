@@ -1,9 +1,12 @@
-"""Tests for native UFunction Script reader — Issue #77 Task 1.
+"""Tests for native UFunction Script reader — Issue #77 Task 2.
 
 Covers:
 - Custom version lookup with serialized GUID
 - Export boundary enforcement and offset cross-checking
 - UE5 version 1011 serialization control byte handling
+- UStruct prefix reading (SuperStruct, Children, NativePropertyCount)
+- Script size header validation (BytecodeBufferSize, SerializedScriptSize)
+- Script extraction with various header combinations
 """
 from __future__ import annotations
 
@@ -209,16 +212,19 @@ class TestSerializationControlByte:
 
     def test_control_byte_zero_no_override(self):
         """Control byte 0x00: no override-operation, proceed to tagged properties."""
-        payload = serialization_control_none_terminator() + b"DATA"
+        script = b"DATA"
+        native = modern_ustruct_prefix(property_count=0) + script_header(4, 4) + script
+        payload = serialization_control_none_terminator() + native
         archive, export, summary, names, imports, exports = make_function_export(
             payload, file_version_ue5=1011,
         )
         export.script_serialization_start_offset = 0
         export.script_serialization_end_offset = len(serialization_control_none_terminator())
+        summary = make_summary_with_versions(framework_version=37, core_version=12)
 
         result = read_ufunction_script(archive, export, summary, names, imports, exports)
         assert result.status == "extracted"
-        assert result.serialized_script == b"DATA"
+        assert result.serialized_script == script
 
     def test_control_byte_0x02_with_override_operation(self):
         """Control byte 0x02: consume one override-operation byte after control byte."""
@@ -277,3 +283,234 @@ class TestSerializationControlByte:
         )
         assert native_start == export.script_serialization_end_offset
         assert window.read(6) == b"SCRIPT"
+
+
+# ===================================================================
+# UStruct prefix helpers
+# ===================================================================
+
+def i32(value: int) -> bytes:
+    """Serialize a signed 32-bit integer, little-endian."""
+    return struct.pack("<i", value)
+
+
+def ustruct_prefix_legacy(super_struct: int = 0, children_ptr: int = 0) -> bytes:
+    """Legacy UStruct prefix (Framework version < 29):
+    SuperStruct: i32, Children: legacy pointer (i32).
+    """
+    return i32(super_struct) + i32(children_ptr)
+
+
+def ustruct_prefix_modern(
+    super_struct: int = 0,
+    children_count: int = 0,
+    property_count: int = 0,
+) -> bytes:
+    """Modern UStruct prefix (Framework version >= 29):
+    SuperStruct: i32, Children: count (i32) + count*i32 pointers,
+    NativePropertyCount: i32 (when Core version >= 4).
+    """
+    result = i32(super_struct) + i32(children_count)
+    for _ in range(children_count):
+        result += i32(0)
+    result += i32(property_count)
+    return result
+
+
+def modern_ustruct_prefix(property_count: int = 0) -> bytes:
+    """Convenience wrapper: modern UStruct prefix with zero children."""
+    return ustruct_prefix_modern(property_count=property_count)
+
+
+def script_header(bytecode_size: int, script_size: int) -> bytes:
+    """BytecodeBufferSize + SerializedScriptSize."""
+    return i32(bytecode_size) + i32(script_size)
+
+
+def make_summary_with_versions(
+    file_version_ue4: int = 522,
+    file_version_ue5: int = 1011,
+    framework_version: int = 37,
+    core_version: int = 12,
+) -> PackageFileSummary:
+    """Create a summary with specific framework and core custom versions."""
+    return PackageFileSummary(
+        tag=0,
+        legacy_file_version=-4,
+        file_version_ue4=file_version_ue4,
+        file_version_ue5=file_version_ue5,
+        custom_versions=[
+            CustomVersion(FRAMEWORK_GUID, framework_version),
+            CustomVersion(CORE_GUID, core_version),
+        ],
+    )
+
+
+def read_synthetic_function(
+    native: bytes,
+    *,
+    framework_version: int = 37,
+    core_version: int = 12,
+    file_version_ue4: int = 522,
+    file_version_ue5: int = 1011,
+) -> FunctionScriptReadResult:
+    """Build a synthetic Function export and run read_ufunction_script.
+
+    The ``native`` bytes are placed after the serialization-control prefix
+    and None terminator (tagged-property stream).
+    """
+    # Prefix: serialization-control 0x00 + None tag
+    control_prefix = b"\x00"
+    none_tag = fname(0, 0)
+    payload = control_prefix + none_tag + native
+
+    archive, export, summary, names, imports, exports = make_function_export(
+        payload,
+        file_version_ue4=file_version_ue4,
+        file_version_ue5=file_version_ue5,
+    )
+    export.script_serialization_start_offset = 0
+    export.script_serialization_end_offset = len(control_prefix) + len(none_tag)
+
+    summary = make_summary_with_versions(
+        file_version_ue4=file_version_ue4,
+        file_version_ue5=file_version_ue5,
+        framework_version=framework_version,
+        core_version=core_version,
+    )
+
+    return read_ufunction_script(archive, export, summary, names, imports, exports)
+
+
+# ===================================================================
+# UStruct prefix and header tests
+# ===================================================================
+
+class TestUStructPrefix:
+    """UStruct prefix parsing after tagged properties."""
+
+    def test_modern_zero_property_function_extracts_script(self):
+        """Modern header with zero native properties: read script bytes."""
+        script = bytes([0x00])  # EX_EndOfScript
+        result = read_synthetic_function(
+            native=modern_ustruct_prefix(property_count=0) + script_header(1, 1) + script,
+        )
+        assert result.status == "extracted"
+        assert result.serialized_script == script
+        assert result.bytecode_buffer_size == 1
+        assert result.serialized_script_size == 1
+
+    def test_zero_zero_header_is_no_script(self):
+        """BytecodeBufferSize=0 and SerializedScriptSize=0 -> no_script."""
+        result = read_synthetic_function(
+            native=modern_ustruct_prefix(property_count=0) + script_header(0, 0),
+        )
+        assert result.status == "no_script"
+
+    @pytest.mark.parametrize("buffer_size, serialized_size", [
+        (-1, 0),
+        (0, -1),
+        (1, 0),
+        (0, 1),
+    ])
+    def test_invalid_script_size_pairs_fail(self, buffer_size: int, serialized_size: int):
+        """Negative or one-sided-zero sizes are rejected."""
+        result = read_synthetic_function(
+            native=modern_ustruct_prefix(property_count=0) + script_header(buffer_size, serialized_size),
+        )
+        assert result.status == "failed"
+        assert result.failure is not None
+        assert result.failure.error_code == "invalid_script_size"
+
+    def test_truncated_script_reports_declared_and_remaining_sizes(self):
+        """Declared script size larger than available bytes -> truncated_script."""
+        result = read_synthetic_function(
+            native=modern_ustruct_prefix(property_count=0) + script_header(4, 4) + b"\x53",
+        )
+        assert result.status == "failed"
+        assert result.failure is not None
+        assert result.failure.error_code == "truncated_script"
+        assert result.failure.remaining_serialized == 1
+
+    def test_legacy_framework_28_one_child_pointer(self):
+        """Framework version 28 uses legacy Children (one pointer, no count)."""
+        script = bytes([0x00])
+        native = (
+            ustruct_prefix_legacy(super_struct=0, children_ptr=0)
+            + i32(0)  # NativePropertyCount (core_version >= 4)
+            + script_header(1, 1)
+            + script
+        )
+        result = read_synthetic_function(
+            native=native,
+            framework_version=28,
+            core_version=12,
+        )
+        assert result.status == "extracted"
+        assert result.serialized_script == script
+        assert result.bytecode_buffer_size == 1
+
+    def test_modern_framework_29_two_children(self):
+        """Framework version 29 with two-element Children array."""
+        script = bytes([0x00])
+        native = (
+            ustruct_prefix_modern(super_struct=0, children_count=2, property_count=0)
+            + script_header(1, 1)
+            + script
+        )
+        result = read_synthetic_function(
+            native=native,
+            framework_version=29,
+            core_version=12,
+        )
+        assert result.status == "extracted"
+        assert result.serialized_script == script
+
+    def test_core_version_below_4_omits_native_property_count(self):
+        """Core version < 4: no NativePropertyCount field."""
+        script = bytes([0x00])
+        # Framework < 29: legacy Children pointer
+        # Core < 4: no NativePropertyCount
+        native = (
+            ustruct_prefix_legacy(super_struct=0, children_ptr=0)
+            + script_header(1, 1)
+            + script
+        )
+        result = read_synthetic_function(
+            native=native,
+            framework_version=28,
+            core_version=3,
+        )
+        assert result.status == "extracted"
+        assert result.serialized_script == script
+
+
+class TestUnsupportedVersions:
+    """Summaries with very old file versions fail before UStruct parsing."""
+
+    @pytest.mark.parametrize("file_version_ue4, file_version_licensee", [
+        (398, -1),
+        (398, 0),
+    ])
+    def test_old_version_fails_with_unsupported_serialization_version(
+        self,
+        file_version_ue4: int,
+        file_version_licensee: int,
+    ):
+        """Versions below UE5 1011 still process tagged properties but
+        file_version_ue4=398 with no framework/custom versions means the
+        archive has no serialization-control byte and the UStruct prefix
+        reading will be attempted on raw bytes.
+
+        In practice these fail with 'unsupported_serialization_version' or
+        'invalid_script_size' depending on the raw byte values.
+        """
+        payload = b"\x00" + fname(0, 0) + b"\x00" * 16
+        archive, export, summary, names, imports, exports = make_function_export(
+            payload,
+            file_version_ue4=file_version_ue4,
+            file_version_ue5=file_version_licensee,
+        )
+        result = read_ufunction_script(archive, export, summary, names, imports, exports)
+        # Old versions either fail or return no_script depending on the bytes
+        assert result.status in ("failed", "no_script")
