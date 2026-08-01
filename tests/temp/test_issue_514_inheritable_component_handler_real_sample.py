@@ -61,6 +61,7 @@ def test_real_inheritable_component_handler_records_are_tagged_properties() -> N
         assert {"ComponentClass", "ComponentTemplate", "ComponentKey"} <= record.fields.keys()
         component_key = record.fields["ComponentKey"]
         assert isinstance(component_key, StructValue)
+        assert component_key.fields["OwnerClass"] is not None
         assert component_key.fields["SCSVariableName"]
         assert "AssociatedGuid" in component_key.fields
 
@@ -82,6 +83,11 @@ def test_real_inheritable_component_handler_records_are_tagged_properties() -> N
         prop for prop in rendered[0]["properties"] if prop["name"] == "Records"
     )["value"]
     assert len(rendered_records) == 4
-    assert {
-        "ComponentClass", "ComponentTemplate", "ComponentKey",
-    } <= rendered_records[0]["fields"].keys()
+    for record in rendered_records:
+        assert {
+            "ComponentClass", "ComponentTemplate", "ComponentKey",
+        } <= record["fields"].keys()
+        component_key = record["fields"]["ComponentKey"]["fields"]
+        assert component_key["OwnerClass"] is not None
+        assert component_key["SCSVariableName"]
+        assert "AssociatedGuid" in component_key
