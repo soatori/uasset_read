@@ -6,6 +6,7 @@ import pytest
 
 from uasset_read import parse_single
 from uasset_read.graph.chain_builder import build_execution_chains
+from uasset_read.graph.graph_utils import _iter_normalized_edges
 from uasset_read.models.core import FEdGraphPinType, UEdGraph, UEdGraphNode, UEdGraphPin
 
 
@@ -48,6 +49,24 @@ def test_stackobot_if_then_else_chains_publish_resolved_successors(output_level:
         path["to_node_guid"] in {node["node_guid"] for node in graph["nodes"]}
         for graph, path in branch_paths
     )
+    successors_by_output = {
+        (from_node_guid, output_pin): {
+            path["to_node_guid"]
+            for _, path in branch_paths
+            if path["from_node_guid"] == from_node_guid and path["output_pin"] == output_pin
+        }
+        for from_node_guid, output_pin in {
+            (path["from_node_guid"], path["output_pin"])
+            for _, path in branch_paths
+        }
+    }
+    play_audio_else = successors_by_output[("ee0262e430b7fc47b587fb8183abe5f1", "else")]
+    assert "395e6d5e1a85834484b40aab489fd315" in play_audio_else
+    assert "1984d156b97e354b820a4c82633c0b0b" not in play_audio_else
+    reset_save_game_then = successors_by_output[("9c81310e1263a2438a64864cc219d88a", "then")]
+    assert "7305b0f44856774ab33cdce866f53a00" in reset_save_game_then
+    assert "bae91e18f018704a9b8d2bd94bf3eb00" not in reset_save_game_then
+    assert len(branch_paths) == 9
     jsonschema.validate(data, SCHEMA)
 
 
@@ -113,6 +132,51 @@ def test_execution_sequence_fan_out_publishes_resolved_successors() -> None:
             "to_node_guid": target_one_guid,
         },
     ]
+
+
+def test_normalized_edges_disambiguate_duplicate_pin_ids_by_linked_to_owner() -> None:
+    source_guid = "1" * 32
+    target_a_guid = "2" * 32
+    target_b_guid = "3" * 32
+    source_pin_id = "a" * 32
+    shared_target_pin_id = "b" * 32
+
+    target_a = UEdGraphNode(
+        node_guid=target_a_guid,
+        class_name="K2Node_CallFunction",
+        pins=[_exec_pin(shared_target_pin_id, "execute", 0)],
+    )
+    target_a._export_object_name = "Target_A"
+    target_b = UEdGraphNode(
+        node_guid=target_b_guid,
+        class_name="K2Node_CallFunction",
+        pins=[_exec_pin(shared_target_pin_id, "execute", 0)],
+    )
+    target_b._export_object_name = "Target_B"
+    graph = UEdGraph(
+        graph_name="DuplicatePinIds",
+        graph_class="EdGraph",
+        nodes=[
+            UEdGraphNode(
+                node_guid=source_guid,
+                class_name="K2Node_IfThenElse",
+                pins=[
+                    _exec_pin(
+                        source_pin_id,
+                        "then",
+                        1,
+                        [{"pin_guid": shared_target_pin_id, "owning_node": "Target_A"}],
+                    )
+                ],
+            ),
+            target_a,
+            target_b,
+        ],
+    )
+
+    edges = list(_iter_normalized_edges(graph))
+
+    assert [edge["to_node_guid"] for edge in edges] == [target_a_guid]
 
 
 @pytest.mark.parametrize("branch_path", [
