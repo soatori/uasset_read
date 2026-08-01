@@ -727,6 +727,44 @@ def _try_fast_path_struct(
             "SphereRadius": sr,
         })
 
+    # MovieSceneDoubleChannel — animation keyframe channel (#515)
+    # UE source: Engine/Source/Runtime/MovieScene/Public/MovieSceneChannel.h
+    # Binary layout: [Traits_version:u8][Values_count:u8][Times_count:u8][bHasDefaults:u8]
+    #                [Values:f64[]][Times:i32[]][DefaultValue:f64 (if bHasDefaults)]
+    if struct_type == "MovieSceneDoubleChannel" and tag.size >= 4:
+        start = archive.tell()
+        header = archive.read(4)
+        traits_ver = header[0]
+        vc = header[1]
+        tc = header[2]
+        bhd = header[3]
+
+        # Validate: reasonable counts, header version
+        if (0 < vc < 50 and 0 <= tc <= vc and traits_ver in (0, 1, 2, 3, 4, 5)
+                and start + 4 + vc * 8 + tc * 4 + (8 if bhd else 0) <= start + tag.size + 16):
+            try:
+                values = [archive.read_f64() for _ in range(vc)]
+                times = [archive.read_i32() for _ in range(tc)]
+                default_val = archive.read_f64() if bhd else None
+                # Seek to end of struct
+                archive.seek(start + tag.size)
+                fields: Dict[str, Any] = {
+                    "Values": values,
+                    "Times": times,
+                    "keyframe_count": vc,
+                    "bHasDefaults": bool(bhd),
+                }
+                if default_val is not None:
+                    fields["DefaultValue"] = default_val
+                return StructValue(
+                    struct_type="MovieSceneDoubleChannel",
+                    fields=fields,
+                    raw_size=tag.size,
+                    parse_status="success",
+                )
+            except Exception:
+                archive.seek(start)
+
     return None
 
 

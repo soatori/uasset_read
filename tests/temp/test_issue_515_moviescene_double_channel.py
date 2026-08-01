@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from uasset_read import parse_single
 
 
@@ -74,8 +76,8 @@ def test_moviescene_double_channel_values():
                 value = prop.get("value", {})
                 if isinstance(value, dict) and value.get("struct_type") == "MovieSceneDoubleChannel":
                     fields = value.get("fields", {})
-                    # Should have values or keyframes field
-                    assert "values" in fields or "keyframes" in fields, \
+                    # Should have Values (keyframe values array)
+                    assert "Values" in fields or "values" in fields or "keyframes" in fields, \
                         f"MovieSceneDoubleChannel missing values: {fields}"
                     return  # Test one instance
 
