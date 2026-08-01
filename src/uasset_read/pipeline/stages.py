@@ -113,18 +113,19 @@ def _derive_package_name(path: str, summary) -> None:
     from pathlib import Path
     if summary.package_name:
         return
-    _p = Path(path)
-    _path_str = _p.as_posix()
-    _content_idx = _path_str.lower().find("/content/")
-    if _content_idx >= 0:
-        _relative = _path_str[_content_idx + len("/content/"):]
-        if _relative.startswith("/"):
-            _relative = _relative[1:]
-        if _relative.lower().endswith(".uasset"):
-            _relative = _relative[:-len(".uasset")]
-        summary.package_name = f"/Game/{_relative}"
+    path_obj = Path(path)
+    content_dir = next(
+        (parent for parent in path_obj.parents if parent.name.lower() == "content"),
+        None,
+    )
+    if content_dir is not None:
+        relative = path_obj.relative_to(content_dir).with_suffix("").as_posix()
+        plugin_root = content_dir.parent
+        descriptor = plugin_root / f"{plugin_root.name}.uplugin"
+        mount_root = f"/{plugin_root.name}" if descriptor.is_file() else "/Game"
+        summary.package_name = f"{mount_root}/{relative}"
     else:
-        summary.package_name = f"/Game/{_p.stem}"
+        summary.package_name = f"/Game/{path_obj.stem}"
 
 
 def _init_parse_env(
