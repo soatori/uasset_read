@@ -70,6 +70,11 @@ def create_parser():
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('--json', action='store_true', help='Output full JSON structure (default)')
     group.add_argument('--markdown', action='store_true', help='Output Markdown format')
+    group.add_argument(
+        '--format',
+        choices=['json', 'markdown', 'uasset-reader-js'],
+        help='Output format name',
+    )
 
     # Optional flags
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
@@ -127,6 +132,8 @@ def resolve_format(args) -> str:
         return "markdown"
     if args.json:
         return "json"
+    if args.format:
+        return args.format
     return "json"
 
 

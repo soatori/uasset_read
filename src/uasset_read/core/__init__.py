@@ -278,7 +278,7 @@ def _parse_and_render(
     """
     set_last_parse_result(None)
 
-    linker_formats = {"json"}
+    linker_formats = {"json", "uasset-reader-js"}
 
     if format in linker_formats:
         result = parse_uasset_with_linker(
@@ -312,6 +312,11 @@ def _parse_and_render(
     if not result.is_success and not _can_render_tolerant_json(result, format, tolerant):
         raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
 
+    if format == "uasset-reader-js":
+        from uasset_read.compat.uasset_reader_js import render_uasset_reader_js
+
+        return render_uasset_reader_js(file_path), result
+
     ir = build_package_ir(result)
 
     # Release temporary large objects to prevent memory accumulation during batch parsing
@@ -336,7 +341,10 @@ def _parse_and_render(
 
 
 def _can_render_tolerant_json(result, format: str, tolerant: bool | None) -> bool:
-    if (tolerant is not None and not tolerant) or format not in {"json"}:
+    if (tolerant is not None and not tolerant) or format not in {
+        "json",
+        "uasset-reader-js",
+    }:
         return False
     from uasset_read.link.result import LinkerParseResult
     from uasset_read.models.result import ParseResult
@@ -462,7 +470,7 @@ def parse_batch(
     policy = memory_policy or MemoryPolicy()
     system_usage_limit = min(max_memory_usage, policy.system_usage_limit)
 
-    if format.startswith("json"):
+    if format.startswith("json") or format == "uasset-reader-js":
         extension = ".json"
     elif format == "markdown":
         extension = ".md"

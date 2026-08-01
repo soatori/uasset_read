@@ -10,7 +10,11 @@ from uasset_read import core
 
 @pytest.mark.parametrize(
     ("format_name", "extension"),
-    [("json", ".json"), ("markdown", ".md")],
+    [
+        ("json", ".json"),
+        ("uasset-reader-js", ".json"),
+        ("markdown", ".md"),
+    ],
 )
 def test_parse_batch_replaces_input_suffix_in_success_paths_and_files(
     tmp_path: Path,

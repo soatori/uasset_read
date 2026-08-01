@@ -7,6 +7,7 @@ import struct
 import pytest
 
 from uasset_read import parse_single
+from uasset_read.cli import create_parser, resolve_format
 from uasset_read.compat.uasset_reader_js import (
     _bigint_json_string,
     _guid_slot_to_js,
@@ -20,6 +21,41 @@ EXPECTED_BIGINTS = {
     "BP_Actor_Simple": ("20574n", "-1n"),
     "Actor": ("4613n", "4617n"),
 }
+NORMAL_JSON_ROOT_KEYS = {
+    "status",
+    "metadata",
+    "summary",
+    "exports",
+    "import_map",
+    "name_map",
+    "blueprint",
+    "decompiled_functions",
+    "variables",
+    "warnings",
+    "diagnostics",
+    "asset_registry_data",
+    "statistics",
+}
+
+
+def test_cli_selects_uasset_reader_js_format() -> None:
+    args = create_parser().parse_args([
+        "--format",
+        "uasset-reader-js",
+        "asset.uasset",
+    ])
+
+    assert resolve_format(args) == "uasset-reader-js"
+
+
+def test_normal_json_root_keys_are_unchanged() -> None:
+    actual = json.loads(parse_single(
+        str(FIXTURES / "BP_Actor_Simple.uasset"),
+        format="json",
+        log_enabled=False,
+    ))
+
+    assert set(actual) == NORMAL_JSON_ROOT_KEYS
 
 
 def test_js_guid_slot_reverses_each_u32_and_uppercases() -> None:
