@@ -5,9 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from uasset_read import parse_single
 from uasset_read.parsers.asset_types.property_metadata import build_property_metadata
+from uasset_read.parsers.class_specific_skip import should_skip_export_for_tolerant_parsing
 from uasset_read.parsers.class_serialization_strategy import (
     SerializationStrategy,
     get_serialization_strategy,
@@ -48,8 +50,36 @@ def test_empty_cube_builder_metadata_remains_opaque() -> None:
     }
 
 
+def test_cube_builder_metadata_uses_empty_serialized_polys_as_zero() -> None:
+    """An explicitly serialized empty Polys array is business metadata, not absence."""
+    assert build_property_metadata(
+        "CubeBuilder", [SimpleNamespace(name="Polys", value=[])],
+    ) == {
+        "asset_type": "CubeBuilder",
+        "parse_status": "partial_metadata",
+        "polygon_count": 0,
+    }
+
+
+def test_cube_builder_metadata_does_not_promote_size_without_raw_vertices() -> None:
+    """A structural size alone does not prove the native vertex payload was read."""
+    assert build_property_metadata(
+        "CubeBuilder", [SimpleNamespace(name="Vertices", value={"size": 196})],
+    ) == {
+        "asset_type": "CubeBuilder",
+        "parse_status": "opaque",
+    }
+
+
 def test_cube_builder_uses_opaque_strategy_without_broadening_skip_prefixes() -> None:
     """Only the exact CubeBuilder class is reclassified from the builder skip family."""
     assert get_serialization_strategy("CubeBuilder") is SerializationStrategy.OPAQUE_CLASS_PAYLOAD
+    assert get_serialization_strategy("CubeBuilderHelper") is SerializationStrategy.SKIP_UNSUPPORTED
     assert get_serialization_strategy("GeomModifier_Any") is SerializationStrategy.SKIP_UNSUPPORTED
     assert get_serialization_strategy("BrushBuilderAny") is SerializationStrategy.SKIP_UNSUPPORTED
+    assert should_skip_export_for_tolerant_parsing(
+        SimpleNamespace(object_name="CubeBuilder_3"), "CubeBuilder",
+    ) is False
+    assert should_skip_export_for_tolerant_parsing(
+        SimpleNamespace(object_name="CubeBuilderHelper_3"), "CubeBuilderHelper",
+    ) is True

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from numbers import Integral
 from typing import Any
 
 from uasset_read.models.asset_metadata import (
@@ -68,10 +67,10 @@ def build_property_metadata(
     }
     business_field_count = 0
 
-    def project(field_name: str, value: Any) -> None:
+    def project(field_name: str, value: Any, *, include_zero: bool = False) -> None:
         nonlocal business_field_count
         sanitized = sanitize_asset_metadata(value)
-        if has_meaningful_metadata(sanitized):
+        if has_meaningful_metadata(sanitized) or (include_zero and sanitized == 0):
             data[field_name] = sanitized
             business_field_count += 1
 
@@ -116,20 +115,16 @@ def build_property_metadata(
             project("layer", layer)
 
         polygons = values.get("Polys")
-        if isinstance(polygons, list) and polygons:
-            project("polygon_count", len(polygons))
+        if isinstance(polygons, list):
+            project("polygon_count", len(polygons), include_zero=True)
 
         vertices = values.get("Vertices")
         if isinstance(vertices, dict):
             raw_data = vertices.get("raw_data")
-            fallback_size = vertices.get("size")
         else:
             raw_data = getattr(vertices, "raw_data", None)
-            fallback_size = getattr(vertices, "size", None)
         if isinstance(raw_data, (bytes, bytearray, memoryview)) and raw_data:
             project("vertex_payload_size", len(raw_data))
-        elif isinstance(fallback_size, Integral) and not isinstance(fallback_size, bool) and fallback_size > 0:
-            project("vertex_payload_size", fallback_size)
 
     if business_field_count:
         data["parse_status"] = validate_parse_status("partial_metadata")

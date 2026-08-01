@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # These classes have serialization data not fully compatible with the generic property parser.
 SKIP_CLASS_PREFIXES = (
     # P0: Builder / Brush
+    "CubeBuilder",
     "GeomModifier_",
     "BrushBuilder",
     # P0: Animation -- migrated to opaque whitelist (#166)
@@ -123,11 +124,15 @@ def should_skip_export_for_tolerant_parsing(
 
     # Check 2-4: original skip list (as fallback policy)
     object_name = str(export.object_name)
-    if object_name.startswith(SKIP_CLASS_PREFIXES):
+    if class_name != "CubeBuilder" and object_name.startswith(SKIP_CLASS_PREFIXES):
         return True
     if class_name is not None and class_name in SKIP_CLASS_NAMES:
         return True
-    if class_name is not None and class_name.startswith(SKIP_CLASS_PREFIXES):
+    if (
+        class_name is not None
+        and class_name != "CubeBuilder"
+        and class_name.startswith(SKIP_CLASS_PREFIXES)
+    ):
         return True
     return False
 
