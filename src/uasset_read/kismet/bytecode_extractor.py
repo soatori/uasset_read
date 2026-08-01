@@ -1,29 +1,18 @@
 """
-Kismet Bytecode Extractor — UStruct ScriptBytecode extraction and parsing.
-
-Bridge between FKismetArchive and AST translation.
+Kismet Bytecode Extractor — bytecode parsing and expression tree construction.
 
 Provides:
-- extract_bytecode_bytes: Extract raw ScriptBytecode from a UStruct export
 - parse_bytecode_stream: Parse bytecode bytes into KismetExpression list
-- extract_and_parse: Combined extraction + parsing entry point
 """
 
 from __future__ import annotations
 
 import logging
-import struct
 from typing import TYPE_CHECKING
 
 from uasset_read.kismet.archive import FKismetArchive
 from uasset_read.kismet.expressions.base import KismetExpression
 from uasset_read.exceptions import ParseError
-from uasset_read.constants import UE_NONE_SENTINEL
-
-if TYPE_CHECKING:
-    from uasset_read.archive import FArchive
-    from uasset_read.serializers.object_resources import ObjectExport
-    from uasset_read.serializers.package_summary import PackageFileSummary
 
 
 logger = logging.getLogger(__name__)
@@ -71,97 +60,6 @@ def has_false_positive_pattern(data: bytes) -> bool:
 MAX_SCAN_ATTEMPTS = 500       # Maximum (start, end) combinations to try per function
 MAX_CANDIDATE_SIZE = 4096     # Maximum candidate byte stream length (bytes)
 
-
-
-# ===========================================================================
-# Bytecode extraction
-# ===========================================================================
-
-
-def extract_bytecode_bytes(
-    archive: FArchive,
-    export: ObjectExport,
-    summary: PackageFileSummary,
-    name_map: list[str],
-    import_map: list,
-    export_map: list,
-) -> tuple[bytes | None, str, int]:
-    """
-    Extract ScriptBytecode raw bytes from a UStruct export.
-
-    Strategy: Navigate to the export's property region, skip PropertyTags
-    until "None", then read bytecodeBufferSize + serializedScriptSize header,
-    and return the bytecode data.
-
-    Per UStruct.cs, ScriptBytecode is NOT a PropertyTag value —
-    it is embedded directly in the UStruct serialization stream AFTER the
-    PropertyTag loop.
-
-    Args:
-        archive: FArchive instance (file-level archive)
-        export: ObjectExport to extract bytecode from
-        summary: PackageFileSummary for version flags
-        name_map: Name table for PropertyTag parsing
-        import_map: Import table for class name resolution
-        export_map: Export table for class name resolution
-
-    Returns:
-        Tuple of (bytecode_bytes, fallback_reason, bytecode_buffer_size).
-        fallback_reason is one of: "function_export", "none"
-        bytecode_buffer_size is the declared logical buffer size (0 when unavailable)
-
-    Raises:
-        ParseError: If serializedScriptSize is out of bounds
-    """
-    from uasset_read.serializers.object_resources import resolve_class_name
-    from uasset_read.serializers.property_tags import read_property_tag
-    from uasset_read.constants import UE5_PROPERTY_TAG_EXTENSION
-
-    # T-62-01: Verify class is in UStruct whitelist
-    class_name = resolve_class_name(export.class_index, import_map, export_map)
-    if class_name not in FUNCTION_EXPORT_CLASSES:
-        return None, "none", 0
-
-    # No script data
-    if not export.has_script_serialization:
-        return None, "none", 0
-
-    # Calculate script start position
-    if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
-        script_start = export.serial_offset + export.script_serialization_start_offset
-    else:
-        script_start = export.serial_offset
-
-    archive.seek(script_start)
-
-    # T-62-02: SerializationControlExtensions header
-    if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
-        ctrl = archive.read_u8()
-        if ctrl & 0x02:
-            archive.read_u8()  # skip overridden operation
-
-    # Skip PropertyTags until "None" (positions us at bytecode header)
-    while True:
-        tag = read_property_tag(archive, name_map)
-        if tag.name == UE_NONE_SENTINEL:
-            break
-        archive.skip(tag.size)
-
-    # Read bytecode header: bytecodeBufferSize + serializedScriptSize
-    bytecode_buffer_size = archive.read_i32()
-    serialized_script_size = archive.read_i32()
-
-    # T-62-02: Validate serializedScriptSize bounds
-    if serialized_script_size <= 0:
-        return None, "none", 0
-
-    if serialized_script_size > export.script_serialization_size:
-        raise ParseError(
-            f"serializedScriptSize ({serialized_script_size}) exceeds "
-            f"script_serialization_size ({export.script_serialization_size}) for '{export.object_name}'"
-        )
-
-    return archive.read_bytes(serialized_script_size), "function_export", bytecode_buffer_size
 
 
 # ===========================================================================
@@ -271,67 +169,6 @@ def _validate_jump_targets(expressions: list[KismetExpression]) -> None:
                 raise ParseError(
                     f"Invalid jump target {target} at offset {expr.StatementIndex}"
                 )
-
-
-# ===========================================================================
-# Combined extraction + parsing
-# ===========================================================================
-
-
-def extract_and_parse(
-    archive: FArchive,
-    export: ObjectExport,
-    summary: PackageFileSummary,
-    name_map: list[str],
-    import_map: list,
-    export_map: list,
-    tolerant: bool = False,
-) -> tuple[list[KismetExpression], str | None, str]:
-    """
-    Extract ScriptBytecode from a UStruct export and parse into expressions.
-
-    Convenience function combining extract_bytecode_bytes + parse_bytecode_stream.
-
-    Args:
-        archive: FArchive instance (file-level archive)
-        export: ObjectExport to extract bytecode from
-        summary: PackageFileSummary for version flags
-        name_map: Name table for expression resolution
-        import_map: Import table for class name resolution
-        export_map: Export table for class name resolution
-        tolerant: If True, use tolerant mode for FKismetArchive
-
-    Returns:
-        Tuple of (expressions, error_message, fallback_reason).
-        - On success: (list[KismetExpression], None, reason)
-        - On non-UStruct or no bytecode: ([], None, "none")
-        - On ParseError: ([], str(error), "none")
-    """
-    # Check if this is a Function/UFunction type
-    from uasset_read.serializers.object_resources import resolve_class_name
-
-    class_name = resolve_class_name(export.class_index, import_map, export_map)
-    if class_name not in FUNCTION_EXPORT_CLASSES:
-        return ([], None, "none")
-
-    try:
-        bytecode_bytes, fallback_reason, bytecode_buffer_size = extract_bytecode_bytes(
-            archive, export, summary, name_map, import_map, export_map
-        )
-    except ParseError as e:
-        return ([], str(e), "none")
-
-    if bytecode_bytes is None:
-        return ([], None, fallback_reason)
-
-    try:
-        expressions = parse_bytecode_stream(
-            bytecode_bytes, name_map, summary,
-            bytecode_buffer_size=bytecode_buffer_size, tolerant=tolerant,
-        )
-        return (expressions, None, fallback_reason)
-    except ParseError as e:
-        return ([], str(e), fallback_reason)
 
 
 # ===========================================================================

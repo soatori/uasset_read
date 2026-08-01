@@ -190,9 +190,11 @@ class FKismetArchive(FArchive):
         """Read one int32 package index (4 bytes serialized, 8 logical bytes).
 
         Object pointers occupy 4 bytes on disk and advance the logical
-        address by 8 (the pointer is a function/struct reference).
+        address by 8 (the pointer is a function/struct reference on 64-bit).
         """
         index = self.read_i32()
+        # Pointer-sized logical operand: 4 extra bytes beyond the int32 read
+        self.bytecode_index += 4
         return PackageIndex(index)
 
     def xfer_field_pointer(self) -> FFieldPath:

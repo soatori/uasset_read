@@ -3,7 +3,8 @@
 Covers:
 - Dual-cursor tracking: serialized_offset (bytes consumed from disk) and
   bytecode_index (reconstructed in-memory address)
-- xfer_object_pointer: reads one int32 package index, adds four logical bytes
+- xfer_object_pointer: reads one int32 package index (4 bytes serialized,
+  8 logical bytes for pointer-sized operand)
 - xfer_field_pointer: version-aware FFieldPath deserialization with owner
 - xfer_fname: reads FName index + number, returns FNameRef
 - xfer_code_skip: reads i16 code skip offset
@@ -115,14 +116,14 @@ class TestDualCursor:
 # ===========================================================================
 
 class TestXObjectPointer:
-    """xfer_object_pointer: reads one int32 package index, adds four logical bytes."""
+    """xfer_object_pointer: reads one int32 package index (4 bytes serialized, 8 logical bytes)."""
 
     def test_object_pointer_is_four_serialized_bytes_and_eight_logical_bytes(self):
         ar = make_kismet_archive(i32(-3), bytecode_buffer_size=8)
         result = ar.xfer_object_pointer()
         assert result.index == -3
         assert ar.serialized_offset == 4
-        assert ar.bytecode_index == 12  # 8 + 4 (logical address advances by 4)
+        assert ar.bytecode_index == 16  # 8 + 4 (read_i32) + 4 (pointer-sized logical)
 
     def test_object_pointer_positive_index(self):
         """Positive package index resolves correctly."""
@@ -130,7 +131,7 @@ class TestXObjectPointer:
         result = ar.xfer_object_pointer()
         assert result.index == 5
         assert ar.serialized_offset == 4
-        assert ar.bytecode_index == 4  # 0 + 4 (logical address advances by 4)
+        assert ar.bytecode_index == 8  # 0 + 4 (read_i32) + 4 (pointer-sized logical)
 
 
 # ===========================================================================
@@ -334,7 +335,11 @@ class TestExpressionTransfers:
         assert ar.bytecode_index == 3
 
     def test_final_function_pointer_adds_eight_logical_bytes(self):
-        """EX_FinalFunction reads stack pointer via xfer_object_pointer."""
+        """EX_FinalFunction reads stack pointer via xfer_object_pointer.
+
+        The pointer-sized logical operand adds 8 bytes to the logical cursor
+        (4 from read_i32 + 4 extra for pointer size).
+        """
         # Stream: EX_FinalFunction + i32(-4) + EX_True + EX_EndFunctionParms
         data = (
             token(EExprToken.EX_FinalFunction)
@@ -353,9 +358,9 @@ class TestExpressionTransfers:
         assert all(p.Token != EExprToken.EX_EndFunctionParms for p in expr.Parameters)
         # Position after terminator
         assert ar.tell() == len(data)
-        # The final function pointer adds four logical bytes (int32 package index)
-        assert ar.bytecode_index == len(data)
-        # Next serialized/logical position is immediately after the terminator
+        # Logical cursor: EX_FinalFunction (1) + pointer (8) + EX_True (1) + EX_EndFunctionParms (1) = 11
+        assert ar.bytecode_index == len(data) + 4  # extra 4 for pointer-sized logical
+        # Next serialized position is immediately after the terminator
         assert ar.serialized_offset == len(data)
 
     def test_read_expression_array_consumes_terminator(self):
@@ -457,8 +462,8 @@ class TestNestedTerminators:
         assert expr.Properties[0].Token == EExprToken.EX_IntOne
         # Position after StructConst, at EX_True
         assert ar.tell() == len(data) - 1
-        # Logical cursor advances past the struct pointer (4 bytes) but not size (4 bytes)
-        assert ar.bytecode_index == len(data) - 1
+        # Logical cursor: EX_StructConst (1) + pointer (8) + struct_size (4) + EX_IntOne (1) + EX_EndStructConst (1) = 15
+        assert ar.bytecode_index == len(data) + 3  # 12 + 3 = 15 (extra 4 from pointer, minus 1 for EX_True not consumed)
 
 
 class TestStringTransfers:

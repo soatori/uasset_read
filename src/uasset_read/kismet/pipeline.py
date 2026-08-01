@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from uasset_read.exceptions import ParseError
 from uasset_read.kismet.result import KismetDecompiledResult
 from uasset_read.kismet.bytecode_extractor import (
-    extract_and_parse,
+    parse_bytecode_stream,
     FUNCTION_EXPORT_CLASSES,
 )
 from uasset_read.kismet.body_builder import FunctionBodyBuilder
@@ -40,7 +40,7 @@ def decompile_single_function(
     Decompile a single UStruct export to KismetDecompiledResult.
 
     Internal helper that:
-    1. Uses extract_and_parse() to extract and parse bytecode
+    1. Uses read_ufunction_script() to extract script bytes, then parse_bytecode_stream()
     2. Translates expressions to C++ pseudocode
     3. Captures local variable types from TypeRegistry
     4. Returns structured result
@@ -78,17 +78,36 @@ def decompile_single_function(
             fallback_reasons=[reason],
         )
 
-    # Reuse extract_and_parse() to extract and parse bytecode
+    # Use read_ufunction_script() to extract script bytes, then parse
+    from uasset_read.kismet.ufunction_reader import read_ufunction_script
+
     try:
-        expressions, error, extraction_reason = extract_and_parse(
+        script_result = read_ufunction_script(
             archive, export, summary, name_map, import_map, export_map,
-            tolerant=tolerant,
         )
     except (ParseError, ValueError, IndexError, KeyError) as exc:
-        # Expected failures from corrupted/malformed bytecode
         if tolerant:
             return _failed_result(f"bytecode extraction error: {exc}")
         raise
+
+    if script_result.status == "no_script":
+        return _failed_result("no script data")
+    if script_result.status == "failed":
+        reason = script_result.failure.error_message if script_result.failure else "unknown"
+        return _failed_result(f"UFunction script read failed: {reason}")
+
+    # Parse the bytecode from the serialized script
+    expressions = []
+    error = None
+    if script_result.serialized_script:
+        try:
+            expressions = parse_bytecode_stream(
+                script_result.serialized_script, name_map, summary,
+                bytecode_buffer_size=script_result.bytecode_buffer_size,
+                tolerant=tolerant,
+            )
+        except (ParseError, ValueError) as exc:
+            error = str(exc)
 
     if error or not expressions:
         if tolerant:
