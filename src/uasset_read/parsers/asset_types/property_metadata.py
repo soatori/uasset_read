@@ -123,8 +123,32 @@ def build_property_metadata(
             raw_data = vertices.get("raw_data")
         else:
             raw_data = getattr(vertices, "raw_data", None)
-        if isinstance(raw_data, (bytes, bytearray, memoryview)) and raw_data:
-            project("vertex_payload_size", len(raw_data))
+        if raw_data:
+            # Normalize to bytes: handle hex string, bytes, bytearray, memoryview
+            raw_bytes = None
+            if isinstance(raw_data, (bytes, bytearray, memoryview)):
+                raw_bytes = bytes(raw_data)
+            elif isinstance(raw_data, str) and len(raw_data) >= 8:
+                try:
+                    raw_bytes = bytes.fromhex(raw_data)
+                except ValueError:
+                    pass
+            if raw_bytes:
+                project("vertex_payload_size", len(raw_bytes))
+                # Decode vertex positions: u32 count + FVector[count] (3x f64)
+                try:
+                    import struct
+                    if len(raw_bytes) >= 4:
+                        vertex_count = struct.unpack_from("<I", raw_bytes, 0)[0]
+                        if 0 < vertex_count < 1000 and len(raw_bytes) >= 4 + vertex_count * 24:
+                            verts = []
+                            for vi in range(vertex_count):
+                                off = 4 + vi * 24
+                                x, y, z = struct.unpack_from("<ddd", raw_bytes, off)
+                                verts.append({"X": x, "Y": y, "Z": z})
+                            project("vertices", verts)
+                except (struct.error, OverflowError):
+                    pass
 
     if business_field_count:
         data["parse_status"] = validate_parse_status("partial_metadata")
