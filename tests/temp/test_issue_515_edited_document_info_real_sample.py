@@ -16,17 +16,19 @@ from uasset_read.models.properties import StructValue
 
 _EXPECTED_SUB_PATHS = [
     "UserConstructionScript",
-    "Move",
-    "Aim",
     "EventGraph",
 ]
-_EXPECTED_ZOOMS = [1.0, 1.0, 1.0, 0.5]
+_EXPECTED_ZOOMS = [0.75, 1.0]
+_EXPECTED_EXPORT_NAME = "BP_VehicleAdvSportsCar"
+_EXPECTED_ASSET_PATH_SUFFIX = ".BP_VehicleAdvSportsCar"
 
 
 def _sample_path() -> Path:
     configured = os.environ.get("UASSET_READ_EDI_SAMPLE")
     if not configured:
-        pytest.skip("set UASSET_READ_EDI_SAMPLE to run the real-package acceptance check")
+        pytest.skip(
+            "set UASSET_READ_EDI_SAMPLE to the UE 5.8 BP_VehicleAdvSportsCar package"
+        )
     path = Path(configured)
     assert path.is_file(), f"configured #515 sample is not a file: {path}"
     return path
@@ -51,9 +53,7 @@ def _assert_document_fields(record, index: int) -> None:
     assert path_value["size"] == 4
     assert path_value["fields"]["index"] == index
     assert path_value["fields"]["sub_path"] == _EXPECTED_SUB_PATHS[index]
-    assert path_value["fields"]["asset_path"].endswith(
-        ".BP_FirstPersonCharacter"
-    )
+    assert path_value["fields"]["asset_path"].endswith(_EXPECTED_ASSET_PATH_SUFFIX)
     assert "raw_data" not in path_value
 
     assert offset_value["kind"] == "struct_binary_decoded"
@@ -64,8 +64,8 @@ def _assert_document_fields(record, index: int) -> None:
     assert "raw_data" not in offset_value
 
 
-def test_real_edited_document_info_records_are_fully_decoded() -> None:
-    """The recorded UE 5.8 Blueprint exposes all four editor document records."""
+def test_real_ue58_edited_document_info_records_are_fully_decoded() -> None:
+    """The recorded UE 5.8 Blueprint exposes its editor document records."""
     sample = _sample_path()
     result = parse_uasset_with_linker(
         str(sample),
@@ -73,14 +73,17 @@ def test_real_edited_document_info_records_are_fully_decoded() -> None:
         force_full_parse=True,
     )
     assert result.is_success
+    engine_version = result.summary.saved_by_engine_version
+    assert (engine_version.major, engine_version.minor) == (5, 8)
+    assert engine_version.branch == "++UE5+Dev-Release-5.8"
 
     export = next(
         export
         for export in result.export_map
-        if export.object_name == "BP_FirstPersonCharacter"
+        if export.object_name == _EXPECTED_EXPORT_NAME
     )
     records = _last_edited_documents(export)
-    assert len(records) == 4
+    assert len(records) == 2
 
     for index, record in enumerate(records):
         assert isinstance(record, StructValue)
@@ -106,13 +109,13 @@ def test_real_edited_document_info_records_are_fully_decoded() -> None:
     rendered_export = next(
         export
         for export in payload["exports"]
-        if export["object_name"] == "BP_FirstPersonCharacter"
+        if export["object_name"] == _EXPECTED_EXPORT_NAME
     )
     rendered_records = next(
         prop for prop in rendered_export["properties"]
         if prop["name"] == "LastEditedDocuments"
     )["value"]
-    assert len(rendered_records) == 4
+    assert len(rendered_records) == 2
 
     for index, record in enumerate(rendered_records):
         assert record["struct_type"] == "EditedDocumentInfo"
