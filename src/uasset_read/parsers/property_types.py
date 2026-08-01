@@ -765,6 +765,61 @@ def _try_fast_path_struct(
             except Exception:
                 archive.seek(start)
 
+    # MovieSceneFloatChannel — animation keyframe channel, f32 variant (#515)
+    # Same header layout as MovieSceneDoubleChannel but f32 values
+    if struct_type == "MovieSceneFloatChannel" and tag.size >= 4:
+        start = archive.tell()
+        header = archive.read(4)
+        traits_ver = header[0]
+        vc = header[1]
+        tc = header[2]
+        bhd = header[3]
+
+        if (0 < vc < 50 and 0 <= tc <= vc and traits_ver in (0, 1, 2, 3, 4, 5)
+                and start + 4 + vc * 4 + tc * 4 + (4 if bhd else 0) <= start + tag.size + 16):
+            try:
+                values = [archive.read_f32() for _ in range(vc)]
+                times = [archive.read_i32() for _ in range(tc)]
+                default_val = archive.read_f32() if bhd else None
+                archive.seek(start + tag.size)
+                fields: Dict[str, Any] = {
+                    "Values": values,
+                    "Times": times,
+                    "keyframe_count": vc,
+                    "bHasDefaults": bool(bhd),
+                }
+                if default_val is not None:
+                    fields["DefaultValue"] = default_val
+                return StructValue(
+                    struct_type="MovieSceneFloatChannel",
+                    fields=fields,
+                    raw_size=tag.size,
+                    parse_status="success",
+                )
+            except Exception:
+                archive.seek(start)
+
+    # MovieSceneFrameRange — frame range with LowerBound/UpperBound (#515)
+    # Binary layout: [header:2][LowerBound:i32][UpperBound:i32] (10 bytes total)
+    if struct_type == "MovieSceneFrameRange" and tag.size == 10:
+        start = archive.tell()
+        try:
+            header = archive.read(2)
+            lb = archive.read_i32()
+            ub = archive.read_i32()
+            archive.seek(start + tag.size)
+            return StructValue(
+                struct_type="MovieSceneFrameRange",
+                fields={
+                    "LowerBound": lb,
+                    "UpperBound": ub,
+                },
+                raw_size=tag.size,
+                parse_status="success",
+            )
+        except Exception:
+            archive.seek(start)
+
     return None
 
 
