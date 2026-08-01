@@ -214,6 +214,9 @@ class JSONRenderer(IRenderer):
             "object_class": export.object_class,
             "serial_size": export.serial_size,
         }
+        asset_class = getattr(export, "asset_class", None)
+        if is_debug or asset_class:
+            d["asset_class"] = asset_class
         # parent_class: always included in debug mode, only included when non-None in standard mode
         if is_debug or export.parent_class is not None:
             d["parent_class"] = export.parent_class

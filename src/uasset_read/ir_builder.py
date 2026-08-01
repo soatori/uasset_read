@@ -505,6 +505,37 @@ def _clamp_serial_size(size: int) -> int:
         return 0
     return size
 
+
+def _resolve_asset_class(export, result: ParseResult) -> str | None:
+    """Resolve the nearest owning asset export's class through outer links."""
+    exports = result.export_map or []
+    import_map = result.import_map or []
+    current = export
+    seen: set[int] = set()
+
+    while current is not None:
+        identity = id(current)
+        if identity in seen:
+            return None
+        seen.add(identity)
+
+        if getattr(current, "b_is_asset", False):
+            class_index = getattr(current, "class_index", None)
+            if class_index is None:
+                return None
+            return _safe_str(resolve_class_name(class_index, import_map, exports)) or None
+
+        outer_index = getattr(current, "outer_index", None)
+        if not getattr(outer_index, "is_export", False):
+            return None
+        outer_idx = outer_index.to_export_index()
+        if not 0 <= outer_idx < len(exports):
+            return None
+        current = exports[outer_idx]
+
+    return None
+
+
 def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
     outer_resolved = _resolve_package_index(result, getattr(export, "outer_index", None))
     super_resolved = _resolve_package_index(result, getattr(export, "super_index", None))
@@ -550,6 +581,7 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
         properties=properties,
         graphs=graphs,
         bulk_data=bulk_data,
+        asset_class=_resolve_asset_class(export, result),
         asset_type_data=asset_type_data,
         parse_status=_safe_str(getattr(export, "parse_status", "success")) or "success",
         fallback_reason=(

@@ -323,6 +323,10 @@
           "type": "string",
           "description": "导出对象类名"
         },
+        "asset_class": {
+          "type": ["string", "null"],
+          "description": "Owning asset class resolved from the nearest asset export"
+        },
         "serial_size": {
           "type": "integer",
           "description": "序列化大小（字节）"
