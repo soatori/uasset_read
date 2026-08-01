@@ -17,11 +17,6 @@ EXPECTED_BIGINTS = {
 
 @pytest.mark.parametrize("stem", ["BP_Actor_Simple", "Actor"])
 def test_public_format_matches_pinned_fixture(stem: str) -> None:
-    actual = json.loads(parse_single(
-        str(FIXTURES / f"{stem}.uasset"),
-        format="uasset-reader-js",
-        log_enabled=False,
-    ))
     expected = json.loads((FIXTURES / f"{stem}.json").read_text(encoding="utf-8"))
 
     assert list(expected) == ["header", "names", "gatherableTextData"]
@@ -29,4 +24,15 @@ def test_public_format_matches_pinned_fixture(stem: str) -> None:
         expected["header"]["BulkDataStartOffset"],
         expected["header"]["PayloadTocOffset"],
     ) == EXPECTED_BIGINTS[stem]
+    assert expected["names"]
+    assert all(
+        set(name) == {"Name", "NonCasePreservingHash", "CasePreservingHash"}
+        for name in expected["names"]
+    )
+
+    actual = json.loads(parse_single(
+        str(FIXTURES / f"{stem}.uasset"),
+        format="uasset-reader-js",
+        log_enabled=False,
+    ))
     assert actual == expected
