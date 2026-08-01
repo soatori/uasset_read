@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Optional
 from uasset_read.kismet.expressions.base import KismetExpression, make_simple_expression
 from uasset_read.kismet.tokens import EExprToken
 from uasset_read.kismet.value_types import FNameRef
+from uasset_read.serializers.object_resources import PackageIndex
 
 if TYPE_CHECKING:
     from uasset_read.kismet.archive import FKismetArchive
@@ -36,9 +37,9 @@ class EX_FinalFunction(KismetExpression):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_FinalFunction:
-        stack = archive.read_i32()
+        stack_ref = archive.xfer_object_pointer()
         params = archive.read_expression_array(EExprToken.EX_EndFunctionParms)
-        return cls(StackNode=stack, Parameters=params)
+        return cls(StackNode=stack_ref.index, Parameters=params)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
@@ -117,7 +118,7 @@ class EX_CallMulticastDelegate(KismetExpression):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_CallMulticastDelegate:
-        stack = archive.read_i32()
+        stack_ref = archive.xfer_object_pointer()
         delegate = archive.read_expression()
         params = archive.read_expression_array(EExprToken.EX_EndFunctionParms)
-        return cls(StackNode=stack, Delegate=delegate, Parameters=params)
+        return cls(StackNode=stack_ref.index, Delegate=delegate, Parameters=params)

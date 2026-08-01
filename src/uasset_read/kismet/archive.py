@@ -113,19 +113,9 @@ class FKismetArchive(FArchive):
                     f"Kismet expression array exceeded {max_items} items "
                     f"without finding {end_token.name} at offset {self.tell()}"
                 )
-            # Peek at next byte — if it's the end token, consume it and stop.
-            pos = self.tell()
-            token_byte = self._file.read(1)
-            if not token_byte:
-                break
-            token_val = token_byte[0]
-            if token_val == end_token:
-                # Consume the terminator — advance past it
-                self.seek(pos + 1)
-                break
-            # Not the end token — seek back and parse as a full expression
-            self.seek(pos)
             expr = self.read_expression()
+            if expr.Token == end_token:
+                break
             result.append(expr)
         return result
 
@@ -193,15 +183,12 @@ class FKismetArchive(FArchive):
     # ------------------------------------------------------------------
 
     def xfer_object_pointer(self) -> PackageIndex:
-        """Read one int32 package index (4 bytes serialized).
+        """Read one int32 package index (4 bytes serialized, 8 logical bytes).
 
-        Object pointers occupy 4 bytes on disk. The logical address
-        does not advance (the pointer is a reference, not a value).
+        Object pointers occupy 4 bytes on disk and advance the logical
+        address by 8 (the pointer is a function/struct reference).
         """
-        start_bytecode = self.bytecode_index
         index = self.read_i32()
-        # Logical address stays at start (pointer is a reference)
-        self.bytecode_index = start_bytecode
         return PackageIndex(index)
 
     def xfer_field_pointer(self) -> FFieldPath:

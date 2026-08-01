@@ -116,7 +116,7 @@ class TestXObjectPointer:
         result = ar.xfer_object_pointer()
         assert result.index == -3
         assert ar.serialized_offset == 4
-        assert ar.bytecode_index == 8  # logical address stays at start
+        assert ar.bytecode_index == 12  # 8 + 4 (logical address advances by 4)
 
     def test_object_pointer_positive_index(self):
         """Positive package index resolves correctly."""
@@ -124,7 +124,7 @@ class TestXObjectPointer:
         result = ar.xfer_object_pointer()
         assert result.index == 5
         assert ar.serialized_offset == 4
-        assert ar.bytecode_index == 0  # logical address stays at start
+        assert ar.bytecode_index == 4  # 0 + 4 (logical address advances by 4)
 
 
 # ===========================================================================
@@ -142,7 +142,9 @@ class TestXFerFName:
         )
         value = ar.xfer_fname()
         assert (value.name_index, value.number, value.base_name) == (2, 7, "Move")
-        assert (ar.serialized_offset, ar.bytecode_index) == (8, 8)
+        assert ar.serialized_offset == 8
+        # Logical address stays at start (xfer_fname restores bytecode_index)
+        assert ar.bytecode_index == 8
 
     def test_fname_zero_index(self):
         """FName with index 0 is 'None' (null name)."""
@@ -321,6 +323,9 @@ class TestExpressionTransfers:
         assert all(p.Token != EExprToken.EX_EndFunctionParms for p in expr.Parameters)
         # Position after terminator
         assert ar.tell() == len(data)
+        # xfer_fname restores bytecode_index, so logical position only advances
+        # for token bytes: EX_VirtualFunction (1) + EX_IntOne (1) + EX_EndFunctionParms (1) = 3
+        assert ar.bytecode_index == 3
 
     def test_final_function_pointer_adds_eight_logical_bytes(self):
         """EX_FinalFunction reads stack pointer via xfer_object_pointer."""
@@ -342,6 +347,10 @@ class TestExpressionTransfers:
         assert all(p.Token != EExprToken.EX_EndFunctionParms for p in expr.Parameters)
         # Position after terminator
         assert ar.tell() == len(data)
+        # The final function pointer adds four logical bytes (int32 package index)
+        assert ar.bytecode_index == len(data)
+        # Next serialized/logical position is immediately after the terminator
+        assert ar.serialized_offset == len(data)
 
     def test_read_expression_array_consumes_terminator(self):
         """read_expression_array consumes the terminator byte and advances past it."""
@@ -358,6 +367,8 @@ class TestExpressionTransfers:
         assert result[1].Token == EExprToken.EX_IntZero
         # Position should be after EX_EndFunctionParms, at EX_True
         assert ar.tell() == len(data) - 1  # one byte (EX_True) remains
+        # Logical position matches serialized position (no pointer refs)
+        assert ar.bytecode_index == len(data) - 1
 
     def test_read_expression_array_empty(self):
         """read_expression_array with immediate terminator returns empty list."""
@@ -369,6 +380,7 @@ class TestExpressionTransfers:
         result = ar.read_expression_array(EExprToken.EX_EndFunctionParms)
         assert result == []
         assert ar.tell() == 1  # after terminator, at EX_True
+        assert ar.bytecode_index == 1
 
 
 class TestNestedTerminators:
@@ -397,6 +409,9 @@ class TestNestedTerminators:
         assert all(e.Token != EExprToken.EX_EndArray for e in expr.Elements)
         # Position after SetArray, at EX_True
         assert ar.tell() == len(data) - 1
+        # Logical position: EX_SetArray (1) + read_bool bNew (4) + xfer_field_pointer restores (0)
+        # + EX_IntOne (1) + EX_EndArray (1) = 7
+        assert ar.bytecode_index == 7
 
     def test_nested_map_terminator_not_leaked(self):
         """EX_SetMap with EX_EndMap consumed internally."""
@@ -416,6 +431,8 @@ class TestNestedTerminators:
         assert expr.Elements[0].Token == EExprToken.EX_IntOne
         # Position after SetMap, at EX_True
         assert ar.tell() == len(data) - 1
+        # Logical position: EX_SetMap (1) + EX_Nothing (1) + EX_IntOne (1) + EX_EndMap (1) = 4
+        assert ar.bytecode_index == 4
 
     def test_nested_struct_terminator_not_leaked(self):
         """EX_StructConst with EX_EndStructConst consumed internally."""
@@ -434,6 +451,8 @@ class TestNestedTerminators:
         assert expr.Properties[0].Token == EExprToken.EX_IntOne
         # Position after StructConst, at EX_True
         assert ar.tell() == len(data) - 1
+        # Logical cursor advances past the struct pointer (4 bytes) but not size (4 bytes)
+        assert ar.bytecode_index == len(data) - 1
 
 
 class TestStringTransfers:
