@@ -315,9 +315,9 @@ def _parse_and_render(
     if format == "uasset-reader-js":
         from uasset_read.compat.uasset_reader_js import render_uasset_reader_js
 
-        return render_uasset_reader_js(file_path), result
-
-    ir = build_package_ir(result)
+        output_str = render_uasset_reader_js(file_path)
+    else:
+        ir = build_package_ir(result)
 
     # Release temporary large objects to prevent memory accumulation during batch parsing
     try:
@@ -328,6 +328,9 @@ def _parse_and_render(
                 delattr(export, "_uclass_native_fields")
     except Exception:
         logger.debug("Failed to clean up temporary large objects in batch", exc_info=True)
+
+    if format == "uasset-reader-js":
+        return output_str, result
 
     renderer = get_renderer(format)
     options = RenderOptions(

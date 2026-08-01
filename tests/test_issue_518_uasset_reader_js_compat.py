@@ -15,9 +15,11 @@ from uasset_read.compat.uasset_reader_js import (
     render_uasset_reader_js,
 )
 from uasset_read.exceptions import ParseError
+from uasset_read.project_logging import get_last_parse_result
 
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "uasset_reader_js"
+SAMPLES = Path(__file__).resolve().parent / "samples"
 EXPECTED_BIGINTS = {
     "BP_Actor_Simple": ("20574n", "-1n"),
     "Actor": ("4613n", "4617n"),
@@ -141,3 +143,24 @@ def test_public_format_matches_pinned_fixture(stem: str) -> None:
         log_enabled=False,
     ))
     assert actual == expected
+
+
+def test_public_format_cleans_transient_export_data_after_rendering() -> None:
+    path = SAMPLES / "FirstPerson_M_FlatCol.uasset"
+    expected = render_uasset_reader_js(str(path))
+
+    actual = parse_single(
+        str(path),
+        format="uasset-reader-js",
+        log_enabled=False,
+    )
+    result = get_last_parse_result()
+
+    assert actual == expected
+    assert result.status == "partial"
+    assert result.export_map
+    assert all(
+        not hasattr(export, "_asset_type_data")
+        and not hasattr(export, "_uclass_native_fields")
+        for export in result.export_map
+    )
