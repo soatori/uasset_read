@@ -374,6 +374,31 @@ def _iter_normalized_edges(
         if export_name:
             export_name_lookup[export_name] = node
 
+    def _resolve_owner_qualified_pin(
+        ref: object,
+        pin_id: Optional[str],
+        current_direction: int,
+    ) -> Optional[Tuple[UEdGraphNode, UEdGraphPin]]:
+        """Resolve a LinkedTo pin within its declared owning node when unambiguous."""
+        if not isinstance(ref, dict) or not pin_id:
+            return None
+        owner = export_name_lookup.get(ref.get("owning_node"))
+        if owner is None:
+            return None
+
+        opposite_direction = 0 if current_direction == 1 else 1
+        candidates = [
+            candidate
+            for candidate in owner.pins
+            if (
+                _normalize_pin_id(candidate.pin_id) == pin_id
+                and candidate.direction == opposite_direction
+            )
+        ]
+        if len(candidates) != 1:
+            return None
+        return owner, candidates[0]
+
     seen: Set[Tuple[str, str, str, str]] = set()
 
     def _emit(
@@ -445,11 +470,22 @@ def _iter_normalized_edges(
         for pin in node.pins:
             for ref in (pin.linked_to_raw or []):
                 other_pin_id = _pin_ref_guid(ref)
-                other_pin = pin_object_lookup.get(other_pin_id) if other_pin_id else None
+                owner_qualified = _resolve_owner_qualified_pin(
+                    ref, other_pin_id, pin.direction,
+                )
+                if owner_qualified is not None:
+                    other_node, other_pin = owner_qualified
+                    other_node_guid = other_node.node_guid
+                    other_pin_name = other_pin.pin_name
+                else:
+                    other_pin = pin_object_lookup.get(other_pin_id) if other_pin_id else None
+                    other_node_guid = ""
+                    other_pin_name = ""
 
                 if other_pin_id in pin_lookup and other_pin is not None:
-                    other_node_guid, other_pin_name = pin_lookup[other_pin_id]
-                    other_node = node_lookup[other_node_guid]
+                    if owner_qualified is None:
+                        other_node_guid, other_pin_name = pin_lookup[other_pin_id]
+                        other_node = node_lookup[other_node_guid]
 
                     if pin.direction == 1 and other_pin.direction == 0:
                         edge = _emit(
