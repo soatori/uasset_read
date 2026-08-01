@@ -90,6 +90,11 @@
         ]
       }
     },
+    "diagnostics_truncated_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "因容量限制未保留的诊断条目数"
+    },
     "warnings": {
       "type": "array",
       "description": "解析警告列表",
@@ -425,8 +430,8 @@
       "required": ["node_guid", "node_class", "pins"],
       "properties": {
         "node_guid": {
-          "type": "string",
-          "description": "节点 GUID（32 位小写 hex）"
+          "type": ["string", "null"],
+          "description": "节点 GUID（32 位小写 hex；不可用时为 null）"
         },
         "node_class": {
           "type": "string",
