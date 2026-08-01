@@ -730,6 +730,78 @@ def _try_fast_path_struct(
     return None
 
 
+def _parse_moviescene_double_channel(
+    archive: FArchive,
+    tag,
+    name_map: List[str],
+) -> Optional[StructValue]:
+    """Parse MovieSceneDoubleChannel struct.
+
+    UE source: Engine/Source/Runtime/MovieScene/Public/MovieSceneChannel.h
+    Binary layout (little-endian):
+    - Values count (i32)
+    - Values (repeated):
+      - Value (f64): Double precision keyframe value
+      - Interpolation (u8): Interpolation type
+    - Times count (i32)
+    - Times (repeated):
+      - FrameNumber (i32): Frame number
+    - bHasDefaults (u8): Whether default value exists
+    - DefaultValue (optional): Default value if bHasDefaults
+    """
+    logger.debug("Attempting to parse MovieSceneDoubleChannel at offset %d", archive.tell())
+    try:
+        struct_start = archive.tell()
+
+        # Read values array
+        values_count = archive.read_i32()
+        if values_count < 0 or values_count > 10000:
+            logger.debug("MovieSceneDoubleChannel: invalid values_count %d", values_count)
+            return None
+
+        values = []
+        for _ in range(values_count):
+            value = archive.read_f64()
+            interpolation = archive.read_u8()
+            values.append({"value": value, "interpolation": interpolation})
+
+        # Read times array
+        times_count = archive.read_i32()
+        if times_count < 0 or times_count > 10000:
+            logger.debug("MovieSceneDoubleChannel: invalid times_count %d", times_count)
+            return None
+
+        times = []
+        for _ in range(times_count):
+            frame_number = archive.read_i32()
+            times.append(frame_number)
+
+        # Read bHasDefaults
+        b_has_defaults = archive.read_u8() != 0
+
+        # Read default value if present
+        default_value = None
+        if b_has_defaults:
+            default_value = archive.read_f64()
+
+        logger.debug("MovieSceneDoubleChannel: parsed %d values, %d times", len(values), len(times))
+        return StructValue(
+            struct_type="MovieSceneDoubleChannel",
+            fields={
+                "keyframe_count": len(values),
+                "values": values,
+                "times": times,
+                "b_has_defaults": b_has_defaults,
+                "default_value": default_value,
+            },
+            raw_size=tag.size,
+            parse_status="success",
+        )
+    except (struct.error, OSError) as e:
+        logger.debug("MovieSceneDoubleChannel: parse failed: %s", e)
+        return None
+
+
 def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, depth: int = 0) -> StructValue:
     """Parse StructProperty (ADVP-01)."""
     MAX_DEPTH = 5
@@ -800,6 +872,13 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
     fast_result = _try_fast_path_struct(struct_type, tag, archive, name_map)
     if fast_result is not None:
         return fast_result
+
+    # Custom parsers for complex structs with known binary layouts
+    # Use declared_struct_type because struct_type may be None after size validation
+    if declared_struct_type == "MovieSceneDoubleChannel":
+        custom_result = _parse_moviescene_double_channel(archive, tag, name_map)
+        if custom_result is not None:
+            return custom_result
 
     if declared_struct_type not in _TAGGED_FALLBACK_STRUCTS and tag.size <= 0:
         return StructValue(
