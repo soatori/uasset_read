@@ -215,7 +215,6 @@ class FKismetArchive(FArchive):
             path_segments.append((name_index, name_number))
 
         # Resolve path segments to FFieldPathSegment objects
-        from uasset_read.kismet.property_pointer import FFieldPathSegment
         resolved_path: list[FFieldPathSegment] = []
         for name_idx, name_num in path_segments:
             if 0 <= name_idx < len(self._name_map):
