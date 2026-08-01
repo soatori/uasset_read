@@ -1126,6 +1126,8 @@ class TestNativeFieldArrayProperty:
         assert declarations[0].name == "Points"
         assert len(declarations[0].inner_fields) == 1
         assert declarations[0].inner_fields[0].type_name == "StructProperty"
+        from uasset_read.kismet.native_fields import native_field_cpp_type
+        assert native_field_cpp_type(declarations[0]) == "TArray<FVector>"
         assert end == len(field)
 
     def test_array_property_cpp_type(self):
