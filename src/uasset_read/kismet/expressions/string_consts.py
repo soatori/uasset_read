@@ -39,7 +39,6 @@ class EX_UnicodeStringConst(KismetExpressionT[str]):
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_UnicodeStringConst:
         value = archive.xfer_unicode_string()
-        archive.skip(2)  # skip double-null terminator
         return cls(Value=value)
 
 
