@@ -1001,3 +1001,369 @@ class TestUFunctionNativeFieldIntegration:
         assert len(result.native_fields) == 1
         assert result.native_fields[0].name == "Param"
         assert result.native_fields[0].type_name == "IntProperty"
+
+
+# ===================================================================
+# Task 4: Recursive container and enum field types
+# ===================================================================
+
+
+def serialize_inner_field(
+    type_name: str,
+    name: str,
+    *,
+    name_map: list[str],
+    tail: bytes = b"",
+) -> bytes:
+    """Serialize a minimal inner FField (type-name + name + zero-length prefix).
+
+    Inner fields in container properties (EnumProperty, ArrayProperty, etc.)
+    use the same FField serialization layout as top-level fields, but with
+    minimal prefix (array_dim=1, element_size=0, property_flags=0, etc.)
+    and no metadata.
+    """
+    # FField::Serialize: type name as FName
+    type_index = name_map.index(type_name) if type_name in name_map else 0
+    result = struct.pack("<II", type_index, 0)
+    # NamePrivate: FName
+    name_index = name_map.index(name) if name in name_map else 0
+    result += struct.pack("<II", name_index, 0)
+    # FlagsPrivate: u32 (always present in inner fields)
+    result += struct.pack("<I", 0)
+    # ArrayDim: u16
+    result += struct.pack("<H", 1)
+    # ElementSize: u16
+    result += struct.pack("<H", 0)
+    # PropertyFlags: u64
+    result += struct.pack("<Q", 0)
+    # RepIndex: u16
+    result += struct.pack("<H", 0)
+    # RepNotifyFunc: FName
+    result += struct.pack("<II", 0, 0)
+    # ReplicationCondition: u8 (release_version >= 21)
+    result += struct.pack("<B", 0)
+    # Metadata: no metadata flag
+    result += b"\x00"
+    # Type-specific tail
+    result += tail
+    return result
+
+
+class TestNativeFieldEnumProperty:
+    """EnumProperty: int32 enum reference + FName inner-type + inner field."""
+
+    def test_enum_property_with_int32_inner(self):
+        """EnumProperty wrapping an IntProperty inner field."""
+        name_map = make_name_map_with_entries(
+            "Color", "EnumProperty",
+            "EMyEnum",
+            "Value", "IntProperty",
+        )
+        import_map = [make_import_for_name("EMyEnum", 0)]
+        inner = serialize_inner_field("IntProperty", "Value", name_map=name_map)
+        field = serialize_field(
+            "EnumProperty", "Color",
+            name_map=name_map,
+            tail=i32(-1) + inner,  # enum ref + inner field
+        )
+        declarations, end = read_fields_from_bytes(
+            field, name_map=name_map, import_map=import_map,
+        )
+        assert len(declarations) == 1
+        assert declarations[0].type_name == "EnumProperty"
+        assert declarations[0].name == "Color"
+        assert len(declarations[0].inner_fields) == 1
+        inner_decl = declarations[0].inner_fields[0]
+        assert inner_decl.type_name == "IntProperty"
+        assert inner_decl.name == "Value"
+        assert end == len(field)
+
+    def test_enum_property_cpp_type(self):
+        """EnumProperty cpp_type maps inner through native_field_cpp_type."""
+        name_map = make_name_map_with_entries(
+            "Color", "EnumProperty",
+            "EMyEnum",
+            "Value", "IntProperty",
+        )
+        import_map = [make_import_for_name("EMyEnum", 0)]
+        inner = serialize_inner_field("IntProperty", "Value", name_map=name_map)
+        field = serialize_field(
+            "EnumProperty", "Color",
+            name_map=name_map,
+            tail=i32(-1) + inner,
+        )
+        declarations, _ = read_fields_from_bytes(
+            field, name_map=name_map, import_map=import_map,
+        )
+        assert native_field_cpp_type(declarations[0]) == "EMyEnum"
+
+
+class TestNativeFieldArrayProperty:
+    """ArrayProperty: FName inner-type + inner field."""
+
+    def test_array_property_with_struct_inner(self):
+        """ArrayProperty wrapping a StructProperty inner field."""
+        name_map = make_name_map_with_entries(
+            "Points", "ArrayProperty",
+            "FVector",
+            "Pos", "StructProperty",
+        )
+        import_map = [make_import_for_name("FVector", 0)]
+        inner = serialize_inner_field(
+            "StructProperty", "Pos", name_map=name_map,
+            tail=i32(-1),  # package index → FVector
+        )
+        field = serialize_field(
+            "ArrayProperty", "Points",
+            name_map=name_map,
+            tail=inner,
+        )
+        declarations, end = read_fields_from_bytes(
+            field, name_map=name_map, import_map=import_map,
+        )
+        assert len(declarations) == 1
+        assert declarations[0].type_name == "ArrayProperty"
+        assert declarations[0].name == "Points"
+        assert len(declarations[0].inner_fields) == 1
+        assert declarations[0].inner_fields[0].type_name == "StructProperty"
+        assert end == len(field)
+
+    def test_array_property_cpp_type(self):
+        """ArrayProperty cpp_type builds TArray<InnerType>."""
+        name_map = make_name_map_with_entries(
+            "Items", "ArrayProperty",
+            "FString",
+            "S", "StrProperty",
+        )
+        inner = serialize_inner_field("StrProperty", "S", name_map=name_map)
+        field = serialize_field(
+            "ArrayProperty", "Items",
+            name_map=name_map,
+            tail=inner,
+        )
+        declarations, _ = read_fields_from_bytes(field, name_map=name_map)
+        assert native_field_cpp_type(declarations[0]) == "TArray<FString>"
+
+
+class TestNativeFieldSetProperty:
+    """SetProperty: FName element-type + element field."""
+
+    def test_set_property_with_name_inner(self):
+        """SetProperty wrapping a NameProperty inner field."""
+        name_map = make_name_map_with_entries(
+            "Tags", "SetProperty",
+            "FName",
+            "N", "NameProperty",
+        )
+        inner = serialize_inner_field("NameProperty", "N", name_map=name_map)
+        field = serialize_field(
+            "SetProperty", "Tags",
+            name_map=name_map,
+            tail=inner,
+        )
+        declarations, end = read_fields_from_bytes(
+            field, name_map=name_map,
+        )
+        assert len(declarations) == 1
+        assert declarations[0].type_name == "SetProperty"
+        assert declarations[0].name == "Tags"
+        assert len(declarations[0].inner_fields) == 1
+        assert declarations[0].inner_fields[0].type_name == "NameProperty"
+        assert end == len(field)
+
+    def test_set_property_cpp_type(self):
+        """SetProperty cpp_type builds TSet<InnerType>."""
+        name_map = make_name_map_with_entries(
+            "Tags", "SetProperty",
+            "FName",
+            "N", "NameProperty",
+        )
+        inner = serialize_inner_field("NameProperty", "N", name_map=name_map)
+        field = serialize_field(
+            "SetProperty", "Tags",
+            name_map=name_map,
+            tail=inner,
+        )
+        declarations, _ = read_fields_from_bytes(field, name_map=name_map)
+        assert native_field_cpp_type(declarations[0]) == "TSet<FName>"
+
+
+class TestNativeFieldMapProperty:
+    """MapProperty: key FName/field + value FName/field."""
+
+    def test_map_property_with_name_and_string(self):
+        """MapProperty with FName key and FString value."""
+        name_map = make_name_map_with_entries(
+            "Lookup", "MapProperty",
+            "FName", "K", "NameProperty",
+            "FString", "V", "StrProperty",
+        )
+        key_inner = serialize_inner_field("NameProperty", "K", name_map=name_map)
+        val_inner = serialize_inner_field("StrProperty", "V", name_map=name_map)
+        field = serialize_field(
+            "MapProperty", "Lookup",
+            name_map=name_map,
+            tail=key_inner + val_inner,
+        )
+        declarations, end = read_fields_from_bytes(
+            field, name_map=name_map,
+        )
+        assert len(declarations) == 1
+        assert declarations[0].type_name == "MapProperty"
+        assert declarations[0].name == "Lookup"
+        assert len(declarations[0].inner_fields) == 2
+        assert declarations[0].inner_fields[0].type_name == "NameProperty"
+        assert declarations[0].inner_fields[1].type_name == "StrProperty"
+        assert end == len(field)
+
+    def test_map_property_cpp_type(self):
+        """MapProperty cpp_type builds TMap<KeyType, ValueType>."""
+        name_map = make_name_map_with_entries(
+            "Data", "MapProperty",
+            "FName", "K", "NameProperty",
+            "FString", "V", "StrProperty",
+        )
+        key_inner = serialize_inner_field("NameProperty", "K", name_map=name_map)
+        val_inner = serialize_inner_field("StrProperty", "V", name_map=name_map)
+        field = serialize_field(
+            "MapProperty", "Data",
+            name_map=name_map,
+            tail=key_inner + val_inner,
+        )
+        declarations, _ = read_fields_from_bytes(field, name_map=name_map)
+        assert native_field_cpp_type(declarations[0]) == "TMap<FName, FString>"
+
+
+class TestNativeFieldOptionalProperty:
+    """OptionalProperty: FName value-type + value field."""
+
+    def test_optional_property_with_bool_inner(self):
+        """OptionalProperty wrapping a BoolProperty inner field."""
+        name_map = make_name_map_with_entries(
+            "Maybe", "OptionalProperty",
+            "bool",
+            "B", "BoolProperty",
+        )
+        inner = serialize_inner_field(
+            "BoolProperty", "B", name_map=name_map,
+            tail=bytes([0, 0, 0, 0, 0, 0]),
+        )
+        field = serialize_field(
+            "OptionalProperty", "Maybe",
+            name_map=name_map,
+            tail=inner,
+        )
+        declarations, end = read_fields_from_bytes(
+            field, name_map=name_map,
+        )
+        assert len(declarations) == 1
+        assert declarations[0].type_name == "OptionalProperty"
+        assert declarations[0].name == "Maybe"
+        assert len(declarations[0].inner_fields) == 1
+        assert declarations[0].inner_fields[0].type_name == "BoolProperty"
+        assert end == len(field)
+
+    def test_optional_property_cpp_type(self):
+        """OptionalProperty cpp_type builds TOptional<InnerType>."""
+        name_map = make_name_map_with_entries(
+            "Maybe", "OptionalProperty",
+            "bool",
+            "B", "BoolProperty",
+        )
+        inner = serialize_inner_field(
+            "BoolProperty", "B", name_map=name_map,
+            tail=bytes([0, 0, 0, 0, 0, 0]),
+        )
+        field = serialize_field(
+            "OptionalProperty", "Maybe",
+            name_map=name_map,
+            tail=inner,
+        )
+        declarations, _ = read_fields_from_bytes(field, name_map=name_map)
+        assert native_field_cpp_type(declarations[0]) == "TOptional<bool>"
+
+
+class TestNativeFieldNullInnerType:
+    """Container property with null (None) inner FName type → unsupported."""
+
+    def test_null_inner_type_in_array_emits_unsupported(self):
+        """ArrayProperty with null (FName index 0) inner type emits unsupported."""
+        name_map = make_name_map_with_entries(
+            "Bad", "ArrayProperty",
+            # inner type FName index 0 = None (null)
+        )
+        # Inner field: type FName index 0 (None/null)
+        inner_type_bytes = struct.pack("<II", 0, 0)  # FName(None)
+        # Inner field name: FName(None)
+        inner_name_bytes = struct.pack("<II", 0, 0)
+        inner_prefix = (
+            inner_type_bytes + inner_name_bytes
+            + struct.pack("<I", 0)  # FlagsPrivate
+            + struct.pack("<HH", 1, 0)  # ArrayDim + ElementSize
+            + struct.pack("<Q", 0)  # PropertyFlags
+            + struct.pack("<H", 0)  # RepIndex
+            + struct.pack("<II", 0, 0)  # RepNotifyFunc
+            + struct.pack("<B", 0)  # ReplicationCondition
+            + b"\x00"  # metadata flag
+        )
+        field = serialize_field(
+            "ArrayProperty", "Bad",
+            name_map=name_map,
+            tail=inner_prefix,
+        )
+        declarations, _ = read_fields_from_bytes(field, name_map=name_map)
+        assert len(declarations) == 1
+        assert declarations[0].type_name == "ArrayProperty"
+        # Inner field should be unsupported due to null type name
+        assert len(declarations[0].inner_fields) == 1
+        assert declarations[0].inner_fields[0].type_name == "unsupported:None"
+
+
+class TestNativeFieldDepthLimit:
+    """Recursive depth limit: nested containers beyond 32 levels."""
+
+    def test_depth_32_nesting_triggers_unsupported(self):
+        """33 levels of nesting should stop at depth limit."""
+        name_map = make_name_map_with_entries(
+            "Deep", "ArrayProperty",
+            "int32", "IntProperty",
+        )
+        # Build a deeply nested array-of-array structure manually
+        # Each level wraps the previous
+        # Innermost: IntProperty with no further nesting
+        innermost = serialize_inner_field("IntProperty", "X", name_map=name_map)
+
+        # Wrap it 32 times in ArrayProperty
+        current = innermost
+        for i in range(32):
+            name_map.extend([f"L{i}", "ArrayProperty"])
+            inner_type_bytes = struct.pack(
+                "<II", name_map.index("ArrayProperty"), 0
+            )
+            inner_name_bytes = struct.pack("<II", name_map.index(f"L{i}"), 0)
+            current = (
+                inner_type_bytes + inner_name_bytes
+                + struct.pack("<I", 0)
+                + struct.pack("<HH", 1, 0)
+                + struct.pack("<Q", 0)
+                + struct.pack("<H", 0)
+                + struct.pack("<II", 0, 0)
+                + struct.pack("<B", 0)
+                + b"\x00"
+                + current
+            )
+
+        field = serialize_field(
+            "ArrayProperty", "Deep",
+            name_map=name_map,
+            tail=current,
+        )
+        declarations, _ = read_fields_from_bytes(field, name_map=name_map)
+        assert declarations[0].type_name == "ArrayProperty"
+        # Walk down 32 levels to reach the depth limit
+        inner = declarations[0]
+        for _ in range(32):
+            assert len(inner.inner_fields) == 1
+            inner = inner.inner_fields[0]
+        # At depth 33, the inner field should be unsupported
+        assert inner.type_name.startswith("unsupported:")

@@ -296,6 +296,69 @@ def _read_fieldpath_tail(
     decl.reference_names.append(fname_ref.base_name)
 
 
+# ---------------------------------------------------------------------------
+# Container / recursive type tail readers (Task 4)
+# ---------------------------------------------------------------------------
+
+def _read_enum_tail(
+    archive: ByteArchive,
+    context: NativeFieldContext,
+    decl: NativeFieldDeclaration,
+    depth: int,
+) -> None:
+    """EnumProperty: int32 enum reference + FName inner-type + inner field."""
+    raw, name = _read_package_ref(archive, context)
+    decl.references.append(raw)
+    decl.reference_names.append(name)
+    inner = _read_inner_field(archive, context, depth + 1)
+    decl.inner_fields.append(inner)
+
+
+def _read_array_tail(
+    archive: ByteArchive,
+    context: NativeFieldContext,
+    decl: NativeFieldDeclaration,
+    depth: int,
+) -> None:
+    """ArrayProperty: FName inner-type + inner field."""
+    inner = _read_inner_field(archive, context, depth + 1)
+    decl.inner_fields.append(inner)
+
+
+def _read_set_tail(
+    archive: ByteArchive,
+    context: NativeFieldContext,
+    decl: NativeFieldDeclaration,
+    depth: int,
+) -> None:
+    """SetProperty: FName element-type + element field."""
+    inner = _read_inner_field(archive, context, depth + 1)
+    decl.inner_fields.append(inner)
+
+
+def _read_map_tail(
+    archive: ByteArchive,
+    context: NativeFieldContext,
+    decl: NativeFieldDeclaration,
+    depth: int,
+) -> None:
+    """MapProperty: key FName/field + value FName/field."""
+    key = _read_inner_field(archive, context, depth + 1)
+    val = _read_inner_field(archive, context, depth + 1)
+    decl.inner_fields.extend([key, val])
+
+
+def _read_optional_tail(
+    archive: ByteArchive,
+    context: NativeFieldContext,
+    decl: NativeFieldDeclaration,
+    depth: int,
+) -> None:
+    """OptionalProperty: FName value-type + value field."""
+    inner = _read_inner_field(archive, context, depth + 1)
+    decl.inner_fields.append(inner)
+
+
 # Scalar types with no extra bytes
 _NO_EXTRA_BYTES_TYPES = frozenset({
     "Int8Property", "Int16Property", "IntProperty", "Int64Property",
@@ -309,17 +372,49 @@ _NO_EXTRA_BYTES_TYPES = frozenset({
 # Main reading API
 # ---------------------------------------------------------------------------
 
+_MAX_FIELD_DEPTH = 32
+
+
+def _read_inner_field(
+    archive: ByteArchive,
+    context: NativeFieldContext,
+    depth: int,
+) -> NativeFieldDeclaration:
+    """Read an inner FField within a container property.
+
+    Reads the type-name FName; if null (index 0), returns an unsupported
+    declaration.  Otherwise delegates to ``_read_single_field`` at the
+    next recursion depth with the type name already consumed.
+    """
+    type_ref = _read_fname_ref(archive, context)
+    type_name = type_ref.base_name
+    if type_name is None or type_name == "None":
+        # Null inner type — emit unsupported
+        decl = NativeFieldDeclaration(type_name="unsupported:None")
+        return decl
+    if depth >= _MAX_FIELD_DEPTH:
+        decl = NativeFieldDeclaration(type_name=f"unsupported:depth_limit:{type_name}")
+        return decl
+    return _read_single_field(archive, context, depth=depth, type_name=type_name)
+
+
 def _read_single_field(
     archive: ByteArchive,
     context: NativeFieldContext,
+    *,
+    depth: int = 0,
+    type_name: str | None = None,
 ) -> NativeFieldDeclaration:
     """Read a single native FField from the archive.
 
     The archive must be positioned at the start of the field (type-name FName).
+    When *type_name* is supplied the caller has already consumed the type-name
+    FName; otherwise it is read here.
     """
     # FField::Serialize writes the type name as an FName
-    type_ref = _read_fname_ref(archive, context)
-    type_name = type_ref.base_name or ""
+    if type_name is None:
+        type_ref = _read_fname_ref(archive, context)
+        type_name = type_ref.base_name or ""
 
     # Build the declaration
     decl = NativeFieldDeclaration(type_name=type_name)
@@ -364,6 +459,16 @@ def _read_single_field(
         _read_delegate_tail(archive, context, decl)
     elif type_name == "FieldPathProperty":
         _read_fieldpath_tail(archive, context, decl)
+    elif type_name == "EnumProperty":
+        _read_enum_tail(archive, context, decl, depth)
+    elif type_name == "ArrayProperty":
+        _read_array_tail(archive, context, decl, depth)
+    elif type_name == "SetProperty":
+        _read_set_tail(archive, context, decl, depth)
+    elif type_name == "MapProperty":
+        _read_map_tail(archive, context, decl, depth)
+    elif type_name == "OptionalProperty":
+        _read_optional_tail(archive, context, decl, depth)
     else:
         # Unknown property class — emit unsupported_native_field failure
         logger.warning(
@@ -438,6 +543,31 @@ def native_field_cpp_type(field: NativeFieldDeclaration) -> str:
     # Unknown / unsupported types
     if type_name.startswith("unsupported:"):
         return f"/* {type_name} */"
+
+    # Container types — recurse into inner fields for C++ type mapping
+    if type_name == "EnumProperty":
+        # EnumProperty uses the resolved enum name (from references)
+        enum_name = field.reference_names[0] if field.reference_names else None
+        if enum_name:
+            return enum_name
+        return "uint8"
+
+    if type_name == "ArrayProperty" and field.inner_fields:
+        inner_cpp = native_field_cpp_type(field.inner_fields[0])
+        return f"TArray<{inner_cpp}>"
+
+    if type_name == "SetProperty" and field.inner_fields:
+        inner_cpp = native_field_cpp_type(field.inner_fields[0])
+        return f"TSet<{inner_cpp}>"
+
+    if type_name == "MapProperty" and len(field.inner_fields) >= 2:
+        key_cpp = native_field_cpp_type(field.inner_fields[0])
+        val_cpp = native_field_cpp_type(field.inner_fields[1])
+        return f"TMap<{key_cpp}, {val_cpp}>"
+
+    if type_name == "OptionalProperty" and field.inner_fields:
+        inner_cpp = native_field_cpp_type(field.inner_fields[0])
+        return f"TOptional<{inner_cpp}>"
 
     # ByteProperty with null enum → uint8, with enum → EEnumName
     if type_name == "ByteProperty":
