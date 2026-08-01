@@ -18,7 +18,7 @@ Instead, the parser:
 
 Based on UE source verification:
 
-1. **UStruct::Serialize**顺序:
+1. **UStruct::Serialize** order:
    - Super::Serialize (parent class)
    - SuperStruct
    - Children (child functions/structs)

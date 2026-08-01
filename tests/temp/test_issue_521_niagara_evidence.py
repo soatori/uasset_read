@@ -14,13 +14,14 @@ from uasset_read import parse_single
 
 ROOT = Path(__file__).resolve().parents[2]
 SAMPLE = ROOT / "tests" / "samples" / "NM_BPSystemEvent.uasset"
-SOURCE_FIXTURE_SHA256 = None  # Will be computed on first run
+SOURCE_FIXTURE_SHA256 = "B182D85907E858086E8B4BA8CC3D527D1DFBA21CA450ADDC2481A5053CE24FBF"
 
 
 def test_niagara_asset_parsed_as_partial():
     """Niagara assets are currently parsed as partial with skipped exports."""
     # Compute SHA-256 for fixture verification
     sha256 = hashlib.sha256(SAMPLE.read_bytes()).hexdigest().upper()
+    assert sha256 == SOURCE_FIXTURE_SHA256, f"Fixture SHA-256 mismatch: {sha256}"
 
     payload = json.loads(parse_single(
         str(SAMPLE), format="json", tolerant=True, log_enabled=False,
