@@ -286,6 +286,7 @@ class ExportIR:
     properties: list[PropertyIR]
     graphs: list[GraphIR]
     bulk_data: dict | None
+    asset_class: str | None = None
     parse_status: str = "success"
     fallback_reason: str | None = None
     error_message: str | None = None
