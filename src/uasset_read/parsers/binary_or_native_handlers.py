@@ -270,6 +270,39 @@ def _decode_sphere(raw: bytes, size: int) -> Dict[str, Any]:
     return {"Center": {"X": x, "Y": y, "Z": z}, "Radius": w}
 
 
+def _decode_soft_object_path_index(
+    raw: bytes,
+    summary: Any,
+) -> Optional[Dict[str, Any]]:
+    """Resolve a UE5 header-table FSoftObjectPath index without guessing."""
+    soft_object_path_list = getattr(summary, "_soft_object_path_list", None)
+    if (
+        len(raw) != 4
+        or not isinstance(soft_object_path_list, list)
+        or not soft_object_path_list
+    ):
+        return None
+
+    index = struct.unpack("<i", raw)[0]
+    if not 0 <= index < len(soft_object_path_list):
+        return None
+
+    entry = soft_object_path_list[index]
+    if not isinstance(entry, dict):
+        return None
+
+    return {
+        "kind": "struct_binary_decoded",
+        "struct_type": "SoftObjectPath",
+        "size": 4,
+        "fields": {
+            "asset_path": entry.get("asset_path", ""),
+            "sub_path": entry.get("sub_path", ""),
+            "index": index,
+        },
+    }
+
+
 # struct_type -> (set of valid byte sizes, decoder function) dispatch dictionary
 _STRUCT_DECODERS: Dict[str, tuple] = {
     "Vector":       ((12, 24), _decode_vector),
@@ -281,6 +314,7 @@ _STRUCT_DECODERS: Dict[str, tuple] = {
     "Vector2D":     ((8, 16),  _decode_vector2d),
     "Vector2f":     ((8, 16),  _decode_vector2d),
     "Vector2d":     ((8, 16),  _decode_vector2d),
+    "DeprecateSlateVector2D": ((8,), _decode_vector2d),
     "Vector4":      ((16, 32), _decode_vector4),
     "Vector4f":     ((16, 32), _decode_vector4),
     "Vector4d":     ((16, 32), _decode_vector4),
@@ -327,6 +361,11 @@ def _parse_struct_binary(
     except (struct.error, OSError):
         archive.seek(start_pos)
         return None
+
+    if struct_type == "SoftObjectPath":
+        resolved_path = _decode_soft_object_path_index(raw, summary)
+        if resolved_path is not None:
+            return resolved_path
 
     # Dispatch decoder by struct_type + size
     decoder_entry = _STRUCT_DECODERS.get(struct_type)

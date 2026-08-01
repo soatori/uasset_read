@@ -208,6 +208,7 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     # Blueprint related structs
     "ImplementedInterfaces",
     "LastEditedDocuments",
+    "EditedDocumentInfo",
     "CategorySorting",
     # AnimSequence structs (some assets use tagged format)
     "FrameRate",         # some assets tag.size=37, uses tagged PropertyTag format
