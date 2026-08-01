@@ -34,6 +34,7 @@ def decompile_single_function(
     export_map: list,
     tolerant: bool = True,
     linker: "PackageLinker | None" = None,
+    native_fields: list | None = None,
 ) -> KismetDecompiledResult | None:
     """
     Decompile a single UStruct export to KismetDecompiledResult.
@@ -52,6 +53,9 @@ def decompile_single_function(
         import_map: Import table for class name resolution
         export_map: Export table for class name resolution
         tolerant: If True, skip unknown tokens instead of raising
+        native_fields: Optional list of NativeFieldDeclaration from
+            FunctionScriptReadResult. When provided, used to derive the
+            function signature, parameters, and return type.
 
     Returns:
         KismetDecompiledResult if bytecode found and parsed successfully.
@@ -126,6 +130,20 @@ def decompile_single_function(
     # Format: "void FuncName(...) {" or similar
     signature = cpp_code.split("{")[0].strip() if "{" in cpp_code else f"void {func_name}()"
 
+    # Use native fields to derive structured signature data when available
+    native_params: list[dict[str, object]] = []
+    native_return_type = "void"
+    native_signature_used = False
+    if native_fields:
+        try:
+            from uasset_read.kismet.native_fields import build_native_function_signature
+            signature, native_params, native_return_type = build_native_function_signature(
+                func_name, native_fields,
+            )
+            native_signature_used = True
+        except (ValueError, KeyError, IndexError):
+            pass  # Fall back to graph-derived signature
+
     # Capture local variables from TypeRegistry snapshot
     local_vars: list[dict[str, str]] = []
     for var_name, cpp_type in type_registry._types.items():
@@ -143,6 +161,9 @@ def decompile_single_function(
         fallback_reasons=fallback_reasons,
         function_ref_stats=func_ref_stats,
         structured_rate=structured_rate,
+        parameters=native_params,
+        return_type=native_return_type,
+        native_signature=native_signature_used,
     )
 
 

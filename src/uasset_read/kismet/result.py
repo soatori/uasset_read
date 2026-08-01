@@ -70,6 +70,10 @@ class KismetDecompiledResult:
     bytecode_source: str = "unknown"
     bytecode_status: str = "unknown"
     translation_status: str = "not_applicable"
+    # Native field-derived signature data
+    parameters: list[dict[str, object]] = field(default_factory=list)
+    return_type: str = "void"
+    native_signature: bool = False  # True when parameters/return_type from native fields
     # "complete" | "partial" | "failed" | "not_applicable"
     error_code: str | None = None
     error_message: str | None = None
@@ -101,6 +105,9 @@ class KismetDecompiledResult:
             "bytecode_source": self.bytecode_source,
             "bytecode_status": self.bytecode_status,
             "translation_status": self.translation_status,
+            "parameters": self.parameters,
+            "return_type": self.return_type,
+            "native_signature": self.native_signature,
             "bytecode_confidence": infer_bytecode_confidence(
                 self.fallback_reasons,
                 bytecode_status=self.bytecode_status,

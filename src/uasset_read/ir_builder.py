@@ -970,9 +970,15 @@ def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFuncti
     """Build DecompiledFunctionIR list from ParseResult.decompiled_functions."""
     decompiled = []
     for func in result.decompiled_functions or []:
-        # Parse return_type from signature (format: "ReturnType FuncName(params)")
-        return_type = _extract_return_type(func.signature)
-        parameters = _extract_parameters(func)
+        # Prefer native field-derived parameters and return_type when available
+        native_signature = getattr(func, "native_signature", False)
+        if native_signature:
+            return_type = getattr(func, "return_type", "void")
+            parameters = getattr(func, "parameters", [])
+        else:
+            # Fallback: parse return_type from signature (format: "ReturnType FuncName(params)")
+            return_type = _extract_return_type(func.signature)
+            parameters = _extract_parameters(func)
         confidence = _infer_bytecode_confidence(
             func.fallback_reasons,
             bytecode_status=func.bytecode_status,

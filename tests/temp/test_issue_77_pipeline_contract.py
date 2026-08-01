@@ -22,6 +22,11 @@ from uasset_read.kismet.diagnostics import (
     BytecodeCandidateDiagnostic,
 )
 from uasset_read.kismet.result import KismetDecompiledResult
+from uasset_read.kismet.native_fields import (
+    NativeFieldDeclaration,
+    native_field_cpp_type,
+    build_native_function_signature,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -235,3 +240,238 @@ class TestBytecodeCandidateDiagnostic:
         assert "end_offset" in fields
         assert "expression_count" in fields
         assert "validation_error" in fields
+
+
+# ---------------------------------------------------------------------------
+# Test: Native function signature building
+# ---------------------------------------------------------------------------
+
+# Property flag constants (from uasset_read.constants)
+CPF_Parm = 0x0000000000000080
+CPF_OutParm = 0x0000000000000100
+CPF_ReturnParm = 0x0000000000000400
+CPF_ReferenceParm = 0x0000000008000000
+CPF_ConstParm = 0x0000000000000002
+
+
+def _make_field(type_name: str, name: str, flags: int) -> NativeFieldDeclaration:
+    """Build a minimal NativeFieldDeclaration with given property flags."""
+    decl = NativeFieldDeclaration(type_name=type_name, name=name, property_flags=flags)
+    return decl
+
+
+class TestBuildNativeFunctionSignature:
+    """Verify build_native_function_signature derives C++ signatures from native fields."""
+
+    def test_basic_signature_with_return_and_params(self):
+        """BoolProperty return + FloatProperty param + ObjectProperty out param."""
+        fields = [
+            _make_field("BoolProperty", "ReturnValue", CPF_Parm | CPF_ReturnParm),
+            _make_field("FloatProperty", "Yaw", CPF_Parm),
+            _make_field("ObjectProperty", "Target", CPF_Parm | CPF_OutParm | CPF_ReferenceParm),
+        ]
+        signature, parameters, return_type = build_native_function_signature("Aim", fields)
+        assert signature == "bool Aim(float Yaw, UObject*& Target)"
+        assert return_type == "bool"
+        assert parameters == [
+            {"name": "Yaw", "param_type": "float", "is_input": True, "is_output": False},
+            {"name": "Target", "param_type": "UObject*&", "is_input": True, "is_output": True},
+        ]
+
+    def test_void_signature_no_params(self):
+        """No fields produces a void function with no parameters."""
+        signature, parameters, return_type = build_native_function_signature("DoNothing", [])
+        assert signature == "void DoNothing()"
+        assert return_type == "void"
+        assert parameters == []
+
+    def test_const_reference_param(self):
+        """ConstParm + ReferenceParm produces const T&."""
+        fields = [
+            _make_field("StructProperty", "Data", CPF_Parm | CPF_ConstParm | CPF_ReferenceParm),
+        ]
+        signature, parameters, return_type = build_native_function_signature("Process", fields)
+        assert "const FStruct& Data" in signature
+        assert return_type == "void"
+        assert len(parameters) == 1
+        assert parameters[0]["param_type"] == "const FStruct&"
+
+    def test_array_signature(self):
+        """ArrayProperty with inner IntProperty produces TArray<int32>."""
+        inner = NativeFieldDeclaration(type_name="IntProperty", name="Element")
+        arr_field = _make_field("ArrayProperty", "Items", CPF_Parm)
+        arr_field.inner_fields = [inner]
+        fields = [arr_field]
+        signature, parameters, return_type = build_native_function_signature("SetItems", fields)
+        assert "TArray<int32> Items" in signature
+        assert parameters[0]["param_type"] == "TArray<int32>"
+
+    def test_map_signature(self):
+        """MapProperty with key/value produces TMap<K, V>."""
+        key_field = NativeFieldDeclaration(type_name="NameProperty", name="Key")
+        val_field = NativeFieldDeclaration(type_name="StrProperty", name="Value")
+        map_field = _make_field("MapProperty", "Lookup", CPF_Parm)
+        map_field.inner_fields = [key_field, val_field]
+        fields = [map_field]
+        signature, parameters, return_type = build_native_function_signature("Find", fields)
+        assert "TMap<FName, FString> Lookup" in signature
+        assert parameters[0]["param_type"] == "TMap<FName, FString>"
+
+    def test_out_param_is_output(self):
+        """CPF_OutParm marks param as is_output=True."""
+        fields = [
+            _make_field("FloatProperty", "Result", CPF_Parm | CPF_OutParm),
+        ]
+        _, parameters, _ = build_native_function_signature("Calc", fields)
+        assert len(parameters) == 1
+        assert parameters[0]["is_output"] is True
+        assert parameters[0]["is_input"] is True
+
+    def test_return_param_excluded_from_parameters(self):
+        """CPF_ReturnParm field is the return type, not in parameters list."""
+        fields = [
+            _make_field("IntProperty", "ReturnValue", CPF_Parm | CPF_ReturnParm),
+            _make_field("FloatProperty", "X", CPF_Parm),
+        ]
+        _, parameters, return_type = build_native_function_signature("GetX", fields)
+        assert return_type == "int32"
+        assert len(parameters) == 1
+        assert parameters[0]["name"] == "X"
+
+    def test_parameter_order_preserved(self):
+        """Parameters appear in the same order as fields (excluding return)."""
+        fields = [
+            _make_field("BoolProperty", "ReturnValue", CPF_Parm | CPF_ReturnParm),
+            _make_field("FloatProperty", "A", CPF_Parm),
+            _make_field("FloatProperty", "B", CPF_Parm),
+            _make_field("FloatProperty", "C", CPF_Parm),
+        ]
+        _, parameters, _ = build_native_function_signature("Lerp", fields)
+        names = [p["name"] for p in parameters]
+        assert names == ["A", "B", "C"]
+
+
+# ---------------------------------------------------------------------------
+# Test: KismetDecompiledResult native parameters
+# ---------------------------------------------------------------------------
+
+
+class TestKismetDecompiledResultNativeParameters:
+    """Verify KismetDecompiledResult carries native parameters and return_type."""
+
+    def test_has_parameters_and_return_type_fields(self):
+        """KismetDecompiledResult accepts parameters and return_type."""
+        result = KismetDecompiledResult(
+            function_name="Aim",
+            signature="bool Aim(float Yaw)",
+            local_variables=[],
+            cpp_code="",
+            bytecode_status="parsed",
+            translation_status="complete",
+            parameters=[
+                {"name": "Yaw", "param_type": "float", "is_input": True, "is_output": False},
+            ],
+            return_type="bool",
+        )
+        assert result.parameters == [
+            {"name": "Yaw", "param_type": "float", "is_input": True, "is_output": False},
+        ]
+        assert result.return_type == "bool"
+
+    def test_default_parameters_empty(self):
+        """Default parameters is an empty list."""
+        result = KismetDecompiledResult(
+            function_name="Empty",
+            signature="void Empty()",
+            local_variables=[],
+            cpp_code="",
+            bytecode_status="no_script",
+            translation_status="not_applicable",
+        )
+        assert result.parameters == []
+        assert result.return_type == "void"
+
+    def test_to_dict_includes_parameters(self):
+        """to_dict() includes parameters and return_type."""
+        result = KismetDecompiledResult(
+            function_name="Aim",
+            signature="bool Aim(float Yaw)",
+            local_variables=[],
+            cpp_code="",
+            bytecode_status="parsed",
+            translation_status="complete",
+            parameters=[
+                {"name": "Yaw", "param_type": "float", "is_input": True, "is_output": False},
+            ],
+            return_type="bool",
+        )
+        d = result.to_dict()
+        assert d["parameters"] == [
+            {"name": "Yaw", "param_type": "float", "is_input": True, "is_output": False},
+        ]
+        assert d["return_type"] == "bool"
+
+
+# ---------------------------------------------------------------------------
+# Test: IR builder uses native parameters
+# ---------------------------------------------------------------------------
+
+
+class TestIRBuilderNativeParameters:
+    """Verify IR builder prefers native parameters over signature parsing."""
+
+    def test_ir_uses_native_parameters_when_available(self):
+        """DecompiledFunctionIR uses native parameters and return_type."""
+        from dataclasses import dataclass
+        from uasset_read.ir_builder import _build_decompiled_functions_ir
+
+        # Minimal mock ParseResult
+        @dataclass
+        class MockResult:
+            decompiled_functions: list = None
+
+        native_params = [
+            {"name": "Yaw", "param_type": "float", "is_input": True, "is_output": False},
+            {"name": "Target", "param_type": "UObject*&", "is_input": True, "is_output": True},
+        ]
+        func = KismetDecompiledResult(
+            function_name="Aim",
+            signature="void Aim(float, UObject*&)",
+            local_variables=[],
+            cpp_code="",
+            bytecode_status="parsed",
+            translation_status="complete",
+            parameters=native_params,
+            return_type="bool",
+            native_signature=True,
+        )
+        result = MockResult(decompiled_functions=[func])
+        ir_funcs = _build_decompiled_functions_ir(result)
+        assert len(ir_funcs) == 1
+        assert ir_funcs[0].return_type == "bool"
+        assert ir_funcs[0].parameters == native_params
+
+    def test_ir_falls_back_to_signature_parsing(self):
+        """When native parameters are empty, IR falls back to signature parsing."""
+        from dataclasses import dataclass
+        from uasset_read.ir_builder import _build_decompiled_functions_ir
+
+        @dataclass
+        class MockResult:
+            decompiled_functions: list = None
+
+        func = KismetDecompiledResult(
+            function_name="TestFunc",
+            signature="void TestFunc(int32 EntryPoint)",
+            local_variables=[],
+            cpp_code="",
+            bytecode_status="parsed",
+            translation_status="complete",
+        )
+        result = MockResult(decompiled_functions=[func])
+        ir_funcs = _build_decompiled_functions_ir(result)
+        assert len(ir_funcs) == 1
+        # Should fall back to parsing signature string
+        assert ir_funcs[0].return_type == "void"
+        assert len(ir_funcs[0].parameters) == 1
+        assert ir_funcs[0].parameters[0]["name"] == "EntryPoint"

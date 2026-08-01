@@ -500,6 +500,70 @@ def read_native_fields(
 # C++ type mapping
 # ---------------------------------------------------------------------------
 
+# Property flag constants (mirrored from constants.py to avoid circular import)
+_CPF_Parm = 0x0000000000000080
+_CPF_OutParm = 0x0000000000000100
+_CPF_ReturnParm = 0x0000000000000400
+_CPF_ReferenceParm = 0x0000000008000000
+_CPF_ConstParm = 0x0000000000000002
+
+
+def build_native_function_signature(
+    function_name: str,
+    fields: list[NativeFieldDeclaration],
+) -> tuple[str, list[dict[str, object]], str]:
+    """Build a C++ function signature from native field declarations.
+
+    Selects fields with CPF_Parm, separates CPF_ReturnParm as the return type,
+    and produces a structured parameter list.
+
+    Returns:
+        (signature, parameters, return_type) where:
+        - signature is the full C++ signature string, e.g. "bool Aim(float Yaw, UObject*& Target)"
+        - parameters is a list of dicts with keys: name, param_type, is_input, is_output
+        - return_type is the C++ return type string
+    """
+    params: list[dict[str, object]] = []
+    return_cpp = "void"
+    return_name = ""
+
+    for field in fields:
+        if not (field.property_flags & _CPF_Parm):
+            continue
+
+        is_return = bool(field.property_flags & _CPF_ReturnParm)
+        cpp_type = native_field_cpp_type(field)
+
+        # Append reference suffix
+        if field.property_flags & _CPF_ReferenceParm:
+            cpp_type += "&"
+
+        # Prepend const
+        if field.property_flags & _CPF_ConstParm:
+            cpp_type = f"const {cpp_type}"
+
+        if is_return:
+            return_cpp = cpp_type
+            return_name = field.name
+        else:
+            params.append({
+                "name": field.name,
+                "param_type": cpp_type,
+                "is_input": True,
+                "is_output": bool(field.property_flags & _CPF_OutParm),
+            })
+
+    # Build signature string
+    param_strs = [f"{p['param_type']} {p['name']}" for p in params]
+    signature = f"{return_cpp} {function_name}({', '.join(param_strs)})"
+
+    return signature, params, return_cpp
+
+
+# ---------------------------------------------------------------------------
+# C++ type mapping (scalar + container)
+# ---------------------------------------------------------------------------
+
 # Scalar type name → C++ type
 _SCALAR_CPP_TYPES: dict[str, str] = {
     "Int8Property": "int8",
