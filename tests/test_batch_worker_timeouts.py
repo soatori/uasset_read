@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import json
+import shutil
+from pathlib import Path
+
 from uasset_read.batch_worker import BatchWorkerOutcome, _monitor_worker
+from uasset_read.core import parse_batch
 from uasset_read.memory_safety import ResourceLimits
 
 
@@ -85,3 +90,32 @@ def test_monitor_worker_returns_result_after_clean_worker_exit() -> None:
     assert outcome == expected
     assert process.join_timeouts == [1]
     assert results.timeouts == [1]
+
+
+def test_parse_batch_completes_rifle_anim_layers_in_isolated_worker(
+    tmp_path: Path,
+) -> None:
+    """#511: the real AnimBlueprint completes with an honest partial result."""
+    fixture = Path(__file__).parent / "samples" / "ABP_RifleAnimLayers.uasset"
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "output"
+    input_dir.mkdir()
+    shutil.copyfile(fixture, input_dir / fixture.name)
+
+    result = parse_batch(
+        str(input_dir),
+        format="json",
+        output_dir=str(output_dir),
+        isolate_assets=True,
+        log_enabled=False,
+    )
+
+    assert result.total == 1
+    assert len(result.success) == 1
+    assert result.partial == []
+    assert result.failed == []
+    assert result.skipped == []
+
+    payload = json.loads(Path(result.success[0]).read_text(encoding="utf-8"))
+    assert payload["status"]["status"] == "partial"
+    assert list(output_dir.glob(".uasset-worker-*")) == []
