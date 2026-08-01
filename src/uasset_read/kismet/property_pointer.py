@@ -1,16 +1,12 @@
-from __future__ import annotations
-
-"""
-Kismet property pointer — FFieldPath + FKismetPropertyPointer.
+"""Kismet property pointer — FFieldPath + FKismetPropertyPointer.
 
 Corresponds to UE engine's FFieldPath and FKismetPropertyPointer structs,
 used to reference object properties in Kismet bytecode.
 
-UE4.25+ introduced bNew flag: True uses FFieldPath path reference,
-False uses legacy FPackageIndex single-step reference.
-Simplified implementation: always reads FFieldPath (UE5 default behavior).
+UE5 FFieldPath stores a sequence of FName path segments plus an optional
+resolved owner (PackageIndex). FKismetPropertyPointer wraps FFieldPath.
 """
-
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional, TYPE_CHECKING
@@ -22,89 +18,80 @@ from uasset_read.serializers.object_resources import PackageIndex
 
 
 @dataclass
+class FFieldPathSegment:
+    """Single segment in an FFieldPath: FName index + number + resolved name."""
+
+    name_index: int
+    number: int
+    base_name: str
+
+
+@dataclass
 class FFieldPath:
-    """
-    UE5 FFieldPath — property path reference.
+    """UE5 FFieldPath — property path reference.
 
     Path stores list of path segments resolved from FName name table.
     ResolvedOwner is a UE5 new field storing the owner PackageIndex for path resolution.
     """
 
-    Path: list[str] = field(default_factory=list)
-    ResolvedOwner: Optional[PackageIndex] = field(default=None)
-
-    @classmethod
-    def from_archive(cls, archive: FArchive, name_map: list[str]) -> FFieldPath:
-        """
-        Deserialize FFieldPath from FArchive.
-
-        UE source: FFieldPath stores TArray<FName>, where each FName has:
-        - NameIndex (i32): Index into name table
-        - Number (i32): Instance number for disambiguation
-
-        Read logic:
-        1. Read u32 array length (Path segment count)
-        2. Loop reading each FName (NameIndex + Number), resolve to string
-        3. If first element is "None", clear Path (indicates empty path)
-        """
-        count = archive.read_u32()
-
-        path: list[str] = []
-        for _ in range(count):
-            # Read FName: NameIndex (i32) + Number (i32)
-            name_index = archive.read_i32()
-            name_number = archive.read_i32()
-            path.append(archive.resolve_fname(name_index, name_number))
-
-        # If first element is "None", indicates empty path
-        if path and path[0] == "None":
-            path.clear()
-
-        return cls(Path=path)
+    path: list[FFieldPathSegment] = field(default_factory=list)
+    resolved_owner: Optional[PackageIndex] = field(default=None)
 
 
 @dataclass
 class FKismetPropertyPointer:
-    """
-    FKismetPropertyPointer — property reference pointer in Kismet bytecode.
+    """FKismetPropertyPointer — property reference pointer in Kismet bytecode.
 
-    bNew flag distinguishes two reference modes:
-    - True (UE4.25+): Uses FFieldPath multi-segment path reference
-    - False (legacy): Uses FPackageIndex single-step reference
-
-    Simplified implementation: always uses New (FFieldPath) path.
+    Wraps an FFieldPath for property references in Kismet bytecode.
     """
 
     bNew: bool = True
-    Old: Optional[PackageIndex] = field(default=None)
-    New: Optional[FFieldPath] = field(default=None)
+    path: Optional[FFieldPath] = field(default=None)
 
     @classmethod
     def from_archive(
         cls, archive: FArchive, name_map: list[str]
     ) -> FKismetPropertyPointer:
-        """
-        Deserialize FKismetPropertyPointer from FArchive.
-
-        Simplified: after reading bNew flag, always uses New (FFieldPath) path.
-        Full legacy Old path support deferred to future implementation.
-        """
+        """Deserialize FKismetPropertyPointer from FArchive."""
         b_new = archive.read_bool()
 
         if b_new:
-            new_path = FFieldPath.from_archive(archive, name_map)
-            return cls(bNew=True, New=new_path)
+            # Use archive's xfer_field_pointer if available (dual-cursor)
+            if hasattr(archive, 'xfer_field_pointer'):
+                field_path = archive.xfer_field_pointer()
+            else:
+                # Legacy fallback: read FFieldPath manually
+                count = archive.read_u32()
+                from uasset_read.kismet.property_pointer import FFieldPathSegment
+                segments: list[FFieldPathSegment] = []
+                for _ in range(count):
+                    name_index = archive.read_u32()
+                    number = archive.read_u32()
+                    if 0 <= name_index < len(name_map):
+                        base_name = name_map[name_index]
+                    else:
+                        base_name = f"Unknown_{name_index}"
+                    segments.append(FFieldPathSegment(
+                        name_index=name_index,
+                        number=number,
+                        base_name=base_name,
+                    ))
+                field_path = FFieldPath(path=segments)
+            return cls(bNew=True, path=field_path)
         else:
             # Legacy path: read FPackageIndex (single int32)
             old_index = PackageIndex(archive.read_i32())
-            return cls(bNew=False, Old=old_index)
+            return cls(bNew=False, path=FFieldPath(
+                path=[],
+                resolved_owner=old_index,
+            ))
 
     def __str__(self) -> str:
         """Return string representation of the property path."""
-        if self.New and self.New.Path:
-            return self.New.Path[0]
-        if self.Old is not None:
-            idx = self.Old.index
+        if self.path and self.path.path:
+            return self.path.path[0].base_name
+        if self.path and self.path.resolved_owner is not None:
+            idx = self.path.resolved_owner.index
             if idx == 0:
                 return "None"
             return f"Property_{idx}"

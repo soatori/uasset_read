@@ -23,8 +23,7 @@ class EX_StringConst(KismetExpressionT[str]):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_StringConst:
-        value = archive.xfer_string()
-        archive.skip(1)  # skip null terminator
+        value = archive.xfer_ansi_string()
         return cls(Value=value)
 
 
@@ -39,7 +38,6 @@ class EX_UnicodeStringConst(KismetExpressionT[str]):
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_UnicodeStringConst:
         value = archive.xfer_unicode_string()
-        archive.skip(2)  # skip double-null terminator
         return cls(Value=value)
 
 
@@ -60,12 +58,9 @@ class FScriptText:
         if lit_type == EBlueprintTextLiteralType.Empty:
             return cls(TextLiteralType=lit_type)
         elif lit_type == EBlueprintTextLiteralType.LocalizedText:
-            namespace = archive.xfer_string()
-            archive.skip(1)
-            key = archive.xfer_string()
-            archive.skip(1)
-            source = archive.xfer_string()
-            archive.skip(1)
+            namespace = archive.xfer_ansi_string()
+            key = archive.xfer_ansi_string()
+            source = archive.xfer_ansi_string()
             return cls(
                 TextLiteralType=lit_type,
                 Namespace=namespace,
@@ -73,20 +68,15 @@ class FScriptText:
                 SourceString=source,
             )
         elif lit_type == EBlueprintTextLiteralType.Invariant:
-            key = archive.xfer_string()
-            archive.skip(1)
-            source = archive.xfer_string()
-            archive.skip(1)
+            key = archive.xfer_ansi_string()
+            source = archive.xfer_ansi_string()
             return cls(TextLiteralType=lit_type, KeyString=key, SourceString=source)
         elif lit_type == EBlueprintTextLiteralType.CultureInvariant:
-            source = archive.xfer_string()
-            archive.skip(1)
+            source = archive.xfer_ansi_string()
             return cls(TextLiteralType=lit_type, SourceString=source)
         elif lit_type == EBlueprintTextLiteralType.StringTableEntry:
-            asset = archive.xfer_string()
-            archive.skip(1)
-            table_id = archive.xfer_string()
-            archive.skip(1)
+            asset = archive.xfer_ansi_string()
+            table_id = archive.xfer_ansi_string()
             return cls(
                 TextLiteralType=lit_type,
                 StringTableAsset=asset,

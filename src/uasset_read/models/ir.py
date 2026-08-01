@@ -414,6 +414,15 @@ class BlueprintIR:
 
 
 @dataclass
+class ScriptMetricsIR:
+    """Script metrics for a decompiled function."""
+    bytecode_buffer_size: int = 0
+    serialized_script_size: int = 0
+    serialized_bytes_consumed: int = 0
+    bytecode_bytes_consumed: int = 0
+
+
+@dataclass
 class DecompiledFunctionIR:
     """Decompiled function IR (from KismetDecompiledResult)."""
     name: str
@@ -423,11 +432,18 @@ class DecompiledFunctionIR:
     return_type: str
     fallback_reasons: list[str] = field(default_factory=list)
     bytecode_confidence: str = "verified"
-    # "verified" | "fallback" | "heuristic" | "graph_topology" | "failed"
-    bytecode_status: str = "unknown"   # "parsed" | "failed" | "unknown"
-    bytecode_source: str = "unknown"   # "function_export" | "fallback_or_serial_scan" | "unknown"
+    # "verified" | "no_script" | "graph_topology" | "failed"
+    bytecode_status: str = "unknown"
+    # "parsed" | "no_script" | "failed" | "unknown"
+    translation_status: str = "not_applicable"
+    # "complete" | "partial" | "failed" | "not_applicable"
+    bytecode_source: str = "unknown"   # "function_export" | "unknown"
     logic_source: str = "current_asset"  # "current_asset" | "graph_topology"
     warnings: list[str] = field(default_factory=list)
+    error_code: str | None = None
+    error_message: str | None = None
+    error_context: dict | None = None
+    script_metrics: ScriptMetricsIR | None = None
 
 
 @dataclass

@@ -3,11 +3,9 @@ from __future__ import annotations
 """
 Kismet Decompilation Pipeline — Standalone decompile_uasset() entry point.
 
-Provides decompile_uasset(path) function that iterates Blueprint
-UStruct exports, extracts bytecode, translates to C++ pseudocode, and returns
+Provides decompile_uasset(path) function that iterates Function/UFunction
+exports, extracts bytecode, translates to C++ pseudocode, and returns
 structured results.
-
-BPGC bytecode fallback with cache reset.
 """
 
 from typing import TYPE_CHECKING
@@ -15,9 +13,8 @@ from typing import TYPE_CHECKING
 from uasset_read.exceptions import ParseError
 from uasset_read.kismet.result import KismetDecompiledResult
 from uasset_read.kismet.bytecode_extractor import (
-    extract_and_parse,
-    USTRUCT_TYPES,
-    reset_bpgc_cache,
+    parse_bytecode_stream,
+    FUNCTION_EXPORT_CLASSES,
 )
 from uasset_read.kismet.body_builder import FunctionBodyBuilder
 from uasset_read.kismet.translator import TypeRegistry
@@ -37,12 +34,13 @@ def decompile_single_function(
     export_map: list,
     tolerant: bool = True,
     linker: "PackageLinker | None" = None,
+    native_fields: list | None = None,
 ) -> KismetDecompiledResult | None:
     """
     Decompile a single UStruct export to KismetDecompiledResult.
 
     Internal helper that:
-    1. Uses extract_and_parse() to extract and parse bytecode
+    1. Uses read_ufunction_script() to extract script bytes, then parse_bytecode_stream()
     2. Translates expressions to C++ pseudocode
     3. Captures local variable types from TypeRegistry
     4. Returns structured result
@@ -55,6 +53,9 @@ def decompile_single_function(
         import_map: Import table for class name resolution
         export_map: Export table for class name resolution
         tolerant: If True, skip unknown tokens instead of raising
+        native_fields: Optional list of NativeFieldDeclaration from
+            FunctionScriptReadResult. When provided, used to derive the
+            function signature, parameters, and return type.
 
     Returns:
         KismetDecompiledResult if bytecode found and parsed successfully.
@@ -77,17 +78,36 @@ def decompile_single_function(
             fallback_reasons=[reason],
         )
 
-    # Reuse extract_and_parse() to extract and parse bytecode
+    # Use read_ufunction_script() to extract script bytes, then parse
+    from uasset_read.kismet.ufunction_reader import read_ufunction_script
+
     try:
-        expressions, error, extraction_reason = extract_and_parse(
+        script_result = read_ufunction_script(
             archive, export, summary, name_map, import_map, export_map,
-            tolerant=tolerant,
         )
     except (ParseError, ValueError, IndexError, KeyError) as exc:
-        # Expected failures from corrupted/malformed bytecode
         if tolerant:
             return _failed_result(f"bytecode extraction error: {exc}")
         raise
+
+    if script_result.status == "no_script":
+        return _failed_result("no script data")
+    if script_result.status == "failed":
+        reason = script_result.failure.error_message if script_result.failure else "unknown"
+        return _failed_result(f"UFunction script read failed: {reason}")
+
+    # Parse the bytecode from the serialized script
+    expressions = []
+    error = None
+    if script_result.serialized_script:
+        try:
+            expressions = parse_bytecode_stream(
+                script_result.serialized_script, name_map, summary,
+                bytecode_buffer_size=script_result.bytecode_buffer_size,
+                tolerant=tolerant,
+            )
+        except (ParseError, ValueError) as exc:
+            error = str(exc)
 
     if error or not expressions:
         if tolerant:
@@ -97,8 +117,6 @@ def decompile_single_function(
 
     # Build fallback reason list
     fallback_reasons: list[str] = []
-    if extraction_reason != "function_export":
-        fallback_reasons.append(extraction_reason)
 
     # Build C++ pseudocode using FunctionBodyBuilder
     type_registry = TypeRegistry()
@@ -131,6 +149,20 @@ def decompile_single_function(
     # Format: "void FuncName(...) {" or similar
     signature = cpp_code.split("{")[0].strip() if "{" in cpp_code else f"void {func_name}()"
 
+    # Use native fields to derive structured signature data when available
+    native_params: list[dict[str, object]] = []
+    native_return_type = "void"
+    native_signature_used = False
+    if native_fields:
+        try:
+            from uasset_read.kismet.native_fields import build_native_function_signature
+            signature, native_params, native_return_type = build_native_function_signature(
+                func_name, native_fields,
+            )
+            native_signature_used = True
+        except (ValueError, KeyError, IndexError):
+            pass  # Fall back to graph-derived signature
+
     # Capture local variables from TypeRegistry snapshot
     local_vars: list[dict[str, str]] = []
     for var_name, cpp_type in type_registry._types.items():
@@ -142,12 +174,15 @@ def decompile_single_function(
         local_variables=local_vars,
         cpp_code=cpp_code,
         expressions=expressions,
-        bytecode_source=("function_export" if extraction_reason == "function_export" else "fallback_or_serial_scan"),
+        bytecode_source="function_export",
         bytecode_status="parsed",
         warnings=warnings,
         fallback_reasons=fallback_reasons,
         function_ref_stats=func_ref_stats,
         structured_rate=structured_rate,
+        parameters=native_params,
+        return_type=native_return_type,
+        native_signature=native_signature_used,
     )
 
 
@@ -197,9 +232,6 @@ def decompile_uasset(path: str, tolerant: bool = True) -> list[KismetDecompiledR
         resolve_class_name,
     )
 
-    # T-72C-04: Reset BPGC cache for fresh extraction per file
-    reset_bpgc_cache()
-
     # Verify file exists
     if not os.path.exists(path):
         raise FileNotFoundError(f"File not found: {path}")
@@ -216,20 +248,21 @@ def decompile_uasset(path: str, tolerant: bool = True) -> list[KismetDecompiledR
     archive.seek(summary.export_offset)
     export_map = read_export_map(archive, summary, name_map)
 
-    # Collect UStruct exports
+    # Collect Function/UFunction exports only
     results: list[KismetDecompiledResult] = []
 
     for export in export_map:
-        # Check if this is a Blueprint UStruct export with bytecode
+        # Check if this is a Function/UFunction export with bytecode
         class_name = resolve_class_name(export.class_index, import_map, export_map)
-        if class_name not in USTRUCT_TYPES:
+        if class_name not in FUNCTION_EXPORT_CLASSES:
             continue
 
         # Skip exports with no script data
         if not export.has_script_serialization:
             continue
 
-        # Attempt decompilation
+        # Attempt decompilation — retain one result for every such export
+        # including no_script and failed
         result = decompile_single_function(
             archive, export, summary, name_map, import_map, export_map, tolerant=tolerant
         )

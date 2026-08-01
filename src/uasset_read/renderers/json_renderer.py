@@ -599,6 +599,7 @@ class JSONRenderer(IRenderer):
             "parameters": func.parameters,
             "return_type": func.return_type,
             "bytecode_status": func.bytecode_status,
+            "translation_status": func.translation_status,
             "bytecode_source": func.bytecode_source,
             "logic_source": func.logic_source,
             "warnings": func.warnings,
@@ -606,6 +607,19 @@ class JSONRenderer(IRenderer):
         }
         if func.bytecode_confidence != "verified":
             d["bytecode_confidence"] = func.bytecode_confidence
+        if func.error_code is not None:
+            d["error_code"] = func.error_code
+        if func.error_message is not None:
+            d["error_message"] = func.error_message
+        if func.error_context is not None:
+            d["error_context"] = func.error_context
+        if func.script_metrics is not None:
+            d["script_metrics"] = {
+                "bytecode_buffer_size": func.script_metrics.bytecode_buffer_size,
+                "serialized_script_size": func.script_metrics.serialized_script_size,
+                "serialized_bytes_consumed": func.script_metrics.serialized_bytes_consumed,
+                "bytecode_bytes_consumed": func.script_metrics.bytecode_bytes_consumed,
+            }
         return d
 
     def _calculate_statistics(self, ir: PackageIR) -> dict:

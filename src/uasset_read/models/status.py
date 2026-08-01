@@ -100,11 +100,14 @@ def _result_status(result: "ParseResult | LinkerParseResult") -> str:
     if has_structural_diagnostic:
         return "partial"
 
-    # 3.4 Check heuristic recovery (from decompiled functions)
+    # 3.4 Check native function status (failed/partial translation)
     decompiled_functions = getattr(result, "decompiled_functions", None) or []
     for func in decompiled_functions:
-        fallback_reasons = getattr(func, "fallback_reasons", None) or []
-        if "serial_scan_recovery" in fallback_reasons:
+        bytecode_status = getattr(func, "bytecode_status", "unknown")
+        translation_status = getattr(func, "translation_status", "not_applicable")
+        if bytecode_status == "failed":
+            return "partial"
+        if bytecode_status == "parsed" and translation_status in ("partial", "failed"):
             return "partial"
 
     return "success"

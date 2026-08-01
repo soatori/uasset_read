@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Optional
 
 from uasset_read.kismet.expressions.base import KismetExpression
 from uasset_read.kismet.tokens import EExprToken, ECastToken
+from uasset_read.serializers.object_resources import PackageIndex
 
 if TYPE_CHECKING:
     from uasset_read.kismet.archive import FKismetArchive
@@ -21,13 +22,14 @@ class EX_CastBase(KismetExpression):
     """Abstract base class for cast expressions -- reads class pointer and target expression."""
 
     ClassPtr: int = 0
+    ClassPtrRef: PackageIndex | None = None
     Target: Optional[KismetExpression] = None
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_CastBase:
-        cls_ptr = archive.read_i32()
+        cls_ptr_ref = archive.xfer_object_pointer()
         target = archive.read_expression()
-        return cls(ClassPtr=cls_ptr, Target=target)
+        return cls(ClassPtr=cls_ptr_ref.index, ClassPtrRef=cls_ptr_ref, Target=target)
 
 
 @dataclass

@@ -9,6 +9,25 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+# Allowed (bytecode_status, translation_status) pairs
+ALLOWED_STATUS_PAIRS = frozenset({
+    ("parsed", "complete"),
+    ("parsed", "partial"),
+    ("parsed", "failed"),
+    ("no_script", "not_applicable"),
+    ("failed", "not_applicable"),
+})
+
+
+def _validate_status_pair(bytecode_status: str, translation_status: str) -> None:
+    """Raise ValueError for disallowed (bytecode_status, translation_status) pairs."""
+    if (bytecode_status, translation_status) not in ALLOWED_STATUS_PAIRS:
+        raise ValueError(
+            f"disallowed status pair: ({bytecode_status!r}, {translation_status!r}); "
+            f"allowed: {sorted(ALLOWED_STATUS_PAIRS)}"
+        )
+
+
 def infer_bytecode_confidence(
     fallback_reasons: list[str],
     bytecode_status: str = "unknown",
@@ -23,10 +42,8 @@ def infer_bytecode_confidence(
         return "graph_topology"
     if bytecode_status == "failed":
         return "failed"
-    if "serial_scan_recovery" in fallback_reasons:
-        return "heuristic"
-    if "bpgc_bytecode_extraction" in fallback_reasons:
-        return "fallback"
+    if bytecode_status == "no_script":
+        return "no_script"
     return "verified"
 
 
@@ -52,12 +69,26 @@ class KismetDecompiledResult:
     expressions: list[Any] = field(default_factory=list)  # raw KismetExpression list for debugging
     bytecode_source: str = "unknown"
     bytecode_status: str = "unknown"
+    translation_status: str = "not_applicable"
+    # Native field-derived signature data
+    parameters: list[dict[str, object]] = field(default_factory=list)
+    return_type: str = "void"
+    native_signature: bool = False  # True when parameters/return_type from native fields
+    # "complete" | "partial" | "failed" | "not_applicable"
+    error_code: str | None = None
+    error_message: str | None = None
+    error_context: dict[str, Any] | None = None
+    script_metrics: dict[str, Any] | None = None
     warnings: list[str] = field(default_factory=list)
     fallback_reasons: list[str] = field(default_factory=list)
     semantic_calls: list[dict[str, Any]] = field(default_factory=list)
     logic_source: str = "current_asset"
     function_ref_stats: dict[str, Any] = field(default_factory=dict)
     structured_rate: float | None = None
+
+    def __post_init__(self) -> None:
+        """Validate status pair on construction."""
+        _validate_status_pair(self.bytecode_status, self.translation_status)
 
     def to_dict(self) -> dict:
         """
@@ -66,13 +97,17 @@ class KismetDecompiledResult:
         expressions field is serialized via each expression's to_dict() if available,
         else falls back to str() representation.
         """
-        return {
+        d = {
             "function_name": self.function_name,
             "signature": self.signature,
             "local_variables": self.local_variables,
             "cpp_code": self.cpp_code,
             "bytecode_source": self.bytecode_source,
             "bytecode_status": self.bytecode_status,
+            "translation_status": self.translation_status,
+            "parameters": self.parameters,
+            "return_type": self.return_type,
+            "native_signature": self.native_signature,
             "bytecode_confidence": infer_bytecode_confidence(
                 self.fallback_reasons,
                 bytecode_status=self.bytecode_status,
@@ -89,6 +124,15 @@ class KismetDecompiledResult:
                 for e in self.expressions
             ],
         }
+        if self.error_code is not None:
+            d["error_code"] = self.error_code
+        if self.error_message is not None:
+            d["error_message"] = self.error_message
+        if self.error_context is not None:
+            d["error_context"] = self.error_context
+        if self.script_metrics is not None:
+            d["script_metrics"] = self.script_metrics
+        return d
 
     def to_json(self, indent: int = 2) -> str:
         """JSON string view (D-08)."""
@@ -99,4 +143,4 @@ class KismetDecompiledResult:
         return self.cpp_code
 
 
-__all__ = ["KismetDecompiledResult", "infer_bytecode_confidence"]
+__all__ = ["KismetDecompiledResult", "infer_bytecode_confidence", "ALLOWED_STATUS_PAIRS"]

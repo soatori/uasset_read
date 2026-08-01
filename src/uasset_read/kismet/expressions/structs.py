@@ -33,10 +33,10 @@ class EX_StructConst(KismetExpression):
     def from_archive(
         cls, archive: FKismetArchive, name_map: list[str]
     ) -> EX_StructConst:
-        struct_idx = archive.read_i32()
+        struct_ref = archive.xfer_object_pointer()
         size = archive.read_u32()
         props = archive.read_expression_array(EExprToken.EX_EndStructConst)
-        return cls(Struct=struct_idx, StructSize=size, Properties=props)
+        return cls(Struct=struct_ref.index, StructSize=size, Properties=props)
 
     def to_dict(self) -> dict:
         result = super().to_dict()
