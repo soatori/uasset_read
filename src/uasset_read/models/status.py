@@ -107,4 +107,13 @@ def _result_status(result: "ParseResult | LinkerParseResult") -> str:
         if "serial_scan_recovery" in fallback_reasons:
             return "partial"
 
+    # 3.5 Check native function status (failed/partial translation)
+    for func in decompiled_functions:
+        bytecode_status = getattr(func, "bytecode_status", "unknown")
+        translation_status = getattr(func, "translation_status", "not_applicable")
+        if bytecode_status == "failed":
+            return "partial"
+        if bytecode_status == "parsed" and translation_status in ("partial", "failed"):
+            return "partial"
+
     return "success"

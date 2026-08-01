@@ -722,7 +722,7 @@
     },
     "DecompiledFunction": {
       "type": "object",
-      "required": ["name", "signature", "cpp_code", "parameters", "return_type", "bytecode_status", "bytecode_source", "logic_source", "warnings", "fallback_reasons"],
+      "required": ["name", "signature", "cpp_code", "parameters", "return_type", "bytecode_status", "translation_status", "bytecode_source", "logic_source", "warnings", "fallback_reasons"],
       "properties": {
         "name": {
           "type": "string",
@@ -749,8 +749,13 @@
         },
         "bytecode_status": {
           "type": "string",
-          "enum": ["parsed", "failed", "unknown"],
+          "enum": ["parsed", "no_script", "failed", "unknown"],
           "description": "Bytecode extraction/parsing status"
+        },
+        "translation_status": {
+          "type": "string",
+          "enum": ["complete", "partial", "failed", "not_applicable"],
+          "description": "Translation (C++ code generation) status"
         },
         "bytecode_source": {
           "type": "string",
@@ -764,8 +769,27 @@
         },
         "bytecode_confidence": {
           "type": "string",
-          "enum": ["verified", "fallback", "heuristic", "graph_topology", "failed"],
+          "enum": ["verified", "no_script", "graph_topology", "failed"],
           "description": "Confidence level of the decompiled function body"
+        },
+        "error_code": {
+          "type": ["string", "null"],
+          "description": "Structured error code"
+        },
+        "error_message": {
+          "type": ["string", "null"],
+          "description": "Structured error message"
+        },
+        "error_context": {
+          "type": ["object", "null"],
+          "description": "Structured error context (e.g. offsets, indices)"
+        },
+        "script_metrics": {
+          "oneOf": [
+            { "$ref": "#/$defs/ScriptMetrics" },
+            { "type": "null" }
+          ],
+          "description": "Script metrics for the function"
         },
         "fallback_reasons": {
           "type": "array",
@@ -780,6 +804,32 @@
           "items": {
             "type": "string"
           }
+        }
+      }
+    },
+    "ScriptMetrics": {
+      "type": "object",
+      "required": ["bytecode_buffer_size", "serialized_script_size", "serialized_bytes_consumed", "bytecode_bytes_consumed"],
+      "properties": {
+        "bytecode_buffer_size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total bytecode buffer size in bytes"
+        },
+        "serialized_script_size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Declared serialized script size in bytes"
+        },
+        "serialized_bytes_consumed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Bytes consumed from serialized data"
+        },
+        "bytecode_bytes_consumed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Bytes consumed from bytecode buffer"
         }
       }
     },

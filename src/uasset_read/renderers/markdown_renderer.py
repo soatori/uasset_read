@@ -397,10 +397,14 @@ class MarkdownRenderer(IRenderer):
                 "return_type": func.return_type,
                 "bytecode_confidence": func.bytecode_confidence,
                 "bytecode_status": func.bytecode_status,
+                "translation_status": func.translation_status,
                 "bytecode_source": func.bytecode_source,
                 "logic_source": func.logic_source,
                 "warnings": func.warnings,
                 "fallback_reasons": func.fallback_reasons,
+                "error_code": getattr(func, "error_code", None),
+                "error_message": getattr(func, "error_message", None),
+                "script_metrics": getattr(func, "script_metrics", None),
             }
 
         if ir.blueprint and ir.blueprint.functions:
@@ -443,6 +447,11 @@ class MarkdownRenderer(IRenderer):
                         param_strs.append(f"{ptype} {pname}")
                 sig = f"{func_info['return_type']} {func_info['name']}({', '.join(param_strs)})"
                 lines.append(f"**Signature:** `{sig}`")
+
+            # Status line
+            bs = func_info.get("bytecode_status", "unknown")
+            ts = func_info.get("translation_status", "not_applicable")
+            lines.append(f"**Status:** bytecode={bs}, translation={ts}")
             lines.append("")
 
             # Parameter list
@@ -461,6 +470,19 @@ class MarkdownRenderer(IRenderer):
             warn = self._provenance_warning(func_info)
             if warn:
                 lines.append(warn)
+                lines.append("")
+
+            # Script metrics
+            script_metrics = func_info.get("script_metrics")
+            if script_metrics is not None:
+                lines.append("**Script Metrics:**")
+                lines.append("")
+                lines.append("| Metric | Value |")
+                lines.append("|--------|-------|")
+                lines.append(f"| bytecode_buffer_size | {script_metrics.bytecode_buffer_size} |")
+                lines.append(f"| serialized_script_size | {script_metrics.serialized_script_size} |")
+                lines.append(f"| serialized_bytes_consumed | {script_metrics.serialized_bytes_consumed} |")
+                lines.append(f"| bytecode_bytes_consumed | {script_metrics.bytecode_bytes_consumed} |")
                 lines.append("")
 
             # C++ implementation code block
@@ -760,13 +782,17 @@ class MarkdownRenderer(IRenderer):
             return None
 
         status = _get(func, "bytecode_status", "unknown")
+        translation = _get(func, "translation_status", "not_applicable")
         source = _get(func, "bytecode_source", "unknown")
         logic = _get(func, "logic_source", "current_asset")
         reasons = _get(func, "fallback_reasons", [])
+        error_code = _get(func, "error_code", None)
 
-        parts = [f"status={status}", f"source={source}", f"logic={logic}"]
+        parts = [f"status={status}", f"translation={translation}", f"source={source}", f"logic={logic}"]
         if confidence != "verified":
             parts.append(f"confidence={confidence}")
+        if error_code:
+            parts.append(f"error={error_code}")
         if reasons:
             parts.append(f"reasons={'; '.join(reasons)}")
 

@@ -457,6 +457,7 @@ class TestMarkdownRendering:
             return_type="void",
             bytecode_confidence="graph_topology",
             bytecode_status="failed",
+            translation_status="not_applicable",
             bytecode_source="unknown",
             logic_source="graph_topology",
             warnings=["Empty bytecode body enriched"],
@@ -466,6 +467,7 @@ class TestMarkdownRendering:
         assert "> [!WARNING]" in md
         assert "Function body provenance:" in md
         assert "status=failed" in md
+        assert "translation=not_applicable" in md
         assert "logic=graph_topology" in md
         assert "confidence=graph_topology" in md
 
@@ -479,6 +481,7 @@ class TestMarkdownRendering:
             return_type="void",
             bytecode_confidence="failed",
             bytecode_status="failed",
+            translation_status="not_applicable",
             bytecode_source="unknown",
             logic_source="current_asset",
             warnings=["bytecode extraction error: short read"],
@@ -545,6 +548,8 @@ class TestEventGraphCompletion:
             signature="void ReceiveBeginPlay()",
             local_variables=[],
             cpp_code="void ReceiveBeginPlay() { /* bytecode */ }",
+            bytecode_status="parsed",
+            translation_status="complete",
         )
         monkeypatch.setattr(
             semantic,
@@ -570,6 +575,8 @@ class TestEventGraphCompletion:
             signature="void ExecuteUbergraph_TestBlueprint()",
             local_variables=[],
             cpp_code="void ExecuteUbergraph_TestBlueprint() { /* bytecode */ }",
+            bytecode_status="parsed",
+            translation_status="complete",
         )
         monkeypatch.setattr(
             semantic,

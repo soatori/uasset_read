@@ -73,6 +73,8 @@ def run_post_process_kismet(exports):
             signature=f"void {export.object_name}()",
             local_variables=[],
             cpp_code=f"void {export.object_name}() {{ }}",
+            bytecode_status="parsed",
+            translation_status="complete",
         )
 
     archive = MagicMock()
@@ -159,6 +161,7 @@ class TestProductionBytecodeSource:
             expressions=[],
             bytecode_source="function_export",
             bytecode_status="parsed",
+            translation_status="complete",
         )
         assert result.bytecode_source == "function_export"
         assert "bpgc_bytecode_extraction" not in result.fallback_reasons

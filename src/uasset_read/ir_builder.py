@@ -35,6 +35,7 @@ from uasset_read.models.ir import (
     AnimationDataIR,
     PackageDependenciesIR,
     DiagnosticsDataIR,
+    ScriptMetricsIR,
 )
 
 if TYPE_CHECKING:
@@ -73,6 +74,38 @@ def _count_heuristic_functions(result: "ParseResult | LinkerParseResult") -> int
     count = 0
     for func in result.decompiled_functions or []:
         if "serial_scan_recovery" in (func.fallback_reasons or []):
+            count += 1
+    return count
+
+
+def _has_kismet_failure(result: "ParseResult | LinkerParseResult") -> bool:
+    """Check if any decompiled function has failed bytecode or partial/failed translation."""
+    for func in result.decompiled_functions or []:
+        bytecode_status = getattr(func, "bytecode_status", "unknown")
+        translation_status = getattr(func, "translation_status", "not_applicable")
+        if bytecode_status == "failed":
+            return True
+        if bytecode_status == "parsed" and translation_status in ("partial", "failed"):
+            return True
+    return False
+
+
+def _count_kismet_failed_functions(result: "ParseResult | LinkerParseResult") -> int:
+    """Count functions with failed bytecode status."""
+    count = 0
+    for func in result.decompiled_functions or []:
+        if getattr(func, "bytecode_status", "unknown") == "failed":
+            count += 1
+    return count
+
+
+def _count_kismet_partial_functions(result: "ParseResult | LinkerParseResult") -> int:
+    """Count functions with partial or failed translation status."""
+    count = 0
+    for func in result.decompiled_functions or []:
+        bytecode_status = getattr(func, "bytecode_status", "unknown")
+        translation_status = getattr(func, "translation_status", "not_applicable")
+        if bytecode_status == "parsed" and translation_status in ("partial", "failed"):
             count += 1
     return count
 
@@ -189,6 +222,19 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         status_message = (
             f"Bytecode heuristic recovery: {heuristic_count}/{total_count} functions recovered via serial scan, "
             f"low confidence"
+        )
+    elif status == "partial" and _has_kismet_failure(result):
+        status_code = "KISMET_PARTIAL"
+        failed_count = _count_kismet_failed_functions(result)
+        partial_count = _count_kismet_partial_functions(result)
+        total_count = len(result.decompiled_functions or [])
+        parts = []
+        if failed_count:
+            parts.append(f"{failed_count} failed")
+        if partial_count:
+            parts.append(f"{partial_count} partial translation")
+        status_message = (
+            f"Kismet function status: {', '.join(parts)} out of {total_count}"
         )
     # v0.5.1: export-level partial status message (#432)
     elif any(
@@ -957,6 +1003,16 @@ def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFuncti
             bytecode_status=func.bytecode_status,
             logic_source=func.logic_source,
         )
+        # Convert script_metrics dict to ScriptMetricsIR
+        raw_metrics = getattr(func, "script_metrics", None)
+        script_metrics = None
+        if raw_metrics is not None:
+            script_metrics = ScriptMetricsIR(
+                bytecode_buffer_size=raw_metrics.get("bytecode_buffer_size", 0),
+                serialized_script_size=raw_metrics.get("serialized_script_size", 0),
+                serialized_bytes_consumed=raw_metrics.get("serialized_bytes_consumed", 0),
+                bytecode_bytes_consumed=raw_metrics.get("bytecode_bytes_consumed", 0),
+            )
         decompiled.append(DecompiledFunctionIR(
             name=func.function_name,
             signature=func.signature,
@@ -966,9 +1022,14 @@ def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFuncti
             fallback_reasons=func.fallback_reasons,
             bytecode_confidence=confidence,
             bytecode_status=func.bytecode_status,
+            translation_status=getattr(func, "translation_status", "not_applicable"),
             bytecode_source=func.bytecode_source,
             logic_source=func.logic_source,
             warnings=func.warnings,
+            error_code=getattr(func, "error_code", None),
+            error_message=getattr(func, "error_message", None),
+            error_context=getattr(func, "error_context", None),
+            script_metrics=script_metrics,
         ))
     return decompiled
 
@@ -1185,11 +1246,25 @@ def _bind_single_implementation(
             "return_type": matched_decompiled.return_type,
             "bytecode_confidence": matched_decompiled.bytecode_confidence,
             "bytecode_status": matched_decompiled.bytecode_status,
+            "translation_status": matched_decompiled.translation_status,
             "bytecode_source": matched_decompiled.bytecode_source,
             "logic_source": matched_decompiled.logic_source,
             "warnings": matched_decompiled.warnings,
+            "fallback_reasons": matched_decompiled.fallback_reasons,
         }
-        item.implementation["fallback_reasons"] = matched_decompiled.fallback_reasons
+        if matched_decompiled.error_code is not None:
+            item.implementation["error_code"] = matched_decompiled.error_code
+        if matched_decompiled.error_message is not None:
+            item.implementation["error_message"] = matched_decompiled.error_message
+        if matched_decompiled.error_context is not None:
+            item.implementation["error_context"] = matched_decompiled.error_context
+        if matched_decompiled.script_metrics is not None:
+            item.implementation["script_metrics"] = {
+                "bytecode_buffer_size": matched_decompiled.script_metrics.bytecode_buffer_size,
+                "serialized_script_size": matched_decompiled.script_metrics.serialized_script_size,
+                "serialized_bytes_consumed": matched_decompiled.script_metrics.serialized_bytes_consumed,
+                "bytecode_bytes_consumed": matched_decompiled.script_metrics.bytecode_bytes_consumed,
+            }
         item.implementation_status = "decompiled"
         if match_count > 1:
             item.implementation["ambiguous_match"] = True
