@@ -6,6 +6,7 @@ import pytest
 
 from uasset_read import parse_single
 from uasset_read.graph.chain_builder import build_execution_chains
+from uasset_read.graph.flow_builder import build_normalized_edge_indexes
 from uasset_read.graph.graph_utils import _iter_normalized_edges
 from uasset_read.models.core import FEdGraphPinType, UEdGraph, UEdGraphNode, UEdGraphPin
 
@@ -177,6 +178,74 @@ def test_normalized_edges_disambiguate_duplicate_pin_ids_by_linked_to_owner() ->
     edges = list(_iter_normalized_edges(graph))
 
     assert [edge["to_node_guid"] for edge in edges] == [target_a_guid]
+
+
+def _input_to_output_duplicate_pin_graph(
+    owning_node: str | None,
+    source_a_direction: int = 1,
+) -> tuple[UEdGraph, str, str, str]:
+    source_a_guid = "4" * 32
+    source_b_guid = "5" * 32
+    target_guid = "6" * 32
+    shared_source_pin_id = "c" * 32
+    target_pin_id = "d" * 32
+
+    source_a = UEdGraphNode(
+        node_guid=source_a_guid,
+        class_name="K2Node_CallFunction",
+        pins=[_exec_pin(shared_source_pin_id, "then", source_a_direction)],
+    )
+    source_a._export_object_name = "Source_A"
+    source_b = UEdGraphNode(
+        node_guid=source_b_guid,
+        class_name="K2Node_CallFunction",
+        pins=[_exec_pin(shared_source_pin_id, "then", 1)],
+    )
+    source_b._export_object_name = "Source_B"
+    link = {"pin_guid": shared_source_pin_id}
+    if owning_node is not None:
+        link["owning_node"] = owning_node
+    target = UEdGraphNode(
+        node_guid=target_guid,
+        class_name="K2Node_CallFunction",
+        pins=[_exec_pin(target_pin_id, "execute", 0, [link])],
+    )
+    return (
+        UEdGraph(
+            graph_name="InputToOutputDuplicatePinIds",
+            graph_class="EdGraph",
+            nodes=[source_a, source_b, target],
+        ),
+        source_a_guid,
+        source_b_guid,
+        target_pin_id,
+    )
+
+
+def test_normalized_edge_indexes_input_to_output_prefer_declared_owner_for_duplicate_pin_ids() -> None:
+    graph, source_a_guid, _, target_pin_id = _input_to_output_duplicate_pin_graph("Source_A")
+
+    _, edges_by_to_pin = build_normalized_edge_indexes(graph)
+
+    assert [edge["from_node_guid"] for edge in edges_by_to_pin[target_pin_id]] == [source_a_guid]
+
+
+def test_normalized_edge_indexes_input_to_output_without_declared_owner_uses_global_lookup() -> None:
+    graph, _, source_b_guid, target_pin_id = _input_to_output_duplicate_pin_graph(None)
+
+    _, edges_by_to_pin = build_normalized_edge_indexes(graph)
+
+    assert [edge["from_node_guid"] for edge in edges_by_to_pin[target_pin_id]] == [source_b_guid]
+
+
+def test_normalized_edge_indexes_input_to_output_with_incompatible_owner_uses_global_lookup() -> None:
+    graph, _, source_b_guid, target_pin_id = _input_to_output_duplicate_pin_graph(
+        "Source_A", source_a_direction=0,
+    )
+
+    _, edges_by_to_pin = build_normalized_edge_indexes(graph)
+
+    assert [edge["from_node_guid"] for edge in edges_by_to_pin[target_pin_id]] == [source_b_guid]
 
 
 @pytest.mark.parametrize("branch_path", [
