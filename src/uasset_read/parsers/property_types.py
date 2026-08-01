@@ -203,6 +203,8 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "EdGraphPinType",
     "FEdGraphPinType",
     "BPVariableDescriptionHelper",
+    # InheritableComponentHandler Records array (zero-size inner tagged structs)
+    "ComponentOverrideRecord",
     # Blueprint related structs
     "ImplementedInterfaces",
     "LastEditedDocuments",

@@ -57,7 +57,6 @@ SKIP_CLASS_PREFIXES = (
     # "MaterialExpression",
     # P3: Other
     "SkySphereMesh",
-    "InheritableComponentHandler",
     "AggGeom_",
 )
 
