@@ -11,6 +11,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from uasset_read.archive import ByteArchive
+from uasset_read.kismet.native_fields import (
+    NativeFieldContext,
+    NativeFieldDeclaration,
+    read_native_fields,
+)
 from uasset_read.serializers.object_resources import (
     ObjectExport,
     ObjectImport,
@@ -90,14 +95,6 @@ class FunctionScriptReadResult:
     serialized_start: int | None = None
     native_fields: list[NativeFieldDeclaration] = field(default_factory=list)
     failure: FunctionScriptFailure | None = None
-
-
-# Forward reference for NativeFieldDeclaration (implemented in Task 3)
-@dataclass
-class NativeFieldDeclaration:
-    """Placeholder for native FField declarations (Task 3)."""
-    name: str = ""
-    type_name: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -279,6 +276,10 @@ def _read_ustruct_prefix_and_script(
     *,
     export_index: int = 0,
     native_start: int = 0,
+    name_map: list[str] | None = None,
+    import_map: list[ObjectImport] | None = None,
+    export_map: list[ObjectExport] | None = None,
+    package_flags: int = 0,
 ) -> FunctionScriptReadResult:
     """Read the UStruct prefix and script header after tagged properties.
 
@@ -287,9 +288,10 @@ def _read_ustruct_prefix_and_script(
       1. SuperStruct: int32
       2. Children: int32 (legacy pointer) OR int32 (count) + count * int32 pointers
       3. NativePropertyCount: int32 (only when Core version >= 4)
-      4. BytecodeBufferSize: int32
-      5. SerializedScriptSize: int32
-      6. SerializedScript: SerializedScriptSize bytes
+      4. NativeField declarations (when NativePropertyCount > 0)
+      5. BytecodeBufferSize: int32
+      6. SerializedScriptSize: int32
+      7. SerializedScript: SerializedScriptSize bytes
 
     Returns FunctionScriptReadResult with status "extracted", "no_script", or "failed".
     """
@@ -334,19 +336,19 @@ def _read_ustruct_prefix_and_script(
                     f"Negative NativePropertyCount: {native_property_count}",
                     export, export_index, native_start,
                 )
-            if native_property_count > 0:
-                return FunctionScriptReadResult(
-                    status="failed",
-                    failure=FunctionScriptFailure(
-                        error_code="unsupported_native_field",
-                        error_message=f"NativePropertyCount={native_property_count} (non-zero native fields not yet supported)",
-                        function_name=export.object_name,
-                        export_index=export_index,
-                        class_name=resolve_class_name(export.class_index, [], [export]) or "Unknown",
-                        package_offset=export.serial_offset,
-                        export_offset=export.serial_offset,
-                    ),
-                )
+
+        # 3a. Read native field declarations when count > 0
+        native_fields: list[NativeFieldDeclaration] = []
+        if native_property_count > 0:
+            release_version = get_kismet_custom_version(summary, RELEASE_GUID)
+            ctx = NativeFieldContext(
+                name_map=name_map or [],
+                import_map=import_map or [],
+                export_map=export_map or [],
+                package_flags=package_flags,
+                release_version=release_version if release_version >= 0 else 21,
+            )
+            native_fields = read_native_fields(window, native_property_count, ctx)
 
         # 4. BytecodeBufferSize
         bytecode_buffer_size = window.read_i32("BytecodeBufferSize")
@@ -377,6 +379,7 @@ def _read_ustruct_prefix_and_script(
                 bytecode_buffer_size=0,
                 serialized_script_size=0,
                 serialized_start=native_start,
+                native_fields=native_fields,
             )
 
         # Check remaining bytes vs declared size
@@ -409,6 +412,7 @@ def _read_ustruct_prefix_and_script(
             bytecode_buffer_size=bytecode_buffer_size,
             serialized_script_size=serialized_script_size,
             serialized_start=native_start,
+            native_fields=native_fields,
         )
 
     except Exception as exc:
@@ -531,6 +535,10 @@ def read_ufunction_script(
             window, export, summary,
             export_index=export_index,
             native_start=native_start,
+            name_map=name_map,
+            import_map=import_map,
+            export_map=export_map,
+            package_flags=summary.package_flags,
         )
     except (UnsupportedSerializationVersion, InvalidScriptPropertyRange) as exc:
         return FunctionScriptReadResult(status="failed", failure=exc.failure)
