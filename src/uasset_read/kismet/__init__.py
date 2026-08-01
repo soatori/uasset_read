@@ -11,11 +11,7 @@ from uasset_read.kismet.property_pointer import FKismetPropertyPointer, FFieldPa
 from uasset_read.kismet.archive import FKismetArchive
 
 from uasset_read.kismet.bytecode_extractor import (
-    extract_bytecode_bytes, parse_bytecode_stream, extract_and_parse, USTRUCT_TYPES,
-    reset_bpgc_cache,
-)
-from uasset_read.kismet.bpgc_bytecode import (
-    BPGCExtractionMetrics, BytecodeConfidenceLevel, validate_recovered_bytecode,
+    extract_bytecode_bytes, parse_bytecode_stream, extract_and_parse, FUNCTION_EXPORT_CLASSES,
 )
 
 # C++ pseudocode translator
@@ -46,8 +42,7 @@ __all__ = [
     "extract_bytecode_bytes",
     "parse_bytecode_stream",
     "extract_and_parse",
-    "USTRUCT_TYPES",
-    "reset_bpgc_cache",
+    "FUNCTION_EXPORT_CLASSES",
     # C++ translator
     "KismetTranslator",
     "MathFunctionCleaner",

@@ -39,16 +39,14 @@ def _extract_kismet_decompiled(
     Tolerant mode: failures return empty list for that function, never crash.
     Per D-10: Kismet decompilation failure does NOT block the main pipeline.
     """
-    from uasset_read.kismet.bytecode_extractor import USTRUCT_TYPES, reset_bpgc_cache
+    from uasset_read.kismet.bytecode_extractor import FUNCTION_EXPORT_CLASSES
     from uasset_read.serializers.object_resources import resolve_class_name
     from uasset_read.kismet.pipeline import decompile_single_function
-
-    reset_bpgc_cache()
 
     results = []
     for export in export_map:
         class_name = resolve_class_name(export.class_index, import_map, export_map)
-        if class_name not in USTRUCT_TYPES:
+        if class_name not in FUNCTION_EXPORT_CLASSES:
             continue
         try:
             result = decompile_single_function(
