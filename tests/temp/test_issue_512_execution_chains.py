@@ -40,3 +40,16 @@ def test_first_person_graphs_publish_schema_valid_execution_chains(output_level:
         for chain in chains
     )
     jsonschema.validate(data, SCHEMA)
+
+
+@pytest.mark.parametrize("entry", [
+    {"start_event": "", "chains": ["N0"], "has_cycle": False},
+    {"start_event": "BeginPlay", "chains": [], "has_cycle": False},
+    {"start_event": "BeginPlay", "chains": [""], "has_cycle": False},
+])
+def test_graph_execution_chain_schema_rejects_empty_required_content(entry: dict) -> None:
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            entry,
+            {"$ref": "#/$defs/GraphExecutionChain", "$defs": SCHEMA["$defs"]},
+        )
