@@ -21,18 +21,30 @@ def test_stackobot_if_then_else_chains_publish_resolved_successors(output_level:
         format="json", output_level=output_level, force_full_parse=True, log_enabled=False,
     ))
     graphs = [graph for export in data["exports"] for graph in export.get("graphs", [])]
-    chains = [chain for graph in graphs for chain in graph["execution_chains"]]
-    branch_paths = [path for chain in chains for path in chain.get("branch_paths", [])]
+    if_then_else_guids = {
+        node["node_guid"]
+        for graph in graphs
+        for node in graph["nodes"]
+        if node["node_class"] == "K2Node_IfThenElse"
+    }
+    assert if_then_else_guids
 
-    assert any(
-        node["node_class"] == "K2Node_IfThenElse"
-        for graph in graphs for node in graph["nodes"]
-    )
+    branch_paths = [
+        (graph, path)
+        for graph in graphs
+        for chain in graph["execution_chains"]
+        for path in chain.get("branch_paths", [])
+        if path["from_node_guid"] in if_then_else_guids
+    ]
     assert branch_paths
-    assert {"then", "else"} <= {path["output_pin"] for path in branch_paths}
+    assert {"then", "else"} <= {path["output_pin"] for _, path in branch_paths}
     assert all(
         path["from_node_guid"] and path["output_pin"] and path["to_node_guid"]
-        for path in branch_paths
+        for _, path in branch_paths
+    )
+    assert all(
+        path["to_node_guid"] in {node["node_guid"] for node in graph["nodes"]}
+        for graph, path in branch_paths
     )
     jsonschema.validate(data, SCHEMA)
 
