@@ -404,6 +404,7 @@ BRANCH_TYPE_MAP = {
     "K2Node_WhileLoop": "while_loop",
     "K2Node_DoOnce": "do_once",
     "K2Node_Sequence": "sequence",
+    "K2Node_ExecutionSequence": "execution_sequence",
     "K2Node_MultiGate": "multi_gate",
     "K2Node_Select": "select",
 }
