@@ -624,6 +624,11 @@ def _build_graph_ir(graph) -> GraphIR:
     for subgraph in getattr(graph, "subgraphs", None) or []:
         subgraphs.append(_build_graph_ir(subgraph))
 
+    execution_chains = list(getattr(graph, "execution_chains", None) or [])
+    if not execution_chains:
+        from uasset_read.graph.chain_builder import build_execution_chains
+        execution_chains = build_execution_chains(graph)
+
     # Infer graph type (ordered by priority: more specific patterns before broader ones)
     graph_type = None
     graph_class = _safe_str(getattr(graph, "graph_class", None))
@@ -642,7 +647,7 @@ def _build_graph_ir(graph) -> GraphIR:
         graph_name=_safe_str(getattr(graph, "graph_name", None)),
         graph_class=graph_class,
         nodes=nodes,
-        execution_chains=getattr(graph, "execution_chains", None) or [],
+        execution_chains=execution_chains,
         subgraphs=subgraphs,
         graph_type=graph_type,
     )
