@@ -195,14 +195,12 @@ class TestDiagnosticScanIsolation:
         archive.read_bytes.return_value = b"\x53"  # EX_EndOfScript
 
         export = make_export("Function", "TestFunc")
-        summary = MagicMock()
-        summary.file_version_ue5 = 0
         name_map = ["None"]
         import_map = []
         export_map = []
 
         candidates = scan_function_export_for_diagnostics(
-            archive, export, summary, name_map, import_map, export_map,
+            archive, export, name_map, import_map, export_map,
         )
         assert all(isinstance(item, BytecodeCandidateDiagnostic) for item in candidates)
         assert not any(isinstance(item, KismetDecompiledResult) for item in candidates)

@@ -136,20 +136,22 @@ class TestIRMapping:
         assert func.logic_source == "current_asset"
         assert func.bytecode_confidence == "verified"
 
-    def test_fallback_result_fields(self):
-        """BPGC fallback result uses 'fallback' confidence."""
+    def test_fallback_reasons_absent_from_production_enums(self):
+        """Defunct fallback_or_serial_scan and bpgc_bytecode_extraction are absent."""
         result = _make_result(
             cpp_code="void TestFunc() { /* bpgc */ }",
             bytecode_status="parsed",
-            bytecode_source="fallback_or_serial_scan",
+            bytecode_source="function_export",
             logic_source="current_asset",
-            fallback_reasons=["bpgc_bytecode_extraction"],
+            fallback_reasons=[],
         )
         mock_result = MagicMock()
         mock_result.decompiled_functions = [result]
         decompiled = _build_decompiled_functions_ir(mock_result)
         func = decompiled[0]
-        assert func.bytecode_confidence == "fallback"
+        assert func.bytecode_source != "fallback_or_serial_scan"
+        assert "bpgc_bytecode_extraction" not in func.fallback_reasons
+        assert func.bytecode_confidence == "verified"
 
 
 class TestBlueprintImplementationProvenance:
@@ -214,7 +216,7 @@ class TestConfidencePriority:
         ) == "graph_topology"
 
     def test_failed_overrides_heuristic(self):
-        """failed status wins over heuristic fallback reasons."""
+        """failed status wins over any fallback reasons."""
         assert _infer_bytecode_confidence(
             ["serial_scan_recovery"], bytecode_status="failed", logic_source="current_asset",
         ) == "failed"
@@ -225,17 +227,17 @@ class TestConfidencePriority:
             [], bytecode_status="failed", logic_source="current_asset",
         ) == "failed"
 
-    def test_heuristic_normal(self):
-        """serial_scan_recovery → heuristic."""
+    def test_serial_scan_recovery_absent_from_production(self):
+        """serial_scan_recovery no longer produces 'heuristic' confidence."""
         assert _infer_bytecode_confidence(
             ["serial_scan_recovery"], bytecode_status="parsed", logic_source="current_asset",
-        ) == "heuristic"
+        ) == "verified"
 
-    def test_fallback_normal(self):
-        """bpgc_bytecode_extraction → fallback."""
+    def test_bpgc_bytecode_extraction_absent_from_production(self):
+        """bpgc_bytecode_extraction no longer produces 'fallback' confidence."""
         assert _infer_bytecode_confidence(
             ["bpgc_bytecode_extraction"], bytecode_status="parsed", logic_source="current_asset",
-        ) == "fallback"
+        ) == "verified"
 
     def test_verified_default(self):
         """No special conditions → verified."""
@@ -506,24 +508,24 @@ class TestMarkdownRendering:
         assert "> [!WARNING]" not in md
         assert "Function body provenance:" not in md
 
-    def test_heuristic_function_shows_warning(self):
-        """Heuristic recovery function shows warning with correct confidence."""
+    def test_defunct_provenance_values_absent_from_output(self):
+        """fallback_or_serial_scan and serial_scan_recovery are absent from production output."""
         func = DecompiledFunctionIR(
             name="HeuristicFunc",
             signature="void HeuristicFunc()",
-            cpp_code="void HeuristicFunc() { /* recovered */ }",
+            cpp_code="void HeuristicFunc() { /* parsed */ }",
             parameters=[],
             return_type="void",
-            bytecode_confidence="heuristic",
+            bytecode_confidence="verified",
             bytecode_status="parsed",
-            bytecode_source="fallback_or_serial_scan",
+            bytecode_source="function_export",
             logic_source="current_asset",
-            fallback_reasons=["serial_scan_recovery"],
+            fallback_reasons=[],
         )
         md = self._render_markdown([func])
-        assert "> [!WARNING]" in md
-        assert "confidence=heuristic" in md
-        assert "reasons=serial_scan_recovery" in md
+        assert "> [!WARNING]" not in md
+        assert "fallback_or_serial_scan" not in md
+        assert "serial_scan_recovery" not in md
 
 
 # ---------------------------------------------------------------------------

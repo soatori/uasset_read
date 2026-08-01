@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_PLAUSIBLE_SCRIPT_START_TOKENS = {
+PLAUSIBLE_SCRIPT_START_TOKENS = {
     0x04,  # EX_Return
     0x19,  # EX_Context
     0x1B,  # EX_VirtualFunction
@@ -47,7 +47,7 @@ FUNCTION_EXPORT_CLASSES = frozenset({"Function", "UFunction"})
 # ---------------------------------------------------------------------------
 
 
-def _has_false_positive_pattern(data: bytes) -> bool:
+def has_false_positive_pattern(data: bytes) -> bool:
     """Detect false positive data patterns: too many consecutive constant tokens or repeated byte patterns.
 
     Used by diagnostic scanning to filter candidates that are clearly non-code
@@ -68,8 +68,8 @@ def _has_false_positive_pattern(data: bytes) -> bool:
 
 
 # Scan complexity limits — prevent combinatorial explosion in large Blueprints
-_MAX_SCAN_ATTEMPTS = 500       # Maximum (start, end) combinations to try per function
-_MAX_CANDIDATE_SIZE = 4096     # Maximum candidate byte stream length (bytes)
+MAX_SCAN_ATTEMPTS = 500       # Maximum (start, end) combinations to try per function
+MAX_CANDIDATE_SIZE = 4096     # Maximum candidate byte stream length (bytes)
 
 
 

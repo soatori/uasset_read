@@ -14,10 +14,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from uasset_read.kismet.bytecode_extractor import (
-    _PLAUSIBLE_SCRIPT_START_TOKENS,
-    _MAX_SCAN_ATTEMPTS,
-    _MAX_CANDIDATE_SIZE,
-    _has_false_positive_pattern,
+    PLAUSIBLE_SCRIPT_START_TOKENS,
+    MAX_SCAN_ATTEMPTS,
+    MAX_CANDIDATE_SIZE,
+    has_false_positive_pattern,
     parse_bytecode_stream,
 )
 from uasset_read.exceptions import ParseError
@@ -25,7 +25,6 @@ from uasset_read.exceptions import ParseError
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport
-    from uasset_read.serializers.package_summary import PackageFileSummary
 
 
 logger = logging.getLogger(__name__)
@@ -47,7 +46,6 @@ class BytecodeCandidateDiagnostic:
 def scan_function_export_for_diagnostics(
     archive: FArchive,
     export: ObjectExport,
-    summary: PackageFileSummary,
     name_map: list[str],
     import_map: list,
     export_map: list,
@@ -61,7 +59,6 @@ def scan_function_export_for_diagnostics(
     Args:
         archive: FArchive instance (file-level archive)
         export: ObjectExport to scan
-        summary: PackageFileSummary for version info
         name_map: Name table for expression resolution
         import_map: Import table for class resolution
         export_map: Export table for class resolution
@@ -81,7 +78,7 @@ def scan_function_export_for_diagnostics(
     attempts = 0
 
     for start, first in enumerate(data):
-        if first not in _PLAUSIBLE_SCRIPT_START_TOKENS:
+        if first not in PLAUSIBLE_SCRIPT_START_TOKENS:
             continue
         for end in end_positions:
             if end < start:
@@ -89,16 +86,16 @@ def scan_function_export_for_diagnostics(
             candidate = data[start:end + 1]
             if len(candidate) < 2:
                 continue
-            if len(candidate) > _MAX_CANDIDATE_SIZE:
+            if len(candidate) > MAX_CANDIDATE_SIZE:
                 break
-            if _has_false_positive_pattern(candidate):
+            if has_false_positive_pattern(candidate):
                 continue
 
             attempts += 1
-            if attempts > _MAX_SCAN_ATTEMPTS:
+            if attempts > MAX_SCAN_ATTEMPTS:
                 logger.debug(
-                    "Diagnostic scan for '%s': hit _MAX_SCAN_ATTEMPTS (%d), stopping",
-                    export.object_name, _MAX_SCAN_ATTEMPTS,
+                    "Diagnostic scan for '%s': hit MAX_SCAN_ATTEMPTS (%d), stopping",
+                    export.object_name, MAX_SCAN_ATTEMPTS,
                 )
                 return candidates
 

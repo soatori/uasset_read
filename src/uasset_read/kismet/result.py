@@ -23,10 +23,6 @@ def infer_bytecode_confidence(
         return "graph_topology"
     if bytecode_status == "failed":
         return "failed"
-    if "serial_scan_recovery" in fallback_reasons:
-        return "heuristic"
-    if "bpgc_bytecode_extraction" in fallback_reasons:
-        return "fallback"
     return "verified"
 
 
