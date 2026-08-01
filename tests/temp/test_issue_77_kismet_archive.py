@@ -1,4 +1,4 @@
-"""Tests for dual-cursor Kismet archive — Issue #77 Task 5.
+"""Tests for dual-cursor Kismet archive — Issue #77 Tasks 5-6.
 
 Covers:
 - Dual-cursor tracking: serialized_offset (bytes consumed from disk) and
@@ -9,6 +9,7 @@ Covers:
 - xfer_code_skip: reads i16 code skip offset
 - xfer_ansi_string: reads null-terminated ASCII string
 - xfer_unicode_string: reads null-terminated UTF-16 string
+- Task 6: Expression transfers with xfer methods and nested terminator consumption
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ import pytest
 from uasset_read.archive import ByteArchive
 from uasset_read.kismet.archive import FKismetArchive
 from uasset_read.kismet.value_types import FNameRef
+from uasset_read.kismet.tokens import EExprToken
 
 
 # ---------------------------------------------------------------------------
@@ -38,6 +40,11 @@ def i16(value: int) -> bytes:
 def fname(index: int, number: int) -> bytes:
     """Serialize an FName as index (u32) + number (u32), little-endian."""
     return struct.pack("<II", index, number)
+
+
+def token(t: EExprToken) -> bytes:
+    """Serialize an EExprToken as a single byte."""
+    return bytes([t])
 
 
 def make_kismet_archive(
@@ -283,3 +290,185 @@ class TestXFerUnicodeString:
         assert value == ""
         assert ar.serialized_offset == 2
         assert ar.bytecode_index == 10
+
+
+# ===========================================================================
+# Task 6: Expression transfers and nested terminator consumption
+# ===========================================================================
+
+class TestExpressionTransfers:
+    """Task 6: Virtual/final call transfers with xfer methods."""
+
+    def test_virtual_function_uses_xfer_fname(self):
+        """EX_VirtualFunction reads function name via xfer_fname (FNameRef)."""
+        # Stream: EX_VirtualFunction + fname(2, 0) + EX_IntOne + EX_EndFunctionParms
+        data = (
+            token(EExprToken.EX_VirtualFunction)
+            + fname(2, 0)
+            + token(EExprToken.EX_IntOne)
+            + token(EExprToken.EX_EndFunctionParms)
+        )
+        ar = make_kismet_archive(data, name_map=["None", "Func", "MyFunc"])
+        ar.bytecode_index = 0
+        expr = ar.read_expression()
+        assert expr.Token == EExprToken.EX_VirtualFunction
+        # VirtualFunctionName should be resolved from FName
+        assert expr.VirtualFunctionName == "MyFunc"
+        # Should have one parameter (EX_IntOne)
+        assert len(expr.Parameters) == 1
+        assert expr.Parameters[0].Token == EExprToken.EX_IntOne
+        # EX_EndFunctionParms should NOT be in the child list
+        assert all(p.Token != EExprToken.EX_EndFunctionParms for p in expr.Parameters)
+        # Position after terminator
+        assert ar.tell() == len(data)
+
+    def test_final_function_pointer_adds_eight_logical_bytes(self):
+        """EX_FinalFunction reads stack pointer via xfer_object_pointer."""
+        # Stream: EX_FinalFunction + i32(-4) + EX_True + EX_EndFunctionParms
+        data = (
+            token(EExprToken.EX_FinalFunction)
+            + i32(-4)
+            + token(EExprToken.EX_True)
+            + token(EExprToken.EX_EndFunctionParms)
+        )
+        ar = make_kismet_archive(data, bytecode_buffer_size=0)
+        expr = ar.read_expression()
+        assert expr.Token == EExprToken.EX_FinalFunction
+        assert expr.StackNode == -4
+        # Should have one parameter (EX_True)
+        assert len(expr.Parameters) == 1
+        assert expr.Parameters[0].Token == EExprToken.EX_True
+        # EX_EndFunctionParms should NOT be in the child list
+        assert all(p.Token != EExprToken.EX_EndFunctionParms for p in expr.Parameters)
+        # Position after terminator
+        assert ar.tell() == len(data)
+
+    def test_read_expression_array_consumes_terminator(self):
+        """read_expression_array consumes the terminator byte and advances past it."""
+        data = (
+            token(EExprToken.EX_IntOne)
+            + token(EExprToken.EX_IntZero)
+            + token(EExprToken.EX_EndFunctionParms)
+            + token(EExprToken.EX_True)  # should NOT be consumed
+        )
+        ar = make_kismet_archive(data, bytecode_buffer_size=0)
+        result = ar.read_expression_array(EExprToken.EX_EndFunctionParms)
+        assert len(result) == 2
+        assert result[0].Token == EExprToken.EX_IntOne
+        assert result[1].Token == EExprToken.EX_IntZero
+        # Position should be after EX_EndFunctionParms, at EX_True
+        assert ar.tell() == len(data) - 1  # one byte (EX_True) remains
+
+    def test_read_expression_array_empty(self):
+        """read_expression_array with immediate terminator returns empty list."""
+        data = (
+            token(EExprToken.EX_EndFunctionParms)
+            + token(EExprToken.EX_True)  # should NOT be consumed
+        )
+        ar = make_kismet_archive(data, bytecode_buffer_size=0)
+        result = ar.read_expression_array(EExprToken.EX_EndFunctionParms)
+        assert result == []
+        assert ar.tell() == 1  # after terminator, at EX_True
+
+
+class TestNestedTerminators:
+    """Task 6: Nested terminator consumption."""
+
+    def test_nested_array_terminator_not_leaked(self):
+        """EX_SetArray with EX_EndArray consumed internally, not leaked to outer stream."""
+        # EX_SetArray: property pointer (bNew=True, empty path) + elements + EX_EndArray
+        # Then EX_True after the array
+        # Note: read_bool() reads 4 bytes (uint32), not 1 byte
+        bnew_true = i32(1)  # bNew=True as uint32
+        data = (
+            token(EExprToken.EX_SetArray)
+            + bnew_true
+            + i32(0)  # empty path count
+            + token(EExprToken.EX_IntOne)
+            + token(EExprToken.EX_EndArray)
+            + token(EExprToken.EX_True)  # should NOT be consumed by SetArray
+        )
+        ar = make_kismet_archive(data, bytecode_buffer_size=0)
+        expr = ar.read_expression()
+        assert expr.Token == EExprToken.EX_SetArray
+        assert len(expr.Elements) == 1
+        assert expr.Elements[0].Token == EExprToken.EX_IntOne
+        # EX_EndArray should NOT be in the child list
+        assert all(e.Token != EExprToken.EX_EndArray for e in expr.Elements)
+        # Position after SetArray, at EX_True
+        assert ar.tell() == len(data) - 1
+
+    def test_nested_map_terminator_not_leaked(self):
+        """EX_SetMap with EX_EndMap consumed internally."""
+        # EX_SetMap: property expression + elements + EX_EndMap
+        # Then EX_True after the map
+        data = (
+            token(EExprToken.EX_SetMap)
+            + token(EExprToken.EX_Nothing)  # property expression
+            + token(EExprToken.EX_IntOne)
+            + token(EExprToken.EX_EndMap)
+            + token(EExprToken.EX_True)  # should NOT be consumed
+        )
+        ar = make_kismet_archive(data, bytecode_buffer_size=0)
+        expr = ar.read_expression()
+        assert expr.Token == EExprToken.EX_SetMap
+        assert len(expr.Elements) == 1
+        assert expr.Elements[0].Token == EExprToken.EX_IntOne
+        # Position after SetMap, at EX_True
+        assert ar.tell() == len(data) - 1
+
+    def test_nested_struct_terminator_not_leaked(self):
+        """EX_StructConst with EX_EndStructConst consumed internally."""
+        data = (
+            token(EExprToken.EX_StructConst)
+            + i32(5)  # struct index
+            + i32(16)  # struct size
+            + token(EExprToken.EX_IntOne)
+            + token(EExprToken.EX_EndStructConst)
+            + token(EExprToken.EX_True)  # should NOT be consumed
+        )
+        ar = make_kismet_archive(data, bytecode_buffer_size=0)
+        expr = ar.read_expression()
+        assert expr.Token == EExprToken.EX_StructConst
+        assert len(expr.Properties) == 1
+        assert expr.Properties[0].Token == EExprToken.EX_IntOne
+        # Position after StructConst, at EX_True
+        assert ar.tell() == len(data) - 1
+
+
+class TestStringTransfers:
+    """Task 6: String expressions use consuming transfer methods."""
+
+    def test_string_const_no_skip(self):
+        """EX_StringConst uses xfer_ansi_string which consumes the null terminator."""
+        # EX_StringConst + "Hello" + null terminator
+        data = token(EExprToken.EX_StringConst) + b"Hello\x00"
+        ar = make_kismet_archive(data, bytecode_buffer_size=0)
+        expr = ar.read_expression()
+        assert expr.Token == EExprToken.EX_StringConst
+        assert expr.Value == "Hello"
+        # Position should be after the null terminator
+        assert ar.tell() == len(data)
+
+    def test_unicode_string_const_no_skip(self):
+        """EX_UnicodeStringConst uses xfer_unicode_string which consumes double-null."""
+        text = "Hi"
+        encoded = text.encode("utf-16-le") + b"\x00\x00"
+        data = bytes([EExprToken.EX_UnicodeStringConst]) + encoded
+        ar = make_kismet_archive(data, bytecode_buffer_size=0)
+        expr = ar.read_expression()
+        assert expr.Token == EExprToken.EX_UnicodeStringConst
+        assert expr.Value == "Hi"
+        assert ar.tell() == len(data)
+
+    def test_instance_delegate_uses_xfer_fname(self):
+        """EX_InstanceDelegate reads function name via xfer_fname."""
+        data = (
+            token(EExprToken.EX_InstanceDelegate)
+            + fname(1, 0)  # index=1 -> "DelegateFunc"
+        )
+        ar = make_kismet_archive(data, name_map=["None", "DelegateFunc"], bytecode_buffer_size=0)
+        expr = ar.read_expression()
+        assert expr.Token == EExprToken.EX_InstanceDelegate
+        assert expr.FunctionName == "DelegateFunc"
+        assert ar.tell() == len(data)

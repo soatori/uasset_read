@@ -104,7 +104,7 @@ class FKismetArchive(FArchive):
             return expr
 
     def read_expression_array(self, end_token: EExprToken) -> list[KismetExpression]:
-        """Read expressions until end_token is encountered. The end_token byte is NOT consumed."""
+        """Read expressions until end_token is encountered. The end_token byte IS consumed."""
         result = []
         max_items = self.remaining()
         while True:
@@ -113,16 +113,15 @@ class FKismetArchive(FArchive):
                     f"Kismet expression array exceeded {max_items} items "
                     f"without finding {end_token.name} at offset {self.tell()}"
                 )
-            # Peek at next byte — if it's the end token, stop without parsing
-            # the full expression (the terminator has no trailing data).
+            # Peek at next byte — if it's the end token, consume it and stop.
             pos = self.tell()
             token_byte = self._file.read(1)
             if not token_byte:
                 break
             token_val = token_byte[0]
             if token_val == end_token:
-                # Don't consume the terminator — leave it for the caller
-                self.seek(pos)
+                # Consume the terminator — advance past it
+                self.seek(pos + 1)
                 break
             # Not the end token — seek back and parse as a full expression
             self.seek(pos)

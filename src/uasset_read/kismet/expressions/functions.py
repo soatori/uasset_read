@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Optional
 
 from uasset_read.kismet.expressions.base import KismetExpression, make_simple_expression
 from uasset_read.kismet.tokens import EExprToken
+from uasset_read.kismet.value_types import FNameRef
 
 if TYPE_CHECKING:
     from uasset_read.kismet.archive import FKismetArchive
@@ -69,6 +70,7 @@ class EX_VirtualFunction(KismetExpression):
     """Virtual function call, resolved by function name."""
 
     VirtualFunctionName: str = ""
+    VirtualFunctionNameRef: FNameRef | None = None
     Parameters: list[KismetExpression] = field(default_factory=list)
 
     @property
@@ -77,10 +79,13 @@ class EX_VirtualFunction(KismetExpression):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_VirtualFunction:
-        name = archive.xfer_string()
-        archive.skip(1)
+        fname_ref = archive.xfer_fname()
         params = archive.read_expression_array(EExprToken.EX_EndFunctionParms)
-        return cls(VirtualFunctionName=name, Parameters=params)
+        return cls(
+            VirtualFunctionName=fname_ref.base_name,
+            VirtualFunctionNameRef=fname_ref,
+            Parameters=params,
+        )
 
     def to_dict(self) -> dict:
         d = super().to_dict()

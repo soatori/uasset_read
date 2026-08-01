@@ -14,6 +14,8 @@ from uasset_read.kismet.expressions.base import (
     KismetExpression, KismetExpressionT, make_simple_expression,
 )
 from uasset_read.kismet.tokens import EExprToken, EScriptInstrumentationType
+from uasset_read.kismet.value_types import FNameRef
+from uasset_read.serializers.object_resources import PackageIndex
 
 if TYPE_CHECKING:
     from uasset_read.kismet.archive import FKismetArchive
@@ -118,6 +120,7 @@ class EX_InstrumentationEvent(KismetExpression):
 
     EventType: EScriptInstrumentationType = EScriptInstrumentationType.None_
     EventName: Optional[str] = None
+    EventNameRef: Optional[FNameRef] = None
 
     @property
     def Token(self) -> EExprToken:
@@ -127,10 +130,12 @@ class EX_InstrumentationEvent(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_InstrumentationEvent:
         evt_type = EScriptInstrumentationType(archive.read_u8())
         name = None
+        name_ref = None
         if evt_type == EScriptInstrumentationType.InlineEvent:
-            name = archive.read_fname_kismet()
-            archive.skip(1)
-        return cls(EventType=evt_type, EventName=name)
+            fname_ref = archive.xfer_fname()
+            name = fname_ref.base_name
+            name_ref = fname_ref
+        return cls(EventType=evt_type, EventName=name, EventNameRef=name_ref)
 
 
 # Data-free expression: returns Token only
@@ -161,6 +166,7 @@ class EX_ObjectConst(KismetExpressionT[int]):
     """Object constant — reads object reference index."""
 
     Value: int = 0
+    ObjectRef: PackageIndex | None = None
 
     @property
     def Token(self) -> EExprToken:
@@ -168,7 +174,8 @@ class EX_ObjectConst(KismetExpressionT[int]):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ObjectConst:
-        return cls(Value=archive.read_i32())
+        obj_ref = archive.xfer_object_pointer()
+        return cls(Value=obj_ref.index, ObjectRef=obj_ref)
 
 
 @dataclass
@@ -176,6 +183,7 @@ class EX_NameConst(KismetExpressionT[str]):
     """Name constant — reads FName index + number from name_map."""
 
     Value: str = ""
+    NameRef: FNameRef | None = None
 
     @property
     def Token(self) -> EExprToken:
@@ -183,11 +191,8 @@ class EX_NameConst(KismetExpressionT[str]):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_NameConst:
-        # Read FName: index + number (aligned with UE FName serialized as two int32 values)
-        idx = archive.read_i32()
-        num = archive.read_i32()
-        name = archive.resolve_fname(idx, num)
-        return cls(Value=name)
+        fname_ref = archive.xfer_fname()
+        return cls(Value=fname_ref.base_name, NameRef=fname_ref)
 
 
 @dataclass
