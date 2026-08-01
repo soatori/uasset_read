@@ -38,18 +38,23 @@ class FFieldPath:
         """
         Deserialize FFieldPath from FArchive.
 
+        UE source: FFieldPath stores TArray<FName>, where each FName has:
+        - NameIndex (i32): Index into name table
+        - Number (i32): Instance number for disambiguation
+
         Read logic:
         1. Read u32 array length (Path segment count)
-        2. Loop reading each FName index (u32), look up name_map to resolve string
+        2. Loop reading each FName (NameIndex + Number), resolve to string
         3. If first element is "None", clear Path (indicates empty path)
-        4. Check version/engine state to read optional ResolvedOwner
         """
         count = archive.read_u32()
 
         path: list[str] = []
         for _ in range(count):
-            name_index = archive.read_u32()
-            path.append(archive.resolve_fname(name_index))
+            # Read FName: NameIndex (i32) + Number (i32)
+            name_index = archive.read_i32()
+            name_number = archive.read_i32()
+            path.append(archive.resolve_fname(name_index, name_number))
 
         # If first element is "None", indicates empty path
         if path and path[0] == "None":

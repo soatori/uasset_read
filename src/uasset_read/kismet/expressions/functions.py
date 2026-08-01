@@ -77,8 +77,9 @@ class EX_VirtualFunction(KismetExpression):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_VirtualFunction:
-        name = archive.xfer_string()
-        archive.skip(1)
+        # UE source: EX_VirtualFunction uses XFER_FUNC_NAME which reads FName (NameIndex + Number)
+        # NOT xfer_string() which reads FString (null-terminated ASCII)
+        name = archive.read_fname_kismet()
         params = archive.read_expression_array(EExprToken.EX_EndFunctionParms)
         return cls(VirtualFunctionName=name, Parameters=params)
 
