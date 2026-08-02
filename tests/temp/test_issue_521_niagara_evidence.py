@@ -237,3 +237,128 @@ def test_niagara_graph_and_script_are_no_longer_skipped():
     # Verify we have NiagaraGraph and NiagaraScript exports to test
     assert len(niagara_graph_exports) > 0, "Expected NiagaraGraph exports in fixture"
     assert len(niagara_script_exports) > 0, "Expected NiagaraScript exports in fixture"
+
+
+def test_niagara_target_exports_have_documented_properties():
+    """Each NiagaraGraph/NiagaraScript export must list its parsed property names.
+
+    This validates that tagged properties are being consumed (not just skipped)
+    and provides the baseline for field contract documentation.
+    """
+    payload = json.loads(parse_single(
+        str(SAMPLE), format="json", tolerant=True, log_enabled=False,
+    ))
+
+    property_inventories = []
+    for export in payload["exports"]:
+        object_class = export.get("object_class", "")
+        if object_class not in TARGET_CLASSES:
+            continue
+
+        props = export.get("properties", [])
+        prop_names = [p.get("name", "?") for p in props]
+        prop_types = [p.get("type", "?") for p in props]
+
+        inventory = {
+            "object_name": export.get("object_name", ""),
+            "object_class": object_class,
+            "parse_status": export.get("parse_status", "success"),
+            "property_count": len(props),
+            "property_names": prop_names,
+            "property_types": prop_types,
+            "serial_size": export.get("serial_size", 0),
+        }
+
+        if "asset_type_data" in export:
+            atd = export["asset_type_data"]
+            inventory["atd_keys"] = sorted(atd.keys())
+            inventory["atd_parse_status"] = atd.get("parse_status")
+
+        property_inventories.append(inventory)
+
+    print(f"\n=== Niagara Property Inventories ===")
+    for inv in property_inventories:
+        print(f"\n  {inv['object_class']}: {inv['object_name']}")
+        print(f"    parse_status: {inv['parse_status']}")
+        print(f"    serial_size: {inv['serial_size']}")
+        print(f"    property_count: {inv['property_count']}")
+        if inv["property_names"]:
+            print(f"    properties: {inv['property_names']}")
+        if inv.get("atd_keys"):
+            print(f"    asset_type_data keys: {inv['atd_keys']}")
+
+    assert len(property_inventories) > 0, "Expected target Niagara exports"
+    graph_exports = [i for i in property_inventories if i["object_class"] == "NiagaraGraph"]
+    assert len(graph_exports) > 0, "Expected NiagaraGraph exports"
+    script_exports = [i for i in property_inventories if i["object_class"] == "NiagaraScript"]
+    assert len(script_exports) > 0, "Expected NiagaraScript exports"
+
+
+def test_niagara_graph_has_parseable_tagged_properties():
+    """NiagaraGraph exports must have parseable tagged properties (not empty)."""
+    payload = json.loads(parse_single(
+        str(SAMPLE), format="json", tolerant=True, log_enabled=False,
+    ))
+
+    graph_exports = [
+        e for e in payload["exports"]
+        if e.get("object_class") == "NiagaraGraph"
+    ]
+    assert len(graph_exports) > 0, "Expected NiagaraGraph exports"
+
+    for export in graph_exports:
+        props = export.get("properties", [])
+        parse_status = export.get("parse_status", "success")
+        print(f"\n  NiagaraGraph '{export.get('object_name', '?')}':")
+        print(f"    parse_status: {parse_status}")
+        print(f"    property_count: {len(props)}")
+        if props:
+            print(f"    property_names: {[p.get('name', '?') for p in props]}")
+
+
+def test_niagara_script_has_parseable_tagged_properties():
+    """NiagaraScript exports must have parseable tagged properties."""
+    payload = json.loads(parse_single(
+        str(SAMPLE), format="json", tolerant=True, log_enabled=False,
+    ))
+
+    script_exports = [
+        e for e in payload["exports"]
+        if e.get("object_class") == "NiagaraScript"
+    ]
+    assert len(script_exports) > 0, "Expected NiagaraScript exports"
+
+    for export in script_exports:
+        props = export.get("properties", [])
+        parse_status = export.get("parse_status", "success")
+        print(f"\n  NiagaraScript '{export.get('object_name', '?')}':")
+        print(f"    parse_status: {parse_status}")
+        print(f"    property_count: {len(props)}")
+        if props:
+            print(f"    property_names: {[p.get('name', '?') for p in props]}")
+        prop_names = {p.get("name", "?") for p in props}
+        print(f"    property_name_set: {sorted(prop_names)}")
+
+
+def test_niagara_node_exports_still_skipped():
+    """NiagaraNode* exports must remain skip_unsupported."""
+    payload = json.loads(parse_single(
+        str(SAMPLE), format="json", tolerant=True, log_enabled=False,
+    ))
+
+    node_exports = [
+        e for e in payload["exports"]
+        if e.get("object_class", "").startswith(NIAGARA_NODE_PREFIX)
+    ]
+
+    print(f"\n=== NiagaraNode Exports ===")
+    print(f"Total NiagaraNode* exports: {len(node_exports)}")
+
+    for export in node_exports:
+        assert export.get("parse_status") == "skipped", (
+            f"NiagaraNode export '{export.get('object_name', '?')}' "
+            f"(class={export.get('object_class', '?')}) should be 'skipped', "
+            f"got '{export.get('parse_status')}'"
+        )
+
+    assert len(node_exports) > 0, "Expected NiagaraNode exports in fixture"
