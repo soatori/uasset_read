@@ -1,0 +1,233 @@
+{
+  "candidates": [
+    {
+      "struct_type": "Guid",
+      "occurrence_count": 13,
+      "unique_locations": 13,
+      "locations": [
+        {
+          "file": "samples\\ALS_N_FallLoop.uasset",
+          "object_name": "ALS_N_FallLoop",
+          "outer_path": "RawDataGuid",
+          "raw_size": null
+        },
+        {
+          "file": "samples\\FirstPerson_M_FlatCol.uasset",
+          "object_name": "M_FlatCol",
+          "outer_path": "StateId",
+          "raw_size": null
+        },
+        {
+          "file": "samples\\FirstPerson_M_FlatCol.uasset",
+          "object_name": "M_FlatCol",
+          "outer_path": "LightingGuid",
+          "raw_size": null
+        },
+        {
+          "file": "samples\\FirstPerson_M_PrototypeGrid.uasset",
+          "object_name": "M_PrototypeGrid",
+          "outer_path": "StateId",
+          "raw_size": null
+        },
+        {
+          "file": "samples\\FirstPerson_M_PrototypeGrid.uasset",
+          "object_name": "M_PrototypeGrid",
+          "outer_path": "LightingGuid",
+          "raw_size": null
+        },
+        {
+          "file": "samples\\IntroToUnreal_M_Plastic.uasset",
+          "object_name": "M_Plastic",
+          "outer_path": "StateId",
+          "raw_size": null
+        },
+        {
+          "file": "samples\\IntroToUnreal_M_Plastic.uasset",
+          "object_name": "M_Plastic",
+          "outer_path": "LightingGuid",
+          "raw_size": null
+        },
+        {
+          "file": "samples\\NM_BPSystemEvent.uasset",
+          "object_name": "NiagaraGraph_1",
+          "outer_path": "ChangeId",
+          "raw_size": null
+        },
+        {
+          "file": "samples\\NM_BPSystemEvent.uasset",
+          "object_name": "NiagaraGraph_1",
+          "outer_path": "LastBuiltTraversalDataChangeId",
+          "raw_size": null
+        },
+        {
+          "file": "samples\\NM_BPSystemEvent.uasset",
+          "object_name": "NiagaraGraph_1",
+          "outer_path": "GraphGuid",
+          "raw_size": null
+        },
+        {
+          "file": "samples\\NM_BPSystemEvent.uasset",
+          "object_name": "NM_BPSystemEvent",
+          "outer_path": "ExposedVersion",
+          "raw_size": null
+        },
+        {
+          "file": "samples\\StarterContent_M_Wood_Walnut.uasset",
+          "object_name": "M_Wood_Walnut",
+          "outer_path": "StateId",
+          "raw_size": null
+        },
+        {
+          "file": "samples\\StarterContent_M_Wood_Walnut.uasset",
+          "object_name": "M_Wood_Walnut",
+          "outer_path": "LightingGuid",
+          "raw_size": null
+        }
+      ]
+    },
+    {
+      "struct_type": "AlphaBlend",
+      "occurrence_count": 2,
+      "unique_locations": 2,
+      "locations": [
+        {
+          "file": "samples\\ALS_CLF_GetUp_Back_Montage_Default.uasset",
+          "object_name": "ALS_CLF_GetUp_Back_Montage_Default",
+          "outer_path": "BlendIn",
+          "raw_size": 37
+        },
+        {
+          "file": "samples\\ALS_CLF_GetUp_Back_Montage_Default.uasset",
+          "object_name": "ALS_CLF_GetUp_Back_Montage_Default",
+          "outer_path": "BlendOut",
+          "raw_size": 78
+        }
+      ]
+    },
+    {
+      "struct_type": "MeshSectionInfoMap",
+      "occurrence_count": 2,
+      "unique_locations": 2,
+      "locations": [
+        {
+          "file": "samples\\StarterContent_SM_Chair.uasset",
+          "object_name": "SM_Chair",
+          "outer_path": "SectionInfoMap",
+          "raw_size": 228
+        },
+        {
+          "file": "samples\\StarterContent_SM_Chair.uasset",
+          "object_name": "SM_Chair",
+          "outer_path": "OriginalSectionInfoMap",
+          "raw_size": 228
+        }
+      ]
+    },
+    {
+      "struct_type": "BoxSphereBounds",
+      "occurrence_count": 1,
+      "unique_locations": 1,
+      "locations": [
+        {
+          "file": "samples\\StarterContent_SM_Chair.uasset",
+          "object_name": "SM_Chair",
+          "outer_path": "ExtendedBounds",
+          "raw_size": 187
+        }
+      ]
+    },
+    {
+      "struct_type": "MeshNaniteSettings",
+      "occurrence_count": 1,
+      "unique_locations": 1,
+      "locations": [
+        {
+          "file": "samples\\StarterContent_SM_Chair.uasset",
+          "object_name": "SM_Chair",
+          "outer_path": "NaniteSettings",
+          "raw_size": 34
+        }
+      ]
+    },
+    {
+      "struct_type": "NiagaraParameterStore",
+      "occurrence_count": 1,
+      "unique_locations": 1,
+      "locations": [
+        {
+          "file": "samples\\NM_BPSystemEvent.uasset",
+          "object_name": "NM_BPSystemEvent",
+          "outer_path": "RapidIterationParameters",
+          "raw_size": 102
+        }
+      ]
+    },
+    {
+      "struct_type": "RawCurveTracks",
+      "occurrence_count": 1,
+      "unique_locations": 1,
+      "locations": [
+        {
+          "file": "samples\\ALS_CLF_GetUp_Back_Montage_Default.uasset",
+          "object_name": "ALS_CLF_GetUp_Back_Montage_Default",
+          "outer_path": "RawCurveData",
+          "raw_size": 5258
+        }
+      ]
+    },
+    {
+      "struct_type": "StaticMeshSourceModel",
+      "occurrence_count": 1,
+      "unique_locations": 1,
+      "locations": [
+        {
+          "file": "samples\\StarterContent_SM_Chair.uasset",
+          "object_name": "SM_Chair",
+          "outer_path": "HiResSourceModel",
+          "raw_size": 37
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_samples_scanned": 41,
+    "files_with_opaque_exports": 9,
+    "total_opaque_exports": 39,
+    "total_struct_entries": 22,
+    "unique_struct_types": 8,
+    "top_struct_types": [
+      {
+        "struct_type": "Guid",
+        "count": 13
+      },
+      {
+        "struct_type": "AlphaBlend",
+        "count": 2
+      },
+      {
+        "struct_type": "MeshSectionInfoMap",
+        "count": 2
+      },
+      {
+        "struct_type": "BoxSphereBounds",
+        "count": 1
+      },
+      {
+        "struct_type": "MeshNaniteSettings",
+        "count": 1
+      },
+      {
+        "struct_type": "NiagaraParameterStore",
+        "count": 1
+      },
+      {
+        "struct_type": "RawCurveTracks",
+        "count": 1
+      },
+      {
+        "struct_type": "StaticMeshSourceModel",
+        "count": 1
+      }
+    ]
+  }
+}
