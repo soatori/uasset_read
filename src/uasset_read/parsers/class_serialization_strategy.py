@@ -63,6 +63,9 @@ _OPAQUE_CLASSES = frozenset({
     "SoundCue",
     "ParticleSystem",
     "NiagaraSystem",
+    # #521: migrated from _SKIP_CLASSES for field-level parsing
+    "NiagaraGraph",
+    "NiagaraScript",
     # #164: MovieScene/Sequencer classes (MovieScene/ControlRig migrated to TAGGED_PROPERTIES_ONLY)
     "MovieSceneBuiltInEasingFunction",
     # #320: ControlRig / RigVM serialization classes (custom Serialize())
@@ -98,8 +101,6 @@ _OPAQUE_CLASSES = frozenset({
 
 # Skip entirely — format unknown or too risky
 _SKIP_CLASSES = frozenset({
-    "NiagaraGraph",
-    "NiagaraScript",
     "NiagaraDataInterface",
     # Migrated from class_specific_skip.py SKIP_CLASS_NAMES (eliminates strategy conflict)
     "NiagaraScriptSource",
