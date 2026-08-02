@@ -4,7 +4,7 @@
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
-> 📦 **v0.5.5** — Zero runtime dependencies · Python 3.10+ · 183 source files · 28 asset types
+> 📦 **v0.5.5** — Zero runtime dependencies · Python 3.10+ · 188 source files · 30 asset types
 
 ## Why uasset_read?
 
@@ -24,7 +24,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 |--------|-------|
 | Version | 0.5.5 |
 | Source | Python parser for Unreal Engine .uasset files |
-| Modules | 183 source files across 20 subpackages |
+| Modules | 188 source files across 22 subpackages |
 
 ## Features
 
@@ -257,12 +257,13 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | Project Logging | `project_logging.py` | Structured logging with rotation |
 | Report Summary | `report_summary.py` | Structured batch summary generation |
 | Debug | `debug/hex_view.py` | HexView debug system for binary field inspection |
+| JS Compat | `compat/uasset_reader_js.py` | Pinned raw reader for uasset-reader-js JSON profile |
 | **Pipeline** | `pipeline/` | Parsing pipeline orchestration: stages, memory, error handling |
 | **IR** | `ir_builder.py` | Package-level intermediate representation builder |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult, Status, Diagnostics |
 | **Parsers** | `parsers/` | 40+ property type parsers + dispatcher + custom property registry + AssetRegistry parser + class serialization strategy |
-| ├ Asset Types | `parsers/asset_types/` | 28 asset type parsers including StaticMesh, SkeletalMesh, AnimBlueprint, AnimMontage, DataTable, LevelSequence, MovieScene |
+| ├ Asset Types | `parsers/asset_types/` | 30 asset type parsers including StaticMesh, SkeletalMesh, AnimBlueprint, AnimMontage, DataTable, LevelSequence, MovieScene |
 | **Blueprint** | `blueprint/` | Variable/Transform/Component/Metadata extraction |
 | **Graph** | `graph/` | Execution/data flow tracing, chain builder, graph_utils |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback |
