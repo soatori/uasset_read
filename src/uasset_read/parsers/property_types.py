@@ -234,6 +234,9 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "BoxSphereBounds3d",
     # BPInterfaceDescription (ImplementedInterfaces array element)
     "BPInterfaceDescription",
+    # Builder polygon struct (CubeBuilder/EditorBrushBuilder Polys array element)
+    "BuilderPoly",
+    "FBuilderPoly",
 }
 """Set of struct names requiring tagged fallback parsing.
 
@@ -314,6 +317,19 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
         ("Time", "FloatProperty"),            # float -- animation time value
         ("RateScale", "IntProperty"),         # int32 -- playback rate scale
         ("bIsValid", "BoolProperty"),         # bool -- whether sample point is valid
+    ],
+    # Builder polygon struct (UE source: Engine/BrushBuilder.h)
+    "BuilderPoly": [
+        ("VertexIndices", "ArrayProperty"),   # TArray<int32> -- vertex indices into UBrushBuilder::Vertices
+        ("Direction", "IntProperty"),         # int32 -- face normal direction (+1 or -1)
+        ("ItemName", "NameProperty"),         # FName -- surface label (e.g. "Top", "Side")
+        ("PolyFlags", "IntProperty"),         # int32 -- BSP polygon flags
+    ],
+    "FBuilderPoly": [
+        ("VertexIndices", "ArrayProperty"),   # TArray<int32> -- vertex indices into UBrushBuilder::Vertices
+        ("Direction", "IntProperty"),         # int32 -- face normal direction (+1 or -1)
+        ("ItemName", "NameProperty"),         # FName -- surface label (e.g. "Top", "Side")
+        ("PolyFlags", "IntProperty"),         # int32 -- BSP polygon flags
     ],
 }
 

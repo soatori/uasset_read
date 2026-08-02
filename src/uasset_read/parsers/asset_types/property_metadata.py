@@ -39,6 +39,79 @@ def _enum_value(value: Any) -> Any:
     return value
 
 
+def _normalize_raw_bytes(raw_data: Any) -> bytes | None:
+    """Convert raw_data (bytes, bytearray, memoryview, hex string) to bytes."""
+    if isinstance(raw_data, (bytes, bytearray, memoryview)):
+        return bytes(raw_data)
+    if isinstance(raw_data, str) and len(raw_data) >= 8:
+        try:
+            return bytes.fromhex(raw_data)
+        except ValueError:
+            pass
+    return None
+
+
+def _decode_fvector_array(raw_bytes: bytes) -> list[dict[str, float]] | None:
+    """Decode TArray<FVector>: u32 count + FVector[count] (3×f64 = 24 bytes each)."""
+    import struct
+    if len(raw_bytes) < 4:
+        return None
+    count = struct.unpack_from("<I", raw_bytes, 0)[0]
+    if count == 0:
+        return []
+    if count > 1000 or len(raw_bytes) < 4 + count * 24:
+        return None
+    verts = []
+    for i in range(count):
+        off = 4 + i * 24
+        x, y, z = struct.unpack_from("<ddd", raw_bytes, off)
+        verts.append({"X": x, "Y": y, "Z": z})
+    return verts
+
+
+def _decode_builder_polys(raw_bytes: bytes) -> list[dict[str, Any]] | None:
+    """Decode TArray<FBuilderPoly> from raw bytes.
+
+    FBuilderPoly layout (UE source: BrushBuilder.h):
+        VertexIndices: TArray<int32>  (u32 count + i32[count])
+        Direction:     int32
+        ItemName:      FName          (int32 number + int32 pool_index)
+        PolyFlags:     int32
+    """
+    import struct
+    if len(raw_bytes) < 4:
+        return None
+    poly_count = struct.unpack_from("<I", raw_bytes, 0)[0]
+    if poly_count == 0:
+        return []
+    if poly_count > 1000:
+        return None
+    result = []
+    off = 4
+    for _ in range(poly_count):
+        if off + 4 > len(raw_bytes):
+            return None
+        # VertexIndices: u32 count
+        vi_count = struct.unpack_from("<I", raw_bytes, off)[0]
+        off += 4
+        if vi_count > 100 or off + vi_count * 4 > len(raw_bytes):
+            return None
+        indices = list(struct.unpack_from(f"<{vi_count}i", raw_bytes, off))
+        off += vi_count * 4
+        # Direction, ItemName (2×i32), PolyFlags
+        if off + 16 > len(raw_bytes):
+            return None
+        direction, fn_number, fn_pool_idx, poly_flags = struct.unpack_from("<iiii", raw_bytes, off)
+        off += 16
+        result.append({
+            "VertexIndices": indices,
+            "Direction": direction,
+            "ItemName": f"NAME_{fn_pool_idx}" if fn_pool_idx >= 0 else f"None_{fn_number}",
+            "PolyFlags": poly_flags,
+        })
+    return result
+
+
 def _texture_references(value: Any) -> list[str]:
     entries = value if isinstance(value, list) else [value]
     references: list[str] = []
@@ -110,6 +183,16 @@ def build_property_metadata(
                     project(field_name, values[property_name])
                     break
     elif class_name == "CubeBuilder":
+        # Extract UPROPERTY scalar fields
+        for prop_name, field_name in (
+            ("X", "size_x"), ("Y", "size_y"), ("Z", "size_z"),
+            ("WallThickness", "wall_thickness"),
+        ):
+            if prop_name in values:
+                project(field_name, _enum_value(values[prop_name]))
+        for prop_name, field_name in (("Hollow", "hollow"), ("Tessellated", "tessellated")):
+            if prop_name in values:
+                project(field_name, bool(_enum_value(values[prop_name])))
         layer = values.get("Layer")
         if isinstance(layer, str) and layer:
             project("layer", layer)
@@ -117,38 +200,50 @@ def build_property_metadata(
         polygons = values.get("Polys")
         if isinstance(polygons, list):
             project("polygon_count", len(polygons), include_zero=True)
+            # Decode FBuilderPoly structs if available
+            decoded_polys = []
+            for poly in polygons:
+                # Handle both dict and StructValue objects
+                if isinstance(poly, dict):
+                    fields = poly.get("fields", {})
+                else:
+                    fields = getattr(poly, "fields", {})
+                if fields:
+                    decoded_polys.append({
+                        "VertexIndices": fields.get("VertexIndices", []),
+                        "Direction": fields.get("Direction", 0),
+                        "ItemName": fields.get("ItemName", "None"),
+                        "PolyFlags": fields.get("PolyFlags", 0),
+                    })
+            if decoded_polys:
+                project("polygons", decoded_polys)
+        elif isinstance(polygons, dict):
+            # ArrayProperty with raw_data — decode FBuilderPoly[]
+            poly_raw = polygons.get("raw_data")
+            poly_bytes = _normalize_raw_bytes(poly_raw)
+            if poly_bytes:
+                project("poly_payload_size", len(poly_bytes))
+                try:
+                    polys = _decode_builder_polys(poly_bytes)
+                    if polys:
+                        project("polygons", polys)
+                except Exception:
+                    pass
 
         vertices = values.get("Vertices")
         if isinstance(vertices, dict):
             raw_data = vertices.get("raw_data")
         else:
             raw_data = getattr(vertices, "raw_data", None)
-        if raw_data:
-            # Normalize to bytes: handle hex string, bytes, bytearray, memoryview
-            raw_bytes = None
-            if isinstance(raw_data, (bytes, bytearray, memoryview)):
-                raw_bytes = bytes(raw_data)
-            elif isinstance(raw_data, str) and len(raw_data) >= 8:
-                try:
-                    raw_bytes = bytes.fromhex(raw_data)
-                except ValueError:
-                    pass
-            if raw_bytes:
-                project("vertex_payload_size", len(raw_bytes))
-                # Decode vertex positions: u32 count + FVector[count] (3x f64)
-                try:
-                    import struct
-                    if len(raw_bytes) >= 4:
-                        vertex_count = struct.unpack_from("<I", raw_bytes, 0)[0]
-                        if 0 < vertex_count < 1000 and len(raw_bytes) >= 4 + vertex_count * 24:
-                            verts = []
-                            for vi in range(vertex_count):
-                                off = 4 + vi * 24
-                                x, y, z = struct.unpack_from("<ddd", raw_bytes, off)
-                                verts.append({"X": x, "Y": y, "Z": z})
-                            project("vertices", verts)
-                except (struct.error, OverflowError):
-                    pass
+        raw_bytes = _normalize_raw_bytes(raw_data)
+        if raw_bytes:
+            project("vertex_payload_size", len(raw_bytes))
+            try:
+                verts = _decode_fvector_array(raw_bytes)
+                if verts is not None:
+                    project("vertices", verts)
+            except Exception:
+                pass
 
     if business_field_count:
         data["parse_status"] = validate_parse_status("partial_metadata")
