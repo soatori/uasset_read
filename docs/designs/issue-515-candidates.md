@@ -44,35 +44,28 @@ A candidate qualifies for implementation only when ALL are met:
 
 ## Top Candidates (Recommended for Implementation)
 
-### 1. BoxSphereBounds
-
-- **Occurrences:** 1
-- **Sample file:** `StarterContent_SM_Chair.uasset` (property: `ExtendedBounds`)
-- **Raw size:** 187 bytes
-- **Rationale:** Standard UE type used for mesh bounding volumes. Fixed layout (Origin: Vector, Extent: Vector, SphereRadius: float). Binary boundaries clear from raw_size. UE source: `Math/BoxSphereBounds.h`. High impact for mesh metadata parsing.
-
-### 2. AlphaBlend
+### 1. AlphaBlend
 
 - **Occurrences:** 2
 - **Sample file:** `ALS_CLF_GetUp_Back_Montage_Default.uasset` (properties: `BlendIn`, `BlendOut`)
 - **Raw size:** 37-78 bytes
 - **Rationale:** Animation montage blending parameters. Variable size suggests tagged property format or LWC precision variants. UE source: `Animation/AlphaBlend.h`. Medium complexity; high impact for animation data extraction.
 
-### 3. MeshSectionInfoMap
+### 2. MeshSectionInfoMap
 
 - **Occurrences:** 2
 - **Sample file:** `StarterContent_SM_Chair.uasset` (properties: `SectionInfoMap`, `OriginalSectionInfoMap`)
 - **Raw size:** 228 bytes
 - **Rationale:** Static mesh section metadata map. Map type requires careful parsing of key-value pairs. UE source: `Engine/MeshSectionInfo.h`. Medium complexity; medium impact for mesh structure analysis.
 
-### 4. MeshNaniteSettings
+### 3. MeshNaniteSettings
 
 - **Occurrences:** 1
 - **Sample file:** `StarterContent_SM_Chair.uasset` (property: `NaniteSettings`)
 - **Raw size:** 34 bytes
 - **Rationale:** Nanite virtual geometry settings. Small fixed size suggests simple binary layout. UE source: `Engine/NaniteVertexFactory.h` and related. Low complexity; emerging importance for UE5+ assets.
 
-### 5. NiagaraParameterStore
+### 4. NiagaraParameterStore
 
 - **Occurrences:** 1
 - **Sample file:** `NM_BPSystemEvent.uasset` (property: `RapidIterationParameters`)
@@ -98,7 +91,7 @@ A candidate qualifies for implementation only when ALL are met:
 ## Excluded Categories
 
 - **Fast-path handled structs:** `Vector`, `Rotator`, `Vector2D`, `Vector4`, `LinearColor`, `Color`, `Quat`, `Plane`, `Guid`, `IntPoint`, `IntVector`, `Box2D`, `Box`, `Sphere`, `TopLevelAssetPath`, `PointerToUberGraphFrame`, `Matrix`, `TwoVectors`, `OrientedBox`, `Transform` -- all handled by `_try_fast_path_struct()` in `property_types.py`.
-- **Tagged fallback structs:** `MemberReference`, `SimpleMemberReference`, `FBPVariableDescription`, `BPVariableDescription`, `EdGraphPinType`, `FEdGraphPinType`, `BPVariableDescriptionHelper`, `ComponentOverrideRecord`, `ImplementedInterfaces`, `LastEditedDocuments`, `EditedDocumentInfo`, `CategorySorting`, `FrameRate`, `AnimNotifyTrack`, `FEditorElement` -- handled via `_TAGGED_FALLBACK_STRUCTS` in `property_types.py:197-217`.
+- **Tagged fallback structs:** `MemberReference`, `SimpleMemberReference`, `FBPVariableDescription`, `BPVariableDescription`, `EdGraphPinType`, `FEdGraphPinType`, `BPVariableDescriptionHelper`, `ComponentOverrideRecord`, `ImplementedInterfaces`, `LastEditedDocuments`, `EditedDocumentInfo`, `CategorySorting`, `FrameRate`, `AnimNotifyTrack`, `FEditorElement`, `BoxSphereBounds` -- handled via `_TAGGED_FALLBACK_STRUCTS` in `property_types.py:197-217`.
 - **Zero-boundary false positives:** Opaque exports with no struct data or with `tag.size <= 0` that produce empty `StructValue` objects.
 
 ## Implementation Notes
