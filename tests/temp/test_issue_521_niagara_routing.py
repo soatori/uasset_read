@@ -116,3 +116,8 @@ def test_niagara_emitter_still_skip() -> None:
 def test_niagara_unknown_class_falls_through_to_tagged() -> None:
     """Unknown Niagara class not in any table gets TAGGED_PROPERTIES_ONLY."""
     assert get_serialization_strategy("NiagaraFooBar") == SerializationStrategy.TAGGED_PROPERTIES_ONLY
+
+
+def test_niagara_script_variable_is_opaque() -> None:
+    """NiagaraScriptVariable migrated to _OPAQUE_CLASSES (#521 A3)."""
+    assert get_serialization_strategy("NiagaraScriptVariable") == SerializationStrategy.OPAQUE_CLASS_PAYLOAD
