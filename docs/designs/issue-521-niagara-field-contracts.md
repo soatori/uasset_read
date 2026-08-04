@@ -163,6 +163,35 @@ Follow-up issue created; see #521 Epic status.
 
 ---
 
+## Execution Flow Disposition (A2)
+
+**Terminal state:** explicitly out of scope of Epic #521.
+
+**Rationale (evidence discipline):** Insufficient evidence today; no assertion is made
+about whether Niagara graphs carry an executable control flow. The 2026-08-04 audit
+found no fixture-visible exec-pin data, and the project attribution rule forbids
+asserting graph semantics — including "pure dataflow" — without a version-fixed UE
+source reference. A targeted audit of `EdGraphSchema_Niagara` at checkout commit
+`7deeb413d3dc1fc034f48d1aacc0861301829d32` (5.8.0-release) on 2026-08-05 produced no
+decisive exec-pin evidence: the schema header declares no exec-pin API (its only
+`exec` hit is the cosmetic `FNiagaraConnectionDrawingPolicy::DefaultExecutionWireThickness`
+wire-thickness field, `EdGraphSchema_Niagara.h:233`), `EdGraphSchema_Niagara.cpp`
+implements no `CreateDefaultNodes`, and the exec-pin references found elsewhere in
+NiagaraEditor are compile-time constructs (`FNiagaraCompilationNode::GetInputExecPin` /
+`GetOutputExecPin`, `NiagaraGraphDigest.cpp:2027,2040`; `Signature.bRequiresExecPin`,
+`NiagaraHlslTranslator.cpp:302`, `NiagaraAttributeTrimmer.cpp:134`) rather than
+graph-level execution-order serialization.
+
+**What this means:** Execution flow is neither projected nor inferred by this parser.
+`node_exports` order is document order, not execution order.
+
+**Re-open condition:** If version-fixed UE source evidence demonstrates that Niagara
+graphs serialize execution-order semantics (e.g. exec pins in `UEdGraphSchema_Niagara`
+or traversal-order serialization in `UNiagaraGraph`), open a new issue referencing
+this section.
+
+---
+
 ## Notes
 
 - All three handler families report `parse_status = "partial_metadata"`
