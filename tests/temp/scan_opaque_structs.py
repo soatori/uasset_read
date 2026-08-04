@@ -1,7 +1,9 @@
 """Opaque struct scan script for Issue #515.
 
 Traverses all version-controlled sample files, parses each in tolerant mode,
-and extracts StructProperty candidates from exports with parse_status == "opaque".
+and extracts StructProperty candidates from exports whose parse_status is
+"opaque" or "partial_metadata" (B1-pre intake fix: partial_metadata exports
+were structurally missed before).
 Outputs deduplicated results as JSON to stdout.
 """
 
@@ -105,11 +107,12 @@ def scan_opaque_structs() -> dict:
 
         for exp in exports:
             ps = exp.get("parse_status", "success")
-            if ps != "opaque":
+            if ps not in ("opaque", "partial_metadata"):
                 continue
 
             total_opaque_exports += 1
             files_with_opaque.add(rel_path)
+            export_status = ps
             properties = exp.get("properties", [])
             struct_entries = _collect_struct_props(properties)
 
@@ -120,6 +123,7 @@ def scan_opaque_structs() -> dict:
                     "object_name": exp.get("object_name", "?"),
                     "outer_path": entry["outer_path"],
                     "raw_size": entry["raw_size"],
+                    "export_status": export_status,
                 })
 
     # Build deduplicated candidate table
