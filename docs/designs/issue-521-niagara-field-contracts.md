@@ -192,6 +192,26 @@ this section.
 
 ---
 
+## Niagara Coverage Contract (A3)
+
+Every Niagara class present in the fixture lands on an evidence-based terminal
+state. Live enumeration is pinned by `tests/temp/test_issue_521_niagara_coverage.py`;
+uncovered classes are exactly two and both are settled below.
+
+| Class | Count | Terminal state | parse_status | Evidence |
+|---|---|---|---|---|
+| NiagaraGraph | 1 | field-level parse | partial_metadata | NiagaraGraphHandler; §NiagaraGraph above |
+| NiagaraScript | 1 | field-level parse | partial_metadata | NiagaraScriptHandler; §NiagaraScript above |
+| NiagaraNodeFunctionCall / Input / Op / Output / ParameterMapGet / ParameterMapSet / Reroute / Select / StaticSwitch | 25 | field-level parse | partial_metadata | NiagaraNodeHandler; §NiagaraNode* above |
+| NiagaraScriptVariable | 11 | field-level parse | partial_metadata | NiagaraScriptVariableHandler; tagged properties verified against `UNiagaraScriptVariable` UPROPERTYs (`NiagaraScriptVariable.h:138-264`, checkout `7deeb413d3dc1fc034f48d1aacc0861301829d32`) and fixture probe |
+| NiagaraScriptSource | 1 | evidence-backed skip | skipped | `UNiagaraScriptSource` (`NiagaraScriptSource.h:18-101`) holds compiled script source; bytecode decoding is out of scope (roadmap §Explicitly Out of Scope) |
+
+The inner opaque structs of `NiagaraScriptVariable` (`NiagaraVariable`,
+`NiagaraVariableMetaData`, `NiagaraVariant`) and the `Outputs`/`OutputVars`
+element structs are owned by the B1/#515 path and are not decoded here.
+
+---
+
 ## Notes
 
 - All three handler families report `parse_status = "partial_metadata"`
