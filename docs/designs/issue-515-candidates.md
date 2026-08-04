@@ -1,18 +1,47 @@
 # #515 Opaque StructProperty Candidates
 
-> Generated: 2026-08-02
-> Scan script: `tests/temp/scan_opaque_structs.py`
-> Samples scanned: 41
+> Original scan: 2026-08-02 (`tests/temp/scan_opaque_structs.py`)
+> Re-scan: 2026-08-05 (`tests/temp/rescan_opaque_structs.py`)
+> Re-scan output: `temp/rescan_opaque_2026-08-05.txt`
+> Samples scanned: 42 (all files under `tests/samples/` at scan time)
+
+## Scan Methodology
+
+The 2026-08-02 scan listed struct types embedded in opaque **exports**. The
+2026-08-05 re-scan records only StructProperty values whose **own**
+`parse_status` is `opaque` in the current parser output (JSON, tolerant mode,
+`output_level="debug"`), recursing into export properties and `ArrayProperty`
+items. The re-scan is diagnostic only; it does not modify parsing.
 
 ## Scan Summary
 
 | Metric | Value |
 |--------|-------|
-| Total samples scanned | 41 |
-| Files with opaque exports | 9 |
-| Total opaque exports | 39 |
-| Total struct entries in opaque | 22 |
-| Unique struct types | 8 |
+| Samples scanned | 42 |
+| Parse errors | 0 |
+| Opaque struct values found by the script | 37 |
+| Unique opaque struct types found by the script | 5 |
+| Additional opaque values verified outside the script traversal | 126 (`UnknownStruct`; see traversal caveat below) |
+
+## Status change since 2026-08-02
+
+The six 2026-08-02 candidates are now `success` via the generic tagged-fallback
+loop in `parse_struct_property` (`parsers/property_types.py`). They are no
+longer opacity candidates:
+
+| 2026-08-02 candidate | Current status | Verified location |
+|---|---|---|
+| `AlphaBlend` | success (`BlendIn`/`BlendOut`, 37/78 bytes) | `ALS_CLF_GetUp_Back_Montage_Default.uasset` |
+| `MeshSectionInfoMap` | success (`SectionInfoMap`/`OriginalSectionInfoMap`, 228 bytes) | `StarterContent_SM_Chair.uasset` |
+| `MeshNaniteSettings` | success (`NaniteSettings`, 34 bytes) | `StarterContent_SM_Chair.uasset` |
+| `BoxSphereBounds` | success (`ExtendedBounds`, 187 bytes) | `StarterContent_SM_Chair.uasset` |
+| `NiagaraParameterStore` | success (`RapidIterationParameters`, 102 bytes) | `NM_BPSystemEvent.uasset` |
+| `StaticMeshSourceModel` | success (`HiResSourceModel`, 37 bytes) | `StarterContent_SM_Chair.uasset` |
+
+Other 2026-08-02 list entries: `RawCurveTracks` also decodes as `success` at
+the struct-value level now (its containing export remains `opaque` at export
+level, which is why the export-based 2026-08-02 scan listed it); `Guid` was
+already a fast-path false positive in the old scan.
 
 ## Candidate Selection Criteria
 
@@ -29,73 +58,75 @@ A candidate qualifies for implementation only when ALL are met:
 3. UE source code auditable for the matching engine version
 4. Field semantics provable from source or tagged property structure
 
-## All Candidates by Frequency
+## All Candidates by Frequency (re-scan 2026-08-05)
 
-| # | Struct Type | Occurrences | Unique Locations | Raw Size Range | Sample Files |
-|---|------------|-------------|-----------------|----------------|--------------|
-| 1 | Guid | 13 | 13 | null (fast-path) | ALS_N_FallLoop, FirstPerson_M_FlatCol, FirstPerson_M_PrototypeGrid, IntroToUnreal_M_Plastic, NM_BPSystemEvent, StarterContent_M_Wood_Walnut |
-| 2 | AlphaBlend | 2 | 2 | 37-78 | ALS_CLF_GetUp_Back_Montage_Default |
-| 3 | MeshSectionInfoMap | 2 | 2 | 228 | StarterContent_SM_Chair |
-| 4 | BoxSphereBounds | 1 | 1 | 187 | StarterContent_SM_Chair |
-| 5 | MeshNaniteSettings | 1 | 1 | 34 | StarterContent_SM_Chair |
-| 6 | NiagaraParameterStore | 1 | 1 | 102 | NM_BPSystemEvent |
-| 7 | RawCurveTracks | 1 | 1 | 5258 | ALS_CLF_GetUp_Back_Montage_Default |
-| 8 | StaticMeshSourceModel | 1 | 1 | 37 | StarterContent_SM_Chair |
+From `temp/rescan_opaque_2026-08-05.txt`:
 
-## Top Candidates (Recommended for Implementation)
+| # | Struct Type | Occurrences | Raw Size | Sample Files |
+|---|------------|-------------|----------|--------------|
+| 1 | ExpressionInput | 22 | 36 | StarterContent_M_Wood_Walnut |
+| 2 | NiagaraVariable | 12 | 111-114 | NM_BPSystemEvent |
+| 3 | ColorMaterialInput | 1 | 44 | StarterContent_M_Wood_Walnut |
+| 4 | ScalarMaterialInput | 1 | 44 | StarterContent_M_Wood_Walnut |
+| 5 | VectorMaterialInput | 1 | 52 | StarterContent_M_Wood_Walnut |
 
-### 1. AlphaBlend
+### Re-scan traversal caveat: UnknownStruct
 
-- **Occurrences:** 2
-- **Sample file:** `ALS_CLF_GetUp_Back_Montage_Default.uasset` (properties: `BlendIn`, `BlendOut`)
-- **Raw size:** 37-78 bytes
-- **Rationale:** Animation montage blending parameters. Variable size suggests tagged property format or LWC precision variants. UE source: `Animation/AlphaBlend.h`. Medium complexity; high impact for animation data extraction.
+`UnknownStruct` does not appear in the script output: the re-scan's `_collect`
+recurses into StructProperty values and ArrayProperty items only, not into
+MapProperty entries. A separate verification walk over
+`CiciToon_SK_Mannequin.uasset` (2026-08-05) found 126 `UnknownStruct` values
+(the `AnimCurveMetaData` map values), all with `parse_status: opaque` and
+`raw_size: 0`. They remain part of the still-opaque set below.
 
-### 2. MeshSectionInfoMap
+## Still-Opaque Set (recommended next slices)
 
-- **Occurrences:** 2
-- **Sample file:** `StarterContent_SM_Chair.uasset` (properties: `SectionInfoMap`, `OriginalSectionInfoMap`)
-- **Raw size:** 228 bytes
-- **Rationale:** Static mesh section metadata map. Map type requires careful parsing of key-value pairs. UE source: `Engine/MeshSectionInfo.h`. Medium complexity; medium impact for mesh structure analysis.
+### 1. ExpressionInput (22 occurrences)
 
-### 3. MeshNaniteSettings
+- **Sample file:** `StarterContent_M_Wood_Walnut.uasset` (material expression inputs such as `A`, `B`, `Alpha`)
+- **Raw size:** 36 bytes
+- **Rationale:** Material graph input references. Native (non-tagged) layout per
+  `SerializeExpressionInput` (`Engine/Source/Runtime/Engine/Private/Materials/MaterialShared.cpp:439-469`,
+  UE 5.8.0-release), which is why the tagged fallback cannot decode it. Highest
+  frequency in the current corpus; stable fixture available.
 
-- **Occurrences:** 1
-- **Sample file:** `StarterContent_SM_Chair.uasset` (property: `NaniteSettings`)
-- **Raw size:** 34 bytes
-- **Rationale:** Nanite virtual geometry settings. Small fixed size suggests simple binary layout. UE source: `Engine/NaniteVertexFactory.h` and related. Low complexity; emerging importance for UE5+ assets.
+### 2. NiagaraVariable (12 occurrences)
 
-### 4. NiagaraParameterStore
+- **Sample file:** `NM_BPSystemEvent.uasset` (properties: `Input`, `Variable`)
+- **Raw size:** 111-114 bytes
+- **Rationale:** Niagara script variable declarations with offset-based embedded
+  data. Requires its own evidence-backed slice (adjacent to #521 work).
 
-- **Occurrences:** 1
-- **Sample file:** `NM_BPSystemEvent.uasset` (property: `RapidIterationParameters`)
-- **Raw size:** 102 bytes
-- **Rationale:** Niagara VFX parameter storage. Variable-size parameter store with internal array structure. UE source: `NiagaraDataInterfaceBase.h` and Niagara module. Medium complexity; high impact for VFX data extraction.
+### 3. Material input variants (3 occurrences)
 
-## Deferred Candidates
+- **Types:** `ScalarMaterialInput` (44 bytes), `ColorMaterialInput` (44 bytes),
+  `VectorMaterialInput` (52 bytes)
+- **Sample file:** `StarterContent_M_Wood_Walnut.uasset` (properties: `Roughness`, `BaseColor`, `Normal`)
+- **Rationale:** Same native family as `ExpressionInput`: base 36 bytes +
+  `bUseConstant` (uint32) + typed `Constant`, per `SerializeMaterialInput`
+  (`MaterialShared.cpp:473-487`, UE 5.8.0-release). Best implemented together
+  with candidate 1.
 
-### StaticMeshSourceModel
+### 4. UnknownStruct -- CurveMetaData values (126 occurrences)
 
-- **Occurrences:** 1
-- **Reason:** Complex nested structure (LOD settings, build settings, reduction settings). Requires deep UE source analysis of `StaticMeshSourceModel.h` and multiple sub-structures. Low ROI for initial implementation.
+- **Sample file:** `CiciToon_SK_Mannequin.uasset` (values of the `AnimCurveMetaData` map entries)
+- **Raw size:** 0
+- **Rationale:** Zero-size tagged struct values whose type name is not resolved
+  (reported as `UnknownStruct`). Not visible to the re-scan script (MapProperty
+  entries); verified separately as still opaque. Type-name resolution needs its
+  own evidence-backed slice.
 
-### RawCurveTracks
+## Follow-up: MeshSectionInfoMap value correctness (not opacity)
 
-- **Occurrences:** 1
-- **Reason:** Very large raw_size (5258 bytes). Contains arrays of rich curve data with nested structures. High parsing complexity; better deferred until simpler candidates are validated.
-
-### Guid (13 occurrences)
-
-- **Reason:** Already handled by `_try_fast_path_struct()` in `property_types.py:628-632`. Not an opaque candidate -- these 13 occurrences appear in the scan because they are embedded in opaque exports, but the StructProperty itself is parsed by the fast-path handler. No implementation needed.
-
-## Excluded Categories
-
-- **Fast-path handled structs:** `Vector`, `Rotator`, `Vector2D`, `Vector4`, `LinearColor`, `Color`, `Quat`, `Plane`, `Guid`, `IntPoint`, `IntVector`, `Box2D`, `Box`, `Sphere`, `TopLevelAssetPath`, `PointerToUberGraphFrame`, `Matrix`, `TwoVectors`, `OrientedBox`, `Transform` -- all handled by `_try_fast_path_struct()` in `property_types.py`.
-- **Tagged fallback structs:** `MemberReference`, `SimpleMemberReference`, `FBPVariableDescription`, `BPVariableDescription`, `EdGraphPinType`, `FEdGraphPinType`, `BPVariableDescriptionHelper`, `ComponentOverrideRecord`, `ImplementedInterfaces`, `LastEditedDocuments`, `EditedDocumentInfo`, `CategorySorting`, `FrameRate`, `AnimNotifyTrack`, `FEditorElement`, `BoxSphereBounds` -- handled via `_TAGGED_FALLBACK_STRUCTS` in `property_types.py:197-217`.
-- **Zero-boundary false positives:** Opaque exports with no struct data or with `tag.size <= 0` that produce empty `StructValue` objects.
+`MeshSectionInfoMap` now decodes as a `MapProperty`, but its value type resolves
+to `IntProperty` with a single entry (`{0: 77}`) -- the `FMeshSectionInfo`
+fields are not decoded. That is a **correctness gap**, not an opacity gap, and
+is tracked as a follow-up rather than in the opaque candidate list above.
 
 ## Implementation Notes
 
-- All candidates with non-null `raw_size` values have determinable binary boundaries via the tagged property size field.
-- Candidates 2-5 have variable or complex layouts; tagged fallback parsing may be needed before native fast-path implementation.
-- Candidate selection should prioritize types with stable, version-controlled sample fixtures in `tests/samples/`.
+- All still-opaque candidates above have determinable boundaries (`tag.size` or
+  zero-size tagged) except where noted; layouts must be proven against UE source
+  before implementation (no format guessing).
+- Candidate selection should prioritize types with stable, version-controlled
+  sample fixtures in `tests/samples/`.
