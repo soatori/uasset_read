@@ -40,6 +40,9 @@ from uasset_read.parsers.asset_types.texture2d import parse_texture2d
 from uasset_read.parsers.asset_types.anim_blueprint import AnimBlueprintHandler
 from uasset_read.parsers.asset_types.anim_sequence import AnimSequenceHandler
 from uasset_read.parsers.asset_types.anim_montage import AnimMontageHandler
+from uasset_read.parsers.asset_types.niagara_graph import NiagaraGraphHandler
+from uasset_read.parsers.asset_types.niagara_script import NiagaraScriptHandler
+from uasset_read.parsers.asset_types.niagara_node import NiagaraNodeHandler
 
 __all__ = [
     "parse_static_mesh",
@@ -51,6 +54,9 @@ __all__ = [
     "AnimBlueprintHandler",
     "AnimSequenceHandler",
     "AnimMontageHandler",
+    "NiagaraGraphHandler",
+    "NiagaraScriptHandler",
+    "NiagaraNodeHandler",
     "PropertyMetadataHandler",
 ]
 
@@ -157,6 +163,10 @@ def register_asset_type_handlers() -> None:
         ),
         PropertyMetadataHandler("Texture2D"),
         PropertyMetadataHandler("SoundCue"),
+        # #521: Niagara handlers
+        NiagaraGraphHandler(),
+        NiagaraScriptHandler(),
+        NiagaraNodeHandler(),
     ]
 
     # Optional parsers (register if import succeeds)

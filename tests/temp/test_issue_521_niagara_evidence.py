@@ -64,37 +64,49 @@ def test_niagara_asset_parsed_as_partial():
 
 
 def test_niagara_export_types_documented():
-    """Document the specific Niagara export types that are skipped."""
+    """Document the current Niagara export parse status for each class.
+
+    After Phase 2/3/4, Graph/Script and 9 node classes are no longer skipped.
+    Remaining Niagara classes (NiagaraSystem, NiagaraDataInterface*, NiagaraScriptSource,
+    NiagaraEmitter, etc.) stay in the skipped set.
+    """
     payload = json.loads(parse_single(
         str(SAMPLE), format="json", tolerant=True, log_enabled=False,
     ))
 
-    # Collect unique skipped export types
-    skipped_types = set()
+    # Collect unique Niagara export classes and their parse statuses
+    niagara_classes: dict[str, str] = {}
     for export in payload["exports"]:
-        if export.get("parse_status") == "skipped":
-            skipped_types.add(export.get("object_class", ""))
+        cls = export.get("object_class", "")
+        if "Niagara" not in cls:
+            continue
+        status = export.get("parse_status", "success")
+        niagara_classes.setdefault(cls, status)
 
-    # Document expected types from issue #521
-    expected_types = {
-        "NiagaraNodeFunctionCall",
-        "NiagaraNodeParameterMapSet",
-        "NiagaraNodeInput",
-        "NiagaraNodeParameterMapGet",
-        "NiagaraScript",
-        "NiagaraNodeOp",
-        "NiagaraNodeOutput",
+    # Migrated classes (no longer skipped)
+    migrated = {
+        "NiagaraGraph", "NiagaraScript",
+        "NiagaraNodeFunctionCall", "NiagaraNodeParameterMapSet",
+        "NiagaraNodeInput", "NiagaraNodeParameterMapGet",
+        "NiagaraNodeOp", "NiagaraNodeOutput",
         "NiagaraNodeReroute",
-        "NiagaraGraph",
     }
 
-    print(f"\n=== Skipped Niagara Types ===")
-    for t in sorted(skipped_types):
-        marker = "✓" if t in expected_types else " "
-        print(f"  {marker} {t}")
+    print(f"\n=== Niagara Export Parse Status by Class ===")
+    for cls in sorted(niagara_classes):
+        status = niagara_classes[cls]
+        marker = "✓" if cls in migrated else " "
+        print(f"  {marker} {cls}: {status}")
 
-    # Verify we have evidence of the issue
-    assert len(skipped_types) > 0, "Expected skipped export types"
+    # Verify migrated classes are NOT skipped
+    for cls in migrated:
+        if cls in niagara_classes:
+            assert niagara_classes[cls] != "skipped", (
+                f"{cls} should not be 'skipped' after migration; got '{niagara_classes[cls]}'"
+            )
+
+    # Verify we have Niagara exports at all
+    assert len(niagara_classes) > 0, "Expected Niagara exports in fixture"
 
 
 def test_niagara_exports_structured_inventory():
@@ -174,11 +186,11 @@ def test_niagara_exports_structured_inventory():
                 f"got '{entry['parse_status']}'"
             )
 
-    # Verify classification: NiagaraNode* should still be skipped
+    # Verify classification: migrated NiagaraNode* classes are now opaque/partial_metadata
     for entry in target_inventory:
         if entry["object_class"].startswith(NIAGARA_NODE_PREFIX):
-            assert entry["parse_status"] == "skipped", (
-                f"{entry['object_class']} should still be 'skipped' (prefix skip), "
+            assert entry["parse_status"] != "skipped", (
+                f"{entry['object_class']} should not be 'skipped' after Phase 4 migration, "
                 f"got '{entry['parse_status']}'"
             )
 
@@ -213,11 +225,11 @@ def test_niagara_graph_and_script_are_no_longer_skipped():
             f"NiagaraGraph '{export['object_name']}' should not be 'skipped' "
             f"after routing migration; got '{parse_status}'"
         )
-        # After routing to OPAQUE_CLASS_PAYLOAD, status should be "opaque"
-        # (not "partial_metadata", since no business fields are projected for NiagaraGraph)
-        assert parse_status == "opaque", (
-            f"NiagaraGraph '{export['object_name']}' expected 'opaque' "
-            f"after routing to OPAQUE_CLASS_PAYLOAD; got '{parse_status}'"
+        # After routing to OPAQUE_CLASS_PAYLOAD + handler projection, status is "partial_metadata"
+        # (handler projects business fields from tagged properties)
+        assert parse_status == "partial_metadata", (
+            f"NiagaraGraph '{export['object_name']}' expected 'partial_metadata' "
+            f"after handler projection; got '{parse_status}'"
         )
 
     # Verify NiagaraScript exports are not skipped (routed to opaque path)
@@ -228,10 +240,11 @@ def test_niagara_graph_and_script_are_no_longer_skipped():
             f"NiagaraScript '{export['object_name']}' should not be 'skipped' "
             f"after routing migration; got '{parse_status}'"
         )
-        # After routing to OPAQUE_CLASS_PAYLOAD, status should be "opaque"
-        assert parse_status == "opaque", (
-            f"NiagaraScript '{export['object_name']}' expected 'opaque' "
-            f"after routing to OPAQUE_CLASS_PAYLOAD; got '{parse_status}'"
+        # After routing to OPAQUE_CLASS_PAYLOAD + handler projection, status is "partial_metadata"
+        # (handler projects business fields from tagged properties)
+        assert parse_status == "partial_metadata", (
+            f"NiagaraScript '{export['object_name']}' expected 'partial_metadata' "
+            f"after handler projection; got '{parse_status}'"
         )
 
     # Verify we have NiagaraGraph and NiagaraScript exports to test
@@ -340,8 +353,8 @@ def test_niagara_script_has_parseable_tagged_properties():
         print(f"    property_name_set: {sorted(prop_names)}")
 
 
-def test_niagara_node_exports_still_skipped():
-    """NiagaraNode* exports must remain skip_unsupported."""
+def test_niagara_node_exports_no_longer_skipped():
+    """NiagaraNode* exports must no longer be skip_unsupported after Phase 4 migration."""
     payload = json.loads(parse_single(
         str(SAMPLE), format="json", tolerant=True, log_enabled=False,
     ))
@@ -355,10 +368,12 @@ def test_niagara_node_exports_still_skipped():
     print(f"Total NiagaraNode* exports: {len(node_exports)}")
 
     for export in node_exports:
-        assert export.get("parse_status") == "skipped", (
+        parse_status = export.get("parse_status", "success")
+        print(f"  {export.get('object_class')}: {export.get('object_name')} -> {parse_status}")
+        assert parse_status != "skipped", (
             f"NiagaraNode export '{export.get('object_name', '?')}' "
-            f"(class={export.get('object_class', '?')}) should be 'skipped', "
-            f"got '{export.get('parse_status')}'"
+            f"(class={export.get('object_class', '?')}) should not be 'skipped' "
+            f"after Phase 4 migration; got '{parse_status}'"
         )
 
     assert len(node_exports) > 0, "Expected NiagaraNode exports in fixture"

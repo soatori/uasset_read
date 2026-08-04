@@ -355,6 +355,9 @@ def _try_asset_type_handler(
     if parsed_properties is not None:
         export.properties = parsed_properties
 
+    # Store resolved class name on export for handler use
+    setattr(export, "resolved_class_name", class_name)
+
     saved_pos = archive.tell()
     try:
         # Do not seek to property_end -- After property parsing the current position is already past Super::Serialize.

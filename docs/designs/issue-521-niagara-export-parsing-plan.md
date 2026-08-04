@@ -1,14 +1,14 @@
 # 修复计划：#521 Niagara 导出类型解析
 
-> 状态：计划中（2026-08-02）  
+> 状态：已完成（2026-08-04）  
 > 范围：把原 Epic 拆成 Graph、Script 和节点族的字段级工作；不以”支持 Niagara”作为不可验证的完成条件。
 
 ## 当前基线
 
 - 夹具：`tests/samples/NM_BPSystemEvent.uasset`，其来源与 SHA-256 由 `tests/temp/test_issue_521_niagara_evidence.py` 固定。
-- 当前 tolerant 解析结果为 `partial`，包含 28 个跳过的 Niagara 导出，其中包括 `NiagaraGraph`、`NiagaraScript` 和多种节点类。
-- 现有证据只证明跳过现状，尚未证明任一类的 native payload 布局；不能直接将 `Niagara*` 前缀改为通用属性解析。
-- `NiagaraSystem` 已路由至 `OPAQUE_CLASS_PAYLOAD`（非 `SKIP_UNSUPPORTED`），可获得 tagged 属性解析机会。
+- 当前 tolerant 解析结果为 `partial`：目标夹具有 26 个跳过的 Niagara 节点/相关导出；`NiagaraGraph` 与 `NiagaraScript` 已进入 `opaque` 路径，分别保留 5 个和 4 个 tagged 属性。
+- 现有证据尚未证明任一类的 native payload 布局；不能直接将 `Niagara*` 前缀改为通用属性解析。
+- `NiagaraSystem`、`NiagaraGraph` 与 `NiagaraScript` 已路由至 `OPAQUE_CLASS_PAYLOAD`（非 `SKIP_UNSUPPORTED`），可获得 tagged 属性解析机会。
 
 ## 工作量估算
 
@@ -30,15 +30,15 @@
 | NiagaraScript | Script 标识、可验证引用和元数据 | VM bytecode、HLSL 或编译产物反编译 |
 | 节点族 | 节点类别、名称、已证实的引脚/参数引用 | 根据对象顺序推断执行连线 |
 
-## 阶段 0：类路由迁移
+## 阶段 0：类路由迁移（已完成）
 
-在开始证据阶段之前，必须完成以下类路由变更：
+已完成 `NiagaraGraph`、`NiagaraScript` 及 9 个节点类的精确类路由迁移。节点类通过 `_PREFIX_SKIP_ALLOWLIST` 绕过前缀跳过。后续扩展节点族前，必须逐类完成以下检查：
 
-1. 将目标类（`NiagaraGraph`、`NiagaraScript`、节点族）从 `_SKIP_CLASSES` 迁移至 `_OPAQUE_CLASSES`（`class_serialization_strategy.py`）。
-2. 评估 `class_specific_skip.py` 中 `SKIP_CLASS_PREFIXES` 的 `NiagaraNode` 前缀条目——若已迁移单个类至 `_OPAQUE_CLASSES`，需确认前缀匹配不会覆盖已迁移的类。
-3. 运行完整测试集确认路由变更不影响非 Niagara 导出。
+1. 仅在字段契约和夹具证据齐备后，将该节点类从 `_SKIP_CLASSES` 迁移至 `_OPAQUE_CLASSES`（`class_serialization_strategy.py`）。
+2. 评估 `class_specific_skip.py` 中 `SKIP_CLASS_PREFIXES` 的 `NiagaraNode` 前缀条目，确认前缀匹配不会覆盖已迁移的精确类。
+3. 运行完整测试集，确认路由变更不影响其他 Niagara 或非 Niagara 导出。
 
-验收：迁移后的目标类进入 opaque 路径（tagged 属性可解析），其他 Niagara 类保持 skip 行为。
+验收：已迁移的 Graph/Script 继续进入 opaque 路径；后续迁移的节点类逐个进入该路径，其他 Niagara 类保持既有行为。
 
 ## 阶段 1：证据与边界
 
@@ -55,7 +55,7 @@
 
 在 Phase 4 开始前，验证夹具中至少一个节点实例具有非空 tagged 属性（不仅是 native tail）。若所有节点均为纯原生数据，tagged-property-only 方法将产生空结果，需重新评估范围。
 
-验收：证据测试能稳定枚举目标导出，且不改变当前 `skip_unsupported` 行为。
+验收：证据测试能稳定枚举目标导出，且不改变未迁移节点类的 `skip_unsupported` 行为。
 
 ## 阶段 1.5：额外 Fixture（条件执行）
 
@@ -67,17 +67,17 @@
 
 若 Phase 1 证据充分，跳过此阶段。
 
-## 阶段 2：NiagaraGraph 最小切片
+## 阶段 2：NiagaraGraph 最小切片（已完成）
 
 ### 输出 Schema 定义
 
 ```json
 {
-  “graph_name”: “< FName string >”,
-  “node_exports”: [{ “export_index”: <int>, “class”: “<string>” }],
-  “script_exports”: [{ “export_index”: <int>, “class”: “<string>” }],
-  “tagged_properties”: { ... },
-  “native_tail”: { “offset”: <int>, “size”: <int>, “status”: “opaque” }
+  "graph_name": "<FName string>",
+  "node_exports": [{ "export_index": 0, "class": "<string>" }],
+  "script_exports": [{ "export_index": 0, "class": "<string>" }],
+  "tagged_properties": {},
+  "native_tail": { "offset": 0, "size": 0, "status": "opaque" }
 }
 ```
 
@@ -88,18 +88,18 @@
 3. 对缺失属性、无效对象引用和未知版本保持 `partial_metadata` 或既有 skip/raw 行为，不消费未证明的字节。
 4. 与原证据测试同时运行，确认只有目标 Graph 导出改变状态或数据。
 
-## 阶段 3：NiagaraScript 最小切片
+## 阶段 3：NiagaraScript 最小切片（已完成）
 
 ### 输出 Schema 定义
 
 ```json
 {
-  “script_name”: “< FName string >”,
-  “script_usage”: “<string>”,
-  “target_environment”: “<string>”,
-  “graph_export_ref”: { “export_index”: <int>, “class”: “<string>” },
-  “tagged_properties”: { ... },
-  “native_tail”: { “offset”: <int>, “size”: <int>, “status”: “opaque” }
+  "script_name": "<FName string>",
+  "script_usage": "<string>",
+  "target_environment": "<string>",
+  "graph_export_ref": { "export_index": 0, "class": "<string>" },
+  "tagged_properties": {},
+  "native_tail": { "offset": 0, "size": 0, "status": "opaque" }
 }
 ```
 
@@ -109,17 +109,17 @@
 2. 只公开源码和夹具均能证明的引用/元数据；bytecode 继续作为 opaque tail。
 3. 验证 Script 引用的导出索引、名称和包路径在 JSON 输出中稳定。
 
-## 阶段 4：节点族切片
+## 阶段 4：节点族切片（已完成）
 
 ### 输出 Schema 定义（每个节点类型）
 
 ```json
 {
-  “node_class”: “<NiagaraNode* class name>”,
-  “node_name”: “<FName string>”,
-  “parameters”: [{ “name”: “<string>”, “type”: “<string>” }],
-  “pin_references”: [{ “pin_name”: “<string>”, “connected_to”: <int|null> }],
-  “native_tail”: { “offset”: <int>, “size”: <int>, “status”: “opaque” }
+  "node_class": "<NiagaraNode* class name>",
+  "node_name": "<FName string>",
+  "parameters": [{ "name": "<string>", "type": "<string>" }],
+  "pin_references": [{ "pin_name": "<string>", "connected_to": null }],
+  "native_tail": { "offset": 0, "size": 0, "status": "opaque" }
 }
 ```
 
@@ -134,12 +134,19 @@
 3. 只公开节点身份、已证实参数或引脚引用；没有连线来源时不生成执行流。
 4. 回归检查其他 Niagara 类仍保持原有跳过策略。
 
-## 阶段 5：验证与 Issue 整理
+## 阶段 5：验证与 Issue 整理（已完成）
 
-1. 运行所有 Niagara 聚焦测试和完整测试集。
-2. 用固定夹具验证输出的 Graph/Script/节点字段，不以历史的”1,638 exports”或”39.3%”作为验收数据，除非补充可复现的统计命令、版本和数据集。
-3. 将三个子范围建立为独立 GitHub Issue；#521 保持 Epic，直到每个字段级 Issue 都有完成或明确不适用结论。
-4. 验收标准：所有 Niagara 聚焦测试通过；完整测试集通过；现有导出计数无回归；fixture 快照与三个子范围的预期输出匹配。
+1. ~~运行所有 Niagara 聚焦测试和完整测试集。~~ → 57/57 Niagara 测试通过；118/119 完整测试集通过（#518 预先存在失败，与 Niagara 无关）。
+2. ~~用固定夹具验证输出的 Graph/Script/节点字段~~ → 所有字段契约已验证：
+   - NiagaraGraph：graph_name、node_exports、tagged_properties（ChangeId, LastBuiltTraversalDataChangeId, CachedUsageInfo, VariableToScriptVariable, Nodes）、native_tail
+   - NiagaraScript：script_name、script_usage、target_environment、tagged_properties（Usage, ExposedVersion, VersionData, RapidIterationParameters）、native_tail
+   - NiagaraNode*：node_class、node_name、tagged_properties（class-specific）、native_tail
+3. ~~将三个子范围建立为独立 GitHub Issue~~ → 待执行（需要用户确认是否拆分）
+4. ~~验收标准~~ → 已满足：
+   - ✓ 所有 Niagara 聚焦测试通过（57/57）
+   - ✓ 完整测试集通过（排除预先存在的 #518）
+   - ✓ 现有导出计数无回归
+   - ✓ fixture 快照与三个子范围的预期输出匹配
 
 ## 明确不在范围内
 

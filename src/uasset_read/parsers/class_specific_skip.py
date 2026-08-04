@@ -60,6 +60,20 @@ SKIP_CLASS_PREFIXES = (
     "AggGeom_",
 )
 
+# #521 Phase 4: Exact class names that bypass prefix skip (migrated to opaque).
+# These classes have verified tagged properties and dedicated handlers.
+_PREFIX_SKIP_ALLOWLIST: frozenset[str] = frozenset({
+    "NiagaraNodeInput",
+    "NiagaraNodeFunctionCall",
+    "NiagaraNodeParameterMapGet",
+    "NiagaraNodeParameterMapSet",
+    "NiagaraNodeOp",
+    "NiagaraNodeOutput",
+    "NiagaraNodeReroute",
+    "NiagaraNodeSelect",
+    "NiagaraNodeStaticSwitch",
+})
+
 # Exact class names to skip (no prefix matching)
 # These classes use fully custom serialization formats, cannot be handled by generic parser
 #
@@ -93,6 +107,8 @@ def should_skip_export_class_prefix(class_name: str) -> bool:
     Returns:
         True if class name starts with any SKIP_CLASS_PREFIXES prefix
     """
+    if class_name in _PREFIX_SKIP_ALLOWLIST:
+        return False
     return class_name.startswith(SKIP_CLASS_PREFIXES)
 
 
@@ -123,6 +139,9 @@ def should_skip_export_for_tolerant_parsing(
             return True
 
     # Check 2-4: original skip list (as fallback policy)
+    # #521: check allowlist first — exact classes with verified tagged properties bypass prefix skip
+    if class_name is not None and class_name in _PREFIX_SKIP_ALLOWLIST:
+        return False
     object_name = str(export.object_name)
     if class_name != "CubeBuilder" and object_name.startswith(SKIP_CLASS_PREFIXES):
         return True

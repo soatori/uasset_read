@@ -66,6 +66,16 @@ _OPAQUE_CLASSES = frozenset({
     # #521: migrated from _SKIP_CLASSES for field-level parsing
     "NiagaraGraph",
     "NiagaraScript",
+    # #521 Phase 4: node family migration (verified tagged properties via probe)
+    "NiagaraNodeInput",
+    "NiagaraNodeFunctionCall",
+    "NiagaraNodeParameterMapGet",
+    "NiagaraNodeParameterMapSet",
+    "NiagaraNodeOp",
+    "NiagaraNodeOutput",
+    "NiagaraNodeReroute",
+    "NiagaraNodeSelect",
+    "NiagaraNodeStaticSwitch",
     # #164: MovieScene/Sequencer classes (MovieScene/ControlRig migrated to TAGGED_PROPERTIES_ONLY)
     "MovieSceneBuiltInEasingFunction",
     # #320: ControlRig / RigVM serialization classes (custom Serialize())
