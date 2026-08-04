@@ -9,6 +9,33 @@
 - `MovieSceneDoubleChannel`、`MovieSceneFrameRange` 与 `MovieSceneFloatChannel` 已有实现和覆盖；聚焦回归测试通过。
 - 仓库样本中仍有大量、彼此无关的 `opaque` StructProperty，因此不能为它们增加一个通用二进制解码器。
 
+## Slice Log
+
+### 2026-08-05 — FExpressionInput material-input family: COMPLETE
+
+- Decoded (native layout, `SerializeExpressionInput` / `SerializeMaterialInput`,
+  `MaterialShared.cpp:439-487`, UE `5.8.0-release` @ `7deeb413d`):
+  - `ExpressionInput` — 36 bytes (Expression, OutputIndex, InputName, Mask, MaskR/G/B/A).
+  - `ScalarMaterialInput` — base 40 bytes + float constant (tag.size 44).
+  - `ColorMaterialInput` — base 40 bytes + FColor (44) or FLinearColor (56).
+  - `VectorMaterialInput` — base 40 bytes + FVector3f (52) or FVector3d (64).
+- These structs have a custom `Serialize`, so the tagged fallback is never valid
+  for them: unrecognized sizes or failed decodes stay `opaque` and consume the
+  payload, instead of falling through to the tagged loop.
+- Tests: `tests/test_issue_515_material_inputs.py` (6 synthetic byte-layout
+  cases), `tests/temp/test_issue_515_material_inputs_real_sample.py`
+  (25 family structs in `tests/samples/StarterContent_M_Wood_Walnut.uasset`,
+  all `parse_status: success`).
+- Commits: `242b66e7` (decoder), `d8278880` (real-sample acceptance).
+
+### Remaining candidates (each needs its own evidence-backed slice)
+
+| Candidate | Count / fixture | Notes |
+|---|---|---|
+| `NiagaraVariable` | 12 × `NM_BPSystemEvent.uasset` | offset-based payload; adjacent to #521 |
+| `UnknownStruct` (FCurveMetaData values) | 126 × `CiciToon_SK_Mannequin.uasset` | zero-size tagged; needs type-name resolution |
+| `MeshSectionInfoMap` value type | correctness gap, not opacity | map values decode as `IntProperty`; `FMeshSectionInfo` fields not recovered (map value struct names are reflection-only, absent from the stream) |
+
 ## 目标与非目标
 
 目标是逐个结构类型在真实夹具上公开最小且可验证的字段，并明确何时必须保留 `opaque` 或 raw fallback。
