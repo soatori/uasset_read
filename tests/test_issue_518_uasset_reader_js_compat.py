@@ -32,7 +32,6 @@ NORMAL_JSON_ROOT_KEYS = {
     "import_map",
     "name_map",
     "blueprint",
-    "decompiled_functions",
     "variables",
     "warnings",
     "diagnostics",
