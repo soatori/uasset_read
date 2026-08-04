@@ -32,7 +32,7 @@
 
 ### Phase 1 交付物
 
-- [ ] 扫描脚本：`tests/temp/scan_opaque_structs.py`
+- [x] 扫描脚本：`tests/temp/scan_opaque_structs.py`
 - [ ] 候选清单：`docs/designs/issue-515-candidates.md`
 - [ ] 候选筛选验证：每个候选均具备 ✓fixture ✓UE 源码 ✓边界证明
 - [ ] 为每个通过筛选的候选创建独立 Issue
