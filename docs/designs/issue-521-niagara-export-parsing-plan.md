@@ -1,12 +1,12 @@
 # 修复计划：#521 Niagara 导出类型解析
 
-> 状态：partial-metadata 最小切片已完成（2026-08-04 契约缺口审计后修订）；完整 Niagara 解析未完成  
+> 状态：partial-metadata 最小切片已完成（2026-08-04 契约缺口审计后修订）；Epic 收尾由 `issue-521-completion-roadmap-design.md`（2026-08-05）接管  
 > 范围：把原 Epic 拆成 Graph、Script 和节点族的字段级工作；不以”支持 Niagara”作为不可验证的完成条件。
 
 ## 当前基线
 
 - 夹具：`tests/samples/NM_BPSystemEvent.uasset`，其来源与 SHA-256 由 `tests/temp/test_issue_521_niagara_evidence.py` 固定。
-- 当前 tolerant 解析结果为 `partial`：目标夹具有 26 个跳过的 Niagara 节点/相关导出；`NiagaraGraph` 与 `NiagaraScript` 已进入 `opaque` 路径，分别保留 5 个和 4 个 tagged 属性。
+- 当前 tolerant 解析结果为 `partial`：目标夹具仅剩 1 个跳过的 Niagara 导出（`NiagaraScriptSource`）；`NiagaraGraph`、`NiagaraScript`、9 个 `NiagaraNode*` 节点类与 `NiagaraScriptVariable` 均以 `partial_metadata` 投影 tagged 属性。最新实测基线见 `issue-521-completion-roadmap-design.md` 的 Verified Baseline。
 - 现有证据尚未证明任一类的 native payload 布局；不能直接将 `Niagara*` 前缀改为通用属性解析。
 - `NiagaraSystem`、`NiagaraGraph` 与 `NiagaraScript` 已路由至 `OPAQUE_CLASS_PAYLOAD`（非 `SKIP_UNSUPPORTED`），可获得 tagged 属性解析机会。
 
@@ -147,7 +147,7 @@
 
 ## 阶段 5：验证与 Issue 整理
 
-1. ~~运行所有 Niagara 聚焦测试和完整测试集。~~ → 59/59 Niagara 测试通过；118/119 完整测试集通过（#518 预先存在失败，与 Niagara 无关）。
+1. ~~运行所有 Niagara 聚焦测试和完整测试集。~~ → 59/59 Niagara 测试通过；125/126 完整测试集通过（截至 2026-08-05；唯一失败为 #518 相关测试，见测试基础设施 Issue）。
 2. ~~用固定夹具验证输出的 Graph/Script/节点字段~~ → 2026-08-04 契约缺口审计后修订：
    - NiagaraGraph：graph_name、node_exports（PackageIndex 解析 + 类解析）、tagged_properties、native_tail
    - NiagaraScript：script_name、script_usage、tagged_properties、native_tail
@@ -174,6 +174,7 @@
 | `NiagaraSystem` | 已路由至 opaque，不在本计划扩展范围 |
 | `NiagaraDataInterface*` | 已在 skip 列表中，无足够证据推进；不以 `Niagara` 前缀扩大 handler |
 | VM bytecode / HLSL | 编译产物反编译超出本项目范围 |
+| Lyra 全量统计（39.3% / 1,638） | 所有者 2026-08-01 确认无法从仓库夹具复现；验收已改为逐夹具定义 |
 
 ## 风险控制
 
@@ -184,3 +185,10 @@
 | `NiagaraNode` 前缀覆盖 | Phase 0 确认前缀匹配与单类迁移的交互 |
 | 跨 handler 引用验证 | Phase 4 前置检查：验证节点是否有非空 tagged 属性 |
 | `partial_metadata` 未定义 | 在 Phase 2 开始前添加至 `ExportParseStatus` 枚举或定义为独立机制 |
+
+## 收尾路线图（2026-08-05）
+
+Epic 收尾路线见 `issue-521-completion-roadmap-design.md`：Track A（A1 验收标准重写、
+A2 execution flow 落定、A3 覆盖清单）与 Track B（B0a/B0b 引脚证据门、B1-pre #515
+候选收录、B1 结构解码、B2 #525 投影）。首批实施计划见
+`issue-521-completion-plan-1.md`（A1–A3、B0a/B0b、B1-pre）。
