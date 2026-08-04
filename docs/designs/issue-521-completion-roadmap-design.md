@@ -36,8 +36,9 @@ must be mapped to state 2 (with evidence) or 3.
   (elements of `Outputs`/`OutputVars` arrays), `Guid`×52.
 - No pin-class exports exist in the fixture.
 - Uncovered Niagara classes are exactly two: `NiagaraScriptVariable` and
-  `NiagaraScriptSource`. (The "23 other Niagara exports" figure quoted in older
-  evidence comments was extrapolated from a pre-migration skip list and is void.)
+  `NiagaraScriptSource`. (The "23 other Niagara exports" figure that appeared in
+  earlier discussion was extrapolated from a pre-migration skip list; it appears
+  in no current document or commit history and is void.)
 
 ## Redefined Epic Completion Criteria
 
@@ -61,7 +62,7 @@ status; decoding belongs to B1/#515).
 ```
 Track A:  A1 ─┬─> A2                     Track B:  B0a ─> B0b ─> gate decision
               └─> A3 ······┐                          ┌──> pin path ──────> B2 (pin half)
-                           │        B1-pre ──> B1 ────┤   (in parallel with B0)
+                           │        B1-pre ──> B1 ────┤
         (ScriptVariable    │                          └──> parameters path ─> B2 (parameters half)
          inner-struct overlap from A3 to B1)
                            ▼
@@ -73,10 +74,12 @@ Track A:  A1 ─┬─> A2                     Track B:  B0a ─> B0b ─> gate 
 **A1 — Epic acceptance-criteria rewrite** (documentation only)
 
 - Deliverables: #521 issue body rewritten as an "original requirement → terminal state"
-  mapping table; `docs/designs/issue-521-niagara-export-parsing-plan.md` fixed (stale
-  counts 26/28/23 corrected) and updated with the Lyra-statistics disposition row;
-  a new independent issue created for test promotion + `constraints.md` desync, linked
-  from the Epic.
+  mapping table; `docs/designs/issue-521-niagara-export-parsing-plan.md` fixed (only
+  the stale skip count 26 is corrected, to the actual 1 skipped Niagara export; the
+  figure 28 (Nodes refs) is audit-verified and must be preserved) and updated with the
+  Lyra-statistics disposition row; a new independent issue created for test promotion
+  + `constraints.md` desync + disposition of the still-reproducing #518-related test
+  failure, linked from the Epic.
 - Acceptance: issue body / plan doc / field-contract doc are mutually consistent; every
   original requirement has exactly one terminal state.
 - Not done: any code change.
@@ -130,9 +133,11 @@ Track A:  A1 ─┬─> A2                     Track B:  B0a ─> B0b ─> gate 
   - Pins absent from this fixture but serialized per UE source → Phase 1.5-style
     fixture expansion, then re-enter B0a.
   - Pins not serialized by UE → pin half disproven-closed; **the parameters path
-    continues unaffected** (#525 narrows to its pin half only).
+    continues unaffected** (the #525 scope change touches its pin half only:
+    `parameters` acceptance stands, pin-level `connected_to` closes as disproven).
 
-**B1-pre — #515 candidate-intake extension** (may run in parallel with B0)
+**B1-pre — #515 candidate-intake extension** (scan and candidate-intake work may run
+in parallel with B0; adding the `Outputs` element types awaits B0a identification)
 
 - Deliverables: `tests/temp/scan_opaque_structs.py` extended to also collect structs
   inside `partial_metadata` exports (the current scan only covers `parse_status ==
@@ -176,7 +181,9 @@ All of the following must hold before #521 closes:
 3. Coverage table complete — no Niagara class undecided.
 4. Niagara focused suite run manually and fully green (see Test Strategy for why CI
    does not cover it yet).
-5. CI full suite green excluding the known pre-existing #518 failure.
+5. CI full suite green excluding the known pre-existing #518-related failure
+   (issue #518 is closed but the test still fails; its disposition is tracked by
+   the independent issue created in A1).
 6. Both `issue-521-niagara-export-parsing-plan.md` and
    `issue-521-niagara-field-contracts.md` reflect the final state.
 
@@ -199,13 +206,16 @@ disposition.
 
 - All new tests go to `tests/temp/` first (constraint), with pinned fixture SHA-256.
 - Four scenarios per new parser: normal / truncated / unknown version / malformed.
-- Baseline guards: the 59 Niagara tests stay green; full suite stays at 118 passed +
-  the known #518 failure; export counts never regress (evidence tests assert counts).
+- Baseline guards: the 59 Niagara tests stay green; full suite stays at 125 passed +
+  the known #518-related failure (figure as of 2026-08-05); export counts never
+  regress (evidence tests assert counts).
 - Diagnostic scans must not change parse output.
 - Test promotion out of `tests/temp/` is NOT part of this roadmap — it belongs to the
-  independent issue created in A1 (covering also the `constraints.md` "exactly 6 root
-  test files" desync). During this roadmap, the convergence gate runs the Niagara suite
-  manually.
+  independent issue created in A1 (covering also the `constraints.md` desyncs —
+  "exactly 6 root test files" vs. the actual 18, and `tests/samples/` holding
+  non-`.uasset` provenance files — and the disposition of the still-reproducing
+  #518-related failure whose original issue is closed). During this roadmap, the
+  convergence gate runs the Niagara suite manually.
 
 ## Effort Estimate
 
@@ -245,7 +255,8 @@ gate result is known.
 
 ## Explicitly Out of Scope
 
-- The pre-existing #518 JSON root-field test failure (separate issue).
+- The pre-existing #518-related JSON root-field test failure (#518 closed; failure
+  still reproduces; disposition owned by the independent issue created in A1).
 - Test promotion / CI acceptance-test placement (separate issue, created in A1).
 - VM bytecode / HLSL decoding.
 - `NiagaraDataInterface*` and other Niagara classes absent from the fixture.
