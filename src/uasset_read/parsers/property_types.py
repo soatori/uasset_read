@@ -836,6 +836,76 @@ def _try_fast_path_struct(
         except Exception:
             archive.seek(start)
 
+    # FExpressionInput family -- material graph inputs (#515).
+    # Native layout, NOT tagged: SerializeExpressionInput /
+    # SerializeMaterialInput, MaterialShared.cpp:439-487 (5.8.0-release@7deeb413).
+    # Custom Serialize means the tagged fallback is never valid for these
+    # types: decode on a known size, otherwise keep the bytes opaque.
+    if struct_type in ("ExpressionInput", "ScalarMaterialInput",
+                       "ColorMaterialInput", "VectorMaterialInput"):
+        if struct_type == "ExpressionInput" and tag.size == 36:
+            start = archive.tell()
+            try:
+                fields = {
+                    "Expression": archive.read_i32(),
+                    "OutputIndex": archive.read_i32(),
+                    "InputName": archive.read_name(name_map),
+                    "Mask": archive.read_i32(),
+                    "MaskR": archive.read_i32(),
+                    "MaskG": archive.read_i32(),
+                    "MaskB": archive.read_i32(),
+                    "MaskA": archive.read_i32(),
+                }
+                return StructValue(struct_type="ExpressionInput", fields=fields,
+                                   raw_size=tag.size, parse_status="success")
+            except Exception:
+                archive.seek(start)
+        elif struct_type != "ExpressionInput":
+            start = archive.tell()
+            try:
+                fields = {
+                    "Expression": archive.read_i32(),
+                    "OutputIndex": archive.read_i32(),
+                    "InputName": archive.read_name(name_map),
+                    "Mask": archive.read_i32(),
+                    "MaskR": archive.read_i32(),
+                    "MaskG": archive.read_i32(),
+                    "MaskB": archive.read_i32(),
+                    "MaskA": archive.read_i32(),
+                    "bUseConstant": bool(archive.read_u32()),
+                }
+                constant_size = tag.size - 40
+                if struct_type == "ScalarMaterialInput" and constant_size == 4:
+                    fields["Constant"] = archive.read_f32()
+                elif struct_type == "ColorMaterialInput" and constant_size == 4:
+                    b, g, r, a = archive.read_bytes(4)
+                    fields["Constant"] = {"B": b, "G": g, "R": r, "A": a}
+                elif struct_type == "ColorMaterialInput" and constant_size == 16:
+                    fields["Constant"] = {
+                        "R": archive.read_f32(), "G": archive.read_f32(),
+                        "B": archive.read_f32(), "A": archive.read_f32(),
+                    }
+                elif struct_type == "VectorMaterialInput" and constant_size == 12:
+                    fields["Constant"] = {"X": archive.read_f32(),
+                                          "Y": archive.read_f32(),
+                                          "Z": archive.read_f32()}
+                elif struct_type == "VectorMaterialInput" and constant_size == 24:
+                    fields["Constant"] = {"X": archive.read_f64(),
+                                          "Y": archive.read_f64(),
+                                          "Z": archive.read_f64()}
+                else:
+                    raise ValueError(
+                        f"unexpected constant size {constant_size} for {struct_type}")
+                return StructValue(struct_type=struct_type, fields=fields,
+                                   raw_size=tag.size, parse_status="success")
+            except Exception:
+                archive.seek(start)
+        # Decode failed or unrecognized size: never fall through to the
+        # tagged loop for native-serialize structs; keep raw bytes opaque.
+        archive.seek(archive.tell() + tag.size)
+        return StructValue(struct_type=struct_type, fields={},
+                           raw_size=tag.size, parse_status="opaque")
+
     return None
 
 
