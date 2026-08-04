@@ -14,20 +14,20 @@
 | 阶段 | 估算 | 说明 |
 | --- | --- | --- |
 | Phase 1：二进制证据重建 | 2-4 小时 | 文档化已知的偏移、字段和剩余区间 |
-| Phase 2：材质归属调查 | 2-4 小时 | 几乎确定为驳回路径（见下方已知结论） |
+| Phase 2：材质归属调查 | 2-4 小时 | 以待复核的归属假设为起点 |
 | Phase 3：碰撞与 LOD 归属 | 1-2 小时 | 同上，文档化后关闭 |
 | Phase 4：回归验证 | 1-2 小时 | 全量回归 + Issue 整理 |
 | **总计** | **6-12 小时（1-1.5 天）** | 反射数据已证明预期结论 |
 
-## 已知结论（基于反射数据）
+## 待复核的归属假设
 
-> 以下结论基于 Clay jmap 反射数据和 CUE4Parse 源码验证，在执行前已明确。
+> 下列结论来自先前的 Clay jmap / CUE4Parse 调查，但本文未固定其版本、路径或可复查链接。因此它们只是 Phase 1-3 的待验证假设，不能作为关闭 #522 的证据。
 
-**材质归属：** `FBuilderPoly` 恰好有 4 个字段（`VertexIndices`、`Direction`、`ItemName`、`PolyFlags`），无材质槽位。材质存储在 `UModel` 中的 `FBspSurf.Material`，通过 `FBspSurf.iBrushPoly` 关联回编辑器多边形。Phase 2 的预期结论是”材质不属于 CubeBuilder”。
+**材质归属假设：** `FBuilderPoly` 可能只含 `VertexIndices`、`Direction`、`ItemName`、`PolyFlags`，而材料可能存储在 `UModel` 的 `FBspSurf.Material` 中，通过 `FBspSurf.iBrushPoly` 关联回编辑器多边形。Phase 2 必须以匹配版本源码和夹具验证此假设。
 
-**碰撞归属：** 碰撞数据位于 `UBrushComponent → BrushBodySetup: UBodySetup`（确认来源：CUE4Parse `UBrushComponent.cs`），不在 CubeBuilder 序列化路径中。Phase 3 的预期结论是”碰撞不属于 CubeBuilder”。
+**碰撞归属假设：** 碰撞可能位于 `UBrushComponent → BrushBodySetup: UBodySetup`，而不在 CubeBuilder 序列化路径中。Phase 3 必须记录匹配版本源码的精确路径和夹具证据。
 
-**LOD 归属：** LOD 是 `StaticMesh` / 构建管线的关注点，不在 CubeBuilder 中。
+**LOD 归属假设：** LOD 可能是 `StaticMesh` / 构建管线的关注点，而非 CubeBuilder 数据；Phase 3 必须验证后才能从 #522 验收中移除。
 
 ## 首要原则
 
@@ -39,7 +39,7 @@ Issue 描述中的”材质、碰撞、LOD”并不自动意味着这些字段�
 
 ## BrushBuilder 额外属性
 
-Clay jmap 反射数据揭示 BrushBuilder 具有以下额外 protected UPROPERTY 字段（可能作为 tagged 属性出现在部分资产中）：
+先前反射调查提到 BrushBuilder 可能具有以下 protected UPROPERTY 字段；在未固定来源前，它们仅作为 Phase 1 的核查项：
 
 - `BitmapFilename`
 - `ToolTip`
@@ -61,8 +61,8 @@ Clay jmap 反射数据揭示 BrushBuilder 具有以下额外 protected UPROPERTY
 
 ### 驳回路径（预期结论）
 
-1. 基于已知结论（`FBuilderPoly` 无材质槽位），在夹具中确认 `CubeBuilder_3` 是否分配了材质。
-2. 若确认无材质（预期）：在 #522 中记录归属链——材质在 `UModel` 的 `FBspSurf.Material` 中，通过 `FBspSurf.iBrushPoly` 关联。
+1. 以匹配版本的 `FBuilderPoly`/`UModel` 源码和夹具确认 `CubeBuilder_3` 是否分配了材质。
+2. 若证据表明材质不在 CubeBuilder 中：在 #522 中记录归属链、源码路径、版本和夹具观察结果。
 3. 若需要材质解析：创建独立 Issue 处理 `UModel`/`FBspSurf` 解析，不在本 handler 中伪造字段。
 
 ### 实现路径（仅在证据证实在 CubeBuilder 内时）
@@ -74,8 +74,8 @@ Clay jmap 反射数据揭示 BrushBuilder 具有以下额外 protected UPROPERTY
 
 ### 驳回路径（预期结论）
 
-1. 基于已知结论（碰撞在 `UBrushComponent→UBodySetup` 中），确认该夹具的碰撞路径。
-2. 在 #522 中记录归属——碰撞和 LOD 不属于 CubeBuilder 序列化。
+1. 以匹配版本源码和夹具确认碰撞、LOD 的实际序列化路径。
+2. 只有证据充分时，才在 #522 中记录它们不属于 CubeBuilder 序列化。
 3. 若需要碰撞解析：建议创建独立 Issue 处理 `UBrushComponent`/`UBodySetup`。
 
 ### 实现路径（仅在证据证实在 CubeBuilder 内时）
@@ -101,7 +101,7 @@ Clay jmap 反射数据揭示 BrushBuilder 具有以下额外 protected UPROPERTY
 
 ## 单 Fixture 局限性
 
-所有证据来自单一夹具（`CubeBuilder_3` in `FirstPerson_Lvl_FirstPerson.umap`）。该实例可能未分配材质（基础几何构建器常见），Phase 2 可能产生假阴性。当前计划以单一夹具证据为 sufficient（因反射数据已证明 `FBuilderPoly` 无材质字段），但需在 #522 Issue 中注明此局限性。
+所有已固定的仓库内证据来自单一夹具（`CubeBuilder_3` in `FirstPerson_Lvl_FirstPerson.umap`）。该实例可能未分配材质，Phase 2 可能产生假阴性；若需要以“不存在”作为结论，必须补充第二个相关夹具或匹配版本源码的明确证明，并在 #522 中注明局限性。
 
 ## 验收标准
 
