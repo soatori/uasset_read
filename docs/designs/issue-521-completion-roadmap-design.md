@@ -96,7 +96,10 @@ Track A:  A1 ─┬─> A2                     Track B:  B0a ─> B0b ─> gate 
   (`NiagaraScriptVariable`×11, `NiagaraScriptSource`×1); per-class version-fixed source
   audit; per-class terminal state (field-level parse / explicit opaque / evidence-backed
   skip); an explicit `parse_status` defined for `NiagaraScriptVariable` (its current
-  `None` violates the status-model constraint); coverage contract table added to the
+  `None` violates the status-model constraint) — the value is an audit output, chosen
+  from `ExportParseStatus` with the expected candidate being `partial_metadata` via
+  `OPAQUE_CLASS_PAYLOAD` handler projection, mirroring the Graph/Script precedent;
+  coverage contract table added to the
   field-contract doc; independent issues created for any class qualifying for parsing.
 - Acceptance: every Niagara export belongs to a terminal state; the inner opaque structs
   of `NiagaraScriptVariable` (`NiagaraVariableMetaData` / `NiagaraVariant`) are marked
