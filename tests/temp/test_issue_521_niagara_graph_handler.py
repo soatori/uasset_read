@@ -40,11 +40,16 @@ def test_niagara_graph_handler_name():
 
 # ── Output schema ──────────────────────────────────────────────────────
 
-def _get_niagara_graph_export() -> dict:
-    """Parse fixture and return first NiagaraGraph export dict."""
-    payload = json.loads(parse_single(
+def _get_payload() -> dict:
+    """Parse fixture and return the full JSON payload."""
+    return json.loads(parse_single(
         str(SAMPLE), format="json", tolerant=True, log_enabled=False,
     ))
+
+
+def _get_niagara_graph_export() -> dict:
+    """Parse fixture and return first NiagaraGraph export dict."""
+    payload = _get_payload()
     for export in payload["exports"]:
         if export.get("object_class") == "NiagaraGraph":
             return export
@@ -52,27 +57,61 @@ def _get_niagara_graph_export() -> dict:
 
 
 def test_niagara_graph_has_graph_name():
-    """NiagaraGraph output must include graph_name from object_name."""
+    """NiagaraGraph output must project graph_name in asset_type_data (contract field)."""
     export = _get_niagara_graph_export()
-    # graph_name is projected from the export object_name
     assert export.get("object_name") == "NiagaraGraph_1"
+    atd = export.get("asset_type_data", {})
+    assert atd.get("graph_name") == "NiagaraGraph_1", (
+        f"Expected graph_name 'NiagaraGraph_1' in asset_type_data, "
+        f"got {atd.get('graph_name')!r}"
+    )
 
 
 def test_niagara_graph_has_node_exports():
-    """NiagaraGraph output must include node_exports list."""
+    """node_exports must contain resolved NiagaraNode* references (contract).
+
+    Nodes is serialized as PackageIndex values (1-based: value = export_index + 1).
+    The fixture graph holds 28 node refs: 25 NiagaraNode* + 3 EdGraphNode_Comment.
+    Only NiagaraNode* entries are projected per contract.
+    """
     export = _get_niagara_graph_export()
-    # After handler implementation, asset_type_data should contain node_exports
+    payload_exports = _get_payload()["exports"]
     atd = export.get("asset_type_data", {})
     assert "node_exports" in atd, (
         f"Expected 'node_exports' in asset_type_data, got keys: {list(atd.keys())}"
     )
     node_exports = atd["node_exports"]
     assert isinstance(node_exports, list)
-    assert len(node_exports) > 0, "Expected at least one node export reference"
-    # Each entry should have export_index and class
+    assert len(node_exports) == 25, (
+        f"Expected 25 NiagaraNode* references, got {len(node_exports)}"
+    )
     for node in node_exports:
         assert "export_index" in node, f"Missing export_index in node: {node}"
         assert "class" in node, f"Missing class in node: {node}"
+        assert node["class"].startswith("NiagaraNode"), (
+            f"Non-node class in node_exports: {node}"
+        )
+        # export_index must be a resolved 0-based index matching the export table
+        target = payload_exports[node["export_index"]]
+        assert target["object_class"] == node["class"], (
+            f"export_index {node['export_index']} resolves to "
+            f"{target['object_class']}, expected {node['class']}"
+        )
+
+    # Class composition of the fixture graph (evidence-pinned)
+    from collections import Counter
+    composition = Counter(n["class"] for n in node_exports)
+    assert composition == {
+        "NiagaraNodeFunctionCall": 1,
+        "NiagaraNodeInput": 1,
+        "NiagaraNodeOp": 5,
+        "NiagaraNodeOutput": 1,
+        "NiagaraNodeParameterMapGet": 5,
+        "NiagaraNodeParameterMapSet": 5,
+        "NiagaraNodeReroute": 5,
+        "NiagaraNodeSelect": 1,
+        "NiagaraNodeStaticSwitch": 1,
+    }
 
 
 def test_niagara_graph_has_tagged_properties():

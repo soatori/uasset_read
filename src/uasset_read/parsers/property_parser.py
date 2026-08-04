@@ -332,6 +332,8 @@ def _try_asset_type_handler(
     class_name: str,
     parsed_properties: Optional[List["PropertyValue"]] = None,
     property_end: int = 0,
+    export_map: Optional[List[Any]] = None,
+    import_map: Optional[List[Any]] = None,
 ) -> None:
     """Try to extract raw binary data using a registered ClassHandler.
 
@@ -357,6 +359,11 @@ def _try_asset_type_handler(
 
     # Store resolved class name on export for handler use
     setattr(export, "resolved_class_name", class_name)
+
+    # Store package tables for handlers that resolve object references (#521)
+    if export_map is not None:
+        setattr(export, "package_export_map", export_map)
+        setattr(export, "package_import_map", import_map or [])
 
     saved_pos = archive.tell()
     try:
@@ -1064,6 +1071,7 @@ def parse_properties_from_export(
         _try_asset_type_handler(
             export, archive, name_map, skip_class_name,
             parsed_properties=properties, property_end=property_end,
+            export_map=export_map, import_map=import_map,
         )
 
     return properties

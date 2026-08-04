@@ -113,6 +113,8 @@ class NiagaraNodeHandler(ClassHandler):
             data: dict[str, Any] = {
                 "asset_type": class_name,
                 "parse_status": validate_parse_status("partial_metadata"),
+                "node_class": class_name,
+                "node_name": str(export.object_name),
                 "tagged_properties": tagged_properties,
                 "native_tail": {
                     "offset": tail_offset,

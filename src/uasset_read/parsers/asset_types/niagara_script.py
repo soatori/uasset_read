@@ -59,6 +59,14 @@ class NiagaraScriptHandler(ClassHandler):
                 if prop_name in properties:
                     tagged_properties[prop_name] = properties[prop_name]
 
+            # Project script_usage from the Usage enum property
+            script_usage: Optional[str] = None
+            usage = properties.get("Usage")
+            if isinstance(usage, dict) and usage.get("value_name"):
+                script_usage = str(usage["value_name"])
+            elif isinstance(usage, str):
+                script_usage = usage
+
             # Calculate native tail offset/size
             tail_offset = archive.tell()
             serial_end = export.serial_offset + export.serial_size
@@ -68,6 +76,7 @@ class NiagaraScriptHandler(ClassHandler):
             data: dict[str, Any] = {
                 "asset_type": "NiagaraScript",
                 "parse_status": validate_parse_status("partial_metadata"),
+                "script_name": str(export.object_name),
                 "tagged_properties": tagged_properties,
                 "native_tail": {
                     "offset": tail_offset,
@@ -75,6 +84,8 @@ class NiagaraScriptHandler(ClassHandler):
                     "status": "opaque",
                 },
             }
+            if script_usage is not None:
+                data["script_usage"] = script_usage
 
             return HandlerResult(
                 success=True,

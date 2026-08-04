@@ -52,9 +52,27 @@ def _get_niagara_script_export() -> dict:
 
 
 def test_niagara_script_has_script_name():
-    """NiagaraScript output must include script_name from object_name."""
+    """NiagaraScript output must project script_name in asset_type_data (contract field)."""
     export = _get_niagara_script_export()
     assert export.get("object_name") == "NM_BPSystemEvent"
+    atd = export.get("asset_type_data", {})
+    assert atd.get("script_name") == "NM_BPSystemEvent", (
+        f"Expected script_name 'NM_BPSystemEvent' in asset_type_data, "
+        f"got {atd.get('script_name')!r}"
+    )
+
+
+def test_niagara_script_projects_script_usage():
+    """script_usage must be projected from the Usage enum property (contract field).
+
+    Fixture evidence: Usage = EnumProperty with value_name 'ENiagaraScriptUsage::Module'.
+    """
+    export = _get_niagara_script_export()
+    atd = export.get("asset_type_data", {})
+    assert atd.get("script_usage") == "ENiagaraScriptUsage::Module", (
+        f"Expected script_usage 'ENiagaraScriptUsage::Module', "
+        f"got {atd.get('script_usage')!r}"
+    )
 
 
 def test_niagara_script_has_tagged_properties():

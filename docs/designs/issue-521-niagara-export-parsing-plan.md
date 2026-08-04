@@ -1,6 +1,6 @@
 # 修复计划：#521 Niagara 导出类型解析
 
-> 状态：已完成（2026-08-04）  
+> 状态：partial-metadata 最小切片已完成（2026-08-04 契约缺口审计后修订）；完整 Niagara 解析未完成  
 > 范围：把原 Epic 拆成 Graph、Script 和节点族的字段级工作；不以”支持 Niagara”作为不可验证的完成条件。
 
 ## 当前基线
@@ -75,11 +75,14 @@
 {
   "graph_name": "<FName string>",
   "node_exports": [{ "export_index": 0, "class": "<string>" }],
-  "script_exports": [{ "export_index": 0, "class": "<string>" }],
   "tagged_properties": {},
   "native_tail": { "offset": 0, "size": 0, "status": "opaque" }
 }
 ```
+
+> 2026-08-04 审计修订：`script_exports` 已移除——经 PackageIndex 语义
+> 验证（value = export_index + 1），Nodes 的 28 个引用全部解析为图节点
+> （25 个 NiagaraNode* + 3 个 EdGraphNode_Comment），不含脚本引用。
 
 ### 执行步骤
 
@@ -96,12 +99,15 @@
 {
   "script_name": "<FName string>",
   "script_usage": "<string>",
-  "target_environment": "<string>",
-  "graph_export_ref": { "export_index": 0, "class": "<string>" },
   "tagged_properties": {},
   "native_tail": { "offset": 0, "size": 0, "status": "opaque" }
 }
 ```
+
+> 2026-08-04 审计修订：`target_environment` 与 `graph_export_ref` 已移除——
+> 前者声称"从 Usage 派生"但 Usage 枚举编码脚本角色而非目标环境，
+> 夹具中也无对应属性；后者声称按对象名匹配 Graph 导出，但脚本不携带
+> 指向源图的引用，名称匹配属于虚构。详见字段契约文档。
 
 ### 执行步骤
 
@@ -117,11 +123,16 @@
 {
   "node_class": "<NiagaraNode* class name>",
   "node_name": "<FName string>",
-  "parameters": [{ "name": "<string>", "type": "<string>" }],
-  "pin_references": [{ "pin_name": "<string>", "connected_to": null }],
+  "tagged_properties": {},
   "native_tail": { "offset": 0, "size": 0, "status": "opaque" }
 }
 ```
+
+> 2026-08-04 审计修订：原 schema 中的 `parameters` 与 `pin_references`
+> 无法从现有证据派生——节点参数/引脚数据位于 opaque struct
+> （`NiagaraVariable`、`UnknownStruct` 数组）与 native tail 中，
+> 需要 #515 opaque struct 解析或 UE 源码支持的原生解码。
+> 已建立后续 Issue 追踪；详见字段契约文档。
 
 ### 实现顺序
 
@@ -134,19 +145,27 @@
 3. 只公开节点身份、已证实参数或引脚引用；没有连线来源时不生成执行流。
 4. 回归检查其他 Niagara 类仍保持原有跳过策略。
 
-## 阶段 5：验证与 Issue 整理（已完成）
+## 阶段 5：验证与 Issue 整理
 
-1. ~~运行所有 Niagara 聚焦测试和完整测试集。~~ → 57/57 Niagara 测试通过；118/119 完整测试集通过（#518 预先存在失败，与 Niagara 无关）。
-2. ~~用固定夹具验证输出的 Graph/Script/节点字段~~ → 所有字段契约已验证：
-   - NiagaraGraph：graph_name、node_exports、tagged_properties（ChangeId, LastBuiltTraversalDataChangeId, CachedUsageInfo, VariableToScriptVariable, Nodes）、native_tail
-   - NiagaraScript：script_name、script_usage、target_environment、tagged_properties（Usage, ExposedVersion, VersionData, RapidIterationParameters）、native_tail
+1. ~~运行所有 Niagara 聚焦测试和完整测试集。~~ → 59/59 Niagara 测试通过；118/119 完整测试集通过（#518 预先存在失败，与 Niagara 无关）。
+2. ~~用固定夹具验证输出的 Graph/Script/节点字段~~ → 2026-08-04 契约缺口审计后修订：
+   - NiagaraGraph：graph_name、node_exports（PackageIndex 解析 + 类解析）、tagged_properties、native_tail
+   - NiagaraScript：script_name、script_usage、tagged_properties、native_tail
    - NiagaraNode*：node_class、node_name、tagged_properties（class-specific）、native_tail
-3. ~~将三个子范围建立为独立 GitHub Issue~~ → 待执行（需要用户确认是否拆分）
-4. ~~验收标准~~ → 已满足：
-   - ✓ 所有 Niagara 聚焦测试通过（57/57）
+3. **契约缺口审计（2026-08-04）**：对照原始 Issue 需求与字段契约审计发现：
+   - **已修复**：`graph_name`、`script_name`、`script_usage`、`node_class`、`node_name` 补齐；
+     `node_exports` 的 off-by-one 修复（Nodes 为 PackageIndex，value = export_index + 1），
+     并解析类名、按契约过滤至 NiagaraNode*。
+   - **已移除（无证据）**：`script_exports`（Nodes 不含脚本引用）、
+     `target_environment`（Usage 不编码目标环境）、`graph_export_ref`（脚本无 Graph 引用）。
+   - **延期（需 opaque struct 解析）**：`parameters`、`pin_references`——数据位于
+     opaque struct（NiagaraVariable/UnknownStruct）与 native tail，依赖 #515 或 UE 源码解码。
+     已建立后续 Issue；#521 保持 Epic 直至其关闭或明确不适用。
+4. 验收标准：
+   - ✓ 所有 Niagara 聚焦测试通过（59/59）
    - ✓ 完整测试集通过（排除预先存在的 #518）
    - ✓ 现有导出计数无回归
-   - ✓ fixture 快照与三个子范围的预期输出匹配
+   - ✓ fixture 快照与修订后的字段契约匹配
 
 ## 明确不在范围内
 

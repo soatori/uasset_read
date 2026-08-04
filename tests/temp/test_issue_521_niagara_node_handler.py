@@ -202,6 +202,27 @@ def test_niagara_node_reroute_parse_status():
     assert exports[0].get("parse_status") == "partial_metadata"
 
 
+# ── Identity fields (contract: node_class, node_name) ─────────────────
+
+def test_niagara_node_projects_node_class_and_name():
+    """Every migrated node export must project node_class and node_name."""
+    for cls in ("NiagaraNodeInput", "NiagaraNodeFunctionCall", "NiagaraNodeOp",
+                "NiagaraNodeOutput", "NiagaraNodeParameterMapGet",
+                "NiagaraNodeParameterMapSet", "NiagaraNodeReroute"):
+        exports = _get_node_exports_by_class(cls)
+        assert len(exports) > 0, f"No {cls} exports found"
+        for export in exports:
+            atd = export.get("asset_type_data", {})
+            assert atd.get("node_class") == cls, (
+                f"{cls} '{export.get('object_name')}': expected node_class "
+                f"'{cls}', got {atd.get('node_class')!r}"
+            )
+            assert atd.get("node_name") == export.get("object_name"), (
+                f"{cls}: node_name {atd.get('node_name')!r} does not match "
+                f"object_name {export.get('object_name')!r}"
+            )
+
+
 # ── Native tail (common) ───────────────────────────────────────────────
 
 def test_niagara_node_has_native_tail():
