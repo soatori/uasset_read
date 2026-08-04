@@ -76,6 +76,8 @@ _OPAQUE_CLASSES = frozenset({
     "NiagaraNodeReroute",
     "NiagaraNodeSelect",
     "NiagaraNodeStaticSwitch",
+    # #521 A3: coverage inventory — explicit partial_metadata status
+    "NiagaraScriptVariable",
     # #164: MovieScene/Sequencer classes (MovieScene/ControlRig migrated to TAGGED_PROPERTIES_ONLY)
     "MovieSceneBuiltInEasingFunction",
     # #320: ControlRig / RigVM serialization classes (custom Serialize())

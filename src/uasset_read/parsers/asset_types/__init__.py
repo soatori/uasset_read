@@ -43,6 +43,7 @@ from uasset_read.parsers.asset_types.anim_montage import AnimMontageHandler
 from uasset_read.parsers.asset_types.niagara_graph import NiagaraGraphHandler
 from uasset_read.parsers.asset_types.niagara_script import NiagaraScriptHandler
 from uasset_read.parsers.asset_types.niagara_node import NiagaraNodeHandler
+from uasset_read.parsers.asset_types.niagara_script_variable import NiagaraScriptVariableHandler
 
 __all__ = [
     "parse_static_mesh",
@@ -57,6 +58,7 @@ __all__ = [
     "NiagaraGraphHandler",
     "NiagaraScriptHandler",
     "NiagaraNodeHandler",
+    "NiagaraScriptVariableHandler",
     "PropertyMetadataHandler",
 ]
 
@@ -167,6 +169,7 @@ def register_asset_type_handlers() -> None:
         NiagaraGraphHandler(),
         NiagaraScriptHandler(),
         NiagaraNodeHandler(),
+        NiagaraScriptVariableHandler(),
     ]
 
     # Optional parsers (register if import succeeds)
