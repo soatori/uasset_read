@@ -57,6 +57,8 @@ reports/
 .qwen/
 .agents/
 .playwright-mcp/
+.orca/
+.qoder/
 memory/
 
 # CodeGraph local data
@@ -67,36 +69,13 @@ memory/
 
 # Test files - track test Python files and directories
 tests/*
-!tests/__init__.py
 !tests/conftest.py
 !tests/README.md
 !tests/test_*.py
 !tests/temp/
 !tests/temp/test_*.py
-!tests/graph/
-!tests/core/
-!tests/kismet/
-!tests/renderers/
-!tests/blueprint/
-!tests/integration/
-!tests/linker/
-!tests/link/
-!tests/archive/
-!tests/ir/
-!tests/structs/
-!tests/misc/
-!tests/serialization/
-!tests/asset/
-!tests/cpp/
-!tests/unit/
-!tests/pak/
-!tests/security/
-!tests/debug/
-!tests/parsers/
-!tests/iostore/
 !tests/samples/
-!tests/config/
-!tests/batch/
+!tests/fixtures/
 
 # AI agent reports (local only)
 docs/firstperson_blueprint_test_report.md
