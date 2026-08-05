@@ -139,7 +139,7 @@ Track A:  A1 ─┬─> A2                     Track B:  B0a ─> B0b ─> gate 
 **B1-pre — #515 candidate-intake extension** (scan and candidate-intake work may run
 in parallel with B0; adding the `Outputs` element types awaits B0a identification)
 
-- Deliverables: `tests/temp/scan_opaque_structs.py` extended to also collect structs
+- Deliverables: `temp/scan_opaque_structs.py` extended to also collect structs
   inside `partial_metadata` exports (the current scan only covers `parse_status ==
   "opaque"` exports and structurally misses these); re-scan;
   `NiagaraVariable` / `NiagaraVariableMetaData` / `NiagaraVariant` /

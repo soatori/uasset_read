@@ -693,7 +693,7 @@ git commit -m "docs: add Niagara coverage contract table (#521)"
 ### Task 6: B0a — Fixture-level pin existence proof (diagnostic)
 
 **Files:**
-- Create: `tests/temp/inspect_521_node_tails.py`
+- Create: `temp/inspect_521_node_tails.py`
 - Create: `docs/designs/issue-521-b0-pin-existence-evidence.md`
 - Scratch output: `temp/b0a_report.txt`
 
@@ -705,7 +705,7 @@ This task MUST NOT change parse output: it adds a read-only diagnostic script an
 
 - [ ] **Step 1: Write the inspection script**
 
-Create `tests/temp/inspect_521_node_tails.py`:
+Create `temp/inspect_521_node_tails.py`:
 
 ```python
 """Diagnostic for #521 B0a: inspect native tails of Niagara exports.
@@ -714,7 +714,7 @@ Read-only: parses the fixture, then hex-inspects the native-tail byte ranges
 already recorded by the handlers. Prints a report to stdout. Does NOT modify
 parse behavior or source code.
 
-Usage: python tests/temp/inspect_521_node_tails.py > temp/b0a_report.txt
+Usage: python temp/inspect_521_node_tails.py > temp/b0a_report.txt
 """
 
 from __future__ import annotations
@@ -809,7 +809,7 @@ if __name__ == "__main__":
 - [ ] **Step 2: Run the script and capture the report**
 
 ```bash
-python tests/temp/inspect_521_node_tails.py > temp/b0a_report.txt
+python temp/inspect_521_node_tails.py > temp/b0a_report.txt
 ```
 
 Read the report. For each node class note: tail size, presence of FName-index-shaped int32 clusters, repeated 16-byte GUID blocks, ASCII name fragments.
@@ -836,7 +836,7 @@ Create `docs/designs/issue-521-b0-pin-existence-evidence.md` with this structure
 > Fixture: `tests/samples/NM_BPSystemEvent.uasset`
 > SHA-256: `B182D85907E858086E8B4BA8CC3D527D1DFBA21CA450ADDC2481A5053CE24FBF`
 > UE checkout: `E:/Develop/lib/UnrealEngine` @ `7deeb413d3dc1fc034f48d1aacc0861301829d32` (5.8.0-release)
-> Script: `tests/temp/inspect_521_node_tails.py` (read-only; parse output unchanged)
+> Script: `temp/inspect_521_node_tails.py` (read-only; parse output unchanged)
 
 ## Method
 
@@ -876,7 +876,7 @@ Expected: PASS (the script touched no `src/` code).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add tests/temp/inspect_521_node_tails.py
+git add temp/inspect_521_node_tails.py
 git commit -m "test: add #521 B0a native-tail inspection script (#521)"
 git add docs/designs/issue-521-b0-pin-existence-evidence.md
 git commit -m "docs: record #521 B0a pin existence evidence (#521)"
@@ -995,7 +995,7 @@ git commit -m "docs: record #521 B0b source-audit gate decision (#521)"
 ### Task 8: B1-pre code — Extend the #515 struct scan
 
 **Files:**
-- Modify: `tests/temp/scan_opaque_structs.py`
+- Modify: `temp/scan_opaque_structs.py`
 - Scratch output: `temp/b1_pre_scan.json`
 
 **Interfaces:**
@@ -1006,7 +1006,7 @@ The scan currently filters `if ps != "opaque": continue` and therefore structura
 
 - [ ] **Step 1: Broaden the scan filter**
 
-In `tests/temp/scan_opaque_structs.py` make these edits:
+In `temp/scan_opaque_structs.py` make these edits:
 
 1. Module docstring, replace
 
@@ -1062,7 +1062,7 @@ with
 - [ ] **Step 2: Re-run the scan**
 
 ```bash
-python tests/temp/scan_opaque_structs.py > temp/b1_pre_scan.json
+python temp/scan_opaque_structs.py > temp/b1_pre_scan.json
 ```
 
 Expected: `NM_BPSystemEvent` now contributes Niagara structs — verify in the JSON: `NiagaraVariable` (occurrences ≥ 12), `NiagaraVariableMetaData` (≥ 11), `NiagaraVariant` (≥ 11), `NiagaraTypeDefinition` (≥ 1), `StaticSwitchTypeData` (≥ 1), all with `export_status: "partial_metadata"`; pre-existing opaque candidates (`AlphaBlend`, `MeshSectionInfoMap`, `MeshNaniteSettings`, `NiagaraParameterStore`, `RawCurveTracks`, `StaticMeshSourceModel`, `BoxSphereBounds`) still present with `export_status: "opaque"`. Note: summary counts will drift from the stale candidates-doc header (41/39/8) — Task 9 refreshes them.
@@ -1079,7 +1079,7 @@ Expected: PASS (script-only change; root suite 125 + 1 known failure).
 - [ ] **Step 4: Commit**
 
 ```bash
-git add tests/temp/scan_opaque_structs.py
+git add temp/scan_opaque_structs.py
 git commit -m "feat: extend #515 struct scan to partial_metadata exports (#515)"
 ```
 
@@ -1145,7 +1145,7 @@ Fill the `file:line` cells from Step 2; adjust any gate cell that fails and mark
 Append to the `## 当前基线` list in `docs/designs/issue-515-opaque-structproperty-roadmap.md` (document is Chinese; note follows it):
 
 ```markdown
-- B1-pre（2026-08-XX，源自 #521 收尾路线图）：扫描脚本 `tests/temp/scan_opaque_structs.py` 已扩展至 `partial_metadata` 导出（此前结构性遗漏）；新增 Niagara 结构候选及筛选结果见 `issue-515-candidates.md` 的 Niagara Intake 一节。
+- B1-pre（2026-08-XX，源自 #521 收尾路线图）：扫描脚本 `temp/scan_opaque_structs.py` 已扩展至 `partial_metadata` 导出（此前结构性遗漏）；新增 Niagara 结构候选及筛选结果见 `issue-515-candidates.md` 的 Niagara Intake 一节。
 ```
 
 - [ ] **Step 5: Commit**

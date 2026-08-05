@@ -8,7 +8,7 @@
 - `EditedDocumentInfo` 已支持：仅通过零大小 tagged-struct fallback 解析，未知或无边界数据仍保留原始降级行为。
 - `MovieSceneDoubleChannel`、`MovieSceneFrameRange` 与 `MovieSceneFloatChannel` 已有实现和覆盖；聚焦回归测试通过。
 - 仓库样本中仍有大量、彼此无关的 `opaque` StructProperty，因此不能为它们增加一个通用二进制解码器。
-- B1-pre（2026-08-05，源自 #521 收尾路线图）：扫描脚本 `tests/temp/scan_opaque_structs.py` 已扩展至 `partial_metadata` 导出（此前结构性遗漏；commit `28725871`）；新增 Niagara 结构候选及筛选结果见 `issue-515-candidates.md` 的 Niagara Intake 一节。筛选结论：`NiagaraVariable` 与两个数组元素结构（`FNiagaraGraphScriptUsageInfo`、`FVersionedNiagaraScriptData`）通过选择门槛，各自建立 #515 子 Issue；其余五个 Niagara 结构（`NiagaraVariableMetaData`、`NiagaraVariant`、`NiagaraTypeDefinition`、`StaticSwitchTypeData`、`NiagaraParameterStore`）经字节级校验已被 tagged fallback 完整解码，不作为 opaque 候选收录。
+- B1-pre（2026-08-05，源自 #521 收尾路线图）：扫描脚本 `temp/scan_opaque_structs.py` 已扩展至 `partial_metadata` 导出（此前结构性遗漏；commit `28725871`）；新增 Niagara 结构候选及筛选结果见 `issue-515-candidates.md` 的 Niagara Intake 一节。筛选结论：`NiagaraVariable` 与两个数组元素结构（`FNiagaraGraphScriptUsageInfo`、`FVersionedNiagaraScriptData`）通过选择门槛，各自建立 #515 子 Issue；其余五个 Niagara 结构（`NiagaraVariableMetaData`、`NiagaraVariant`、`NiagaraTypeDefinition`、`StaticSwitchTypeData`、`NiagaraParameterStore`）经字节级校验已被 tagged fallback 完整解码，不作为 opaque 候选收录。
 
 ## Slice Log
 
@@ -60,7 +60,7 @@
 
 ### Phase 1 交付物
 
-- [x] 扫描脚本：`tests/temp/scan_opaque_structs.py`
+- [x] 扫描脚本：`temp/scan_opaque_structs.py`
 - [ ] 候选清单：`docs/designs/issue-515-candidates.md`
 - [ ] 候选筛选验证：每个候选均具备 ✓fixture ✓UE 源码 ✓边界证明
 - [ ] 为每个通过筛选的候选创建独立 Issue

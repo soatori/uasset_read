@@ -4,7 +4,7 @@
 > Fixture: `tests/samples/NM_BPSystemEvent.uasset`
 > SHA-256: `B182D85907E858086E8B4BA8CC3D527D1DFBA21CA450ADDC2481A5053CE24FBF`
 > UE checkout: `E:/Develop/lib/UnrealEngine` @ `7deeb413d3dc1fc034f48d1aacc0861301829d32` (5.8.0-release) — verified before audit
-> Script: `tests/temp/inspect_521_node_tails.py` (read-only; parse output unchanged — `tests/temp/test_issue_521_niagara_coverage.py` + `tests/temp/test_issue_521_niagara_evidence.py` green after run)
+> Script: `temp/inspect_521_node_tails.py` (read-only; parse output unchanged — `tests/temp/test_issue_521_niagara_coverage.py` + `tests/temp/test_issue_521_niagara_evidence.py` green after run)
 > Report: `temp/b0a_report.txt`
 
 ## Method

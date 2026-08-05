@@ -1,9 +1,9 @@
 # #515 Opaque StructProperty Candidates
 
-> Original scan: 2026-08-02 (`tests/temp/scan_opaque_structs.py`)
-> Re-scan: 2026-08-05 (`tests/temp/rescan_opaque_structs.py`)
+> Original scan: 2026-08-02 (`temp/scan_opaque_structs.py`)
+> Re-scan: 2026-08-05 (`temp/rescan_opaque_structs.py`)
 > Re-scan output: `temp/rescan_opaque_2026-08-05.txt`
-> B1-pre re-scan: 2026-08-05 (`tests/temp/scan_opaque_structs.py` extended, commit `28725871`)
+> B1-pre re-scan: 2026-08-05 (`temp/scan_opaque_structs.py` extended, commit `28725871`)
 > B1-pre output: `temp/b1_pre_scan.json`
 > Samples scanned: 42 (all files under `tests/samples/` at scan time)
 > 2026-08-05 (B1-pre): scan extended to `partial_metadata` exports; counts refreshed.
@@ -13,17 +13,17 @@
 Three scan generations exist; their counts are NOT interchangeable. Every row
 below cites the scan that produced it.
 
-1. **2026-08-02 original scan** (`tests/temp/scan_opaque_structs.py`,
+1. **2026-08-02 original scan** (`temp/scan_opaque_structs.py`,
    export-level): listed struct types embedded in exports whose
    `parse_status` was `opaque`. Superseded; its six then-opaque candidates
    are tracked in the "Status change" section below.
-2. **2026-08-05 value-level re-scan** (`tests/temp/rescan_opaque_structs.py`,
+2. **2026-08-05 value-level re-scan** (`temp/rescan_opaque_structs.py`,
    output `temp/rescan_opaque_2026-08-05.txt`): records only StructProperty
    values whose **own** `parse_status` is `opaque` in the current parser
    output (JSON, tolerant mode, `output_level="debug"`), recursing into
    export properties and `ArrayProperty` items (not `MapProperty` entries).
    This is the generation that measures remaining value-level opacity.
-3. **2026-08-05 B1-pre export-level scan** (`tests/temp/scan_opaque_structs.py`
+3. **2026-08-05 B1-pre export-level scan** (`temp/scan_opaque_structs.py`
    extended in commit `28725871` to exports whose `parse_status` is `opaque`
    OR `partial_metadata`; output `temp/b1_pre_scan.json`): records EVERY
    StructProperty entry inside in-scope exports regardless of the value's own
