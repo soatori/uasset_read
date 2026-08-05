@@ -1,6 +1,6 @@
 # 修复计划：#522 CubeBuilder 剩余数据
 
-> 状态：已完成（2026-08-05），证据与结论见
+> 状态：已完成（2026-08-05），Issue #522 已关闭；证据与结论见
 > [`issue-522-cube-builder-source-evidence.md`](issue-522-cube-builder-source-evidence.md)。  
 > 范围：验证材质、碰撞和 LOD 的真实序列化归属；仅解析可由源码和夹具证明属于 `CubeBuilder` 的数据。
 

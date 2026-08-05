@@ -11,8 +11,9 @@ The formal suite contains exactly six `test_*.py` scripts:
 five benchmark cases. Measurements are informational and have no pass/fail
 threshold. Child-process allocations are not included in the reported peak.
 
-The current inventory is 36 tracked samples and 41 collected test cases.
-Files under `tests/temp/` are experimental and excluded from collection.
+The current inventory is 41 tracked samples and 46 collected test cases
+(five benchmarks + 41 parameterized sample cases). `tests/temp/` currently
+holds 57 tracked experimental test files, excluded from collection.
 
 ## Commands
 

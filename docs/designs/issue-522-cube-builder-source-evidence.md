@@ -1,6 +1,6 @@
 # Issue #522 — CubeBuilder Source Evidence List
 
-> Status: accepted (2026-08-05)
+> Status: accepted (2026-08-05); issue #522 closed
 > Scope: version-pinned UE source evidence for every attribution claim used to
 > close #522. All paths are relative to the engine checkout below; all line
 > numbers were verified against that exact commit.
