@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport
 
+from uasset_read.constants import MAX_NODES_PER_GRAPH
 from uasset_read.parsers.asset_types.property_extractor import build_properties_dict
 from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
 from uasset_read.models.validators import validate_parse_status
@@ -175,6 +176,11 @@ def _decode_single_pin(archive: "FArchive", name_map: list) -> Optional[dict[str
     # --- Pin body (written by Serialize / SerializeAsOwningNode) ---
     # OwningNode (repeated in body)
     _body_owning_node = archive.read_i32()
+    if _body_owning_node != owning_node_index:
+        logger.debug(
+            "Pin body owning_node %d != reference %d at offset %d",
+            _body_owning_node, owning_node_index, archive.tell(),
+        )
 
     # PinId (repeated in body as FGuid)
     _body_pin_id = (
@@ -276,6 +282,7 @@ def _decode_pins_from_tail(
     if tail_size < 8:  # Minimum: GUID marker (4) + pin count (4)
         return []
 
+    tail_end = tail_offset + tail_size
     archive.seek(tail_offset)
 
     # Object-GUID presence marker (always false in this fixture)
@@ -283,11 +290,13 @@ def _decode_pins_from_tail(
 
     # Pin count
     pin_count = archive.read_i32()
-    if pin_count < 0 or pin_count > 1000:  # Sanity check
+    if pin_count < 0 or pin_count > MAX_NODES_PER_GRAPH:  # Sanity check
         return []
 
     pins: list[dict[str, Any]] = []
     for _ in range(pin_count):
+        if archive.tell() >= tail_end:
+            break
         pin = _decode_single_pin(archive, name_map)
         if pin is None:
             break

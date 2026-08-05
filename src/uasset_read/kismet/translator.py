@@ -12,7 +12,7 @@ Provides:
 """
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +191,7 @@ class MathFunctionCleaner:
     # --- Math library ---
 
     # Lookup table: prefix -> lambda(p) -> str, used for categorized dispatch to reduce cyclomatic complexity
-    _MATH_COMPARISON_TABLE: dict[str, any] = {
+    _MATH_COMPARISON_TABLE: dict[str, Any] = {
         "EqualEqual_": lambda p: f"{p[0]} == {p[1]}",
         "EqualEqual_ByteByte": lambda p: f"((!{p[0]}) == (!{p[1]}))",
         "NotEqualExactly_": lambda p: f"({p[0]} != {p[1]})",
@@ -203,7 +203,7 @@ class MathFunctionCleaner:
         "Greater_": lambda p: f"({p[0]} > {p[1]})",
     }
 
-    _MATH_ARITHMETIC_TABLE: dict[str, any] = {
+    _MATH_ARITHMETIC_TABLE: dict[str, Any] = {
         "Add_": lambda p: f"{p[0]} + {p[1]}",
         "Subtract_": lambda p: f"{p[0]} - {p[1]}",
         "Multiply_": lambda p: f"({p[0]} * {p[1]})",
@@ -211,7 +211,7 @@ class MathFunctionCleaner:
         "Percent_": lambda p: f"({p[0]} % {p[1]})",
     }
 
-    _MATH_BITWISE_TABLE: dict[str, any] = {
+    _MATH_BITWISE_TABLE: dict[str, Any] = {
         "Xor_": lambda p: f"({p[0]} ^ {p[1]})",
         "Or_": lambda p: f"({p[0]} | {p[1]})",
         "And_": lambda p: f"({p[0]} & {p[1]})",
@@ -219,7 +219,7 @@ class MathFunctionCleaner:
         "Not_": lambda p: f"(~{p[0]})",
     }
 
-    _MATH_BOOLEAN_TABLE: dict[str, any] = {
+    _MATH_BOOLEAN_TABLE: dict[str, Any] = {
         "BooleanAND": lambda p: f"{p[0]} && {p[1]}",
         "BooleanNAND": lambda p: f"!({p[0]} && {p[1]})",
         "BooleanOR": lambda p: f"({p[0]} || {p[1]})",
@@ -227,7 +227,7 @@ class MathFunctionCleaner:
         "BooleanNOR": lambda p: f"!({p[0]} || {p[1]})",
     }
 
-    _MATH_COMPOUND_ASSIGN_TABLE: dict[str, any] = {
+    _MATH_COMPOUND_ASSIGN_TABLE: dict[str, Any] = {
         "AddEquals": lambda p: f"({p[0]} += {p[1]})",
         "SubtractEquals": lambda p: f"({p[0]} -= {p[1]})",
         "MultiplyEquals": lambda p: f"({p[0]} *= {p[1]})",
@@ -236,7 +236,7 @@ class MathFunctionCleaner:
 
     @staticmethod
     def _dispatch_table_lookup(func_name: str, p: list[str],
-                               table: dict[str, any]) -> str | None:
+                               table: dict[str, Any]) -> str | None:
         """Look up table by longest prefix match, return formatted result or None."""
         # Check exact match first
         if func_name in table:
@@ -248,7 +248,7 @@ class MathFunctionCleaner:
         return None
 
     # Math function table (exact match first, prefix match by length descending)
-    _MATH_FN_TABLE: dict[str, any] = {
+    _MATH_FN_TABLE: dict[str, Any] = {
         "Max": lambda p: f"(({p[0]} > {p[1]}) ? {p[0]} : {p[1]})",
         "Min": lambda p: f"(({p[0]} < {p[1]}) ? {p[0]} : {p[1]})",
         "RandomFloatInRange": lambda p: f"RandomFloatInRange({p[0]}, {p[1]})",
@@ -319,7 +319,7 @@ class MathFunctionCleaner:
         return None
 
     # Constructor prefix -> lambda(p) -> str
-    _CONSTRUCTOR_TABLE: dict[str, any] = {
+    _CONSTRUCTOR_TABLE: dict[str, Any] = {
         "Select": lambda p: f"({p[2]} ? {p[0]} : {p[1]})",
         "IsValid": lambda p: f"{p[0]} != nullptr",
         "MakeTransform": lambda p: f"FTransform({p[0]}, {p[1]}, {p[2]})",
@@ -336,7 +336,7 @@ class MathFunctionCleaner:
         "ToVector": lambda p: f"FVector((float){p[0]})",
     }
     # Vector operations: exact match or prefix match -> lambda(p) -> str
-    _VECTOR_OP_TABLE: dict[str, any] = {
+    _VECTOR_OP_TABLE: dict[str, Any] = {
         "Dot_": lambda p: f"Dot({p[0]}, {p[1]})",
         "Dot_VectorVector": lambda p: f"Dot({p[0]}, {p[1]})",
         "Cross_": lambda p: f"Cross({p[0]}, {p[1]})",
@@ -380,7 +380,7 @@ class MathFunctionCleaner:
             return result
         return None
 
-    _BREAK_TABLE: dict[str, any] = {
+    _BREAK_TABLE: dict[str, Any] = {
         "BreakVector": lambda p: f"{p[1]} = {p[0]}.X;\n{p[2]} = {p[0]}.Y;\n{p[3]} = {p[0]}.Z",
         "BreakVector2D": lambda p: f"{p[1]} = {p[0]}.X;\n{p[2]} = {p[0]}.Y",
         "BreakRotator": lambda p: f"{p[1]} = {p[0]}.Roll;\n{p[2]} = {p[0]}.Pitch;\n{p[3]} = {p[0]}.Yaw",
@@ -424,7 +424,7 @@ class MathFunctionCleaner:
     # --- String library ---
 
     # String library exact match table
-    _STRING_EXACT_TABLE: dict[str, any] = {
+    _STRING_EXACT_TABLE: dict[str, Any] = {
         "Concat_StrStr": lambda p: " += ".join(p),
         "ParseIntoArray": lambda p: f"{p[0]}.Split({p[1]}, /* removeEmpty = */ {p[2]})",
         "JoinStringArray": lambda p: f"{p[0]}.Join({p[1]})",
@@ -436,7 +436,7 @@ class MathFunctionCleaner:
         "ToLower": lambda p: f"{p[0]}.ToLower()",
     }
     # String library prefix match table (by length descending)
-    _STRING_PREFIX_TABLE: dict[str, any] = {
+    _STRING_PREFIX_TABLE: dict[str, Any] = {
         "Conv_BoolToString": lambda p: f"{p[0]} ? \"true\" : \"false\"",
         "EqualEqual_": lambda p: f"{p[0]} == {p[1]}",
         "NotEqual_": lambda p: f"({p[0]} != {p[1]})",
@@ -471,7 +471,7 @@ class MathFunctionCleaner:
     # --- System library ---
 
     # System library prefix match table (by length descending)
-    _SYSTEM_PREFIX_TABLE: dict[str, any] = {
+    _SYSTEM_PREFIX_TABLE: dict[str, Any] = {
         "Conv_SoftClassPathToSoftClassRef": lambda p: f"TSoftClassPtr<UObject>({p[0]})",
         "Conv_SoftClassReferenceToClass": lambda p: f"{p[0]}",
         "Conv_SoftObjectReferenceToObject": lambda p: f"{p[0]}",
@@ -512,7 +512,7 @@ class MathFunctionCleaner:
 
     # --- Array library ---
 
-    _ARRAY_CLEAN_TABLE: dict[str, any] = {
+    _ARRAY_CLEAN_TABLE: dict[str, Any] = {
         "Array_Length": lambda p: f"{p[0]}.Length",
         "Array_IsNotEmpty": lambda p: f"{p[0]}.Length > 0",
         "Array_IsEmpty": lambda p: f"{p[0]}.Length == 0",
@@ -536,7 +536,7 @@ class MathFunctionCleaner:
 
     # --- Map library ---
 
-    _MAP_CLEAN_TABLE: dict[str, any] = {
+    _MAP_CLEAN_TABLE: dict[str, Any] = {
         "Map_Length": lambda p: f"{p[0]}.Length",
         "Map_Remove": lambda p: f"{p[0]}.Remove({p[1]})",
         "Map_Contains": lambda p: f"{p[0]}.Contains({p[1]})",
@@ -553,7 +553,7 @@ class MathFunctionCleaner:
 
     # --- Set library ---
 
-    _SET_CLEAN_TABLE: dict[str, any] = {
+    _SET_CLEAN_TABLE: dict[str, Any] = {
         "Set_AddItems": lambda p: f"{p[0]}.Add({p[1]})",
         "Set_Clear": lambda p: f"{p[0]}.Clear()",
         "Set_Difference": lambda p: f"{p[2]} = {p[0]} - {p[1]}",

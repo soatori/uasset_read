@@ -34,7 +34,7 @@ def enrich_decompiled_functions(
 
     by_event = {item["event_name"]: item for item in semantic_calls}
     for result in functions:
-        if result.function_name == "ExecuteUbergraph_BP_FirstPersonCharacter" or result.function_name.startswith("ExecuteUbergraph_"):
+        if result.function_name.startswith("ExecuteUbergraph_"):
             result.semantic_calls = semantic_calls
             result.cpp_code = _format_ubergraph_semantics(result.function_name, semantic_calls)
             result.logic_source = "graph_topology"

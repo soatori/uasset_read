@@ -49,6 +49,7 @@ class NiagaraGraphHandler(ClassHandler):
             return node_exports
         export_map = getattr(export, "package_export_map", None)
         if export_map is None:
+            logger.debug("No package_export_map available for node ref resolution")
             return node_exports
         import_map = getattr(export, "package_import_map", [])
         for ref in nodes_value:

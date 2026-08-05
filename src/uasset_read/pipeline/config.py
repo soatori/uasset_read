@@ -1,4 +1,8 @@
-"""parse_utils.py — Lightweight parse helper functions."""
+"""Pipeline configuration — ParseConfig / LogConfig.
+
+Extract scattered configuration parameters from parse_package() and core API into structured objects,
+reducing function parameter count and improving readability and composability.
+"""
 from __future__ import annotations
 
 import logging
