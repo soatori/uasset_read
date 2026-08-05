@@ -193,7 +193,7 @@ def _read_fstring_safe(archive: FArchive, max_length: int = MAX_SAFE_COUNT) -> s
     return data.decode('utf-8', errors='replace').rstrip('\x00')
 
 
-def _read_ftext_fstring(archive: FArchive) -> str:
+def read_ftext_fstring(archive: FArchive) -> str:
     """Read FText internal FString.
 
     Unlike _read_fstring_safe, this function raises on abnormal length,
@@ -253,11 +253,11 @@ def read_ftext_with_history(
     if history_type in (-1, 255):
         b_has_culture = archive.read_bool()
         if b_has_culture:
-            value = _read_ftext_fstring(archive)
+            value = read_ftext_fstring(archive)
     elif history_type == 0:
-        _namespace = _read_ftext_fstring(archive)
-        _key = _read_ftext_fstring(archive)
-        value = _read_ftext_fstring(archive)
+        _namespace = read_ftext_fstring(archive)
+        _key = read_ftext_fstring(archive)
+        value = read_ftext_fstring(archive)
     elif history_type == 1:
         format_text, _, _, _ = _read_ftext_value(archive, tolerant=tolerant)
         arg_count = archive.read_i32()
@@ -271,7 +271,7 @@ def read_ftext_with_history(
             arg_count = 0  # Skip subsequent argument reading
         format_args: Dict[str, str] = {}
         for _ in range(arg_count):
-            arg_name = _read_ftext_fstring(archive)
+            arg_name = read_ftext_fstring(archive)
             arg_type = archive.read_u8()
             arg_value = ""
             if arg_type == 0:
@@ -298,6 +298,27 @@ def read_ftext_with_history(
 
     consumed = archive.tell() - start_pos
     return value, consumed
+
+
+def read_ftext(archive: FArchive, tolerant: bool = True) -> str:
+    """Read complete FText (flags + history_type + payload), return decoded string.
+
+    Convenience wrapper: reads the FText header (u32 Flags + i8 HistoryType)
+    then delegates to read_ftext_with_history. On any failure in tolerant mode,
+    restores archive to field start and returns "".
+    """
+    start_pos = archive.tell()
+    try:
+        _flags = archive.read_u32()
+        history_type_raw = archive.read_u8()
+        history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
+        value, _ = read_ftext_with_history(archive, history_type, tolerant=tolerant)
+        return value
+    except (ParseError, struct.error, EOFError, OSError):
+        if tolerant:
+            archive.seek(start_pos)
+            return ""
+        raise
 
 
 # ============================================================================

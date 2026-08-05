@@ -29,6 +29,7 @@ from uasset_read.constants import MAX_NODES_PER_GRAPH
 from uasset_read.parsers.asset_types.property_extractor import build_properties_dict
 from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
 from uasset_read.models.validators import validate_parse_status
+from uasset_read.serializers.graph_helpers import read_ftext_fstring, read_ftext
 
 logger = logging.getLogger(__name__)
 
@@ -44,67 +45,6 @@ _HANDLED_CLASSES: Set[str] = {
     "NiagaraNodeSelect",
     "NiagaraNodeStaticSwitch",
 }
-
-# ---------------------------------------------------------------------------
-# Pin decode helpers
-# ---------------------------------------------------------------------------
-
-def _decode_ftext_fstring(archive: "FArchive") -> str:
-    """Read FText internal FString. Length=-1 means empty string (not UTF-16).
-
-    Source: Text.cpp, graph_helpers.py _read_ftext_fstring.
-    """
-    length = archive.read_i32()
-    if length == 0 or length == -1:
-        return ""
-    if length < -1:
-        # UTF-16
-        data = archive.read(-length * 2)
-        return data.decode('utf-16-le', errors='replace').rstrip('\x00')
-    # UTF-8
-    data = archive.read(length)
-    return data.decode('utf-8', errors='replace').rstrip('\x00')
-
-
-def _decode_ftext(archive: "FArchive") -> str:
-    """Decode FText binary format from the archive.
-
-    Source: Text.cpp:888-988, TextHistory.h:24-27, TextHistory.cpp:810-911.
-    Format: u32 Flags + i8 HistoryType + history payload.
-    - HistoryType -1 (None): empty FText = Flags(0) + 0xFF + u32 bHasCultureInvariantString(0)
-    - HistoryType 0 (Base) and types 2-10 (OrderedFormat, ArgumentFormat, AsNumber,
-      AsCurrency, AsPercent, AsDate, AsTime, AsDateTime, AsRelative):
-      Namespace FString + Key FString + SourceString FString
-    - HistoryType 1 (NamedFormat): recursive FText + Arguments (skipped, returns "")
-    On failure, restores archive to field start and returns "".
-    """
-    start_pos = archive.tell()
-    try:
-        flags = archive.read_u32()
-        history_type = archive.read_i8()
-
-        if history_type == -1:  # None -- empty FText
-            b_has_culture = archive.read_u32()
-            if b_has_culture:
-                return _decode_ftext_fstring(archive)
-            return ""
-        elif history_type in (0,) or 2 <= history_type <= 10:
-            # Base and derived types: Namespace + Key + SourceString
-            _decode_ftext_fstring(archive)  # Namespace
-            _decode_ftext_fstring(archive)  # Key
-            source_string = _decode_ftext_fstring(archive)  # SourceString
-            return source_string
-        elif history_type == 1:  # NamedFormat -- complex, skip
-            logger.debug("FText NamedFormat at offset %d, skipping", start_pos)
-            archive.seek(start_pos)
-            return ""
-        else:
-            logger.debug("Unknown FText HistoryType %d at offset %d", history_type, start_pos)
-            archive.seek(start_pos)
-            return ""
-    except Exception:
-        archive.seek(start_pos)
-        return ""
 
 
 def _decode_pin_type(archive: "FArchive", name_map: list) -> dict[str, Any]:
@@ -192,7 +132,7 @@ def _decode_single_pin(archive: "FArchive", name_map: list) -> Optional[dict[str
     pin_name = archive.read_name(name_map)
 
     # PinFriendlyName (FText)
-    pin_friendly_name = _decode_ftext(archive)
+    pin_friendly_name = read_ftext(archive)
 
     # SourceIndex (int32) -- present in this fixture (ff ff ff ff = INDEX_NONE)
     source_index = archive.read_i32()
@@ -216,7 +156,7 @@ def _decode_single_pin(archive: "FArchive", name_map: list) -> Optional[dict[str
     default_object_index = archive.read_i32()
 
     # DefaultTextValue (FText)
-    default_text_value = _decode_ftext(archive)
+    default_text_value = read_ftext(archive)
 
     # LinkedTo array
     linked_to_count = archive.read_i32()
