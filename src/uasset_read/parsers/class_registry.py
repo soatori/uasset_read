@@ -40,7 +40,6 @@ class FallbackPolicy(str, Enum):
 class HandlerResult:
     """Parse result from a class handler."""
     success: bool
-    properties: List["PropertyValue"] = field(default_factory=list)
     data: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
     fallback_policy: FallbackPolicy = FallbackPolicy.GENERIC_UOBJECT

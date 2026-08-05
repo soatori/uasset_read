@@ -4,6 +4,7 @@ import io
 import logging
 
 from uasset_read.archive import FArchive
+from uasset_read.bounded_events import BoundedSet
 from uasset_read.exceptions import ParseError
 from uasset_read.kismet.tokens import EExprToken
 from uasset_read.kismet.expressions.base import KismetExpression
@@ -22,7 +23,7 @@ class FKismetArchive(FArchive):
     """Kismet bytecode reader. Wraps in-memory bytes as an FArchive-compatible stream."""
 
     # Class-level dedup set: shared across instances, same offset prints warning only once
-    _warned_offsets: set[int] = set()
+    _warned_offsets: BoundedSet = BoundedSet(max_size=10000)
 
     def __init__(self, data: bytes, name: str, name_map: list[str], tolerant: bool = False):
         self._init_archive_attrs(name, tolerant, hex_view=False)
@@ -44,7 +45,7 @@ class FKismetArchive(FArchive):
     @classmethod
     def reset_warned_offsets(cls) -> None:
         """Reset class-level warning dedup set (called at start of new asset decompilation)."""
-        cls._warned_offsets = set()
+        cls._warned_offsets = BoundedSet(max_size=10000)
 
     def read_expression(self) -> KismetExpression:
         """Read one byte token → look up in EXPR_CLASS_MAP → construct expression → set StatementIndex."""
