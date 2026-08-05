@@ -253,3 +253,84 @@ def test_niagara_node_exports_no_longer_skipped():
             assert export.get("parse_status") != "skipped", (
                 f"{cls} '{export.get('object_name')}' should not be skipped"
             )
+
+
+# ── Parameters projection (#525) ───────────────────────────────────────
+
+def test_niagara_node_input_has_decoded_parameters():
+    """NiagaraNodeInput must project parameters from decoded Input (FNiagaraVariable).
+
+    UE source: UNiagaraNodeInput::Input at NiagaraNodeInput.h:53.
+    """
+    exports = _get_node_exports_by_class("NiagaraNodeInput")
+    assert len(exports) > 0
+    atd = exports[0].get("asset_type_data", {})
+    params = atd.get("parameters")
+    assert params is not None, "NiagaraNodeInput should have 'parameters' field"
+    assert len(params) >= 1, "NiagaraNodeInput.Input should yield at least 1 parameter"
+    p = params[0]
+    assert p["name"] == "InputMap"
+    assert "type_definition" in p
+    td = p["type_definition"]
+    assert "UnderlyingType" in td
+    assert "Class" in td
+    assert "Flags" in td
+
+
+def test_niagara_node_output_has_decoded_parameters():
+    """NiagaraNodeOutput must project parameters from decoded Outputs (TArray<FNiagaraVariable>).
+
+    UE source: UNiagaraNodeOutput::Outputs at NiagaraNodeOutput.h:19.
+    """
+    exports = _get_node_exports_by_class("NiagaraNodeOutput")
+    assert len(exports) > 0
+    atd = exports[0].get("asset_type_data", {})
+    params = atd.get("parameters")
+    assert params is not None, "NiagaraNodeOutput should have 'parameters' field"
+    assert len(params) >= 1, "NiagaraNodeOutput.Outputs should yield at least 1 parameter"
+    p = params[0]
+    assert p["name"] == "OutputMap"
+    assert "type_definition" in p
+
+
+def test_niagara_node_select_has_decoded_parameters():
+    """NiagaraNodeSelect must project parameters from decoded OutputVars (TArray<FNiagaraVariable>).
+
+    UE source: UNiagaraNodeUsageSelector::OutputVars at NiagaraNodeUsageSelector.h:15.
+    """
+    exports = _get_node_exports_by_class("NiagaraNodeSelect")
+    assert len(exports) > 0
+    atd = exports[0].get("asset_type_data", {})
+    params = atd.get("parameters")
+    assert params is not None, "NiagaraNodeSelect should have 'parameters' field"
+    assert len(params) >= 1, "NiagaraNodeSelect.OutputVars should yield at least 1 parameter"
+    p = params[0]
+    assert "name" in p
+    assert "type_definition" in p
+
+
+def test_niagara_node_op_has_empty_parameters():
+    """NiagaraNodeOp has no FNiagaraVariable properties; parameters must be empty list."""
+    exports = _get_node_exports_by_class("NiagaraNodeOp")
+    assert len(exports) > 0
+    atd = exports[0].get("asset_type_data", {})
+    params = atd.get("parameters")
+    assert params is not None, "NiagaraNodeOp should have 'parameters' field"
+    assert params == [], "NiagaraNodeOp should have empty parameters"
+
+
+def test_niagara_node_input_type_definition_structure():
+    """NiagaraNodeInput parameter type_definition must have correct shape.
+
+    UE source: FNiagaraTypeDefinition serialized via BinaryOrNative handler
+    (binary_or_native_handlers.py:400-447).
+    """
+    exports = _get_node_exports_by_class("NiagaraNodeInput")
+    assert len(exports) > 0
+    atd = exports[0].get("asset_type_data", {})
+    params = atd.get("parameters", [])
+    assert len(params) >= 1
+    td = params[0]["type_definition"]
+    assert isinstance(td["UnderlyingType"], str), f"UnderlyingType should be str, got {type(td['UnderlyingType'])}"
+    assert isinstance(td["Class"], int), f"Class should be int, got {type(td['Class'])}"
+    assert isinstance(td["Flags"], int), f"Flags should be int, got {type(td['Flags'])}"
