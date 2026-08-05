@@ -1,7 +1,16 @@
 # 修复计划：#522 CubeBuilder 剩余数据
 
-> 状态：计划中（2026-08-02）  
+> 状态：已完成（2026-08-05），证据与结论见
+> [`issue-522-cube-builder-source-evidence.md`](issue-522-cube-builder-source-evidence.md)。  
 > 范围：验证材质、碰撞和 LOD 的真实序列化归属；仅解析可由源码和夹具证明属于 `CubeBuilder` 的数据。
+
+**Resolution (2026-08-05):** 全部归属假设已按 UE `5.8.0-release@7deeb413`
+固定源码验证——材质属于 `FBspSurf.Material`/`UModel`，碰撞属于
+`UBrushComponent.BrushBodySetup`，LOD 属于 StaticMesh 构建体系，transform
+属于 `ABrush`/`USceneComponent`，均不在 `CubeBuilder` 序列化路径内。尺寸
+（`X/Y/Z/WallThickness`）已由非默认夹具
+`FirstPersonC_Variant_Shooter_CubeBuilder_4.uasset` 验收。4 字节尾部经
+964/964 语料统计判定为写入端版本残留，保持 raw tail + `partial_metadata`。
 
 ## 当前基线
 
