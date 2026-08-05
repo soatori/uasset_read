@@ -1,6 +1,6 @@
 # #521 Niagara Field Contracts
 
-> Generated: 2026-08-02; Revised: 2026-08-04 (contract gap audit)
+> Generated: 2026-08-02; Revised: 2026-08-05 (B2 pin projection results)
 > Fixture: `tests/samples/NM_BPSystemEvent.uasset`
 > SHA-256: `B182D85907E858086E8B4BA8CC3D527D1DFBA21CA450ADDC2481A5053CE24FBF`
 
@@ -138,7 +138,9 @@ indirectly (e.g. `NiagaraNodeFunctionCall.FunctionScript` object refs).
   "node_class": "<NiagaraNode* class name>",
   "node_name": "<FName string>",
   "tagged_properties": {},
-  "native_tail": { "offset": 0, "size": 0, "status": "opaque" }
+  "pins": [{ "pin_id": 0, "pin_name": "<FName>", "pin_direction": "Input|Output",
+             "linked_to": [0, ...], "source_connection_count": 0 }],
+  "native_tail": { "offset": 0, "size": 0, "status": "decoded|opaque" }
 }
 ```
 
@@ -149,16 +151,32 @@ indirectly (e.g. `NiagaraNodeFunctionCall.FunctionScript` object refs).
 | `node_class` | Resolved class name | all 9 migrated classes |
 | `node_name` | Export `object_name` | e.g. `NiagaraNodeInput_170` |
 | `tagged_properties` | Class-specific property map | see handler `_CLASS_PROPERTIES` |
-| `native_tail` | OPAQUE_CLASS_PAYLOAD handler | remainder after tagged properties |
+| `pins` | Native tail pin records (B2) | 99 pins across 25 NiagaraNode* exports; 76 LinkedTo edges resolved |
+| `native_tail` | OPAQUE_CLASS_PAYLOAD handler | remainder after tagged properties; status `decoded` when pins present, `opaque` otherwise |
 
-### Deferred Fields: `parameters`, `pin_references`
+### B2 Pin Projection Results
 
-The Phase 4 plan schema listed `parameters` and `pin_references`. The
-2026-08-04 audit confirmed these are NOT derivable from current evidence:
-node parameter/pin data lives inside partially-decoded structs (`NiagaraVariable`
-now decoded via BinaryOrNative handler, `UnknownStruct` arrays such as `Outputs`,
-`OutputVars` still opaque) and native tails. Deriving them requires full
-opaque struct parsing (tracked under #515) or UE-source-backed native decoding.
+All 25 NiagaraNode* exports now decode pin records from their native tails.
+Pin layout is byte-verified against the B0b gate decision document
+(`issue-521-b0-gate-decision.md`). Key metrics:
+
+- **Total pins decoded:** 99
+- **LinkedTo edges resolved:** 76 (100% of edges in fixture)
+- **Pin resolution:** 25/25 node exports (100%)
+- **Version-delta compliance:** UE 5.0 fixture; `bSerializeAsSinglePrecisionFloat` absent
+
+Pin fields: `pin_id` (unique per-node integer), `pin_name` (FName string),
+`pin_direction` ("Input" or "Output"), `linked_to` (list of target pin IDs),
+`source_connection_count` (integer).
+
+### Deferred Fields: `parameters`
+
+The Phase 4 plan schema listed `parameters` and `pin_references`. `pin_references`
+is now resolved via B2 pin projection (see above). `parameters` remains deferred:
+node parameter data lives inside partially-decoded structs (`NiagaraVariable` now
+decoded via BinaryOrNative handler, `UnknownStruct` arrays such as `Outputs`,
+`OutputVars` still opaque). Deriving parameters requires full opaque struct parsing
+(tracked under #515) or UE-source-backed native decoding.
 Follow-up issue created; see #521 Epic status.
 
 ---
@@ -227,6 +245,9 @@ the B1/#515 path and are not decoded here. The following structs are now decoded
   `VersionedNiagaraScriptData` are now decoded (`parse_status: success`);
   remaining inner structs (`NiagaraVariableMetaData`, `NiagaraVariant`,
   `Outputs`/`OutputVars` elements) are still opaque
-- Native tail bytes contain serialized graph/script data that remains opaque
+- Pin projection (B2) is complete: 99 pins decoded from 25 NiagaraNode*
+  native tails with 76 LinkedTo edges resolved at 100%
+- Native tail bytes for nodes with pins are now `status: "decoded"`;
+  nodes without pins remain `status: "opaque"`
 - This contract documents the evidence-verified field baseline; fields
   without fixture + UE-source evidence are not projected

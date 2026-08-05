@@ -234,7 +234,9 @@ def test_niagara_node_has_native_tail():
         atd = exports[0].get("asset_type_data", {})
         assert "native_tail" in atd, f"{cls} missing native_tail"
         tail = atd["native_tail"]
-        assert tail["status"] == "opaque"
+        assert tail["status"] in ("opaque", "decoded"), (
+            f"{cls} native_tail status should be 'opaque' or 'decoded', got '{tail['status']}'"
+        )
         assert isinstance(tail["offset"], int)
         assert isinstance(tail["size"], int)
 
