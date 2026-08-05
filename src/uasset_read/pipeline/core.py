@@ -40,7 +40,6 @@ from uasset_read.pipeline.stages import (
     _read_package_headers,
 )
 from uasset_read.pipeline.post_process import _post_process
-from uasset_read.parse_uasset import _cleanup_archive_diagnostics
 from uasset_read.pipeline.config import (
     _should_use_lightweight_tolerant_parse,
     _is_large_file_asset,
@@ -53,6 +52,30 @@ from uasset_read.pipeline.error_handler import _handle_parse_error
 from uasset_read.pipeline.memory import _cleanup_parse_memory
 
 logger = logging.getLogger(__name__)
+
+
+def _cleanup_archive_diagnostics(result, archive) -> None:
+    """Collect linker/FArchive diagnostics and close archive at the end."""
+    if result.linker and getattr(result.linker, 'diagnostics', None):
+        result.diagnostics.extend(result.linker.diagnostics)
+        # Aggregate linker BoundedEventBuffer truncation counts
+        linker_diag_buf = getattr(result.linker, '_diagnostics', None)
+        if linker_diag_buf is not None:
+            result.diagnostics_dropped_count += getattr(linker_diag_buf, 'dropped_count', 0)
+    if archive:
+        archive_diagnostics = archive.get_diagnostics()
+        if archive_diagnostics:
+            result.diagnostics = archive_diagnostics + result.diagnostics
+        # Collect structured diagnostics
+        structured_diags = archive.get_structured_diagnostics()
+        if structured_diags:
+            result.structured_diagnostics = structured_diags + result.structured_diagnostics
+        # Propagate archive BoundedEventBuffer truncation counts
+        result.diagnostics_dropped_count += archive.diagnostics_dropped_count
+        result.hex_view_dropped_count += archive.hex_view_dropped_count
+        if archive.is_hex_view_enabled():
+            result.hex_view_entries = archive.get_hex_view_entries()
+        archive.close()
 
 
 def _run_linker_post_load(linker, result, tolerant: bool) -> None:
