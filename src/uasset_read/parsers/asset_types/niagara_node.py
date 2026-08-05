@@ -258,6 +258,79 @@ _CLASS_PROPERTIES: dict[str, list[str]] = {
     "NiagaraNodeStaticSwitch": ["InputParameterName", "SwitchTypeData", "OutputVars", "OutputVarGuids", "NumOptionsPerVariable"],
 }
 
+# Mapping of classes with FNiagaraVariable properties.
+# Single values are wrapped in a list; array values are iterated directly.
+# Source citations: see module docstring.
+_NIAGARA_VARIABLE_PROPERTIES: dict[str, list[str]] = {
+    "NiagaraNodeInput": ["Input"],                          # FNiagaraVariable (NiagaraNodeInput.h:53)
+    "NiagaraNodeOutput": ["Outputs"],                        # TArray<FNiagaraVariable> (NiagaraNodeOutput.h:19)
+    "NiagaraNodeSelect": ["OutputVars"],                     # TArray<FNiagaraVariable> (NiagaraNodeUsageSelector.h:15)
+    "NiagaraNodeStaticSwitch": ["OutputVars"],               # TArray<FNiagaraVariable> (NiagaraNodeUsageSelector.h:15)
+}
+
+
+def _extract_parameters(
+    tagged_properties: dict[str, Any], class_name: str
+) -> list[dict[str, Any]]:
+    """Extract parameters (name + type_definition) from decoded NiagaraVariable properties.
+
+    Single-value properties (e.g. NiagaraNodeInput.Input) are wrapped in a list.
+    Array properties (e.g. NiagaraNodeOutput.Outputs) are iterated directly.
+    Missing or empty properties silently produce an empty list.
+
+    Handles both StructValue dataclass instances (inside parse()) and plain
+    dicts (after JSON serialization).  Duck-typing via getattr / .get() is
+    used so the function works with either representation.
+
+    Source: FNiagaraVariable decoded via BinaryOrNative handler
+    (binary_or_native_handlers.py:400-447); TypeDefinition fields
+    preserved as-is (Class = FPackageIndex, not resolved to name).
+    """
+    var_props = _NIAGARA_VARIABLE_PROPERTIES.get(class_name, [])
+    parameters: list[dict[str, Any]] = []
+
+    for prop_name in var_props:
+        value = tagged_properties.get(prop_name)
+        if value is None:
+            continue
+
+        # Single FNiagaraVariable: decoded struct (StructValue dataclass or dict)
+        st = getattr(value, "struct_type", None) or (
+            value.get("struct_type") if isinstance(value, dict) else None
+        )
+        if st == "NiagaraVariable":
+            fields = getattr(value, "fields", None) or (
+                value.get("fields", {}) if isinstance(value, dict) else {}
+            )
+            name = fields.get("Name") if isinstance(fields, dict) else getattr(fields, "get", lambda k, d=None: d)("Name")
+            if name is not None:
+                td = fields.get("TypeDefinition", {}) if isinstance(fields, dict) else getattr(fields, "get", lambda k, d=None: d)("TypeDefinition", {})
+                parameters.append({
+                    "name": name,
+                    "type_definition": td,
+                })
+            continue
+
+        # TArray<FNiagaraVariable>: list of decoded structs
+        if isinstance(value, list):
+            for element in value:
+                est = getattr(element, "struct_type", None) or (
+                    element.get("struct_type") if isinstance(element, dict) else None
+                )
+                if est == "NiagaraVariable":
+                    efields = getattr(element, "fields", None) or (
+                        element.get("fields", {}) if isinstance(element, dict) else {}
+                    )
+                    ename = efields.get("Name") if isinstance(efields, dict) else getattr(efields, "get", lambda k, d=None: d)("Name")
+                    if ename is not None:
+                        etd = efields.get("TypeDefinition", {}) if isinstance(efields, dict) else getattr(efields, "get", lambda k, d=None: d)("TypeDefinition", {})
+                        parameters.append({
+                            "name": ename,
+                            "type_definition": etd,
+                        })
+
+    return parameters
+
 
 class NiagaraNodeHandler(ClassHandler):
     """Generic handler for all NiagaraNode* classes."""
@@ -308,6 +381,9 @@ class NiagaraNodeHandler(ClassHandler):
                 if prop_name in properties:
                     tagged_properties[prop_name] = properties[prop_name]
 
+            # Extract parameters from NiagaraVariable properties
+            parameters = _extract_parameters(tagged_properties, class_name)
+
             # Calculate native tail offset/size
             tail_offset = archive.tell()
             serial_end = export.serial_offset + export.serial_size
@@ -329,6 +405,7 @@ class NiagaraNodeHandler(ClassHandler):
                 "node_class": class_name,
                 "node_name": str(export.object_name),
                 "tagged_properties": tagged_properties,
+                "parameters": parameters,
                 "pins": pins,
                 "native_tail": {
                     "offset": tail_offset,
