@@ -525,7 +525,6 @@ def build_native_function_signature(
     """
     params: list[dict[str, object]] = []
     return_cpp = "void"
-    return_name = ""
 
     for field in fields:
         if not (field.property_flags & _CPF_Parm):
@@ -544,7 +543,6 @@ def build_native_function_signature(
 
         if is_return:
             return_cpp = cpp_type
-            return_name = field.name
         else:
             params.append({
                 "name": field.name,

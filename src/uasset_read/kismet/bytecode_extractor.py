@@ -14,6 +14,9 @@ from uasset_read.kismet.archive import FKismetArchive
 from uasset_read.kismet.expressions.base import KismetExpression
 from uasset_read.exceptions import ParseError
 
+if TYPE_CHECKING:
+    from uasset_read.serializers.package_summary import PackageFileSummary
+
 
 logger = logging.getLogger(__name__)
 
