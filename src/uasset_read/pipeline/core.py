@@ -17,19 +17,15 @@ if TYPE_CHECKING:
     from uasset_read.link.result import LinkerParseResult
     from uasset_read.config import ParseConfig
 
-from uasset_read.memory_safety import MemoryLimitExceeded, ResourceBudget
-from uasset_read.constants import (
-    LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD,
-    CONTROL_RIG_LARGE_FILE_THRESHOLD,
-    CONTROL_RIG_LARGE_FILE_CLASSES,
-)
+from uasset_read.memory_safety import ResourceBudget
+from uasset_read.constants import LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.package import PackageProvider
 from uasset_read.parsers.property_parser import parse_properties_from_export
 from uasset_read.models.result import ParseResult
 from uasset_read.config import LogConfig
-from uasset_read.project_logging import scoped_project_logging, configure_project_logging, current_log_run_id
+from uasset_read.project_logging import scoped_project_logging, configure_project_logging
 from uasset_read.pipeline.stages import (
     _record_parse_stage_error,
     _init_parse_env,
@@ -326,15 +322,6 @@ def parse_uasset(
     Internally delegates to parse_package(), so sidecar payload discovery is
     shared with .umap/package parsing.
     """
-    # Handle deprecated include_linker parameter
-    if include_linker is not True:
-        warnings.warn(
-            "The include_linker parameter is deprecated; linker is always included in the result. "
-            "Please remove this parameter from the call.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
     return parse_package(
         path,
         tolerant=tolerant,
@@ -381,6 +368,12 @@ def parse_uasset_with_linker(
     """
     # Lazy import of extras module (per #117 core/extras layering)
     from uasset_read.link.result import LinkerParseResult
+
+    # Initialize project logging if log_config is provided
+    if log_config:
+        configure_project_logging(**log_config.to_configure_kwargs())
+    else:
+        configure_project_logging()
 
     result = LinkerParseResult()
 
