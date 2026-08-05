@@ -16,7 +16,7 @@ from uasset_read.parsers.property_types import (
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SCAN_RESULTS = ROOT / "tests" / "temp" / "scan_results.json"
+SCAN_RESULTS = ROOT / "temp" / "scan_results.json"
 
 
 def _load_candidates() -> list[dict]:

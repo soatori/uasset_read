@@ -10,14 +10,14 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SCAN_RESULTS = ROOT / "tests" / "temp" / "scan_results.json"
+SCAN_RESULTS = ROOT / "temp" / "scan_results.json"
 
 
 def _load_scan_results() -> dict:
     """Load scan results; skip if file does not exist."""
     assert SCAN_RESULTS.exists(), (
         f"Scan results not found at {SCAN_RESULTS}. "
-        "Run: python tests/temp/scan_opaque_structs.py > tests/temp/scan_results.json"
+        "Run: python temp/scan_opaque_structs.py > temp/scan_results.json"
     )
     return json.loads(SCAN_RESULTS.read_text(encoding="utf-8"))
 
