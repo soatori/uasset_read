@@ -988,6 +988,25 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             parse_status="opaque",
         )
 
+    # Check BinaryOrNative handler registry for known struct types (e.g. NiagaraVariable).
+    # These have custom hybrid layouts that the standard tagged loop cannot decode.
+    if declared_struct_type:
+        from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
+        bn_handler = BINARY_OR_NATIVE_HANDLERS.get(declared_struct_type)
+        if bn_handler is not None:
+            try:
+                bn_result = bn_handler(tag, archive, name_map, export_map, summary)
+                if bn_result is not None:
+                    fields = bn_result.get("fields", {})
+                    return StructValue(
+                        struct_type=declared_struct_type,
+                        fields=fields,
+                        raw_size=tag.size,
+                        parse_status="success",
+                    )
+            except (struct.error, OSError, ValueError):
+                pass  # Fall through to tagged loop
+
     # Unknown structs may still be tagged FStructFallback payloads. Try the
     # standard inner PropertyTag loop first, then fall back to opaque bytes.
     fields: Dict[str, Any] = {}

@@ -390,6 +390,67 @@ def _parse_struct_binary(
     }
 
 
+def _parse_niagara_variable(
+    tag: "PropertyTag",
+    archive: "FArchive",
+    name_map: List[str],
+    export_map: List[Any],
+    summary: Any,
+) -> Optional[Dict[str, Any]]:
+    """Parse FNiagaraVariable hybrid layout: raw FName + FNiagaraTypeDefinition + data blob.
+
+    Source: NiagaraModule.cpp:1732/:1763 (custom Serialize).
+    Layout (verified against fixture):
+        - Name: FName (8 bytes)
+        - UnderlyingType: FName (8 bytes)
+        - Class: FPackageIndex / int32 (4 bytes)
+        - Flags: int32 (4 bytes)
+        - DataBlob: remaining bytes
+    B0a byte evidence: 111-114 bytes per instance, 12 total in fixture.
+    """
+    if tag.size < 24:  # Minimum: FName(8) + UnderlyingType(8) + Class(4) + Flags(4)
+        return None
+
+    start_pos = archive.tell()
+    try:
+        # Field 1: Name (raw FName, no PropertyTag prefix)
+        name = archive.read_name(name_map)
+
+        # FNiagaraTypeDefinition fields
+        underlying_type = archive.read_name(name_map)
+        class_index = archive.read_i32()
+        flags = archive.read_i32()
+
+        # Any remaining bytes are the typed data blob
+        consumed = archive.tell() - start_pos
+        remaining = tag.size - consumed
+        data_blob = b""
+        if remaining > 0:
+            data_blob = archive.read(remaining)
+
+        result: Dict[str, Any] = {
+            "kind": "niagara_variable",
+            "struct_type": "NiagaraVariable",
+            "size": tag.size,
+            "fields": {
+                "Name": name,
+                "TypeDefinition": {
+                    "UnderlyingType": underlying_type,
+                    "Class": class_index,
+                    "Flags": flags,
+                },
+            },
+        }
+        if data_blob:
+            result["fields"]["DataBlob"] = data_blob.hex()
+
+        return result
+
+    except (struct.error, OSError, ValueError):
+        archive.seek(start_pos)
+        return None
+
+
 # ============================================================================
 # Handler registry
 # ============================================================================
@@ -405,6 +466,9 @@ BINARY_OR_NATIVE_HANDLERS: Dict[str, BinaryOrNativeHandler] = {
 
     # General structs
     "FInstancedStruct": _parse_instanced_struct,
+
+    # Niagara structs
+    "NiagaraVariable": _parse_niagara_variable,
 
     # StructProperty binary decode (dispatched by struct_type + size)
     "StructProperty": _parse_struct_binary,

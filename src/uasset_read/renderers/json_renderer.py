@@ -246,7 +246,6 @@ class JSONRenderer(IRenderer):
         if not is_debug and hasattr(prop.value, "__dataclass_fields__"):
             value_dict = dataclasses.asdict(prop.value)
             for field_name, default in [
-                ("parse_status", "success"),
                 ("property_type", "StructProperty"),
                 ("kind", "struct_binary_decoded"),
             ]:
