@@ -555,21 +555,30 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
     count = read_validated_count_tolerant(archive, MAX_ARRAY_COUNT, "array count")
     elements: List[Any] = []
     parse_property_value = _get_parse_property_value()
+    read_property_tag = _get_read_property_tag()
 
     inner_type = getattr(tag, "inner_type", None) or _get_inner_type(tag.type)
 
     # For StructProperty array elements, UE uses complete PropertyTag serialization
     # For other types, serialized natively by type (each element size determined by type)
+    inner_type_struct = getattr(tag, "inner_type_struct", None) if inner_type == "StructProperty" else None
     for i in range(count):
-        # Create inner tag, size=0 means the parse function decides how many bytes to read
-        inner_tag = PropertyTag(
-            name=f"{tag.name}[{i}]",
-            type=inner_type,
-            size=0  # Let parse function serialize by type natively
-        )
-        # For StructProperty array elements, pass struct_type so parse_struct_property can hit fast-path
-        if inner_type == "StructProperty":
-            inner_tag.struct_type = getattr(tag, "inner_type_struct", None)
+        if inner_type == "StructProperty" and inner_type_struct is None:
+            # Legacy format (UE5 < 1012): parent ArrayProperty tag only stores
+            # inner_type name, not the nested struct type.  Each element in the
+            # archive carries its own PropertyTag with the correct struct_type.
+            # Read it from the archive so parse_struct_property gets the real name.
+            inner_tag = read_property_tag(archive, name_map)
+        else:
+            # Create inner tag, size=0 means the parse function decides how many bytes to read
+            inner_tag = PropertyTag(
+                name=f"{tag.name}[{i}]",
+                type=inner_type,
+                size=0  # Let parse function serialize by type natively
+            )
+            # For StructProperty array elements, pass struct_type so parse_struct_property can hit fast-path
+            if inner_type == "StructProperty":
+                inner_tag.struct_type = inner_type_struct
         inner_value = parse_property_value(inner_tag, archive, name_map, export_map, summary, depth + 1)
         elements.append(inner_value)
 
