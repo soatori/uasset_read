@@ -12,7 +12,7 @@ from uasset_read import parse_single
 from uasset_read.pipeline.stages import _derive_package_name
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 SAMPLE = ROOT / "tests" / "samples" / "Lyra_B_Rifle.uasset"
 SOURCE_FIXTURE_SHA256 = (
     "584E26FFA27CAC2431E514BE620DA120E8CA44734F12714ED954F49F2F9005F6"

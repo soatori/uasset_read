@@ -13,7 +13,7 @@ from uasset_read.cli import create_parser
 from uasset_read.renderers.base import RenderOptions
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 SAMPLES = ROOT / "tests" / "samples"
 SCHEMA = json.loads((ROOT / "schemas" / "package.schema.json").read_text(encoding="utf-8"))
 

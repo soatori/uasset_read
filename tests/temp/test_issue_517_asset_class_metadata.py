@@ -16,7 +16,7 @@ from uasset_read.serializers.object_resources import (
 )
 
 
-_SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "package.schema.json"
+_SCHEMA_PATH = Path(__file__).resolve().parents[2] / "schemas" / "package.schema.json"
 
 
 def _import(name: str) -> ObjectImport:
