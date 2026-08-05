@@ -155,10 +155,10 @@ indirectly (e.g. `NiagaraNodeFunctionCall.FunctionScript` object refs).
 
 The Phase 4 plan schema listed `parameters` and `pin_references`. The
 2026-08-04 audit confirmed these are NOT derivable from current evidence:
-node parameter/pin data lives inside opaque structs (`NiagaraVariable`
-with `parse_status: opaque`, `UnknownStruct` arrays such as `Outputs`,
-`OutputVars`) and native tails. Deriving them requires opaque struct
-parsing (tracked under #515) or UE-source-backed native decoding.
+node parameter/pin data lives inside partially-decoded structs (`NiagaraVariable`
+now decoded via BinaryOrNative handler, `UnknownStruct` arrays such as `Outputs`,
+`OutputVars` still opaque) and native tails. Deriving them requires full
+opaque struct parsing (tracked under #515) or UE-source-backed native decoding.
 Follow-up issue created; see #521 Epic status.
 
 ---
@@ -206,9 +206,15 @@ uncovered classes are exactly two and both are settled below.
 | NiagaraScriptVariable | 11 | field-level parse | partial_metadata | NiagaraScriptVariableHandler; tagged properties verified against `UNiagaraScriptVariable` UPROPERTYs (`NiagaraScriptVariable.h:138-264`, checkout `7deeb413d3dc1fc034f48d1aacc0861301829d32`) and fixture probe |
 | NiagaraScriptSource | 1 | evidence-backed skip | skipped | `UNiagaraScriptSource` (`NiagaraScriptSource.h:18-101`) holds compiled script source; bytecode decoding is out of scope (roadmap §Explicitly Out of Scope) |
 
-The inner opaque structs of `NiagaraScriptVariable` (`NiagaraVariable`,
-`NiagaraVariableMetaData`, `NiagaraVariant`) and the `Outputs`/`OutputVars`
-element structs are owned by the B1/#515 path and are not decoded here.
+The inner opaque structs of `NiagaraScriptVariable` (`NiagaraVariableMetaData`,
+`NiagaraVariant`) and the `Outputs`/`OutputVars` element structs are owned by
+the B1/#515 path and are not decoded here. The following structs are now decoded:
+
+| Struct | parse_status | Commit | Issue |
+|--------|--------------|--------|-------|
+| `NiagaraVariable` | success | `84825a0e` (BinaryOrNative handler) | #527 |
+| `NiagaraGraphScriptUsageInfo` | success | `6e47a4b9` (element PropertyTag fix) | #521 |
+| `VersionedNiagaraScriptData` | success | `6e47a4b9` (element PropertyTag fix) | #521 |
 
 ---
 
@@ -217,6 +223,10 @@ element structs are owned by the B1/#515 path and are not decoded here.
 - All three handler families report `parse_status = "partial_metadata"`
   (handler projection over tagged properties); unproven native bytes
   remain explicitly opaque
+- `NiagaraVariable`, `NiagaraGraphScriptUsageInfo`, and
+  `VersionedNiagaraScriptData` are now decoded (`parse_status: success`);
+  remaining inner structs (`NiagaraVariableMetaData`, `NiagaraVariant`,
+  `Outputs`/`OutputVars` elements) are still opaque
 - Native tail bytes contain serialized graph/script data that remains opaque
 - This contract documents the evidence-verified field baseline; fields
   without fixture + UE-source evidence are not projected
