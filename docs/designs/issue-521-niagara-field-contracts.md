@@ -138,6 +138,7 @@ indirectly (e.g. `NiagaraNodeFunctionCall.FunctionScript` object refs).
   "node_class": "<NiagaraNode* class name>",
   "node_name": "<FName string>",
   "tagged_properties": {},
+  "parameters": [{ "name": "<string>", "type_definition": {} }],
   "pins": [{ "pin_id": 0, "pin_name": "<FName>", "pin_direction": "Input|Output",
              "linked_to": [0, ...], "source_connection_count": 0 }],
   "native_tail": { "offset": 0, "size": 0, "status": "decoded|opaque" }
@@ -169,15 +170,38 @@ Pin fields: `pin_id` (unique per-node integer), `pin_name` (FName string),
 `pin_direction` ("Input" or "Output"), `linked_to` (list of target pin IDs),
 `source_connection_count` (integer).
 
-### Deferred Fields: `parameters`
+### Parameters Projection Results (#525)
 
-The Phase 4 plan schema listed `parameters` and `pin_references`. `pin_references`
-is now resolved via B2 pin projection (see above). `parameters` remains deferred:
-node parameter data lives inside partially-decoded structs (`NiagaraVariable` now
-decoded via BinaryOrNative handler, `UnknownStruct` arrays such as `Outputs`,
-`OutputVars` still opaque). Deriving parameters requires full opaque struct parsing
-(tracked under #515) or UE-source-backed native decoding.
-Follow-up issue created; see #521 Epic status.
+Node classes with `FNiagaraVariable` properties project a `parameters` array
+containing `{name, type_definition}` records extracted from decoded NiagaraVariable
+tagged properties.
+
+| Class | Property | UE source | Extraction |
+|---|---|---|---|
+| NiagaraNodeInput | `Input` | `NiagaraNodeInput.h:53` | Single struct → wrap in list |
+| NiagaraNodeOutput | `Outputs` | `NiagaraNodeOutput.h:19` | Array → iterate elements |
+| NiagaraNodeSelect | `OutputVars` | `NiagaraNodeUsageSelector.h:15` (inherited) | Array → iterate elements |
+| NiagaraNodeStaticSwitch | `OutputVars` | `NiagaraNodeUsageSelector.h:15` (inherited) | Array → iterate elements |
+
+Remaining classes (FunctionCall, Op, ParameterMapGet, ParameterMapSet, Reroute) have
+no `FNiagaraVariable` UPROPERTY members and produce `"parameters": []`.
+
+Output schema per node export:
+
+```json
+{
+  "parameters": [
+    { "name": "<FName string>", "type_definition": { "UnderlyingType": "<FName string>", "Class": <int32>, "Flags": <int32> } }
+  ]
+}
+```
+
+- `type_definition` preserves the raw decoded `FNiagaraTypeDefinition` record
+- `Class` is a serialized FPackageIndex (UStruct* reference); resolution to a human-readable name is a future enhancement
+- `DataBlob` (typed variable value bytes) is intentionally excluded from the parameters projection
+
+Terminal state: **Achieved** — parameter names and types derived from fixture evidence
+with UE source backing.
 
 ---
 
