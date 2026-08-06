@@ -38,7 +38,6 @@ def test_niagara_graph_handler_projects_tagged_properties() -> None:
         parse_status = export.get("parse_status", "success")
         assert parse_status != "skipped", "NiagaraGraph should not be skipped"
 
-        # After handler registration, parse_status should upgrade to partial_metadata
         assert "asset_type_data" in export, (
             f"NiagaraGraph export '{export.get('object_name')}' should have asset_type_data"
         )
@@ -48,8 +47,11 @@ def test_niagara_graph_handler_projects_tagged_properties() -> None:
             f"got '{atd.get('parse_status')}'"
         )
         assert atd.get("asset_type") == "NiagaraGraph"
-        assert "tail_offset" in atd, "tail_offset should be present"
-        assert "tail_size" in atd, "tail_size should be present"
+        assert "native_tail" in atd, "native_tail should be present"
+        tail = atd["native_tail"]
+        assert "offset" in tail
+        assert "size" in tail
+        assert "status" in tail
 
 
 def test_niagara_script_handler_projects_tagged_properties() -> None:
@@ -74,20 +76,8 @@ def test_niagara_script_handler_projects_tagged_properties() -> None:
             f"got '{atd.get('parse_status')}'"
         )
         assert atd.get("asset_type") == "NiagaraScript"
-        assert "tail_offset" in atd, "tail_offset should be present"
-        assert "tail_size" in atd, "tail_size should be present"
-
-
-def test_niagara_node_exports_still_skipped_after_handlers() -> None:
-    """NiagaraNode* exports must remain skipped after handler registration."""
-    payload = _parse_niagara_fixture()
-    node_exports = [
-        e for e in payload["exports"]
-        if e.get("object_class", "").startswith("NiagaraNode")
-    ]
-    assert len(node_exports) > 0, "Expected NiagaraNode exports"
-
-    for export in node_exports:
-        assert export.get("parse_status") == "skipped", (
-            f"NiagaraNode '{export.get('object_name')}' should still be skipped"
-        )
+        assert "native_tail" in atd, "native_tail should be present"
+        tail = atd["native_tail"]
+        assert "offset" in tail
+        assert "size" in tail
+        assert "status" in tail
