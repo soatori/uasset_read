@@ -440,8 +440,8 @@ def _validate_script_sizes(
     Returns (error_code, error_message) if invalid, or None if valid.
 
     In UE, BytecodeBufferSize is the logical buffer size and
-    SerializedScriptSize is the physical size. BytecodeBufferSize=0
-    is valid when SerializedScriptSize > 0 (no logical validation needed).
+    SerializedScriptSize is the physical size. Both sizes are zero for a
+    function with no script; a one-sided zero size pair is invalid.
     """
     # Negative sizes
     if bytecode_buffer_size < 0 or serialized_script_size < 0:
@@ -451,11 +451,13 @@ def _validate_script_sizes(
             f"SerializedScriptSize={serialized_script_size}",
         )
     # Both zero is valid (no script)
-    # SerializedScriptSize=0 with BytecodeBufferSize>0 is invalid
-    if serialized_script_size == 0 and bytecode_buffer_size > 0:
+    # A one-sided zero size pair is invalid
+    if (bytecode_buffer_size == 0) != (serialized_script_size == 0):
         return (
             "invalid_script_size",
-            f"SerializedScriptSize=0 but BytecodeBufferSize={bytecode_buffer_size}",
+            "Mismatched zero size pair: "
+            f"BytecodeBufferSize={bytecode_buffer_size}, "
+            f"SerializedScriptSize={serialized_script_size}",
         )
     return None
 
