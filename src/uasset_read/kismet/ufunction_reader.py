@@ -530,10 +530,6 @@ def read_ufunction_script(
             ),
         )
 
-    # Check for script serialization data
-    if not export.has_script_serialization:
-        return FunctionScriptReadResult(status="no_script")
-
     try:
         window, native_start = _read_native_payload_start(
             archive, export, summary, name_map, import_map, export_map,

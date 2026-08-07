@@ -327,6 +327,16 @@ def script_header(bytecode_size: int, script_size: int) -> bytes:
     return i32(bytecode_size) + i32(script_size)
 
 
+def serialized_function_payload(script: bytes) -> bytes:
+    """Build a legacy UFunction payload with one serialized script byte stream."""
+    return (
+        serialization_control_none_terminator()
+        + ustruct_prefix_legacy()
+        + script_header(len(script), len(script))
+        + script
+    )
+
+
 def make_summary_with_versions(
     file_version_ue4: int = 522,
     file_version_ue5: int = 1011,
@@ -400,12 +410,26 @@ class TestUStructPrefix:
         assert result.bytecode_buffer_size == 1
         assert result.serialized_script_size == 1
 
-    def test_zero_zero_header_is_no_script(self):
-        """BytecodeBufferSize=0 and SerializedScriptSize=0 -> no_script."""
+    def test_zero_script_header_is_confirmed_no_script(self):
+        """A serialized 0/0 header is the evidence for no_script."""
         result = read_synthetic_function(
             native=modern_ustruct_prefix(property_count=0) + script_header(0, 0),
         )
         assert result.status == "no_script"
+        assert result.failure is None
+        assert result.bytecode_buffer_size == result.serialized_script_size == 0
+
+    def test_missing_export_offsets_do_not_skip_serialized_payload(self):
+        """Absent export-table offsets do not prove that a payload has no script."""
+        archive, export, summary, names, imports, exports = make_function_export(
+            serialized_function_payload(script=b"\x53"), file_version_ue5=1017,
+        )
+        export.script_serialization_start_offset = 0
+        export.script_serialization_end_offset = 0
+
+        result = read_ufunction_script(archive, export, summary, names, imports, exports)
+
+        assert result.status == "extracted"
 
     @pytest.mark.parametrize("buffer_size, serialized_size", [
         (-1, 0),
