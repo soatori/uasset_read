@@ -22,6 +22,10 @@ from uasset_read.kismet.diagnostics import (
     BytecodeCandidateDiagnostic,
 )
 from uasset_read.kismet.result import KismetDecompiledResult
+from uasset_read.kismet.ufunction_reader import (
+    FunctionScriptFailure,
+    FunctionScriptReadResult,
+)
 from uasset_read.kismet.native_fields import (
     NativeFieldDeclaration,
     native_field_cpp_type,
@@ -68,19 +72,12 @@ def run_post_process_kismet(exports):
 
     mock_resolve = MagicMock(side_effect=_mock_resolve_class)
 
-    def mock_decompile(archive, export, summary, name_map, import_map, export_map,
-                       tolerant=True, linker=None):
-        # Mimic real pipeline: skip exports without script serialization
+    def mock_read(archive, export, summary, name_map, import_map, export_map,
+                  export_index=0):
+        # _extract_kismet_decompiled now reads UFunction scripts directly.
         if not export.has_script_serialization:
             return None
-        return KismetDecompiledResult(
-            function_name=export.object_name,
-            signature=f"void {export.object_name}()",
-            local_variables=[],
-            cpp_code=f"void {export.object_name}() {{ }}",
-            bytecode_status="parsed",
-            translation_status="complete",
-        )
+        return FunctionScriptReadResult(status="no_script")
 
     archive = MagicMock()
     summary = MagicMock()
@@ -89,12 +86,30 @@ def run_post_process_kismet(exports):
     export_map = exports
 
     with patch("uasset_read.serializers.object_resources.resolve_class_name", mock_resolve), \
-         patch("uasset_read.kismet.pipeline.decompile_single_function", side_effect=mock_decompile):
+         patch("uasset_read.kismet.ufunction_reader.read_ufunction_script", side_effect=mock_read):
         results = _extract_kismet_decompiled(
             "test.uasset", archive, summary, name_map,
             import_map, export_map, tolerant=True,
         )
     return results
+
+
+def run_post_process_with_script_result(script_result):
+    """Run the native pipeline with a deterministic UFunction reader result."""
+    from uasset_read.pipeline.post_process import _extract_kismet_decompiled
+
+    export = make_export("Function", "NativeFailure", serial_offset=64)
+    summary = MagicMock()
+    with patch(
+        "uasset_read.serializers.object_resources.resolve_class_name",
+        side_effect=_mock_resolve_class,
+    ), patch(
+        "uasset_read.kismet.ufunction_reader.read_ufunction_script",
+        return_value=script_result,
+    ):
+        return _extract_kismet_decompiled(
+            "test.uasset", MagicMock(), summary, ["None"], [], [export], tolerant=True,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +162,93 @@ class TestPipelineFunctionFiltering:
 
         results = run_post_process_kismet([export])
         assert len(results) == 0
+
+
+# ---------------------------------------------------------------------------
+# Test: structured native script failure diagnostics
+# ---------------------------------------------------------------------------
+
+class TestPipelineFailureDiagnostics:
+    """Native reader and decoder failures retain structured provenance."""
+
+    def test_reader_failure_preserves_structured_diagnostics(self):
+        failure = FunctionScriptFailure(
+            error_code="invalid_script_property_range",
+            error_message="script properties end at 72, expected 64",
+            function_name="NativeFailure",
+            export_index=3,
+            class_name="Function",
+            package_offset=128,
+            export_offset=64,
+            bytecode_index=9,
+            bytecode_buffer_size=32,
+            serialized_script_size=24,
+        )
+
+        results = run_post_process_with_script_result(
+            FunctionScriptReadResult(status="failed", failure=failure),
+        )
+
+        assert len(results) == 1
+        result = results[0]
+        assert result.bytecode_source == "unknown"
+        assert result.bytecode_status == "failed"
+        assert result.translation_status == "not_applicable"
+        assert result.error_code == "invalid_script_property_range"
+        assert result.error_message == failure.error_message
+        assert result.error_context == {
+            "function_name": "NativeFailure",
+            "export_index": 3,
+            "class_name": "Function",
+            "package_offset": 128,
+            "export_offset": 64,
+        }
+        assert result.script_metrics == {
+            "bytecode_buffer_size": 32,
+            "serialized_script_size": 24,
+            "serialized_bytes_consumed": 0,
+            "bytecode_bytes_consumed": 9,
+        }
+
+    def test_decoder_failure_preserves_header_metrics(self):
+        from uasset_read.exceptions import ParseError
+
+        script_result = FunctionScriptReadResult(
+            status="extracted",
+            serialized_script=b"\xff",
+            bytecode_buffer_size=32,
+            serialized_script_size=24,
+        )
+        with patch(
+            "uasset_read.kismet.ufunction_reader.read_ufunction_script",
+            return_value=script_result,
+        ), patch(
+            "uasset_read.kismet.bytecode_extractor.parse_bytecode_stream",
+            side_effect=ParseError("unknown expression token"),
+        ), patch(
+            "uasset_read.serializers.object_resources.resolve_class_name",
+            side_effect=_mock_resolve_class,
+        ):
+            from uasset_read.pipeline.post_process import _extract_kismet_decompiled
+
+            results = _extract_kismet_decompiled(
+                "test.uasset", MagicMock(), MagicMock(), ["None"], [],
+                [make_export("Function", "NativeFailure", serial_offset=64)], tolerant=True,
+            )
+
+        assert len(results) == 1
+        result = results[0]
+        assert result.bytecode_source == "unknown"
+        assert result.bytecode_status == "failed"
+        assert result.translation_status == "not_applicable"
+        assert result.error_code == "bytecode_decode_error"
+        assert result.error_message == "unknown expression token"
+        assert result.script_metrics == {
+            "bytecode_buffer_size": 32,
+            "serialized_script_size": 24,
+            "serialized_bytes_consumed": 0,
+            "bytecode_bytes_consumed": 0,
+        }
 
 
 # ---------------------------------------------------------------------------

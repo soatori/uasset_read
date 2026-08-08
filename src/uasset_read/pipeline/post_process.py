@@ -76,7 +76,8 @@ def _extract_kismet_decompiled(
                 continue
 
             if script_result.status == "failed":
-                reason = script_result.failure.error_message if script_result.failure else "unknown"
+                failure = script_result.failure
+                reason = failure.error_message if failure else "unknown"
                 result = KismetDecompiledResult(
                     function_name=export.object_name,
                     signature=f"void {export.object_name}()",
@@ -84,6 +85,28 @@ def _extract_kismet_decompiled(
                     cpp_code="",
                     bytecode_source="unknown",
                     bytecode_status="failed",
+                    translation_status="not_applicable",
+                    error_code=failure.error_code if failure else "ufunction_script_read_error",
+                    error_message=reason,
+                    error_context=(
+                        {
+                            "function_name": failure.function_name,
+                            "export_index": failure.export_index,
+                            "class_name": failure.class_name,
+                            "package_offset": failure.package_offset,
+                            "export_offset": failure.export_offset,
+                        }
+                        if failure else None
+                    ),
+                    script_metrics=(
+                        {
+                            "bytecode_buffer_size": failure.bytecode_buffer_size,
+                            "serialized_script_size": failure.serialized_script_size,
+                            "serialized_bytes_consumed": 0,
+                            "bytecode_bytes_consumed": failure.bytecode_index or 0,
+                        }
+                        if failure else None
+                    ),
                     warnings=[],
                     fallback_reasons=[f"UFunction script read failed: {reason}"],
                 )
@@ -93,7 +116,7 @@ def _extract_kismet_decompiled(
             # script_result.status == "extracted"
             # Parse the bytecode from the serialized script
             expressions: list = []
-            parse_error: str | None = None
+            parse_error: Exception | None = None
             if script_result.serialized_script:
                 try:
                     expressions = parse_bytecode_stream(
@@ -102,10 +125,10 @@ def _extract_kismet_decompiled(
                         tolerant=tolerant,
                     )
                 except (ParseError, ValueError) as exc:
-                    parse_error = str(exc)
+                    parse_error = exc
 
             if parse_error or not expressions:
-                reason = parse_error if parse_error else "no bytecode expressions extracted"
+                reason = str(parse_error) if parse_error else "no bytecode expressions extracted"
                 result = KismetDecompiledResult(
                     function_name=export.object_name,
                     signature=f"void {export.object_name}()",
@@ -113,6 +136,22 @@ def _extract_kismet_decompiled(
                     cpp_code="",
                     bytecode_source="unknown",
                     bytecode_status="failed",
+                    translation_status="not_applicable",
+                    error_code="bytecode_decode_error",
+                    error_message=reason,
+                    error_context={
+                        "function_name": export.object_name,
+                        "export_index": export_idx,
+                        "class_name": class_name,
+                        "package_offset": export.serial_offset,
+                        "export_offset": export.serial_offset,
+                    },
+                    script_metrics={
+                        "bytecode_buffer_size": script_result.bytecode_buffer_size,
+                        "serialized_script_size": script_result.serialized_script_size,
+                        "serialized_bytes_consumed": 0,
+                        "bytecode_bytes_consumed": 0,
+                    },
                     warnings=[],
                     fallback_reasons=[f"bytecode extraction error: {reason}"],
                 )

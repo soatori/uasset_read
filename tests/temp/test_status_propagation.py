@@ -54,6 +54,9 @@ def _make_decompiled_result(**overrides):
         "bytecode_source": "unknown",
         "bytecode_status": "unknown",
         "translation_status": "not_applicable",
+        "parameters": [],
+        "return_type": "void",
+        "native_signature": False,
         "error_code": None,
         "error_message": None,
         "error_context": None,
@@ -162,6 +165,36 @@ class TestStatusRoundTrip:
         assert len(decompiled) == 1
         assert decompiled[0].bytecode_status == bytecode_status
         assert decompiled[0].translation_status == translation_status
+
+    def test_native_reader_failure_diagnostics_round_trip_to_json(self):
+        """Reader failure provenance remains structured after IR and JSON rendering."""
+        result = _make_decompiled_result(
+            bytecode_status="failed",
+            translation_status="not_applicable",
+            error_code="invalid_script_property_range",
+            error_message="script properties end at 72, expected 64",
+            error_context={
+                "function_name": "NativeFailure",
+                "export_index": 3,
+                "class_name": "Function",
+                "package_offset": 128,
+                "export_offset": 64,
+            },
+            script_metrics={
+                "bytecode_buffer_size": 32,
+                "serialized_script_size": 24,
+                "serialized_bytes_consumed": 0,
+                "bytecode_bytes_consumed": 9,
+            },
+        )
+
+        data, _ = _render_json([result])
+        function = data["decompiled_functions"][0]
+        assert function["bytecode_status"] == "failed"
+        assert function["translation_status"] == "not_applicable"
+        assert function["error_code"] == "invalid_script_property_range"
+        assert function["error_context"]["export_index"] == 3
+        assert function["script_metrics"]["bytecode_bytes_consumed"] == 9
 
     @pytest.mark.parametrize("bytecode_status,translation_status", [
         ("parsed", "complete"),
