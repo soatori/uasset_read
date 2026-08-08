@@ -493,11 +493,12 @@ class TestNestedTerminators:
 
     def test_nested_array_terminator_not_leaked(self):
         """EX_SetArray with EX_EndArray consumed internally, not leaked to outer stream."""
-        # EX_SetArray: serialized FFieldPath + elements + EX_EndArray
+        # Modern EX_SetArray: target expression + elements + EX_EndArray
         # Then EX_True after the array
         data = (
             token(EExprToken.EX_SetArray)
-            + i32(0)  # empty path count
+            + token(EExprToken.EX_LocalVariable)
+            + i32(0)  # target expression's empty FFieldPath
             + token(EExprToken.EX_IntOne)
             + token(EExprToken.EX_EndArray)
             + token(EExprToken.EX_True)  # should NOT be consumed by SetArray
@@ -505,15 +506,16 @@ class TestNestedTerminators:
         ar = make_kismet_archive(data, bytecode_buffer_size=0)
         expr = ar.read_expression()
         assert expr.Token == EExprToken.EX_SetArray
+        assert expr.AssigningProperty.Token == EExprToken.EX_LocalVariable
         assert len(expr.Elements) == 1
         assert expr.Elements[0].Token == EExprToken.EX_IntOne
         # EX_EndArray should NOT be in the child list
         assert all(e.Token != EExprToken.EX_EndArray for e in expr.Elements)
         # Position after SetArray, at EX_True
         assert ar.tell() == len(data) - 1
-        # Logical position: EX_SetArray (1) + FProperty* (8)
-        # + EX_IntOne (1) + EX_EndArray (1) = 11
-        assert ar.bytecode_index == 11
+        # Logical position: EX_SetArray (1) + EX_LocalVariable (1)
+        # + FProperty* (8) + EX_IntOne (1) + EX_EndArray (1) = 12
+        assert ar.bytecode_index == 12
 
     def test_nested_map_terminator_not_leaked(self):
         """EX_SetMap with EX_EndMap consumed internally."""

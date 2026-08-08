@@ -34,6 +34,10 @@ def enrich_decompiled_functions(
 
     by_event = {item["event_name"]: item for item in semantic_calls}
     for result in functions:
+        # Parsed results already carry verified current-export bytecode. Graph
+        # topology is a distinct inference source and must not replace it.
+        if result.bytecode_status == "parsed":
+            continue
         if result.function_name.startswith("ExecuteUbergraph_"):
             result.semantic_calls = semantic_calls
             result.cpp_code = _format_ubergraph_semantics(result.function_name, semantic_calls)
@@ -64,6 +68,8 @@ def _enrich_empty_functions_from_graphs(
     K2Node_FunctionEntry and generates readable C++ pseudocode.
     """
     for result in functions:
+        if result.bytecode_status == "parsed":
+            continue
         # Skip if already has cpp_code or semantics already enriched
         if result.cpp_code and any("enriched" in w for w in result.warnings):
             continue

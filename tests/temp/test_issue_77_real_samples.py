@@ -29,13 +29,19 @@ SAMPLES = [
 # Total expected function exports: 76
 TOTAL_EXPECTED = sum(count for _, count in SAMPLES)
 
-# Allowed (bytecode_status, translation_status) pairs
+# Allowed (bytecode_status, translation_status) pairs after native extraction.
 ALLOWED_STATUS_PAIRS = {
     ("parsed", "complete"),
     ("parsed", "partial"),
     ("parsed", "failed"),
     ("no_script", "not_applicable"),
-    ("failed", "not_applicable"),
+}
+
+ZERO_SCRIPT_METRICS = {
+    "bytecode_buffer_size": 0,
+    "serialized_script_size": 0,
+    "serialized_bytes_consumed": 0,
+    "bytecode_bytes_consumed": 0,
 }
 
 # Rejected patterns in rendered JSON output
@@ -85,7 +91,7 @@ def all_results() -> dict[str, Any]:
     for rel_path, expected_count in SAMPLES:
         path = _load_sample(rel_path)
         if not os.path.exists(path):
-            continue
+            pytest.fail(f"Required Issue #77 sample not found: {path}")
 
         # Parse the asset
         result = parse_uasset_with_linker(path, tolerant=True)
@@ -190,25 +196,59 @@ class TestFunctionContract:
     """Verify per-function status and metadata contract."""
 
     @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
-    def test_no_failed_status(self, all_results):
-        """Verify no function has bytecode_status=failed.
+    def test_at_least_one_function_has_native_bytecode(self, all_results):
+        """Require the matrix to exercise native UFunction bytecode parsing."""
+        functions = [
+            function
+            for data in all_results.values()
+            for function in (data["result"].decompiled_functions or [])
+        ]
+        assert any(function.bytecode_status == "parsed" for function in functions)
 
-        Functions with bytecode_status=failed must have a non-empty
-        fallback_reasons list explaining the failure.  This is expected
-        for Blueprint functions whose serialized script data does not
-        match the expected bytecode format (e.g. event-graph stubs,
-        truncated scripts, or negative UStruct prefix values).
-        """
+    @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
+    def test_parsed_functions_have_native_current_asset_provenance(self, all_results):
+        """Parsed bytecode must come from the current Function export."""
         for rel_path, data in all_results.items():
             result = data["result"]
             if not result.decompiled_functions:
                 continue
             for df in result.decompiled_functions:
-                if df.bytecode_status == "failed":
-                    assert df.fallback_reasons, (
-                        f"{rel_path}/{df.function_name}: failed status "
-                        f"without fallback_reasons"
+                if df.bytecode_status == "parsed":
+                    assert df.bytecode_source == "function_export", (
+                        f"{rel_path}/{df.function_name}: parsed bytecode source "
+                        f"is {df.bytecode_source!r}"
                     )
+                    assert df.logic_source == "current_asset", (
+                        f"{rel_path}/{df.function_name}: parsed bytecode logic "
+                        f"source is {df.logic_source!r}"
+                    )
+
+    @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
+    def test_no_failed_status(self, all_results):
+        """Every Function export must be parsed or confirmed to have no Script."""
+        failed = [
+            f"{rel_path}/{df.function_name}: {df.error_code}: {df.error_message}"
+            for rel_path, data in all_results.items()
+            for df in (data["result"].decompiled_functions or [])
+            if df.bytecode_status == "failed"
+        ]
+        assert not failed, "UFunction Script failures:\n  " + "\n  ".join(failed)
+
+    @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
+    def test_no_script_status_requires_zero_header(self, all_results):
+        """Only an observed zero Script header can produce no_script."""
+        for rel_path, data in all_results.items():
+            for df in (data["result"].decompiled_functions or []):
+                if df.bytecode_status != "no_script":
+                    continue
+                assert df.error_code == "confirmed_no_script", (
+                    f"{rel_path}/{df.function_name}: no_script error code "
+                    f"is {df.error_code!r}"
+                )
+                assert df.script_metrics == ZERO_SCRIPT_METRICS, (
+                    f"{rel_path}/{df.function_name}: no_script metrics "
+                    f"are {df.script_metrics!r}"
+                )
 
     @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
     def test_status_pairs_are_allowed(self, all_results):
@@ -226,16 +266,14 @@ class TestFunctionContract:
     @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
     def test_no_k2node_pseudo_functions(self, all_results):
         """Verify no K2Node pseudo-functions appear in decompiled results."""
-        k2node_prefixes = ("K2Node_", "BndEvt__")
         for rel_path, data in all_results.items():
             result = data["result"]
             if not result.decompiled_functions:
                 continue
             for df in result.decompiled_functions:
-                # K2Node_FunctionEntry and similar should not be decompiled
-                # But BndEvt__ delegate functions are valid Function exports
-                # Only reject actual K2Node class names
-                pass  # Validated by export class filter in pipeline
+                assert not df.function_name.startswith("K2Node_"), (
+                    f"{rel_path}: K2Node pseudo-function {df.function_name!r}"
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -308,10 +346,10 @@ class TestFirstPersonSpecific:
 
         # Aim body must contain the expected controller input calls
         assert "AddControllerYawInput" in aim_func.cpp_code, (
-            f"Aim function body missing AddControllerYawInput call"
+            "Aim function body missing AddControllerYawInput call"
         )
         assert "AddControllerPitchInput" in aim_func.cpp_code, (
-            f"Aim function body missing AddControllerPitchInput call"
+            "Aim function body missing AddControllerPitchInput call"
         )
 
     @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
@@ -336,8 +374,32 @@ class TestFirstPersonSpecific:
 
         # Move body must contain the expected movement input calls
         assert "AddMovementInput" in move_func.cpp_code, (
-            f"Move function body missing AddMovementInput call"
+            "Move function body missing AddMovementInput call"
         )
+
+    @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
+    def test_aim_move_and_shooter_never_verify_graph_topology(self, all_results):
+        """Named acceptance functions must not label topology as parsed bytecode."""
+        firstperson_path = (
+            "FirstPerson/Content/FirstPerson/Blueprints/"
+            "BP_FirstPersonCharacter.uasset"
+        )
+        shooter_path = (
+            "FirstPersonC/Content/Variant_Shooter/Blueprints/"
+            "BP_ShooterCharacter.uasset"
+        )
+        targets = [
+            df
+            for df in all_results[firstperson_path]["result"].decompiled_functions
+            if df.function_name in {"Aim", "Move"}
+        ]
+        targets.extend(all_results[shooter_path]["result"].decompiled_functions)
+
+        for df in targets:
+            assert not (
+                df.bytecode_status == "parsed"
+                and df.logic_source == "graph_topology"
+            ), f"{df.function_name}: graph topology presented as parsed bytecode"
 
 
 # ---------------------------------------------------------------------------
@@ -345,11 +407,11 @@ class TestFirstPersonSpecific:
 # ---------------------------------------------------------------------------
 
 class TestMatrixSummary:
-    """Print summary statistics for the real-sample matrix."""
+    """Enforce aggregate acceptance statistics for the real-sample matrix."""
 
     @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
-    def test_matrix_summary(self, all_results, capsys):
-        """Print summary of the real-sample matrix."""
+    def test_matrix_summary(self, all_results):
+        """Require every expected Function export to have an accepted result."""
         total_functions = 0
         total_parsed = 0
         total_no_script = 0
@@ -369,10 +431,8 @@ class TestMatrixSummary:
                     elif df.bytecode_status == "failed":
                         total_failed += 1
 
-        with capsys.disabled():
-            print(f"\n=== Real-Sample Matrix Summary ===")
-            print(f"Total functions: {total_functions}")
-            print(f"  parsed: {total_parsed}")
-            print(f"  no_script: {total_no_script}")
-            print(f"  failed: {total_failed}")
-            print(f"Samples: {len(all_results)}")
+        assert len(all_results) == len(SAMPLES)
+        assert total_functions == TOTAL_EXPECTED
+        assert total_parsed > 0
+        assert total_failed == 0
+        assert total_parsed + total_no_script == TOTAL_EXPECTED

@@ -536,10 +536,10 @@ class TestMarkdownRendering:
 # ---------------------------------------------------------------------------
 
 class TestEventGraphCompletion:
-    """Verify graph topology enrichment writes logic_source."""
+    """Verify graph topology does not replace parsed bytecode provenance."""
 
-    def test_eventgraph_semantic_enrichment_marks_graph_topology(self, monkeypatch):
-        """EventGraph-replaced C++ code is marked as graph topology derived."""
+    def test_eventgraph_semantics_preserve_parsed_bytecode(self, monkeypatch):
+        """EventGraph semantics do not replace verified Function Script."""
         from uasset_read.kismet import semantic
         from uasset_read.kismet.result import KismetDecompiledResult
 
@@ -548,6 +548,7 @@ class TestEventGraphCompletion:
             signature="void ReceiveBeginPlay()",
             local_variables=[],
             cpp_code="void ReceiveBeginPlay() { /* bytecode */ }",
+            bytecode_source="function_export",
             bytecode_status="parsed",
             translation_status="complete",
         )
@@ -562,11 +563,13 @@ class TestEventGraphCompletion:
 
         semantic.enrich_decompiled_functions([result], [])
 
-        assert result.cpp_code == "ReceiveBeginPlay() {\n    Initialize();\n}"
-        assert result.logic_source == "graph_topology"
+        assert result.cpp_code == "void ReceiveBeginPlay() { /* bytecode */ }"
+        assert result.bytecode_source == "function_export"
+        assert result.logic_source == "current_asset"
+        assert result.warnings == []
 
-    def test_execute_ubergraph_enrichment_marks_graph_topology(self, monkeypatch):
-        """ExecuteUbergraph EventGraph semantics replace bytecode provenance."""
+    def test_execute_ubergraph_semantics_preserve_parsed_bytecode(self, monkeypatch):
+        """ExecuteUbergraph topology does not replace verified Function Script."""
         from uasset_read.kismet import semantic
         from uasset_read.kismet.result import KismetDecompiledResult
 
@@ -575,6 +578,7 @@ class TestEventGraphCompletion:
             signature="void ExecuteUbergraph_TestBlueprint()",
             local_variables=[],
             cpp_code="void ExecuteUbergraph_TestBlueprint() { /* bytecode */ }",
+            bytecode_source="function_export",
             bytecode_status="parsed",
             translation_status="complete",
         )
@@ -590,12 +594,8 @@ class TestEventGraphCompletion:
         semantic.enrich_decompiled_functions([result], [])
 
         assert result.cpp_code == (
-            "ExecuteUbergraph_TestBlueprint() {\n"
-            "    // ReceiveBeginPlay -> Initialize()\n"
-            "    Initialize();\n"
-            "}"
+            "void ExecuteUbergraph_TestBlueprint() { /* bytecode */ }"
         )
-        assert result.logic_source == "graph_topology"
-        assert result.warnings == [
-            "Kismet bytecode semantics enriched from EventGraph pin topology"
-        ]
+        assert result.bytecode_source == "function_export"
+        assert result.logic_source == "current_asset"
+        assert result.warnings == []
