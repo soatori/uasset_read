@@ -601,6 +601,7 @@ def serialize_field_prefix(
     rep_index: int = 0,
     rep_notify_name_index: int = 0,
     include_field_flags: bool = True,
+    include_metadata_record: bool = True,
     metadata: dict[str, str] | None = None,
     release_version: int = 21,
 ) -> bytes:
@@ -609,7 +610,7 @@ def serialize_field_prefix(
     Layout:
       - NamePrivate: FName (u32 index + u32 number)
       - FlagsPrivate: u32 (only if include_field_flags=True)
-      - bHasMetaData + metadata map (unless editor-only data is filtered)
+      - optional bHasMetaData + metadata map, independently version-gated
       - ArrayDim: int32
       - ElementSize: int32
       - PropertyFlags: u64
@@ -626,6 +627,7 @@ def serialize_field_prefix(
     if include_field_flags:
         result += struct.pack("<I", 0)  # FlagsPrivate = 0
 
+    if include_metadata_record:
         # WITH_METADATA persistent-package bool uses FArchive::SerializeBool.
         result += struct.pack("<I", bool(metadata))
         if metadata:
@@ -666,6 +668,7 @@ def serialize_field(
     rep_index: int = 0,
     rep_notify_name_index: int = 0,
     include_field_flags: bool = True,
+    include_metadata_record: bool = True,
     metadata: dict[str, str] | None = None,
     tail: bytes = b"",
     release_version: int = 21,
@@ -696,6 +699,7 @@ def serialize_field(
         rep_index=rep_index,
         rep_notify_name_index=rep_notify_name_index,
         include_field_flags=include_field_flags,
+        include_metadata_record=include_metadata_record,
         metadata=metadata,
         release_version=release_version,
     )
@@ -715,6 +719,7 @@ def read_fields_from_bytes(
     import_map: list[ObjectImport] | None = None,
     export_map: list[ObjectExport] | None = None,
     release_version: int = 21,
+    saved_engine_version: tuple[int, int] = (5, 0),
 ) -> tuple[list[NativeFieldDeclaration], int]:
     """Helper: read native fields from raw bytes and return (declarations, end_offset)."""
     archive = ByteArchive(data)
@@ -730,6 +735,7 @@ def read_fields_from_bytes(
         export_map=export_map,
         package_flags=package_flags,
         release_version=release_version,
+        saved_engine_version=saved_engine_version,
     )
     declarations = read_native_fields(archive, count, context)
     return declarations, archive.tell()
@@ -826,23 +832,35 @@ class TestNativeFieldPrefix:
             "package_flags",
             "include_field_flags",
             "include_metadata_record",
+            "saved_engine_version",
             "serialized_size",
         ),
         [
-            (0, True, True, 51),
-            (PKG_Cooked, True, False, 47),
-            (PKG_FilterEditorOnly, False, False, 43),
+            (0, True, True, (5, 0), 51),
+            (PKG_FilterEditorOnly, True, False, (5, 0), 47),
+            (PKG_Cooked, True, False, (5, 4), 47),
+            (PKG_FilterEditorOnly, True, True, (5, 4), 51),
+            (PKG_Cooked, True, False, (5, 8), 47),
+            (PKG_FilterEditorOnly, False, True, (5, 8), 47),
         ],
-        ids=["uncooked", "cooked", "editor-only-filtered"],
+        ids=[
+            "ue5.0-uncooked",
+            "ue5.0-filtered",
+            "ue5.4-cooked",
+            "ue5.4-filtered",
+            "ue5.8-cooked",
+            "ue5.8-filtered",
+        ],
     )
     def test_float_property_package_layout_does_not_shift_dimensions(
         self,
         package_flags: int,
         include_field_flags: bool,
         include_metadata_record: bool,
+        saved_engine_version: tuple[int, int],
         serialized_size: int,
     ):
-        """Cooked/filtered fields omit metadata; uncooked fields retain it."""
+        """Apply the independent FlagsPrivate and metadata gates per UE version."""
         name_map = make_name_map_with_entries("Yaw", "FloatProperty")
         field = serialize_float_property_layout(
             name_map,
@@ -855,6 +873,7 @@ class TestNativeFieldPrefix:
             package_flags=package_flags,
             name_map=name_map,
             release_version=44,
+            saved_engine_version=saved_engine_version,
         )
 
         assert end == len(field) == serialized_size
@@ -878,21 +897,6 @@ class TestNativeFieldPrefix:
         assert declarations[0].metadata == {"Category": "Input"}
         assert declarations[0].type_name == "BoolProperty"
         assert end == len(field)
-
-    def test_filtered_editor_only_field_omits_field_flags(self):
-        """PKG_FilterEditorOnly: FlagsPrivate is absent from the prefix."""
-        name_map = make_name_map_with_entries("Count", "IntProperty")
-        field = serialize_field(
-            "IntProperty", "Count",
-            name_map=name_map,
-            include_field_flags=False,
-        )
-        declarations, end = read_fields_from_bytes(
-            field, package_flags=PKG_FilterEditorOnly, name_map=name_map,
-        )
-        assert declarations[0].name == "Count"
-        assert end == len(field)
-
 
 # --- Package index / reference tests ---
 

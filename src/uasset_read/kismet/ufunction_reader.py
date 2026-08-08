@@ -351,6 +351,10 @@ def _read_ustruct_prefix_and_script(
                 export_map=export_map or [],
                 package_flags=package_flags,
                 release_version=release_version if release_version >= 0 else 21,
+                saved_engine_version=(
+                    summary.saved_by_engine_version.major or 5,
+                    summary.saved_by_engine_version.minor,
+                ),
             )
             native_fields = read_native_fields(window, native_property_count, ctx)
 

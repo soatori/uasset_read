@@ -27,6 +27,8 @@ PKG_FilterEditorOnly = 0x80000000
 
 # FReleaseObjectVersion threshold for replication condition byte
 _PROPERTIES_SERIALIZE_REP_CONDITION_VERSION = 21
+_FFIELD_METADATA_USES_COOKED_FLAG_VERSION = (5, 4)
+_FFIELD_FLAGS_RESPECT_EDITOR_FILTER_VERSION = (5, 8)
 
 
 # ---------------------------------------------------------------------------
@@ -37,8 +39,8 @@ _PROPERTIES_SERIALIZE_REP_CONDITION_VERSION = 21
 class NativeFieldContext:
     """Resolution context for native field reading.
 
-    Holds the name map, import/export maps, package flags, and release
-    version needed to resolve package indices and determine which prefix
+    Holds the name map, import/export maps, package flags, and engine/custom
+    versions needed to resolve package indices and determine which prefix
     fields are present.
     """
 
@@ -47,6 +49,7 @@ class NativeFieldContext:
     export_map: list[ObjectExport]
     package_flags: int = 0
     release_version: int = 21  # FReleaseObjectVersion
+    saved_engine_version: tuple[int, int] = (5, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -141,8 +144,12 @@ def _read_fproperty_prefix(
     # NamePrivate: FName
     name_ref = _read_fname_ref(archive, context)
 
-    # FlagsPrivate: u32 (absent when PKG_FilterEditorOnly)
-    if not (context.package_flags & PKG_FilterEditorOnly):
+    # UE5.0-5.7 always serialize FlagsPrivate. UE5.8 made it conditional on
+    # the archive's editor-only filter state.
+    if (
+        context.saved_engine_version < _FFIELD_FLAGS_RESPECT_EDITOR_FILTER_VERSION
+        or not (context.package_flags & PKG_FilterEditorOnly)
+    ):
         _flags = archive.read_u32()
 
     # FField metadata is serialized by Super::Serialize before the
@@ -184,10 +191,16 @@ def _read_fproperty_prefix(
 def _read_metadata(archive: ByteArchive, context: NativeFieldContext) -> dict[str, str]:
     """Read the metadata boolean and, when true, a TMap<FName, FString>.
 
-    Returns a dict of key-value pairs. Cooked and editor-only-filtered packages
-    omit the metadata record; a present uncooked record may still be false.
+    Returns a dict of key-value pairs. UE5.0-5.3 use the package's
+    bIsCookedForEditor state (derived by the loader from PKG_FilterEditorOnly);
+    UE5.4+ use PKG_Cooked. A present record may still contain false.
     """
-    if context.package_flags & (PKG_Cooked | PKG_FilterEditorOnly):
+    metadata_omission_flag = (
+        PKG_FilterEditorOnly
+        if context.saved_engine_version < _FFIELD_METADATA_USES_COOKED_FLAG_VERSION
+        else PKG_Cooked
+    )
+    if context.package_flags & metadata_omission_flag:
         return {}
 
     has_metadata = archive.read_bool()
