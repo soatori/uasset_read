@@ -563,7 +563,7 @@ from uasset_read.kismet.native_fields import (
     native_field_cpp_type,
 )
 from uasset_read.kismet.value_types import FNameRef
-from uasset_read.constants import PKG_FilterEditorOnly
+from uasset_read.constants import PKG_Cooked, PKG_FilterEditorOnly
 
 # Property flags (CPF_ constants from UE)
 CPF_Parm = 0x80
@@ -735,6 +735,32 @@ def read_fields_from_bytes(
     return declarations, archive.tell()
 
 
+def serialize_float_property_layout(
+    name_map: list[str],
+    *,
+    include_field_flags: bool,
+    include_metadata_record: bool,
+) -> bytes:
+    """Serialize the observed UE5 FloatProperty prefix layout."""
+    result = (
+        fname(name_map.index("FloatProperty"), 0)
+        + fname(name_map.index("Yaw"), 0)
+    )
+    if include_field_flags:
+        result += struct.pack("<I", 0)
+    if include_metadata_record:
+        result += struct.pack("<I", 0)
+    return (
+        result
+        + struct.pack("<i", 1)       # FProperty::ArrayDim
+        + struct.pack("<i", 4)       # FProperty::ElementSize
+        + struct.pack("<Q", 0x94)    # FProperty::PropertyFlags
+        + struct.pack("<H", 0)       # legacy RepIndex placeholder
+        + fname(0, 0)                # RepNotifyFunc = None
+        + b"\x00"                    # BlueprintReplicationCondition
+    )
+
+
 # --- Base FProperty prefix tests ---
 
 class TestNativeFieldPrefix:
@@ -791,6 +817,47 @@ class TestNativeFieldPrefix:
         assert end == len(field) == 51
         assert declarations[0].type_name == "FloatProperty"
         assert declarations[0].name == "Yaw"
+        assert declarations[0].array_dim == 1
+        assert declarations[0].element_size == 4
+        assert declarations[0].property_flags == 0x94
+
+    @pytest.mark.parametrize(
+        (
+            "package_flags",
+            "include_field_flags",
+            "include_metadata_record",
+            "serialized_size",
+        ),
+        [
+            (0, True, True, 51),
+            (PKG_Cooked, True, False, 47),
+            (PKG_FilterEditorOnly, False, False, 43),
+        ],
+        ids=["uncooked", "cooked", "editor-only-filtered"],
+    )
+    def test_float_property_package_layout_does_not_shift_dimensions(
+        self,
+        package_flags: int,
+        include_field_flags: bool,
+        include_metadata_record: bool,
+        serialized_size: int,
+    ):
+        """Cooked/filtered fields omit metadata; uncooked fields retain it."""
+        name_map = make_name_map_with_entries("Yaw", "FloatProperty")
+        field = serialize_float_property_layout(
+            name_map,
+            include_field_flags=include_field_flags,
+            include_metadata_record=include_metadata_record,
+        )
+
+        declarations, end = read_fields_from_bytes(
+            field,
+            package_flags=package_flags,
+            name_map=name_map,
+            release_version=44,
+        )
+
+        assert end == len(field) == serialized_size
         assert declarations[0].array_dim == 1
         assert declarations[0].element_size == 4
         assert declarations[0].property_flags == 0x94

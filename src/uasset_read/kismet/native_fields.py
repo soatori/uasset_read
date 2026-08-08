@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Package flags constant (mirrored from constants.py to avoid circular import)
 # ---------------------------------------------------------------------------
+PKG_Cooked = 0x00000200
 PKG_FilterEditorOnly = 0x80000000
 
 # FReleaseObjectVersion threshold for replication condition byte
@@ -183,10 +184,10 @@ def _read_fproperty_prefix(
 def _read_metadata(archive: ByteArchive, context: NativeFieldContext) -> dict[str, str]:
     """Read the metadata boolean and, when true, a TMap<FName, FString>.
 
-    Returns a dict of key-value pairs.  For cooked packages or when the
-    metadata flag is false, returns an empty dict.
+    Returns a dict of key-value pairs. Cooked and editor-only-filtered packages
+    omit the metadata record; a present uncooked record may still be false.
     """
-    if context.package_flags & PKG_FilterEditorOnly:
+    if context.package_flags & (PKG_Cooked | PKG_FilterEditorOnly):
         return {}
 
     has_metadata = archive.read_bool()
