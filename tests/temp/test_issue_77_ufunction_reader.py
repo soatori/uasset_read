@@ -11,7 +11,6 @@ Covers:
 from __future__ import annotations
 
 import struct
-from dataclasses import dataclass, field
 from typing import List
 
 import pytest
@@ -56,6 +55,11 @@ def serialization_control_none_terminator() -> bytes:
     """Return the serialization-control 0x00 byte followed by the None-tag
     terminator (FName index=0, number=0)."""
     return b"\x00" + fname(0, 0)
+
+
+def absent_object_guid() -> bytes:
+    """Serialize UObject's persistent HasObjectGuid=false marker."""
+    return struct.pack("<I", 0)
 
 
 def make_summary(
@@ -166,9 +170,10 @@ class TestCustomVersionLookup:
 class TestNativePayloadStart:
     def test_native_start_consumes_tags_from_serial_offset_and_cross_checks_offsets(self):
         """The native reader starts at serial_offset, reads the serialization-control
-        byte and tagged properties, and returns the bounded archive positioned after
-        the None terminator.  script_serialization offsets are cross-checked."""
-        payload = serialization_control_none_terminator() + b"NATIVE"
+        byte and tagged properties, consumes the absent object-GUID marker, and
+        returns the bounded archive at the native UStruct payload. Property
+        serialization offsets are cross-checked before that marker."""
+        payload = serialization_control_none_terminator() + absent_object_guid() + b"NATIVE"
         archive, export, summary, names, imports, exports = make_function_export(payload)
         export.script_serialization_start_offset = 0
         export.script_serialization_end_offset = len(serialization_control_none_terminator())
@@ -176,7 +181,7 @@ class TestNativePayloadStart:
         window, native_start = _read_native_payload_start(
             archive, export, summary, names, imports, exports,
         )
-        assert native_start == export.script_serialization_end_offset
+        assert native_start == export.script_serialization_end_offset + len(absent_object_guid())
         assert window.read(6) == b"NATIVE"
 
     def test_native_start_rejects_mismatched_script_property_offsets(self):
@@ -214,7 +219,7 @@ class TestSerializationControlByte:
         """Control byte 0x00: no override-operation, proceed to tagged properties."""
         script = b"DATA"
         native = modern_ustruct_prefix(property_count=0) + script_header(4, 4) + script
-        payload = serialization_control_none_terminator() + native
+        payload = serialization_control_none_terminator() + absent_object_guid() + native
         archive, export, summary, names, imports, exports = make_function_export(
             payload, file_version_ue5=1011,
         )
@@ -231,7 +236,7 @@ class TestSerializationControlByte:
         # 1 control byte (0x02) + 1 override-operation byte + None tag (8 bytes)
         control_prefix = b"\x02\x01"  # control=0x02, override_op=0x01
         none_tag = fname(0, 0)
-        payload = control_prefix + none_tag + b"SCRIPT"
+        payload = control_prefix + none_tag + absent_object_guid() + b"SCRIPT"
         archive, export, summary, names, imports, exports = make_function_export(
             payload, file_version_ue5=1011,
         )
@@ -241,7 +246,7 @@ class TestSerializationControlByte:
         window, native_start = _read_native_payload_start(
             archive, export, summary, names, imports, exports,
         )
-        assert native_start == export.script_serialization_end_offset
+        assert native_start == export.script_serialization_end_offset + len(absent_object_guid())
         assert window.read(6) == b"SCRIPT"
 
     def test_unknown_control_bit_rejected(self):
@@ -271,7 +276,7 @@ class TestSerializationControlByte:
 
     def test_no_control_byte_below_ue5_1011(self):
         """Below UE5 version 1011, no serialization-control byte is consumed."""
-        payload = fname(0, 0) + b"SCRIPT"
+        payload = fname(0, 0) + absent_object_guid() + b"SCRIPT"
         archive, export, summary, names, imports, exports = make_function_export(
             payload, file_version_ue5=1010,
         )
@@ -281,7 +286,7 @@ class TestSerializationControlByte:
         window, native_start = _read_native_payload_start(
             archive, export, summary, names, imports, exports,
         )
-        assert native_start == export.script_serialization_end_offset
+        assert native_start == export.script_serialization_end_offset + len(absent_object_guid())
         assert window.read(6) == b"SCRIPT"
 
 
@@ -331,6 +336,7 @@ def serialized_function_payload(script: bytes) -> bytes:
     """Build a legacy UFunction payload with one serialized script byte stream."""
     return (
         serialization_control_none_terminator()
+        + absent_object_guid()
         + ustruct_prefix_legacy()
         + script_header(len(script), len(script))
         + script
@@ -369,10 +375,10 @@ def read_synthetic_function(
     The ``native`` bytes are placed after the serialization-control prefix
     and None terminator (tagged-property stream).
     """
-    # Prefix: serialization-control 0x00 + None tag
+    # Prefix: serialization-control 0x00 + None tag + absent UObject GUID
     control_prefix = b"\x00"
     none_tag = fname(0, 0)
-    payload = control_prefix + none_tag + native
+    payload = control_prefix + none_tag + absent_object_guid() + native
 
     archive, export, summary, names, imports, exports = make_function_export(
         payload,
@@ -418,6 +424,12 @@ class TestUStructPrefix:
         assert result.status == "no_script"
         assert result.failure is None
         assert result.bytecode_buffer_size == result.serialized_script_size == 0
+        assert result.serialized_start == (
+            len(serialization_control_none_terminator())
+            + len(absent_object_guid())
+            + len(modern_ustruct_prefix(property_count=0))
+            + len(script_header(0, 0))
+        )
 
     def test_missing_export_offsets_do_not_skip_serialized_payload(self):
         """Absent export-table offsets do not prove that a payload has no script."""
@@ -589,6 +601,7 @@ def serialize_field_prefix(
     rep_index: int = 0,
     rep_notify_name_index: int = 0,
     include_field_flags: bool = True,
+    metadata: dict[str, str] | None = None,
     release_version: int = 21,
 ) -> bytes:
     """Serialize a base FProperty prefix.
@@ -596,8 +609,9 @@ def serialize_field_prefix(
     Layout:
       - NamePrivate: FName (u32 index + u32 number)
       - FlagsPrivate: u32 (only if include_field_flags=True)
-      - ArrayDim: u16
-      - ElementSize: u16
+      - bHasMetaData + metadata map (unless editor-only data is filtered)
+      - ArrayDim: int32
+      - ElementSize: int32
       - PropertyFlags: u64
       - RepIndex: u16
       - RepNotifyFunc: FName
@@ -612,10 +626,21 @@ def serialize_field_prefix(
     if include_field_flags:
         result += struct.pack("<I", 0)  # FlagsPrivate = 0
 
+        # WITH_METADATA persistent-package bool uses FArchive::SerializeBool.
+        result += struct.pack("<I", bool(metadata))
+        if metadata:
+            result += struct.pack("<i", len(metadata))
+            for key, value in metadata.items():
+                key_index = name_map.index(key) if key in name_map else 0
+                result += struct.pack("<II", key_index, 0)
+                value_bytes = value.encode("utf-8") + b"\x00"
+                result += struct.pack("<i", len(value_bytes))
+                result += value_bytes
+
     # ArrayDim
-    result += struct.pack("<H", array_dim)
+    result += struct.pack("<i", array_dim)
     # ElementSize
-    result += struct.pack("<H", element_size)
+    result += struct.pack("<i", element_size)
     # PropertyFlags
     result += struct.pack("<Q", property_flags)
     # RepIndex
@@ -671,28 +696,9 @@ def serialize_field(
         rep_index=rep_index,
         rep_notify_name_index=rep_notify_name_index,
         include_field_flags=include_field_flags,
+        metadata=metadata,
         release_version=release_version,
     )
-
-    # Metadata boolean (present in uncooked packages, absent in cooked/filtered)
-    if metadata is not None:
-        result += b"\x01"  # has metadata = True
-        # TMap count
-        result += struct.pack("<i", len(metadata))
-        for key, value in metadata.items():
-            # FName key
-            key_index = name_map.index(key) if key in name_map else 0
-            result += struct.pack("<II", key_index, 0)
-            # FString value
-            value_bytes = value.encode("utf-8") + b"\x00"
-            result += struct.pack("<i", len(value_bytes))
-            result += value_bytes
-    elif not include_field_flags:
-        # PKG_FilterEditorOnly: metadata boolean is absent
-        pass
-    else:
-        # Default: no metadata (cooked or no metadata flag)
-        result += b"\x00"  # has metadata = False
 
     # Type-specific tail
     result += tail
@@ -755,6 +761,39 @@ class TestNativeFieldPrefix:
         assert declarations[0].array_dim == 1
         assert declarations[0].element_size == 1
         assert end == len(field)
+
+    def test_ue5_field_metadata_precedes_int32_dimensions(self):
+        """Mirror FField::Serialize followed by FProperty::Serialize.
+
+        Persistent UE5 packages encode the metadata-presence bool as four bytes,
+        followed by int32 ArrayDim and ElementSize values.
+        """
+        name_map = make_name_map_with_entries("Yaw", "FloatProperty")
+        field = (
+            fname(name_map.index("FloatProperty"), 0)
+            + fname(name_map.index("Yaw"), 0)
+            + struct.pack("<I", 0)       # FField::FlagsPrivate
+            + struct.pack("<I", 0)       # FField::bHasMetaData = false
+            + struct.pack("<i", 1)       # FProperty::ArrayDim
+            + struct.pack("<i", 4)       # FProperty::ElementSize
+            + struct.pack("<Q", 0x94)    # FProperty::PropertyFlags
+            + struct.pack("<H", 0)       # legacy RepIndex placeholder
+            + fname(0, 0)                 # RepNotifyFunc = None
+            + b"\x00"                    # BlueprintReplicationCondition
+        )
+
+        declarations, end = read_fields_from_bytes(
+            field,
+            name_map=name_map,
+            release_version=44,
+        )
+
+        assert end == len(field) == 51
+        assert declarations[0].type_name == "FloatProperty"
+        assert declarations[0].name == "Yaw"
+        assert declarations[0].array_dim == 1
+        assert declarations[0].element_size == 4
+        assert declarations[0].property_flags == 0x94
 
     def test_uncooked_field_reads_metadata_and_bool_layout(self):
         """Uncooked field with metadata: metadata bool + TMap of pairs."""
@@ -1004,7 +1043,7 @@ class TestUFunctionNativeFieldIntegration:
         # Build payload manually with correct name_map
         control_prefix = b"\x00"
         none_tag = fname(0, 0)
-        payload = control_prefix + none_tag + native
+        payload = control_prefix + none_tag + absent_object_guid() + native
 
         archive, export, summary, names, imports, exports = make_function_export(
             payload,
@@ -1054,10 +1093,12 @@ def serialize_inner_field(
     result += struct.pack("<II", name_index, 0)
     # FlagsPrivate: u32 (always present in inner fields)
     result += struct.pack("<I", 0)
-    # ArrayDim: u16
-    result += struct.pack("<H", 1)
-    # ElementSize: u16
-    result += struct.pack("<H", 0)
+    # Metadata: false (serialized by FField before FProperty members)
+    result += struct.pack("<I", 0)
+    # ArrayDim: int32
+    result += struct.pack("<i", 1)
+    # ElementSize: int32
+    result += struct.pack("<i", 0)
     # PropertyFlags: u64
     result += struct.pack("<Q", 0)
     # RepIndex: u16
@@ -1066,8 +1107,6 @@ def serialize_inner_field(
     result += struct.pack("<II", 0, 0)
     # ReplicationCondition: u8 (release_version >= 21)
     result += struct.pack("<B", 0)
-    # Metadata: no metadata flag
-    result += b"\x00"
     # Type-specific tail
     result += tail
     return result
@@ -1370,12 +1409,12 @@ class TestNativeFieldDepthLimit:
             current = (
                 inner_type_bytes + inner_name_bytes
                 + struct.pack("<I", 0)
-                + struct.pack("<HH", 1, 0)
+                + struct.pack("<I", 0)
+                + struct.pack("<ii", 1, 0)
                 + struct.pack("<Q", 0)
                 + struct.pack("<H", 0)
                 + struct.pack("<II", 0, 0)
                 + struct.pack("<B", 0)
-                + b"\x00"
                 + current
             )
 

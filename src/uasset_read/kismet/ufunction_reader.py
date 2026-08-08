@@ -110,7 +110,7 @@ def get_kismet_custom_version(
     Returns the version number if found, or -1 if the GUID is not present
     in the summary's custom version table.
     """
-    for cv in summary.custom_versions:
+    for cv in getattr(summary, "custom_versions", ()):
         if cv.guid == serialized_guid:
             return cv.version
     return -1
@@ -130,17 +130,14 @@ def _read_native_payload_start(
     *,
     export_index: int = 0,
 ) -> tuple[ByteArchive, int]:
-    """Read the serialization-control prefix and tagged-property stream,
-    returning a bounded ByteArchive positioned after the None terminator.
+    """Read the UObject prefix before the native UStruct payload.
 
-    The native start is measured as the byte offset within the bounded
-    archive where the tagged-property data begins (after any
-    serialization-control prefix).
+    The native start is measured after serialization control, tagged
+    properties, and UObject's optional lazy-object GUID record.
 
     Returns:
-        (window, native_start) where window is a ByteArchive of the
-        serialized-script region and native_start is the offset within that
-        archive where tagged-property data begins.
+        (window, native_start) where window is bounded to the export's serial
+        range and positioned at the native UStruct payload.
 
     Raises:
         UnsupportedSerializationVersion: if control bits are unknown.
@@ -183,9 +180,16 @@ def _read_native_payload_start(
                 export_index=export_index,
             )
 
-    # Position window at the end of tagged properties (the native payload start)
+    # UObject::Serialize follows tagged properties with the optional lazy-object
+    # GUID record. Persistent binary archives encode the presence flag as a
+    # four-byte bool; a present GUID contributes another 16 bytes.
     window.seek(pos_after_tags)
-    return window, pos_after_tags
+    has_object_guid = window.read_bool("HasObjectGuid")
+    if has_object_guid:
+        window.read(16)
+
+    native_start = window.tell()
+    return window, native_start
 
 
 def _consume_tagged_properties(
@@ -281,9 +285,9 @@ def _read_ustruct_prefix_and_script(
     export_map: list[ObjectExport] | None = None,
     package_flags: int = 0,
 ) -> FunctionScriptReadResult:
-    """Read the UStruct prefix and script header after tagged properties.
+    """Read the UStruct prefix and script header after the UObject prefix.
 
-    The window must be positioned immediately after the None terminator.
+    The window must be positioned at the native UStruct payload.
     Reads:
       1. SuperStruct: int32
       2. Children: int32 (legacy pointer) OR int32 (count) + count * int32 pointers
@@ -378,7 +382,7 @@ def _read_ustruct_prefix_and_script(
                 status="no_script",
                 bytecode_buffer_size=0,
                 serialized_script_size=0,
-                serialized_start=native_start,
+                serialized_start=window.tell(),
                 native_fields=native_fields,
             )
 
@@ -405,13 +409,14 @@ def _read_ustruct_prefix_and_script(
             )
 
         # 6. SerializedScript
+        serialized_start = window.tell()
         script = window.read(serialized_script_size)
         return FunctionScriptReadResult(
             status="extracted",
             serialized_script=script,
             bytecode_buffer_size=bytecode_buffer_size,
             serialized_script_size=serialized_script_size,
-            serialized_start=native_start,
+            serialized_start=serialized_start,
             native_fields=native_fields,
         )
 

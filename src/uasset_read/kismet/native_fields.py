@@ -130,11 +130,11 @@ def _read_package_ref(archive: ByteArchive, context: NativeFieldContext) -> tupl
 def _read_fproperty_prefix(
     archive: ByteArchive,
     context: NativeFieldContext,
-) -> tuple[str, FNameRef, int, int, int, int, FNameRef | None, int]:
+) -> tuple[str, FNameRef, dict[str, str], int, int, int, int, FNameRef | None, int]:
     """Read the common FProperty prefix after the FField type-name.
 
     Returns:
-        (name, name_ref, array_dim, element_size, property_flags,
+        (name, name_ref, metadata, array_dim, element_size, property_flags,
          rep_index, rep_notify_name, replication_condition)
     """
     # NamePrivate: FName
@@ -144,10 +144,13 @@ def _read_fproperty_prefix(
     if not (context.package_flags & PKG_FilterEditorOnly):
         _flags = archive.read_u32()
 
-    # ArrayDim: u16
-    array_dim = archive.read_u16()
-    # ElementSize: u16
-    element_size = archive.read_u16()
+    # FField metadata is serialized by Super::Serialize before the
+    # FProperty-specific fields.
+    metadata = _read_metadata(archive, context)
+
+    # ArrayDim / ElementSize: int32
+    array_dim = archive.read_i32()
+    element_size = archive.read_i32()
     # PropertyFlags: u64
     property_flags = archive.read_u64()
     # RepIndex: u16
@@ -163,6 +166,7 @@ def _read_fproperty_prefix(
     return (
         name_ref.base_name or "",
         name_ref,
+        metadata,
         array_dim,
         element_size,
         property_flags,
@@ -185,7 +189,7 @@ def _read_metadata(archive: ByteArchive, context: NativeFieldContext) -> dict[st
     if context.package_flags & PKG_FilterEditorOnly:
         return {}
 
-    has_metadata = archive.read_u8() != 0
+    has_metadata = archive.read_bool()
     if not has_metadata:
         return {}
 
@@ -421,7 +425,7 @@ def _read_single_field(
 
     # Read the common FProperty prefix
     (
-        name, _name_ref, array_dim, element_size,
+        name, _name_ref, metadata, array_dim, element_size,
         property_flags, _rep_index, rep_notify_name, replication_condition,
     ) = _read_fproperty_prefix(archive, context)
 
@@ -432,8 +436,7 @@ def _read_single_field(
     decl.rep_notify_name = rep_notify_name
     decl.replication_condition = replication_condition
 
-    # Metadata (uncooked)
-    decl.metadata = _read_metadata(archive, context)
+    decl.metadata = metadata
 
     # Type-specific tail
     if type_name in _NO_EXTRA_BYTES_TYPES:

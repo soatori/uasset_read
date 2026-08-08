@@ -15,19 +15,31 @@ Covers:
 """
 from __future__ import annotations
 
+import hashlib
 import struct
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List
 
 import pytest
 
-from uasset_read.archive import ByteArchive
+from uasset_read.archive import ByteArchive, FArchive
 from uasset_read.kismet.archive import FKismetArchive
 from uasset_read.kismet.bytecode_extractor import parse_bytecode_stream
 from uasset_read.kismet.value_types import FNameRef
 from uasset_read.kismet.tokens import EExprToken
 from uasset_read.exceptions import ParseError
 from uasset_read.constants import UE5_LARGE_WORLD_COORDINATES
+from uasset_read.kismet.ufunction_reader import read_ufunction_script
+from uasset_read.serializers.object_resources import (
+    read_export_map,
+    read_import_map,
+    resolve_class_name,
+)
+from uasset_read.serializers.package_summary import (
+    read_name_table,
+    read_package_summary,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -150,8 +162,8 @@ class TestXFerFName:
         value = ar.xfer_fname()
         assert (value.name_index, value.number, value.base_name) == (2, 7, "Move")
         assert ar.serialized_offset == 8
-        # Logical address stays at start (xfer_fname restores bytecode_index)
-        assert ar.bytecode_index == 8
+        # FScriptName is 12 logical bytes (ComparisonIndex, DisplayIndex, Number).
+        assert ar.bytecode_index == 20
 
     def test_fname_zero_index(self):
         """FName with index 0 is 'None' (null name)."""
@@ -165,7 +177,90 @@ class TestXFerFName:
         assert value.number == 0
         assert value.base_name == "None"
         assert ar.serialized_offset == 8
-        assert ar.bytecode_index == 0  # bytecode_buffer_size=0, stays at start
+        assert ar.bytecode_index == 12
+
+
+def test_serialized_name_transfer_does_not_consume_logical_token_bytes():
+    archive = FKismetArchive(
+        struct.pack("<iiB", 1, 0, EExprToken.EX_EndOfScript),
+        "test", ["None", "Func"],
+    )
+    archive.xfer_fname()
+    assert archive.serialized_offset == 8
+    assert archive.bytecode_index == 12
+    assert archive.read_expression().Token is EExprToken.EX_EndOfScript
+
+
+def test_real_aim_script_uses_verified_header_and_closes_both_cursors():
+    """Decode the real UE5.0 Aim Script without scanning for a plausible range.
+
+    Provenance:
+    - asset: tests/samples/FirstPerson_BP_FirstPersonCharacter.uasset
+    - SHA-256: 32D47177B176A430ADB28897153E9BF5D2A3807BFCA232815AA60AD58B6AE6A3
+    - Aim Function export serial range: [83619, 83925)
+    - FStructScriptLoader header: export-relative [178, 186) = logical 84 / physical 108
+    - bounded Script bytes: asset [83805, 83913), ending in EX_EndOfScript (0x53)
+    """
+    sample = Path(__file__).resolve().parents[1] / "samples" / "FirstPerson_BP_FirstPersonCharacter.uasset"
+    asset_bytes = sample.read_bytes()
+    assert hashlib.sha256(asset_bytes).hexdigest().upper() == (
+        "32D47177B176A430ADB28897153E9BF5D2A3807BFCA232815AA60AD58B6AE6A3"
+    )
+
+    archive = FArchive(str(sample), tolerant=False)
+    try:
+        summary = read_package_summary(archive)
+        archive.seek(summary.name_offset)
+        name_map = read_name_table(archive, summary)
+        archive.seek(summary.import_offset)
+        import_map = read_import_map(archive, summary, name_map)
+        archive.seek(summary.export_offset)
+        export_map = read_export_map(archive, summary, name_map)
+
+        matches = [
+            (index, export)
+            for index, export in enumerate(export_map)
+            if export.object_name == "Aim"
+            and resolve_class_name(export.class_index, import_map, export_map) == "Function"
+        ]
+        assert len(matches) == 1
+        export_index, export = matches[0]
+        assert (export.serial_offset, export.serial_size) == (83619, 306)
+
+        script = read_ufunction_script(
+            archive, export, summary, name_map, import_map, export_map,
+            export_index=export_index,
+        )
+        assert script.status == "extracted"
+        assert script.serialized_start == 186
+        assert script.bytecode_buffer_size == 84
+        assert script.serialized_script_size == 108
+        assert script.serialized_script == asset_bytes[83805:83913]
+
+        expressions = parse_bytecode_stream(
+            script.serialized_script,
+            name_map,
+            summary,
+            bytecode_buffer_size=script.bytecode_buffer_size,
+        )
+        assert [expr.Token for expr in expressions] == [
+            EExprToken.EX_Tracepoint,
+            EExprToken.EX_WireTracepoint,
+            EExprToken.EX_Tracepoint,
+            EExprToken.EX_VirtualFunction,
+            EExprToken.EX_WireTracepoint,
+            EExprToken.EX_Tracepoint,
+            EExprToken.EX_Let,
+            EExprToken.EX_VirtualFunction,
+            EExprToken.EX_WireTracepoint,
+            EExprToken.EX_Return,
+            EExprToken.EX_EndOfScript,
+        ]
+        assert [expr.StatementIndex for expr in expressions] == [
+            0, 1, 2, 3, 26, 27, 28, 57, 80, 81, 83,
+        ]
+    finally:
+        archive.close()
 
 
 # ===========================================================================
@@ -187,7 +282,7 @@ class TestXFerFieldPointer:
         assert [part.number for part in value.path] == [0, 2]
         assert value.resolved_owner.index == 5
         assert ar.serialized_offset == len(disk)
-        assert ar.bytecode_index == 8
+        assert ar.bytecode_index == 16
 
     def test_field_path_owner_absent_below_thresholds(self):
         """Below both Fortnite 33 and Release 30: no owner read."""
@@ -201,7 +296,7 @@ class TestXFerFieldPointer:
         value = ar.xfer_field_pointer()
         assert value.resolved_owner is None
         assert ar.serialized_offset == len(disk)
-        assert ar.bytecode_index == 8
+        assert ar.bytecode_index == 16
 
     def test_field_path_owner_present_release_30_fortnite_below_33(self):
         """Release >= 30 alone triggers owner read (Fortnite still below 33)."""
@@ -215,7 +310,7 @@ class TestXFerFieldPointer:
         value = ar.xfer_field_pointer()
         assert value.resolved_owner.index == 10
         assert ar.serialized_offset == len(disk)
-        assert ar.bytecode_index == 8
+        assert ar.bytecode_index == 16
 
     def test_field_path_empty_path(self):
         """Empty path (count=0) with no owner."""
@@ -230,7 +325,7 @@ class TestXFerFieldPointer:
         assert value.path == []
         assert value.resolved_owner is None
         assert ar.serialized_offset == 4
-        assert ar.bytecode_index == 8
+        assert ar.bytecode_index == 16
 
 
 # ===========================================================================
@@ -330,9 +425,8 @@ class TestExpressionTransfers:
         assert all(p.Token != EExprToken.EX_EndFunctionParms for p in expr.Parameters)
         # Position after terminator
         assert ar.tell() == len(data)
-        # xfer_fname restores bytecode_index, so logical position only advances
-        # for token bytes: EX_VirtualFunction (1) + EX_IntOne (1) + EX_EndFunctionParms (1) = 3
-        assert ar.bytecode_index == 3
+        # Logical position includes the 12-byte FScriptName plus three tokens.
+        assert ar.bytecode_index == 15
 
     def test_final_function_pointer_adds_eight_logical_bytes(self):
         """EX_FinalFunction reads stack pointer via xfer_object_pointer.
@@ -399,13 +493,10 @@ class TestNestedTerminators:
 
     def test_nested_array_terminator_not_leaked(self):
         """EX_SetArray with EX_EndArray consumed internally, not leaked to outer stream."""
-        # EX_SetArray: property pointer (bNew=True, empty path) + elements + EX_EndArray
+        # EX_SetArray: serialized FFieldPath + elements + EX_EndArray
         # Then EX_True after the array
-        # Note: read_bool() reads 4 bytes (uint32), not 1 byte
-        bnew_true = i32(1)  # bNew=True as uint32
         data = (
             token(EExprToken.EX_SetArray)
-            + bnew_true
             + i32(0)  # empty path count
             + token(EExprToken.EX_IntOne)
             + token(EExprToken.EX_EndArray)
@@ -420,9 +511,9 @@ class TestNestedTerminators:
         assert all(e.Token != EExprToken.EX_EndArray for e in expr.Elements)
         # Position after SetArray, at EX_True
         assert ar.tell() == len(data) - 1
-        # Logical position: EX_SetArray (1) + read_bool bNew (4) + xfer_field_pointer restores (0)
-        # + EX_IntOne (1) + EX_EndArray (1) = 7
-        assert ar.bytecode_index == 7
+        # Logical position: EX_SetArray (1) + FProperty* (8)
+        # + EX_IntOne (1) + EX_EndArray (1) = 11
+        assert ar.bytecode_index == 11
 
     def test_nested_map_terminator_not_leaked(self):
         """EX_SetMap with EX_EndMap consumed internally."""
