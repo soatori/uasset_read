@@ -1,6 +1,11 @@
 ---
 name: dev-tool
 description: Unified dev knowledge base: commands, test rules, architecture, log analysis, batch parsing, issue review. Load sub-docs on demand.
+trigger: true
+procedure: true
+output: true
+validation: true
+routed: true
 ---
 
 # Dev Tool — Unified Knowledge Base
@@ -19,7 +24,27 @@ Auto-load the matching sub-document based on user keywords:
 | "analyze logs", "review log", "log report" | `references/log-analysis.md` |
 | "batch parse", "test samples", "error report" | `references/batch-parse.md` |
 | "issue status", "review issue", "check fix" | `references/issue-review.md` |
-| First question about project structure / no specific keyword | Load this file only (routing table) |
+
+> **Fallback**: If no keywords match, present this routing table as a quick reference.
+
+## Procedure
+
+1. Parse user message for keywords in the routing table
+2. Match keywords to sub-document
+3. Load the matched `references/<file>.md`
+4. Use the sub-document content to answer the user's question
+5. If no keywords match, present the Quick Reference section as a fallback
+
+## Output
+
+- Direct answer or summary derived from the loaded sub-document
+- Reference to the source file for further reading
+
+## Validation
+
+- Sub-document exists at the matched path
+- Content loaded successfully without errors
+- Response directly addresses the user's query using the loaded content
 
 ## Quick Reference
 
