@@ -24,7 +24,8 @@ Auto-load the matching sub-document based on user keywords:
 | "analyze logs", "review log", "log report" | `references/log-analysis.md` |
 | "batch parse", "test samples", "error report" | `references/batch-parse.md` |
 | "issue status", "review issue", "check fix" | `references/issue-review.md` |
-| First question about project structure / no specific keyword | Load this file only (routing table) |
+
+> **Fallback**: If no keywords match, present this routing table as a quick reference.
 
 ## Procedure
 
@@ -32,7 +33,7 @@ Auto-load the matching sub-document based on user keywords:
 2. Match keywords to sub-document
 3. Load the matched `references/<file>.md`
 4. Use the sub-document content to answer the user's question
-5. If no keywords match, present the routing table as a quick reference
+5. If no keywords match, present the Quick Reference section as a fallback
 
 ## Output
 
