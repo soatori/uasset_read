@@ -307,6 +307,88 @@ class TestJsonRejection:
 
 
 # ---------------------------------------------------------------------------
+# Rendered JSON + Markdown public-output acceptance
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def rendered_outputs() -> dict[str, dict[str, Any]]:
+    """Render both public formats for every required #77 sample."""
+    if not _sample_exists():
+        pytest.skip("Sample root not found")
+
+    import json
+    from uasset_read.core import parse_single
+
+    outputs: dict[str, dict[str, Any]] = {}
+    for rel_path, _expected_count in SAMPLES:
+        path = _load_sample(rel_path)
+        if not os.path.exists(path):
+            pytest.fail(f"Required Issue #77 sample not found: {path}")
+        outputs[rel_path] = {
+            "json": json.loads(parse_single(path, format="json", tolerant=True)),
+            "markdown": parse_single(path, format="markdown", tolerant=True),
+        }
+    return outputs
+
+
+def _function_markdown_section(markdown: str, function_name: str) -> str:
+    """Return one rendered function section, excluding following sections."""
+    marker = f"### {function_name}\n"
+    assert marker in markdown, f"Markdown missing function heading: {function_name}"
+    return markdown.split(marker, 1)[1].split("\n### ", 1)[0]
+
+
+class TestRenderedFunctionOutput:
+    """Public JSON and Markdown preserve Function Script output contracts."""
+
+    @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
+    def test_rendered_outputs_cover_every_function_with_contract_fields(
+        self, rendered_outputs
+    ):
+        """Each actual Function is unique, status-bearing, and code-bearing when parsed."""
+        total = 0
+        for rel_path, expected_count in SAMPLES:
+            functions = rendered_outputs[rel_path]["json"].get("decompiled_functions", [])
+            assert len(functions) == expected_count, rel_path
+            names = [function["name"] for function in functions]
+            assert len(names) == len(set(names)), f"{rel_path}: duplicate Function output"
+            total += len(functions)
+
+            for function in functions:
+                assert isinstance(function.get("local_variables"), list), function["name"]
+                assert (function["bytecode_status"], function["translation_status"]) in ALLOWED_STATUS_PAIRS
+                if function["bytecode_status"] == "parsed":
+                    assert function["bytecode_source"] == "function_export"
+                    assert function["cpp_code"].strip(), function["name"]
+                if function["bytecode_status"] == "no_script":
+                    assert function["error_code"] == "confirmed_no_script"
+                    assert function["script_metrics"] == ZERO_SCRIPT_METRICS
+                if function["bytecode_status"] == "failed":
+                    assert function.get("error_code"), function["name"]
+                    assert function.get("error_message"), function["name"]
+                metrics = function.get("script_metrics")
+                if metrics is not None:
+                    assert set(metrics) == set(ZERO_SCRIPT_METRICS)
+                    assert all(value >= 0 for value in metrics.values())
+
+        assert total == TOTAL_EXPECTED
+
+    @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
+    def test_markdown_locals_are_conditional_and_parsed_code_is_rendered(
+        self, rendered_outputs
+    ):
+        """Function-local tables are present exactly when JSON recovered locals."""
+        for rel_path, _expected_count in SAMPLES:
+            payload = rendered_outputs[rel_path]["json"]
+            markdown = rendered_outputs[rel_path]["markdown"]
+            for function in payload.get("decompiled_functions", []):
+                section = _function_markdown_section(markdown, function["name"])
+                assert ("**Local Variables:**" in section) is bool(function["local_variables"])
+                if function["bytecode_status"] == "parsed":
+                    assert "```cpp" in section, f"{rel_path}/{function['name']}"
+
+
+# ---------------------------------------------------------------------------
 # FirstPerson-specific assertions
 # ---------------------------------------------------------------------------
 
