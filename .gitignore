@@ -81,9 +81,6 @@ tests/*
 docs/firstperson_blueprint_test_report.md
 docs/reference/refactor-reference.md
 
-# Superpowers workflow artifacts (local only)
-.superpowers/
-
 # Accidentally added submodule (no .gitmodules mapping)
 .claude/skills/unreal-mcp-skills
 
@@ -91,7 +88,6 @@ docs/reference/refactor-reference.md
 .worktrees/
 
 # Documentation build artifacts
-docs/superpowers/
 docs/compose/
 .mimocode/
 
@@ -101,4 +97,3 @@ worktrees/
 
 # Coverage
 coverage.xml
-.worktrees/
