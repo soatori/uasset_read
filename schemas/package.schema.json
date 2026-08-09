@@ -747,6 +747,22 @@
           "type": "string",
           "description": "Return type"
         },
+        "local_variables": {
+          "type": "array",
+          "description": "Recovered function-local variables; empty when none are available",
+          "items": {
+            "type": "object",
+            "required": ["name", "type"],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            }
+          }
+        },
         "bytecode_status": {
           "type": "string",
           "enum": ["parsed", "no_script", "failed", "unknown"],

@@ -91,7 +91,28 @@ def decompile_single_function(
         raise
 
     if script_result.status == "no_script":
-        return _failed_result("no script data")
+        return KismetDecompiledResult(
+            function_name=func_name,
+            signature=f"void {func_name}()",
+            local_variables=[],
+            cpp_code="",
+            bytecode_source="unknown",
+            bytecode_status="no_script",
+            translation_status="not_applicable",
+            error_code="confirmed_no_script",
+            error_message="UFunction Script header declares no bytecode",
+            error_context={
+                "function_name": func_name,
+                "package_offset": export.serial_offset,
+                "export_offset": export.serial_offset,
+            },
+            script_metrics={
+                "bytecode_buffer_size": 0,
+                "serialized_script_size": 0,
+                "serialized_bytes_consumed": 0,
+                "bytecode_bytes_consumed": 0,
+            },
+        )
     if script_result.status == "failed":
         reason = script_result.failure.error_message if script_result.failure else "unknown"
         return _failed_result(f"UFunction script read failed: {reason}")
@@ -112,7 +133,30 @@ def decompile_single_function(
     if error or not expressions:
         if tolerant:
             reason = error if error else "no bytecode expressions extracted"
-            return _failed_result(reason)
+            return KismetDecompiledResult(
+                function_name=func_name,
+                signature=f"void {func_name}()",
+                local_variables=[],
+                cpp_code="",
+                bytecode_source="function_export",
+                bytecode_status="failed",
+                translation_status="not_applicable",
+                error_code="bytecode_decode_error",
+                error_message=reason,
+                error_context={
+                    "function_name": func_name,
+                    "package_offset": export.serial_offset,
+                    "export_offset": export.serial_offset,
+                },
+                script_metrics={
+                    "bytecode_buffer_size": script_result.bytecode_buffer_size,
+                    "serialized_script_size": script_result.serialized_script_size,
+                    "serialized_bytes_consumed": len(script_result.serialized_script),
+                    "bytecode_bytes_consumed": 0,
+                },
+                warnings=[],
+                fallback_reasons=[f"bytecode decode error: {reason}"],
+            )
         return None
 
     # Build fallback reason list
@@ -257,11 +301,8 @@ def decompile_uasset(path: str, tolerant: bool = True) -> list[KismetDecompiledR
         if class_name not in FUNCTION_EXPORT_CLASSES:
             continue
 
-        # Skip exports with no script data
-        if not export.has_script_serialization:
-            continue
-
-        # Attempt decompilation — retain one result for every such export
+        # Attempt decompilation — the native reader determines whether a
+        # Function has Script data; export property offsets are unrelated.
         # including no_script and failed
         result = decompile_single_function(
             archive, export, summary, name_map, import_map, export_map, tolerant=tolerant

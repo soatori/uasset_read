@@ -430,6 +430,7 @@ class DecompiledFunctionIR:
     cpp_code: str
     parameters: list[dict]
     return_type: str
+    local_variables: list[dict] = field(default_factory=list)
     fallback_reasons: list[str] = field(default_factory=list)
     bytecode_confidence: str = "verified"
     # "verified" | "no_script" | "graph_topology" | "failed"

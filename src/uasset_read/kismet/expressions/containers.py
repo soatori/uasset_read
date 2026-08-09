@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 @dataclass
 class EX_SetArray(KismetExpression):
     """SetArray — version-dependent: with CHANGE_SETARRAY_BYTECODE has AssigningProperty."""
-    AssigningProperty: Optional[FKismetPropertyPointer] = None
+    AssigningProperty: Optional[KismetExpression] = None
     ArrayInnerProp: Optional[FKismetPropertyPointer] = None
     Elements: list[KismetExpression] = None
 
@@ -22,9 +22,9 @@ class EX_SetArray(KismetExpression):
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetArray:
-        from uasset_read.kismet.property_pointer import FKismetPropertyPointer
-        # In UE5, SetArray reads a property then elements
-        prop = FKismetPropertyPointer.from_archive(archive, name_map)
+        # UE5's post-VER_UE4_CHANGE_SETARRAY_BYTECODE layout serializes the
+        # array target as an expression, not as a bare FProperty pointer.
+        prop = archive.read_expression()
         elements = archive.read_expression_array(EExprToken.EX_EndArray)
         return cls(AssigningProperty=prop, Elements=elements)
 
@@ -95,6 +95,7 @@ EX_EndArrayConst = make_simple_expression(EExprToken.EX_EndArrayConst)
 class EX_MapConst(KismetExpression):
     KeyProperty: FKismetPropertyPointer = None
     ValueProperty: FKismetPropertyPointer = None
+    Num: int = 0
     Elements: list[KismetExpression] = None
 
     @property
@@ -105,8 +106,14 @@ class EX_MapConst(KismetExpression):
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
         key_prop = FKismetPropertyPointer.from_archive(archive, name_map)
         val_prop = FKismetPropertyPointer.from_archive(archive, name_map)
+        num = archive.read_i32()
         elements = archive.read_expression_array(EExprToken.EX_EndMapConst)
-        return cls(KeyProperty=key_prop, ValueProperty=val_prop, Elements=elements)
+        return cls(
+            KeyProperty=key_prop,
+            ValueProperty=val_prop,
+            Num=num,
+            Elements=elements,
+        )
 
 
 # Data-free expression: returns Token only

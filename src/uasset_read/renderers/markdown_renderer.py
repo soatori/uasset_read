@@ -395,6 +395,7 @@ class MarkdownRenderer(IRenderer):
                 "cpp_code": func.cpp_code,
                 "parameters": func.parameters,
                 "return_type": func.return_type,
+                "local_variables": func.local_variables,
                 "bytecode_confidence": func.bytecode_confidence,
                 "bytecode_status": func.bytecode_status,
                 "translation_status": func.translation_status,
@@ -465,6 +466,21 @@ class MarkdownRenderer(IRenderer):
                     default = p.get("default_value")
                     default_str = str(default) if default is not None else "-"
                     lines.append(f"| {_escape_md_cell(pname)} | {_escape_md_cell(ptype)} | {_escape_md_cell(default_str)} |")
+                lines.append("")
+
+            # Local variables are function-scoped and optional: only render
+            # data actually recovered from this function's bytecode.
+            local_variables = func_info.get("local_variables", [])
+            if local_variables:
+                lines.append("**Local Variables:**")
+                lines.append("")
+                lines.append("| Local | Type |")
+                lines.append("|-------|------|")
+                for local in local_variables:
+                    lines.append(
+                        f"| {_escape_md_cell(local.get('name', ''))} | "
+                        f"{_escape_md_cell(local.get('type', ''))} |"
+                    )
                 lines.append("")
 
             warn = self._provenance_warning(func_info)

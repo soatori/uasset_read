@@ -57,7 +57,8 @@ class FKismetArchive(FArchive):
 
         consecutive_unknown = 0
         while True:
-            stmt_index = self.tell()
+            serialized_start = self.tell()
+            stmt_index = self.bytecode_index
             token_byte = self.read_u8()
             try:
                 token = EExprToken(token_byte)
@@ -72,13 +73,13 @@ class FKismetArchive(FArchive):
                         raise ParseError(
                             "Too many consecutive unknown tokens in tolerant mode"
                         )
-                    if stmt_index not in self._warned_offsets:
+                    if serialized_start not in self._warned_offsets:
                         logger.debug(
-                            f"Unknown EExprToken 0x{token_byte:02X} at offset {stmt_index}, skipping in tolerant mode"
+                            f"Unknown EExprToken 0x{token_byte:02X} at offset {serialized_start}, skipping in tolerant mode"
                         )
-                        self._warned_offsets.add(stmt_index)
-                    # Skip back: we already consumed 1 byte, so seek to stmt_index + 1
-                    self.seek(stmt_index + 1)
+                        self._warned_offsets.add(serialized_start)
+                    # The unknown byte is already consumed from both cursors.
+                    self.seek(serialized_start + 1)
                     continue
                 else:
                     token_name = token.name if token is not None else "<unknown>"
@@ -98,11 +99,11 @@ class FKismetArchive(FArchive):
             finally:
                 self._expression_depth -= 1
 
-            end_offset = self.tell()
-            if end_offset <= stmt_index:
+            serialized_end = self.tell()
+            if serialized_end <= serialized_start:
                 raise ParseError(
                     f"Kismet expression {token.name} made no progress "
-                    f"at offset {stmt_index} (ended at {end_offset})"
+                    f"at offset {serialized_start} (ended at {serialized_end})"
                 )
 
             expr.StatementIndex = stmt_index
@@ -234,8 +235,9 @@ class FKismetArchive(FArchive):
             owner_index = self.read_i32()
             resolved_owner = PackageIndex(owner_index)
 
-        # Restore logical address (xfer doesn't advance it)
-        self.bytecode_index = start_bytecode
+        # FProperty* is pointer-sized in the reconstructed Script buffer,
+        # irrespective of the variable-length FFieldPath on disk.
+        self.bytecode_index = start_bytecode + 8
 
         return FFieldPath(
             path=resolved_path,
@@ -245,7 +247,9 @@ class FKismetArchive(FArchive):
     def xfer_fname(self) -> FNameRef:
         """Read FName (index + number), returning lossless FNameRef.
 
-        The logical address does not advance (xfer is a data read, not a skip).
+        Persistent packages store two uint32 values, while the reconstructed
+        FScriptName occupies three uint32 values (ComparisonIndex,
+        DisplayIndex, Number).
         """
         start_bytecode = self.bytecode_index
         name_index = self.read_u32()
@@ -257,8 +261,7 @@ class FKismetArchive(FArchive):
         else:
             base_name = f"Unknown_{name_index}"
 
-        # Restore logical address (xfer doesn't advance it)
-        self.bytecode_index = start_bytecode
+        self.bytecode_index = start_bytecode + 12
 
         return FNameRef(
             name_index=name_index,

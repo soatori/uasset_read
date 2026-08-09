@@ -22,10 +22,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Package flags constant (mirrored from constants.py to avoid circular import)
 # ---------------------------------------------------------------------------
+PKG_Cooked = 0x00000200
 PKG_FilterEditorOnly = 0x80000000
 
 # FReleaseObjectVersion threshold for replication condition byte
 _PROPERTIES_SERIALIZE_REP_CONDITION_VERSION = 21
+_FFIELD_METADATA_USES_COOKED_FLAG_VERSION = (5, 4)
+_FFIELD_FLAGS_RESPECT_EDITOR_FILTER_VERSION = (5, 8)
 
 
 # ---------------------------------------------------------------------------
@@ -36,8 +39,8 @@ _PROPERTIES_SERIALIZE_REP_CONDITION_VERSION = 21
 class NativeFieldContext:
     """Resolution context for native field reading.
 
-    Holds the name map, import/export maps, package flags, and release
-    version needed to resolve package indices and determine which prefix
+    Holds the name map, import/export maps, package flags, and engine/custom
+    versions needed to resolve package indices and determine which prefix
     fields are present.
     """
 
@@ -46,6 +49,7 @@ class NativeFieldContext:
     export_map: list[ObjectExport]
     package_flags: int = 0
     release_version: int = 21  # FReleaseObjectVersion
+    saved_engine_version: tuple[int, int] = (5, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -130,24 +134,31 @@ def _read_package_ref(archive: ByteArchive, context: NativeFieldContext) -> tupl
 def _read_fproperty_prefix(
     archive: ByteArchive,
     context: NativeFieldContext,
-) -> tuple[str, FNameRef, int, int, int, int, FNameRef | None, int]:
+) -> tuple[str, FNameRef, dict[str, str], int, int, int, int, FNameRef | None, int]:
     """Read the common FProperty prefix after the FField type-name.
 
     Returns:
-        (name, name_ref, array_dim, element_size, property_flags,
+        (name, name_ref, metadata, array_dim, element_size, property_flags,
          rep_index, rep_notify_name, replication_condition)
     """
     # NamePrivate: FName
     name_ref = _read_fname_ref(archive, context)
 
-    # FlagsPrivate: u32 (absent when PKG_FilterEditorOnly)
-    if not (context.package_flags & PKG_FilterEditorOnly):
+    # UE5.0-5.7 always serialize FlagsPrivate. UE5.8 made it conditional on
+    # the archive's editor-only filter state.
+    if (
+        context.saved_engine_version < _FFIELD_FLAGS_RESPECT_EDITOR_FILTER_VERSION
+        or not (context.package_flags & PKG_FilterEditorOnly)
+    ):
         _flags = archive.read_u32()
 
-    # ArrayDim: u16
-    array_dim = archive.read_u16()
-    # ElementSize: u16
-    element_size = archive.read_u16()
+    # FField metadata is serialized by Super::Serialize before the
+    # FProperty-specific fields.
+    metadata = _read_metadata(archive, context)
+
+    # ArrayDim / ElementSize: int32
+    array_dim = archive.read_i32()
+    element_size = archive.read_i32()
     # PropertyFlags: u64
     property_flags = archive.read_u64()
     # RepIndex: u16
@@ -163,6 +174,7 @@ def _read_fproperty_prefix(
     return (
         name_ref.base_name or "",
         name_ref,
+        metadata,
         array_dim,
         element_size,
         property_flags,
@@ -179,13 +191,19 @@ def _read_fproperty_prefix(
 def _read_metadata(archive: ByteArchive, context: NativeFieldContext) -> dict[str, str]:
     """Read the metadata boolean and, when true, a TMap<FName, FString>.
 
-    Returns a dict of key-value pairs.  For cooked packages or when the
-    metadata flag is false, returns an empty dict.
+    Returns a dict of key-value pairs. UE5.0-5.3 use the package's
+    bIsCookedForEditor state (derived by the loader from PKG_FilterEditorOnly);
+    UE5.4+ use PKG_Cooked. A present record may still contain false.
     """
-    if context.package_flags & PKG_FilterEditorOnly:
+    metadata_omission_flag = (
+        PKG_FilterEditorOnly
+        if context.saved_engine_version < _FFIELD_METADATA_USES_COOKED_FLAG_VERSION
+        else PKG_Cooked
+    )
+    if context.package_flags & metadata_omission_flag:
         return {}
 
-    has_metadata = archive.read_u8() != 0
+    has_metadata = archive.read_bool()
     if not has_metadata:
         return {}
 
@@ -421,7 +439,7 @@ def _read_single_field(
 
     # Read the common FProperty prefix
     (
-        name, _name_ref, array_dim, element_size,
+        name, _name_ref, metadata, array_dim, element_size,
         property_flags, _rep_index, rep_notify_name, replication_condition,
     ) = _read_fproperty_prefix(archive, context)
 
@@ -432,8 +450,7 @@ def _read_single_field(
     decl.rep_notify_name = rep_notify_name
     decl.replication_condition = replication_condition
 
-    # Metadata (uncooked)
-    decl.metadata = _read_metadata(archive, context)
+    decl.metadata = metadata
 
     # Type-specific tail
     if type_name in _NO_EXTRA_BYTES_TYPES:

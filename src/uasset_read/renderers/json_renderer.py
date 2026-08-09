@@ -598,6 +598,7 @@ class JSONRenderer(IRenderer):
             "cpp_code": func.cpp_code,
             "parameters": func.parameters,
             "return_type": func.return_type,
+            "local_variables": func.local_variables,
             "bytecode_status": func.bytecode_status,
             "translation_status": func.translation_status,
             "bytecode_source": func.bytecode_source,
