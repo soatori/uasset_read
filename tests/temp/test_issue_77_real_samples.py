@@ -6,7 +6,9 @@ Opt-in: skipped when the sample root directory is absent.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -29,21 +31,6 @@ SAMPLES = [
 # Total expected function exports: 76
 TOTAL_EXPECTED = sum(count for _, count in SAMPLES)
 
-# Allowed (bytecode_status, translation_status) pairs after native extraction.
-ALLOWED_STATUS_PAIRS = {
-    ("parsed", "complete"),
-    ("parsed", "partial"),
-    ("parsed", "failed"),
-    ("no_script", "not_applicable"),
-}
-
-ZERO_SCRIPT_METRICS = {
-    "bytecode_buffer_size": 0,
-    "serialized_script_size": 0,
-    "serialized_bytes_consumed": 0,
-    "bytecode_bytes_consumed": 0,
-}
-
 # Rejected patterns in rendered JSON output
 REJECTED_JSON_PATTERNS = [
     "Property_-7",
@@ -52,6 +39,7 @@ REJECTED_JSON_PATTERNS = [
     "fallback_or_serial_scan",
     "bpgc_bytecode_extraction",
     "serial_scan_recovery",
+    "graph_topology",
 ]
 
 
@@ -63,6 +51,76 @@ def _sample_exists() -> bool:
 def _load_sample(rel_path: str) -> str:
     """Return absolute path to a sample file."""
     return os.path.join(SAMPLE_ROOT, rel_path)
+
+
+@pytest.mark.parametrize(
+    "function, expected_message",
+    [
+        (SimpleNamespace(function_name="Partial", bytecode_status="parsed", translation_status="partial", bytecode_source="function_export", logic_source="current_asset", fallback_reasons=[], cpp_code="return;"), "status"),
+        (SimpleNamespace(function_name="Fallback", bytecode_status="parsed", translation_status="complete", bytecode_source="serial_scan_recovery", logic_source="current_asset", fallback_reasons=[], cpp_code="return;"), "bytecode source"),
+        (SimpleNamespace(function_name="Topology", bytecode_status="parsed", translation_status="complete", bytecode_source="function_export", logic_source="graph_topology", fallback_reasons=[], cpp_code="return;"), "logic source"),
+        (SimpleNamespace(function_name="FallbackReason", bytecode_status="parsed", translation_status="complete", bytecode_source="function_export", logic_source="current_asset", fallback_reasons=["serial_scan_recovery"], cpp_code="return;"), "fallback reasons"),
+        (SimpleNamespace(function_name="EmptyCode", bytecode_status="parsed", translation_status="complete", bytecode_source="function_export", logic_source="current_asset", fallback_reasons=[], cpp_code=""), "missing C++ code"),
+    ],
+)
+def test_strict_native_function_contract_rejects_non_native_or_incomplete_results(
+    function: SimpleNamespace,
+    expected_message: str,
+) -> None:
+    """The #77 close gate rejects non-native or incomplete function results."""
+    with pytest.raises(AssertionError, match=re.escape(expected_message)):
+        _assert_strict_native_function("synthetic", function)
+
+
+def _function_value(function: Any, name: str) -> Any:
+    """Read one function field from internal IR or rendered JSON."""
+    if isinstance(function, dict):
+        return function.get(name)
+    return getattr(function, name)
+
+
+def _assert_strict_native_function(context: str, function: Any) -> None:
+    """Require the #77 close-out contract for one known Script-bearing function."""
+    name = _function_value(function, "function_name")
+    if name is None:
+        name = _function_value(function, "name")
+    prefix = f"{context}/{name}"
+    assert _function_value(function, "bytecode_status") == "parsed", f"{prefix}: bytecode status is {_function_value(function, 'bytecode_status')!r}"
+    assert _function_value(function, "translation_status") == "complete", f"{prefix}: translation status is {_function_value(function, 'translation_status')!r}"
+    assert _function_value(function, "bytecode_source") == "function_export", f"{prefix}: bytecode source is {_function_value(function, 'bytecode_source')!r}"
+    assert _function_value(function, "logic_source") == "current_asset", f"{prefix}: logic source is {_function_value(function, 'logic_source')!r}"
+    assert not _function_value(function, "fallback_reasons"), f"{prefix}: fallback reasons are {_function_value(function, 'fallback_reasons')!r}"
+    assert _function_value(function, "cpp_code").strip(), f"{prefix}: missing C++ code"
+
+
+def test_markdown_function_renderer_prefers_native_results_but_keeps_metadata_fallback() -> None:
+    """Markdown matches native output when present and retains metadata-only fallback."""
+    from uasset_read.renderers.markdown_renderer import MarkdownRenderer
+
+    metadata_function = SimpleNamespace(name="MetadataOnly", parameters=[], return_type="void")
+    native_function = SimpleNamespace(
+        name="NativeOnly", signature="void NativeOnly()", cpp_code="return;",
+        parameters=[], return_type="void", local_variables=[], bytecode_confidence="verified",
+        bytecode_status="parsed", translation_status="complete",
+        bytecode_source="function_export", logic_source="current_asset", warnings=[],
+        fallback_reasons=[], error_code=None, error_message=None, script_metrics=None,
+    )
+    renderer = MarkdownRenderer()
+
+    metadata_lines: list[str] = []
+    renderer._render_functions(
+        metadata_lines,
+        SimpleNamespace(decompiled_functions=[], blueprint=SimpleNamespace(functions=[metadata_function])),
+    )
+    assert "### MetadataOnly" in metadata_lines
+
+    native_lines: list[str] = []
+    renderer._render_functions(
+        native_lines,
+        SimpleNamespace(decompiled_functions=[native_function], blueprint=SimpleNamespace(functions=[metadata_function])),
+    )
+    assert "### NativeOnly" in native_lines
+    assert "### MetadataOnly" not in native_lines
 
 
 # ---------------------------------------------------------------------------
@@ -196,72 +254,11 @@ class TestFunctionContract:
     """Verify per-function status and metadata contract."""
 
     @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
-    def test_at_least_one_function_has_native_bytecode(self, all_results):
-        """Require the matrix to exercise native UFunction bytecode parsing."""
-        functions = [
-            function
-            for data in all_results.values()
-            for function in (data["result"].decompiled_functions or [])
-        ]
-        assert any(function.bytecode_status == "parsed" for function in functions)
-
-    @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
-    def test_parsed_functions_have_native_current_asset_provenance(self, all_results):
-        """Parsed bytecode must come from the current Function export."""
-        for rel_path, data in all_results.items():
-            result = data["result"]
-            if not result.decompiled_functions:
-                continue
-            for df in result.decompiled_functions:
-                if df.bytecode_status == "parsed":
-                    assert df.bytecode_source == "function_export", (
-                        f"{rel_path}/{df.function_name}: parsed bytecode source "
-                        f"is {df.bytecode_source!r}"
-                    )
-                    assert df.logic_source == "current_asset", (
-                        f"{rel_path}/{df.function_name}: parsed bytecode logic "
-                        f"source is {df.logic_source!r}"
-                    )
-
-    @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
-    def test_no_failed_status(self, all_results):
-        """Every Function export must be parsed or confirmed to have no Script."""
-        failed = [
-            f"{rel_path}/{df.function_name}: {df.error_code}: {df.error_message}"
-            for rel_path, data in all_results.items()
-            for df in (data["result"].decompiled_functions or [])
-            if df.bytecode_status == "failed"
-        ]
-        assert not failed, "UFunction Script failures:\n  " + "\n  ".join(failed)
-
-    @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
-    def test_no_script_status_requires_zero_header(self, all_results):
-        """Only an observed zero Script header can produce no_script."""
+    def test_every_matrix_function_is_complete_native_current_asset_script(self, all_results):
+        """Every known Script-bearing matrix function meets the #77 close gate."""
         for rel_path, data in all_results.items():
             for df in (data["result"].decompiled_functions or []):
-                if df.bytecode_status != "no_script":
-                    continue
-                assert df.error_code == "confirmed_no_script", (
-                    f"{rel_path}/{df.function_name}: no_script error code "
-                    f"is {df.error_code!r}"
-                )
-                assert df.script_metrics == ZERO_SCRIPT_METRICS, (
-                    f"{rel_path}/{df.function_name}: no_script metrics "
-                    f"are {df.script_metrics!r}"
-                )
-
-    @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
-    def test_status_pairs_are_allowed(self, all_results):
-        """Verify every (bytecode_status, translation_status) pair is in the allowed set."""
-        for rel_path, data in all_results.items():
-            result = data["result"]
-            if not result.decompiled_functions:
-                continue
-            for df in result.decompiled_functions:
-                pair = (df.bytecode_status, df.translation_status)
-                assert pair in ALLOWED_STATUS_PAIRS, (
-                    f"{rel_path}/{df.function_name}: disallowed status pair {pair}"
-                )
+                _assert_strict_native_function(rel_path, df)
 
     @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
     def test_no_k2node_pseudo_functions(self, all_results):
@@ -305,6 +302,15 @@ class TestJsonRejection:
                 f"{rel_path}: rejected pattern '{pattern}' found in JSON output"
             )
 
+    @pytest.mark.skipif(not _sample_exists(), reason="Sample root not found")
+    def test_no_rejected_markdown_patterns(self, rendered_outputs):
+        """Verify fallback, topology, and garbage patterns never reach Markdown."""
+        for rel_path, outputs in rendered_outputs.items():
+            for pattern in REJECTED_JSON_PATTERNS:
+                assert pattern not in outputs["markdown"], (
+                    f"{rel_path}: rejected pattern '{pattern}' found in Markdown output"
+                )
+
 
 # ---------------------------------------------------------------------------
 # Rendered JSON + Markdown public-output acceptance
@@ -331,11 +337,50 @@ def rendered_outputs() -> dict[str, dict[str, Any]]:
     return outputs
 
 
+def _markdown_functions_block(markdown: str) -> str:
+    """Return the Markdown ``Functions`` block, excluding other asset sections."""
+    marker = "## Functions\n"
+    assert marker in markdown, "Markdown missing Functions section"
+    return markdown.split(marker, 1)[1].split("\n## ", 1)[0]
+
+
+def _markdown_function_sections(markdown: str) -> list[tuple[str, str]]:
+    """Return every named function heading and body from the Functions block."""
+    functions_block = _markdown_functions_block(markdown)
+    matches = list(re.finditer(r"^### (?P<name>[^\n]+)\n", functions_block, re.MULTILINE))
+    return [
+        (match.group("name"), functions_block[match.end() : matches[index + 1].start()] if index + 1 < len(matches) else functions_block[match.end() :])
+        for index, match in enumerate(matches)
+    ]
+
+
 def _function_markdown_section(markdown: str, function_name: str) -> str:
-    """Return one rendered function section, excluding following sections."""
-    marker = f"### {function_name}\n"
-    assert marker in markdown, f"Markdown missing function heading: {function_name}"
-    return markdown.split(marker, 1)[1].split("\n### ", 1)[0]
+    """Return exactly one rendered Function body by name."""
+    matches = [section for name, section in _markdown_function_sections(markdown) if name == function_name]
+    assert len(matches) == 1, f"Markdown Function heading count for {function_name}: {len(matches)}"
+    return matches[0]
+
+
+def _cpp_fenced_block(section: str, context: str) -> str:
+    """Return exactly one C++ code fence from a rendered Function body."""
+    matches = re.findall(r"```cpp\n(.*?)\n```", section, re.DOTALL)
+    assert len(matches) == 1, f"{context}: expected exactly one C++ code fence"
+    return matches[0]
+
+
+def _markdown_table_rows(section: str, heading: str) -> list[str]:
+    """Return data rows from one Markdown table, or no rows when it is absent."""
+    if heading not in section:
+        return []
+    table = section.split(heading, 1)[1].lstrip("\n").split("\n\n", 1)[0]
+    lines = table.splitlines()
+    assert lines and lines[0].startswith("|---"), f"{heading}: missing Markdown separator"
+    return lines[1:]
+
+
+def _markdown_cell(value: Any) -> str:
+    """Match the Markdown renderer's table-cell escaping."""
+    return str(value).replace("|", "\\|").replace("\n", " ")
 
 
 class TestRenderedFunctionOutput:
@@ -345,7 +390,7 @@ class TestRenderedFunctionOutput:
     def test_rendered_outputs_cover_every_function_with_contract_fields(
         self, rendered_outputs
     ):
-        """Each actual Function is unique, status-bearing, and code-bearing when parsed."""
+        """Each actual Function satisfies the strict #77 public-output contract."""
         total = 0
         for rel_path, expected_count in SAMPLES:
             functions = rendered_outputs[rel_path]["json"].get("decompiled_functions", [])
@@ -356,20 +401,7 @@ class TestRenderedFunctionOutput:
 
             for function in functions:
                 assert isinstance(function.get("local_variables"), list), function["name"]
-                assert (function["bytecode_status"], function["translation_status"]) in ALLOWED_STATUS_PAIRS
-                if function["bytecode_status"] == "parsed":
-                    assert function["bytecode_source"] == "function_export"
-                    assert function["cpp_code"].strip(), function["name"]
-                if function["bytecode_status"] == "no_script":
-                    assert function["error_code"] == "confirmed_no_script"
-                    assert function["script_metrics"] == ZERO_SCRIPT_METRICS
-                if function["bytecode_status"] == "failed":
-                    assert function.get("error_code"), function["name"]
-                    assert function.get("error_message"), function["name"]
-                metrics = function.get("script_metrics")
-                if metrics is not None:
-                    assert set(metrics) == set(ZERO_SCRIPT_METRICS)
-                    assert all(value >= 0 for value in metrics.values())
+                _assert_strict_native_function(rel_path, function)
 
         assert total == TOTAL_EXPECTED
 
@@ -381,11 +413,45 @@ class TestRenderedFunctionOutput:
         for rel_path, _expected_count in SAMPLES:
             payload = rendered_outputs[rel_path]["json"]
             markdown = rendered_outputs[rel_path]["markdown"]
-            for function in payload.get("decompiled_functions", []):
+            functions = payload.get("decompiled_functions", [])
+            json_names = [function["name"] for function in functions]
+            markdown_sections = _markdown_function_sections(markdown)
+            markdown_names = [name for name, _section in markdown_sections]
+            assert len(markdown_names) == len(json_names), f"{rel_path}: Markdown Function count does not match JSON"
+            assert len(markdown_names) == len(set(markdown_names)), f"{rel_path}: duplicate Markdown Function headings"
+            assert markdown_names == json_names, f"{rel_path}: Markdown Function headings do not match JSON order"
+
+            for function in functions:
                 section = _function_markdown_section(markdown, function["name"])
                 assert ("**Local Variables:**" in section) is bool(function["local_variables"])
-                if function["bytecode_status"] == "parsed":
-                    assert "```cpp" in section, f"{rel_path}/{function['name']}"
+                _assert_strict_native_function(rel_path, function)
+                signature_line = f"**Signature:** `{function['signature']}`"
+                status_line = (
+                    f"**Status:** bytecode={function['bytecode_status']}, "
+                    f"translation={function['translation_status']}"
+                )
+                assert section.count(signature_line) == 1
+                assert section.count(status_line) == 1
+                expected_parameter_rows = []
+                for parameter in function["parameters"]:
+                    default = parameter.get("default_value")
+                    default_str = str(default) if default is not None else "-"
+                    expected_parameter_rows.append(
+                        f"| {_markdown_cell(parameter.get('name', ''))} | "
+                        f"{_markdown_cell(parameter.get('param_type', ''))} | "
+                        f"{_markdown_cell(default_str)} |"
+                    )
+                assert _markdown_table_rows(section, "| Parameter | Type | Default |") == expected_parameter_rows
+                expected_local_rows = [
+                    f"| {_markdown_cell(local.get('name', ''))} | "
+                    f"{_markdown_cell(local.get('type', ''))} |"
+                    for local in function["local_variables"]
+                ]
+                assert _markdown_table_rows(section, "| Local | Type |") == expected_local_rows
+                rendered_cpp = _cpp_fenced_block(section, f"{rel_path}/{function['name']}")
+                assert rendered_cpp == function["cpp_code"].strip(), (
+                    f"{rel_path}/{function['name']}: C++ fence differs from JSON cpp_code"
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -515,6 +581,6 @@ class TestMatrixSummary:
 
         assert len(all_results) == len(SAMPLES)
         assert total_functions == TOTAL_EXPECTED
-        assert total_parsed > 0
+        assert total_parsed == TOTAL_EXPECTED
+        assert total_no_script == 0
         assert total_failed == 0
-        assert total_parsed + total_no_script == TOTAL_EXPECTED

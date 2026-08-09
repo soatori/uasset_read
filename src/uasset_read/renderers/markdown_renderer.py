@@ -385,7 +385,8 @@ class MarkdownRenderer(IRenderer):
 
     def _render_functions(self, lines: list[str], ir: PackageIR) -> None:
         """Render Functions section — one subsection per blueprint function with signature, parameters, C++ code."""
-        # Collect all functions: decompiled functions + blueprint function metadata (deduplicated)
+        # Decompiled functions are authoritative when available.  Blueprint
+        # metadata is a fallback for assets with no decompiled functions.
         func_map: dict[str, dict] = {}
 
         for func in ir.decompiled_functions:
@@ -408,7 +409,7 @@ class MarkdownRenderer(IRenderer):
                 "script_metrics": getattr(func, "script_metrics", None),
             }
 
-        if ir.blueprint and ir.blueprint.functions:
+        if not func_map and ir.blueprint and ir.blueprint.functions:
             for func in ir.blueprint.functions:
                 if func.name not in func_map:
                     func_map[func.name] = {
