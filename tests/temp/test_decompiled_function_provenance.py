@@ -136,6 +136,26 @@ class TestIRMapping:
         assert func.logic_source == "current_asset"
         assert func.bytecode_confidence == "verified"
 
+    def test_local_variables_are_not_reclassified_as_parameters(self):
+        """TypeRegistry locals remain local when no native parameter data exists."""
+        from uasset_read.kismet.result import KismetDecompiledResult
+
+        result = KismetDecompiledResult(
+            function_name="UsesLocal",
+            signature="void UsesLocal()",
+            local_variables=[{"name": "Temp", "type": "float"}],
+            cpp_code="float Temp = 1.0f;",
+            bytecode_status="parsed",
+            translation_status="complete",
+            bytecode_source="function_export",
+        )
+        mock_result = MagicMock()
+        mock_result.decompiled_functions = [result]
+
+        function = _build_decompiled_functions_ir(mock_result)[0]
+        assert function.parameters == []
+        assert function.local_variables == [{"name": "Temp", "type": "float"}]
+
     def test_fallback_reasons_absent_from_production_enums(self):
         """Defunct fallback_or_serial_scan and bpgc_bytecode_extraction are absent."""
         result = _make_result(
@@ -510,6 +530,56 @@ class TestMarkdownRendering:
         md = self._render_markdown([func])
         assert "> [!WARNING]" not in md
         assert "Function body provenance:" not in md
+
+    def test_function_locals_render_only_when_recovered(self):
+        """Recovered locals are shown with their owning function, not globally."""
+        func = DecompiledFunctionIR(
+            name="UsesLocal",
+            signature="void UsesLocal()",
+            cpp_code="float Temp = 1.0f;",
+            parameters=[],
+            return_type="void",
+            bytecode_status="parsed",
+            translation_status="complete",
+            bytecode_source="function_export",
+            local_variables=[{"name": "Temp", "type": "float"}],
+        )
+
+        md = self._render_markdown([func])
+        assert "**Local Variables:**" in md
+        assert "| Temp | float |" in md
+
+        from uasset_read.renderers.base import RenderOptions
+        from uasset_read.renderers.json_renderer import JSONRenderer
+        payload = json.loads(JSONRenderer().render(_make_ir_with_decompiled([func]), RenderOptions()))
+        assert payload["decompiled_functions"][0]["local_variables"] == [
+            {"name": "Temp", "type": "float"},
+        ]
+
+    def test_function_without_locals_has_no_empty_locals_section(self):
+        """A function with no recoverable locals remains valid without a placeholder."""
+        func = DecompiledFunctionIR(
+            name="NoLocals",
+            signature="void NoLocals()",
+            cpp_code="return;",
+            parameters=[],
+            return_type="void",
+            bytecode_status="parsed",
+            translation_status="complete",
+            bytecode_source="function_export",
+        )
+
+        assert "**Local Variables:**" not in self._render_markdown([func])
+
+    def test_schema_declares_optional_function_local_variables(self):
+        """The public JSON schema documents the optional per-function locals list."""
+        schema_path = Path(__file__).parents[2] / "schemas" / "package.schema.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        local_variables = schema["$defs"]["DecompiledFunction"]["properties"]["local_variables"]
+
+        assert local_variables["type"] == "array"
+        assert local_variables["items"]["type"] == "object"
+        assert local_variables["items"]["required"] == ["name", "type"]
 
     def test_defunct_provenance_values_absent_from_output(self):
         """fallback_or_serial_scan and serial_scan_recovery are absent from production output."""

@@ -1000,6 +1000,7 @@ def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFuncti
             cpp_code=func.cpp_code,
             parameters=parameters,
             return_type=return_type,
+            local_variables=getattr(func, "local_variables", []),
             fallback_reasons=func.fallback_reasons,
             bytecode_confidence=confidence,
             bytecode_status=func.bytecode_status,
@@ -1076,7 +1077,8 @@ def _extract_parameters_from_signature(signature: str) -> list[dict]:
 def _extract_parameters(func) -> list[dict]:
     """Extract parameter information from KismetDecompiledResult.
 
-    Priority: semantic_calls -> local_variables -> signature parsing
+    Priority: semantic_calls -> signature parsing. Local variables are
+    function-scoped temporaries, not parameter declarations.
     """
     # 1) Arguments from semantic_calls
     if func.semantic_calls:
@@ -1085,11 +1087,7 @@ def _extract_parameters(func) -> list[dict]:
             if args:
                 return [{"name": a, "type": ""} for a in args]
 
-    # 2) local_variables
-    if func.local_variables:
-        return [{"name": v.get("name", ""), "type": v.get("type", "")} for v in func.local_variables]
-
-    # 3) Parse from signature string
+    # 2) Parse from signature string
     if func.signature:
         return _extract_parameters_from_signature(func.signature)
 

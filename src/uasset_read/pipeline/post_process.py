@@ -71,6 +71,21 @@ def _extract_kismet_decompiled(
                     bytecode_source="unknown",
                     bytecode_status="no_script",
                     translation_status="not_applicable",
+                    error_code="confirmed_no_script",
+                    error_message="UFunction Script header declares no bytecode",
+                    error_context={
+                        "function_name": export.object_name,
+                        "export_index": export_idx,
+                        "class_name": class_name,
+                        "package_offset": export.serial_offset,
+                        "export_offset": export.serial_offset,
+                    },
+                    script_metrics={
+                        "bytecode_buffer_size": 0,
+                        "serialized_script_size": 0,
+                        "serialized_bytes_consumed": 0,
+                        "bytecode_bytes_consumed": 0,
+                    },
                 )
                 results.append(result)
                 continue
@@ -134,7 +149,7 @@ def _extract_kismet_decompiled(
                     signature=f"void {export.object_name}()",
                     local_variables=[],
                     cpp_code="",
-                    bytecode_source="unknown",
+                    bytecode_source="function_export",
                     bytecode_status="failed",
                     translation_status="not_applicable",
                     error_code="bytecode_decode_error",
@@ -149,7 +164,7 @@ def _extract_kismet_decompiled(
                     script_metrics={
                         "bytecode_buffer_size": script_result.bytecode_buffer_size,
                         "serialized_script_size": script_result.serialized_script_size,
-                        "serialized_bytes_consumed": 0,
+                        "serialized_bytes_consumed": len(script_result.serialized_script),
                         "bytecode_bytes_consumed": 0,
                     },
                     warnings=[],
@@ -228,9 +243,29 @@ def _extract_kismet_decompiled(
             results.append(result)
 
         except (ParseError, OSError, struct.error, ValueError, KeyError, AttributeError) as e:
-            # Per D-10: failure does NOT block pipeline
-            # Log warning so caller can diagnose if needed
+            # Per D-10: a per-function failure does not block the package, but
+            # it must remain visible in the public result list.
             logger.debug("Kismet decompile failed for export '%s': %s", export.object_name, e)
+            results.append(KismetDecompiledResult(
+                function_name=export.object_name,
+                signature=f"void {export.object_name}()",
+                local_variables=[],
+                cpp_code="",
+                bytecode_source="unknown",
+                bytecode_status="failed",
+                translation_status="not_applicable",
+                error_code="function_processing_error",
+                error_message=str(e),
+                error_context={
+                    "function_name": export.object_name,
+                    "export_index": export_idx,
+                    "class_name": class_name,
+                    "package_offset": export.serial_offset,
+                    "export_offset": export.serial_offset,
+                },
+                warnings=[],
+                fallback_reasons=[f"function processing error: {e}"],
+            ))
     return results
 
 
