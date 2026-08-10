@@ -212,6 +212,9 @@ def decompile_single_function(
     for var_name, cpp_type in type_registry._types.items():
         local_vars.append({"name": var_name, "type": cpp_type})
 
+    # Determine translation_status based on warnings collected above
+    translation_status = "complete" if not warnings else "partial"
+
     return KismetDecompiledResult(
         function_name=func_name,
         signature=signature,
@@ -220,6 +223,7 @@ def decompile_single_function(
         expressions=expressions,
         bytecode_source="function_export",
         bytecode_status="parsed",
+        translation_status=translation_status,
         warnings=warnings,
         fallback_reasons=fallback_reasons,
         function_ref_stats=func_ref_stats,
