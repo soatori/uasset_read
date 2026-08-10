@@ -14,9 +14,9 @@ tests/
   test_benchmark_markdown.py   # Markdown output public contract
   test_benchmark_cli_batch.py  # CLI/batch public contract
   test_samples.py              # parameterized sample parsing
-  core/                        # core pipeline, JSON, batch, status, schema (15 files)
-  kismet/                      # Kismet decompiler, UFunction, pipeline (6 files)
-  iostore/                     # IoStore encrypted reads (1 file)
+  core/                        # core pipeline, JSON, batch, status, schema (20 files)
+  kismet/                      # Kismet decompiler, UFunction, pipeline (8 files)
+  iostore/                     # IoStore encrypted reads (3 files)
   samples/                     # tracked .uasset sample files
 ```
 
@@ -26,8 +26,8 @@ threshold. Child-process allocations are not included in the reported peak.
 
 ## Inventory
 
-- **176+ test functions** across 3 subdirectories and the root
-- **22 test files** in subdirectories (core, kismet, iostore)
+- **523 test functions** across 3 subdirectories and the root
+- **31 test files** in subdirectories (core, kismet, iostore)
 - **6 benchmark/sample test files** at root
 - **41 tracked `.uasset` samples** under `tests/samples/`
 
