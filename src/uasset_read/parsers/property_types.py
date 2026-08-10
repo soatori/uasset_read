@@ -1065,7 +1065,7 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             if tagged_byte_limit is not None and archive.tell() >= tagged_byte_limit:
                 break
 
-            inner_tag = read_property_tag(archive, name_map)
+            inner_tag = read_property_tag(archive, name_map, struct_name=declared_struct_type)
 
             if inner_tag.name == UE_NONE_SENTINEL:
                 break
@@ -1124,6 +1124,9 @@ def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
     """
     key_type = getattr(tag, "key_type", None)
     value_type = getattr(tag, "value_type", None)
+    # Legacy format stores key type in inner_type, not key_type
+    if key_type is None:
+        key_type = getattr(tag, "inner_type", None)
     if not key_type or not value_type:
         key_type, value_type = _extract_map_types_from_tag(tag)
 

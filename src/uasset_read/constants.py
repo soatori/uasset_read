@@ -603,6 +603,7 @@ UE5_LARGE_PROPERTY_TYPES = frozenset({
     "PoseContainer",
     "ArrayConnectionMap",
     "RigVM",
+    "MapProperty",
 })
 
 UE5_LARGE_PROPERTY_MAX_REASONABLE = 500 * 1024 * 1024  # 500 MB — UE5 large property size cap

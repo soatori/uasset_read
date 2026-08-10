@@ -34,6 +34,13 @@ UE4_STRUCT_GUID_IN_PROPERTY_TAG = 441
 UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 503
 UE4_PROPERTY_TAG_SET_MAP_SUPPORT = 509
 
+# Registry for MapProperty value struct types in legacy format.
+# UE source: Engine/Source/Runtime/Engine/Classes/Engine/StaticMesh.h:403
+# FMeshSectionInfoMap::Map is TMap<uint32, FMeshSectionInfo>
+_MAP_VALUE_STRUCT_TYPES: dict[str, dict[str, str]] = {
+    "MeshSectionInfoMap": {"Map": "FMeshSectionInfo"},
+}
+
 
 def _read_property_type_name(
     archive: FArchive,
@@ -127,6 +134,13 @@ def _apply_property_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
             tag.key_type = getattr(key, "name", None) or getattr(key, "type", None)
         if value is not None:
             tag.value_type = getattr(value, "name", None) or getattr(value, "type", None)
+            if tag.value_type == "StructProperty":
+                value_children = getattr(value, "children", None)
+                if value_children and len(value_children) > 0:
+                    struct_name_node = value_children[0]
+                    struct_name_val = getattr(struct_name_node, "name", None) or getattr(struct_name_node, "type", None)
+                    if struct_name_val:
+                        tag.value_type_struct = struct_name_val.split(".")[-1]
     elif tag.type in ("ByteProperty", "EnumProperty"):
         enum_child = child_type(0)
         if enum_child is not None:
@@ -188,6 +202,7 @@ def read_property_tag(
     if file_version_ue5 < PROPERTY_TAG_COMPLETE_TYPE_NAME:
         return _read_property_tag_legacy(
             archive, name_map, tag, tolerant, file_version_ue5, file_version_ue4,
+            struct_name=struct_name,
         )
 
     # === UE5 >= 1012: full FPropertyTypeName format ===
@@ -254,6 +269,7 @@ def _read_property_tag_legacy(
     tolerant: bool = False,
     file_version_ue5: int = 0,
     file_version_ue4: int = 0,
+    struct_name: Optional[str] = None,
 ) -> "PropertyTag":
     """Read legacy format property tag for UE5 < 1012 (PROPERTY_TAG_COMPLETE_TYPE_NAME).
 
@@ -326,6 +342,11 @@ def _read_property_tag_legacy(
             # InnerType (FName) + ValueType (FName) — Reference: PropertyTag.cpp:357-371
             tag.inner_type = archive.read_name(name_map)
             tag.value_type = archive.read_name(name_map)
+            # Look up value_type_struct from the containing struct registry
+            if tag.value_type == "StructProperty" and struct_name is not None:
+                struct_map = _MAP_VALUE_STRUCT_TYPES.get(struct_name, {})
+                if tag.name in struct_map:
+                    tag.value_type_struct = struct_map[tag.name]
 
     # Pass property type for dynamic threshold (StructProperty passes struct_type)
     # Note: must be after type-specific field reads, when tag.struct_type is already assigned
