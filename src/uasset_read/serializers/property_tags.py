@@ -34,7 +34,9 @@ UE4_STRUCT_GUID_IN_PROPERTY_TAG = 441
 UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 503
 UE4_PROPERTY_TAG_SET_MAP_SUPPORT = 509
 
-# Registry for MapProperty value struct types in legacy format.
+# Legacy format: MapProperty only stores key/value type names, not the struct
+# name for struct values.  This registry maps (containing_struct, property_name)
+# to the value struct type, so the tag reader can set value_type_struct.
 # UE source: Engine/Source/Runtime/Engine/Classes/Engine/StaticMesh.h:403
 # FMeshSectionInfoMap::Map is TMap<uint32, FMeshSectionInfo>
 _MAP_VALUE_STRUCT_TYPES: dict[str, dict[str, str]] = {
@@ -134,13 +136,23 @@ def _apply_property_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
             tag.key_type = getattr(key, "name", None) or getattr(key, "type", None)
         if value is not None:
             tag.value_type = getattr(value, "name", None) or getattr(value, "type", None)
+<<<<<<< HEAD
+=======
+            # When value layer is StructProperty, extract value_type_struct
+>>>>>>> b1ea1cf2 (fix: propagate value_type_struct for legacy MapProperty format (#542))
             if tag.value_type == "StructProperty":
                 value_children = getattr(value, "children", None)
                 if value_children and len(value_children) > 0:
                     struct_name_node = value_children[0]
+<<<<<<< HEAD
                     struct_name_val = getattr(struct_name_node, "name", None) or getattr(struct_name_node, "type", None)
                     if struct_name_val:
                         tag.value_type_struct = struct_name_val.split(".")[-1]
+=======
+                    struct_name = getattr(struct_name_node, "name", None) or getattr(struct_name_node, "type", None)
+                    if struct_name:
+                        tag.value_type_struct = struct_name.split(".")[-1]
+>>>>>>> b1ea1cf2 (fix: propagate value_type_struct for legacy MapProperty format (#542))
     elif tag.type in ("ByteProperty", "EnumProperty"):
         enum_child = child_type(0)
         if enum_child is not None:
@@ -342,7 +354,12 @@ def _read_property_tag_legacy(
             # InnerType (FName) + ValueType (FName) — Reference: PropertyTag.cpp:357-371
             tag.inner_type = archive.read_name(name_map)
             tag.value_type = archive.read_name(name_map)
+<<<<<<< HEAD
             # Look up value_type_struct from the containing struct registry
+=======
+            # For legacy format, the value struct name is not serialized in the tag.
+            # Look it up from the containing struct's declaration when available.
+>>>>>>> b1ea1cf2 (fix: propagate value_type_struct for legacy MapProperty format (#542))
             if tag.value_type == "StructProperty" and struct_name is not None:
                 struct_map = _MAP_VALUE_STRUCT_TYPES.get(struct_name, {})
                 if tag.name in struct_map:
