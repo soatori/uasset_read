@@ -268,7 +268,7 @@ def _read_secondary_tables(
     """Read DependsMap / SoftPackageReferences / SoftObjectPathList / AssetRegistryData."""
     # Read DependsMap (dependency table) and PreloadDependencies (preload dependencies)
     if hasattr(result.summary, 'depends_offset'):
-        result.summary.depends_map = read_depends_map(archive, result.summary, budget=budget)
+        result.summary.depends_map = read_depends_map(archive, result.summary, budget=budget, warnings=result.warnings)
     if hasattr(result.summary, 'preload_dependency_count'):
         result.summary.preload_dependencies = read_preload_dependencies(archive, result.summary)
 
