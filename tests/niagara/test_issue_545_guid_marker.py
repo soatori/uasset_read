@@ -93,6 +93,7 @@ def simple_pin_type() -> bytes:
     data += u32(0) * 4        # MemberGuid (16 bytes)
     data += u32(0)            # bIsConst
     data += u32(0)            # bIsUObjectWrapper
+    data += u32(0)            # bSerializeAsSinglePrecisionFloat
     return data
 
 

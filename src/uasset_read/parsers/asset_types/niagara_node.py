@@ -99,12 +99,10 @@ def _decode_single_pin(archive: "FArchive", name_map: list, export: Optional["Ob
     # Direction (u8)
     direction = archive.read_u8()
 
-    # PinType (FEdGraphPinType) -- use canonical reader
+    # PinType (FEdGraphPinType) -- use canonical reader without linker resolution
+    # (niagara pins only need basic type info; no package reference resolution needed)
     summary = getattr(export, "package_summary", None) if export is not None else None
-    linker = getattr(export, "package_linker", None) if export is not None else None
-    import_map = getattr(export, "package_import_map", None) if export is not None else None
-    export_map = getattr(export, "package_export_map", None) if export is not None else None
-    pin_type = read_ed_graph_pin_type(archive, name_map, summary, import_map, export_map, linker)
+    pin_type = read_ed_graph_pin_type(archive, name_map, summary)
 
     # DefaultValue (FString)
     default_value = archive.read_fstring()
