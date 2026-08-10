@@ -76,6 +76,12 @@ tests/*
 !tests/temp/test_*.py
 !tests/samples/
 !tests/fixtures/
+!tests/core/
+!tests/core/test_*.py
+!tests/kismet/
+!tests/kismet/test_*.py
+!tests/iostore/
+!tests/iostore/test_*.py
 !tests/niagara/
 !tests/niagara/test_*.py
 
