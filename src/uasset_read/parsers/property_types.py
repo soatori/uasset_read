@@ -231,6 +231,9 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "BoxSphereBounds3d",
     # BPInterfaceDescription（ImplementedInterfaces 数组元素）
     "BPInterfaceDescription",
+    # StaticMesh section info（StaticMesh 资产的 LOD section 描述）
+    "FMeshSectionInfo",
+    "MeshSectionInfo",
 }
 """需要 tagged fallback 解析的结构体名称集合。
 
@@ -312,6 +315,24 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
         ("RateScale", "IntProperty"),         # int32 — 播放速率缩放
         ("bIsValid", "BoolProperty"),         # bool — 采样点是否有效
     ],
+    # StaticMesh section info tagged fallback schemas
+    # UE source: Engine/Source/Runtime/Engine/Classes/Engine/StaticMesh.h:344
+    "FMeshSectionInfo": [
+        ("MaterialIndex", "IntProperty"),              # int32, default 0
+        ("bEnableCollision", "BoolProperty"),           # bool, default true
+        ("bCastShadow", "BoolProperty"),                # bool, default true
+        ("bVisibleInRayTracing", "BoolProperty"),       # bool, default true
+        ("bAffectDistanceFieldLighting", "BoolProperty"),  # bool, default true
+        ("bForceOpaque", "BoolProperty"),               # bool, default false
+    ],
+    "MeshSectionInfo": [
+        ("MaterialIndex", "IntProperty"),
+        ("bEnableCollision", "BoolProperty"),
+        ("bCastShadow", "BoolProperty"),
+        ("bVisibleInRayTracing", "BoolProperty"),
+        ("bAffectDistanceFieldLighting", "BoolProperty"),
+        ("bForceOpaque", "BoolProperty"),
+    ],
 }
 
 # ============================================================================
@@ -332,6 +353,11 @@ def _get_read_tag_value_bounded():
     """Lazy import to avoid circular dependency."""
     from uasset_read.serializers.property_tags import read_tag_value_bounded
     return read_tag_value_bounded
+
+def _get_parse_struct_property():
+    """Lazy import to avoid circular dependency (parsers <-> property_types)."""
+    from uasset_read.parsers.property_parser import parse_struct_property
+    return parse_struct_property
 
 def _build_version_container_from_summary(summary: Any) -> Optional["VersionContainer"]:
     """从 summary 构建 VersionContainer（Lazy，避免循环导入）。"""
@@ -1073,7 +1099,7 @@ def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
 
     for _ in range(num_entries):
         key = _dispatch_key_parse(key_type, archive, name_map, export_map, summary, tag=tag)
-        value = _dispatch_value_parse(value_type, archive, name_map, export_map, summary)
+        value = _dispatch_value_parse(value_type, archive, name_map, export_map, summary, tag=tag)
         entries.append({"key": key, "value": value})
 
     return MapValue(
@@ -1473,8 +1499,18 @@ def _dispatch_key_parse(key_type: str, archive: FArchive, name_map: List[str], e
 
     return None
 
-def _dispatch_value_parse(value_type: str, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None) -> Any:
+def _dispatch_value_parse(value_type: str, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, tag: Optional[PropertyTag] = None) -> Any:
     """值类型分派解析。"""
+    if value_type == "StructProperty":
+        # Propagate struct type from tag so parse_struct_property can identify
+        # the concrete struct rather than falling back to UnknownStruct.
+        struct_type = None
+        if tag is not None:
+            struct_type = getattr(tag, 'value_type_struct', None)
+        dummy_tag = PropertyTag(name="Value", type="StructProperty", size=0, struct_type=struct_type or "Unknown")
+        parse_struct_property = _get_parse_struct_property()
+        return parse_struct_property(dummy_tag, archive, name_map, export_map, summary)
+
     dummy_tag = PropertyTag(name="Value", type=value_type, size=0)
     parse_property_value = _get_parse_property_value()
     return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
