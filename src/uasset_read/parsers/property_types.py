@@ -354,11 +354,6 @@ def _get_read_tag_value_bounded():
     from uasset_read.serializers.property_tags import read_tag_value_bounded
     return read_tag_value_bounded
 
-def _get_parse_struct_property():
-    """Lazy import to avoid circular dependency (parsers <-> property_types)."""
-    from uasset_read.parsers.property_parser import parse_struct_property
-    return parse_struct_property
-
 def _build_version_container_from_summary(summary: Any) -> Optional["VersionContainer"]:
     """从 summary 构建 VersionContainer（Lazy，避免循环导入）。"""
     if summary is None:
@@ -1508,7 +1503,6 @@ def _dispatch_value_parse(value_type: str, archive: FArchive, name_map: List[str
         if tag is not None:
             struct_type = getattr(tag, 'value_type_struct', None)
         dummy_tag = PropertyTag(name="Value", type="StructProperty", size=0, struct_type=struct_type or "Unknown")
-        parse_struct_property = _get_parse_struct_property()
         return parse_struct_property(dummy_tag, archive, name_map, export_map, summary)
 
     dummy_tag = PropertyTag(name="Value", type=value_type, size=0)

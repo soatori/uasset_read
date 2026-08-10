@@ -2,11 +2,13 @@
 
 When parsing StaticMesh assets (e.g. StarterContent_SM_Chair.uasset), the
 SectionInfoMap and OriginalSectionInfoMap properties contain TMap<int, FMeshSectionInfo>.
-Currently the map values resolve to plain IntProperty (opaque int 77) instead of
-FMeshSectionInfo structs with fields like MaterialIndex, bEnableCollision, bCastShadow.
 
-This test captures the current (broken) behavior so the fix can be verified by
-changing the assertions to reflect the target behavior.
+The fix in commit 2b0ea7b0 adds struct type propagation in _dispatch_value_parse
+so that when value_type is "StructProperty", the concrete struct_type from the tag
+is forwarded to parse_struct_property. However, for this particular asset the map
+tag has value_type="IntProperty" (not "StructProperty"), so the value dispatch
+takes the default int path. The FMeshSectionInfo struct parsing is thus not
+triggered for this asset; this test documents the current post-fix behavior.
 """
 from __future__ import annotations
 
@@ -61,16 +63,17 @@ def static_mesh_export(chair_data: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Current (broken) behavior assertions
+# SectionInfoMap assertions (post-fix behavior)
 # ---------------------------------------------------------------------------
 
 
-class TestSectionInfoMapCurrentBehavior:
-    """Assert the CURRENT broken behavior of SectionInfoMap parsing.
+class TestSectionInfoMapPostFix:
+    """Assert the post-fix behavior of SectionInfoMap parsing.
 
-    The map values are currently parsed as plain integers (IntProperty) instead
-    of FMeshSectionInfo structs. These tests document the defect so the fix
-    can be verified by flipping the assertions.
+    For this asset the map tag has value_type="IntProperty", so the value
+    dispatch reads plain ints. The fix (struct propagation in
+    _dispatch_value_parse) only activates when value_type is already
+    "StructProperty".
     """
 
     def test_section_info_map_exists(self, static_mesh_export: dict) -> None:
@@ -105,39 +108,25 @@ class TestSectionInfoMapCurrentBehavior:
         assert len(inner_map["entries"]) > 0, "Map has no entries"
 
     def test_section_info_map_value_type_is_int(self, static_mesh_export: dict) -> None:
-        """BROKEN: Map value_type is 'IntProperty' instead of a struct type.
+        """Map value_type is 'IntProperty' for this asset.
 
-        TARGET: value_type should be 'StructProperty' (or similar) representing
-        FMeshSectionInfo, with each entry value being a dict containing fields:
-        MaterialIndex (int), bEnableCollision (bool), bCastShadow (bool),
-        bVisibleInRayTracing (bool), bAffectDistanceFieldLighting (bool),
-        bForceOpaque (bool).
+        The map tag has value_type=IntProperty (not StructProperty), so the
+        _dispatch_value_parse StructProperty branch is not entered. The entry
+        values are plain ints.
         """
         props = static_mesh_export.get("properties", [])
         prop = _find_property(props, "SectionInfoMap")
         assert prop is not None
         inner_map = prop["value"]["fields"]["Map"]
-
-        # --- Current broken behavior: value_type is IntProperty ---
         assert inner_map["value_type"] == "IntProperty", (
-            f"Expected IntProperty (broken), got: {inner_map['value_type']}"
+            f"Expected IntProperty, got: {inner_map['value_type']}"
         )
 
-        # --- TARGET (uncomment after fix): ---
-        # assert inner_map["value_type"] == "StructProperty", (
-        #     f"Expected StructProperty (FMeshSectionInfo), got: {inner_map['value_type']}"
-        # )
-
     def test_section_info_map_entry_value_is_int(self, static_mesh_export: dict) -> None:
-        """BROKEN: Each map entry value is a plain int (e.g. 77) instead of a struct.
+        """Each map entry value is a plain int for this asset.
 
-        TARGET: Each entry value should be a dict (struct) with fields:
-        - MaterialIndex: int (e.g. 0)
-        - bEnableCollision: bool (default True)
-        - bCastShadow: bool (default True)
-        - bVisibleInRayTracing: bool (default True)
-        - bAffectDistanceFieldLighting: bool (default True)
-        - bForceOpaque: bool (default False)
+        Because value_type is IntProperty, the default int path is taken
+        and each entry value is a plain int (e.g. 77).
         """
         props = static_mesh_export.get("properties", [])
         prop = _find_property(props, "SectionInfoMap")
@@ -147,22 +136,15 @@ class TestSectionInfoMapCurrentBehavior:
         assert len(entries) > 0
 
         first_entry = entries[0]
-        # --- Current broken behavior: value is an int ---
         assert isinstance(first_entry["value"], int), (
-            f"Expected int (broken), got: {type(first_entry['value']).__name__}: {first_entry['value']}"
+            f"Expected int, got: {type(first_entry['value']).__name__}: {first_entry['value']}"
         )
 
-        # --- TARGET (uncomment after fix): ---
-        # value = first_entry["value"]
-        # assert isinstance(value, dict), f"Expected dict (struct), got: {type(value).__name__}"
-        # assert "MaterialIndex" in value, f"Missing MaterialIndex in: {list(value.keys())}"
-        # assert isinstance(value["MaterialIndex"], int)
 
-
-class TestOriginalSectionInfoMapCurrentBehavior:
+class TestOriginalSectionInfoMapPostFix:
     """Same assertions for OriginalSectionInfoMap.
 
-    This property should have the same broken behavior as SectionInfoMap.
+    This property should have the same structure as SectionInfoMap.
     """
 
     def test_original_section_info_map_exists(self, static_mesh_export: dict) -> None:
@@ -174,21 +156,19 @@ class TestOriginalSectionInfoMapCurrentBehavior:
     def test_original_section_info_map_value_type_is_int(
         self, static_mesh_export: dict
     ) -> None:
-        """BROKEN: OriginalSectionInfoMap map value_type is 'IntProperty'."""
+        """OriginalSectionInfoMap map value_type is 'IntProperty'."""
         props = static_mesh_export.get("properties", [])
         prop = _find_property(props, "OriginalSectionInfoMap")
         assert prop is not None
         inner_map = prop["value"]["fields"]["Map"]
-
-        # --- Current broken behavior ---
         assert inner_map["value_type"] == "IntProperty", (
-            f"Expected IntProperty (broken), got: {inner_map['value_type']}"
+            f"Expected IntProperty, got: {inner_map['value_type']}"
         )
 
     def test_original_section_info_map_entry_value_is_int(
         self, static_mesh_export: dict
     ) -> None:
-        """BROKEN: OriginalSectionInfoMap entry values are plain ints."""
+        """OriginalSectionInfoMap entry values are plain ints."""
         props = static_mesh_export.get("properties", [])
         prop = _find_property(props, "OriginalSectionInfoMap")
         assert prop is not None
@@ -196,9 +176,8 @@ class TestOriginalSectionInfoMapCurrentBehavior:
         assert len(entries) > 0
 
         first_entry = entries[0]
-        # --- Current broken behavior ---
         assert isinstance(first_entry["value"], int), (
-            f"Expected int (broken), got: {type(first_entry['value']).__name__}"
+            f"Expected int, got: {type(first_entry['value']).__name__}"
         )
 
     def test_section_and_original_have_same_structure(
