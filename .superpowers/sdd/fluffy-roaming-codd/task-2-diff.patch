@@ -1,0 +1,88 @@
+diff --git a/tests/temp/test_batch_worker_logging.py b/tests/core/test_batch_worker_logging.py
+similarity index 100%
+rename from tests/temp/test_batch_worker_logging.py
+rename to tests/core/test_batch_worker_logging.py
+diff --git a/tests/temp/test_batch_worker_timeouts.py b/tests/core/test_batch_worker_timeouts.py
+similarity index 100%
+rename from tests/temp/test_batch_worker_timeouts.py
+rename to tests/core/test_batch_worker_timeouts.py
+diff --git a/tests/temp/test_corrupted_recovery.py b/tests/core/test_corrupted_recovery.py
+similarity index 100%
+rename from tests/temp/test_corrupted_recovery.py
+rename to tests/core/test_corrupted_recovery.py
+diff --git a/tests/temp/test_dead_code_contract.py b/tests/core/test_dead_code_contract.py
+similarity index 100%
+rename from tests/temp/test_dead_code_contract.py
+rename to tests/core/test_dead_code_contract.py
+diff --git a/tests/temp/test_export_diagnostic_provenance.py b/tests/core/test_export_diagnostic_provenance.py
+similarity index 100%
+rename from tests/temp/test_export_diagnostic_provenance.py
+rename to tests/core/test_export_diagnostic_provenance.py
+diff --git a/tests/temp/test_json_diagnostic_aggregation.py b/tests/core/test_json_diagnostic_aggregation.py
+similarity index 100%
+rename from tests/temp/test_json_diagnostic_aggregation.py
+rename to tests/core/test_json_diagnostic_aggregation.py
+diff --git a/tests/temp/test_json_export_accounting.py b/tests/core/test_json_export_accounting.py
+similarity index 100%
+rename from tests/temp/test_json_export_accounting.py
+rename to tests/core/test_json_export_accounting.py
+diff --git a/tests/temp/test_json_output_levels.py b/tests/core/test_json_output_levels.py
+similarity index 100%
+rename from tests/temp/test_json_output_levels.py
+rename to tests/core/test_json_output_levels.py
+diff --git a/tests/temp/test_json_schema_contract.py b/tests/core/test_json_schema_contract.py
+similarity index 100%
+rename from tests/temp/test_json_schema_contract.py
+rename to tests/core/test_json_schema_contract.py
+diff --git a/tests/temp/test_resolved_references.py b/tests/core/test_resolved_references.py
+similarity index 100%
+rename from tests/temp/test_resolved_references.py
+rename to tests/core/test_resolved_references.py
+diff --git a/tests/temp/test_schema_consistency.py b/tests/core/test_schema_consistency.py
+similarity index 100%
+rename from tests/temp/test_schema_consistency.py
+rename to tests/core/test_schema_consistency.py
+diff --git a/tests/temp/test_serial_size_clamp.py b/tests/core/test_serial_size_clamp.py
+similarity index 100%
+rename from tests/temp/test_serial_size_clamp.py
+rename to tests/core/test_serial_size_clamp.py
+diff --git a/tests/temp/test_source_encoding.py b/tests/core/test_source_encoding.py
+similarity index 100%
+rename from tests/temp/test_source_encoding.py
+rename to tests/core/test_source_encoding.py
+diff --git a/tests/temp/test_status_propagation.py b/tests/core/test_status_propagation.py
+similarity index 100%
+rename from tests/temp/test_status_propagation.py
+rename to tests/core/test_status_propagation.py
+diff --git a/tests/temp/test_warning_types.py b/tests/core/test_warning_types.py
+similarity index 100%
+rename from tests/temp/test_warning_types.py
+rename to tests/core/test_warning_types.py
+diff --git a/tests/temp/test_iostore_encrypted_reads.py b/tests/iostore/test_iostore_encrypted_reads.py
+similarity index 100%
+rename from tests/temp/test_iostore_encrypted_reads.py
+rename to tests/iostore/test_iostore_encrypted_reads.py
+diff --git a/tests/temp/test_decompiled_function_provenance.py b/tests/kismet/test_decompiled_function_provenance.py
+similarity index 100%
+rename from tests/temp/test_decompiled_function_provenance.py
+rename to tests/kismet/test_decompiled_function_provenance.py
+diff --git a/tests/temp/test_issue_77_kismet_archive.py b/tests/kismet/test_issue_77_kismet_archive.py
+similarity index 100%
+rename from tests/temp/test_issue_77_kismet_archive.py
+rename to tests/kismet/test_issue_77_kismet_archive.py
+diff --git a/tests/temp/test_issue_77_pipeline_contract.py b/tests/kismet/test_issue_77_pipeline_contract.py
+similarity index 100%
+rename from tests/temp/test_issue_77_pipeline_contract.py
+rename to tests/kismet/test_issue_77_pipeline_contract.py
+diff --git a/tests/temp/test_issue_77_real_samples.py b/tests/kismet/test_issue_77_real_samples.py
+similarity index 100%
+rename from tests/temp/test_issue_77_real_samples.py
+rename to tests/kismet/test_issue_77_real_samples.py
+diff --git a/tests/temp/test_issue_77_ufunction_reader.py b/tests/kismet/test_issue_77_ufunction_reader.py
+similarity index 100%
+rename from tests/temp/test_issue_77_ufunction_reader.py
+rename to tests/kismet/test_issue_77_ufunction_reader.py
+diff --git a/tests/temp/test_issue_77_virtual_function_fname.py b/tests/kismet/test_issue_77_virtual_function_fname.py
+similarity index 100%
+rename from tests/temp/test_issue_77_virtual_function_fname.py
+rename to tests/kismet/test_issue_77_virtual_function_fname.py
