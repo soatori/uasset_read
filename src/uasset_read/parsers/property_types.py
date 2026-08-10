@@ -240,6 +240,9 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     # StaticMesh section info (LOD section description for StaticMesh assets)
     "FMeshSectionInfo",
     "MeshSectionInfo",
+    # Animation curve metadata structs (tagged format, size=0)
+    "FCurveMetaData",
+    "CurveMetaData",
 }
 """Set of struct names requiring tagged fallback parsing.
 
