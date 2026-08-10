@@ -237,6 +237,9 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     # Builder polygon struct (CubeBuilder/EditorBrushBuilder Polys array element)
     "BuilderPoly",
     "FBuilderPoly",
+    # StaticMesh section info (LOD section description for StaticMesh assets)
+    "FMeshSectionInfo",
+    "MeshSectionInfo",
 }
 """Set of struct names requiring tagged fallback parsing.
 
@@ -330,6 +333,24 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
         ("Direction", "IntProperty"),         # int32 -- face normal direction (+1 or -1)
         ("ItemName", "NameProperty"),         # FName -- surface label (e.g. "Top", "Side")
         ("PolyFlags", "IntProperty"),         # int32 -- BSP polygon flags
+    ],
+    # StaticMesh section info tagged fallback schemas
+    # UE source: Engine/Source/Runtime/Engine/Classes/Engine/StaticMesh.h:344
+    "FMeshSectionInfo": [
+        ("MaterialIndex", "IntProperty"),              # int32, default 0
+        ("bEnableCollision", "BoolProperty"),           # bool, default true
+        ("bCastShadow", "BoolProperty"),                # bool, default true
+        ("bVisibleInRayTracing", "BoolProperty"),       # bool, default true
+        ("bAffectDistanceFieldLighting", "BoolProperty"),  # bool, default true
+        ("bForceOpaque", "BoolProperty"),               # bool, default false
+    ],
+    "MeshSectionInfo": [
+        ("MaterialIndex", "IntProperty"),
+        ("bEnableCollision", "BoolProperty"),
+        ("bCastShadow", "BoolProperty"),
+        ("bVisibleInRayTracing", "BoolProperty"),
+        ("bAffectDistanceFieldLighting", "BoolProperty"),
+        ("bForceOpaque", "BoolProperty"),
     ],
 }
 
@@ -1115,7 +1136,7 @@ def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
 
     for _ in range(num_entries):
         key = _dispatch_key_parse(key_type, archive, name_map, export_map, summary, tag=tag)
-        value = _dispatch_value_parse(value_type, archive, name_map, export_map, summary)
+        value = _dispatch_value_parse(value_type, archive, name_map, export_map, summary, tag=tag)
         entries.append({"key": key, "value": value})
 
     return MapValue(
@@ -1515,8 +1536,17 @@ def _dispatch_key_parse(key_type: str, archive: FArchive, name_map: List[str], e
 
     return None
 
-def _dispatch_value_parse(value_type: str, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None) -> Any:
+def _dispatch_value_parse(value_type: str, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, tag: Optional[PropertyTag] = None) -> Any:
     """Value type dispatch parsing."""
+    if value_type == "StructProperty":
+        # Propagate struct type from tag so parse_struct_property can identify
+        # the concrete struct rather than falling back to UnknownStruct.
+        struct_type = None
+        if tag is not None:
+            struct_type = getattr(tag, 'value_type_struct', None)
+        dummy_tag = PropertyTag(name="Value", type="StructProperty", size=0, struct_type=struct_type or "Unknown")
+        return parse_struct_property(dummy_tag, archive, name_map, export_map, summary)
+
     dummy_tag = PropertyTag(name="Value", type=value_type, size=0)
     parse_property_value = _get_parse_property_value()
     return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
