@@ -96,7 +96,7 @@ debug 不得增加、删除、替换或重排 standard 的 Graph、Node、Pin、
 
 实现校验使用以下约束：`Graph ID` 匹配 `^blueprint://graph/[A-Za-z][A-Za-z0-9_.-]*$`；`Node ID` 匹配 `^blueprint://graph/[A-Za-z][A-Za-z0-9_.-]*/node/[a-z][a-z0-9-]*/[A-Za-z][A-Za-z0-9_.-]*/[0-9]+$`；端点 ID 必须匹配 `input.<Name>`、`output.<Name>` 或 `exec.<Role>`。名称不能包含 `/`、空格或未转义 URI 保留字符。
 
-节点 ID 是当前文档内的可读引用，不是跨版本持久身份。原始 Unreal GUID 不作为普通 Flow 引用；如果可靠读取，应放在 `source.guid` 作为精确追溯证据。GUID 使用单一规范：四个 UE `FGuid` 分量按原顺序拼接为 32 个十六进制字符，禁止在实现中混用 `System.Guid` 的字节序转换。无法读取 GUID 时不得伪造；可保留语义 ID 并产生对应 coverage/diagnostic。
+节点 ID 是当前文档内的可读引用，不是跨版本持久身份。原始 Unreal GUID 不作为普通 Flow 引用；如果可靠读取，应放在 `source.guid` 作为精确追溯证据。`source.guid` 的最终序列化仍必须通过下方 Pin/GUID 研究门槛确认；在门槛通过前，不得把不同 UE 字段或不同字节序表示合并为一个 UUID 规范。无法读取 GUID 时不得伪造；可保留语义 ID 并产生对应 coverage/diagnostic。
 
 规范节点 ID 示例：
 
@@ -115,6 +115,40 @@ blueprint://graph/EventGraph/node/call/SetActorLocation/0/pin/input.NewLocation
 ```
 
 ID 只允许 ASCII 字符；Graph、Node、Pin 和 Port 的显示名称单独保留，供人和 Agent 阅读。普通模式不输出坐标、原始 Export 名称或完整调试属性；debug 可在同一语义对象下增加 `source.guid`、`source.export_name`、序列化索引和原始名称。
+
+### 5.1 Pin/GUID 研究门槛
+
+Pin 和 UUID 相关实现必须先研究 UE 源码和真实资产，再进入实现计划。不能仅根据某个 JSON 输出字段、文本转储或单个样本确定身份语义。
+
+至少区分以下字段：
+
+| UE 字段 | 当前语义假设 | 进入计划前必须确认 |
+|---|---|---|
+| `UEdGraphNode::NodeGuid` | UE API 说明为用于图版本 diff 的节点 GUID | 生成、持久化、复制/重建行为和序列化字节序 |
+| `UEdGraphPin::PinId` | UE API 说明为 Pin 的唯一 ID | 是否跨保存稳定、split/reconstruct 后是否变化、与连接解析的关系 |
+| `UEdGraphPin::PersistentGuid` | UE API 说明为 Pin 改名后用于节点重建匹配的持久 GUID | 非零条件、版本差异、是否能替代 `PinId` |
+| `UEdGraphPin::ParentPin` / `SubPins` | split Pin 的父子关系；SubPins 是拆分后隐藏的子 Pin | 权威树方向、叶 Pin 连接规则和重建行为 |
+| `UEdGraphPin::LinkedTo` | Pin 的物理连接集合 | 双向去重、PinId/节点引用的组合方式和 orphan 行为 |
+
+初步源码/API 依据（以 UE 5.8 为当前参考版本）：[UEdGraphNode](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/Engine/UEdGraphNode) 将 `NodeGuid` 描述为用于图版本 diff，并提供 `CreateDeterministicGuid`、`CreateNewGuid` 和 `FindPinById`；[UEdGraphPin](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/Engine/UEdGraphPin) 将 `PinId`、`PersistentGuid`、`ParentPin`、`SubPins`、`LinkedTo`、`ReferencePassThroughConnection` 和 `bOrphanedPin` 分别定义为不同字段。该 API 证据支持“字段不可合并”的结论，但不替代目标版本源码和资产序列化验证。
+
+已有仓库证据只能作为待验证输入：
+
+- `tests/samples/FirstPerson_BP_FirstPersonCharacter.uasset` 的公开解析结果包含 38 个 `node_guid`，并能输出多 Graph、多种 Pin 类型、结构体拆分 Pin 和宏实例；当前输出没有 `PinId` 或 `PersistentGuid`。
+- `docs/reference/Blueprint_Node_Text_Reference.md` 的 UE 文本参考同时出现 `NodeGuid`、非零 `PinId`、全零 `PersistentGuid`、`ParentPin`、`SubPins` 和 `LinkedTo`；这说明这些字段不能在语义层直接合并。
+- 以上样本不足以证明 GUID 跨版本稳定，也不足以证明 `PersistentGuid` 可作为 Pin 的主身份。
+
+研究门槛的必需产物：
+
+1. 与目标 UE 版本匹配的源码定位和字段序列化说明，至少覆盖 `UEdGraphNode`、`UEdGraphPin`、`FEdGraphPinType` 及 Pin reconstruction/serialization 路径；
+2. 多个真实 Blueprint 资产的对照记录，至少包含普通 Pin、exec Pin、结构体 split Pin、reroute、macro、orphan Pin、函数入口/结果和跨节点连接；
+3. 每个字段的 confirmed/unknown 结论、版本范围、标准输出映射和 debug evidence 映射；
+4. 反例测试：全零或缺失 GUID、重复 GUID、重建 Pin、同名 Pin、ParentPin/SubPins 不完整、LinkedTo 单向或悬空；
+5. 研究结论通过后，才允许编写实现计划、Schema 约束和 validator 规则。
+
+门槛未通过时的安全行为：语义 Node ID 仍可使用本节的可读 URI；Pin 只能使用图内确定性语义端点 ID，原始 Pin GUID 只能进入 debug 的未定论证据；不得伪造持久身份、不得用 Pin 名称猜测连接、不得把 NodeGuid/PinId/PersistentGuid 互相替换。
+
+特别注意：UE API 的 `HasAnyConnections` 语义包含 Pin 自身 `LinkedTo` 以及 SubPins 的连接，因此实现计划必须单独验证“父 Pin 是否有直接边”“子 Pin 是否有叶边”“ReferencePassThroughConnection 是否产生别名关系”，不能仅检查扁平 Pin 的 `LinkedTo`。
 
 同一输入字节、解析器版本、配置和限制必须产生字节一致输出。无语义顺序的集合按规范键排序；参数、Sequence、Switch case、多链接执行顺序等有语义顺序的集合保留源顺序并输出 `ordinal`。JSON 使用 UTF-8、LF、固定键顺序和有限浮点编码，禁止 NaN/Infinity。
 
@@ -203,7 +237,7 @@ ID 只允许 ASCII 字符；Graph、Node、Pin 和 Port 的显示名称单独保
 
 省略未连接、无默认值且不承担签名或类型约束的 Pin。Advanced/UI 标记只进 debug。
 
-拆分结构使用 `path: ["Transform", "Location", "X"]`，不使用点号拼接。连接权威性位于叶 Pin；未连接兄弟字段的默认值仍参与结构体组装。debug 在保留同一扁平 Pin 集的同时，通过 `evidence.pin_tree` 记录 ParentPin/SubPins 关系，不复制完整类型和连线。
+拆分结构使用 `path: ["Transform", "Location", "X"]`，不使用点号拼接。连接权威性位于叶 Pin；未连接兄弟字段的默认值仍参与结构体组装。debug 在保留同一扁平 Pin 集的同时，通过 `evidence.pin_tree` 记录 ParentPin/SubPins 关系，不复制完整类型和连线。该规则必须在 5.1 的源码和真实资产研究完成后验证；ParentPin/SubPins 缺失或矛盾时标记 partial，不得按名称补树。
 
 Wildcard 保留声明态 `wildcard`、类型变量和已确认 resolved type，不能用解析后的类型覆盖声明态。Map 的 key/value wildcard 可以属于不同类型变量。
 
