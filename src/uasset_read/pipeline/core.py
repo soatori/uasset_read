@@ -35,6 +35,7 @@ from uasset_read.pipeline.stages import (
     _create_linker,
     _read_package_headers,
 )
+from uasset_read.models.validators import validate_parse_status
 from uasset_read.pipeline.post_process import _post_process
 from uasset_read.pipeline.config import (
     _should_use_lightweight_tolerant_parse,
@@ -523,7 +524,7 @@ def parse_package_lazy(
                             tolerant=tolerant,
                         )
                     if not getattr(export, "parse_status", None):
-                        setattr(export, "parse_status", "success")
+                        setattr(export, "parse_status", validate_parse_status("success"))
                     elif getattr(export, "parse_status", None) in ("opaque", "partial_metadata"):
                         pass
                 except (struct.error, OSError, ValueError, KeyError, AttributeError) as e:
@@ -531,7 +532,7 @@ def parse_package_lazy(
                         raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
                     result.errors.append(f"Property parse error in {export.object_name}: {e}")
                     export.properties = []
-                    setattr(export, "parse_status", "failed")
+                    setattr(export, "parse_status", validate_parse_status("failed"))
                     setattr(export, "fallback_reason", "parse_error")
                     setattr(export, "error_message", str(e))
 
