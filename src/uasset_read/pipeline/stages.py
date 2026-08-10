@@ -321,15 +321,39 @@ def _parse_export_properties(
     game: str,
     memory_monitor,
     budget=None,
+    export_indices: set[int] | None = None,  # None = all, set = subset
+    store_raw_bytes: bool = False,            # lazy-mode raw byte caching
 ) -> None:
-    """Parse ExportMap properties — unified dispatch via linker.preload()."""
+    """Parse ExportMap properties — unified dispatch via linker.preload().
+
+    When *export_indices* is provided, only those indices are parsed and
+    the ``is_loaded`` flag is set on every export (True for parsed, False
+    for skipped).  *store_raw_bytes* caches the serial data on each
+    parsed export as ``lazy_load_archive``.
+    """
     # Lazy import of extras module (per #117 core/extras layering)
     from uasset_read.blueprint import extract_component_transforms
     from uasset_read.memory_safety import MemoryLimitExceeded
 
     _mappings = mappings_provider.mappings if mappings_provider else None
     for _exp_idx, export in enumerate(result.export_map or []):
-        memory_monitor.checkpoint(f"export[{_exp_idx}]")
+        if memory_monitor is not None:
+            memory_monitor.checkpoint(f"export[{_exp_idx}]")
+
+        # Lazy-mode: skip exports not in the requested set
+        if export_indices is not None and _exp_idx not in export_indices:
+            if export.serial_size > 0 and store_raw_bytes:
+                try:
+                    archive.seek(export.serial_offset)
+                    setattr(export, "lazy_load_archive", archive.read_bytes(export.serial_size))
+                except (OSError, struct.error) as e:
+                    if not tolerant:
+                        raise ParseError(
+                            f"Failed to read raw bytes for export {export.object_name}: {e}"
+                        ) from e
+                    setattr(export, "lazy_load_archive", None)
+            setattr(export, "is_loaded", False)
+            continue
 
         if export.serial_size > 0:
             try:
@@ -380,6 +404,22 @@ def _parse_export_properties(
             # Extract component transform properties
             if export.properties:
                 export.transforms = extract_component_transforms(export.properties)
+
+        # Lazy-mode: store raw bytes for parsed exports if requested
+        if store_raw_bytes and export.serial_size > 0:
+            try:
+                archive.seek(export.serial_offset)
+                setattr(export, "lazy_load_archive", archive.read_bytes(export.serial_size))
+            except (OSError, struct.error) as e:
+                if not tolerant:
+                    raise ParseError(
+                        f"Failed to read raw bytes for export {export.object_name}: {e}"
+                    ) from e
+                setattr(export, "lazy_load_archive", None)
+
+        # Lazy-mode: set is_loaded flag on every export
+        if export_indices is not None:
+            setattr(export, "is_loaded", _exp_idx in export_indices)
 
 
 def _create_linker(

@@ -22,7 +22,6 @@ from uasset_read.constants import LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.package import PackageProvider
-from uasset_read.parsers.property_parser import parse_properties_from_export
 from uasset_read.models.result import ParseResult
 from uasset_read.config import LogConfig
 from uasset_read.project_logging import scoped_project_logging, configure_project_logging
@@ -35,7 +34,6 @@ from uasset_read.pipeline.stages import (
     _create_linker,
     _read_package_headers,
 )
-from uasset_read.models.validators import validate_parse_status
 from uasset_read.pipeline.post_process import _post_process
 from uasset_read.pipeline.config import (
     _should_use_lightweight_tolerant_parse,
@@ -446,8 +444,6 @@ def parse_package_lazy(
     Returns:
         ParseResult instance (export bodies parsed on demand)
     """
-    from uasset_read.blueprint import extract_component_transforms
-
     result = ParseResult()
     archive = None
     linker = None
@@ -503,57 +499,16 @@ def parse_package_lazy(
             if result.summary is None:
                 return result
 
-        # Parse specified export bodies on demand
+        # Parse specified export bodies on demand -- delegate to shared implementation
         parse_indices = set(export_indices) if export_indices else set()
-        _mappings = mappings_provider.mappings if mappings_provider else None
 
-        for idx, export in enumerate(result.export_map or []):
-            if idx in parse_indices and export.serial_size > 0:
-                try:
-                    if linker is not None:
-                        linker.preload(
-                            idx, mappings=_mappings, game=game, tolerant=tolerant,
-                        )
-                        inst = linker._export_objects[idx]
-                        export.properties = inst.serialized_properties
-                    else:
-                        export.properties = parse_properties_from_export(
-                            export, archive, result.summary, result.name_map,
-                            result.export_map or [], result.import_map,
-                            linker=linker, mappings=_mappings, game=game,
-                            tolerant=tolerant,
-                        )
-                    if not getattr(export, "parse_status", None):
-                        setattr(export, "parse_status", validate_parse_status("success"))
-                    elif getattr(export, "parse_status", None) in ("opaque", "partial_metadata"):
-                        pass
-                except (struct.error, OSError, ValueError, KeyError, AttributeError) as e:
-                    if not tolerant:
-                        raise ParseError(f"Property parse error in {export.object_name}: {e}") from e
-                    result.errors.append(f"Property parse error in {export.object_name}: {e}")
-                    export.properties = []
-                    setattr(export, "parse_status", validate_parse_status("failed"))
-                    setattr(export, "fallback_reason", "parse_error")
-                    setattr(export, "error_message", str(e))
-
-                # Extract component transform properties
-                if export.properties:
-                    export.transforms = extract_component_transforms(export.properties)
-
-            # Store raw bytes (optional)
-            if store_raw_bytes and export.serial_size > 0:
-                try:
-                    archive.seek(export.serial_offset)
-                    setattr(export, "lazy_load_archive", archive.read_bytes(export.serial_size))
-                except (OSError, struct.error) as e:
-                    if not tolerant:
-                        raise ParseError(
-                            f"Failed to read raw bytes for export {export.object_name}: {e}"
-                        ) from e
-                    setattr(export, "lazy_load_archive", None)
-
-            # Set lazy loading flag (via setattr for compatibility with ObjectExport and ExportIR)
-            setattr(export, "is_loaded", idx in parse_indices)
+        _parse_export_properties(
+            archive, result, linker, tolerant, mappings_provider, game,
+            memory_monitor=None,  # No memory monitor in lazy path (diagnostic only)
+            budget=budget,
+            export_indices=parse_indices,
+            store_raw_bytes=store_raw_bytes,
+        )
 
         # post_load
         if linker is not None:
