@@ -14,26 +14,10 @@ tests/
   test_benchmark_markdown.py   # Markdown output public contract
   test_benchmark_cli_batch.py  # CLI/batch public contract
   test_samples.py              # parameterized sample parsing
-  archive/                     # FArchive read/write tests
-  asset/                       # asset metadata and export tests
-  blueprint/                   # Blueprint graph and node tests
-  core/                        # core pipeline, JSON, batch, status, schema
-  graph/                       # graph traversal and pin tests
-  integration/                 # cross-module integration tests
-  iostore/                     # IoStore encrypted reads
-  ir/                          # IR representation tests
-  kismet/                      # Kismet decompiler, UFunction, pipeline
-  link/                        # linker and reference resolution tests
-  linker/                      # linker load tests
-  misc/                        # miscellaneous tests
-  pak/                         # PAK archive tests
-  parsers/                     # format-specific parser tests
-  renderers/                   # JSON/Markdown renderer tests
-  serialization/               # property tag and serialization tests
-  structs/                     # struct decode and opaque struct tests
-  unit/                        # isolated unit tests
+  core/                        # core pipeline, JSON, batch, status, schema (15 files)
+  kismet/                      # Kismet decompiler, UFunction, pipeline (6 files)
+  iostore/                     # IoStore encrypted reads (1 file)
   samples/                     # tracked .uasset sample files
-  fixtures/                    # test fixture data
 ```
 
 `tests/conftest.py` records elapsed time and peak Python allocations for the
@@ -42,10 +26,10 @@ threshold. Child-process allocations are not included in the reported peak.
 
 ## Inventory
 
-- **176+ test functions** across 17 subdirectories and the root
-- **28 test files** covering core pipeline, Kismet, IoStore, and benchmarks
+- **176+ test functions** across 3 subdirectories and the root
+- **22 test files** in subdirectories (core, kismet, iostore)
+- **6 benchmark/sample test files** at root
 - **41 tracked `.uasset` samples** under `tests/samples/`
-- No `tests/temp/` directory -- all experimental tests have been promoted
 
 ## Commands
 
