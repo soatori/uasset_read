@@ -285,28 +285,7 @@ python -m pytest tests/ -v --cov=uasset_read  # With coverage
 
 ### UE Editor Ground Truth
 
-For parser changes that claim UE fidelity, do not rely only on pytest or static
-C++ references. When Unreal Editor 5.8 is available, use the official
-Experimental Unreal MCP server as a live read-only ground-truth channel:
-
-1. Enable `ModelContextProtocol` and, when broader toolsets are needed, enable
-   `AllToolsets` in the UE 5.8 editor project.
-2. Start the server with `ModelContextProtocol.StartServer` or launch the
-   editor with `-ModelContextProtocolStartServer`; the default endpoint is
-   `http://127.0.0.1:8000/mcp`.
-3. Record `tools/list`, `list_toolsets`, and the `describe_toolset` schema for
-   the toolset used to inspect the asset.
-4. Compare parser JSON/Markdown against editor live data for asset class,
-   export object names, Blueprint variables, graph names, nodes, pins,
-   component hierarchy, transforms, input bindings, soft references, and asset
-   load/compile status.
-5. Keep MCP-derived evidence as test artifacts or issue evidence. Do not make
-   the normal test suite fail when the editor or MCP endpoint is unavailable.
-
-MCP evidence is authoritative for editor-visible state, while `.uasset` parsing
-remains the source under test. If the two disagree, document whether the gap is
-caused by cooked/editor-only stripping, unresolved binary serialization, or an
-actual parser defect.
+When Unreal Editor 5.8 is released, use the official Experimental Unreal MCP server as a live read-only ground-truth channel.
 
 ## Tech Stack
 
