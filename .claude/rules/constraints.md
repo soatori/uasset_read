@@ -21,9 +21,10 @@
 - **Dead code cleanup** — Remove dead code, legacy aliases, and deprecated interfaces in the same commit; no deprecated markers or transition periods
 - **Minimal implementation** — Implement in the simplest way possible; avoid over-abstraction, redundant wrappers, and unnecessary complexity
 
-## Test File Rules
+## Test Organization
 
-- **Root `tests/` holds exactly 6 test files** — 5 benchmark tests + 1 sample test (`tests/samples/`)
+- **Root `tests/` holds 6 test files** — 5 benchmark tests + 1 sample test (`tests/samples/`)
 - **Benchmark test changes require confirmation** — Before modifying any benchmark test file, explain the changes and get user approval
-- **Other tests go in `tests/temp/`** — All new experimental, temporary, or non-benchmark test files go in `tests/temp/`; CI does not collect this directory
+- **New tests go in domain subdirectories** — Place tests in the appropriate subdirectory under `tests/` (core, kismet, iostore, etc.) based on the code they exercise
 - **`tests/samples/` stores only `.uasset` sample files** — No Python test code in this directory
+
