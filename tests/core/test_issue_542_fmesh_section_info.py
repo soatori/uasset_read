@@ -1,14 +1,16 @@
 """Regression test for Issue #542: FMeshSectionInfo fields not recovered in MeshSectionInfoMap.
 
 When parsing StaticMesh assets (e.g. StarterContent_SM_Chair.uasset), the
-SectionInfoMap and OriginalSectionInfoMap properties contain TMap<int, FMeshSectionInfo>.
+SectionInfoMap and OriginalSectionInfoMap properties contain TMap<uint32, FMeshSectionInfo>.
 
-The fix in commit 2b0ea7b0 adds struct type propagation in _dispatch_value_parse
-so that when value_type is "StructProperty", the concrete struct_type from the tag
-is forwarded to parse_struct_property. However, for this particular asset the map
-tag has value_type="IntProperty" (not "StructProperty"), so the value dispatch
-takes the default int path. The FMeshSectionInfo struct parsing is thus not
-triggered for this asset; this test documents the current post-fix behavior.
+The fix resolves two bugs:
+1. parse_map_property fallback logic overwrites correct value_type="StructProperty"
+   with "IntProperty" because tag.key_type is None (legacy format stores it in tag.inner_type).
+2. _apply_property_type_to_tag for MapProperty does not extract value_type_struct from
+   the value child's children, so even with correct value_type, the struct type is unknown.
+
+After the fix, the map values are correctly parsed as FMeshSectionInfo structs with
+all expected fields (MaterialIndex, bEnableCollision, bCastShadow, etc.).
 """
 from __future__ import annotations
 
@@ -67,13 +69,12 @@ def static_mesh_export(chair_data: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
-class TestSectionInfoMapPostFix:
-    """Assert the post-fix behavior of SectionInfoMap parsing.
+class TestSectionInfoMap:
+    """Assert the corrected behavior of SectionInfoMap parsing.
 
-    For this asset the map tag has value_type="IntProperty", so the value
-    dispatch reads plain ints. The fix (struct propagation in
-    _dispatch_value_parse) only activates when value_type is already
-    "StructProperty".
+    After the fix, the map tag correctly has value_type="StructProperty" and
+    the value_type_struct is set to "FMeshSectionInfo" via the registry lookup.
+    Each entry value is a dict representing an FMeshSectionInfo struct.
     """
 
     def test_section_info_map_exists(self, static_mesh_export: dict) -> None:
@@ -107,27 +108,22 @@ class TestSectionInfoMapPostFix:
         inner_map = prop["value"]["fields"]["Map"]
         assert len(inner_map["entries"]) > 0, "Map has no entries"
 
-    def test_section_info_map_value_type_is_int(self, static_mesh_export: dict) -> None:
-        """Map value_type is 'IntProperty' for this asset.
+    def test_section_info_map_value_type_is_struct(self, static_mesh_export: dict) -> None:
+        """Map value_type is 'StructProperty' after fix.
 
-        The map tag has value_type=IntProperty (not StructProperty), so the
-        _dispatch_value_parse StructProperty branch is not entered. The entry
-        values are plain ints.
+        Bug 1 was that fallback logic overwrote value_type="StructProperty" with
+        "IntProperty" because key_type was None (stored in inner_type in legacy format).
         """
         props = static_mesh_export.get("properties", [])
         prop = _find_property(props, "SectionInfoMap")
         assert prop is not None
         inner_map = prop["value"]["fields"]["Map"]
-        assert inner_map["value_type"] == "IntProperty", (
-            f"Expected IntProperty, got: {inner_map['value_type']}"
+        assert inner_map["value_type"] == "StructProperty", (
+            f"Expected StructProperty, got: {inner_map['value_type']}"
         )
 
-    def test_section_info_map_entry_value_is_int(self, static_mesh_export: dict) -> None:
-        """Each map entry value is a plain int for this asset.
-
-        Because value_type is IntProperty, the default int path is taken
-        and each entry value is a plain int (e.g. 77).
-        """
+    def test_section_info_map_entry_value_is_struct(self, static_mesh_export: dict) -> None:
+        """Each map entry value is a dict (FMeshSectionInfo struct) after fix."""
         props = static_mesh_export.get("properties", [])
         prop = _find_property(props, "SectionInfoMap")
         assert prop is not None
@@ -136,12 +132,66 @@ class TestSectionInfoMapPostFix:
         assert len(entries) > 0
 
         first_entry = entries[0]
-        assert isinstance(first_entry["value"], int), (
-            f"Expected int, got: {type(first_entry['value']).__name__}: {first_entry['value']}"
+        assert isinstance(first_entry["value"], dict), (
+            f"Expected dict (struct), got: {type(first_entry['value']).__name__}: {first_entry['value']}"
         )
 
+    def test_section_info_map_entry_struct_type(self, static_mesh_export: dict) -> None:
+        """Entry value struct_type is FMeshSectionInfo."""
+        props = static_mesh_export.get("properties", [])
+        prop = _find_property(props, "SectionInfoMap")
+        assert prop is not None
+        inner_map = prop["value"]["fields"]["Map"]
+        first_entry = inner_map["entries"][0]
+        value = first_entry["value"]
+        assert "struct_type" in value
+        assert value["struct_type"] in ("FMeshSectionInfo", "MeshSectionInfo")
 
-class TestOriginalSectionInfoMapPostFix:
+    def test_section_info_map_entry_has_expected_fields(self, static_mesh_export: dict) -> None:
+        """FMeshSectionInfo struct has all expected fields."""
+        props = static_mesh_export.get("properties", [])
+        prop = _find_property(props, "SectionInfoMap")
+        assert prop is not None
+        inner_map = prop["value"]["fields"]["Map"]
+        first_entry = inner_map["entries"][0]
+        value = first_entry["value"]
+        fields = value.get("fields", {})
+        expected = {
+            "MaterialIndex",
+            "bEnableCollision",
+            "bCastShadow",
+            "bVisibleInRayTracing",
+            "bAffectDistanceFieldLighting",
+            "bForceOpaque",
+        }
+        assert set(fields.keys()) == expected, (
+            f"Expected fields {expected}, got: {set(fields.keys())}"
+        )
+
+    def test_section_info_map_material_index_is_int(self, static_mesh_export: dict) -> None:
+        """MaterialIndex field is an int."""
+        props = static_mesh_export.get("properties", [])
+        prop = _find_property(props, "SectionInfoMap")
+        assert prop is not None
+        inner_map = prop["value"]["fields"]["Map"]
+        first_entry = inner_map["entries"][0]
+        value = first_entry["value"]
+        assert isinstance(value["fields"]["MaterialIndex"], int)
+
+    def test_section_info_map_bools_are_bool(self, static_mesh_export: dict) -> None:
+        """Bool fields are Python bool type."""
+        props = static_mesh_export.get("properties", [])
+        prop = _find_property(props, "SectionInfoMap")
+        assert prop is not None
+        inner_map = prop["value"]["fields"]["Map"]
+        first_entry = inner_map["entries"][0]
+        value = first_entry["value"]
+        for name in ("bEnableCollision", "bCastShadow", "bVisibleInRayTracing",
+                      "bAffectDistanceFieldLighting", "bForceOpaque"):
+            assert isinstance(value["fields"][name], bool), f"{name} should be bool"
+
+
+class TestOriginalSectionInfoMap:
     """Same assertions for OriginalSectionInfoMap.
 
     This property should have the same structure as SectionInfoMap.
@@ -153,22 +203,22 @@ class TestOriginalSectionInfoMapPostFix:
         prop = _find_property(props, "OriginalSectionInfoMap")
         assert prop is not None, "OriginalSectionInfoMap property not found"
 
-    def test_original_section_info_map_value_type_is_int(
+    def test_original_section_info_map_value_type_is_struct(
         self, static_mesh_export: dict
     ) -> None:
-        """OriginalSectionInfoMap map value_type is 'IntProperty'."""
+        """OriginalSectionInfoMap map value_type is 'StructProperty' after fix."""
         props = static_mesh_export.get("properties", [])
         prop = _find_property(props, "OriginalSectionInfoMap")
         assert prop is not None
         inner_map = prop["value"]["fields"]["Map"]
-        assert inner_map["value_type"] == "IntProperty", (
-            f"Expected IntProperty, got: {inner_map['value_type']}"
+        assert inner_map["value_type"] == "StructProperty", (
+            f"Expected StructProperty, got: {inner_map['value_type']}"
         )
 
-    def test_original_section_info_map_entry_value_is_int(
+    def test_original_section_info_map_entry_value_is_struct(
         self, static_mesh_export: dict
     ) -> None:
-        """OriginalSectionInfoMap entry values are plain ints."""
+        """OriginalSectionInfoMap entry values are FMeshSectionInfo structs."""
         props = static_mesh_export.get("properties", [])
         prop = _find_property(props, "OriginalSectionInfoMap")
         assert prop is not None
@@ -176,9 +226,30 @@ class TestOriginalSectionInfoMapPostFix:
         assert len(entries) > 0
 
         first_entry = entries[0]
-        assert isinstance(first_entry["value"], int), (
-            f"Expected int, got: {type(first_entry['value']).__name__}"
+        assert isinstance(first_entry["value"], dict), (
+            f"Expected dict (struct), got: {type(first_entry['value']).__name__}"
         )
+
+    def test_original_section_info_map_entry_has_expected_fields(
+        self, static_mesh_export: dict
+    ) -> None:
+        """OriginalSectionInfoMap FMeshSectionInfo has all expected fields."""
+        props = static_mesh_export.get("properties", [])
+        prop = _find_property(props, "OriginalSectionInfoMap")
+        assert prop is not None
+        entries = prop["value"]["fields"]["Map"]["entries"]
+        first_entry = entries[0]
+        value = first_entry["value"]
+        fields = value.get("fields", {})
+        expected = {
+            "MaterialIndex",
+            "bEnableCollision",
+            "bCastShadow",
+            "bVisibleInRayTracing",
+            "bAffectDistanceFieldLighting",
+            "bForceOpaque",
+        }
+        assert set(fields.keys()) == expected
 
     def test_section_and_original_have_same_structure(
         self, static_mesh_export: dict
