@@ -84,15 +84,37 @@ debug 不得增加、删除、替换或重排 standard 的 Graph、Node、Pin、
 
 ## 5. ID、引用与确定性
 
-- Graph ID 在资产内唯一，例如 `g0`。
-- Node ID 在所属 Graph 内唯一，例如 `n0`。
-- 数据 Pin ID 和控制 Port ID 在所属 Node 内唯一，例如 `p0`、`x0`。
+- Graph ID 使用可读的 Blueprint URI，例如 `blueprint://graph/EventGraph`。
+- Node ID 使用 `blueprint://graph/<Graph>/<Kind>/<Name>/<Ordinal>`，例如 `blueprint://graph/EventGraph/node/call/SetActorLocation/0`。
+- 数据 Pin 和控制 Port 使用所属 Node 的语义端点 ID，例如 `input.Target`、`input.NewLocation`、`exec.in` 和 `exec.out`。
 - Type、Symbol、Constant 和 Component ID 在对应顶层表中唯一，例如 `t0`、`s0`、`k0`、`c0`。
 - 局部 ID 仅对当前文档有效，不是跨版本持久标识。
 - 所有本地引用必须闭合，不允许悬空。
 - 跨资产引用使用带 `kind` 的外部引用和规范对象路径，不能伪装为本地 ID。
 
-ID 由稳定源序号和规范排序分配。原始 GUID 可以作为内部 tie-break 或 debug 证据，但 standard 不输出 GUID，也不承担 GUID 兼容职责。
+节点 ID 的 `<Graph>`、`<Kind>` 和 `<Name>` 使用 ASCII slug；原始名称保留在 `name` 或 `label`，不能因 slug 化丢失语义。`<Ordinal>` 从零开始，按确定性的序列化源顺序分配，用于区分同一 Graph 中相同类型和名称的节点。缺少语义名称时使用已确认的源类型名；不得使用坐标或推测名称。
+
+实现校验使用以下约束：`Graph ID` 匹配 `^blueprint://graph/[A-Za-z][A-Za-z0-9_.-]*$`；`Node ID` 匹配 `^blueprint://graph/[A-Za-z][A-Za-z0-9_.-]*/node/[a-z][a-z0-9-]*/[A-Za-z][A-Za-z0-9_.-]*/[0-9]+$`；端点 ID 必须匹配 `input.<Name>`、`output.<Name>` 或 `exec.<Role>`。名称不能包含 `/`、空格或未转义 URI 保留字符。
+
+节点 ID 是当前文档内的可读引用，不是跨版本持久身份。原始 Unreal GUID 不作为普通 Flow 引用；如果可靠读取，应放在 `source.guid` 作为精确追溯证据。GUID 使用单一规范：四个 UE `FGuid` 分量按原顺序拼接为 32 个十六进制字符，禁止在实现中混用 `System.Guid` 的字节序转换。无法读取 GUID 时不得伪造；可保留语义 ID 并产生对应 coverage/diagnostic。
+
+规范节点 ID 示例：
+
+```text
+blueprint://graph/EventGraph/node/event/BeginPlay/0
+blueprint://graph/EventGraph/node/branch/IsValid/0
+blueprint://graph/EventGraph/node/call/SetActorLocation/0
+blueprint://graph/Function_TakeDamage/node/variable-set/Health/0
+```
+
+Pin/Port 端点示例：
+
+```text
+blueprint://graph/EventGraph/node/call/SetActorLocation/0/pin/exec.in
+blueprint://graph/EventGraph/node/call/SetActorLocation/0/pin/input.NewLocation
+```
+
+ID 只允许 ASCII 字符；Graph、Node、Pin 和 Port 的显示名称单独保留，供人和 Agent 阅读。普通模式不输出坐标、原始 Export 名称或完整调试属性；debug 可在同一语义对象下增加 `source.guid`、`source.export_name`、序列化索引和原始名称。
 
 同一输入字节、解析器版本、配置和限制必须产生字节一致输出。无语义顺序的集合按规范键排序；参数、Sequence、Switch case、多链接执行顺序等有语义顺序的集合保留源顺序并输出 `ordinal`。JSON 使用 UTF-8、LF、固定键顺序和有限浮点编码，禁止 NaN/Infinity。
 
@@ -100,7 +122,7 @@ ID 由稳定源序号和规范排序分配。原始 GUID 可以作为内部 tie-
 
 ```json
 {
-  "id": "g0",
+  "id": "blueprint://graph/EventGraph",
   "name": "EventGraph",
   "kind": "event_graph",
   "nodes": [],
@@ -125,20 +147,22 @@ ID 由稳定源序号和规范排序分配。原始 GUID 可以作为内部 tie-
 
 ```json
 {
-  "id": "n4",
+  "id": "blueprint://graph/EventGraph/node/call/SetActorLocation/0",
+  "label": "调用 SetActorLocation",
   "kind": "call",
   "status": "recognized",
   "symbol": "s0",
   "execution": {"model": "immediate"},
   "data_pins": {
-    "p0": {"name": "Target", "direction": "input", "type": {"$type": "t1"}},
-    "p1": {"name": "NewLocation", "direction": "input", "type": {"$type": "t0"}}
+    "input.Target": {"name": "Target", "direction": "input", "type": {"$type": "t1"}},
+    "input.NewLocation": {"name": "NewLocation", "direction": "input", "type": {"$type": "t0"}},
+    "input.bSweep": {"name": "bSweep", "direction": "input", "type": "bool"}
   },
   "control_ports": {
-    "x0": {"name": "execute", "direction": "input", "role": "execute"},
-    "x1": {"name": "then", "direction": "output", "role": "then"}
+    "exec.in": {"name": "execute", "direction": "input", "role": "execute"},
+    "exec.out": {"name": "then", "direction": "output", "role": "then"}
   },
-  "defaults": {"p2": false}
+  "defaults": {"input.bSweep": false}
 }
 ```
 
@@ -191,11 +215,11 @@ Orphaned Pin 只有在需要说明残留连接或默认值时保留，并标记 
 
 ```json
 "control_flow": {
-  "entries": [{"node": "n0", "port": "x1"}],
+  "entries": [{"node": "blueprint://graph/EventGraph/node/event/BeginPlay/0", "port": "exec.out"}],
   "edges": [
     {
-      "from": {"node": "n0", "port": "x1"},
-      "to": {"node": "n1", "port": "x0"},
+      "from": {"node": "blueprint://graph/EventGraph/node/event/BeginPlay/0", "port": "exec.out"},
+      "to": {"node": "blueprint://graph/EventGraph/node/call/SetActorLocation/0", "port": "exec.in"},
       "transition": "immediate",
       "ordinal": 0
     }
@@ -222,8 +246,8 @@ Orphaned Pin 只有在需要说明残留连接或默认值时保留，并标记 
 "data_flow": {
   "edges": [
     {
-      "from": {"node": "n2", "pin": "p0"},
-      "to": {"node": "n1", "pin": "p1"}
+      "from": {"node": "blueprint://graph/EventGraph/node/variable-get/TargetLocation/0", "pin": "value"},
+      "to": {"node": "blueprint://graph/EventGraph/node/call/SetActorLocation/0", "pin": "input.NewLocation"}
     }
   ]
 }
@@ -387,7 +411,7 @@ Coverage 描述“损失了什么”，Diagnostic 描述“为什么”。两者
 
 ```json
 {
-  "scope": "graph:g0/nodes",
+  "scope": "graph:blueprint://graph/EventGraph/nodes",
   "status": "truncated",
   "reason": "max_nodes",
   "declared": 6000,
@@ -407,7 +431,7 @@ standard diagnostic 结构稳定聚合：
 ```json
 {
   "code": "BP_LINK_UNRESOLVED",
-  "scope": "graph:g0/data_flow",
+  "scope": "graph:blueprint://graph/EventGraph/data_flow",
   "severity": "warning",
   "effect": "semantic_loss",
   "count": 3
