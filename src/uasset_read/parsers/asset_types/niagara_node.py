@@ -30,6 +30,7 @@ from uasset_read.parsers.asset_types.property_extractor import build_properties_
 from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
 from uasset_read.models.validators import validate_parse_status
 from uasset_read.serializers.graph_helpers import read_ftext_fstring, read_ftext
+from uasset_read.serializers.graph_pin import read_ed_graph_pin_type
 
 logger = logging.getLogger(__name__)
 
@@ -47,52 +48,7 @@ _HANDLED_CLASSES: Set[str] = {
 }
 
 
-def _decode_pin_type(archive: "FArchive", name_map: list) -> dict[str, Any]:
-    """Decode FEdGraphPinType from the archive.
-
-    Source: EdGraphPin.cpp:163, graph_pin.py:read_ed_graph_pin_type.
-    Fixture version: UE 5.0 -- bSerializeAsSinglePrecisionFloat absent.
-    Format: PinCategory(FName) + PinSubCategory(FName) + PinSubCategoryObject(i32)
-    + ContainerType(u8) + bIsReference(u32) + bIsWeakPointer(u32)
-    + FSimpleMemberReference(i32 + FName + 16bytes)
-    + bIsConst(u32) + bIsUObjectWrapper(u32).
-    """
-    pin_category = archive.read_name(name_map)
-    pin_sub_category = archive.read_name(name_map)
-
-    # PinSubCategoryObject -- object reference (PackageIndex)
-    obj_index = archive.read_i32()
-
-    # Container type (EPinContainerType) -- stored as u8 in binary
-    container_type = archive.read_u8()
-
-    # bIsReference / bIsWeakPointer (UE5 FArchive bool = uint32, 4B)
-    b_is_reference = bool(archive.read_u32())
-    b_is_weak_pointer = bool(archive.read_u32())
-
-    # FSimpleMemberReference (always present in UE5)
-    _member_parent = archive.read_i32()
-    _member_name = archive.read_name(name_map)
-    archive.read(16)  # MemberGuid
-
-    # bIsConst / bIsUObjectWrapper (UE5 FArchive bool = uint32, 4B)
-    b_is_const = bool(archive.read_u32())
-    b_is_uobject_wrapper = bool(archive.read_u32())
-    # bSerializeAsSinglePrecisionFloat absent in this fixture (gate 36 > fixture 33)
-
-    return {
-        "pin_category": pin_category,
-        "pin_sub_category": pin_sub_category,
-        "sub_category_object_index": obj_index,
-        "container_type": container_type,
-        "is_reference": b_is_reference,
-        "is_weak_pointer": b_is_weak_pointer,
-        "is_const": b_is_const,
-        "is_uobject_wrapper": b_is_uobject_wrapper,
-    }
-
-
-def _decode_single_pin(archive: "FArchive", name_map: list) -> Optional[dict[str, Any]]:
+def _decode_single_pin(archive: "FArchive", name_map: list, export: Optional["ObjectExport"] = None) -> Optional[dict[str, Any]]:
     """Decode a single UEdGraphPin record.
 
     Source: EdGraphPin.cpp:1838-1948 (UEdGraphPin::Serialize).
@@ -143,8 +99,12 @@ def _decode_single_pin(archive: "FArchive", name_map: list) -> Optional[dict[str
     # Direction (u8)
     direction = archive.read_u8()
 
-    # PinType (FEdGraphPinType)
-    pin_type = _decode_pin_type(archive, name_map)
+    # PinType (FEdGraphPinType) -- use canonical reader
+    summary = getattr(export, "package_summary", None) if export is not None else None
+    linker = getattr(export, "package_linker", None) if export is not None else None
+    import_map = getattr(export, "package_import_map", None) if export is not None else None
+    export_map = getattr(export, "package_export_map", None) if export is not None else None
+    pin_type = read_ed_graph_pin_type(archive, name_map, summary, import_map, export_map, linker)
 
     # DefaultValue (FString)
     default_value = archive.read_fstring()
@@ -213,20 +173,23 @@ def _decode_single_pin(archive: "FArchive", name_map: list) -> Optional[dict[str
 
 def _decode_pins_from_tail(
     archive: "FArchive", name_map: list, tail_offset: int, tail_size: int,
+    export: Optional["ObjectExport"] = None,
 ) -> list[dict[str, Any]]:
     """Decode pin records from a node's native tail bytes.
 
     Source: issue-521-b0-gate-decision.md §Pin-record layout.
     Layout: object-GUID marker (u32) + pin_count (i32) + per-pin SerializePin body.
     """
-    if tail_size < 8:  # Minimum: GUID marker (4) + pin count (4)
+    if tail_size < 8:  # Minimum: GUID marker (4) + pin count (4); GUID consumed conditionally
         return []
 
     tail_end = tail_offset + tail_size
     archive.seek(tail_offset)
 
-    # Object-GUID presence marker (always false in this fixture)
+    # Object-GUID presence marker
     guid_marker = archive.read_u32()
+    if guid_marker != 0:
+        _ = archive.read(16)  # consume 16-byte GUID (FGuid = 4 x u32)
 
     # Pin count
     pin_count = archive.read_i32()
@@ -237,7 +200,7 @@ def _decode_pins_from_tail(
     for _ in range(pin_count):
         if archive.tell() >= tail_end:
             break
-        pin = _decode_single_pin(archive, name_map)
+        pin = _decode_single_pin(archive, name_map, export)
         if pin is None:
             break
         pins.append(pin)
@@ -318,7 +281,7 @@ class NiagaraNodeHandler(ClassHandler):
             if tail_size >= 8 and context is not None:
                 try:
                     name_map = context if isinstance(context, list) else []
-                    pins = _decode_pins_from_tail(archive, name_map, tail_offset, tail_size)
+                    pins = _decode_pins_from_tail(archive, name_map, tail_offset, tail_size, export)
                 except Exception as e:
                     logger.debug("Pin decode failed for %s: %s", class_name, e)
 

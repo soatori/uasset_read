@@ -76,6 +76,8 @@ tests/*
 !tests/temp/test_*.py
 !tests/samples/
 !tests/fixtures/
+!tests/niagara/
+!tests/niagara/test_*.py
 
 # AI agent reports (local only)
 docs/firstperson_blueprint_test_report.md
