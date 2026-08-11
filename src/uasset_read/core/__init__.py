@@ -287,10 +287,9 @@ def _parse_and_render(
     # Semantic JSON routing: build SemanticIR then render
     if format == "semantic_json":
         from uasset_read.semantic.builder import build_semantic_ir
-        from uasset_read.renderers.semantic_json_renderer import SemanticJSONRenderer
 
         semantic_ir = build_semantic_ir(ir, mode=output_level)
-        renderer = SemanticJSONRenderer()
+        renderer = get_renderer(format)
         options = RenderOptions(
             verbose=verbose,
             include_schema=include_schema,
