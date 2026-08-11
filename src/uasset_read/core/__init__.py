@@ -274,6 +274,16 @@ def _parse_and_render(
 
     ir = build_package_ir(result)
 
+    # 释放临时大对象，防止批量解析时内存累积
+    try:
+        for export in getattr(result, "export_map", []) or []:
+            if hasattr(export, "_asset_type_data"):
+                delattr(export, "_asset_type_data")
+            if hasattr(export, "_uclass_native_fields"):
+                delattr(export, "_uclass_native_fields")
+    except Exception:
+        logger.debug("批量清理临时大对象失败", exc_info=True)
+
     # Semantic JSON routing: build SemanticIR then render
     if format == "semantic_json":
         from uasset_read.semantic.builder import build_semantic_ir
@@ -289,16 +299,6 @@ def _parse_and_render(
             hex_view=hex_view,
         )
         return renderer.render_semantic(semantic_ir, options), result
-
-    # 释放临时大对象，防止批量解析时内存累积
-    try:
-        for export in getattr(result, "export_map", []) or []:
-            if hasattr(export, "_asset_type_data"):
-                delattr(export, "_asset_type_data")
-            if hasattr(export, "_uclass_native_fields"):
-                delattr(export, "_uclass_native_fields")
-    except Exception:
-        logger.debug("批量清理临时大对象失败", exc_info=True)
 
     renderer = get_renderer(format)
     options = RenderOptions(
