@@ -63,7 +63,7 @@ class TestClassifyAsset:
     def test_empty_class_is_opaque(self):
         assert classify_asset("", None) == AssetKind.OPAQUE
 
-    # Blueprint exclusion — #551 handles these
+    # Blueprint exclusion — #554 handles these
     def test_blueprint_generated_class_is_opaque(self):
         assert classify_asset("BlueprintGeneratedClass", None) == AssetKind.OPAQUE
 

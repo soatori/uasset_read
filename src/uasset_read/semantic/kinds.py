@@ -4,7 +4,7 @@ Classification rules:
 - GRAPH: Material, SoundCue, Niagara (node-based assets)
 - STRUCTURED: StaticMesh, Skeleton, AnimSequence, DataTable (structured data)
 - RESOURCE: Texture2D, SoundWave (binary resources with metadata)
-- OPAQUE: Everything else (including Blueprint — handled by #551)
+- OPAQUE: Everything else (including Blueprint — handled by #554)
 """
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ _CLASS_KIND_MAP: dict[str, AssetKind] = {
     "SoundWave": AssetKind.RESOURCE,
 }
 
-# Classes explicitly excluded (Blueprint domain — #551)
+# Classes explicitly excluded (Blueprint domain — #554)
 _EXCLUDED_CLASSES = frozenset({
     "BlueprintGeneratedClass",
     "AnimBlueprintGeneratedClass",
@@ -68,7 +68,7 @@ def classify_asset(export_class: str, asset_type_data: dict | None = None) -> As
     if kind is not None:
         return kind
 
-    # Blueprint classes → opaque (handled by #551)
+    # Blueprint classes → opaque (handled by #554)
     if export_class in _EXCLUDED_CLASSES:
         return AssetKind.OPAQUE
 
