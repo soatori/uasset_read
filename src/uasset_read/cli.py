@@ -69,6 +69,8 @@ def create_parser():
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('--json', action='store_true', help='Output full JSON structure (default)')
     group.add_argument('--markdown', action='store_true', help='Output Markdown format')
+    group.add_argument('--semantic-json', action='store_true',
+                        help='Output semantic JSON structure (compact, AI-friendly)')
 
     # Optional flags
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
@@ -122,9 +124,11 @@ def create_parser():
 
 
 def resolve_format(args) -> str:
-    """从 CLI 参数解析导出格式名。"""
+    """From CLI args, determine the export format name."""
     if args.markdown:
         return "markdown"
+    if args.semantic_json:
+        return "semantic_json"
     if args.json:
         return "json"
     return "json"

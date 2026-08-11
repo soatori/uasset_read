@@ -61,11 +61,25 @@ def test_resolve_format_named_flags():
     """--markdown -> 'markdown'，--json -> 'json'。"""
     from uasset_read.cli import resolve_format
 
-    args_md = types.SimpleNamespace(markdown=True, json=False)
+    args_md = types.SimpleNamespace(markdown=True, json=False, semantic_json=False)
     assert resolve_format(args_md) == "markdown"
 
-    args_json = types.SimpleNamespace(markdown=False, json=True)
+    args_json = types.SimpleNamespace(markdown=False, json=True, semantic_json=False)
     assert resolve_format(args_json) == "json"
+
+
+def test_resolve_format_semantic_json():
+    """--semantic-json flag returns 'semantic_json' format."""
+    from uasset_read.cli import resolve_format
+    args = types.SimpleNamespace(markdown=False, json=False, semantic_json=True)
+    assert resolve_format(args) == "semantic_json"
+
+
+def test_resolve_format_default_is_json():
+    """No format flag returns 'json' by default."""
+    from uasset_read.cli import resolve_format
+    args = types.SimpleNamespace(markdown=False, json=False, semantic_json=False)
+    assert resolve_format(args) == "json"
 
 
 def test_parse_batch_raises_on_non_directory():
