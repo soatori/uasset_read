@@ -104,13 +104,20 @@ def build_semantic_ir(package_ir: PackageIR, mode: str = "standard") -> Semantic
         unparsed = [k for k, v in atd.items() if v is None]
         coverage_model.track(fields_expected, fields_parsed, unparsed)
     else:
-        # Minimal coverage for opaque
-        coverage_model.track(3, 3, [])
+        # Opaque -- nothing was actually parsed
+        coverage_model.track(0, 0, [])
 
     # Collect diagnostics
     diag_agg = DiagnosticAggregator()
     if package_ir.diagnostics_data:
         diag_agg.from_ir(package_ir.diagnostics_data)
+
+    # Inject diagnostic when parse status indicates incompleteness but no diagnostics exist
+    parse_status = primary_export.parse_status or "success"
+    if parse_status == "partial" and not diag_agg.build():
+        diag_agg.add("warning", "PARTIAL_PARSE", f"Asset '{primary_export.object_name}' was only partially parsed")
+    elif parse_status == "failed" and not diag_agg.build():
+        diag_agg.add("error", "PARSE_FAILED", f"Asset '{primary_export.object_name}' failed to parse")
 
     # Asset meta
     asset_meta = AssetMeta(
