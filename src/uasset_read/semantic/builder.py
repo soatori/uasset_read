@@ -49,17 +49,21 @@ def build_semantic_ir(package_ir: PackageIR, mode: str = "standard") -> Semantic
     Returns:
         SemanticIR ready for rendering
     """
-    # Pick the primary export (first non-Blueprint export, or first export)
+    # Pick the primary export: prefer b_is_asset=True, else first non-Blueprint
     primary_export: ExportIR | None = None
     for export in package_ir.exports:
-        # Skip Blueprint exports (#551 handles these)
-        if export.object_class and (
-            export.object_class.endswith("_C")
-            or export.object_class in ("BlueprintGeneratedClass", "AnimBlueprintGeneratedClass")
-        ):
-            continue
-        primary_export = export
-        break
+        if export.b_is_asset:
+            primary_export = export
+            break
+    if primary_export is None:
+        for export in package_ir.exports:
+            if export.object_class and (
+                export.object_class.endswith("_C")
+                or export.object_class in ("BlueprintGeneratedClass", "AnimBlueprintGeneratedClass")
+            ):
+                continue
+            primary_export = export
+            break
 
     if primary_export is None and package_ir.exports:
         primary_export = package_ir.exports[0]
@@ -113,6 +117,7 @@ def build_semantic_ir(package_ir: PackageIR, mode: str = "standard") -> Semantic
         kind=kind,
         class_name=primary_export.object_class or "Unknown",
         object_name=primary_export.object_name or "Unknown",
+        package_path=package_ir.header.package_name,
         parse_status=primary_export.parse_status or "success",
     )
 

@@ -116,19 +116,6 @@ class TestBuildSemanticIR:
         assert semantic.content is not None
         assert semantic.content.key == "root"
 
-
-def test_can_render_tolerant_semantic_json():
-    """_can_render_tolerant_json should allow semantic_json format."""
-    from uasset_read.core import _can_render_tolerant_json
-    from uasset_read.link.result import LinkerParseResult
-    result = LinkerParseResult(
-        is_success=False,
-        errors=["partial parse"],
-        diagnostics=[],
-        metadata={"test": True},
-    )
-    assert _can_render_tolerant_json(result, "semantic_json", True) is True
-
     def test_primary_export_prefers_b_is_asset(self):
         """When multiple exports exist, pick the one with b_is_asset=True."""
         from uasset_read.models.ir import ExportRawIR
@@ -165,7 +152,6 @@ def test_can_render_tolerant_semantic_json():
                     ),
                 ),
             ],
-            total_export_count=2,
         )
         semantic = build_semantic_ir(ir, mode="standard")
         assert semantic.asset.object_name == "M9"
@@ -177,3 +163,16 @@ def test_can_render_tolerant_semantic_json():
         ir.header.package_name = "/Game/Maps/M9_Skeleton"
         semantic = build_semantic_ir(ir, mode="standard")
         assert semantic.asset.package_path == "/Game/Maps/M9_Skeleton"
+
+
+def test_can_render_tolerant_semantic_json():
+    """_can_render_tolerant_json should allow semantic_json format."""
+    from uasset_read.core import _can_render_tolerant_json
+    from uasset_read.link.result import LinkerParseResult
+    result = LinkerParseResult(
+        is_success=False,
+        errors=["partial parse"],
+        diagnostics=[],
+        metadata={"test": True},
+    )
+    assert _can_render_tolerant_json(result, "semantic_json", True) is True
