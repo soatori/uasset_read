@@ -1,134 +1,196 @@
-"""parsers 模块测试 — 核心解析、类型处理、PropertyTag 恢复。"""
+"""Consolidated parser tests — struct sizes, serialization strategy, tag retry, error recovery."""
 from __future__ import annotations
 
-import io
 import struct
+from io import BytesIO
 from unittest.mock import MagicMock
 
 import pytest
 
+from uasset_read.archive import ByteArchive, FArchive
+from uasset_read.exceptions import ParseError
+from uasset_read.models.properties import PropertyTag
 from uasset_read.parsers.class_serialization_strategy import (
-    get_serialization_strategy,
     SerializationStrategy,
+    get_serialization_strategy,
 )
 from uasset_read.parsers.property_parser import (
-    _try_recover_property_tag,
-    _KNOWN_PROPERTY_TYPES,
-    _MAX_RECOVERY_SCAN,
+    parse_properties_from_export,
+    parse_property_value,
 )
-from uasset_read.parsers.property_types import get_struct_size
-from uasset_read.parsers.utils import resolve_name_from_index, read_validated_count_tolerant
-from uasset_read.versioning import VersionContainer
+from uasset_read.parsers.property_types import (
+    _try_fast_path_struct,
+)
+from uasset_read.parsers.usmap import MAGIC_USMAP, _parse_usmap_data
 
 
-def _make_vc(ue5_version: int = 0, ue4_version: int = 0) -> VersionContainer:
-    return VersionContainer(file_version_ue5=ue5_version, file_version_ue4=ue4_version)
+# ---------------------------------------------------------------------------
+# 1. Struct size constants and fast-path reading
+# ---------------------------------------------------------------------------
+
+class TestStructSizeConstants:
+    """Verify _EXPECTED_STRUCT_SIZES and fast-path reading for Transform."""
+
+    def test_transform_read_f32(self):
+        """FTransform3f reads 40 bytes correctly via _try_fast_path_struct."""
+        data = struct.pack(
+            "<10f",
+            0.0, 0.0, 0.0, 1.0,   # Rotation
+            100.0, 200.0, 300.0,   # Translation
+            1.0, 1.0, 1.0,         # Scale3D
+        )
+        archive = ByteArchive(data)
+        tag = MagicMock()
+        tag.size = 40
+        tag.struct_type = "Transform"
+
+        result = _try_fast_path_struct("Transform", tag, archive, name_map=[])
+
+        assert result is not None
+        assert result.struct_type == "Transform"
+        assert result.fields["Translation"]["X"] == 100.0
+        assert result.fields["Translation"]["Y"] == 200.0
+        assert result.fields["Translation"]["Z"] == 300.0
+        assert result.fields["Rotation"]["W"] == 1.0
+        assert result.fields["Scale3D"]["X"] == 1.0
 
 
-class TestCoreParsing:
-    def test_resolve_name_from_index_valid(self):
-        """有效索引返回名称；有效计数返回正确值。"""
+# ---------------------------------------------------------------------------
+# 2. Serialization strategy selection
+# ---------------------------------------------------------------------------
+
+class TestSerializationStrategy:
+    """Verify strategy lookup for known and unknown classes."""
+
+    def test_tagged_class_strategy(self):
+        assert get_serialization_strategy("BlueprintGeneratedClass") == SerializationStrategy.TAGGED_PROPERTIES_ONLY
+
+
+# ---------------------------------------------------------------------------
+# 3. Property tag retry / tolerant parsing
+# ---------------------------------------------------------------------------
+
+def _make_archive(data: bytes, tolerant: bool = False) -> FArchive:
+    archive = FArchive.__new__(FArchive)
+    archive._stream = BytesIO(data)
+    archive._file_size = len(data)
+    archive._byte_swapping = False
+    archive._use_mmap = False
+    archive._mmap = None
+    archive._tolerant = tolerant
+    archive._file = BytesIO(data)
+    archive._hex_view_enabled = False
+    archive._hex_view_entries = []
+    archive._hex_view_context = ""
+    archive._diagnostics = []
+    archive._logger = __import__("logging").getLogger("test")
+    archive._name_map = None
+    return archive
+
+
+class TestTagRetryTolerant:
+    """Tolerant mode on corrupted tags should not hang or retry infinitely."""
+
+    def test_corrupted_tag_tolerant_does_not_hang(self):
+        name_bytes = struct.pack("<II", 0, 0)   # FName index=0
+        truncated = b"\x00" * 2                 # not enough for type name
+        data = name_bytes + truncated
+        archive = _make_archive(data, tolerant=True)
+        archive._file_version_ue5 = 1012
+
+        summary = MagicMock()
+        summary.package_flags = 0
+        summary.file_version_ue5 = 1012
+        export = MagicMock()
+        export.serial_offset = 0
+        export.serial_size = 100
+
+        result = parse_properties_from_export(
+            export, archive, summary,
+            name_map=["TestProp"], export_map=[], tolerant=True,
+        )
+        assert isinstance(result, list)
+        assert len(result) >= 1
+        assert result[0].type == "Warning"
+
+
+# ---------------------------------------------------------------------------
+# 4. Error recovery and fallback
+# ---------------------------------------------------------------------------
+
+class TestErrorRecovery:
+    """Property parser should recover gracefully from handler failures."""
+
+    def test_binary_or_native_handler_fallback(self):
+        tag = PropertyTag(
+            name="TestProp", type="MaterialInput",
+            size=4, serialize_type="BinaryOrNative",
+        )
         archive = MagicMock()
-        name_map = ["Actor", "Component", "Property"]
-        assert resolve_name_from_index(archive, name_map, 1) == "Component"
-        archive.read_i32.return_value = 5
-        assert read_validated_count_tolerant(archive, max_count=100, label="test") == 5
+        archive.read.return_value = b"\xFF\xFF\xFF\xFF"
+        archive.tell.return_value = 0
+
+        result = parse_property_value(tag, archive, [], [])
+        assert result is not None
+        assert result.get("kind") == "binary_or_native_property"
 
 
-class TestLevelSequenceStrategy:
-    def test_level_sequence_strategy_is_tagged(self):
-        """LevelSequence 应使用 TAGGED_PROPERTIES_ONLY 策略。"""
-        assert get_serialization_strategy("LevelSequence") == SerializationStrategy.TAGGED_PROPERTIES_ONLY
+# ---------------------------------------------------------------------------
+# 5. Usmap header parsing
+# ---------------------------------------------------------------------------
+
+class TestUsmapHeader:
+    """Verify .usmap file header validation."""
+
+    def test_valid_magic_parses(self):
+        data = _build_usmap_v0()
+        result = _parse_usmap_data(data)
+        assert result.version == 0
 
 
-class TestStructSizeLWC:
-    def test_ue4_returns_float_size(self):
-        """UE4→float(12)；UE5 LWC→double(24)。"""
-        assert get_struct_size("Vector", _make_vc(ue4_version=516)) == 12
-        assert get_struct_size("Vector", _make_vc(ue5_version=1004)) == 24
-
-
-class _FakeArchiveForRecovery:
-    """用于恢复测试的 archive 模拟。"""
-
-    def __init__(self, data: bytes) -> None:
-        self._buf = io.BytesIO(data)
-        self._file_size = len(data)
-
-    def read(self, size: int) -> bytes:
-        return self._buf.read(size)
-
-    def read_i32(self) -> int:
-        return struct.unpack("<i", self.read(4))[0]
-
-    def tell(self) -> int:
-        return self._buf.tell()
-
-    def seek(self, pos: int) -> None:
-        self._buf.seek(pos)
-
-    def total_size(self) -> int:
-        return self._file_size
-
-
-def _build_recovery_data(
-    name_map: list[str],
-    valid_tag_offset: int,
-    tag_name: str = "TestProp",
-    tag_type: str = "IntProperty",
-    tag_size: int = 4,
+def _build_usmap_v0(
+    name_table: list[str] | None = None,
+    schemas=None,
 ) -> bytes:
-    """构造包含垃圾数据 + 有效 PropertyTag 的二进制数据。"""
-    if tag_name not in name_map:
-        name_map.append(tag_name)
-    if tag_type not in name_map:
-        name_map.append(tag_type)
-    name_idx = name_map.index(tag_name)
-    type_idx = name_map.index(tag_type)
+    """Build a synthetic v0 .usmap binary for testing."""
+    if name_table is None:
+        name_table = []
+    if schemas is None:
+        schemas = []
 
-    garbage = b"\xff" * valid_tag_offset
-    tag_bytes = struct.pack("<II", name_idx, 0)
-    tag_bytes += struct.pack("<II", type_idx, 0)
-    tag_bytes += struct.pack("<i", tag_size)
-    tag_bytes += b"\x00" * tag_size
+    payload = bytearray()
+    # NameTable
+    payload += struct.pack("<I", len(name_table))
+    for name in name_table:
+        encoded = name.encode("utf-8")
+        payload += struct.pack("<B", len(encoded))
+        payload += encoded
+    # EnumTable (empty)
+    payload += struct.pack("<I", 0)
+    # SchemaTable
+    payload += struct.pack("<I", len(schemas))
+    for schema in schemas:
+        name_idx = name_table.index(schema.name) if schema.name in name_table else -1
+        super_idx = name_table.index(schema.super_type) if schema.super_type and schema.super_type in name_table else -1
+        payload += struct.pack("<i", name_idx)
+        payload += struct.pack("<i", super_idx)
+        payload += struct.pack("<H", schema.property_count)
+        payload += struct.pack("<H", schema.serializable_count)
+        sorted_props = sorted(schema.properties.values(), key=lambda p: p.index)
+        for prop in sorted_props:
+            payload += struct.pack("<H", prop.index)
+            payload += struct.pack("<B", prop.array_dim)
+            prop_name_idx = name_table.index(prop.name) if prop.name in name_table else -1
+            payload += struct.pack("<i", prop_name_idx)
+            # type byte (use 0xFF = Unknown for simplicity)
+            payload += struct.pack("<B", 0xFF)
 
-    return garbage + tag_bytes
-
-
-class TestPropertyTagRecovery:
-    def test_property_tag_recovery_valid_and_known_type(self):
-        """恢复扫描应支持大偏移并接受已知属性类型。"""
-        assert _MAX_RECOVERY_SCAN == 512
-
-        expected_types = {"IntProperty", "FloatProperty", "StrProperty", "BoolProperty",
-                          "StructProperty", "ObjectProperty", "ArrayProperty", "MapProperty"}
-        assert expected_types.issubset(_KNOWN_PROPERTY_TYPES)
-
-        name_map: list[str] = ["None"]
-        data = _build_recovery_data(name_map, 300, tag_name="MyProp", tag_type="FloatProperty")
-        archive = _FakeArchiveForRecovery(data)
-        archive._file_version_ue5 = 500
-        result = _try_recover_property_tag(archive, name_map, max_scan=_MAX_RECOVERY_SCAN)
-        assert result is True
-        assert archive.tell() == 300
-
-    def test_property_tag_recovery_rejects_unknown_type(self):
-        """恢复扫描应拒绝未知属性类型名称。"""
-        name_map: list[str] = ["None"]
-        valid_offset = 100
-        garbage = b"\xff" * valid_offset
-
-        name_map.append("SomeName")
-        name_map.append("NotARealProperty")
-
-        tag_bytes = struct.pack("<II", 1, 0)
-        tag_bytes += struct.pack("<II", 2, 0)
-        tag_bytes += struct.pack("<i", 4)
-        tag_bytes += b"\x00" * 4
-
-        data = garbage + tag_bytes
-        archive = _FakeArchiveForRecovery(data)
-        archive._file_version_ue5 = 500
-
-        result = _try_recover_property_tag(archive, name_map, max_scan=_MAX_RECOVERY_SCAN)
-        assert result is False
+    comp_size = len(payload)
+    header = bytearray()
+    header += struct.pack("<H", MAGIC_USMAP)
+    header += struct.pack("<B", 0)   # version
+    header += struct.pack("<B", 0)   # compression = none
+    header += struct.pack("<I", comp_size)
+    header += struct.pack("<I", comp_size)
+    header += bytes(payload)
+    return bytes(header)

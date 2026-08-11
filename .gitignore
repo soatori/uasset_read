@@ -33,6 +33,7 @@ env/
 .coverage
 htmlcov/
 .coverage.*
+schemas/
 
 # OS
 .DS_Store
@@ -58,6 +59,7 @@ reports/
 .agents/
 .playwright-mcp/
 memory/
+.superpowers/
 
 # CodeGraph local data
 .codegraph/

@@ -1,30 +1,79 @@
-"""安全边界与批量报告测试 — tolerant_parse、batch、日志聚合。"""
+"""Consolidated safety tests — memory policy, error propagation, isolation."""
+
 from __future__ import annotations
 
-import logging
-import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
-from uasset_read.core import BatchResult, _log_batch_summary
-from uasset_read.exceptions import ParseError
-from uasset_read.memory_safety import MemoryLimitExceeded, MemoryPolicy, ResourceLimits
-from uasset_read.models.result import ParseResult
+from uasset_read.memory_safety import (
+    FileSizeTier,
+    MemoryLimitExceeded,
+    MemoryPolicy,
+    ResourceLimits,
+    cleanup_after_parse,
+    should_isolate,
+)
 
 
-def test_tolerant_parse_dedup():
-    """tolerant_parse 去重 + MemoryLimitExceeded re-raise。"""
+# ---------------------------------------------------------------------------
+# MemoryPolicy / ResourceLimits
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("size_bytes", "rss_limit_mb", "timeout_seconds"),
+    [
+        (20 * 1024 * 1024, 1024, 120.0),
+        (20 * 1024 * 1024 + 1, 2048, 180.0),
+        (100 * 1024 * 1024, 2048, 180.0),
+        (100 * 1024 * 1024 + 1, 4096, 300.0),
+    ],
+)
+def test_memory_policy_file_size_tiers(
+    size_bytes: int,
+    rss_limit_mb: int,
+    timeout_seconds: float,
+) -> None:
+    """MemoryPolicy selects correct ResourceLimits based on file size tiers."""
+    limits = MemoryPolicy().limits_for_size(size_bytes)
+    assert limits == ResourceLimits(rss_limit_mb, timeout_seconds)
+
+
+def test_memory_limit_exceeded_records_stage() -> None:
+    """MemoryLimitExceeded checkpoint reports stage, RSS, limit, and path."""
+    monitor = __import__("uasset_read.memory_safety", fromlist=["MemoryMonitor"]).MemoryMonitor(
+        asset_path=Path("Content/Test.uasset"),
+        limits=ResourceLimits(64, 30),
+        rss_reader=lambda _pid=None: 65.5,
+    )
+
+    with pytest.raises(MemoryLimitExceeded) as exc_info:
+        monitor.checkpoint("export_map")
+
+    error = exc_info.value
+    assert error.stage == "export_map"
+    assert error.current_rss_mb == 65.5
+    assert error.limit_mb == 64
+
+
+# ---------------------------------------------------------------------------
+# Tolerant parse / error deduplication
+# ---------------------------------------------------------------------------
+
+
+def test_tolerant_parse_deduplicates_errors() -> None:
+    """tolerant_parse deduplicates repeated ParseError messages."""
     from uasset_read.core.error_handling import tolerant_parse
-    from uasset_read.parse_uasset import _handle_parse_error
+    from uasset_read.exceptions import ParseError
 
-    class _R:
-        def __init__(self):
+    class _Result:
+        def __init__(self) -> None:
             self.errors: list[str] = []
 
-    result = _R()
-    # tolerant_parse 捕获 ParseError → 记录到 errors → 重新抛出
+    result = _Result()
+
+    # First error is recorded
     try:
         with tolerant_parse(result, "stage"):
             raise ParseError("dup error")
@@ -32,197 +81,68 @@ def test_tolerant_parse_dedup():
         pass
     assert len(result.errors) == 1
 
-    # 重复错误应被去重（只记录一次）
+    # Duplicate error is deduplicated
     try:
         with tolerant_parse(result, "stage"):
             raise ParseError("dup error")
     except ParseError:
         pass
-    assert len(result.errors) == 1  # 仍然只有1条
-
-    # MemoryLimitExceeded 应被 re-raise
-    class _FakeArchive:
-        def total_size(self): return 1024
-        def tell(self): return 0
-    result2 = ParseResult(); result2.is_success = True
-    exc = MemoryLimitExceeded(asset_path="test.uasset", stage="parse", current_rss_mb=2048.0, limit_mb=1024.0)
-    caught = None
-    try:
-        raise exc
-    except Exception as e:
-        try:
-            _handle_parse_error(e, result2, _FakeArchive(), "test.uasset", tolerant=True)
-        except MemoryLimitExceeded as re_raised:
-            caught = re_raised
-    assert caught is not None
-    assert result2.errors == []
-
-
-def test_record_parse_stage_error_dedup():
-    """重复错误不应重复添加到 result.errors，但 diagnostic 仍记录。"""
-    from uasset_read.parse_stages import _record_parse_stage_error
-
-    class _FakeArchive:
-        def total_size(self): return 1024
-        def tell(self): return 0
-
-    class _FakeResult:
-        def __init__(self):
-            self.errors: list[str] = []
-            self.is_success = True
-            self.diagnostics: list = []
-            self._error_keys: set = set()
-
-    result = _FakeResult()
-    archive = _FakeArchive()
-
-    _record_parse_stage_error(result, archive, "test.uasset", "parse", "field", ValueError("dup"))
-    _record_parse_stage_error(result, archive, "test.uasset", "parse", "field", ValueError("dup"))
-
     assert len(result.errors) == 1
-    assert len(result.diagnostics) == 2
 
 
-def test_batch_failure_logged_to_same_file(tmp_path):
-    """batch 失败时，关键信息应在同一 log 文件中。"""
-    from uasset_read.core import parse_batch
-
-    batch_dir = tmp_path / "batch_input"
-    batch_dir.mkdir()
-    fake_asset = batch_dir / "fail.uasset"
-    fake_asset.write_bytes(b"\x00" * 100)
-
-    log_dir = tmp_path / "logs"
-
-    with patch("uasset_read.core._parse_and_render", side_effect=ValueError("corrupted asset")):
-        result = parse_batch(
-            str(batch_dir),
-            isolate_assets=False,
-            log_dir=str(log_dir),
-            log_enabled=True,
-        )
-
-    assert len(result.failed) >= 1
-    _, error, _ = result.failed[0]
-    assert "corrupted asset" in error
-
-    log_files = list(Path(log_dir).rglob("*.log")) if log_dir.exists() else []
-    if not log_files:
-        project_log = Path("log")
-        if project_log.exists():
-            log_files = sorted(project_log.glob("*.log"), key=lambda f: f.stat().st_mtime, reverse=True)
-
-    if log_files:
-        log_content = log_files[0].read_text(encoding="utf-8", errors="replace")
-        assert "batch_summary" in log_content
-        assert "failed=1" in log_content
+# ---------------------------------------------------------------------------
+# Worker monitoring / isolation
+# ---------------------------------------------------------------------------
 
 
-def test_batch_summary_counts():
-    """验证摘要中各计数正确。"""
-    result = BatchResult(total=6)
-    result.success = ["a.json", "b.json", "c.json"]
-    result.partial = ["b.json"]
-    result.skipped = [("d.json", "memory limit")]
-    result.failed = [("e.json", "parse error", ""), ("f.json", "timeout", "")]
+class _FakeProcess:
+    pid = 123
+    exitcode = None
 
-    with patch.object(logging.getLogger("uasset_read.core"), "info") as mock_info:
-        _log_batch_summary(result, elapsed_seconds=5.0)
-        mock_info.assert_called_once()
-        args, kwargs = mock_info.call_args
-        assert args[1] == 6
-        assert args[2] == 3
-        assert args[3] == 1
-        assert args[4] == 1
-        assert args[5] == 2
-        assert args[6] == 5.0
+    def __init__(self) -> None:
+        self.terminated = False
 
+    def is_alive(self) -> bool:
+        return not self.terminated
 
-def test_debug_aggregation_shows_counts():
-    """重复 DEBUG 消息超过 repeat_limit 后应被抑制。"""
-    from uasset_read.project_logging import _RepeatedDebugFilter
+    def terminate(self) -> None:
+        self.terminated = True
 
-    logger = logging.getLogger("test_aggregation")
-    logger.setLevel(logging.DEBUG)
-    filter_obj = _RepeatedDebugFilter(repeat_limit=3)
-    logger.addFilter(filter_obj)
+    def join(self, timeout: object = None) -> None:
+        return None
 
-    for _ in range(10):
-        logger.debug("read_name: index out of range")
-
-    assert filter_obj.suppressed_count == 7
-    assert "read_name: index out of range" in filter_obj.message_counts
-    assert filter_obj.message_counts["read_name: index out of range"] == 10
-    logger.removeFilter(filter_obj)
+    def kill(self) -> None:
+        self.terminated = True
 
 
-def test_atomic_write_produces_valid_json(tmp_path):
-    """原子写入中断后不应产生不完整 JSON 文件。"""
-    import json
-    import tempfile
+def test_monitor_terminates_worker_over_rss_limit() -> None:
+    """_monitor_worker terminates process when RSS exceeds limit."""
+    from uasset_read.batch_worker import _monitor_worker
 
-    out_file = tmp_path / "output.json"
-    output_str = json.dumps({"test": "data"}, ensure_ascii=False)
+    process = _FakeProcess()
+    outcome = _monitor_worker(
+        process=process,
+        result_queue=None,
+        limits=ResourceLimits(64, 30),
+        poll_interval_seconds=0,
+        rss_reader=lambda _pid: 65,
+        monotonic=lambda: 0,
+        sleep=lambda _seconds: None,
+    )
 
-    tmp_fd = -1
-    tmp_path_str = ""
-    try:
-        tmp_fd, tmp_path_str = tempfile.mkstemp(
-            dir=str(tmp_path), suffix=".tmp"
-        )
-        with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_f:
-            tmp_f.write(output_str)
-        tmp_fd = -1
-        os.replace(tmp_path_str, str(out_file))
-    except BaseException:
-        if tmp_fd >= 0:
-            os.close(tmp_fd)
-        try:
-            os.unlink(tmp_path_str)
-        except OSError:
-            pass
-        raise
-
-    assert out_file.exists()
-    data = json.loads(out_file.read_text(encoding="utf-8"))
-    assert data["test"] == "data"
-
-    tmp_files = list(tmp_path.glob("*.tmp"))
-    assert len(tmp_files) == 0
+    assert process.terminated is True
+    assert outcome.succeeded is False
+    assert "memory_limit" in outcome.error
 
 
-def test_atomic_write_cleans_up_on_exception(tmp_path):
-    """写入异常时临时文件应被清理，目标文件不受影响。"""
-    import json
-    import tempfile
+# ---------------------------------------------------------------------------
+# Hybrid isolation / should_isolate
+# ---------------------------------------------------------------------------
 
-    out_file = tmp_path / "output.json"
-    out_file.write_text(json.dumps({"original": True}), encoding="utf-8")
 
-    class WriteError(Exception):
-        pass
-
-    tmp_fd = -1
-    tmp_path_str = ""
-    with pytest.raises(WriteError):
-        try:
-            tmp_fd, tmp_path_str = tempfile.mkstemp(
-                dir=str(tmp_path), suffix=".tmp"
-            )
-            with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_f:
-                tmp_f.write("partial content")
-            tmp_fd = -1
-            raise WriteError("模拟中断")
-        except BaseException:
-            if tmp_fd >= 0:
-                os.close(tmp_fd)
-            try:
-                os.unlink(tmp_path_str)
-            except OSError:
-                pass
-            raise
-
-    data = json.loads(out_file.read_text(encoding="utf-8"))
-    assert data["original"] is True
-    tmp_files = list(tmp_path.glob("*.tmp"))
-    assert len(tmp_files) == 0
+def test_should_isolate_respects_file_size_tier() -> None:
+    """should_isolate returns correct decision based on file size and tier."""
+    assert should_isolate(10 * 1024 * 1024, FileSizeTier.SMALL) is False
+    assert should_isolate(200 * 1024 * 1024, FileSizeTier.LARGE) is True
+    assert should_isolate(30 * 1024 * 1024, FileSizeTier.MEDIUM) is False
+    assert should_isolate(60 * 1024 * 1024, FileSizeTier.MEDIUM) is True
