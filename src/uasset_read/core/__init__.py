@@ -240,7 +240,7 @@ def _parse_and_render(
 
     parse_single 和 parse_batch 共用的核心逻辑。
     """
-    linker_formats = {"json"}
+    linker_formats = {"json", "semantic_json"}
 
     if format in linker_formats:
         result = parse_uasset_with_linker(
@@ -273,6 +273,22 @@ def _parse_and_render(
         raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
 
     ir = build_package_ir(result)
+
+    # Semantic JSON routing: build SemanticIR then render
+    if format == "semantic_json":
+        from uasset_read.semantic.builder import build_semantic_ir
+        from uasset_read.renderers.semantic_json_renderer import SemanticJSONRenderer
+
+        semantic_ir = build_semantic_ir(ir, mode=output_level)
+        renderer = SemanticJSONRenderer()
+        options = RenderOptions(
+            verbose=verbose,
+            include_schema=include_schema,
+            include_function_graphs=include_function_graphs,
+            output_level=output_level,
+            hex_view=hex_view,
+        )
+        return renderer.render_semantic(semantic_ir, options), result
 
     # 释放临时大对象，防止批量解析时内存累积
     try:
