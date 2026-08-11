@@ -35,3 +35,4 @@ def list_formats() -> list[str]:
 # Import concrete renderer modules to trigger registration
 from uasset_read.renderers import json_renderer  # noqa: F401, E402
 from uasset_read.renderers import markdown_renderer  # noqa: F401, E402
+from uasset_read.renderers import semantic_json_renderer  # noqa: F401, E402

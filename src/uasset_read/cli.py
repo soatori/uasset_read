@@ -1,7 +1,6 @@
-"""CLI entry module — argparse parameter parsing + delegation to core module.
+"""CLI 入口模块 — argparse 参数解析 + 委托 core 模块。
 
-Core logic and entry point are separated: core module provides pure parsing functions,
-CLI only handles parameter parsing and output writing.
+核心逻辑与入口分离：core 模块提供纯解析函数，CLI 仅负责参数解析和输出写入。
 """
 
 import json
@@ -19,10 +18,10 @@ _logger = logging.getLogger(__name__)
 
 
 def _sanitize_error_message(message: str) -> str:
-    """Clean internal paths from exception messages to prevent information leakage.
+    """清理异常消息中的内部路径，防止信息泄露。
 
-    Replace absolute paths with basename, preserve exception type and key information.
-    Detailed original messages can be obtained via DEBUG level logging.
+    将绝对路径替换为 basename，保留异常类型和关键信息。
+    详细原始消息可通过 DEBUG 级别日志获取。
     """
     def basename(path: str) -> str:
         normalized = path.rstrip("\\/").replace("\\", "/")
@@ -70,11 +69,8 @@ def create_parser():
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('--json', action='store_true', help='Output full JSON structure (default)')
     group.add_argument('--markdown', action='store_true', help='Output Markdown format')
-    group.add_argument(
-        '--format',
-        choices=list_formats(),
-        help='Output format name',
-    )
+    group.add_argument('--semantic-json', action='store_true',
+                        help='Output semantic JSON structure (compact, AI-friendly)')
 
     # Optional flags
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
@@ -88,6 +84,7 @@ def create_parser():
                         help='Resolve and parse parent Blueprint assets')
     parser.add_argument('--mappings', metavar='FILE', help='Load .usmap/.jmap type mappings')
     parser.add_argument('--game', metavar='NAME', help='Enable game-specific property readers')
+    parser.add_argument('--tolerant', action='store_true', default=True, help='Enable tolerant mode (default)')
     parser.add_argument('--strict', action='store_true', help='Disable tolerant mode')
     parser.add_argument('--full-parse', action='store_true', default=False,
                         help='Force full parse for large blueprints (skip lightweight mode)')
@@ -127,13 +124,13 @@ def create_parser():
 
 
 def resolve_format(args) -> str:
-    """Parse export format name from CLI arguments."""
+    """From CLI args, determine the export format name."""
     if args.markdown:
         return "markdown"
+    if args.semantic_json:
+        return "semantic_json"
     if args.json:
         return "json"
-    if args.format:
-        return args.format
     return "json"
 
 
@@ -186,7 +183,7 @@ def _log_config_from_args(args) -> LogConfig:
 
 
 def _handle_batch(args) -> None:
-    """Handle batch export mode."""
+    """处理批量导出模式。"""
     import time
 
     input_dir = Path(args.file)
@@ -204,7 +201,6 @@ def _handle_batch(args) -> None:
             output_dir=output_dir,
             tolerant=not args.strict,
             verbose=args.verbose,
-            output_level=args.output_level,
             include_schema=args.schema or args.verbose,
             include_function_graphs=args.function_graphs,
             include_parent_assets=args.include_parent_assets,
@@ -254,7 +250,7 @@ def _handle_clean_logs(args) -> None:
 
 
 def _handle_list_package_files(file_path: str, tolerant: bool) -> None:
-    """List discovered package files."""
+    """列出发现的 package 文件。"""
     from uasset_read.package import open_package_bundle
     try:
         bundle = open_package_bundle(file_path, tolerant=tolerant)
@@ -286,17 +282,7 @@ def main():
         formats = list_formats()
         print("Available export formats:")
         for fmt in formats:
-            legacy_flag = next(
-                (
-                    option
-                    for action in parser._actions
-                    if action.dest == fmt
-                    for option in action.option_strings
-                    if option.startswith("--")
-                ),
-                None,
-            )
-            print(f"  {legacy_flag or f'--format {fmt}'}")
+            print(f"  --{fmt.replace('_', '-')}")
         sys.exit(EXIT_SUCCESS)
 
     if args.clean_logs:
@@ -328,7 +314,7 @@ def main():
         _handle_list_package_files(args.file, tolerant)
         return
 
-    # --diff mode
+    # --diff 模式
     if args.diff is not None:
         from uasset_read.core import diff_single
         if args.diff is True:

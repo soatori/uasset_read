@@ -33,6 +33,7 @@ env/
 .coverage
 htmlcov/
 .coverage.*
+schemas/
 
 # OS
 .DS_Store
@@ -57,9 +58,8 @@ reports/
 .qwen/
 .agents/
 .playwright-mcp/
-.orca/
-.qoder/
 memory/
+.superpowers/
 
 # CodeGraph local data
 .codegraph/
@@ -69,25 +69,42 @@ memory/
 
 # Test files - track test Python files and directories
 tests/*
+!tests/__init__.py
 !tests/conftest.py
 !tests/README.md
 !tests/test_*.py
-!tests/temp/
-!tests/temp/test_*.py
-!tests/samples/
-!tests/fixtures/
+!tests/graph/
 !tests/core/
-!tests/core/test_*.py
 !tests/kismet/
-!tests/kismet/test_*.py
+!tests/renderers/
+!tests/blueprint/
+!tests/integration/
+!tests/linker/
+!tests/link/
+!tests/archive/
+!tests/ir/
+!tests/structs/
+!tests/misc/
+!tests/serialization/
+!tests/asset/
+!tests/cpp/
+!tests/unit/
+!tests/pak/
+!tests/security/
+!tests/debug/
+!tests/parsers/
 !tests/iostore/
-!tests/iostore/test_*.py
-!tests/niagara/
-!tests/niagara/test_*.py
+!tests/samples/
+!tests/config/
+!tests/batch/
+!tests/semantic/
 
 # AI agent reports (local only)
 docs/firstperson_blueprint_test_report.md
 docs/reference/refactor-reference.md
+
+# Superpowers workflow artifacts (local only)
+.superpowers/sdd/
 
 # Accidentally added submodule (no .gitmodules mapping)
 .claude/skills/unreal-mcp-skills
@@ -96,13 +113,11 @@ docs/reference/refactor-reference.md
 .worktrees/
 
 # Documentation build artifacts
+docs/superpowers/
 docs/compose/
 .mimocode/
 
 # Wiki submodule (external)
 wiki/
 worktrees/
-
-# Coverage
-coverage.xml
-.superpowers/
+.worktrees/

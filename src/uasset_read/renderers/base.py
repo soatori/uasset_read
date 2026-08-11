@@ -12,6 +12,7 @@ from typing import IO, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
+    from uasset_read.semantic.ir import SemanticIR
 
 
 # ── Renderer shared constants ──
@@ -138,6 +139,23 @@ class IRenderer(ABC):
         if options is None:
             options = RenderOptions()
         writer.write(self.render(ir, options))
+
+    def render_semantic(self, semantic_ir: "SemanticIR", options: RenderOptions) -> str:
+        """Render SemanticIR to string.
+
+        Default implementation raises NotImplementedError.
+        Override in renderers that support SemanticIR.
+
+        Args:
+            semantic_ir: SemanticIR instance
+            options: Render options
+
+        Returns:
+            Rendered string
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support SemanticIR rendering"
+        )
 
     @property
     @abstractmethod
