@@ -440,7 +440,7 @@ def parse_batch(
     policy = memory_policy or MemoryPolicy()
     system_usage_limit = min(max_memory_usage, policy.system_usage_limit)
 
-    if format.startswith("json"):
+    if format in ("json", "semantic_json"):
         extension = ".json"
     elif format == "markdown":
         extension = ".md"
