@@ -95,6 +95,7 @@ tests/*
 !tests/samples/
 !tests/config/
 !tests/batch/
+!tests/semantic/
 
 # AI agent reports (local only)
 docs/firstperson_blueprint_test_report.md
