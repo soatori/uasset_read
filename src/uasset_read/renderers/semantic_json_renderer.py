@@ -13,21 +13,9 @@ from uasset_read.renderers.base import IRenderer, RenderOptions
 from uasset_read.renderers import register_renderer
 from uasset_read.semantic.canonical import canonical_sort
 from uasset_read.semantic.ir import SemanticIR
-from uasset_read.semantic.kinds import AssetKind
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR
-
-
-class _SemanticEncoder(json.JSONEncoder):
-    """Custom encoder for SemanticIR types."""
-
-    def default(self, o: Any) -> Any:
-        if isinstance(o, AssetKind):
-            return o.value
-        if hasattr(o, "__dataclass_fields__"):
-            return asdict(o)
-        return super().default(o)
 
 
 class SemanticJSONRenderer(IRenderer):
@@ -65,7 +53,6 @@ class SemanticJSONRenderer(IRenderer):
             data,
             indent=options.indent,
             ensure_ascii=False,
-            cls=_SemanticEncoder,
         )
 
     def render_semantic_to(
@@ -89,7 +76,6 @@ class SemanticJSONRenderer(IRenderer):
             writer,
             indent=options.indent,
             ensure_ascii=False,
-            cls=_SemanticEncoder,
         )
         writer.write("\n")
 

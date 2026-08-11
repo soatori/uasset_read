@@ -58,6 +58,8 @@ def canonical_sort(data: Any) -> Any:
     Returns:
         Same value with all dict keys in deterministic order
     """
+    if isinstance(data, list):
+        return [canonical_sort(item) for item in data]
     if not isinstance(data, dict):
         return data
 
