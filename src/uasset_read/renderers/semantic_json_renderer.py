@@ -37,7 +37,7 @@ class SemanticJSONRenderer(IRenderer):
     def format_name(self) -> str:
         return "semantic_json"
 
-    def render(self, ir: PackageIR, options: RenderOptions) -> str:
+    def render(self, ir: PackageIR | SemanticIR, options: RenderOptions) -> str:
         """Render to semantic JSON.
 
         Accepts either SemanticIR or PackageIR. When called with SemanticIR,
