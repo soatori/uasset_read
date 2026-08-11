@@ -4,8 +4,12 @@ Projects a debug-mode SemanticIR to standard mode by:
 1. Setting mode to "standard"
 2. Preserving all data fields (asset, references, content, coverage, diagnostics)
 
-The projection invariant: project_debug(debug_document) == standard_document
-when both contain the same data.
+This module is NOT called automatically in the render pipeline.
+It is provided for callers who need to downgrade debug output to standard format.
+
+Usage:
+    from uasset_read.semantic.projection import project_debug
+    standard_ir = project_debug(debug_ir)
 """
 from __future__ import annotations
 

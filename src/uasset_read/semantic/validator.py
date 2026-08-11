@@ -1,4 +1,15 @@
-"""Semantic IR validator — checks public JSON contract constraints."""
+"""Semantic IR validator — checks public JSON contract constraints.
+
+This module provides external validation for SemanticIR instances.
+It is NOT called automatically in the render pipeline — callers should
+invoke validate_semantic_ir() explicitly when they need contract validation.
+
+Usage:
+    from uasset_read.semantic.validator import validate_semantic_ir
+    errors = validate_semantic_ir(semantic_ir)
+    if errors:
+        raise ValueError(f"Invalid SemanticIR: {errors}")
+"""
 from __future__ import annotations
 
 from uasset_read.semantic.ir import SemanticIR
