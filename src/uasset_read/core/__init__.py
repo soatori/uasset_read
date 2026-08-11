@@ -311,7 +311,7 @@ def _parse_and_render(
 
 
 def _can_render_tolerant_json(result, format: str, tolerant: bool | None) -> bool:
-    if (tolerant is not None and not tolerant) or format not in {"json"}:
+    if (tolerant is not None and not tolerant) or format not in {"json", "semantic_json"}:
         return False
     from uasset_read.link.result import LinkerParseResult
     from uasset_read.models.result import ParseResult

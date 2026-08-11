@@ -115,3 +115,65 @@ class TestBuildSemanticIR:
         semantic = build_semantic_ir(ir, mode="standard")
         assert semantic.content is not None
         assert semantic.content.key == "root"
+
+
+def test_can_render_tolerant_semantic_json():
+    """_can_render_tolerant_json should allow semantic_json format."""
+    from uasset_read.core import _can_render_tolerant_json
+    from uasset_read.link.result import LinkerParseResult
+    result = LinkerParseResult(
+        is_success=False,
+        errors=["partial parse"],
+        diagnostics=[],
+        metadata={"test": True},
+    )
+    assert _can_render_tolerant_json(result, "semantic_json", True) is True
+
+    def test_primary_export_prefers_b_is_asset(self):
+        """When multiple exports exist, pick the one with b_is_asset=True."""
+        from uasset_read.models.ir import ExportRawIR
+        ir = _make_package_ir(
+            exports=[
+                ExportIR(
+                    index=0,
+                    object_name="MetaData_0",
+                    object_class="MetaData",
+                    serial_size=100,
+                    outer_index_resolved=None,
+                    super_index_resolved=None,
+                    parent_class=None,
+                    properties=[],
+                    graphs=[],
+                    bulk_data=None,
+                    ue_export_raw=ExportRawIR(
+                        b_is_asset=False,
+                    ),
+                ),
+                ExportIR(
+                    index=1,
+                    object_name="M9",
+                    object_class="SkeletalMesh",
+                    serial_size=4096,
+                    outer_index_resolved=None,
+                    super_index_resolved=None,
+                    parent_class=None,
+                    properties=[],
+                    graphs=[],
+                    bulk_data=None,
+                    ue_export_raw=ExportRawIR(
+                        b_is_asset=True,
+                    ),
+                ),
+            ],
+            total_export_count=2,
+        )
+        semantic = build_semantic_ir(ir, mode="standard")
+        assert semantic.asset.object_name == "M9"
+        assert semantic.asset.class_name == "SkeletalMesh"
+
+    def test_package_path_populated_from_header(self):
+        """AssetMeta.package_path should be filled from header.package_name."""
+        ir = _make_package_ir()
+        ir.header.package_name = "/Game/Maps/M9_Skeleton"
+        semantic = build_semantic_ir(ir, mode="standard")
+        assert semantic.asset.package_path == "/Game/Maps/M9_Skeleton"
