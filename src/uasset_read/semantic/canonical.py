@@ -32,6 +32,9 @@ _DIAGNOSTIC_ORDER = ["severity", "code", "message"]
 # Reference sub-key order
 _REFERENCE_ORDER = ["index", "kind", "class_name", "object_name", "package_path"]
 
+# Content node sub-key order (semantic, not alphabetical)
+_CONTENT_NODE_ORDER = ["key", "value", "children"]
+
 
 def _order_keys(data: dict, key_order: list[str]) -> dict:
     """Order dict keys according to a predefined order, alphabetically for extras."""
@@ -74,6 +77,8 @@ def canonical_sort(data: Any) -> Any:
         ordered = _order_keys(data, _DIAGNOSTIC_ORDER)
     elif set(data.keys()).issubset(set(_REFERENCE_ORDER)):
         ordered = _order_keys(data, _REFERENCE_ORDER)
+    elif set(data.keys()).issubset(set(_CONTENT_NODE_ORDER)):
+        ordered = _order_keys(data, _CONTENT_NODE_ORDER)
     else:
         ordered = dict(sorted(data.items()))
 

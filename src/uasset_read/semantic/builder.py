@@ -30,12 +30,13 @@ def _extract_content(export: ExportIR, kind: AssetKind) -> ContentNode:
     if kind == AssetKind.RESOURCE:
         return extract_resource(export)
     # Opaque -- minimal metadata
-    return ContentNode(key="root", children=(
-        ContentNode(key="class_name", value=export.object_class),
-        ContentNode(key="object_name", value=export.object_name),
-        ContentNode(key="serial_size", value=export.serial_size),
-        ContentNode(key="parse_status", value=export.parse_status or "opaque"),
-    ))
+    children: list[ContentNode] = []
+    children.append(ContentNode(key="class_name", value=export.object_class))
+    children.append(ContentNode(key="object_name", value=export.object_name))
+    children.append(ContentNode(key="serial_size", value=export.serial_size))
+    children.append(ContentNode(key="parse_status", value=export.parse_status or "opaque"))
+    children.sort(key=lambda c: c.key)
+    return ContentNode(key="root", children=tuple(children))
 
 
 def build_semantic_ir(package_ir: PackageIR, mode: str = "standard") -> SemanticIR:
