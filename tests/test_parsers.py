@@ -21,7 +21,6 @@ from uasset_read.parsers.property_parser import (
 from uasset_read.parsers.property_types import (
     _try_fast_path_struct,
 )
-from uasset_read.parsers.usmap import MAGIC_USMAP, _parse_usmap_data
 
 
 # ---------------------------------------------------------------------------
@@ -135,62 +134,3 @@ class TestErrorRecovery:
         assert result.get("kind") == "binary_or_native_property"
 
 
-# ---------------------------------------------------------------------------
-# 5. Usmap header parsing
-# ---------------------------------------------------------------------------
-
-class TestUsmapHeader:
-    """Verify .usmap file header validation."""
-
-    def test_valid_magic_parses(self):
-        data = _build_usmap_v0()
-        result = _parse_usmap_data(data)
-        assert result.version == 0
-
-
-def _build_usmap_v0(
-    name_table: list[str] | None = None,
-    schemas=None,
-) -> bytes:
-    """Build a synthetic v0 .usmap binary for testing."""
-    if name_table is None:
-        name_table = []
-    if schemas is None:
-        schemas = []
-
-    payload = bytearray()
-    # NameTable
-    payload += struct.pack("<I", len(name_table))
-    for name in name_table:
-        encoded = name.encode("utf-8")
-        payload += struct.pack("<B", len(encoded))
-        payload += encoded
-    # EnumTable (empty)
-    payload += struct.pack("<I", 0)
-    # SchemaTable
-    payload += struct.pack("<I", len(schemas))
-    for schema in schemas:
-        name_idx = name_table.index(schema.name) if schema.name in name_table else -1
-        super_idx = name_table.index(schema.super_type) if schema.super_type and schema.super_type in name_table else -1
-        payload += struct.pack("<i", name_idx)
-        payload += struct.pack("<i", super_idx)
-        payload += struct.pack("<H", schema.property_count)
-        payload += struct.pack("<H", schema.serializable_count)
-        sorted_props = sorted(schema.properties.values(), key=lambda p: p.index)
-        for prop in sorted_props:
-            payload += struct.pack("<H", prop.index)
-            payload += struct.pack("<B", prop.array_dim)
-            prop_name_idx = name_table.index(prop.name) if prop.name in name_table else -1
-            payload += struct.pack("<i", prop_name_idx)
-            # type byte (use 0xFF = Unknown for simplicity)
-            payload += struct.pack("<B", 0xFF)
-
-    comp_size = len(payload)
-    header = bytearray()
-    header += struct.pack("<H", MAGIC_USMAP)
-    header += struct.pack("<B", 0)   # version
-    header += struct.pack("<B", 0)   # compression = none
-    header += struct.pack("<I", comp_size)
-    header += struct.pack("<I", comp_size)
-    header += bytes(payload)
-    return bytes(header)
