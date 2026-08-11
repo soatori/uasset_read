@@ -35,3 +35,4 @@ def list_formats() -> list[str]:
 # 导入具体渲染器模块以触发注册
 from uasset_read.renderers import json_renderer  # noqa: F401, E402
 from uasset_read.renderers import markdown_renderer  # noqa: F401, E402
+from uasset_read.renderers import semantic_json_renderer  # noqa: F401, E402
