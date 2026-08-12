@@ -50,6 +50,7 @@ def _make_args(tmp_path):
         "mappings": None,
         "game": None,
         "full_parse": False,
+        "output_level": "standard",
     })()
 
 
