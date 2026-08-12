@@ -70,8 +70,6 @@ def create_parser():
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('--json', action='store_true', help='Output full JSON structure (default)')
     group.add_argument('--markdown', action='store_true', help='Output Markdown format')
-    group.add_argument('--semantic-json', action='store_true',
-                        help='Output semantic JSON structure (compact, AI-friendly)')
 
     # Optional flags
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
@@ -128,8 +126,6 @@ def resolve_format(args) -> str:
     """From CLI args, determine the export format name."""
     if args.markdown:
         return "markdown"
-    if args.semantic_json:
-        return "semantic_json"
     if args.json:
         return "json"
     return "json"
@@ -209,6 +205,7 @@ def _handle_batch(args) -> None:
             mappings_path=args.mappings,
             game=args.game,
             force_full_parse=args.full_parse,
+            output_level=args.output_level,
             log_config=_log_config_from_args(args),
         )
     except Exception as e:

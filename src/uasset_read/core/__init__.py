@@ -185,6 +185,13 @@ def parse_single(
         ParseError: 解析失败
         ValueError: 渲染格式不存在
     """
+    _VALID_OUTPUT_LEVELS = {"standard", "debug"}
+    if output_level not in _VALID_OUTPUT_LEVELS:
+        raise ValueError(
+            f"Invalid output_level: {output_level!r}. "
+            f"Expected one of ['standard', 'debug']"
+        )
+
     _configure_logging(
         log_config=log_config,
         log_level=log_level,
@@ -394,6 +401,13 @@ def parse_batch(
     if not isinstance(isolate_assets, bool) and isolate_assets != "auto":
         raise ValueError(
             f"isolate_assets must be bool or 'auto', got {isolate_assets!r}"
+        )
+
+    _VALID_OUTPUT_LEVELS = {"standard", "debug"}
+    if output_level not in _VALID_OUTPUT_LEVELS:
+        raise ValueError(
+            f"Invalid output_level: {output_level!r}. "
+            f"Expected one of ['standard', 'debug']"
         )
 
     active_run_id = log_run_id or current_log_run_id() or new_log_run_id()

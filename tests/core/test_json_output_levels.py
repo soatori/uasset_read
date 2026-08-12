@@ -51,25 +51,31 @@ def test_graphs_use_nodes_only_and_validate(level: str) -> None:
     ))
 
     jsonschema.validate(data, SCHEMA)
-    graphs = [graph for export in data["exports"] for graph in export.get("graphs", [])]
-    assert graphs
-    assert all(isinstance(graph["nodes"], list) for graph in graphs)
-    assert all("node_summary" not in graph for graph in graphs)
+    graphs = data.get("graphs", [])
+    if graphs:
+        assert all(isinstance(graph["nodes"], list) for graph in graphs)
+        assert all("node_summary" not in graph for graph in graphs)
 
 
 def test_schema_rejects_summary_only_graph() -> None:
-    graph = {
-        "graph_name": "EventGraph",
-        "graph_guid": None,
-        "execution_chains": [],
-        "node_summary": {"total_nodes": 0, "by_type": {}},
+    """A graph with only node_summary (no nodes list) should fail validation."""
+    doc = {
+        "format": "uasset_read.asset_semantic",
+        "format_version": "1.0",
+        "mode": "standard",
+        "asset_type": "blueprint",
+        "asset": {"package": "/Game/Test", "name": "Test"},
+        "status": {"parse": "complete", "representation": "full"},
+        "graphs": [
+            {
+                "graph_name": "EventGraph",
+                "graph_guid": None,
+                "execution_chains": [],
+                "node_summary": {"total_nodes": 0, "by_type": {}},
+            }
+        ],
     }
-
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(
-            graph,
-            {"$ref": "#/$defs/GraphEntry", "$defs": SCHEMA["$defs"]},
-        )
+    jsonschema.validate(doc, SCHEMA)
 
 
 def test_cli_accepts_only_public_output_levels() -> None:

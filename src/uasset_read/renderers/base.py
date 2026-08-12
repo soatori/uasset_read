@@ -90,6 +90,14 @@ class RenderOptions:
     output_level: str = "standard"  # "standard"（默认，过滤 UI/空字段）或 "debug"（完整输出）
     hex_view: bool = False  # 输出 HexView 解析轨迹数据
 
+    def __post_init__(self) -> None:
+        _valid = {"standard", "debug"}
+        if self.output_level not in _valid:
+            raise ValueError(
+                f"Invalid output_level: {self.output_level!r}. "
+                f"Expected one of ['standard', 'debug']"
+            )
+
 
 class IRenderer(ABC):
     """渲染器抽象基类。"""
