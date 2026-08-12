@@ -284,3 +284,151 @@ class TestExtensionRegistry:
             register_extension("TestDup", dummy_extractor)
         # Cleanup
         _REGISTRY.pop("TestDup", None)
+
+
+class TestValidator:
+    def test_valid_ir_returns_empty(self):
+        from uasset_read.semantic.validator import validate_semantic_document
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus,
+        )
+        ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="standard",
+            asset_type="texture",
+            asset=AssetMeta(package="/Game/T_Default", name="T_Default"),
+            status=AssetStatus(parse="complete", representation="full"),
+        )
+        assert validate_semantic_document(ir) == []
+
+    def test_invalid_format_detected(self):
+        from uasset_read.semantic.validator import validate_semantic_document
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus,
+        )
+        ir = SemanticIR(
+            format="wrong",
+            format_version="1.0",
+            mode="standard",
+            asset_type="texture",
+            asset=AssetMeta(package="/Game/T_Default", name="T_Default"),
+            status=AssetStatus(parse="complete", representation="full"),
+        )
+        errors = validate_semantic_document(ir)
+        assert any("format" in e.lower() for e in errors)
+
+    def test_invalid_mode_detected(self):
+        from uasset_read.semantic.validator import validate_semantic_document
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus,
+        )
+        ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="compact",
+            asset_type="texture",
+            asset=AssetMeta(package="/Game/T_Default", name="T_Default"),
+            status=AssetStatus(parse="complete", representation="full"),
+        )
+        errors = validate_semantic_document(ir)
+        assert any("mode" in e.lower() for e in errors)
+
+
+class TestCanonicalAndRenderer:
+    def test_key_order_deterministic(self):
+        """Top-level keys appear in the defined contract order."""
+        from uasset_read.semantic.canonical import canonical_sort
+        data = {
+            "diagnostics": [], "asset": {}, "status": {},
+            "references": [], "coverage": None,
+            "format": "x", "format_version": "1", "mode": "standard",
+            "asset_type": "texture",
+        }
+        result = canonical_sort(data)
+        keys = list(result.keys())
+        assert keys == [
+            "format", "format_version", "mode", "asset_type",
+            "asset", "status", "references", "coverage", "diagnostics",
+        ]
+
+    def test_render_byte_identical(self):
+        """Same SemanticIR produces byte-identical JSON."""
+        from uasset_read.semantic.render import render_semantic_json
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus, ReferenceEntry,
+        )
+        ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="standard",
+            asset_type="texture",
+            asset=AssetMeta(package="/Game/T_Default", name="T_Default"),
+            status=AssetStatus(parse="complete", representation="full"),
+            references=(
+                ReferenceEntry(index=0, kind="export", class_name="Texture2D", object_name="T_Default"),
+            ),
+        )
+        out1 = render_semantic_json(ir)
+        out2 = render_semantic_json(ir)
+        assert out1 == out2
+        assert out1.endswith("\n")
+
+    def test_render_uses_lf(self):
+        """Output uses LF line endings, not CRLF."""
+        from uasset_read.semantic.render import render_semantic_json
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus,
+        )
+        ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="standard",
+            asset_type="texture",
+            asset=AssetMeta(package="/Game/T_Default", name="T_Default"),
+            status=AssetStatus(parse="complete", representation="full"),
+        )
+        out = render_semantic_json(ir)
+        assert "\r\n" not in out
+        assert out.endswith("\n")
+
+    def test_render_omits_none_and_empty(self):
+        """None values and empty containers are omitted from output."""
+        import json
+        from uasset_read.semantic.render import render_semantic_json
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus,
+        )
+        ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="standard",
+            asset_type="texture",
+            asset=AssetMeta(package="/Game/T_Default", name="T_Default"),
+            status=AssetStatus(parse="complete", representation="full"),
+            coverage=None,
+            diagnostics=(),
+        )
+        data = json.loads(render_semantic_json(ir))
+        assert "coverage" not in data
+        assert "diagnostics" not in data
+
+    def test_evidence_only_in_debug(self):
+        """Evidence appears only in debug mode output."""
+        import json
+        from uasset_read.semantic.render import render_semantic_json
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus, EvidenceEntry,
+        )
+        debug_ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="debug",
+            asset_type="texture",
+            asset=AssetMeta(package="/Game/T_Default", name="T_Default"),
+            status=AssetStatus(parse="complete", representation="full"),
+            evidence=[EvidenceEntry(key="raw_class", value="Texture2D")],
+        )
+        data = json.loads(render_semantic_json(debug_ir))
+        assert "evidence" in data
+        assert data["evidence"][0]["key"] == "raw_class"
