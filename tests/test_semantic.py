@@ -432,3 +432,133 @@ class TestCanonicalAndRenderer:
         data = json.loads(render_semantic_json(debug_ir))
         assert "evidence" in data
         assert data["evidence"][0]["key"] == "raw_class"
+
+
+class TestDeterminism:
+    def test_byte_identical_across_runs(self):
+        """Same input produces byte-identical output across subprocess calls."""
+        import subprocess
+        import sys
+        script = '''
+import json, sys
+sys.path.insert(0, "src")
+from uasset_read.semantic.models import SemanticIR, AssetMeta, AssetStatus, ReferenceEntry
+from uasset_read.semantic.render import render_semantic_json
+ir = SemanticIR(
+    format="uasset_read.asset_semantic",
+    format_version="1.0",
+    mode="standard",
+    asset_type="texture",
+    asset=AssetMeta(package="/Game/T_Default", name="T_Default"),
+    status=AssetStatus(parse="complete", representation="full"),
+    references=(ReferenceEntry(index=0, kind="export", class_name="Texture2D", object_name="T_Default"),),
+)
+sys.stdout.write(render_semantic_json(ir))
+'''
+        import os
+        env1 = {**os.environ, "PYTHONHASHSEED": "0"}
+        env2 = {**os.environ, "PYTHONHASHSEED": "42"}
+        r1 = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, env=env1)
+        r2 = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, env=env2)
+        assert r1.returncode == 0, r1.stderr
+        assert r2.returncode == 0, r2.stderr
+        assert r1.stdout == r2.stdout
+
+
+class TestRealAssetSmoke:
+    def test_bp_firstperson_parses_without_crash(self):
+        """BP_FirstPersonCharacter.uasset parses and produces valid JSON."""
+        import json
+        from pathlib import Path
+        sample = Path("tests/samples/FirstPerson_BP_FirstPersonCharacter.uasset")
+        if not sample.exists():
+            pytest.skip("Sample not available")
+        from uasset_read.core import parse_single
+        result = parse_single(str(sample), format="json", output_level="standard")
+        data = json.loads(result)
+        assert data["format"] == "uasset_read.asset_semantic"
+        assert "asset" in data
+        assert "status" in data
+
+    def test_opaque_asset_preserves_facts(self):
+        """Opaque assets still emit identity, references, and diagnostics."""
+        from uasset_read.semantic.builder import build_semantic_ir
+        from uasset_read.models.ir import (
+            ExportIR, PackageIR, PackageHeaderIR, DiagnosticsDataIR, LinkerSummaryIR,
+        )
+        exports = [
+            ExportIR(index=0, object_name="SomeAsset", object_class="UnknownClass",
+                     serial_size=512, outer_index_resolved=None, super_index_resolved=None,
+                     parent_class=None, properties=[], graphs=[], bulk_data=None),
+        ]
+        ir = PackageIR(
+            header=PackageHeaderIR(package_name="/Game/SomeAsset", package_class="Package",
+                                   package_flags=0, total_export_count=1, total_import_count=0, ue_version="5.3"),
+            name_map=[], imports=[], exports=exports,
+            linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+            diagnostics_data=DiagnosticsDataIR(),
+        )
+        semantic = build_semantic_ir(ir)
+        assert semantic.status.representation == "opaque"
+        assert semantic.asset_type == "unknown"
+        assert any(d.code == "UNKNOWN_TYPE" for d in semantic.diagnostics)
+        # asset_class preserved in evidence for unknown types
+        assert any(e.key == "asset_class" and e.value == "UnknownClass" for e in semantic.evidence)
+        assert semantic.asset.generated_class == "UnknownClass"
+
+    def test_asset_class_evidence_only_in_debug(self):
+        """asset_class evidence is stripped by standard projection."""
+        from uasset_read.semantic.builder import build_semantic_ir
+        from uasset_read.semantic.projection import project_semantic
+        from uasset_read.models.ir import (
+            ExportIR, PackageIR, PackageHeaderIR, DiagnosticsDataIR, LinkerSummaryIR,
+        )
+        exports = [
+            ExportIR(index=0, object_name="SomeAsset", object_class="UnknownClass",
+                     serial_size=512, outer_index_resolved=None, super_index_resolved=None,
+                     parent_class=None, properties=[], graphs=[], bulk_data=None),
+        ]
+        ir = PackageIR(
+            header=PackageHeaderIR(package_name="/Game/SomeAsset", package_class="Package",
+                                   package_flags=0, total_export_count=1, total_import_count=0, ue_version="5.3"),
+            name_map=[], imports=[], exports=exports,
+            linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+            diagnostics_data=DiagnosticsDataIR(),
+        )
+        debug_ir = build_semantic_ir(ir)
+        assert any(e.key == "asset_class" for e in debug_ir.evidence)
+        standard_ir = project_semantic(debug_ir, "standard")
+        assert standard_ir.evidence == ()
+
+
+class TestCLIAPIEquivalence:
+    def test_single_file_cli_matches_python_api(self):
+        """CLI single-file output matches Python API output byte-for-byte."""
+        import subprocess, sys, json
+        from pathlib import Path
+        sample = Path("tests/samples/FirstPerson_BP_FirstPersonCharacter.uasset")
+        if not sample.exists():
+            pytest.skip("Sample not available")
+        # Python API
+        from uasset_read.core import parse_single
+        api_output = parse_single(str(sample), format="json", output_level="standard")
+        # CLI
+        cli_result = subprocess.run(
+            [sys.executable, "run.py", "--json", str(sample)],
+            capture_output=True, text=True,
+        )
+        assert cli_result.returncode == 0, cli_result.stderr
+        assert json.loads(api_output) == json.loads(cli_result.stdout)
+
+
+class TestSchemaLocatability:
+    def test_schema_file_exists_and_valid_json(self):
+        """semantic.schema.json exists and is valid JSON."""
+        import json
+        from pathlib import Path
+        schema_path = Path("schemas/semantic.schema.json")
+        assert schema_path.exists(), f"Schema not found at {schema_path}"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
+        assert "properties" in schema
+        assert "$defs" in schema

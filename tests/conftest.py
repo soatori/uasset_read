@@ -20,6 +20,24 @@ from uasset_read.memory_safety import (
     get_memory_stats,
 )
 
+from uasset_read.semantic.models import (
+    SemanticIR, AssetMeta, AssetStatus, CoverageInfo, DiagnosticEntry,
+)
+
+
+def make_semantic_ir(mode="standard", **kwargs):
+    """Factory for minimal SemanticIR (new model)."""
+    defaults = dict(
+        format="uasset_read.asset_semantic",
+        format_version="1.0",
+        mode=mode,
+        asset_type="texture",
+        asset=AssetMeta(package="/Game/T_Default", name="T_Default"),
+        status=AssetStatus(parse="complete", representation="full"),
+    )
+    defaults.update(kwargs)
+    return SemanticIR(**defaults)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = ROOT / "src"
