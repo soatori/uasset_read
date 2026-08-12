@@ -108,7 +108,8 @@ def test_spawn_worker_writes_output_atomically(tmp_path) -> None:
 
     assert outcome.succeeded is True
     assert outcome.output_path == str(output)
-    assert json.loads(output.read_text(encoding="utf-8"))["status"]["status"] == "failed"
+    # Semantic output uses status.parse instead of status.status
+    assert json.loads(output.read_text(encoding="utf-8"))["status"]["parse"] == "failed"
     assert list(output.parent.glob(".*.tmp")) == []
 
 

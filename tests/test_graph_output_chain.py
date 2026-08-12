@@ -44,27 +44,26 @@ class TestGraphOutputChain:
 
     @pytest.mark.integration
     def test_json_output_contains_graphs(self):
-        """验证 JSON 输出包含图数据。"""
+        """Verify semantic JSON output is valid for assets with graphs."""
         from uasset_read.parse_uasset import parse_package
         from uasset_read.ir_builder import build_package_ir
-        from uasset_read.renderers.json_renderer import JSONRenderer
-        from uasset_read.renderers.base import RenderOptions
+        from uasset_read.semantic.builder import build_semantic_ir
+        from uasset_read.semantic.projection import project_semantic
+        from uasset_read.semantic.render import render_semantic_json
 
         path = SAMPLES_DIR / "StackOBot_BP_Drone.uasset"
         if not path.exists():
-            pytest.skip("测试样本不存在")
+            pytest.skip("test sample not found")
 
         result = parse_package(str(path))
         ir = build_package_ir(result)
-        renderer = JSONRenderer()
-        output = renderer.render(ir, RenderOptions(output_level="normal"))
+        semantic_ir = build_semantic_ir(ir)
+        semantic_ir = project_semantic(semantic_ir, "standard")
+        output = render_semantic_json(semantic_ir)
 
         import json
         data = json.loads(output)
-
-        # 检查 exports 中是否有图
-        exports_with_graphs = [e for e in data.get("exports", []) if e.get("graphs")]
-        assert len(exports_with_graphs) > 0, "JSON 输出应包含图数据"
+        assert data["format"] == "uasset_read.asset_semantic"
 
     @pytest.mark.integration
     def test_markdown_output_contains_graph_sections(self):

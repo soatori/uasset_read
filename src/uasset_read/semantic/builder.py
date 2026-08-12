@@ -69,7 +69,7 @@ def build_semantic_ir(package_ir: PackageIR) -> SemanticIR:
         return SemanticIR(
             format="uasset_read.asset_semantic",
             format_version="1.0",
-            mode="standard",
+            mode="",
             asset_type="unknown",
             asset=AssetMeta(package=package_ir.header.package_name or "", name="unknown"),
             status=AssetStatus(parse="failed", representation="opaque"),
@@ -120,7 +120,7 @@ def build_semantic_ir(package_ir: PackageIR) -> SemanticIR:
     return SemanticIR(
         format="uasset_read.asset_semantic",
         format_version="1.0",
-        mode="standard",
+        mode="",
         asset_type=asset_type,
         asset=AssetMeta(
             package=package_ir.header.package_name or "",

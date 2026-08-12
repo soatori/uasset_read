@@ -48,7 +48,6 @@ MODULES = [
     "uasset_read.blueprint.variable_extractor",
     "uasset_read.cpp_gen",
     "uasset_read.renderers",
-    "uasset_read.renderers.json_renderer",
     "uasset_read.renderers.markdown_renderer",
     "uasset_read.memory_safety",
     "uasset_read.debug",

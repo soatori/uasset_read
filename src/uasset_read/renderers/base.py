@@ -87,7 +87,6 @@ class RenderOptions:
     verbose: bool = False
     indent: int = 2
     include_schema: bool = False
-    include_function_graphs: bool = False
     output_level: str = "standard"  # "standard"（默认，过滤 UI/空字段）或 "debug"（完整输出）
     hex_view: bool = False  # 输出 HexView 解析轨迹数据
 
@@ -112,7 +111,6 @@ class IRenderer(ABC):
         """渲染到文件/流。
 
         默认实现写入 render() 结果。
-        JSONRenderer 覆盖此方法以使用 json.dump() 流式写入。
 
         Args:
             ir: PackageIR 实例

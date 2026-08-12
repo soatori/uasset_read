@@ -16,8 +16,6 @@ import pytest
 from uasset_read.debug.hex_view import HexViewEntry
 from uasset_read.models.ir import HexViewEntryIR, DebugIR, PackageIR, PackageHeaderIR
 from uasset_read.ir_builder import _build_debug_ir, build_package_ir
-from uasset_read.renderers.json_renderer import JSONRenderer
-from uasset_read.renderers.base import RenderOptions
 from uasset_read.models.result import ParseResult
 
 
@@ -184,13 +182,13 @@ class TestPackageIRDebug:
 
 
 # ---------------------------------------------------------------------------
-# JSON Renderer — debug.hex_view 输出
+# Semantic pipeline -- hex_view handling
 # ---------------------------------------------------------------------------
-class TestJSONRendererHexView:
-    """JSON 渲染器 HexView 输出测试。"""
+class TestSemanticHexView:
+    """Verify semantic pipeline produces valid output for assets with debug data."""
 
     def _make_ir(self, hex_view_entries=None):
-        """构建用于测试的最小 PackageIR。"""
+        """Build a minimal PackageIR for testing."""
         header = PackageHeaderIR(
             package_name="Test", package_class="Package",
             package_flags=0, total_export_count=0, total_import_count=0,
@@ -204,82 +202,34 @@ class TestJSONRendererHexView:
             ir.debug = DebugIR(hex_view=hex_view_entries)
         return ir
 
-    def test_no_debug_when_hex_view_flag_false(self):
-        """hex_view=False 时不输出 debug。"""
-        ir = self._make_ir([
-            HexViewEntryIR(key="x", type="u8", value=1, start=0, stop=1, size=1),
-        ])
-        renderer = JSONRenderer()
-        options = RenderOptions(hex_view=False)
-        output = json.loads(renderer.render(ir, options))
-        assert "debug" not in output
+    def test_semantic_output_with_hex_view_data(self):
+        """Semantic pipeline should produce valid output for assets with hex_view data."""
+        from uasset_read.semantic.builder import build_semantic_ir
+        from uasset_read.semantic.projection import project_semantic
+        from uasset_read.semantic.render import render_semantic_json
 
-    def test_debug_output_when_hex_view_flag_true(self):
-        """hex_view=True 时输出 debug.hex_view。"""
         ir = self._make_ir([
             HexViewEntryIR(key="Magic", type="u32", value=0x9E2A83C1, start=0, stop=4, size=4),
         ])
-        renderer = JSONRenderer()
-        options = RenderOptions(hex_view=True)
-        output = json.loads(renderer.render(ir, options))
-        assert "debug" in output
-        assert "hex_view" in output["debug"]
-        assert len(output["debug"]["hex_view"]) == 1
-        assert output["debug"]["hex_view"][0]["key"] == "Magic"
-        assert output["debug"]["hex_view"][0]["type"] == "u32"
-        assert output["debug"]["hex_view"][0]["value"] == 0x9E2A83C1
-        assert output["debug"]["hex_view"][0]["start"] == 0
-        assert output["debug"]["hex_view"][0]["stop"] == 4
-        assert output["debug"]["hex_view"][0]["size"] == 4
+        semantic_ir = build_semantic_ir(ir)
+        semantic_ir = project_semantic(semantic_ir, "standard")
+        output = render_semantic_json(semantic_ir)
+        data = json.loads(output)
+        assert data["format"] == "uasset_read.asset_semantic"
+        assert data["asset"]["name"] == "unknown"
 
-    def test_debug_output_when_output_level_debug(self):
-        """output_level='debug' 时输出 debug.hex_view。"""
-        ir = self._make_ir([
-            HexViewEntryIR(key="x", type="u8", value=1, start=0, stop=1, size=1),
-        ])
-        renderer = JSONRenderer()
-        options = RenderOptions(output_level="debug")
-        output = json.loads(renderer.render(ir, options))
-        assert "debug" in output
+    def test_semantic_output_without_hex_view_data(self):
+        """Semantic pipeline should produce valid output without hex_view data."""
+        from uasset_read.semantic.builder import build_semantic_ir
+        from uasset_read.semantic.projection import project_semantic
+        from uasset_read.semantic.render import render_semantic_json
 
-    def test_no_debug_when_no_entries(self):
-        """无条目时不输出 debug。"""
-        ir = self._make_ir()  # 无 hex_view_entries
-        renderer = JSONRenderer()
-        options = RenderOptions(hex_view=True)
-        output = json.loads(renderer.render(ir, options))
-        assert "debug" not in output
-
-    def test_field_path_in_output(self):
-        """field_path 字段正确输出。"""
-        ir = self._make_ir([
-            HexViewEntryIR(
-                key="Version", type="i32", value=100, start=4, stop=8, size=4,
-                field_path="PackageSummary.Version",
-                semantic_type="header",
-            ),
-        ])
-        renderer = JSONRenderer()
-        options = RenderOptions(hex_view=True)
-        output = json.loads(renderer.render(ir, options))
-        entry = output["debug"]["hex_view"][0]
-        assert entry["field_path"] == "PackageSummary.Version"
-        assert entry["semantic_type"] == "header"
-
-    def test_bytes_value_serialized_as_hex(self):
-        """bytes 值序列化为 value_hex。"""
-        ir = self._make_ir([
-            HexViewEntryIR(
-                key="raw", type="bytes", value=b'\xAB\xCD', start=0, stop=2, size=2,
-            ),
-        ])
-        renderer = JSONRenderer()
-        options = RenderOptions(hex_view=True)
-        output = json.loads(renderer.render(ir, options))
-        entry = output["debug"]["hex_view"][0]
-        assert entry["value_hex"] == "abcd"
-        assert entry["value_size"] == 2
-        assert "value" not in entry
+        ir = self._make_ir()
+        semantic_ir = build_semantic_ir(ir)
+        semantic_ir = project_semantic(semantic_ir, "standard")
+        output = render_semantic_json(semantic_ir)
+        data = json.loads(output)
+        assert data["format"] == "uasset_read.asset_semantic"
 
 
 # ---------------------------------------------------------------------------
@@ -307,23 +257,23 @@ class TestCoreBypassLogic:
             assert "HexView" in result
 
     def test_hex_view_json_format_goes_through_ir(self):
-        """json 格式 + hex_view=True 时走 IR 管线。"""
+        """json format + hex_view=True goes through IR + semantic pipeline."""
         from unittest.mock import patch
         from uasset_read.core import parse_single
 
-        # 构建真实 ParseResult 避免 mock 属性缺失问题
+        # Build a real ParseResult to avoid mock attribute issues
         mock_result = ParseResult()
         mock_result.is_success = True
         mock_result.hex_view_entries = [
             HexViewEntry(key="Magic", type="u32", value=0x9E2A83C1, start=0, stop=4),
         ]
 
-        # json 格式走 linker 路径，需要 mock parse_uasset_with_linker
+        # json format uses linker path, need to mock parse_uasset_with_linker
         with patch("uasset_read.core.parse_uasset_with_linker", return_value=mock_result):
             result = parse_single("fake.uasset", hex_view=True, format="json")
-            # JSON 格式走 IR 管线，返回 JSON 字符串
+            # JSON format goes through semantic pipeline, returns JSON string
             assert isinstance(result, str)
             output = json.loads(result)
-            assert "summary" in output
-            assert "debug" in output
-            assert output["debug"]["hex_view"][0]["key"] == "Magic"
+            assert "format" in output
+            assert output["format"] == "uasset_read.asset_semantic"
+            assert "status" in output

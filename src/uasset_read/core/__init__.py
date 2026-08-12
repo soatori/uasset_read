@@ -284,11 +284,25 @@ def _parse_and_render(
     except Exception:
         logger.debug("批量清理临时大对象失败", exc_info=True)
 
+    # JSON format: route through semantic pipeline
+    if format == "json":
+        from uasset_read.semantic.builder import build_semantic_ir
+        from uasset_read.semantic.projection import project_semantic
+        from uasset_read.semantic.validator import validate_semantic_document
+        from uasset_read.semantic.render import render_semantic_json
+
+        semantic_ir = build_semantic_ir(ir)
+        semantic_ir = project_semantic(semantic_ir, output_level)
+        validation_errors = validate_semantic_document(semantic_ir)
+        if validation_errors:
+            logger.warning("Semantic IR validation errors: %s", validation_errors)
+        return render_semantic_json(semantic_ir, include_schema=include_schema), result
+
+    # Other formats: use renderer registry
     renderer = get_renderer(format)
     options = RenderOptions(
         verbose=verbose,
         include_schema=include_schema,
-        include_function_graphs=include_function_graphs,
         output_level=output_level,
         hex_view=hex_view,
     )
@@ -563,7 +577,9 @@ def parse_batch(
 
 def list_formats() -> list[str]:
     """返回所有支持的格式名列表。"""
-    return _list_renderer_formats()
+    formats = set(_list_renderer_formats())
+    formats.add("json")  # json goes through semantic pipeline, not renderer registry
+    return sorted(formats)
 
 
 @scoped_project_logging

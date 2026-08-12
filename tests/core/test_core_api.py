@@ -57,7 +57,7 @@ class TestParseSingle:
                     parse_single("test.uasset", format="nonexistent_format")
 
     def test_parse_single_uses_linker_for_json_format(self):
-        """parse_single 对 json 格式使用 parse_uasset_with_linker。"""
+        """parse_single uses parse_uasset_with_linker for json format."""
         with patch("uasset_read.core.parse_uasset_with_linker") as mock_linker_parse:
             mock_result = MagicMock()
             mock_result.is_success = True
@@ -65,11 +65,7 @@ class TestParseSingle:
             with patch("uasset_read.core.build_package_ir") as mock_build:
                 mock_ir = MagicMock()
                 mock_build.return_value = mock_ir
-                with patch("uasset_read.core.get_renderer") as mock_get_renderer:
-                    mock_renderer = MagicMock()
-                    mock_renderer.render.return_value = "{}"
-                    mock_get_renderer.return_value = mock_renderer
-
+                with patch("uasset_read.semantic.render.render_semantic_json", return_value="{}"):
                     parse_single("test.uasset", format="json")
                     mock_linker_parse.assert_called_once()
 
@@ -86,9 +82,7 @@ class TestParseSingle:
         ) as mock_parse, patch(
             "uasset_read.core.build_package_ir",
             return_value=MagicMock(),
-        ), patch("uasset_read.core.get_renderer") as mock_get_renderer:
-            mock_get_renderer.return_value.render.return_value = "{}"
-
+        ), patch("uasset_read.semantic.render.render_semantic_json", return_value="{}"):
             parse_single("test.uasset", format="json", memory_policy=policy)
 
         assert mock_parse.call_args.kwargs["memory_policy"] is policy

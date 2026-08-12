@@ -1,17 +1,19 @@
-"""JSON Schema 集成测试 — 验证 output_version 移除和 $schema 引用。"""
+"""JSON Schema integration tests -- verify semantic output structure."""
 from __future__ import annotations
 
 import json
 
 import pytest
 
-from uasset_read.renderers.json_renderer import JSONRenderer
-from uasset_read.renderers.base import RenderOptions
 from uasset_read.models.ir import PackageIR, PackageHeaderIR, ExportIR
+from uasset_read.semantic.builder import build_semantic_ir
+from uasset_read.semantic.projection import project_semantic
+from uasset_read.semantic.render import render_semantic_json
+from uasset_read.semantic.validator import validate_semantic_document
 
 
 # ---------------------------------------------------------------------------
-# 辅助工厂
+# Helper factories
 # ---------------------------------------------------------------------------
 
 def _make_header() -> PackageHeaderIR:
@@ -26,7 +28,7 @@ def _make_header() -> PackageHeaderIR:
 
 
 def _make_minimal_ir(**kwargs) -> PackageIR:
-    """构造最小 PackageIR。"""
+    """Construct a minimal PackageIR."""
     defaults = dict(
         header=_make_header(),
         name_map=["BP_Test"],
@@ -38,71 +40,87 @@ def _make_minimal_ir(**kwargs) -> PackageIR:
     return PackageIR(**defaults)
 
 
-def _render_json(ir: PackageIR, **options_kwargs) -> dict:
-    """渲染 IR 为 JSON 字典。"""
-    renderer = JSONRenderer()
-    options = RenderOptions(**options_kwargs)
-    output = renderer.render(ir, options)
+def _render_json(ir: PackageIR, output_level: str = "standard") -> dict:
+    """Render IR through the semantic pipeline and return as dict."""
+    semantic_ir = build_semantic_ir(ir)
+    semantic_ir = project_semantic(semantic_ir, output_level)
+    output = render_semantic_json(semantic_ir)
     return json.loads(output)
 
 
 # ---------------------------------------------------------------------------
-# 测试类
+# Test classes
 # ---------------------------------------------------------------------------
 
-class TestOutputVersionRemoved:
-    """验证 JSON 输出不包含 output_version 字段。"""
+class TestSemanticOutputVersion:
+    """Verify semantic JSON output uses format_version instead of output_version."""
 
     def test_no_output_version_default(self):
-        """默认渲染不应包含 output_version 字段。"""
+        """Default rendering should not contain output_version field."""
         ir = _make_minimal_ir()
         data = _render_json(ir)
         assert "output_version" not in data
+        assert "format_version" in data
 
     def test_no_output_version_debug(self):
-        """debug 模式也不应包含 output_version 字段。"""
+        """Debug mode should not contain output_version field."""
         ir = _make_minimal_ir()
         data = _render_json(ir, output_level="debug")
         assert "output_version" not in data
+        assert "format_version" in data
 
 
 class TestSchemaReference:
-    """验证 include_schema=True 时输出包含 $schema 引用。"""
+    """Verify $schema reference when include_schema=True."""
 
     def test_schema_reference_included(self):
-        """启用 include_schema 时应包含 $schema 引用。"""
+        """When include_schema=True, $schema should be included."""
         ir = _make_minimal_ir()
-        data = _render_json(ir, include_schema=True)
+        semantic_ir = build_semantic_ir(ir)
+        semantic_ir = project_semantic(semantic_ir, "standard")
+        output = render_semantic_json(semantic_ir, include_schema=True)
+        data = json.loads(output)
         assert "$schema" in data
-        assert data["$schema"] == "package.schema.json"
+        assert "semantic.schema.json" in data["$schema"]
 
     def test_schema_reference_absent_by_default(self):
-        """默认不启用 include_schema 时不应包含 $schema。"""
+        """By default, $schema should not be included."""
         ir = _make_minimal_ir()
         data = _render_json(ir)
         assert "$schema" not in data
 
     def test_schema_reference_absent_when_false(self):
-        """显式 include_schema=False 时不应包含 $schema。"""
+        """When include_schema=False, $schema should not be included."""
         ir = _make_minimal_ir()
-        data = _render_json(ir, include_schema=False)
+        semantic_ir = build_semantic_ir(ir)
+        semantic_ir = project_semantic(semantic_ir, "standard")
+        output = render_semantic_json(semantic_ir, include_schema=False)
+        data = json.loads(output)
         assert "$schema" not in data
 
 
 class TestRequiredFields:
-    """验证 JSON 输出的基本字段结构。"""
+    """Verify semantic JSON output has required fields."""
 
-    def test_has_status_and_summary_and_exports(self):
-        """输出应包含 status、summary、exports 键。"""
+    def test_has_format_status_and_asset(self):
+        """Output should contain format, status, and asset keys."""
         ir = _make_minimal_ir()
         data = _render_json(ir)
+        assert "format" in data
         assert "status" in data
-        assert "summary" in data
-        assert "exports" in data
+        assert "asset" in data
 
     def test_status_structure(self):
-        """status 字段应包含 status、message、code。"""
+        """status field should contain parse and representation."""
         ir = _make_minimal_ir()
         data = _render_json(ir)
-        assert "status" in data
-        assert "status" in data["status"]
+        assert "parse" in data["status"]
+        assert "representation" in data["status"]
+
+    def test_validation_passes(self):
+        """Semantic IR should pass validation."""
+        ir = _make_minimal_ir()
+        semantic_ir = build_semantic_ir(ir)
+        semantic_ir = project_semantic(semantic_ir, "standard")
+        errors = validate_semantic_document(semantic_ir)
+        assert errors == []

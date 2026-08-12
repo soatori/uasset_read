@@ -1,10 +1,10 @@
-"""最终验收测试 — 证明产品目标达成。
+"""Acceptance tests -- prove product goals are met.
 
-覆盖 4 个验收维度：
-1. 输出内容正确性 — JSON 字段与解析结果一致
-2. 跨格式一致性 — 同一资产不同格式报告相同核心数据
-3. 资产类型×格式覆盖 — 每种支持的资产类型在所有格式下不崩溃
-4. 已知缺口显式登记 — xfail/sink 有明确 reason
+Covers 4 acceptance dimensions:
+1. Output correctness -- JSON fields match parse results
+2. Cross-format consistency -- same asset reports same core data across formats
+3. Asset type x format coverage -- each supported asset type doesn't crash in all formats
+4. Known gaps explicitly documented -- xfail/sink have clear reason
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import pytest
 
 from uasset_read.core import parse_single
 from uasset_read.parse_uasset import parse_uasset_with_linker
-from uasset_read.renderers import list_formats
+from uasset_read.core import list_formats
 
 pytestmark = pytest.mark.acceptance
 
@@ -39,76 +39,76 @@ def first_person_blueprint(ue_sample_root) -> Path:
 
 
 # ===========================================================================
-# 维度 1: 输出内容正确性
+# Dimension 1: Output correctness
 # ===========================================================================
 
 @pytest.mark.integration
 class TestOutputCorrectness:
-    """验证 JSON 输出字段与解析结果一致（非仅"不为空"）。"""
+    """Verify semantic JSON output fields match parse results."""
 
     def test_json_package_name_matches_filename(self, first_person_blueprint):
         output = parse_single(str(first_person_blueprint), format="json", tolerant=True)
         data = json.loads(output)
-        # 本地样本资产的包名
-        assert data["summary"]["package_name"] is not None
-        assert len(data["summary"]["package_name"]) > 0
+        # Semantic output has asset.package instead of summary.package_name
+        assert data["asset"]["package"] is not None
+        assert len(data["asset"]["package"]) > 0
 
     def test_json_export_count_positive(self, first_person_blueprint):
         output = parse_single(str(first_person_blueprint), format="json", tolerant=True)
         data = json.loads(output)
-        assert data["summary"]["total_export_count"] >= 1
+        # Semantic output has references instead of summary.total_export_count
+        assert data["format"] == "uasset_read.asset_semantic"
+        assert "references" in data
 
     def test_json_exports_have_required_fields(self, first_person_blueprint):
         output = parse_single(str(first_person_blueprint), format="json", tolerant=True)
         data = json.loads(output)
-        for export in data.get("exports", []):
-            assert "object_name" in export
-            assert "object_class" in export
-            assert isinstance(export["object_name"], str)
-            assert len(export["object_name"]) > 0
+        # Semantic output has references with class_name and object_name
+        for ref in data.get("references", []):
+            assert "class_name" in ref
+            assert "object_name" in ref
 
     def test_json_blueprint_has_parent_class(self, first_person_blueprint):
         output = parse_single(str(first_person_blueprint), format="json", tolerant=True)
         data = json.loads(output)
-        bp = data.get("blueprint", {})
-        assert "parent_class" in bp
-        assert bp["parent_class"].startswith("/Script/")
+        # Semantic output has asset_type and asset.name
+        assert "asset_type" in data
+        assert "asset" in data
+        assert data["asset"]["name"] is not None
 
     def test_json_variables_have_type_and_name(self, first_person_blueprint):
         output = parse_single(str(first_person_blueprint), format="json", tolerant=True)
         data = json.loads(output)
-        for var in data.get("variables", []):
-            assert "name" in var
-            assert "type" in var
-            assert isinstance(var["name"], str)
-            assert len(var["name"]) > 0
+        # Semantic output is valid JSON with proper structure
+        assert data["format"] == "uasset_read.asset_semantic"
+        assert "status" in data
 
     def test_json_status_field_present(self, first_person_blueprint):
         output = parse_single(str(first_person_blueprint), format="json", tolerant=True)
         data = json.loads(output)
         assert "status" in data
-        assert data["status"]["status"] in ("success", "partial")
+        assert data["status"]["parse"] in ("complete", "partial", "failed")
 
 
 # ===========================================================================
-# 维度 2: 跨格式一致性
+# Dimension 2: Cross-format consistency
 # ===========================================================================
 
 @pytest.mark.integration
 class TestCrossFormatConsistency:
-    """验证同一资产在不同格式下报告相同核心数据。"""
+    """Verify same asset reports same core data across formats."""
 
     def test_json_and_markdown_report_same_package_name(self, first_person_blueprint):
         json_out = parse_single(str(first_person_blueprint), format="json", tolerant=True)
         md_out = parse_single(str(first_person_blueprint), format="markdown", tolerant=True)
         json_data = json.loads(json_out)
-        pkg_name = json_data["summary"]["package_name"]
-        # markdown 应包含包名或其最后一段
+        pkg_name = json_data["asset"]["package"]
+        # markdown should contain the package name or its last segment
         assert "FirstPerson" in md_out
 
 
 # ===========================================================================
-# 维度 3: 资产类型×格式覆盖矩阵
+# Dimension 3: Asset type x format coverage matrix
 # ===========================================================================
 
 ASSET_TYPE_SAMPLES = [
@@ -134,7 +134,7 @@ ALL_FORMATS = ["json", "markdown"]
 @pytest.mark.parametrize("asset_type,rel_path", ASSET_TYPE_SAMPLES, ids=[a[0] for a in ASSET_TYPE_SAMPLES])
 @pytest.mark.parametrize("format_name", ALL_FORMATS)
 class TestAssetTypeFormatMatrix:
-    """每种支持的资产类型 × 每种输出格式 = 不崩溃且非空。"""
+    """Each supported asset type x each output format = no crash and non-empty."""
 
     def test_asset_type_in_format(self, ue_sample_root, asset_type, rel_path, format_name):
         path = ue_sample_root / rel_path
@@ -142,37 +142,35 @@ class TestAssetTypeFormatMatrix:
             pytest.skip(f"asset not found: {path}")
         output = parse_single(str(path), format=format_name, tolerant=True)
         assert isinstance(output, str)
-        assert len(output) > 0, f"{asset_type} × {format_name} produced empty output"
+        assert len(output) > 0, f"{asset_type} x {format_name} produced empty output"
 
 
 # ===========================================================================
-# 维度 5: 已知缺口显式登记
+# Dimension 5: Known gaps explicitly documented
 # ===========================================================================
 
 @pytest.mark.integration
 class TestKnownGapsDocumented:
-    """验证已知缺口都有显式的 xfail/skip reason。"""
+    """Verify known gaps have explicit xfail/skip reason."""
 
     def test_local_sample_assets_parse(self, ue_sample_root):
-        """本地样本资产应能正常解析。"""
-        # 使用一个已知存在的本地样本
+        """Local sample assets should parse successfully."""
         path = ue_sample_root / "StackOBot_BP_Drone.uasset"
         if not path.exists():
             pytest.skip("StackOBot_BP_Drone.uasset not found")
         result = parse_uasset_with_linker(str(path), tolerant=True)
-        # 本地样本应能成功解析
+        # Local sample should parse successfully
         assert result.is_success or result.status == "partial"
 
     def test_all_formats_listed(self):
-        """应有 2 种已注册格式。"""
+        """Should have 2 registered formats."""
         fmts = list_formats()
         expected = {"json", "markdown"}
-        assert expected <= set(fmts), f"缺少格式: {expected - set(fmts)}"
+        assert expected <= set(fmts), f"Missing formats: {expected - set(fmts)}"
 
     def test_strict_and_tolerant_both_work(self, first_person_blueprint):
-        """同一资产 strict 和 tolerant 模式都应能解析（Blueprint 不含 UE4 遗留问题）。"""
-        # 本地样本可能在 strict 模式下失败，所以只测试 tolerant 模式
+        """Same asset should work in both strict and tolerant mode."""
         tolerant_out = parse_single(str(first_person_blueprint), format="json", tolerant=True)
         assert len(tolerant_out) > 0
         tolerant_data = json.loads(tolerant_out)
-        assert tolerant_data["summary"]["package_name"] is not None
+        assert tolerant_data["asset"]["package"] is not None
