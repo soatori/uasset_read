@@ -264,15 +264,15 @@ class TestExtensionRegistry:
     def test_register_and_lookup(self):
         """Register an extractor and look it up."""
         from uasset_read.semantic.extensions import register_extension, get_extractor, is_registered
-        def dummy_extractor(export_ir):
+        def dummy_extractor(export_ir, coverage, evidence_list=None):
             return {}
-        register_extension("Material", dummy_extractor)
-        assert is_registered("Material")
-        assert get_extractor("Material") is dummy_extractor
+        register_extension("TestDummyClass", dummy_extractor)
+        assert is_registered("TestDummyClass")
+        assert get_extractor("TestDummyClass") is dummy_extractor
         assert get_extractor("NonExistent") is None
         # Cleanup
         from uasset_read.semantic.extensions import _REGISTRY
-        _REGISTRY.pop("Material", None)
+        _REGISTRY.pop("TestDummyClass", None)
 
     def test_duplicate_registration_raises(self):
         """Duplicate registration raises ValueError."""
@@ -562,3 +562,170 @@ class TestSchemaLocatability:
         assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
         assert "properties" in schema
         assert "$defs" in schema
+
+
+# ── Domain Extractor Integration Tests ──
+
+def _make_export(object_class, object_name, serial_size=1024, properties=None,
+                 graphs=None, asset_type_data=None, b_is_asset=True):
+    """Helper to create ExportIR for domain extractor tests."""
+    raw = ExportRawIR(b_is_asset=b_is_asset) if b_is_asset else ExportRawIR()
+    return ExportIR(
+        index=0, object_name=object_name, object_class=object_class,
+        serial_size=serial_size, outer_index_resolved=None, super_index_resolved=None,
+        parent_class=None, properties=properties or [], graphs=graphs or [],
+        bulk_data=None, asset_type_data=asset_type_data, ue_export_raw=raw,
+    )
+
+
+def _make_pkg(export, package_name=None):
+    """Helper to create PackageIR wrapping a single export."""
+    if package_name is None:
+        package_name = f"/Game/{export.object_name}"
+    return PackageIR(
+        header=PackageHeaderIR(
+            package_name=package_name, package_class="Package",
+            package_flags=0, total_export_count=1, total_import_count=0, ue_version="5.3",
+        ),
+        name_map=[], imports=[], exports=[export],
+        linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+        diagnostics_data=DiagnosticsDataIR(),
+    )
+
+
+class TestDomainExtractors:
+    """Integration tests for domain extractors through the full pipeline."""
+
+    def test_resource_extractor_texture2d(self):
+        """Texture2D with resource properties produces correct content."""
+        import json
+        from uasset_read.semantic import build_semantic_ir, project_semantic, render_semantic_json
+
+        export = _make_export(
+            "Texture2D", "T_Wood",
+            properties=[
+                type("P", (), {"name": "SizeX", "value": 512})(),
+                type("P", (), {"name": "SizeY", "value": 256})(),
+                type("P", (), {"name": "Format", "value": "PF_B8G8R8A8"})(),
+            ],
+        )
+        ir = build_semantic_ir(_make_pkg(export))
+        ir = project_semantic(ir, "standard")
+        data = json.loads(render_semantic_json(ir))
+
+        assert data["asset_type"] == "texture"
+        assert "content" not in data  # merged, not nested
+        assert data["class_name"] == "Texture2D"
+        assert data["object_name"] == "T_Wood"
+        assert data["serial_size"] == 1024
+        assert data["properties"]["SizeX"] == 512
+        assert data["properties"]["Format"] == "PF_B8G8R8A8"
+
+    def test_resource_extractor_coverage(self):
+        """Resource extractor tracks coverage scopes correctly."""
+        from uasset_read.semantic import build_semantic_ir
+        from uasset_read.semantic.coverage import CoverageModel
+
+        export = _make_export(
+            "Texture2D", "T_Default",
+            properties=[type("P", (), {"name": "SizeX", "value": 256})()],
+        )
+        ir = build_semantic_ir(_make_pkg(export))
+        assert ir.coverage is not None
+        assert ir.coverage.scopes_expected == 3  # metadata, properties, asset_type_data
+        assert ir.coverage.scopes_available == 2  # metadata + properties
+        assert "asset_type_data" in ir.coverage.scopes_unavailable
+
+    def test_graph_extractor_soundcue(self):
+        """SoundCue with graphs produces graph content."""
+        import json
+        from uasset_read.semantic import build_semantic_ir, project_semantic, render_semantic_json
+        from uasset_read.models.ir import GraphIR
+
+        graph = GraphIR(graph_guid="g1", graph_name="SoundGraph", graph_class="EdGraph", nodes=[1, 2, 3], execution_chains=[])
+        export = _make_export(
+            "SoundCue", "SC_Footstep",
+            graphs=[graph],
+            asset_type_data={"parse_status": "success", "node_count": 3},
+        )
+        ir = build_semantic_ir(_make_pkg(export))
+        ir = project_semantic(ir, "standard")
+        data = json.loads(render_semantic_json(ir))
+
+        assert data["asset_type"] == "sound_cue"
+        assert "content" not in data
+        assert data["graph_metadata"]["class_name"] == "SoundCue"
+        assert data["graphs"][0]["name"] == "SoundGraph"
+        assert data["graphs"][0]["node_count"] == 3
+        assert data["asset_type_data"]["node_count"] == 3
+
+    def test_structured_extractor_datatable(self):
+        """DataTable with rows produces structured content."""
+        import json
+        from uasset_read.semantic import build_semantic_ir, project_semantic, render_semantic_json
+
+        export = _make_export(
+            "DataTable", "DT_Config",
+            asset_type_data={
+                "parse_status": "success",
+                "rows": [{"Key": "row1"}, {"Key": "row2"}, {"Key": "row3"}],
+                "row_count": 3,
+                "guid": "abc-123",
+            },
+        )
+        ir = build_semantic_ir(_make_pkg(export))
+        ir = project_semantic(ir, "standard")
+        data = json.loads(render_semantic_json(ir))
+
+        assert data["asset_type"] == "data_table"
+        assert data["class_name"] == "DataTable"
+        assert data["row_count"] == 3
+        assert data["guid"] == "abc-123"
+
+    def test_no_extractor_opaque_content(self):
+        """Asset with no registered extractor has empty content."""
+        from uasset_read.semantic import build_semantic_ir
+
+        export = _make_export("BlueprintGeneratedClass", "BP_Foo", b_is_asset=False)
+        # BlueprintGeneratedClass is not registered, so no extractor
+        pkg = _make_pkg(export, "/Game/BP_Foo")
+        ir = build_semantic_ir(pkg)
+        # Should fall back to name-match rule or be opaque
+        assert ir.content == {} or ir.status.representation == "opaque"
+
+    def test_content_merges_to_top_level(self):
+        """Domain content fields appear at JSON top level, not nested."""
+        import json
+        from uasset_read.semantic import build_semantic_ir, project_semantic, render_semantic_json
+
+        export = _make_export(
+            "Texture2D", "T_Test",
+            properties=[type("P", (), {"name": "SizeX", "value": 128})()],
+        )
+        ir = build_semantic_ir(_make_pkg(export))
+        out = render_semantic_json(project_semantic(ir, "standard"))
+        data = json.loads(out)
+
+        # Contract keys present
+        assert "format" in data
+        assert "asset_type" in data
+        # Domain keys at top level
+        assert "class_name" in data
+        assert "properties" in data
+        # No nested "content" key
+        assert "content" not in data
+
+    def test_deterministic_domain_output(self):
+        """Same asset produces byte-identical JSON across runs."""
+        import json
+        from uasset_read.semantic import build_semantic_ir, project_semantic, render_semantic_json
+
+        export = _make_export(
+            "Texture2D", "T_Det",
+            properties=[type("P", (), {"name": "SizeX", "value": 64})()],
+        )
+        ir = build_semantic_ir(_make_pkg(export))
+        ir = project_semantic(ir, "standard")
+        out1 = render_semantic_json(ir)
+        out2 = render_semantic_json(ir)
+        assert out1 == out2

@@ -14,6 +14,7 @@ from uasset_read.semantic.kinds import resolve_asset_type
 from uasset_read.semantic.references import collect_references
 from uasset_read.semantic.coverage import CoverageModel
 from uasset_read.semantic.diagnostics import DiagnosticAggregator
+from uasset_read.semantic.extensions import get_extractor
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
@@ -106,12 +107,19 @@ def build_semantic_ir(package_ir: PackageIR) -> SemanticIR:
     elif status.parse == "failed" and not any(d.code == "PARSE_FAILED" for d in diag.build()):
         diag.add("error", "PARSE_FAILED", f"Asset '{primary.object_name}' failed to parse")
 
-    # Coverage
+    # Coverage + Domain Content
     cov = CoverageModel()
-    if status.representation == "opaque":
-        cov.track("domain_content", False)
+    content: dict = {}
+    evidence_list: list = list(evidence)
+
+    extractor = get_extractor(primary.object_class or "")
+    if extractor is not None and status.representation != "opaque":
+        # Domain extractor populates content and tracks its own coverage scopes
+        content = extractor(primary, cov, evidence_list)
     else:
-        cov.track("domain_content", True)
+        # No extractor or opaque — track domain_content as unavailable
+        cov.track("domain_content", False)
+
     coverage = cov.build()
 
     # References
@@ -129,7 +137,8 @@ def build_semantic_ir(package_ir: PackageIR) -> SemanticIR:
         ),
         status=status,
         references=references,
+        content=content,
         coverage=coverage,
         diagnostics=diag.build(),
-        evidence=tuple(evidence),
+        evidence=tuple(evidence_list),
     )

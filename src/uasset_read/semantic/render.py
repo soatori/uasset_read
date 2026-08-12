@@ -38,6 +38,9 @@ def render_semantic_json(ir: SemanticIR, *, include_schema: bool = False) -> str
         UTF-8 JSON string with LF line endings, ending with exactly one newline.
     """
     raw = asdict(ir)
+    # Merge domain content fields into top-level output
+    content = raw.pop("content", {}) or {}
+    raw.update(content)
     if include_schema:
         raw["$schema"] = "https://github.com/soatori/uasset_read/schemas/semantic.schema.json"
     raw = canonical_sort(raw)
