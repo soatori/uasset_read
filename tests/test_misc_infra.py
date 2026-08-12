@@ -20,19 +20,15 @@ from uasset_read.project_logging import project_logging_session, current_log_run
 def test_resolve_format_coverage():
     """resolve_format returns correct format for all flags."""
     # markdown flag
-    args_md = types.SimpleNamespace(markdown=True, json=False, semantic_json=False)
+    args_md = types.SimpleNamespace(markdown=True, json=False)
     assert resolve_format(args_md) == "markdown"
 
     # json flag
-    args_json = types.SimpleNamespace(markdown=False, json=True, semantic_json=False)
+    args_json = types.SimpleNamespace(markdown=False, json=True)
     assert resolve_format(args_json) == "json"
 
-    # semantic_json flag
-    args_sem = types.SimpleNamespace(markdown=False, json=False, semantic_json=True)
-    assert resolve_format(args_sem) == "semantic_json"
-
     # default (no flag)
-    args_default = types.SimpleNamespace(markdown=False, json=False, semantic_json=False)
+    args_default = types.SimpleNamespace(markdown=False, json=False)
     assert resolve_format(args_default) == "json"
 
 
