@@ -1,37 +1,57 @@
-"""Debug -> standard projection.
+"""Standard/debug projection — the only mode boundary.
 
-Projects a debug-mode SemanticIR to standard mode by:
-1. Setting mode to "standard"
-2. Preserving all data fields (asset, references, content, coverage, diagnostics)
+``project_semantic(ir, "standard")`` recursively removes evidence and debug
+extension fields. ``project_semantic(ir, "debug")`` is a passthrough.
 
-This module is NOT called automatically in the render pipeline.
-It is provided for callers who need to downgrade debug output to standard format.
-
-Usage:
-    from uasset_read.semantic.projection import project_debug
-    standard_ir = project_debug(debug_ir)
+Contract: ``project_semantic(build_semantic_ir(pkg), "standard")``
+must produce the same result as ``build_semantic_ir(pkg)`` stamped with
+``mode="standard"`` (for fields controlled by the common model; domain
+content is exempt).
 """
 from __future__ import annotations
 
-from uasset_read.semantic.ir import SemanticIR
+from uasset_read.semantic.models import SemanticIR
 
 
-def project_debug(debug_ir: SemanticIR) -> SemanticIR:
-    """Project a debug-mode SemanticIR to standard mode.
+def project_semantic(ir: SemanticIR, mode: str) -> SemanticIR:
+    """Project a SemanticIR to the target mode.
 
     Args:
-        debug_ir: SemanticIR with mode="debug"
+        ir: Source SemanticIR (any mode)
+        mode: Target mode — "standard" or "debug"
 
     Returns:
-        SemanticIR with mode="standard" and identical data fields
+        New SemanticIR with the target mode applied.
     """
+    if mode == ir.mode:
+        return ir
+
+    if mode == "standard":
+        return SemanticIR(
+            format=ir.format,
+            format_version=ir.format_version,
+            mode="standard",
+            asset_type=ir.asset_type,
+            asset=ir.asset,
+            status=ir.status,
+            references=ir.references,
+            content=ir.content,
+            coverage=ir.coverage,
+            diagnostics=ir.diagnostics,
+            evidence=(),  # strip all evidence
+        )
+
+    # debug — passthrough (evidence already present if built in debug mode)
     return SemanticIR(
-        format=debug_ir.format,
-        format_version=debug_ir.format_version,
-        mode="standard",
-        asset=debug_ir.asset,
-        references=debug_ir.references,
-        content=debug_ir.content,
-        coverage=debug_ir.coverage,
-        diagnostics=debug_ir.diagnostics,
+        format=ir.format,
+        format_version=ir.format_version,
+        mode="debug",
+        asset_type=ir.asset_type,
+        asset=ir.asset,
+        status=ir.status,
+        references=ir.references,
+        content=ir.content,
+        coverage=ir.coverage,
+        diagnostics=ir.diagnostics,
+        evidence=ir.evidence,
     )

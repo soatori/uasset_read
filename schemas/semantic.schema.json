@@ -2,153 +2,63 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/soatori/uasset_read/schemas/semantic.schema.json",
   "title": "uasset_read Asset Semantic JSON",
-  "description": "Schema for uasset_read semantic_json output format. Describes the compact, AI-consumable representation of an Unreal .uasset file.",
+  "description": "Common schema for uasset_read semantic JSON output. Domain schemas compose via allOf/$ref.",
   "type": "object",
-  "required": ["format", "format_version", "mode", "asset", "references", "content", "coverage", "diagnostics"],
+  "required": ["format", "format_version", "mode", "asset_type", "asset", "status"],
   "properties": {
-    "format": {
-      "const": "uasset_read.asset_semantic",
-      "description": "Output format identifier"
-    },
-    "format_version": {
-      "const": "1.0.0",
-      "description": "Semantic JSON format version"
-    },
-    "mode": {
-      "type": "string",
-      "enum": ["standard", "debug"],
-      "description": "Rendering mode"
-    },
-    "asset": {
-      "$ref": "#/$defs/AssetMeta",
-      "description": "Asset metadata"
-    },
-    "references": {
-      "type": "array",
-      "description": "Import and export reference entries",
-      "items": {
-        "$ref": "#/$defs/ReferenceEntry"
-      }
-    },
-    "content": {
-      "$ref": "#/$defs/ContentNode",
-      "description": "Structured content tree"
-    },
-    "coverage": {
-      "$ref": "#/$defs/CoverageInfo",
-      "description": "Parse coverage information"
-    },
-    "diagnostics": {
-      "type": "array",
-      "description": "Diagnostic messages",
-      "items": {
-        "$ref": "#/$defs/DiagnosticEntry"
-      }
-    }
+    "$schema": { "type": "string", "format": "uri" },
+    "format": { "const": "uasset_read.asset_semantic" },
+    "format_version": { "const": "1.0" },
+    "mode": { "type": "string", "enum": ["standard", "debug"] },
+    "asset_type": { "type": "string" },
+    "asset": { "$ref": "#/$defs/AssetMeta" },
+    "status": { "$ref": "#/$defs/AssetStatus" },
+    "references": { "type": "array", "items": { "$ref": "#/$defs/ReferenceEntry" } },
+    "coverage": { "$ref": "#/$defs/CoverageInfo" },
+    "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/DiagnosticEntry" } },
+    "evidence": { "type": "array", "items": { "$ref": "#/$defs/EvidenceEntry" } }
   },
-  "additionalProperties": false,
+  "additionalProperties": true,
   "$defs": {
     "AssetMeta": {
       "type": "object",
-      "required": ["kind", "class_name", "object_name", "package_path", "parse_status"],
+      "required": ["package", "name"],
       "properties": {
-        "kind": {
-          "type": "string",
-          "enum": ["graph", "structured", "resource", "opaque"],
-          "description": "Semantic asset kind"
-        },
-        "class_name": {
-          "type": "string",
-          "description": "Primary UE class name"
-        },
-        "object_name": {
-          "type": "string",
-          "description": "Export object name"
-        },
-        "package_path": {
-          "type": "string",
-          "description": "Package path (e.g. /Game/Path/Asset)"
-        },
-        "parse_status": {
-          "type": "string",
-          "enum": ["success", "partial", "failed"],
-          "description": "Parse status"
-        }
+        "package": { "type": "string" },
+        "name": { "type": "string" },
+        "generated_class": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "AssetStatus": {
+      "type": "object",
+      "required": ["parse", "representation"],
+      "properties": {
+        "parse": { "type": "string", "enum": ["complete", "partial", "failed"] },
+        "representation": { "type": "string", "enum": ["full", "partial", "opaque"] }
       },
       "additionalProperties": false
     },
     "ReferenceEntry": {
       "type": "object",
-      "required": ["index", "kind", "class_name", "object_name", "package_path"],
+      "required": ["index", "kind", "class_name", "object_name"],
       "properties": {
-        "index": {
-          "type": "integer",
-          "description": "Import or export table index"
-        },
-        "kind": {
-          "type": "string",
-          "enum": ["import", "export"],
-          "description": "Reference kind"
-        },
-        "class_name": {
-          "type": "string",
-          "description": "Referenced class name"
-        },
-        "object_name": {
-          "type": "string",
-          "description": "Referenced object name"
-        },
-        "package_path": {
-          "type": "string",
-          "description": "Referenced package path"
-        }
-      },
-      "additionalProperties": false
-    },
-    "ContentNode": {
-      "type": "object",
-      "required": ["key"],
-      "properties": {
-        "key": {
-          "type": "string",
-          "description": "Node key name"
-        },
-        "value": {
-          "description": "Leaf node value (set for leaf nodes, absent for branch nodes)"
-        },
-        "children": {
-          "type": "array",
-          "description": "Child nodes (set for branch nodes, absent for leaf nodes)",
-          "items": {
-            "$ref": "#/$defs/ContentNode"
-          }
-        }
+        "index": { "type": "integer" },
+        "kind": { "type": "string", "enum": ["import", "export"] },
+        "class_name": { "type": "string" },
+        "object_name": { "type": "string" },
+        "package_path": { "type": "string" }
       },
       "additionalProperties": false
     },
     "CoverageInfo": {
       "type": "object",
-      "required": ["fields_expected", "fields_parsed", "coverage_pct", "unparsed_fields"],
+      "required": ["scopes_expected", "scopes_available"],
       "properties": {
-        "fields_expected": {
-          "type": "integer",
-          "description": "Total expected fields"
-        },
-        "fields_parsed": {
-          "type": "integer",
-          "description": "Successfully parsed fields"
-        },
-        "coverage_pct": {
-          "type": "number",
-          "description": "Coverage percentage (0.0-100.0)"
-        },
-        "unparsed_fields": {
-          "type": "array",
-          "description": "Names of fields that could not be parsed",
-          "items": {
-            "type": "string"
-          }
-        }
+        "scopes_expected": { "type": "integer" },
+        "scopes_available": { "type": "integer" },
+        "scopes_unavailable": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "string" }
       },
       "additionalProperties": false
     },
@@ -156,19 +66,18 @@
       "type": "object",
       "required": ["severity", "code", "message"],
       "properties": {
-        "severity": {
-          "type": "string",
-          "enum": ["error", "warning", "info"],
-          "description": "Diagnostic severity"
-        },
-        "code": {
-          "type": "string",
-          "description": "Diagnostic code"
-        },
-        "message": {
-          "type": "string",
-          "description": "Human-readable diagnostic message"
-        }
+        "severity": { "type": "string", "enum": ["error", "warning", "info"] },
+        "code": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "EvidenceEntry": {
+      "type": "object",
+      "required": ["key"],
+      "properties": {
+        "key": { "type": "string" },
+        "value": {}
       },
       "additionalProperties": false
     }

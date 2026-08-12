@@ -1,44 +1,28 @@
-"""Coverage model — tracks field-level parse coverage."""
+"""Honest coverage model — reports actual semantic loss, not key counts."""
 from __future__ import annotations
 
-from uasset_read.semantic.ir import CoverageInfo
+from uasset_read.semantic.models import CoverageInfo
 
 
 class CoverageModel:
-    """Tracks expected vs parsed fields and builds CoverageInfo."""
+    """Tracks domain scopes and builds CoverageInfo."""
 
     def __init__(self) -> None:
         self._expected: int = 0
-        self._parsed: int = 0
-        self._unparsed: list[str] = []
+        self._available: int = 0
+        self._unavailable: list[str] = []
 
-    def track(
-        self,
-        fields_expected: int,
-        fields_parsed: int,
-        unparsed_fields: list[str],
-    ) -> None:
-        """Record field coverage for a domain section.
+    def track(self, scope: str, available: bool) -> None:
+        self._expected += 1
+        if available:
+            self._available += 1
+        else:
+            self._unavailable.append(scope)
 
-        Args:
-            fields_expected: Total fields expected by the domain extractor
-            fields_parsed: Fields successfully parsed
-            unparsed_fields: Names of fields that were not parsed
-        """
-        self._expected += fields_expected
-        self._parsed += fields_parsed
-        self._unparsed.extend(unparsed_fields)
-
-    def build(self) -> CoverageInfo:
-        """Build the immutable CoverageInfo.
-
-        Returns:
-            CoverageInfo with computed coverage percentage
-        """
-        pct = (self._parsed / self._expected * 100.0) if self._expected > 0 else 0.0
+    def build(self, notes: str = "") -> CoverageInfo:
         return CoverageInfo(
-            fields_expected=self._expected,
-            fields_parsed=self._parsed,
-            coverage_pct=round(pct, 1),
-            unparsed_fields=tuple(self._unparsed),
+            scopes_expected=self._expected,
+            scopes_available=self._available,
+            scopes_unavailable=tuple(self._unavailable),
+            notes=notes,
         )

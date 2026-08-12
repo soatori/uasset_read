@@ -1,140 +1,144 @@
-"""Semantic IR builder -- orchestrates classifier, domain extractor, and IR assembly.
+"""Semantic IR builder — the single semantic-projection boundary.
 
-This is the main entry point for building a SemanticIR from PackageIR.
+Orchestrates: main-asset selection, reference normalization, coverage/diagnostics.
+Does NOT perform standard/debug projection (that is project_semantic's job).
 """
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from uasset_read.semantic.kinds import AssetKind, classify_asset
-from uasset_read.semantic.ir import (
-    SemanticIR, AssetMeta, ContentNode, CoverageInfo,
+from uasset_read.semantic.models import (
+    SemanticIR, AssetMeta, AssetStatus, EvidenceEntry,
 )
-from uasset_read.semantic.references import ReferenceTable
+from uasset_read.semantic.kinds import resolve_asset_type
+from uasset_read.semantic.references import collect_references
 from uasset_read.semantic.coverage import CoverageModel
 from uasset_read.semantic.diagnostics import DiagnosticAggregator
-from uasset_read.semantic.graph_domain import extract_graph
-from uasset_read.semantic.structured_domain import extract_structured
-from uasset_read.semantic.resource_domain import extract_resource
+from uasset_read.semantic.extensions import get_extractor
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
 
 
-def _extract_content(export: ExportIR, kind: AssetKind) -> ContentNode:
-    """Route to the appropriate domain extractor based on kind."""
-    if kind == AssetKind.GRAPH:
-        return extract_graph(export)
-    if kind == AssetKind.STRUCTURED:
-        return extract_structured(export)
-    if kind == AssetKind.RESOURCE:
-        return extract_resource(export)
-    # Opaque -- minimal metadata
-    children: list[ContentNode] = []
-    children.append(ContentNode(key="class_name", value=export.object_class))
-    children.append(ContentNode(key="object_name", value=export.object_name))
-    children.append(ContentNode(key="serial_size", value=export.serial_size))
-    children.append(ContentNode(key="parse_status", value=export.parse_status or "opaque"))
-    children.sort(key=lambda c: c.key)
-    return ContentNode(key="root", children=tuple(children))
+def _select_primary_export(package_ir: PackageIR) -> ExportIR | None:
+    """Select the primary export using deterministic rules.
+
+    1. Prefer the single export marked with ``b_is_asset``.
+    2. Fallback: single top-level export whose name matches package basename.
+    3. Otherwise: ``None`` (opaque/partial).
+
+    Do NOT guess when there are multiple candidates, no candidates,
+    or insufficient evidence.
+    """
+    # Rule 1: b_is_asset
+    candidates = [e for e in package_ir.exports if getattr(e, "b_is_asset", False)]
+    if len(candidates) == 1:
+        return candidates[0]
+
+    # Rule 2: name matches package basename
+    basename = package_ir.header.package_name.rsplit("/", 1)[-1] if package_ir.header.package_name else ""
+    if basename:
+        name_matches = [e for e in package_ir.exports if e.object_name == basename]
+        if len(name_matches) == 1:
+            return name_matches[0]
+
+    return None
 
 
-def build_semantic_ir(package_ir: PackageIR, mode: str = "standard") -> SemanticIR:
-    """Build a SemanticIR from PackageIR.
+def build_semantic_ir(package_ir: PackageIR) -> SemanticIR:
+    """Build a mode-independent SemanticIR from PackageIR.
+
+    This is the single semantic-projection boundary. It does NOT perform
+    standard/debug pruning — use ``project_semantic()`` for that.
+    The returned IR always has ``mode="standard"`` as a placeholder;
+    ``project_semantic()`` stamps the actual target mode.
 
     Args:
         package_ir: PackageIR from ir_builder
-        mode: "standard" or "debug"
 
     Returns:
-        SemanticIR ready for rendering
+        SemanticIR ready for projection and rendering
     """
-    # Pick the primary export: prefer b_is_asset=True, else first non-Blueprint
-    primary_export: ExportIR | None = None
-    for export in package_ir.exports:
-        if export.b_is_asset:
-            primary_export = export
-            break
-    if primary_export is None:
-        for export in package_ir.exports:
-            if export.object_class and (
-                export.object_class.endswith("_C")
-                or export.object_class in ("BlueprintGeneratedClass", "AnimBlueprintGeneratedClass")
-            ):
-                continue
-            primary_export = export
-            break
+    diag = DiagnosticAggregator()
+    if package_ir.diagnostics_data:
+        diag.from_ir(package_ir.diagnostics_data)
 
-    if primary_export is None and package_ir.exports:
-        primary_export = package_ir.exports[0]
+    primary = _select_primary_export(package_ir)
 
-    if primary_export is None:
-        # No exports -- return opaque
+    if primary is None:
+        diag.add("warning", "NO_EXPORTS", "No suitable primary export found")
         return SemanticIR(
             format="uasset_read.asset_semantic",
-            format_version="1.0.0",
-            mode=mode,
-            asset=AssetMeta(
-                kind=AssetKind.OPAQUE,
-                class_name="Unknown",
-                object_name="Unknown",
-            ),
-            references=(),
-            content=ContentNode(key="root", children=()),
-            coverage=CoverageInfo(fields_expected=0, fields_parsed=0, coverage_pct=0.0, unparsed_fields=()),
-            diagnostics=(),
+            format_version="1.0",
+            mode="",
+            asset_type="unknown",
+            asset=AssetMeta(package=package_ir.header.package_name or "", name="unknown"),
+            status=AssetStatus(parse="failed", representation="opaque"),
+            references=collect_references(package_ir.imports, package_ir.exports),
+            diagnostics=diag.build(),
         )
 
-    # Classify
-    kind = classify_asset(primary_export.object_class, primary_export.asset_type_data)
+    # Resolve asset type
+    asset_type = resolve_asset_type(primary.object_class or "")
 
-    # Build references
-    ref_table = ReferenceTable()
-    references = ref_table.collect(package_ir.imports, package_ir.exports)
+    # Build status
+    parse_status = primary.parse_status or "success"
+    parse_map = {"success": "complete", "partial": "partial", "partial_metadata": "partial", "failed": "failed", "opaque": "partial"}
+    representation_map = {"success": "full", "partial": "partial", "partial_metadata": "partial", "failed": "opaque", "opaque": "opaque"}
 
-    # Extract content
-    content = _extract_content(primary_export, kind)
-
-    # Build coverage
-    coverage_model = CoverageModel()
-    if primary_export.asset_type_data:
-        atd = primary_export.asset_type_data
-        fields_expected = len(atd)
-        fields_parsed = sum(1 for v in atd.values() if v is not None)
-        unparsed = [k for k, v in atd.items() if v is None]
-        coverage_model.track(fields_expected, fields_parsed, unparsed)
+    # Unknown type -> opaque representation + evidence with raw class
+    evidence: list = []
+    if asset_type == "unknown":
+        representation = "opaque"
+        diag.add("info", "UNKNOWN_TYPE", f"Unresolved asset type for class '{primary.object_class}'")
+        # Preserve exact UE class in evidence when normalized type is insufficient
+        evidence.append(EvidenceEntry(key="asset_class", value=primary.object_class or ""))
     else:
-        # Opaque -- nothing was actually parsed
-        coverage_model.track(0, 0, [])
+        representation = representation_map.get(parse_status, "opaque")
 
-    # Collect diagnostics
-    diag_agg = DiagnosticAggregator()
-    if package_ir.diagnostics_data:
-        diag_agg.from_ir(package_ir.diagnostics_data)
-
-    # Inject diagnostic when parse status indicates incompleteness but no diagnostics exist
-    parse_status = primary_export.parse_status or "success"
-    if parse_status == "partial" and not diag_agg.build():
-        diag_agg.add("warning", "PARTIAL_PARSE", f"Asset '{primary_export.object_name}' was only partially parsed")
-    elif parse_status == "failed" and not diag_agg.build():
-        diag_agg.add("error", "PARSE_FAILED", f"Asset '{primary_export.object_name}' failed to parse")
-
-    # Asset meta
-    asset_meta = AssetMeta(
-        kind=kind,
-        class_name=primary_export.object_class or "Unknown",
-        object_name=primary_export.object_name or "Unknown",
-        package_path=package_ir.header.package_name,
-        parse_status=primary_export.parse_status or "success",
+    status = AssetStatus(
+        parse=parse_map.get(parse_status, "partial"),
+        representation=representation,
     )
+
+    # Inject diagnostics for partial/failed
+    if status.parse == "partial" and not any(d.code == "PARTIAL_PARSE" for d in diag.build()):
+        diag.add("warning", "PARTIAL_PARSE", f"Asset '{primary.object_name}' was only partially parsed")
+    elif status.parse == "failed" and not any(d.code == "PARSE_FAILED" for d in diag.build()):
+        diag.add("error", "PARSE_FAILED", f"Asset '{primary.object_name}' failed to parse")
+
+    # Coverage + Domain Content
+    cov = CoverageModel()
+    content: dict = {}
+    evidence_list: list = list(evidence)
+
+    extractor = get_extractor(primary.object_class or "")
+    if extractor is not None and status.representation != "opaque":
+        # Domain extractor populates content and tracks its own coverage scopes
+        content = extractor(primary, cov, evidence_list)
+    else:
+        # No extractor or opaque — track domain_content as unavailable
+        cov.track("domain_content", False)
+
+    coverage = cov.build()
+
+    # References
+    references = collect_references(package_ir.imports, package_ir.exports)
 
     return SemanticIR(
         format="uasset_read.asset_semantic",
-        format_version="1.0.0",
-        mode=mode,
-        asset=asset_meta,
+        format_version="1.0",
+        mode="",
+        asset_type=asset_type,
+        asset=AssetMeta(
+            package=package_ir.header.package_name or "",
+            name=primary.object_name or "unknown",
+            generated_class=primary.object_class if asset_type == "unknown" else None,
+        ),
+        status=status,
         references=references,
         content=content,
-        coverage=coverage_model.build(),
-        diagnostics=diag_agg.build(),
+        coverage=coverage,
+        diagnostics=diag.build(),
+        evidence=tuple(evidence_list),
     )

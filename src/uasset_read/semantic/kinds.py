@@ -1,75 +1,51 @@
-"""Asset kind classifier — maps UE class names to semantic kinds.
+"""Asset type resolver — maps UE class names to normalized semantic type strings.
 
-Classification rules:
-- GRAPH: Material, SoundCue, Niagara (node-based assets)
-- STRUCTURED: StaticMesh, Skeleton, AnimSequence, DataTable (structured data)
-- RESOURCE: Texture2D, SoundWave (binary resources with metadata)
-- OPAQUE: Everything else (including Blueprint — handled by #554)
+Each type string is a stable slug used as the common ``asset_type`` discriminator.
+Exact UE class names are preserved only in debug evidence or when type is ``unknown``.
 """
 from __future__ import annotations
 
-from enum import Enum
-
-
-class AssetKind(str, Enum):
-    """Semantic asset kind."""
-    GRAPH = "graph"
-    STRUCTURED = "structured"
-    RESOURCE = "resource"
-    OPAQUE = "opaque"
-
-
-# Classification lookup: UE class name → AssetKind
-_CLASS_KIND_MAP: dict[str, AssetKind] = {
-    # Graph domain
-    "Material": AssetKind.GRAPH,
-    "MaterialInstance": AssetKind.GRAPH,
-    "MaterialInstanceConstant": AssetKind.GRAPH,
-    "MaterialInstanceDynamic": AssetKind.GRAPH,
-    "SoundCue": AssetKind.GRAPH,
-    "NiagaraSystem": AssetKind.GRAPH,
-    "NiagaraEmitter": AssetKind.GRAPH,
-    "NiagaraScript": AssetKind.GRAPH,
-    # Structured domain
-    "StaticMesh": AssetKind.STRUCTURED,
-    "SkeletalMesh": AssetKind.STRUCTURED,
-    "Skeleton": AssetKind.STRUCTURED,
-    "AnimSequence": AssetKind.STRUCTURED,
-    "AnimMontage": AssetKind.STRUCTURED,
-    "DataTable": AssetKind.STRUCTURED,
-    "CurveTable": AssetKind.STRUCTURED,
-    # Resource domain
-    "Texture2D": AssetKind.RESOURCE,
-    "TextureCube": AssetKind.RESOURCE,
-    "SoundWave": AssetKind.RESOURCE,
+_TYPE_MAP: dict[str, str] = {
+    # Material
+    "Material": "material",
+    "MaterialInstance": "material",
+    "MaterialInstanceConstant": "material",
+    "MaterialInstanceDynamic": "material",
+    # Sound
+    "SoundCue": "sound_cue",
+    "SoundWave": "sound_wave",
+    # Niagara
+    "NiagaraSystem": "niagara_system",
+    "NiagaraEmitter": "niagara_emitter",
+    "NiagaraScript": "niagara_script",
+    # Mesh
+    "StaticMesh": "static_mesh",
+    "SkeletalMesh": "skeletal_mesh",
+    "Skeleton": "skeleton",
+    # Animation
+    "AnimSequence": "anim_sequence",
+    "AnimMontage": "anim_montage",
+    # Data
+    "DataTable": "data_table",
+    "CurveTable": "curve_table",
+    # Texture
+    "Texture2D": "texture",
+    "TextureCube": "texture",
+    # Blueprint
+    "BlueprintGeneratedClass": "blueprint",
+    "AnimBlueprintGeneratedClass": "anim_blueprint",
 }
 
-# Classes explicitly excluded (Blueprint domain — #554)
-_EXCLUDED_CLASSES = frozenset({
-    "BlueprintGeneratedClass",
-    "AnimBlueprintGeneratedClass",
-})
 
-
-def classify_asset(export_class: str, asset_type_data: dict | None = None) -> AssetKind:
-    """Classify an export into a semantic asset kind.
+def resolve_asset_type(export_class: str) -> str:
+    """Resolve a UE class name to a normalized semantic type string.
 
     Args:
-        export_class: UE class name (e.g. "Material", "StaticMesh")
-        asset_type_data: Optional asset type data dict from ExportIR
+        export_class: UE class name (e.g. "Material", "Texture2D")
 
     Returns:
-        AssetKind enum value
+        Normalized type string, or "unknown" if unresolvable.
     """
     if not export_class:
-        return AssetKind.OPAQUE
-
-    kind = _CLASS_KIND_MAP.get(export_class)
-    if kind is not None:
-        return kind
-
-    # Blueprint classes → opaque (handled by #554)
-    if export_class in _EXCLUDED_CLASSES:
-        return AssetKind.OPAQUE
-
-    return AssetKind.OPAQUE
+        return "unknown"
+    return _TYPE_MAP.get(export_class, "unknown")

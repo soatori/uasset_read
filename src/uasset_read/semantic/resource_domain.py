@@ -1,51 +1,84 @@
-"""Resource domain extractor — extracts metadata from resource assets.
+"""Resource domain extractor — Texture2D / SoundWave metadata.
 
-Resource assets (Texture2D, SoundWave) output only metadata:
-dimensions, format, duration, sizes, SHA-256. No pixel/audio arrays.
+Returns a plain dict (no ContentNode) that becomes ``SemanticIR.content``.
+Tracks three coverage scopes: ``resource_metadata``, ``resource_properties``,
+and ``asset_type_data``.
 """
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from uasset_read.semantic.ir import ContentNode
-
 if TYPE_CHECKING:
     from uasset_read.models.ir import ExportIR
+    from uasset_read.semantic.coverage import CoverageModel
+    from uasset_read.semantic.models import EvidenceEntry
+
+# Property keys considered resource-relevant (Texture2D / SoundWave).
+_RESOURCE_PROPERTY_KEYS: frozenset[str] = frozenset({
+    "SizeX",
+    "SizeY",
+    "SizeZ",
+    "NumMips",
+    "Format",
+    "bHasAlphaChannel",
+    "SRGB",
+    "LODGroup",
+    "SampleRate",
+    "NumChannels",
+    "Duration",
+})
 
 
-def extract_resource(export: ExportIR) -> ContentNode:
-    """Extract metadata from a resource export.
+def extract_resource(export: ExportIR, coverage: CoverageModel, evidence_list: list[EvidenceEntry] | None = None) -> dict:
+    """Extract resource-relevant data from *export*.
 
-    Args:
-        export: ExportIR for a resource asset
+    Parameters
+    ----------
+    export:
+        The export intermediate representation.
+    coverage:
+        Coverage tracker — called with ``track()`` for every data scope
+        this extractor attempts to populate.
+    evidence_list:
+        Optional mutable list for debug evidence entries.
 
-    Returns:
-        ContentNode tree with resource metadata
+    Returns
+    -------
+    dict
+        Deterministic, sorted-key dictionary ready for ``SemanticIR.content``.
     """
-    children: list[ContentNode] = []
+    result: dict = {}
 
-    # Core metadata
-    children.append(ContentNode(key="class_name", value=export.object_class))
-    children.append(ContentNode(key="object_name", value=export.object_name))
-    children.append(ContentNode(key="serial_size", value=export.serial_size))
+    # ── resource_metadata (always available) ──────────────────────────
+    result["class_name"] = export.object_class
+    result["object_name"] = export.object_name
+    result["serial_size"] = export.serial_size
+    coverage.track("resource_metadata", True)
 
-    # Extract properties as metadata (only known resource-relevant keys)
-    _RESOURCE_PROPERTY_KEYS = frozenset({
-        "SizeX", "SizeY", "SizeZ", "NumMips", "Format",
-        "bHasAlphaChannel", "SRGB", "LODGroup",
-        "SampleRate", "NumChannels", "Duration",
-    })
-    for prop in export.properties:
-        if prop.name in _RESOURCE_PROPERTY_KEYS:
-            children.append(ContentNode(key=prop.name, value=prop.value))
+    # ── resource_properties ───────────────────────────────────────────
+    props = {p.name: p.value for p in export.properties}
+    resource_props: dict = {}
+    for key in sorted(_RESOURCE_PROPERTY_KEYS):
+        if key in props:
+            resource_props[key] = props[key]
 
-    # Asset type data (parse_status, raw_offset, sample_size)
-    if export.asset_type_data:
+    if resource_props:
+        result["properties"] = resource_props
+        coverage.track("resource_properties", True)
+    else:
+        coverage.track("resource_properties", False)
+
+    # ── asset_type_data ───────────────────────────────────────────────
+    atd = export.asset_type_data
+    if atd:
+        atd_slice: dict = {}
         for key in ("parse_status", "raw_offset", "sample_size"):
-            if key in export.asset_type_data:
-                children.append(ContentNode(key=key, value=export.asset_type_data[key]))
+            if key in atd:
+                atd_slice[key] = atd[key]
+        if atd_slice:
+            result["asset_type_data"] = atd_slice
+        coverage.track("asset_type_data", True)
+    else:
+        coverage.track("asset_type_data", False)
 
-    # Sort by key for deterministic output
-    children.sort(key=lambda c: c.key)
-
-    return ContentNode(key="root", children=tuple(children))
+    return result
