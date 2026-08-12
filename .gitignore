@@ -67,6 +67,9 @@ memory/
 # Codex local data
 .codex/
 
+# Orca local data
+.orca/
+
 # Test files - track test Python files and directories
 tests/*
 !tests/__init__.py
