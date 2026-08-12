@@ -15,7 +15,9 @@ from uasset_read.renderers.base import RenderOptions
 
 ROOT = Path(__file__).resolve().parents[2]
 SAMPLES = ROOT / "tests" / "samples"
-SCHEMA = json.loads((ROOT / "schemas" / "semantic.schema.json").read_text(encoding="utf-8"))
+from uasset_read.schema_loader import load_semantic_schema
+
+SCHEMA = load_semantic_schema()
 
 
 @pytest.mark.parametrize("level", ["compact", "verbose", ""])

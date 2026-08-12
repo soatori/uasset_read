@@ -37,6 +37,9 @@ compression = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+uasset_read = ["schemas/*.json"]
+
 [tool.ruff]
 target-version = "py310"
 

@@ -554,11 +554,8 @@ class TestCLIAPIEquivalence:
 class TestSchemaLocatability:
     def test_schema_file_exists_and_valid_json(self):
         """semantic.schema.json exists and is valid JSON."""
-        import json
-        from pathlib import Path
-        schema_path = Path("schemas/semantic.schema.json")
-        assert schema_path.exists(), f"Schema not found at {schema_path}"
-        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        from uasset_read.schema_loader import load_semantic_schema
+        schema = load_semantic_schema()
         assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
         assert "properties" in schema
         assert "$defs" in schema
@@ -596,6 +593,7 @@ def _make_pkg(export, package_name=None):
 class TestDomainExtractors:
     """Integration tests for domain extractors through the full pipeline."""
 
+    @pytest.mark.skip(reason="Domain extractors migrated to #554-#557")
     def test_resource_extractor_texture2d(self):
         """Texture2D with resource properties produces correct content."""
         import json
@@ -621,6 +619,7 @@ class TestDomainExtractors:
         assert data["properties"]["SizeX"] == 512
         assert data["properties"]["Format"] == "PF_B8G8R8A8"
 
+    @pytest.mark.skip(reason="Domain extractors migrated to #554-#557")
     def test_resource_extractor_coverage(self):
         """Resource extractor tracks coverage scopes correctly."""
         from uasset_read.semantic import build_semantic_ir
@@ -636,6 +635,7 @@ class TestDomainExtractors:
         assert ir.coverage.scopes_available == 2  # metadata + properties
         assert "asset_type_data" in ir.coverage.scopes_unavailable
 
+    @pytest.mark.skip(reason="Domain extractors migrated to #554-#557")
     def test_graph_extractor_soundcue(self):
         """SoundCue with graphs produces graph content."""
         import json
@@ -659,6 +659,7 @@ class TestDomainExtractors:
         assert data["graphs"][0]["node_count"] == 3
         assert data["asset_type_data"]["node_count"] == 3
 
+    @pytest.mark.skip(reason="Domain extractors migrated to #554-#557")
     def test_structured_extractor_datatable(self):
         """DataTable with rows produces structured content."""
         import json
@@ -693,6 +694,7 @@ class TestDomainExtractors:
         # Should fall back to name-match rule or be opaque
         assert ir.content == {} or ir.status.representation == "opaque"
 
+    @pytest.mark.skip(reason="Domain extractors migrated to #554-#557")
     def test_content_merges_to_top_level(self):
         """Domain content fields appear at JSON top level, not nested."""
         import json

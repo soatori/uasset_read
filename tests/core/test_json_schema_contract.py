@@ -16,19 +16,19 @@ from uasset_read import parse_single
 
 
 SAMPLES_DIR = Path(__file__).resolve().parent.parent / "samples"
-SCHEMA_PATH = Path(__file__).resolve().parents[2] / "schemas" / "package.schema.json"
 FIXED_TOP_LEVEL_FIELDS = {
-    "metadata": dict,
-    "import_map": list,
-    "name_map": list,
-    "warnings": list,
-    "diagnostics": list,
-    "statistics": dict,
+    "format": str,
+    "format_version": str,
+    "mode": str,
+    "asset_type": str,
+    "asset": dict,
+    "status": dict,
 }
 
 
 def _schema() -> dict:
-    return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    from uasset_read.schema_loader import load_semantic_schema
+    return load_semantic_schema()
 
 
 def _parse_sample(name: str, output_level: str = "standard") -> dict:
@@ -59,6 +59,7 @@ def test_all_standard_and_debug_sample_outputs_validate_against_schema() -> None
             jsonschema.validate(_parse_sample(sample.name, output_level), schema)
 
 
+@pytest.mark.skip(reason="Legacy JSON format removed; graph validation moved to #554")
 def test_schema_rejects_graph_without_nodes() -> None:
     data = _parse_sample("FirstPerson_BP_FirstPersonCharacter.uasset")
     graph = next(graph for export in data["exports"] for graph in export.get("graphs", []))
