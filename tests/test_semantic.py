@@ -1,6 +1,11 @@
 """Consolidated semantic tests for Issue #551 — common semantic JSON foundation."""
 import pytest
 
+from uasset_read.models.ir import (
+    ExportIR, ExportRawIR, ImportIR, PackageIR, PackageHeaderIR,
+    DiagnosticsDataIR, LinkerSummaryIR,
+)
+
 
 class TestAssetTypeResolution:
     def test_known_types(self):
@@ -122,3 +127,160 @@ class TestProjection:
         assert result.format == ir.format
         assert result.mode == "standard"
         assert result.asset_type == ir.asset_type
+
+
+class TestPrimaryAssetSelection:
+    def test_b_is_asset_preferred(self):
+        """Export with b_is_asset=True is selected as primary."""
+        from uasset_read.semantic.builder import build_semantic_ir
+        exports = [
+            ExportIR(index=0, object_name="Other", object_class="Texture2D",
+                     serial_size=100, outer_index_resolved=None, super_index_resolved=None,
+                     parent_class=None, properties=[], graphs=[], bulk_data=None),
+            ExportIR(index=1, object_name="BP_Main", object_class="BlueprintGeneratedClass",
+                     serial_size=2048, outer_index_resolved=None, super_index_resolved=None,
+                     parent_class=None, properties=[], graphs=[], bulk_data=None,
+                     ue_export_raw=ExportRawIR(b_is_asset=True)),
+        ]
+        ir = PackageIR(
+            header=PackageHeaderIR(package_name="/Game/BP_Main", package_class="Package",
+                                   package_flags=0, total_export_count=2, total_import_count=0, ue_version="5.3"),
+            name_map=[], imports=[], exports=exports,
+            linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+            diagnostics_data=DiagnosticsDataIR(),
+        )
+        semantic = build_semantic_ir(ir)
+        assert semantic.asset.name == "BP_Main"
+        assert semantic.asset_type == "blueprint"
+
+    def test_fallback_to_package_basename(self):
+        """When no b_is_asset, fallback to export matching package basename."""
+        from uasset_read.semantic.builder import build_semantic_ir
+        exports = [
+            ExportIR(index=0, object_name="BP_Foo", object_class="Texture2D",
+                     serial_size=100, outer_index_resolved=None, super_index_resolved=None,
+                     parent_class=None, properties=[], graphs=[], bulk_data=None),
+        ]
+        ir = PackageIR(
+            header=PackageHeaderIR(package_name="/Game/BP_Foo", package_class="Package",
+                                   package_flags=0, total_export_count=1, total_import_count=0, ue_version="5.3"),
+            name_map=[], imports=[], exports=exports,
+            linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+            diagnostics_data=DiagnosticsDataIR(),
+        )
+        semantic = build_semantic_ir(ir)
+        assert semantic.asset.name == "BP_Foo"
+
+    def test_no_exports_emits_opaque(self):
+        """No exports -> opaque status with diagnostic."""
+        from uasset_read.semantic.builder import build_semantic_ir
+        ir = PackageIR(
+            header=PackageHeaderIR(package_name="/Game/Empty", package_class="Package",
+                                   package_flags=0, total_export_count=0, total_import_count=0, ue_version="5.3"),
+            name_map=[], imports=[], exports=[],
+            linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+            diagnostics_data=DiagnosticsDataIR(),
+        )
+        semantic = build_semantic_ir(ir)
+        assert semantic.status.representation == "opaque"
+        assert any(d.code == "NO_EXPORTS" for d in semantic.diagnostics)
+
+
+class TestDiagnosticAggregation:
+    def test_diagnostics_deduplicated(self):
+        """Duplicate diagnostics are deduplicated by DiagnosticAggregator."""
+        from uasset_read.semantic.diagnostics import DiagnosticAggregator
+        agg = DiagnosticAggregator()
+        agg.add("error", "PARSE_ERROR", "duplicate message")
+        agg.add("error", "PARSE_ERROR", "duplicate message")
+        agg.add("warning", "PARSE_WARNING", "other")
+        result = agg.build()
+        assert len(result) == 2  # not 3
+
+    def test_from_ir_populates(self):
+        """DiagnosticAggregator.from_ir() populates from DiagnosticsDataIR."""
+        from uasset_read.semantic.diagnostics import DiagnosticAggregator
+        data = DiagnosticsDataIR(errors=["err1"], warnings=["warn1"])
+        agg = DiagnosticAggregator()
+        agg.from_ir(data)
+        result = agg.build()
+        assert len(result) == 2
+        assert result[0].severity == "error"
+        assert result[1].severity == "warning"
+
+
+class TestCoverageModel:
+    def test_all_available(self):
+        """All scopes available -> 0 unavailable."""
+        from uasset_read.semantic.coverage import CoverageModel
+        cov = CoverageModel()
+        cov.track("scope_a", True)
+        cov.track("scope_b", True)
+        info = cov.build()
+        assert info.scopes_expected == 2
+        assert info.scopes_available == 2
+        assert info.scopes_unavailable == ()
+
+    def test_some_unavailable(self):
+        """Some scopes unavailable -> listed."""
+        from uasset_read.semantic.coverage import CoverageModel
+        cov = CoverageModel()
+        cov.track("domain_content", True)
+        cov.track("extra_data", False)
+        info = cov.build(notes="partial coverage")
+        assert info.scopes_expected == 2
+        assert info.scopes_available == 1
+        assert info.scopes_unavailable == ("extra_data",)
+        assert info.notes == "partial coverage"
+
+
+class TestReferenceCollection:
+    def test_sorted_by_kind_then_index(self):
+        """References sorted by (kind, index)."""
+        from uasset_read.semantic.references import collect_references
+        exports = [
+            ExportIR(index=0, object_name="Exp0", object_class="Texture2D",
+                     serial_size=100, outer_index_resolved=None, super_index_resolved=None,
+                     parent_class=None, properties=[], graphs=[], bulk_data=None),
+            ExportIR(index=1, object_name="Exp1", object_class="Material",
+                     serial_size=200, outer_index_resolved=None, super_index_resolved=None,
+                     parent_class=None, properties=[], graphs=[], bulk_data=None),
+        ]
+        imports = [
+            ImportIR(index=0, class_package="/Script/Engine",
+                     class_name="Actor", object_name="Actor_0"),
+        ]
+        refs = collect_references(imports, exports)
+        # Sorted by (kind, index): "export" < "import" alphabetically
+        assert refs[0].kind == "export"
+        assert refs[0].index == 0
+        assert refs[1].kind == "export"
+        assert refs[1].index == 1
+        assert refs[2].kind == "import"
+        assert refs[2].index == 0
+
+
+class TestExtensionRegistry:
+    def test_register_and_lookup(self):
+        """Register an extractor and look it up."""
+        from uasset_read.semantic.extensions import register_extension, get_extractor, is_registered
+        def dummy_extractor(export_ir):
+            return {}
+        register_extension("Material", dummy_extractor)
+        assert is_registered("Material")
+        assert get_extractor("Material") is dummy_extractor
+        assert get_extractor("NonExistent") is None
+        # Cleanup
+        from uasset_read.semantic.extensions import _REGISTRY
+        _REGISTRY.pop("Material", None)
+
+    def test_duplicate_registration_raises(self):
+        """Duplicate registration raises ValueError."""
+        from uasset_read.semantic.extensions import register_extension, _REGISTRY
+        def dummy_extractor(export_ir):
+            return {}
+        register_extension("TestDup", dummy_extractor)
+        with pytest.raises(ValueError, match="already registered"):
+            register_extension("TestDup", dummy_extractor)
+        # Cleanup
+        _REGISTRY.pop("TestDup", None)
