@@ -1,10 +1,8 @@
-"""Consolidated renderer tests — registry, consistency, JSON schema, semantic.
+"""Consolidated renderer tests — registry, consistency.
 
 Merges tests from:
 - tests/test_renderer_consistency.py
-- tests/test_json_schema.py
 - tests/core/test_renderers.py
-- tests/semantic/test_renderer.py
 """
 from __future__ import annotations
 
@@ -14,9 +12,7 @@ import pytest
 
 from uasset_read.renderers import get_renderer, list_formats
 from uasset_read.renderers.base import RenderOptions
-from uasset_read.renderers.json_renderer import JSONRenderer
 from uasset_read.renderers.markdown_renderer import MarkdownRenderer
-from uasset_read.renderers.semantic_json_renderer import SemanticJSONRenderer
 from uasset_read.models.ir import (
     PackageIR,
     PackageHeaderIR,
@@ -71,12 +67,6 @@ def _make_ir(**kwargs) -> PackageIR:
     return PackageIR(**defaults)
 
 
-def _render_json(ir: PackageIR, **opts) -> dict:
-    renderer = JSONRenderer()
-    options = RenderOptions(**opts)
-    return json.loads(renderer.render(ir, options))
-
-
 # ---------------------------------------------------------------------------
 # Test 1: Renderer registry (list_formats, get_renderer, error handling)
 # ---------------------------------------------------------------------------
@@ -84,80 +74,32 @@ def _render_json(ir: PackageIR, **opts) -> dict:
 class TestRendererRegistry:
     """Renderer registry, format dispatch, and error handling."""
 
-    def test_registry_has_json_markdown_semantic(self):
+    def test_registry_has_markdown(self):
         formats = list_formats()
-        assert "json" in formats
         assert "markdown" in formats
         assert formats == sorted(formats)
-        assert isinstance(get_renderer("json"), JSONRenderer)
         assert isinstance(get_renderer("markdown"), MarkdownRenderer)
+
+    def test_json_not_in_renderer_registry(self):
+        """JSON format routes through semantic pipeline, not renderer registry."""
+        formats = list_formats()
+        assert "json" not in formats
+
+    def test_unknown_format_raises(self):
+        with pytest.raises(ValueError, match="Unknown render format"):
+            get_renderer("nonexistent_format")
 
 
 # ---------------------------------------------------------------------------
-# Test 2: JSON/Markdown filtering consistency (one representative test)
+# Test 2: Markdown filtering consistency
 # ---------------------------------------------------------------------------
 
 class TestRendererConsistency:
-    """JSON and Markdown renderers filter editor-internal data consistently."""
+    """Markdown renderer filters editor-internal data."""
 
-    def test_editor_variable_filtered_in_json_and_markdown(self):
+    def test_editor_variable_filtered_in_markdown(self):
         from uasset_read.models.ir import VariableIR
         variables = [VariableIR(name="UbergraphPages", type="bool", default_value="False", kind="user")]
         ir = _make_ir(variables=variables)
-        # JSON
-        json_data = json.loads(get_renderer("json").render(ir, RenderOptions()))
-        assert "UbergraphPages" not in [v["name"] for v in json_data.get("variables", [])]
-        # Markdown
         md_result = get_renderer("markdown").render(ir, RenderOptions())
         assert "UbergraphPages" not in md_result
-
-
-# ---------------------------------------------------------------------------
-# Test 3: JSON output structure (schema, required fields)
-# ---------------------------------------------------------------------------
-
-class TestJSONOutputStructure:
-    """JSON output structure: required fields, $schema."""
-
-    def test_required_fields_present(self):
-        ir = _make_ir()
-        data = _render_json(ir)
-        assert "status" in data
-        assert "summary" in data
-        assert "exports" in data
-        assert "status" in data["status"]
-
-
-# ---------------------------------------------------------------------------
-# Test 4: SemanticJSONRenderer output
-# ---------------------------------------------------------------------------
-
-class TestSemanticJSONRenderer:
-    """SemanticJSONRenderer: format, required fields, canonical key order."""
-
-    @pytest.fixture
-    def _semantic_ir(self):
-        from uasset_read.semantic.ir import SemanticIR, AssetMeta, CoverageInfo, ContentNode
-        from uasset_read.semantic.kinds import AssetKind
-        return SemanticIR(
-            format="uasset_read.asset_semantic",
-            format_version="1.0.0",
-            mode="standard",
-            asset=AssetMeta(kind=AssetKind.RESOURCE, class_name="Texture2D", object_name="T_Default"),
-            references=(),
-            content=ContentNode(key="root", children=()),
-            coverage=CoverageInfo(fields_expected=5, fields_parsed=5, coverage_pct=100.0, unparsed_fields=()),
-            diagnostics=(),
-        )
-
-    def test_semantic_valid_json_and_required_fields(self, _semantic_ir):
-        renderer = SemanticJSONRenderer()
-        data = json.loads(renderer.render(_semantic_ir, RenderOptions()))
-        assert data["format"] == "uasset_read.asset_semantic"
-        assert data["format_version"] == "1.0.0"
-        assert "mode" in data
-        assert "asset" in data
-        assert "content" in data
-        assert "coverage" in data
-        assert "diagnostics" in data
-

@@ -9,11 +9,6 @@ from uasset_read.models.ir import (
     PackageIR, PackageHeaderIR, ExportIR, ImportIR,
     DiagnosticsDataIR, LinkerSummaryIR,
 )
-from uasset_read.semantic.ir import (
-    SemanticIR, AssetMeta, CoverageInfo, ContentNode,
-)
-from uasset_read.semantic.kinds import AssetKind
-
 from uasset_read.semantic.models import (
     SemanticIR, AssetMeta, AssetStatus, CoverageInfo, DiagnosticEntry,
 )
