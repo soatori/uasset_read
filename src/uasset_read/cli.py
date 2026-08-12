@@ -1,6 +1,7 @@
-"""CLI 入口模块 — argparse 参数解析 + 委托 core 模块。
+"""CLI entry module — argparse parameter parsing + delegation to core module.
 
-核心逻辑与入口分离：core 模块提供纯解析函数，CLI 仅负责参数解析和输出写入。
+Core logic and entry point are separated: core module provides pure parsing functions,
+CLI only handles parameter parsing and output writing.
 """
 
 import json
@@ -18,10 +19,10 @@ _logger = logging.getLogger(__name__)
 
 
 def _sanitize_error_message(message: str) -> str:
-    """清理异常消息中的内部路径，防止信息泄露。
+    """Clean internal paths from exception messages to prevent information leakage.
 
-    将绝对路径替换为 basename，保留异常类型和关键信息。
-    详细原始消息可通过 DEBUG 级别日志获取。
+    Replace absolute paths with basename, preserve exception type and key information.
+    Detailed original messages can be obtained via DEBUG level logging.
     """
     def basename(path: str) -> str:
         normalized = path.rstrip("\\/").replace("\\", "/")
@@ -183,7 +184,7 @@ def _log_config_from_args(args) -> LogConfig:
 
 
 def _handle_batch(args) -> None:
-    """处理批量导出模式。"""
+    """Handle batch export mode."""
     import time
 
     input_dir = Path(args.file)
@@ -250,7 +251,7 @@ def _handle_clean_logs(args) -> None:
 
 
 def _handle_list_package_files(file_path: str, tolerant: bool) -> None:
-    """列出发现的 package 文件。"""
+    """List discovered package files."""
     from uasset_read.package import open_package_bundle
     try:
         bundle = open_package_bundle(file_path, tolerant=tolerant)
@@ -314,7 +315,7 @@ def main():
         _handle_list_package_files(args.file, tolerant)
         return
 
-    # --diff 模式
+    # --diff mode
     if args.diff is not None:
         from uasset_read.core import diff_single
         if args.diff is True:
