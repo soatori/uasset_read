@@ -966,3 +966,28 @@ class TestValidatorEnhancements:
 
         errors = validate_semantic_document(ir)
         assert any("opaque" in e.lower() and "diagnostic" in e.lower() for e in errors)
+
+
+class TestRendererRestructuring:
+    def test_content_not_overwrite_common_fields(self):
+        """Renderer must not let content overwrite common fields."""
+        from uasset_read.semantic.render import render_semantic_json
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus,
+        )
+
+        ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="standard",
+            asset_type="texture",
+            asset=AssetMeta(package="/Game/T_Default", name="T_Default"),
+            status=AssetStatus(parse="complete", representation="full"),
+            content={"format": "malicious", "status": {"parse": "hacked"}},
+        )
+
+        output = render_semantic_json(ir)
+        import json
+        data = json.loads(output)
+        assert data["format"] == "uasset_read.asset_semantic"
+        assert data["status"]["parse"] == "complete"
