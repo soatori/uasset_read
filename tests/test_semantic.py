@@ -984,6 +984,20 @@ class TestFunctionGraphsRemoved:
         assert "include_function_graphs" not in sig.parameters
 
 
+class TestDomainExtractorMigration:
+    def test_no_domain_logic_in_551(self):
+        """#551 should not contain domain-specific extractor logic."""
+        import os
+        semantic_dir = os.path.join(os.path.dirname(__file__), "..", "src", "uasset_read", "semantic")
+        for fname in ["graph_domain.py", "structured_domain.py", "resource_domain.py"]:
+            fpath = os.path.join(semantic_dir, fname)
+            if os.path.exists(fpath):
+                with open(fpath) as f:
+                    content = f.read()
+                # Should only contain stubs or comments
+                assert "def extract" not in content, f"{fname} still contains domain extractor logic"
+
+
 class TestRendererRestructuring:
     def test_content_not_overwrite_common_fields(self):
         """Renderer must not let content overwrite common fields."""
