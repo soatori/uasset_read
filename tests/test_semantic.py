@@ -299,6 +299,32 @@ class TestExtensionRegistry:
         _REGISTRY.pop("TestDup", None)
 
 
+class TestCoverageRepresentationConsistency:
+    def test_full_representation_requires_coverage(self):
+        """Full representation requires scopes_available == scopes_expected."""
+        from uasset_read.semantic.validator import validate_semantic_document
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus, CoverageInfo,
+        )
+
+        ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="standard",
+            asset_type="texture",
+            asset=AssetMeta(package="/Game/T_Default", name="T_Default"),
+            status=AssetStatus(parse="complete", representation="full"),
+            coverage=CoverageInfo(
+                scopes_expected=1,
+                scopes_available=0,
+                scopes_unavailable=("domain_content",),
+            ),
+        )
+
+        errors = validate_semantic_document(ir)
+        assert any("coverage" in e.lower() or "representation" in e.lower() for e in errors)
+
+
 class TestValidator:
     def test_valid_ir_returns_empty(self):
         from uasset_read.semantic.validator import validate_semantic_document

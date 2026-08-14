@@ -42,6 +42,12 @@ def validate_semantic_document(ir: SemanticIR) -> list[str]:
     if ir.mode == "standard" and ir.evidence:
         errors.append("Standard mode must not contain evidence entries")
 
+    if ir.status.representation == "full" and ir.coverage:
+        if ir.coverage.scopes_available < ir.coverage.scopes_expected:
+            errors.append(
+                f"representation='full' but coverage is {ir.coverage.scopes_available}/{ir.coverage.scopes_expected}"
+            )
+
     for diag in ir.diagnostics:
         if diag.severity not in _VALID_SEVERITIES:
             errors.append(f"Invalid diagnostic severity: '{diag.severity}'")
