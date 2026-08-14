@@ -15,7 +15,6 @@ def test_json_output_public_contract(blueprint_sample, measure):
             format="json",
             tolerant=True,
             force_full_parse=True,
-            include_function_graphs=True,
         )
         payload = json.loads(output)
 
