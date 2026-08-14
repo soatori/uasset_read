@@ -531,6 +531,41 @@ class TestRealAssetSmoke:
         assert standard_ir.evidence == ()
 
 
+class TestOpaqueFallback:
+    def test_unregistered_asset_is_opaque(self):
+        """Asset with a known type but no registered extractor must be opaque, not full."""
+        from uasset_read.semantic.builder import build_semantic_ir
+        from uasset_read.models.ir import PackageIR, PackageHeaderIR, ExportIR, LinkerSummaryIR, DiagnosticsDataIR
+
+        pkg = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Game/BP_Test",
+                package_class="Package",
+                package_flags=0,
+                total_export_count=1,
+                total_import_count=0,
+                ue_version="5.1",
+            ),
+            name_map=(),
+            imports=[],
+            exports=[
+                ExportIR(
+                    index=0, object_name="BP_Test", object_class="BlueprintGeneratedClass",
+                    serial_size=1024, outer_index_resolved=None,
+                    super_index_resolved=None, parent_class=None,
+                    properties=[], graphs=[], bulk_data=None,
+                ),
+            ],
+            linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+            diagnostics_data=DiagnosticsDataIR(),
+        )
+
+        ir = build_semantic_ir(pkg)
+        assert ir.asset_type == "blueprint"
+        assert ir.status.representation == "opaque"
+        assert any(d.code == "NO_EXTRACTOR" for d in ir.diagnostics)
+
+
 class TestCLIAPIEquivalence:
     def test_single_file_cli_matches_python_api(self):
         """CLI single-file output matches Python API output byte-for-byte."""

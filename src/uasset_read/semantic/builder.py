@@ -105,6 +105,11 @@ def build_semantic_ir(package_ir: PackageIR) -> SemanticIR:
     else:
         representation = representation_map.get(parse_status, "opaque")
 
+    # Known type but no registered extractor → opaque (not full)
+    if asset_type != "unknown" and get_extractor(primary.object_class or "") is None:
+        representation = "opaque"
+        diag.add("info", "NO_EXTRACTOR", f"No semantic extractor registered for class '{primary.object_class}'")
+
     status = AssetStatus(
         parse=parse_map.get(parse_status, "partial"),
         representation=representation,
