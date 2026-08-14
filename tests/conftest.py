@@ -111,26 +111,4 @@ def make_package_ir(export_class="Texture2D", **kwargs):
     return PackageIR(**defaults)
 
 
-def make_semantic_ir(mode="standard", **kwargs):
-    """Factory for minimal SemanticIR."""
-    defaults = dict(
-        format="uasset_read.asset_semantic",
-        format_version="1.0.0",
-        mode=mode,
-        asset=AssetMeta(
-            kind=AssetKind.RESOURCE,
-            class_name="Texture2D",
-            object_name="T_Default",
-        ),
-        references=(),
-        content=ContentNode(key="root", children=()),
-        coverage=CoverageInfo(
-            fields_expected=5,
-            fields_parsed=5,
-            coverage_pct=100.0,
-            unparsed_fields=(),
-        ),
-        diagnostics=(),
-    )
-    defaults.update(kwargs)
-    return SemanticIR(**defaults)
+
