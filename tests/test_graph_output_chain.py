@@ -80,7 +80,7 @@ class TestGraphOutputChain:
         result = parse_package(str(path))
         ir = build_package_ir(result)
         renderer = MarkdownRenderer()
-        output = renderer.render(ir, RenderOptions(output_level="normal"))
+        output = renderer.render(ir, RenderOptions(output_level="standard"))
 
         # 检查是否有图章节
         assert "## Graph:" in output or "## Event Graph" in output, \

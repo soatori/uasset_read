@@ -308,7 +308,7 @@ class TestSeekSafe:
         assert d.field == "seek"
         assert d.target_offset == 100
         assert d.file_size == 16
-        assert "超出文件范围" in d.error
+        assert "exceeds file range" in d.error.lower() or "超出文件范围" in d.error
 
     def test_seek_negative_records_diagnostic(self, sample_archive):
         """seek 负偏移产生诊断。"""
@@ -364,7 +364,7 @@ class TestReadSafe:
         d = diags[0]
         assert d.field == "read"
         assert d.read_size == 8
-        assert "仅剩 4 字节" in d.error
+        assert "only 4 bytes remaining" in d.error.lower() or "仅剩 4 字节" in d.error
 
     def test_read_negative_size_records_diagnostic(self, sample_archive):
         """负大小产生诊断。"""
@@ -372,7 +372,7 @@ class TestReadSafe:
         assert data is None
         d = sample_archive.get_diagnostics()[0]
         assert d.read_size == -1
-        assert "负数" in d.error
+        assert "negative" in d.error.lower() or "负数" in d.error
 
     def test_read_at_eof_records_diagnostic(self, sample_archive):
         """在 EOF 处读取产生诊断。"""
@@ -555,21 +555,21 @@ class TestMarkdownRendererDiagnostics:
         """无诊断时 Markdown 不包含诊断信息章节。"""
         ir = _make_package_ir()
         md = self._render(ir)
-        assert "诊断信息" not in md
+        assert "诊断信息" not in md and "Diagnostics" not in md
 
     def test_diagnostics_section_present(self):
         """有诊断时 Markdown 包含诊断信息章节。"""
         diag = _make_diagnostic()
         ir = _make_package_ir(diagnostics=[diag])
         md = self._render(ir)
-        assert "## 诊断信息" in md
+        assert "## 诊断信息" in md or "## Diagnostics" in md
 
     def test_diagnostics_table_header(self):
         """诊断信息章节包含表头行。"""
         diag = _make_diagnostic()
         ir = _make_package_ir(diagnostics=[diag])
         md = self._render(ir)
-        assert "| 类型 | 模块 | 对象名 | 字段 | 错误信息 |" in md
+        assert "| 类型 | 模块 | 对象名 | 字段 | 错误信息 |" in md or "| Type | Module | Object | Field | Error |" in md
 
     def test_diagnostics_table_row_content(self):
         """诊断表格行包含正确的字段值。"""

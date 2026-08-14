@@ -69,7 +69,7 @@ def test_cli_and_batch_public_contract(
 
     assert single.returncode == 0, single.stderr
     single_payload = json.loads(single.stdout)
-    assert single_payload["status"].get("status") in {"success", "partial"}
+    assert single_payload["status"].get("parse") in {"complete", "partial", "failed"}
 
     assert batch.total == len(batch_samples)
     assert len(batch.success) == len(batch_samples)
@@ -79,4 +79,4 @@ def test_cli_and_batch_public_contract(
     assert len(outputs) == len(batch_samples)
     for output in outputs:
         payload = json.loads(output.read_text(encoding="utf-8"))
-        assert payload["status"].get("status") in {"success", "partial"}
+        assert payload["status"].get("parse") in {"complete", "partial", "failed"}

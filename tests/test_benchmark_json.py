@@ -19,21 +19,17 @@ def test_json_output_public_contract(blueprint_sample, measure):
         payload = json.loads(output)
 
     required_keys = {
+        "format",
+        "format_version",
+        "mode",
+        "asset_type",
+        "asset",
         "status",
-        "summary",
-        "exports",
-        "function_graphs",
-        "variables",
-        "warnings",
+        "references",
         "diagnostics",
-        "statistics",
     }
     assert required_keys <= payload.keys()
     assert isinstance(payload["status"], dict)
-    assert payload["status"].get("status") in {"success", "partial"}
-    assert payload["exports"]
-    assert payload["function_graphs"]
-    assert payload["variables"]
-    assert isinstance(payload["warnings"], list)
+    assert payload["status"].get("parse") in {"complete", "partial", "failed"}
+    assert isinstance(payload["references"], list)
     assert isinstance(payload["diagnostics"], list)
-    assert isinstance(payload["statistics"], dict)

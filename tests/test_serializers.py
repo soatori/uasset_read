@@ -156,9 +156,9 @@ class TestPinArrayRecovery:
         assert result["count"] == valid_count
         assert result["confidence"] == "high"
 
-        recovery_logs = [r for r in captured if "P73-RECOVERY" in r.message]
+        recovery_logs = [r for r in captured if "P73-RECOVERY" in r.getMessage()]
         assert len(recovery_logs) > 0
-        log_msg = recovery_logs[0].message
+        log_msg = recovery_logs[0].getMessage()
         assert "confidence=" in log_msg
         assert "scan=" in log_msg
         assert "bad_count=" in log_msg
