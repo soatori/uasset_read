@@ -590,6 +590,43 @@ def _make_pkg(export, package_name=None):
     )
 
 
+class TestPrimaryExportTopLevel:
+    def test_nested_export_not_selected_by_basename(self):
+        """Nested export matching basename must not be primary when no top-level match exists."""
+        from uasset_read.semantic.builder import _select_primary_export
+        pkg = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Game/Foo",
+                package_class="Package",
+                package_flags=0,
+                total_export_count=2,
+                total_import_count=0,
+                ue_version="5.1",
+            ),
+            name_map=(),
+            imports=[],
+            exports=[
+                ExportIR(
+                    index=0, object_name="Other", object_class="Texture2D",
+                    serial_size=1024, outer_index_resolved=None,
+                    super_index_resolved=None, parent_class=None,
+                    properties=[], graphs=[], bulk_data=None,
+                ),
+                ExportIR(
+                    index=1, object_name="Foo", object_class="Texture2D",
+                    serial_size=512, outer_index_resolved="SomeOuter",
+                    super_index_resolved=None, parent_class=None,
+                    properties=[], graphs=[], bulk_data=None,
+                ),
+            ],
+            linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+            diagnostics_data=DiagnosticsDataIR(),
+        )
+
+        result = _select_primary_export(pkg)
+        assert result is None
+
+
 class TestDomainExtractors:
     """Integration tests for domain extractors through the full pipeline."""
 

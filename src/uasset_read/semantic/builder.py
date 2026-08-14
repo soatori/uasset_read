@@ -28,17 +28,26 @@ def _select_primary_export(package_ir: PackageIR) -> ExportIR | None:
     3. Otherwise: ``None`` (opaque/partial).
 
     Do NOT guess when there are multiple candidates, no candidates,
-    or insufficient evidence.
+    or insufficient evidence.  Nested exports (those with a non-None
+    ``outer_index_resolved``) are never considered primary.
     """
-    # Rule 1: b_is_asset
-    candidates = [e for e in package_ir.exports if getattr(e, "b_is_asset", False)]
+    # Rule 1: b_is_asset (only top-level)
+    candidates = [
+        e for e in package_ir.exports
+        if getattr(e, "b_is_asset", False)
+        and not getattr(e, "outer_index_resolved", None)
+    ]
     if len(candidates) == 1:
         return candidates[0]
 
-    # Rule 2: name matches package basename
+    # Rule 2: name matches package basename (only top-level)
     basename = package_ir.header.package_name.rsplit("/", 1)[-1] if package_ir.header.package_name else ""
     if basename:
-        name_matches = [e for e in package_ir.exports if e.object_name == basename]
+        name_matches = [
+            e for e in package_ir.exports
+            if e.object_name == basename
+            and not getattr(e, "outer_index_resolved", None)
+        ]
         if len(name_matches) == 1:
             return name_matches[0]
 
