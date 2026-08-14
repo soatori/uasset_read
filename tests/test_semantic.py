@@ -883,6 +883,51 @@ class TestRecursiveProjection:
         # Nested evidence must also be removed
         for func in standard.content.get("functions", []):
             assert "evidence" not in func
-        for var in standard.content.get("variables", []):
-            assert "evidence" not in var
-            assert "nested" not in var or "evidence" not in var.get("nested", {})
+            for var in standard.content.get("variables", []):
+                assert "evidence" not in var
+                assert "nested" not in var or "evidence" not in var.get("nested", {})
+
+
+class TestValidatorEnhancements:
+    def test_reference_index_unique(self):
+        """Reference indices must be unique within kind."""
+        from uasset_read.semantic.validator import validate_semantic_document
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus, ReferenceEntry,
+        )
+
+        ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="standard",
+            asset_type="texture",
+            asset=AssetMeta(package="/Game/T_Default", name="T_Default"),
+            status=AssetStatus(parse="complete", representation="full"),
+            references=(
+                ReferenceEntry(index=0, kind="import", class_name="A", object_name="A1"),
+                ReferenceEntry(index=0, kind="import", class_name="B", object_name="B1"),
+            ),
+        )
+
+        errors = validate_semantic_document(ir)
+        assert any("reference" in e.lower() and "unique" in e.lower() for e in errors)
+
+    def test_opaque_has_diagnostic(self):
+        """Opaque representation must have at least one diagnostic."""
+        from uasset_read.semantic.validator import validate_semantic_document
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus, DiagnosticEntry,
+        )
+
+        ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="standard",
+            asset_type="unknown",
+            asset=AssetMeta(package="/Game/Unknown", name="Unknown"),
+            status=AssetStatus(parse="failed", representation="opaque"),
+            diagnostics=(),
+        )
+
+        errors = validate_semantic_document(ir)
+        assert any("opaque" in e.lower() and "diagnostic" in e.lower() for e in errors)

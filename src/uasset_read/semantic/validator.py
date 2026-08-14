@@ -52,4 +52,16 @@ def validate_semantic_document(ir: SemanticIR) -> list[str]:
         if diag.severity not in _VALID_SEVERITIES:
             errors.append(f"Invalid diagnostic severity: '{diag.severity}'")
 
+    # Reference index uniqueness (within kind)
+    seen_refs: set[tuple[str, int]] = set()
+    for ref in ir.references:
+        key = (ref.kind, ref.index)
+        if key in seen_refs:
+            errors.append(f"Reference index not unique: kind={ref.kind}, index={ref.index}")
+        seen_refs.add(key)
+
+    # Opaque representation must have at least one diagnostic
+    if ir.status.representation == "opaque" and not ir.diagnostics:
+        errors.append("Opaque representation must have at least one diagnostic")
+
     return errors
