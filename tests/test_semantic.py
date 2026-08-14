@@ -209,6 +209,19 @@ class TestDiagnosticAggregation:
         assert result[1].severity == "warning"
 
 
+class TestBoundedDiagnostics:
+    def test_diagnostics_bounded(self):
+        """Diagnostics must be bounded to prevent infinite output."""
+        from uasset_read.semantic.diagnostics import DiagnosticAggregator
+
+        agg = DiagnosticAggregator()
+        for i in range(200):
+            agg.add("warning", f"CODE_{i % 5}", f"Message {i}")
+
+        result = agg.build()
+        assert len(result) <= 100  # Hard limit
+
+
 class TestCoverageModel:
     def test_all_available(self):
         """All scopes available -> 0 unavailable."""
