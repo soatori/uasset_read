@@ -803,3 +803,47 @@ class TestDomainExtractors:
         out1 = render_semantic_json(ir)
         out2 = render_semantic_json(ir)
         assert out1 == out2
+
+
+class TestRecursiveProjection:
+    def test_nested_evidence_stripped(self):
+        """Standard projection recursively removes evidence from nested content."""
+        from uasset_read.semantic.projection import project_semantic
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus, EvidenceEntry,
+        )
+
+        debug_ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="debug",
+            asset_type="blueprint",
+            asset=AssetMeta(package="/Game/BP_Foo", name="BP_Foo"),
+            status=AssetStatus(parse="complete", representation="full"),
+            content={
+                "functions": [
+                    {
+                        "name": "Foo",
+                        "evidence": [{"key": "export_index", "value": 0}],
+                    }
+                ],
+                "variables": [
+                    {
+                        "name": "Bar",
+                        "nested": {
+                            "evidence": [{"key": "property_index", "value": 1}],
+                        },
+                    }
+                ],
+            },
+            evidence=(EvidenceEntry(key="top_level", value=0),),
+        )
+
+        standard = project_semantic(debug_ir, "standard")
+        assert standard.evidence == ()
+        # Nested evidence must also be removed
+        for func in standard.content.get("functions", []):
+            assert "evidence" not in func
+        for var in standard.content.get("variables", []):
+            assert "evidence" not in var
+            assert "nested" not in var or "evidence" not in var.get("nested", {})
