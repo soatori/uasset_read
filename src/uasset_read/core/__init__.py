@@ -133,7 +133,6 @@ def parse_single(
     tolerant: bool | None = None,
     verbose: bool = False,
     include_schema: bool = False,
-    include_function_graphs: bool = False,
     include_parent_assets: bool | None = None,
     asset_roots: list[str] | None = None,
     mappings_path: str | None = None,
@@ -166,7 +165,6 @@ def parse_single(
         tolerant: 容错模式，遇到错误继续解析。None 表示使用 ParseConfig 或默认值 True
         verbose: 详细输出
         include_schema: 包含 JSON Schema
-        include_function_graphs: 包含函数图
         include_parent_assets: 解析父资产。None 表示使用 ParseConfig 或默认值 False
         asset_roots: 资产根目录列表
         mappings_path: .usmap 映射文件路径
@@ -211,7 +209,6 @@ def parse_single(
         tolerant=tolerant,
         verbose=verbose,
         include_schema=include_schema,
-        include_function_graphs=include_function_graphs,
         include_parent_assets=include_parent_assets,
         asset_roots=asset_roots,
         mappings_path=mappings_path,
@@ -232,7 +229,6 @@ def _parse_and_render(
     tolerant: bool | None = None,
     verbose: bool = False,
     include_schema: bool = False,
-    include_function_graphs: bool = False,
     include_parent_assets: bool | None = None,
     asset_roots: list[str] | None = None,
     mappings_path: str | None = None,
@@ -345,7 +341,6 @@ def parse_batch(
     tolerant: bool | None = None,
     verbose: bool = False,
     include_schema: bool = False,
-    include_function_graphs: bool = False,
     include_parent_assets: bool | None = None,
     asset_roots: list[str] | None = None,
     mappings_path: str | None = None,
@@ -378,7 +373,6 @@ def parse_batch(
         tolerant: 容错模式
         verbose: 详细输出
         include_schema: 包含 JSON Schema
-        include_function_graphs: 包含函数图
         include_parent_assets: 解析父资产
         asset_roots: 资产根目录列表
         mappings_path: .usmap 映射文件路径
@@ -465,7 +459,6 @@ def parse_batch(
         "tolerant": tolerant,
         "verbose": verbose,
         "include_schema": include_schema,
-        "include_function_graphs": include_function_graphs,
         "include_parent_assets": include_parent_assets,
         "asset_roots": asset_roots,
         "mappings_path": mappings_path,
@@ -535,7 +528,6 @@ def parse_batch(
                 tolerant=tolerant,
                 verbose=verbose,
                 include_schema=include_schema,
-                include_function_graphs=include_function_graphs,
                 include_parent_assets=include_parent_assets,
                 asset_roots=asset_roots,
                 mappings_path=mappings_path,

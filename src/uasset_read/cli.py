@@ -76,7 +76,6 @@ def create_parser():
     parser.add_argument('--output', metavar='FILE', help='Write output to file instead of stdout')
     parser.add_argument('--export', metavar='INDEX', type=int, help='Output only specific export by index')
     parser.add_argument('--schema', action='store_true', help='Include field semantic annotations')
-    parser.add_argument('--function-graphs', action='store_true', help='Include function_graphs array')
     parser.add_argument('--asset-root', action='append', default=[],
                         help='Root directory to search for parent .uasset files')
     parser.add_argument('--include-parent-assets', action='store_true',
@@ -199,7 +198,6 @@ def _handle_batch(args) -> None:
             tolerant=not args.strict,
             verbose=args.verbose,
             include_schema=args.schema or args.verbose,
-            include_function_graphs=args.function_graphs,
             include_parent_assets=args.include_parent_assets,
             asset_roots=list(args.asset_root or []),
             mappings_path=args.mappings,
@@ -344,7 +342,6 @@ def main():
             tolerant=tolerant,
             verbose=args.verbose,
             include_schema=args.schema or args.verbose,
-            include_function_graphs=args.function_graphs,
             include_parent_assets=args.include_parent_assets,
             asset_roots=list(args.asset_root or []),
             mappings_path=args.mappings,

@@ -968,6 +968,22 @@ class TestValidatorEnhancements:
         assert any("opaque" in e.lower() and "diagnostic" in e.lower() for e in errors)
 
 
+class TestFunctionGraphsRemoved:
+    def test_cli_no_function_graphs_flag(self):
+        """CLI should not have --function-graphs flag."""
+        from uasset_read.cli import create_parser
+        parser = create_parser()
+        args = parser.parse_args(["test.uasset"])
+        assert not hasattr(args, "function_graphs")
+
+    def test_parse_single_no_function_graphs_param(self):
+        """parse_single should not accept include_function_graphs."""
+        import inspect
+        from uasset_read.core import parse_single
+        sig = inspect.signature(parse_single)
+        assert "include_function_graphs" not in sig.parameters
+
+
 class TestRendererRestructuring:
     def test_content_not_overwrite_common_fields(self):
         """Renderer must not let content overwrite common fields."""
