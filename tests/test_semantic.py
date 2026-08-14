@@ -888,6 +888,41 @@ class TestRecursiveProjection:
                 assert "nested" not in var or "evidence" not in var.get("nested", {})
 
 
+class TestCanonicalArrayOrdering:
+    def test_diagnostics_sorted_by_code(self):
+        """Diagnostics array should be sorted by severity then code."""
+        from uasset_read.semantic.canonical import canonical_sort
+
+        data = {
+            "diagnostics": [
+                {"severity": "warning", "code": "B_CODE", "message": "msg"},
+                {"severity": "error", "code": "A_CODE", "message": "msg"},
+                {"severity": "warning", "code": "A_CODE", "message": "msg"},
+            ]
+        }
+
+        result = canonical_sort(data)
+        codes = [d["code"] for d in result["diagnostics"]]
+        assert codes == ["A_CODE", "A_CODE", "B_CODE"]
+
+    def test_references_sorted_by_kind_index(self):
+        """References array should be sorted by kind then index."""
+        from uasset_read.semantic.canonical import canonical_sort
+
+        data = {
+            "references": [
+                {"index": 1, "kind": "export", "class_name": "B", "object_name": "B1"},
+                {"index": 0, "kind": "import", "class_name": "A", "object_name": "A1"},
+                {"index": 0, "kind": "export", "class_name": "C", "object_name": "C1"},
+            ]
+        }
+
+        result = canonical_sort(data)
+        kinds = [r["kind"] for r in result["references"]]
+        # "export" < "import" alphabetically, so exports come first, then by index
+        assert kinds == ["export", "export", "import"]
+
+
 class TestValidatorEnhancements:
     def test_reference_index_unique(self):
         """Reference indices must be unique within kind."""
