@@ -440,8 +440,6 @@ class TestGraphEnrichmentPreservesStatus:
             bytecode_source="unknown",
             translation_status="not_applicable",
         )
-        # Mock semantic calls to enrich
-        monkeypatch_graphs = MagicMock()
         # Simulate graph enrichment setting logic_source
         result.logic_source = "graph_topology"
         result.cpp_code = "// from topology"

@@ -101,10 +101,10 @@ class TestCrossFormatConsistency:
     def test_json_and_markdown_report_same_package_name(self, first_person_blueprint):
         json_out = parse_single(str(first_person_blueprint), format="json", tolerant=True)
         md_out = parse_single(str(first_person_blueprint), format="markdown", tolerant=True)
-        json_data = json.loads(json_out)
-        pkg_name = json_data["asset"]["package"]
+        pkg_name = json.loads(json_out)["asset"]["package"]
         # markdown should contain the package name or its last segment
         assert "FirstPerson" in md_out
+        assert "FirstPersonGameMode" in pkg_name
 
 
 # ===========================================================================
