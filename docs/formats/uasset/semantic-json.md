@@ -120,6 +120,8 @@ The `status` object has two independent dimensions:
 | `partial` | `opaque` | Partially parsed, content not interpretable |
 | `failed` | `opaque` | Parse failed, no semantic content |
 
+**Note:** `representation: "opaque"` also occurs when the asset type is unknown or when a known type has no registered domain extractor.
+
 ## Optional Fields
 
 ### References
@@ -147,6 +149,8 @@ Array of import/export reference entries:
 | `class_name` | `string` | Yes | UE class name |
 | `object_name` | `string` | Yes | Object name |
 | `package_path` | `string` | No | Package path (for imports) |
+
+**Note:** Reference closure filtering is not yet implemented. Currently, all import and export references are included regardless of reachability from the primary asset. This will be addressed when domain extensions (#554-#557) define which references are semantically reachable.
 
 ### Coverage
 
@@ -191,6 +195,8 @@ Array of deduplicated diagnostic messages:
 | `severity` | `"error"`, `"warning"`, `"info"` | Yes | Diagnostic severity |
 | `code` | `string` | Yes | Unique diagnostic code |
 | `message` | `string` | Yes | Human-readable message |
+
+**Note:** Diagnostics are deduplicated and bounded to a maximum of 100 entries. The validator requires that assets with `representation: "opaque"` must have at least one diagnostic.
 
 ### Evidence (Debug Only)
 
@@ -246,11 +252,15 @@ Unknown UE classes emit:
 - `asset.generated_class` with the original UE class name
 - `evidence` entry with `key: "asset_class"` and the raw class name
 
+### Unregistered Asset Opaque Behavior
+
+Assets with known types but no registered domain extractor are emitted with `representation: "opaque"`. The builder adds an `info` diagnostic with code `NO_EXTRACTOR`. This ensures semantic coverage honesty: without an extractor, the asset's domain content cannot be interpreted.
+
 ## Standard/Debug Projection
 
 The projection is idempotent: `project_semantic(ir, ir.mode)` returns equivalent IR.
 
-- **Standard mode**: Strips all `evidence` entries and debug-only extension fields
+- **Standard mode**: Strips all `evidence` entries (debug-only extension fields are not yet implemented)
 - **Debug mode**: Preserves all `evidence` entries for debugging
 
 ```python
@@ -312,7 +322,7 @@ Sub-objects follow their own canonical orderings.
 
 ## JSON Schema
 
-The full schema is at `schemas/semantic.schema.json` (Draft 2020-12):
+The full schema is at `schemas/semantic.schema.json` (Draft 2020-12). **Note:** The schema file is not yet created; the following is a preview of the intended structure:
 
 ```json
 {
@@ -352,4 +362,3 @@ The full schema is at `schemas/semantic.schema.json` (Draft 2020-12):
 - [Package Summary](package-summary.md)
 - [Import/Export Tables](import-export-tables.md)
 - [Blueprint Format](assets/blueprint.md)
-- [Schema File](../../schemas/semantic.schema.json)
