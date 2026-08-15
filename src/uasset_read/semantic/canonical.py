@@ -4,7 +4,14 @@ Ensures same input -> byte-identical JSON regardless of dict insertion order.
 """
 from __future__ import annotations
 
+import json
 from typing import Any
+
+
+def _canonical_value(value: Any) -> str:
+    """Deterministic string form of an evidence value for tie-break sorting."""
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+
 
 # Public contract top-level key order
 _TOP_LEVEL_ORDER = [
@@ -21,9 +28,15 @@ _REFERENCE_ORDER = ["index", "kind", "class_name", "object_name", "package_path"
 _EVIDENCE_ORDER = ["key", "value"]
 
 _ARRAY_SORT_KEYS = {
-    "diagnostics": lambda d: (d.get("severity", ""), d.get("code", "")),
-    "references": lambda r: (r.get("kind", ""), r.get("index", 0)),
-    "evidence": lambda e: (e.get("key", ""),),
+    "diagnostics": lambda d: (d.get("severity", ""), d.get("code", ""), d.get("message", "")),
+    "references": lambda r: (
+        r.get("kind", ""),
+        r.get("index", 0),
+        r.get("class_name", ""),
+        r.get("object_name", ""),
+        r.get("package_path", ""),
+    ),
+    "evidence": lambda e: (e.get("key", ""), _canonical_value(e.get("value"))),
 }
 
 

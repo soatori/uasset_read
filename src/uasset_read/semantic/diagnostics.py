@@ -26,4 +26,4 @@ class DiagnosticAggregator:
             self.add("warning", "PARSE_WARNING", warning)
 
     def build(self) -> tuple[DiagnosticEntry, ...]:
-        return tuple(sorted(self._entries, key=lambda d: (d.severity, d.code)))
+        return tuple(sorted(self._entries, key=lambda d: (d.severity, d.code, d.message)))

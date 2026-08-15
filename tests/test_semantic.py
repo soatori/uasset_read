@@ -1021,3 +1021,41 @@ class TestRendererRestructuring:
         data = json.loads(output)
         assert data["format"] == "uasset_read.asset_semantic"
         assert data["status"]["parse"] == "complete"
+
+
+class TestCanonicalTieBreaks:
+    def test_diagnostics_order_independent_of_input_order(self):
+        """Same (severity, code) with different messages must not depend on input order."""
+        from uasset_read.semantic.canonical import canonical_sort
+        a = {"diagnostics": [
+            {"severity": "warning", "code": "SAME", "message": "b"},
+            {"severity": "warning", "code": "SAME", "message": "a"},
+        ]}
+        b = {"diagnostics": [
+            {"severity": "warning", "code": "SAME", "message": "a"},
+            {"severity": "warning", "code": "SAME", "message": "b"},
+        ]}
+        assert canonical_sort(a) == canonical_sort(b)
+        assert [d["message"] for d in canonical_sort(a)["diagnostics"]] == ["a", "b"]
+
+    def test_evidence_order_independent_of_input_order(self):
+        """Same evidence key with different values must not depend on input order."""
+        from uasset_read.semantic.canonical import canonical_sort
+        a = {"evidence": [{"key": "k", "value": 2}, {"key": "k", "value": 1}]}
+        b = {"evidence": [{"key": "k", "value": 1}, {"key": "k", "value": 2}]}
+        assert canonical_sort(a) == canonical_sort(b)
+        assert [e["value"] for e in canonical_sort(a)["evidence"]] == [1, 2]
+
+    def test_reference_ties_broken_by_identity_fields(self):
+        """Identical (kind, index) pairs must order by class/object/package fields."""
+        from uasset_read.semantic.canonical import canonical_sort
+        a = {"references": [
+            {"index": 0, "kind": "import", "class_name": "B", "object_name": "B1", "package_path": ""},
+            {"index": 0, "kind": "import", "class_name": "A", "object_name": "A1", "package_path": ""},
+        ]}
+        b = {"references": [
+            {"index": 0, "kind": "import", "class_name": "A", "object_name": "A1", "package_path": ""},
+            {"index": 0, "kind": "import", "class_name": "B", "object_name": "B1", "package_path": ""},
+        ]}
+        assert canonical_sort(a) == canonical_sort(b)
+        assert [r["class_name"] for r in canonical_sort(a)["references"]] == ["A", "B"]
