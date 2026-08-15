@@ -87,3 +87,107 @@ def validate_semantic_document(ir: SemanticIR) -> list[str]:
         errors.extend(domain_validator(ir))
 
     return errors
+
+
+# ---------------------------------------------------------------------------
+# Blueprint-specific semantic rules (BP-§18)
+# ---------------------------------------------------------------------------
+
+_GRAPH_ID_FULL = _re.compile(r"^blueprint://graph/[A-Za-z][A-Za-z0-9_.-]*$")
+_NODE_ID_FULL = _re.compile(
+    r"^blueprint://graph/[A-Za-z][A-Za-z0-9_.-]*/node/[a-z][a-z0-9-]*/[A-Za-z][A-Za-z0-9_.-]*/[0-9]+$")
+_ENDPOINT_FULL = _re.compile(r"^(input|output|exec)\.[A-Za-z][A-Za-z0-9_.-]*$")
+
+
+def _validate_type_refs(value, known: set, errors: list, ctx: str) -> None:
+    if isinstance(value, dict):
+        if "$type" in value and value["$type"] not in known:
+            errors.append(f"Type closure violation at {ctx}: unknown '{value['$type']}'")
+        for v in value.values():
+            _validate_type_refs(v, known, errors, ctx)
+    elif isinstance(value, list):
+        for item in value:
+            _validate_type_refs(item, known, errors, ctx)
+
+
+def validate_blueprint_document(ir) -> list[str]:
+    """BP-§18 semantic rules for uasset_read.blueprint_semantic content."""
+    errors: list[str] = []
+    content = ir.content or {}
+    graphs = content.get("graphs", []) or []
+    types = content.get("types", {}) or {}
+
+    graph_ids: set[str] = set()
+    node_ids: set[str] = set()
+    endpoints: set[tuple[str, str, str]] = set()  # (graph_id, node_id, endpoint)
+    for graph in graphs:
+        gid = graph.get("id", "")
+        if not _GRAPH_ID_FULL.match(gid):
+            errors.append(f"Invalid graph id format: '{gid}'")
+        if gid in graph_ids:
+            errors.append(f"Duplicate graph id: '{gid}'")
+        graph_ids.add(gid)
+        entry_nodes = [n for n in graph.get("nodes", []) or [] if n.get("kind") == "function_entry"]
+        if len(entry_nodes) > 1:
+            errors.append(f"Function graph '{gid}' has {len(entry_nodes)} entry nodes")
+        for node in graph.get("nodes", []) or []:
+            nid = node.get("id", "")
+            if not _NODE_ID_FULL.match(nid):
+                errors.append(f"Invalid node id format: '{nid}'")
+            if nid in node_ids:
+                errors.append(f"Duplicate node id: '{nid}'")
+            node_ids.add(nid)
+            for endpoint in list(node.get("data_pins", {}) or {}) + list(node.get("control_ports", {}) or {}):
+                if not _ENDPOINT_FULL.match(endpoint):
+                    errors.append(f"Invalid endpoint id format: '{endpoint}' on node '{nid}'")
+                endpoints.add((gid, nid, endpoint))
+
+    for section, key in (("control_flow", "port"), ("data_flow", "pin")):
+        for graph in graphs:
+            gid = graph.get("id", "")
+            flow = graph.get(section, {}) or {}
+            for entry in flow.get("entries", []) or []:
+                if (gid, entry.get("node", ""), entry.get(key, "")) not in endpoints:
+                    errors.append(f"Endpoint closure violation: {section} entry {entry} in '{gid}'")
+            for edge in flow.get("edges", []) or []:
+                for side in ("from", "to"):
+                    ref = edge.get(side, {}) or {}
+                    if (gid, ref.get("node", ""), ref.get(key, "")) not in endpoints:
+                        errors.append(f"Endpoint closure violation: {section} edge {side} in '{gid}'")
+
+    _validate_type_refs(content, set(types.keys()), errors, "content")
+
+    component_ids = {c.get("id") for c in content.get("components", []) or []}
+    parent_of: dict[str, str] = {}
+    for comp in content.get("components", []) or []:
+        parent = comp.get("parent")
+        if parent is not None:
+            if parent not in component_ids:
+                errors.append(f"Component parent closure violation: '{comp.get('id')}' -> '{parent}'")
+            parent_of[comp.get("id")] = parent
+    for start in parent_of:
+        seen: set[str] = set()
+        cur = start
+        while cur in parent_of:
+            if cur in seen:
+                errors.append(f"Component hierarchy cycle at '{start}'")
+                break
+            seen.add(cur)
+            cur = parent_of[cur]
+
+    if ir.status.representation == "opaque" and not content.get("diagnostics"):
+        errors.append("Opaque blueprint representation must have at least one diagnostic")
+    if ir.mode == "standard":
+        def _has_evidence(value) -> bool:
+            if isinstance(value, dict):
+                return "evidence" in value or any(_has_evidence(v) for v in value.values())
+            if isinstance(value, list):
+                return any(_has_evidence(v) for v in value)
+            return False
+        if _has_evidence(content):
+            errors.append("Standard blueprint content must not contain evidence")
+
+    return errors
+
+
+register_domain_validator("uasset_read.blueprint_semantic", validate_blueprint_document)

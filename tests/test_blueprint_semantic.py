@@ -340,3 +340,218 @@ class TestBlueprintVariables:
         assert decl["variables"] == ["Health"]
         assert decl["components"] == ["c0"]
         assert decl["functions"] == [{"name": "TakeDamage"}]
+
+
+class TestBlueprintValidator:
+    def _ir(self, content):
+        from uasset_read.semantic.models import SemanticIR, AssetMeta, AssetStatus
+        return SemanticIR(
+            format="uasset_read.blueprint_semantic", format_version="1.0.0",
+            mode="standard", asset_type="blueprint",
+            asset=AssetMeta(package="/Game/BP_X", name="BP_X"),
+            status=AssetStatus(parse="complete", representation="partial"),
+            content=content)
+
+    def test_valid_document_passes(self):
+        from uasset_read.semantic.validator import validate_semantic_document
+        content = {
+            "graphs": [{
+                "id": "blueprint://graph/EventGraph", "name": "EventGraph",
+                "kind": "event_graph",
+                "nodes": [{
+                    "id": "blueprint://graph/EventGraph/node/event/BeginPlay/0",
+                    "kind": "event",
+                    "control_ports": {"exec.out": {"name": "then", "direction": "output", "role": "then"}},
+                }],
+                "control_flow": {"entries": [
+                    {"node": "blueprint://graph/EventGraph/node/event/BeginPlay/0", "port": "exec.out"}]},
+            }],
+            "diagnostics": [{"code": "BP_GRAPH_MISSING", "scope": "asset",
+                             "severity": "warning", "effect": "semantic_loss", "count": 1}],
+        }
+        assert validate_semantic_document(self._ir(content)) == []
+
+    def test_dangling_flow_endpoint_rejected(self):
+        from uasset_read.semantic.validator import validate_semantic_document
+        content = {
+            "graphs": [{
+                "id": "blueprint://graph/EventGraph", "name": "EventGraph",
+                "kind": "event_graph", "nodes": [],
+                "control_flow": {"entries": [
+                    {"node": "blueprint://graph/EventGraph/node/event/BeginPlay/0", "port": "exec.out"}]},
+            }],
+        }
+        errors = validate_semantic_document(self._ir(content))
+        assert any("closure" in e.lower() for e in errors)
+
+    def test_type_closure_violation_rejected(self):
+        from uasset_read.semantic.validator import validate_semantic_document
+        content = {"types": {"t0": {"kind": "array", "element": {"$type": "t9"}}}, "graphs": []}
+        errors = validate_semantic_document(self._ir(content))
+        assert any("type" in e.lower() for e in errors)
+
+    def test_component_cycle_rejected(self):
+        from uasset_read.semantic.validator import validate_semantic_document
+        content = {
+            "graphs": [],
+            "components": [
+                {"id": "c0", "name": "A", "origin": "unverified", "parent": "c1"},
+                {"id": "c1", "name": "B", "origin": "unverified", "parent": "c0"},
+            ],
+        }
+        errors = validate_semantic_document(self._ir(content))
+        assert any("cycle" in e.lower() for e in errors)
+
+
+class TestBlueprintSchema:
+    def test_schema_loads_and_validates_real_samples(self):
+        import jsonschema
+        from uasset_read.schema_loader import load_blueprint_semantic_schema
+        from uasset_read.core import parse_single
+
+        schema = load_blueprint_semantic_schema()
+        for name in ("FirstPerson_BP_FirstPersonCharacter.uasset",
+                     "FirstPerson_BP_FirstPersonGameMode.uasset",
+                     "StackOBot_BP_Drone.uasset",
+                     "IntroToUnreal_BP_Light.uasset",
+                     "IntroToUnreal_BP_SaveData.uasset"):
+            for level in ("standard", "debug"):
+                doc = json.loads(parse_single(str(_sample(name)), format="json", output_level=level))
+                if doc.get("format") == "uasset_read.blueprint_semantic":
+                    jsonschema.validate(doc, schema)
+
+    def test_schema_rejects_bad_mode(self):
+        import jsonschema
+        from jsonschema import ValidationError
+        from uasset_read.schema_loader import load_blueprint_semantic_schema
+        schema = load_blueprint_semantic_schema()
+        doc = {"format": "uasset_read.blueprint_semantic", "format_version": "1.0.0",
+               "mode": "compact", "asset_type": "blueprint",
+               "asset": {"package": "/Game/X", "name": "X"},
+               "status": {"parse": "complete", "representation": "partial"},
+               "graphs": []}
+        with pytest.raises(ValidationError):
+            jsonschema.validate(doc, schema)
+
+
+class TestBlueprintCoverageMetrics:
+    def test_graphs_coverage_has_completeness_metrics(self):
+        from uasset_read.core import parse_single
+
+        doc = json.loads(parse_single(
+            str(_sample("FirstPerson_BP_FirstPersonCharacter.uasset")),
+            format="json", output_level="standard"))
+        if doc.get("format") != "uasset_read.blueprint_semantic":
+            pytest.skip("not blueprint format")
+        coverage = doc.get("coverage", [])
+        assert coverage, "blueprint output must have coverage entries"
+        # Check for graph completeness entries (graph_nodes, graph_pins, graph_edges)
+        node_entry = next((e for e in coverage if e["scope"] == "graph_nodes"), None)
+        assert node_entry is not None, "coverage must include 'graph_nodes' scope"
+        assert "declared" in node_entry, "graph_nodes coverage must report declared count"
+        assert "emitted" in node_entry, "graph_nodes coverage must report emitted count"
+        assert node_entry["declared"] >= node_entry["emitted"]
+
+
+class TestBlueprintProjection:
+    def test_standard_projection_strips_extensions(self):
+        from uasset_read.semantic.projection import _recursive_strip_evidence
+        result = _recursive_strip_evidence({"a": 1, "evidence": {}, "extensions": {"x": 1}})
+        assert result == {"a": 1}
+
+    def test_standard_mode_has_no_evidence_or_extensions(self):
+        from uasset_read.core import parse_single
+        doc = json.loads(parse_single(
+            str(_sample("FirstPerson_BP_FirstPersonCharacter.uasset")),
+            format="json", output_level="standard"))
+        if doc.get("format") != "uasset_read.blueprint_semantic":
+            pytest.skip("not blueprint format")
+        assert "evidence" not in doc
+        assert "extensions" not in doc
+
+
+class TestBlueprintAcceptance:
+    SAMPLES = [
+        "FirstPerson_BP_FirstPersonCharacter.uasset",
+        "FirstPerson_BP_FirstPersonGameMode.uasset",
+        "StackOBot_BP_Drone.uasset",
+        "IntroToUnreal_BP_Light.uasset",
+        "IntroToUnreal_BP_SaveData.uasset",
+    ]
+
+    def test_all_blueprint_samples_schema_valid_and_honest(self):
+        import jsonschema
+        from uasset_read.schema_loader import load_blueprint_semantic_schema
+        from uasset_read.core import parse_single
+
+        schema = load_blueprint_semantic_schema()
+        for name in self.SAMPLES:
+            path = _sample(name)
+            doc = json.loads(parse_single(str(path), format="json"))
+            if doc.get("format") != "uasset_read.blueprint_semantic":
+                continue
+            jsonschema.validate(doc, schema)
+            assert doc["status"]["parse"] != "failed"
+            if doc["status"]["representation"] == "opaque":
+                assert doc.get("diagnostics")
+            for graph in doc["graphs"]:
+                for node in graph.get("nodes", []):
+                    for endpoint in list(node.get("data_pins", {})) + list(node.get("control_ports", {})):
+                        assert "." in endpoint
+            # Pin/Port completeness: every edge endpoint resolves to a declared pin/port
+            for graph in doc["graphs"]:
+                declared = set()
+                for node in graph.get("nodes", []):
+                    for ep in node.get("data_pins", {}):
+                        declared.add((node["id"], ep))
+                    for ep in node.get("control_ports", {}):
+                        declared.add((node["id"], ep))
+                for section, key in (("control_flow", "port"), ("data_flow", "pin")):
+                    for edge in graph.get(section, {}).get("edges", []):
+                        for side in ("from", "to"):
+                            ref = edge[side]
+                            assert (ref["node"], ref[key]) in declared
+
+    def test_standard_debug_modes_differ(self):
+        from uasset_read.core import parse_single
+
+        sample = str(_sample("FirstPerson_BP_FirstPersonCharacter.uasset"))
+        standard = parse_single(sample, format="json", output_level="standard")
+        debug = parse_single(sample, format="json", output_level="debug")
+        assert standard != debug
+        assert '"evidence"' in debug
+        assert '"evidence"' not in standard
+        assert json.loads(standard)["status"] == json.loads(debug)["status"]
+
+    def test_byte_determinism_across_pythonhashseed(self):
+        import os
+        import subprocess
+        import sys
+
+        sample = str(_sample("FirstPerson_BP_FirstPersonCharacter.uasset")).replace("\\", "/")
+        snippet = (
+            "from uasset_read.core import parse_single;"
+            f"print(parse_single(r'{sample}', format='json', output_level='standard'), end='')"
+        )
+        outputs = []
+        for seed in ("0", "12345"):
+            env = dict(os.environ, PYTHONHASHSEED=seed, PYTHONPATH="src")
+            proc = subprocess.run([sys.executable, "-c", snippet], capture_output=True,
+                                  text=True, env=env, check=True)
+            outputs.append(proc.stdout)
+        assert outputs[0] == outputs[1]
+        assert outputs[0].endswith("}\n")
+
+    def test_cli_single_file_matches_python_api(self):
+        import subprocess
+        import sys
+
+        from uasset_read.core import parse_single
+
+        sample = str(_sample("FirstPerson_BP_FirstPersonCharacter.uasset"))
+        api_output = parse_single(sample, format="json", output_level="standard")
+        assert api_output.endswith("}\n")
+        proc = subprocess.run([sys.executable, "run.py", "--json", sample],
+                              capture_output=True, text=True, check=True,
+                              env={**__import__("os").environ, "PYTHONPATH": "src"})
+        assert json.loads(proc.stdout) == json.loads(api_output)
