@@ -293,3 +293,50 @@ class TestBlueprintTypes:
         assert entry["const"] is True
         inner = table.entries[entry["target"]["$type"]]
         assert inner == {"kind": "object", "path": "Actor"}
+
+
+class TestBlueprintVariables:
+    def _variable(self):
+        from uasset_read.models.ir import VariableIR
+        return VariableIR(name="Health", type="float", default_value="100.0",
+                          guid="ab" * 16, property_flags=0,
+                          flags_labels=["EditAnywhere", "BlueprintVisible", "RepNotify"],
+                          is_replicated=True, replication_condition=0,
+                          rep_notify_func="OnRep_Health")
+
+    def test_variable_emission(self):
+        from uasset_read.semantic.blueprint.variables import emit_variables
+        from uasset_read.semantic.blueprint.types import TypeTable
+        from uasset_read.semantic.blueprint.reporting import BlueprintReporting
+
+        rep = BlueprintReporting()
+        variables_json = emit_variables([self._variable()], TypeTable(), rep)
+        var = variables_json[0]
+        assert var["name"] == "Health"
+        assert var["type"] == "float"
+        assert var["default"] == 100.0
+        assert var["flags"] == ["BlueprintVisible", "EditAnywhere", "RepNotify"]
+        assert var["identity"] == "ab" * 16
+        assert var["replication"] == {"condition": "always", "notify": "OnRep_Health"}
+        assert [e["scope"] for e in rep.coverage_entries()] == ["variables"]
+
+    def test_empty_default_not_confirmed(self):
+        from uasset_read.models.ir import VariableIR
+        from uasset_read.semantic.blueprint.variables import emit_variables
+        from uasset_read.semantic.blueprint.types import TypeTable
+        from uasset_read.semantic.blueprint.reporting import BlueprintReporting
+
+        var = VariableIR(name="Note", type="string", default_value="")
+        emitted = emit_variables([var], TypeTable(), BlueprintReporting())
+        assert "default" not in emitted[0]
+
+    def test_declaration_index_references_only(self):
+        from uasset_read.semantic.blueprint.variables import emit_declaration
+        decl = emit_declaration(variable_names=["Health"], component_ids=["c0"],
+                                functions=[{"name": "TakeDamage", "graph": None}],
+                                parent_class="/Script/Engine.Character",
+                                interfaces=["/Game/IF_Damageable"])
+        assert decl["parent_class"] == "/Script/Engine.Character"
+        assert decl["variables"] == ["Health"]
+        assert decl["components"] == ["c0"]
+        assert decl["functions"] == [{"name": "TakeDamage"}]
