@@ -1127,3 +1127,78 @@ class TestRealSampleAssetTypes:
             pytest.skip("Sample not available")
         data = json.loads(parse_single(str(sample), format="json", output_level="standard"))
         assert data["asset_type"] == "unknown", reason
+
+
+class TestImportPackagePath:
+    """package_path must be the referenced object's package, not the class package."""
+
+    def _imports(self):
+        from uasset_read.models.ir import ImportIR
+        from uasset_read.serializers.object_resources import PackageIndex
+        return [
+            ImportIR(index=0, class_package="/Script/CoreUObject", class_name="Class",
+                     object_name="MetaData", outer_index=PackageIndex(index=-3)),
+            ImportIR(index=1, class_package="/Script/CoreUObject", class_name="Class",
+                     object_name="SoundAttenuation", outer_index=PackageIndex(index=-4)),
+            ImportIR(index=2, class_package="/Script/CoreUObject", class_name="Package",
+                     object_name="/Script/CoreUObject", outer_index=PackageIndex(index=0)),
+            ImportIR(index=3, class_package="/Script/CoreUObject", class_name="Package",
+                     object_name="/Script/Engine", outer_index=PackageIndex(index=0)),
+            ImportIR(index=4, class_package="/Script/Engine", class_name="SoundAttenuation",
+                     object_name="Attenuation_general", outer_index=PackageIndex(index=-4)),
+            ImportIR(index=5, class_package="/Script/CoreUObject", class_name="Object",
+                     object_name="Inner", outer_index=PackageIndex(index=-1)),
+        ]
+
+    def _refs_by_import_index(self):
+        from uasset_read.semantic.references import collect_references
+        refs = collect_references(self._imports(), [])
+        return {r.index: r for r in refs if r.kind == "import"}
+
+    def test_package_import_uses_object_name(self):
+        refs = self._refs_by_import_index()
+        assert refs[2].package_path == "/Script/CoreUObject"
+        assert refs[3].package_path == "/Script/Engine"
+
+    def test_class_import_resolves_outer_package(self):
+        refs = self._refs_by_import_index()
+        assert refs[0].package_path == "/Script/CoreUObject"
+        assert refs[1].package_path == "/Script/Engine"
+
+    def test_asset_object_import_resolves_outer_package(self):
+        refs = self._refs_by_import_index()
+        assert refs[4].package_path == "/Script/Engine"
+
+    def test_chained_outer_walks_through_non_package_imports(self):
+        refs = self._refs_by_import_index()
+        assert refs[5].package_path == "/Script/CoreUObject"
+
+    def test_unresolvable_outer_is_empty(self):
+        from uasset_read.models.ir import ImportIR
+        from uasset_read.serializers.object_resources import PackageIndex
+        from uasset_read.semantic.references import collect_references
+        imports = [
+            ImportIR(index=0, class_package="/Script/Engine", class_name="Object",
+                     object_name="Orphan", outer_index=PackageIndex(index=0)),
+        ]
+        refs = collect_references(imports, [])
+        assert refs[0].package_path == ""
+
+
+class TestRealSampleImportPackagePath:
+    def test_soundattenuation_class_import_package_is_engine(self):
+        """Regression: package_path must not be the class package (/Script/CoreUObject)."""
+        import json
+        from pathlib import Path
+        from uasset_read.core import parse_single
+        sample = Path("tests/samples/CropoutSample_Attenuation_general.uasset")
+        if not sample.exists():
+            pytest.skip("Sample not available")
+        data = json.loads(parse_single(str(sample), format="json", output_level="standard"))
+        ref = next(r for r in data["references"]
+                   if r["kind"] == "import" and r["object_name"] == "SoundAttenuation")
+        assert ref["package_path"] == "/Script/Engine"
+        pkg_ref = next(r for r in data["references"]
+                       if r["kind"] == "import" and r["class_name"] == "Package"
+                       and r["object_name"] == "/Script/CoreUObject")
+        assert pkg_ref["package_path"] == "/Script/CoreUObject"
