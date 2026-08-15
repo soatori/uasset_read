@@ -104,3 +104,61 @@ class TestPinIRIdentityFields:
         assert len(pin_ids) > 50
         assert len(set(pin_ids)) > 30  # majority of PinIds are unique
         assert parent_refs > 0 and sub_refs > 0   # split-pin tree preserved
+
+
+class TestDomainFormatPlumbing:
+    def _package_ir(self, export):
+        from uasset_read.models.ir import PackageIR, PackageHeaderIR, DiagnosticsDataIR, LinkerSummaryIR
+        header = PackageHeaderIR(
+            package_name="/Game/BP_Fake", package_class="Package", package_flags=0,
+            total_export_count=1, total_import_count=0, ue_version="5.4.0",
+        )
+        pkg = PackageIR(header=header, name_map=(), imports=[], exports=[export],
+                        linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]))
+        pkg.diagnostics_data = DiagnosticsDataIR(status="success", errors=None, warnings=None)
+        return pkg
+
+    def _fake_export(self):
+        from uasset_read.models.ir import ExportIR
+        return ExportIR(
+            index=0, object_name="BP_Fake", object_class="Blueprint",
+            serial_size=0, outer_index_resolved=None, super_index_resolved=None,
+            parent_class=None, properties=[], graphs=[], bulk_data=None,
+        )
+
+    def _build(self, monkeypatch, content, domain_format=None, domain_version=None):
+        from uasset_read.semantic import extensions
+        from uasset_read.semantic.builder import build_semantic_ir
+
+        def extractor(package_ir, export_ir, cov, evidence):
+            return content
+
+        monkeypatch.setattr(extensions, "_REGISTRY", {"Blueprint": extractor})
+        monkeypatch.setattr(
+            extensions, "_DOMAIN_FORMATS",
+            {"Blueprint": (domain_format, domain_version)} if domain_format else {})
+        return build_semantic_ir(self._package_ir(self._fake_export()), source_path="BP_Fake.uasset")
+
+    def test_domain_format_stamped(self, monkeypatch):
+        ir = self._build(monkeypatch, {"graphs": []},
+                         domain_format="uasset_read.blueprint_semantic", domain_version="1.0.0")
+        assert ir.format == "uasset_read.blueprint_semantic"
+        assert ir.format_version == "1.0.0"
+
+    def test_collision_guard_raises(self, monkeypatch):
+        from uasset_read.semantic.render import render_semantic_json
+        ir = self._build(monkeypatch, {"format": "evil"})
+        with pytest.raises(ValueError, match="collides"):
+            render_semantic_json(ir)
+
+    def test_domain_coverage_override(self, monkeypatch):
+        from uasset_read.semantic.render import render_semantic_json
+        ir = self._build(
+            monkeypatch,
+            {"references": [], "coverage": [{"scope": "graphs", "status": "partial"}],
+             "diagnostics": [{"code": "BP_TEST", "scope": "asset", "severity": "info",
+                              "effect": "none", "count": 1}]},
+            domain_format="uasset_read.blueprint_semantic", domain_version="1.0.0")
+        doc = json.loads(render_semantic_json(ir))
+        assert doc["coverage"] == [{"scope": "graphs", "status": "partial"}]
+        assert "references" not in doc  # empty list stripped by renderer
