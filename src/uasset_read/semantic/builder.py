@@ -5,6 +5,7 @@ Does NOT perform standard/debug projection (that is project_semantic's job).
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from uasset_read.semantic.models import (
@@ -47,6 +48,23 @@ def _combine_package_status(export_parse: str, diagnostics_data) -> str:
     return export_parse
 
 
+def _resolve_package_name(package_ir: PackageIR, source_path: str | None) -> str:
+    """Resolve a non-empty asset package path.
+
+    Prefers the parsed package name. When it is missing, derives one from the
+    source file so fallback documents remain schema-valid (``asset.package``
+    requires minLength 1); otherwise falls back to a stable sentinel.
+    """
+    name = package_ir.header.package_name or ""
+    if name:
+        return name
+    if source_path:
+        stem = Path(source_path).stem
+        if stem:
+            return "/" + stem
+    return "/Unknown"
+
+
 def _select_primary_export(package_ir: PackageIR) -> ExportIR | None:
     """Select the primary export using deterministic rules.
 
@@ -81,7 +99,7 @@ def _select_primary_export(package_ir: PackageIR) -> ExportIR | None:
     return None
 
 
-def build_semantic_ir(package_ir: PackageIR) -> SemanticIR:
+def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> SemanticIR:
     """Build a mode-independent SemanticIR from PackageIR.
 
     This is the single semantic-projection boundary. It does NOT perform
@@ -91,6 +109,8 @@ def build_semantic_ir(package_ir: PackageIR) -> SemanticIR:
 
     Args:
         package_ir: PackageIR from ir_builder
+        source_path: Optional path of the parsed file, used to derive a stable
+            package identity when the header has none.
 
     Returns:
         SemanticIR ready for projection and rendering
@@ -108,7 +128,7 @@ def build_semantic_ir(package_ir: PackageIR) -> SemanticIR:
             format_version="1.0",
             mode="",
             asset_type="unknown",
-            asset=AssetMeta(package=package_ir.header.package_name or "", name="unknown"),
+            asset=AssetMeta(package=_resolve_package_name(package_ir, source_path), name="unknown"),
             status=AssetStatus(parse="failed", representation="opaque"),
             references=collect_references(package_ir.imports, package_ir.exports),
             diagnostics=diag.build(),
@@ -174,7 +194,7 @@ def build_semantic_ir(package_ir: PackageIR) -> SemanticIR:
         mode="",
         asset_type=asset_type,
         asset=AssetMeta(
-            package=package_ir.header.package_name or "",
+            package=_resolve_package_name(package_ir, source_path),
             name=primary.object_name or "unknown",
             generated_class=primary.object_class if asset_type == "unknown" else None,
         ),

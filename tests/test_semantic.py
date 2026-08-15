@@ -1249,3 +1249,55 @@ class TestPackageStatusPropagation:
     def test_partial_downgrade_adds_partial_parse_diagnostic(self):
         semantic = self._build("success", DiagnosticsDataIR(errors=["boom"], status="success"))
         assert any(d.code == "PARTIAL_PARSE" for d in semantic.diagnostics)
+
+
+class TestFallbackIdentity:
+    """Opaque fallback documents must stay schema-valid (asset.package non-empty)."""
+
+    def _empty_package_ir(self):
+        return PackageIR(
+            header=PackageHeaderIR(package_name="", package_class="Package", package_flags=0,
+                                   total_export_count=0, total_import_count=0, ue_version="5.3"),
+            name_map=[], imports=[], exports=[],
+            linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+            diagnostics_data=DiagnosticsDataIR(),
+        )
+
+    def test_source_path_derives_package(self):
+        from uasset_read.semantic.builder import build_semantic_ir
+        semantic = build_semantic_ir(self._empty_package_ir(), source_path="X/MyAsset.uasset")
+        assert semantic.asset.package == "/MyAsset"
+
+    def test_stable_sentinel_without_source(self):
+        from uasset_read.semantic.builder import build_semantic_ir
+        semantic = build_semantic_ir(self._empty_package_ir())
+        assert semantic.asset.package == "/Unknown"
+
+    def test_parsed_package_name_preferred(self):
+        from uasset_read.semantic.builder import build_semantic_ir
+        ir = self._empty_package_ir()
+        ir.header.package_name = "/Game/Real"
+        semantic = build_semantic_ir(ir, source_path="X/MyAsset.uasset")
+        assert semantic.asset.package == "/Game/Real"
+
+    def test_fallback_output_validates_against_schema(self):
+        import json
+        import jsonschema
+        from uasset_read.schema_loader import load_semantic_schema
+        from uasset_read.semantic.builder import build_semantic_ir
+        from uasset_read.semantic.projection import project_semantic
+        from uasset_read.semantic.render import render_semantic_json
+        semantic = build_semantic_ir(self._empty_package_ir())
+        for mode in ("standard", "debug"):
+            out = json.loads(render_semantic_json(project_semantic(semantic, mode)))
+            jsonschema.validate(out, load_semantic_schema())
+
+    def test_validator_rejects_empty_package(self):
+        from uasset_read.semantic.validator import validate_semantic_document
+        from uasset_read.semantic.models import SemanticIR, AssetMeta, AssetStatus
+        ir = SemanticIR(
+            format="uasset_read.asset_semantic", format_version="1.0", mode="standard",
+            asset_type="unknown", asset=AssetMeta(package="", name="X"),
+            status=AssetStatus(parse="failed", representation="opaque"),
+        )
+        assert any("asset.package" in e for e in validate_semantic_document(ir))
