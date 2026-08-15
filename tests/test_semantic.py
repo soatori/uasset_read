@@ -1396,3 +1396,44 @@ class TestRealSampleEvidence:
             pytest.skip("Sample not available")
         data = json.loads(parse_single(str(sample), format="json", output_level="standard"))
         assert data.get("evidence", []) == []
+
+
+class TestValidatorFailFast:
+    def test_contract_violation_blocks_output(self, monkeypatch):
+        """Invalid SemanticIR must raise instead of emitting invalid JSON."""
+        from pathlib import Path
+        from uasset_read.core import parse_single
+        from uasset_read.exceptions import SemanticContractError
+        from uasset_read.semantic.builder import build_semantic_ir as real_build
+        from uasset_read.semantic import models as semantic_models
+
+        sample = Path("tests/samples/FirstPerson_BP_FirstPersonCharacter.uasset")
+        if not sample.exists():
+            pytest.skip("Sample not available")
+
+        def broken_build(package_ir, source_path=None):
+            ir = real_build(package_ir, source_path=source_path)
+            return semantic_models.SemanticIR(
+                format="wrong",
+                format_version=ir.format_version,
+                mode=ir.mode,
+                asset_type=ir.asset_type,
+                asset=ir.asset,
+                status=ir.status,
+            )
+
+        monkeypatch.setattr("uasset_read.semantic.builder.build_semantic_ir", broken_build)
+        with pytest.raises(SemanticContractError):
+            parse_single(str(sample), format="json", output_level="standard")
+
+    def test_all_real_samples_pass_the_contract_gate(self):
+        """Every bundled sample must parse without raising the contract gate."""
+        from pathlib import Path
+        from uasset_read.core import parse_single
+        samples = sorted(Path("tests/samples").glob("*.uasset"))
+        if not samples:
+            pytest.skip("No samples available")
+        for sample in samples:
+            for level in ("standard", "debug"):
+                parse_single(str(sample), format="json", output_level=level,
+                             tolerant=True, log_enabled=False)

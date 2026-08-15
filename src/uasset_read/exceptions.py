@@ -33,6 +33,15 @@ class LinkerError(UAssetError):
     pass
 
 
+class SemanticContractError(UAssetError):
+    """Semantic JSON contract violation — output was blocked.
+
+    Raised when a SemanticIR fails validation before rendering; invalid
+    documents must never be emitted.
+    """
+    pass
+
+
 @dataclass
 class ErrorContext:
     """
