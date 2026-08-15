@@ -20,6 +20,33 @@ if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
 
 
+_PARSE_RANK = {"complete": 0, "partial": 1, "failed": 2}
+
+
+def _worst_parse(a: str, b: str) -> str:
+    """Return the more severe parse status (failed > partial > complete)."""
+    return a if _PARSE_RANK.get(a, 1) >= _PARSE_RANK.get(b, 1) else b
+
+
+def _combine_package_status(export_parse: str, diagnostics_data) -> str:
+    """Combine export-level and package-level parse status.
+
+    Priority: failed > partial > complete. Package-level errors or a
+    non-success package status must never be reported as "complete", even
+    when the primary export itself parsed successfully.
+    """
+    if export_parse == "failed":
+        return "failed"
+    if diagnostics_data is None:
+        return export_parse
+    pkg_status = diagnostics_data.status or "success"
+    if pkg_status == "failed":
+        return "failed"
+    if pkg_status != "success" or diagnostics_data.errors:
+        return _worst_parse(export_parse, "partial")
+    return export_parse
+
+
 def _select_primary_export(package_ir: PackageIR) -> ExportIR | None:
     """Select the primary export using deterministic rules.
 
@@ -90,10 +117,12 @@ def build_semantic_ir(package_ir: PackageIR) -> SemanticIR:
     # Resolve asset type
     asset_type = resolve_asset_type(primary.object_class or "")
 
-    # Build status
+    # Build status (export-level mapping, then package-level combination)
     parse_status = primary.parse_status or "success"
     parse_map = {"success": "complete", "partial": "partial", "partial_metadata": "partial", "failed": "failed", "opaque": "partial"}
     representation_map = {"success": "full", "partial": "partial", "partial_metadata": "partial", "failed": "opaque", "opaque": "opaque"}
+    export_parse = parse_map.get(parse_status, "partial")
+    parse = _combine_package_status(export_parse, package_ir.diagnostics_data)
 
     # Unknown type -> opaque representation + evidence with raw class
     evidence: list = []
@@ -111,7 +140,7 @@ def build_semantic_ir(package_ir: PackageIR) -> SemanticIR:
         diag.add("info", "NO_EXTRACTOR", f"No semantic extractor registered for class '{primary.object_class}'")
 
     status = AssetStatus(
-        parse=parse_map.get(parse_status, "partial"),
+        parse=parse,
         representation=representation,
     )
 

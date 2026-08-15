@@ -1202,3 +1202,50 @@ class TestRealSampleImportPackagePath:
                        if r["kind"] == "import" and r["class_name"] == "Package"
                        and r["object_name"] == "/Script/CoreUObject")
         assert pkg_ref["package_path"] == "/Script/CoreUObject"
+
+
+class TestPackageStatusPropagation:
+    """Package-level diagnostics must never be hidden behind parse: complete."""
+
+    def _build(self, export_parse_status, diagnostics_data):
+        from uasset_read.semantic.builder import build_semantic_ir
+        exports = [
+            ExportIR(index=0, object_name="X", object_class="Texture2D",
+                     serial_size=10, outer_index_resolved=None, super_index_resolved=None,
+                     parent_class=None, properties=[], graphs=[], bulk_data=None,
+                     parse_status=export_parse_status,
+                     ue_export_raw=ExportRawIR(b_is_asset=True)),
+        ]
+        ir = PackageIR(
+            header=PackageHeaderIR(package_name="/Game/X", package_class="Package",
+                                   package_flags=0, total_export_count=1, total_import_count=0,
+                                   ue_version="5.3"),
+            name_map=[], imports=[], exports=exports,
+            linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+            diagnostics_data=diagnostics_data,
+        )
+        return build_semantic_ir(ir)
+
+    def test_package_errors_downgrade_complete_to_partial(self):
+        semantic = self._build("success", DiagnosticsDataIR(errors=["boom"], status="success"))
+        assert semantic.status.parse == "partial"
+
+    def test_package_partial_status_downgrades_complete(self):
+        semantic = self._build("success", DiagnosticsDataIR(status="partial"))
+        assert semantic.status.parse == "partial"
+
+    def test_package_failed_status_forces_failed(self):
+        semantic = self._build("success", DiagnosticsDataIR(status="failed"))
+        assert semantic.status.parse == "failed"
+
+    def test_failed_export_stays_failed_with_partial_package(self):
+        semantic = self._build("failed", DiagnosticsDataIR(status="partial"))
+        assert semantic.status.parse == "failed"
+
+    def test_all_success_stays_complete(self):
+        semantic = self._build("success", DiagnosticsDataIR(status="success"))
+        assert semantic.status.parse == "complete"
+
+    def test_partial_downgrade_adds_partial_parse_diagnostic(self):
+        semantic = self._build("success", DiagnosticsDataIR(errors=["boom"], status="success"))
+        assert any(d.code == "PARTIAL_PARSE" for d in semantic.diagnostics)
