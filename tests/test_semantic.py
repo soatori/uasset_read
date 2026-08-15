@@ -711,8 +711,9 @@ class TestPrimaryExportTopLevel:
             diagnostics_data=DiagnosticsDataIR(),
         )
 
-        result = _select_primary_export(pkg)
+        result, rule = _select_primary_export(pkg)
         assert result is None
+        assert rule == "none"
 
 
 class TestDomainExtractors:
@@ -1301,3 +1302,97 @@ class TestFallbackIdentity:
             status=AssetStatus(parse="failed", representation="opaque"),
         )
         assert any("asset.package" in e for e in validate_semantic_document(ir))
+
+
+class TestEvidenceContract:
+    """Common-layer debug evidence must explain primary selection and parse outcome."""
+
+    CONTRACT_KEYS = {"primary_export_index", "primary_selection_rule", "original_class", "export_parse_status"}
+
+    def _selectable_pkg(self, export_class="Texture2D", parse_status="success",
+                        fallback_reason=None, b_is_asset=True):
+        exports = [
+            ExportIR(index=0, object_name="TestAsset", object_class=export_class,
+                     serial_size=2048, outer_index_resolved=None, super_index_resolved=None,
+                     parent_class=None, properties=[], graphs=[], bulk_data=None,
+                     parse_status=parse_status, fallback_reason=fallback_reason,
+                     ue_export_raw=ExportRawIR(b_is_asset=b_is_asset)),
+        ]
+        return PackageIR(
+            header=PackageHeaderIR(package_name="/Game/Test", package_class="Package",
+                                   package_flags=0, total_export_count=1, total_import_count=0,
+                                   ue_version="5.3"),
+            name_map=[], imports=[], exports=exports,
+            linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+            diagnostics_data=DiagnosticsDataIR(),
+        )
+
+    def test_primary_evidence_entries_present(self):
+        from uasset_read.semantic.builder import build_semantic_ir
+        semantic = build_semantic_ir(self._selectable_pkg())
+        by_key = {e.key: e.value for e in semantic.evidence}
+        assert set(by_key) >= self.CONTRACT_KEYS
+        assert by_key["primary_export_index"] == 0
+        assert by_key["primary_selection_rule"] == "b_is_asset"
+        assert by_key["original_class"] == "Texture2D"
+        assert by_key["export_parse_status"] == "success"
+
+    def test_selection_rule_reflects_b_is_asset(self):
+        from uasset_read.semantic.builder import _select_primary_export
+        primary, rule = _select_primary_export(self._selectable_pkg())
+        assert primary is not None
+        assert rule == "b_is_asset"
+
+    def test_selection_rule_reflects_basename_match(self):
+        from uasset_read.semantic.builder import _select_primary_export
+        pkg = self._selectable_pkg(b_is_asset=False)
+        pkg.exports[0].object_name = "Test"
+        primary, rule = _select_primary_export(pkg)
+        assert primary is not None
+        assert rule == "basename_match"
+
+    def test_fallback_reason_evidence(self):
+        from uasset_read.semantic.builder import build_semantic_ir
+        semantic = build_semantic_ir(self._selectable_pkg(
+            parse_status="partial", fallback_reason="struct read truncated"))
+        by_key = {e.key: e.value for e in semantic.evidence}
+        assert by_key["fallback_reason"] == "struct read truncated"
+
+    def test_no_primary_emits_selection_rule_none(self):
+        from uasset_read.semantic.builder import build_semantic_ir
+        pkg = self._selectable_pkg()
+        pkg.exports = []
+        semantic = build_semantic_ir(pkg)
+        assert any(e.key == "primary_selection_rule" and e.value == "none"
+                   for e in semantic.evidence)
+
+    def test_standard_projection_strips_contract_evidence(self):
+        from uasset_read.semantic.builder import build_semantic_ir
+        from uasset_read.semantic.projection import project_semantic
+        debug = project_semantic(build_semantic_ir(self._selectable_pkg()), "debug")
+        assert set(e.key for e in debug.evidence) >= self.CONTRACT_KEYS
+        standard = project_semantic(debug, "standard")
+        assert standard.evidence == ()
+
+
+class TestRealSampleEvidence:
+    def test_blueprint_debug_evidence_contains_contract_keys(self):
+        import json
+        from pathlib import Path
+        from uasset_read.core import parse_single
+        sample = Path("tests/samples/FirstPerson_BP_FirstPersonCharacter.uasset")
+        if not sample.exists():
+            pytest.skip("Sample not available")
+        data = json.loads(parse_single(str(sample), format="json", output_level="debug"))
+        keys = {e["key"] for e in data.get("evidence", [])}
+        assert {"primary_export_index", "primary_selection_rule", "original_class", "export_parse_status"} <= keys
+
+    def test_blueprint_standard_output_has_no_evidence(self):
+        import json
+        from pathlib import Path
+        from uasset_read.core import parse_single
+        sample = Path("tests/samples/FirstPerson_BP_FirstPersonCharacter.uasset")
+        if not sample.exists():
+            pytest.skip("Sample not available")
+        data = json.loads(parse_single(str(sample), format="json", output_level="standard"))
+        assert data.get("evidence", []) == []

@@ -65,12 +65,15 @@ def _resolve_package_name(package_ir: PackageIR, source_path: str | None) -> str
     return "/Unknown"
 
 
-def _select_primary_export(package_ir: PackageIR) -> ExportIR | None:
+def _select_primary_export(package_ir: PackageIR) -> tuple[ExportIR | None, str]:
     """Select the primary export using deterministic rules.
+
+    Returns ``(export, rule)`` where ``rule`` is ``"b_is_asset"``,
+    ``"basename_match"``, or ``"none"`` (export is None).
 
     1. Prefer the single export marked with ``b_is_asset``.
     2. Fallback: single top-level export whose name matches package basename.
-    3. Otherwise: ``None`` (opaque/partial).
+    3. Otherwise: ``(None, "none")`` (opaque/partial).
 
     Do NOT guess when there are multiple candidates, no candidates,
     or insufficient evidence.  Nested exports (those with a non-None
@@ -83,7 +86,7 @@ def _select_primary_export(package_ir: PackageIR) -> ExportIR | None:
         and not getattr(e, "outer_index_resolved", None)
     ]
     if len(candidates) == 1:
-        return candidates[0]
+        return candidates[0], "b_is_asset"
 
     # Rule 2: name matches package basename (only top-level)
     basename = package_ir.header.package_name.rsplit("/", 1)[-1] if package_ir.header.package_name else ""
@@ -94,9 +97,9 @@ def _select_primary_export(package_ir: PackageIR) -> ExportIR | None:
             and not getattr(e, "outer_index_resolved", None)
         ]
         if len(name_matches) == 1:
-            return name_matches[0]
+            return name_matches[0], "basename_match"
 
-    return None
+    return None, "none"
 
 
 def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> SemanticIR:
@@ -119,7 +122,7 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> 
     if package_ir.diagnostics_data:
         diag.from_ir(package_ir.diagnostics_data)
 
-    primary = _select_primary_export(package_ir)
+    primary, selection_rule = _select_primary_export(package_ir)
 
     if primary is None:
         diag.add("warning", "NO_EXPORTS", "No suitable primary export found")
@@ -132,6 +135,7 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> 
             status=AssetStatus(parse="failed", representation="opaque"),
             references=collect_references(package_ir.imports, package_ir.exports),
             diagnostics=diag.build(),
+            evidence=(EvidenceEntry(key="primary_selection_rule", value="none"),),
         )
 
     # Resolve asset type
@@ -144,8 +148,18 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> 
     export_parse = parse_map.get(parse_status, "partial")
     parse = _combine_package_status(export_parse, package_ir.diagnostics_data)
 
+    # Common-layer evidence contract: explain primary selection and parse outcome.
+    # Standard projection strips it; debug keeps it.
+    evidence: list = [
+        EvidenceEntry(key="primary_export_index", value=primary.index),
+        EvidenceEntry(key="primary_selection_rule", value=selection_rule),
+        EvidenceEntry(key="original_class", value=primary.object_class or ""),
+        EvidenceEntry(key="export_parse_status", value=primary.parse_status or "success"),
+    ]
+    if primary.fallback_reason:
+        evidence.append(EvidenceEntry(key="fallback_reason", value=primary.fallback_reason))
+
     # Unknown type -> opaque representation + evidence with raw class
-    evidence: list = []
     if asset_type == "unknown":
         representation = "opaque"
         diag.add("info", "UNKNOWN_TYPE", f"Unresolved asset type for class '{primary.object_class}'")
