@@ -169,3 +169,44 @@ class TestBlueprintIds:
         assert re.fullmatch(NODE_ID_RE, node_id("Function_TakeDamage", "variable-set", "Health", 3))
         for ep in (data_endpoint("NewLocation", "input"), exec_endpoint("then")):
             assert re.fullmatch(ENDPOINT_RE, ep)
+
+
+class TestBlueprintTypes:
+    def test_primitive_categories_inline(self):
+        from uasset_read.semantic.blueprint.types import TypeTable
+        table = TypeTable()
+        assert table.type_ref_for(category="bool") == "bool"
+        assert table.type_ref_for(category="real", subcategory="double") == "double"
+        assert table.type_ref_for(category="real") == "float"
+        assert table.entries == {}
+
+    def test_struct_deduplicated(self):
+        from uasset_read.semantic.blueprint.types import TypeTable
+        table = TypeTable()
+        r1 = table.type_ref_for(category="struct", subcategory_object_name="Vector")
+        r2 = table.type_ref_for(category="struct", subcategory_object_name="Vector")
+        assert r1 == r2 == {"$type": "t0"}
+        assert table.entries == {"t0": {"kind": "struct", "path": "Vector"}}
+
+    def test_map_key_value_terminal(self):
+        from uasset_read.semantic.blueprint.types import TypeTable
+        table = TypeTable()
+        ref = table.type_ref_for(category="name", container_type=3,
+                                 map_key_terminal_category="struct",
+                                 map_key_terminal_sub_category_object_name="Objective")
+        entry = table.entries[ref["$type"]]
+        assert entry["kind"] == "map"
+        assert entry["key"] == "name"
+        assert entry["value"] == {"$type": "t0"}
+        assert table.entries["t0"] == {"kind": "struct", "path": "Objective"}
+
+    def test_reference_and_const_modifiers(self):
+        from uasset_read.semantic.blueprint.types import TypeTable
+        table = TypeTable()
+        ref = table.type_ref_for(category="object", subcategory_object_name="Actor",
+                                 is_reference=True, is_const=True)
+        entry = table.entries[ref["$type"]]
+        assert entry["kind"] == "ref"
+        assert entry["const"] is True
+        inner = table.entries[entry["target"]["$type"]]
+        assert inner == {"kind": "object", "path": "Actor"}
