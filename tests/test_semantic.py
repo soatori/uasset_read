@@ -26,6 +26,20 @@ class TestAssetTypeResolution:
         assert resolve_asset_type("SomeUnknownClass") == "unknown"
         assert resolve_asset_type("") == "unknown"
 
+    def test_editor_asset_classes(self):
+        from uasset_read.semantic.kinds import resolve_asset_type
+        assert resolve_asset_type("Blueprint") == "blueprint"
+        assert resolve_asset_type("AnimBlueprint") == "anim_blueprint"
+        assert resolve_asset_type("UserDefinedEnum") == "enum"
+        assert resolve_asset_type("UserDefinedStruct") == "struct"
+        assert resolve_asset_type("PoseAsset") == "pose_asset"
+        assert resolve_asset_type("SoundAttenuation") == "sound_attenuation"
+        assert resolve_asset_type("SubsurfaceProfile") == "subsurface_profile"
+        assert resolve_asset_type("SkeletalMeshLODSettings") == "skeletal_mesh_lod_settings"
+        assert resolve_asset_type("AnimCurveCompressionSettings") == "anim_curve_compression_settings"
+        assert resolve_asset_type("CurveFloat") == "curve"
+        assert resolve_asset_type("FoliageType_InstancedStaticMesh") == "foliage_type"
+
 
 class TestSemanticIRModels:
     def test_asset_status_fields(self):
@@ -1059,3 +1073,57 @@ class TestCanonicalTieBreaks:
         ]}
         assert canonical_sort(a) == canonical_sort(b)
         assert [r["class_name"] for r in canonical_sort(a)["references"]] == ["A", "B"]
+
+
+SAMPLE_TYPE_EXPECTATIONS = [
+    ("FirstPerson_BP_FirstPersonCharacter.uasset", "blueprint"),
+    ("FirstPerson_BP_FirstPersonGameMode.uasset", "blueprint"),
+    ("IntroToUnreal_BP_Light.uasset", "blueprint"),
+    ("IntroToUnreal_BP_SaveData.uasset", "blueprint"),
+    ("StackOBot_BP_Drone.uasset", "blueprint"),
+    ("ABP_RifleAnimLayers.uasset", "anim_blueprint"),
+    ("Lyra_Enum_PanelType.uasset", "enum"),
+    ("StackOBot_Enum_CameraState.uasset", "enum"),
+    ("Lyra_AnimStruct_CardinalDirections.uasset", "struct"),
+    ("StackOBot_Struct_Objective.uasset", "struct"),
+    ("Echo_calf_l_PoseAsset.uasset", "pose_asset"),
+    ("CropoutSample_Attenuation_general.uasset", "sound_attenuation"),
+    ("GameAnimSample_TeethSubsurfaceProfile.uasset", "subsurface_profile"),
+    ("GameAnimSample_FaceArchetype_LODSettings_High.uasset", "skeletal_mesh_lod_settings"),
+    ("GameAnimSample_SandboxAnimCurveCompSettings.uasset", "anim_curve_compression_settings"),
+    ("Lyra_Curve_LaunchpadMaterialEffect.uasset", "curve"),
+    ("ProjectTitan_SM_GrassBlade_FoliageType.uasset", "foliage_type"),
+]
+
+SAMPLE_TYPE_UNKNOWN = [
+    ("ALS_AnimBP.uasset", "corrupted name map: class string is garbage"),
+    ("Lyra_B_Rifle.uasset", "no primary export resolvable (b_is_asset and basename rules fail)"),
+    ("FirstPersonC_Variant_Shooter_CubeBuilder_4.uasset", "no identifiable primary export class"),
+    ("Lyra_SEQ_LobbyScreen_LevelSequence.uasset", "no identifiable primary export class"),
+]
+
+
+class TestRealSampleAssetTypes:
+    @pytest.mark.samples
+    @pytest.mark.parametrize("name,expected", SAMPLE_TYPE_EXPECTATIONS)
+    def test_known_editor_asset_types(self, name, expected):
+        import json
+        from pathlib import Path
+        from uasset_read.core import parse_single
+        sample = Path("tests/samples") / name
+        if not sample.exists():
+            pytest.skip("Sample not available")
+        data = json.loads(parse_single(str(sample), format="json", output_level="standard"))
+        assert data["asset_type"] == expected
+
+    @pytest.mark.samples
+    @pytest.mark.parametrize("name,reason", SAMPLE_TYPE_UNKNOWN, ids=[n for n, _ in SAMPLE_TYPE_UNKNOWN])
+    def test_genuinely_unknown_stays_unknown(self, name, reason):
+        import json
+        from pathlib import Path
+        from uasset_read.core import parse_single
+        sample = Path("tests/samples") / name
+        if not sample.exists():
+            pytest.skip("Sample not available")
+        data = json.loads(parse_single(str(sample), format="json", output_level="standard"))
+        assert data["asset_type"] == "unknown", reason
