@@ -76,3 +76,31 @@ class TestPinGuidResearchFixtures:
         # Research finding: a bounded number of dangling refs may exist;
         # they must never produce authoritative edges.
         assert unresolved <= resolved
+
+
+class TestPinIRIdentityFields:
+    def test_pin_ir_carries_self_id_and_relations(self):
+        from uasset_read.parse_uasset import parse_uasset
+        from uasset_read.ir_builder import build_package_ir
+
+        result = parse_uasset(str(_sample("FirstPerson_BP_FirstPersonCharacter.uasset")), tolerant=True)
+        pkg = build_package_ir(result)
+        pin_ids: list[str] = []
+        parent_refs = sub_refs = 0
+        for export in pkg.exports:
+            for graph in export.graphs:
+                stack = [graph]
+                while stack:
+                    g = stack.pop()
+                    for node in g.nodes:
+                        for pin in node.pins:
+                            if pin.pin_guid:
+                                pin_ids.append(pin.pin_guid)
+                            if pin.parent_pin_guid:
+                                parent_refs += 1
+                            if pin.sub_pin_guids:
+                                sub_refs += 1
+                    stack.extend(g.subgraphs)
+        assert len(pin_ids) > 50
+        assert len(set(pin_ids)) > 30  # majority of PinIds are unique
+        assert parent_refs > 0 and sub_refs > 0   # split-pin tree preserved
