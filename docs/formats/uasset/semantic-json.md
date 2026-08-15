@@ -293,6 +293,18 @@ def my_extractor(export_ir, semantic_ir):
 register_extension("MyCustomClass", my_extractor)
 ```
 
+### Reference Scope (#551)
+
+`references` currently contains the **full import and export tables** of the
+package, sorted deterministically by `(kind, index)`. The table is complete
+but **not filtered**: reachable-reference closure (only objects semantically
+reachable from the primary asset) requires domain-extractor reachability data
+and is formally deferred to #554–#557.
+
+Until then, consumers must not interpret `references` as the primary asset's
+dependency closure. This scope is pinned by
+`tests/core/test_semantic_determinism.py::TestReferenceScopePinned`.
+
 ## Determinism Guarantees
 
 Output is byte-identical across processes and `PYTHONHASHSEED` values:
