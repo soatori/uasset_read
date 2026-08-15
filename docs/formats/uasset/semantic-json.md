@@ -293,6 +293,18 @@ def my_extractor(export_ir, semantic_ir):
 register_extension("MyCustomClass", my_extractor)
 ```
 
+### Reference Scope (#551)
+
+`references` currently contains the **full import and export tables** of the
+package, sorted deterministically by `(kind, index)`. The table is complete
+but **not filtered**: reachable-reference closure (only objects semantically
+reachable from the primary asset) requires domain-extractor reachability data
+and is formally deferred to #554–#557.
+
+Until then, consumers must not interpret `references` as the primary asset's
+dependency closure. This scope is pinned by
+`tests/core/test_semantic_determinism.py::TestReferenceScopePinned`.
+
 ## Determinism Guarantees
 
 Output is byte-identical across processes and `PYTHONHASHSEED` values:
@@ -302,6 +314,10 @@ Output is byte-identical across processes and `PYTHONHASHSEED` values:
 - **Fixed key ordering** via `canonical_sort()`
 - **`allow_nan=False`** in JSON encoding
 - **Deterministic sort** for all dict keys using predefined orderings
+- **Total array ordering** — no array order depends on input order:
+  `diagnostics` by `(severity, code, message)`, `references` by
+  `(kind, index, class_name, object_name, package_path)`, `evidence` by
+  `(key, canonical value)`
 
 ### Canonical Key Order
 
@@ -322,40 +338,28 @@ Sub-objects follow their own canonical orderings.
 
 ## JSON Schema
 
-The full schema is at `schemas/semantic.schema.json` (Draft 2020-12). **Note:** The schema file is not yet created; the following is a preview of the intended structure:
+The full Draft 2020-12 schema is implemented at
+`src/uasset_read/schemas/semantic.schema.json` and packaged inside the wheel
+(`importlib.resources` path `uasset_read/schemas/semantic.schema.json`). Load
+it from either a source checkout or an installed package with:
 
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/soatori/uasset_read/schemas/semantic.schema.json",
-  "title": "uasset_read Asset Semantic JSON",
-  "type": "object",
-  "required": ["format", "format_version", "mode", "asset_type", "asset", "status"],
-  "properties": {
-    "$schema": { "type": "string", "format": "uri" },
-    "format": { "const": "uasset_read.asset_semantic" },
-    "format_version": { "const": "1.0" },
-    "mode": { "type": "string", "enum": ["standard", "debug"] },
-    "asset_type": { "type": "string" },
-    "asset": { "$ref": "#/$defs/AssetMeta" },
-    "status": { "$ref": "#/$defs/AssetStatus" },
-    "references": { "type": "array", "items": { "$ref": "#/$defs/ReferenceEntry" } },
-    "coverage": { "$ref": "#/$defs/CoverageInfo" },
-    "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/DiagnosticEntry" } },
-    "evidence": { "type": "array", "items": { "$ref": "#/$defs/EvidenceEntry" } }
-  },
-  "additionalProperties": true
-}
+```python
+from uasset_read.schema_loader import load_semantic_schema
+
+schema = load_semantic_schema()
 ```
 
-### Schema Definitions
+Behavior and limits:
 
-- `AssetMeta`: Asset identity (`package`, `name`, `generated_class`)
-- `AssetStatus`: Parse and representation status
-- `ReferenceEntry`: Import/export reference
-- `CoverageInfo`: Semantic coverage report
-- `DiagnosticEntry`: Deduplicated diagnostic message
-- `EvidenceEntry`: Debug-only evidence
+- `render_semantic_json(ir, include_schema=True)` emits the schema URI as `$schema`;
+  by default (`include_schema=False`) no `$schema` key is emitted.
+- The schema enforces both modes: in `standard` mode `evidence` must be an empty
+  array (the projection strips it); `debug` mode may carry evidence entries.
+- `asset.package` and `asset.name` are required non-empty strings — opaque
+  fallback documents derive a non-empty package when the header has none.
+- Domain-extension fields (#554–#557) are permitted via top-level
+  `additionalProperties: true` and are not yet schema-described.
+- `EvidenceEntry.value` is intentionally untyped (free-form debug evidence).
 
 ## See Also
 

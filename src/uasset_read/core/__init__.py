@@ -24,7 +24,7 @@ from uasset_read.project_logging import (
 )
 from uasset_read.renderers import get_renderer, list_formats as _list_renderer_formats
 from uasset_read.renderers.base import RenderOptions
-from uasset_read.exceptions import ParseError as ParseError  # Re-export for backward compatibility
+from uasset_read.exceptions import ParseError as ParseError, SemanticContractError  # Re-export for backward compatibility
 
 if TYPE_CHECKING:
     from uasset_read.memory_safety import MemoryPolicy
@@ -294,11 +294,13 @@ def _parse_and_render(
         from uasset_read.semantic.validator import validate_semantic_document
         from uasset_read.semantic.render import render_semantic_json
 
-        semantic_ir = build_semantic_ir(ir)
+        semantic_ir = build_semantic_ir(ir, source_path=file_path)
         semantic_ir = project_semantic(semantic_ir, output_level)
         validation_errors = validate_semantic_document(semantic_ir)
         if validation_errors:
-            logger.warning("Semantic IR validation errors: %s", validation_errors)
+            raise SemanticContractError(
+                "Semantic contract violated: " + "; ".join(validation_errors)
+            )
         return render_semantic_json(semantic_ir, include_schema=include_schema), result
 
     # Other formats: use renderer registry

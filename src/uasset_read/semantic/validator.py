@@ -33,6 +33,9 @@ def validate_semantic_document(ir: SemanticIR) -> list[str]:
     if not ir.asset.name:
         errors.append("asset.name must not be empty")
 
+    if not ir.asset.package:
+        errors.append("asset.package must not be empty")
+
     if ir.status.parse not in _VALID_PARSES:
         errors.append(f"Invalid status.parse: expected one of {_VALID_PARSES}, got '{ir.status.parse}'")
 

@@ -96,6 +96,7 @@ def test_parent_forwards_worker_event_with_one_formatter_and_worker_context(tmp_
 
 def test_isolated_worker_writes_only_to_the_parent_log(tmp_path) -> None:
     pytest.skip("Batch worker subprocess requires PYTHONPATH setup")
+    sample = Path(__file__).resolve().parents[1] / "samples" / "ALS_AnimBP.uasset"
     log_path = configure_project_logging(log_dir=tmp_path / "logs", run_id="batch-run")
     assert log_path is not None
     request = BatchWorkerRequest(

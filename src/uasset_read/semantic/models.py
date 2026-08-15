@@ -30,7 +30,12 @@ class AssetMeta:
 
 @dataclass(frozen=True)
 class ReferenceEntry:
-    """A single import or export reference."""
+    """A single import or export reference.
+
+    ``package_path`` is the package containing the referenced object (for
+    imports, resolved through the outer chain). Empty when unresolvable.
+    It is never the class package.
+    """
     index: int
     kind: str       # "import" | "export"
     class_name: str

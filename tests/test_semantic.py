@@ -26,6 +26,20 @@ class TestAssetTypeResolution:
         assert resolve_asset_type("SomeUnknownClass") == "unknown"
         assert resolve_asset_type("") == "unknown"
 
+    def test_editor_asset_classes(self):
+        from uasset_read.semantic.kinds import resolve_asset_type
+        assert resolve_asset_type("Blueprint") == "blueprint"
+        assert resolve_asset_type("AnimBlueprint") == "anim_blueprint"
+        assert resolve_asset_type("UserDefinedEnum") == "enum"
+        assert resolve_asset_type("UserDefinedStruct") == "struct"
+        assert resolve_asset_type("PoseAsset") == "pose_asset"
+        assert resolve_asset_type("SoundAttenuation") == "sound_attenuation"
+        assert resolve_asset_type("SubsurfaceProfile") == "subsurface_profile"
+        assert resolve_asset_type("SkeletalMeshLODSettings") == "skeletal_mesh_lod_settings"
+        assert resolve_asset_type("AnimCurveCompressionSettings") == "anim_curve_compression_settings"
+        assert resolve_asset_type("CurveFloat") == "curve"
+        assert resolve_asset_type("FoliageType_InstancedStaticMesh") == "foliage_type"
+
 
 class TestSemanticIRModels:
     def test_asset_status_fields(self):
@@ -697,8 +711,9 @@ class TestPrimaryExportTopLevel:
             diagnostics_data=DiagnosticsDataIR(),
         )
 
-        result = _select_primary_export(pkg)
+        result, rule = _select_primary_export(pkg)
         assert result is None
+        assert rule == "none"
 
 
 class TestDomainExtractors:
@@ -1021,3 +1036,404 @@ class TestRendererRestructuring:
         data = json.loads(output)
         assert data["format"] == "uasset_read.asset_semantic"
         assert data["status"]["parse"] == "complete"
+
+
+class TestCanonicalTieBreaks:
+    def test_diagnostics_order_independent_of_input_order(self):
+        """Same (severity, code) with different messages must not depend on input order."""
+        from uasset_read.semantic.canonical import canonical_sort
+        a = {"diagnostics": [
+            {"severity": "warning", "code": "SAME", "message": "b"},
+            {"severity": "warning", "code": "SAME", "message": "a"},
+        ]}
+        b = {"diagnostics": [
+            {"severity": "warning", "code": "SAME", "message": "a"},
+            {"severity": "warning", "code": "SAME", "message": "b"},
+        ]}
+        assert canonical_sort(a) == canonical_sort(b)
+        assert [d["message"] for d in canonical_sort(a)["diagnostics"]] == ["a", "b"]
+
+    def test_evidence_order_independent_of_input_order(self):
+        """Same evidence key with different values must not depend on input order."""
+        from uasset_read.semantic.canonical import canonical_sort
+        a = {"evidence": [{"key": "k", "value": 2}, {"key": "k", "value": 1}]}
+        b = {"evidence": [{"key": "k", "value": 1}, {"key": "k", "value": 2}]}
+        assert canonical_sort(a) == canonical_sort(b)
+        assert [e["value"] for e in canonical_sort(a)["evidence"]] == [1, 2]
+
+    def test_reference_ties_broken_by_identity_fields(self):
+        """Identical (kind, index) pairs must order by class/object/package fields."""
+        from uasset_read.semantic.canonical import canonical_sort
+        a = {"references": [
+            {"index": 0, "kind": "import", "class_name": "B", "object_name": "B1", "package_path": ""},
+            {"index": 0, "kind": "import", "class_name": "A", "object_name": "A1", "package_path": ""},
+        ]}
+        b = {"references": [
+            {"index": 0, "kind": "import", "class_name": "A", "object_name": "A1", "package_path": ""},
+            {"index": 0, "kind": "import", "class_name": "B", "object_name": "B1", "package_path": ""},
+        ]}
+        assert canonical_sort(a) == canonical_sort(b)
+        assert [r["class_name"] for r in canonical_sort(a)["references"]] == ["A", "B"]
+
+
+SAMPLE_TYPE_EXPECTATIONS = [
+    ("FirstPerson_BP_FirstPersonCharacter.uasset", "blueprint"),
+    ("FirstPerson_BP_FirstPersonGameMode.uasset", "blueprint"),
+    ("IntroToUnreal_BP_Light.uasset", "blueprint"),
+    ("IntroToUnreal_BP_SaveData.uasset", "blueprint"),
+    ("StackOBot_BP_Drone.uasset", "blueprint"),
+    ("ABP_RifleAnimLayers.uasset", "anim_blueprint"),
+    ("Lyra_Enum_PanelType.uasset", "enum"),
+    ("StackOBot_Enum_CameraState.uasset", "enum"),
+    ("Lyra_AnimStruct_CardinalDirections.uasset", "struct"),
+    ("StackOBot_Struct_Objective.uasset", "struct"),
+    ("Echo_calf_l_PoseAsset.uasset", "pose_asset"),
+    ("CropoutSample_Attenuation_general.uasset", "sound_attenuation"),
+    ("GameAnimSample_TeethSubsurfaceProfile.uasset", "subsurface_profile"),
+    ("GameAnimSample_FaceArchetype_LODSettings_High.uasset", "skeletal_mesh_lod_settings"),
+    ("GameAnimSample_SandboxAnimCurveCompSettings.uasset", "anim_curve_compression_settings"),
+    ("Lyra_Curve_LaunchpadMaterialEffect.uasset", "curve"),
+    ("ProjectTitan_SM_GrassBlade_FoliageType.uasset", "foliage_type"),
+]
+
+SAMPLE_TYPE_UNKNOWN = [
+    ("ALS_AnimBP.uasset", "corrupted name map: class string is garbage"),
+    ("Lyra_B_Rifle.uasset", "no primary export resolvable (b_is_asset and basename rules fail)"),
+    ("FirstPersonC_Variant_Shooter_CubeBuilder_4.uasset", "no identifiable primary export class"),
+    ("Lyra_SEQ_LobbyScreen_LevelSequence.uasset", "no identifiable primary export class"),
+]
+
+
+class TestRealSampleAssetTypes:
+    @pytest.mark.samples
+    @pytest.mark.parametrize("name,expected", SAMPLE_TYPE_EXPECTATIONS)
+    def test_known_editor_asset_types(self, name, expected):
+        import json
+        from pathlib import Path
+        from uasset_read.core import parse_single
+        sample = Path("tests/samples") / name
+        if not sample.exists():
+            pytest.skip("Sample not available")
+        data = json.loads(parse_single(str(sample), format="json", output_level="standard"))
+        assert data["asset_type"] == expected
+
+    @pytest.mark.samples
+    @pytest.mark.parametrize("name,reason", SAMPLE_TYPE_UNKNOWN, ids=[n for n, _ in SAMPLE_TYPE_UNKNOWN])
+    def test_genuinely_unknown_stays_unknown(self, name, reason):
+        import json
+        from pathlib import Path
+        from uasset_read.core import parse_single
+        sample = Path("tests/samples") / name
+        if not sample.exists():
+            pytest.skip("Sample not available")
+        data = json.loads(parse_single(str(sample), format="json", output_level="standard"))
+        assert data["asset_type"] == "unknown", reason
+
+
+class TestImportPackagePath:
+    """package_path must be the referenced object's package, not the class package."""
+
+    def _imports(self):
+        from uasset_read.models.ir import ImportIR
+        from uasset_read.serializers.object_resources import PackageIndex
+        return [
+            ImportIR(index=0, class_package="/Script/CoreUObject", class_name="Class",
+                     object_name="MetaData", outer_index=PackageIndex(index=-3)),
+            ImportIR(index=1, class_package="/Script/CoreUObject", class_name="Class",
+                     object_name="SoundAttenuation", outer_index=PackageIndex(index=-4)),
+            ImportIR(index=2, class_package="/Script/CoreUObject", class_name="Package",
+                     object_name="/Script/CoreUObject", outer_index=PackageIndex(index=0)),
+            ImportIR(index=3, class_package="/Script/CoreUObject", class_name="Package",
+                     object_name="/Script/Engine", outer_index=PackageIndex(index=0)),
+            ImportIR(index=4, class_package="/Script/Engine", class_name="SoundAttenuation",
+                     object_name="Attenuation_general", outer_index=PackageIndex(index=-4)),
+            ImportIR(index=5, class_package="/Script/CoreUObject", class_name="Object",
+                     object_name="Inner", outer_index=PackageIndex(index=-1)),
+        ]
+
+    def _refs_by_import_index(self):
+        from uasset_read.semantic.references import collect_references
+        refs = collect_references(self._imports(), [])
+        return {r.index: r for r in refs if r.kind == "import"}
+
+    def test_package_import_uses_object_name(self):
+        refs = self._refs_by_import_index()
+        assert refs[2].package_path == "/Script/CoreUObject"
+        assert refs[3].package_path == "/Script/Engine"
+
+    def test_class_import_resolves_outer_package(self):
+        refs = self._refs_by_import_index()
+        assert refs[0].package_path == "/Script/CoreUObject"
+        assert refs[1].package_path == "/Script/Engine"
+
+    def test_asset_object_import_resolves_outer_package(self):
+        refs = self._refs_by_import_index()
+        assert refs[4].package_path == "/Script/Engine"
+
+    def test_chained_outer_walks_through_non_package_imports(self):
+        refs = self._refs_by_import_index()
+        assert refs[5].package_path == "/Script/CoreUObject"
+
+    def test_unresolvable_outer_is_empty(self):
+        from uasset_read.models.ir import ImportIR
+        from uasset_read.serializers.object_resources import PackageIndex
+        from uasset_read.semantic.references import collect_references
+        imports = [
+            ImportIR(index=0, class_package="/Script/Engine", class_name="Object",
+                     object_name="Orphan", outer_index=PackageIndex(index=0)),
+        ]
+        refs = collect_references(imports, [])
+        assert refs[0].package_path == ""
+
+
+class TestRealSampleImportPackagePath:
+    def test_soundattenuation_class_import_package_is_engine(self):
+        """Regression: package_path must not be the class package (/Script/CoreUObject)."""
+        import json
+        from pathlib import Path
+        from uasset_read.core import parse_single
+        sample = Path("tests/samples/CropoutSample_Attenuation_general.uasset")
+        if not sample.exists():
+            pytest.skip("Sample not available")
+        data = json.loads(parse_single(str(sample), format="json", output_level="standard"))
+        ref = next(r for r in data["references"]
+                   if r["kind"] == "import" and r["object_name"] == "SoundAttenuation")
+        assert ref["package_path"] == "/Script/Engine"
+        pkg_ref = next(r for r in data["references"]
+                       if r["kind"] == "import" and r["class_name"] == "Package"
+                       and r["object_name"] == "/Script/CoreUObject")
+        assert pkg_ref["package_path"] == "/Script/CoreUObject"
+
+
+class TestPackageStatusPropagation:
+    """Package-level diagnostics must never be hidden behind parse: complete."""
+
+    def _build(self, export_parse_status, diagnostics_data):
+        from uasset_read.semantic.builder import build_semantic_ir
+        exports = [
+            ExportIR(index=0, object_name="X", object_class="Texture2D",
+                     serial_size=10, outer_index_resolved=None, super_index_resolved=None,
+                     parent_class=None, properties=[], graphs=[], bulk_data=None,
+                     parse_status=export_parse_status,
+                     ue_export_raw=ExportRawIR(b_is_asset=True)),
+        ]
+        ir = PackageIR(
+            header=PackageHeaderIR(package_name="/Game/X", package_class="Package",
+                                   package_flags=0, total_export_count=1, total_import_count=0,
+                                   ue_version="5.3"),
+            name_map=[], imports=[], exports=exports,
+            linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+            diagnostics_data=diagnostics_data,
+        )
+        return build_semantic_ir(ir)
+
+    def test_package_errors_downgrade_complete_to_partial(self):
+        semantic = self._build("success", DiagnosticsDataIR(errors=["boom"], status="success"))
+        assert semantic.status.parse == "partial"
+
+    def test_package_partial_status_downgrades_complete(self):
+        semantic = self._build("success", DiagnosticsDataIR(status="partial"))
+        assert semantic.status.parse == "partial"
+
+    def test_package_failed_status_forces_failed(self):
+        semantic = self._build("success", DiagnosticsDataIR(status="failed"))
+        assert semantic.status.parse == "failed"
+
+    def test_failed_export_stays_failed_with_partial_package(self):
+        semantic = self._build("failed", DiagnosticsDataIR(status="partial"))
+        assert semantic.status.parse == "failed"
+
+    def test_all_success_stays_complete(self):
+        semantic = self._build("success", DiagnosticsDataIR(status="success"))
+        assert semantic.status.parse == "complete"
+
+    def test_partial_downgrade_adds_partial_parse_diagnostic(self):
+        semantic = self._build("success", DiagnosticsDataIR(errors=["boom"], status="success"))
+        assert any(d.code == "PARTIAL_PARSE" for d in semantic.diagnostics)
+
+
+class TestFallbackIdentity:
+    """Opaque fallback documents must stay schema-valid (asset.package non-empty)."""
+
+    def _empty_package_ir(self):
+        return PackageIR(
+            header=PackageHeaderIR(package_name="", package_class="Package", package_flags=0,
+                                   total_export_count=0, total_import_count=0, ue_version="5.3"),
+            name_map=[], imports=[], exports=[],
+            linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+            diagnostics_data=DiagnosticsDataIR(),
+        )
+
+    def test_source_path_derives_package(self):
+        from uasset_read.semantic.builder import build_semantic_ir
+        semantic = build_semantic_ir(self._empty_package_ir(), source_path="X/MyAsset.uasset")
+        assert semantic.asset.package == "/MyAsset"
+
+    def test_stable_sentinel_without_source(self):
+        from uasset_read.semantic.builder import build_semantic_ir
+        semantic = build_semantic_ir(self._empty_package_ir())
+        assert semantic.asset.package == "/Unknown"
+
+    def test_parsed_package_name_preferred(self):
+        from uasset_read.semantic.builder import build_semantic_ir
+        ir = self._empty_package_ir()
+        ir.header.package_name = "/Game/Real"
+        semantic = build_semantic_ir(ir, source_path="X/MyAsset.uasset")
+        assert semantic.asset.package == "/Game/Real"
+
+    def test_fallback_output_validates_against_schema(self):
+        import json
+        import jsonschema
+        from uasset_read.schema_loader import load_semantic_schema
+        from uasset_read.semantic.builder import build_semantic_ir
+        from uasset_read.semantic.projection import project_semantic
+        from uasset_read.semantic.render import render_semantic_json
+        semantic = build_semantic_ir(self._empty_package_ir())
+        for mode in ("standard", "debug"):
+            out = json.loads(render_semantic_json(project_semantic(semantic, mode)))
+            jsonschema.validate(out, load_semantic_schema())
+
+    def test_validator_rejects_empty_package(self):
+        from uasset_read.semantic.validator import validate_semantic_document
+        from uasset_read.semantic.models import SemanticIR, AssetMeta, AssetStatus
+        ir = SemanticIR(
+            format="uasset_read.asset_semantic", format_version="1.0", mode="standard",
+            asset_type="unknown", asset=AssetMeta(package="", name="X"),
+            status=AssetStatus(parse="failed", representation="opaque"),
+        )
+        assert any("asset.package" in e for e in validate_semantic_document(ir))
+
+
+class TestEvidenceContract:
+    """Common-layer debug evidence must explain primary selection and parse outcome."""
+
+    CONTRACT_KEYS = {"primary_export_index", "primary_selection_rule", "original_class", "export_parse_status"}
+
+    def _selectable_pkg(self, export_class="Texture2D", parse_status="success",
+                        fallback_reason=None, b_is_asset=True):
+        exports = [
+            ExportIR(index=0, object_name="TestAsset", object_class=export_class,
+                     serial_size=2048, outer_index_resolved=None, super_index_resolved=None,
+                     parent_class=None, properties=[], graphs=[], bulk_data=None,
+                     parse_status=parse_status, fallback_reason=fallback_reason,
+                     ue_export_raw=ExportRawIR(b_is_asset=b_is_asset)),
+        ]
+        return PackageIR(
+            header=PackageHeaderIR(package_name="/Game/Test", package_class="Package",
+                                   package_flags=0, total_export_count=1, total_import_count=0,
+                                   ue_version="5.3"),
+            name_map=[], imports=[], exports=exports,
+            linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+            diagnostics_data=DiagnosticsDataIR(),
+        )
+
+    def test_primary_evidence_entries_present(self):
+        from uasset_read.semantic.builder import build_semantic_ir
+        semantic = build_semantic_ir(self._selectable_pkg())
+        by_key = {e.key: e.value for e in semantic.evidence}
+        assert set(by_key) >= self.CONTRACT_KEYS
+        assert by_key["primary_export_index"] == 0
+        assert by_key["primary_selection_rule"] == "b_is_asset"
+        assert by_key["original_class"] == "Texture2D"
+        assert by_key["export_parse_status"] == "success"
+
+    def test_selection_rule_reflects_b_is_asset(self):
+        from uasset_read.semantic.builder import _select_primary_export
+        primary, rule = _select_primary_export(self._selectable_pkg())
+        assert primary is not None
+        assert rule == "b_is_asset"
+
+    def test_selection_rule_reflects_basename_match(self):
+        from uasset_read.semantic.builder import _select_primary_export
+        pkg = self._selectable_pkg(b_is_asset=False)
+        pkg.exports[0].object_name = "Test"
+        primary, rule = _select_primary_export(pkg)
+        assert primary is not None
+        assert rule == "basename_match"
+
+    def test_fallback_reason_evidence(self):
+        from uasset_read.semantic.builder import build_semantic_ir
+        semantic = build_semantic_ir(self._selectable_pkg(
+            parse_status="partial", fallback_reason="struct read truncated"))
+        by_key = {e.key: e.value for e in semantic.evidence}
+        assert by_key["fallback_reason"] == "struct read truncated"
+
+    def test_no_primary_emits_selection_rule_none(self):
+        from uasset_read.semantic.builder import build_semantic_ir
+        pkg = self._selectable_pkg()
+        pkg.exports = []
+        semantic = build_semantic_ir(pkg)
+        assert any(e.key == "primary_selection_rule" and e.value == "none"
+                   for e in semantic.evidence)
+
+    def test_standard_projection_strips_contract_evidence(self):
+        from uasset_read.semantic.builder import build_semantic_ir
+        from uasset_read.semantic.projection import project_semantic
+        debug = project_semantic(build_semantic_ir(self._selectable_pkg()), "debug")
+        assert set(e.key for e in debug.evidence) >= self.CONTRACT_KEYS
+        standard = project_semantic(debug, "standard")
+        assert standard.evidence == ()
+
+
+class TestRealSampleEvidence:
+    def test_blueprint_debug_evidence_contains_contract_keys(self):
+        import json
+        from pathlib import Path
+        from uasset_read.core import parse_single
+        sample = Path("tests/samples/FirstPerson_BP_FirstPersonCharacter.uasset")
+        if not sample.exists():
+            pytest.skip("Sample not available")
+        data = json.loads(parse_single(str(sample), format="json", output_level="debug"))
+        keys = {e["key"] for e in data.get("evidence", [])}
+        assert {"primary_export_index", "primary_selection_rule", "original_class", "export_parse_status"} <= keys
+
+    def test_blueprint_standard_output_has_no_evidence(self):
+        import json
+        from pathlib import Path
+        from uasset_read.core import parse_single
+        sample = Path("tests/samples/FirstPerson_BP_FirstPersonCharacter.uasset")
+        if not sample.exists():
+            pytest.skip("Sample not available")
+        data = json.loads(parse_single(str(sample), format="json", output_level="standard"))
+        assert data.get("evidence", []) == []
+
+
+class TestValidatorFailFast:
+    def test_contract_violation_blocks_output(self, monkeypatch):
+        """Invalid SemanticIR must raise instead of emitting invalid JSON."""
+        from pathlib import Path
+        from uasset_read.core import parse_single
+        from uasset_read.exceptions import SemanticContractError
+        from uasset_read.semantic.builder import build_semantic_ir as real_build
+        from uasset_read.semantic import models as semantic_models
+
+        sample = Path("tests/samples/FirstPerson_BP_FirstPersonCharacter.uasset")
+        if not sample.exists():
+            pytest.skip("Sample not available")
+
+        def broken_build(package_ir, source_path=None):
+            ir = real_build(package_ir, source_path=source_path)
+            return semantic_models.SemanticIR(
+                format="wrong",
+                format_version=ir.format_version,
+                mode=ir.mode,
+                asset_type=ir.asset_type,
+                asset=ir.asset,
+                status=ir.status,
+            )
+
+        monkeypatch.setattr("uasset_read.semantic.builder.build_semantic_ir", broken_build)
+        with pytest.raises(SemanticContractError):
+            parse_single(str(sample), format="json", output_level="standard")
+
+    def test_all_real_samples_pass_the_contract_gate(self):
+        """Every bundled sample must parse without raising the contract gate."""
+        from pathlib import Path
+        from uasset_read.core import parse_single
+        samples = sorted(Path("tests/samples").glob("*.uasset"))
+        if not samples:
+            pytest.skip("No samples available")
+        for sample in samples:
+            for level in ("standard", "debug"):
+                parse_single(str(sample), format="json", output_level=level,
+                             tolerant=True, log_enabled=False)
