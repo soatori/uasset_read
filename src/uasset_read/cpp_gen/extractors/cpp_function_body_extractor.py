@@ -194,7 +194,6 @@ def _extract_call_args(
         data_sources = node_info.get("data_sources", [])
         for ds in data_sources:
             if isinstance(ds, dict):
-                _pin = ds.get("input_pin", "")  # noqa: F841 - extracted for clarity
                 source = ds.get("data_source", {})
                 if isinstance(source, dict):
                     sources_list = source.get("data_sources", [])
@@ -257,8 +256,6 @@ def _translate_control_flow(
 ) -> Optional[CppStatement]:
     """Translate control flow nodes (IfThenElse / Switch*) to CppIfStmt."""
     node_type = node_info.get("node_type", "")
-    _branch_type = node_info.get("branch_type", "unknown")  # noqa: F841 - extracted for clarity
-
     # Derive condition expression
     condition = _derive_condition(node_info, data_flows)
 
@@ -281,7 +278,6 @@ def _derive_condition(node_info: Dict, data_flows: List[Dict]) -> str:
     if data_sources:
         for ds in data_sources:
             if isinstance(ds, dict):
-                _input_pin = ds.get("input_pin", "")  # noqa: F841 - extracted for clarity
                 source = ds.get("data_source", {})
                 if isinstance(source, dict):
                     for src in source.get("data_sources", []):

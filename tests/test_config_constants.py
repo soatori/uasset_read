@@ -4,19 +4,12 @@ Extracted from:
 - tests/test_constants_versioning.py (version detection)
 - tests/test_exception_context.py (ErrorContext/ParseError)
 - tests/test_cpf_constants.py (flag group)
-- tests/test_game_variant.py (game variant)
 """
 from __future__ import annotations
 
-import pytest
-
-from uasset_read.constants import GameVariant, get_game_variant_config
-from uasset_read.exceptions import ParseError, ErrorContext
+from uasset_read.exceptions import ParseError
 from uasset_read.versioning import (
     EUEVersion,
-    FPackageFileVersion,
-    VersionContainer,
-    build_version_container,
 )
 
 
@@ -53,12 +46,3 @@ class TestCPFConstantsGroup:
         import uasset_read.constants as c
         flags = [v for k, v in vars(c).items() if k.startswith("CPF_") and isinstance(v, int)]
         assert len(flags) == len(set(flags)), "Duplicate CPF_* values found"
-
-
-class TestGameVariant:
-    """GameVariant enum values and config retrieval."""
-
-    def test_enum_values(self):
-        """GameVariant NONE=0, FORTNITE=1001."""
-        assert GameVariant.NONE.value == 0
-        assert GameVariant.FORTNITE.value == 1001

@@ -16,8 +16,8 @@ from uasset_read.kismet.expressions.control_flow import (
 from uasset_read.kismet.cfg import (
     build_cfg,
     compute_dominator_tree,
-    decompose_regions,
 )
+from uasset_read.kismet.cfg.region import decompose_regions
 from uasset_read.kismet.cfg.data import (
     EdgeKind,
     RegionKind,

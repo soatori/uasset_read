@@ -1172,8 +1172,6 @@ def read_ue_graph_node(
     archive.seek(node_export.serial_offset)
 
     node_name = node_export.object_name
-    _node_class = _gac(node_export, import_map, export_map, linker)  # noqa: F841 - extracted for clarity
-
     # Parse tagged properties in script_serial
     (function_reference, event_reference, b_override_function,
      b_internal_event, custom_function_name, function_flags,

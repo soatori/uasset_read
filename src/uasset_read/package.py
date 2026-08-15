@@ -1,5 +1,6 @@
 """Package bundle and provider helpers."""
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -201,16 +202,20 @@ class PackageBundle:
         pass
 
 
-class PackageProvider:
+class PackageProvider(ABC):
     """Abstract package provider used by filesystem and container readers."""
 
     container = "unknown"
 
+    @abstractmethod
     def list_files(self) -> list[str]:
-        raise NotImplementedError
+        """List all files available from this provider."""
+        ...
 
+    @abstractmethod
     def read_file(self, path: str) -> Optional[bytes]:
-        raise NotImplementedError
+        """Read the contents of a file by path, returning None if not found."""
+        ...
 
     def open_file(self, path: str) -> Optional[ArchiveLike]:
         """Open file and return ArchiveLike, supporting range reads (recommended for large files).

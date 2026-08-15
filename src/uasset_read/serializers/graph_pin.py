@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 
 from uasset_read.constants import (
     MAX_LINKEDTO_PER_PIN, MAX_FTEXT_CONSUMPTION,
-    FRELEASE_OBJECT_VERSION_GUID,
 )
 from uasset_read.exceptions import ParseError
 from uasset_read.serializers.object_resources import PackageIndex
@@ -48,8 +47,6 @@ def read_ed_graph_pin_type(
 ) -> FEdGraphPinType:
     """Parse FEdGraphPinType (UE5.7 specific — custom serialization path)."""
     pin_type = FEdGraphPinType()
-
-    _release_version = summary.get_custom_version(FRELEASE_OBJECT_VERSION_GUID, 0) if summary is not None else 0  # noqa: F841 - extracted for clarity
 
     # PinCategory / PinSubCategory (UE5 always uses FName format)
     pin_type.pin_category = archive.read_name(name_map, "PinType.PinCategory")

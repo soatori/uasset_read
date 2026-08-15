@@ -273,8 +273,6 @@ def _render_if_stmt(stmt: CppIfStmt, indent: int) -> List[str]:
     """Recursively render CppIfStmt into .cpp line list."""
     lines: List[str] = []
     prefix = _INDENT * indent
-    _inner_prefix = _INDENT * (indent + 1)  # noqa: F841 - computed for context
-
     # if (condition) {
     lines.append(f"{prefix}if ({stmt.condition}) {{")
 

@@ -372,7 +372,7 @@ def _extract_class_name(ir: "PackageIR") -> str:
     raw_name = ""
     if ir.header and hasattr(ir.header, 'package_name'):
         raw_name = ir.header.package_name
-    elif ir.name_map and len(ir.name_map) > 0:
+    elif ir.name_map:
         raw_name = ir.name_map[0]
 
     if not raw_name:

@@ -1292,7 +1292,6 @@ def build_function_graphs(
                 n_lookup: Dict[str, UEdGraphNode]
             ) -> Dict[str, List[Dict]]:
                 """Extract node data_providers and data_sources annotations from data_flows."""
-                _node_name = n_name_lookup.get(node_guid, node_guid)  # noqa: F841 - extracted for clarity
                 providers: List[Dict] = []
                 sources: List[Dict] = []
 

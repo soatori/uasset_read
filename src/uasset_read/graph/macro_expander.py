@@ -468,8 +468,6 @@ class MacroExpander:
                     continue
 
                 pin_name = pin.get("pin_name", "")
-                _start_pid = pin.get("pin_id", "")  # noqa: F841 - extracted for clarity
-
                 # Find the first connected internal node via linked_to_raw
                 first_node = None
                 for linked_ref in (pin.get("linked_to_raw") or []):

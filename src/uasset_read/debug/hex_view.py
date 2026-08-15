@@ -150,7 +150,6 @@ def format_hex_dump(
         # Hex part
         hex_parts = []
         for i, b in enumerate(chunk):
-            _offset = line_start + i  # noqa: F841 - computed for context
             hex_parts.append(f"{b:02X}")
         hex_str = " ".join(hex_parts)
         hex_str = hex_str.ljust(bytes_per_line * 3 - 1)
@@ -163,7 +162,6 @@ def format_hex_dump(
         for entry in sorted_entries:
             if entry.start < line_end and entry.stop > line_start:
                 label_start = max(entry.start, line_start)
-                _label_end = min(entry.stop, line_end)  # noqa: F841 - computed for context
                 if label_start == entry.start:
                     labels.append(entry.key)
         label_str = ", ".join(labels) if labels else ""

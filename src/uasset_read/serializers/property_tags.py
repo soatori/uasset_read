@@ -124,7 +124,7 @@ def _apply_property_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
             # When Array/Set inner layer is StructProperty, extract inner_type_struct
             if tag.inner_type == "StructProperty":
                 inner_children = getattr(inner, "children", None)
-                if inner_children and len(inner_children) > 0:
+                if inner_children:
                     struct_name_node = inner_children[0]
                     struct_name = getattr(struct_name_node, "name", None) or getattr(struct_name_node, "type", None)
                     if struct_name:
@@ -139,7 +139,7 @@ def _apply_property_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
             # When value layer is StructProperty, extract value_type_struct
             if tag.value_type == "StructProperty":
                 value_children = getattr(value, "children", None)
-                if value_children and len(value_children) > 0:
+                if value_children:
                     struct_name_node = value_children[0]
                     struct_name = getattr(struct_name_node, "name", None) or getattr(struct_name_node, "type", None)
                     if struct_name:

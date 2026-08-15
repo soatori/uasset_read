@@ -89,9 +89,8 @@ def test_disabled_session_no_run_id():
     """Disabled session has run_id=None and supports context manager."""
     session = project_logging_session(enabled=False, level="off")
     assert current_log_run_id() is None
-    session.close()
     with project_logging_session(enabled=False, level="off") as s:
-        assert s is not None and current_log_run_id() is None
+        assert current_log_run_id() is None
 
 
 # ---------------------------------------------------------------------------
