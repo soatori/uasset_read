@@ -117,61 +117,6 @@ def format_hex_view(
     return "\n".join(lines)
 
 
-def format_hex_dump(
-    entries: list[HexViewEntry],
-    raw_data: bytes,
-    *,
-    bytes_per_line: int = 16,
-    start_offset: int = 0,
-) -> str:
-    """Generate a hex dump with field annotations.
-
-    On top of a standard hex dump, displays the field name corresponding to each byte range on the right.
-
-    Args:
-        entries: List of HexViewEntry
-        raw_data: Raw file bytes
-        bytes_per_line: Bytes per line
-        start_offset: Start offset
-
-    Returns:
-        Annotated hex dump text
-    """
-    if not raw_data:
-        return "(no data)"
-
-    sorted_entries = sorted(entries, key=lambda e: e.start)
-    lines: list[str] = []
-
-    for line_start in range(start_offset, len(raw_data), bytes_per_line):
-        line_end = min(line_start + bytes_per_line, len(raw_data))
-        chunk = raw_data[line_start:line_end]
-
-        # Hex part
-        hex_parts = []
-        for i, b in enumerate(chunk):
-            hex_parts.append(f"{b:02X}")
-        hex_str = " ".join(hex_parts)
-        hex_str = hex_str.ljust(bytes_per_line * 3 - 1)
-
-        # ASCII part
-        ascii_str = "".join(chr(b) if 32 <= b < 127 else "." for b in chunk)
-
-        # Field annotations (fields covered by this line)
-        labels = []
-        for entry in sorted_entries:
-            if entry.start < line_end and entry.stop > line_start:
-                label_start = max(entry.start, line_start)
-                if label_start == entry.start:
-                    labels.append(entry.key)
-        label_str = ", ".join(labels) if labels else ""
-
-        offset_col = f"{line_start:08X}"
-        lines.append(f"{offset_col}  {hex_str}  |{ascii_str}|  {label_str}")
-
-    return "\n".join(lines)
-
-
 def _format_value_short(value: Any, max_len: int = 60) -> str:
     """Format value as a short display string."""
     if isinstance(value, bytes):

@@ -29,7 +29,7 @@ from uasset_read.constants import MAX_NODES_PER_GRAPH
 from uasset_read.parsers.asset_types.property_extractor import build_properties_dict
 from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
 from uasset_read.models.validators import validate_parse_status
-from uasset_read.serializers.graph_helpers import read_ftext_fstring, read_ftext
+from uasset_read.serializers.graph_helpers import read_ftext
 from uasset_read.serializers.graph_pin import read_ed_graph_pin_type
 
 logger = logging.getLogger(__name__)

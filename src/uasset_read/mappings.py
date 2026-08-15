@@ -8,7 +8,7 @@ import struct
 from typing import Dict, Optional, Any
 
 from uasset_read.exceptions import ParseError
-from uasset_read.memory_safety import ResourceBudget, MemoryLimitExceeded
+from uasset_read.memory_safety import ResourceBudget
 from uasset_read.constants import MAX_ARRAY_DIM
 
 

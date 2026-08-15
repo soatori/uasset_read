@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from uasset_read.cpp_gen.formatters.cpp_json_ir import CppClassIR
-    from uasset_read.models.blueprint import BlueprintVariable
     from uasset_read.models.ir import VariableIR
 
 

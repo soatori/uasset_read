@@ -8,7 +8,6 @@ import logging
 import os
 
 from uasset_read.archive import FArchive, ArchiveLike, ByteArchive
-from uasset_read.bounded_events import BoundedEventBuffer
 from uasset_read.exceptions import ParseError
 from uasset_read.memory_safety import ResourceBudget
 

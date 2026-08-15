@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Optional
 from uasset_read.kismet.expressions.base import KismetExpression, make_simple_expression
 from uasset_read.kismet.tokens import EExprToken
 from uasset_read.kismet.value_types import FNameRef
-from uasset_read.serializers.object_resources import PackageIndex
 
 if TYPE_CHECKING:
     from uasset_read.kismet.archive import FKismetArchive

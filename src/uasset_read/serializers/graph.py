@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import TYPE_CHECKING, List, Optional, Dict, Any
+from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive

@@ -10,7 +10,6 @@ import warnings
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from uasset_read.models.result import ParseResult
     from uasset_read.models.config import ParseConfig
 
 from uasset_read.constants import (

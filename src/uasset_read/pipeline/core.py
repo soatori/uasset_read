@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from uasset_read.config import ParseConfig
 
 from uasset_read.memory_safety import ResourceBudget
-from uasset_read.constants import LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.package import PackageProvider
@@ -36,10 +35,6 @@ from uasset_read.pipeline.stages import (
 )
 from uasset_read.pipeline.post_process import _post_process
 from uasset_read.pipeline.config import (
-    _should_use_lightweight_tolerant_parse,
-    _is_large_file_asset,
-    _build_lightweight_graphs,
-    _build_lightweight_function_graphs,
     _apply_lightweight_parse,
     _resolve_parse_params,
 )
@@ -131,7 +126,6 @@ def _parse_package_core(
         hex_view = False
 
     from uasset_read.memory_safety import (
-        AllocationLimits,
         MemoryMonitor,
         MemoryPolicy,
         ResourceBudget,

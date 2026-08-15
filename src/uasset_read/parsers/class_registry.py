@@ -16,14 +16,13 @@ Handler interface:
 
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Any, List, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport
-    from uasset_read.models.properties import PropertyValue
 
 logger = logging.getLogger(__name__)
 
