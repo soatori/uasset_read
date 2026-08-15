@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from uasset_read.semantic.models import DiagnosticEntry
 
+_MAX_DIAGNOSTICS = 100
+
 
 class DiagnosticAggregator:
     """Collects and deduplicates diagnostics."""
@@ -13,7 +15,7 @@ class DiagnosticAggregator:
 
     def add(self, severity: str, code: str, message: str) -> None:
         key = (severity, code, message)
-        if key not in self._seen:
+        if key not in self._seen and len(self._entries) < _MAX_DIAGNOSTICS:
             self._seen.add(key)
             self._entries.append(DiagnosticEntry(severity=severity, code=code, message=message))
 

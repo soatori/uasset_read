@@ -94,6 +94,20 @@ class TestRendererRegistry:
 # Test 2: Markdown filtering consistency
 # ---------------------------------------------------------------------------
 
+class TestMarkdownRenderer:
+    """Markdown renderer basic output."""
+
+    def test_render_produces_heading_with_package_info(self):
+        ir = _make_ir()
+        renderer = get_renderer("markdown")
+        options = RenderOptions()
+        output = renderer.render(ir, options)
+        assert output.startswith("# ")
+        assert "BP_Test" in output
+        assert "5.3" in output
+        assert "BP_Test_C" in output
+
+
 class TestRendererConsistency:
     """Markdown renderer filters editor-internal data."""
 

@@ -10,7 +10,22 @@ content is exempt).
 """
 from __future__ import annotations
 
+from typing import Any
+
 from uasset_read.semantic.models import SemanticIR
+
+
+def _recursive_strip_evidence(data: Any) -> Any:
+    """Recursively remove evidence keys from nested structures."""
+    if isinstance(data, dict):
+        return {
+            k: _recursive_strip_evidence(v)
+            for k, v in data.items()
+            if k != "evidence"
+        }
+    if isinstance(data, list):
+        return [_recursive_strip_evidence(item) for item in data]
+    return data
 
 
 def project_semantic(ir: SemanticIR, mode: str) -> SemanticIR:
@@ -23,6 +38,10 @@ def project_semantic(ir: SemanticIR, mode: str) -> SemanticIR:
     Returns:
         New SemanticIR with the target mode applied.
     """
+    _VALID_MODES = {"standard", "debug"}
+    if mode not in _VALID_MODES:
+        raise ValueError(f"Invalid mode: expected one of {_VALID_MODES}, got '{mode}'")
+
     if mode == ir.mode:
         return ir
 
@@ -35,10 +54,10 @@ def project_semantic(ir: SemanticIR, mode: str) -> SemanticIR:
             asset=ir.asset,
             status=ir.status,
             references=ir.references,
-            content=ir.content,
+            content=_recursive_strip_evidence(ir.content),
             coverage=ir.coverage,
             diagnostics=ir.diagnostics,
-            evidence=(),  # strip all evidence
+            evidence=(),
         )
 
     # debug — passthrough (evidence already present if built in debug mode)

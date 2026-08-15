@@ -110,4 +110,4 @@ def test_tolerant_json_returns_failed_status(tmp_path):
     output = parse_single(str(path), format="json", tolerant=True)
     data = json.loads(output)
 
-    assert data["status"]["status"] == "failed"
+    assert data["status"]["parse"] == "failed"

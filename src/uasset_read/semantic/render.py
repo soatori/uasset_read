@@ -38,9 +38,13 @@ def render_semantic_json(ir: SemanticIR, *, include_schema: bool = False) -> str
         UTF-8 JSON string with LF line endings, ending with exactly one newline.
     """
     raw = asdict(ir)
-    # Merge domain content fields into top-level output
     content = raw.pop("content", {}) or {}
-    raw.update(content)
+
+    # Merge content but do NOT overwrite common contract fields
+    _COMMON_FIELDS = {"format", "format_version", "mode", "asset_type", "asset", "status", "references", "coverage", "diagnostics", "evidence"}
+    for key, value in content.items():
+        if key not in _COMMON_FIELDS and key not in raw:
+            raw[key] = value
     if include_schema:
         raw["$schema"] = "https://github.com/soatori/uasset_read/schemas/semantic.schema.json"
     raw = canonical_sort(raw)

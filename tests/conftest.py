@@ -1,6 +1,10 @@
 """Shared fixtures for compact test suite."""
 from __future__ import annotations
 
+import time
+from contextlib import contextmanager
+from typing import Generator
+
 import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -28,7 +32,40 @@ def make_semantic_ir(mode="standard", **kwargs):
     return SemanticIR(**defaults)
 
 
-SAMPLES_DIR = Path(__file__).resolve().parents[2] / "tests" / "samples"
+SAMPLES_DIR = Path(__file__).resolve().parents[1] / "tests" / "samples"
+
+
+@pytest.fixture
+def samples_dir() -> Path:
+    """Path to the test samples directory."""
+    return SAMPLES_DIR
+
+
+@pytest.fixture
+def blueprint_sample() -> Path:
+    """Path to a representative Blueprint .uasset sample."""
+    path = SAMPLES_DIR / "FirstPerson_BP_FirstPersonCharacter.uasset"
+    if not path.exists():
+        pytest.skip("Test sample not found")
+    return path
+
+
+@contextmanager
+def _measure(label: str = "") -> Generator[dict, None, None]:
+    """Context manager that records wall-clock elapsed time."""
+    result = {}
+    t0 = time.perf_counter()
+    try:
+        yield result
+    finally:
+        elapsed = time.perf_counter() - t0
+        result["elapsed"] = elapsed
+
+
+@pytest.fixture
+def measure():
+    """Fixture providing a ``measure(label)`` context-manager."""
+    return _measure
 
 
 @pytest.fixture
@@ -74,26 +111,4 @@ def make_package_ir(export_class="Texture2D", **kwargs):
     return PackageIR(**defaults)
 
 
-def make_semantic_ir(mode="standard", **kwargs):
-    """Factory for minimal SemanticIR."""
-    defaults = dict(
-        format="uasset_read.asset_semantic",
-        format_version="1.0.0",
-        mode=mode,
-        asset=AssetMeta(
-            kind=AssetKind.RESOURCE,
-            class_name="Texture2D",
-            object_name="T_Default",
-        ),
-        references=(),
-        content=ContentNode(key="root", children=()),
-        coverage=CoverageInfo(
-            fields_expected=5,
-            fields_parsed=5,
-            coverage_pct=100.0,
-            unparsed_fields=(),
-        ),
-        diagnostics=(),
-    )
-    defaults.update(kwargs)
-    return SemanticIR(**defaults)
+

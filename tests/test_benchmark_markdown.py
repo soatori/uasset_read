@@ -13,7 +13,6 @@ def test_markdown_output_public_contract(blueprint_sample, measure):
             format="markdown",
             tolerant=True,
             force_full_parse=True,
-            include_function_graphs=True,
         )
 
     assert output.startswith("# BP_FirstPersonCharacter\n")

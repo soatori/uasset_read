@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, List, Optional, Any
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
+    from uasset_read.link.linker import PackageLinker
     from uasset_read.serializers.object_resources import ObjectImport
     from uasset_read.serializers.package_summary import PackageFileSummary
 

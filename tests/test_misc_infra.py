@@ -105,5 +105,5 @@ def test_parse_batch_has_required_params():
         f"parse_batch missing output_level; current: {list(sig.parameters.keys())}"
     )
     assert "hex_view" in sig.parameters, (
-        f"parse_batch missing hex_view"
+        "parse_batch missing hex_view"
     )

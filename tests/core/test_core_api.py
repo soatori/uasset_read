@@ -216,7 +216,7 @@ class TestCLIBatchOptions:
     """Verify CLI batch mode passes all output options to parse_batch."""
 
     def test_batch_passes_all_options(self, tmp_path):
-        """CLI batch passes verbose/schema/function_graphs/parent_assets options."""
+        """CLI batch passes verbose/schema/parent_assets options."""
         test_file = tmp_path / "test.uasset"
         test_file.write_bytes(b"\x00" * 100)
 
@@ -230,7 +230,6 @@ class TestCLIBatchOptions:
                 tolerant=True,
                 verbose=True,
                 include_schema=True,
-                include_function_graphs=True,
                 include_parent_assets=True,
                 asset_roots=["/game/root"],
                 mappings_path="test.usmap",

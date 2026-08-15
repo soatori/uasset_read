@@ -209,6 +209,19 @@ class TestDiagnosticAggregation:
         assert result[1].severity == "warning"
 
 
+class TestBoundedDiagnostics:
+    def test_diagnostics_bounded(self):
+        """Diagnostics must be bounded to prevent infinite output."""
+        from uasset_read.semantic.diagnostics import DiagnosticAggregator
+
+        agg = DiagnosticAggregator()
+        for i in range(200):
+            agg.add("warning", f"CODE_{i % 5}", f"Message {i}")
+
+        result = agg.build()
+        assert len(result) <= 100  # Hard limit
+
+
 class TestCoverageModel:
     def test_all_available(self):
         """All scopes available -> 0 unavailable."""
@@ -284,6 +297,32 @@ class TestExtensionRegistry:
             register_extension("TestDup", dummy_extractor)
         # Cleanup
         _REGISTRY.pop("TestDup", None)
+
+
+class TestCoverageRepresentationConsistency:
+    def test_full_representation_requires_coverage(self):
+        """Full representation requires scopes_available == scopes_expected."""
+        from uasset_read.semantic.validator import validate_semantic_document
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus, CoverageInfo,
+        )
+
+        ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="standard",
+            asset_type="texture",
+            asset=AssetMeta(package="/Game/T_Default", name="T_Default"),
+            status=AssetStatus(parse="complete", representation="full"),
+            coverage=CoverageInfo(
+                scopes_expected=1,
+                scopes_available=0,
+                scopes_unavailable=("domain_content",),
+            ),
+        )
+
+        errors = validate_semantic_document(ir)
+        assert any("coverage" in e.lower() or "representation" in e.lower() for e in errors)
 
 
 class TestValidator:
@@ -531,6 +570,41 @@ class TestRealAssetSmoke:
         assert standard_ir.evidence == ()
 
 
+class TestOpaqueFallback:
+    def test_unregistered_asset_is_opaque(self):
+        """Asset with a known type but no registered extractor must be opaque, not full."""
+        from uasset_read.semantic.builder import build_semantic_ir
+        from uasset_read.models.ir import PackageIR, PackageHeaderIR, ExportIR, LinkerSummaryIR, DiagnosticsDataIR
+
+        pkg = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Game/BP_Test",
+                package_class="Package",
+                package_flags=0,
+                total_export_count=1,
+                total_import_count=0,
+                ue_version="5.1",
+            ),
+            name_map=(),
+            imports=[],
+            exports=[
+                ExportIR(
+                    index=0, object_name="BP_Test", object_class="BlueprintGeneratedClass",
+                    serial_size=1024, outer_index_resolved=None,
+                    super_index_resolved=None, parent_class=None,
+                    properties=[], graphs=[], bulk_data=None,
+                ),
+            ],
+            linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+            diagnostics_data=DiagnosticsDataIR(),
+        )
+
+        ir = build_semantic_ir(pkg)
+        assert ir.asset_type == "blueprint"
+        assert ir.status.representation == "opaque"
+        assert any(d.code == "NO_EXTRACTOR" for d in ir.diagnostics)
+
+
 class TestCLIAPIEquivalence:
     def test_single_file_cli_matches_python_api(self):
         """CLI single-file output matches Python API output byte-for-byte."""
@@ -588,6 +662,43 @@ def _make_pkg(export, package_name=None):
         linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
         diagnostics_data=DiagnosticsDataIR(),
     )
+
+
+class TestPrimaryExportTopLevel:
+    def test_nested_export_not_selected_by_basename(self):
+        """Nested export matching basename must not be primary when no top-level match exists."""
+        from uasset_read.semantic.builder import _select_primary_export
+        pkg = PackageIR(
+            header=PackageHeaderIR(
+                package_name="/Game/Foo",
+                package_class="Package",
+                package_flags=0,
+                total_export_count=2,
+                total_import_count=0,
+                ue_version="5.1",
+            ),
+            name_map=(),
+            imports=[],
+            exports=[
+                ExportIR(
+                    index=0, object_name="Other", object_class="Texture2D",
+                    serial_size=1024, outer_index_resolved=None,
+                    super_index_resolved=None, parent_class=None,
+                    properties=[], graphs=[], bulk_data=None,
+                ),
+                ExportIR(
+                    index=1, object_name="Foo", object_class="Texture2D",
+                    serial_size=512, outer_index_resolved="SomeOuter",
+                    super_index_resolved=None, parent_class=None,
+                    properties=[], graphs=[], bulk_data=None,
+                ),
+            ],
+            linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
+            diagnostics_data=DiagnosticsDataIR(),
+        )
+
+        result = _select_primary_export(pkg)
+        assert result is None
 
 
 class TestDomainExtractors:
@@ -731,3 +842,182 @@ class TestDomainExtractors:
         out1 = render_semantic_json(ir)
         out2 = render_semantic_json(ir)
         assert out1 == out2
+
+
+class TestRecursiveProjection:
+    def test_nested_evidence_stripped(self):
+        """Standard projection recursively removes evidence from nested content."""
+        from uasset_read.semantic.projection import project_semantic
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus, EvidenceEntry,
+        )
+
+        debug_ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="debug",
+            asset_type="blueprint",
+            asset=AssetMeta(package="/Game/BP_Foo", name="BP_Foo"),
+            status=AssetStatus(parse="complete", representation="full"),
+            content={
+                "functions": [
+                    {
+                        "name": "Foo",
+                        "evidence": [{"key": "export_index", "value": 0}],
+                    }
+                ],
+                "variables": [
+                    {
+                        "name": "Bar",
+                        "nested": {
+                            "evidence": [{"key": "property_index", "value": 1}],
+                        },
+                    }
+                ],
+            },
+            evidence=(EvidenceEntry(key="top_level", value=0),),
+        )
+
+        standard = project_semantic(debug_ir, "standard")
+        assert standard.evidence == ()
+        # Nested evidence must also be removed
+        for func in standard.content.get("functions", []):
+            assert "evidence" not in func
+            for var in standard.content.get("variables", []):
+                assert "evidence" not in var
+                assert "nested" not in var or "evidence" not in var.get("nested", {})
+
+
+class TestCanonicalArrayOrdering:
+    def test_diagnostics_sorted_by_code(self):
+        """Diagnostics array should be sorted by severity then code."""
+        from uasset_read.semantic.canonical import canonical_sort
+
+        data = {
+            "diagnostics": [
+                {"severity": "warning", "code": "B_CODE", "message": "msg"},
+                {"severity": "error", "code": "A_CODE", "message": "msg"},
+                {"severity": "warning", "code": "A_CODE", "message": "msg"},
+            ]
+        }
+
+        result = canonical_sort(data)
+        codes = [d["code"] for d in result["diagnostics"]]
+        assert codes == ["A_CODE", "A_CODE", "B_CODE"]
+
+    def test_references_sorted_by_kind_index(self):
+        """References array should be sorted by kind then index."""
+        from uasset_read.semantic.canonical import canonical_sort
+
+        data = {
+            "references": [
+                {"index": 1, "kind": "export", "class_name": "B", "object_name": "B1"},
+                {"index": 0, "kind": "import", "class_name": "A", "object_name": "A1"},
+                {"index": 0, "kind": "export", "class_name": "C", "object_name": "C1"},
+            ]
+        }
+
+        result = canonical_sort(data)
+        kinds = [r["kind"] for r in result["references"]]
+        # "export" < "import" alphabetically, so exports come first, then by index
+        assert kinds == ["export", "export", "import"]
+
+
+class TestValidatorEnhancements:
+    def test_reference_index_unique(self):
+        """Reference indices must be unique within kind."""
+        from uasset_read.semantic.validator import validate_semantic_document
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus, ReferenceEntry,
+        )
+
+        ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="standard",
+            asset_type="texture",
+            asset=AssetMeta(package="/Game/T_Default", name="T_Default"),
+            status=AssetStatus(parse="complete", representation="full"),
+            references=(
+                ReferenceEntry(index=0, kind="import", class_name="A", object_name="A1"),
+                ReferenceEntry(index=0, kind="import", class_name="B", object_name="B1"),
+            ),
+        )
+
+        errors = validate_semantic_document(ir)
+        assert any("reference" in e.lower() and "unique" in e.lower() for e in errors)
+
+    def test_opaque_has_diagnostic(self):
+        """Opaque representation must have at least one diagnostic."""
+        from uasset_read.semantic.validator import validate_semantic_document
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus, DiagnosticEntry,
+        )
+
+        ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="standard",
+            asset_type="unknown",
+            asset=AssetMeta(package="/Game/Unknown", name="Unknown"),
+            status=AssetStatus(parse="failed", representation="opaque"),
+            diagnostics=(),
+        )
+
+        errors = validate_semantic_document(ir)
+        assert any("opaque" in e.lower() and "diagnostic" in e.lower() for e in errors)
+
+
+class TestFunctionGraphsRemoved:
+    def test_cli_no_function_graphs_flag(self):
+        """CLI should not have --function-graphs flag."""
+        from uasset_read.cli import create_parser
+        parser = create_parser()
+        args = parser.parse_args(["test.uasset"])
+        assert not hasattr(args, "function_graphs")
+
+    def test_parse_single_no_function_graphs_param(self):
+        """parse_single should not accept include_function_graphs."""
+        import inspect
+        from uasset_read.core import parse_single
+        sig = inspect.signature(parse_single)
+        assert "include_function_graphs" not in sig.parameters
+
+
+class TestDomainExtractorMigration:
+    def test_no_domain_logic_in_551(self):
+        """#551 should not contain domain-specific extractor logic."""
+        import os
+        semantic_dir = os.path.join(os.path.dirname(__file__), "..", "src", "uasset_read", "semantic")
+        for fname in ["graph_domain.py", "structured_domain.py", "resource_domain.py"]:
+            fpath = os.path.join(semantic_dir, fname)
+            if os.path.exists(fpath):
+                with open(fpath) as f:
+                    content = f.read()
+                # Should only contain stubs or comments
+                assert "def extract" not in content, f"{fname} still contains domain extractor logic"
+
+
+class TestRendererRestructuring:
+    def test_content_not_overwrite_common_fields(self):
+        """Renderer must not let content overwrite common fields."""
+        from uasset_read.semantic.render import render_semantic_json
+        from uasset_read.semantic.models import (
+            SemanticIR, AssetMeta, AssetStatus,
+        )
+
+        ir = SemanticIR(
+            format="uasset_read.asset_semantic",
+            format_version="1.0",
+            mode="standard",
+            asset_type="texture",
+            asset=AssetMeta(package="/Game/T_Default", name="T_Default"),
+            status=AssetStatus(parse="complete", representation="full"),
+            content={"format": "malicious", "status": {"parse": "hacked"}},
+        )
+
+        output = render_semantic_json(ir)
+        import json
+        data = json.loads(output)
+        assert data["format"] == "uasset_read.asset_semantic"
+        assert data["status"]["parse"] == "complete"

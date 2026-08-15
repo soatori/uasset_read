@@ -54,7 +54,6 @@ MODULES = [
     "uasset_read.bounded_events",
     "uasset_read.versioning",
     "uasset_read.ir_builder",
-    "uasset_read.objects",
     "uasset_read.raw",
     "uasset_read.mappings",
     "uasset_read.batch_worker",
@@ -112,11 +111,11 @@ def test_handler_classes_exist():
     from uasset_read.parsers.asset_types.movie_scene import MovieSceneHandler
     for cls in [AnimBlueprintHandler, AnimMontageHandler, AnimSequenceHandler, MovieSceneHandler]:
         handler = cls()
-        assert hasattr(handler, "handle")
+        assert hasattr(handler, "parse")
 
 
 def test_handler_empty_properties():
-    """handler 空属性应返回 PARTIAL"""
+    """handler 空属性应返回 non-success result"""
     from uasset_read.parsers.asset_types.anim_blueprint import AnimBlueprintHandler
     from uasset_read.parsers.asset_types.anim_montage import AnimMontageHandler
     from uasset_read.parsers.asset_types.anim_sequence import AnimSequenceHandler
@@ -130,8 +129,8 @@ def test_handler_empty_properties():
         class FakeCtx:
             warnings = []
 
-        result = handler.handle(FakeExport(), FakeCtx())
-        assert result.value == "partial"
+        result = handler.parse(FakeExport(), FakeCtx())
+        assert not result.success
 
 
 def test_status_model():

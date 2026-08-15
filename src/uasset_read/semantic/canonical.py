@@ -20,6 +20,12 @@ _DIAGNOSTIC_ORDER = ["severity", "code", "message"]
 _REFERENCE_ORDER = ["index", "kind", "class_name", "object_name", "package_path"]
 _EVIDENCE_ORDER = ["key", "value"]
 
+_ARRAY_SORT_KEYS = {
+    "diagnostics": lambda d: (d.get("severity", ""), d.get("code", "")),
+    "references": lambda r: (r.get("kind", ""), r.get("index", 0)),
+    "evidence": lambda e: (e.get("key", ""),),
+}
+
 
 def _order_keys(data: dict, key_order: list[str]) -> dict:
     ordered = {}
@@ -73,4 +79,12 @@ def canonical_sort(data: Any) -> Any:
     else:
         ordered = dict(sorted(data.items()))
 
-    return {k: canonical_sort(v) for k, v in ordered.items()}
+    result = {}
+    for key, value in ordered.items():
+        if key in _ARRAY_SORT_KEYS and isinstance(value, list):
+            sorted_items = sorted(value, key=_ARRAY_SORT_KEYS[key])
+            result[key] = [canonical_sort(item) for item in sorted_items]
+        else:
+            result[key] = canonical_sort(value)
+
+    return result

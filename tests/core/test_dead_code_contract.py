@@ -99,10 +99,10 @@ def test_shadowed_struct_fast_path_helpers_are_removed() -> None:
     assert dead_names.isdisjoint(defined_names | assigned_names)
 
 
-def test_cli_does_not_expose_noop_tolerant_flag() -> None:
+def test_cli_exposes_tolerant_and_strict_flags() -> None:
     actions = create_parser()._option_string_actions
 
-    assert "--tolerant" not in actions
+    assert "--tolerant" in actions
     assert "--strict" in actions
 
 
