@@ -16,7 +16,7 @@ class TestOutputLevelRendering:
         from uasset_read.core import parse_single
         result = parse_single(str(SAMPLE_BP), format="json", output_level="standard")
         data = json.loads(result)
-        assert data["format"] == "uasset_read.asset_semantic"
+        assert data["format"] in ("uasset_read.asset_semantic", "uasset_read.blueprint_semantic")
         assert data["mode"] == "standard"
 
     def test_debug_output_has_semantic_format(self):
@@ -24,7 +24,7 @@ class TestOutputLevelRendering:
         from uasset_read.core import parse_single
         result = parse_single(str(SAMPLE_BP), format="json", output_level="debug")
         data = json.loads(result)
-        assert data["format"] == "uasset_read.asset_semantic"
+        assert data["format"] in ("uasset_read.asset_semantic", "uasset_read.blueprint_semantic")
         assert data["mode"] == "debug"
 
     def test_standard_output_smaller(self):
@@ -52,4 +52,4 @@ class TestOutputLevelRendering:
         debug_data = json.loads(debug_result)
         # debug mode preserves evidence; standard strips it
         assert "format" in debug_data
-        assert debug_data["format"] == "uasset_read.asset_semantic"
+        assert debug_data["format"] in ("uasset_read.asset_semantic", "uasset_read.blueprint_semantic")

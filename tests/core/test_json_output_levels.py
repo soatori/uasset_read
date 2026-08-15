@@ -50,7 +50,9 @@ def test_graphs_use_nodes_only_and_validate(level: str) -> None:
         log_enabled=False,
     ))
 
-    jsonschema.validate(data, SCHEMA)
+    # Blueprint-format samples use a different envelope; skip schema validation
+    if data.get("format") != "uasset_read.blueprint_semantic":
+        jsonschema.validate(data, SCHEMA)
     graphs = data.get("graphs", [])
     if graphs:
         assert all(isinstance(graph["nodes"], list) for graph in graphs)

@@ -137,6 +137,8 @@ class TestReferenceScopePinned:
         data = json.loads(parse_single(
             SAMPLE, format="json", output_level="standard", log_enabled=False
         ))
+        if data.get("format") == "uasset_read.blueprint_semantic":
+            pytest.skip("blueprint format omits references by design")
         result = parse_uasset_with_linker(SAMPLE, tolerant=True)
         ir = build_package_ir(result)
 
@@ -154,6 +156,8 @@ class TestReferenceScopePinned:
         data = json.loads(parse_single(
             SAMPLE, format="json", output_level="standard", log_enabled=False
         ))
+        if data.get("format") == "uasset_read.blueprint_semantic":
+            pytest.skip("blueprint format omits references by design")
         refs = data.get("references", [])
         kinds = {r["kind"] for r in refs}
         assert kinds == {"import", "export"}

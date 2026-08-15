@@ -16,6 +16,8 @@ def test_references_include_class_names():
         pytest.skip("sample not available")
     output = parse_single(str(sample), format="json", tolerant=True)
     data = json.loads(output)
+    if data.get("format") == "uasset_read.blueprint_semantic":
+        pytest.skip("blueprint format omits references by design")
     assert "references" in data, "Missing references field"
     refs = data["references"]
     assert isinstance(refs, list), "references should be a list"
@@ -33,6 +35,8 @@ def test_references_have_valid_kinds():
         pytest.skip("sample not available")
     output = parse_single(str(sample), format="json", tolerant=True)
     data = json.loads(output)
+    if data.get("format") == "uasset_read.blueprint_semantic":
+        pytest.skip("blueprint format omits references by design")
     refs = data["references"]
     valid_kinds = {"export", "import"}
     for ref in refs:

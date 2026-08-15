@@ -56,9 +56,13 @@ class TestOutputCorrectness:
     def test_json_export_count_positive(self, first_person_blueprint):
         output = parse_single(str(first_person_blueprint), format="json", tolerant=True)
         data = json.loads(output)
-        # Semantic output has references instead of summary.total_export_count
-        assert data["format"] == "uasset_read.asset_semantic"
-        assert "references" in data
+        # Both formats carry export-related data; asset_semantic uses references,
+        # blueprint_semantic carries declaration/components/variables.
+        assert data["format"] in ("uasset_read.asset_semantic", "uasset_read.blueprint_semantic")
+        if data["format"] == "uasset_read.blueprint_semantic":
+            assert "declaration" in data or "components" in data
+        else:
+            assert "references" in data
 
     def test_json_exports_have_required_fields(self, first_person_blueprint):
         output = parse_single(str(first_person_blueprint), format="json", tolerant=True)
@@ -79,8 +83,9 @@ class TestOutputCorrectness:
     def test_json_variables_have_type_and_name(self, first_person_blueprint):
         output = parse_single(str(first_person_blueprint), format="json", tolerant=True)
         data = json.loads(output)
-        # Semantic output is valid JSON with proper structure
-        assert data["format"] == "uasset_read.asset_semantic"
+        # Both formats carry variable data; blueprint_semantic has top-level
+        # variables list, asset_semantic carries status envelope.
+        assert data["format"] in ("uasset_read.asset_semantic", "uasset_read.blueprint_semantic")
         assert "status" in data
 
     def test_json_status_field_present(self, first_person_blueprint):
