@@ -9,6 +9,7 @@ from uasset_read.semantic.validator import validate_semantic_document
 from uasset_read.semantic.render import render_semantic_json
 
 # Domain extractors migrated to #554-#557 (stubs in graph_domain, structured_domain, resource_domain)
+import uasset_read.semantic.blueprint  # noqa: F401  (registers #554 extractors)
 
 __all__ = [
     "SemanticIR", "AssetMeta", "AssetStatus", "CoverageInfo",
