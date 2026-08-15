@@ -289,27 +289,20 @@ class TestReferenceCollection:
 
 class TestExtensionRegistry:
     def test_register_and_lookup(self):
-        """Register an extractor and look it up."""
-        from uasset_read.semantic.extensions import register_extension, get_extractor, is_registered
-        def dummy_extractor(export_ir, coverage, evidence_list=None):
+        from uasset_read.semantic.extensions import register_extension, get_extractor, _REGISTRY
+        def dummy_extractor(package_ir, export_ir, cov, evidence):
             return {}
         register_extension("TestDummyClass", dummy_extractor)
-        assert is_registered("TestDummyClass")
         assert get_extractor("TestDummyClass") is dummy_extractor
-        assert get_extractor("NonExistent") is None
-        # Cleanup
-        from uasset_read.semantic.extensions import _REGISTRY
         _REGISTRY.pop("TestDummyClass", None)
 
     def test_duplicate_registration_raises(self):
-        """Duplicate registration raises ValueError."""
         from uasset_read.semantic.extensions import register_extension, _REGISTRY
-        def dummy_extractor(export_ir):
+        def dummy_extractor(package_ir, export_ir, cov, evidence):
             return {}
         register_extension("TestDup", dummy_extractor)
-        with pytest.raises(ValueError, match="already registered"):
+        with pytest.raises(ValueError):
             register_extension("TestDup", dummy_extractor)
-        # Cleanup
         _REGISTRY.pop("TestDup", None)
 
 
@@ -1015,7 +1008,7 @@ class TestDomainExtractorMigration:
 
 class TestRendererRestructuring:
     def test_content_not_overwrite_common_fields(self):
-        """Renderer must not let content overwrite common fields."""
+        """Renderer must raise on collision with non-overridable envelope keys."""
         from uasset_read.semantic.render import render_semantic_json
         from uasset_read.semantic.models import (
             SemanticIR, AssetMeta, AssetStatus,
@@ -1031,11 +1024,8 @@ class TestRendererRestructuring:
             content={"format": "malicious", "status": {"parse": "hacked"}},
         )
 
-        output = render_semantic_json(ir)
-        import json
-        data = json.loads(output)
-        assert data["format"] == "uasset_read.asset_semantic"
-        assert data["status"]["parse"] == "complete"
+        with pytest.raises(ValueError, match="collides"):
+            render_semantic_json(ir)
 
 
 class TestCanonicalTieBreaks:

@@ -15,7 +15,7 @@ from uasset_read.semantic.kinds import resolve_asset_type
 from uasset_read.semantic.references import collect_references
 from uasset_read.semantic.coverage import CoverageModel
 from uasset_read.semantic.diagnostics import DiagnosticAggregator
-from uasset_read.semantic.extensions import get_extractor
+from uasset_read.semantic.extensions import get_extractor, get_domain_format
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
@@ -168,43 +168,48 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> 
     else:
         representation = representation_map.get(parse_status, "opaque")
 
-    # Known type but no registered extractor → opaque (not full)
-    if asset_type != "unknown" and get_extractor(primary.object_class or "") is None:
+    extractor = get_extractor(primary.object_class or "")
+    domain_format = get_domain_format(primary.object_class or "")
+
+    # Known type but no registered extractor -> opaque (not full)
+    if asset_type != "unknown" and extractor is None:
         representation = "opaque"
         diag.add("info", "NO_EXTRACTOR", f"No semantic extractor registered for class '{primary.object_class}'")
 
-    status = AssetStatus(
-        parse=parse,
-        representation=representation,
-    )
+    status = AssetStatus(parse=parse, representation=representation)
 
-    # Inject diagnostics for partial/failed
     if status.parse == "partial" and not any(d.code == "PARTIAL_PARSE" for d in diag.build()):
         diag.add("warning", "PARTIAL_PARSE", f"Asset '{primary.object_name}' was only partially parsed")
     elif status.parse == "failed" and not any(d.code == "PARSE_FAILED" for d in diag.build()):
         diag.add("error", "PARSE_FAILED", f"Asset '{primary.object_name}' failed to parse")
 
-    # Coverage + Domain Content
     cov = CoverageModel()
     content: dict = {}
     evidence_list: list = list(evidence)
 
-    extractor = get_extractor(primary.object_class or "")
     if extractor is not None and status.representation != "opaque":
-        # Domain extractor populates content and tracks its own coverage scopes
-        content = extractor(primary, cov, evidence_list)
+        content = extractor(package_ir, primary, cov, evidence_list)
     else:
-        # No extractor or opaque — track domain_content as unavailable
         cov.track("domain_content", False)
 
-    coverage = cov.build()
+    # Domain formats own coverage/diagnostics/references inside content.
+    owns_envelope_sections = domain_format is not None and status.representation != "opaque"
+    if owns_envelope_sections and content.get("coverage"):
+        # Any reported coverage entry means some scope is not complete:
+        # representation cannot be "full" (honest status contract).
+        representation = "partial"
+        status = AssetStatus(parse=parse, representation="partial")
+    coverage = None if owns_envelope_sections else cov.build()
+    diagnostics = () if owns_envelope_sections else diag.build()
+    references = () if owns_envelope_sections else collect_references(package_ir.imports, package_ir.exports)
 
-    # References
-    references = collect_references(package_ir.imports, package_ir.exports)
+    fmt, fmt_version = "uasset_read.asset_semantic", "1.0"
+    if owns_envelope_sections:
+        fmt, fmt_version = domain_format
 
     return SemanticIR(
-        format="uasset_read.asset_semantic",
-        format_version="1.0",
+        format=fmt,
+        format_version=fmt_version,
         mode="",
         asset_type=asset_type,
         asset=AssetMeta(
@@ -216,6 +221,6 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> 
         references=references,
         content=content,
         coverage=coverage,
-        diagnostics=diag.build(),
+        diagnostics=diagnostics,
         evidence=tuple(evidence_list),
     )

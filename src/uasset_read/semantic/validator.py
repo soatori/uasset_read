@@ -5,12 +5,26 @@ Called in production before rendering. Does NOT perform JSON Schema validation
 """
 from __future__ import annotations
 
+import re as _re
+
 from uasset_read.semantic.models import SemanticIR
 
 _VALID_MODES = {"standard", "debug"}
 _VALID_PARSES = {"complete", "partial", "failed"}
 _VALID_REPRESENTATIONS = {"full", "partial", "opaque"}
 _VALID_SEVERITIES = {"error", "warning", "info"}
+
+_FORMAT_VERSIONS = {
+    "uasset_read.asset_semantic": "1.0",
+    "uasset_read.blueprint_semantic": "1.0.0",
+}
+
+_DOMAIN_VALIDATORS: dict[str, object] = {}
+
+
+def register_domain_validator(fmt: str, validator) -> None:
+    """Register a format-specific semantic validator."""
+    _DOMAIN_VALIDATORS[fmt] = validator
 
 
 def validate_semantic_document(ir: SemanticIR) -> list[str]:
@@ -21,11 +35,12 @@ def validate_semantic_document(ir: SemanticIR) -> list[str]:
     """
     errors: list[str] = []
 
-    if ir.format != "uasset_read.asset_semantic":
-        errors.append(f"Invalid format: expected 'uasset_read.asset_semantic', got '{ir.format}'")
-
-    if ir.format_version != "1.0":
-        errors.append(f"Invalid format_version: expected '1.0', got '{ir.format_version}'")
+    expected_version = _FORMAT_VERSIONS.get(ir.format)
+    if expected_version is None:
+        errors.append(f"Invalid format: '{ir.format}' is not a known semantic format")
+    elif ir.format_version != expected_version:
+        errors.append(
+            f"Invalid format_version for '{ir.format}': expected '{expected_version}', got '{ir.format_version}'")
 
     if ir.mode not in _VALID_MODES:
         errors.append(f"Invalid mode: expected one of {_VALID_MODES}, got '{ir.mode}'")
@@ -45,7 +60,7 @@ def validate_semantic_document(ir: SemanticIR) -> list[str]:
     if ir.mode == "standard" and ir.evidence:
         errors.append("Standard mode must not contain evidence entries")
 
-    if ir.status.representation == "full" and ir.coverage:
+    if ir.status.representation == "full" and ir.coverage is not None:
         if ir.coverage.scopes_available < ir.coverage.scopes_expected:
             errors.append(
                 f"representation='full' but coverage is {ir.coverage.scopes_available}/{ir.coverage.scopes_expected}"
@@ -64,7 +79,11 @@ def validate_semantic_document(ir: SemanticIR) -> list[str]:
         seen_refs.add(key)
 
     # Opaque representation must have at least one diagnostic
-    if ir.status.representation == "opaque" and not ir.diagnostics:
+    if ir.status.representation == "opaque" and not ir.diagnostics and ir.format == "uasset_read.asset_semantic":
         errors.append("Opaque representation must have at least one diagnostic")
+
+    domain_validator = _DOMAIN_VALIDATORS.get(ir.format)
+    if domain_validator is not None:
+        errors.extend(domain_validator(ir))
 
     return errors
