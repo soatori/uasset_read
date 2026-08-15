@@ -99,6 +99,7 @@ def test_parse_batch_completes_rifle_anim_layers_in_isolated_worker(
 ) -> None:
     """#511: the real AnimBlueprint completes with an honest partial result."""
     pytest.skip("Batch worker subprocess requires PYTHONPATH setup")
+    fixture = Path(__file__).resolve().parents[1] / "samples" / "ABP_RifleAnimLayers.uasset"
     input_dir = tmp_path / "input"
     output_dir = tmp_path / "output"
     input_dir.mkdir()
