@@ -274,6 +274,9 @@ class MarkdownRenderer(IRenderer):
         # === Animation Data ===
         self._render_anim_data(lines, ir)
 
+        # === Material Data ===
+        self._render_material_section(ir, lines)
+
         # === Diagnostics ===
         self._render_diagnostics(lines, ir)
 
@@ -896,6 +899,39 @@ class MarkdownRenderer(IRenderer):
     @property
     def format_name(self) -> str:
         return "markdown"
+
+    def _render_material_section(self, ir: PackageIR, lines: list[str]) -> None:
+        """Render Material section in Markdown."""
+        if ir.material is None:
+            return
+        mat = ir.material
+        lines.append(f"\n## Material ({mat.material_type})\n")
+        if mat.properties:
+            lines.append("| Property | Value |")
+            lines.append("|----------|-------|")
+            for key, val in sorted(mat.properties.items()):
+                if isinstance(val, list):
+                    val = ", ".join(str(v) for v in val)
+                lines.append(f"| {key} | {val} |")
+            lines.append("")
+        if mat.parent:
+            lines.append(f"**Parent:** {mat.parent}\n")
+        if mat.expressions:
+            lines.append("### Expressions\n")
+            lines.append("| GUID | Class | Type |")
+            lines.append("|------|-------|------|")
+            for expr in mat.expressions:
+                lines.append(
+                    f"| {expr.expression_guid[:8]}... | {expr.expression_class} | {expr.expression_type or ''} |"
+                )
+            lines.append("")
+        if mat.parameters:
+            lines.append("### Parameters\n")
+            for ptype, params in mat.parameters.items():
+                if params:
+                    lines.append(f"**{ptype}:** {', '.join(sorted(params.keys()))}\n")
+        if mat.data_flow:
+            lines.append(f"**Data flow connections:** {len(mat.data_flow)}\n")
 
 
 register_renderer("markdown", MarkdownRenderer)

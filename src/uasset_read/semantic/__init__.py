@@ -11,6 +11,7 @@ from uasset_read.semantic.render import render_semantic_json
 # Domain extractors migrated to #554-#557 (stubs in graph_domain, structured_domain, resource_domain)
 import uasset_read.semantic.blueprint  # noqa: F401  (registers #554 extractors)
 import uasset_read.semantic.anim_blueprint  # noqa: F401  (registers #555 extractors)
+import uasset_read.semantic.material  # noqa: F401  (registers #556 extractors)
 
 __all__ = [
     "SemanticIR", "AssetMeta", "AssetStatus", "CoverageInfo",
