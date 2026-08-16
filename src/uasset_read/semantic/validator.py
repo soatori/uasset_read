@@ -17,6 +17,7 @@ _VALID_SEVERITIES = {"error", "warning", "info"}
 _FORMAT_VERSIONS = {
     "uasset_read.asset_semantic": "1.0",
     "uasset_read.blueprint_semantic": "1.0.0",
+    "uasset_read.anim_blueprint_semantic": "1.0.0",
 }
 
 _DOMAIN_VALIDATORS: dict[str, object] = {}
@@ -190,3 +191,133 @@ def validate_blueprint_document(ir) -> list[str]:
     return errors
 
 # Registration is handled by blueprint/__init__.py via register_domain_validator()
+
+
+# ---------------------------------------------------------------------------
+# Animation Blueprint-specific semantic rules (#555)
+# ---------------------------------------------------------------------------
+
+_ANIM_GRAPH_ID_FULL = _re.compile(r"^animblueprint://graph/[A-Za-z][A-Za-z0-9_.-]*$")
+_ANIM_NODE_ID_FULL = _re.compile(
+    r"^animblueprint://graph/[A-Za-z][A-Za-z0-9_.-]*/node/[a-z][a-z0-9-]*/[A-Za-z][A-Za-z0-9_.-]*/[0-9]+$")
+_ANIM_ENDPOINT_FULL = _re.compile(r"^(input|output|exec|pose)\.[A-Za-z][A-Za-z0-9_.-]*$")
+_ANIM_STATE_MACHINE_ID_FULL = _re.compile(r"^animblueprint://state_machine/[A-Za-z][A-Za-z0-9_.-]*$")
+_ANIM_STATE_ID_FULL = _re.compile(
+    r"^animblueprint://state_machine/[A-Za-z][A-Za-z0-9_.-]*/state/[A-Za-z][A-Za-z0-9_.-]*$")
+
+
+def validate_anim_blueprint_document(ir) -> list[str]:
+    """Animation Blueprint-specific semantic rules for uasset_read.anim_blueprint_semantic content."""
+    errors: list[str] = []
+    content = ir.content or {}
+    graphs = content.get("graphs", []) or []
+    types = content.get("types", {}) or {}
+
+    graph_ids: set[str] = set()
+    node_ids: set[str] = set()
+    endpoints: set[tuple[str, str, str]] = set()
+
+    for graph in graphs:
+        gid = graph.get("id", "")
+        if not _ANIM_GRAPH_ID_FULL.match(gid):
+            errors.append(f"Invalid graph id format: '{gid}'")
+        if gid in graph_ids:
+            errors.append(f"Duplicate graph id: '{gid}'")
+        graph_ids.add(gid)
+
+        for node in graph.get("nodes", []) or []:
+            nid = node.get("id", "")
+            if not _ANIM_NODE_ID_FULL.match(nid):
+                errors.append(f"Invalid node id format: '{nid}'")
+            if nid in node_ids:
+                errors.append(f"Duplicate node id: '{nid}'")
+            node_ids.add(nid)
+            for endpoint in (list(node.get("data_pins", {}) or {})
+                             + list(node.get("control_ports", {}) or {})
+                             + list(node.get("pose_pins", {}) or {})):
+                if not _ANIM_ENDPOINT_FULL.match(endpoint):
+                    errors.append(f"Invalid endpoint id format: '{endpoint}' on node '{nid}'")
+                endpoints.add((gid, nid, endpoint))
+
+    # Validate control/data flow endpoint closure
+    for section, key in (("control_flow", "port"), ("data_flow", "pin")):
+        for graph in graphs:
+            gid = graph.get("id", "")
+            flow = graph.get(section, {}) or {}
+            for entry in flow.get("entries", []) or []:
+                if (gid, entry.get("node", ""), entry.get(key, "")) not in endpoints:
+                    errors.append(f"Endpoint closure violation: {section} entry {entry} in '{gid}'")
+            for edge in flow.get("edges", []) or []:
+                for side in ("from", "to"):
+                    ref = edge.get(side, {}) or {}
+                    if (gid, ref.get("node", ""), ref.get(key, "")) not in endpoints:
+                        errors.append(f"Endpoint closure violation: {section} edge {side} in '{gid}'")
+
+    # Validate pose flow endpoint closure
+    for graph in graphs:
+        gid = graph.get("id", "")
+        pose_flow = graph.get("pose_flow", {}) or {}
+        for entry in pose_flow.get("entries", []) or []:
+            if (gid, entry.get("node", ""), entry.get("pose_pin", "")) not in endpoints:
+                errors.append(f"Pose endpoint closure violation: pose_flow entry {entry} in '{gid}'")
+        for edge in pose_flow.get("edges", []) or []:
+            for side in ("from", "to"):
+                ref = edge.get(side, {}) or {}
+                if (gid, ref.get("node", ""), ref.get("pose_pin", "")) not in endpoints:
+                    errors.append(f"Pose endpoint closure violation: pose_flow edge {side} in '{gid}'")
+
+    # Validate state machine IDs
+    state_machine_ids: set[str] = set()
+    state_ids: set[str] = set()
+    for sm in content.get("state_machines", []) or []:
+        sm_id = sm.get("id", "")
+        if not _ANIM_STATE_MACHINE_ID_FULL.match(sm_id):
+            errors.append(f"Invalid state machine id format: '{sm_id}'")
+        if sm_id in state_machine_ids:
+            errors.append(f"Duplicate state machine id: '{sm_id}'")
+        state_machine_ids.add(sm_id)
+
+        for state in sm.get("states", []) or []:
+            sid = state.get("id", "")
+            if not _ANIM_STATE_ID_FULL.match(sid):
+                errors.append(f"Invalid state id format: '{sid}'")
+            if sid in state_ids:
+                errors.append(f"Duplicate state id: '{sid}'")
+            state_ids.add(sid)
+
+    _validate_type_refs(content, set(types.keys()), errors, "content")
+
+    # Component hierarchy validation (reused from blueprint)
+    component_ids = {c.get("id") for c in content.get("components", []) or []}
+    parent_of: dict[str, str] = {}
+    for comp in content.get("components", []) or []:
+        parent = comp.get("parent")
+        if parent is not None:
+            if parent not in component_ids:
+                errors.append(f"Component parent closure violation: '{comp.get('id')}' -> '{parent}'")
+            parent_of[comp.get("id")] = parent
+    for start in parent_of:
+        seen: set[str] = set()
+        cur = start
+        while cur in parent_of:
+            if cur in seen:
+                errors.append(f"Component hierarchy cycle at '{start}'")
+                break
+            seen.add(cur)
+            cur = parent_of[cur]
+
+    if ir.status.representation == "opaque" and not content.get("diagnostics"):
+        errors.append("Opaque animation blueprint representation must have at least one diagnostic")
+    if ir.mode == "standard":
+        def _has_evidence(value) -> bool:
+            if isinstance(value, dict):
+                return "evidence" in value or any(_has_evidence(v) for v in value.values())
+            if isinstance(value, list):
+                return any(_has_evidence(v) for v in value)
+            return False
+        if _has_evidence(content):
+            errors.append("Standard animation blueprint content must not contain evidence")
+
+    return errors
+
+# Registration is handled by anim_blueprint/__init__.py via register_domain_validator()
