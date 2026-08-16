@@ -52,7 +52,6 @@ _ANIM_NODE_KIND_MAP = {
     "AnimNode_ModifyBone": "modify_bone",
     "AnimNode_CopyBone": "copy_bone",
     "AnimNode_ApplyMeshSpaceAdditive": "additive",
-    "AnimNode_ApplyMeshSpaceAdditive": "additive",
     "AnimNode_Root": "root",
     "AnimNode_SaveCachedPose": "save_cached_pose",
     "AnimNode_UseCachedPose": "use_cached_pose",
