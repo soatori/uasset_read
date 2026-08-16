@@ -189,5 +189,4 @@ def validate_blueprint_document(ir) -> list[str]:
 
     return errors
 
-
-register_domain_validator("uasset_read.blueprint_semantic", validate_blueprint_document)
+# Registration is handled by blueprint/__init__.py via register_domain_validator()
