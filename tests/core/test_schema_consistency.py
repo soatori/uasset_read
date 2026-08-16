@@ -24,8 +24,9 @@ def test_all_samples_have_references_and_diagnostics():
         output = parse_single(str(sample), format="json", tolerant=True)
         data = json.loads(output)
         is_blueprint = data.get("format") == "uasset_read.blueprint_semantic"
+        is_anim_blueprint = data.get("format") == "uasset_read.anim_blueprint_semantic"
         is_material = data.get("asset_type") == "material"
-        if is_blueprint or is_material:
+        if is_blueprint or is_anim_blueprint or is_material:
             # Blueprint format omits references by design; material format strips them in standard mode
             continue
         assert "references" in data, f"{sample.name}: missing references"
@@ -76,5 +77,5 @@ def test_all_samples_have_format():
         data = json.loads(output)
         assert "format" in data, f"{sample.name}: missing format"
         assert "format_version" in data, f"{sample.name}: missing format_version"
-        valid_formats = {"uasset_read.asset_semantic", "uasset_read.blueprint_semantic", "uasset_read.material_semantic"}
+        valid_formats = {"uasset_read.asset_semantic", "uasset_read.blueprint_semantic", "uasset_read.material_semantic", "uasset_read.anim_blueprint_semantic"}
         assert data["format"] in valid_formats, f"{sample.name}: wrong format {data['format']!r}"
