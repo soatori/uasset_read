@@ -1023,9 +1023,10 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
 
     # Check BinaryOrNative handler registry for known struct types (e.g. NiagaraVariable).
     # These have custom hybrid layouts that the standard tagged loop cannot decode.
+    # Try both with and without "F" prefix to handle UE naming inconsistencies.
     if declared_struct_type:
         from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
-        bn_handler = BINARY_OR_NATIVE_HANDLERS.get(declared_struct_type)
+        bn_handler = BINARY_OR_NATIVE_HANDLERS.get(declared_struct_type) or BINARY_OR_NATIVE_HANDLERS.get(f"F{declared_struct_type}")
         if bn_handler is not None:
             try:
                 bn_result = bn_handler(tag, archive, name_map, export_map, summary)
