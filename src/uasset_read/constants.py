@@ -545,6 +545,179 @@ UE5_LARGE_PROPERTY_TYPES = frozenset({
 
 UE5_LARGE_PROPERTY_MAX_REASONABLE = 500 * 1024 * 1024  # 500 MB — UE5 large property size cap
 
+# ============================================================================
+# Material property decode tables
+# Reference: Engine/Source/Runtime/Engine/Public/Materials/Material.h
+# ============================================================================
+
+MATERIAL_DOMAIN_MAP: dict[int, str] = {
+    0: "Surface",
+    1: "DeferredDecal",
+    2: "LightFunction",
+    3: "Volume",
+    4: "PostProcess",
+    5: "UserInterface",
+}
+
+BLEND_MODE_MAP: dict[int, str] = {
+    0: "Opaque",
+    1: "Masked",
+    2: "Translucent",
+    3: "Additive",
+    4: "Modulate",
+    5: "AlphaComposite",
+    8: "TranslucentColoredTransmittance",
+}
+
+SHADING_MODEL_MAP: dict[int, str] = {
+    0: "Unlit",
+    1: "DefaultLit",
+    2: "Subsurface",
+    3: "PreintegratedSkin",
+    4: "SubsurfaceProfile",
+    5: "ClearCoatTopCoat",
+    6: "ThinTranslucent",
+    8: "SingleLayerWater",
+}
+
+MATERIAL_USAGE_FLAG_NAMES: tuple[str, ...] = (
+    "bUsedWithSkeletalMesh",
+    "bUsedWithClothing",
+    "bUsedWithStatic",
+    "bUsedWithLandscape",
+    "bUsedWithNanite",
+    "bUsedWithUI",
+    "bUsedWithParticles",
+    "bUsedWithSplineMeshes",
+    "bUsedWithInstancedStaticMeshes",
+    "bUsedWithGeometryCollection",
+    "bUsedWithWaterSurface",
+    "bUsedWithHairStrands",
+)
+
+# Expression type classification table
+# Maps expression class name patterns to semantic types
+_EXPRESSION_TYPE_PATTERNS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("MaterialExpressionConstant", "MaterialExpressionConstant2Vector",
+      "MaterialExpressionConstant3Vector", "MaterialExpressionConstant4Vector"), "constant"),
+    (("MaterialExpressionScalarParameter", "MaterialExpressionVectorParameter",
+      "MaterialExpressionTextureSampleParameter", "MaterialExpressionTextureObjectParameter",
+      "MaterialExpressionDoubleVectorParameter", "MaterialExpressionChannelMaskParameter",
+      "MaterialExpressionStaticBoolParameter", "MaterialExpressionStaticSwitchParameter",
+      "MaterialExpressionStaticComponentMaskParameter",
+      "MaterialExpressionFontSampleParameter", "MaterialExpressionCurveAtlasRowParameter",
+      "MaterialExpressionTextureCollectionParameter",
+      "MaterialExpressionRuntimeVirtualTextureSampleParameter"), "parameter"),
+    (("MaterialExpressionAdd", "MaterialExpressionSubtract", "MaterialExpressionMultiply",
+      "MaterialExpressionDivide", "MaterialExpressionPower", "MaterialExpressionLinearInterpolate",
+      "MaterialExpressionClamp", "MaterialExpressionSaturate", "MaterialExpressionAbs",
+      "MaterialExpressionSine", "MaterialExpressionCosine", "MaterialExpressionFloor",
+      "MaterialExpressionCeil", "MaterialExpressionFrac", "MaterialExpressionRound",
+      "MaterialExpressionSquareRoot", "MaterialExpressionExponential", "MaterialExpressionExponential2",
+      "MaterialExpressionModulo", "MaterialExpressionCrossProduct", "MaterialExpressionDotProduct",
+      "MaterialExpressionLength", "MaterialExpressionNormalize", "MaterialExpressionOneMinus",
+      "MaterialExpressionSign", "MaterialExpressionDesaturation", "MaterialExpressionIf",
+      "MaterialExpressionIfThenElse", "MaterialExpressionInverseLinearInterpolate",
+      "MaterialExpressionSmoothStep", "MaterialExpressionStep", "MaterialExpressionFmod",
+      "MaterialExpressionLogarithm", "MaterialExpressionLogarithm2", "MaterialExpressionLogarithm10",
+      "MaterialExpressionArcsine", "MaterialExpressionArcsineFast",
+      "MaterialExpressionArccosine", "MaterialExpressionArccosineFast",
+      "MaterialExpressionArctangent", "MaterialExpressionArctangentFast",
+      "MaterialExpressionArctangent2", "MaterialExpressionArctangent2Fast",
+      "MaterialExpressionBumpOffset", "MaterialExpressionBlend",
+      "MaterialExpressionComponentMask", "MaterialExpressionAppendVector",
+      "MaterialExpressionConstantBiasScale", "MaterialExpressionDistance",
+      "MaterialExpressionFresnel", "MaterialExpressionNoise", "MaterialExpressionPanner",
+      "MaterialExpressionRotator", "MaterialExpressionSphereMask",
+      "MaterialExpressionSphericalParticleOpacity", "MaterialExpressionDeriveNormalZ",
+      "MaterialExpressionDDX", "MaterialExpressionDDY",
+      "MaterialExpressionMax", "MaterialExpressionMin",
+      "MaterialExpressionTransform", "MaterialExpressionTransformPosition",
+      "MaterialExpressionConvert", "MaterialExpressionHsvToRgb",
+      "MaterialExpressionRgbToHsv", "MaterialExpressionSpeedTree",
+      "MaterialExpressionBlendMaterialAttributes", "MaterialExpressionBreakMaterialAttributes",
+      "MaterialExpressionGetMaterialAttributes", "MaterialExpressionSetMaterialAttributes",
+      "MaterialExpressionMakeMaterialAttributes",
+      "MaterialExpressionMaterialAttributeLayers", "MaterialExpressionLayerStack",
+      "MaterialExpressionSwitch", "MaterialExpressionStaticSwitch",
+      "MaterialExpressionPreviousFrameSwitch", "MaterialExpressionFeatureLevelSwitch",
+      "MaterialExpressionQualitySwitch", "MaterialExpressionShaderStageSwitch",
+      "MaterialExpressionShadingPathSwitch", "MaterialExpressionDataDrivenShaderPlatformInfoSwitch",
+      "MaterialExpressionPathTracingQualitySwitch", "MaterialExpressionRayTracingQualitySwitch",
+      "MaterialExpressionReflectionCapturePassSwitch", "MaterialExpressionShadowReplace",
+      "MaterialExpressionNaniteReplace", "MaterialExpressionVirtualTextureFeatureSwitch",
+      "MaterialExpressionRequiredSamplersSwitch",
+      "MaterialExpressionDistanceFieldsRenderingSwitch", "MaterialExpressionGIReplace",
+      "MaterialExpressionLightmassReplace", "MaterialExpressionBindlessSwitch",
+      "MaterialExpressionMeshPaintTextureReplace",
+      "MaterialExpressionSobol", "MaterialExpressionTemporalSobol"), "operator"),
+    (("MaterialExpressionTextureSample", "MaterialExpressionTextureObject",
+      "MaterialExpressionTextureProperty",
+      "MaterialExpressionSparseVolumeTextureSample", "MaterialExpressionSparseVolumeTextureObject",
+      "MaterialExpressionRuntimeVirtualTextureSample", "MaterialExpressionRuntimeVirtualTextureReplace",
+      "MaterialExpressionVirtualTextureFeatureSwitch",
+      "MaterialExpressionDBufferTexture", "MaterialExpressionSceneTexture",
+      "MaterialExpressionUserSceneTexture", "MaterialExpressionSceneColor",
+      "MaterialExpressionSceneDepth", "MaterialExpressionSceneDepthWithoutWater",
+      "MaterialExpressionSceneTexelSize", "MaterialExpressionScreenPosition",
+      "MaterialExpressionTextureCollection", "MaterialExpressionTextureCollectionParameter"), "texture_sample"),
+    (("MaterialExpressionTextureCoordinate", "MaterialExpressionVertexColor", "MaterialExpressionCameraPositionWS",
+      "MaterialExpressionCameraVectorWS", "MaterialExpressionObjectOrientation",
+      "MaterialExpressionObjectPositionWS", "MaterialExpressionObjectBounds",
+      "MaterialExpressionObjectLocalBounds", "MaterialExpressionObjectRadius",
+      "MaterialExpressionLocalPosition", "MaterialExpressionWorldPosition",
+      "MaterialExpressionViewProperty", "MaterialExpressionViewSize",
+      "MaterialExpressionPixelNormalWS", "MaterialExpressionVertexNormalWS",
+      "MaterialExpressionVertexTangentWS", "MaterialExpressionTangent",
+      "MaterialExpressionTangentOutput",
+      "MaterialExpressionTime", "MaterialExpressionDeltaTime",
+      "MaterialExpressionEyeAdaptation", "MaterialExpressionEyeAdaptationInverse",
+      "MaterialExpressionDistanceCullFade", "MaterialExpressionDistanceToNearestSurface",
+      "MaterialExpressionDistanceFieldGradient", "MaterialExpressionDistanceFieldApproxAO",
+      "MaterialExpressionFogColor", "MaterialExpressionAtmosphericFogColor",
+      "MaterialExpressionAtmosphericLightColor", "MaterialExpressionAtmosphericLightVector",
+      "MaterialExpressionMainDirectionalLight", "MaterialExpressionLightVector",
+      "MaterialExpressionPixelDepth", "MaterialExpressionPreSkinnedNormal",
+      "MaterialExpressionPreSkinnedPosition", "MaterialExpressionPreSkinnedLocalBounds",
+      "MaterialExpressionTwoSidedSign", "MaterialExpressionIsOrthographic",
+      "MaterialExpressionIsFirstPerson", "MaterialExpressionPerInstanceCustomData",
+      "MaterialExpressionPerInstanceFadeAmount", "MaterialExpressionPerInstanceRandom",
+      "MaterialExpressionBounds", "MaterialExpressionSkyAtmosphereLightDirection",
+      "MaterialExpressionSkyAtmosphereLightIlluminance", "MaterialExpressionSkyAtmosphereViewLuminance",
+      "MaterialExpressionSkyLightEnvMapSample", "MaterialExpressionPostVolumeUserFlagTest",
+      "MaterialExpressionParticleColor", "MaterialExpressionParticleDirection",
+      "MaterialExpressionParticleMacroUV", "MaterialExpressionParticleMotionBlurFade",
+      "MaterialExpressionParticlePositionWS", "MaterialExpressionParticleRadius",
+      "MaterialExpressionParticleRandom", "MaterialExpressionParticleRelativeTime",
+      "MaterialExpressionParticleSize", "MaterialExpressionParticleSpeed",
+      "MaterialExpressionParticleSpriteRotation", "MaterialExpressionParticleSubUV",
+      "MaterialExpressionFirstPersonOutput", "MaterialExpressionVolumetricAdvancedMaterialInput",
+      "MaterialExpressionLightmapUVs", "MaterialExpressionMeshPaintTextureCoordinateIndex",
+      "MaterialExpressionRecordTextureStreamingInfo",
+      "MaterialExpressionTemporalResponsivenessOutput"), "input"),
+    (("MaterialExpressionComment",), "comment"),
+    (("MaterialExpressionFunctionInput", "MaterialExpressionFunctionOutput"), "function_io"),
+    (("MaterialExpressionReroute", "MaterialExpressionNamedReroute",
+      "MaterialExpressionNamedRerouteUsage", "MaterialExpressionRerouteBase",
+      "MaterialExpressionPinBase"), "reroute"),
+)
+
+
+def classify_expression_type(class_name: str) -> str:
+    """Classify a MaterialExpression class name into a semantic type.
+
+    Returns one of: "constant", "parameter", "operator", "texture_sample",
+    "input", "comment", "function_io", "reroute", "unknown".
+    Returns "unknown" for empty or unrecognized names.
+    """
+    if not class_name:
+        return "unknown"
+    for patterns, expr_type in _EXPRESSION_TYPE_PATTERNS:
+        for pattern in patterns:
+            if class_name == pattern:
+                return expr_type
+    return "unknown"
+
 
 def get_max_reasonable(property_type: str, engine_version: int) -> int:
     """Return reasonable size cap based on property type and engine version.
