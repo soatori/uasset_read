@@ -162,6 +162,60 @@ def _parse_expression_output(
         return None
 
 
+def _parse_expression_input(
+    tag: "PropertyTag",
+    archive: "FArchive",
+    name_map: List[str],
+    export_map: List[Any],
+    summary: Any,
+) -> Optional[Dict[str, Any]]:
+    """Parse FExpressionInput binary data.
+
+    FExpressionInput format (36 bytes):
+    - Expression: int32 (PackageIndex — references a MaterialExpression export)
+    - OutputIndex: int32
+    - InputName: FName (8 bytes: index + number)
+    - Mask: int32
+    - MaskR: int32
+    - MaskG: int32
+    - MaskB: int32
+    - MaskA: int32
+
+    Reference: Engine/Source/Runtime/Engine/Public/Materials/MaterialExpression.h:47-79
+    """
+    if tag.size < 36:
+        return None
+
+    start_pos = archive.tell()
+    try:
+        expression_index = archive.read_i32()
+        output_index = archive.read_i32()
+        input_name = archive.read_name(name_map)
+        mask = archive.read_i32()
+        mask_r = archive.read_i32()
+        mask_g = archive.read_i32()
+        mask_b = archive.read_i32()
+        mask_a = archive.read_i32()
+
+        return {
+            "kind": "expression_input",
+            "type": tag.type,
+            "size": tag.size,
+            "expression_index": expression_index,
+            "output_index": output_index,
+            "input_name": input_name,
+            "mask": mask,
+            "mask_r": mask_r,
+            "mask_g": mask_g,
+            "mask_b": mask_b,
+            "mask_a": mask_a,
+        }
+    except (struct.error, OSError, ValueError) as e:
+        archive.seek(start_pos)
+        logger.debug("ExpressionInput parse failed: %s", e)
+        return None
+
+
 # ============================================================================
 # Struct binary decoders (dispatched by struct_type + size)
 # ============================================================================
@@ -463,6 +517,8 @@ BINARY_OR_NATIVE_HANDLERS: Dict[str, BinaryOrNativeHandler] = {
     "FVectorMaterialInput": _parse_material_input,
     "FVector2MaterialInput": _parse_material_input,
     "FExpressionOutput": _parse_expression_output,
+    "ExpressionInput": _parse_expression_input,
+    "FExpressionInput": _parse_expression_input,
 
     # General structs
     "FInstancedStruct": _parse_instanced_struct,
