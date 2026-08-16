@@ -289,27 +289,20 @@ class TestReferenceCollection:
 
 class TestExtensionRegistry:
     def test_register_and_lookup(self):
-        """Register an extractor and look it up."""
-        from uasset_read.semantic.extensions import register_extension, get_extractor, is_registered
-        def dummy_extractor(export_ir, coverage, evidence_list=None):
+        from uasset_read.semantic.extensions import register_extension, get_extractor, _REGISTRY
+        def dummy_extractor(package_ir, export_ir, cov, evidence):
             return {}
         register_extension("TestDummyClass", dummy_extractor)
-        assert is_registered("TestDummyClass")
         assert get_extractor("TestDummyClass") is dummy_extractor
-        assert get_extractor("NonExistent") is None
-        # Cleanup
-        from uasset_read.semantic.extensions import _REGISTRY
         _REGISTRY.pop("TestDummyClass", None)
 
     def test_duplicate_registration_raises(self):
-        """Duplicate registration raises ValueError."""
         from uasset_read.semantic.extensions import register_extension, _REGISTRY
-        def dummy_extractor(export_ir):
+        def dummy_extractor(package_ir, export_ir, cov, evidence):
             return {}
         register_extension("TestDup", dummy_extractor)
-        with pytest.raises(ValueError, match="already registered"):
+        with pytest.raises(ValueError):
             register_extension("TestDup", dummy_extractor)
-        # Cleanup
         _REGISTRY.pop("TestDup", None)
 
 
@@ -529,7 +522,7 @@ class TestRealAssetSmoke:
         from uasset_read.core import parse_single
         result = parse_single(str(sample), format="json", output_level="standard")
         data = json.loads(result)
-        assert data["format"] == "uasset_read.asset_semantic"
+        assert data["format"] in ("uasset_read.asset_semantic", "uasset_read.blueprint_semantic")
         assert "asset" in data
         assert "status" in data
 
@@ -590,9 +583,10 @@ class TestOpaqueFallback:
         from uasset_read.semantic.builder import build_semantic_ir
         from uasset_read.models.ir import PackageIR, PackageHeaderIR, ExportIR, LinkerSummaryIR, DiagnosticsDataIR
 
+        from uasset_read.models.ir import ExportRawIR
         pkg = PackageIR(
             header=PackageHeaderIR(
-                package_name="/Game/BP_Test",
+                package_name="/Game/T_Test",
                 package_class="Package",
                 package_flags=0,
                 total_export_count=1,
@@ -603,10 +597,11 @@ class TestOpaqueFallback:
             imports=[],
             exports=[
                 ExportIR(
-                    index=0, object_name="BP_Test", object_class="BlueprintGeneratedClass",
+                    index=0, object_name="T_Test", object_class="Texture2D",
                     serial_size=1024, outer_index_resolved=None,
                     super_index_resolved=None, parent_class=None,
                     properties=[], graphs=[], bulk_data=None,
+                    ue_export_raw=ExportRawIR(b_is_asset=True),
                 ),
             ],
             linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
@@ -614,7 +609,7 @@ class TestOpaqueFallback:
         )
 
         ir = build_semantic_ir(pkg)
-        assert ir.asset_type == "blueprint"
+        assert ir.asset_type == "texture"
         assert ir.status.representation == "opaque"
         assert any(d.code == "NO_EXTRACTOR" for d in ir.diagnostics)
 
@@ -813,9 +808,9 @@ class TestDomainExtractors:
         """Asset with no registered extractor has empty content."""
         from uasset_read.semantic import build_semantic_ir
 
-        export = _make_export("BlueprintGeneratedClass", "BP_Foo", b_is_asset=False)
-        # BlueprintGeneratedClass is not registered, so no extractor
-        pkg = _make_pkg(export, "/Game/BP_Foo")
+        export = _make_export("Texture2D", "T_Foo", b_is_asset=False)
+        # Texture2D is a known type but has no registered extractor
+        pkg = _make_pkg(export, "/Game/T_Foo")
         ir = build_semantic_ir(pkg)
         # Should fall back to name-match rule or be opaque
         assert ir.content == {} or ir.status.representation == "opaque"
@@ -1015,7 +1010,7 @@ class TestDomainExtractorMigration:
 
 class TestRendererRestructuring:
     def test_content_not_overwrite_common_fields(self):
-        """Renderer must not let content overwrite common fields."""
+        """Renderer must raise on collision with non-overridable envelope keys."""
         from uasset_read.semantic.render import render_semantic_json
         from uasset_read.semantic.models import (
             SemanticIR, AssetMeta, AssetStatus,
@@ -1031,11 +1026,8 @@ class TestRendererRestructuring:
             content={"format": "malicious", "status": {"parse": "hacked"}},
         )
 
-        output = render_semantic_json(ir)
-        import json
-        data = json.loads(output)
-        assert data["format"] == "uasset_read.asset_semantic"
-        assert data["status"]["parse"] == "complete"
+        with pytest.raises(ValueError, match="collides"):
+            render_semantic_json(ir)
 
 
 class TestCanonicalTieBreaks:

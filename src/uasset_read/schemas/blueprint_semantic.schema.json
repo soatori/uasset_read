@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/soatori/uasset_read/schemas/blueprint_semantic.schema.json",
+  "title": "UAsset Read Blueprint Semantic JSON",
+  "description": "Public semantic contract for Unreal Engine Blueprint asset parsing output.",
+  "type": "object",
+  "required": ["format", "format_version", "mode", "asset_type", "asset", "status", "graphs"],
+  "properties": {
+    "format": {"type": "string", "const": "uasset_read.blueprint_semantic"},
+    "format_version": {"type": "string", "const": "1.0.0"},
+    "mode": {"type": "string", "enum": ["standard", "debug"]},
+    "asset_type": {"type": "string", "const": "blueprint"},
+    "asset": {"$ref": "#/$defs/BlueprintAsset"},
+    "status": {"$ref": "#/$defs/AssetStatus"},
+    "references": {"type": "array", "items": {"type": "object"}},
+    "types": {"type": "object", "additionalProperties": {"$ref": "#/$defs/TypeEntry"}},
+    "variables": {"type": "array", "items": {"type": "object", "required": ["name"]}},
+    "components": {"type": "array", "items": {"$ref": "#/$defs/Component"}},
+    "declaration": {"type": "object"},
+    "graphs": {"type": "array", "items": {"$ref": "#/$defs/Graph"}},
+    "coverage": {"type": "array", "items": {"$ref": "#/$defs/CoverageEntry"}},
+    "diagnostics": {"type": "array", "items": {"$ref": "#/$defs/BlueprintDiagnostic"}},
+    "evidence": {"type": "array", "items": {"$ref": "#/$defs/EvidenceEntry"}},
+    "extensions": {"type": "object"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"mode": {"const": "standard"}}},
+      "then": {
+        "properties": {
+          "evidence": {"type": "array", "maxItems": 0},
+          "extensions": {"maxProperties": 0}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "BlueprintAsset": {
+      "type": "object",
+      "required": ["package", "name"],
+      "properties": {
+        "package": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "kind": {"type": "string"},
+        "generated_class": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "AssetStatus": {
+      "type": "object",
+      "required": ["parse", "representation"],
+      "properties": {
+        "parse": {"type": "string", "enum": ["complete", "partial", "failed"]},
+        "representation": {"type": "string", "enum": ["full", "partial", "opaque"]}
+      },
+      "additionalProperties": false
+    },
+    "Graph": {
+      "type": "object",
+      "required": ["id", "name", "kind"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^blueprint://graph/[A-Za-z][A-Za-z0-9_.-]*$"},
+        "name": {"type": "string"},
+        "kind": {"type": "string", "enum": ["event_graph", "function", "macro", "construction_script", "collapsed_graph"]},
+        "nodes": {"type": "array", "items": {"$ref": "#/$defs/Node"}},
+        "control_flow": {"$ref": "#/$defs/Flow"},
+        "data_flow": {"$ref": "#/$defs/Flow"},
+        "evidence": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "Node": {
+      "type": "object",
+      "required": ["id", "kind"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^blueprint://graph/[A-Za-z][A-Za-z0-9_.-]*/node/[a-z][a-z0-9-]*/[A-Za-z][A-Za-z0-9_.-]*/[0-9]+$"},
+        "label": {"type": "string"},
+        "kind": {"type": "string"},
+        "status": {"type": "string", "enum": ["recognized", "partial", "opaque"]},
+        "source_type": {"type": "string"},
+        "data_pins": {"type": "object", "additionalProperties": {"$ref": "#/$defs/DataPin"}},
+        "control_ports": {"type": "object", "additionalProperties": {"$ref": "#/$defs/ControlPort"}},
+        "evidence": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "DataPin": {
+      "type": "object",
+      "required": ["name", "direction", "type"],
+      "properties": {
+        "name": {"type": "string"},
+        "direction": {"type": "string", "enum": ["input", "output"]},
+        "type": {"$ref": "#/$defs/TypeRef"},
+        "path": {"type": "array", "items": {"type": "string"}},
+        "split_child": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "ControlPort": {
+      "type": "object",
+      "required": ["name", "direction", "role"],
+      "properties": {
+        "name": {"type": "string"},
+        "direction": {"type": "string", "enum": ["input", "output"]},
+        "role": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "Flow": {
+      "type": "object",
+      "properties": {
+        "entries": {"type": "array", "items": {"$ref": "#/$defs/EndpointRef"}},
+        "edges": {"type": "array", "items": {"$ref": "#/$defs/FlowEdge"}}
+      },
+      "additionalProperties": false
+    },
+    "EndpointRef": {
+      "type": "object",
+      "required": ["node"],
+      "properties": {
+        "node": {"type": "string"},
+        "port": {"type": "string"},
+        "pin": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "FlowEdge": {
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": {
+        "from": {"$ref": "#/$defs/EndpointRef"},
+        "to": {"$ref": "#/$defs/EndpointRef"},
+        "ordinal": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "TypeRef": {
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "object", "required": ["$type"],
+         "properties": {"$type": {"type": "string", "pattern": "^t[0-9]+$"}},
+         "additionalProperties": false}
+      ]
+    },
+    "TypeEntry": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {"type": "string"},
+        "path": {"type": "string"},
+        "category": {"type": "string"},
+        "name": {"type": "string"},
+        "signature": {"type": "string"},
+        "key": {"$ref": "#/$defs/TypeRef"},
+        "value": {"$ref": "#/$defs/TypeRef"},
+        "target": {"$ref": "#/$defs/TypeRef"},
+        "element": {"$ref": "#/$defs/TypeRef"},
+        "const": {"type": "boolean"}
+      }
+    },
+    "Component": {
+      "type": "object",
+      "required": ["id", "name", "origin"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^c[0-9]+$"},
+        "name": {"type": "string"},
+        "type": {"$ref": "#/$defs/TypeRef"},
+        "origin": {"type": "string", "enum": ["scs_owned", "scs_inherited", "native", "unverified"]},
+        "parent": {"type": "string"},
+        "socket": {"type": "string"},
+        "transform": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "CoverageEntry": {
+      "type": "object",
+      "required": ["scope", "status"],
+      "properties": {
+        "scope": {"type": "string"},
+        "status": {"type": "string", "enum": ["ok", "partial", "unavailable", "truncated"]},
+        "reason": {"type": "string"},
+        "declared": {"type": "integer", "minimum": 0},
+        "emitted": {"type": "integer", "minimum": 0},
+        "omitted": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "BlueprintDiagnostic": {
+      "type": "object",
+      "required": ["code", "scope", "severity", "effect", "count"],
+      "properties": {
+        "code": {"type": "string"},
+        "scope": {"type": "string"},
+        "severity": {"type": "string", "enum": ["error", "warning", "info"]},
+        "effect": {"type": "string"},
+        "count": {"type": "integer", "minimum": 1},
+        "evidence": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "EvidenceEntry": {
+      "type": "object",
+      "required": ["key"],
+      "properties": {"key": {"type": "string"}, "value": {}},
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

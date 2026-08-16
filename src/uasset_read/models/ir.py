@@ -174,6 +174,20 @@ class PinIR:
     map_key_pin_category: str = ""
     map_key_pin_subcategory: str = ""
     map_key_pin_subcategory_object_name: str | None = None
+    # --- Pin identity fields (BP-§5, Task 2) ---
+    friendly_name: str | None = None
+    source_index: int | None = None
+    persistent_guid: str = ""
+    default_text_value: str | None = None
+    auto_default_value: str | None = None
+    default_object_name: str | None = None
+    parent_pin_guid: str = ""
+    sub_pin_guids: list[str] = field(default_factory=list)
+    ref_pass_through_guid: str = ""
+    hidden: bool = False
+    not_connectable: bool = False
+    advanced_view: bool = False
+    orphaned: bool = False
 
 
 @dataclass
@@ -196,6 +210,9 @@ class NodeIR:
     input_action_path: str | None = None  # Input Action asset path
     trigger_events: list[dict] = field(default_factory=list)  # Trigger events list
     event_type: str | None = None  # Event type (Triggered/Completed/Started/Stopped/Ongoing)
+    # --- Member reference fields (Task 2) ---
+    member_name: str | None = None
+    member_parent: str | None = None
 
 
 @dataclass

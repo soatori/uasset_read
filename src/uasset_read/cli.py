@@ -149,10 +149,6 @@ def _write_output(output_str: str, output_path: str | None) -> None:
         print(output_str)
 
 
-def _log_enabled_from_args(args) -> bool:
-    return args.log_level != "off"
-
-
 def _log_max_total_bytes_from_args(args) -> int | None:
     if args.log_max_total_mb is None:
         return None

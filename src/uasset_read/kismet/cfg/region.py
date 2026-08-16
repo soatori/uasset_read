@@ -113,8 +113,7 @@ def classify_loop(
 
     if head_has_external_pred:
         return RegionKind.WHILE_LOOP
-    else:
-        return RegionKind.DO_WHILE
+    return RegionKind.DO_WHILE
 
 
 def decompose_regions(

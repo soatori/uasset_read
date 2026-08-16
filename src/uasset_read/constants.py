@@ -5,8 +5,6 @@ Contains all version numbers, property type thresholds, and boundary constants.
 Extracted from uasset_read.py (per D-11).
 """
 
-from enum import IntEnum
-
 # ============================================================================
 # CLI Exit Codes
 # ============================================================================
@@ -295,29 +293,6 @@ FASSET_REGISTRY_VERSION_GUID = "717F9EE7-E9B0493A-88B39132-1B388107"
 FCURVE_EXPRESSION_CUSTOM_VERSION_GUID = "A26D36AE-26935388-A8C5CB96-2B95B4AF"
 
 # ============================================================================
-# FrameworkObjectVersion thresholds
-# ============================================================================
-
-FFRAMEWORK_VERSION_ED_GRAPH_PIN_CONTAINER_TYPE = 15
-FFRAMEWORK_VERSION_PINS_STORE_FNAME = 19
-
-# ============================================================================
-# FUE5MainStreamObjectVersion thresholds
-# ============================================================================
-
-FUE5_MAINSTREAM_VERSION_ED_GRAPH_PIN_SOURCE_INDEX = 50
-
-# ============================================================================
-# FReleaseObjectVersion thresholds
-# ============================================================================
-
-FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER = 10
-
-# ============================================================================
-# FUE5ReleaseStreamObjectVersion Thresholds
-# ============================================================================
-
-# ============================================================================
 # Blueprint metadata keys (UE editor internal fields)
 # ============================================================================
 
@@ -493,39 +468,6 @@ CPF_AllowSelfReference = 0x1000000000000000  # L494
 CPF_ForcePostConstructLink = 0x2000000000000000  # L495
 
 # ============================================================================
-# Game variant enum (GameVariant)
-# ============================================================================
-
-class GameVariant(IntEnum):
-    """Game variant enum."""
-    NONE = 0
-    FORTNITE = 1001
-    PUBG = 1002
-    APEX_LEGENDS = 1003
-    VALORANT = 1004
-
-# Version mapping table
-GAME_VARIANT_VERSIONS = {
-    GameVariant.NONE: {
-        "override_file_version": None,
-        "feature_flags": {},
-    },
-    GameVariant.FORTNITE: {
-        "override_file_version": None,
-        "feature_flags": {
-            "use_new_cooked_format": True,
-            "enable_niagara_support": True,
-        },
-    },
-    GameVariant.PUBG: {
-        "override_file_version": None,
-        "feature_flags": {
-            "enable_lod_streaming": True,
-        },
-    },
-}
-
-# ============================================================================
 # Property type name → unversioned size mapping (property_parser._fixed_unversioned_size)
 # ============================================================================
 
@@ -585,11 +527,6 @@ def format_guid_bytes(data: bytes, uppercase: bool = True) -> str:
         f"{data[10]:02x}{data[11]:02x}{data[12]:02x}{data[13]:02x}{data[14]:02x}{data[15]:02x}"
     )
     return text.upper() if uppercase else text
-
-
-def get_game_variant_config(variant: GameVariant) -> dict:
-    """Get game variant configuration."""
-    return GAME_VARIANT_VERSIONS.get(variant, GAME_VARIANT_VERSIONS[GameVariant.NONE])
 
 
 # ============================================================================

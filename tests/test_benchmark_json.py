@@ -18,18 +18,26 @@ def test_json_output_public_contract(blueprint_sample, measure):
         )
         payload = json.loads(output)
 
-    required_keys = {
+    is_blueprint = payload.get("format") == "uasset_read.blueprint_semantic"
+
+    # Common keys present in both formats
+    common_keys = {
         "format",
         "format_version",
         "mode",
         "asset_type",
         "asset",
         "status",
-        "references",
-        "diagnostics",
     }
-    assert required_keys <= payload.keys()
+    assert common_keys <= payload.keys()
     assert isinstance(payload["status"], dict)
     assert payload["status"].get("parse") in {"complete", "partial", "failed"}
-    assert isinstance(payload["references"], list)
-    assert isinstance(payload["diagnostics"], list)
+
+    if is_blueprint:
+        # Blueprint format carries declarations instead of raw references
+        assert "declaration" in payload or "components" in payload
+    else:
+        assert "references" in payload
+        assert isinstance(payload["references"], list)
+        assert "diagnostics" in payload
+        assert isinstance(payload["diagnostics"], list)

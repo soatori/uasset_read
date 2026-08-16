@@ -123,9 +123,7 @@ def _emit_for_block(
     label_set: set[int],
 ) -> list[str]:
     """Emit a for loop block."""
-    _start_idx = for_result["start"]  # noqa: F841 - extracted for clarity
     body_start = for_result["body_start"]
-    _body_end = for_result["body_end"]  # noqa: F841 - extracted for clarity
     condition = for_result["condition"]
     inc_start = for_result["increment_start"]
     inc_end = for_result["increment_end"]
@@ -199,7 +197,6 @@ def _emit_while_block(
     label_set: set[int],
 ) -> list[str]:
     """Emit a while loop block."""
-    _start_idx = while_result["start"]  # noqa: F841 - extracted for clarity
     body_start = while_result["body_start"]
     body_end = while_result["body_end"]
     condition = while_result["condition"]
@@ -523,11 +520,10 @@ class FunctionBodyBuilder:
         Returns:
             Tuple of (formatted C++ function body, CFG).
         """
-        from uasset_read.kismet.cfg import build_cfg, compute_dominator_tree
+        from uasset_read.kismet.cfg import build_cfg
         from uasset_read.kismet.translator import KismetTranslator
 
         cfg = build_cfg(expressions)
-        _dom_tree = compute_dominator_tree(cfg)  # noqa: F841 - computed for future use
 
         translator = KismetTranslator(
             self.type_registry, linker=self._linker, expressions=expressions

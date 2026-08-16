@@ -41,9 +41,15 @@ def render_semantic_json(ir: SemanticIR, *, include_schema: bool = False) -> str
     content = raw.pop("content", {}) or {}
 
     # Merge content but do NOT overwrite common contract fields
-    _COMMON_FIELDS = {"format", "format_version", "mode", "asset_type", "asset", "status", "references", "coverage", "diagnostics", "evidence"}
+    _COMMON_FIELDS = {"format", "format_version", "mode", "asset_type", "asset", "status",
+                      "references", "coverage", "diagnostics", "evidence"}
+    _OVERRIDABLE = {"references", "coverage", "diagnostics"}
     for key, value in content.items():
-        if key not in _COMMON_FIELDS and key not in raw:
+        if key in _COMMON_FIELDS and key not in _OVERRIDABLE:
+            raise ValueError(f"Domain content collides with envelope key: '{key}'")
+        if key in _OVERRIDABLE:
+            raw[key] = value
+        elif key not in raw:
             raw[key] = value
     if include_schema:
         raw["$schema"] = "https://github.com/soatori/uasset_read/schemas/semantic.schema.json"

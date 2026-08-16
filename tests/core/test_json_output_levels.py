@@ -50,7 +50,12 @@ def test_graphs_use_nodes_only_and_validate(level: str) -> None:
         log_enabled=False,
     ))
 
-    jsonschema.validate(data, SCHEMA)
+    # Blueprint-format samples use a dedicated schema
+    if data.get("format") == "uasset_read.blueprint_semantic":
+        from uasset_read.schema_loader import load_blueprint_semantic_schema
+        jsonschema.validate(data, load_blueprint_semantic_schema())
+    else:
+        jsonschema.validate(data, SCHEMA)
     graphs = data.get("graphs", [])
     if graphs:
         assert all(isinstance(graph["nodes"], list) for graph in graphs)

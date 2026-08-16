@@ -8,7 +8,7 @@ import threading
 import inspect
 import time
 from functools import wraps
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 from typing import Any
 from dataclasses import dataclass, field
@@ -268,27 +268,7 @@ class ProjectLogSession:
                     _scope_lock.release()
 
 
-class _DisabledLogSession:
-    """No-op log session — placeholder implementation when logging is disabled."""
-
-    _owns_scope_lock: bool = False
-    _closed: bool = False
-
-    def __enter__(self) -> "_DisabledLogSession":
-        return self
-
-    def __exit__(self, exc_type, exc, traceback) -> None:
-        self.close()
-
-    def close(self) -> None:
-        if not self._closed:
-            self._closed = True
-            if self._owns_scope_lock:
-                self._owns_scope_lock = False
-                _scope_lock.release()
-
-
-def project_logging_session(**kwargs) -> ProjectLogSession | _DisabledLogSession:
+def project_logging_session(**kwargs) -> ProjectLogSession | object:
     """Configure and return a scoped project logging session."""
     if not _scope_lock.acquire(blocking=False):
         raise RuntimeError("A project logging session is already active")
@@ -302,9 +282,8 @@ def project_logging_session(**kwargs) -> ProjectLogSession | _DisabledLogSession
         _scope_lock.release()
         raise
     if log_path is None or _configured_run_id is None:
-        session = _DisabledLogSession()
-        session._owns_scope_lock = True
-        return session
+        _scope_lock.release()
+        return nullcontext()
     logging.getLogger(_LOGGER_NAME).info("session_start run_id=%s", _configured_run_id)
     return ProjectLogSession(
         log_path=log_path,

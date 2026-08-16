@@ -742,6 +742,18 @@ def _build_node_ir(node) -> NodeIR:
         if not event_type:
             event_type = getattr(node, "event_type", None)
 
+    # Extract member references from node_data (function_reference, event_reference, variable_reference)
+    member_name = None
+    member_parent = None
+    node_data = getattr(node, "node_data", None)
+    if isinstance(node_data, dict):
+        for ref_attr in ("function_reference", "event_reference", "variable_reference"):
+            ref = node_data.get(ref_attr)
+            if ref is not None and getattr(ref, "member_name", ""):
+                member_name = _safe_str(ref.member_name)
+                member_parent = _safe_str(getattr(ref, "member_parent", None))
+                break
+
     return NodeIR(
         node_guid=_normalize_guid(getattr(node, "node_guid", None)),
         node_class=node_class,
@@ -752,11 +764,13 @@ def _build_node_ir(node) -> NodeIR:
         input_action_path=input_action_path,
         trigger_events=trigger_events,
         event_type=event_type,
+        member_name=member_name,
+        member_parent=member_parent,
     )
 
 def _build_pin_ir(pin) -> PinIR:
-    # Extract pin_guid
-    pin_guid = _normalize_guid(getattr(pin, "pin_guid", None))
+    # Extract pin_guid — pin_id is the canonical field; pin_guid is a legacy alias
+    pin_guid = _normalize_guid(getattr(pin, "pin_id", None)) or _normalize_guid(getattr(pin, "pin_guid", None))
 
     linked_to = []
     for ref in getattr(pin, "linked_to_raw", None) or []:
@@ -824,6 +838,20 @@ def _build_pin_ir(pin) -> PinIR:
         map_key_pin_category=map_key_pin_category,
         map_key_pin_subcategory=map_key_pin_subcategory,
         map_key_pin_subcategory_object_name=map_key_pin_subcategory_object,
+        # Pin identity fields (Task 2)
+        friendly_name=_safe_str(getattr(pin, "pin_friendly_name", None)) or None,
+        source_index=getattr(pin, "source_index", None),
+        persistent_guid=_normalize_guid(getattr(pin, "persistent_guid", None)) or "",
+        default_text_value=_safe_str(getattr(pin, "default_text_value", None)) or None,
+        auto_default_value=_safe_str(getattr(pin, "auto_default_value", None)) or None,
+        default_object_name=_resolve_default_object_name(getattr(pin, "default_object_ref", None)),
+        parent_pin_guid=_extract_pin_guid(getattr(pin, "parent_pin", None)) or "",
+        sub_pin_guids=[g for g in (_extract_pin_guid(ref) for ref in getattr(pin, "sub_pins", None) or []) if g],
+        ref_pass_through_guid=_extract_pin_guid(getattr(pin, "ref_pass_through", None)) or "",
+        hidden=bool(getattr(pin, "hidden", False)),
+        not_connectable=bool(getattr(pin, "not_connectable", False)),
+        advanced_view=bool(getattr(pin, "advanced_view", False)),
+        orphaned=bool(getattr(pin, "orphaned_pin", False)),
     )
 
 def _resolve_package_index(result: ParseResult, pkg_index) -> str | None:
@@ -1381,6 +1409,15 @@ def _extract_pin_guid(ref) -> str | None:
         return _normalize_guid(ref)
     raw = getattr(ref, "pin_guid", None) or getattr(ref, "pin_id", None)
     return _normalize_guid(raw) if raw else None
+
+
+def _resolve_default_object_name(ref) -> str | None:
+    """Object name of a linker-resolved pin DefaultObject, or None."""
+    if ref is None:
+        return None
+    if isinstance(ref, dict):
+        return ref.get("object_name") or ref.get("name") or None
+    return _safe_str(getattr(ref, "object_name", None)) or None
 
 def _build_asset_registry_data(result) -> dict | None:
     """Build asset_registry_data dictionary from ParseResult."""

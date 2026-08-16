@@ -63,7 +63,9 @@ class TestGraphOutputChain:
 
         import json
         data = json.loads(output)
-        assert data["format"] == "uasset_read.asset_semantic"
+        # Blueprint assets route through the blueprint semantic extractor,
+        # producing blueprint_semantic format.
+        assert data["format"] in ("uasset_read.asset_semantic", "uasset_read.blueprint_semantic")
 
     @pytest.mark.integration
     def test_markdown_output_contains_graph_sections(self):

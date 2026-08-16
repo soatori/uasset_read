@@ -9,7 +9,13 @@ from uasset_read import parse_single
 
 
 def test_all_samples_have_references_and_diagnostics():
-    """All output files should include references and diagnostics fields."""
+    """All output files should include references and diagnostics fields.
+
+    Blueprint format omits the references table by design; only asset_semantic
+    samples are checked for references.  Blueprint samples may also lack
+    diagnostics (opaque blueprints include coverage instead), so skip both
+    checks for that format.
+    """
     samples_dir = Path(__file__).resolve().parent.parent / "samples"
     samples = list(sorted(samples_dir.glob("*.uasset")))
     if not samples:
@@ -17,6 +23,10 @@ def test_all_samples_have_references_and_diagnostics():
     for sample in samples:
         output = parse_single(str(sample), format="json", tolerant=True)
         data = json.loads(output)
+        is_blueprint = data.get("format") == "uasset_read.blueprint_semantic"
+        if is_blueprint:
+            # Blueprint format omits references by design and may omit diagnostics
+            continue
         assert "references" in data, f"{sample.name}: missing references"
         assert "diagnostics" in data, f"{sample.name}: missing diagnostics"
         assert isinstance(data["references"], list), f"{sample.name}: references not list"
@@ -65,4 +75,5 @@ def test_all_samples_have_format():
         data = json.loads(output)
         assert "format" in data, f"{sample.name}: missing format"
         assert "format_version" in data, f"{sample.name}: missing format_version"
-        assert data["format"] == "uasset_read.asset_semantic", f"{sample.name}: wrong format"
+        valid_formats = {"uasset_read.asset_semantic", "uasset_read.blueprint_semantic"}
+        assert data["format"] in valid_formats, f"{sample.name}: wrong format {data['format']!r}"
