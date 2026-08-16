@@ -189,6 +189,13 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> 
 
     if extractor is not None and status.representation != "opaque":
         content = extractor(package_ir, primary, cov, evidence_list)
+    elif extractor is not None and asset_type == "material" and getattr(package_ir, "material", None) is not None:
+        # Material data is built by _build_material_ir in ir_builder, not from export parsing
+        # Call the extractor even when the export is opaque
+        content = extractor(package_ir, primary, cov, evidence_list)
+        # Override representation to full since we have material data
+        representation = "full"
+        status = AssetStatus(parse=parse, representation="full")
     else:
         cov.track("domain_content", False)
 
