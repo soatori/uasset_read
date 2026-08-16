@@ -17,6 +17,7 @@ _VALID_SEVERITIES = {"error", "warning", "info"}
 _FORMAT_VERSIONS = {
     "uasset_read.asset_semantic": "1.0",
     "uasset_read.blueprint_semantic": "1.0.0",
+    "uasset_read.material_semantic": "1.0.0",
 }
 
 _DOMAIN_VALIDATORS: dict[str, object] = {}
@@ -189,4 +190,44 @@ def validate_blueprint_document(ir) -> list[str]:
 
     return errors
 
-# Registration is handled by blueprint/__init__.py via register_domain_validator()
+
+# ---------------------------------------------------------------------------
+# Material-specific semantic rules (#556)
+# ---------------------------------------------------------------------------
+
+def validate_material_document(ir) -> list[str]:
+    """Material-specific semantic rules for uasset_read.material_semantic content."""
+    errors: list[str] = []
+    content = ir.content or {}
+    material = content.get("material") or {}
+
+    if not material:
+        errors.append("Material content is empty")
+        return errors
+
+    material_type = material.get("material_type", "")
+    if material_type not in ("Material", "MaterialInstance"):
+        errors.append(f"Invalid material_type: '{material_type}'")
+
+    # Validate expressions
+    expressions = material.get("expressions", []) or []
+    for expr in expressions:
+        if not expr.get("expression_guid"):
+            errors.append(f"Expression missing expression_guid")
+        if not expr.get("expression_class"):
+            errors.append(f"Expression missing expression_class")
+
+    # Validate data_flow references
+    data_flow = material.get("data_flow", []) or []
+    expression_guids = {e.get("expression_guid", "") for e in expressions}
+    for entry in data_flow:
+        source_guid = entry.get("source_expression_guid", "")
+        target_guid = entry.get("target_expression_guid", "")
+        if source_guid and source_guid != "__material__" and source_guid not in expression_guids:
+            errors.append(f"Data flow source expression not found: '{source_guid}'")
+        if target_guid and target_guid != "__material__" and target_guid not in expression_guids:
+            errors.append(f"Data flow target expression not found: '{target_guid}'")
+
+    return errors
+
+# Registration is handled by material/__init__.py via register_domain_validator()
