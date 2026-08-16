@@ -598,6 +598,70 @@ class DiagnosticsDataIR:
 
 
 @dataclass
+class MaterialExpressionInputIR:
+    """An input on a material expression, with resolved data-flow connection."""
+    input_name: str
+    source_expression_guid: str | None
+    source_output_index: int
+    mask: int = 0
+    mask_r: int = 0
+    mask_g: int = 0
+    mask_b: int = 0
+    mask_a: int = 0
+
+
+@dataclass
+class MaterialExpressionOutputIR:
+    """An output on a material expression."""
+    output_name: str = ""
+    mask: int = 0
+    mask_r: int = 0
+    mask_g: int = 0
+    mask_b: int = 0
+    mask_a: int = 0
+
+
+@dataclass
+class MaterialExpressionIR:
+    """A single material expression (node in the material graph)."""
+    expression_guid: str
+    expression_class: str
+    expression_type: str | None
+    inputs: list[MaterialExpressionInputIR]
+    outputs: list[MaterialExpressionOutputIR]
+    parameter: dict | None = None
+    constant_value: Any | None = None
+    editor_position: dict | None = None
+    description: str | None = None
+
+
+@dataclass
+class MaterialInputIR:
+    """A material channel input (e.g. BaseColor, Roughness) with resolved expression ref."""
+    input_name: str
+    source_expression_guid: str | None
+    source_output_index: int
+    mask: int = 0
+    mask_r: int = 0
+    mask_g: int = 0
+    mask_b: int = 0
+    mask_a: int = 0
+
+
+@dataclass
+class MaterialIR:
+    """Material semantic data (top-level on PackageIR)."""
+    material_type: str
+    properties: dict
+    expressions: list[MaterialExpressionIR]
+    material_inputs: list[MaterialInputIR]
+    data_flow: list[dict]
+    parameters: dict | None = None
+    base_property_overrides: dict | None = None
+    parent: str | None = None
+
+
+@dataclass
 class PackageIR:
     """Top-level IR structure (recomposed)."""
     header: PackageHeaderIR
@@ -610,6 +674,7 @@ class PackageIR:
     execution_chains: list[ExecutionChainIR] = field(default_factory=list)
     variables: list[VariableIR] = field(default_factory=list)
     animation: AnimationDataIR | None = None
+    material: MaterialIR | None = None
     diagnostics: list[OffsetRangeDiagnostic | StructuredDiagnostic] = field(default_factory=list)
     function_graphs: list[dict] = field(default_factory=list)
     logic_sources: list[dict] = field(default_factory=list)
