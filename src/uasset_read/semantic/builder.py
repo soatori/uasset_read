@@ -219,7 +219,9 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None, *, 
     else:
         cov.track("domain_content", False)
 
-    # Domain formats own coverage/diagnostics/references inside content.
+    # Domain formats own coverage inside content; references and diagnostics
+    # are always provided by the envelope so domain extractors need not
+    # hardcode empty values.
     owns_envelope_sections = domain_format is not None and status.representation != "opaque"
     if owns_envelope_sections and content.get("coverage"):
         # Any reported coverage entry means some scope is not complete:
@@ -227,8 +229,8 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None, *, 
         representation = "partial"
         status = AssetStatus(parse=parse, representation="partial")
     coverage = None if owns_envelope_sections else cov.build()
-    diagnostics = () if owns_envelope_sections else diag.build()
-    references = () if owns_envelope_sections else collect_references(package_ir.imports, package_ir.exports)
+    diagnostics = diag.build()
+    references = collect_references(package_ir.imports, package_ir.exports)
 
     fmt, fmt_version = "uasset_read.asset_semantic", "1.0"
     if owns_envelope_sections:
