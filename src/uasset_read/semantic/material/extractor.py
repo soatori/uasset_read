@@ -24,6 +24,8 @@ def build_material_content(package_ir: "PackageIR", export_ir: "ExportIR",
 
     content: dict = {
         "material": _material_to_dict(material_ir),
+        "references": [],  # material format omits the raw import/export table
+        "diagnostics": [],
     }
     return content
 

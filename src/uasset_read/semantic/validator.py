@@ -212,8 +212,6 @@ def validate_material_document(ir) -> list[str]:
     # Validate expressions
     expressions = material.get("expressions", []) or []
     for expr in expressions:
-        if not expr.get("expression_guid"):
-            errors.append(f"Expression missing expression_guid")
         if not expr.get("expression_class"):
             errors.append(f"Expression missing expression_class")
 

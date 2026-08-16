@@ -8,19 +8,19 @@ from uasset_read.semantic.validator import register_domain_validator, validate_m
 register_extension(
     "Material",
     build_material_content,
-    domain_format="uasset_read.material_semantic",
-    domain_format_version="1.0.0",
+    domain_format="uasset_read.asset_semantic",
+    domain_format_version="1.0",
 )
 register_extension(
     "MaterialInstanceConstant",
     build_material_content,
-    domain_format="uasset_read.material_semantic",
-    domain_format_version="1.0.0",
+    domain_format="uasset_read.asset_semantic",
+    domain_format_version="1.0",
 )
 register_extension(
     "MaterialInstance",
     build_material_content,
-    domain_format="uasset_read.material_semantic",
-    domain_format_version="1.0.0",
+    domain_format="uasset_read.asset_semantic",
+    domain_format_version="1.0",
 )
 register_domain_validator("uasset_read.material_semantic", validate_material_document)
