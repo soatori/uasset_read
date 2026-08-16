@@ -36,6 +36,11 @@ from uasset_read.models.ir import (
     PackageDependenciesIR,
     DiagnosticsDataIR,
     ScriptMetricsIR,
+    MaterialIR,
+    MaterialExpressionIR,
+    MaterialExpressionInputIR,
+    MaterialExpressionOutputIR,
+    MaterialInputIR,
 )
 
 if TYPE_CHECKING:
@@ -147,6 +152,426 @@ def _build_animation_data(result: "ParseResult | LinkerParseResult") -> Animatio
             anim_montage=anim_mon,
         )
     return None
+
+
+def _build_material_ir(result: "ParseResult | LinkerParseResult") -> MaterialIR | None:
+    """Build MaterialIR from ParseResult by scanning exports.
+
+    Scans export_map for Material/MaterialInstance + MaterialExpression* exports.
+    Resolves FExpressionInput/FMaterialInput PackageIndex cross-references.
+    """
+    from uasset_read.constants import (
+        MATERIAL_DOMAIN_MAP, BLEND_MODE_MAP, SHADING_MODEL_MAP,
+        MATERIAL_USAGE_FLAG_NAMES, classify_expression_type,
+    )
+
+    # Find Material/MaterialInstance export
+    material_export = None
+    expression_exports = []
+
+    for export in result.export_map or []:
+        class_name = _safe_str(getattr(export, "object_class", None)) or \
+                     resolve_class_name(
+                         getattr(export, "class_index", None),
+                         result.import_map or [],
+                         result.export_map or [],
+                     )
+        if class_name in ("Material",):
+            if getattr(export, "b_is_asset", False) or material_export is None:
+                material_export = export
+                material_export._resolved_class = "Material"
+        elif class_name in ("MaterialInstance", "MaterialInstanceConstant"):
+            if getattr(export, "b_is_asset", False) or material_export is None:
+                material_export = export
+                material_export._resolved_class = "MaterialInstance"
+        elif class_name and class_name.startswith("MaterialExpression"):
+            expression_exports.append(export)
+
+    if material_export is None:
+        return None
+
+    material_type = getattr(material_export, "_resolved_class", "Material")
+
+    # Build expression index -> guid mapping
+    expr_guid_map: dict[int, str] = {}
+    for idx, expr_export in enumerate(expression_exports):
+        guid = _extract_expression_guid(expr_export)
+        if guid:
+            expr_guid_map[idx + 1] = guid  # 1-based export index
+
+    # Build expressions
+    expressions = []
+    for idx, expr_export in enumerate(expression_exports):
+        expr_ir = _build_single_expression_ir(idx + 1, expr_export, expr_guid_map, result)
+        expressions.append(expr_ir)
+
+    # Build material inputs (Material only)
+    material_inputs = []
+    if material_type == "Material":
+        material_inputs = _build_material_inputs(material_export, expr_guid_map)
+
+    # Build properties
+    properties = _build_material_properties(material_export)
+
+    # Build parameters (MaterialInstance only)
+    parameters = None
+    base_property_overrides = None
+    parent = None
+    if material_type == "MaterialInstance":
+        parameters = _build_material_instance_parameters(material_export)
+        base_property_overrides = _build_material_instance_overrides(material_export)
+        parent = _resolve_material_parent(material_export, result)
+
+    # Build data_flow
+    data_flow = _build_material_data_flow(expressions, material_inputs)
+
+    return MaterialIR(
+        material_type=material_type,
+        properties=properties,
+        expressions=expressions,
+        material_inputs=material_inputs,
+        parameters=parameters,
+        base_property_overrides=base_property_overrides,
+        parent=parent,
+        data_flow=data_flow,
+    )
+
+
+def _extract_expression_guid(expr_export) -> str | None:
+    """Extract MaterialExpressionGuid from export properties."""
+    for prop in getattr(expr_export, "properties", None) or []:
+        if getattr(prop, "name", None) == "MaterialExpressionGuid":
+            val = getattr(prop, "value", None)
+            if isinstance(val, str):
+                return normalize_hex_guid(val)
+            if isinstance(val, dict):
+                guid_str = val.get("guid", "") or val.get("value", "")
+                if guid_str:
+                    return normalize_hex_guid(guid_str)
+    return None
+
+
+def _build_single_expression_ir(
+    export_idx: int,
+    expr_export,
+    expr_guid_map: dict[int, str],
+    result,
+) -> MaterialExpressionIR:
+    """Build a single MaterialExpressionIR from an export."""
+    from uasset_read.constants import classify_expression_type
+
+    class_name = _safe_str(getattr(expr_export, "object_class", None)) or \
+                 resolve_class_name(
+                     getattr(expr_export, "class_index", None),
+                     result.import_map or [],
+                     result.export_map or [],
+                 )
+
+    guid = expr_guid_map.get(export_idx, "")
+    expr_type = classify_expression_type(class_name)
+
+    # Parse inputs (ExpressionInput struct properties)
+    inputs = []
+    for prop in getattr(expr_export, "properties", None) or []:
+        prop_name = getattr(prop, "name", "")
+        prop_value = getattr(prop, "value", None)
+        if isinstance(prop_value, dict) and prop_value.get("struct_type") in (
+            "ExpressionInput", "FExpressionInput",
+        ):
+            fields = prop_value.get("fields", {})
+            if isinstance(fields, dict):
+                expr_idx = fields.get("expression_index", 0)
+                source_guid = expr_guid_map.get(expr_idx) if expr_idx else None
+                inputs.append(MaterialExpressionInputIR(
+                    input_name=prop_name,
+                    source_expression_guid=source_guid,
+                    source_output_index=fields.get("output_index", 0),
+                    mask=fields.get("mask", 0),
+                    mask_r=fields.get("mask_r", 0),
+                    mask_g=fields.get("mask_g", 0),
+                    mask_b=fields.get("mask_b", 0),
+                    mask_a=fields.get("mask_a", 0),
+                ))
+
+    # Parse outputs
+    outputs = _build_expression_outputs(expr_export)
+
+    # Extract parameter/constant values
+    parameter, constant_value = _extract_expression_value(class_name, expr_export)
+
+    # Editor position
+    editor_position = _extract_editor_position(expr_export)
+
+    # Description
+    description = None
+    for prop in getattr(expr_export, "properties", None) or []:
+        if getattr(prop, "name", None) == "Desc":
+            description = _safe_str(getattr(prop, "value", None)) or None
+
+    return MaterialExpressionIR(
+        expression_guid=guid,
+        expression_class=class_name,
+        expression_type=expr_type,
+        inputs=inputs,
+        outputs=outputs,
+        parameter=parameter,
+        constant_value=constant_value,
+        editor_position=editor_position,
+        description=description,
+    )
+
+
+def _build_expression_outputs(expr_export) -> list:
+    """Build MaterialExpressionOutputIR list from export properties."""
+    outputs = []
+    for prop in getattr(expr_export, "properties", None) or []:
+        if getattr(prop, "name", None) == "Outputs":
+            val = getattr(prop, "value", None)
+            if isinstance(val, list):
+                for item in val:
+                    if isinstance(item, dict):
+                        fields = item.get("fields", item)
+                        outputs.append(MaterialExpressionOutputIR(
+                            output_name=fields.get("output_name", ""),
+                            mask=fields.get("mask", 0),
+                            mask_r=fields.get("mask_r", 0),
+                            mask_g=fields.get("mask_g", 0),
+                            mask_b=fields.get("mask_b", 0),
+                            mask_a=fields.get("mask_a", 0),
+                        ))
+            break
+    return outputs
+
+
+def _extract_expression_value(class_name: str, expr_export) -> tuple:
+    """Extract parameter or constant value from expression properties."""
+    parameter = None
+    constant_value = None
+
+    for prop in getattr(expr_export, "properties", None) or []:
+        prop_name = getattr(prop, "name", None)
+        prop_value = getattr(prop, "value", None)
+
+        if prop_name == "ParameterName" and prop_value:
+            parameter = {"name": _safe_str(prop_value)}
+        elif prop_name == "DefaultValue" and prop_value is not None:
+            if parameter is None:
+                parameter = {}
+            if isinstance(prop_value, dict):
+                parameter["value"] = prop_value.get("fields", prop_value)
+            else:
+                parameter["value"] = prop_value
+        elif prop_name == "R" and prop_value is not None:
+            constant_value = prop_value
+        elif prop_name == "X" and constant_value is None and prop_value is not None:
+            constant_value = prop_value
+
+    return parameter, constant_value
+
+
+def _extract_editor_position(expr_export) -> dict | None:
+    """Extract MaterialExpressionEditorX/Y from properties."""
+    x = None
+    y = None
+    for prop in getattr(expr_export, "properties", None) or []:
+        if getattr(prop, "name", None) == "MaterialExpressionEditorX":
+            x = getattr(prop, "value", None)
+        elif getattr(prop, "name", None) == "MaterialExpressionEditorY":
+            y = getattr(prop, "value", None)
+    if x is not None or y is not None:
+        return {"x": x or 0, "y": y or 0}
+    return None
+
+
+def _build_material_inputs(material_export, expr_guid_map: dict[int, str]) -> list:
+    """Build MaterialInputIR list from Material export properties."""
+    inputs = []
+    for prop in getattr(material_export, "properties", None) or []:
+        prop_name = getattr(prop, "name", "")
+        prop_value = getattr(prop, "value", None)
+        if isinstance(prop_value, dict):
+            struct_type = prop_value.get("struct_type", "")
+            if struct_type in (
+                "MaterialInput", "FMaterialInput",
+                "ColorMaterialInput", "FColorMaterialInput",
+                "ScalarMaterialInput", "FScalarMaterialInput",
+                "VectorMaterialInput", "FVectorMaterialInput",
+                "Vector2MaterialInput", "FVector2MaterialInput",
+            ):
+                fields = prop_value.get("fields", {})
+                if isinstance(fields, dict):
+                    expr_idx = fields.get("expression_index", 0)
+                    source_guid = expr_guid_map.get(expr_idx) if expr_idx else None
+                    inputs.append(MaterialInputIR(
+                        input_name=prop_name,
+                        source_expression_guid=source_guid,
+                        source_output_index=fields.get("output_index", 0),
+                        mask=fields.get("mask", 0),
+                        mask_r=fields.get("mask_r", 0),
+                        mask_g=fields.get("mask_g", 0),
+                        mask_b=fields.get("mask_b", 0),
+                        mask_a=fields.get("mask_a", 0),
+                    ))
+    return inputs
+
+
+def _build_material_properties(material_export) -> dict:
+    """Build material properties dict from tagged properties."""
+    from uasset_read.constants import (
+        MATERIAL_DOMAIN_MAP, BLEND_MODE_MAP, SHADING_MODEL_MAP,
+        MATERIAL_USAGE_FLAG_NAMES,
+    )
+
+    properties: dict = {}
+    usage_flags: list[str] = []
+
+    for prop in getattr(material_export, "properties", None) or []:
+        prop_name = getattr(prop, "name", "")
+        prop_value = getattr(prop, "value", None)
+
+        if prop_name in ("MaterialDomain", "Domain"):
+            domain_val = _safe_int(prop_value)
+            properties["domain"] = MATERIAL_DOMAIN_MAP.get(domain_val, str(domain_val))
+        elif prop_name == "BlendMode":
+            blend_val = _safe_int(prop_value)
+            properties["blend_mode"] = BLEND_MODE_MAP.get(blend_val, str(blend_val))
+        elif prop_name == "ShadingModel":
+            model_val = _safe_int(prop_value)
+            properties["shading_model"] = SHADING_MODEL_MAP.get(model_val, str(model_val))
+        elif prop_name in MATERIAL_USAGE_FLAG_NAMES and prop_value:
+            usage_flags.append(prop_name)
+
+    if usage_flags:
+        properties["usage_flags"] = usage_flags
+
+    return properties
+
+
+def _build_material_instance_parameters(material_export) -> dict:
+    """Build parameters dict from MaterialInstance export properties."""
+    parameters: dict = {}
+
+    for prop in getattr(material_export, "properties", None) or []:
+        prop_name = getattr(prop, "name", "")
+        prop_value = getattr(prop, "value", None)
+
+        if prop_name == "ScalarParameterValues":
+            parameters["scalar"] = _extract_parameter_values(prop_value, "ParameterValue")
+        elif prop_name == "VectorParameterValues":
+            parameters["vector"] = _extract_parameter_values(prop_value, "ParameterValue")
+        elif prop_name == "TextureParameterValues":
+            parameters["texture"] = _extract_parameter_values(prop_value, "ParameterValue")
+        elif prop_name == "StaticSwitchParameters":
+            parameters["static_switch"] = _extract_static_switch_values(prop_value)
+
+    return parameters if parameters else None
+
+
+def _extract_parameter_values(source, value_key: str) -> dict:
+    """Extract parameter name->value mapping from a parameter array."""
+    result: dict = {}
+    if isinstance(source, list):
+        for item in source:
+            if isinstance(item, dict):
+                info = item.get("ParameterInfo", item.get("Info", {}))
+                if isinstance(info, dict):
+                    name = info.get("Name", info.get("ParameterName", ""))
+                else:
+                    name = str(info)
+                if not name:
+                    name = item.get("ParameterName", item.get("Name", ""))
+                if name:
+                    result[str(name)] = {"value": item.get(value_key, item.get("Value"))}
+    return result
+
+
+def _extract_static_switch_values(source) -> dict:
+    """Extract static switch parameter name->bool mapping."""
+    result: dict = {}
+    if isinstance(source, list):
+        for item in source:
+            if isinstance(item, dict):
+                info = item.get("ParameterInfo", item.get("Info", {}))
+                if isinstance(info, dict):
+                    name = info.get("Name", info.get("ParameterName", ""))
+                else:
+                    name = str(info)
+                if not name:
+                    name = item.get("ParameterName", item.get("Name", ""))
+                if name:
+                    val = item.get("Value", item.get("value"))
+                    result[str(name)] = bool(val) if val is not None else False
+    return result
+
+
+def _build_material_instance_overrides(material_export) -> dict | None:
+    """Build base_property_overrides from MaterialInstance export."""
+    overrides: dict = {}
+    override_names = (
+        "OpacityMaskClipValue", "BlendMode", "ShadingModel",
+        "TwoSided", "DitheredLODTransition", "CastDynamicShadowAsMasked",
+        "bIsThinSurface", "OutputTranslucentVelocity", "bHasPixelAnimation",
+        "bEnableTessellation", "DisplacementScaling", "bEnableDisplacementFade",
+        "DisplacementFadeRange", "MaxWorldPositionOffsetDisplacement",
+        "CompatibleWithLumenCardSharing", "UsageFlags",
+    )
+
+    for prop in getattr(material_export, "properties", None) or []:
+        prop_name = getattr(prop, "name", "")
+        if prop_name == "BasePropertyOverrides":
+            val = getattr(prop, "value", None)
+            if isinstance(val, dict):
+                for name in override_names:
+                    flag = val.get(f"bOverride_{name}")
+                    if flag:
+                        v = val.get(name)
+                        if v is not None:
+                            overrides[name] = v
+
+    return overrides if overrides else None
+
+
+def _resolve_material_parent(material_export, result) -> str | None:
+    """Resolve parent material path from MaterialInstance export."""
+    for prop in getattr(material_export, "properties", None) or []:
+        if getattr(prop, "name", None) == "Parent":
+            val = getattr(prop, "value", None)
+            if isinstance(val, dict):
+                return _safe_str(val.get("object_name", val.get("full_name")))
+            if isinstance(val, str):
+                return val
+    return None
+
+
+def _build_material_data_flow(
+    expressions: list,
+    material_inputs: list,
+) -> list[dict]:
+    """Build data_flow list from resolved expression inputs and material inputs."""
+    data_flow: list[dict] = []
+
+    # Expression-to-expression connections
+    for expr in expressions:
+        for inp in expr.inputs:
+            if inp.source_expression_guid:
+                data_flow.append({
+                    "source_expression_guid": inp.source_expression_guid,
+                    "source_output_index": inp.source_output_index,
+                    "target_expression_guid": expr.expression_guid,
+                    "target_input_name": inp.input_name,
+                })
+
+    # Expression-to-material connections
+    for mi in material_inputs:
+        if mi.source_expression_guid:
+            data_flow.append({
+                "source_expression_guid": mi.source_expression_guid,
+                "source_output_index": mi.source_output_index,
+                "target_expression_guid": "__material__",
+                "target_input_name": mi.input_name,
+            })
+
+    return data_flow
 
 
 def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
@@ -262,6 +687,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         execution_chains=_build_execution_chains_ir(result),
         variables=_build_variables_ir(result),
         animation=_build_animation_data(result),
+        material=_build_material_ir(result),
         diagnostics=(result.diagnostics or []) + list(getattr(result, "structured_diagnostics", None) or []),
         function_graphs=function_graphs,
         logic_sources=list(getattr(result, "logic_sources", None) or []),
