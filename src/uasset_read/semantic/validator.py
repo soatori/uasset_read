@@ -19,6 +19,16 @@ _FORMAT_VERSIONS = {
     "uasset_read.blueprint_semantic": "1.0.0",
     "uasset_read.anim_blueprint_semantic": "1.0.0",
     "uasset_read.material_semantic": "1.0.0",
+    "uasset_read.data_table_semantic": "1.0.0",
+    "uasset_read.skeleton_semantic": "1.0.0",
+    "uasset_read.mesh_semantic": "1.0.0",
+    "uasset_read.texture_semantic": "1.0.0",
+    "uasset_read.sound_semantic": "1.0.0",
+    "uasset_read.anim_semantic": "1.0.0",
+    "uasset_read.curve_table_semantic": "1.0.0",
+    "uasset_read.user_defined_semantic": "1.0.0",
+    "uasset_read.standalone_semantic": "1.0.0",
+    "uasset_read.niagara_semantic": "1.0.0",
 }
 
 _DOMAIN_VALIDATORS: dict[str, object] = {}
@@ -362,3 +372,246 @@ def validate_material_document(ir) -> list[str]:
     return errors
 
 # Registration is handled by material/__init__.py via register_domain_validator()
+
+
+# ---------------------------------------------------------------------------
+# DataTable-specific semantic rules (#557)
+# ---------------------------------------------------------------------------
+
+def validate_data_table_document(ir) -> list[str]:
+    """DataTable-specific semantic rules for uasset_read.data_table_semantic content."""
+    errors: list[str] = []
+    content = ir.content or {}
+    data_table = content.get("data_table") or {}
+
+    if not data_table:
+        errors.append("DataTable content is empty")
+        return errors
+
+    row_count = data_table.get("row_count")
+    rows = data_table.get("rows", []) or []
+
+    if row_count is None:
+        errors.append("DataTable missing row_count")
+    elif not isinstance(row_count, int) or row_count < 0:
+        errors.append(f"Invalid row_count: {row_count}")
+
+    if row_count is not None and row_count != len(rows):
+        errors.append(f"row_count mismatch: declared {row_count}, actual {len(rows)}")
+
+    for i, row in enumerate(rows):
+        name = row.get("name", "")
+        if not name:
+            errors.append(f"Row[{i}] missing name")
+        payload_size = row.get("payload_size")
+        if payload_size is None:
+            errors.append(f"Row[{i}] missing payload_size")
+        elif not isinstance(payload_size, int) or payload_size < 0:
+            errors.append(f"Row[{i}] invalid payload_size: {payload_size}")
+
+    row_struct = data_table.get("row_struct")
+    if row_struct is not None:
+        if not row_struct.get("class_name"):
+            errors.append("row_struct missing class_name")
+        if not row_struct.get("object_name"):
+            errors.append("row_struct missing object_name")
+
+    return errors
+
+# Registration is handled by data_table/__init__.py via register_domain_validator()
+
+
+# ---------------------------------------------------------------------------
+# Skeleton-specific semantic rules (#557)
+# ---------------------------------------------------------------------------
+
+def validate_skeleton_document(ir) -> list[str]:
+    """Skeleton-specific semantic rules for uasset_read.skeleton_semantic content."""
+    errors: list[str] = []
+    content = ir.content or {}
+    skeleton = content.get("skeleton") or {}
+
+    if not skeleton:
+        errors.append("Skeleton content is empty")
+        return errors
+
+    bone_count = skeleton.get("bone_count")
+    bones = skeleton.get("bones", []) or []
+
+    if bone_count is None:
+        errors.append("Skeleton missing bone_count")
+    elif not isinstance(bone_count, int) or bone_count < 0:
+        errors.append(f"Invalid bone_count: {bone_count}")
+
+    if bone_count is not None and bone_count != len(bones):
+        errors.append(f"bone_count mismatch: declared {bone_count}, actual {len(bones)}")
+
+    for i, bone in enumerate(bones):
+        name = bone.get("name", "")
+        if not name:
+            errors.append(f"Bone[{i}] missing name")
+        parent_index = bone.get("parent_index")
+        if parent_index is not None:
+            if not isinstance(parent_index, int):
+                errors.append(f"Bone[{i}] invalid parent_index: {parent_index}")
+            elif parent_index < 0 or parent_index >= len(bones):
+                errors.append(f"Bone[{i}] parent_index {parent_index} out of range [0, {len(bones)})")
+
+    retarget_sources = skeleton.get("retarget_sources", []) or []
+    for i, src in enumerate(retarget_sources):
+        if not src.get("name"):
+            errors.append(f"RetargetSource[{i}] missing name")
+        if not src.get("pose_name"):
+            errors.append(f"RetargetSource[{i}] missing pose_name")
+
+    guid = skeleton.get("guid")
+    if guid is not None and not isinstance(guid, str):
+        errors.append(f"Invalid guid type: {type(guid).__name__}")
+
+    return errors
+
+# Registration is handled by skeleton/__init__.py via register_domain_validator()
+
+
+# ---------------------------------------------------------------------------
+# Mesh-specific semantic rules (#557a)
+# ---------------------------------------------------------------------------
+
+def validate_mesh_document(ir) -> list[str]:
+    """Mesh-specific semantic rules."""
+    errors: list[str] = []
+    content = ir.content or {}
+    mesh = content.get("mesh") or {}
+    if not mesh:
+        return errors
+    mesh_summary = mesh.get("mesh_summary") or {}
+    if not mesh_summary:
+        errors.append("Mesh mesh_summary is empty")
+    materials = mesh.get("materials", []) or []
+    for i, mat in enumerate(materials):
+        if "slot_index" not in mat:
+            errors.append(f"Material[{i}] missing slot_index")
+    lod_info = mesh.get("lod_info", []) or []
+    for i, lod in enumerate(lod_info):
+        if "lod_index" not in lod:
+            errors.append(f"LODInfo[{i}] missing lod_index")
+    return errors
+
+# Registration is handled by mesh/__init__.py via register_domain_validator()
+
+
+# ---------------------------------------------------------------------------
+# Texture-specific semantic rules (#557b)
+# ---------------------------------------------------------------------------
+
+def validate_texture_document(ir) -> list[str]:
+    """Texture-specific semantic rules."""
+    errors: list[str] = []
+    content = ir.content or {}
+    texture = content.get("texture") or {}
+    if not texture:
+        return errors
+    resource = texture.get("resource_properties") or {}
+    if not resource:
+        errors.append("Texture resource_properties is empty")
+    if "size_x" in resource and (not isinstance(resource["size_x"], int) or resource["size_x"] <= 0):
+        errors.append(f"Invalid size_x: {resource['size_x']}")
+    if "size_y" in resource and (not isinstance(resource["size_y"], int) or resource["size_y"] <= 0):
+        errors.append(f"Invalid size_y: {resource['size_y']}")
+    return errors
+
+# Registration is handled by texture/__init__.py via register_domain_validator()
+
+
+# ---------------------------------------------------------------------------
+# Sound-specific semantic rules (#557c)
+# ---------------------------------------------------------------------------
+
+def validate_sound_document(ir) -> list[str]:
+    """Sound-specific semantic rules."""
+    errors: list[str] = []
+    content = ir.content or {}
+    sound = content.get("sound") or {}
+    # Empty content is valid — some sound assets have no asset_type_data
+    return errors
+
+# Registration is handled by sound/__init__.py via register_domain_validator()
+
+
+# ---------------------------------------------------------------------------
+# Animation-specific semantic rules (#557f)
+# ---------------------------------------------------------------------------
+
+def validate_anim_document(ir) -> list[str]:
+    """Animation-specific semantic rules."""
+    errors: list[str] = []
+    content = ir.content or {}
+    anim = content.get("anim") or {}
+    # Empty content is valid — some animation assets are opaque
+    return errors
+
+# Registration is handled by anim/__init__.py via register_domain_validator()
+
+
+# ---------------------------------------------------------------------------
+# CurveTable-specific semantic rules (#557d)
+# ---------------------------------------------------------------------------
+
+def validate_curve_table_document(ir) -> list[str]:
+    """CurveTable-specific semantic rules."""
+    errors: list[str] = []
+    content = ir.content or {}
+    curve_table = content.get("curve_table") or {}
+    if not curve_table:
+        return errors
+    table_summary = curve_table.get("table_summary") or {}
+    if not table_summary:
+        errors.append("CurveTable table_summary is empty")
+    return errors
+
+# Registration is handled by curve_table/__init__.py via register_domain_validator()
+
+
+# ---------------------------------------------------------------------------
+# User-Defined types-specific semantic rules (#557g)
+# ---------------------------------------------------------------------------
+
+def validate_user_defined_document(ir) -> list[str]:
+    """User-Defined types-specific semantic rules."""
+    errors: list[str] = []
+    content = ir.content or {}
+    user_defined = content.get("user_defined") or {}
+    # Empty content is valid — some user-defined assets have no asset_type_data
+    return errors
+
+# Registration is handled by user_defined/__init__.py via register_domain_validator()
+
+
+# ---------------------------------------------------------------------------
+# Standalone types-specific semantic rules (#557h)
+# ---------------------------------------------------------------------------
+
+def validate_standalone_document(ir) -> list[str]:
+    """Standalone types-specific semantic rules."""
+    errors: list[str] = []
+    content = ir.content or {}
+    standalone = content.get("standalone") or {}
+    # Empty content is valid — some standalone assets have no asset_type_data
+    return errors
+
+# Registration is handled by standalone/__init__.py via register_domain_validator()
+
+
+# ---------------------------------------------------------------------------
+# Niagara-specific semantic rules (#557e)
+# ---------------------------------------------------------------------------
+
+def validate_niagara_document(ir) -> list[str]:
+    """Niagara-specific semantic rules."""
+    errors: list[str] = []
+    content = ir.content or {}
+    niagara = content.get("niagara") or {}
+    # Empty content is valid — some niagara assets have no asset_type_data
+    return errors
+
+# Registration is handled by niagara/__init__.py via register_domain_validator()

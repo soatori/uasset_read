@@ -57,6 +57,16 @@ def render_semantic_json(ir: SemanticIR, *, include_schema: bool = False) -> str
             "uasset_read.blueprint_semantic": "blueprint_semantic.schema.json",
             "uasset_read.anim_blueprint_semantic": "anim_blueprint_semantic.schema.json",
             "uasset_read.material_semantic": "material_semantic.schema.json",
+            "uasset_read.data_table_semantic": "data_table_semantic.schema.json",
+            "uasset_read.skeleton_semantic": "skeleton_semantic.schema.json",
+            "uasset_read.mesh_semantic": "mesh_semantic.schema.json",
+            "uasset_read.texture_semantic": "texture_semantic.schema.json",
+            "uasset_read.sound_semantic": "sound_semantic.schema.json",
+            "uasset_read.anim_semantic": "anim_semantic.schema.json",
+            "uasset_read.curve_table_semantic": "curve_table_semantic.schema.json",
+            "uasset_read.user_defined_semantic": "user_defined_semantic.schema.json",
+            "uasset_read.standalone_semantic": "standalone_semantic.schema.json",
+            "uasset_read.niagara_semantic": "niagara_semantic.schema.json",
         }
         schema_file = format_to_schema.get(ir.format, "semantic.schema.json")
         raw["$schema"] = f"https://github.com/soatori/uasset_read/schemas/{schema_file}"
