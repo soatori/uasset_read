@@ -16,7 +16,7 @@
       "enum": ["standard", "debug"]
     },
     "asset_type": {
-      "enum": ["user_defined_enum", "user_defined_struct"]
+      "type": "string"
     },
     "asset": {
       "$ref": "#/$defs/AssetMeta"

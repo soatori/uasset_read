@@ -16,7 +16,7 @@
       "enum": ["standard", "debug"]
     },
     "asset_type": {
-      "const": "standalone"
+      "type": "string"
     },
     "asset": {
       "$ref": "#/$defs/AssetMeta"
