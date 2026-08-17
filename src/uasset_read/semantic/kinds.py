@@ -75,6 +75,45 @@ _TYPE_MAP: dict[str, str] = {
     "FoliageType": "foliage_type",
     # Builder
     "CubeBuilder": "cube_builder",
+    # Physics
+    "PhysicsAsset": "physics_asset",
+    "PhysicalMaterial": "physical_material",
+    # Animation (extended)
+    "AnimLayerInterface": "anim_layer_interface",
+    # Sound (extended)
+    "SoundMix": "sound_mix",
+    "SoundClass": "sound_class",
+    "SoundSubmix": "sound_submix",
+    # AI
+    "BehaviorTree": "behavior_tree",
+    "BlackboardData": "blackboard_data",
+    # Data assets
+    "DataAsset": "data_asset",
+    "PrimaryDataAsset": "primary_data_asset",
+    # Landscape
+    "Landscape": "landscape",
+    "LandscapeGrassType": "landscape_grass_type",
+    "LandscapeLayerInfoObject": "landscape_layer_info",
+    # World
+    "World": "world",
+    "Level": "level",
+    # Particles
+    "ParticleSystem": "particle_system",
+    # UI
+    "WidgetBlueprintGeneratedClass": "widget_blueprint",
+    "WidgetBlueprint": "widget_blueprint",
+    # Texture (extended)
+    "Texture2DArray": "texture",
+    "VolumeTexture": "texture",
+    # Media
+    "MediaPlayer": "media_player",
+    "MediaTexture": "media_texture",
+    "MediaSource": "media_source",
+    # Cloth and Hair
+    "ClothAsset": "cloth_asset",
+    "GroomAsset": "groom_asset",
+    # Sparse Volume Texture
+    "SparseVolumeTexture": "sparse_volume_texture",
 }
 
 
