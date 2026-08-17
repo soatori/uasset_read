@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/soatori/uasset_read/schemas/niagara_semantic.schema.json",
+  "title": "Niagara Semantic JSON",
+  "description": "Semantic JSON output for Niagara (NiagaraSystem, NiagaraEmitter, NiagaraScript) assets.",
+  "type": "object",
+  "required": ["format", "format_version", "mode", "asset_type", "asset", "status", "niagara"],
+  "properties": {
+    "format": {
+      "const": "uasset_read.niagara_semantic"
+    },
+    "format_version": {
+      "const": "1.0.0"
+    },
+    "mode": {
+      "enum": ["standard", "debug"]
+    },
+    "asset_type": {
+      "enum": ["niagara_system", "niagara_emitter", "niagara_script"]
+    },
+    "asset": {
+      "$ref": "#/$defs/AssetMeta"
+    },
+    "status": {
+      "$ref": "#/$defs/AssetStatus"
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "niagara": {
+      "$ref": "#/$defs/NiagaraContent"
+    },
+    "coverage": {
+      "$ref": "#/$defs/CoverageInfo"
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DiagnosticEntry"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EvidenceEntry"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "standard"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "AssetMeta": {
+      "type": "object",
+      "required": ["package", "name"],
+      "properties": {
+        "package": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generated_class": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "AssetStatus": {
+      "type": "object",
+      "required": ["parse", "representation"],
+      "properties": {
+        "parse": {
+          "enum": ["complete", "partial", "failed"]
+        },
+        "representation": {
+          "enum": ["full", "partial", "opaque"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "NiagaraContent": {
+      "type": "object",
+      "properties": {
+        "niagara_metadata": {
+          "$ref": "#/$defs/NiagaraMetadata"
+        },
+        "emitters": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "scripts": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "parameters": {
+          "$ref": "#/$defs/NiagaraParameters"
+        }
+      },
+      "additionalProperties": false
+    },
+    "NiagaraMetadata": {
+      "type": "object",
+      "properties": {
+        "emitter_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_spawn_rate": {
+          "type": "number",
+          "minimum": 0
+        },
+        "has_gpu_computation": {
+          "type": "boolean"
+        },
+        "script_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "parameter_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sim_stage_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "script_type": {
+          "type": "string"
+        },
+        "has_bytecode": {
+          "type": "boolean"
+        },
+        "bytecode_size": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "NiagaraParameters": {
+      "type": "object",
+      "properties": {
+        "uniform": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "input": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "output": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "CoverageInfo": {
+      "type": "object",
+      "required": ["scopes_expected", "scopes_available", "scopes_unavailable"],
+      "properties": {
+        "scopes_expected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scopes_available": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scopes_unavailable": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DiagnosticEntry": {
+      "type": "object",
+      "required": ["severity", "code", "message"],
+      "properties": {
+        "severity": {
+          "enum": ["error", "warning", "info"]
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EvidenceEntry": {
+      "type": "object",
+      "required": ["key", "value"],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {}
+      },
+      "additionalProperties": false
+    }
+  }
+}
