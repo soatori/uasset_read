@@ -5,6 +5,7 @@ Does NOT perform standard/debug projection (that is project_semantic's job).
 """
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -27,6 +28,17 @@ _PARSE_RANK = {"complete": 0, "partial": 1, "failed": 2}
 def _worst_parse(a: str, b: str) -> str:
     """Return the more severe parse status (failed > partial > complete)."""
     return a if _PARSE_RANK.get(a, 1) >= _PARSE_RANK.get(b, 1) else b
+
+
+def _extractor_accepts_mode(extractor) -> bool:
+    """Check if a domain extractor function accepts a 'mode' keyword parameter."""
+    if extractor is None:
+        return False
+    try:
+        sig = inspect.signature(extractor)
+        return "mode" in sig.parameters
+    except (ValueError, TypeError):
+        return False
 
 
 def _combine_package_status(export_parse: str, diagnostics_data) -> str:
@@ -102,7 +114,7 @@ def _select_primary_export(package_ir: PackageIR) -> tuple[ExportIR | None, str]
     return None, "none"
 
 
-def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> SemanticIR:
+def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None, *, mode: str = "standard") -> SemanticIR:
     """Build a mode-independent SemanticIR from PackageIR.
 
     This is the single semantic-projection boundary. It does NOT perform
@@ -114,6 +126,8 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> 
         package_ir: PackageIR from ir_builder
         source_path: Optional path of the parsed file, used to derive a stable
             package identity when the header has none.
+        mode: Build mode — "standard" or "debug". Passed to domain extractors
+            that accept it, enabling debug evidence generation before projection.
 
     Returns:
         SemanticIR ready for projection and rendering
@@ -187,8 +201,14 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> 
     content: dict = {}
     evidence_list: list = list(evidence)
 
+    # Check if extractor accepts 'mode' parameter
+    _pass_mode = _extractor_accepts_mode(extractor)
+
     if extractor is not None and status.representation != "opaque":
-        content = extractor(package_ir, primary, cov, evidence_list)
+        if _pass_mode:
+            content = extractor(package_ir, primary, cov, evidence_list, mode=mode)
+        else:
+            content = extractor(package_ir, primary, cov, evidence_list)
     elif extractor is not None and asset_type == "material" and getattr(package_ir, "material", None) is not None:
         # Material data is built by _build_material_ir in ir_builder, not from export parsing
         # Call the extractor even when the export is opaque
@@ -199,7 +219,9 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> 
     else:
         cov.track("domain_content", False)
 
-    # Domain formats own coverage/diagnostics/references inside content.
+    # Domain formats own coverage inside content; references and diagnostics
+    # are always provided by the envelope so domain extractors need not
+    # hardcode empty values.
     owns_envelope_sections = domain_format is not None and status.representation != "opaque"
     if owns_envelope_sections and content.get("coverage"):
         # Any reported coverage entry means some scope is not complete:
@@ -207,8 +229,8 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> 
         representation = "partial"
         status = AssetStatus(parse=parse, representation="partial")
     coverage = None if owns_envelope_sections else cov.build()
-    diagnostics = () if owns_envelope_sections else diag.build()
-    references = () if owns_envelope_sections else collect_references(package_ir.imports, package_ir.exports)
+    diagnostics = diag.build()
+    references = collect_references(package_ir.imports, package_ir.exports)
 
     fmt, fmt_version = "uasset_read.asset_semantic", "1.0"
     if owns_envelope_sections:

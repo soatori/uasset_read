@@ -32,6 +32,8 @@ def build_anim_blueprint_content(
     export_ir: "ExportIR",
     coverage_model,
     evidence_list,
+    *,
+    mode: str = "standard",
 ) -> dict:
     """Build the Animation Blueprint domain content dict.
 
@@ -55,14 +57,14 @@ def build_anim_blueprint_content(
         reporting.coverage("graphs", "unavailable", reason="no_graph_exports")
         reporting.diagnostic("ABP_GRAPH_MISSING", "asset", "warning", "semantic_loss")
 
-    graphs_json, index = _emit_anim_graphs(graphs, table, reporting, mode="debug")
-    attach_flows(graphs_json, index, reporting, mode="debug")
+    graphs_json, index = _emit_anim_graphs(graphs, table, reporting, mode=mode)
+    attach_flows(graphs_json, index, reporting, mode=mode)
 
     # --- State Machines ---
     state_machines = []
     if anim_blueprint is not None:
         baked_machines = getattr(anim_blueprint, "baked_state_machines", []) or []
-        state_machines = emit_state_machines(baked_machines, reporting, mode="debug")
+        state_machines = emit_state_machines(baked_machines, reporting, mode=mode)
     else:
         reporting.coverage("state_machines", "unavailable", reason="no_anim_blueprint_data")
 
@@ -70,7 +72,7 @@ def build_anim_blueprint_content(
     anim_notifies = []
     if anim_blueprint is not None:
         notifies = getattr(anim_blueprint, "anim_notifies", []) or []
-        anim_notifies = _emit_anim_notifies(notifies, reporting, mode="debug")
+        anim_notifies = _emit_anim_notifies(notifies, reporting, mode=mode)
     else:
         reporting.coverage("anim_notifies", "unavailable", reason="no_anim_blueprint_data")
 
@@ -125,7 +127,7 @@ def build_anim_blueprint_content(
     coverage_entries = reporting.coverage_entries()
     if coverage_entries:
         content["coverage"] = coverage_entries
-    diagnostics = reporting.diagnostics_entries("debug")
+    diagnostics = reporting.diagnostics_entries(mode)
     if diagnostics:
         content["diagnostics"] = diagnostics
 

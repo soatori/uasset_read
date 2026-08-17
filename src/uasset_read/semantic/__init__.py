@@ -12,6 +12,17 @@ from uasset_read.semantic.render import render_semantic_json
 import uasset_read.semantic.blueprint  # noqa: F401  (registers #554 extractors)
 import uasset_read.semantic.anim_blueprint  # noqa: F401  (registers #555 extractors)
 import uasset_read.semantic.material  # noqa: F401  (registers #556 extractors)
+import uasset_read.semantic.data_table  # noqa: F401  (registers #557 DataTable extractors)
+import uasset_read.semantic.skeleton  # noqa: F401  (registers #557 Skeleton extractors)
+import uasset_read.semantic.mesh  # noqa: F401  (registers #557a Mesh extractors)
+import uasset_read.semantic.texture  # noqa: F401  (registers #557b Texture extractors)
+import uasset_read.semantic.sound  # noqa: F401  (registers #557c Sound extractors)
+import uasset_read.semantic.anim  # noqa: F401  (registers #557f Animation extractors)
+import uasset_read.semantic.curve_table  # noqa: F401  (registers #557d CurveTable extractors)
+import uasset_read.semantic.user_defined  # noqa: F401  (registers #557g UserDefined extractors)
+import uasset_read.semantic.standalone  # noqa: F401  (registers #557h Standalone extractors)
+import uasset_read.semantic.niagara  # noqa: F401  (registers #557e Niagara extractors)
+import uasset_read.semantic.movie  # noqa: F401  (registers #557i Movie extractors)
 
 __all__ = [
     "SemanticIR", "AssetMeta", "AssetStatus", "CoverageInfo",

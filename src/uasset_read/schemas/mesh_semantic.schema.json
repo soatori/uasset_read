@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/soatori/uasset_read/schemas/mesh_semantic.schema.json",
+  "title": "Mesh Semantic JSON",
+  "description": "Semantic JSON output for Mesh (UStaticMesh, USkeletalMesh) assets.",
+  "type": "object",
+  "required": ["format", "format_version", "mode", "asset_type", "asset", "status", "mesh"],
+  "properties": {
+    "format": {
+      "const": "uasset_read.mesh_semantic"
+    },
+    "format_version": {
+      "const": "1.0.0"
+    },
+    "mode": {
+      "enum": ["standard", "debug"]
+    },
+    "asset_type": {
+      "enum": ["static_mesh", "skeletal_mesh"]
+    },
+    "asset": {
+      "$ref": "#/$defs/AssetMeta"
+    },
+    "status": {
+      "$ref": "#/$defs/AssetStatus"
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "mesh": {
+      "$ref": "#/$defs/Mesh"
+    },
+    "coverage": {
+      "$ref": "#/$defs/CoverageInfo"
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DiagnosticEntry"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EvidenceEntry"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "standard"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "AssetMeta": {
+      "type": "object",
+      "required": ["package", "name"],
+      "properties": {
+        "package": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generated_class": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "AssetStatus": {
+      "type": "object",
+      "required": ["parse", "representation"],
+      "properties": {
+        "parse": {
+          "enum": ["complete", "partial", "failed"]
+        },
+        "representation": {
+          "enum": ["full", "partial", "opaque"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Mesh": {
+      "type": "object",
+      "required": ["mesh_summary"],
+      "properties": {
+        "mesh_summary": {
+          "$ref": "#/$defs/MeshSummary"
+        },
+        "materials": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MaterialSlot"
+          }
+        },
+        "lod_info": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LODInfo"
+          }
+        },
+        "skeleton_ref": {
+          "type": ["string", "null"]
+        },
+        "physics_asset_ref": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "MeshSummary": {
+      "type": "object",
+      "properties": {
+        "lod_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "section_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "vertex_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "triangle_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "material_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bone_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bounds": {
+          "$ref": "#/$defs/BoundingBox"
+        }
+      },
+      "additionalProperties": false
+    },
+    "BoundingBox": {
+      "type": "object",
+      "required": ["origin", "extent"],
+      "properties": {
+        "origin": {
+          "$ref": "#/$defs/Vector3"
+        },
+        "extent": {
+          "$ref": "#/$defs/Vector3"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Vector3": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MaterialSlot": {
+      "type": "object",
+      "required": ["slot_index"],
+      "properties": {
+        "slot_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "material_name": {
+          "type": "string"
+        },
+        "material_ref": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "LODInfo": {
+      "type": "object",
+      "required": ["lod_index"],
+      "properties": {
+        "lod_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "screen_size": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "vertex_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "triangle_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "section_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "CoverageInfo": {
+      "type": "object",
+      "required": ["scopes_expected", "scopes_available", "scopes_unavailable"],
+      "properties": {
+        "scopes_expected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scopes_available": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scopes_unavailable": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DiagnosticEntry": {
+      "type": "object",
+      "required": ["severity", "code", "message"],
+      "properties": {
+        "severity": {
+          "enum": ["error", "warning", "info"]
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EvidenceEntry": {
+      "type": "object",
+      "required": ["key", "value"],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {}
+      },
+      "additionalProperties": false
+    }
+  }
+}

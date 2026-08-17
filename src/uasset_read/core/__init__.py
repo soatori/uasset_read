@@ -294,7 +294,7 @@ def _parse_and_render(
         from uasset_read.semantic.validator import validate_semantic_document
         from uasset_read.semantic.render import render_semantic_json
 
-        semantic_ir = build_semantic_ir(ir, source_path=file_path)
+        semantic_ir = build_semantic_ir(ir, source_path=file_path, mode=output_level)
         semantic_ir = project_semantic(semantic_ir, output_level)
         validation_errors = validate_semantic_document(semantic_ir)
         if validation_errors:

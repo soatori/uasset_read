@@ -15,10 +15,16 @@ _TYPE_MAP: dict[str, str] = {
     "MaterialInstance": "material",
     "MaterialInstanceConstant": "material",
     "MaterialInstanceDynamic": "material",
+    "MaterialFunction": "material_function",
+    "MaterialParameterCollection": "material_parameter_collection",
     # Sound
     "SoundCue": "sound_cue",
     "SoundWave": "sound_wave",
     "SoundAttenuation": "sound_attenuation",
+    "SoundConcurrency": "sound_concurrency",
+    "ReverbEffect": "reverb_effect",
+    "DialogueWave": "dialogue_wave",
+    "DialogueVoice": "dialogue_voice",
     # Niagara
     "NiagaraSystem": "niagara_system",
     "NiagaraEmitter": "niagara_emitter",
@@ -33,12 +39,23 @@ _TYPE_MAP: dict[str, str] = {
     "AnimMontage": "anim_montage",
     "PoseAsset": "pose_asset",
     "AnimCurveCompressionSettings": "anim_curve_compression_settings",
+    "AnimCurveCompressionCodec": "anim_curve_compression_codec",
+    "AnimBoneCompressionSettings": "anim_bone_compression_settings",
+    "AnimationDataModel": "anim_data_model",
+    "AnimComposite": "anim_composite",
+    "AnimBlendSpace": "anim_blend_space",
+    "AnimBlendSpace1D": "anim_blend_space",
+    "AimOffsetBlendSpace": "anim_blend_space",
+    "AimOffsetBlendSpace1D": "anim_blend_space",
     # Data
     "DataTable": "data_table",
     "CurveTable": "curve_table",
+    "StringTable": "string_table",
     # Texture
     "Texture2D": "texture",
     "TextureCube": "texture",
+    "TextureRenderTarget2D": "texture",
+    "TextureRenderTargetCube": "texture",
     # Blueprint
     "BlueprintGeneratedClass": "blueprint",
     "AnimBlueprintGeneratedClass": "anim_blueprint",
@@ -51,8 +68,57 @@ _TYPE_MAP: dict[str, str] = {
     "SubsurfaceProfile": "subsurface_profile",
     # Curves
     "CurveFloat": "curve",
+    "CurveLinearColor": "curve",
+    "CurveVector": "curve",
     # Foliage
     "FoliageType_InstancedStaticMesh": "foliage_type",
+    "FoliageType": "foliage_type",
+    # Builder
+    "CubeBuilder": "cube_builder",
+    # Physics
+    "PhysicsAsset": "physics_asset",
+    "PhysicalMaterial": "physical_material",
+    # Animation (extended)
+    "AnimLayerInterface": "anim_layer_interface",
+    # Sound (extended)
+    "SoundMix": "sound_mix",
+    "SoundClass": "sound_class",
+    "SoundSubmix": "sound_submix",
+    # AI
+    "BehaviorTree": "behavior_tree",
+    "BlackboardData": "blackboard_data",
+    # Data assets
+    "DataAsset": "data_asset",
+    "PrimaryDataAsset": "primary_data_asset",
+    # Landscape
+    "Landscape": "landscape",
+    "LandscapeGrassType": "landscape_grass_type",
+    "LandscapeLayerInfoObject": "landscape_layer_info",
+    # World
+    "World": "world",
+    "Level": "level",
+    # Particles
+    "ParticleSystem": "particle_system",
+    # UI
+    "WidgetBlueprintGeneratedClass": "widget_blueprint",
+    "WidgetBlueprint": "widget_blueprint",
+    # Texture (extended)
+    "Texture2DArray": "texture",
+    "VolumeTexture": "texture",
+    # Media
+    "MediaPlayer": "media_player",
+    "MediaTexture": "media_texture",
+    "MediaSource": "media_source",
+    # Cloth and Hair
+    "ClothAsset": "cloth_asset",
+    "GroomAsset": "groom_asset",
+    # Sparse Volume Texture
+    "SparseVolumeTexture": "sparse_volume_texture",
+    # Movie / Sequencer
+    "MovieScene": "movie_scene",
+    "LevelSequence": "level_sequence",
+    "MovieSceneControlRigParameterTrack": "movie_scene",
+    "MovieSceneControlRigParameterSection": "movie_scene",
 }
 
 

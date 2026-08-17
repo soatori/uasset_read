@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/soatori/uasset_read/schemas/user_defined_semantic.schema.json",
+  "title": "User-Defined Types Semantic JSON",
+  "description": "Semantic JSON output for UserDefinedEnum and UserDefinedStruct assets.",
+  "type": "object",
+  "required": ["format", "format_version", "mode", "asset_type", "asset", "status", "user_defined"],
+  "properties": {
+    "format": {
+      "const": "uasset_read.user_defined_semantic"
+    },
+    "format_version": {
+      "const": "1.0.0"
+    },
+    "mode": {
+      "enum": ["standard", "debug"]
+    },
+    "asset_type": {
+      "type": "string"
+    },
+    "asset": {
+      "$ref": "#/$defs/AssetMeta"
+    },
+    "status": {
+      "$ref": "#/$defs/AssetStatus"
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "user_defined": {
+      "$ref": "#/$defs/UserDefined"
+    },
+    "coverage": {
+      "$ref": "#/$defs/CoverageInfo"
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DiagnosticEntry"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EvidenceEntry"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "standard"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "AssetMeta": {
+      "type": "object",
+      "required": ["package", "name"],
+      "properties": {
+        "package": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generated_class": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "AssetStatus": {
+      "type": "object",
+      "required": ["parse", "representation"],
+      "properties": {
+        "parse": {
+          "enum": ["complete", "partial", "failed"]
+        },
+        "representation": {
+          "enum": ["full", "partial", "opaque"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "UserDefined": {
+      "type": "object",
+      "properties": {
+        "enum_data": {
+          "$ref": "#/$defs/EnumData"
+        },
+        "struct_data": {
+          "$ref": "#/$defs/StructData"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EnumData": {
+      "type": "object",
+      "required": ["enum_name", "display_name", "entry_count", "entries"],
+      "properties": {
+        "enum_name": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "entry_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EnumEntry"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "EnumEntry": {
+      "type": "object",
+      "required": ["name", "display_name", "value"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "value": {}
+      },
+      "additionalProperties": false
+    },
+    "StructData": {
+      "type": "object",
+      "required": ["struct_name", "display_name", "property_count", "properties"],
+      "properties": {
+        "struct_name": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "property_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StructProperty"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "StructProperty": {
+      "type": "object",
+      "required": ["name", "type", "display_name"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CoverageInfo": {
+      "type": "object",
+      "required": ["scopes_expected", "scopes_available", "scopes_unavailable"],
+      "properties": {
+        "scopes_expected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scopes_available": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scopes_unavailable": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DiagnosticEntry": {
+      "type": "object",
+      "required": ["severity", "code", "message"],
+      "properties": {
+        "severity": {
+          "enum": ["error", "warning", "info"]
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EvidenceEntry": {
+      "type": "object",
+      "required": ["key", "value"],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {}
+      },
+      "additionalProperties": false
+    }
+  }
+}

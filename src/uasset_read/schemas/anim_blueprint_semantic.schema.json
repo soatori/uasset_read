@@ -273,7 +273,8 @@
         "duration": {"type": "number"},
         "notify_class": {"type": ["string", "null"]},
         "notify_state_class": {"type": ["string", "null"]},
-        "track_index": {"type": "integer"}
+        "track_index": {"type": "integer"},
+        "evidence": {"type": "object"}
       },
       "additionalProperties": false
     },
