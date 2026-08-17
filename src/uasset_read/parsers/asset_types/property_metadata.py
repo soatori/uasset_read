@@ -245,6 +245,43 @@ def build_property_metadata(
             except Exception:
                 pass
 
+    elif class_name == "MaterialFunction":
+        for property_name, field_name in (
+            ("Description", "description"),
+            ("UserExposedCaption", "user_exposed_caption"),
+        ):
+            if property_name in values:
+                project(field_name, values[property_name])
+        if "bExposeToLibrary" in values:
+            project("expose_to_library", bool(values["bExposeToLibrary"]))
+
+    elif class_name == "MaterialParameterCollection":
+        scalar_params = values.get("ScalarParameters")
+        if isinstance(scalar_params, list):
+            project("scalar_parameter_count", len(scalar_params), include_zero=True)
+        vector_params = values.get("VectorParameters")
+        if isinstance(vector_params, list):
+            project("vector_parameter_count", len(vector_params), include_zero=True)
+
+    elif class_name == "ReverbEffect":
+        for property_name, field_name in (
+            ("bBypassEarlyReflections", "bypass_early_reflections"),
+            ("ReflectionsDelay", "reflections_delay"),
+            ("GainHF", "gain_hf"),
+            ("ReflectionsGain", "reflections_gain"),
+            ("bBypassLateReflections", "bypass_late_reflections"),
+            ("LateDelay", "late_delay"),
+            ("DecayTime", "decay_time"),
+            ("Density", "density"),
+            ("Diffusion", "diffusion"),
+            ("AirAbsorptionGainHF", "air_absorption_gain_hf"),
+            ("DecayHFRatio", "decay_hf_ratio"),
+            ("LateGain", "late_gain"),
+            ("Gain", "gain"),
+        ):
+            if property_name in values:
+                project(field_name, _enum_value(values[property_name]))
+
     if business_field_count:
         data["parse_status"] = validate_parse_status("partial_metadata")
 

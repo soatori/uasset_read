@@ -165,6 +165,9 @@ def register_asset_type_handlers() -> None:
         ),
         PropertyMetadataHandler("Texture2D"),
         PropertyMetadataHandler("SoundCue"),
+        PropertyMetadataHandler("MaterialFunction"),
+        PropertyMetadataHandler("MaterialParameterCollection"),
+        PropertyMetadataHandler("ReverbEffect"),
         # #521: Niagara handlers
         NiagaraGraphHandler(),
         NiagaraScriptHandler(),
@@ -194,6 +197,19 @@ def register_asset_type_handlers() -> None:
         ("movie_scene", "MovieSceneHandler", ["MovieScene"], "MovieSceneHandler"),
         ("movie_scene_control_rig", "MovieSceneControlRigParameterTrackHandler", ["MovieSceneControlRigParameterTrack"], "MovieSceneControlRigParameterTrackHandler"),
         ("movie_scene_control_rig", "MovieSceneControlRigParameterSectionHandler", ["MovieSceneControlRigParameterSection"], "MovieSceneControlRigParameterSectionHandler"),
+        # New types from #557
+        ("curve_float", "parse_curve_float", ["CurveFloat"], "CurveFloatHandler"),
+        ("material_function", "parse_material_function", ["MaterialFunction"], "MaterialFunctionHandler"),
+        ("material_parameter_collection", "parse_material_parameter_collection", ["MaterialParameterCollection"], "MaterialParameterCollectionHandler"),
+        ("anim_composite", "parse_anim_composite", ["AnimComposite"], "AnimCompositeHandler"),
+        ("anim_blend_space", "parse_anim_blend_space", ["AnimBlendSpace", "AnimBlendSpace1D", "AimOffsetBlendSpace", "AimOffsetBlendSpace1D"], "AnimBlendSpaceHandler"),
+        ("sound_concurrency", "parse_sound_concurrency", ["SoundConcurrency"], "SoundConcurrencyHandler"),
+        ("reverb_effect", "parse_reverb_effect", ["ReverbEffect"], "ReverbEffectHandler"),
+        ("dialogue_wave", "parse_dialogue_wave", ["DialogueWave"], "DialogueWaveHandler"),
+        ("dialogue_voice", "parse_dialogue_voice", ["DialogueVoice"], "DialogueVoiceHandler"),
+        ("curve_linear_color", "parse_curve_linear_color", ["CurveLinearColor"], "CurveLinearColorHandler"),
+        ("curve_vector", "parse_curve_vector", ["CurveVector"], "CurveVectorHandler"),
+        ("texture_render_target", "parse_texture_render_target", ["TextureRenderTarget2D", "TextureRenderTargetCube"], "TextureRenderTargetHandler"),
     ]
     for module, func_name, class_names, handler_name in _optional:
         try:

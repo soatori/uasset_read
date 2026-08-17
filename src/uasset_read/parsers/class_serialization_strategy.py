@@ -109,6 +109,7 @@ _OPAQUE_CLASSES = frozenset({
     # Pure UPROPERTY classes that the current parser cannot fully parse
     "FoliageType",
     "SkeletalMeshLODSettings",
+    "CurveFloat",
 })
 
 # Skip entirely — format unknown or too risky
