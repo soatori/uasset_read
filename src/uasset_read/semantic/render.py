@@ -67,6 +67,7 @@ def render_semantic_json(ir: SemanticIR, *, include_schema: bool = False) -> str
             "uasset_read.user_defined_semantic": "user_defined_semantic.schema.json",
             "uasset_read.standalone_semantic": "standalone_semantic.schema.json",
             "uasset_read.niagara_semantic": "niagara_semantic.schema.json",
+            "uasset_read.movie_semantic": "movie_semantic.schema.json",
         }
         schema_file = format_to_schema.get(ir.format, "semantic.schema.json")
         raw["$schema"] = f"https://github.com/soatori/uasset_read/schemas/{schema_file}"

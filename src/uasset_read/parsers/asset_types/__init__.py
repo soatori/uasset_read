@@ -236,6 +236,7 @@ def register_asset_type_handlers() -> None:
         ("cloth_asset", "parse_cloth_asset", ["ClothAsset"], "ClothAssetHandler"),
         ("groom_asset", "parse_groom_asset", ["GroomAsset"], "GroomAssetHandler"),
         ("sparse_volume_texture", "parse_sparse_volume_texture", ["SparseVolumeTexture"], "SparseVolumeTextureHandler"),
+        ("level_sequence", "parse_level_sequence", ["LevelSequence"], "LevelSequenceHandler"),
     ]
     for module, func_name, class_names, handler_name in _optional:
         try:

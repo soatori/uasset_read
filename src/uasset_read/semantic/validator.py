@@ -29,6 +29,7 @@ _FORMAT_VERSIONS = {
     "uasset_read.user_defined_semantic": "1.0.0",
     "uasset_read.standalone_semantic": "1.0.0",
     "uasset_read.niagara_semantic": "1.0.0",
+    "uasset_read.movie_semantic": "1.0.0",
 }
 
 _DOMAIN_VALIDATORS: dict[str, object] = {}
@@ -615,3 +616,18 @@ def validate_niagara_document(ir) -> list[str]:
     return errors
 
 # Registration is handled by niagara/__init__.py via register_domain_validator()
+
+
+# ---------------------------------------------------------------------------
+# Movie-specific semantic rules (#557i)
+# ---------------------------------------------------------------------------
+
+def validate_movie_document(ir) -> list[str]:
+    """Movie-specific semantic rules."""
+    errors: list[str] = []
+    content = ir.content or {}
+    movie = content.get("movie") or {}
+    # Empty content is valid — some movie assets have no asset_type_data
+    return errors
+
+# Registration is handled by movie/__init__.py via register_domain_validator()

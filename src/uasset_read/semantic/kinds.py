@@ -114,6 +114,11 @@ _TYPE_MAP: dict[str, str] = {
     "GroomAsset": "groom_asset",
     # Sparse Volume Texture
     "SparseVolumeTexture": "sparse_volume_texture",
+    # Movie / Sequencer
+    "MovieScene": "movie_scene",
+    "LevelSequence": "level_sequence",
+    "MovieSceneControlRigParameterTrack": "movie_scene",
+    "MovieSceneControlRigParameterSection": "movie_scene",
 }
 
 

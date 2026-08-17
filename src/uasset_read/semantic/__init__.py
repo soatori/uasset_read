@@ -22,6 +22,7 @@ import uasset_read.semantic.curve_table  # noqa: F401  (registers #557d CurveTab
 import uasset_read.semantic.user_defined  # noqa: F401  (registers #557g UserDefined extractors)
 import uasset_read.semantic.standalone  # noqa: F401  (registers #557h Standalone extractors)
 import uasset_read.semantic.niagara  # noqa: F401  (registers #557e Niagara extractors)
+import uasset_read.semantic.movie  # noqa: F401  (registers #557i Movie extractors)
 
 __all__ = [
     "SemanticIR", "AssetMeta", "AssetStatus", "CoverageInfo",
