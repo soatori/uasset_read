@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import struct
-import warnings
 from typing import TYPE_CHECKING, Sequence, Callable
 from pathlib import Path
 
@@ -222,11 +221,9 @@ def parse_package(
     tolerant: bool | None = None,
     include_parent_assets: bool | None = None,
     asset_roots: Sequence[str] | None = None,
-    aes_key: bytes | None = None,
     provider: PackageProvider | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
-    include_linker: bool = True,  # Deprecated, linker is always created
     lightweight_threshold: int | None = None,
     force_full_parse: bool | None = None,
     hex_view: bool | None = None,
@@ -240,11 +237,7 @@ def parse_package(
     Args:
         path: .uasset/.umap file path
         tolerant: Whether to enable tolerant mode (default enabled)
-        aes_key: Deprecated. Construct encrypted container readers/providers with
-            their AES key instead; the parser no longer accepts an unused key.
         provider: Optional package provider (filesystem/pak/iostore)
-        include_linker: Deprecated. Linker is now always created for complete
-            object graph resolution. Parameter retained for backward compatibility.
         force_full_parse: Force full parse for large blueprints (ignore lightweight threshold)
         hex_view: Enable HexView byte offset tracking
         config: Optional ParseConfig instance for centralized parameter management.
@@ -256,24 +249,6 @@ def parse_package(
     """
     configure_project_logging()
     result = ParseResult()
-
-    # Handle deprecated include_linker parameter
-    if include_linker is not True:
-        warnings.warn(
-            "The include_linker parameter is deprecated; linker is always included in the result. "
-            "Please remove this parameter from the call.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
-    # Handle deprecated aes_key inline (don't pass to core)
-    if aes_key is not None:
-        result.errors.append(
-            "Unsupported argument: aes_key. Pass the key "
-            "when constructing the Pak/IoStore reader and provider"
-        )
-        result.is_success = False
-        return result
 
     # Merge config and legacy parameters
     core_kwargs = _resolve_parse_params(config, {
@@ -304,7 +279,6 @@ def parse_uasset(
     asset_roots: Sequence[str] | None = None,
     mappings_path: str | None = None,
     game: str | None = None,
-    include_linker: bool = True,  # Deprecated, linker is always created
     force_full_parse: bool | None = None,
     memory_policy: MemoryPolicy | None = None,
     config: ParseConfig | None = None,

@@ -14,7 +14,7 @@ __version__ = "0.5.5"
 
 from .core import parse_single, parse_batch, diff_single, list_formats, BatchResult
 from .config import ParseConfig, LogConfig
-from .parse_uasset import parse_package, parse_uasset, parse_uasset_with_linker
+from .pipeline.core import parse_package, parse_uasset, parse_uasset_with_linker
 from .project_logging import (
     ProjectLogSession,
     configure_project_logging,

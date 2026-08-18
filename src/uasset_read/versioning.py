@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Protocol
+from typing import Any
 
 from uasset_read.core.utils import normalize_hex_guid
 
@@ -160,11 +160,6 @@ STREAM_MAP: dict[str, VersionStream] = {
 # VersionContainer
 # ============================================================================
 
-class _CustomVersionLike(Protocol):
-    """Any object with guid: str and version: int attributes (protocol type)."""
-    guid: str
-    version: int
-
 
 @dataclass
 class FPackageFileVersion:
@@ -207,7 +202,7 @@ class VersionContainer:
     After construction from PackageFileSummary, provides:
     - get_version(guid) -> look up CustomVersion number
     """
-    custom_versions: list[_CustomVersionLike] = field(default_factory=list)
+    custom_versions: list[Any] = field(default_factory=list)
     file_version_ue5: int = UE5_VERSION_MIN
     file_version_ue4: int = 0
     _guid_cache: dict[str, int] = field(default_factory=dict, repr=False)

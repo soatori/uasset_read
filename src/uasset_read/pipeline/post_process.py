@@ -536,7 +536,7 @@ def _resolve_parent_assets(
         return
 
     # Lazy import to avoid circular dependencies
-    from uasset_read.parse_uasset import parse_uasset_with_linker
+    from uasset_read.pipeline.core import parse_uasset_with_linker
 
     try:
         parent_result = parse_uasset_with_linker(
