@@ -55,26 +55,22 @@ def extract_function_pins(file_path: str, tolerant: bool = True) -> list[dict]:
 
     Args:
         file_path: Path to .uasset file
-        tolerant: Enable tolerant parsing mode (default: True)
+ tolerant: Enable tolerant parsing mode (default: True)
 
     Returns:
         List of dicts, each with keys: function_name, return_type, parameters.
         Each parameter has keys: name, type, direction ("input" or "output").
     """
-    from uasset_read.parse_uasset import parse_uasset_with_linker
+    from uasset_read import parse_uasset_with_linker
     from uasset_read.ir_builder import build_package_ir
 
     result = parse_uasset_with_linker(file_path, tolerant=tolerant)
     ir = build_package_ir(result)
 
-    # ir.function_graphs is a list[dict] built by build_function_graphs()
-    # Each entry: {function_name, graph_source, entry_node_guid, signature, execution_chains, ...}
-    # signature: {return_type: str, parameters: [{name, type, direction}]}
     _IMPLICIT_PINS = {"self", "target", "worldcontext"}
     entries: list[dict] = []
     for fg in ir.function_graphs:
         sig = fg.get("signature", {})
-        # Filter implicit pins (self/target/worldcontext) for consistent output
         params = [
             p for p in sig.get("parameters", [])
             if p.get("name", "").lower() not in _IMPLICIT_PINS
@@ -84,7 +80,6 @@ def extract_function_pins(file_path: str, tolerant: bool = True) -> list[dict]:
             "return_type": sig.get("return_type", ""),
             "parameters": params,
         }
-        # Surface fallback reason when graph complexity guard triggered
         fallback = fg.get("fallback_reason")
         if fallback:
             entry["fallback_reason"] = fallback
@@ -115,7 +110,6 @@ def format_text(entries: list[dict]) -> str:
         return_type = entry.get("return_type", "") or "void"
         parameters = entry.get("parameters", [])
 
-        # Build signature line: "ReturnType FunctionName(Param1Type Param1, ...)"
         param_parts = []
         for p in parameters:
             p_type = p.get("type", "")
@@ -132,7 +126,6 @@ def format_text(entries: list[dict]) -> str:
             suffix = f"  [{fallback}]"
         lines.append(f"{return_type} {func_name}({sig_params}){suffix}")
 
-        # List each parameter with direction arrow
         for p in parameters:
             p_type = p.get("type", "")
             p_name = p.get("name", "")
@@ -149,8 +142,7 @@ def format_text(entries: list[dict]) -> str:
 def format_json(entries: list[dict]) -> str:
     """Format function pin data as JSON.
 
-    Adds is_input/is_output boolean fields to each parameter
-    (derived from the "direction" field).
+    Adds is_input/is_output boolean fields to each parameter.
 
     Args:
         entries: List of function dicts from extract_function_pins()
