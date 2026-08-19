@@ -50,40 +50,39 @@ def create_parser() -> argparse.ArgumentParser:
 def extract_function_pins(file_path: str, tolerant: bool = True) -> list[dict]:
     """Extract function pin/parameter info from a .uasset file.
 
-    Parses the asset, builds the IR, and returns the function_graphs data
-    with parameters filtered to data pins only (exec/delegate pins excluded).
+    Parses the asset and returns Blueprint function data with parameters.
 
     Args:
         file_path: Path to .uasset file
- tolerant: Enable tolerant parsing mode (default: True)
+        tolerant: Enable tolerant parsing mode (default: True)
 
     Returns:
         List of dicts, each with keys: function_name, return_type, parameters.
-        Each parameter has keys: name, type, direction ("input" or "output").
+        Each parameter has keys: name, type, is_input, is_output.
     """
-    from uasset_read import parse_uasset_with_linker
-    from uasset_read.ir_builder import build_package_ir
+    from uasset_read import parse_package
 
-    result = parse_uasset_with_linker(file_path, tolerant=tolerant)
-    ir = build_package_ir(result)
+    result = parse_package(file_path, tolerant=tolerant)
 
-    _IMPLICIT_PINS = {"self", "target", "worldcontext"}
+    if not result.is_success or not result.blueprint or not result.blueprint.is_blueprint:
+        return []
+
     entries: list[dict] = []
-    for fg in ir.function_graphs:
-        sig = fg.get("signature", {})
+    for func in result.blueprint.functions:
         params = [
-            p for p in sig.get("parameters", [])
-            if p.get("name", "").lower() not in _IMPLICIT_PINS
+            {
+                "name": p.name,
+                "type": p.param_type,
+                "is_input": p.is_input,
+                "is_output": p.is_output,
+            }
+            for p in func.parameters
         ]
-        entry: dict = {
-            "function_name": fg.get("function_name", "Unknown"),
-            "return_type": sig.get("return_type", ""),
+        entries.append({
+            "function_name": func.name,
+            "return_type": func.return_type or "void",
             "parameters": params,
-        }
-        fallback = fg.get("fallback_reason")
-        if fallback:
-            entry["fallback_reason"] = fallback
-        entries.append(entry)
+        })
     return entries
 
 
@@ -129,8 +128,9 @@ def format_text(entries: list[dict]) -> str:
         for p in parameters:
             p_type = p.get("type", "")
             p_name = p.get("name", "")
-            direction = p.get("direction", "input")
-            arrow = "<-" if direction == "input" else "->"
+            is_input = p.get("is_input", False)
+            is_output = p.get("is_output", False)
+            arrow = "<-" if is_input else "->"
             type_prefix = f"{p_type} " if p_type else ""
             lines.append(f"    {arrow} {type_prefix}{p_name}")
 
@@ -141,8 +141,6 @@ def format_text(entries: list[dict]) -> str:
 
 def format_json(entries: list[dict]) -> str:
     """Format function pin data as JSON.
-
-    Adds is_input/is_output boolean fields to each parameter.
 
     Args:
         entries: List of function dicts from extract_function_pins()
@@ -158,12 +156,11 @@ def format_json(entries: list[dict]) -> str:
             "parameters": [],
         }
         for p in entry.get("parameters", []):
-            direction = p.get("direction", "input")
             func["parameters"].append({
                 "name": p.get("name", ""),
                 "type": p.get("type", ""),
-                "is_input": direction == "input",
-                "is_output": direction == "output",
+                "is_input": p.get("is_input", False),
+                "is_output": p.get("is_output", False),
             })
         output.append(func)
     return json.dumps(output, indent=2, ensure_ascii=False)

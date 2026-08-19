@@ -81,15 +81,17 @@ class TestExtraction:
         assert isinstance(entry["parameters"], list)
 
     def test_extract_parameter_structure(self, blueprint_asset: Path):
-        """Each parameter has name, type, and direction."""
+        """Each parameter has name, type, is_input, is_output."""
         from extract_function_pins import extract_function_pins
         result = extract_function_pins(str(blueprint_asset))
         for entry in result:
             for param in entry["parameters"]:
                 assert "name" in param
                 assert "type" in param
-                assert "direction" in param
-                assert param["direction"] in ("input", "output")
+                assert "is_input" in param
+                assert "is_output" in param
+                assert isinstance(param["is_input"], bool)
+                assert isinstance(param["is_output"], bool)
 
     def test_extract_non_blueprint_returns_empty(self, samples_dir: Path):
         """Non-Blueprint assets return an empty list."""
@@ -119,8 +121,8 @@ class TestTextFormatter:
                 "function_name": "MyFunction",
                 "return_type": "void",
                 "parameters": [
-                    {"name": "Param1", "type": "int32", "direction": "input"},
-                    {"name": "Param2", "type": "float", "direction": "input"},
+                    {"name": "Param1", "type": "int32", "is_input": True, "is_output": False},
+                    {"name": "Param2", "type": "float", "is_input": True, "is_output": False},
                 ],
             }
         ]
@@ -149,7 +151,7 @@ class TestTextFormatter:
                 "function_name": "GetLocation",
                 "return_type": "void",
                 "parameters": [
-                    {"name": "OutLocation", "type": "vector", "direction": "output"},
+                    {"name": "OutLocation", "type": "vector", "is_input": False, "is_output": True},
                 ],
             }
         ]
@@ -187,7 +189,7 @@ class TestTextFormatter:
                 "function_name": "FuncB",
                 "return_type": "bool",
                 "parameters": [
-                    {"name": "bFlag", "type": "bool", "direction": "input"},
+                    {"name": "bFlag", "type": "bool", "is_input": True, "is_output": False},
                 ],
             },
         ]
@@ -226,8 +228,8 @@ class TestJsonFormatter:
                 "function_name": "GetLocation",
                 "return_type": "void",
                 "parameters": [
-                    {"name": "OutLoc", "type": "vector", "direction": "output"},
-                    {"name": "InName", "type": "string", "direction": "input"},
+                    {"name": "OutLoc", "type": "vector", "is_input": False, "is_output": True},
+                    {"name": "InName", "type": "string", "is_input": True, "is_output": False},
                 ],
             }
         ]
@@ -253,8 +255,8 @@ class TestJsonFormatter:
                 "function_name": "Test",
                 "return_type": "bool",
                 "parameters": [
-                    {"name": "bFlag", "type": "bool", "direction": "input"},
-                    {"name": "OutResult", "type": "int32", "direction": "output"},
+                    {"name": "bFlag", "type": "bool", "is_input": True, "is_output": False},
+                    {"name": "OutResult", "type": "int32", "is_input": False, "is_output": True},
                 ],
             }
         ]
