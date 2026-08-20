@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from uasset_read.cpp_gen.formatters import CppCallStatement
 
 from uasset_read.cpp_gen.formatters import CppClassIR, CppProperty, CppMethodIR, CppCallStatement
-from uasset_read.cpp_gen.sanitizer import sanitize_identifier, sanitize_category, sanitize_uproperty_marks
+from uasset_read.cpp_gen.sanitizer import sanitize_identifier, sanitize_category, sanitize_uproperty_marks, sanitize_string_literal
 
 logger = logging.getLogger(__name__)
 
@@ -330,7 +330,7 @@ def _format_default_value(cpp_type: str, value: any) -> str:
 
     # Handle string types (TEXT wrapper, escape quotes and backslashes)
     if cpp_type in ("FString", "FName"):
-        escaped = str(value).replace('\\', '\\\\').replace('"', '\\"')
+        escaped = sanitize_string_literal(str(value))
         return f'TEXT("{escaped}")'
 
     # FText too complex, skip (currently not supported)

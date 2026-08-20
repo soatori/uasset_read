@@ -11,6 +11,8 @@ Security mitigations (threat model T-059-03, T-059-04):
 import re
 from typing import Any, Dict, List, Optional
 
+from uasset_read.cpp_gen.sanitizer import sanitize_string_literal
+
 
 # ============================================================================
 # Security constants (T-059-03)
@@ -21,26 +23,6 @@ CPP_SYNTAX_TOKENS = [';', '{', '}', '//']
 
 # UE asset path pattern (T-059-04)
 UE_ASSET_PATH_PATTERN = re.compile(r'^/Game/')
-
-
-def _escape_cpp_string(value: str) -> str:
-    """Escape string values to prevent C++ injection (T-059-03).
-
-    Args:
-        value: Raw string value
-
-    Returns:
-        Escaped string value
-    """
-    # Escape backslashes (must be done first)
-    value = value.replace('\\', '\\\\')
-    # Escape double quotes
-    value = value.replace('"', '\\"')
-    # Escape control characters
-    value = value.replace('\n', '\\n')
-    value = value.replace('\r', '\\r')
-    value = value.replace('\t', '\\t')
-    return value
 
 
 def _validate_no_cpp_syntax(value: str) -> str:
@@ -136,13 +118,13 @@ def format_cpp_default_value(value: Any, cpp_type: str) -> str:
     if cpp_type in ("FString", "FName"):
         str_val = str(value)
         _validate_no_cpp_syntax(str_val)
-        return f'TEXT("{_escape_cpp_string(str_val)}")'
+        return f'TEXT("{sanitize_string_literal(str_val)}")'
 
     # FText -- FText::FromString() wrapping
     if cpp_type == "FText":
         str_val = str(value)
         _validate_no_cpp_syntax(str_val)
-        return f'FText::FromString("{_escape_cpp_string(str_val)}")'
+        return f'FText::FromString("{sanitize_string_literal(str_val)}")'
 
     # Enum types (UE convention: E + uppercase letter, e.g. EFirstPersonPrimitiveType) -- use value directly
     if len(cpp_type) > 1 and cpp_type[0] == "E" and cpp_type[1].isupper():
@@ -306,5 +288,5 @@ def format_cpp_input_action_load(variable_name: str, asset_path: str) -> str:
         )
 
     # Escape quotes
-    safe_path = _escape_cpp_string(asset_path)
+    safe_path = sanitize_string_literal(asset_path)
     return f'{variable_name} = LoadObject<UInputAction>(nullptr, TEXT("{safe_path}"));'
