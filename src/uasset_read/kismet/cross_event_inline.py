@@ -10,7 +10,6 @@ This module detects common patterns across events:
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -60,26 +59,6 @@ def _hash_expressions(exprs: list) -> str:
         value = getattr(expr, "Value", None) or getattr(expr, "Name", None) or ""
         parts.append(f"{cls_name}:{value}")
     return hashlib.md5("|".join(parts).encode(), usedforsecurity=False).hexdigest()
-
-
-def _compute_similarity(exprs_a: list, exprs_b: list) -> float:
-    """Compute similarity score between two expression lists."""
-    if not exprs_a or not exprs_b:
-        return 0.0
-
-    if len(exprs_a) != len(exprs_b):
-        return 0.0
-
-    matching = 0
-    for a, b in zip(exprs_a, exprs_b):
-        if type(a) == type(b):
-            # Compare key attributes
-            val_a = getattr(a, "Value", None) or getattr(a, "Name", None)
-            val_b = getattr(b, "Value", None) or getattr(b, "Name", None)
-            if val_a == val_b:
-                matching += 1
-
-    return matching / len(exprs_a)
 
 
 def analyze_cross_event_sharing(events: list) -> CrossEventResult:
@@ -134,33 +113,3 @@ def analyze_cross_event_sharing(events: list) -> CrossEventResult:
     return result
 
 
-def format_cross_event_report(result: CrossEventResult) -> str:
-    """Format cross-event analysis results as a readable report.
-
-    Args:
-        result: CrossEventResult from analyze_cross_event_sharing
-
-    Returns:
-        Formatted text report
-    """
-    lines: list[str] = [
-        f"Cross-Event Analysis: {result.total_events_analyzed} events analyzed",
-        f"Shared blocks found: {result.total_shared_blocks}",
-        f"Deduplication potential: {result.deduplication_potential:.0%}",
-        "",
-    ]
-
-    if not result.shared_blocks:
-        lines.append("No shared code blocks detected.")
-        return "\n".join(lines)
-
-    for i, block in enumerate(result.shared_blocks[:10], 1):
-        lines.append(f"  Block {i}: shared by {block.event_count} events")
-        for event_name in block.event_names:
-            lines.append(f"    - {event_name}")
-        lines.append("")
-
-    if len(result.shared_blocks) > 10:
-        lines.append(f"  ... and {len(result.shared_blocks) - 10} more blocks")
-
-    return "\n".join(lines)

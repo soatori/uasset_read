@@ -57,17 +57,6 @@ class MacroPatternResult:
         """Get all patterns of a specific type."""
         return [p for p in self.patterns if p.pattern_type == pattern_type]
 
-    @property
-    def do_once_count(self) -> int:
-        return len(self.get_by_type(MacroPatternType.DO_ONCE))
-
-    @property
-    def flip_flop_count(self) -> int:
-        return len(self.get_by_type(MacroPatternType.FLIP_FLOP))
-
-    @property
-    def sequence_count(self) -> int:
-        return len(self.get_by_type(MacroPatternType.SEQUENCE))
 
 
 def _find_bool_flag_check(cfg, block_id: int) -> Optional[tuple[int, str]]:
@@ -261,22 +250,3 @@ def detect_sequence(cfg, dom_tree=None) -> list[MacroPattern]:
     return patterns
 
 
-def detect_macro_patterns(cfg, dom_tree=None) -> MacroPatternResult:
-    """Detect all macro patterns in the CFG.
-
-    Runs all pattern detectors and returns combined results.
-
-    Args:
-        cfg: Control flow graph
-        dom_tree: Dominator tree (optional, computed if not provided)
-
-    Returns:
-        MacroPatternResult with all detected patterns
-    """
-    result = MacroPatternResult()
-
-    result.patterns.extend(detect_do_once(cfg, dom_tree))
-    result.patterns.extend(detect_flip_flop(cfg, dom_tree))
-    result.patterns.extend(detect_sequence(cfg, dom_tree))
-
-    return result

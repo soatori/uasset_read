@@ -114,28 +114,6 @@ class JumpAnalyzer:
         """
         return self._offset_to_index.get(offset)
 
-    def is_jump_target(self, offset: int) -> bool:
-        """Check whether a given offset is a jump target.
-
-        Args:
-            offset: The byte offset to check.
-
-        Returns:
-            True if any jump instruction points to this offset.
-        """
-        return offset in self._jump_targets
-
-    def get_jump_sources(self, target_offset: int) -> list[int]:
-        """Get all source indices that jump to a given target.
-
-        Args:
-            target_offset: The jump target offset.
-
-        Returns:
-            List of expression indices jumping to this target, or empty list if none.
-        """
-        return list(self._jump_sources.get(target_offset, []))
-
     # ================================================================
     # Unified pattern detection entry point
     # ================================================================
@@ -755,39 +733,3 @@ class JumpAnalyzer:
 
         return "unknown (unrecognized jump type)"
 
-    # ================================================================
-    # goto fallback report generation
-    # ================================================================
-
-    def format_goto_report(self, report: StructuredRateReport | None = None) -> str:
-        """Format a goto fallback report as readable text.
-
-        Args:
-            report: Optional pre-computed report; if None, calls analyze_structured_rate().
-
-        Returns:
-            Formatted report text.
-        """
-        if report is None:
-            report = self.analyze_structured_rate()
-
-        lines: list[str] = []
-        lines.append("=== Control Flow Structured Rate Report ===")
-        lines.append(f"Total jump instructions: {report.total_jump_exprs}")
-        lines.append(f"Structured: {report.structured_count}")
-        lines.append(f"Goto fallback: {report.goto_count}")
-        lines.append(f"Structured rate: {report.rate:.1%}")
-        lines.append("")
-
-        if report.pattern_counts:
-            lines.append("Pattern hit statistics:")
-            for pattern, count in sorted(report.pattern_counts.items()):
-                lines.append(f"  {pattern}: {count}")
-            lines.append("")
-
-        if report.goto_reasons:
-            lines.append(f"Goto fallback reasons ({len(report.goto_reasons)}):")
-            for item in report.goto_reasons:
-                lines.append(f"  [{item['index']}] {item['expr_type']}: {item['reason']}")
-
-        return "\n".join(lines)

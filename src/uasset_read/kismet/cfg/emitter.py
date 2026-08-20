@@ -337,11 +337,6 @@ class StmtEmitter:
         """Render Stmt tree as indented pseudocode string."""
         return self._emit(stmt, depth=0)
 
-    def emit_lines(self, stmt: Stmt) -> list[str]:
-        """Render Stmt tree as list of lines."""
-        text = self.emit_body(stmt)
-        return text.split("\n") if text else []
-
     # ------------------------------------------------------------------
     # Recursive rendering
     # ------------------------------------------------------------------

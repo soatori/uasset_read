@@ -53,33 +53,6 @@ class CallGraph:
         """Set of function names that are called."""
         return {edge.callee for edges in self.edges.values() for edge in edges}
 
-    @property
-    def leaf_functions(self) -> set[str]:
-        """Functions that are called but never call others (leaf nodes)."""
-        callers = self.all_callers
-        callees = self.all_callees
-        return callees - callers
-
-    @property
-    def root_functions(self) -> set[str]:
-        """Functions that call others but are never called (entry points)."""
-        callers = self.all_callers
-        callees = self.all_callees
-        return callers - callees
-
-    def callees_of(self, func_name: str) -> list[str]:
-        """Return list of functions called by func_name."""
-        return [e.callee for e in self.edges.get(func_name, [])]
-
-    def callers_of(self, func_name: str) -> list[str]:
-        """Return list of functions that call func_name."""
-        return [
-            caller
-            for caller, edges in self.edges.items()
-            for e in edges
-            if e.callee == func_name
-        ]
-
     def has_cycle(self) -> bool:
         """Detect if the call graph contains a cycle (mutual recursion)."""
         WHITE, GRAY, BLACK = 0, 1, 2

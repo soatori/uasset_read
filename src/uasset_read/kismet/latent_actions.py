@@ -57,10 +57,6 @@ class LatentActionInfo:
     pin_values: dict[str, str] = field(default_factory=dict)
     """Extracted pin values (e.g. {"Duration": "2.0"})."""
 
-    @property
-    def is_known(self) -> bool:
-        """True if this is a recognized latent action type."""
-        return self.class_name in _KNOWN_LATENT_ACTIONS
 
 
 @dataclass
@@ -139,25 +135,3 @@ def detect_latent_actions(expressions: list) -> LatentActionResult:
     return result
 
 
-def format_latent_action_summary(result: LatentActionResult) -> str:
-    """Format latent action detection results as a readable summary.
-
-    Args:
-        result: LatentActionResult from detect_latent_actions
-
-    Returns:
-        Formatted text summary
-    """
-    if not result.latent_actions:
-        return "No latent actions detected."
-
-    lines: list[str] = [f"Detected {result.count} latent action(s):", ""]
-
-    for i, la in enumerate(result.latent_actions, 1):
-        lines.append(f"  {i}. {la.friendly_name}")
-        lines.append(f"     Class: {la.class_name}")
-        if la.pin_values:
-            lines.append(f"     Pins: {la.pin_values}")
-        lines.append("")
-
-    return "\n".join(lines)

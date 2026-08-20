@@ -100,10 +100,6 @@ class CFG:
             total += len(block.successors)
         return total
 
-    def ordered_blocks(self) -> list[BasicBlock]:
-        """Return all basic blocks in ascending block_id order."""
-        return [self.blocks[bid] for bid in sorted(self.blocks.keys())]
-
     def add_block(self, block: BasicBlock) -> None:
         """Add a basic block to the CFG."""
         self.blocks[block.block_id] = block
@@ -176,10 +172,6 @@ class RegionTree:
         """Add a region."""
         self.regions[region.region_id] = region
 
-    def get_region(self, region_id: int) -> Region | None:
-        """Get a region by ID."""
-        return self.regions.get(region_id)
-
     def __repr__(self) -> str:
         return f"RegionTree(regions={len(self.regions)})"
 
@@ -201,14 +193,6 @@ class DominatorTree:
         if node_id not in self.dominators:
             return False
         return dom_id in self.dominators[node_id]
-
-    def immediate_dominator(self, block_id: int) -> int | None:
-        """Get the immediate dominator of block_id."""
-        return self.idom.get(block_id)
-
-    def dominator_frontier(self, block_id: int) -> set[int]:
-        """Get the dominator frontier of block_id."""
-        return self._frontiers.get(block_id, set())
 
     def __repr__(self) -> str:
         return f"DominatorTree(blocks={len(self.idom)})"
