@@ -59,7 +59,7 @@ def _hash_expressions(exprs: list) -> str:
         cls_name = type(expr).__name__
         value = getattr(expr, "Value", None) or getattr(expr, "Name", None) or ""
         parts.append(f"{cls_name}:{value}")
-    return hashlib.md5("|".join(parts).encode()).hexdigest()
+    return hashlib.md5("|".join(parts).encode(), usedforsecurity=False).hexdigest()
 
 
 def _compute_similarity(exprs_a: list, exprs_b: list) -> float:

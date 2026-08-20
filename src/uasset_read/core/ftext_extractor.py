@@ -163,7 +163,10 @@ class FTextExtractor:
         return [e.to_dict() for e in entries]
 
 
-def extract_texts_from_expressions(expressions: list) -> list[FTextEntry]:
+def extract_texts_from_expressions(
+    expressions: list,
+    max_depth: int = 50,
+) -> list[FTextEntry]:
     """Extract all FText values from a list of Kismet expressions.
 
     Recursively searches expression trees for EX_TextConst nodes
@@ -171,6 +174,7 @@ def extract_texts_from_expressions(expressions: list) -> list[FTextEntry]:
 
     Args:
         expressions: List of KismetExpression objects
+        max_depth: Maximum recursion depth to prevent stack overflow
 
     Returns:
         List of FTextEntry objects
@@ -180,8 +184,8 @@ def extract_texts_from_expressions(expressions: list) -> list[FTextEntry]:
     results: list[FTextEntry] = []
     seen: set[str] = set()
 
-    def _walk(expr) -> None:
-        if expr is None:
+    def _walk(expr, depth: int = 0) -> None:
+        if expr is None or depth > max_depth:
             return
 
         if isinstance(expr, EX_TextConst) and expr.Text is not None:
@@ -200,9 +204,9 @@ def extract_texts_from_expressions(expressions: list) -> list[FTextEntry]:
                 continue
             if isinstance(child, list):
                 for item in child:
-                    _walk(item)
+                    _walk(item, depth + 1)
             else:
-                _walk(child)
+                _walk(child, depth + 1)
 
     for expr in expressions:
         _walk(expr)

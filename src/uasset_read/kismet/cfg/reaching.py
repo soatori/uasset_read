@@ -41,6 +41,41 @@ class ReachingConditions:
         return cond.condition if cond else "true"
 
 
+def _topological_sort(cfg) -> list[int]:
+    """Topological sort of CFG blocks, handling cycles via back-edge detection.
+
+    Returns block IDs in a valid processing order where predecessors
+    are processed before successors (except for back edges in cycles).
+    """
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color: dict[int, int] = {bid: WHITE for bid in cfg.blocks}
+    order: list[int] = []
+    back_edges: set[tuple[int, int]] = set()
+
+    def dfs(bid: int) -> None:
+        color[bid] = GRAY
+        block = cfg.blocks.get(bid)
+        if block is not None:
+            for succ in block.successors:
+                if succ not in cfg.blocks:
+                    continue
+                if color.get(succ) == GRAY:
+                    # Back edge (cycle) — skip
+                    back_edges.add((bid, succ))
+                elif color.get(succ) == WHITE:
+                    dfs(succ)
+        color[bid] = BLACK
+        order.append(bid)
+
+    for bid in cfg.blocks:
+        if color.get(bid) == WHITE:
+            dfs(bid)
+
+    # Reverse to get predecessors before successors
+    order.reverse()
+    return order
+
+
 def compute_reaching_conditions(cfg) -> ReachingConditions:
     """Compute reaching conditions for all blocks in the CFG.
 
@@ -74,8 +109,10 @@ def compute_reaching_conditions(cfg) -> ReachingConditions:
         condition="true",
     )
 
-    # Process blocks in topological order (block_id order works for most CFGs)
-    for bid in sorted(cfg.blocks.keys()):
+    # Use topological sort to handle cyclic CFGs correctly
+    topo_order = _topological_sort(cfg)
+
+    for bid in topo_order:
         if bid == cfg.entry_id:
             continue
 
