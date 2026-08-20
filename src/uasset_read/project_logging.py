@@ -5,7 +5,7 @@ import os
 import sys
 import threading
 import inspect
-import time
+import time as _time
 from functools import wraps
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -13,7 +13,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
+import json as _json
 
 _LOGGER_NAME = "uasset_read"
 _HANDLER_MARKER = "_uasset_read_project_log_handler"
@@ -44,7 +46,9 @@ class _LogContextFilter(logging.Filter):
 
 
 class _RepeatedDebugFilter(logging.Filter):
-    def __init__(self, repeat_limit: int, suppress_levels: set[int] | None = None) -> None:
+    def __init__(
+        self, repeat_limit: int, suppress_levels: set[int] | None = None
+    ) -> None:
         super().__init__()
         self.limit = repeat_limit
         self.repeat_limit = repeat_limit
@@ -88,6 +92,71 @@ class _RepeatedDebugFilter(logging.Filter):
         return "Repeated warnings: " + "; ".join(summary_parts)
 
 
+class JSONFormatter(logging.Formatter):
+    """Format log records as single-line JSON objects.
+
+    Output format::
+
+        {"ts":"2026-08-21T10:00:00","level":"INFO","run":"abc123",
+         "pid":1234,"asset":"BP_Player","stage":"link",
+         "logger":"uasset_read","msg":"event=parse_start"}
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_entry = {
+            "ts": self.formatTime(record, self.datefmt),
+            "level": record.levelname,
+            "run": getattr(record, "run_id", "-"),
+            "pid": getattr(record, "process_id", record.process),
+            "asset": getattr(record, "asset", "-"),
+            "stage": getattr(record, "stage", "-"),
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info and record.exc_info[0] is not None:
+            log_entry["exc"] = self.formatException(record.exc_info)
+        return _json.dumps(log_entry, ensure_ascii=False, default=str)
+
+
+class SamplingFilter(logging.Filter):
+    """Drop a fraction of DEBUG records to reduce log volume.
+
+    ``rate`` is the keep probability (0.0 = drop all, 1.0 = keep all).
+    Only applies to records at or below ``sample_level`` (default DEBUG).
+
+    Uses a deterministic hash (sum of char ordinals) so that the same
+    message is always sampled the same way across processes.
+    """
+
+    def __init__(self, rate: float = 1.0, sample_level: int = logging.DEBUG):
+        super().__init__()
+        if not 0.0 <= rate <= 1.0:
+            raise ValueError(f"rate must be 0.0-1.0, got {rate}")
+        self.rate = rate
+        self.sample_level = sample_level
+
+    @staticmethod
+    def _stable_hash(msg: str) -> int:
+        """Deterministic hash — not affected by PYTHONHASHSEED.
+
+        Uses FNV-1a for uniform distribution across similar strings.
+        """
+        h = 0x811C9DC5  # FNV offset basis
+        for c in msg:
+            h ^= ord(c)
+            h = (h * 0x01000193) & 0xFFFFFFFF  # FNV prime
+        return h % 1000
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno > self.sample_level:
+            return True
+        if self.rate >= 1.0:
+            return True
+        if self.rate <= 0.0:
+            return False
+        return self._stable_hash(record.msg) < int(self.rate * 1000)
+
+
 @contextmanager
 def log_context(*, asset: str | None = None, stage: str | None = None):
     """Attach asset and stage fields to records emitted in this context."""
@@ -98,6 +167,90 @@ def log_context(*, asset: str | None = None, stage: str | None = None):
     finally:
         _log_stage.reset(stage_token)
         _log_asset.reset(asset_token)
+
+
+def log_event(
+    logger: logging.Logger,
+    level: int,
+    event: str,
+    **fields: Any,
+) -> None:
+    """Emit a structured log event with key-value fields.
+
+    Fields are appended to the message as ``key=value`` pairs, sorted
+    alphabetically.  The ``event`` keyword is always first.
+
+    Example::
+
+        log_event(logger, logging.INFO, "parse_start",
+                  asset="BP_Player", stage="link")
+
+    Emits::
+
+        2026-08-21 10:00:00 [INFO] [run=abc123 pid=1234 asset=BP_Player stage=link]
+        uasset_read: event=parse_start
+    """
+    if not fields:
+        logger.log(level, "event=%s", event)
+        return
+    sorted_fields = sorted(fields.items())
+    field_str = " ".join(f"{k}={v}" for k, v in sorted_fields)
+    logger.log(level, "event=%s %s", event, field_str)
+
+
+def log_stage_timing(
+    logger: logging.Logger,
+    stage_name: str,
+    asset: str | None = None,
+):
+    """Return an object usable as both decorator and context manager.
+
+    Usage as context manager::
+
+        with log_stage_timing(logger, "preload", asset="BP_Player"):
+            do_work()
+
+    Usage as decorator::
+
+        @log_stage_timing(logger, "link")
+        def link(self): ...
+    """
+
+    class _TimingContext:
+        def __init__(self):
+            self._start: float = 0.0
+
+        def __enter__(self):
+            if asset is not None:
+                _log_asset.set(asset)
+            _log_stage.set(stage_name)
+            self._start = _time.monotonic()
+            logger.debug("stage_start stage=%s", stage_name)
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            elapsed_ms = (_time.monotonic() - self._start) * 1000
+            status = "error" if exc_type else "success"
+            logger.debug(
+                "stage_end stage=%s status=%s duration_ms=%.1f",
+                stage_name,
+                status,
+                elapsed_ms,
+            )
+            return False
+
+        def __call__(self, func):
+            """Allow use as a decorator."""
+            ctx = self
+
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                with ctx:
+                    return func(*args, **kwargs)
+
+            return wrapper
+
+    return _TimingContext()
 
 
 def _default_project_root() -> Path:
@@ -111,8 +264,7 @@ def new_log_run_id() -> str:
 def _build_log_path(log_dir: Path, run_id: str) -> Path:
     log_dir.mkdir(parents=True, exist_ok=True)
     safe_run_id = "".join(
-        char if char.isalnum() or char in "-_" else "_"
-        for char in run_id
+        char if char.isalnum() or char in "-_" else "_" for char in run_id
     )
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     return log_dir / f"uasset_read-{timestamp}-pid{os.getpid()}-{safe_run_id}.log"
@@ -151,7 +303,12 @@ def _shutdown_locked(package_logger: logging.Logger) -> None:
             continue
         for installed_filter in handler.filters:
             if isinstance(installed_filter, _RepeatedDebugFilter):
-                for asset, logger_name, template, suppressed in installed_filter.summaries():
+                for (
+                    asset,
+                    logger_name,
+                    template,
+                    suppressed,
+                ) in installed_filter.summaries():
                     with log_context(asset=asset):
                         package_logger.info(
                             "Repeated message summary logger=%s template=%s suppressed=%d",
@@ -188,7 +345,7 @@ class ProjectLogSession:
     keep_latest: int | None = None
     max_total_bytes: int | None = None
     older_than_days: int | None = None
-    _started_at: float = field(default_factory=time.monotonic)
+    _started_at: float = field(default_factory=_time.monotonic)
     _owns_scope_lock: bool = False
     _closed: bool = False
 
@@ -201,7 +358,7 @@ class ProjectLogSession:
     def close(self) -> None:
         if not self._closed:
             try:
-                duration_ms = (time.monotonic() - self._started_at) * 1000
+                duration_ms = (_time.monotonic() - self._started_at) * 1000
                 logging.getLogger(_LOGGER_NAME).info(
                     "session_end run_id=%s duration_ms=%.1f",
                     self.run_id,
@@ -296,7 +453,7 @@ def scoped_project_logging(func):
         with project_logging_session(**config.to_configure_kwargs()):
             stage = "batch" if func.__name__ == "parse_batch" else "parse"
             with log_context(asset=asset, stage=stage):
-                started_at = time.monotonic()
+                started_at = _time.monotonic()
                 status = "success"
                 logging.getLogger(_LOGGER_NAME).info("asset_start")
                 try:
@@ -305,7 +462,7 @@ def scoped_project_logging(func):
                     status = "error"
                     raise
                 finally:
-                    duration_ms = (time.monotonic() - started_at) * 1000
+                    duration_ms = (_time.monotonic() - started_at) * 1000
                     logging.getLogger(_LOGGER_NAME).info(
                         "asset_end status=%s duration_ms=%.1f",
                         status,
@@ -331,13 +488,15 @@ def configure_worker_stream_logging(
     handler = logging.StreamHandler(stream or sys.stderr)
     setattr(handler, _WORKER_HANDLER_MARKER, True)
     handler.setLevel(_coerce_level(level))
-    handler.setFormatter(logging.Formatter(
-        fmt=(
-            f"%(asctime)s [%(levelname)s] [run={run_id} pid={os.getpid()} "
-            f"asset={asset} stage=worker] %(name)s: %(message)s"
-        ),
-        datefmt="%Y-%m-%d %H:%M:%S",
-    ))
+    handler.setFormatter(
+        logging.Formatter(
+            fmt=(
+                f"%(asctime)s [%(levelname)s] [run={run_id} pid={os.getpid()} "
+                f"asset={asset} stage=worker] %(name)s: %(message)s"
+            ),
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
     package_logger.setLevel(logging.DEBUG)
     package_logger.propagate = False
     package_logger.addHandler(handler)
@@ -359,6 +518,8 @@ def configure_project_logging(
     cleanup: bool = False,
     repeat_limit: int = 5,
     cleanup_on_close: bool = False,
+    format: str = "text",
+    sample_rate: float = 1.0,
 ) -> Path | None:
     """Configure a per-process file logger under <project>/log/."""
     global _configured_log_path
@@ -388,14 +549,20 @@ def configure_project_logging(
             and cleanup is False
             and repeat_limit == 5
             and cleanup_on_close is False
+            and format == "text"
+            and sample_rate == 1.0
         )
         if _disabled_by_request and default_request:
             return None
         _disabled_by_request = False
 
-        root = Path(project_root) if project_root is not None else _default_project_root()
+        root = (
+            Path(project_root) if project_root is not None else _default_project_root()
+        )
         root = root.resolve()
-        resolved_log_dir = Path(log_dir).resolve() if log_dir is not None else root / "log"
+        resolved_log_dir = (
+            Path(log_dir).resolve() if log_dir is not None else root / "log"
+        )
         log_level = _coerce_level(level)
         signature = (
             root,
@@ -410,6 +577,8 @@ def configure_project_logging(
             cleanup,
             repeat_limit,
             cleanup_on_close,
+            format,
+            sample_rate,
         )
         if _configured_log_path is not None and signature == _configured_signature:
             return _configured_log_path
@@ -443,20 +612,26 @@ def configure_project_logging(
         setattr(handler, _HANDLER_MARKER, True)
         handler.setLevel(log_level)
         handler.addFilter(_LogContextFilter(active_run_id))
-        handler.addFilter(_RepeatedDebugFilter(
-            repeat_limit,
-            suppress_levels={logging.DEBUG, logging.WARNING}
-        ))
-        handler.setFormatter(
-            logging.Formatter(
-                fmt=(
-                    "%(asctime)s [%(levelname)s] "
-                    "[run=%(run_id)s pid=%(process_id)s asset=%(asset)s stage=%(stage)s] "
-                    "%(name)s: %(message)s"
-                ),
-                datefmt="%Y-%m-%d %H:%M:%S",
+        handler.addFilter(
+            _RepeatedDebugFilter(
+                repeat_limit, suppress_levels={logging.DEBUG, logging.WARNING}
             )
         )
+        if format == "json":
+            handler.setFormatter(JSONFormatter(datefmt="%Y-%m-%dT%H:%M:%S"))
+        else:
+            handler.setFormatter(
+                logging.Formatter(
+                    fmt=(
+                        "%(asctime)s [%(levelname)s] "
+                        "[run=%(run_id)s pid=%(process_id)s asset=%(asset)s stage=%(stage)s] "
+                        "%(name)s: %(message)s"
+                    ),
+                    datefmt="%Y-%m-%d %H:%M:%S",
+                )
+            )
+        if sample_rate < 1.0:
+            handler.addFilter(SamplingFilter(rate=sample_rate))
         package_logger.addHandler(handler)
 
         _configured_log_path = log_path
@@ -511,7 +686,8 @@ def cleanup_project_logs(
             raise ValueError("keep_latest must be >= 0")
         effective_keep_latest = max(1, keep_latest)
         selected_families.update(
-            family for family in ordered_families[effective_keep_latest:]
+            family
+            for family in ordered_families[effective_keep_latest:]
             if family != active_family
         )
 
@@ -520,11 +696,13 @@ def cleanup_project_logs(
             raise ValueError("older_than_days must be >= 0")
         cutoff = datetime.now() - timedelta(days=older_than_days)
         selected_families.update(
-            family for family in ordered_families
+            family
+            for family in ordered_families
             if family != active_family
             and datetime.fromtimestamp(
                 max(path.stat().st_mtime for path in families[family])
-            ) < cutoff
+            )
+            < cutoff
         )
 
     if max_total_bytes is not None:
@@ -546,11 +724,7 @@ def cleanup_project_logs(
             remaining_total -= sum(path.stat().st_size for path in families[family])
 
     planned = sorted(
-        (
-            path
-            for family in selected_families
-            for path in families[family]
-        ),
+        (path for family in selected_families for path in families[family]),
         key=lambda path: path.stat().st_mtime,
     )
     if not dry_run:

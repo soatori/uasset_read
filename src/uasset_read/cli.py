@@ -12,7 +12,12 @@ from pathlib import Path
 from uasset_read.config import LogConfig
 from uasset_read.core import parse_single, parse_batch, list_formats, ParseError
 from uasset_read.project_logging import cleanup_project_logs
-from uasset_read.constants import EXIT_SUCCESS, EXIT_PARSE_ERROR, EXIT_FILE_NOT_FOUND, EXIT_ARGUMENT_ERROR
+from uasset_read.constants import (
+    EXIT_SUCCESS,
+    EXIT_PARSE_ERROR,
+    EXIT_FILE_NOT_FOUND,
+    EXIT_ARGUMENT_ERROR,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -23,6 +28,7 @@ def _sanitize_error_message(message: str) -> str:
     将绝对路径替换为 basename，保留异常类型和关键信息。
     详细原始消息可通过 DEBUG 级别日志获取。
     """
+
     def basename(path: str) -> str:
         normalized = path.rstrip("\\/").replace("\\", "/")
         return normalized.rsplit("/", 1)[-1] if "/" in normalized else normalized
@@ -32,8 +38,17 @@ def _sanitize_error_message(message: str) -> str:
     # Prefer extension-anchored matches so paths with spaces followed by prose
     # do not consume the following error text.
     path_extensions = (
-        "uasset", "umap", "uexp", "ubulk", "uptnl", "pak",
-        "json", "txt", "bin", "dat", "log",
+        "uasset",
+        "umap",
+        "uexp",
+        "ubulk",
+        "uptnl",
+        "pak",
+        "json",
+        "txt",
+        "bin",
+        "dat",
+        "log",
     )
     ext_group = "|".join(path_extensions)
     # Fallback patterns for paths without extensions (stop at delimiters)
@@ -57,66 +72,176 @@ def create_parser():
     from uasset_read import __version__
 
     parser = argparse.ArgumentParser(
-        prog='uasset_read',
-        description='Parse Unreal Engine .uasset/.umap files and output structured data'
+        prog="uasset_read",
+        description="Parse Unreal Engine .uasset/.umap files and output structured data",
     )
 
-    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
-    parser.add_argument('file', nargs='?', default=None,
-                        help='Path to .uasset/.umap file to parse (or directory in --batch mode)')
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
+    )
+    parser.add_argument(
+        "file",
+        nargs="?",
+        default=None,
+        help="Path to .uasset/.umap file to parse (or directory in --batch mode)",
+    )
 
     # Mutually exclusive output flags
     group = parser.add_mutually_exclusive_group(required=False)
-    group.add_argument('--json', action='store_true', help='Output full JSON structure (default)')
-    group.add_argument('--markdown', action='store_true', help='Output Markdown format')
+    group.add_argument(
+        "--json", action="store_true", help="Output full JSON structure (default)"
+    )
+    group.add_argument("--markdown", action="store_true", help="Output Markdown format")
 
     # Optional flags
-    parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
-    parser.add_argument('--output', metavar='FILE', help='Write output to file instead of stdout')
-    parser.add_argument('--export', metavar='INDEX', type=int, help='Output only specific export by index')
-    parser.add_argument('--schema', action='store_true', help='Include field semantic annotations')
-    parser.add_argument('--function-graphs', action='store_true', help='Include function_graphs array')
-    parser.add_argument('--asset-root', action='append', default=[],
-                        help='Root directory to search for parent .uasset files')
-    parser.add_argument('--include-parent-assets', action='store_true',
-                        help='Resolve and parse parent Blueprint assets')
-    parser.add_argument('--mappings', metavar='FILE', help='Load .usmap/.jmap type mappings')
-    parser.add_argument('--game', metavar='NAME', help='Enable game-specific property readers')
-    parser.add_argument('--tolerant', action='store_true', default=True, help='Enable tolerant mode (default)')
-    parser.add_argument('--strict', action='store_true', help='Disable tolerant mode')
-    parser.add_argument('--full-parse', action='store_true', default=False,
-                        help='Force full parse for large blueprints (skip lightweight mode)')
-    parser.add_argument('--hex-view', action='store_true', default=False,
-                        help='Enable HexView byte offset tracking (debug)')
-    parser.add_argument('--output-level', choices=['standard', 'debug'], default='standard',
-                        help='Output level: standard (default, filters UI properties) or debug (full output)')
-    parser.add_argument('--log-level', choices=['debug', 'info', 'warning', 'error', 'off'], default=None,
-                        help='File log level: debug, info, warning, error, or off')
-    parser.add_argument('--log-dir', metavar='DIR', help='Write project logs to DIR instead of ./log')
-    parser.add_argument('--log-cleanup', action=argparse.BooleanOptionalAction, default=True,
-                        help='Clean old run logs automatically (default: enabled)')
-    parser.add_argument('--log-keep-latest', metavar='N', type=int,
-                        help='When cleanup is enabled, keep only the newest N complete runs')
-    parser.add_argument('--log-max-total-mb', metavar='MB', type=int,
-                        help='When --log-cleanup is set, cap total log storage to MB megabytes')
-    parser.add_argument('--log-max-bytes', metavar='BYTES', type=int, default=10_000_000,
-                        help='Max size per log file in bytes (default: 10MB)')
-    parser.add_argument('--log-backup-count', metavar='N', type=int, default=5,
-                        help='Number of backup log files to keep (default: 5)')
-    parser.add_argument('--log-repeat-limit', metavar='N', type=int, default=5,
-                        help='Keep the first N repeated DEBUG messages (0 disables aggregation)')
+    parser.add_argument(
+        "--verbose", action="store_true", help="Include extra detail fields"
+    )
+    parser.add_argument(
+        "--output", metavar="FILE", help="Write output to file instead of stdout"
+    )
+    parser.add_argument(
+        "--export",
+        metavar="INDEX",
+        type=int,
+        help="Output only specific export by index",
+    )
+    parser.add_argument(
+        "--schema", action="store_true", help="Include field semantic annotations"
+    )
+    parser.add_argument(
+        "--function-graphs", action="store_true", help="Include function_graphs array"
+    )
+    parser.add_argument(
+        "--asset-root",
+        action="append",
+        default=[],
+        help="Root directory to search for parent .uasset files",
+    )
+    parser.add_argument(
+        "--include-parent-assets",
+        action="store_true",
+        help="Resolve and parse parent Blueprint assets",
+    )
+    parser.add_argument(
+        "--mappings", metavar="FILE", help="Load .usmap/.jmap type mappings"
+    )
+    parser.add_argument(
+        "--game", metavar="NAME", help="Enable game-specific property readers"
+    )
+    parser.add_argument(
+        "--tolerant",
+        action="store_true",
+        default=True,
+        help="Enable tolerant mode (default)",
+    )
+    parser.add_argument("--strict", action="store_true", help="Disable tolerant mode")
+    parser.add_argument(
+        "--full-parse",
+        action="store_true",
+        default=False,
+        help="Force full parse for large blueprints (skip lightweight mode)",
+    )
+    parser.add_argument(
+        "--hex-view",
+        action="store_true",
+        default=False,
+        help="Enable HexView byte offset tracking (debug)",
+    )
+    parser.add_argument(
+        "--output-level",
+        choices=["standard", "debug"],
+        default="standard",
+        help="Output level: standard (default, filters UI properties) or debug (full output)",
+    )
+    parser.add_argument(
+        "--log-level",
+        choices=["debug", "info", "warning", "error", "off"],
+        default=None,
+        help="File log level: debug, info, warning, error, or off",
+    )
+    parser.add_argument(
+        "--log-dir", metavar="DIR", help="Write project logs to DIR instead of ./log"
+    )
+    parser.add_argument(
+        "--log-cleanup",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Clean old run logs automatically (default: enabled)",
+    )
+    parser.add_argument(
+        "--log-keep-latest",
+        metavar="N",
+        type=int,
+        help="When cleanup is enabled, keep only the newest N complete runs",
+    )
+    parser.add_argument(
+        "--log-max-total-mb",
+        metavar="MB",
+        type=int,
+        help="When --log-cleanup is set, cap total log storage to MB megabytes",
+    )
+    parser.add_argument(
+        "--log-max-bytes",
+        metavar="BYTES",
+        type=int,
+        default=10_000_000,
+        help="Max size per log file in bytes (default: 10MB)",
+    )
+    parser.add_argument(
+        "--log-backup-count",
+        metavar="N",
+        type=int,
+        default=5,
+        help="Number of backup log files to keep (default: 5)",
+    )
+    parser.add_argument(
+        "--log-repeat-limit",
+        metavar="N",
+        type=int,
+        default=5,
+        help="Keep the first N repeated DEBUG messages (0 disables aggregation)",
+    )
+    parser.add_argument(
+        "--log-format",
+        choices=["text", "json"],
+        default="text",
+        help="Log output format: text (default) or json",
+    )
 
     # Batch and utility flags
-    parser.add_argument('--list-formats', action='store_true', help='List all available export formats')
-    parser.add_argument('--clean-logs', action='store_true',
-                        help='Dry-run log cleanup plan and exit; never deletes files')
-    parser.add_argument('--batch', action='store_true', help='Enable batch mode')
-    parser.add_argument('--batch-dir', metavar='DIR', help='Output directory for batch mode')
-    parser.add_argument('--list-package-files', action='store_true', help='List discovered package files')
-    parser.add_argument('--diff', metavar='FILE2', nargs='?', const=True, default=None,
-                        help='Diff FILE against FILE2 (JSON comparison)')
-    parser.add_argument('--diff-context', metavar='N', type=int, default=3,
-                        help='Number of context lines around changes in diff (default: 3)')
+    parser.add_argument(
+        "--list-formats", action="store_true", help="List all available export formats"
+    )
+    parser.add_argument(
+        "--clean-logs",
+        action="store_true",
+        help="Dry-run log cleanup plan and exit; never deletes files",
+    )
+    parser.add_argument("--batch", action="store_true", help="Enable batch mode")
+    parser.add_argument(
+        "--batch-dir", metavar="DIR", help="Output directory for batch mode"
+    )
+    parser.add_argument(
+        "--list-package-files",
+        action="store_true",
+        help="List discovered package files",
+    )
+    parser.add_argument(
+        "--diff",
+        metavar="FILE2",
+        nargs="?",
+        const=True,
+        default=None,
+        help="Diff FILE against FILE2 (JSON comparison)",
+    )
+    parser.add_argument(
+        "--diff-context",
+        metavar="N",
+        type=int,
+        default=3,
+        help="Number of context lines around changes in diff (default: 3)",
+    )
 
     return parser
 
@@ -134,16 +259,18 @@ def _write_output(output_str: str, output_path: str | None) -> None:
     """Unified output writer."""
     if output_path:
         try:
-            with open(output_path, 'w', encoding='utf-8') as f:
+            with open(output_path, "w", encoding="utf-8") as f:
                 f.write(output_str)
             print(f"Output written to {output_path}", file=sys.stderr)
         except IOError as e:
             _logger.debug("File write error (full): %s", e, exc_info=True)
-            print(f"Error writing to file: {_sanitize_error_message(e)}", file=sys.stderr)
+            print(
+                f"Error writing to file: {_sanitize_error_message(e)}", file=sys.stderr
+            )
             sys.exit(EXIT_ARGUMENT_ERROR)
     else:
         try:
-            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, OSError):
             pass
         print(output_str)
@@ -175,6 +302,7 @@ def _log_config_from_args(args) -> LogConfig:
         max_bytes=args.log_max_bytes,
         backup_count=args.log_backup_count,
         repeat_limit=args.log_repeat_limit,
+        format=args.log_format,
     )
 
 
@@ -212,20 +340,29 @@ def _handle_batch(args) -> None:
         sys.exit(EXIT_PARSE_ERROR)
 
     elapsed = time.monotonic() - start_time
-    print(f"Batch export complete: {result.total} files in {elapsed:.1f}s", file=sys.stderr)
+    print(
+        f"Batch export complete: {result.total} files in {elapsed:.1f}s",
+        file=sys.stderr,
+    )
     print(f"  Success: {len(result.success)}", file=sys.stderr)
     if result.partial:
         print(f"  Partial: {len(result.partial)}", file=sys.stderr)
         if result.partial_reasons:
             for reason, files in result.partial_reasons.items():
-                print(f"    {reason.replace('_', ' ').title()}: {len(files)}", file=sys.stderr)
+                print(
+                    f"    {reason.replace('_', ' ').title()}: {len(files)}",
+                    file=sys.stderr,
+                )
     if result.skipped:
         print(f"  Skipped: {len(result.skipped)}", file=sys.stderr)
     if result.failed:
         print(f"  Failed: {len(result.failed)}", file=sys.stderr)
         for path, error, details in result.failed:
             _logger.debug("Batch file failed (full): %s — %s\n%s", path, error, details)
-            print(f"    - {Path(path).name}: {_sanitize_error_message(error)}", file=sys.stderr)
+            print(
+                f"    - {Path(path).name}: {_sanitize_error_message(error)}",
+                file=sys.stderr,
+            )
         sys.exit(EXIT_PARSE_ERROR)
 
     sys.exit(EXIT_SUCCESS)
@@ -248,17 +385,27 @@ def _handle_clean_logs(args) -> None:
 def _handle_list_package_files(file_path: str, tolerant: bool) -> None:
     """列出发现的 package 文件。"""
     from uasset_read.package import open_package_bundle
+
     try:
         bundle = open_package_bundle(file_path, tolerant=tolerant)
     except Exception as e:
         _logger.debug("Package discovery error (full): %s", e, exc_info=True)
-        print(f"Error: Package discovery failed: {_sanitize_error_message(e)}", file=sys.stderr)
+        print(
+            f"Error: Package discovery failed: {_sanitize_error_message(e)}",
+            file=sys.stderr,
+        )
         sys.exit(EXIT_PARSE_ERROR)
-    print(json.dumps({
-        "package_kind": bundle.package_kind,
-        "container": bundle.container,
-        "files": bundle.package_files,
-    }, indent=2, ensure_ascii=False))
+    print(
+        json.dumps(
+            {
+                "package_kind": bundle.package_kind,
+                "container": bundle.container,
+                "files": bundle.package_files,
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
     sys.exit(EXIT_SUCCESS)
 
 
@@ -313,6 +460,7 @@ def main():
     # --diff 模式
     if args.diff is not None:
         from uasset_read.core import diff_single
+
         if args.diff is True:
             print("Error: --diff requires a second file path", file=sys.stderr)
             sys.exit(EXIT_ARGUMENT_ERROR)
@@ -358,7 +506,10 @@ def main():
         sys.exit(EXIT_PARSE_ERROR)
     except Exception as e:
         _logger.debug("Unexpected parse failure (full): %s", e, exc_info=True)
-        print(f"Error: Unexpected parse failure: {_sanitize_error_message(e)}", file=sys.stderr)
+        print(
+            f"Error: Unexpected parse failure: {_sanitize_error_message(e)}",
+            file=sys.stderr,
+        )
         sys.exit(EXIT_PARSE_ERROR)
 
     _write_output(output_str, args.output)

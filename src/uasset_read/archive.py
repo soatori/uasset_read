@@ -4,6 +4,7 @@ FArchive — 二进制读取器，镜像 UE 的 FArchive 模式。
 支持字节序检测和交换、mmap 大文件映射、边界验证。
 来自 uasset_read.py 第 204-895 行。
 """
+
 import logging
 import mmap
 import os
@@ -12,8 +13,11 @@ from typing import Optional, Dict, BinaryIO, Callable, Any, Protocol
 
 from uasset_read.exceptions import ParseError
 from uasset_read.constants import (
-    MMAP_THRESHOLD, MAX_FSTRING_LENGTH, MAX_ARRAY_COUNT,
-    get_max_reasonable, MAX_REASONABLE_CAP,
+    MMAP_THRESHOLD,
+    MAX_FSTRING_LENGTH,
+    MAX_ARRAY_COUNT,
+    get_max_reasonable,
+    MAX_REASONABLE_CAP,
 )
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 from uasset_read.bounded_events import BoundedEventBuffer
@@ -22,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 # read_name 索引恢复阈值
 _FNAME_INDEX_RECOVERY_THRESHOLD = 1000  # 超过此值尝试恢复
+
 
 class ArchiveLike(Protocol):
     """统一的 Archive 契约 — 所有 Archive 实现必须满足。"""
@@ -56,22 +61,24 @@ class FArchive:
         self._mmap_warning: Optional[str] = None
         self._logger = logging.getLogger(__name__)
         self._name_map: Optional[list] = None  # 可选的名称表缓存
-        self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)  # 偏移诊断记录（有界）
+        self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(
+            max_entries=10000
+        )  # 偏移诊断记录（有界）
         self._name_warnings_seen: set[int] = set()  # read_name 越界索引去重 (#411)
         self._hex_view_enabled: bool = hex_view
-        self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)  # list[HexViewEntry]，有界
+        self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(
+            max_entries=50000
+        )  # list[HexViewEntry]，有界
         self._hex_view_context: str = ""  # 当前上下文前缀（如 "Summary."）
 
         try:
-            self._file = open(path, 'rb')
+            self._file = open(path, "rb")
             self._file_size = os.path.getsize(path)
 
             if self._file_size >= MMAP_THRESHOLD:
                 try:
                     self._mmap = mmap.mmap(
-                        self._file.fileno(),
-                        0,
-                        access=mmap.ACCESS_READ
+                        self._file.fileno(), 0, access=mmap.ACCESS_READ
                     )
                     self._use_mmap = True
                 except (OSError, ValueError, PermissionError, MemoryError) as e:
@@ -92,9 +99,12 @@ class FArchive:
         if size > remaining:
             # 记录诊断后再抛异常（确保 finally 块可收集）
             self._record_diagnostic(
-                module="archive", field="read",
-                source="read", read_size=size,
-                current_pos=current_pos, file_size=self._file_size,
+                module="archive",
+                field="read",
+                source="read",
+                read_size=size,
+                current_pos=current_pos,
+                file_size=self._file_size,
                 error=f"Cannot read {size} bytes at position {current_pos}, only {remaining} bytes remaining",
             )
             raise ParseError(
@@ -135,22 +145,34 @@ class FArchive:
         """全偏移验证 - 在定位前检查偏移有效性。"""
         if offset < 0:
             self._record_diagnostic(
-                module="archive", field="seek",
+                module="archive",
+                field="seek",
                 source=context or "validate_offset",
-                target_offset=offset, file_size=self._file_size,
+                target_offset=offset,
+                file_size=self._file_size,
                 error=f"Invalid offset {offset} (negative) at {context}",
             )
             raise ParseError(f"Invalid offset {offset} (negative) at {context}")
         if offset > self._file_size:
             self._record_diagnostic(
-                module="archive", field="seek",
+                module="archive",
+                field="seek",
                 source=context or "validate_offset",
-                target_offset=offset, file_size=self._file_size,
+                target_offset=offset,
+                file_size=self._file_size,
                 error=f"Offset {offset} exceeds file size {self._file_size} at {context}",
             )
-            raise ParseError(f"Offset {offset} exceeds file size {self._file_size} at {context}")
+            raise ParseError(
+                f"Offset {offset} exceeds file size {self._file_size} at {context}"
+            )
 
-    def validate_size(self, size: int, context: str = "", tolerant: bool | None = None, property_type: str | None = None) -> bool:
+    def validate_size(
+        self,
+        size: int,
+        context: str = "",
+        tolerant: bool | None = None,
+        property_type: str | None = None,
+    ) -> bool:
         """PropertyTag.Size 完整验证，支持容错模式。
 
         Args:
@@ -167,9 +189,11 @@ class FArchive:
         if size < 0:
             if tolerant:
                 self._record_diagnostic(
-                    module="archive", field="validate_size",
+                    module="archive",
+                    field="validate_size",
                     source=context or "validate_size",
-                    target_offset=self.tell(), file_size=self._file_size,
+                    target_offset=self.tell(),
+                    file_size=self._file_size,
                     error=f"Size {size} (negative) at {context}",
                 )
                 return False
@@ -179,19 +203,23 @@ class FArchive:
         if size > remaining:
             if tolerant:
                 self._record_diagnostic(
-                    module="archive", field="validate_size",
+                    module="archive",
+                    field="validate_size",
                     source=context or "validate_size",
-                    target_offset=current_pos, file_size=self._file_size,
+                    target_offset=current_pos,
+                    file_size=self._file_size,
                     read_size=size,
                     error=f"Size {size} exceeds remaining {remaining} bytes at {context}",
                 )
                 return False
-            raise ParseError(f"Size {size} exceeds remaining {remaining} bytes at {context}")
+            raise ParseError(
+                f"Size {size} exceeds remaining {remaining} bytes at {context}"
+            )
         min_reasonable = 1024
         # 动态 max_reasonable_cap：根据属性类型和引擎版本调整
         # - UE5 大型属性类型（BoneAnimationTracks、PoseContainer 等）：500MB
         # - 其他属性类型：100MB
-        engine_version = getattr(self, '_file_version_ue5', 0)
+        engine_version = getattr(self, "_file_version_ue5", 0)
         max_reasonable_cap = get_max_reasonable(property_type or "", engine_version)
         # 自适应 max_reasonable：
         # - 小文件（<100KB）：使用 file_size // 2，不再使用 remaining 作为 fallback
@@ -211,14 +239,18 @@ class FArchive:
         if size > max_reasonable:
             if tolerant:
                 self._record_diagnostic(
-                    module="archive", field="validate_size",
+                    module="archive",
+                    field="validate_size",
                     source=context or "validate_size",
-                    target_offset=current_pos, file_size=self._file_size,
+                    target_offset=current_pos,
+                    file_size=self._file_size,
                     read_size=size,
                     error=f"Size {size} exceeds max_reasonable {max_reasonable} at {context}",
                 )
                 return False
-            raise ParseError(f"Size {size} exceeds max_reasonable {max_reasonable} at {context}")
+            raise ParseError(
+                f"Size {size} exceeds max_reasonable {max_reasonable} at {context}"
+            )
         return True
 
     def tell(self) -> int:
@@ -241,15 +273,17 @@ class FArchive:
         """
         current = self.tell()
         if pos < 0 or pos > self._file_size:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="archive",
-                field="seek",
-                current_pos=current,
-                target_offset=pos,
-                file_size=self._file_size,
-                source=context or "seek_safe",
-                error=f"seek 目标 {pos} 超出文件范围 [0, {self._file_size}]",
-            ))
+            self._diagnostics.append(
+                OffsetRangeDiagnostic(
+                    module="archive",
+                    field="seek",
+                    current_pos=current,
+                    target_offset=pos,
+                    file_size=self._file_size,
+                    source=context or "seek_safe",
+                    error=f"seek 目标 {pos} 超出文件范围 [0, {self._file_size}]",
+                )
+            )
             return False
         if self._use_mmap and self._mmap:
             self._mmap.seek(pos)
@@ -273,26 +307,30 @@ class FArchive:
         current = self.tell()
         remaining = self._file_size - current
         if size < 0:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="archive",
-                field="read",
-                current_pos=current,
-                read_size=size,
-                file_size=self._file_size,
-                source=context or "read_safe",
-                error=f"read 大小 {size} 为负数",
-            ))
+            self._diagnostics.append(
+                OffsetRangeDiagnostic(
+                    module="archive",
+                    field="read",
+                    current_pos=current,
+                    read_size=size,
+                    file_size=self._file_size,
+                    source=context or "read_safe",
+                    error=f"read 大小 {size} 为负数",
+                )
+            )
             return None
         if size > remaining:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="archive",
-                field="read",
-                current_pos=current,
-                read_size=size,
-                file_size=self._file_size,
-                source=context or "read_safe",
-                error=f"read 请求 {size} 字节，仅剩 {remaining} 字节",
-            ))
+            self._diagnostics.append(
+                OffsetRangeDiagnostic(
+                    module="archive",
+                    field="read",
+                    current_pos=current,
+                    read_size=size,
+                    file_size=self._file_size,
+                    source=context or "read_safe",
+                    error=f"read 请求 {size} 字节，仅剩 {remaining} 字节",
+                )
+            )
             return None
         return self.read(size)
 
@@ -346,18 +384,20 @@ class FArchive:
         current = self.tell()
         remaining = self._file_size - current
         if remaining < expected_bytes:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="archive",
-                field="check_remaining",
-                current_pos=current,
-                read_size=expected_bytes,
-                file_size=self._file_size,
-                source=context or "check_remaining",
-                error=(
-                    f"需要 {expected_bytes} 字节，仅剩 {remaining} 字节，"
-                    f"文件可能已截断"
-                ),
-            ))
+            self._diagnostics.append(
+                OffsetRangeDiagnostic(
+                    module="archive",
+                    field="check_remaining",
+                    current_pos=current,
+                    read_size=expected_bytes,
+                    file_size=self._file_size,
+                    source=context or "check_remaining",
+                    error=(
+                        f"需要 {expected_bytes} 字节，仅剩 {remaining} 字节，"
+                        f"文件可能已截断"
+                    ),
+                )
+            )
             return False
         return True
 
@@ -399,8 +439,9 @@ class FArchive:
         """清除当前 hex_view 上下文前缀。"""
         self._hex_view_context = ""
 
-    def _record_hex_view(self, key: str, type_name: str, value: Any,
-                         start: int, stop: int) -> None:
+    def _record_hex_view(
+        self, key: str, type_name: str, value: Any, start: int, stop: int
+    ) -> None:
         """记录一次读取操作到 hex_view。
 
         仅在 hex_view 启用时调用，避免性能损失。
@@ -408,14 +449,17 @@ class FArchive:
         if not self._hex_view_enabled:
             return
         from uasset_read.debug.hex_view import HexViewEntry
+
         full_key = f"{self._hex_view_context}{key}" if self._hex_view_context else key
-        self._hex_view_entries.append(HexViewEntry(
-            key=full_key,
-            type=type_name,
-            value=value,
-            start=start,
-            stop=stop,
-        ))
+        self._hex_view_entries.append(
+            HexViewEntry(
+                key=full_key,
+                type=type_name,
+                value=value,
+                start=start,
+                stop=stop,
+            )
+        )
 
     def get_hex_view_entries(self) -> list:
         """返回收集到的 hex_view 条目列表。"""
@@ -430,7 +474,7 @@ class FArchive:
     def _read_swapped(self, fmt_char: str, size: int, type_name: str, key: str = ""):
         """通用字节序感知读取（内部辅助方法）。"""
         start = self.tell()
-        fmt = '>' if self._byte_swapping else '<'
+        fmt = ">" if self._byte_swapping else "<"
         value = struct.unpack(fmt + fmt_char, self.read(size))[0]
         if key:
             self._record_hex_view(key, type_name, value, start, start + size)
@@ -440,12 +484,14 @@ class FArchive:
         """通用字节序感知预读（不移动位置）。"""
         current_pos = self.tell()
         try:
-            fmt = '>' if self._byte_swapping else '<'
+            fmt = ">" if self._byte_swapping else "<"
             data = self.read(size)
             result = struct.unpack(fmt + fmt_char, data)[0]
             self.seek(current_pos)
             if key:
-                self._record_hex_view(key, type_name, result, current_pos, current_pos + size)
+                self._record_hex_view(
+                    key, type_name, result, current_pos, current_pos + size
+                )
             return result
         except (struct.error, OSError, ValueError):
             self.seek(current_pos)
@@ -456,7 +502,7 @@ class FArchive:
 
         start = self.tell()
         data = self.read(1)
-        value = struct.unpack('<B', data)[0]
+        value = struct.unpack("<B", data)[0]
         if key:
             self._record_hex_view(key, "u8", value, start, start + 1)
         return value
@@ -466,7 +512,7 @@ class FArchive:
 
         start = self.tell()
         data = self.read(1)
-        value = struct.unpack('<b', data)[0]  # 'b' = signed byte
+        value = struct.unpack("<b", data)[0]  # 'b' = signed byte
         if key:
             self._record_hex_view(key, "i8", value, start, start + 1)
         return value
@@ -481,23 +527,23 @@ class FArchive:
 
     def read_i32(self, key: str = "") -> int:
         """读取 signed 32-bit integer（支持字节交换）"""
-        return self._read_swapped('i', 4, "i32", key)
+        return self._read_swapped("i", 4, "i32", key)
 
     def peek_i32(self, key: str = "") -> int:
         """预读 signed 32-bit integer（不移动位置）"""
-        return self._peek_swapped('i', 4, "i32(peek)", key)
+        return self._peek_swapped("i", 4, "i32(peek)", key)
 
     def read_u16(self, key: str = "") -> int:
         """读取 unsigned 16-bit integer（支持字节交换）"""
-        return self._read_swapped('H', 2, "u16", key)
+        return self._read_swapped("H", 2, "u16", key)
 
     def read_i16(self, key: str = "") -> int:
         """读取 signed 16-bit integer（支持字节交换）"""
-        return self._read_swapped('h', 2, "i16", key)
+        return self._read_swapped("h", 2, "i16", key)
 
     def read_u32(self, key: str = "") -> int:
         """读取 unsigned 32-bit integer（支持字节交换）"""
-        return self._read_swapped('I', 4, "u32", key)
+        return self._read_swapped("I", 4, "u32", key)
 
     def read_bool(self, key: str = "") -> bool:
         """读取 UE bool 值（序列化为 uint32，4 bytes）。
@@ -528,19 +574,19 @@ class FArchive:
 
     def read_i64(self, key: str = "") -> int:
         """读取 signed 64-bit integer（支持字节交换）"""
-        return self._read_swapped('q', 8, "i64", key)
+        return self._read_swapped("q", 8, "i64", key)
 
     def read_u64(self, key: str = "") -> int:
         """读取 unsigned 64-bit integer（支持字节交换）"""
-        return self._read_swapped('Q', 8, "u64", key)
+        return self._read_swapped("Q", 8, "u64", key)
 
     def read_f32(self, key: str = "") -> float:
         """读取 32-bit float（支持字节交换）"""
-        return self._read_swapped('f', 4, "f32", key)
+        return self._read_swapped("f", 4, "f32", key)
 
     def read_f64(self, key: str = "") -> float:
         """读取 64-bit double（支持字节交换）"""
-        return self._read_swapped('d', 8, "f64", key)
+        return self._read_swapped("d", 8, "f64", key)
 
     def serialize_int(self, value: int) -> bytes:
         """序列化 32 位整数（用于 SerializeInt 兼容）。
@@ -549,8 +595,8 @@ class FArchive:
         此方法提供对称的序列化能力。
         """
 
-        fmt = '>' if self._byte_swapping else '<'
-        return struct.pack(fmt + 'i', value)
+        fmt = ">" if self._byte_swapping else "<"
+        return struct.pack(fmt + "i", value)
 
     def serialize_bits(self, value: int, num_bits: int) -> bytes:
         """序列化指定位数的值（用于 SerializeBits 兼容）。
@@ -571,14 +617,16 @@ class FArchive:
             序列化后的字节
         """
         num_bytes = (num_bits + 7) // 8
-        byteorder = 'big' if self._byte_swapping else 'little'
+        byteorder = "big" if self._byte_swapping else "little"
         # 对齐 UE bitmask: 非字节对齐时截断高位
         if num_bits % 8 != 0:
             mask = (1 << (num_bits & 7)) - 1
             value = value & mask
         return value.to_bytes(num_bytes, byteorder=byteorder, signed=False)
 
-    def _is_likely_alignment_padding(self, data_start_pos: int, byte_count: int) -> bool:
+    def _is_likely_alignment_padding(
+        self, data_start_pos: int, byte_count: int
+    ) -> bool:
         """判断全零数据是否为对齐 padding 而非真实损坏（#369）。
 
         启发式条件：
@@ -613,19 +661,23 @@ class FArchive:
             utf16_len = -length * 2
             if utf16_len > MAX_FSTRING_LENGTH:
                 self._record_diagnostic(
-                    module="archive", field="fstring",
+                    module="archive",
+                    field="fstring",
                     source="read_fstring",
-                    target_offset=pos_before, file_size=self.total_size(),
+                    target_offset=pos_before,
+                    file_size=self.total_size(),
                     read_size=utf16_len,
                     error=f"FString at pos {pos_before}: length {utf16_len} "
-                          f"exceeds MAX_FSTRING_LENGTH {MAX_FSTRING_LENGTH}",
+                    f"exceeds MAX_FSTRING_LENGTH {MAX_FSTRING_LENGTH}",
                 )
                 self.seek(pos_before)
                 if self._tolerant:
                     self._logger.warning(
                         "FString at pos %d: UTF-16 length %d exceeds maximum %d, "
                         "returning empty string (tolerant)",
-                        pos_before, utf16_len, MAX_FSTRING_LENGTH,
+                        pos_before,
+                        utf16_len,
+                        MAX_FSTRING_LENGTH,
                     )
                     return ""
                 raise ParseError(
@@ -638,7 +690,9 @@ class FArchive:
                     self._logger.warning(
                         "FString at pos %d: UTF-16 expected %d bytes but only %d remain, "
                         "returning empty string (tolerant)",
-                        pos_before, utf16_len, self._file_size - pos_before - 4,
+                        pos_before,
+                        utf16_len,
+                        self._file_size - pos_before - 4,
                     )
                     return ""
                 raise ParseError(
@@ -650,7 +704,7 @@ class FArchive:
             # without BOM. Using 'utf-16' without explicit byte order causes
             # Python to default to big-endian when no BOM is present, breaking
             # surrogate pair decoding. Use 'utf-16-le' explicitly.
-            result = data.decode('utf-16-le', errors='replace').rstrip('\x00')
+            result = data.decode("utf-16-le", errors="replace").rstrip("\x00")
             # UTF-16 null terminator (\x00\x00) is legal — rstrip handles it.
             # Internal single nulls between valid chars are unusual but not fatal.
             # All-null detection: if result is empty after rstrip, the data was all nulls.
@@ -666,30 +720,38 @@ class FArchive:
                     self._logger.debug(
                         "FString at pos %d: length=%d, encoding=UTF-16, "
                         "all nulls (likely alignment padding), consumed=%d bytes",
-                        pos_before, -length, len(data),
+                        pos_before,
+                        -length,
+                        len(data),
                     )
                 else:
                     self._logger.warning(
                         "FString at pos %d: length=%d, encoding=UTF-16, "
                         "all nulls (completely corrupted), consumed=%d bytes",
-                        pos_before, -length, len(data),
+                        pos_before,
+                        -length,
+                        len(data),
                     )
         else:
             if length > MAX_FSTRING_LENGTH:
                 self._record_diagnostic(
-                    module="archive", field="fstring",
+                    module="archive",
+                    field="fstring",
                     source="read_fstring",
-                    target_offset=pos_before, file_size=self.total_size(),
+                    target_offset=pos_before,
+                    file_size=self.total_size(),
                     read_size=length,
                     error=f"FString at pos {pos_before}: length {length} "
-                          f"exceeds MAX_FSTRING_LENGTH {MAX_FSTRING_LENGTH}",
+                    f"exceeds MAX_FSTRING_LENGTH {MAX_FSTRING_LENGTH}",
                 )
                 self.seek(pos_before)
                 if self._tolerant:
                     self._logger.warning(
                         "FString at pos %d: UTF-8 length %d exceeds maximum %d, "
                         "returning empty string (tolerant)",
-                        pos_before, length, MAX_FSTRING_LENGTH,
+                        pos_before,
+                        length,
+                        MAX_FSTRING_LENGTH,
                     )
                     return ""
                 raise ParseError(
@@ -702,7 +764,9 @@ class FArchive:
                     self._logger.warning(
                         "FString at pos %d: UTF-8 expected %d bytes but only %d remain, "
                         "returning empty string (tolerant)",
-                        pos_before, length, self._file_size - pos_before - 4,
+                        pos_before,
+                        length,
+                        self._file_size - pos_before - 4,
                     )
                     return ""
                 raise ParseError(
@@ -710,7 +774,7 @@ class FArchive:
                     f"but only {self._file_size - pos_before - 4} remain"
                 )
             data = self.read(length)
-            result = data.decode('utf-8', errors='replace').rstrip('\x00')
+            result = data.decode("utf-8", errors="replace").rstrip("\x00")
 
             # All-null detection: if result is empty after rstrip but length was non-zero,
             # the data was entirely null bytes — completely corrupted (#302).
@@ -726,9 +790,9 @@ class FArchive:
             # Internal null detection (UTF-8 only — null bytes mid-string are abnormal)
             # Improved handling — truncate at first null rather than
             # returning empty string, to preserve data and avoid position errors in Pin parsing
-            if '\x00' in result:
-                null_count = result.count('\x00')
-                first_null_idx = result.index('\x00')
+            if "\x00" in result:
+                null_count = result.count("\x00")
+                first_null_idx = result.index("\x00")
                 preview = result[:80] if len(result) > 80 else result
 
                 if first_null_idx > 0:
@@ -738,16 +802,24 @@ class FArchive:
                         "FString at pos %d: length=%d, encoding=UTF-8, "
                         "truncated at null (null_at=%d, nulls_total=%d), "
                         "consumed=%d bytes, end_pos=%d",
-                        pos_before, length, first_null_idx, null_count,
-                        len(data), self.tell()
+                        pos_before,
+                        length,
+                        first_null_idx,
+                        null_count,
+                        len(data),
+                        self.tell(),
                     )
                     self._logger.debug(
                         "FString hex detail: pos=%d, hex=%s, preview_orig=%r, truncated_value=%r",
-                        pos_before, data[:32].hex(), preview, truncated
+                        pos_before,
+                        data[:32].hex(),
+                        preview,
+                        truncated,
                     )
                     if key:
-                        self._record_hex_view(key, "fstring", truncated,
-                                              pos_before, self.tell())
+                        self._record_hex_view(
+                            key, "fstring", truncated, pos_before, self.tell()
+                        )
                     return truncated
                 else:
                     # All nulls from start — likely file tail padding (zero-filled region).
@@ -767,18 +839,25 @@ class FArchive:
                             "FString at pos %d: length=%d, encoding=UTF-8, "
                             "all nulls (likely alignment padding), "
                             "consumed=%d bytes, end_pos=%d",
-                            pos_before, length, len(data), self.tell()
+                            pos_before,
+                            length,
+                            len(data),
+                            self.tell(),
                         )
                     else:
                         self._logger.warning(
                             "FString at pos %d: length=%d, encoding=UTF-8, "
                             "all nulls (completely corrupted), "
                             "consumed=%d bytes, end_pos=%d",
-                            pos_before, length, len(data), self.tell()
+                            pos_before,
+                            length,
+                            len(data),
+                            self.tell(),
                         )
                     self._logger.debug(
                         "FString hex detail: pos=%d, hex=%s",
-                        pos_before, data[:32].hex()
+                        pos_before,
+                        data[:32].hex(),
                     )
                     # Padding zone detection: scan ahead up to 1KB for non-zero data
                     current_pos = self.tell()
@@ -793,17 +872,20 @@ class FArchive:
                             self._logger.debug(
                                 "FString padding zone detected at pos %d: "
                                 "%d/%d non-zero bytes in next %d bytes, seeking to file end",
-                                current_pos, non_zero, scan_size, scan_size,
+                                current_pos,
+                                non_zero,
+                                scan_size,
+                                scan_size,
                             )
                             self.seek(self._file_size)
                     if key:
-                        self._record_hex_view(key, "fstring", "",
-                                              pos_before, self.tell())
+                        self._record_hex_view(
+                            key, "fstring", "", pos_before, self.tell()
+                        )
                     return ""
 
         if key:
-            self._record_hex_view(key, "fstring", result,
-                                  pos_before, self.tell())
+            self._record_hex_view(key, "fstring", result, pos_before, self.tell())
         return result
 
     def read_utf8_string(self, tolerant: bool = False) -> str:
@@ -829,9 +911,11 @@ class FArchive:
         remaining = self.total_size() - self.tell()
         if length > remaining:
             self._record_diagnostic(
-                module="archive", field="read_utf8_string",
+                module="archive",
+                field="read_utf8_string",
                 source="read_utf8_string",
-                target_offset=pos_before, file_size=self.total_size(),
+                target_offset=pos_before,
+                file_size=self.total_size(),
                 read_size=length,
                 error=f"UTF-8 length {length} exceeds remaining {remaining}",
             )
@@ -839,14 +923,14 @@ class FArchive:
                 self._logger.warning(
                     "read_utf8_string at pos %d: length %d exceeds remaining %d, "
                     "returning empty string (tolerant)",
-                    pos_before, length, remaining,
+                    pos_before,
+                    length,
+                    remaining,
                 )
                 self.seek(pos_before)
                 return ""
             self.seek(pos_before)
-            raise ParseError(
-                f"UTF-8 length {length} exceeds remaining {remaining}"
-            )
+            raise ParseError(f"UTF-8 length {length} exceeds remaining {remaining}")
 
         # 最大长度检查
         if length > MAX_FSTRING_LENGTH:
@@ -854,7 +938,9 @@ class FArchive:
                 self._logger.warning(
                     "read_utf8_string at pos %d: length %d exceeds maximum %d, "
                     "returning empty string (tolerant)",
-                    pos_before, length, MAX_FSTRING_LENGTH,
+                    pos_before,
+                    length,
+                    MAX_FSTRING_LENGTH,
                 )
                 self.seek(pos_before)
                 return ""
@@ -865,7 +951,7 @@ class FArchive:
             )
 
         data = self.read(length)
-        result = data.decode('utf-8', errors='replace').rstrip('\x00')
+        result = data.decode("utf-8", errors="replace").rstrip("\x00")
 
         # 全空检测：length > 0 但数据全为 null (#302)
         if not result and length != 0:
@@ -878,7 +964,8 @@ class FArchive:
             self._logger.warning(
                 "read_utf8_string at pos %d: length=%d, all nulls, "
                 "returning empty string (tolerant)",
-                pos_before, length,
+                pos_before,
+                length,
             )
 
         return result
@@ -945,8 +1032,7 @@ class FArchive:
             recovered = self._try_recover_fname(start, name_map)
             if recovered is not None:
                 logger.debug(
-                    "read_name: recovered out-of-range index %d at pos %d",
-                    index, start
+                    "read_name: recovered out-of-range index %d at pos %d", index, start
                 )
                 return recovered
 
@@ -963,12 +1049,16 @@ class FArchive:
                 self._name_warnings_seen.add(index)
                 logger.warning(
                     "read_name: index %d out of range (name_map len=%d) at pos %d",
-                    index, len(name_map), self.tell() - 8
+                    index,
+                    len(name_map),
+                    self.tell() - 8,
                 )
                 # 添加诊断记录
                 self._record_diagnostic(
-                    module="archive", field="read_name",
-                    source="read_name", target_offset=self.tell() - 8,
+                    module="archive",
+                    field="read_name",
+                    source="read_name",
+                    target_offset=self.tell() - 8,
                     file_size=self._file_size,
                     error=f"FName index {index} out of range (name_map len={len(name_map)})",
                 )
@@ -989,9 +1079,9 @@ class FArchive:
             dict: 包含恢复尝试次数、成功次数等统计
         """
         return {
-            "recovery_attempts": getattr(self, '_recovery_attempts', 0),
-            "recovery_successes": getattr(self, '_recovery_successes', 0),
-            "recovery_failures": getattr(self, '_recovery_failures', 0),
+            "recovery_attempts": getattr(self, "_recovery_attempts", 0),
+            "recovery_successes": getattr(self, "_recovery_successes", 0),
+            "recovery_failures": getattr(self, "_recovery_failures", 0),
         }
 
     def _try_recover_fname(self, original_pos: int, name_map: list) -> Optional[str]:
@@ -1008,7 +1098,7 @@ class FArchive:
             恢复的名称字符串，或 None（恢复失败）
         """
         # 更新统计
-        if not hasattr(self, '_recovery_attempts'):
+        if not hasattr(self, "_recovery_attempts"):
             self._recovery_attempts = 0
             self._recovery_successes = 0
             self._recovery_failures = 0
@@ -1032,10 +1122,13 @@ class FArchive:
                     self._recovery_successes += 1
                     self._logger.debug(
                         "read_name: recovered at offset %d (adjust %+d), index=%d",
-                        try_pos, offset_adjust, test_index
+                        try_pos,
+                        offset_adjust,
+                        test_index,
                     )
                     self._record_diagnostic(
-                        module="archive", field="read_name",
+                        module="archive",
+                        field="read_name",
                         source="read_name_recovery",
                         target_offset=original_pos,
                         file_size=self._file_size,
@@ -1053,8 +1146,9 @@ class FArchive:
         self.seek(current_pos)
         return None
 
-    def read_array(self, count: int, element_reader: Callable[["FArchive"], Any],
-                   key: str = "") -> list:
+    def read_array(
+        self, count: int, element_reader: Callable[["FArchive"], Any], key: str = ""
+    ) -> list:
         """读取指定数量的元素数组。
 
         泛型数组读取方法，等价于 UE 的 ReadArray<T>。
@@ -1084,8 +1178,9 @@ class FArchive:
         for _ in range(count):
             result.append(element_reader(self))
         if key:
-            self._record_hex_view(key, f"array[{count}]", len(result),
-                                  start, self.tell())
+            self._record_hex_view(
+                key, f"array[{count}]", len(result), start, self.tell()
+            )
         return result
 
     def read_bulk_array(self, element_size: int, element_count: int) -> bytes:
@@ -1106,13 +1201,9 @@ class FArchive:
             ParseError: 实际读取大小与期望不匹配
         """
         if element_size < 0:
-            raise ParseError(
-                f"read_bulk_array: element_size {element_size} 为负数"
-            )
+            raise ParseError(f"read_bulk_array: element_size {element_size} 为负数")
         if element_count < 0:
-            raise ParseError(
-                f"read_bulk_array: element_count {element_count} 为负数"
-            )
+            raise ParseError(f"read_bulk_array: element_count {element_count} 为负数")
 
         expected_size = element_size * element_count
         pos_before = self.tell()
@@ -1126,6 +1217,7 @@ class FArchive:
                 f"serialized {actual_size}"
             )
         return data
+
 
 def _contains_binary_data(
     value: str, threshold: float = 0.3, max_check_length: int = 256
@@ -1146,7 +1238,8 @@ def _contains_binary_data(
     if not value:
         return False
     check_len = min(len(value), max_check_length)
-    return value.count('\x00', 0, check_len) / check_len > threshold
+    return value.count("\x00", 0, check_len) / check_len > threshold
+
 
 class ByteArchive(FArchive):
     """
@@ -1156,7 +1249,9 @@ class ByteArchive(FArchive):
     用于测试、流式解析、网络数据等场景。
     """
 
-    def __init__(self, data: bytes | memoryview, tolerant: bool = False, name: str = ""):
+    def __init__(
+        self, data: bytes | memoryview, tolerant: bool = False, name: str = ""
+    ):
         """
         从内存数据创建 ByteArchive。
 
@@ -1179,7 +1274,9 @@ class ByteArchive(FArchive):
         self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)
         self._name_warnings_seen: set[int] = set()  # read_name 越界索引去重 (#411)
         self._hex_view_enabled: bool = False
-        self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)
+        self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(
+            max_entries=50000
+        )
         self._hex_view_context: str = ""
         # ByteArchive 专有属性
         self._buffer: memoryview | bytes = data
@@ -1196,16 +1293,19 @@ class ByteArchive(FArchive):
         remaining = self._file_size - current_pos
         if size > remaining:
             self._record_diagnostic(
-                module="byte_archive", field="read",
-                source="read", read_size=size,
-                current_pos=current_pos, file_size=self._file_size,
+                module="byte_archive",
+                field="read",
+                source="read",
+                read_size=size,
+                current_pos=current_pos,
+                file_size=self._file_size,
                 error=f"Cannot read {size} bytes at position {current_pos}, only {remaining} bytes remaining",
             )
             raise ParseError(
                 f"Cannot read {size} bytes at position {current_pos}, "
                 f"only {remaining} bytes remaining"
             )
-        data = bytes(self._buffer[current_pos:current_pos + size])
+        data = bytes(self._buffer[current_pos : current_pos + size])
         self._pos = current_pos + size
         return data
 
@@ -1222,15 +1322,17 @@ class ByteArchive(FArchive):
         """安全定位 — 越界时记录诊断并返回 False。"""
         current = self._pos
         if pos < 0 or pos > self._file_size:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="byte_archive",
-                field="seek",
-                current_pos=current,
-                target_offset=pos,
-                file_size=self._file_size,
-                source=context or "seek_safe",
-                error=f"seek 目标 {pos} 超出文件范围 [0, {self._file_size}]",
-            ))
+            self._diagnostics.append(
+                OffsetRangeDiagnostic(
+                    module="byte_archive",
+                    field="seek",
+                    current_pos=current,
+                    target_offset=pos,
+                    file_size=self._file_size,
+                    source=context or "seek_safe",
+                    error=f"seek 目标 {pos} 超出文件范围 [0, {self._file_size}]",
+                )
+            )
             return False
         self._pos = pos
         return True
@@ -1240,26 +1342,30 @@ class ByteArchive(FArchive):
         current = self._pos
         remaining = self._file_size - current
         if size < 0:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="byte_archive",
-                field="read",
-                current_pos=current,
-                read_size=size,
-                file_size=self._file_size,
-                source=context or "read_safe",
-                error=f"read 大小 {size} 为负数",
-            ))
+            self._diagnostics.append(
+                OffsetRangeDiagnostic(
+                    module="byte_archive",
+                    field="read",
+                    current_pos=current,
+                    read_size=size,
+                    file_size=self._file_size,
+                    source=context or "read_safe",
+                    error=f"read 大小 {size} 为负数",
+                )
+            )
             return None
         if size > remaining:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="byte_archive",
-                field="read",
-                current_pos=current,
-                read_size=size,
-                file_size=self._file_size,
-                source=context or "read_safe",
-                error=f"read 请求 {size} 字节，仅剩 {remaining} 字节",
-            ))
+            self._diagnostics.append(
+                OffsetRangeDiagnostic(
+                    module="byte_archive",
+                    field="read",
+                    current_pos=current,
+                    read_size=size,
+                    file_size=self._file_size,
+                    source=context or "read_safe",
+                    error=f"read 请求 {size} 字节，仅剩 {remaining} 字节",
+                )
+            )
             return None
         return self.read(size)
 

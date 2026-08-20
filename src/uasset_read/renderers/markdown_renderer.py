@@ -5,9 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from uasset_read.renderers.base import (
-    IRenderer, RenderOptions, is_blueprint_export,
+    IRenderer,
+    RenderOptions,
+    is_blueprint_export,
     EDITOR_PROPERTY_NAMES,
-    filter_editor_items, filter_variables,
+    filter_editor_items,
+    filter_variables,
 )
 from uasset_read.renderers import register_renderer
 from uasset_read.constants import decode_package_flags
@@ -24,8 +27,8 @@ def _escape_md_cell(text: str) -> str:
 def _escape_mermaid_label(text: str) -> str:
     """转义 Mermaid 标签中的特殊字符，防止图解析失败。"""
     s = str(text)
-    for ch in ('"', '[', ']', '{', '}'):
-        s = s.replace(ch, f'#{ord(ch)};')
+    for ch in ('"', "[", "]", "{", "}"):
+        s = s.replace(ch, f"#{ord(ch)};")
     return s
 
 
@@ -34,16 +37,32 @@ def _format_transforms(transforms) -> str:
     if not transforms:
         return "Identity"
     parts = []
-    loc = transforms.get("relative_location") if isinstance(transforms, dict) else getattr(transforms, "relative_location", None)
-    rot = transforms.get("relative_rotation") if isinstance(transforms, dict) else getattr(transforms, "relative_rotation", None)
-    scale = transforms.get("relative_scale") if isinstance(transforms, dict) else getattr(transforms, "relative_scale", None)
+    loc = (
+        transforms.get("relative_location")
+        if isinstance(transforms, dict)
+        else getattr(transforms, "relative_location", None)
+    )
+    rot = (
+        transforms.get("relative_rotation")
+        if isinstance(transforms, dict)
+        else getattr(transforms, "relative_rotation", None)
+    )
+    scale = (
+        transforms.get("relative_scale")
+        if isinstance(transforms, dict)
+        else getattr(transforms, "relative_scale", None)
+    )
     if loc:
         x = getattr(loc, "x", 0) if not isinstance(loc, dict) else loc.get("x", 0)
         y = getattr(loc, "y", 0) if not isinstance(loc, dict) else loc.get("y", 0)
         z = getattr(loc, "z", 0) if not isinstance(loc, dict) else loc.get("z", 0)
         parts.append(f"Loc({x:.1f},{y:.1f},{z:.1f})")
     if rot:
-        p = getattr(rot, "pitch", 0) if not isinstance(rot, dict) else rot.get("pitch", 0)
+        p = (
+            getattr(rot, "pitch", 0)
+            if not isinstance(rot, dict)
+            else rot.get("pitch", 0)
+        )
         y = getattr(rot, "yaw", 0) if not isinstance(rot, dict) else rot.get("yaw", 0)
         r = getattr(rot, "roll", 0) if not isinstance(rot, dict) else rot.get("roll", 0)
         parts.append(f"Rot({p:.1f},{y:.1f},{r:.1f})")
@@ -63,6 +82,7 @@ def _collect_input_actions(ir) -> list[tuple[str, dict]]:
     2. decompiled_functions 中的 InpActEvt_*_K2Node_EnhancedInputActionEvent_* 函数名（降级）
     """
     import re
+
     input_actions: list[tuple[str, dict]] = []
     seen_actions: set[str] = set()
 
@@ -81,8 +101,8 @@ def _collect_input_actions(ir) -> list[tuple[str, dict]]:
 
     # 来源2: decompiled_functions 中的函数名（降级路径）
     # 格式: InpActEvt_IA_Jump_K2Node_EnhancedInputActionEvent_2
-    pattern = re.compile(r'^InpActEvt_(.+)_K2Node_EnhancedInputActionEvent')
-    for func in (ir.decompiled_functions or []):
+    pattern = re.compile(r"^InpActEvt_(.+)_K2Node_EnhancedInputActionEvent")
+    for func in ir.decompiled_functions or []:
         match = pattern.match(func.name)
         if match:
             action_name = match.group(1)
@@ -101,12 +121,17 @@ class MarkdownRenderer(IRenderer):
         # 如果启用 hex_view 且 IR 中有 hex_view 数据，返回 hex 视图格式
         if options.hex_view and ir.debug and ir.debug.hex_view:
             from uasset_read.debug.hex_view import format_hex_view
+
             return format_hex_view(ir.debug.hex_view)
 
         lines: list[str] = []
 
         # 标题
-        asset_name = ir.header.package_name.split("/")[-1] if "/" in ir.header.package_name else ir.header.package_name
+        asset_name = (
+            ir.header.package_name.split("/")[-1]
+            if "/" in ir.header.package_name
+            else ir.header.package_name
+        )
         lines.append(f"# {asset_name}")
         lines.append("")
 
@@ -127,13 +152,15 @@ class MarkdownRenderer(IRenderer):
         self._render_status_section(lines, ir)
 
         # === Opaque Classes ===
-        opaque_count = sum(1 for e in ir.exports if getattr(e, 'parse_status', None) == 'opaque')
+        opaque_count = sum(
+            1 for e in ir.exports if getattr(e, "parse_status", None) == "opaque"
+        )
         if opaque_count > 0:
             lines.append(f"\n### Opaque Classes ({opaque_count})\n")
             opaque_classes = {}
             for export in ir.exports:
-                if getattr(export, 'parse_status', None) == 'opaque':
-                    cls = getattr(export, 'object_class', 'unknown')
+                if getattr(export, "parse_status", None) == "opaque":
+                    cls = getattr(export, "object_class", "unknown")
                     opaque_classes[cls] = opaque_classes.get(cls, 0) + 1
             for cls, count in sorted(opaque_classes.items(), key=lambda x: -x[1]):
                 lines.append(f"- {cls}: {count}")
@@ -144,15 +171,25 @@ class MarkdownRenderer(IRenderer):
             lines.append("| Field | Value |")
             lines.append("|-------|-------|")
             if ir.blueprint.parent_class:
-                lines.append(f"| Parent Class | {_escape_md_cell(ir.blueprint.parent_class)} |")
+                lines.append(
+                    f"| Parent Class | {_escape_md_cell(ir.blueprint.parent_class)} |"
+                )
             if ir.blueprint.description:
-                lines.append(f"| Description | {_escape_md_cell(ir.blueprint.description)} |")
+                lines.append(
+                    f"| Description | {_escape_md_cell(ir.blueprint.description)} |"
+                )
             if ir.blueprint.interfaces:
                 ifaces = ", ".join(i.get("name", "") for i in ir.blueprint.interfaces)
                 lines.append(f"| Interfaces | {_escape_md_cell(ifaces)} |")
             var_count = len(ir.variables) if ir.variables else 0
-            comp_count = sum(1 for c in ir.blueprint.components) if ir.blueprint.components else 0
-            lines.append(f"| Variables | {var_count} ({comp_count} components, {max(0, var_count - comp_count)} regular) |")
+            comp_count = (
+                sum(1 for c in ir.blueprint.components)
+                if ir.blueprint.components
+                else 0
+            )
+            lines.append(
+                f"| Variables | {var_count} ({comp_count} components, {max(0, var_count - comp_count)} regular) |"
+            )
             lines.append("")
 
             # === Component Hierarchy Mermaid 图 ===
@@ -162,13 +199,25 @@ class MarkdownRenderer(IRenderer):
                 lines.append("```mermaid")
                 lines.append("graph TD")
                 root_name = asset_name.replace(" ", "_")
-                lines.append(f"  {root_name}[\"{asset_name}\"]")
+                lines.append(f'  {root_name}["{asset_name}"]')
                 for comp in ir.blueprint.components:
-                    comp_name = comp.get("name", "Unknown") if isinstance(comp, dict) else getattr(comp, "name", "Unknown")
-                    comp_class = comp.get("class", "Unknown") if isinstance(comp, dict) else getattr(comp, "class_name", "Unknown")
-                    safe_name = "".join(c if c.isalnum() or c == "_" else "_" for c in comp_name)
-                    safe_label = _escape_mermaid_label(f"{comp_name}<br/><i>{comp_class}</i>")
-                    lines.append(f"  {root_name} --> {safe_name}[\"{safe_label}\"]")
+                    comp_name = (
+                        comp.get("name", "Unknown")
+                        if isinstance(comp, dict)
+                        else getattr(comp, "name", "Unknown")
+                    )
+                    comp_class = (
+                        comp.get("class", "Unknown")
+                        if isinstance(comp, dict)
+                        else getattr(comp, "class_name", "Unknown")
+                    )
+                    safe_name = "".join(
+                        c if c.isalnum() or c == "_" else "_" for c in comp_name
+                    )
+                    safe_label = _escape_mermaid_label(
+                        f"{comp_name}<br/><i>{comp_class}</i>"
+                    )
+                    lines.append(f'  {root_name} --> {safe_name}["{safe_label}"]')
                 lines.append("```")
                 lines.append("")
 
@@ -185,7 +234,9 @@ class MarkdownRenderer(IRenderer):
                         comp_class = getattr(comp, "class_name", "Unknown")
                         transforms = getattr(comp, "transforms", {}) or {}
                     transform_str = _format_transforms(transforms)
-                    lines.append(f"| {_escape_md_cell(comp_name)} | {_escape_md_cell(comp_class)} | {transform_str} |")
+                    lines.append(
+                        f"| {_escape_md_cell(comp_name)} | {_escape_md_cell(comp_class)} | {transform_str} |"
+                    )
                 lines.append("")
 
             # === Input Action Bindings ===
@@ -201,7 +252,9 @@ class MarkdownRenderer(IRenderer):
                         first_trigger = True
                         for trigger_name, event_type in triggers.items():
                             if first_trigger:
-                                lines.append(f"| {action_name} | {trigger_name} | {event_type} |")
+                                lines.append(
+                                    f"| {action_name} | {trigger_name} | {event_type} |"
+                                )
                                 first_trigger = False
                             else:
                                 lines.append(f"| | {trigger_name} | {event_type} |")
@@ -211,8 +264,7 @@ class MarkdownRenderer(IRenderer):
 
         # 导出 — 只显示蓝图 export，过滤编辑器节点类 export（与 JSON 渲染器一致）
         blueprint_exports = [
-            e for e in filter_editor_items(ir.exports)
-            if is_blueprint_export(e)
+            e for e in filter_editor_items(ir.exports) if is_blueprint_export(e)
         ]
         if blueprint_exports:
             lines.append("## Exports")
@@ -234,7 +286,9 @@ class MarkdownRenderer(IRenderer):
                 lines.append(f"## Graph: {graph.graph_name}")
                 lines.append(f"- **Nodes**: {len(graph.nodes)}")
                 if graph.execution_chains:
-                    lines.append(f"- **Execution Chains**: {len(graph.execution_chains)}")
+                    lines.append(
+                        f"- **Execution Chains**: {len(graph.execution_chains)}"
+                    )
                 if graph.subgraphs:
                     lines.append(f"- **Subgraphs**: {len(graph.subgraphs)}")
                 if graph.graph_type:
@@ -398,7 +452,11 @@ class MarkdownRenderer(IRenderer):
                         "signature": "",
                         "cpp_code": "",
                         "parameters": [
-                            {"name": p["name"], "param_type": p["param_type"], "default_value": p.get("default_value")}
+                            {
+                                "name": p["name"],
+                                "param_type": p["param_type"],
+                                "default_value": p.get("default_value"),
+                            }
                             for p in func.parameters
                         ],
                         "return_type": func.return_type,
@@ -442,7 +500,9 @@ class MarkdownRenderer(IRenderer):
                     pname = p.get("name", "")
                     default = p.get("default_value")
                     default_str = str(default) if default is not None else "-"
-                    lines.append(f"| {_escape_md_cell(pname)} | {_escape_md_cell(ptype)} | {_escape_md_cell(default_str)} |")
+                    lines.append(
+                        f"| {_escape_md_cell(pname)} | {_escape_md_cell(ptype)} | {_escape_md_cell(default_str)} |"
+                    )
                 lines.append("")
 
             # C++ 实现代码块
@@ -471,8 +531,14 @@ class MarkdownRenderer(IRenderer):
         lines.append("| Name | Type | Default Value |")
         lines.append("|------|------|---------------|")
         for var in filtered_variables:
-            default_str = _escape_md_cell(str(var.default_value)) if var.default_value is not None else "-"
-            lines.append(f"| {_escape_md_cell(var.name)} | {_escape_md_cell(var.type)} | {default_str} |")
+            default_str = (
+                _escape_md_cell(str(var.default_value))
+                if var.default_value is not None
+                else "-"
+            )
+            lines.append(
+                f"| {_escape_md_cell(var.name)} | {_escape_md_cell(var.type)} | {default_str} |"
+            )
         lines.append("")
 
     def _render_asset_registry(self, lines: list[str], ir: PackageIR) -> None:
@@ -502,7 +568,9 @@ class MarkdownRenderer(IRenderer):
                 lines.append("| Tag | Value |")
                 lines.append("|-----|-------|")
                 for key, value in tags.items():
-                    lines.append(f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |")
+                    lines.append(
+                        f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |"
+                    )
                 lines.append("")
 
     def _render_anim_data(self, lines: list[str], ir: PackageIR) -> None:
@@ -516,10 +584,14 @@ class MarkdownRenderer(IRenderer):
             lines.append("## Animation Blueprint")
             lines.append("")
             if anim.anim_blueprint.target_skeleton:
-                lines.append(f"**Target Skeleton**: `{anim.anim_blueprint.target_skeleton}`")
+                lines.append(
+                    f"**Target Skeleton**: `{anim.anim_blueprint.target_skeleton}`"
+                )
                 lines.append("")
             if anim.anim_blueprint.sync_group_names:
-                lines.append(f"**Sync Groups**: {', '.join(anim.anim_blueprint.sync_group_names)}")
+                lines.append(
+                    f"**Sync Groups**: {', '.join(anim.anim_blueprint.sync_group_names)}"
+                )
                 lines.append("")
             if anim.anim_blueprint.graph_asset_player_info:
                 lines.append("### Graph Asset Player Info")
@@ -527,7 +599,9 @@ class MarkdownRenderer(IRenderer):
                 lines.append("| Key | Value |")
                 lines.append("|-----|-------|")
                 for key, value in anim.anim_blueprint.graph_asset_player_info.items():
-                    lines.append(f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |")
+                    lines.append(
+                        f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |"
+                    )
                 lines.append("")
             if anim.anim_blueprint.graph_blend_options:
                 lines.append("### Graph Blend Options")
@@ -535,7 +609,9 @@ class MarkdownRenderer(IRenderer):
                 lines.append("| Key | Value |")
                 lines.append("|-----|-------|")
                 for key, value in anim.anim_blueprint.graph_blend_options.items():
-                    lines.append(f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |")
+                    lines.append(
+                        f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |"
+                    )
                 lines.append("")
             if anim.anim_blueprint.anim_node_data:
                 lines.append("### Anim Node Data")
@@ -556,7 +632,9 @@ class MarkdownRenderer(IRenderer):
                 lines.append("|-------|-----------|---------|")
                 for state in sm.states:
                     conduit = "Yes" if state.b_is_a_conduit else "No"
-                    lines.append(f"| {state.state_name} | #{state.state_root_node_index} | {conduit} |")
+                    lines.append(
+                        f"| {state.state_name} | #{state.state_root_node_index} | {conduit} |"
+                    )
                 lines.append("")
             if anim.anim_blueprint.anim_notifies:
                 lines.append("### Anim Notifies")
@@ -564,7 +642,9 @@ class MarkdownRenderer(IRenderer):
                 lines.append("| Name | Class | Trigger Offset | Duration |")
                 lines.append("|------|-------|---------------|----------|")
                 for notify in anim.anim_blueprint.anim_notifies:
-                    lines.append(f"| {notify.notify_name} | {notify.notify_class or '-'} | {notify.trigger_time_offset} | {notify.duration} |")
+                    lines.append(
+                        f"| {notify.notify_name} | {notify.notify_class or '-'} | {notify.trigger_time_offset} | {notify.duration} |"
+                    )
                 lines.append("")
 
         # AnimSequence
@@ -572,13 +652,19 @@ class MarkdownRenderer(IRenderer):
             lines.append("## Animation Sequence")
             lines.append("")
             if anim.anim_sequence.target_skeleton:
-                lines.append(f"**Target Skeleton**: `{anim.anim_sequence.target_skeleton}`")
+                lines.append(
+                    f"**Target Skeleton**: `{anim.anim_sequence.target_skeleton}`"
+                )
             if anim.anim_sequence.sequence_length:
-                lines.append(f"**Sequence Length**: {anim.anim_sequence.sequence_length:.2f}s")
+                lines.append(
+                    f"**Sequence Length**: {anim.anim_sequence.sequence_length:.2f}s"
+                )
             if anim.anim_sequence.rate_scale != 1.0:
                 lines.append(f"**Rate Scale**: {anim.anim_sequence.rate_scale}")
             if anim.anim_sequence.additive_anim_type:
-                lines.append(f"**Additive Type**: {anim.anim_sequence.additive_anim_type}")
+                lines.append(
+                    f"**Additive Type**: {anim.anim_sequence.additive_anim_type}"
+                )
             if anim.anim_sequence.notifies:
                 lines.append("")
                 lines.append("### Anim Notifies")
@@ -586,11 +672,17 @@ class MarkdownRenderer(IRenderer):
                 lines.append("| Name | Class | Trigger Offset | Duration |")
                 lines.append("|------|-------|---------------|----------|")
                 for notify in anim.anim_sequence.notifies:
-                    lines.append(f"| {notify.notify_name} | {notify.notify_class or '-'} | {notify.trigger_time_offset} | {notify.duration} |")
+                    lines.append(
+                        f"| {notify.notify_name} | {notify.notify_class or '-'} | {notify.trigger_time_offset} | {notify.duration} |"
+                    )
             if anim.anim_sequence.float_curve_names:
                 lines.append("")
-                lines.append(f"**Float Curves**: {', '.join(anim.anim_sequence.float_curve_names)}")
-            lines.append(f"**Has Compressed Data**: {anim.anim_sequence.has_compressed_data}")
+                lines.append(
+                    f"**Float Curves**: {', '.join(anim.anim_sequence.float_curve_names)}"
+                )
+            lines.append(
+                f"**Has Compressed Data**: {anim.anim_sequence.has_compressed_data}"
+            )
             lines.append("")
 
         # AnimMontage
@@ -602,9 +694,13 @@ class MarkdownRenderer(IRenderer):
             if anim.anim_montage.blend_mode_out:
                 lines.append(f"**Blend Out Mode**: {anim.anim_montage.blend_mode_out}")
             if anim.anim_montage.blend_in_option:
-                lines.append(f"**Blend In Option**: {anim.anim_montage.blend_in_option}")
+                lines.append(
+                    f"**Blend In Option**: {anim.anim_montage.blend_in_option}"
+                )
             if anim.anim_montage.blend_out_option:
-                lines.append(f"**Blend Out Option**: {anim.anim_montage.blend_out_option}")
+                lines.append(
+                    f"**Blend Out Option**: {anim.anim_montage.blend_out_option}"
+                )
             if anim.anim_montage.sync_group:
                 lines.append(f"**Sync Group**: {anim.anim_montage.sync_group}")
             if anim.anim_montage.rate_scale != 1.0:
@@ -634,10 +730,14 @@ class MarkdownRenderer(IRenderer):
                 lines.append("| Name | Class | Trigger Offset | Duration |")
                 lines.append("|------|-------|---------------|----------|")
                 for notify in anim.anim_montage.notifies:
-                    lines.append(f"| {notify.notify_name} | {notify.notify_class or '-'} | {notify.trigger_time_offset} | {notify.duration} |")
+                    lines.append(
+                        f"| {notify.notify_name} | {notify.notify_class or '-'} | {notify.trigger_time_offset} | {notify.duration} |"
+                    )
             if anim.anim_montage.float_curve_names:
                 lines.append("")
-                lines.append(f"**Float Curves**: {', '.join(anim.anim_montage.float_curve_names)}")
+                lines.append(
+                    f"**Float Curves**: {', '.join(anim.anim_montage.float_curve_names)}"
+                )
             lines.append("")
 
     def _render_diagnostics(self, lines: list[str], ir: PackageIR) -> None:
@@ -679,15 +779,16 @@ class MarkdownRenderer(IRenderer):
                 object_name = _escape_md_cell(d.get("object_name", ""))
                 field_name = _escape_md_cell(d.get("field", ""))
                 error = _escape_md_cell(d.get("error", ""))
-                lines.append(f"| {kind} | {module} | {object_name} | {field_name} | {error} |")
+                lines.append(
+                    f"| {kind} | {module} | {object_name} | {field_name} | {error} |"
+                )
             lines.append("")
 
     def _render_export_properties(self, lines: list[str], export) -> None:
         """渲染 export 的属性表格。"""
         # 过滤编辑器属性（standard 输出级别）
         filtered_props = [
-            p for p in (export.properties or [])
-            if p.name not in EDITOR_PROPERTY_NAMES
+            p for p in (export.properties or []) if p.name not in EDITOR_PROPERTY_NAMES
         ]
         if not filtered_props:
             return
@@ -714,8 +815,7 @@ class MarkdownRenderer(IRenderer):
         """渲染 export 的属性表格。"""
         # 过滤编辑器属性（standard 输出级别）
         filtered_props = [
-            p for p in (export.properties or [])
-            if p.name not in EDITOR_PROPERTY_NAMES
+            p for p in (export.properties or []) if p.name not in EDITOR_PROPERTY_NAMES
         ]
         if not filtered_props:
             return
@@ -766,7 +866,9 @@ class MarkdownRenderer(IRenderer):
                     pin_to_node[pin.pin_guid] = node_guid
         return pin_to_node
 
-    def _render_mermaid_edges(self, graph, pin_to_node: dict[str, str], indent: int = 0) -> list[str]:
+    def _render_mermaid_edges(
+        self, graph, pin_to_node: dict[str, str], indent: int = 0
+    ) -> list[str]:
         """渲染 Mermaid 边，使用 Node GUID 替代 Pin GUID。"""
         prefix = "    " * indent
         edge_lines: list[str] = []
@@ -775,7 +877,7 @@ class MarkdownRenderer(IRenderer):
         for node in graph.nodes:
             source_guid = (node.node_guid or "")[:8]
             for pin in node.pins:
-                for linked_pin_guid in (pin.linked_to or []):
+                for linked_pin_guid in pin.linked_to or []:
                     # 将 Pin GUID 转换为 Node GUID
                     target_node_guid = pin_to_node.get(linked_pin_guid)
 

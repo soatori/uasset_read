@@ -14,7 +14,9 @@ if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.package_summary import PackageFileSummary
     from uasset_read.serializers.object_resources import (
-        ObjectImport, ObjectExport, PackageIndex,
+        ObjectImport,
+        ObjectExport,
+        PackageIndex,
     )
     from uasset_read.versioning import VersionContainer
 
@@ -23,11 +25,12 @@ from uasset_read.serializers.object_resources import resolve_class_name
 from uasset_read.link.object_instance import UObjectInstance
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 from uasset_read.models.validators import validate_parse_status
+from uasset_read.project_logging import log_context
 
 logger = logging.getLogger(__name__)
 
 # World Partition 路径规范化正则：匹配路径段末尾的 _数字 后缀
-_WP_HASH_RE = re.compile(r'_(\d{3,})$')
+_WP_HASH_RE = re.compile(r"_(\d{3,})$")
 
 
 def normalize_world_partition_path(path: str) -> str:
@@ -48,14 +51,14 @@ def normalize_world_partition_path(path: str) -> str:
     """
     if not path:
         return path
-    last_slash = path.rfind('/')
+    last_slash = path.rfind("/")
     if last_slash < 0:
         segment = path
-        prefix = ''
+        prefix = ""
     else:
-        segment = path[last_slash + 1:]
-        prefix = path[:last_slash + 1]
-    normalized_segment = _WP_HASH_RE.sub('', segment)
+        segment = path[last_slash + 1 :]
+        prefix = path[: last_slash + 1]
+    normalized_segment = _WP_HASH_RE.sub("", segment)
     return prefix + normalized_segment
 
 
@@ -92,7 +95,7 @@ class PackageLinker:
         self._root_objects: List[UObjectInstance] = []
         self._preload_cache: dict[int, bool] = {}
         self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)
-        self._file_size: int = getattr(archive, '_file_size', 0)
+        self._file_size: int = getattr(archive, "_file_size", 0)
         self._import_verification_errors: List[str] = []
 
     @property
@@ -106,10 +109,11 @@ class PackageLinker:
         注意：当前实现一次性创建所有实例。
         对于超大包（>10000 个对象），可考虑延迟创建优化。
         """
-        self._create_import_instances()
-        self._create_export_instances()
-        self.build_outer_tree()
-        self._collect_root_objects()
+        with log_context(stage="link"):
+            self._create_import_instances()
+            self._create_export_instances()
+            self.build_outer_tree()
+            self._collect_root_objects()
 
     def _create_import_instances(self) -> None:
         """Create UObjectInstance for each ImportMap entry."""
@@ -118,15 +122,18 @@ class PackageLinker:
             pkg_idx = -(idx + 1)
             obj_name = (
                 self._name_map[imp.object_name]
-                if isinstance(imp.object_name, int) else imp.object_name
+                if isinstance(imp.object_name, int)
+                else imp.object_name
             )
             cls_name = (
                 self._name_map[imp.class_name]
-                if isinstance(imp.class_name, int) else imp.class_name
+                if isinstance(imp.class_name, int)
+                else imp.class_name
             )
             cls_pkg = (
                 self._name_map[imp.class_package]
-                if isinstance(imp.class_package, int) else imp.class_package
+                if isinstance(imp.class_package, int)
+                else imp.class_package
             )
             inst = UObjectInstance(
                 package_index=pkg_idx,
@@ -147,7 +154,8 @@ class PackageLinker:
             pkg_idx = idx + 1
             obj_name = (
                 self._name_map[exp.object_name]
-                if isinstance(exp.object_name, int) else exp.object_name
+                if isinstance(exp.object_name, int)
+                else exp.object_name
             )
             cls_name = resolve_class_name(
                 exp.class_index, self._import_map, self._export_map
@@ -157,16 +165,18 @@ class PackageLinker:
             serial_offset = exp.serial_offset
             serial_size = exp.serial_size
             if serial_offset < 0 or serial_offset > self._file_size:
-                self._diagnostics.append(OffsetRangeDiagnostic(
-                    module="linker",
-                    field="serial_offset",
-                    export_index=idx,
-                    object_name=obj_name,
-                    target_offset=serial_offset,
-                    file_size=self._file_size,
-                    source="_create_export_instances",
-                    error=f"Export #{idx} ({obj_name}) serial_offset {serial_offset} 超出文件范围 [0, {self._file_size}]",
-                ))
+                self._diagnostics.append(
+                    OffsetRangeDiagnostic(
+                        module="linker",
+                        field="serial_offset",
+                        export_index=idx,
+                        object_name=obj_name,
+                        target_offset=serial_offset,
+                        file_size=self._file_size,
+                        source="_create_export_instances",
+                        error=f"Export #{idx} ({obj_name}) serial_offset {serial_offset} 超出文件范围 [0, {self._file_size}]",
+                    )
+                )
                 serial_offset = 0
                 serial_size = 0
 
@@ -198,7 +208,11 @@ class PackageLinker:
         for idx, exp in enumerate(self._export_map):
             if idx < len(self._export_objects):
                 inst = self._export_objects[idx]
-                if hasattr(exp, 'super_index') and exp.super_index and not exp.super_index.is_null:
+                if (
+                    hasattr(exp, "super_index")
+                    and exp.super_index
+                    and not exp.super_index.is_null
+                ):
                     super_inst = self.resolve_package_index(exp.super_index)
                     if super_inst is not None:
                         inst.super_object = super_inst
@@ -222,28 +236,32 @@ class PackageLinker:
             if 0 <= idx < len(self._export_objects):
                 return self._export_objects[idx]
             # 越界诊断
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="linker",
-                field="PackageIndex",
-                export_index=idx,
-                file_size=self._file_size,
-                source="resolve_package_index",
-                error=f"Export PackageIndex {pkg_idx.index} (idx={idx}) 越界，export 数量 {len(self._export_objects)}",
-            ))
+            self._diagnostics.append(
+                OffsetRangeDiagnostic(
+                    module="linker",
+                    field="PackageIndex",
+                    export_index=idx,
+                    file_size=self._file_size,
+                    source="resolve_package_index",
+                    error=f"Export PackageIndex {pkg_idx.index} (idx={idx}) 越界，export 数量 {len(self._export_objects)}",
+                )
+            )
             return None
         if pkg_idx.is_import:
             idx = pkg_idx.to_import_index()
             if 0 <= idx < len(self._import_objects):
                 return self._import_objects[idx]
             # 越界诊断
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="linker",
-                field="PackageIndex",
-                import_index=idx,
-                file_size=self._file_size,
-                source="resolve_package_index",
-                error=f"Import PackageIndex {pkg_idx.index} (idx={idx}) 越界，import 数量 {len(self._import_objects)}",
-            ))
+            self._diagnostics.append(
+                OffsetRangeDiagnostic(
+                    module="linker",
+                    field="PackageIndex",
+                    import_index=idx,
+                    file_size=self._file_size,
+                    source="resolve_package_index",
+                    error=f"Import PackageIndex {pkg_idx.index} (idx={idx}) 越界，import 数量 {len(self._import_objects)}",
+                )
+            )
             return None
         return None
 
@@ -267,176 +285,186 @@ class PackageLinker:
             game: Game identifier (optional).
             tolerant: Tolerant parsing mode (default True).
         """
-        if index in self._preload_cache:
-            return
-        if index < 0 or index >= len(self._export_objects):
-            return
+        with log_context(stage="preload"):
+            if index in self._preload_cache:
+                return
+            if index < 0 or index >= len(self._export_objects):
+                return
 
-        instance = self._export_objects[index]
-        if instance._preloaded:
-            self._preload_cache[index] = True
-            return
+            instance = self._export_objects[index]
+            if instance._preloaded:
+                self._preload_cache[index] = True
+                return
 
-        # === NoneType Guard (#328) ===
-        # 防止 serial_offset/serial_size 为 None 导致 TypeError
-        if self._archive is None:
-            logger.warning("preload: archive is None for export #%d", index)
-            instance._preloaded = True
-            self._preload_cache[index] = True
-            return
-        if instance.serial_offset is None or instance.serial_size is None:
-            logger.warning(
-                "preload: export %d (%s) has None serial_offset or serial_size, skipping",
-                index, instance.object_name,
-            )
-            instance._preloaded = True
-            self._preload_cache[index] = True
-            return
-
-        # === Class Serialization Strategy Check ===
-        # 对 SKIP_UNSUPPORTED 类，在 linker 层提前拦截
-        # 对 OPAQUE_CLASS_PAYLOAD 类，设置初始状态但不 early return，
-        # 让 parse_properties_from_export() 调用 asset type handler 提取元数据
-        # 参见 Issue #23: class serialization strategy 不应绕过 asset type handler
-        from uasset_read.parsers.class_serialization_strategy import (
-            get_serialization_strategy,
-            SerializationStrategy,
-        )
-        class_name = instance.object_class
-        if class_name is not None:
-            strategy = get_serialization_strategy(class_name)
-            exp = self._export_map[index]
-            if strategy == SerializationStrategy.SKIP_UNSUPPORTED:
-                # 完全不支持的类，直接跳过（无 asset handler）
-                setattr(instance, "parse_status", validate_parse_status("skipped"))
-                setattr(instance, "fallback_reason", f"skip_unsupported:{class_name}")
-                setattr(exp, "parse_status", validate_parse_status("skipped"))
-                setattr(exp, "fallback_reason", f"skip_unsupported:{class_name}")
-                # 确保 properties 至少为空列表
-                exp.properties = []
-                logger.debug(
-                    "Skipping export #%d (%s): unsupported class '%s'",
+            # === NoneType Guard (#328) ===
+            # 防止 serial_offset/serial_size 为 None 导致 TypeError
+            if self._archive is None:
+                logger.warning("preload: archive is None for export #%d", index)
+                instance._preloaded = True
+                self._preload_cache[index] = True
+                return
+            if instance.serial_offset is None or instance.serial_size is None:
+                logger.warning(
+                    "preload: export %d (%s) has None serial_offset or serial_size, skipping",
                     index,
                     instance.object_name,
-                    class_name,
                 )
                 instance._preloaded = True
                 self._preload_cache[index] = True
                 return
-            elif strategy == SerializationStrategy.OPAQUE_CLASS_PAYLOAD:
-                # Opaque payload — 设置初始状态，但不 early return
-                # 让 parse_properties_from_export() 调用 asset type handler
-                # handler 可能会更新 parse_status 为 partial_metadata
-                setattr(instance, "parse_status", validate_parse_status("opaque"))
-                setattr(instance, "fallback_reason", f"opaque_payload:{class_name}")
-                setattr(exp, "parse_status", validate_parse_status("opaque"))
-                setattr(exp, "fallback_reason", f"opaque_payload:{class_name}")
-                # 存储 ScriptSerialization 绝对偏移用于诊断
-                if hasattr(exp, 'script_serialization_start_offset'):
-                    exp._script_serialization_start_absolute = (
-                        exp.serial_offset + exp.script_serialization_start_offset
+
+            # === Class Serialization Strategy Check ===
+            # 对 SKIP_UNSUPPORTED 类，在 linker 层提前拦截
+            # 对 OPAQUE_CLASS_PAYLOAD 类，设置初始状态但不 early return，
+            # 让 parse_properties_from_export() 调用 asset type handler 提取元数据
+            # 参见 Issue #23: class serialization strategy 不应绕过 asset type handler
+            from uasset_read.parsers.class_serialization_strategy import (
+                get_serialization_strategy,
+                SerializationStrategy,
+            )
+
+            class_name = instance.object_class
+            if class_name is not None:
+                strategy = get_serialization_strategy(class_name)
+                exp = self._export_map[index]
+                if strategy == SerializationStrategy.SKIP_UNSUPPORTED:
+                    # 完全不支持的类，直接跳过（无 asset handler）
+                    setattr(instance, "parse_status", validate_parse_status("skipped"))
+                    setattr(
+                        instance, "fallback_reason", f"skip_unsupported:{class_name}"
                     )
-                if hasattr(exp, 'script_serialization_end_offset'):
-                    exp._script_serialization_end_absolute = (
-                        exp.serial_offset + exp.script_serialization_end_offset
+                    setattr(exp, "parse_status", validate_parse_status("skipped"))
+                    setattr(exp, "fallback_reason", f"skip_unsupported:{class_name}")
+                    # 确保 properties 至少为空列表
+                    exp.properties = []
+                    logger.debug(
+                        "Skipping export #%d (%s): unsupported class '%s'",
+                        index,
+                        instance.object_name,
+                        class_name,
                     )
-                logger.debug(
-                    "Marking export #%d (%s) as opaque: class '%s' has custom Serialize()",
-                    index,
-                    instance.object_name,
-                    class_name,
+                    instance._preloaded = True
+                    self._preload_cache[index] = True
+                    return
+                elif strategy == SerializationStrategy.OPAQUE_CLASS_PAYLOAD:
+                    # Opaque payload — 设置初始状态，但不 early return
+                    # 让 parse_properties_from_export() 调用 asset type handler
+                    # handler 可能会更新 parse_status 为 partial_metadata
+                    setattr(instance, "parse_status", validate_parse_status("opaque"))
+                    setattr(instance, "fallback_reason", f"opaque_payload:{class_name}")
+                    setattr(exp, "parse_status", validate_parse_status("opaque"))
+                    setattr(exp, "fallback_reason", f"opaque_payload:{class_name}")
+                    # 存储 ScriptSerialization 绝对偏移用于诊断
+                    if hasattr(exp, "script_serialization_start_offset"):
+                        exp._script_serialization_start_absolute = (
+                            exp.serial_offset + exp.script_serialization_start_offset
+                        )
+                    if hasattr(exp, "script_serialization_end_offset"):
+                        exp._script_serialization_end_absolute = (
+                            exp.serial_offset + exp.script_serialization_end_offset
+                        )
+                    logger.debug(
+                        "Marking export #%d (%s) as opaque: class '%s' has custom Serialize()",
+                        index,
+                        instance.object_name,
+                        class_name,
+                    )
+                    # 不 return，继续进入 parse_properties_from_export()
+                # TAGGED_PROPERTIES_ONLY — 继续正常解析
+
+            # === Offset Validation ===
+            # 验证 serial_offset 范围（防止 4294967296 等溢出值导致崩溃）
+            if instance.serial_offset < 0 or instance.serial_offset > self._file_size:
+                self._diagnostics.append(
+                    OffsetRangeDiagnostic(
+                        module="linker",
+                        field="serial_offset",
+                        export_index=index,
+                        object_name=instance.object_name,
+                        target_offset=instance.serial_offset,
+                        file_size=self._file_size,
+                        source="preload",
+                        error=f"Export #{index} ({instance.object_name}) serial_offset {instance.serial_offset} 超出文件范围 [0, {self._file_size}]",
+                    )
                 )
-                # 不 return，继续进入 parse_properties_from_export()
-            # TAGGED_PROPERTIES_ONLY — 继续正常解析
+                instance._preloaded = True
+                self._preload_cache[index] = True
+                return
 
-        # === Offset Validation ===
-        # 验证 serial_offset 范围（防止 4294967296 等溢出值导致崩溃）
-        if instance.serial_offset < 0 or instance.serial_offset > self._file_size:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="linker",
-                field="serial_offset",
-                export_index=index,
-                object_name=instance.object_name,
-                target_offset=instance.serial_offset,
-                file_size=self._file_size,
-                source="preload",
-                error=f"Export #{index} ({instance.object_name}) serial_offset {instance.serial_offset} 超出文件范围 [0, {self._file_size}]",
-            ))
+            # === serial_size 验证 ===
+            # 负值检查（防止 offset+size 产生意外结果）
+            if instance.serial_size < 0:
+                self._diagnostics.append(
+                    OffsetRangeDiagnostic(
+                        module="linker",
+                        field="serial_size",
+                        export_index=index,
+                        object_name=instance.object_name,
+                        target_offset=instance.serial_offset,
+                        read_size=instance.serial_size,
+                        file_size=self._file_size,
+                        source="preload",
+                        error=f"Export #{index} ({instance.object_name}) serial_size {instance.serial_size} 为负数",
+                    )
+                )
+                instance._preloaded = True
+                self._preload_cache[index] = True
+                return
+
+            # 零值跳过（在偏移校验之后执行，确保无效偏移先被诊断）
+            if instance.serial_size == 0:
+                instance._preloaded = True
+                self._preload_cache[index] = True
+                return
+
+            # 验证 serial_offset + serial_size 不超出文件
+            if instance.serial_offset + instance.serial_size > self._file_size:
+                self._diagnostics.append(
+                    OffsetRangeDiagnostic(
+                        module="linker",
+                        field="serial_size",
+                        export_index=index,
+                        object_name=instance.object_name,
+                        target_offset=instance.serial_offset,
+                        read_size=instance.serial_size,
+                        file_size=self._file_size,
+                        source="preload",
+                        error=f"Export #{index} ({instance.object_name}) offset+size {instance.serial_offset}+{instance.serial_size} 超出文件大小 {self._file_size}",
+                    )
+                )
+                instance._preloaded = True
+                self._preload_cache[index] = True
+                return
+
+            self._archive.seek(instance.serial_offset)
+
+            # Delayed import to avoid circular dependency at module load time.
+            from uasset_read.parsers.property_parser import (
+                parse_properties_from_export,
+            )
+
+            exp = self._export_map[index]
+            instance.serialized_properties = parse_properties_from_export(
+                exp,
+                self._archive,
+                self._summary,
+                self._name_map,
+                self._export_map,
+                self._import_map,
+                linker=self,
+                mappings=mappings,
+                game=game,
+                tolerant=tolerant,
+            )
             instance._preloaded = True
             self._preload_cache[index] = True
-            return
-
-        # === serial_size 验证 ===
-        # 负值检查（防止 offset+size 产生意外结果）
-        if instance.serial_size < 0:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="linker",
-                field="serial_size",
-                export_index=index,
-                object_name=instance.object_name,
-                target_offset=instance.serial_offset,
-                read_size=instance.serial_size,
-                file_size=self._file_size,
-                source="preload",
-                error=f"Export #{index} ({instance.object_name}) serial_size {instance.serial_size} 为负数",
-            ))
-            instance._preloaded = True
-            self._preload_cache[index] = True
-            return
-
-        # 零值跳过（在偏移校验之后执行，确保无效偏移先被诊断）
-        if instance.serial_size == 0:
-            instance._preloaded = True
-            self._preload_cache[index] = True
-            return
-
-        # 验证 serial_offset + serial_size 不超出文件
-        if instance.serial_offset + instance.serial_size > self._file_size:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="linker",
-                field="serial_size",
-                export_index=index,
-                object_name=instance.object_name,
-                target_offset=instance.serial_offset,
-                read_size=instance.serial_size,
-                file_size=self._file_size,
-                source="preload",
-                error=f"Export #{index} ({instance.object_name}) offset+size {instance.serial_offset}+{instance.serial_size} 超出文件大小 {self._file_size}",
-            ))
-            instance._preloaded = True
-            self._preload_cache[index] = True
-            return
-
-        self._archive.seek(instance.serial_offset)
-
-        # Delayed import to avoid circular dependency at module load time.
-        from uasset_read.parsers.property_parser import (
-            parse_properties_from_export,
-        )
-
-        exp = self._export_map[index]
-        instance.serialized_properties = parse_properties_from_export(
-            exp,
-            self._archive,
-            self._summary,
-            self._name_map,
-            self._export_map,
-            self._import_map,
-            linker=self,
-            mappings=mappings,
-            game=game,
-            tolerant=tolerant,
-        )
-        instance._preloaded = True
-        self._preload_cache[index] = True
 
     def _collect_root_objects(self) -> None:
         """Collect objects with no outer into _root_objects."""
         self._root_objects = [
             inst
             for inst in self._import_objects + self._export_objects
-            if inst.outer_index is None
-            or inst.outer_index.is_null
+            if inst.outer_index is None or inst.outer_index.is_null
         ]
 
     def post_load(self) -> None:
@@ -462,16 +490,20 @@ class PackageLinker:
         支持 int 和 PackageIndex 两种值类型。
         """
         from uasset_read.serializers.object_resources import PackageIndex
+
         for inst in self._export_objects:
             if not inst._preloaded:
                 continue
-            if not hasattr(inst, 'serialized_properties') or not inst.serialized_properties:
+            if (
+                not hasattr(inst, "serialized_properties")
+                or not inst.serialized_properties
+            ):
                 continue
             for prop in inst.serialized_properties:
                 if not isinstance(prop, dict):
                     continue
-                if prop.get('type') == 'ObjectProperty':
-                    pkg_idx = prop.get('value')
+                if prop.get("type") == "ObjectProperty":
+                    pkg_idx = prop.get("value")
                     if isinstance(pkg_idx, PackageIndex):
                         resolved = self.resolve_package_index(pkg_idx)
                     elif isinstance(pkg_idx, int):
@@ -479,8 +511,8 @@ class PackageLinker:
                     else:
                         continue
                     if resolved:
-                        prop_name = prop.get('name', '')
-                        if not hasattr(inst, 'property_references'):
+                        prop_name = prop.get("name", "")
+                        if not hasattr(inst, "property_references"):
                             inst.property_references = {}
                         inst.property_references[prop_name] = resolved
 
@@ -491,16 +523,20 @@ class PackageLinker:
         支持 int 和 PackageIndex 两种值类型。
         """
         from uasset_read.serializers.object_resources import PackageIndex
+
         for inst in self._export_objects:
             if not inst._preloaded:
                 continue
-            if not hasattr(inst, 'serialized_properties') or not inst.serialized_properties:
+            if (
+                not hasattr(inst, "serialized_properties")
+                or not inst.serialized_properties
+            ):
                 continue
             for prop in inst.serialized_properties:
                 if not isinstance(prop, dict):
                     continue
-                if prop.get('type') == 'WeakObjectProperty':
-                    pkg_idx = prop.get('value')
+                if prop.get("type") == "WeakObjectProperty":
+                    pkg_idx = prop.get("value")
                     if isinstance(pkg_idx, PackageIndex):
                         resolved = self.resolve_package_index(pkg_idx)
                     elif isinstance(pkg_idx, int):
@@ -518,19 +554,27 @@ class PackageLinker:
         """
         errors = []
         for idx, imp in enumerate(self._import_map):
-            inst = self._import_objects[idx] if idx < len(self._import_objects) else None
+            inst = (
+                self._import_objects[idx] if idx < len(self._import_objects) else None
+            )
             if inst is None:
                 continue
 
             # 验证 class_name 在 name_map 中的有效性
             if isinstance(imp.class_name, int):
                 if imp.class_name < 0 or imp.class_name >= len(self._name_map):
-                    errors.append(f"Import {inst.object_name}: class_name index {imp.class_name} 越界")
+                    errors.append(
+                        f"Import {inst.object_name}: class_name index {imp.class_name} 越界"
+                    )
             elif isinstance(imp.class_name, str) and not imp.class_name:
                 errors.append(f"Import {inst.object_name}: class_name 为空")
 
             # 验证 outer_index
-            if hasattr(imp, 'outer_index') and imp.outer_index and not imp.outer_index.is_null:
+            if (
+                hasattr(imp, "outer_index")
+                and imp.outer_index
+                and not imp.outer_index.is_null
+            ):
                 outer_inst = self.resolve_package_index(imp.outer_index)
                 if outer_inst is None:
                     # World Partition 子包的 hashed 路径（如 /Script/Engine_3103784960）
@@ -543,7 +587,9 @@ class PackageLinker:
                             obj_name,
                         )
                     else:
-                        errors.append(f"Import {inst.object_name}: outer_index 无法解析")
+                        errors.append(
+                            f"Import {inst.object_name}: outer_index 无法解析"
+                        )
 
         return errors
 
@@ -556,7 +602,11 @@ class PackageLinker:
             if idx >= len(self._export_map):
                 continue
             exp = self._export_map[idx]
-            if hasattr(exp, 'template_index') and exp.template_index and not exp.template_index.is_null:
+            if (
+                hasattr(exp, "template_index")
+                and exp.template_index
+                and not exp.template_index.is_null
+            ):
                 template = self.resolve_package_index(exp.template_index)
                 if template:
                     inst.template_object = template
@@ -571,7 +621,7 @@ class PackageLinker:
 
         DependsMap[export_index] = [FPackageIndex 列表]
         """
-        if not hasattr(self._summary, 'depends_map') or not self._summary.depends_map:
+        if not hasattr(self._summary, "depends_map") or not self._summary.depends_map:
             return
 
         from uasset_read.serializers.object_resources import PackageIndex
@@ -591,13 +641,15 @@ class PackageLinker:
 
                 # 类型校验：仅接受 int 类型的 FPackageIndex 值
                 if not isinstance(raw_dep, int):
-                    self._diagnostics.append(OffsetRangeDiagnostic(
-                        module="linker",
-                        field="DependsMap",
-                        export_index=exp_idx,
-                        source="_build_dependency_graph",
-                        error=f"Export #{exp_idx} dependency 值类型异常: {type(raw_dep).__name__}({raw_dep})",
-                    ))
+                    self._diagnostics.append(
+                        OffsetRangeDiagnostic(
+                            module="linker",
+                            field="DependsMap",
+                            export_index=exp_idx,
+                            source="_build_dependency_graph",
+                            error=f"Export #{exp_idx} dependency 值类型异常: {type(raw_dep).__name__}({raw_dep})",
+                        )
+                    )
                     continue
 
                 # Convert FPackageIndex to UObjectInstance
@@ -608,11 +660,13 @@ class PackageLinker:
                     inst.dependencies.append(resolved)
                 else:
                     # Record diagnostic for unresolvable dependency
-                    self._diagnostics.append(OffsetRangeDiagnostic(
-                        module="linker",
-                        field="DependsMap",
-                        export_index=exp_idx,
-                        target_offset=raw_dep,
-                        source="_build_dependency_graph",
-                        error=f"Export #{exp_idx} dependency {raw_dep} could not be resolved",
-                    ))
+                    self._diagnostics.append(
+                        OffsetRangeDiagnostic(
+                            module="linker",
+                            field="DependsMap",
+                            export_index=exp_idx,
+                            target_offset=raw_dep,
+                            source="_build_dependency_graph",
+                            error=f"Export #{exp_idx} dependency {raw_dep} could not be resolved",
+                        )
+                    )

@@ -1,41 +1,56 @@
-"""日志配置测试。"""
+"""Tests for LogConfig.format field and configure_project_logging format param."""
+
+from __future__ import annotations
+
 import logging
+import tempfile
+from pathlib import Path
+
 import pytest
 
+from uasset_read.config import LogConfig
+from uasset_read.project_logging import (
+    JSONFormatter,
+    configure_project_logging,
+    _reset_logging_state_for_tests,
+)
 
-class TestLoggingLevelSpec:
-    """#342: 日志级别规范测试。"""
 
-    def test_logger_has_expected_handlers(self):
-        """验证项目 logger 有正确的 handler 配置。"""
-        from uasset_read.project_logging import configure_project_logging, _reset_logging_state_for_tests
-        import tempfile
-        from pathlib import Path
+class TestLogConfigFormat:
+    """LogConfig.format field."""
 
+    def test_default_format_is_text(self):
+        cfg = LogConfig()
+        assert cfg.format == "text"
+
+    def test_json_format_in_kwargs(self):
+        cfg = LogConfig(format="json")
+        kwargs = cfg.to_configure_kwargs()
+        assert kwargs.get("format") == "json"
+
+    def test_text_format_not_in_kwargs(self):
+        cfg = LogConfig(format="text")
+        kwargs = cfg.to_configure_kwargs()
+        assert "format" not in kwargs
+
+
+class TestConfigureLoggingFormat:
+    """configure_project_logging() format parameter."""
+
+    def test_json_format_uses_json_formatter(self):
         _reset_logging_state_for_tests()
         with tempfile.TemporaryDirectory() as tmp:
-            configure_project_logging(
-                log_dir=Path(tmp),
-                level="DEBUG",
-            )
+            configure_project_logging(log_dir=Path(tmp), level="DEBUG", format="json")
             logger = logging.getLogger("uasset_read")
-            assert len(logger.handlers) > 0
-            # 在退出临时目录前关闭 handler，避免文件锁
+            handler = logger.handlers[-1]
+            assert isinstance(handler.formatter, JSONFormatter)
             _reset_logging_state_for_tests()
 
-    def test_log_level_can_be_configured(self):
-        """验证日志级别可通过参数配置。"""
-        from uasset_read.project_logging import configure_project_logging, _reset_logging_state_for_tests
-        import tempfile
-        from pathlib import Path
-
+    def test_text_format_uses_standard_formatter(self):
         _reset_logging_state_for_tests()
         with tempfile.TemporaryDirectory() as tmp:
-            configure_project_logging(
-                log_dir=Path(tmp),
-                level="WARNING",
-            )
+            configure_project_logging(log_dir=Path(tmp), level="DEBUG", format="text")
             logger = logging.getLogger("uasset_read")
-            assert logger.level <= logging.WARNING
-            # 在退出临时目录前关闭 handler，避免文件锁
+            handler = logger.handlers[-1]
+            assert not isinstance(handler.formatter, JSONFormatter)
             _reset_logging_state_for_tests()

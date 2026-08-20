@@ -20,17 +20,19 @@ EXIT_ARGUMENT_ERROR = 3
 # Package文件标签（来自UE源码）
 # ============================================================================
 
-PACKAGE_FILE_TAG = 0x9E2A83C1       # 正确字节序魔术标签
+PACKAGE_FILE_TAG = 0x9E2A83C1  # 正确字节序魔术标签
 PACKAGE_FILE_TAG_SWAPPED = 0xC1832A9E  # 交换字节序魔术标签
 
 # ============================================================================
 # 版本常量
 # ============================================================================
 
-UE5_VERSION_MIN = 0                # UE5 版本最低值
-UE5_LEGACY_VERSION = -9            # UE5.6+ 文件的 LegacyFileVersion 固定值
+UE5_VERSION_MIN = 0  # UE5 版本最低值
+UE5_LEGACY_VERSION = -9  # UE5.6+ 文件的 LegacyFileVersion 固定值
 # -8: FileVersionUE5 字段加入, -7: 纹理分配信息移除, -6: 自定义版本序列化优化
-UE5_LEGACY_VERSIONS = frozenset({-6, -7, -8, UE5_LEGACY_VERSION})  # 支持的 UE5 LegacyFileVersion
+UE5_LEGACY_VERSIONS = frozenset(
+    {-6, -7, -8, UE5_LEGACY_VERSION}
+)  # 支持的 UE5 LegacyFileVersion
 
 # UE4 LegacyFileVersion（GUID-based custom versions）
 # -3: GUID-based custom versions, 有 LegacyUE3Version
@@ -51,33 +53,35 @@ FFRAMEWORK_OBJECT_VERSION_GUID = "CFFC743F-43B04480-939114DF-171D2073"
 # 边界验证常量（防御性编程）
 # ============================================================================
 
-MAX_NAME_COUNT = 10_000_000        # Maximum name table entries
-MAX_IMPORT_COUNT = 1_000_000       # Maximum import table entries
-MAX_EXPORT_COUNT = 1_000_000       # Maximum export table entries
-MAX_TOTAL_OBJECT_COUNT = 500_000   # Maximum import + export combined entries
-MAX_CUSTOM_VERSIONS = 10_000       # Maximum custom version entries
-MAX_GENERATIONS = 10_000           # Maximum Generations table entries
-MAX_COMPRESSED_CHUNKS = 100_000    # Maximum CompressedChunks entries
+MAX_NAME_COUNT = 10_000_000  # Maximum name table entries
+MAX_IMPORT_COUNT = 1_000_000  # Maximum import table entries
+MAX_EXPORT_COUNT = 1_000_000  # Maximum export table entries
+MAX_TOTAL_OBJECT_COUNT = 500_000  # Maximum import + export combined entries
+MAX_CUSTOM_VERSIONS = 10_000  # Maximum custom version entries
+MAX_GENERATIONS = 10_000  # Maximum Generations table entries
+MAX_COMPRESSED_CHUNKS = 100_000  # Maximum CompressedChunks entries
 MAX_SOFT_PACKAGE_REFS = 1_000_000  # Maximum SoftPackageReferences entries
-MMAP_THRESHOLD = 10 * 1024 * 1024  # 10MB - switch to mmap above this (降低阈值，减少内存峰值)
-MAX_PROPERTY_COUNT = 10_000        # Property loop limit
-MAX_RECURSION_DEPTH = 50           # 属性嵌套最大递归深度（防止恶意/畸形资产栈溢出）
-MIN_UASSET_SIZE = 64               # 最小合法 .uasset 文件大小（字节）
-                                      # 包含 Tag(4) + 版本字段(16~20) + LicenseeVer(4) + Hash(20) + HeaderSize(4) 的最小值
-MAX_ARRAY_COUNT = 1_000_000       # Maximum ArrayProperty elements (per HIGH-07/35d-01)
-MAX_FSTRING_LENGTH = 10_000_000   # 10 MB — FString maximum length (UTF-8/UTF-16)
+MMAP_THRESHOLD = (
+    10 * 1024 * 1024
+)  # 10MB - switch to mmap above this (降低阈值，减少内存峰值)
+MAX_PROPERTY_COUNT = 10_000  # Property loop limit
+MAX_RECURSION_DEPTH = 50  # 属性嵌套最大递归深度（防止恶意/畸形资产栈溢出）
+MIN_UASSET_SIZE = 64  # 最小合法 .uasset 文件大小（字节）
+# 包含 Tag(4) + 版本字段(16~20) + LicenseeVer(4) + Hash(20) + HeaderSize(4) 的最小值
+MAX_ARRAY_COUNT = 1_000_000  # Maximum ArrayProperty elements (per HIGH-07/35d-01)
+MAX_FSTRING_LENGTH = 10_000_000  # 10 MB — FString maximum length (UTF-8/UTF-16)
 
 # ============================================================================
 # PropertyTag标志
 # ============================================================================
 
 PROP_TAG_NONE = 0x00
-PROP_TAG_HAS_ARRAY_INDEX = 0x01      # ArrayIndex field present
-PROP_TAG_HAS_PROPERTY_GUID = 0x02    # PropertyGuid field present
-PROP_TAG_HAS_EXTENSIONS = 0x04       # Extension data
-PROP_TAG_HAS_BINARY_OR_NATIVE = 0x08 # Binary/native serialize
-PROP_TAG_BOOL_TRUE = 0x10            # Bool value is true
-PROP_TAG_SKIPPED_SERIALIZE = 0x20    # Skipped serialize
+PROP_TAG_HAS_ARRAY_INDEX = 0x01  # ArrayIndex field present
+PROP_TAG_HAS_PROPERTY_GUID = 0x02  # PropertyGuid field present
+PROP_TAG_HAS_EXTENSIONS = 0x04  # Extension data
+PROP_TAG_HAS_BINARY_OR_NATIVE = 0x08  # Binary/native serialize
+PROP_TAG_BOOL_TRUE = 0x10  # Bool value is true
+PROP_TAG_SKIPPED_SERIALIZE = 0x20  # Skipped serialize
 
 # ============================================================================
 # PropertyTag版本阈值
@@ -90,35 +94,39 @@ PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012  # UE5 format switch threshold
 # 来源: UE 源码 ObjectMacros.h
 # ============================================================================
 
-PKG_None                        = 0x00000000  # No flags — 仅用于 decode_package_flags
-PKG_NewlyCreated                = 0x00000001  # Newly created package, not saved yet. In editor only.
-PKG_ClientOptional              = 0x00000002  # Purely optional for clients.
-PKG_ServerSideOnly              = 0x00000004  # Only needed on the server side.
-PKG_CompiledIn                  = 0x00000010  # This package is from "compiled in" classes.
-PKG_ForDiffing                  = 0x00000020  # This package was loaded just for the purposes of diffing
-PKG_EditorOnly                  = 0x00000040  # This is editor-only package (for example: editor module script package)
-PKG_Developer                   = 0x00000080  # Developer module
-PKG_UncookedOnly                = 0x00000100  # Loaded only in uncooked builds (i.e. runtime in editor)
-PKG_Cooked                      = 0x00000200  # Package is cooked
-PKG_ContainsNoAsset             = 0x00000400  # Package doesn't contain any asset object (although asset tags can be present)
-PKG_NotExternallyReferenceable  = 0x00000800  # Objects in this package cannot be referenced in a different plugin or mount point (i.e /Game -> /Engine)
+PKG_None = 0x00000000  # No flags — 仅用于 decode_package_flags
+PKG_NewlyCreated = 0x00000001  # Newly created package, not saved yet. In editor only.
+PKG_ClientOptional = 0x00000002  # Purely optional for clients.
+PKG_ServerSideOnly = 0x00000004  # Only needed on the server side.
+PKG_CompiledIn = 0x00000010  # This package is from "compiled in" classes.
+PKG_ForDiffing = 0x00000020  # This package was loaded just for the purposes of diffing
+PKG_EditorOnly = 0x00000040  # This is editor-only package (for example: editor module script package)
+PKG_Developer = 0x00000080  # Developer module
+PKG_UncookedOnly = 0x00000100  # Loaded only in uncooked builds (i.e. runtime in editor)
+PKG_Cooked = 0x00000200  # Package is cooked
+PKG_ContainsNoAsset = 0x00000400  # Package doesn't contain any asset object (although asset tags can be present)
+PKG_NotExternallyReferenceable = 0x00000800  # Objects in this package cannot be referenced in a different plugin or mount point (i.e /Game -> /Engine)
 PKG_AccessSpecifierEpicInternal = 0x00001000  # Objects in this package can only be referenced in a different plugin or mount point by Epic
-PKG_UnversionedProperties       = 0x00002000  # Uses unversioned property serialization instead of versioned tagged property serialization
-PKG_ContainsMapData             = 0x00004000  # Contains map data (UObjects only referenced by a single ULevel) but is stored in a different package
-PKG_IsSaving                    = 0x00008000  # Temporarily set on a package while it is being saved.
-PKG_Compiling                   = 0x00010000  # package is currently being compiled
-PKG_ContainsMap                 = 0x00020000  # Set if the package contains a ULevel/ UWorld object
-PKG_RequiresLocalizationGather  = 0x00040000  # Set if the package contains any data to be gathered by localization
-PKG_LoadUncooked                = 0x00080000  # This package must be loaded uncooked from IoStore/ZenStore
-PKG_PlayInEditor                = 0x00100000  # Set if the package was created for the purpose of PIE
-PKG_ContainsScript              = 0x00200000  # Package is allowed to contain UClass objects
-PKG_DisallowExport              = 0x00400000  # Editor should not export asset in this package
+PKG_UnversionedProperties = 0x00002000  # Uses unversioned property serialization instead of versioned tagged property serialization
+PKG_ContainsMapData = 0x00004000  # Contains map data (UObjects only referenced by a single ULevel) but is stored in a different package
+PKG_IsSaving = 0x00008000  # Temporarily set on a package while it is being saved.
+PKG_Compiling = 0x00010000  # package is currently being compiled
+PKG_ContainsMap = 0x00020000  # Set if the package contains a ULevel/ UWorld object
+PKG_RequiresLocalizationGather = (
+    0x00040000  # Set if the package contains any data to be gathered by localization
+)
+PKG_LoadUncooked = (
+    0x00080000  # This package must be loaded uncooked from IoStore/ZenStore
+)
+PKG_PlayInEditor = 0x00100000  # Set if the package was created for the purpose of PIE
+PKG_ContainsScript = 0x00200000  # Package is allowed to contain UClass objects
+PKG_DisallowExport = 0x00400000  # Editor should not export asset in this package
 # 0x00800000, 0x01000000, 0x02000000, 0x04000000 — reserved/unused
-PKG_CookGenerated               = 0x08000000  # This package was generated by the cooker and does not exist in the WorkspaceDomain
-PKG_DynamicImports              = 0x10000000  # Obsolete (deprecated in UE 5.8)
-PKG_RuntimeGenerated            = 0x20000000  # This package contains elements that are runtime generated, and may not follow standard loading order rules
-PKG_ReloadingForCooker          = 0x40000000  # This package is reloading in the cooker, try to avoid getting data we will never need.
-PKG_FilterEditorOnly            = 0x80000000  # Package has editor-only data filtered out
+PKG_CookGenerated = 0x08000000  # This package was generated by the cooker and does not exist in the WorkspaceDomain
+PKG_DynamicImports = 0x10000000  # Obsolete (deprecated in UE 5.8)
+PKG_RuntimeGenerated = 0x20000000  # This package contains elements that are runtime generated, and may not follow standard loading order rules
+PKG_ReloadingForCooker = 0x40000000  # This package is reloading in the cooker, try to avoid getting data we will never need.
+PKG_FilterEditorOnly = 0x80000000  # Package has editor-only data filtered out
 
 # 组合标志位（UE 源码宏定义）
 PKG_TransientFlags = PKG_NewlyCreated | PKG_IsSaving | PKG_ReloadingForCooker
@@ -169,15 +177,16 @@ def decode_package_flags(flags: int) -> list[str]:
         result.append(f"Unknown_{remaining:#010x}")
     return result if result else ["PKG_None"]
 
+
 # ============================================================================
 # 蓝图图解析安全常量
 # ============================================================================
 
-MAX_PINS_PER_NODE = 1000               # 单节点最大引脚数
-MAX_NODES_PER_GRAPH = 5000             # 单图最大节点数
-MAX_SUBGRAPHS = 1000                   # 单图最大子图数（损坏资产防御）
-MAX_LINKEDTO_PER_PIN = 100             # 单引脚最大连接数
-MAX_FTEXT_CONSUMPTION = 10_240         # 10 KB — FText 解析安全网最大字节消耗
+MAX_PINS_PER_NODE = 1000  # 单节点最大引脚数
+MAX_NODES_PER_GRAPH = 5000  # 单图最大节点数
+MAX_SUBGRAPHS = 1000  # 单图最大子图数（损坏资产防御）
+MAX_LINKEDTO_PER_PIN = 100  # 单引脚最大连接数
+MAX_FTEXT_CONSUMPTION = 10_240  # 10 KB — FText 解析安全网最大字节消耗
 
 # ============================================================================
 # 轻量容错解析阈值
@@ -192,12 +201,14 @@ LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD = 300  # export_count 超过此值时启用
 CONTROL_RIG_LARGE_FILE_THRESHOLD = 50000  # ControlRig 类文件的轻量解析阈值
 
 # 已知大型文件类名子串 — export class 名称包含以下任一子串时使用高阈值
-CONTROL_RIG_LARGE_FILE_CLASSES = frozenset({
-    "ControlRig",
-    "RigHierarchy",
-    "RigVM",
-    "RigUnit",
-})
+CONTROL_RIG_LARGE_FILE_CLASSES = frozenset(
+    {
+        "ControlRig",
+        "RigHierarchy",
+        "RigVM",
+        "RigUnit",
+    }
+)
 
 # ============================================================================
 # FPropertyTypeName type node read limit
@@ -226,7 +237,9 @@ UE5_ADD_SOFTOBJECTPATH_LIST = 1008
 UE5_DATA_RESOURCES = 1009
 UE5_SCRIPT_SERIALIZATION_OFFSET = 1010
 UE5_PROPERTY_TAG_EXTENSION = 1011
-UE5_PROPERTY_TAG_COMPLETE_TYPE_NAME = PROPERTY_TAG_COMPLETE_TYPE_NAME  # alias (same value 1012)
+UE5_PROPERTY_TAG_COMPLETE_TYPE_NAME = (
+    PROPERTY_TAG_COMPLETE_TYPE_NAME  # alias (same value 1012)
+)
 UE5_ASSETREGISTRY_PACKAGEBUILDDEPENDENCIES = 1013
 UE5_METADATA_SERIALIZATION_OFFSET = 1014
 UE5_VERSE_CELLS = 1015
@@ -244,7 +257,9 @@ UE4_SERIALIZE_TEXT_IN_PACKAGES = 459
 UE4_ADDED_SEARCHABLE_NAMES = 510
 UE4_ADDED_PACKAGE_OWNER = 518
 UE4_NON_OUTER_PACKAGE_IMPORT = 520
-UE4_NAME_HASHES_SERIALIZED = 504  # VER_UE4_NAME_HASHES_SERIALIZED: 名称表条目后添加 4 字节哈希 (UE 4.14+)
+UE4_NAME_HASHES_SERIALIZED = (
+    504  # VER_UE4_NAME_HASHES_SERIALIZED: 名称表条目后添加 4 字节哈希 (UE 4.14+)
+)
 UE4_LOAD_FOR_EDITOR_GAME = 365
 UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 485
 UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 507
@@ -320,62 +335,70 @@ FRELEASE_VERSION_PIN_TYPE_UOBJECT_WRAPPER = 10
 # 蓝图元数据键（UE 编辑器内部字段）
 # ============================================================================
 
-BLUEPRINT_METADATA_KEYS = frozenset({
-    "BlueprintSystemVersion",
-    "GeneratedClass",
-    "SimpleConstructionScript",
-    "bCanEverTick",
-    "bCanEverRender",
-    "bStartWithTickEnabled",
-    "bReplicates",
-    "NetUpdateFrequency",
-    "MinNetUpdateFrequency",
-    "NetPriority",
-})
+BLUEPRINT_METADATA_KEYS = frozenset(
+    {
+        "BlueprintSystemVersion",
+        "GeneratedClass",
+        "SimpleConstructionScript",
+        "bCanEverTick",
+        "bCanEverRender",
+        "bStartWithTickEnabled",
+        "bReplicates",
+        "NetUpdateFrequency",
+        "MinNetUpdateFrequency",
+        "NetPriority",
+    }
+)
 
 # ============================================================================
 # 控制流节点集合（用于蓝图图解析）
 # ============================================================================
 
-CONTROL_FLOW_NODES = frozenset({
-    "K2Node_IfThenElse",
-    "K2Node_Switch",
-    "K2Node_SwitchString",
-    "K2Node_SwitchEnum",
-    "K2Node_SwitchInteger",
-    "K2Node_MacroInstance",
-    # 循环类宏
-    "K2Node_ForLoop",
-    "K2Node_WhileLoop",
-    "K2Node_DoOnce",
-    # 多门控
-    "K2Node_Sequence",
-    "K2Node_MultiGate",
-    # 选择
-    "K2Node_Select",
-    "K2Node_ExecutionSequence",
-})
+CONTROL_FLOW_NODES = frozenset(
+    {
+        "K2Node_IfThenElse",
+        "K2Node_Switch",
+        "K2Node_SwitchString",
+        "K2Node_SwitchEnum",
+        "K2Node_SwitchInteger",
+        "K2Node_MacroInstance",
+        # 循环类宏
+        "K2Node_ForLoop",
+        "K2Node_WhileLoop",
+        "K2Node_DoOnce",
+        # 多门控
+        "K2Node_Sequence",
+        "K2Node_MultiGate",
+        # 选择
+        "K2Node_Select",
+        "K2Node_ExecutionSequence",
+    }
+)
 
 # ============================================================================
 # 开始事件类型集合
 # ============================================================================
 
-START_EVENT_TYPES = frozenset({
-    "K2Node_Event",
-    "K2Node_EnhancedInputAction",
-    "K2Node_VariableSet",
-    "K2Node_CustomEvent",
-    "K2Node_FunctionEntry",  # 函数图执行流起点
-})
+START_EVENT_TYPES = frozenset(
+    {
+        "K2Node_Event",
+        "K2Node_EnhancedInputAction",
+        "K2Node_VariableSet",
+        "K2Node_CustomEvent",
+        "K2Node_FunctionEntry",  # 函数图执行流起点
+    }
+)
 
 # ============================================================================
 # 数据流边界节点集合
 # ============================================================================
 
-DATA_BOUNDARY_NODES = frozenset({
-    "K2Node_FunctionEntry",  # 函数参数输出作为数据流起点
-    "K2Node_VariableSet",    # 本地变量定义（边界）
-})
+DATA_BOUNDARY_NODES = frozenset(
+    {
+        "K2Node_FunctionEntry",  # 函数参数输出作为数据流起点
+        "K2Node_VariableSet",  # 本地变量定义（边界）
+    }
+)
 
 # ============================================================================
 # EnhancedInput TriggerEvent 引脚映射
@@ -430,47 +453,47 @@ GRAPH_TYPE_MAP = {
 # 源码: Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectMacros.h
 # ============================================================================
 
-CPF_Edit = 0x0000000000000001          # L434
-CPF_ConstParm = 0x0000000000000002     # L435
+CPF_Edit = 0x0000000000000001  # L434
+CPF_ConstParm = 0x0000000000000002  # L435
 CPF_BlueprintVisible = 0x0000000000000004  # L436
 CPF_ExportObject = 0x0000000000000008  # L437
 CPF_BlueprintReadOnly = 0x0000000000000010  # L438
-CPF_Net = 0x0000000000000020          # L439
+CPF_Net = 0x0000000000000020  # L439
 CPF_EditFixedSize = 0x0000000000000040  # L440
-CPF_Parm = 0x0000000000000080         # L441
-CPF_OutParm = 0x0000000000000100      # L442
+CPF_Parm = 0x0000000000000080  # L441
+CPF_OutParm = 0x0000000000000100  # L442
 CPF_ZeroConstructor = 0x0000000000000200  # L443
-CPF_ReturnParm = 0x0000000000000400   # L444
+CPF_ReturnParm = 0x0000000000000400  # L444
 CPF_DisableEditOnTemplate = 0x0000000000000800  # L445
 CPF_NonNullable = 0x0000000000001000  # L446
-CPF_Transient = 0x0000000000002000    # L447
-CPF_Config = 0x0000000000004000       # L448
+CPF_Transient = 0x0000000000002000  # L447
+CPF_Config = 0x0000000000004000  # L448
 CPF_RequiredParm = 0x0000000000008000  # L449
 CPF_DisableEditOnInstance = 0x0000000000010000  # L450
-CPF_EditConst = 0x0000000000020000    # L451
+CPF_EditConst = 0x0000000000020000  # L451
 CPF_GlobalConfig = 0x0000000000040000  # L452
 CPF_InstancedReference = 0x0000000000080000  # L453
 # L454: CPF_ExperimentalExternalObjects omitted — UE5 experimental, no UPROPERTY semantic mapping
 CPF_DuplicateTransient = 0x0000000000200000  # L455
-CPF_SaveGame = 0x0000000001000000     # L458
-CPF_NoClear = 0x0000000002000000      # L459
-CPF_Virtual = 0x0000000004000000      # L460
+CPF_SaveGame = 0x0000000001000000  # L458
+CPF_NoClear = 0x0000000002000000  # L459
+CPF_Virtual = 0x0000000004000000  # L460
 CPF_ReferenceParm = 0x0000000008000000  # L461
 CPF_BlueprintAssignable = 0x0000000010000000  # L462
-CPF_Deprecated = 0x0000000020000000   # L463
+CPF_Deprecated = 0x0000000020000000  # L463
 CPF_IsPlainOldData = 0x0000000040000000  # L464
-CPF_RepSkip = 0x0000000080000000      # L465
-CPF_RepNotify = 0x0000000100000000    # L466
-CPF_Interp = 0x0000000200000000       # L467
+CPF_RepSkip = 0x0000000080000000  # L465
+CPF_RepNotify = 0x0000000100000000  # L466
+CPF_Interp = 0x0000000200000000  # L467
 CPF_NonTransactional = 0x0000000400000000  # L468
-CPF_EditorOnly = 0x0000000800000000   # L469
+CPF_EditorOnly = 0x0000000800000000  # L469
 CPF_NoDestructor = 0x0000001000000000  # L470
-CPF_AutoWeak = 0x0000004000000000     # L472
+CPF_AutoWeak = 0x0000004000000000  # L472
 CPF_ContainsInstancedReference = 0x0000008000000000  # L473
 CPF_AssetRegistrySearchable = 0x0000010000000000  # L474
 CPF_SimpleDisplay = 0x0000020000000000  # L475
 CPF_AdvancedDisplay = 0x0000040000000000  # L476
-CPF_Protected = 0x0000080000000000    # L477
+CPF_Protected = 0x0000080000000000  # L477
 CPF_BlueprintCallable = 0x0000100000000000  # L478
 CPF_BlueprintAuthorityOnly = 0x0000200000000000  # L479
 CPF_TextExportTransient = 0x0000400000000000  # L480
@@ -483,7 +506,7 @@ CPF_NativeAccessSpecifierPublic = 0x0010000000000000  # L486
 CPF_NativeAccessSpecifierProtected = 0x0020000000000000  # L487
 CPF_NativeAccessSpecifierPrivate = 0x0040000000000000  # L488
 CPF_SkipSerialization = 0x0080000000000000  # L489
-CPF_TObjectPtr = 0x0100000000000000   # L490
+CPF_TObjectPtr = 0x0100000000000000  # L490
 CPF_ExperimentalOverridableLogic = 0x0200000000000000  # L491
 CPF_ExperimentalAlwaysOverriden = 0x0400000000000000  # L492
 CPF_ExperimentalNeverOverriden = 0x0800000000000000  # L493
@@ -494,13 +517,16 @@ CPF_ForcePostConstructLink = 0x2000000000000000  # L495
 # 游戏变体枚举（GameVariant）
 # ============================================================================
 
+
 class GameVariant(IntEnum):
     """游戏变体枚举。"""
+
     NONE = 0
     FORTNITE = 1001
     PUBG = 1002
     APEX_LEGENDS = 1003
     VALORANT = 1004
+
 
 # 版本映射表
 GAME_VARIANT_VERSIONS = {
@@ -562,11 +588,14 @@ UE_NONE_SENTINEL = "None"
 # 通用安全计数上限
 # ============================================================================
 
-MAX_SAFE_COUNT = 10_000  # 用于 FText args / MulticastDelegate / FieldPath 等子元素计数验证
+MAX_SAFE_COUNT = (
+    10_000  # 用于 FText args / MulticastDelegate / FieldPath 等子元素计数验证
+)
 
 # ============================================================================
 # GUID 字节格式化
 # ============================================================================
+
 
 def format_guid_bytes(data: bytes, uppercase: bool = True) -> str:
     """将 16 原始 FGuid 字节格式化为稳定的 8-4-4-4-12 字符串。"""
@@ -596,12 +625,14 @@ def get_game_variant_config(variant: GameVariant) -> dict:
 
 MAX_REASONABLE_CAP = 100 * 1024 * 1024  # 100 MB — 标准属性大小上限
 
-UE5_LARGE_PROPERTY_TYPES = frozenset({
-    "BoneAnimationTracks",
-    "PoseContainer",
-    "ArrayConnectionMap",
-    "RigVM",
-})
+UE5_LARGE_PROPERTY_TYPES = frozenset(
+    {
+        "BoneAnimationTracks",
+        "PoseContainer",
+        "ArrayConnectionMap",
+        "RigVM",
+    }
+)
 
 UE5_LARGE_PROPERTY_MAX_REASONABLE = 500 * 1024 * 1024  # 500 MB — UE5 大型属性上限
 

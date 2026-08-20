@@ -126,16 +126,19 @@ def test_batch_summary_counts():
     result.skipped = [("d.json", "memory limit")]
     result.failed = [("e.json", "parse error", ""), ("f.json", "timeout", "")]
 
-    with patch.object(logging.getLogger("uasset_read.core"), "info") as mock_info:
+    with patch.object(logging.getLogger("uasset_read.core"), "log") as mock_log:
         _log_batch_summary(result, elapsed_seconds=5.0)
-        mock_info.assert_called_once()
-        args, kwargs = mock_info.call_args
-        assert args[1] == 6
-        assert args[2] == 3
-        assert args[3] == 1
-        assert args[4] == 1
-        assert args[5] == 2
-        assert args[6] == 5.0
+        mock_log.assert_called_once()
+        args, kwargs = mock_log.call_args
+        # log_event calls logger.log(level, "event=%s %s", event, field_str)
+        # args = (INFO, "event=%s %s", "batch_summary", "total=6 success=3 ...")
+        assert args[0] == logging.INFO
+        assert args[2] == "batch_summary"
+        field_str = args[3]
+        assert "total=6" in field_str
+        assert "success=3" in field_str
+        assert "partial=1" in field_str
+        assert "failed=2" in field_str
 
 
 def test_debug_aggregation_shows_counts():

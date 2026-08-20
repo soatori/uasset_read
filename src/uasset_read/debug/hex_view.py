@@ -41,7 +41,9 @@ class HexViewEntry:
         if isinstance(self.value, bytes):
             return self.value.hex()
         if isinstance(self.value, int):
-            byte_count = max(1, (self.value.bit_length() + 7) // 8) if self.value > 0 else 1
+            byte_count = (
+                max(1, (self.value.bit_length() + 7) // 8) if self.value > 0 else 1
+            )
             return f"0x{self.value:0{byte_count * 2}X}"
         return repr(self.value)
 
@@ -89,7 +91,9 @@ def format_hex_view(
 
     lines: list[str] = []
     if file_size > 0:
-        lines.append(f"HexView — {len(entries)} entries, file size: {file_size} (0x{file_size:X})")
+        lines.append(
+            f"HexView — {len(entries)} entries, file size: {file_size} (0x{file_size:X})"
+        )
     else:
         lines.append(f"HexView — {len(entries)} entries")
     lines.append("")
@@ -112,7 +116,9 @@ def format_hex_view(
         lines.append(f"{offset_str}  {size_str}  {key_str}  {type_str}  {val_str}")
 
     if len(sorted_entries) > max_entries:
-        lines.append(f"\n... ({len(sorted_entries) - max_entries} more entries truncated)")
+        lines.append(
+            f"\n... ({len(sorted_entries) - max_entries} more entries truncated)"
+        )
 
     return "\n".join(lines)
 

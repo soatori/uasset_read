@@ -2,6 +2,7 @@
 
 CLI、独立脚本、未来 Skill 共享此 API。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -19,12 +20,15 @@ from uasset_read.parse_uasset import parse_package, parse_uasset_with_linker
 from uasset_read.project_logging import (
     configure_project_logging,
     current_log_run_id,
+    log_event,
     new_log_run_id,
     scoped_project_logging,
 )
 from uasset_read.renderers import get_renderer, list_formats as _list_renderer_formats
 from uasset_read.renderers.base import RenderOptions
-from uasset_read.exceptions import ParseError as ParseError  # Re-export for backward compatibility
+from uasset_read.exceptions import (
+    ParseError as ParseError,
+)  # Re-export for backward compatibility
 
 if TYPE_CHECKING:
     from uasset_read.memory_safety import MemoryPolicy
@@ -38,23 +42,28 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BatchResult:
     """批量导出结果。"""
+
     total: int = 0
     success: list[str] = field(default_factory=list)
     partial: list[str] = field(default_factory=list)
     partial_reasons: dict[str, list[str]] = field(default_factory=dict)
     skipped: list[tuple[str, str]] = field(default_factory=list)
-    failed: list[tuple[str, str, str]] = field(default_factory=list)  # (path, error, details)
+    failed: list[tuple[str, str, str]] = field(
+        default_factory=list
+    )  # (path, error, details)
 
 
 def _log_batch_summary(result: BatchResult, elapsed_seconds: float = 0) -> None:
-    logging.getLogger(__name__).info(
-        "batch_summary total=%d success=%d partial=%d skipped=%d failed=%d elapsed=%.1fs",
-        result.total,
-        len(result.success),
-        len(result.partial),
-        len(result.skipped),
-        len(result.failed),
-        elapsed_seconds,
+    log_event(
+        logging.getLogger(__name__),
+        logging.INFO,
+        "batch_summary",
+        total=result.total,
+        success=len(result.success),
+        partial=len(result.partial),
+        skipped=len(result.skipped),
+        failed=len(result.failed),
+        elapsed_s=f"{elapsed_seconds:.1f}",
     )
 
 
@@ -77,14 +86,24 @@ def _configure_logging(
     """
     if log_config is not None:
         # 检测是否有旧参数也显式传入
-        has_legacy = any(v is not None and v != {
-            "log_level": None, "log_dir": None, "log_run_id": None,
-            "log_keep_latest": None, "log_max_total_bytes": None,
-        }.get(k) for k, v in {
-            "log_level": log_level, "log_dir": log_dir,
-            "log_run_id": log_run_id, "log_keep_latest": log_keep_latest,
-            "log_max_total_bytes": log_max_total_bytes,
-        }.items())
+        has_legacy = any(
+            v is not None
+            and v
+            != {
+                "log_level": None,
+                "log_dir": None,
+                "log_run_id": None,
+                "log_keep_latest": None,
+                "log_max_total_bytes": None,
+            }.get(k)
+            for k, v in {
+                "log_level": log_level,
+                "log_dir": log_dir,
+                "log_run_id": log_run_id,
+                "log_keep_latest": log_keep_latest,
+                "log_max_total_bytes": log_max_total_bytes,
+            }.items()
+        )
         if has_legacy:
             warnings.warn(
                 "同时传入 log_config 和旧风格日志参数，旧参数将被忽略。"
@@ -269,7 +288,9 @@ def _parse_and_render(
             config=parse_config,
         )
 
-    if not result.is_success and not _can_render_tolerant_json(result, format, tolerant):
+    if not result.is_success and not _can_render_tolerant_json(
+        result, format, tolerant
+    ):
         raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
 
     ir = build_package_ir(result)
@@ -452,9 +473,14 @@ def parse_batch(
 
     # #346: 智能混合模式 — 将导入移到循环外部
     if isolate_assets == "auto":
-        from uasset_read.memory_safety import should_isolate, check_file_size, FileSizeTier
+        from uasset_read.memory_safety import (
+            should_isolate,
+            check_file_size,
+            FileSizeTier,
+        )
 
     import time
+
     start_time = time.monotonic()
 
     for idx, pf in enumerate(package_files):
@@ -484,8 +510,12 @@ def parse_batch(
                     output_path=str(out_file),
                     parse_options=parse_options,
                     logging_options={
-                        "enabled": log_enabled if log_config is None else log_config.enabled,
-                        "level": (log_level or "DEBUG") if log_config is None else (log_config.level or "DEBUG"),
+                        "enabled": log_enabled
+                        if log_config is None
+                        else log_config.enabled,
+                        "level": (log_level or "DEBUG")
+                        if log_config is None
+                        else (log_config.level or "DEBUG"),
                         "log_dir": log_dir if log_config is None else log_config.dir,
                         "run_id": active_run_id,
                     },
@@ -498,7 +528,9 @@ def parse_batch(
                 if outcome.succeeded:
                     result.success.append(outcome.output_path)
                 else:
-                    result.failed.append((str(pf), outcome.error, outcome.error_details))
+                    result.failed.append(
+                        (str(pf), outcome.error, outcome.error_details)
+                    )
                 continue
 
             output_str, parse_result = _parse_and_render(
@@ -521,13 +553,16 @@ def parse_batch(
 
             # 检查 partial 状态并追踪原因
             from uasset_read.models.status import _result_status, PARTIAL_STATUSES
+
             status = _result_status(parse_result)
             if status == "partial":
                 result.partial.append(str(pf))
-                for exp in (getattr(parse_result, "export_map", None) or []):
+                for exp in getattr(parse_result, "export_map", None) or []:
                     exp_status = getattr(exp, "parse_status", None)
                     if exp_status and exp_status in PARTIAL_STATUSES:
-                        result.partial_reasons.setdefault(exp_status, []).append(str(pf))
+                        result.partial_reasons.setdefault(exp_status, []).append(
+                            str(pf)
+                        )
 
             # 原子写入：先写临时文件再 replace，避免中断产生不完整输出（#434）
             tmp_fd = -1
@@ -551,10 +586,13 @@ def parse_batch(
             result.success.append(str(out_file))
         except Exception as exc:
             import traceback
+
             tb = traceback.format_exc()
             error_msg = f"{type(exc).__name__}: {exc}"
             result.failed.append((str(pf), error_msg, tb))
-            logging.getLogger(__name__).error("parse_batch asset failed: %s — %s", pf, error_msg)
+            logging.getLogger(__name__).error(
+                "parse_batch asset failed: %s — %s", pf, error_msg
+            )
 
     elapsed = time.monotonic() - start_time
     _log_batch_summary(result, elapsed_seconds=elapsed)
@@ -622,9 +660,12 @@ def diff_single(
 
     if writer is None:
         from io import StringIO
+
         buf = StringIO()
         _diff_to(
-            file_path1, file_path2, buf,
+            file_path1,
+            file_path2,
+            buf,
             tolerant=tolerant,
             context_lines=context_lines,
             mappings_path=mappings_path,
@@ -633,7 +674,9 @@ def diff_single(
         )
         return buf.getvalue()
     _diff_to(
-        file_path1, file_path2, writer,
+        file_path1,
+        file_path2,
+        writer,
         tolerant=tolerant,
         context_lines=context_lines,
         mappings_path=mappings_path,
