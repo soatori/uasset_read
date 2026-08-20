@@ -10,7 +10,6 @@ from typing import IO, TYPE_CHECKING
 import logging
 import os
 import tempfile
-import warnings
 
 from uasset_read.batch_worker import BatchWorkerRequest, run_isolated_asset
 from uasset_read.config import LogConfig
@@ -19,6 +18,7 @@ from uasset_read.pipeline.core import parse_package, parse_uasset_with_linker
 from uasset_read.project_logging import (
     configure_project_logging,
     current_log_run_id,
+    log_event,
     new_log_run_id,
     scoped_project_logging,
 )
@@ -47,83 +47,22 @@ class BatchResult:
 
 
 def _log_batch_summary(result: BatchResult, elapsed_seconds: float = 0) -> None:
-    logging.getLogger(__name__).info(
-        "batch_summary total=%d success=%d partial=%d skipped=%d failed=%d elapsed=%.1fs",
-        result.total,
-        len(result.success),
-        len(result.partial),
-        len(result.skipped),
-        len(result.failed),
-        elapsed_seconds,
+    log_event(
+        logging.getLogger(__name__), logging.INFO, "batch_summary",
+        total=result.total,
+        success=len(result.success),
+        partial=len(result.partial),
+        skipped=len(result.skipped),
+        failed=len(result.failed),
+        elapsed_s=f"{elapsed_seconds:.1f}",
     )
 
 
-def _configure_logging(
-    *,
-    log_config: LogConfig | None = None,
-    log_level: str | None = None,
-    log_dir: str | None = None,
-    log_enabled: bool = True,
-    log_run_id: str | None = None,
-    log_keep_latest: int | None = None,
-    log_max_total_bytes: int | None = None,
-    log_cleanup: bool = False,
-    log_max_bytes: int = 10_000_000,
-    log_backup_count: int = 5,
-):
-    """配置项目日志。
-
-    优先使用 log_config（LogConfig 实例），旧风格参数保留兼容。
-    """
-    if log_config is not None:
-        # 检测是否有旧参数也显式传入
-        has_legacy = any(v is not None and v != {
-            "log_level": None, "log_dir": None, "log_run_id": None,
-            "log_keep_latest": None, "log_max_total_bytes": None,
-        }.get(k) for k, v in {
-            "log_level": log_level, "log_dir": log_dir,
-            "log_run_id": log_run_id, "log_keep_latest": log_keep_latest,
-            "log_max_total_bytes": log_max_total_bytes,
-        }.items())
-        if has_legacy:
-            warnings.warn(
-                "同时传入 log_config 和旧风格日志参数，旧参数将被忽略。"
-                "请统一使用 LogConfig。",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        return configure_project_logging(**log_config.to_configure_kwargs())
-
-    # 旧风格路径
-    effective_enabled = log_enabled and log_level != "off"
-    if (
-        log_level is None
-        and log_dir is None
-        and log_enabled is True
-        and log_run_id is None
-        and log_keep_latest is None
-        and log_max_total_bytes is None
-        and log_cleanup is False
-        and log_max_bytes == 10_000_000
-        and log_backup_count == 5
-    ):
+def _configure_logging(*, log_config: LogConfig | None = None):
+    """Configure project logging from a LogConfig instance."""
+    if log_config is None:
         return None
-    kwargs = {
-        "level": log_level or "DEBUG",
-        "log_dir": log_dir,
-        "enabled": effective_enabled,
-        "max_bytes": log_max_bytes,
-        "backup_count": log_backup_count,
-    }
-    if log_run_id is not None:
-        kwargs["run_id"] = log_run_id
-    if log_keep_latest is not None:
-        kwargs["keep_latest"] = log_keep_latest
-    if log_max_total_bytes is not None:
-        kwargs["max_total_bytes"] = log_max_total_bytes
-    if log_cleanup:
-        kwargs["cleanup"] = True
-    return configure_project_logging(**kwargs)
+    return configure_project_logging(**log_config.to_configure_kwargs())
 
 
 @scoped_project_logging
@@ -141,15 +80,6 @@ def parse_single(
     hex_view: bool | None = None,
     memory_policy: "MemoryPolicy | None" = None,
     output_level: str = "standard",
-    log_level: str | None = None,
-    log_dir: str | None = None,
-    log_enabled: bool = True,
-    log_run_id: str | None = None,
-    log_keep_latest: int | None = None,
-    log_max_total_bytes: int | None = None,
-    log_cleanup: bool = False,
-    log_max_bytes: int = 10_000_000,
-    log_backup_count: int = 5,
     log_config: LogConfig | None = None,
     parse_config: "ParseConfig | None" = None,
 ) -> str:
@@ -190,18 +120,7 @@ def parse_single(
             f"Expected one of ['standard', 'debug']"
         )
 
-    _configure_logging(
-        log_config=log_config,
-        log_level=log_level,
-        log_dir=log_dir,
-        log_enabled=log_enabled,
-        log_run_id=log_run_id,
-        log_keep_latest=log_keep_latest,
-        log_max_total_bytes=log_max_total_bytes,
-        log_cleanup=log_cleanup,
-        log_max_bytes=log_max_bytes,
-        log_backup_count=log_backup_count,
-    )
+    _configure_logging(log_config=log_config)
 
     output_str, _ = _parse_and_render(
         file_path,
@@ -353,15 +272,6 @@ def parse_batch(
     isolate_assets: bool | str = True,  # True/False/"auto"
     memory_policy: "MemoryPolicy | None" = None,
     output_level: str = "standard",
-    log_level: str | None = None,
-    log_dir: str | None = None,
-    log_enabled: bool = True,
-    log_run_id: str | None = None,
-    log_keep_latest: int | None = None,
-    log_max_total_bytes: int | None = None,
-    log_cleanup: bool = False,
-    log_max_bytes: int = 10_000_000,
-    log_backup_count: int = 5,
     log_config: LogConfig | None = None,
     parse_config: "ParseConfig | None" = None,
 ) -> BatchResult:
@@ -405,19 +315,8 @@ def parse_batch(
             f"Expected one of ['standard', 'debug']"
         )
 
-    active_run_id = log_run_id or current_log_run_id() or new_log_run_id()
-    _configure_logging(
-        log_config=log_config,
-        log_level=log_level,
-        log_dir=log_dir,
-        log_enabled=log_enabled,
-        log_run_id=active_run_id,
-        log_keep_latest=log_keep_latest,
-        log_max_total_bytes=log_max_total_bytes,
-        log_cleanup=log_cleanup,
-        log_max_bytes=log_max_bytes,
-        log_backup_count=log_backup_count,
-    )
+    active_run_id = current_log_run_id() or new_log_run_id()
+    _configure_logging(log_config=log_config)
 
     from uasset_read.memory_safety import MemoryPolicy, get_memory_stats
 
@@ -499,9 +398,9 @@ def parse_batch(
                     output_path=str(out_file),
                     parse_options=parse_options,
                     logging_options={
-                        "enabled": log_enabled if log_config is None else log_config.enabled,
-                        "level": (log_level or "DEBUG") if log_config is None else (log_config.level or "DEBUG"),
-                        "log_dir": log_dir if log_config is None else log_config.dir,
+                        "enabled": log_config.enabled if log_config else True,
+                        "level": (log_config.level or "DEBUG") if log_config else "DEBUG",
+                        "log_dir": log_config.dir if log_config else None,
                         "run_id": active_run_id,
                     },
                 )
@@ -593,15 +492,6 @@ def diff_single(
     game: str | None = None,
     force_full_parse: bool | None = None,
     writer: IO[str] | None = None,
-    log_level: str | None = None,
-    log_dir: str | None = None,
-    log_enabled: bool = True,
-    log_run_id: str | None = None,
-    log_keep_latest: int | None = None,
-    log_max_total_bytes: int | None = None,
-    log_cleanup: bool = False,
-    log_max_bytes: int = 10_000_000,
-    log_backup_count: int = 5,
     log_config: LogConfig | None = None,
 ) -> str:
     """对比两个 .uasset 文件的文本摘要差异，返回 unified diff 输出。
@@ -623,18 +513,7 @@ def diff_single(
     Returns:
         writer 为 None 时返回 unified diff 文本；否则返回空字符串
     """
-    _configure_logging(
-        log_config=log_config,
-        log_level=log_level,
-        log_dir=log_dir,
-        log_enabled=log_enabled,
-        log_run_id=log_run_id,
-        log_keep_latest=log_keep_latest,
-        log_max_total_bytes=log_max_total_bytes,
-        log_cleanup=log_cleanup,
-        log_max_bytes=log_max_bytes,
-        log_backup_count=log_backup_count,
-    )
+    _configure_logging(log_config=log_config)
 
     if writer is None:
         from io import StringIO

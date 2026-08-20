@@ -1,7 +1,6 @@
-"""CLI entry module — argparse parameter parsing + delegation to core module.
+"""CLI 入口模块 — argparse 参数解析 + 委托 core 模块。
 
-Core logic and entry point are separated: core module provides pure parsing functions,
-CLI only handles parameter parsing and output writing.
+核心逻辑与入口分离：core 模块提供纯解析函数，CLI 仅负责参数解析和输出写入。
 """
 
 import json
@@ -12,7 +11,6 @@ from pathlib import Path
 
 from uasset_read.config import LogConfig
 from uasset_read.core import parse_single, parse_batch, list_formats, ParseError
-from uasset_read.core.utils import normalize_path
 from uasset_read.project_logging import cleanup_project_logs
 from uasset_read.constants import EXIT_SUCCESS, EXIT_PARSE_ERROR, EXIT_FILE_NOT_FOUND, EXIT_ARGUMENT_ERROR
 
@@ -20,10 +18,10 @@ _logger = logging.getLogger(__name__)
 
 
 def _sanitize_error_message(message: str) -> str:
-    """Clean internal paths from exception messages to prevent information leakage.
+    """清理异常消息中的内部路径，防止信息泄露。
 
-    Replace absolute paths with basename, preserve exception type and key information.
-    Detailed original messages can be obtained via DEBUG level logging.
+    将绝对路径替换为 basename，保留异常类型和关键信息。
+    详细原始消息可通过 DEBUG 级别日志获取。
     """
     def basename(path: str) -> str:
         normalized = path.rstrip("\\/").replace("\\", "/")
@@ -77,6 +75,7 @@ def create_parser():
     parser.add_argument('--output', metavar='FILE', help='Write output to file instead of stdout')
     parser.add_argument('--export', metavar='INDEX', type=int, help='Output only specific export by index')
     parser.add_argument('--schema', action='store_true', help='Include field semantic annotations')
+    parser.add_argument('--function-graphs', action='store_true', help='Include function_graphs array')
     parser.add_argument('--asset-root', action='append', default=[],
                         help='Root directory to search for parent .uasset files')
     parser.add_argument('--include-parent-assets', action='store_true',
@@ -106,6 +105,8 @@ def create_parser():
                         help='Number of backup log files to keep (default: 5)')
     parser.add_argument('--log-repeat-limit', metavar='N', type=int, default=5,
                         help='Keep the first N repeated DEBUG messages (0 disables aggregation)')
+    parser.add_argument('--log-format', choices=['text', 'json'], default='text',
+                        help='Log output format: text (default) or json')
 
     # Batch and utility flags
     parser.add_argument('--list-formats', action='store_true', help='List all available export formats')
@@ -123,7 +124,7 @@ def create_parser():
 
 
 def resolve_format(args) -> str:
-    """From CLI args, determine the export format name."""
+    """从 CLI 参数解析导出格式名。"""
     if args.markdown:
         return "markdown"
     if args.json:
@@ -150,6 +151,10 @@ def _write_output(output_str: str, output_path: str | None) -> None:
         print(output_str)
 
 
+def _log_enabled_from_args(args) -> bool:
+    return args.log_level != "off"
+
+
 def _log_max_total_bytes_from_args(args) -> int | None:
     if args.log_max_total_mb is None:
         return None
@@ -172,11 +177,12 @@ def _log_config_from_args(args) -> LogConfig:
         max_bytes=args.log_max_bytes,
         backup_count=args.log_backup_count,
         repeat_limit=args.log_repeat_limit,
+        format=args.log_format,
     )
 
 
 def _handle_batch(args) -> None:
-    """Handle batch export mode."""
+    """处理批量导出模式。"""
     import time
 
     input_dir = Path(args.file)
@@ -195,12 +201,12 @@ def _handle_batch(args) -> None:
             tolerant=not args.strict,
             verbose=args.verbose,
             include_schema=args.schema or args.verbose,
+            include_function_graphs=args.function_graphs,
             include_parent_assets=args.include_parent_assets,
             asset_roots=list(args.asset_root or []),
             mappings_path=args.mappings,
             game=args.game,
             force_full_parse=args.full_parse,
-            output_level=args.output_level,
             log_config=_log_config_from_args(args),
         )
     except Exception as e:
@@ -243,7 +249,7 @@ def _handle_clean_logs(args) -> None:
 
 
 def _handle_list_package_files(file_path: str, tolerant: bool) -> None:
-    """List discovered package files."""
+    """列出发现的 package 文件。"""
     from uasset_read.package import open_package_bundle
     try:
         bundle = open_package_bundle(file_path, tolerant=tolerant)
@@ -307,7 +313,7 @@ def main():
         _handle_list_package_files(args.file, tolerant)
         return
 
-    # --diff mode
+    # --diff 模式
     if args.diff is not None:
         from uasset_read.core import diff_single
         if args.diff is True:
@@ -339,6 +345,7 @@ def main():
             tolerant=tolerant,
             verbose=args.verbose,
             include_schema=args.schema or args.verbose,
+            include_function_graphs=args.function_graphs,
             include_parent_assets=args.include_parent_assets,
             asset_roots=list(args.asset_root or []),
             mappings_path=args.mappings,

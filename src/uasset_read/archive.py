@@ -222,74 +222,7 @@ class FArchive:
             return self._mmap.tell()
         return self._file.tell()
 
-    def seek_safe(self, pos: int, context: str = "") -> bool:
-        """Safe seek — records diagnostic and returns False on out-of-bounds.
 
-        Unlike seek(), does not raise exceptions, suitable for tolerant parsing.
-
-        Args:
-            pos: target offset
-            context: diagnostic context description
-
-        Returns:
-            True on success, False on out-of-bounds (diagnostic recorded)
-        """
-        current = self.tell()
-        if pos < 0 or pos > self._file_size:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="archive",
-                field="seek",
-                current_pos=current,
-                target_offset=pos,
-                file_size=self._file_size,
-                source=context or "seek_safe",
-                error=f"seek target {pos} exceeds file range [0, {self._file_size}]",
-            ))
-            return False
-        if self._use_mmap and self._mmap:
-            self._mmap.seek(pos)
-        else:
-            self._file.seek(pos)
-        return True
-
-    def read_safe(self, size: int, context: str = "") -> Optional[bytes]:
-        """Safe read — records diagnostic and returns None on out-of-bounds.
-
-        Unlike read(), does not raise exceptions, suitable for tolerant parsing.
-        When requested size exceeds remaining bytes, attempts truncated read of available data.
-
-        Args:
-            size: number of bytes to read
-            context: diagnostic context description
-
-        Returns:
-            bytes read, or None on out-of-bounds
-        """
-        current = self.tell()
-        remaining = self._file_size - current
-        if size < 0:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="archive",
-                field="read",
-                current_pos=current,
-                read_size=size,
-                file_size=self._file_size,
-                source=context or "read_safe",
-                error=f"read size {size} is negative",
-            ))
-            return None
-        if size > remaining:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="archive",
-                field="read",
-                current_pos=current,
-                read_size=size,
-                file_size=self._file_size,
-                source=context or "read_safe",
-                error=f"read requested {size} bytes, only {remaining} bytes remaining",
-            ))
-            return None
-        return self.read(size)
 
     def __repr__(self) -> str:
         """Return readable repr with path and file size."""
@@ -521,9 +454,6 @@ class FArchive:
         """Read signed 32-bit integer (supports byte swapping)."""
         return self._read_swapped('i', 4, "i32", key)
 
-    def peek_i32(self, key: str = "") -> int:
-        """Peek signed 32-bit integer (does not move position)."""
-        return self._peek_swapped('i', 4, "i32(peek)", key)
 
     def read_u16(self, key: str = "") -> int:
         """Read unsigned 16-bit integer (supports byte swapping)."""
@@ -550,19 +480,6 @@ class FArchive:
             self._record_hex_view(key, "bool", value, start, start + 4)
         return value
 
-    def read_bool_1byte(self, key: str = "") -> bool:
-        """Read UE5 1-byte bool value (serialized as uint8).
-
-        UE5 uses 1-byte bool serialization in specific structures (e.g. FEdGraphPinType).
-        Unlike the standard read_bool() (4-byte uint32), this is a compact format.
-
-        Use case: bool fields in FEdGraphPinType serialization.
-        """
-        start = self.tell()
-        value = self.read_u8() != 0
-        if key:
-            self._record_hex_view(key, "bool8", value, start, start + 1)
-        return value
 
     def read_i64(self, key: str = "") -> int:
         """Read signed 64-bit integer (supports byte swapping)."""
@@ -580,42 +497,7 @@ class FArchive:
         """Read 64-bit double (supports byte swapping)."""
         return self._read_swapped('d', 8, "f64", key)
 
-    def serialize_int(self, value: int) -> bytes:
-        """Serialize a 32-bit integer (for SerializeInt compatibility).
 
-        UE FArchive::SerializeInt is typically used to write integers to archives.
-        This method provides symmetric serialization capability.
-        """
-
-        fmt = '>' if self._byte_swapping else '<'
-        return struct.pack(fmt + 'i', value)
-
-    def serialize_bits(self, value: int, num_bits: int) -> bytes:
-        """Serialize a value of specified bit width (for SerializeBits compatibility).
-
-        UE FArchive::SerializeBits is used for bit-level serialization.
-        This method packs the value into the specified byte count and applies
-        UE bit masking when not byte-aligned.
-
-        Aligned with UE source Archive.h:1716-1724:
-            Serialize(V, (LengthBits + 7) / 8);
-            if (IsLoading() && (LengthBits % 8) != 0)
-                ((uint8*)V)[LengthBits / 8] &= ((1 << (LengthBits & 7)) - 1);
-
-        Args:
-            value: value to serialize
-            num_bits: bit count (will be rounded up to bytes)
-
-        Returns:
-            serialized bytes
-        """
-        num_bytes = (num_bits + 7) // 8
-        byteorder = 'big' if self._byte_swapping else 'little'
-        # UE bitmask alignment: truncate high bits when not byte-aligned
-        if num_bits % 8 != 0:
-            mask = (1 << (num_bits & 7)) - 1
-            value = value & mask
-        return value.to_bytes(num_bytes, byteorder=byteorder, signed=False)
 
     def _is_likely_alignment_padding(self, data_start_pos: int, byte_count: int) -> bool:
         """Determine whether all-zero data is alignment padding rather than real corruption (#369).
@@ -868,101 +750,7 @@ class FArchive:
                                   pos_before, self.tell())
         return result
 
-    def read_utf8_string(self, tolerant: bool = False) -> str:
-        """Read UTF-8 string (length-prefixed, null-terminated).
 
-        Unlike read_fstring(), this method specifically handles UTF-8 strings
-        and validates declared length against remaining bytes before reading (#407).
-
-        Args:
-            tolerant: tolerance mode switch. True to return empty string on
-                      length out-of-bounds, False to raise ParseError.
-
-        Returns:
-            parsed UTF-8 string
-        """
-        pos_before = self.tell()
-        length = self.read_i32()
-
-        if length == 0:
-            return ""
-
-        # Early length validation: declared length exceeds remaining bytes (#407)
-        remaining = self.total_size() - self.tell()
-        if length > remaining:
-            self._record_diagnostic(
-                module="archive", field="read_utf8_string",
-                source="read_utf8_string",
-                target_offset=pos_before, file_size=self.total_size(),
-                read_size=length,
-                error=f"UTF-8 length {length} exceeds remaining {remaining}",
-            )
-            if tolerant:
-                self._logger.warning(
-                    "read_utf8_string at pos %d: length %d exceeds remaining %d, "
-                    "returning empty string (tolerant)",
-                    pos_before, length, remaining,
-                )
-                self.seek(pos_before)
-                return ""
-            self.seek(pos_before)
-            raise ParseError(
-                f"UTF-8 length {length} exceeds remaining {remaining}"
-            )
-
-        # Maximum length check
-        if length > MAX_FSTRING_LENGTH:
-            if tolerant:
-                self._record_structured_diagnostic(
-                    code="fstring_length_exceeds_limit",
-                    stage="read_utf8_string",
-                    offset=pos_before,
-                    raw_value=length,
-                    fallback="used_empty_string",
-                    message=f"read_utf8_string at pos {pos_before}: length {length} exceeds maximum {MAX_FSTRING_LENGTH}",
-                )
-                self.seek(pos_before)
-                return ""
-            self.seek(pos_before)
-            raise ParseError(
-                f"UTF-8 string at pos {pos_before}: length {length} exceeds "
-                f"maximum {MAX_FSTRING_LENGTH}"
-            )
-
-        data = self.read(length)
-        result = data.decode('utf-8', errors='replace').rstrip('\x00')
-
-        # All-null detection: length > 0 but data is all null (#302)
-        if not result and length != 0:
-            if not tolerant:
-                self.seek(pos_before)
-                raise ParseError(
-                    f"read_utf8_string at pos {pos_before}: length={length}, "
-                    "all nulls (completely corrupted), strict mode"
-                )
-            self._record_structured_diagnostic(
-                code="fstring_all_null",
-                stage="read_utf8_string",
-                offset=pos_before,
-                raw_value=length,
-                fallback="used_empty_string",
-                message=f"read_utf8_string at pos {pos_before}: length={length}, all nulls",
-            )
-
-        return result
-
-    def read_fsoftobjectpath(self, key: str = "") -> Dict[str, str]:
-        """Read FSoftObjectPath (legacy FString format).
-
-        FSoftObjectPath is serialized as two consecutive FStrings:
-        - AssetPath: asset path (e.g. "/Game/MovieScene.DefaultMovieScene")
-        - SubPath: sub-path (can be empty string)
-
-        UE5.7+ uses index format (int32 → SoftObjectPathList), this method handles legacy format only.
-        """
-        asset_path = self.read_fstring(f"{key}.AssetPath" if key else "")
-        sub_path = self.read_fstring(f"{key}.SubPath" if key else "")
-        return {"asset_path": asset_path, "sub_path": sub_path}
 
     def set_name_map(self, name_map: list) -> None:
         """Set name table cache for read_name() no-argument calls.
@@ -1055,17 +843,6 @@ class FArchive:
             self._record_hex_view(key, "fname", result, start, self.tell())
         return result
 
-    def get_read_name_recovery_stats(self) -> dict:
-        """Get read_name recovery statistics.
-
-        Returns:
-            dict: containing recovery attempt count, success count, and other stats
-        """
-        return {
-            "recovery_attempts": getattr(self, '_recovery_attempts', 0),
-            "recovery_successes": getattr(self, '_recovery_successes', 0),
-            "recovery_failures": getattr(self, '_recovery_failures', 0),
-        }
 
     def _try_recover_fname(self, original_pos: int, name_map: list) -> Optional[str]:
         """Attempt to recover FName reading from offset misalignment.
@@ -1126,80 +903,7 @@ class FArchive:
         self.seek(current_pos)
         return None
 
-    def read_array(self, count: int, element_reader: Callable[["FArchive"], Any],
-                   key: str = "") -> list:
-        """Read an array of specified element count.
 
-        Generic array read method, equivalent to UE's ReadArray<T>.
-
-        Args:
-            count: element count
-            element_reader: element reader function, accepts archive parameter, returns single element
-            key: hex_view field name (optional)
-
-        Returns:
-            element list
-
-        Example:
-            # Read int32 array
-            values = archive.read_array(5, lambda ar: ar.read_i32())
-
-            # Read FString array
-            strings = archive.read_array(3, lambda ar: ar.read_fstring())
-        """
-        start = self.tell()
-        if count < 0:
-            raise ParseError(f"read_array: negative element count {count}")
-        # Defensive check
-        if count > MAX_ARRAY_COUNT:
-            raise ParseError(f"read_array: element count {count} exceeds maximum limit")
-
-        result = []
-        for _ in range(count):
-            result.append(element_reader(self))
-        if key:
-            self._record_hex_view(key, f"array[{count}]", len(result),
-                                  start, self.tell())
-        return result
-
-    def read_bulk_array(self, element_size: int, element_count: int) -> bytes:
-        """Read BulkArray and validate size.
-
-        Used for raw data reading in the BulkData system, mirroring UE's TBulkData serialization.
-        Validates actual bytes read against expected size after reading, preventing silent data errors.
-
-        Args:
-            element_size: single element size (bytes)
-            element_count: element count
-
-        Returns:
-            raw byte data
-
-        Raises:
-            ParseError: element size or count is negative
-            ParseError: actual read size does not match expected
-        """
-        if element_size < 0:
-            raise ParseError(
-                f"read_bulk_array: element_size {element_size} is negative"
-            )
-        if element_count < 0:
-            raise ParseError(
-                f"read_bulk_array: element_count {element_count} is negative"
-            )
-
-        expected_size = element_size * element_count
-        pos_before = self.tell()
-        data = self.read(expected_size)
-        pos_after = self.tell()
-
-        actual_size = pos_after - pos_before
-        if actual_size != expected_size:
-            raise ParseError(
-                f"BulkArray size mismatch: expected {expected_size}, "
-                f"serialized {actual_size}"
-            )
-        return data
 
 def _contains_binary_data(
     value: str, threshold: float = 0.3, max_check_length: int = 256
@@ -1277,50 +981,6 @@ class ByteArchive(FArchive):
         self.validate_offset(pos, "seek")
         self._pos = pos
 
-    def seek_safe(self, pos: int, context: str = "") -> bool:
-        """Safe seek — records diagnostic and returns False on out-of-bounds."""
-        current = self._pos
-        if pos < 0 or pos > self._file_size:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="byte_archive",
-                field="seek",
-                current_pos=current,
-                target_offset=pos,
-                file_size=self._file_size,
-                source=context or "seek_safe",
-                error=f"seek target {pos} exceeds file range [0, {self._file_size}]",
-            ))
-            return False
-        self._pos = pos
-        return True
-
-    def read_safe(self, size: int, context: str = "") -> Optional[bytes]:
-        """Safe read — records diagnostic and returns None on out-of-bounds."""
-        current = self._pos
-        remaining = self._file_size - current
-        if size < 0:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="byte_archive",
-                field="read",
-                current_pos=current,
-                read_size=size,
-                file_size=self._file_size,
-                source=context or "read_safe",
-                error=f"read size {size} is negative",
-            ))
-            return None
-        if size > remaining:
-            self._diagnostics.append(OffsetRangeDiagnostic(
-                module="byte_archive",
-                field="read",
-                current_pos=current,
-                read_size=size,
-                file_size=self._file_size,
-                source=context or "read_safe",
-                error=f"read requested {size} bytes, only {remaining} bytes remaining",
-            ))
-            return None
-        return self.read(size)
 
     def __repr__(self) -> str:
         """Return readable repr with buffer size."""

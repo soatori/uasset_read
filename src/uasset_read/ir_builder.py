@@ -66,6 +66,7 @@ def _classify_variable(var) -> str:
         return "input_action"
     return "user"
 
+
 def _has_kismet_failure(result: "ParseResult | LinkerParseResult") -> bool:
     """Check if any decompiled function has failed bytecode or partial/failed translation."""
     for func in result.decompiled_functions or []:

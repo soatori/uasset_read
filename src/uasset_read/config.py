@@ -1,7 +1,7 @@
-"""Parse configuration dataclasses — ParseConfig / LogConfig.
+"""解析配置 dataclass — ParseConfig / LogConfig。
 
-Extract scattered configuration parameters from parse_package() and core API into structured objects,
-reducing function parameter count and improving readability and composability.
+将 parse_package() 和 core API 中散落的配置参数提取为结构化对象，
+减少函数参数数量，提升可读性和可组合性。
 """
 
 from __future__ import annotations
@@ -15,12 +15,11 @@ if TYPE_CHECKING:
 
 @dataclass
 class ParseConfig:
-    """Parse pipeline configuration.
+    """解析管线配置。
 
-    Contains all parameters that affect parsing behavior (excluding file paths, provider,
-    and other runtime inputs).
+    包含影响解析行为的所有参数（不含文件路径、provider 等运行时输入）。
 
-    Typical usage::
+    典型用法::
 
         from uasset_read.config import ParseConfig
 
@@ -28,44 +27,56 @@ class ParseConfig:
         result = parse_package("file.uasset", config=cfg)
     """
 
-    # --- Tolerant / Debug ---
+    # --- 容错 / 调试 ---
     tolerant: bool = True
-    """Whether to enable tolerant mode (default: enabled)."""
+    """是否启用容错模式（默认开启）。"""
     force_full_parse: bool = False
-    """Force full parse for large blueprints (ignore lightweight mode threshold)."""
+    """强制完整解析大蓝图（忽略轻量模式阈值）。"""
     hex_view: bool = False
-    """Enable HexView byte offset tracking."""
+    """启用 HexView 字节偏移追踪。"""
 
-    # --- Asset Relationships ---
+    # --- 资产关系 ---
     include_parent_assets: bool = False
-    """Whether to parse parent assets."""
+    """是否解析父资产。"""
     asset_roots: Optional[Sequence[str]] = field(default=None)
-    """Root directories for locating parent assets."""
+    """资产根目录列表，用于查找父资产。"""
 
-    # --- Type Mappings / Game Adaptation ---
+    # --- 类型映射 / 游戏适配 ---
     mappings_path: Optional[str] = None
-    """.usmap/.jmap type mapping file path."""
+    """.usmap/.jmap 类型映射文件路径。"""
     game: Optional[str] = None
-    """Game identifier, enables game-specific property parsing."""
+    """游戏标识，启用游戏特定属性解析。"""
 
-    # --- Lightweight Mode ---
+    # --- 轻量模式 ---
     lightweight_threshold: Optional[int] = None
-    """Lightweight mode trigger threshold (export count). None uses default value."""
+    """轻量模式触发阈值（export 数量），None 使用默认值。"""
 
-    # --- Memory Strategy ---
+    # --- 内存策略 ---
     memory_policy: Optional["MemoryPolicy"] = None
-    """Optional memory strategy, controls RSS limits and isolation behavior."""
+    """可选内存策略，控制 RSS 限制和隔离行为。"""
 
+    def apply_to_package(self, kwargs: dict) -> dict:
+        """将配置项注入 parse_package() 的调用参数字典。
+
+        用于内部桥接，不覆盖 kwargs 中已有的值（如 path、provider 等），
+        也不注入值为 None 的字段，避免覆盖调用方的显式 None。
+        """
+        for fld in self.__dataclass_fields__:
+            if fld not in kwargs:
+                val = getattr(self, fld)
+                if val is not None:
+                    kwargs[fld] = val
+        return kwargs
 
 
 @dataclass
 class LogConfig:
-    """Logging configuration.
+    """日志配置。
 
-    Contains all parameters related to file logging, used by core APIs
-    such as parse_single / parse_batch / diff_single.
+    包含文件日志相关的所有参数，用于 parse_single / parse_batch / diff_single
+    等 core API。
 
-    Typical usage::
+    典型用法::
 
         from uasset_read.config import LogConfig
 
@@ -74,30 +85,32 @@ class LogConfig:
     """
 
     level: Optional[str] = None
-    """Log level: debug / info / warning / error / off. None means default."""
+    """日志级别：debug / info / warning / error / off。None 表示默认。"""
     dir: Optional[str] = None
-    """Log output directory. None uses default ./log."""
+    """日志输出目录，None 使用默认 ./log。"""
     enabled: bool = True
-    """Whether to enable file logging."""
+    """是否启用文件日志。"""
     run_id: Optional[str] = None
-    """Log run ID. Child processes can reuse parent process ID."""
+    """日志运行 ID，子进程可复用父进程的 ID。"""
     keep_latest: Optional[int] = None
-    """Keep only the newest N log files (used with cleanup)."""
+    """保留最新 N 个日志文件（配合 cleanup 使用）。"""
     max_total_bytes: Optional[int] = None
-    """Total log size limit (bytes)."""
+    """日志总大小上限（字节）。"""
     cleanup: bool = False
-    """Whether to clean old logs on startup."""
+    """是否在启动时清理旧日志。"""
     auto_cleanup: bool = False
-    """Whether to automatically clean old logs after log session ends."""
+    """是否在日志会话结束后自动清理旧日志。"""
     max_bytes: int = 10_000_000
-    """Maximum size per log file (bytes), default 10MB."""
+    """单个日志文件最大大小（字节），默认 10MB。"""
     backup_count: int = 5
-    """Number of backup log files to keep, default 5."""
+    """保留的备份日志文件数量，默认 5。"""
     repeat_limit: int = 5
-    """Number of same DEBUG message templates to keep. 0 means no aggregation."""
+    """同一 DEBUG 消息模板保留数量，0 表示不聚合。"""
+    format: str = "text"
+    """日志输出格式：'text'（默认）或 'json'。"""
 
     def to_configure_kwargs(self) -> dict:
-        """Convert to keyword arguments for configure_project_logging()."""
+        """转换为 configure_project_logging() 的关键字参数。"""
         effective_enabled = self.enabled and self.level != "off"
         return {
             "level": self.level or "DEBUG",
@@ -111,4 +124,5 @@ class LogConfig:
             **({"max_total_bytes": self.max_total_bytes} if self.max_total_bytes is not None else {}),
             **({"cleanup": True} if self.cleanup else {}),
             **({"cleanup_on_close": True} if self.auto_cleanup else {}),
+            **({"format": self.format} if self.format != "text" else {}),
         }

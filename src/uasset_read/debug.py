@@ -1,4 +1,4 @@
-"""debug/hex_view.py — HexView debug system.
+"""debug.py — HexView debug system.
 
 Structured byte offset tracking, recording field names, types, values, and file offset ranges for each read operation.
 Only enabled in --hex-view mode to avoid performance overhead.
