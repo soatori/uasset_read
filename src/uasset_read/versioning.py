@@ -8,6 +8,7 @@ Corresponds to COR-02: FCustomVersion system.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import IntEnum
 from typing import Any
 
 from uasset_read.core.utils import normalize_hex_guid
