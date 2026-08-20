@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Cooked bytecode end-of-function sentinel variants
-_END_OF_SCRIPT = 0x53        # EX_EndOfScript — standard
+_END_OF_SCRIPT = 0x53  # EX_EndOfScript — standard
 _COOKED_END_SENTINEL = 0xDD  # Cooked format variant seen in some UE5 assets
 
 
@@ -41,10 +41,30 @@ _COOKED_END_SENTINEL = 0xDD  # Cooked format variant seen in some UE5 assets
 
 class BytecodeConfidenceLevel(Enum):
     """字节码恢复置信度级别。"""
-    HIGH = "high"           # 所有缓冲区数量匹配、哨兵正确、无截断
-    MEDIUM = "medium"       # 存在哨兵不匹配或数量不一致，但大部分数据可用
-    LOW = "low"             # 存在截断或大量空缓冲区
+
+    HIGH = "high"  # 所有缓冲区数量匹配、哨兵正确、无截断
+    MEDIUM = "medium"  # 存在哨兵不匹配或数量不一致，但大部分数据可用
+    LOW = "low"  # 存在截断或大量空缓冲区
     UNRECOVERABLE = "unrecoverable"  # 无可用数据
+
+
+def _find_next_sentinel(data: bytes, start: int) -> int:
+    """Scan forward through data to find the next sentinel byte.
+
+    Searches for EX_EndOfScript (0x53) or Cooked end sentinel (0xDD)
+    starting from the given offset.
+
+    Args:
+        data: Raw bytecode data
+        start: Starting offset for the search
+
+    Returns:
+        Offset of the next sentinel byte, or -1 if not found.
+    """
+    for i in range(start, len(data)):
+        if data[i] in (_END_OF_SCRIPT, _COOKED_END_SENTINEL):
+            return i
+    return -1
 
 
 @dataclass
@@ -54,27 +74,29 @@ class BPGCExtractionMetrics:
     用于评估提取结果的可信度，辅助调试和诊断。
     由 _parse_cooked_bytecode_buffer 生成，由 extract_bpgc_bytecode 透传。
     """
+
     # 原始数据信息
-    total_raw_bytes: int = 0             # 脚本区域可用字节总数
-    class_script_skipped: bool = False   # 是否跳过了 BPGC class 自身脚本
-    class_script_size: int = 0           # 跳过的 class 脚本大小
+    total_raw_bytes: int = 0  # 脚本区域可用字节总数
+    class_script_skipped: bool = False  # 是否跳过了 BPGC class 自身脚本
+    class_script_size: int = 0  # 跳过的 class 脚本大小
 
     # 函数声明与提取
-    declared_function_count: int = 0     # header 中声明的函数数量
-    extracted_buffer_count: int = 0      # 实际提取的缓冲区数量
+    declared_function_count: int = 0  # header 中声明的函数数量
+    extracted_buffer_count: int = 0  # 实际提取的缓冲区数量
 
     # 缓冲区质量
-    empty_buffer_count: int = 0          # 空缓冲区数量 (sz <= 0)
-    sentinel_mismatch_count: int = 0     # 未以预期哨兵结束的缓冲区数量
-    truncated_buffer_count: int = 0      # 因数据不足而被截断的缓冲区数量
+    empty_buffer_count: int = 0  # 空缓冲区数量 (sz <= 0)
+    sentinel_mismatch_count: int = 0  # 未以预期哨兵结束的缓冲区数量
+    truncated_buffer_count: int = 0  # 因数据不足而被截断的缓冲区数量
 
     # 映射质量 (由 map_bytecode_to_functions 填充)
-    mapped_function_count: int = 0       # 成功映射到函数的缓冲区数量
-    mapping_mismatch: bool = False       # 缓冲区数量与函数导出数量是否不匹配
+    mapped_function_count: int = 0  # 成功映射到函数的缓冲区数量
+    mapping_mismatch: bool = False  # 缓冲区数量与函数导出数量是否不匹配
 
     # 提取阶段错误
-    early_exit: bool = False             # 是否因数据异常提前退出
-    exit_reason: str = ""                # 提前退出的原因
+    early_exit: bool = False  # 是否因数据异常提前退出
+    exit_reason: str = ""  # 提前退出的原因
+    used_sentinel_fallback: bool = False  # 是否使用了哨兵回退解析
 
     def to_dict(self) -> dict:
         """转为 JSON 兼容字典。零值字段省略以减少输出噪音。"""
@@ -101,6 +123,8 @@ class BPGCExtractionMetrics:
         if self.early_exit:
             d["early_exit"] = True
             d["exit_reason"] = self.exit_reason
+        if self.used_sentinel_fallback:
+            d["used_sentinel_fallback"] = True
         return d
 
     @property
@@ -115,13 +139,19 @@ class BPGCExtractionMetrics:
             return BytecodeConfidenceLevel.LOW
 
         # 大量空缓冲区 (>50%) → 低置信度
-        if (self.empty_buffer_count > 0
-                and self.empty_buffer_count > self.extracted_buffer_count // 2):
+        if (
+            self.empty_buffer_count > 0
+            and self.empty_buffer_count > self.extracted_buffer_count // 2
+        ):
             return BytecodeConfidenceLevel.LOW
 
         # 提前退出 → 低置信度
         if self.early_exit:
             return BytecodeConfidenceLevel.LOW
+
+        # 使用了哨兵回退 → 中等置信度
+        if self.used_sentinel_fallback:
+            return BytecodeConfidenceLevel.MEDIUM
 
         # 哨兵不匹配或数量不一致 → 中等置信度
         if self.sentinel_mismatch_count > 0 or self.mapping_mismatch:
@@ -131,7 +161,9 @@ class BPGCExtractionMetrics:
         return BytecodeConfidenceLevel.HIGH
 
 
-def _parse_cooked_bytecode_buffer(data: bytes) -> tuple[list[bytes], BPGCExtractionMetrics]:
+def _parse_cooked_bytecode_buffer(
+    data: bytes,
+) -> tuple[list[bytes], BPGCExtractionMetrics]:
     """Parse BPGC script region bytes into per-function bytecode buffers.
 
     BPGC cooked 格式 (per UStruct/FStructScriptLoader + 实测验证):
@@ -170,8 +202,8 @@ def _parse_cooked_bytecode_buffer(data: bytes) -> tuple[list[bytes], BPGCExtract
         metrics.exit_reason = "data_too_short_for_header"
         return buffers, metrics
 
-    _bb_size = struct.unpack_from('<i', data, offset)[0]
-    ss_size = struct.unpack_from('<i', data, offset + 4)[0]
+    _bb_size = struct.unpack_from("<i", data, offset)[0]
+    ss_size = struct.unpack_from("<i", data, offset + 4)[0]
     offset += 8
 
     # Skip class script data if present (SerializedScriptSize > 0)
@@ -179,7 +211,8 @@ def _parse_cooked_bytecode_buffer(data: bytes) -> tuple[list[bytes], BPGCExtract
         if offset + ss_size > data_len:
             logger.debug(
                 "BPGC bytecode: class script SerializedScriptSize=%d exceeds data (%d bytes)",
-                ss_size, data_len - offset,
+                ss_size,
+                data_len - offset,
             )
             metrics.early_exit = True
             metrics.exit_reason = "class_script_exceeds_data"
@@ -195,7 +228,7 @@ def _parse_cooked_bytecode_buffer(data: bytes) -> tuple[list[bytes], BPGCExtract
         metrics.exit_reason = "no_room_for_function_count"
         return buffers, metrics
 
-    num_functions = struct.unpack_from('<I', data, offset)[0]
+    num_functions = struct.unpack_from("<I", data, offset)[0]
     offset += 4
     metrics.declared_function_count = num_functions
 
@@ -208,7 +241,8 @@ def _parse_cooked_bytecode_buffer(data: bytes) -> tuple[list[bytes], BPGCExtract
     if num_functions > 10000:
         logger.debug(
             "BPGC bytecode: unreasonable function count %d at offset %d",
-            num_functions, offset - 4,
+            num_functions,
+            offset - 4,
         )
         metrics.early_exit = True
         metrics.exit_reason = f"unreasonable_function_count_{num_functions}"
@@ -219,7 +253,9 @@ def _parse_cooked_bytecode_buffer(data: bytes) -> tuple[list[bytes], BPGCExtract
     if sizes_end > data_len:
         logger.debug(
             "BPGC bytecode: not enough data for %d function sizes (need %d, have %d)",
-            num_functions, sizes_end - offset, data_len - offset,
+            num_functions,
+            sizes_end - offset,
+            data_len - offset,
         )
         metrics.early_exit = True
         metrics.exit_reason = "not_enough_data_for_sizes"
@@ -227,21 +263,23 @@ def _parse_cooked_bytecode_buffer(data: bytes) -> tuple[list[bytes], BPGCExtract
 
     sizes: list[int] = []
     for i in range(num_functions):
-        sz = struct.unpack_from('<i', data, offset)[0]
+        sz = struct.unpack_from("<i", data, offset)[0]
         sizes.append(sz)
         offset += 4
 
     # Step 4: Extract function bytecodes from concatenated data
     for i, sz in enumerate(sizes):
         if sz <= 0:
-            buffers.append(b'')
+            buffers.append(b"")
             metrics.empty_buffer_count += 1
             continue
 
         if offset + sz > data_len:
             logger.debug(
                 "BPGC bytecode buffer #%d: size=%d exceeds remaining %d bytes",
-                i, sz, data_len - offset,
+                i,
+                sz,
+                data_len - offset,
             )
             # 尝试读取剩余数据
             sz = data_len - offset
@@ -250,18 +288,115 @@ def _parse_cooked_bytecode_buffer(data: bytes) -> tuple[list[bytes], BPGCExtract
                 break
             metrics.truncated_buffer_count += 1
 
-        buf = data[offset:offset + sz]
+        buf = data[offset : offset + sz]
         offset += sz
 
         # Validate buffer ends with expected sentinel (tolerant)
         if buf and buf[-1] not in (_END_OF_SCRIPT, _COOKED_END_SENTINEL):
             logger.debug(
                 "Bytecode buffer #%d ends with 0x%02X, accepting in tolerant mode",
-                i, buf[-1],
+                i,
+                buf[-1],
             )
             metrics.sentinel_mismatch_count += 1
 
         buffers.append(buf)
+
+    metrics.extracted_buffer_count = len(buffers)
+    return buffers, metrics
+
+
+def _parse_cooked_bytecode_buffer_sentinel_fallback(
+    data: bytes,
+) -> tuple[list[bytes], BPGCExtractionMetrics]:
+    """Parse BPGC script region using sentinel-based recovery.
+
+    This is a fallback strategy activated only when the primary size-based
+    parsing returns empty results (e.g., malformed headers, variant formats).
+    Scans forward through the byte stream for sentinel bytes (0x53, 0xDD)
+    to find function buffer boundaries.
+
+    Args:
+        data: Raw script_serial_region content
+
+    Returns:
+        Tuple of (buffers, metrics) with used_sentinel_fallback=True
+    """
+    buffers: list[bytes] = []
+    metrics = BPGCExtractionMetrics(total_raw_bytes=len(data))
+    metrics.used_sentinel_fallback = True
+    data_len = len(data)
+
+    if data_len < 8:
+        metrics.early_exit = True
+        metrics.exit_reason = "data_too_short_for_sentinel_scan"
+        return buffers, metrics
+
+    # Skip the 8-byte header (BytecodeBufferSize + SerializedScriptSize)
+    offset = 8
+
+    # Try to read function count, but be lenient
+    if offset + 4 <= data_len:
+        num_functions = struct.unpack_from("<I", data, offset)[0]
+        offset += 4
+        metrics.declared_function_count = num_functions
+
+        # If function count looks reasonable, try to read size array
+        if 0 < num_functions <= 10000:
+            sizes_end = offset + num_functions * 4
+            if sizes_end <= data_len:
+                # Read sizes and extract buffers using size-based approach
+                sizes: list[int] = []
+                for _ in range(num_functions):
+                    sz = struct.unpack_from("<i", data, offset)[0]
+                    sizes.append(sz)
+                    offset += 4
+
+                # Extract buffers using declared sizes
+                for i, sz in enumerate(sizes):
+                    if sz <= 0:
+                        buffers.append(b"")
+                        metrics.empty_buffer_count += 1
+                        continue
+
+                    if offset + sz > data_len:
+                        # Size exceeds data, fall through to sentinel scan
+                        break
+
+                    buf = data[offset : offset + sz]
+                    offset += sz
+
+                    # Validate sentinel (tolerant)
+                    if buf and buf[-1] not in (_END_OF_SCRIPT, _COOKED_END_SENTINEL):
+                        metrics.sentinel_mismatch_count += 1
+
+                    buffers.append(buf)
+
+                # If we extracted some buffers, return them
+                if buffers:
+                    metrics.extracted_buffer_count = len(buffers)
+                    return buffers, metrics
+
+    # Sentinel-based recovery: scan for sentinel bytes
+    logger.debug("BPGC bytecode: falling back to sentinel scan")
+    buffers = []
+    offset = 8  # Skip header again
+
+    while offset < data_len:
+        sentinel_pos = _find_next_sentinel(data, offset)
+        if sentinel_pos == -1:
+            # No more sentinels, take remaining data as last buffer
+            remaining = data[offset:]
+            if remaining:
+                buffers.append(remaining)
+            break
+
+        # Extract buffer up to and including the sentinel
+        buf = data[offset : sentinel_pos + 1]
+        if buf:
+            buffers.append(buf)
+
+        offset = sentinel_pos + 1
 
     metrics.extracted_buffer_count = len(buffers)
     return buffers, metrics
@@ -301,7 +436,9 @@ def extract_bpgc_bytecode(
     Raises:
         ParseError: If script region structure is invalid
     """
-    from uasset_read.serializers.object_resources import detect_blueprint_generated_class
+    from uasset_read.serializers.object_resources import (
+        detect_blueprint_generated_class,
+    )
     from uasset_read.serializers.property_tags import read_property_tag
     from uasset_read.constants import UE5_PROPERTY_TAG_EXTENSION
 
@@ -309,17 +446,24 @@ def extract_bpgc_bytecode(
 
     # Step 1: Validate BPGC export
     if not detect_blueprint_generated_class(bpgc_export, import_map, export_map):
-        logger.debug("Export '%s' is not a BlueprintGeneratedClass, skipping", bpgc_export.object_name)
+        logger.debug(
+            "Export '%s' is not a BlueprintGeneratedClass, skipping",
+            bpgc_export.object_name,
+        )
         return {}, empty_metrics
 
     # Step 2: Check script_serialization
     if not bpgc_export.has_script_serialization:
-        logger.debug("BPGC '%s' has no script_serial_region data", bpgc_export.object_name)
+        logger.debug(
+            "BPGC '%s' has no script_serial_region data", bpgc_export.object_name
+        )
         return {}, empty_metrics
 
     # Step 3: Calculate script start position
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
-        script_start = bpgc_export.serial_offset + bpgc_export.script_serialization_start_offset
+        script_start = (
+            bpgc_export.serial_offset + bpgc_export.script_serialization_start_offset
+        )
     else:
         script_start = bpgc_export.serial_offset
 
@@ -351,7 +495,9 @@ def extract_bpgc_bytecode(
     remaining_bytes = region_end - current_pos
 
     if remaining_bytes <= 0:
-        logger.debug("BPGC '%s': no bytecode data after PropertyTags", bpgc_export.object_name)
+        logger.debug(
+            "BPGC '%s': no bytecode data after PropertyTags", bpgc_export.object_name
+        )
         return {}, empty_metrics
 
     # 注意: script_serialization_size 仅覆盖 PropertyTags 区域，不包含字节码数据。
@@ -362,19 +508,31 @@ def extract_bpgc_bytecode(
     # Step 7: Parse cooked bytecode buffers
     buffers, metrics = _parse_cooked_bytecode_buffer(raw_bytecode)
 
+    # Step 8: Try sentinel fallback if primary parsing failed
+    if not buffers and metrics.early_exit:
+        logger.debug(
+            "BPGC '%s': primary parsing failed (%s), trying sentinel fallback",
+            asset_name,
+            metrics.exit_reason,
+        )
+        buffers, metrics = _parse_cooked_bytecode_buffer_sentinel_fallback(raw_bytecode)
+
     if not buffers:
         # #343: 区分"无字节码"和"解析失败"
         # 注意：remaining_bytes <= 0 的情况已在上方处理
         logger.debug(
-            "BPGC '%s': _parse_cooked_bytecode_buffer 返回空 (%d bytes 可用），"
-            "可能是格式变体或数据损坏",
-            asset_name, remaining_bytes,
+            "BPGC '%s': no bytecode buffers extracted (%d bytes available),"
+            " possibly format variant or data corruption",
+            asset_name,
+            remaining_bytes,
         )
         return {}, metrics
 
     logger.info(
         "BPGC '%s': extracted %d bytecode buffers from script_serial_region (confidence=%s)",
-        bpgc_export.object_name, len(buffers), metrics.confidence.value,
+        bpgc_export.object_name,
+        len(buffers),
+        metrics.confidence.value,
     )
 
     # Return dict mapping index string to bytecode bytes
@@ -411,8 +569,10 @@ def map_bytecode_to_functions(
 
     # Step 2: Filter to Function-type exports only
     function_type_exports = [
-        exp for exp in function_exports
-        if resolve_class_name(exp.class_index, import_map, export_map) in ("Function", "UFunction")
+        exp
+        for exp in function_exports
+        if resolve_class_name(exp.class_index, import_map, export_map)
+        in ("Function", "UFunction")
     ]
 
     if not function_type_exports:
@@ -422,7 +582,16 @@ def map_bytecode_to_functions(
         return {}
 
     # Sort buffers by index key for deterministic ordinal pairing
-    sorted_indices = sorted(bytecode_buffers.keys(), key=lambda k: int(k))
+    # Filter to valid integer keys only (skip any malformed keys)
+    def _safe_int(s: str) -> int:
+        try:
+            return int(s)
+        except ValueError:
+            return -1
+
+    sorted_indices = sorted(bytecode_buffers.keys(), key=_safe_int)
+    # Exclude any keys that couldn't be parsed as int
+    sorted_indices = [k for k in sorted_indices if k.isdigit()]
     buffer_list = [bytecode_buffers[i] for i in sorted_indices]
 
     buf_count = len(buffer_list)
@@ -433,7 +602,8 @@ def map_bytecode_to_functions(
         logger.debug(
             "Bytecode/function count mismatch: %d buffers vs %d Function exports — "
             "mapping by min count",
-            buf_count, func_count,
+            buf_count,
+            func_count,
         )
         if metrics is not None:
             metrics.mapping_mismatch = True
@@ -541,8 +711,9 @@ def validate_recovered_bytecode(
     if function_name and warnings:
         logger.debug(
             "validate_recovered_bytecode('%s'): confidence=%s, %d warnings",
-            function_name, confidence.value, len(warnings),
+            function_name,
+            confidence.value,
+            len(warnings),
         )
 
     return confidence, warnings
-
