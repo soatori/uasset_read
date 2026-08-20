@@ -13,7 +13,7 @@ Usage:
     report = FTextExtractor.format_locres(texts)
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 

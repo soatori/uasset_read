@@ -10,10 +10,7 @@ references}, which a domain format may redefine.
 """
 from __future__ import annotations
 
-from typing import Callable, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from uasset_read.models.ir import PackageIR, ExportIR
+from typing import Callable
 
 _REGISTRY: dict[str, Callable] = {}
 _DOMAIN_FORMATS: dict[str, tuple[str, str]] = {}

@@ -8,8 +8,6 @@ Extends the Blueprint node emission with animation-specific node kinds:
 """
 from __future__ import annotations
 
-from typing import Any
-
 from uasset_read.semantic.blueprint.ids import ascii_slug
 from uasset_read.semantic.blueprint.nodes import (
     _NODE_KIND_MAP,

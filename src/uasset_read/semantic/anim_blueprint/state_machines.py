@@ -1,8 +1,6 @@
 """State machine emission for Animation Blueprint semantic JSON."""
 from __future__ import annotations
 
-from typing import Any
-
 from uasset_read.semantic.anim_blueprint.ids import (
     ascii_slug,
     state_machine_id,

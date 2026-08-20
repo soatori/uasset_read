@@ -1,8 +1,6 @@
 """Graph/node/pin/port emission for Blueprint semantic JSON (BP-6, 7, 8)."""
 from __future__ import annotations
 
-from typing import Any
-
 from uasset_read.semantic.blueprint.ids import (
     ascii_slug, graph_id, node_id, data_endpoint, exec_endpoint,
 )
