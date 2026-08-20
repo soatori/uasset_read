@@ -53,12 +53,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# Inheritance chain depth limit (T-056-03)
-# ============================================================================
-
-MAX_INHERITANCE_DEPTH = 50  # Prevent infinite loops
-
-# ============================================================================
 # Backfill missing methods from decompiled_functions (third path)
 # ============================================================================
 
@@ -533,58 +527,6 @@ def _extract_variable_properties(user_vars: List["VariableIR"]) -> List[CppPrope
 
     return properties
 
-def _extract_input_action_properties(graphs: List["UEdGraph"]) -> List[CppProperty]:
-    """Extract input action variables from graph nodes.
-
-    P2 improvement: Extract input action references from K2Node_EnhancedInputAction nodes,
-    generating UInputAction* member variables.
-
-    Args:
-        graphs: List of graphs
-
-    Returns:
-        List of CppProperty (category="input")
-    """
-    properties: List[CppProperty] = []
-    seen_actions: set = set()
-
-    for graph in graphs:
-        for node in graph.nodes:
-            if node.class_name != "K2Node_EnhancedInputAction":
-                continue
-
-            nd = node.node_data
-            if not isinstance(nd, dict):
-                continue
-
-            # Get input action reference
-            action_path = nd.get("input_action_path", "")
-            action_short_name = nd.get("input_action_short_name", "")
-
-            if not action_path or action_path == "None":
-                continue
-
-            # Deduplicate (same input action may be referenced by multiple nodes)
-            if action_path in seen_actions:
-                continue
-            seen_actions.add(action_path)
-
-            # Generate variable name (use short name)
-            var_name = action_short_name if action_short_name else action_path
-
-            # Build property
-            prop = CppProperty(
-                cpp_type="UInputAction*",
-                name=var_name,
-                uproperty_marks=["EditAnywhere"],
-                category="input",
-                default_value=None,
-                cpp_comment=f"Input Action: {action_path}",
-            )
-            properties.append(prop)
-
-    return properties
-
 def _create_variable_property(var: "VariableIR") -> CppProperty:
     """Create variable CppProperty from VariableIR.
 
@@ -712,44 +654,6 @@ def _build_methods_from_blueprint_ir(blueprint: "BlueprintIR") -> List[CppMethod
 
     return methods
 
-def _build_ue_type_from_pin_type(pin_type: "FEdGraphPinType") -> str:
-    """Build UE type path from FEdGraphPinType."""
-    category = pin_type.pin_category
-    subcategory = pin_type.pin_subcategory or ""
-
-    # Property types -> map to corresponding UE basic types
-    _PROP_TYPE_MAP = {
-        "IntProperty": "int32", "FloatProperty": "float", "DoubleProperty": "double",
-        "BoolProperty": "bool",
-        "StrProperty": "FString", "NameProperty": "FName", "TextProperty": "FText",
-    }
-    if category in _PROP_TYPE_MAP:
-        return _PROP_TYPE_MAP[category]
-    if category in ("ObjectProperty", "SoftObjectProperty"):
-        cpp_type = subcategory or "UObject"
-        return cpp_type if cpp_type.endswith("*") else f"{cpp_type}*"
-    if category in ("ArrayProperty", "SetProperty", "MapProperty"):
-        return subcategory or "FString"
-
-    # Basic types returned directly
-    _BASIC_TYPES = frozenset({"float", "double", "bool", "int", "int32", "int64",
-                               "byte", "string", "name", "text"})
-    if category in _BASIC_TYPES:
-        return category
-
-    # object types
-    if category == "object":
-        if subcategory:
-            return subcategory if subcategory.startswith("/Script/") else f"/Script/Engine.{subcategory}"
-        return "UObject"
-
-    # struct types
-    if category in ("struct", "StructProperty"):
-        if subcategory:
-            return subcategory if subcategory.startswith("/Script/") else f"/Script/CoreUObject.{subcategory}"
-        return "FStruct"
-
-    return category
 
 # ============================================================================
 # Function signature mapping
@@ -829,11 +733,6 @@ def _extract_parameters_from_pins(
 # ============================================================================
 # Function flag constants (UE5 UFunctionFlags) - reference EFunctionFlags.cs
 # ============================================================================
-
-# Access modifiers (these flags are not in extra_flags, need to be inferred from other sources)
-FUNC_PUBLIC = 0x00000001  # Placeholder, actual access modifier needs inference from other information
-FUNC_PROTECTED = 0x00000002  # Placeholder
-FUNC_PRIVATE = 0x00000004  # Placeholder
 
 # Function types (reference EFunctionFlags.cs)
 FUNC_Final = 0x00000001

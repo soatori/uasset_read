@@ -47,6 +47,3 @@ def get_domain_format(class_name: str) -> tuple[str, str] | None:
     return _DOMAIN_FORMATS.get(class_name)
 
 
-def is_registered(class_name: str) -> bool:
-    """Check whether a class has a registered extractor."""
-    return class_name in _REGISTRY

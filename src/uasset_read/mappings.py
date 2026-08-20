@@ -384,20 +384,6 @@ class JmapParser:
         )
 
 
-def parse_jmap(path: str, budget: ResourceBudget | None = None) -> TypeMappings:
-    """Parse .jmap/.jmap.gz file and return TypeMappings.
-
-    Args:
-        path: Mapping file path
-        budget: Optional resource budget to limit decompression size
-
-    Returns:
-        TypeMappings mapping container
-
-    Raises:
-        MemoryLimitExceeded: Decompressed size exceeds budget
-    """
-    return JmapParser(path, budget=budget).mappings
 
 
 class TypeMappingsProvider:

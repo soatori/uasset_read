@@ -2,14 +2,13 @@ from __future__ import annotations
 
 """Central memory policy, process RSS measurement, and parser checkpoints."""
 
-import gc
 import logging
 import os
 import sys
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -58,10 +57,6 @@ def should_isolate(file_size: int, tier: FileSizeTier) -> bool:
     return False
 
 
-LARGE_FILE_THRESHOLD = 20 * 1024 * 1024
-MAX_ASSET_COUNT = 200
-
-
 @dataclass
 class AllocationLimits:
     """Allocation limit configuration — used for resource budget tracking."""
@@ -80,8 +75,6 @@ class ResourceBudget:
         self.limits = limits or AllocationLimits()
         self._total_decompressed = 0
         self._checkpoints: list[int] = []
-        self._work_units: int = 0
-        self._max_work_units: int = 10_000_000  # 10M work units
 
     def reserve(self, bytes_needed: int, stage: str, asset: str = "") -> None:
         """Reserve resources, raises MemoryLimitExceeded if quota exceeded."""
@@ -116,22 +109,6 @@ class ResourceBudget:
         """Roll back to the previous checkpoint."""
         if self._checkpoints:
             self._total_decompressed = self._checkpoints.pop()
-
-    def consume_work(self, units: int, stage: str) -> None:
-        """Consume work units, raises MemoryLimitExceeded if quota exceeded."""
-        self._work_units += units
-        if self._work_units > self._max_work_units:
-            raise MemoryLimitExceeded(
-                asset_path="",
-                stage=stage,
-                current_rss_mb=self._work_units / 1_000_000,
-                limit_mb=self._max_work_units / 1_000_000,
-            )
-
-    @property
-    def total_decompressed(self) -> int:
-        """Current cumulative decompressed bytes."""
-        return self._total_decompressed
 
 
 @dataclass
@@ -415,103 +392,3 @@ def check_file_size(path: Path) -> int:
     if not path.exists():
         raise ValueError(f"File not found: {path}")
     return path.stat().st_size
-
-
-def cleanup_after_parse() -> None:
-    """Compatibility cleanup hook: perform exactly one cyclic-GC pass."""
-    gc.collect()
-
-
-# ---------------------------------------------------------------------------
-# Cross-platform hard limits
-# ---------------------------------------------------------------------------
-
-def set_hard_rss_limit(limit_mb: int) -> Callable[[], None]:
-    """Set a hard RSS memory limit for the current process.
-
-    Uses WorkingSet limit on Windows, ``resource.setrlimit`` on Linux/macOS.
-    Returns a cleanup function that restores the original limit.
-
-    Args:
-        limit_mb: RSS limit in MB
-
-    Returns:
-        Cleanup function that restores the original limit when called
-    """
-    limit_bytes = limit_mb * 1024 * 1024
-    original_limit: Any = None
-
-    if sys.platform == "win32":
-        try:
-            import ctypes
-            kernel32 = ctypes.windll.kernel32
-            # GetCurrentProcess returns -1 (pseudo handle)
-            handle = kernel32.GetCurrentProcess()
-            # c_size_t is 8 bytes on 64-bit Windows, but 4 bytes on 32-bit apps
-            # SetProcessWorkingSetSize expects SIZE_T parameters, c_size_t suffices
-            try:
-                result = kernel32.SetProcessWorkingSetSize(
-                    handle, ctypes.c_size_t(limit_bytes), ctypes.c_size_t(limit_bytes)
-                )
-                if not result:
-                    logger.debug("SetProcessWorkingSetSize returned failure")
-            except OverflowError as e:
-                logger.debug("SetProcessWorkingSetSize parameter overflow: %s", e)
-        except (OSError, OverflowError) as e:
-            logger.debug("Windows failed to set RSS hard limit: %s", e)
-    else:
-        try:
-            import resource
-            # Save original limit
-            original_limit = resource.getrlimit(resource.RLIMIT_AS)
-            # Set virtual memory limit (upper bound on RSS)
-            resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
-        except (ImportError, ValueError, OSError) as e:
-            logger.debug("Unix failed to set RSS hard limit: %s", e)
-
-    def _cleanup() -> None:
-        if sys.platform != "win32" and original_limit is not None:
-            try:
-                import resource
-                resource.setrlimit(resource.RLIMIT_AS, original_limit)
-            except (ImportError, ValueError, OSError) as exc:
-                logger.debug("Failed to restore RSS hard limit: %s", exc)
-
-    return _cleanup
-
-
-def get_platform_limits() -> dict[str, Any]:
-    """Return resource limit information for the current platform.
-
-    Returns:
-        Dictionary containing platform, pid, rss_limit_source, and other fields
-    """
-    info: dict[str, Any] = {
-        "platform": sys.platform,
-        "pid": os.getpid(),
-        "rss_limit_source": "none",
-    }
-
-    if sys.platform == "win32":
-        info["rss_limit_source"] = "SetProcessWorkingSetSize"
-        try:
-            import ctypes
-            kernel32 = ctypes.windll.kernel32
-            _handle = kernel32.GetCurrentProcess()  # noqa: F841 - API call for context
-            # Windows has no direct API to query WorkingSet limits
-            # Can only report current RSS
-            info["current_rss_mb"] = _get_process_rss_mb()
-        except Exception as exc:
-            logger.debug("Failed to get Windows platform limits: %s", exc)
-    else:
-        try:
-            import resource
-            soft, hard = resource.getrlimit(resource.RLIMIT_AS)
-            info["rss_limit_source"] = "RLIMIT_AS"
-            info["virtual_memory_soft_limit_bytes"] = soft
-            info["virtual_memory_hard_limit_bytes"] = hard
-            info["current_rss_mb"] = _get_process_rss_mb()
-        except (ImportError, ValueError, OSError) as exc:
-            logger.debug("Failed to get Unix platform limits: %s", exc)
-
-    return info

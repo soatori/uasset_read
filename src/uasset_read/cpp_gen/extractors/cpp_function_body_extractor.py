@@ -67,65 +67,6 @@ def _resolve_target(node_info: Dict, method_ir: CppMethodIR) -> Tuple[str, str]:
         return (target_name, "pointer")
 
     return ("this", "this")
-
-
-# ============================================================================
-# Core function: extract_function_body
-# ============================================================================
-
-def extract_function_body(
-    method_ir: CppMethodIR,
-    execution_flow: Dict,
-    data_flows: List[Dict],
-    node_lookup: Dict,
-) -> List[CppStatement]:
-    """Generate function body statement sequence from execution flow and data flows.
-
-    Args:
-        method_ir: method IR (contains signature information)
-        execution_flow: single flow from execution_flows (contains nodes list)
-        data_flows: data flow list (used for argument derivation)
-        node_lookup: node_guid → node lookup table (used to retrieve full pin information)
-
-    Returns:
-        CppStatement list
-    """
-    nodes = execution_flow.get("nodes", [])
-    statements: List[CppStatement] = []
-
-    for node_info in nodes:
-        node_type = node_info.get("node_type", "")
-
-        # Skip FunctionEntry itself
-        if node_type == "K2Node_FunctionEntry":
-            continue
-
-        if node_type == "K2Node_CallFunction":
-            stmt = _translate_call_function(node_info, method_ir, data_flows)
-            if stmt is not None:
-                statements.append(stmt)
-
-        elif node_type in ("K2Node_IfThenElse", "K2Node_SwitchInteger",
-                           "K2Node_SwitchString", "K2Node_SwitchEnum"):
-            if_stmt = _translate_control_flow(node_info, method_ir, data_flows, node_lookup)
-            if if_stmt is not None:
-                statements.append(if_stmt)
-
-        elif node_type == "K2Node_MacroInstance":
-            stmt = _translate_macro_instance(node_info, method_ir, data_flows, node_lookup)
-            if stmt is not None:
-                statements.append(stmt)
-
-        elif node_type == "K2Node_FunctionResult":
-            # Function return point, no explicit statement generated in pure statement sequence
-            continue
-
-        else:
-            logger.debug(f"Unhandled node type in function body: {node_type}")
-
-    return statements
-
-
 def _translate_call_function(
     node_info: Dict,
     method_ir: CppMethodIR,

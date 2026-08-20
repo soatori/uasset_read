@@ -87,10 +87,6 @@ class NameCleaner:
     cleaned names for traceability.
     """
 
-    def __init__(self) -> None:
-        self._mapping: dict[str, str] = {}
-        self._collisions: list[tuple[str, str, str]] = []
-
     def clean(self, name: str) -> str:
         """Clean a single name by applying heuristic rules.
 
@@ -173,33 +169,11 @@ class NameCleaner:
     def clean_all(self, names: list[str] | set[str]) -> dict[str, str]:
         """Clean a collection of names, returning a mapping.
 
-        Detects collisions where different raw names map to the same
-        cleaned name (logs them for diagnostic purposes).
-
         Args:
             names: Collection of raw names
 
         Returns:
             Dict mapping raw_name -> cleaned_name
         """
-        result: dict[str, str] = {}
-        seen_cleaned: dict[str, str] = {}
+        return {name: self.clean(name) for name in names}
 
-        for name in names:
-            cleaned = self.clean(name)
-            result[name] = cleaned
-
-            if cleaned in seen_cleaned and seen_cleaned[cleaned] != name:
-                self._collisions.append((name, seen_cleaned[cleaned], cleaned))
-            seen_cleaned[cleaned] = name
-
-        self._mapping.update(result)
-        return result
-
-    def get_collisions(self) -> list[tuple[str, str, str]]:
-        """Return detected name collisions as (name_a, name_b, shared_cleaned)."""
-        return list(self._collisions)
-
-    def get_mapping(self) -> dict[str, str]:
-        """Return the full raw->cleaned mapping table."""
-        return dict(self._mapping)

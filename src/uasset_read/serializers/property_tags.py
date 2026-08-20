@@ -152,25 +152,6 @@ def _apply_property_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
                 tag.enum_type = enum_name
 
 
-def parse_ctrl_flags(flags: int) -> dict:
-    """Parse PropertyTag flags byte into named boolean dictionary.
-
-    EPropertyTagFlags bit definitions (UE5 source PropertyTag.h):
-      0x01 HasArrayIndex        — ArrayIndex field present
-      0x02 HasPropertyGuid      — PropertyGuid field present
-      0x04 HasPropertyExtensions — extension data present
-      0x08 HasBinaryOrNative    — binary/native serialization
-      0x10 BoolTrue             — BoolProperty value is true
-      0x20 SkippedSerialize     — serialization was skipped
-    """
-    return {
-        "has_array_index": bool(flags & PROP_TAG_HAS_ARRAY_INDEX),
-        "has_property_guid": bool(flags & PROP_TAG_HAS_PROPERTY_GUID),
-        "has_extensions": bool(flags & PROP_TAG_HAS_EXTENSIONS),
-        "has_binary_or_native": bool(flags & PROP_TAG_HAS_BINARY_OR_NATIVE),
-        "bool_true": bool(flags & PROP_TAG_BOOL_TRUE),
-        "skipped_serialize": bool(flags & PROP_TAG_SKIPPED_SERIALIZE),
-    }
 
 
 def read_property_tag(

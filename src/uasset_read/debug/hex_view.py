@@ -32,18 +32,6 @@ class HexViewEntry:
         """Number of bytes read."""
         return self.stop - self.start
 
-    def hex_range(self) -> str:
-        """Format offset range as hexadecimal."""
-        return f"0x{self.start:08X}-0x{self.stop:08X}"
-
-    def hex_value(self) -> str:
-        """Format value as hexadecimal (for integers and bytes)."""
-        if isinstance(self.value, bytes):
-            return self.value.hex()
-        if isinstance(self.value, int):
-            byte_count = max(1, (self.value.bit_length() + 7) // 8) if self.value > 0 else 1
-            return f"0x{self.value:0{byte_count * 2}X}"
-        return repr(self.value)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-compatible dictionary."""

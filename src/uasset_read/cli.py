@@ -12,6 +12,7 @@ from pathlib import Path
 
 from uasset_read.config import LogConfig
 from uasset_read.core import parse_single, parse_batch, list_formats, ParseError
+from uasset_read.core.utils import normalize_path
 from uasset_read.project_logging import cleanup_project_logs
 from uasset_read.constants import EXIT_SUCCESS, EXIT_PARSE_ERROR, EXIT_FILE_NOT_FOUND, EXIT_ARGUMENT_ERROR
 

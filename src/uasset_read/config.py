@@ -56,19 +56,6 @@ class ParseConfig:
     memory_policy: Optional["MemoryPolicy"] = None
     """Optional memory strategy, controls RSS limits and isolation behavior."""
 
-    def apply_to_package(self, kwargs: dict) -> dict:
-        """Inject configuration into parse_package() keyword argument dictionary.
-
-        Used for internal bridging. Does not override existing values in kwargs
-        (such as path, provider, etc.), and does not inject None-valued fields
-        to avoid overriding caller's explicit None.
-        """
-        for fld in self.__dataclass_fields__:
-            if fld not in kwargs:
-                val = getattr(self, fld)
-                if val is not None:
-                    kwargs[fld] = val
-        return kwargs
 
 
 @dataclass

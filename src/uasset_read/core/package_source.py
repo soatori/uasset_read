@@ -38,15 +38,6 @@ class PackageSourceInfo:
     description: str
     """Human-readable description of the value."""
 
-    @property
-    def is_shipping(self) -> bool:
-        """True if this appears to be a shipping build asset."""
-        return self.build_type == "shipping"
-
-    @property
-    def is_editor(self) -> bool:
-        """True if this appears to be an editor-saved asset."""
-        return self.build_type == "non-shipping"
 
     def to_dict(self) -> dict:
         """Convert to JSON-serializable dictionary."""

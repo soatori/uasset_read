@@ -197,31 +197,3 @@ def get_serialization_strategy(class_name: str) -> SerializationStrategy:
     return SerializationStrategy.TAGGED_PROPERTIES_ONLY
 
 
-def should_skip_class(class_name: str) -> bool:
-    """Determine whether this class should be skipped entirely (no parsing attempted).
-
-    Args:
-        class_name: UE class name
-
-    Returns:
-        True if the class should be skipped (SKIP_UNSUPPORTED)
-    """
-    return (
-        get_serialization_strategy(class_name)
-        == SerializationStrategy.SKIP_UNSUPPORTED
-    )
-
-
-def is_opaque_class(class_name: str) -> bool:
-    """Determine whether this class is an opaque payload (has dedicated Serialize() but not implemented).
-
-    Args:
-        class_name: UE class name
-
-    Returns:
-        True if the class is opaque
-    """
-    return (
-        get_serialization_strategy(class_name)
-        == SerializationStrategy.OPAQUE_CLASS_PAYLOAD
-    )

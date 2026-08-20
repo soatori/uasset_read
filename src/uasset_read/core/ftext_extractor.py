@@ -44,12 +44,6 @@ class FTextEntry:
         """True if this text can be localized."""
         return self.text_type == "localized"
 
-    @property
-    def locres_id(self) -> str:
-        """Lookup ID for .locres files."""
-        if self.text_type == "string_table" and self.table_id:
-            return f"StringTable:{self.table_id}"
-        return f"{self.namespace}:{self.key}"
 
     def to_dict(self) -> dict:
         """Convert to JSON-serializable dictionary."""

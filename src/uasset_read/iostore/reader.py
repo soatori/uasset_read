@@ -24,6 +24,7 @@ from uasset_read.iostore.structures import (
 from uasset_read.pak.decompress import decompress_block
 from uasset_read.pak.crypto import decrypt_aes_ecb
 from uasset_read.exceptions import ParseError
+from uasset_read.core.utils import normalize_path
 
 logger = logging.getLogger(__name__)
 
@@ -270,25 +271,6 @@ class IoStoreReader:
     def list_files(self) -> List[str]:
         """List all file paths (requires directory index)"""
         return list(self._directory_index.keys())
-
-    def does_chunk_exist(self, chunk_id: FIoChunkId) -> bool:
-        """Check if ChunkId exists"""
-        offset_length = self._resolve_chunk(chunk_id)
-        return offset_length is not None
-
-    def try_resolve(self, chunk_id: FIoChunkId) -> Optional[Tuple[int, int]]:
-        """Try to resolve ChunkId to (offset, length)
-
-        Args:
-            chunk_id: Chunk identifier
-
-        Returns:
-            (offset, length) tuple, returns None if not found
-        """
-        offset_length = self._resolve_chunk(chunk_id)
-        if offset_length is not None:
-            return (offset_length.offset, offset_length.length)
-        return None
 
     def extract(self, chunk_id_bytes: bytes) -> bytes:
         """Extract data by ChunkId raw bytes

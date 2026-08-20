@@ -34,10 +34,6 @@ _log_stage: ContextVar[str] = ContextVar("uasset_read_log_stage", default="-")
 _last_parse_result: ContextVar[Any] = ContextVar("uasset_read_last_parse_result", default=None)
 
 
-def set_last_parse_result(result: Any) -> None:
-    """Store the most recent parse result for summary logging."""
-    _last_parse_result.set(result)
-
 
 def get_last_parse_result() -> Any:
     """Retrieve the most recent parse result."""
@@ -121,16 +117,6 @@ class _RepeatedDebugFilter(logging.Filter):
             if count > self.limit
         ]
 
-    def get_summary(self) -> str:
-        if not self.suppressed_count:
-            return ""
-        summary_parts = []
-        for msg, count in self.message_counts.items():
-            if count > self.repeat_limit:
-                summary_parts.append(
-                    f"{msg} (suppressed {count - self.repeat_limit} times)"
-                )
-        return "Repeated warnings: " + "; ".join(summary_parts)
 
 
 @contextmanager
@@ -670,12 +656,3 @@ def _reset_logging_state_for_tests() -> None:
         _disabled_by_request = False
 
 
-def setup_logging(
-    *,
-    log_dir: str | Path | None = None,
-    level: str | int | None = "DEBUG",
-    **kwargs,
-) -> Path | None:
-    """Convenience logging setup entry point; resets state then calls configure_project_logging."""
-    _reset_logging_state_for_tests()
-    return configure_project_logging(log_dir=log_dir, level=level, **kwargs)

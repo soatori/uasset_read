@@ -485,7 +485,6 @@ _WHILE_PATTERN = re.compile(r'^while\s*\((.+)\)\s*\{?$')
 _RETURN_PATTERN = re.compile(r'^return(?:\s+(.+))?$')
 _ASSIGN_PATTERN = re.compile(r'^([\w][\w.>-]*)\s*=\s*(.+)$')
 _CALL_PATTERN = re.compile(r'^([\w][\w:>-]*)\((.*)\)$')
-_GOTO_PATTERN = re.compile(r'^goto\s+(\w+);?$')
 
 
 def _classify_cpp_line(line: str) -> CppStatement:
