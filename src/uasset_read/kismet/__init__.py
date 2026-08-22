@@ -1,8 +1,11 @@
 """Kismet bytecode expression system -- EExprToken + KismetExpression class hierarchy + FKismetArchive."""
 
 from uasset_read.kismet.tokens import (
-    EExprToken, ECastToken, EScriptInstrumentationType,
-    EBlueprintTextLiteralType, EAutoRtfmStopTransactMode,
+    EExprToken,
+    ECastToken,
+    EScriptInstrumentationType,
+    EBlueprintTextLiteralType,
+    EAutoRtfmStopTransactMode,
 )
 from uasset_read.kismet.expressions.base import KismetExpression, KismetExpressionT
 from uasset_read.kismet.expressions import EXPR_CLASS_MAP
@@ -16,7 +19,11 @@ from uasset_read.kismet.bytecode_extractor import (
 
 # C++ pseudocode translator
 from uasset_read.kismet.translator import (
-    KismetTranslator, MathFunctionCleaner, TypeRegistry, line_cpp, UE_TYPE_MAP,
+    KismetTranslator,
+    MathFunctionCleaner,
+    TypeRegistry,
+    line_cpp,
+    UE_TYPE_MAP,
 )
 from uasset_read.kismet.body_builder import FunctionBodyBuilder, to_function_body
 from uasset_read.kismet.structured_flow import StructuredControlFlow, StructuredBlock

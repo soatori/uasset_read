@@ -120,8 +120,16 @@ class LogConfig:
             "backup_count": self.backup_count,
             "repeat_limit": self.repeat_limit,
             **({"run_id": self.run_id} if self.run_id is not None else {}),
-            **({"keep_latest": self.keep_latest} if self.keep_latest is not None else {}),
-            **({"max_total_bytes": self.max_total_bytes} if self.max_total_bytes is not None else {}),
+            **(
+                {"keep_latest": self.keep_latest}
+                if self.keep_latest is not None
+                else {}
+            ),
+            **(
+                {"max_total_bytes": self.max_total_bytes}
+                if self.max_total_bytes is not None
+                else {}
+            ),
             **({"cleanup": True} if self.cleanup else {}),
             **({"cleanup_on_close": True} if self.auto_cleanup else {}),
             **({"format": self.format} if self.format != "text" else {}),

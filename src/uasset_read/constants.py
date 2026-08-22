@@ -43,13 +43,13 @@ SUPPORTED_LEGACY_VERSIONS = UE5_LEGACY_VERSIONS | UE4_LEGACY_VERSIONS
 # Boundary validation constants (defensive programming)
 # ============================================================================
 
-MAX_NAME_COUNT = 10_000_000        # Maximum name table entries
-MAX_IMPORT_COUNT = 1_000_000       # Maximum import table entries
-MAX_EXPORT_COUNT = 1_000_000       # Maximum export table entries
-MAX_TOTAL_OBJECT_COUNT = 500_000   # Maximum import + export combined entries
-MAX_CUSTOM_VERSIONS = 10_000       # Maximum custom version entries
-MAX_GENERATIONS = 10_000           # Maximum Generations table entries
-MAX_COMPRESSED_CHUNKS = 100_000    # Maximum CompressedChunks entries
+MAX_NAME_COUNT = 10_000_000  # Maximum name table entries
+MAX_IMPORT_COUNT = 1_000_000  # Maximum import table entries
+MAX_EXPORT_COUNT = 1_000_000  # Maximum export table entries
+MAX_TOTAL_OBJECT_COUNT = 500_000  # Maximum import + export combined entries
+MAX_CUSTOM_VERSIONS = 10_000  # Maximum custom version entries
+MAX_GENERATIONS = 10_000  # Maximum Generations table entries
+MAX_COMPRESSED_CHUNKS = 100_000  # Maximum CompressedChunks entries
 MAX_SOFT_PACKAGE_REFS = 1_000_000  # Maximum SoftPackageReferences entries
 MMAP_THRESHOLD = 10 * 1024 * 1024  # 10MB - switch to mmap above this (lower threshold to reduce memory peak)
 MAX_PROPERTY_COUNT = 10_000        # Property loop limit
@@ -130,6 +130,7 @@ def decode_package_flags(flags: int) -> list[str]:
     if remaining:
         result.append(f"Unknown_{remaining:#010x}")
     return result if result else ["PKG_None"]
+
 
 # ============================================================================
 # Blueprint graph parsing safety constants
@@ -213,18 +214,20 @@ UE4_64BIT_EXPORTMAP_SERIALSIZES = 511
 # Blueprint metadata keys (UE editor internal fields)
 # ============================================================================
 
-BLUEPRINT_METADATA_KEYS = frozenset({
-    "BlueprintSystemVersion",
-    "GeneratedClass",
-    "SimpleConstructionScript",
-    "bCanEverTick",
-    "bCanEverRender",
-    "bStartWithTickEnabled",
-    "bReplicates",
-    "NetUpdateFrequency",
-    "MinNetUpdateFrequency",
-    "NetPriority",
-})
+BLUEPRINT_METADATA_KEYS = frozenset(
+    {
+        "BlueprintSystemVersion",
+        "GeneratedClass",
+        "SimpleConstructionScript",
+        "bCanEverTick",
+        "bCanEverRender",
+        "bStartWithTickEnabled",
+        "bReplicates",
+        "NetUpdateFrequency",
+        "MinNetUpdateFrequency",
+        "NetPriority",
+    }
+)
 
 # ============================================================================
 # Control flow node set (used in blueprint graph parsing)
@@ -345,9 +348,7 @@ CPF_BlueprintCallable = 0x0000100000000000
 CPF_NonPIEDuplicateTransient = 0x0000800000000000
 CPF_ExposeOnSpawn = 0x0001000000000000
 
-# ============================================================================
-# Property type name → unversioned size mapping (property_parser._fixed_unversioned_size)
-# ============================================================================
+# =====================================================================# ============================================================================
 
 FIXED_UNVERSIONED_SIZES: dict[str, int] = {
     "BoolProperty": 4,
@@ -389,6 +390,7 @@ MAX_SAFE_COUNT = 10_000  # Used for FText args / MulticastDelegate / FieldPath s
 # ============================================================================
 # GUID byte formatting
 # ============================================================================
+
 
 def format_guid_bytes(data: bytes, uppercase: bool = True) -> str:
     """Format 16 raw FGuid bytes into a stable 8-4-4-4-12 string."""

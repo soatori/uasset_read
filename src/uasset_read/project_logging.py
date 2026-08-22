@@ -46,7 +46,9 @@ class _LogContextFilter(logging.Filter):
 
 
 class _RepeatedDebugFilter(logging.Filter):
-    def __init__(self, repeat_limit: int, suppress_levels: set[int] | None = None) -> None:
+    def __init__(
+        self, repeat_limit: int, suppress_levels: set[int] | None = None
+    ) -> None:
         super().__init__()
         self.limit = repeat_limit
         self.repeat_limit = repeat_limit
@@ -257,8 +259,7 @@ def new_log_run_id() -> str:
 def _build_log_path(log_dir: Path, run_id: str) -> Path:
     log_dir.mkdir(parents=True, exist_ok=True)
     safe_run_id = "".join(
-        char if char.isalnum() or char in "-_" else "_"
-        for char in run_id
+        char if char.isalnum() or char in "-_" else "_" for char in run_id
     )
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     return log_dir / f"uasset_read-{timestamp}-pid{os.getpid()}-{safe_run_id}.log"
@@ -297,7 +298,12 @@ def _shutdown_locked(package_logger: logging.Logger) -> None:
             continue
         for installed_filter in handler.filters:
             if isinstance(installed_filter, _RepeatedDebugFilter):
-                for asset, logger_name, template, suppressed in installed_filter.summaries():
+                for (
+                    asset,
+                    logger_name,
+                    template,
+                    suppressed,
+                ) in installed_filter.summaries():
                     with log_context(asset=asset):
                         package_logger.info(
                             "Repeated message summary logger=%s template=%s suppressed=%d",
@@ -477,13 +483,15 @@ def configure_worker_stream_logging(
     handler = logging.StreamHandler(stream or sys.stderr)
     setattr(handler, _WORKER_HANDLER_MARKER, True)
     handler.setLevel(_coerce_level(level))
-    handler.setFormatter(logging.Formatter(
-        fmt=(
-            f"%(asctime)s [%(levelname)s] [run={run_id} pid={os.getpid()} "
-            f"asset={asset} stage=worker] %(name)s: %(message)s"
-        ),
-        datefmt="%Y-%m-%d %H:%M:%S",
-    ))
+    handler.setFormatter(
+        logging.Formatter(
+            fmt=(
+                f"%(asctime)s [%(levelname)s] [run={run_id} pid={os.getpid()} "
+                f"asset={asset} stage=worker] %(name)s: %(message)s"
+            ),
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
     package_logger.setLevel(logging.DEBUG)
     package_logger.propagate = False
     package_logger.addHandler(handler)
@@ -543,9 +551,13 @@ def configure_project_logging(
             return None
         _disabled_by_request = False
 
-        root = Path(project_root) if project_root is not None else _default_project_root()
+        root = (
+            Path(project_root) if project_root is not None else _default_project_root()
+        )
         root = root.resolve()
-        resolved_log_dir = Path(log_dir).resolve() if log_dir is not None else root / "log"
+        resolved_log_dir = (
+            Path(log_dir).resolve() if log_dir is not None else root / "log"
+        )
         log_level = _coerce_level(level)
         signature = (
             root,
@@ -668,7 +680,8 @@ def cleanup_project_logs(
             raise ValueError("keep_latest must be >= 0")
         effective_keep_latest = max(1, keep_latest)
         selected_families.update(
-            family for family in ordered_families[effective_keep_latest:]
+            family
+            for family in ordered_families[effective_keep_latest:]
             if family != active_family
         )
 
@@ -677,11 +690,13 @@ def cleanup_project_logs(
             raise ValueError("older_than_days must be >= 0")
         cutoff = datetime.now() - timedelta(days=older_than_days)
         selected_families.update(
-            family for family in ordered_families
+            family
+            for family in ordered_families
             if family != active_family
             and datetime.fromtimestamp(
                 max(path.stat().st_mtime for path in families[family])
-            ) < cutoff
+            )
+            < cutoff
         )
 
     if max_total_bytes is not None:
@@ -703,11 +718,7 @@ def cleanup_project_logs(
             remaining_total -= sum(path.stat().st_size for path in families[family])
 
     planned = sorted(
-        (
-            path
-            for family in selected_families
-            for path in families[family]
-        ),
+        (path for family in selected_families for path in families[family]),
         key=lambda path: path.stat().st_mtime,
     )
     if not dry_run:

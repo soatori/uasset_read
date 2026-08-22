@@ -12,7 +12,12 @@ from pathlib import Path
 from uasset_read.config import LogConfig
 from uasset_read.core import parse_single, parse_batch, list_formats, ParseError
 from uasset_read.project_logging import cleanup_project_logs
-from uasset_read.constants import EXIT_SUCCESS, EXIT_PARSE_ERROR, EXIT_FILE_NOT_FOUND, EXIT_ARGUMENT_ERROR
+from uasset_read.constants import (
+    EXIT_SUCCESS,
+    EXIT_PARSE_ERROR,
+    EXIT_FILE_NOT_FOUND,
+    EXIT_ARGUMENT_ERROR,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -23,6 +28,7 @@ def _sanitize_error_message(message: str) -> str:
     将绝对路径替换为 basename，保留异常类型和关键信息。
     详细原始消息可通过 DEBUG 级别日志获取。
     """
+
     def basename(path: str) -> str:
         normalized = path.rstrip("\\/").replace("\\", "/")
         return normalized.rsplit("/", 1)[-1] if "/" in normalized else normalized
@@ -32,8 +38,17 @@ def _sanitize_error_message(message: str) -> str:
     # Prefer extension-anchored matches so paths with spaces followed by prose
     # do not consume the following error text.
     path_extensions = (
-        "uasset", "umap", "uexp", "ubulk", "uptnl", "pak",
-        "json", "txt", "bin", "dat", "log",
+        "uasset",
+        "umap",
+        "uexp",
+        "ubulk",
+        "uptnl",
+        "pak",
+        "json",
+        "txt",
+        "bin",
+        "dat",
+        "log",
     )
     ext_group = "|".join(path_extensions)
     # Fallback patterns for paths without extensions (stop at delimiters)
@@ -57,18 +72,26 @@ def create_parser():
     from uasset_read import __version__
 
     parser = argparse.ArgumentParser(
-        prog='uasset_read',
-        description='Parse Unreal Engine .uasset/.umap files and output structured data'
+        prog="uasset_read",
+        description="Parse Unreal Engine .uasset/.umap files and output structured data",
     )
 
-    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
-    parser.add_argument('file', nargs='?', default=None,
-                        help='Path to .uasset/.umap file to parse (or directory in --batch mode)')
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
+    )
+    parser.add_argument(
+        "file",
+        nargs="?",
+        default=None,
+        help="Path to .uasset/.umap file to parse (or directory in --batch mode)",
+    )
 
     # Mutually exclusive output flags
     group = parser.add_mutually_exclusive_group(required=False)
-    group.add_argument('--json', action='store_true', help='Output full JSON structure (default)')
-    group.add_argument('--markdown', action='store_true', help='Output Markdown format')
+    group.add_argument(
+        "--json", action="store_true", help="Output full JSON structure (default)"
+    )
+    group.add_argument("--markdown", action="store_true", help="Output Markdown format")
 
     # Optional flags
     parser.add_argument('--verbose', action='store_true', help='Include extra detail fields')
@@ -109,16 +132,38 @@ def create_parser():
                         help='Log output format: text (default) or json')
 
     # Batch and utility flags
-    parser.add_argument('--list-formats', action='store_true', help='List all available export formats')
-    parser.add_argument('--clean-logs', action='store_true',
-                        help='Dry-run log cleanup plan and exit; never deletes files')
-    parser.add_argument('--batch', action='store_true', help='Enable batch mode')
-    parser.add_argument('--batch-dir', metavar='DIR', help='Output directory for batch mode')
-    parser.add_argument('--list-package-files', action='store_true', help='List discovered package files')
-    parser.add_argument('--diff', metavar='FILE2', nargs='?', const=True, default=None,
-                        help='Diff FILE against FILE2 (JSON comparison)')
-    parser.add_argument('--diff-context', metavar='N', type=int, default=3,
-                        help='Number of context lines around changes in diff (default: 3)')
+    parser.add_argument(
+        "--list-formats", action="store_true", help="List all available export formats"
+    )
+    parser.add_argument(
+        "--clean-logs",
+        action="store_true",
+        help="Dry-run log cleanup plan and exit; never deletes files",
+    )
+    parser.add_argument("--batch", action="store_true", help="Enable batch mode")
+    parser.add_argument(
+        "--batch-dir", metavar="DIR", help="Output directory for batch mode"
+    )
+    parser.add_argument(
+        "--list-package-files",
+        action="store_true",
+        help="List discovered package files",
+    )
+    parser.add_argument(
+        "--diff",
+        metavar="FILE2",
+        nargs="?",
+        const=True,
+        default=None,
+        help="Diff FILE against FILE2 (JSON comparison)",
+    )
+    parser.add_argument(
+        "--diff-context",
+        metavar="N",
+        type=int,
+        default=3,
+        help="Number of context lines around changes in diff (default: 3)",
+    )
 
     return parser
 
@@ -136,16 +181,18 @@ def _write_output(output_str: str, output_path: str | None) -> None:
     """Unified output writer."""
     if output_path:
         try:
-            with open(output_path, 'w', encoding='utf-8') as f:
+            with open(output_path, "w", encoding="utf-8") as f:
                 f.write(output_str)
             print(f"Output written to {output_path}", file=sys.stderr)
         except IOError as e:
             _logger.debug("File write error (full): %s", e, exc_info=True)
-            print(f"Error writing to file: {_sanitize_error_message(e)}", file=sys.stderr)
+            print(
+                f"Error writing to file: {_sanitize_error_message(e)}", file=sys.stderr
+            )
             sys.exit(EXIT_ARGUMENT_ERROR)
     else:
         try:
-            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, OSError):
             pass
         print(output_str)
@@ -215,20 +262,29 @@ def _handle_batch(args) -> None:
         sys.exit(EXIT_PARSE_ERROR)
 
     elapsed = time.monotonic() - start_time
-    print(f"Batch export complete: {result.total} files in {elapsed:.1f}s", file=sys.stderr)
+    print(
+        f"Batch export complete: {result.total} files in {elapsed:.1f}s",
+        file=sys.stderr,
+    )
     print(f"  Success: {len(result.success)}", file=sys.stderr)
     if result.partial:
         print(f"  Partial: {len(result.partial)}", file=sys.stderr)
         if result.partial_reasons:
             for reason, files in result.partial_reasons.items():
-                print(f"    {reason.replace('_', ' ').title()}: {len(files)}", file=sys.stderr)
+                print(
+                    f"    {reason.replace('_', ' ').title()}: {len(files)}",
+                    file=sys.stderr,
+                )
     if result.skipped:
         print(f"  Skipped: {len(result.skipped)}", file=sys.stderr)
     if result.failed:
         print(f"  Failed: {len(result.failed)}", file=sys.stderr)
         for path, error, details in result.failed:
             _logger.debug("Batch file failed (full): %s — %s\n%s", path, error, details)
-            print(f"    - {Path(path).name}: {_sanitize_error_message(error)}", file=sys.stderr)
+            print(
+                f"    - {Path(path).name}: {_sanitize_error_message(error)}",
+                file=sys.stderr,
+            )
         sys.exit(EXIT_PARSE_ERROR)
 
     sys.exit(EXIT_SUCCESS)
@@ -251,17 +307,27 @@ def _handle_clean_logs(args) -> None:
 def _handle_list_package_files(file_path: str, tolerant: bool) -> None:
     """列出发现的 package 文件。"""
     from uasset_read.package import open_package_bundle
+
     try:
         bundle = open_package_bundle(file_path, tolerant=tolerant)
     except Exception as e:
         _logger.debug("Package discovery error (full): %s", e, exc_info=True)
-        print(f"Error: Package discovery failed: {_sanitize_error_message(e)}", file=sys.stderr)
+        print(
+            f"Error: Package discovery failed: {_sanitize_error_message(e)}",
+            file=sys.stderr,
+        )
         sys.exit(EXIT_PARSE_ERROR)
-    print(json.dumps({
-        "package_kind": bundle.package_kind,
-        "container": bundle.container,
-        "files": bundle.package_files,
-    }, indent=2, ensure_ascii=False))
+    print(
+        json.dumps(
+            {
+                "package_kind": bundle.package_kind,
+                "container": bundle.container,
+                "files": bundle.package_files,
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
     sys.exit(EXIT_SUCCESS)
 
 
@@ -316,6 +382,7 @@ def main():
     # --diff 模式
     if args.diff is not None:
         from uasset_read.core import diff_single
+
         if args.diff is True:
             print("Error: --diff requires a second file path", file=sys.stderr)
             sys.exit(EXIT_ARGUMENT_ERROR)
@@ -361,7 +428,10 @@ def main():
         sys.exit(EXIT_PARSE_ERROR)
     except Exception as e:
         _logger.debug("Unexpected parse failure (full): %s", e, exc_info=True)
-        print(f"Error: Unexpected parse failure: {_sanitize_error_message(e)}", file=sys.stderr)
+        print(
+            f"Error: Unexpected parse failure: {_sanitize_error_message(e)}",
+            file=sys.stderr,
+        )
         sys.exit(EXIT_PARSE_ERROR)
 
     _write_output(output_str, args.output)

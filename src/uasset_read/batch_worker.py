@@ -1,6 +1,5 @@
 """Subprocess-isolated per-asset worker for :func:`uasset_read.core.parse_batch`."""
 
-
 import argparse
 import collections
 import json
@@ -78,7 +77,11 @@ class _StderrDrain:
             if proc.stderr is None:
                 return
             for raw_line in proc.stderr:
-                line = raw_line.decode("utf-8", errors="replace") if isinstance(raw_line, bytes) else raw_line
+                line = (
+                    raw_line.decode("utf-8", errors="replace")
+                    if isinstance(raw_line, bytes)
+                    else raw_line
+                )
                 self._append(line)
         except (OSError, ValueError) as exc:
             logger.debug("stderr drain 异常: %s", exc)
@@ -203,6 +206,7 @@ def _asset_worker(request: BatchWorkerRequest) -> BatchWorkerOutcome:
         logging_options = request.logging_options or {}
         if logging_options.get("enabled", True):
             from uasset_read.project_logging import configure_worker_stream_logging
+
             run_id = (
                 logging_options.get("run_id")
                 or os.environ.get("UASSET_READ_RUN_ID")
@@ -220,6 +224,7 @@ def _asset_worker(request: BatchWorkerRequest) -> BatchWorkerOutcome:
         return BatchWorkerOutcome(True, str(output_path), "")
     except BaseException as exc:
         import traceback
+
         return BatchWorkerOutcome(
             False,
             "",
@@ -350,7 +355,9 @@ def _monitor_worker(
     except queue.Empty:
         stderr_out = getattr(process, "stderr_text", "")
         if stderr_out:
-            logger.error("Worker %s failed without result. stderr:\n%s", process.pid, stderr_out)
+            logger.error(
+                "Worker %s failed without result. stderr:\n%s", process.pid, stderr_out
+            )
         return BatchWorkerOutcome(
             False,
             "",

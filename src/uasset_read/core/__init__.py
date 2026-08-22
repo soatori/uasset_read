@@ -2,6 +2,7 @@
 
 CLI、独立脚本、未来 Skill 共享此 API。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -38,12 +39,15 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BatchResult:
     """批量导出结果。"""
+
     total: int = 0
     success: list[str] = field(default_factory=list)
     partial: list[str] = field(default_factory=list)
     partial_reasons: dict[str, list[str]] = field(default_factory=dict)
     skipped: list[tuple[str, str]] = field(default_factory=list)
-    failed: list[tuple[str, str, str]] = field(default_factory=list)  # (path, error, details)
+    failed: list[tuple[str, str, str]] = field(
+        default_factory=list
+    )  # (path, error, details)
 
 
 def _log_batch_summary(result: BatchResult, elapsed_seconds: float = 0) -> None:
@@ -191,7 +195,9 @@ def _parse_and_render(
             config=parse_config,
         )
 
-    if not result.is_success and not _can_render_tolerant_json(result, format, tolerant):
+    if not result.is_success and not _can_render_tolerant_json(
+        result, format, tolerant
+    ):
         raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
 
     ir = build_package_ir(result)
@@ -366,9 +372,14 @@ def parse_batch(
 
     # #346: 智能混合模式 — 将导入移到循环外部
     if isolate_assets == "auto":
-        from uasset_read.memory_safety import should_isolate, check_file_size, FileSizeTier
+        from uasset_read.memory_safety import (
+            should_isolate,
+            check_file_size,
+            FileSizeTier,
+        )
 
     import time
+
     start_time = time.monotonic()
 
     for idx, pf in enumerate(package_files):
@@ -412,7 +423,9 @@ def parse_batch(
                 if outcome.succeeded:
                     result.success.append(outcome.output_path)
                 else:
-                    result.failed.append((str(pf), outcome.error, outcome.error_details))
+                    result.failed.append(
+                        (str(pf), outcome.error, outcome.error_details)
+                    )
                 continue
 
             output_str, parse_result = _parse_and_render(
@@ -434,13 +447,16 @@ def parse_batch(
 
             # 检查 partial 状态并追踪原因
             from uasset_read.models.status import _result_status, PARTIAL_STATUSES
+
             status = _result_status(parse_result)
             if status == "partial":
                 result.partial.append(str(pf))
-                for exp in (getattr(parse_result, "export_map", None) or []):
+                for exp in getattr(parse_result, "export_map", None) or []:
                     exp_status = getattr(exp, "parse_status", None)
                     if exp_status and exp_status in PARTIAL_STATUSES:
-                        result.partial_reasons.setdefault(exp_status, []).append(str(pf))
+                        result.partial_reasons.setdefault(exp_status, []).append(
+                            str(pf)
+                        )
 
             # 原子写入：先写临时文件再 replace，避免中断产生不完整输出（#434）
             tmp_fd = -1
@@ -464,10 +480,13 @@ def parse_batch(
             result.success.append(str(out_file))
         except Exception as exc:
             import traceback
+
             tb = traceback.format_exc()
             error_msg = f"{type(exc).__name__}: {exc}"
             result.failed.append((str(pf), error_msg, tb))
-            logging.getLogger(__name__).error("parse_batch asset failed: %s — %s", pf, error_msg)
+            logging.getLogger(__name__).error(
+                "parse_batch asset failed: %s — %s", pf, error_msg
+            )
 
     elapsed = time.monotonic() - start_time
     _log_batch_summary(result, elapsed_seconds=elapsed)
@@ -517,9 +536,12 @@ def diff_single(
 
     if writer is None:
         from io import StringIO
+
         buf = StringIO()
         _diff_to(
-            file_path1, file_path2, buf,
+            file_path1,
+            file_path2,
+            buf,
             tolerant=tolerant,
             context_lines=context_lines,
             mappings_path=mappings_path,
@@ -528,7 +550,9 @@ def diff_single(
         )
         return buf.getvalue()
     _diff_to(
-        file_path1, file_path2, writer,
+        file_path1,
+        file_path2,
+        writer,
         tolerant=tolerant,
         context_lines=context_lines,
         mappings_path=mappings_path,
