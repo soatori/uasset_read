@@ -393,8 +393,10 @@ def _try_asset_type_handler(
                 setattr(export, "custom_data", custom_data)
             # Propagate handler parse_status to export level
             handler_status = result.data.get("parse_status")
-            if handler_status and handler_status != "success":
-                setattr(export, "parse_status", handler_status)
+            if handler_status:
+                setattr(export, "parse_status", validate_parse_status(handler_status))
+            else:
+                setattr(export, "parse_status", validate_parse_status("success"))
             logger.debug(
                 "AssetTypeHandler '%s' extracted data for '%s' (status=%s)",
                 handler.handler_name, export.object_name, handler_status,
