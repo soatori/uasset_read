@@ -33,6 +33,9 @@ from uasset_read.models.ir import (
     HexViewEntryIR,
     DebugIR,
     AnimationDataIR,
+    UserDefinedDataIR,
+    UserDefinedEnumIR,
+    UserDefinedStructIR,
     PackageDependenciesIR,
     DiagnosticsDataIR,
     ScriptMetricsIR,
@@ -575,6 +578,57 @@ def _build_material_data_flow(
     return data_flow
 
 
+def _build_user_defined_data(result: "ParseResult | LinkerParseResult") -> UserDefinedDataIR | None:
+    """Extract user-defined type semantic data (enum or struct) from exports.
+
+    Scans exports for UserDefinedEnum and UserDefinedStruct types and extracts
+    their semantic content (enum entries or struct fields).
+    """
+    from uasset_read.serializers.object_resources import resolve_class_name
+
+    for export in result.export_map or []:
+        class_name = resolve_class_name(
+            export.class_index,
+            result.import_map or [],
+            result.export_map or [],
+        )
+
+        if class_name == "UserDefinedEnum":
+            try:
+                from uasset_read.parsers.asset_types.user_defined import extract_user_defined_enum
+                enum_data = extract_user_defined_enum(export, result.name_map or [])
+                if enum_data:
+                    return UserDefinedDataIR(
+                        type="enum",
+                        enum=UserDefinedEnumIR(
+                            enum_name=enum_data.get("enum_name", ""),
+                            cpp_type=enum_data.get("cpp_type", ""),
+                            entries=enum_data.get("entries", []),
+                        ),
+                    )
+            except (KeyError, TypeError, ValueError, AttributeError) as e:
+                logger.debug("UserDefinedEnum extraction failed: %s", e)
+
+        elif class_name == "UserDefinedStruct":
+            try:
+                from uasset_read.parsers.asset_types.user_defined import extract_user_defined_struct
+                struct_data = extract_user_defined_struct(export, result.name_map or [])
+                if struct_data:
+                    return UserDefinedDataIR(
+                        type="struct",
+                        struct=UserDefinedStructIR(
+                            struct_name=struct_data.get("struct_name", ""),
+                            struct_flags=struct_data.get("struct_flags", 0),
+                            guid=struct_data.get("guid", ""),
+                            fields=struct_data.get("fields", []),
+                        ),
+                    )
+            except (KeyError, TypeError, ValueError, AttributeError) as e:
+                logger.debug("UserDefinedStruct extraction failed: %s", e)
+
+    return None
+
+
 def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
     """Convert ParseResult to PackageIR.
 
@@ -689,6 +743,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         variables=_build_variables_ir(result),
         animation=_build_animation_data(result),
         material=_build_material_ir(result),
+        user_defined=_build_user_defined_data(result),
         diagnostics=(result.diagnostics or []) + list(getattr(result, "structured_diagnostics", None) or []),
         function_graphs=function_graphs,
         logic_sources=list(getattr(result, "logic_sources", None) or []),

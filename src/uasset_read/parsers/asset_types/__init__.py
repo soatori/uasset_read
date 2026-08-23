@@ -237,6 +237,8 @@ def register_asset_type_handlers() -> None:
         ("groom_asset", "parse_groom_asset", ["GroomAsset"], "GroomAssetHandler"),
         ("sparse_volume_texture", "parse_sparse_volume_texture", ["SparseVolumeTexture"], "SparseVolumeTextureHandler"),
         ("level_sequence", "parse_level_sequence", ["LevelSequence"], "LevelSequenceHandler"),
+        ("sound_cue", "parse_sound_cue", ["SoundCue"], "SoundCueHandler"),
+        ("user_defined", "parse_user_defined", ["UserDefinedEnum", "UserDefinedStruct"], "UserDefinedHandler"),
     ]
     for module, func_name, class_names, handler_name in _optional:
         try:
