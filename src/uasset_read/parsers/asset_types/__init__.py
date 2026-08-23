@@ -95,7 +95,14 @@ class AssetTypeHandler(ClassHandler):
     ) -> HandlerResult:
         try:
             name_map = context if isinstance(context, list) else []
-            data = self._parse_func(archive, name_map)
+            # 向后兼容：如果 parse_func 接受第三个参数（export），则传递
+            import inspect
+            sig = inspect.signature(self._parse_func)
+            params = list(sig.parameters.keys())
+            if len(params) >= 3:
+                data = self._parse_func(archive, name_map, export)
+            else:
+                data = self._parse_func(archive, name_map)
             return HandlerResult(
                 success=True,
                 data=data,

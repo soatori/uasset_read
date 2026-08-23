@@ -307,6 +307,11 @@ class MarkdownRenderer(IRenderer):
             # Property details (filter editor layout properties, consistent with JSON renderer)
             self._render_export_properties(lines, export)
 
+            # asset_type_data: SoundWave, SoundCue, DataTable 等 handler 提取的语义数据
+            atd = getattr(export, "asset_type_data", None)
+            if atd:
+                self._render_asset_type_data(lines, atd)
+
         # === Event Graph ===
         self._render_event_graph(lines, ir)
 
@@ -844,6 +849,22 @@ class MarkdownRenderer(IRenderer):
                     f"| {kind} | {module} | {object_name} | {field_name} | {error} |"
                 )
             lines.append("")
+
+    def _render_asset_type_data(self, lines: list[str], data: dict) -> None:
+        """渲染 asset type handler 提取的语义数据（如 sound 块）。"""
+        if not data:
+            return
+        lines.append("### Asset Type Data")
+        lines.append("")
+        for key, value in data.items():
+            if isinstance(value, dict):
+                lines.append(f"**{key}:**")
+                lines.append("")
+                for k, v in value.items():
+                    lines.append(f"- **{k}:** `{v}`")
+            else:
+                lines.append(f"- **{key}:** `{value}`")
+        lines.append("")
 
     def _render_export_properties(self, lines: list[str], export) -> None:
         """Render export property table."""
