@@ -786,7 +786,22 @@ def _handle_node_pos_y(archive, tag, name_map, import_map, export_map, linker, r
 def _handle_node_guid(archive, tag, name_map, import_map, export_map, linker, raw_properties):
     """Handle NodeGuid tag."""
     if tag.size > 0:
-        val = archive.read_bytes(16).hex()
+        try:
+            data = archive.read_bytes(16)
+            if len(data) < 16:
+                logger.warning(
+                    "NodeGuid: expected 16 bytes, got %d at offset %d",
+                    len(data), archive.tell() - len(data),
+                )
+                val = data.hex().ljust(32, "0")
+            else:
+                val = data.hex()
+        except Exception:
+            logger.warning(
+                "NodeGuid: failed to read 16 bytes at offset %d, using zero GUID",
+                archive.tell(),
+            )
+            val = "0" * 32
         if archive.tell() < tag.value_end_offset:
             archive.seek(tag.value_end_offset)
         return {"node_guid": val}
