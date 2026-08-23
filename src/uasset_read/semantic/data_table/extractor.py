@@ -45,6 +45,9 @@ def build_data_table_content(
 
     content: dict = {"data_table": {}}
 
+    # Top-level row_count (validator reads data_table.get("row_count"))
+    content["data_table"]["row_count"] = row_count
+
     # Table summary
     table_summary: dict = {
         "row_count": row_count,
