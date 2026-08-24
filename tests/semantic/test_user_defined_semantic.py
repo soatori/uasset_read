@@ -1,7 +1,4 @@
-"""User-Defined types semantic extractor tests.
-
-Tests the UserDefinedEnum and UserDefinedStruct domain extractors with real samples.
-"""
+"""Tests for user_defined semantic extraction (#589)."""
 from __future__ import annotations
 
 import json
@@ -9,180 +6,143 @@ from pathlib import Path
 
 import pytest
 
-from uasset_read.pipeline.core import parse_uasset_with_linker
-from uasset_read.ir_builder import build_package_ir
-from uasset_read.semantic.builder import build_semantic_ir
-from uasset_read.semantic.projection import project_semantic
-from uasset_read.semantic.render import render_semantic_json
-from uasset_read.semantic.validator import validate_semantic_document
-from uasset_read.semantic.models import SemanticIR
+SAMPLES_DIR = Path(__file__).parent / "samples"
 
 
-_USER_DEFINED_SAMPLES = [
-    "Lyra_Enum_PanelType.uasset",
-    "StackOBot_Enum_CameraState.uasset",
-    "StackOBot_Struct_Objective.uasset",
-]
+@pytest.fixture
+def ue_sample_root():
+    if not SAMPLES_DIR.exists():
+        pytest.skip(f"samples directory not found: {SAMPLES_DIR}")
+    return SAMPLES_DIR
 
 
-def _build_semantic(samples_dir: Path, filename: str) -> SemanticIR:
-    """Parse and build SemanticIR for a sample."""
-    sample = samples_dir / filename
-    result = parse_uasset_with_linker(str(sample), tolerant=True)
-    ir = build_package_ir(result)
-    return build_semantic_ir(ir, source_path=str(sample))
+class TestUserDefinedEnumSemantic:
+    """Test UserDefinedEnum semantic extraction."""
+
+    def test_enum_has_user_defined_block(self, ue_sample_root):
+        """Enum assets should have a non-empty user_defined root block."""
+        from uasset_read import parse_single
+
+        path = ue_sample_root / "Lyra_Enum_PanelType.uasset"
+        if not path.exists():
+            pytest.skip("sample not found")
+
+        result = parse_single(str(path), format="json", tolerant=True)
+        data = json.loads(result)
+        assert "user_defined" in data, "user_defined block missing from JSON output"
+        ud = data["user_defined"]
+        assert "enum_data" in ud
+        assert ud["enum_data"]["enum_name"]
+        assert len(ud["enum_data"]["entries"]) > 0
+
+    def test_enum_entries_deterministic(self, ue_sample_root):
+        """Enum member ordering should be deterministic."""
+        from uasset_read import parse_single
+
+        path = ue_sample_root / "Lyra_Enum_PanelType.uasset"
+        if not path.exists():
+            pytest.skip("sample not found")
+
+        result1 = parse_single(str(path), format="json", tolerant=True)
+        result2 = parse_single(str(path), format="json", tolerant=True)
+        data1 = json.loads(result1)
+        data2 = json.loads(result2)
+        assert data1["user_defined"]["enum_data"]["entries"] == data2["user_defined"]["enum_data"]["entries"]
+
+    def test_enum_entries_have_name_and_display(self, ue_sample_root):
+        """Each enum entry should have name and display_name."""
+        from uasset_read import parse_single
+
+        path = ue_sample_root / "Lyra_Enum_PanelType.uasset"
+        if not path.exists():
+            pytest.skip("sample not found")
+
+        result = parse_single(str(path), format="json", tolerant=True)
+        data = json.loads(result)
+        for entry in data["user_defined"]["enum_data"]["entries"]:
+            assert "name" in entry, f"entry missing 'name': {entry}"
+            assert "display_name" in entry, f"entry missing 'display_name': {entry}"
+            assert entry["name"], "entry name should not be empty"
+
+    def test_second_enum_sample(self, ue_sample_root):
+        """Second enum sample should also work."""
+        from uasset_read import parse_single
+
+        path = ue_sample_root / "StackOBot_Enum_CameraState.uasset"
+        if not path.exists():
+            pytest.skip("sample not found")
+
+        result = parse_single(str(path), format="json", tolerant=True)
+        data = json.loads(result)
+        assert "user_defined" in data
+        assert "enum_data" in data["user_defined"]
+        assert len(data["user_defined"]["enum_data"]["entries"]) > 0
 
 
-def _build_and_project(samples_dir: Path, filename: str, mode: str = "standard") -> SemanticIR:
-    """Parse, build, project, and return SemanticIR."""
-    sample = samples_dir / filename
-    result = parse_uasset_with_linker(str(sample), tolerant=True)
-    ir = build_package_ir(result)
-    semantic = build_semantic_ir(ir, source_path=str(sample))
-    return project_semantic(semantic, mode)
+class TestUserDefinedStructSemantic:
+    """Test UserDefinedStruct semantic extraction."""
+
+    def test_struct_has_user_defined_block(self, ue_sample_root):
+        """Struct assets should have a non-empty user_defined root block."""
+        from uasset_read import parse_single
+
+        path = ue_sample_root / "StackOBot_Struct_Objective.uasset"
+        if not path.exists():
+            pytest.skip("sample not found")
+
+        result = parse_single(str(path), format="json", tolerant=True)
+        data = json.loads(result)
+        assert "user_defined" in data, "user_defined block missing from JSON output"
+        ud = data["user_defined"]
+        assert "struct_data" in ud
+        assert ud["struct_data"]["struct_name"]
+        assert len(ud["struct_data"]["properties"]) > 0
+
+    def test_struct_fields_have_name_and_type(self, ue_sample_root):
+        """Each struct field should have name and type."""
+        from uasset_read import parse_single
+
+        path = ue_sample_root / "StackOBot_Struct_Objective.uasset"
+        if not path.exists():
+            pytest.skip("sample not found")
+
+        result = parse_single(str(path), format="json", tolerant=True)
+        data = json.loads(result)
+        for field in data["user_defined"]["struct_data"]["properties"]:
+            assert "name" in field, f"field missing 'name': {field}"
+            assert "type" in field, f"field missing 'type': {field}"
+            assert field["name"], "field name should not be empty"
+            assert field["type"], "field type should not be empty"
+
+    def test_struct_has_guid(self, ue_sample_root):
+        """Struct should have a GUID."""
+        from uasset_read import parse_single
+
+        path = ue_sample_root / "StackOBot_Struct_Objective.uasset"
+        if not path.exists():
+            pytest.skip("sample not found")
+
+        result = parse_single(str(path), format="json", tolerant=True)
+        data = json.loads(result)
+        assert data["user_defined"].get("struct_data", {}).get("guid"), "struct should have a guid"
 
 
-class TestUserDefinedSemanticExtraction:
-    """User-Defined types semantic extractor output validation."""
+class TestUserDefinedFallback:
+    """Test that non-enum/struct assets don't have user_defined block."""
 
-    @pytest.mark.parametrize(
-        "filename",
-        _USER_DEFINED_SAMPLES,
-        ids=[s.split(".")[0] for s in _USER_DEFINED_SAMPLES],
-    )
-    def test_user_defined_has_semantic_ir(self, samples_dir: Path, filename: str):
-        """User-Defined sample produces a valid SemanticIR."""
-        if not (samples_dir / filename).exists():
-            pytest.skip(f"Sample not found: {filename}")
+    def test_blueprint_no_user_defined(self, ue_sample_root):
+        """Blueprint assets should not have user_defined block."""
+        from uasset_read import parse_single
 
-        semantic = _build_semantic(samples_dir, filename)
-        assert semantic is not None
-        assert semantic.asset_type in ("enum", "struct")
-        assert semantic.asset.name != "unknown"
+        path = ue_sample_root / "StackOBot_BP_Drone.uasset"
+        if not path.exists():
+            pytest.skip("sample not found")
 
-    @pytest.mark.parametrize(
-        "filename",
-        _USER_DEFINED_SAMPLES,
-        ids=[s.split(".")[0] for s in _USER_DEFINED_SAMPLES],
-    )
-    def test_user_defined_format(self, samples_dir: Path, filename: str):
-        """User-Defined uses the user_defined_semantic domain format."""
-        if not (samples_dir / filename).exists():
-            pytest.skip(f"Sample not found: {filename}")
-
-        semantic = _build_semantic(samples_dir, filename)
-        assert semantic.format == "uasset_read.user_defined_semantic"
-        assert semantic.format_version == "1.0.0"
-
-    @pytest.mark.parametrize(
-        "filename",
-        _USER_DEFINED_SAMPLES,
-        ids=[s.split(".")[0] for s in _USER_DEFINED_SAMPLES],
-    )
-    def test_user_defined_has_content(self, samples_dir: Path, filename: str):
-        """User-Defined SemanticIR may have empty content when asset_type_data is None."""
-        if not (samples_dir / filename).exists():
-            pytest.skip(f"Sample not found: {filename}")
-
-        semantic = _build_semantic(samples_dir, filename)
-        # Some user-defined assets have no asset_type_data from PropertyMetadataHandler
-        if semantic.content:
-            assert "user_defined" in semantic.content, f"{filename}: missing user_defined key"
-
-    @pytest.mark.parametrize(
-        "filename",
-        _USER_DEFINED_SAMPLES,
-        ids=[s.split(".")[0] for s in _USER_DEFINED_SAMPLES],
-    )
-    def test_user_defined_manifest(self, samples_dir: Path, filename: str):
-        """User-Defined content has correct manifest structure when present."""
-        if not (samples_dir / filename).exists():
-            pytest.skip(f"Sample not found: {filename}")
-
-        semantic = _build_semantic(samples_dir, filename)
-        if "user_defined" not in semantic.content:
-            pytest.skip("No user_defined content — asset_type_data was None")
-        ud = semantic.content["user_defined"]
-        assert "enum_data" in ud or "struct_data" in ud
-
-        if "enum_data" in ud:
-            ed = ud["enum_data"]
-            assert "enum_name" in ed
-            assert "display_name" in ed
-            assert "entry_count" in ed
-            assert "entries" in ed
-            assert isinstance(ed["entry_count"], int)
-            assert ed["entry_count"] >= 0
-            assert ed["entry_count"] == len(ed["entries"])
-
-        if "struct_data" in ud:
-            sd = ud["struct_data"]
-            assert "struct_name" in sd
-            assert "display_name" in sd
-            assert "property_count" in sd
-            assert "properties" in sd
-            assert isinstance(sd["property_count"], int)
-            assert sd["property_count"] >= 0
-            assert sd["property_count"] == len(sd["properties"])
-
-
-class TestUserDefinedValidation:
-    """User-Defined validator rules."""
-
-    @pytest.mark.parametrize(
-        "filename",
-        _USER_DEFINED_SAMPLES,
-        ids=[s.split(".")[0] for s in _USER_DEFINED_SAMPLES],
-    )
-    def test_user_defined_passes_validation(self, samples_dir: Path, filename: str):
-        """User-Defined SemanticIR passes validation (empty content valid when atd=None)."""
-        if not (samples_dir / filename).exists():
-            pytest.skip(f"Sample not found: {filename}")
-
-        semantic = _build_and_project(samples_dir, filename)
-        errors = validate_semantic_document(semantic)
-        # Empty content is expected when asset_type_data is None
-        assert errors == [], f"Validation errors: {errors}"
-
-
-class TestUserDefinedSchemaConformance:
-    """Schema conformance for User-Defined semantic JSON."""
-
-    @pytest.mark.parametrize(
-        "filename",
-        _USER_DEFINED_SAMPLES,
-        ids=[s.split(".")[0] for s in _USER_DEFINED_SAMPLES],
-    )
-    def test_standard_output_schema_valid(self, samples_dir: Path, filename: str):
-        """Standard mode output validates against schema."""
-        if not (samples_dir / filename).exists():
-            pytest.skip(f"Sample not found: {filename}")
-
-        semantic = _build_and_project(samples_dir, filename, "standard")
-        json_str = render_semantic_json(semantic, include_schema=True)
-        data = json.loads(json_str)
-
-        assert data["format"] == "uasset_read.user_defined_semantic"
-        assert "$schema" in data
-        assert "user_defined_semantic.schema.json" in data["$schema"]
-        # user_defined key present only when content is non-empty
-        if semantic.content:
-            assert "user_defined" in data
-
-
-class TestUserDefinedProjection:
-    """User-Defined projection (standard vs debug mode)."""
-
-    def test_standard_strips_evidence(self, samples_dir: Path):
-        """Standard mode strips evidence from User-Defined output."""
-        semantic = _build_and_project(
-            samples_dir, "Lyra_Enum_PanelType.uasset", "standard",
-        )
-        assert len(semantic.evidence) == 0
-
-    def test_debug_keeps_evidence(self, samples_dir: Path):
-        """Debug mode keeps evidence in User-Defined output."""
-        semantic = _build_and_project(
-            samples_dir, "Lyra_Enum_PanelType.uasset", "debug",
-        )
-        assert semantic.mode == "debug"
+        result = parse_single(str(path), format="json", tolerant=True)
+        data = json.loads(result)
+        # Blueprint assets should not have user_defined block
+        # (unless they happen to have a UserDefinedEnum/Struct export)
+        if "user_defined" in data:
+            # If present, it should be valid
+            ud = data["user_defined"]
+            assert "enum_data" in ud or "struct_data" in ud

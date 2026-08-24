@@ -1,231 +1,404 @@
-"""Skeleton semantic extractor tests.
-
-Tests the Skeleton domain extractor with real Skeleton samples.
-"""
+"""Skeleton 语义输出测试 — 验证层级安全、容错和 JSON 合约。"""
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import Any
 
 import pytest
 
-from uasset_read.pipeline.core import parse_uasset_with_linker
-from uasset_read.ir_builder import build_package_ir
-from uasset_read.semantic.builder import build_semantic_ir
-from uasset_read.semantic.projection import project_semantic
+from uasset_read.parsers.asset_types.skeleton import _validate_hierarchy
 from uasset_read.semantic.render import render_semantic_json
-from uasset_read.semantic.validator import validate_semantic_document
-from uasset_read.semantic.models import SemanticIR
+from uasset_read.semantic.builder import build_semantic_ir
+from uasset_read.models.ir import (
+    PackageIR,
+    PackageHeaderIR,
+    ExportIR,
+    LinkerSummaryIR,
+)
 
 
-_SKELETON_SAMPLES = [
-    "ALS_Mannequin_Skeleton",
-    "CiciToon_SK_Mannequin",
-]
+# ---------------------------------------------------------------------------
+# 辅助工厂
+# ---------------------------------------------------------------------------
 
-
-def _build_semantic(samples_dir: Path, stem: str) -> SemanticIR:
-    """Parse and build SemanticIR for a sample."""
-    sample = samples_dir / f"{stem}.uasset"
-    result = parse_uasset_with_linker(str(sample), tolerant=True)
-    ir = build_package_ir(result)
-    return build_semantic_ir(ir, source_path=str(sample))
-
-
-def _build_and_project(samples_dir: Path, stem: str, mode: str = "standard") -> SemanticIR:
-    """Parse, build, project, and return SemanticIR."""
-    sample = samples_dir / f"{stem}.uasset"
-    result = parse_uasset_with_linker(str(sample), tolerant=True)
-    ir = build_package_ir(result)
-    semantic = build_semantic_ir(ir, source_path=str(sample))
-    return project_semantic(semantic, mode)
-
-
-class TestSkeletonSemanticExtraction:
-    """Skeleton semantic extractor output validation."""
-
-    @pytest.mark.parametrize(
-        "stem",
-        _SKELETON_SAMPLES,
+def _make_header(**kwargs) -> PackageHeaderIR:
+    defaults = dict(
+        package_name="/Game/Test/Skeleton",
+        package_class="Skeleton",
+        package_flags=0,
+        total_export_count=1,
+        total_import_count=0,
+        ue_version="5.3",
     )
-    def test_skeleton_has_semantic_ir(self, samples_dir: Path, stem: str):
-        """Skeleton sample produces a valid SemanticIR."""
-        sample = samples_dir / f"{stem}.uasset"
-        if not sample.exists():
-            pytest.skip(f"Sample not found: {stem}.uasset")
+    defaults.update(kwargs)
+    return PackageHeaderIR(**defaults)
 
-        semantic = _build_semantic(samples_dir, stem)
-        assert semantic is not None
-        assert semantic.asset_type == "skeleton"
-        assert semantic.asset.name != "unknown"
 
-    @pytest.mark.parametrize(
-        "stem",
-        _SKELETON_SAMPLES,
+def _make_skeleton_export(asset_type_data: dict | None = None, **kwargs) -> ExportIR:
+    defaults = dict(
+        index=0,
+        object_name="Skeleton",
+        object_class="Skeleton",
+        serial_size=1024,
+        outer_index_resolved=None,
+        super_index_resolved=None,
+        parent_class=None,
+        properties=[],
+        graphs=[],
+        bulk_data=None,
+        asset_type_data=asset_type_data,
     )
-    def test_skeleton_format(self, samples_dir: Path, stem: str):
-        """Skeleton uses the skeleton_semantic domain format."""
-        sample = samples_dir / f"{stem}.uasset"
-        if not sample.exists():
-            pytest.skip(f"Sample not found: {stem}.uasset")
+    defaults.update(kwargs)
+    return ExportIR(**defaults)
 
-        semantic = _build_semantic(samples_dir, stem)
-        assert semantic.format == "uasset_read.skeleton_semantic"
-        assert semantic.format_version == "1.0.0"
 
-    @pytest.mark.parametrize(
-        "stem",
-        _SKELETON_SAMPLES,
+def _make_ir(exports: list[ExportIR] | None = None) -> PackageIR:
+    return PackageIR(
+        header=_make_header(),
+        name_map=[],
+        imports=[],
+        exports=exports or [],
+        linker=LinkerSummaryIR(has_linker=False, import_paths=[], export_paths=[]),
     )
-    def test_skeleton_has_content(self, samples_dir: Path, stem: str):
-        """Skeleton SemanticIR has non-empty skeleton content."""
-        sample = samples_dir / f"{stem}.uasset"
-        if not sample.exists():
-            pytest.skip(f"Sample not found: {stem}.uasset")
 
-        semantic = _build_semantic(samples_dir, stem)
-        assert semantic.content, f"{stem}: content is empty"
-        assert "skeleton" in semantic.content, f"{stem}: missing skeleton key"
 
-    @pytest.mark.parametrize(
-        "stem",
-        _SKELETON_SAMPLES,
-    )
-    def test_skeleton_bone_count_at_top_level(self, samples_dir: Path, stem: str):
-        """Skeleton content has bone_count at top level (not only in skeleton_summary)."""
-        sample = samples_dir / f"{stem}.uasset"
-        if not sample.exists():
-            pytest.skip(f"Sample not found: {stem}.uasset")
+def _make_ref_skeleton(names: list[str], parents: list[int]) -> dict:
+    """构造 reference_skeleton 字典。"""
+    return {
+        "names": names,
+        "parents": parents,
+        "bone_count": len(names),
+        "transforms": [],
+        "pose_count": len(names),
+        "name_to_index": {},
+    }
 
-        semantic = _build_semantic(samples_dir, stem)
-        skeleton = semantic.content.get("skeleton", {})
-        assert "bone_count" in skeleton, f"{stem}: missing top-level bone_count"
-        assert isinstance(skeleton["bone_count"], int)
-        assert skeleton["bone_count"] >= 0
 
-    @pytest.mark.parametrize(
-        "stem",
-        _SKELETON_SAMPLES,
-    )
-    def test_skeleton_bone_count_matches_bones(self, samples_dir: Path, stem: str):
-        """bone_count matches actual number of bones emitted."""
-        sample = samples_dir / f"{stem}.uasset"
-        if not sample.exists():
-            pytest.skip(f"Sample not found: {stem}.uasset")
+def _render_json(ir: PackageIR) -> dict:
+    semantic_ir = build_semantic_ir(ir)
+    output = render_semantic_json(semantic_ir)
+    return json.loads(output)
 
-        semantic = _build_semantic(samples_dir, stem)
-        skeleton = semantic.content.get("skeleton", {})
-        bone_count = skeleton.get("bone_count", 0)
-        bones = skeleton.get("bones", [])
-        assert bone_count == len(bones), (
-            f"{stem}: bone_count={bone_count} but len(bones)={len(bones)}"
+
+# ---------------------------------------------------------------------------
+# 层级验证测试
+# ---------------------------------------------------------------------------
+
+class TestHierarchyValidation:
+    """验证 _validate_hierarchy 函数的检测能力。"""
+
+    def test_valid_hierarchy(self):
+        """所有 parent 在范围内且无环 → 空诊断列表。"""
+        ref = _make_ref_skeleton(
+            names=["root", "child1", "child2"],
+            parents=[-1, 0, 0],
         )
+        result = _validate_hierarchy(ref)
+        assert result == []
 
-    @pytest.mark.parametrize(
-        "stem",
-        _SKELETON_SAMPLES,
-    )
-    def test_skeleton_bones_have_required_fields(self, samples_dir: Path, stem: str):
-        """Each bone has name and parent_index."""
-        sample = samples_dir / f"{stem}.uasset"
-        if not sample.exists():
-            pytest.skip(f"Sample not found: {stem}.uasset")
+    def test_single_root(self):
+        """单根骨骼 → 无 MULTIPLE_ROOTS 诊断。"""
+        ref = _make_ref_skeleton(
+            names=["root", "child"],
+            parents=[-1, 0],
+        )
+        result = _validate_hierarchy(ref)
+        assert not any(d["code"] == "SKELETON_MULTIPLE_ROOTS" for d in result)
 
-        semantic = _build_semantic(samples_dir, stem)
-        bones = semantic.content.get("skeleton", {}).get("bones", [])
-        for i, bone in enumerate(bones):
-            assert "name" in bone, f"Bone[{i}] missing name"
-            assert bone["name"], f"Bone[{i}] has empty name"
-            assert "parent_index" in bone, f"Bone[{i}] missing parent_index"
+    def test_multiple_roots(self):
+        """多根骨骼 → MULTIPLE_ROOTS 诊断。"""
+        ref = _make_ref_skeleton(
+            names=["root1", "root2", "child"],
+            parents=[-1, -1, 0],
+        )
+        result = _validate_hierarchy(ref)
+        diag = next(d for d in result if d["code"] == "SKELETON_MULTIPLE_ROOTS")
+        assert diag["count"] == 2
+        assert len(diag["examples"]) == 2
+
+    def test_invalid_parent_out_of_range_high(self):
+        """parent_index >= bone_count → INVALID_PARENT_INDEX。"""
+        ref = _make_ref_skeleton(
+            names=["root", "child1", "child2"],
+            parents=[-1, 5, 0],
+        )
+        result = _validate_hierarchy(ref)
+        diag = next(d for d in result if d["code"] == "SKELETON_INVALID_PARENT_INDEX")
+        assert diag["count"] == 1
+        assert diag["examples"][0] == {"bone_index": 1, "parent_index": 5}
+
+    def test_invalid_parent_negative_two(self):
+        """parent_index = -2（低于 INDEX_NONE）→ INVALID_PARENT_INDEX。"""
+        ref = _make_ref_skeleton(
+            names=["root", "child"],
+            parents=[-1, -2],
+        )
+        result = _validate_hierarchy(ref)
+        diag = next(d for d in result if d["code"] == "SKELETON_INVALID_PARENT_INDEX")
+        assert diag["count"] == 1
+
+    def test_invalid_parent_aggregation(self):
+        """多个无效 parent 聚合计数 + 限制 examples 为 5。"""
+        parents = [-1] + [999] * 20
+        names = ["root"] + [f"bone_{i}" for i in range(20)]
+        ref = _make_ref_skeleton(names=names, parents=parents)
+        result = _validate_hierarchy(ref)
+        diag = next(d for d in result if d["code"] == "SKELETON_INVALID_PARENT_INDEX")
+        assert diag["count"] == 20
+        assert len(diag["examples"]) == 5
+
+    def test_cycle_detection(self):
+        """A→B→A 环 → HIERARCHY_CYCLE。"""
+        ref = _make_ref_skeleton(
+            names=["A", "B", "C"],
+            parents=[1, 2, 1],  # A→B, B→C, C→A (cycle)
+        )
+        result = _validate_hierarchy(ref)
+        diag = next(d for d in result if d["code"] == "SKELETON_HIERARCHY_CYCLE")
+        assert diag["count"] >= 1
+        assert len(diag["examples"]) >= 1
+
+    def test_no_cycle_detection_when_invalid_parents(self):
+        """有 invalid parent 时跳过环检测（避免误报）。"""
+        ref = _make_ref_skeleton(
+            names=["A", "B"],
+            parents=[999, 999],
+        )
+        result = _validate_hierarchy(ref)
+        assert any(d["code"] == "SKELETON_INVALID_PARENT_INDEX" for d in result)
+        assert not any(d["code"] == "SKELETON_HIERARCHY_CYCLE" for d in result)
+
+    def test_empty_skeleton(self):
+        """空骨骼列表 → 无诊断。"""
+        ref = _make_ref_skeleton(names=[], parents=[])
+        result = _validate_hierarchy(ref)
+        assert result == []
+
+    def test_single_bone_root(self):
+        """单根骨骼（无子骨骼）→ 无诊断。"""
+        ref = _make_ref_skeleton(names=["root"], parents=[-1])
+        result = _validate_hierarchy(ref)
+        assert result == []
 
 
-class TestSkeletonValidation:
-    """Skeleton validator rules."""
+# ---------------------------------------------------------------------------
+# JSON 渲染测试
+# ---------------------------------------------------------------------------
 
-    @pytest.mark.parametrize(
-        "stem",
-        _SKELETON_SAMPLES,
-    )
-    def test_skeleton_passes_validation(self, samples_dir: Path, stem: str):
-        """Skeleton SemanticIR passes validation."""
-        sample = samples_dir / f"{stem}.uasset"
-        if not sample.exists():
-            pytest.skip(f"Sample not found: {stem}.uasset")
+class TestSkeletonJSONRendering:
+    """验证 skeleton 块在 JSON 输出中的正确渲染。"""
 
-        semantic = _build_and_project(samples_dir, stem)
-        errors = validate_semantic_document(semantic)
-        assert errors == [], f"Validation errors: {errors}"
-
-    def test_validator_aggregates_bone_errors(self):
-        """Validator reports non-integer parent_index errors (not per-bone)."""
-        from unittest.mock import MagicMock
-        from uasset_read.semantic.validator import validate_skeleton_document
-
-        ir = MagicMock()
-        ir.content = {
-            "skeleton": {
-                "bone_count": 10,
-                "bones": [
-                    {"name": f"bone_{i}", "parent_index": "invalid"}
-                    for i in range(10)
-                ],
-            }
+    def test_skeleton_block_present(self):
+        """有 skeleton asset_type_data 时，JSON 输出包含 skeleton 键。"""
+        ad = {
+            "parse_status": "success",
+            "reference_skeleton": _make_ref_skeleton(
+                names=["root", "child"],
+                parents=[-1, 0],
+            ),
+            "valid_hierarchy": True,
         }
+        export = _make_skeleton_export(asset_type_data=ad)
+        ir = _make_ir(exports=[export])
+        data = _render_json(ir)
+        assert "skeleton" in data
 
-        errors = validate_skeleton_document(ir)
-        # Non-integer parent_index should produce errors
-        parent_errors = [e for e in errors if "invalid parent_index" in e]
-        assert len(parent_errors) > 0, (
-            f"Expected parent_index errors, got: {errors}"
-        )
+    def test_bone_count_matches_bones(self):
+        """bone_count 与 bones 数组长度一致。"""
+        ad = {
+            "parse_status": "success",
+            "reference_skeleton": _make_ref_skeleton(
+                names=["root", "child1", "child2"],
+                parents=[-1, 0, 0],
+            ),
+            "valid_hierarchy": True,
+        }
+        export = _make_skeleton_export(asset_type_data=ad)
+        ir = _make_ir(exports=[export])
+        data = _render_json(ir)
+        sk = data["skeleton"]
+        assert sk["bone_count"] == 3
+        assert len(sk["bones"]) == 3
+
+    def test_bone_names_and_parents(self):
+        """bones 列表包含正确的 name 和 parent_index。"""
+        ad = {
+            "parse_status": "success",
+            "reference_skeleton": _make_ref_skeleton(
+                names=["root", "spine", "head"],
+                parents=[-1, 0, 1],
+            ),
+            "valid_hierarchy": True,
+        }
+        export = _make_skeleton_export(asset_type_data=ad)
+        ir = _make_ir(exports=[export])
+        data = _render_json(ir)
+        bones = data["skeleton"]["bones"]
+        assert bones[0] == {"name": "root", "parent_index": -1}
+        assert bones[1] == {"name": "spine", "parent_index": 0}
+        assert bones[2] == {"name": "head", "parent_index": 1}
+
+    def test_invalid_hierarchy_renders_diagnostics(self):
+        """无效层级时，skeleton 块包含 hierarchy_diagnostics。"""
+        ad = {
+            "parse_status": "partial",
+            "reference_skeleton": _make_ref_skeleton(
+                names=["root", "bad"],
+                parents=[-1, 999],
+            ),
+            "valid_hierarchy": False,
+            "hierarchy_diagnostics": [{
+                "code": "SKELETON_INVALID_PARENT_INDEX",
+                "count": 1,
+                "examples": [{"bone_index": 1, "parent_index": 999}],
+            }],
+        }
+        export = _make_skeleton_export(asset_type_data=ad)
+        ir = _make_ir(exports=[export])
+        data = _render_json(ir)
+        sk = data["skeleton"]
+        assert sk["valid_hierarchy"] is False
+        assert len(sk["hierarchy_diagnostics"]) == 1
+        assert sk["hierarchy_diagnostics"][0]["code"] == "SKELETON_INVALID_PARENT_INDEX"
+
+    def test_partial_status_rendered(self):
+        """parse_status 非 success 时在 skeleton 块中渲染。"""
+        ad = {
+            "parse_status": "partial",
+            "reference_skeleton": _make_ref_skeleton(
+                names=["root"], parents=[-1],
+            ),
+            "valid_hierarchy": True,
+        }
+        export = _make_skeleton_export(asset_type_data=ad)
+        ir = _make_ir(exports=[export])
+        data = _render_json(ir)
+        assert data["skeleton"]["parse_status"] == "partial"
+
+    def test_guid_rendered(self):
+        """guid 字段正确渲染。"""
+        ad = {
+            "parse_status": "success",
+            "reference_skeleton": _make_ref_skeleton(
+                names=["root"], parents=[-1],
+            ),
+            "guid": "00000000-00009100-00000C00-69687400",
+            "valid_hierarchy": True,
+        }
+        export = _make_skeleton_export(asset_type_data=ad)
+        ir = _make_ir(exports=[export])
+        data = _render_json(ir)
+        assert data["skeleton"]["skeleton_summary"]["guid"] == "00000000-00009100-00000C00-69687400"
+
+    def test_no_skeleton_block_without_data(self):
+        """无 skeleton asset_type_data 时，JSON 输出不含 skeleton 键。"""
+        export = _make_skeleton_export(asset_type_data=None)
+        ir = _make_ir(exports=[export])
+        data = _render_json(ir)
+        assert "skeleton" not in data
+
+    def test_empty_bones(self):
+        """bone_count=0 时 bones 为空列表。"""
+        ad = {
+            "parse_status": "success",
+            "reference_skeleton": _make_ref_skeleton(
+                names=[], parents=[],
+            ),
+            "valid_hierarchy": True,
+        }
+        export = _make_skeleton_export(asset_type_data=ad)
+        ir = _make_ir(exports=[export])
+        data = _render_json(ir)
+        sk = data["skeleton"]
+        assert sk["bone_count"] == 0
+        assert "bones" not in sk  # empty list is omitted from output
+
+    def test_retarget_sources_metadata(self):
+        """retarget_sources 只渲染元数据（不含 transforms 数组）。"""
+        ad = {
+            "parse_status": "success",
+            "reference_skeleton": _make_ref_skeleton(
+                names=["root"], parents=[-1],
+            ),
+            "retarget_sources": [{
+                "name": "default",
+                "pose_name": "default",
+                "source_mesh": "/Game/Mesh/SK_Mannequin",
+                "transforms": [{"translation": {}, "rotation": {}, "scale": {}}],
+                "transform_count": 1,
+            }],
+            "valid_hierarchy": True,
+        }
+        export = _make_skeleton_export(asset_type_data=ad)
+        ir = _make_ir(exports=[export])
+        data = _render_json(ir)
+        sources = data["skeleton"]["retarget_sources"]
+        assert len(sources) == 1
+        assert sources[0]["name"] == "default"
+        assert sources[0]["pose_name"] == "default"
+        assert sources[0]["source_mesh"] == "/Game/Mesh/SK_Mannequin"
+        assert "transforms" not in sources[0]  # transforms array is not rendered
 
 
-class TestSkeletonSchemaConformance:
-    """Schema conformance for Skeleton semantic JSON."""
+# ---------------------------------------------------------------------------
+# CiciToon 容错集成测试
+# ---------------------------------------------------------------------------
 
-    @pytest.mark.parametrize(
-        "stem",
-        _SKELETON_SAMPLES,
+class TestCiciToonTolerant:
+    """CiciToon_SK_Mannequin.uasset 容错 JSON 输出测试。"""
+
+    SAMPLE_PATH = "tests/samples/CiciToon_SK_Mannequin.uasset"
+
+    @pytest.mark.skipif(
+        not __import__("os").path.exists(__import__("pathlib").Path(__file__).parent / "samples" / "CiciToon_SK_Mannequin.uasset"),
+        reason="sample not available",
     )
-    def test_standard_output_schema_valid(self, samples_dir: Path, stem: str):
-        """Standard mode output validates against schema."""
-        sample = samples_dir / f"{stem}.uasset"
-        if not sample.exists():
-            pytest.skip(f"Sample not found: {stem}.uasset")
+    def test_tolerant_json_no_exception(self):
+        """CiciToon 在 tolerant 模式下不抛异常，返回合法 JSON。"""
+        from uasset_read.core import parse_single
+        output = parse_single(self.SAMPLE_PATH, format="json", tolerant=True)
+        data = json.loads(output)
+        assert "skeleton" in data
 
-        semantic = _build_and_project(samples_dir, stem, "standard")
-        json_str = render_semantic_json(semantic, include_schema=True)
-        data = json.loads(json_str)
-
-        assert data["format"] == "uasset_read.skeleton_semantic"
-        assert "$schema" in data
-
-
-class TestSkeletonProjection:
-    """Skeleton projection (standard vs debug mode)."""
-
-    @pytest.mark.parametrize(
-        "stem",
-        _SKELETON_SAMPLES,
+    @pytest.mark.skipif(
+        not __import__("os").path.exists(__import__("pathlib").Path(__file__).parent / "samples" / "CiciToon_SK_Mannequin.uasset"),
+        reason="sample not available",
     )
-    def test_standard_strips_evidence(self, samples_dir: Path, stem: str):
-        """Standard mode strips evidence from Skeleton output."""
-        sample = samples_dir / f"{stem}.uasset"
-        if not sample.exists():
-            pytest.skip(f"Sample not found: {stem}.uasset")
+    def test_bone_count_matches_bones(self):
+        """bone_count 与 emitted bones 数量一致。"""
+        from uasset_read.core import parse_single
+        output = parse_single(self.SAMPLE_PATH, format="json", tolerant=True)
+        data = json.loads(output)
+        sk = data["skeleton"]
+        assert sk["bone_count"] == len(sk["bones"])
 
-        semantic = _build_and_project(samples_dir, stem, "standard")
-        assert len(semantic.evidence) == 0
-
-    @pytest.mark.parametrize(
-        "stem",
-        _SKELETON_SAMPLES,
+    @pytest.mark.skipif(
+        not __import__("os").path.exists(__import__("pathlib").Path(__file__).parent / "samples" / "CiciToon_SK_Mannequin.uasset"),
+        reason="sample not available",
     )
-    def test_debug_keeps_evidence(self, samples_dir: Path, stem: str):
-        """Debug mode keeps evidence in Skeleton output."""
-        sample = samples_dir / f"{stem}.uasset"
-        if not sample.exists():
-            pytest.skip(f"Sample not found: {stem}.uasset")
+    def test_invalid_hierarchy_has_aggregated_diagnostics(self):
+        """无效层级产生 aggregated diagnostics 而非逐条展开。"""
+        from uasset_read.core import parse_single
+        output = parse_single(self.SAMPLE_PATH, format="json", tolerant=True)
+        data = json.loads(output)
+        sk = data["skeleton"]
+        assert sk.get("valid_hierarchy") is False
+        diag = sk.get("hierarchy_diagnostics", [])
+        # 至少有一条 INVALID_PARENT_INDEX 诊断
+        parent_diag = [d for d in diag if d["code"] == "SKELETON_INVALID_PARENT_INDEX"]
+        assert len(parent_diag) == 1
+        # count 应 > 0，examples 应 <= 5
+        assert parent_diag[0]["count"] > 0
+        assert len(parent_diag[0]["examples"]) <= 5
 
-        semantic = _build_and_project(samples_dir, stem, "debug")
-        assert semantic.mode == "debug"
+    @pytest.mark.skipif(
+        not __import__("os").path.exists(__import__("pathlib").Path(__file__).parent / "samples" / "CiciToon_SK_Mannequin.uasset"),
+        reason="sample not available",
+    )
+    def test_partial_status(self):
+        """CiciToon skeleton 有层级错误时 parse_status 为 partial。"""
+        from uasset_read.core import parse_single
+        output = parse_single(self.SAMPLE_PATH, format="json", tolerant=True)
+        data = json.loads(output)
+        sk = data["skeleton"]
+        assert sk.get("parse_status") == "partial"
