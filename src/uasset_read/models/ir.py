@@ -573,6 +573,31 @@ class AnimationDataIR:
 
 
 @dataclass
+class UserDefinedEnumIR:
+    """UserDefinedEnum semantic data. """
+    enum_name: str = ""
+    cpp_type: str = ""
+    entries: list[dict] = field(default_factory=list)
+
+
+@dataclass
+class UserDefinedStructIR:
+    """UserDefinedStruct semantic data. """
+    struct_name: str = ""
+    struct_flags: int = 0
+    guid: str = ""
+    fields: list[dict] = field(default_factory=list)
+
+
+@dataclass
+class UserDefinedDataIR:
+    """User-defined type semantic data (enum or struct)."""
+    type: str = ""  # "enum" or "struct"
+    enum: UserDefinedEnumIR | None = None
+    struct: UserDefinedStructIR | None = None
+
+
+@dataclass
 class PackageDependenciesIR:
     """Package dependency data."""
     resolved_parent_assets: list[dict] = field(default_factory=list)
@@ -675,6 +700,7 @@ class PackageIR:
     variables: list[VariableIR] = field(default_factory=list)
     animation: AnimationDataIR | None = None
     material: MaterialIR | None = None
+    user_defined: UserDefinedDataIR | None = None
     diagnostics: list[OffsetRangeDiagnostic | StructuredDiagnostic] = field(default_factory=list)
     function_graphs: list[dict] = field(default_factory=list)
     logic_sources: list[dict] = field(default_factory=list)
