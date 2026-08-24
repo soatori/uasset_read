@@ -91,7 +91,6 @@ def build_anim_content(
     object_class = getattr(export_ir, "object_class", "") or ""
 
     if not asset_type_data or not isinstance(asset_type_data, dict):
-        coverage_model.track("anim_summary", False)
         return {}
 
     if object_class == "AnimSequence":
@@ -103,5 +102,4 @@ def build_anim_content(
     elif object_class == "AnimCurveCompressionSettings":
         return _build_compression_settings(asset_type_data, coverage_model)
     else:
-        coverage_model.track("anim_summary", False)
         return {}
