@@ -467,6 +467,20 @@ def parse_property_value(
                 # Handler returned None (unknown type/parse failed), continue falling back to raw_data
             except (_struct.error, OSError, ValueError) as e:
                 logger.debug("BinaryOrNative handler failed for %s: %s", tag.type, e)
+        # Also try by struct_type (with F-prefix fallback) for struct-specific handlers
+        struct_type = getattr(tag, "struct_type", None)
+        if struct_type:
+            handler = BINARY_OR_NATIVE_HANDLERS.get(struct_type)
+            if handler is None and not struct_type.startswith("F"):
+                handler = BINARY_OR_NATIVE_HANDLERS.get(f"F{struct_type}")
+            if handler is not None:
+                try:
+                    result = handler(tag, archive, name_map, export_map, summary)
+                    if result is not None:
+                        return result
+                except (_struct.error, OSError, ValueError) as e:
+                    logger.debug("BinaryOrNative struct_type handler failed for %s: %s", struct_type, e)
+
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
         return {
             "kind": "binary_or_native_property",

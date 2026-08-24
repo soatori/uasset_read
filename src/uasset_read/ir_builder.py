@@ -197,17 +197,32 @@ def _build_material_ir(result: "ParseResult | LinkerParseResult") -> MaterialIR 
     material_type = getattr(material_export, "_resolved_class", "Material")
 
     # Build expression index -> guid mapping
+    # Key by actual export table position, not sequential position in filtered list
     expr_guid_map: dict[int, str] = {}
-    for idx, expr_export in enumerate(expression_exports):
-        guid = _extract_expression_guid(expr_export)
-        if guid:
-            expr_guid_map[idx + 1] = guid  # 1-based export index
+    for export_idx, export in enumerate(result.export_map or []):
+        class_name = _safe_str(getattr(export, "object_class", None)) or \
+                     resolve_class_name(
+                         getattr(export, "class_index", None),
+                         result.import_map or [],
+                         result.export_map or [],
+                     )
+        if class_name and class_name.startswith("MaterialExpression"):
+            guid = _extract_expression_guid(export)
+            if guid:
+                expr_guid_map[export_idx] = guid  # Actual export table index
 
-    # Build expressions
+    # Build expressions with export table indices
     expressions = []
-    for idx, expr_export in enumerate(expression_exports):
-        expr_ir = _build_single_expression_ir(idx + 1, expr_export, expr_guid_map, result)
-        expressions.append(expr_ir)
+    for export_idx, export in enumerate(result.export_map or []):
+        class_name = _safe_str(getattr(export, "object_class", None)) or \
+                     resolve_class_name(
+                         getattr(export, "class_index", None),
+                         result.import_map or [],
+                         result.export_map or [],
+                     )
+        if class_name and class_name.startswith("MaterialExpression"):
+            expr_ir = _build_single_expression_ir(export_idx, export, expr_guid_map, result)
+            expressions.append(expr_ir)
 
     # Build material inputs (Material only)
     material_inputs = []
@@ -243,11 +258,23 @@ def _build_material_ir(result: "ParseResult | LinkerParseResult") -> MaterialIR 
 
 def _extract_expression_guid(expr_export) -> str | None:
     """Extract MaterialExpressionGuid from export properties."""
+    from uasset_read.models.properties import StructValue
+
     for prop in getattr(expr_export, "properties", None) or []:
         if getattr(prop, "name", None) == "MaterialExpressionGuid":
             val = getattr(prop, "value", None)
+            # Handle StructValue (most common case from property parser)
+            if isinstance(val, StructValue) and val.struct_type == "Guid":
+                fields = val.fields
+                a = fields.get("A", 0)
+                b = fields.get("B", 0)
+                c = fields.get("C", 0)
+                d = fields.get("D", 0)
+                return f"{a:08x}{b:08x}{c:08x}{d:08x}"
+            # Handle string value (legacy/direct)
             if isinstance(val, str):
                 return normalize_hex_guid(val)
+            # Handle dict value (fallback)
             if isinstance(val, dict):
                 guid_str = val.get("guid", "") or val.get("value", "")
                 if guid_str:
@@ -437,8 +464,19 @@ def _build_material_properties(material_export) -> dict:
             domain_val = _safe_int(prop_value)
             properties["domain"] = MATERIAL_DOMAIN_MAP.get(domain_val, str(domain_val))
         elif prop_name == "BlendMode":
-            blend_val = _safe_int(prop_value)
-            properties["blend_mode"] = BLEND_MODE_MAP.get(blend_val, str(blend_val))
+            # Handle enum dict format from ByteProperty
+            if isinstance(prop_value, dict) and "value_name" in prop_value:
+                enum_name = prop_value["value_name"]
+                # Extract "Masked" from "EBlendMode::BLEND_Masked"
+                if "::" in enum_name:
+                    enum_name = enum_name.split("::")[-1]
+                # Remove "BLEND_" prefix if present
+                if enum_name.startswith("BLEND_"):
+                    enum_name = enum_name[6:]
+                properties["blend_mode"] = enum_name
+            else:
+                blend_val = _safe_int(prop_value)
+                properties["blend_mode"] = BLEND_MODE_MAP.get(blend_val, str(blend_val))
         elif prop_name == "ShadingModel":
             model_val = _safe_int(prop_value)
             properties["shading_model"] = SHADING_MODEL_MAP.get(model_val, str(model_val))
@@ -471,21 +509,36 @@ def _build_material_instance_parameters(material_export) -> dict:
     return parameters if parameters else None
 
 
+def _get_fields(obj):
+    """Extract fields from StructValue or dict."""
+    from uasset_read.models.properties import StructValue
+    if isinstance(obj, StructValue):
+        return obj.fields
+    if isinstance(obj, dict):
+        return obj
+    return None
+
+
 def _extract_parameter_values(source, value_key: str) -> dict:
     """Extract parameter name->value mapping from a parameter array."""
     result: dict = {}
     if isinstance(source, list):
         for item in source:
-            if isinstance(item, dict):
-                info = item.get("ParameterInfo", item.get("Info", {}))
-                if isinstance(info, dict):
-                    name = info.get("Name", info.get("ParameterName", ""))
+            fields = _get_fields(item)
+            if fields is not None:
+                info = fields.get("ParameterInfo", fields.get("Info", {}))
+                info_fields = _get_fields(info) if info else {}
+                if info_fields:
+                    name = _safe_str(info_fields.get("Name", info_fields.get("ParameterName", "")))
                 else:
-                    name = str(info)
+                    name = _safe_str(info) if info else ""
                 if not name:
-                    name = item.get("ParameterName", item.get("Name", ""))
+                    name = _safe_str(fields.get("ParameterName", fields.get("Name", "")))
                 if name:
-                    result[str(name)] = {"value": item.get(value_key, item.get("Value"))}
+                    result[name] = {
+                        "value": fields.get(value_key, fields.get("Value")),
+                        "guid": _safe_str(fields.get("ExpressionGUID", "")),
+                    }
     return result
 
 
@@ -494,17 +547,19 @@ def _extract_static_switch_values(source) -> dict:
     result: dict = {}
     if isinstance(source, list):
         for item in source:
-            if isinstance(item, dict):
-                info = item.get("ParameterInfo", item.get("Info", {}))
-                if isinstance(info, dict):
-                    name = info.get("Name", info.get("ParameterName", ""))
+            fields = _get_fields(item)
+            if fields is not None:
+                info = fields.get("ParameterInfo", fields.get("Info", {}))
+                info_fields = _get_fields(info) if info else {}
+                if info_fields:
+                    name = _safe_str(info_fields.get("Name", info_fields.get("ParameterName", "")))
                 else:
-                    name = str(info)
+                    name = _safe_str(info) if info else ""
                 if not name:
-                    name = item.get("ParameterName", item.get("Name", ""))
+                    name = _safe_str(fields.get("ParameterName", fields.get("Name", "")))
                 if name:
-                    val = item.get("Value", item.get("value"))
-                    result[str(name)] = bool(val) if val is not None else False
+                    val = fields.get("Value", fields.get("value"))
+                    result[name] = bool(val) if val is not None else False
     return result
 
 
@@ -524,11 +579,12 @@ def _build_material_instance_overrides(material_export) -> dict | None:
         prop_name = getattr(prop, "name", "")
         if prop_name == "BasePropertyOverrides":
             val = getattr(prop, "value", None)
-            if isinstance(val, dict):
+            fields = _get_fields(val)
+            if fields:
                 for name in override_names:
-                    flag = val.get(f"bOverride_{name}")
+                    flag = fields.get(f"bOverride_{name}")
                     if flag:
-                        v = val.get(name)
+                        v = fields.get(name)
                         if v is not None:
                             overrides[name] = v
 
@@ -540,8 +596,11 @@ def _resolve_material_parent(material_export, result) -> str | None:
     for prop in getattr(material_export, "properties", None) or []:
         if getattr(prop, "name", None) == "Parent":
             val = getattr(prop, "value", None)
-            if isinstance(val, dict):
-                return _safe_str(val.get("object_name", val.get("full_name")))
+            if isinstance(val, int):
+                return _resolve_package_index(result, val)
+            fields = _get_fields(val)
+            if fields:
+                return _safe_str(fields.get("ObjectName", fields.get("object_name", fields.get("full_name", ""))))
             if isinstance(val, str):
                 return val
     return None

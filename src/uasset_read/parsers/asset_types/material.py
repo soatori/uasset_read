@@ -1,10 +1,13 @@
-"""Material Asset metadata extractor (partial metadata).
+"""Material Asset type handler."""
+from __future__ import annotations
 
-Note: This module does not attempt to parse the UE standard UMaterial::Serialize layout
-(that layout depends on version, CustomVersion, and FMaterialResource structure).
-It only extracts raw byte samples for diagnostics.
-"""
+from typing import TYPE_CHECKING
 
-from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
+if TYPE_CHECKING:
+    from uasset_read.archive import FArchive
+    from uasset_read.serializers.object_resources import ObjectExport
 
-parse_material = make_opaque_stub("Material")
+
+def parse_material(archive: "FArchive", name_map: list, export: "ObjectExport") -> dict:
+    """Parse Material export — delegates to IR builder pipeline."""
+    return {"asset_type": "Material", "material_type": "Material"}

@@ -1,10 +1,13 @@
-"""MaterialInstanceConstant Asset metadata extractor (partial metadata).
+"""MaterialInstanceConstant Asset type handler."""
+from __future__ import annotations
 
-Note: This module does not attempt to parse the UE standard UMaterialInstanceConstant::Serialize layout
-(that layout depends on version, CustomVersion, and FMaterialParameterInfo structure).
-It only extracts raw byte samples for diagnostics.
-"""
+from typing import TYPE_CHECKING
 
-from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
+if TYPE_CHECKING:
+    from uasset_read.archive import FArchive
+    from uasset_read.serializers.object_resources import ObjectExport
 
-parse_material_instance = make_opaque_stub("MaterialInstanceConstant")
+
+def parse_material_instance(archive: "FArchive", name_map: list, export: "ObjectExport") -> dict:
+    """Parse MaterialInstanceConstant export — delegates to IR builder pipeline."""
+    return {"asset_type": "MaterialInstance", "material_type": "MaterialInstance"}
