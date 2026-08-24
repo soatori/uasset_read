@@ -81,13 +81,15 @@ def build_skeleton_content(
 
     content: dict = {"skeleton": {}}
 
-    # Skeleton summary
-    skeleton_summary: dict = {
-        "bone_count": len(bones),
-    }
+    # bone_count at top level (contract: always present when skeleton data exists)
+    content["skeleton"]["bone_count"] = len(bones)
+
+    # Skeleton summary (optional metadata)
+    skeleton_summary: dict = {}
     if guid:
         skeleton_summary["guid"] = guid
-    content["skeleton"]["skeleton_summary"] = skeleton_summary
+    if skeleton_summary:
+        content["skeleton"]["skeleton_summary"] = skeleton_summary
 
     # Bones
     if has_bones:
