@@ -99,4 +99,18 @@ def build_skeleton_content(
     if retarget_sources:
         content["skeleton"]["retarget_sources"] = retarget_sources
 
+    # Hierarchy validation (from handler output)
+    valid_hierarchy = asset_type_data.get("valid_hierarchy")
+    if valid_hierarchy is not None:
+        content["skeleton"]["valid_hierarchy"] = valid_hierarchy
+
+    hierarchy_diagnostics = asset_type_data.get("hierarchy_diagnostics")
+    if hierarchy_diagnostics:
+        content["skeleton"]["hierarchy_diagnostics"] = hierarchy_diagnostics
+
+    # Parse status (from handler output)
+    parse_status = asset_type_data.get("parse_status")
+    if parse_status and parse_status != "success":
+        content["skeleton"]["parse_status"] = parse_status
+
     return content

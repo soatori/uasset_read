@@ -171,6 +171,7 @@ def register_asset_type_handlers() -> None:
             handler_name="MaterialInstanceHandler",
         ),
         PropertyMetadataHandler("Texture2D"),
+        PropertyMetadataHandler("TextureCube"),
         PropertyMetadataHandler("SoundCue"),
         PropertyMetadataHandler("MaterialFunction"),
         PropertyMetadataHandler("MaterialParameterCollection"),
@@ -184,7 +185,6 @@ def register_asset_type_handlers() -> None:
 
     # Optional parsers (register if import succeeds)
     _optional = [
-        ("texture_cube", "parse_texture_cube", ["TextureCube"], "TextureCubeHandler"),
         ("anim_sequence", "AnimSequenceHandler", ["AnimSequence"], "AnimSequenceHandler"),
         ("anim_blueprint", "AnimBlueprintHandler", ["AnimBlueprintGeneratedClass"], "AnimBlueprintHandler"),
         ("anim_montage", "AnimMontageHandler", ["AnimMontage"], "AnimMontageHandler"),

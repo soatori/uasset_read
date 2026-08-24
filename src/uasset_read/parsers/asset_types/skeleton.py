@@ -1,7 +1,7 @@
-"""USkeleton 资产类型处理器
+"""USkeleton asset type handler.
 
-解析 USkeleton 的 custom serialization 数据：
-- ReferenceSkeleton（参考骨架）
+Parses USkeleton custom serialization data:
+- ReferenceSkeleton
   - Names: TArray<FName>
   - Parents: TArray<int32>
   - RefLocalPose: TArray<FTransform>
@@ -9,12 +9,12 @@
     - UE5: 52 bytes (Rotation 16 + Translation 24 + Scale 12)
   - NameToIndexMap: TMap<FName, int32>
 - RetargetSources: TMap<FName, FReferencePose>
-- VirtualBoneGuid: FGuid（16 bytes）
+- VirtualBoneGuid: FGuid (16 bytes)
 
-UPROPERTY 部分（BoneTree、VirtualBones、SlotGroups、Sockets 等）
-由属性解析器自动处理。
+UPROPERTY section (BoneTree, VirtualBones, SlotGroups, Sockets, etc.)
+is handled by the property parser automatically.
 
-格式参考：
+Format references:
 - Engine/Source/Runtime/Engine/Classes/Animation/Skeleton.h
 - Engine/Source/Runtime/Engine/Private/Animation/Skeleton.cpp
 - Engine/Source/Runtime/Engine/Public/ReferenceSkeleton.h
@@ -28,81 +28,84 @@ from uasset_read.exceptions import ParseError
 
 logger = logging.getLogger(__name__)
 
-# 安全上限：防止将垃圾字节解释为计数
+# Safety limit: prevent interpreting garbage bytes as counts
 _MAX_SKELETON_COUNT = 100000
 
-# FGuid 序列化大小（字节）
+# FGuid serialization size (bytes)
 FGUID_SIZE = 16
 
 
 def parse_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
-    """解析 USkeleton 资产的 custom serialization 数据。
+    """Parse USkeleton asset custom serialization data.
 
-    Handler 在属性解析完成后调用，archive 定位到 export 的 serial_offset。
-    属性解析器已处理 BoneTree/VirtualBoneGuid/VirtualBones/SlotGroups/Sockets 等 UPROPERTY。
-    此 handler 负责：
-    1. 跳过已解析的 tagged properties（通过读取 PropertyTag 直到 Name=="None"）
-    2. 解析 custom serialization 数据（ReferenceSkeleton、RetargetSources、Guid）
+    Called after property parsing completes; archive is positioned at export serial_offset.
+    The property parser has already handled UPROPERTY fields (BoneTree, VirtualBoneGuid,
+    VirtualBones, SlotGroups, Sockets, etc.).
+    This handler:
+    1. Skips already-parsed tagged properties (reads PropertyTags until Name=="None")
+    2. Parses custom serialization data (ReferenceSkeleton, RetargetSources, Guid)
 
     Args:
-        archive: FArchive 实例（定位到 serial_offset）
-        name_map: 名称表
+        archive: FArchive instance (positioned at serial_offset)
+        name_map: name table
 
     Returns:
-        解析结果字典，包含 reference_skeleton、retarget_sources、guid 等
+        Parsed result dict containing reference_skeleton, retarget_sources, guid, etc.
     """
     result: Dict[str, Any] = {
         "parse_status": "success",
     }
 
-    # 收集截断诊断：子函数遇到非法 count 时追加，最后统一升级 parse_status
+    # Collect truncation diagnostics: appended when sub-functions encounter invalid counts,
+    # then used to upgrade parse_status at the end
     _diagnostics: List[str] = []
 
     try:
-        # 第一步：跳过 tagged properties
-        # PropertyTag 序列化格式：
-        #   Name: FName（index + number）
-        #   如果 Name == "None"（index=0），属性列表结束
-        #   否则继续读取 TypeName、Size、ArrayIndex 等字段和值数据
+        # Step 1: Skip tagged properties
+        # PropertyTag serialization format:
+        #   Name: FName (index + number)
+        #   If Name == "None" (index=0), property list ends
+        #   Otherwise continue reading TypeName, Size, ArrayIndex fields and value data
         _skip_tagged_properties(archive, name_map)
 
-        # 第二步：解析 ReferenceSkeleton（custom serialization，非 UPROPERTY）
+        # Step 2: Parse ReferenceSkeleton (custom serialization, not UPROPERTY)
         ref_skeleton = _read_reference_skeleton(archive, name_map, _diagnostics)
         result["reference_skeleton"] = ref_skeleton
 
-        # 第三步：解析 RetargetSources: TMap<FName, FReferencePose>
+        # Step 3: Parse RetargetSources: TMap<FName, FReferencePose>
         retarget_sources = _read_retarget_sources(archive, name_map, _diagnostics)
         result["retarget_sources"] = retarget_sources
         result["retarget_source_count"] = len(retarget_sources)
 
-        # 第四步：解析 Guid: FGuid（16 bytes）
-        # Guid 在 UE4 >= VER_UE4_SKELETON_GUID_SERIALIZATION 后序列化
+        # Step 4: Parse Guid: FGuid (16 bytes)
+        # Guid is serialized in UE4 >= VER_UE4_SKELETON_GUID_SERIALIZATION
         if archive.check_remaining(FGUID_SIZE, "Skeleton.Guid"):
             guid_bytes = archive.read_bytes(FGUID_SIZE, "Skeleton.Guid")
             result["guid"] = _format_guid(guid_bytes)
 
     except (struct.error, OSError, ValueError, ParseError) as e:
-        logger.debug("skeleton handler 解析失败: %s", e)
-        # 当 class_index 错误指向 Skeleton 但实际数据为其他类型（如 SkeletalMesh）时，
-        # handler 无法解析是预期行为，标记为 opaque 而非 failed，
-        # 避免整个 package 被判定为 failed（Issue #321）
+        logger.debug("skeleton handler parse failed: %s", e)
+        # When class_index incorrectly points to Skeleton but actual data is another type
+        # (e.g. SkeletalMesh), the handler failing to parse is expected behavior.
+        # Mark as opaque rather than failed to avoid the entire package being judged failed.
+        # (Issue #321)
         result["parse_status"] = "opaque"
         result["error"] = str(e)
 
-    # 骨骼层级验证：检查 parent index 合法性和环检测
+    # Bone hierarchy validation: check parent index legality and cycle detection
     ref_skeleton = result.get("reference_skeleton")
     if ref_skeleton and "parents" in ref_skeleton:
         hierarchy_diags = _validate_hierarchy(ref_skeleton)
         if hierarchy_diags:
             result["valid_hierarchy"] = False
             result["hierarchy_diagnostics"] = hierarchy_diags
-            # 层级错误升级为 partial（除非已经是 opaque/failed）
+            # Hierarchy errors upgrade to partial (unless already opaque/failed)
             if result["parse_status"] == "success":
                 result["parse_status"] = "partial"
         else:
             result["valid_hierarchy"] = True
 
-    # 非法 count 截断时，标记为 partial 并附带诊断
+    # When invalid counts are truncated, mark as partial and attach diagnostics
     if _diagnostics:
         result["parse_status"] = "partial"
         if "diagnostics" in result:
@@ -114,97 +117,97 @@ def parse_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
 
 
 def _skip_tagged_properties(archive: Any, name_map: List[str]) -> None:
-    """跳过 tagged properties 直到遇到 Name=="None" 终止标记。
+    """Skip tagged properties until Name=="None" terminator is encountered.
 
-    PropertyTag 序列化格式（参照 UE FPropertyTag::Serialize）：
+    PropertyTag serialization format (see UE FPropertyTag::Serialize):
     1. Name: FName (index: i32 + number: i32)
-    2. 如果 Name == "None"（index == 0），停止
-    3. 否则读取完整的 PropertyTag：
+    2. If Name == "None" (index == 0), stop
+    3. Otherwise read the full PropertyTag:
        - TypeName: FName
        - Size: i32
        - ArrayIndex: i32
-       - BoolVal: u8（如果 TypeName 是 BoolProperty）
-       - EnumName: FName（如果 TypeName 是 EnumProperty 或 ByteProperty）
-       - StructName: FName（如果 TypeName 是 StructProperty）
-       - InnerTypeName: FName（如果 TypeName 是 ArrayProperty 或 SetProperty）
-       - KeyType + ValueType: 2 x FName（如果 TypeName 是 MapProperty）
-       - 以及其他版本相关字段
-    4. 然后跳过 Value 数据（Size 字节）
+       - BoolVal: u8 (if TypeName is BoolProperty)
+       - EnumName: FName (if TypeName is EnumProperty or ByteProperty)
+       - StructName: FName (if TypeName is StructProperty)
+       - InnerTypeName: FName (if TypeName is ArrayProperty or SetProperty)
+       - KeyType + ValueType: 2 x FName (if TypeName is MapProperty)
+       - Plus other version-dependent fields
+    4. Then skip Value data (Size bytes)
 
-    参照 Engine/Source/Runtime/CoreUObject/Private/UObject/Class.cpp
+    Reference: Engine/Source/Runtime/CoreUObject/Private/UObject/Class.cpp
     FPropertyTag::Serialize
     """
-    max_properties = 10000  # 安全上限
+    max_properties = 10000  # Safety limit
     for _ in range(max_properties):
         current_pos = archive.tell()
         remaining = archive.total_size() - current_pos
         if remaining < 8:
-            # 不足一个 FName，视为结束
+            # Less than one FName, treat as end
             break
 
-        # 读取 PropertyTag.Name
+        # Read PropertyTag.Name
         name_index = archive.read_i32()
         _name_number = archive.read_i32()  # noqa: F841 - protocol read
 
         if name_index == 0:
-            # Name == "None"，属性列表结束
+            # Name == "None", property list ended
             break
 
-        # 读取 TypeName
+        # Read TypeName
         type_index = archive.read_i32()
         _type_number = archive.read_i32()  # noqa: F841 - protocol read
 
-        # 解析类型名（用于判断是否需要跳过额外字段）
+        # Resolve type name (used to determine whether to skip extra fields)
         type_name = ""
         if 0 <= type_index < len(name_map):
             type_name = name_map[type_index]
 
-        # 读取 Size: i32
+        # Read Size: i32
         tag_size = archive.read_i32()
 
-        # 读取 ArrayIndex: i32
+        # Read ArrayIndex: i32
         archive.read_i32()
 
-        # BoolVal: u8（仅 BoolProperty）
+        # BoolVal: u8 (BoolProperty only)
         if type_name == "BoolProperty":
             archive.read_u8()
 
-        # EnumName: FName（ByteProperty 或 EnumProperty）
+        # EnumName: FName (ByteProperty or EnumProperty)
         if type_name in ("ByteProperty", "EnumProperty"):
             archive.read_i32()  # index
             archive.read_i32()  # number
 
-        # StructName: FName（StructProperty）
+        # StructName: FName (StructProperty)
         if type_name == "StructProperty":
             archive.read_i32()  # index
             archive.read_i32()  # number
 
-        # InnerTypeName: FName（ArrayProperty 或 SetProperty）
-        # 参照 FPropertyTag::Serialize: InnerType.Serialize(Ar)
+        # InnerTypeName: FName (ArrayProperty or SetProperty)
+        # See FPropertyTag::Serialize: InnerType.Serialize(Ar)
         if type_name in ("ArrayProperty", "SetProperty"):
             archive.read_i32()  # index
             archive.read_i32()  # number
 
-        # KeyTypeName + ValueTypeName: 2 x FName（MapProperty）
-        # 参照 FPropertyTag::Serialize: KeyType.Serialize(Ar) + ValueType.Serialize(Ar)
+        # KeyTypeName + ValueTypeName: 2 x FName (MapProperty)
+        # See FPropertyTag::Serialize: KeyType.Serialize(Ar) + ValueType.Serialize(Ar)
         if type_name == "MapProperty":
             archive.read_i32()  # key type index
             archive.read_i32()  # key type number
             archive.read_i32()  # value type index
             archive.read_i32()  # value type number
 
-        # Guid（PropertyGuid）: bool(i32) + optional FGuid(16)
+        # Guid (PropertyGuid): bool(i32) + optional FGuid(16)
         has_guid = archive.read_i32()
         if has_guid != 0:
             archive.read_bytes(16)
 
-        # 跳过 Value 数据
+        # Skip Value data
         if tag_size > 0:
             remaining_after_tag = archive.total_size() - archive.tell()
             if tag_size <= remaining_after_tag:
                 archive.seek(archive.tell() + tag_size)
             else:
-                # 数据截断，跳到末尾
+                # Data truncated, jump to end
                 archive.seek(archive.total_size())
                 break
 
@@ -213,19 +216,19 @@ _MAX_EXAMPLES = 5
 
 
 def _validate_hierarchy(ref_skeleton: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """验证骨骼层级结构的合法性。
+    """Validate bone hierarchy structure legality.
 
-    检查项：
-    1. parent_index 在 [-1, bone_count) 范围内（-1 = INDEX_NONE，表示根骨骼）
-    2. 无环（DFS 检测）
-    3. 根骨骼数量信息
+    Checks:
+    1. parent_index is in [-1, bone_count) range (-1 = INDEX_NONE, meaning root bone)
+    2. No cycles (DFS detection)
+    3. Root bone count information
 
     Args:
-        ref_skeleton: 包含 names、parents、bone_count 的字典
+        ref_skeleton: dict containing names, parents, bone_count
 
     Returns:
-        聚合的诊断条目列表，空列表表示层级合法。
-        每条目: {"code": str, "count": int, "examples": list}
+        Aggregated diagnostic entry list; empty list means hierarchy is valid.
+        Each entry: {"code": str, "count": int, "examples": list}
     """
     names = ref_skeleton.get("names", [])
     parents = ref_skeleton.get("parents", [])
@@ -236,7 +239,7 @@ def _validate_hierarchy(ref_skeleton: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     diagnostics: List[Dict[str, Any]] = []
 
-    # 1. 检查 parent index 范围
+    # 1. Check parent index range
     invalid_examples: List[Dict[str, int]] = []
     invalid_count = 0
     for i, p in enumerate(parents):
@@ -251,40 +254,46 @@ def _validate_hierarchy(ref_skeleton: Dict[str, Any]) -> List[Dict[str, Any]]:
             "examples": invalid_examples,
         })
 
-    # 2. 环检测（仅在 parent index 范围合法时执行，否则跳过）
+    # 2. Cycle detection (only when parent index range is valid, otherwise skip)
     if invalid_count == 0:
         cycle_examples: List[Dict[str, Any]] = []
         cycle_count = 0
         visited = [0] * bone_count  # 0=unvisited, 1=visiting, 2=done
 
-        def _dfs(node: int, path: List[int]) -> bool:
-            """DFS 检测环。返回 True 表示发现环。"""
-            nonlocal cycle_count
-            if visited[node] == 1:
-                # 发现环：path 中从 node 到末尾构成环
-                cycle_start = path.index(node)
-                cycle_path = path[cycle_start:] + [node]
-                cycle_count += 1
-                if len(cycle_examples) < _MAX_EXAMPLES:
-                    cycle_examples.append({
-                        "cycle": cycle_path,
-                        "names": [names[idx] if idx < len(names) else f"bone_{idx}" for idx in cycle_path],
-                    })
-                return True
-            if visited[node] == 2:
-                return False
-            visited[node] = 1
-            path.append(node)
-            parent = parents[node]
-            if parent >= 0 and parent < bone_count:
-                _dfs(parent, path)
-            path.pop()
-            visited[node] = 2
-            return False
-
         for i in range(bone_count):
-            if visited[i] == 0:
-                _dfs(i, [])
+            if visited[i] != 0:
+                continue
+            # Iterative DFS with explicit stack to avoid recursion limit on deep bone chains
+            stack = [(i, [i])]  # (node, path)
+            while stack:
+                node, path = stack[-1]
+                if visited[node] == 1:
+                    # Node fully processed, pop from stack
+                    visited[node] = 2
+                    stack.pop()
+                    continue
+                if visited[node] == 2:
+                    stack.pop()
+                    continue
+                visited[node] = 1
+                parent = parents[node]
+                if parent >= 0 and parent < bone_count:
+                    if visited[parent] == 1:
+                        # Cycle detected: path from parent to current node forms a cycle
+                        cycle_start = path.index(parent)
+                        cycle_path = path[cycle_start:] + [parent]
+                        cycle_count += 1
+                        if len(cycle_examples) < _MAX_EXAMPLES:
+                            cycle_examples.append({
+                                "cycle": cycle_path,
+                                "names": [names[idx] if idx < len(names) else f"bone_{idx}" for idx in cycle_path],
+                            })
+                    elif visited[parent] == 0:
+                        stack.append((parent, path + [parent]))
+                else:
+                    # Root node or invalid parent (already filtered), mark done
+                    visited[node] = 2
+                    stack.pop()
 
         if cycle_count > 0:
             diagnostics.append({
@@ -293,7 +302,7 @@ def _validate_hierarchy(ref_skeleton: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "examples": cycle_examples,
             })
 
-    # 3. 多根骨骼信息（informational，不升级为 partial）
+    # 3. Multiple root bones info (informational, does not upgrade to partial)
     root_count = sum(1 for p in parents if p == -1)
     if root_count > 1:
         root_examples = [
@@ -312,35 +321,35 @@ def _validate_hierarchy(ref_skeleton: Dict[str, Any]) -> List[Dict[str, Any]]:
 def _read_reference_skeleton(
     archive: Any, name_map: List[str], _diagnostics: List[str] | None = None,
 ) -> Dict[str, Any]:
-    """读取 FReferenceSkeleton custom serialization。
+    """Read FReferenceSkeleton custom serialization.
 
-    FReferenceSkeleton 序列化格式（ReferenceSkeleton.cpp:941）：
+    FReferenceSkeleton serialization format (ReferenceSkeleton.cpp:941):
     1. RawRefBoneInfo: TArray<FMeshBoneInfo>
        - FMeshBoneInfo: FName (8 bytes) + int32 ParentIndex
     2. RawRefBonePose: TArray<FTransform>
-       - 每个 FTransform: Translation(FVector3d: 3*8=24) + Rotation(FQuat4f: 4*4=16) + Scale(FVector3f: 3*4=12) = 52 bytes
-       注意：FTransform 不是 bulk-serialize，实际布局取决于 UE 版本
+       - Each FTransform: Translation(FVector3d: 3*8=24) + Rotation(FQuat4f: 4*4=16) + Scale(FVector3f: 3*4=12) = 52 bytes
+       Note: FTransform is not bulk-serialized; actual layout depends on UE version
     3. RawNameToIndexMap: TMap<FName, int32>
 
     Args:
-        _diagnostics: 可选的诊断收集列表，截断非法 count 时追加条目
+        _diagnostics: optional diagnostic collection list, appended when invalid counts are truncated
 
     Returns:
-        包含 names、parents、transforms 的字典
+        Dict containing names, parents, transforms
     """
     ref_skeleton: Dict[str, Any] = {}
 
-    # 读取 BoneInfo 数量（TArray count）
+    # Read BoneInfo count (TArray count)
     bone_count = archive.read_i32("RefSkel.BoneCount")
 
     if bone_count < 0 or bone_count > 10000:
         logger.debug(
-            "ReferenceSkeleton: 异常的骨骼数量 %d，跳过解析",
+            "ReferenceSkeleton: invalid bone count %d, skipping parse",
             bone_count,
         )
         return {"bone_count": bone_count, "error": "invalid bone count"}
 
-    # 读取 BoneInfo 数组
+    # Read BoneInfo array
     names: List[str] = []
     parents: List[int] = []
     for i in range(bone_count):
@@ -348,10 +357,10 @@ def _read_reference_skeleton(
         name_index = archive.read_i32(f"RefSkel.BoneInfo[{i}].Name.Index")
         name_number = archive.read_i32(f"RefSkel.BoneInfo[{i}].Name.Number")
 
-        # 解析名称
+        # Resolve name
         bone_name = _resolve_fname(name_index, name_number, name_map)
 
-        # ParentIndex: int32（INDEX_NONE = -1 表示根骨骼）
+        # ParentIndex: int32 (INDEX_NONE = -1 means root bone)
         parent_index = archive.read_i32(f"RefSkel.BoneInfo[{i}].ParentIndex")
 
         names.append(bone_name)
@@ -361,16 +370,16 @@ def _read_reference_skeleton(
     ref_skeleton["parents"] = parents
     ref_skeleton["bone_count"] = bone_count
 
-    # 读取 BonePose 数组（TArray<FTransform>）
+    # Read BonePose array (TArray<FTransform>)
     pose_count = archive.read_i32("RefSkel.PoseCount")
     if pose_count < 0 or pose_count > _MAX_SKELETON_COUNT:
         logger.debug(
-            "ReferenceSkeleton: 异常的 PoseCount %d（bone_count=%d），截断为 0",
+            "ReferenceSkeleton: invalid PoseCount %d (bone_count=%d), truncating to 0",
             pose_count, bone_count,
         )
         if _diagnostics is not None:
             _diagnostics.append(
-                f"ReferenceSkeleton.PoseCount 截断: {pose_count} -> 0"
+                f"ReferenceSkeleton.PoseCount truncated: {pose_count} -> 0"
             )
         pose_count = 0
     if pose_count != bone_count:
@@ -388,17 +397,17 @@ def _read_reference_skeleton(
     ref_skeleton["transforms"] = transforms
     ref_skeleton["pose_count"] = pose_count
 
-    # 读取 NameToIndexMap: TMap<FName, int32>
-    # TMap 序列化为 count + entries，每个 entry = Key(FName) + Value(int32)
+    # Read NameToIndexMap: TMap<FName, int32>
+    # TMap serialized as count + entries, each entry = Key(FName) + Value(int32)
     map_count = archive.read_i32("RefSkel.NameToIndexMap.Count")
     if map_count < 0 or map_count > _MAX_SKELETON_COUNT:
         logger.debug(
-            "ReferenceSkeleton: 异常的 NameToIndexMap.Count %d，跳过解析",
+            "ReferenceSkeleton: invalid NameToIndexMap.Count %d, skipping parse",
             map_count,
         )
         if _diagnostics is not None:
             _diagnostics.append(
-                f"ReferenceSkeleton.NameToIndexMap.Count 截断: {map_count} -> 0"
+                f"ReferenceSkeleton.NameToIndexMap.Count truncated: {map_count} -> 0"
             )
         map_count = 0
     name_to_index: Dict[str, int] = {}
@@ -418,19 +427,19 @@ def _read_reference_skeleton(
 def _read_retarget_sources(
     archive: Any, name_map: List[str], _diagnostics: List[str] | None = None,
 ) -> List[Dict[str, Any]]:
-    """读取 RetargetSources: TMap<FName, FReferencePose>。
+    """Read RetargetSources: TMap<FName, FReferencePose>.
 
-    格式（Skeleton.cpp:419-448）：
+    Format (Skeleton.cpp:419-448):
     1. int32 NumOfRetargetSources
-    2. 每个 source:
+    2. For each source:
        - FName RetargetSourceName
        - SerializeReferencePose:
          - FName PoseName
          - TArray<FTransform> ReferencePose
-         - FSoftObjectPath SourceReferenceMesh（editor only，非 cooking 时序列化）
+         - FSoftObjectPath SourceReferenceMesh (editor only, serialized when not cooking)
 
     Returns:
-        RetargetSource 列表
+        RetargetSource list
     """
     sources: List[Dict[str, Any]] = []
     is_ue5 = getattr(archive, '_file_version_ue5', 0) > 0
@@ -438,7 +447,7 @@ def _read_retarget_sources(
     num_sources = archive.read_i32("RetargetSources.Count")
     if num_sources < 0 or num_sources > 1000:
         logger.debug(
-            "RetargetSources: 异常的 source 数量 %d，跳过解析",
+            "RetargetSources: invalid source count %d, skipping parse",
             num_sources,
         )
         return sources
@@ -461,12 +470,12 @@ def _read_retarget_sources(
         pose_count = archive.read_i32(f"RetargetSources[{i}].PoseCount")
         if pose_count < 0 or pose_count > _MAX_SKELETON_COUNT:
             logger.debug(
-                "RetargetSources[%d]: 异常的 PoseCount %d，截断为 0",
+                "RetargetSources[%d]: invalid PoseCount %d, truncating to 0",
                 i, pose_count,
             )
             if _diagnostics is not None:
                 _diagnostics.append(
-                    f"RetargetSources[{i}].PoseCount 截断: {pose_count} -> 0"
+                    f"RetargetSources[{i}].PoseCount truncated: {pose_count} -> 0"
                 )
             pose_count = 0
         transforms: List[Dict[str, Any]] = []
@@ -476,8 +485,8 @@ def _read_retarget_sources(
         source["transforms"] = transforms
         source["transform_count"] = len(transforms)
 
-        # 3. SourceReferenceMesh: FSoftObjectPath（editor only）
-        # FSoftObjectPath 序列化为 FTopLevelAssetPath: PackageName(FName) + AssetName(FName)
+        # 3. SourceReferenceMesh: FSoftObjectPath (editor only)
+        # FSoftObjectPath serialized as FTopLevelAssetPath: PackageName(FName) + AssetName(FName)
         pkg_index = archive.read_i32(f"RetargetSources[{i}].SourceMesh.Pkg.Index")
         pkg_number = archive.read_i32(f"RetargetSources[{i}].SourceMesh.Pkg.Number")
         asset_index = archive.read_i32(f"RetargetSources[{i}].SourceMesh.Asset.Index")
@@ -496,32 +505,32 @@ def _read_retarget_sources(
 
 
 def _read_ftransform(archive: Any, is_ue5: bool = True) -> Dict[str, Any]:
-    """读取 FTransform，支持 UE4/UE5 不同布局。
+    """Read FTransform, supporting UE4/UE5 different layouts.
 
-    序列化顺序（参照 TransformVectorized.h operator<<）：
-    Rotation → Translation → Scale3D
+    Serialization order (see TransformVectorized.h operator<<):
+    Rotation -> Translation -> Scale3D
 
-    UE4 布局（40 bytes）：
+    UE4 layout (40 bytes):
     - Rotation: FQuat4f (4 x f32 = 16 bytes)
     - Translation: FVector (3 x f32 = 12 bytes)
     - Scale3D: FVector (3 x f32 = 12 bytes)
 
-    UE5 布局（52 bytes）：
+    UE5 layout (52 bytes):
     - Rotation: FQuat4f (4 x f32 = 16 bytes)
     - Translation: FVector3d (3 x f64 = 24 bytes)
     - Scale3D: FVector3f (3 x f32 = 12 bytes)
 
     Args:
-        archive: FArchive 实例
-        is_ue5: True 表示 UE5 布局（默认），False 表示 UE4 布局
+        archive: FArchive instance
+        is_ue5: True for UE5 layout (default), False for UE4 layout
     """
-    # Rotation: FQuat4f (4 x f32 = 16 bytes) — UE4/UE5 相同
+    # Rotation: FQuat4f (4 x f32 = 16 bytes) -- same for UE4/UE5
     rx = archive.read_f32("Transform.Rotation.X")
     ry = archive.read_f32("Transform.Rotation.Y")
     rz = archive.read_f32("Transform.Rotation.Z")
     rw = archive.read_f32("Transform.Rotation.W")
 
-    # Translation: FVector (UE4: 3 x f32 = 12 bytes) 或 FVector3d (UE5: 3 x f64 = 24 bytes)
+    # Translation: FVector (UE4: 3 x f32 = 12 bytes) or FVector3d (UE5: 3 x f64 = 24 bytes)
     if is_ue5:
         tx = archive.read_f64("Transform.Translation.X")
         ty = archive.read_f64("Transform.Translation.Y")
@@ -531,7 +540,7 @@ def _read_ftransform(archive: Any, is_ue5: bool = True) -> Dict[str, Any]:
         ty = archive.read_f32("Transform.Translation.Y")
         tz = archive.read_f32("Transform.Translation.Z")
 
-    # Scale3D: FVector3f (3 x f32 = 12 bytes) — UE4/UE5 相同
+    # Scale3D: FVector3f (3 x f32 = 12 bytes) -- same for UE4/UE5
     sx = archive.read_f32("Transform.Scale.X")
     sy = archive.read_f32("Transform.Scale.Y")
     sz = archive.read_f32("Transform.Scale.Z")
@@ -544,17 +553,17 @@ def _read_ftransform(archive: Any, is_ue5: bool = True) -> Dict[str, Any]:
 
 
 def _format_guid(guid_bytes: bytes) -> str:
-    """将 16 字节 FGuid 格式化为字符串。"""
+    """Format 16-byte FGuid as a string."""
     import struct
     if len(guid_bytes) < 16:
         return ""
-    # FGuid 序列化顺序: A(i32) B(i32) C(i32) D(i32)
+    # FGuid serialization order: A(i32) B(i32) C(i32) D(i32)
     a, b, c, d = struct.unpack('<4I', guid_bytes[:16])
     return f"{a:08X}-{b:08X}-{c:08X}-{d:08X}"
 
 
 def _resolve_fname(index: int, number: int, name_map: List[str]) -> str:
-    """解析 FName（index + number）到字符串。"""
+    """Resolve FName (index + number) to string."""
     if 0 <= index < len(name_map):
         base_name = name_map[index]
         if number > 0:

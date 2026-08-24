@@ -119,7 +119,7 @@ class MarkdownRenderer(IRenderer):
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
         # If hex_view is enabled and IR has hex_view data, return hex view format
         if options.hex_view and ir.debug and ir.debug.hex_view:
-            from uasset_read.debug.hex_view import format_hex_view
+            from uasset_read.debug import format_hex_view
             result = format_hex_view(ir.debug.hex_view)
             if ir.debug.hex_view_truncated_count > 0:
                 result += (

@@ -65,13 +65,17 @@ class TestStandaloneSemanticExtraction:
         ids=[s.split(".")[0] for s in _STANDALONE_SAMPLES],
     )
     def test_standalone_format(self, samples_dir: Path, filename: str):
-        """Standalone uses the standalone_semantic domain format."""
+        """Standalone uses standalone_semantic when content exists, else falls back to asset_semantic."""
         if not (samples_dir / filename).exists():
             pytest.skip(f"Sample not found: {filename}")
 
         semantic = _build_semantic(samples_dir, filename)
-        assert semantic.format == "uasset_read.standalone_semantic"
-        assert semantic.format_version == "1.0.0"
+        # When extractor produces content, domain format is used; when empty, fallback to asset_semantic
+        if semantic.content:
+            assert semantic.format == "uasset_read.standalone_semantic"
+            assert semantic.format_version == "1.0.0"
+        else:
+            assert semantic.format == "uasset_read.asset_semantic"
 
     @pytest.mark.parametrize(
         "filename",
@@ -125,12 +129,14 @@ class TestStandaloneSchemaConformance:
         json_str = render_semantic_json(semantic, include_schema=True)
         data = json.loads(json_str)
 
-        assert data["format"] == "uasset_read.standalone_semantic"
-        assert "$schema" in data
-        assert "standalone_semantic.schema.json" in data["$schema"]
-        # standalone key present only when content is non-empty
+        # When extractor produces content, domain format is used; else fallback
         if semantic.content:
+            assert data["format"] == "uasset_read.standalone_semantic"
+            assert "$schema" in data
+            assert "standalone_semantic.schema.json" in data["$schema"]
             assert "standalone" in data
+        else:
+            assert data["format"] == "uasset_read.asset_semantic"
 
 
 class TestStandaloneProjection:

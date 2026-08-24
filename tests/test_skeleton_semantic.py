@@ -7,8 +7,8 @@ from typing import Any
 import pytest
 
 from uasset_read.parsers.asset_types.skeleton import _validate_hierarchy
-from uasset_read.renderers.json_renderer import JSONRenderer
-from uasset_read.renderers.base import RenderOptions
+from uasset_read.semantic.render import render_semantic_json
+from uasset_read.semantic.builder import build_semantic_ir
 from uasset_read.models.ir import (
     PackageIR,
     PackageHeaderIR,
@@ -37,7 +37,7 @@ def _make_header(**kwargs) -> PackageHeaderIR:
 def _make_skeleton_export(asset_type_data: dict | None = None, **kwargs) -> ExportIR:
     defaults = dict(
         index=0,
-        object_name="TestSkeleton",
+        object_name="Skeleton",
         object_class="Skeleton",
         serial_size=1024,
         outer_index_resolved=None,
@@ -75,8 +75,8 @@ def _make_ref_skeleton(names: list[str], parents: list[int]) -> dict:
 
 
 def _render_json(ir: PackageIR) -> dict:
-    renderer = JSONRenderer()
-    output = renderer.render(ir, RenderOptions())
+    semantic_ir = build_semantic_ir(ir)
+    output = render_semantic_json(semantic_ir)
     return json.loads(output)
 
 
@@ -288,7 +288,7 @@ class TestSkeletonJSONRendering:
         export = _make_skeleton_export(asset_type_data=ad)
         ir = _make_ir(exports=[export])
         data = _render_json(ir)
-        assert data["skeleton"]["guid"] == "00000000-00009100-00000C00-69687400"
+        assert data["skeleton"]["skeleton_summary"]["guid"] == "00000000-00009100-00000C00-69687400"
 
     def test_no_skeleton_block_without_data(self):
         """无 skeleton asset_type_data 时，JSON 输出不含 skeleton 键。"""
@@ -311,7 +311,7 @@ class TestSkeletonJSONRendering:
         data = _render_json(ir)
         sk = data["skeleton"]
         assert sk["bone_count"] == 0
-        assert sk["bones"] == []
+        assert "bones" not in sk  # empty list is omitted from output
 
     def test_retarget_sources_metadata(self):
         """retarget_sources 只渲染元数据（不含 transforms 数组）。"""
@@ -335,8 +335,9 @@ class TestSkeletonJSONRendering:
         sources = data["skeleton"]["retarget_sources"]
         assert len(sources) == 1
         assert sources[0]["name"] == "default"
-        assert sources[0]["transform_count"] == 1
-        assert "transforms" not in sources[0]  # transforms 数组不渲染
+        assert sources[0]["pose_name"] == "default"
+        assert sources[0]["source_mesh"] == "/Game/Mesh/SK_Mannequin"
+        assert "transforms" not in sources[0]  # transforms array is not rendered
 
 
 # ---------------------------------------------------------------------------

@@ -227,21 +227,22 @@ def extract_user_defined_struct(export: Any, name_map: List[str]) -> Optional[Di
     }
 
 
-def parse_user_defined(export: Any, archive: Any = None, context: Any = None) -> Dict[str, Any]:
+def parse_user_defined(archive: Any, name_map: list[str], export: Any = None) -> Dict[str, Any]:
     """Parse UserDefinedEnum or UserDefinedStruct export.
 
     This is the entry point for the asset type handler registration.
     It delegates to the appropriate extraction function based on the export class.
 
     Args:
-        export: The parsed ObjectExport
         archive: The FArchive (unused for this handler)
-        context: Additional context (name_map list)
+        name_map: The package name table
+        export: The parsed ObjectExport
 
     Returns:
         Dictionary with extracted data and parse_status
     """
-    name_map = context if isinstance(context, list) else []
+    if not isinstance(name_map, list):
+        name_map = []
 
     # Determine the class type from export
     class_name = getattr(export, "object_class", "") or ""

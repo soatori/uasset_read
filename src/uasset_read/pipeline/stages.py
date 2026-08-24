@@ -3,8 +3,6 @@ from __future__ import annotations
 """Parse stage functions -- core table reads, secondary table reads, export property parsing.
 
 This module contains the stage-level building blocks of the uasset parse lifecycle.
-Extracted from ``uasset_read.parse_stages`` as part of the pipeline consolidation
-(task #458).
 """
 
 import logging

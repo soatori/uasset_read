@@ -30,9 +30,10 @@ class TestUserDefinedEnumSemantic:
         result = parse_single(str(path), format="json", tolerant=True)
         data = json.loads(result)
         assert "user_defined" in data, "user_defined block missing from JSON output"
-        assert data["user_defined"]["type"] == "enum"
-        assert data["user_defined"]["enum_name"]
-        assert len(data["user_defined"]["entries"]) > 0
+        ud = data["user_defined"]
+        assert "enum_data" in ud
+        assert ud["enum_data"]["enum_name"]
+        assert len(ud["enum_data"]["entries"]) > 0
 
     def test_enum_entries_deterministic(self, ue_sample_root):
         """Enum member ordering should be deterministic."""
@@ -46,7 +47,7 @@ class TestUserDefinedEnumSemantic:
         result2 = parse_single(str(path), format="json", tolerant=True)
         data1 = json.loads(result1)
         data2 = json.loads(result2)
-        assert data1["user_defined"]["entries"] == data2["user_defined"]["entries"]
+        assert data1["user_defined"]["enum_data"]["entries"] == data2["user_defined"]["enum_data"]["entries"]
 
     def test_enum_entries_have_name_and_display(self, ue_sample_root):
         """Each enum entry should have name and display_name."""
@@ -58,7 +59,7 @@ class TestUserDefinedEnumSemantic:
 
         result = parse_single(str(path), format="json", tolerant=True)
         data = json.loads(result)
-        for entry in data["user_defined"]["entries"]:
+        for entry in data["user_defined"]["enum_data"]["entries"]:
             assert "name" in entry, f"entry missing 'name': {entry}"
             assert "display_name" in entry, f"entry missing 'display_name': {entry}"
             assert entry["name"], "entry name should not be empty"
@@ -74,8 +75,8 @@ class TestUserDefinedEnumSemantic:
         result = parse_single(str(path), format="json", tolerant=True)
         data = json.loads(result)
         assert "user_defined" in data
-        assert data["user_defined"]["type"] == "enum"
-        assert len(data["user_defined"]["entries"]) > 0
+        assert "enum_data" in data["user_defined"]
+        assert len(data["user_defined"]["enum_data"]["entries"]) > 0
 
 
 class TestUserDefinedStructSemantic:
@@ -92,9 +93,10 @@ class TestUserDefinedStructSemantic:
         result = parse_single(str(path), format="json", tolerant=True)
         data = json.loads(result)
         assert "user_defined" in data, "user_defined block missing from JSON output"
-        assert data["user_defined"]["type"] == "struct"
-        assert data["user_defined"]["struct_name"]
-        assert len(data["user_defined"]["fields"]) > 0
+        ud = data["user_defined"]
+        assert "struct_data" in ud
+        assert ud["struct_data"]["struct_name"]
+        assert len(ud["struct_data"]["properties"]) > 0
 
     def test_struct_fields_have_name_and_type(self, ue_sample_root):
         """Each struct field should have name and type."""
@@ -106,7 +108,7 @@ class TestUserDefinedStructSemantic:
 
         result = parse_single(str(path), format="json", tolerant=True)
         data = json.loads(result)
-        for field in data["user_defined"]["fields"]:
+        for field in data["user_defined"]["struct_data"]["properties"]:
             assert "name" in field, f"field missing 'name': {field}"
             assert "type" in field, f"field missing 'type': {field}"
             assert field["name"], "field name should not be empty"
@@ -122,7 +124,7 @@ class TestUserDefinedStructSemantic:
 
         result = parse_single(str(path), format="json", tolerant=True)
         data = json.loads(result)
-        assert data["user_defined"].get("guid"), "struct should have a guid"
+        assert data["user_defined"].get("struct_data", {}).get("guid"), "struct should have a guid"
 
 
 class TestUserDefinedFallback:
@@ -142,4 +144,5 @@ class TestUserDefinedFallback:
         # (unless they happen to have a UserDefinedEnum/Struct export)
         if "user_defined" in data:
             # If present, it should be valid
-            assert data["user_defined"]["type"] in ("enum", "struct")
+            ud = data["user_defined"]
+            assert "enum_data" in ud or "struct_data" in ud

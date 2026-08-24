@@ -248,7 +248,7 @@ def _handle_batch(args) -> None:
             tolerant=not args.strict,
             verbose=args.verbose,
             include_schema=args.schema or args.verbose,
-            include_function_graphs=args.function_graphs,
+
             include_parent_assets=args.include_parent_assets,
             asset_roots=list(args.asset_root or []),
             mappings_path=args.mappings,
@@ -412,7 +412,7 @@ def main():
             tolerant=tolerant,
             verbose=args.verbose,
             include_schema=args.schema or args.verbose,
-            include_function_graphs=args.function_graphs,
+
             include_parent_assets=args.include_parent_assets,
             asset_roots=list(args.asset_root or []),
             mappings_path=args.mappings,

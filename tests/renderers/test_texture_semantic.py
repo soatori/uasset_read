@@ -11,8 +11,8 @@ import pytest
 from pathlib import Path
 from typing import Any
 
-from uasset_read.renderers.json_renderer import JSONRenderer
-from uasset_read.renderers.base import RenderOptions
+from uasset_read.semantic.render import render_semantic_json
+from uasset_read.semantic.builder import build_semantic_ir
 from tests.integration.sample_assets import (
     LOCAL_SAMPLE_ROOT,
     SampleAsset,
@@ -53,9 +53,8 @@ def _parse_and_render(asset_path: Path) -> dict[str, Any]:
 
     result = parse_uasset(str(asset_path))
     ir = build_package_ir(result)
-    renderer = JSONRenderer()
-    options = RenderOptions()
-    output = renderer.render(ir, options)
+    semantic_ir = build_semantic_ir(ir, source_path=str(asset_path))
+    output = render_semantic_json(semantic_ir)
     return json.loads(output)
 
 

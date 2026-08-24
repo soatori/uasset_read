@@ -35,6 +35,7 @@ env/
 htmlcov/
 .coverage.*
 schemas/
+!src/uasset_read/schemas/
 
 # OS
 .DS_Store

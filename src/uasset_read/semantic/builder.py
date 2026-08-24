@@ -225,6 +225,7 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None, *, 
     # When _extractor_ran but content is empty, the extractor had nothing to
     # contribute.  Do NOT track domain_content as unavailable (it was never
     # available) to avoid a coverage/representation mismatch.
+    _domain_content_empty = not content
 
     # Domain formats own coverage inside content; references and diagnostics
     # are always provided by the envelope so domain extractors need not
@@ -232,6 +233,7 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None, *, 
     owns_envelope_sections = (
         domain_format is not None
         and status.representation != "opaque"
+        and not _domain_content_empty
     )
     if owns_envelope_sections and content.get("coverage"):
         # Any reported coverage entry means some scope is not complete:
@@ -245,6 +247,10 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None, *, 
     fmt, fmt_version = "uasset_read.asset_semantic", "1.0"
     if owns_envelope_sections:
         fmt, fmt_version = domain_format
+    elif _extractor_ran and _domain_content_empty and domain_format is not None:
+        # Extractor ran but produced nothing — downgrade to partial
+        representation = "partial"
+        status = AssetStatus(parse=parse, representation="partial")
 
     return SemanticIR(
         format=fmt,

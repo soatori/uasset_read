@@ -373,7 +373,7 @@ class FArchive:
         """
         if not self._hex_view_enabled:
             return
-        from uasset_read.debug.hex_view import HexViewEntry
+        from uasset_read.debug import HexViewEntry
         full_key = f"{self._hex_view_context}{key}" if self._hex_view_context else key
         self._hex_view_entries.append(HexViewEntry(
             key=full_key,

@@ -159,7 +159,7 @@ def build_property_metadata(
         texture_references = _texture_references(texture_data)
         if texture_references:
             project("texture_references", texture_references)
-    elif class_name == "Texture2D":
+    elif class_name in ("Texture2D", "TextureCube"):
         imported_size = _size(values.get("ImportedSize"))
         if imported_size is not None:
             project("imported_size", imported_size)

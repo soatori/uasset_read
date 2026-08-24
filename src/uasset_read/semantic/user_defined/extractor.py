@@ -11,9 +11,11 @@ if TYPE_CHECKING:
 
 
 def _build_enum(asset_type_data: dict, cov) -> dict:
-    enum_name = asset_type_data.get("enum_name", "")
-    display_name = asset_type_data.get("display_name", "")
-    entries = asset_type_data.get("entries", [])
+    # Handler may return data nested under "user_defined" key or flat
+    ud_data = asset_type_data.get("user_defined", asset_type_data)
+    enum_name = ud_data.get("enum_name", "")
+    display_name = ud_data.get("display_name", "")
+    entries = ud_data.get("entries", [])
 
     cov.track("enum_data", bool(enum_name) or len(entries) > 0)
 
@@ -27,9 +29,11 @@ def _build_enum(asset_type_data: dict, cov) -> dict:
 
 
 def _build_struct(asset_type_data: dict, cov) -> dict:
-    struct_name = asset_type_data.get("struct_name", "")
-    display_name = asset_type_data.get("display_name", "")
-    properties = asset_type_data.get("properties", [])
+    # Handler may return data nested under "user_defined" key or flat
+    ud_data = asset_type_data.get("user_defined", asset_type_data)
+    struct_name = ud_data.get("struct_name", "")
+    display_name = ud_data.get("display_name", "")
+    properties = ud_data.get("properties", [])
 
     cov.track("struct_data", bool(struct_name) or len(properties) > 0)
 

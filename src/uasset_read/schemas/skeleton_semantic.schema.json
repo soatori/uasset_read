@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/soatori/uasset_read/schemas/skeleton_semantic.schema.json",
+  "title": "Skeleton Semantic JSON",
+  "description": "Semantic JSON output for Skeleton (USkeleton) assets.",
+  "type": "object",
+  "required": ["format", "format_version", "mode", "asset_type", "asset", "status", "skeleton"],
+  "properties": {
+    "format": {
+      "const": "uasset_read.skeleton_semantic"
+    },
+    "format_version": {
+      "const": "1.0.0"
+    },
+    "mode": {
+      "enum": ["standard", "debug"]
+    },
+    "asset_type": {
+      "enum": ["skeleton"]
+    },
+    "asset": {
+      "$ref": "#/$defs/AssetMeta"
+    },
+    "status": {
+      "$ref": "#/$defs/AssetStatus"
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "skeleton": {
+      "$ref": "#/$defs/Skeleton"
+    },
+    "coverage": {
+      "$ref": "#/$defs/CoverageInfo"
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DiagnosticEntry"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EvidenceEntry"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "standard"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "AssetMeta": {
+      "type": "object",
+      "required": ["package", "name"],
+      "properties": {
+        "package": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generated_class": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "AssetStatus": {
+      "type": "object",
+      "required": ["parse", "representation"],
+      "properties": {
+        "parse": {
+          "enum": ["complete", "partial", "failed"]
+        },
+        "representation": {
+          "enum": ["full", "partial", "opaque"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Skeleton": {
+      "type": "object",
+      "required": ["bone_count"],
+      "properties": {
+        "bone_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skeleton_summary": {
+          "$ref": "#/$defs/SkeletonSummary"
+        },
+        "bones": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Bone"
+          }
+        },
+        "retarget_sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RetargetSource"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "SkeletonSummary": {
+      "type": "object",
+      "properties": {
+        "guid": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Bone": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parent_index": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RetargetSource": {
+      "type": "object",
+      "required": ["name", "pose_name"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "pose_name": {
+          "type": "string"
+        },
+        "source_mesh": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "CoverageInfo": {
+      "type": "object",
+      "required": ["scopes_expected", "scopes_available"],
+      "properties": {
+        "scopes_expected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scopes_available": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scopes_unavailable": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DiagnosticEntry": {
+      "type": "object",
+      "required": ["severity", "code", "message"],
+      "properties": {
+        "severity": {
+          "enum": ["error", "warning", "info"]
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EvidenceEntry": {
+      "type": "object",
+      "required": ["key"],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {}
+      },
+      "additionalProperties": false
+    }
+  }
+}
