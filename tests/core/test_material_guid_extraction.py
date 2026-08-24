@@ -1,4 +1,5 @@
 """Tests for Material expression GUID extraction."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -26,7 +27,7 @@ def test_guid_extraction_from_struct_value():
     prop.name = "MaterialExpressionGuid"
     prop.value = StructValue(
         struct_type="Guid",
-        fields={"A": 0xA1B2C3D4, "B": 0xE5F67890, "C": 0x12345678, "D": 0xABCDEF01}
+        fields={"A": 0xA1B2C3D4, "B": 0xE5F67890, "C": 0x12345678, "D": 0xABCDEF01},
     )
     export.properties = [prop]
 

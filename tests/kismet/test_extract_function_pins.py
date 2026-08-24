@@ -1,4 +1,5 @@
 """Tests for extract_function_pins.py standalone script."""
+
 from __future__ import annotations
 
 import json
@@ -17,6 +18,7 @@ SCRIPT = ROOT / "extract_function_pins.py"
 def blueprint_asset(samples_dir: Path) -> Path:
     """Return a Blueprint .uasset sample file."""
     from tests.conftest import get_samples_by_category
+
     assets = get_samples_by_category(samples_dir, "blueprint")
     if not assets:
         pytest.skip("No Blueprint samples found")
@@ -65,12 +67,14 @@ class TestExtraction:
     def test_extract_returns_list(self, blueprint_asset: Path):
         """Extraction from a Blueprint asset returns a non-empty list."""
         from extract_function_pins import extract_function_pins
+
         result = extract_function_pins(str(blueprint_asset))
         assert isinstance(result, list)
 
     def test_extract_entry_structure(self, blueprint_asset: Path):
         """Each entry has the required fields."""
         from extract_function_pins import extract_function_pins
+
         result = extract_function_pins(str(blueprint_asset))
         if not result:
             pytest.skip("Asset yielded no function graphs")
@@ -83,6 +87,7 @@ class TestExtraction:
     def test_extract_parameter_structure(self, blueprint_asset: Path):
         """Each parameter has name, type, is_input, is_output."""
         from extract_function_pins import extract_function_pins
+
         result = extract_function_pins(str(blueprint_asset))
         for entry in result:
             for param in entry["parameters"]:
@@ -97,6 +102,7 @@ class TestExtraction:
         """Non-Blueprint assets return an empty list."""
         from tests.conftest import get_samples_by_category
         from extract_function_pins import extract_function_pins
+
         candidates = get_samples_by_category(samples_dir, "material")
         if not candidates:
             pytest.skip("No material samples found")
@@ -107,6 +113,7 @@ class TestExtraction:
     def test_extract_strict_mode(self, blueprint_asset: Path):
         """Strict mode does not crash on valid assets."""
         from extract_function_pins import extract_function_pins
+
         result = extract_function_pins(str(blueprint_asset), tolerant=False)
         assert isinstance(result, list)
 
@@ -116,13 +123,24 @@ class TestTextFormatter:
 
     def test_format_text_basic(self):
         from extract_function_pins import format_text
+
         entries = [
             {
                 "function_name": "MyFunction",
                 "return_type": "void",
                 "parameters": [
-                    {"name": "Param1", "type": "int32", "is_input": True, "is_output": False},
-                    {"name": "Param2", "type": "float", "is_input": True, "is_output": False},
+                    {
+                        "name": "Param1",
+                        "type": "int32",
+                        "is_input": True,
+                        "is_output": False,
+                    },
+                    {
+                        "name": "Param2",
+                        "type": "float",
+                        "is_input": True,
+                        "is_output": False,
+                    },
                 ],
             }
         ]
@@ -134,6 +152,7 @@ class TestTextFormatter:
 
     def test_format_text_with_return_type(self):
         from extract_function_pins import format_text
+
         entries = [
             {
                 "function_name": "GetValue",
@@ -146,12 +165,18 @@ class TestTextFormatter:
 
     def test_format_text_output_parameter(self):
         from extract_function_pins import format_text
+
         entries = [
             {
                 "function_name": "GetLocation",
                 "return_type": "void",
                 "parameters": [
-                    {"name": "OutLocation", "type": "vector", "is_input": False, "is_output": True},
+                    {
+                        "name": "OutLocation",
+                        "type": "vector",
+                        "is_input": False,
+                        "is_output": True,
+                    },
                 ],
             }
         ]
@@ -161,11 +186,13 @@ class TestTextFormatter:
 
     def test_format_text_empty_list(self):
         from extract_function_pins import format_text
+
         result = format_text([])
         assert result.strip() == "" or "no functions" in result.lower()
 
     def test_format_text_fallback_reason(self):
         from extract_function_pins import format_text
+
         entries = [
             {
                 "function_name": "BigFunc",
@@ -179,6 +206,7 @@ class TestTextFormatter:
 
     def test_format_text_multiple_functions(self):
         from extract_function_pins import format_text
+
         entries = [
             {
                 "function_name": "FuncA",
@@ -189,7 +217,12 @@ class TestTextFormatter:
                 "function_name": "FuncB",
                 "return_type": "bool",
                 "parameters": [
-                    {"name": "bFlag", "type": "bool", "is_input": True, "is_output": False},
+                    {
+                        "name": "bFlag",
+                        "type": "bool",
+                        "is_input": True,
+                        "is_output": False,
+                    },
                 ],
             },
         ]
@@ -205,6 +238,7 @@ class TestJsonFormatter:
 
     def test_format_json_valid(self):
         from extract_function_pins import format_json
+
         entries = [
             {
                 "function_name": "MyFunction",
@@ -223,13 +257,24 @@ class TestJsonFormatter:
     def test_format_json_has_is_input_is_output(self):
         """JSON output includes is_input/is_output boolean fields."""
         from extract_function_pins import format_json
+
         entries = [
             {
                 "function_name": "GetLocation",
                 "return_type": "void",
                 "parameters": [
-                    {"name": "OutLoc", "type": "vector", "is_input": False, "is_output": True},
-                    {"name": "InName", "type": "string", "is_input": True, "is_output": False},
+                    {
+                        "name": "OutLoc",
+                        "type": "vector",
+                        "is_input": False,
+                        "is_output": True,
+                    },
+                    {
+                        "name": "InName",
+                        "type": "string",
+                        "is_input": True,
+                        "is_output": False,
+                    },
                 ],
             }
         ]
@@ -243,6 +288,7 @@ class TestJsonFormatter:
 
     def test_format_json_empty_list(self):
         from extract_function_pins import format_json
+
         result = format_json([])
         parsed = json.loads(result)
         assert parsed == []
@@ -250,13 +296,24 @@ class TestJsonFormatter:
     def test_format_json_roundtrip(self):
         """JSON output is valid and round-trips cleanly."""
         from extract_function_pins import format_json
+
         entries = [
             {
                 "function_name": "Test",
                 "return_type": "bool",
                 "parameters": [
-                    {"name": "bFlag", "type": "bool", "is_input": True, "is_output": False},
-                    {"name": "OutResult", "type": "int32", "is_input": False, "is_output": True},
+                    {
+                        "name": "bFlag",
+                        "type": "bool",
+                        "is_input": True,
+                        "is_output": False,
+                    },
+                    {
+                        "name": "OutResult",
+                        "type": "int32",
+                        "is_input": False,
+                        "is_output": True,
+                    },
                 ],
             }
         ]
@@ -279,7 +336,12 @@ class TestIntegration:
         if result.returncode != 0:
             pytest.skip(f"Script failed: {result.stderr}")
         # Text output should contain function signatures or empty message
-        assert "void" in result.stdout or "No functions" in result.stdout or "<-" in result.stdout or "->" in result.stdout
+        assert (
+            "void" in result.stdout
+            or "No functions" in result.stdout
+            or "<-" in result.stdout
+            or "->" in result.stdout
+        )
 
     def test_json_output_blueprint(self, blueprint_asset: Path):
         """JSON output is valid and contains expected structure."""

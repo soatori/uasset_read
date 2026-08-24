@@ -1,4 +1,5 @@
 """Tests for MaterialInstance parameter extraction."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -14,7 +15,7 @@ def test_extract_parameter_values_from_struct_value():
         fields={
             "ParameterInfo": {"Name": "Opacity", "ExpressionGUID": "abc123"},
             "ParameterValue": 0.5,
-        }
+        },
     )
     result = _extract_parameter_values([item], "ParameterValue")
     assert len(result) == 1

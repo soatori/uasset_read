@@ -3,13 +3,18 @@
 Build stage handles all FPackageIndex cross-reference resolution and GUID normalization.
 Renderers receive only PackageIR and do not access ParseResult.
 """
+
 from __future__ import annotations
 
 import logging
 import re
 from typing import TYPE_CHECKING
 
-from uasset_read.core.utils import safe_str as _safe_str, safe_int as _safe_int, normalize_hex_guid
+from uasset_read.core.utils import (
+    safe_str as _safe_str,
+    safe_int as _safe_int,
+    normalize_hex_guid,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +57,14 @@ if TYPE_CHECKING:
 
 from uasset_read.constants import (
     BLUEPRINT_METADATA_KEYS as _BLUEPRINT_METADATA_KEYS,
-    CONTAINER_TYPE_MAP, CONTAINER_TYPE_PREFIX, UE_NONE_SENTINEL,
+    CONTAINER_TYPE_MAP,
+    CONTAINER_TYPE_PREFIX,
+    UE_NONE_SENTINEL,
 )
 from uasset_read.models.status import _result_status
 from uasset_read.serializers.object_resources import PackageIndex, resolve_class_name
 from uasset_read.kismet.result import infer_bytecode_confidence
+
 
 def _classify_variable(var) -> str:
     """Classify blueprint variables."""
@@ -102,7 +110,9 @@ def _count_kismet_partial_functions(result: "ParseResult | LinkerParseResult") -
     return count
 
 
-def _build_statistics(result: "ParseResult | LinkerParseResult", exports_built: int) -> dict:
+def _build_statistics(
+    result: "ParseResult | LinkerParseResult", exports_built: int
+) -> dict:
     """Build statistics dict from parse result for JSON output."""
     export_status_counts: dict[str, int] = {}
     total_props = 0
@@ -113,7 +123,9 @@ def _build_statistics(result: "ParseResult | LinkerParseResult", exports_built: 
         export_status_counts[ps_str] = export_status_counts.get(ps_str, 0) + 1
         total_props += len(getattr(export, "properties", None) or [])
 
-    declared_export_count = getattr(getattr(result, "summary", None), "export_count", None)
+    declared_export_count = getattr(
+        getattr(result, "summary", None), "export_count", None
+    )
     if isinstance(declared_export_count, int) and declared_export_count >= 0:
         export_table_total = max(declared_export_count, len(parsed_exports))
     else:
@@ -133,7 +145,9 @@ def _build_statistics(result: "ParseResult | LinkerParseResult", exports_built: 
     }
 
 
-def _build_animation_data(result: "ParseResult | LinkerParseResult") -> AnimationDataIR | None:
+def _build_animation_data(
+    result: "ParseResult | LinkerParseResult",
+) -> AnimationDataIR | None:
     """Aggregate animation data from ParseResult (anim_blueprint, anim_sequence, anim_montage).
 
     Animation data originates from each Export's custom_data field and must be aggregated across all exports.
@@ -165,8 +179,11 @@ def _build_material_ir(result: "ParseResult | LinkerParseResult") -> MaterialIR 
     Resolves FExpressionInput/FMaterialInput PackageIndex cross-references.
     """
     from uasset_read.constants import (
-        MATERIAL_DOMAIN_MAP, BLEND_MODE_MAP, SHADING_MODEL_MAP,
-        MATERIAL_USAGE_FLAG_NAMES, classify_expression_type,
+        MATERIAL_DOMAIN_MAP,
+        BLEND_MODE_MAP,
+        SHADING_MODEL_MAP,
+        MATERIAL_USAGE_FLAG_NAMES,
+        classify_expression_type,
     )
 
     # Find Material/MaterialInstance export
@@ -174,12 +191,13 @@ def _build_material_ir(result: "ParseResult | LinkerParseResult") -> MaterialIR 
     expression_exports = []
 
     for export in result.export_map or []:
-        class_name = _safe_str(getattr(export, "object_class", None)) or \
-                     resolve_class_name(
-                         getattr(export, "class_index", None),
-                         result.import_map or [],
-                         result.export_map or [],
-                     )
+        class_name = _safe_str(
+            getattr(export, "object_class", None)
+        ) or resolve_class_name(
+            getattr(export, "class_index", None),
+            result.import_map or [],
+            result.export_map or [],
+        )
         if class_name in ("Material",):
             if getattr(export, "b_is_asset", False) or material_export is None:
                 material_export = export
@@ -200,12 +218,13 @@ def _build_material_ir(result: "ParseResult | LinkerParseResult") -> MaterialIR 
     # Key by actual export table position, not sequential position in filtered list
     expr_guid_map: dict[int, str] = {}
     for export_idx, export in enumerate(result.export_map or []):
-        class_name = _safe_str(getattr(export, "object_class", None)) or \
-                     resolve_class_name(
-                         getattr(export, "class_index", None),
-                         result.import_map or [],
-                         result.export_map or [],
-                     )
+        class_name = _safe_str(
+            getattr(export, "object_class", None)
+        ) or resolve_class_name(
+            getattr(export, "class_index", None),
+            result.import_map or [],
+            result.export_map or [],
+        )
         if class_name and class_name.startswith("MaterialExpression"):
             guid = _extract_expression_guid(export)
             if guid:
@@ -214,14 +233,17 @@ def _build_material_ir(result: "ParseResult | LinkerParseResult") -> MaterialIR 
     # Build expressions with export table indices
     expressions = []
     for export_idx, export in enumerate(result.export_map or []):
-        class_name = _safe_str(getattr(export, "object_class", None)) or \
-                     resolve_class_name(
-                         getattr(export, "class_index", None),
-                         result.import_map or [],
-                         result.export_map or [],
-                     )
+        class_name = _safe_str(
+            getattr(export, "object_class", None)
+        ) or resolve_class_name(
+            getattr(export, "class_index", None),
+            result.import_map or [],
+            result.export_map or [],
+        )
         if class_name and class_name.startswith("MaterialExpression"):
-            expr_ir = _build_single_expression_ir(export_idx, export, expr_guid_map, result)
+            expr_ir = _build_single_expression_ir(
+                export_idx, export, expr_guid_map, result
+            )
             expressions.append(expr_ir)
 
     # Build material inputs (Material only)
@@ -291,12 +313,13 @@ def _build_single_expression_ir(
     """Build a single MaterialExpressionIR from an export."""
     from uasset_read.constants import classify_expression_type
 
-    class_name = _safe_str(getattr(expr_export, "object_class", None)) or \
-                 resolve_class_name(
-                     getattr(expr_export, "class_index", None),
-                     result.import_map or [],
-                     result.export_map or [],
-                 )
+    class_name = _safe_str(
+        getattr(expr_export, "object_class", None)
+    ) or resolve_class_name(
+        getattr(expr_export, "class_index", None),
+        result.import_map or [],
+        result.export_map or [],
+    )
 
     guid = expr_guid_map.get(export_idx, "")
     expr_type = classify_expression_type(class_name)
@@ -307,22 +330,25 @@ def _build_single_expression_ir(
         prop_name = getattr(prop, "name", "")
         prop_value = getattr(prop, "value", None)
         if isinstance(prop_value, dict) and prop_value.get("struct_type") in (
-            "ExpressionInput", "FExpressionInput",
+            "ExpressionInput",
+            "FExpressionInput",
         ):
             fields = prop_value.get("fields", {})
             if isinstance(fields, dict):
                 expr_idx = fields.get("expression_index", 0)
                 source_guid = expr_guid_map.get(expr_idx) if expr_idx else None
-                inputs.append(MaterialExpressionInputIR(
-                    input_name=prop_name,
-                    source_expression_guid=source_guid,
-                    source_output_index=fields.get("output_index", 0),
-                    mask=fields.get("mask", 0),
-                    mask_r=fields.get("mask_r", 0),
-                    mask_g=fields.get("mask_g", 0),
-                    mask_b=fields.get("mask_b", 0),
-                    mask_a=fields.get("mask_a", 0),
-                ))
+                inputs.append(
+                    MaterialExpressionInputIR(
+                        input_name=prop_name,
+                        source_expression_guid=source_guid,
+                        source_output_index=fields.get("output_index", 0),
+                        mask=fields.get("mask", 0),
+                        mask_r=fields.get("mask_r", 0),
+                        mask_g=fields.get("mask_g", 0),
+                        mask_b=fields.get("mask_b", 0),
+                        mask_a=fields.get("mask_a", 0),
+                    )
+                )
 
     # Parse outputs
     outputs = _build_expression_outputs(expr_export)
@@ -362,14 +388,16 @@ def _build_expression_outputs(expr_export) -> list:
                 for item in val:
                     if isinstance(item, dict):
                         fields = item.get("fields", item)
-                        outputs.append(MaterialExpressionOutputIR(
-                            output_name=fields.get("output_name", ""),
-                            mask=fields.get("mask", 0),
-                            mask_r=fields.get("mask_r", 0),
-                            mask_g=fields.get("mask_g", 0),
-                            mask_b=fields.get("mask_b", 0),
-                            mask_a=fields.get("mask_a", 0),
-                        ))
+                        outputs.append(
+                            MaterialExpressionOutputIR(
+                                output_name=fields.get("output_name", ""),
+                                mask=fields.get("mask", 0),
+                                mask_r=fields.get("mask_r", 0),
+                                mask_g=fields.get("mask_g", 0),
+                                mask_b=fields.get("mask_b", 0),
+                                mask_a=fields.get("mask_a", 0),
+                            )
+                        )
             break
     return outputs
 
@@ -423,33 +451,42 @@ def _build_material_inputs(material_export, expr_guid_map: dict[int, str]) -> li
         if isinstance(prop_value, dict):
             struct_type = prop_value.get("struct_type", "")
             if struct_type in (
-                "MaterialInput", "FMaterialInput",
-                "ColorMaterialInput", "FColorMaterialInput",
-                "ScalarMaterialInput", "FScalarMaterialInput",
-                "VectorMaterialInput", "FVectorMaterialInput",
-                "Vector2MaterialInput", "FVector2MaterialInput",
+                "MaterialInput",
+                "FMaterialInput",
+                "ColorMaterialInput",
+                "FColorMaterialInput",
+                "ScalarMaterialInput",
+                "FScalarMaterialInput",
+                "VectorMaterialInput",
+                "FVectorMaterialInput",
+                "Vector2MaterialInput",
+                "FVector2MaterialInput",
             ):
                 fields = prop_value.get("fields", {})
                 if isinstance(fields, dict):
                     expr_idx = fields.get("expression_index", 0)
                     source_guid = expr_guid_map.get(expr_idx) if expr_idx else None
-                    inputs.append(MaterialInputIR(
-                        input_name=prop_name,
-                        source_expression_guid=source_guid,
-                        source_output_index=fields.get("output_index", 0),
-                        mask=fields.get("mask", 0),
-                        mask_r=fields.get("mask_r", 0),
-                        mask_g=fields.get("mask_g", 0),
-                        mask_b=fields.get("mask_b", 0),
-                        mask_a=fields.get("mask_a", 0),
-                    ))
+                    inputs.append(
+                        MaterialInputIR(
+                            input_name=prop_name,
+                            source_expression_guid=source_guid,
+                            source_output_index=fields.get("output_index", 0),
+                            mask=fields.get("mask", 0),
+                            mask_r=fields.get("mask_r", 0),
+                            mask_g=fields.get("mask_g", 0),
+                            mask_b=fields.get("mask_b", 0),
+                            mask_a=fields.get("mask_a", 0),
+                        )
+                    )
     return inputs
 
 
 def _build_material_properties(material_export) -> dict:
     """Build material properties dict from tagged properties."""
     from uasset_read.constants import (
-        MATERIAL_DOMAIN_MAP, BLEND_MODE_MAP, SHADING_MODEL_MAP,
+        MATERIAL_DOMAIN_MAP,
+        BLEND_MODE_MAP,
+        SHADING_MODEL_MAP,
         MATERIAL_USAGE_FLAG_NAMES,
     )
 
@@ -479,7 +516,9 @@ def _build_material_properties(material_export) -> dict:
                 properties["blend_mode"] = BLEND_MODE_MAP.get(blend_val, str(blend_val))
         elif prop_name == "ShadingModel":
             model_val = _safe_int(prop_value)
-            properties["shading_model"] = SHADING_MODEL_MAP.get(model_val, str(model_val))
+            properties["shading_model"] = SHADING_MODEL_MAP.get(
+                model_val, str(model_val)
+            )
         elif prop_name in MATERIAL_USAGE_FLAG_NAMES and prop_value:
             usage_flags.append(prop_name)
 
@@ -498,11 +537,17 @@ def _build_material_instance_parameters(material_export) -> dict:
         prop_value = getattr(prop, "value", None)
 
         if prop_name == "ScalarParameterValues":
-            parameters["scalar"] = _extract_parameter_values(prop_value, "ParameterValue")
+            parameters["scalar"] = _extract_parameter_values(
+                prop_value, "ParameterValue"
+            )
         elif prop_name == "VectorParameterValues":
-            parameters["vector"] = _extract_parameter_values(prop_value, "ParameterValue")
+            parameters["vector"] = _extract_parameter_values(
+                prop_value, "ParameterValue"
+            )
         elif prop_name == "TextureParameterValues":
-            parameters["texture"] = _extract_parameter_values(prop_value, "ParameterValue")
+            parameters["texture"] = _extract_parameter_values(
+                prop_value, "ParameterValue"
+            )
         elif prop_name == "StaticSwitchParameters":
             parameters["static_switch"] = _extract_static_switch_values(prop_value)
 
@@ -512,6 +557,7 @@ def _build_material_instance_parameters(material_export) -> dict:
 def _get_fields(obj):
     """Extract fields from StructValue or dict."""
     from uasset_read.models.properties import StructValue
+
     if isinstance(obj, StructValue):
         return obj.fields
     if isinstance(obj, dict):
@@ -529,11 +575,15 @@ def _extract_parameter_values(source, value_key: str) -> dict:
                 info = fields.get("ParameterInfo", fields.get("Info", {}))
                 info_fields = _get_fields(info) if info else {}
                 if info_fields:
-                    name = _safe_str(info_fields.get("Name", info_fields.get("ParameterName", "")))
+                    name = _safe_str(
+                        info_fields.get("Name", info_fields.get("ParameterName", ""))
+                    )
                 else:
                     name = _safe_str(info) if info else ""
                 if not name:
-                    name = _safe_str(fields.get("ParameterName", fields.get("Name", "")))
+                    name = _safe_str(
+                        fields.get("ParameterName", fields.get("Name", ""))
+                    )
                 if name:
                     result[name] = {
                         "value": fields.get(value_key, fields.get("Value")),
@@ -552,11 +602,15 @@ def _extract_static_switch_values(source) -> dict:
                 info = fields.get("ParameterInfo", fields.get("Info", {}))
                 info_fields = _get_fields(info) if info else {}
                 if info_fields:
-                    name = _safe_str(info_fields.get("Name", info_fields.get("ParameterName", "")))
+                    name = _safe_str(
+                        info_fields.get("Name", info_fields.get("ParameterName", ""))
+                    )
                 else:
                     name = _safe_str(info) if info else ""
                 if not name:
-                    name = _safe_str(fields.get("ParameterName", fields.get("Name", "")))
+                    name = _safe_str(
+                        fields.get("ParameterName", fields.get("Name", ""))
+                    )
                 if name:
                     val = fields.get("Value", fields.get("value"))
                     result[name] = bool(val) if val is not None else False
@@ -567,12 +621,22 @@ def _build_material_instance_overrides(material_export) -> dict | None:
     """Build base_property_overrides from MaterialInstance export."""
     overrides: dict = {}
     override_names = (
-        "OpacityMaskClipValue", "BlendMode", "ShadingModel",
-        "TwoSided", "DitheredLODTransition", "CastDynamicShadowAsMasked",
-        "bIsThinSurface", "OutputTranslucentVelocity", "bHasPixelAnimation",
-        "bEnableTessellation", "DisplacementScaling", "bEnableDisplacementFade",
-        "DisplacementFadeRange", "MaxWorldPositionOffsetDisplacement",
-        "CompatibleWithLumenCardSharing", "UsageFlags",
+        "OpacityMaskClipValue",
+        "BlendMode",
+        "ShadingModel",
+        "TwoSided",
+        "DitheredLODTransition",
+        "CastDynamicShadowAsMasked",
+        "bIsThinSurface",
+        "OutputTranslucentVelocity",
+        "bHasPixelAnimation",
+        "bEnableTessellation",
+        "DisplacementScaling",
+        "bEnableDisplacementFade",
+        "DisplacementFadeRange",
+        "MaxWorldPositionOffsetDisplacement",
+        "CompatibleWithLumenCardSharing",
+        "UsageFlags",
     )
 
     for prop in getattr(material_export, "properties", None) or []:
@@ -600,7 +664,12 @@ def _resolve_material_parent(material_export, result) -> str | None:
                 return _resolve_package_index(result, val)
             fields = _get_fields(val)
             if fields:
-                return _safe_str(fields.get("ObjectName", fields.get("object_name", fields.get("full_name", ""))))
+                return _safe_str(
+                    fields.get(
+                        "ObjectName",
+                        fields.get("object_name", fields.get("full_name", "")),
+                    )
+                )
             if isinstance(val, str):
                 return val
     return None
@@ -617,27 +686,33 @@ def _build_material_data_flow(
     for expr in expressions:
         for inp in expr.inputs:
             if inp.source_expression_guid:
-                data_flow.append({
-                    "source_expression_guid": inp.source_expression_guid,
-                    "source_output_index": inp.source_output_index,
-                    "target_expression_guid": expr.expression_guid,
-                    "target_input_name": inp.input_name,
-                })
+                data_flow.append(
+                    {
+                        "source_expression_guid": inp.source_expression_guid,
+                        "source_output_index": inp.source_output_index,
+                        "target_expression_guid": expr.expression_guid,
+                        "target_input_name": inp.input_name,
+                    }
+                )
 
     # Expression-to-material connections
     for mi in material_inputs:
         if mi.source_expression_guid:
-            data_flow.append({
-                "source_expression_guid": mi.source_expression_guid,
-                "source_output_index": mi.source_output_index,
-                "target_expression_guid": "__material__",
-                "target_input_name": mi.input_name,
-            })
+            data_flow.append(
+                {
+                    "source_expression_guid": mi.source_expression_guid,
+                    "source_output_index": mi.source_output_index,
+                    "target_expression_guid": "__material__",
+                    "target_input_name": mi.input_name,
+                }
+            )
 
     return data_flow
 
 
-def _build_user_defined_data(result: "ParseResult | LinkerParseResult") -> UserDefinedDataIR | None:
+def _build_user_defined_data(
+    result: "ParseResult | LinkerParseResult",
+) -> UserDefinedDataIR | None:
     """Extract user-defined type semantic data (enum or struct) from exports.
 
     Scans exports for UserDefinedEnum and UserDefinedStruct types and extracts
@@ -654,7 +729,10 @@ def _build_user_defined_data(result: "ParseResult | LinkerParseResult") -> UserD
 
         if class_name == "UserDefinedEnum":
             try:
-                from uasset_read.parsers.asset_types.user_defined import extract_user_defined_enum
+                from uasset_read.parsers.asset_types.user_defined import (
+                    extract_user_defined_enum,
+                )
+
                 enum_data = extract_user_defined_enum(export, result.name_map or [])
                 if enum_data:
                     return UserDefinedDataIR(
@@ -670,7 +748,10 @@ def _build_user_defined_data(result: "ParseResult | LinkerParseResult") -> UserD
 
         elif class_name == "UserDefinedStruct":
             try:
-                from uasset_read.parsers.asset_types.user_defined import extract_user_defined_struct
+                from uasset_read.parsers.asset_types.user_defined import (
+                    extract_user_defined_struct,
+                )
+
                 struct_data = extract_user_defined_struct(export, result.name_map or [])
                 if struct_data:
                     return UserDefinedDataIR(
@@ -708,7 +789,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
     fallback_graphs = getattr(result, "metadata", {}).get("function_graphs_fallback")
     if fallback_graphs:
         function_graphs = list(fallback_graphs)
-    elif hasattr(result, 'graphs') and result.graphs:
+    elif hasattr(result, "graphs") and result.graphs:
         try:
             function_graphs = _build_function_graphs_safe(result)
         except (KeyError, TypeError, ValueError, AttributeError) as e:
@@ -779,13 +860,15 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
     # Build import_map for JSON output
     import_map = []
     for imp in result.import_map or []:
-        import_map.append({
-            "index": getattr(imp, "index", 0),
-            "class_package": getattr(imp, "class_package", ""),
-            "class_name": getattr(imp, "class_name", ""),
-            "object_name": getattr(imp, "object_name", ""),
-            "outer_index": getattr(imp, "outer_index", 0),
-        })
+        import_map.append(
+            {
+                "index": getattr(imp, "index", 0),
+                "class_package": getattr(imp, "class_package", ""),
+                "class_name": getattr(imp, "class_name", ""),
+                "object_name": getattr(imp, "object_name", ""),
+                "outer_index": getattr(imp, "outer_index", 0),
+            }
+        )
 
     # Build name_map_entries for JSON output
     name_map_entries = list(result.name_map) if result.name_map else []
@@ -803,17 +886,30 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
         animation=_build_animation_data(result),
         material=_build_material_ir(result),
         user_defined=_build_user_defined_data(result),
-        diagnostics=(result.diagnostics or []) + list(getattr(result, "structured_diagnostics", None) or []),
+        diagnostics=(result.diagnostics or [])
+        + list(getattr(result, "structured_diagnostics", None) or []),
         function_graphs=function_graphs,
         logic_sources=list(getattr(result, "logic_sources", None) or []),
         dependencies=PackageDependenciesIR(
-            resolved_parent_assets=list(getattr(result, "resolved_parent_assets", None) or []),
-            inherited_blueprint_graphs=list(getattr(result, "inherited_blueprint_graphs", None) or []),
-            depends_map=list(getattr(result.summary, "depends_map", None) or []) if result.summary else [],
+            resolved_parent_assets=list(
+                getattr(result, "resolved_parent_assets", None) or []
+            ),
+            inherited_blueprint_graphs=list(
+                getattr(result, "inherited_blueprint_graphs", None) or []
+            ),
+            depends_map=list(getattr(result.summary, "depends_map", None) or [])
+            if result.summary
+            else [],
             resolved_depends_map=_build_resolved_depends_map(result),
             soft_object_paths=list(getattr(result, "soft_references", None) or []),
-            soft_package_references=list(getattr(result, "soft_package_references", None) or []),
-            asset_registry_data_offset=_safe_int(getattr(result.summary, "asset_registry_data_offset", 0)) if result.summary else 0,
+            soft_package_references=list(
+                getattr(result, "soft_package_references", None) or []
+            ),
+            asset_registry_data_offset=_safe_int(
+                getattr(result.summary, "asset_registry_data_offset", 0)
+            )
+            if result.summary
+            else 0,
             asset_registry_data=_build_asset_registry_data(result),
         ),
         diagnostics_data=DiagnosticsDataIR(
@@ -822,11 +918,11 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
             status=status,
             status_message=status_message,
             status_code=status_code,
-            diagnostics_truncated_count=getattr(result, 'diagnostics_dropped_count', 0),
+            diagnostics_truncated_count=getattr(result, "diagnostics_dropped_count", 0),
         ),
         debug=_build_debug_ir(
-            getattr(result, 'hex_view_entries', []),
-            hex_view_truncated_count=getattr(result, 'hex_view_dropped_count', 0),
+            getattr(result, "hex_view_entries", []),
+            hex_view_truncated_count=getattr(result, "hex_view_dropped_count", 0),
         ),
         import_map=import_map,
         name_map_entries=name_map_entries,
@@ -839,7 +935,10 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
 
     return ir
 
-def _build_function_graphs_safe(result: "ParseResult | LinkerParseResult") -> list[dict]:
+
+def _build_function_graphs_safe(
+    result: "ParseResult | LinkerParseResult",
+) -> list[dict]:
     """Build function_graphs with a simple complexity guard for large graphs."""
     graphs = getattr(result, "graphs", None) or []
     total_nodes = sum(len(getattr(graph, "nodes", None) or []) for graph in graphs)
@@ -859,12 +958,16 @@ def _build_function_graphs_safe(result: "ParseResult | LinkerParseResult") -> li
         return _build_function_graph_summaries(result)
 
     from uasset_read.graph import build_function_graphs
+
     blueprint_functions = None
-    if hasattr(result, 'blueprint') and result.blueprint:
-        blueprint_functions = getattr(result.blueprint, 'functions', None)
+    if hasattr(result, "blueprint") and result.blueprint:
+        blueprint_functions = getattr(result.blueprint, "functions", None)
     return build_function_graphs(graphs, blueprint_functions)
 
-def _build_function_graph_summaries(result: "ParseResult | LinkerParseResult") -> list[dict]:
+
+def _build_function_graph_summaries(
+    result: "ParseResult | LinkerParseResult",
+) -> list[dict]:
     entries = []
     for graph in getattr(result, "graphs", None) or []:
         for node in getattr(graph, "nodes", None) or []:
@@ -880,15 +983,18 @@ def _build_function_graph_summaries(result: "ParseResult | LinkerParseResult") -
             raw_name = getattr(ref, "member_name", None) if ref is not None else None
             if raw_name and raw_name != UE_NONE_SENTINEL:
                 function_name = raw_name.split("/")[-1]
-            entries.append({
-                "function_name": function_name,
-                "graph_source": getattr(graph, "graph_name", ""),
-                "entry_node_guid": getattr(node, "node_guid", ""),
-                "signature": {"return_type": "", "parameters": []},
-                "execution_flows": [],
-                "fallback_reason": "graph_complexity_limit",
-            })
+            entries.append(
+                {
+                    "function_name": function_name,
+                    "graph_source": getattr(graph, "graph_name", ""),
+                    "entry_node_guid": getattr(node, "node_guid", ""),
+                    "signature": {"return_type": "", "parameters": []},
+                    "execution_flows": [],
+                    "fallback_reason": "graph_complexity_limit",
+                }
+            )
     return entries
+
 
 def _build_header(result: ParseResult) -> PackageHeaderIR:
     summary = result.summary
@@ -912,24 +1018,30 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
     def _custom_versions_list(cvs) -> list[dict]:
         result_list = []
         for cv in cvs or []:
-            result_list.append({
-                "guid": getattr(cv, "guid", "") or "",
-                "version": getattr(cv, "version", 0),
-            })
+            result_list.append(
+                {
+                    "guid": getattr(cv, "guid", "") or "",
+                    "version": getattr(cv, "version", 0),
+                }
+            )
         return result_list
 
     # Helper: safely extract generations as list of dicts
     def _generations_list(gens) -> list[dict]:
         result_list = []
         for gen in gens or []:
-            result_list.append({
-                "export_count": getattr(gen, "export_count", 0),
-                "name_count": getattr(gen, "name_count", 0),
-            })
+            result_list.append(
+                {
+                    "export_count": getattr(gen, "export_count", 0),
+                    "name_count": getattr(gen, "name_count", 0),
+                }
+            )
         return result_list
 
     # Count total properties across all exports
-    total_props = sum(len(getattr(e, "properties", []) or []) for e in result.export_map or [])
+    total_props = sum(
+        len(getattr(e, "properties", []) or []) for e in result.export_map or []
+    )
 
     return PackageHeaderIR(
         package_name=_safe_str(getattr(summary, "package_name", None)),
@@ -938,26 +1050,36 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
         total_export_count=_safe_int(getattr(summary, "export_count", 0)),
         total_import_count=_safe_int(getattr(summary, "import_count", 0)),
         ue_version=version,
-        saved_hash=getattr(summary, "saved_hash", b'') or b'',
+        saved_hash=getattr(summary, "saved_hash", b"") or b"",
         # File version
         file_version_ue4=_safe_int(getattr(summary, "file_version_ue4", 0)),
         file_version_ue5=_safe_int(getattr(summary, "file_version_ue5", 0)),
         file_version_licensee=_safe_int(getattr(summary, "file_version_licensee", 0)),
         # Header structure offsets
         total_header_size=_safe_int(getattr(summary, "total_header_size", 0)),
-        custom_versions=_custom_versions_list(getattr(summary, "custom_versions", None)),
+        custom_versions=_custom_versions_list(
+            getattr(summary, "custom_versions", None)
+        ),
         folder_name=_safe_str(getattr(summary, "folder_name", None)),
         # Name table
         name_count=_safe_int(getattr(summary, "name_count", 0)),
         name_offset=_safe_int(getattr(summary, "name_offset", 0)),
         # Soft reference path table
-        soft_object_paths_count=_safe_int(getattr(summary, "soft_object_paths_count", 0)),
-        soft_object_paths_offset=_safe_int(getattr(summary, "soft_object_paths_offset", 0)),
+        soft_object_paths_count=_safe_int(
+            getattr(summary, "soft_object_paths_count", 0)
+        ),
+        soft_object_paths_offset=_safe_int(
+            getattr(summary, "soft_object_paths_offset", 0)
+        ),
         # Localization
         localization_id=_safe_str(getattr(summary, "localization_id", None)),
         # Gatherable text data
-        gatherable_text_data_count=_safe_int(getattr(summary, "gatherable_text_data_count", 0)),
-        gatherable_text_data_offset=_safe_int(getattr(summary, "gatherable_text_data_offset", 0)),
+        gatherable_text_data_count=_safe_int(
+            getattr(summary, "gatherable_text_data_count", 0)
+        ),
+        gatherable_text_data_offset=_safe_int(
+            getattr(summary, "gatherable_text_data_offset", 0)
+        ),
         # Export/import table
         export_count=_safe_int(getattr(summary, "export_count", 0)),
         export_offset=_safe_int(getattr(summary, "export_offset", 0)),
@@ -968,22 +1090,36 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
         # Dependency table
         depends_offset=_safe_int(getattr(summary, "depends_offset", 0)),
         # Soft package references
-        soft_package_references_count=_safe_int(getattr(summary, "soft_package_references_count", 0)),
-        soft_package_references_offset=_safe_int(getattr(summary, "soft_package_references_offset", 0)),
+        soft_package_references_count=_safe_int(
+            getattr(summary, "soft_package_references_count", 0)
+        ),
+        soft_package_references_offset=_safe_int(
+            getattr(summary, "soft_package_references_offset", 0)
+        ),
         # Searchable names
-        searchable_names_offset=_safe_int(getattr(summary, "searchable_names_offset", 0)),
+        searchable_names_offset=_safe_int(
+            getattr(summary, "searchable_names_offset", 0)
+        ),
         # Thumbnail table
         thumbnail_table_offset=_safe_int(getattr(summary, "thumbnail_table_offset", 0)),
         # Import type hierarchies
-        import_type_hierarchies_count=_safe_int(getattr(summary, "import_type_hierarchies_count", 0)),
-        import_type_hierarchies_offset=_safe_int(getattr(summary, "import_type_hierarchies_offset", 0)),
+        import_type_hierarchies_count=_safe_int(
+            getattr(summary, "import_type_hierarchies_count", 0)
+        ),
+        import_type_hierarchies_offset=_safe_int(
+            getattr(summary, "import_type_hierarchies_offset", 0)
+        ),
         # Persistent GUID
         persistent_guid=_safe_str(getattr(summary, "persistent_guid", None)),
         # Version generations
         generations=_generations_list(getattr(summary, "generations", None)),
         # Engine version
-        saved_by_engine_version=_engine_version_str(getattr(summary, "saved_by_engine_version", None)),
-        compatible_with_engine_version=_engine_version_str(getattr(summary, "compatible_with_engine_version", None)),
+        saved_by_engine_version=_engine_version_str(
+            getattr(summary, "saved_by_engine_version", None)
+        ),
+        compatible_with_engine_version=_engine_version_str(
+            getattr(summary, "compatible_with_engine_version", None)
+        ),
         # Compression
         compression_flags=_safe_int(getattr(summary, "compression_flags", 0)),
         # Package source
@@ -991,14 +1127,22 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
         # Bulk data
         bulk_data_start_offset=_safe_int(getattr(summary, "bulk_data_start_offset", 0)),
         # World tile info
-        world_tile_info_data_offset=_safe_int(getattr(summary, "world_tile_info_data_offset", 0)),
+        world_tile_info_data_offset=_safe_int(
+            getattr(summary, "world_tile_info_data_offset", 0)
+        ),
         # Chunk IDs
         chunk_ids=list(getattr(summary, "chunk_ids", None) or []),
         # Preload dependencies
-        preload_dependency_count=_safe_int(getattr(summary, "preload_dependency_count", 0)),
-        preload_dependency_offset=_safe_int(getattr(summary, "preload_dependency_offset", 0)),
+        preload_dependency_count=_safe_int(
+            getattr(summary, "preload_dependency_count", 0)
+        ),
+        preload_dependency_offset=_safe_int(
+            getattr(summary, "preload_dependency_offset", 0)
+        ),
         # Names referenced from export data count
-        names_referenced_from_export_data_count=_safe_int(getattr(summary, "names_referenced_from_export_data_count", 0)),
+        names_referenced_from_export_data_count=_safe_int(
+            getattr(summary, "names_referenced_from_export_data_count", 0)
+        ),
         # Payload TOC
         payload_toc_offset=_safe_int(getattr(summary, "payload_toc_offset", 0)),
         # Data resource
@@ -1007,6 +1151,7 @@ def _build_header(result: ParseResult) -> PackageHeaderIR:
         total_properties=total_props,
         total_name_entries=len(result.name_map) if result.name_map else 0,
     )
+
 
 def _get_version_string(result: ParseResult) -> str:
     """Extract UE version string from version_container."""
@@ -1027,26 +1172,32 @@ def _get_version_string(result: ParseResult) -> str:
         return "5.x"
     return "4.x"
 
+
 def _build_imports(result: ParseResult) -> list[ImportIR]:
     from uasset_read.link.linker import normalize_world_partition_path
 
     imports = []
     for idx, imp in enumerate(result.import_map or []):
-        outer_resolved = _resolve_package_index(result, getattr(imp, "outer_index", None))
+        outer_resolved = _resolve_package_index(
+            result, getattr(imp, "outer_index", None)
+        )
         cp_raw = _safe_str(getattr(imp, "class_package", None))
-        imports.append(ImportIR(
-            index=idx,
-            class_package=normalize_world_partition_path(cp_raw),
-            class_name=_safe_str(getattr(imp, "class_name", None)),
-            object_name=_safe_str(getattr(imp, "object_name", None)),
-            outer_index=getattr(imp, "outer_index", 0) or 0,
-            is_asset=bool(getattr(imp, "is_asset", False)),
-            package_flags=_safe_int(getattr(imp, "package_flags", 0)),
-            outer_index_resolved=outer_resolved,
-            package_name=_safe_str(getattr(imp, "package_name", None)),
-            b_import_optional=bool(getattr(imp, "b_import_optional", False)),
-        ))
+        imports.append(
+            ImportIR(
+                index=idx,
+                class_package=normalize_world_partition_path(cp_raw),
+                class_name=_safe_str(getattr(imp, "class_name", None)),
+                object_name=_safe_str(getattr(imp, "object_name", None)),
+                outer_index=getattr(imp, "outer_index", 0) or 0,
+                is_asset=bool(getattr(imp, "is_asset", False)),
+                package_flags=_safe_int(getattr(imp, "package_flags", 0)),
+                outer_index_resolved=outer_resolved,
+                package_name=_safe_str(getattr(imp, "package_name", None)),
+                b_import_optional=bool(getattr(imp, "b_import_optional", False)),
+            )
+        )
     return imports
+
 
 def _build_exports(result: ParseResult) -> list[ExportIR]:
     exports = []
@@ -1059,7 +1210,9 @@ def _build_exports(result: ParseResult) -> list[ExportIR]:
             logger.debug("Failed to build export %d IR: %s", idx, e, exc_info=True)
     return exports
 
+
 _MAX_SERIAL_SIZE = 10 * 1024 * 1024 * 1024  # 10 GB sanity limit
+
 
 def _clamp_serial_size(size: int) -> int:
     """Clamp corrupted serial_size values (negative or absurdly large)."""
@@ -1085,7 +1238,9 @@ def _resolve_asset_class(export, result: ParseResult) -> str | None:
             class_index = getattr(current, "class_index", None)
             if class_index is None:
                 return None
-            return _safe_str(resolve_class_name(class_index, import_map, exports)) or None
+            return (
+                _safe_str(resolve_class_name(class_index, import_map, exports)) or None
+            )
 
         outer_index = getattr(current, "outer_index", None)
         if not getattr(outer_index, "is_export", False):
@@ -1099,8 +1254,12 @@ def _resolve_asset_class(export, result: ParseResult) -> str | None:
 
 
 def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
-    outer_resolved = _resolve_package_index(result, getattr(export, "outer_index", None))
-    super_resolved = _resolve_package_index(result, getattr(export, "super_index", None))
+    outer_resolved = _resolve_package_index(
+        result, getattr(export, "outer_index", None)
+    )
+    super_resolved = _resolve_package_index(
+        result, getattr(export, "super_index", None)
+    )
 
     # parent_class is only set on blueprint exports (fix #252)
     # Blueprint export definition: object_name ends with _C, or has graphs data
@@ -1148,11 +1307,13 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
         parse_status=_safe_str(getattr(export, "parse_status", "success")) or "success",
         fallback_reason=(
             _safe_str(getattr(export, "fallback_reason", None))
-            if getattr(export, "fallback_reason", None) is not None else None
+            if getattr(export, "fallback_reason", None) is not None
+            else None
         ),
         error_message=(
             _safe_str(getattr(export, "error_message", None))
-            if getattr(export, "error_message", None) is not None else None
+            if getattr(export, "error_message", None) is not None
+            else None
         ),
         ue_export_raw=raw,
         diagnostics=_build_export_diagnostics(export),
@@ -1160,6 +1321,7 @@ def _build_export_ir(idx: int, export, result: ParseResult) -> ExportIR:
         anim_sequence=getattr(export, "custom_data", {}).get("anim_sequence"),
         anim_montage=getattr(export, "custom_data", {}).get("anim_montage"),
     )
+
 
 def _build_export_raw_ir(export) -> ExportRawIR:
     """Build UE raw export table fields from ObjectExport."""
@@ -1182,11 +1344,19 @@ def _build_export_raw_ir(export) -> ExportRawIR:
         b_not_for_client=bool(getattr(export, "b_not_for_client", False)),
         b_not_for_server=bool(getattr(export, "b_not_for_server", False)),
         b_is_inherited_instance=bool(getattr(export, "b_is_inherited_instance", False)),
-        b_not_always_loaded_for_editor_game=bool(getattr(export, "b_not_always_loaded_for_editor_game", True)),
+        b_not_always_loaded_for_editor_game=bool(
+            getattr(export, "b_not_always_loaded_for_editor_game", True)
+        ),
         b_is_asset=bool(getattr(export, "b_is_asset", False)),
         b_generate_public_hash=bool(getattr(export, "b_generate_public_hash", False)),
-        script_serialization_start_offset=getattr(export, "script_serialization_start_offset", 0) or 0,
-        script_serialization_end_offset=getattr(export, "script_serialization_end_offset", 0) or 0,
+        script_serialization_start_offset=getattr(
+            export, "script_serialization_start_offset", 0
+        )
+        or 0,
+        script_serialization_end_offset=getattr(
+            export, "script_serialization_end_offset", 0
+        )
+        or 0,
         guid=_safe_str(getattr(export, "guid", "")) or "",
     )
 
@@ -1208,6 +1378,7 @@ def _build_property_ir(prop) -> PropertyIR:
         guid=_normalize_guid(getattr(prop, "guid", None)),
     )
 
+
 def _build_graph_ir(graph) -> GraphIR:
     nodes = []
     for node in getattr(graph, "nodes", None) or []:
@@ -1221,6 +1392,7 @@ def _build_graph_ir(graph) -> GraphIR:
     execution_chains = list(getattr(graph, "execution_chains", None) or [])
     if not execution_chains:
         from uasset_read.graph.chain_builder import build_execution_chains
+
         execution_chains = build_execution_chains(graph)
 
     # Infer graph type (ordered by priority: more specific patterns before broader ones)
@@ -1228,9 +1400,12 @@ def _build_graph_ir(graph) -> GraphIR:
     graph_class = _safe_str(getattr(graph, "graph_class", None))
     if graph_class:
         for kw, gtype in (
-            ("StateMachine", "state_machine"), ("Transition", "transition"),
-            ("Conduit", "conduit"), ("State", "state"),
-            ("AnimGraph", "animation"), ("Animation", "animation"),
+            ("StateMachine", "state_machine"),
+            ("Transition", "transition"),
+            ("Conduit", "conduit"),
+            ("State", "state"),
+            ("AnimGraph", "animation"),
+            ("Animation", "animation"),
         ):
             if kw in graph_class:
                 graph_type = gtype
@@ -1245,6 +1420,7 @@ def _build_graph_ir(graph) -> GraphIR:
         subgraphs=subgraphs,
         graph_type=graph_type,
     )
+
 
 def _build_node_ir(node) -> NodeIR:
     pins = []
@@ -1309,9 +1485,12 @@ def _build_node_ir(node) -> NodeIR:
         member_parent=member_parent,
     )
 
+
 def _build_pin_ir(pin) -> PinIR:
     # Extract pin_guid — pin_id is the canonical field; pin_guid is a legacy alias
-    pin_guid = _normalize_guid(getattr(pin, "pin_id", None)) or _normalize_guid(getattr(pin, "pin_guid", None))
+    pin_guid = _normalize_guid(getattr(pin, "pin_id", None)) or _normalize_guid(
+        getattr(pin, "pin_guid", None)
+    )
 
     linked_to = []
     for ref in getattr(pin, "linked_to_raw", None) or []:
@@ -1342,8 +1521,12 @@ def _build_pin_ir(pin) -> PinIR:
     if pin_type_obj is not None:
         pin_category = _safe_str(getattr(pin_type_obj, "pin_category", None))
         pin_subcategory = _safe_str(getattr(pin_type_obj, "pin_subcategory", None))
-        pin_subcategory_object = getattr(pin_type_obj, "pin_subcategory_object_name", None)
-        container_type = CONTAINER_TYPE_MAP.get(getattr(pin_type_obj, "container_type", 0), "None")
+        pin_subcategory_object = getattr(
+            pin_type_obj, "pin_subcategory_object_name", None
+        )
+        container_type = CONTAINER_TYPE_MAP.get(
+            getattr(pin_type_obj, "container_type", 0), "None"
+        )
         is_reference = bool(getattr(pin_type_obj, "is_reference", False))
         is_const = bool(getattr(pin_type_obj, "is_const", False))
         is_weak_pointer = bool(getattr(pin_type_obj, "is_weak_pointer", False))
@@ -1353,8 +1536,12 @@ def _build_pin_ir(pin) -> PinIR:
 
         # Map terminal type (key type info)
         if getattr(pin_type_obj, "container_type", 0) == 3:
-            map_key_pin_category = _safe_str(getattr(pin_type_obj, "map_key_terminal_category", None))
-            map_key_pin_subcategory = _safe_str(getattr(pin_type_obj, "map_key_terminal_sub_category", None))
+            map_key_pin_category = _safe_str(
+                getattr(pin_type_obj, "map_key_terminal_category", None)
+            )
+            map_key_pin_subcategory = _safe_str(
+                getattr(pin_type_obj, "map_key_terminal_sub_category", None)
+            )
             map_key_pin_subcategory_object = getattr(
                 pin_type_obj, "map_key_terminal_sub_category_object_name", None
             )
@@ -1385,15 +1572,25 @@ def _build_pin_ir(pin) -> PinIR:
         persistent_guid=_normalize_guid(getattr(pin, "persistent_guid", None)) or "",
         default_text_value=_safe_str(getattr(pin, "default_text_value", None)) or None,
         auto_default_value=_safe_str(getattr(pin, "auto_default_value", None)) or None,
-        default_object_name=_resolve_default_object_name(getattr(pin, "default_object_ref", None)),
+        default_object_name=_resolve_default_object_name(
+            getattr(pin, "default_object_ref", None)
+        ),
         parent_pin_guid=_extract_pin_guid(getattr(pin, "parent_pin", None)) or "",
-        sub_pin_guids=[g for g in (_extract_pin_guid(ref) for ref in getattr(pin, "sub_pins", None) or []) if g],
-        ref_pass_through_guid=_extract_pin_guid(getattr(pin, "ref_pass_through", None)) or "",
+        sub_pin_guids=[
+            g
+            for g in (
+                _extract_pin_guid(ref) for ref in getattr(pin, "sub_pins", None) or []
+            )
+            if g
+        ],
+        ref_pass_through_guid=_extract_pin_guid(getattr(pin, "ref_pass_through", None))
+        or "",
         hidden=bool(getattr(pin, "hidden", False)),
         not_connectable=bool(getattr(pin, "not_connectable", False)),
         advanced_view=bool(getattr(pin, "advanced_view", False)),
         orphaned=bool(getattr(pin, "orphaned_pin", False)),
     )
+
 
 def _resolve_package_index(result: ParseResult, pkg_index) -> str | None:
     """Resolve PackageIndex to a human-readable path string."""
@@ -1409,6 +1606,7 @@ def _resolve_package_index(result: ParseResult, pkg_index) -> str | None:
         return str(obj_ref)
     except (KeyError, IndexError, AttributeError, ValueError):
         return None
+
 
 def _build_resolved_depends_map(result: "ParseResult") -> list[list[dict]]:
     """Resolve raw PackageIndex values in DependsMap to human-readable paths.
@@ -1442,8 +1640,8 @@ def _build_linker(result: ParseResult) -> LinkerSummaryIR | None:
 
     import_paths = []
     for imp in result.import_map or []:
-        cp = _safe_str(getattr(imp, 'class_package', None))
-        cn = _safe_str(getattr(imp, 'class_name', None))
+        cp = _safe_str(getattr(imp, "class_package", None))
+        cn = _safe_str(getattr(imp, "class_name", None))
         path = f"{normalize_world_partition_path(cp)}.{cn}"
         if path.strip():
             import_paths.append(path)
@@ -1460,6 +1658,7 @@ def _build_linker(result: ParseResult) -> LinkerSummaryIR | None:
         export_paths=export_paths,
     )
 
+
 def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
     """Build BlueprintIR from ParseResult.blueprint (full metadata)."""
     bp = result.blueprint
@@ -1468,54 +1667,69 @@ def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
 
     functions = []
     for func in bp.functions:
-        functions.append(BlueprintFunctionIR(
-            name=func.name,
-            return_type=func.return_type,
-            parameters=[{
-                "name": p.name,
-                "param_type": p.param_type,
-                "default_value": p.default_value,
-                "is_input": p.is_input,
-                "is_output": p.is_output,
-            } for p in func.parameters],
-            function_flags=getattr(func, "function_flags", 0) or 0,
-            is_implemented=getattr(func, "is_implemented", True),
-            is_pure=getattr(func, "is_pure", False),
-            is_blueprint_callable=getattr(func, "is_blueprint_callable", False),
-            is_const=getattr(func, "is_const", False),
-            is_static=getattr(func, "is_static", False),
-            is_net=getattr(func, "is_net", False),
-            is_net_reliable=getattr(func, "is_net_reliable", False),
-            is_blueprint_private=getattr(func, "is_blueprint_private", False),
-            access_specifier=getattr(func, "access_specifier", "Public") or "Public",
-            meta_data=dict(getattr(func, "meta_data", None) or {}),
-        ))
+        functions.append(
+            BlueprintFunctionIR(
+                name=func.name,
+                return_type=func.return_type,
+                parameters=[
+                    {
+                        "name": p.name,
+                        "param_type": p.param_type,
+                        "default_value": p.default_value,
+                        "is_input": p.is_input,
+                        "is_output": p.is_output,
+                    }
+                    for p in func.parameters
+                ],
+                function_flags=getattr(func, "function_flags", 0) or 0,
+                is_implemented=getattr(func, "is_implemented", True),
+                is_pure=getattr(func, "is_pure", False),
+                is_blueprint_callable=getattr(func, "is_blueprint_callable", False),
+                is_const=getattr(func, "is_const", False),
+                is_static=getattr(func, "is_static", False),
+                is_net=getattr(func, "is_net", False),
+                is_net_reliable=getattr(func, "is_net_reliable", False),
+                is_blueprint_private=getattr(func, "is_blueprint_private", False),
+                access_specifier=getattr(func, "access_specifier", "Public")
+                or "Public",
+                meta_data=dict(getattr(func, "meta_data", None) or {}),
+            )
+        )
 
     events = []
     for evt in bp.events:
-        events.append(BlueprintEventIR(
-            name=evt.name,
-            event_type=evt.event_type,
-            parameters=[{
-                "name": p.name,
-                "param_type": p.param_type,
-                "default_value": p.default_value,
-                "is_input": p.is_input,
-                "is_output": p.is_output,
-            } for p in evt.parameters],
-            function_flags=getattr(evt, "function_flags", 0) or 0,
-            is_override=getattr(evt, "is_override", False),
-            override_parent_class=_safe_str(getattr(evt, "override_parent_class", None)),
-            override_parent_event=_safe_str(getattr(evt, "override_parent_event", None)),
-            is_interface_event=getattr(evt, "is_interface_event", False),
-            interface_class=_safe_str(getattr(evt, "interface_class", None)),
-            is_net=getattr(evt, "is_net", False),
-            is_net_multicast=getattr(evt, "is_net_multicast", False),
-            is_replicated=getattr(evt, "is_replicated", False),
-            is_cosmetic=getattr(evt, "is_cosmetic", False),
-            is_static=getattr(evt, "is_static", False),
-            meta_data=dict(getattr(evt, "meta_data", None) or {}),
-        ))
+        events.append(
+            BlueprintEventIR(
+                name=evt.name,
+                event_type=evt.event_type,
+                parameters=[
+                    {
+                        "name": p.name,
+                        "param_type": p.param_type,
+                        "default_value": p.default_value,
+                        "is_input": p.is_input,
+                        "is_output": p.is_output,
+                    }
+                    for p in evt.parameters
+                ],
+                function_flags=getattr(evt, "function_flags", 0) or 0,
+                is_override=getattr(evt, "is_override", False),
+                override_parent_class=_safe_str(
+                    getattr(evt, "override_parent_class", None)
+                ),
+                override_parent_event=_safe_str(
+                    getattr(evt, "override_parent_event", None)
+                ),
+                is_interface_event=getattr(evt, "is_interface_event", False),
+                interface_class=_safe_str(getattr(evt, "interface_class", None)),
+                is_net=getattr(evt, "is_net", False),
+                is_net_multicast=getattr(evt, "is_net_multicast", False),
+                is_replicated=getattr(evt, "is_replicated", False),
+                is_cosmetic=getattr(evt, "is_cosmetic", False),
+                is_static=getattr(evt, "is_static", False),
+                meta_data=dict(getattr(evt, "meta_data", None) or {}),
+            )
+        )
 
     components = list(result.components) if result.components else []
 
@@ -1534,6 +1748,7 @@ def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
         events=events,
         components=components,
     )
+
 
 def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFunctionIR]:
     """Build DecompiledFunctionIR list from ParseResult.decompiled_functions."""
@@ -1560,29 +1775,36 @@ def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFuncti
             script_metrics = ScriptMetricsIR(
                 bytecode_buffer_size=raw_metrics.get("bytecode_buffer_size", 0),
                 serialized_script_size=raw_metrics.get("serialized_script_size", 0),
-                serialized_bytes_consumed=raw_metrics.get("serialized_bytes_consumed", 0),
+                serialized_bytes_consumed=raw_metrics.get(
+                    "serialized_bytes_consumed", 0
+                ),
                 bytecode_bytes_consumed=raw_metrics.get("bytecode_bytes_consumed", 0),
             )
-        decompiled.append(DecompiledFunctionIR(
-            name=func.function_name,
-            signature=func.signature,
-            cpp_code=func.cpp_code,
-            parameters=parameters,
-            return_type=return_type,
-            local_variables=getattr(func, "local_variables", []),
-            fallback_reasons=func.fallback_reasons,
-            bytecode_confidence=confidence,
-            bytecode_status=func.bytecode_status,
-            translation_status=getattr(func, "translation_status", "not_applicable"),
-            bytecode_source=func.bytecode_source,
-            logic_source=func.logic_source,
-            warnings=func.warnings,
-            error_code=getattr(func, "error_code", None),
-            error_message=getattr(func, "error_message", None),
-            error_context=getattr(func, "error_context", None),
-            script_metrics=script_metrics,
-        ))
+        decompiled.append(
+            DecompiledFunctionIR(
+                name=func.function_name,
+                signature=func.signature,
+                cpp_code=func.cpp_code,
+                parameters=parameters,
+                return_type=return_type,
+                local_variables=getattr(func, "local_variables", []),
+                fallback_reasons=func.fallback_reasons,
+                bytecode_confidence=confidence,
+                bytecode_status=func.bytecode_status,
+                translation_status=getattr(
+                    func, "translation_status", "not_applicable"
+                ),
+                bytecode_source=func.bytecode_source,
+                logic_source=func.logic_source,
+                warnings=func.warnings,
+                error_code=getattr(func, "error_code", None),
+                error_message=getattr(func, "error_message", None),
+                error_context=getattr(func, "error_context", None),
+                script_metrics=script_metrics,
+            )
+        )
     return decompiled
+
 
 def _infer_bytecode_confidence(
     fallback_reasons: list[str],
@@ -1610,6 +1832,7 @@ def _extract_return_type(signature: str) -> str:
         return signature[:space_idx]
     return "void"
 
+
 def _extract_parameters_from_signature(signature: str) -> list[dict]:
     """Parse parameter list from a C++ function signature.
 
@@ -1620,7 +1843,7 @@ def _extract_parameters_from_signature(signature: str) -> list[dict]:
         return []
 
     # Extract the parameter portion inside parentheses
-    match = re.search(r'\(([^)]*)\)', signature)
+    match = re.search(r"\(([^)]*)\)", signature)
     if not match:
         return []
 
@@ -1629,7 +1852,7 @@ def _extract_parameters_from_signature(signature: str) -> list[dict]:
         return []
 
     params = []
-    for param in params_str.split(','):
+    for param in params_str.split(","):
         param = param.strip()
         if not param:
             continue
@@ -1662,6 +1885,7 @@ def _extract_parameters(func) -> list[dict]:
 
     return []
 
+
 def _build_execution_chains_ir(result: ParseResult) -> list[ExecutionChainIR]:
     """Build ExecutionChainIR list from execution chains in all graphs."""
     chains = []
@@ -1679,6 +1903,7 @@ def _build_execution_chains_ir(result: ParseResult) -> list[ExecutionChainIR]:
                 chains.append(ExecutionChainIR(event=event_name, chain=chain))
     return chains
 
+
 def _build_variables_ir(result: ParseResult) -> list[VariableIR]:
     """Build VariableIR list from ParseResult.blueprint.variables (full metadata)."""
     variables = []
@@ -1691,30 +1916,33 @@ def _build_variables_ir(result: ParseResult) -> list[VariableIR]:
             continue  # Skip metadata variables
         var_type = _format_var_type(var)
         default_value = _safe_str(getattr(var, "default_value", None)) or None
-        variables.append(VariableIR(
-            name=_safe_str(getattr(var, "var_name", None)),
-            type=var_type,
-            default_value=default_value,
-            kind=kind,
-            guid=_normalize_guid(getattr(var, "var_guid", None)),
-            category=_safe_str(getattr(var, "category", None)),
-            property_flags=getattr(var, "property_flags", 0) or 0,
-            replication_condition=getattr(var, "replication_condition", 0) or 0,
-            rep_notify_func=_safe_str(getattr(var, "rep_notify_func", None)),
-            friendly_name=_safe_str(getattr(var, "friendly_name", None)),
-            metadata=dict(getattr(var, "metadata", None) or {}),
-            flags_labels=list(getattr(var, "flags_labels", None) or []),
-            edit_condition=_safe_str(getattr(var, "edit_condition", None)),
-            is_edit_anywhere=getattr(var, "is_edit_anywhere", False),
-            is_visible_anywhere=getattr(var, "is_visible_anywhere", False),
-            is_blueprint_read_only=getattr(var, "is_blueprint_read_only", False),
-            is_transient=getattr(var, "is_transient", False),
-            is_replicated=getattr(var, "is_replicated", False),
-            is_rep_notify=getattr(var, "is_rep_notify", False),
-            is_expose_on_spawn=getattr(var, "is_expose_on_spawn", False),
-            is_save_game=getattr(var, "is_save_game", False),
-        ))
+        variables.append(
+            VariableIR(
+                name=_safe_str(getattr(var, "var_name", None)),
+                type=var_type,
+                default_value=default_value,
+                kind=kind,
+                guid=_normalize_guid(getattr(var, "var_guid", None)),
+                category=_safe_str(getattr(var, "category", None)),
+                property_flags=getattr(var, "property_flags", 0) or 0,
+                replication_condition=getattr(var, "replication_condition", 0) or 0,
+                rep_notify_func=_safe_str(getattr(var, "rep_notify_func", None)),
+                friendly_name=_safe_str(getattr(var, "friendly_name", None)),
+                metadata=dict(getattr(var, "metadata", None) or {}),
+                flags_labels=list(getattr(var, "flags_labels", None) or []),
+                edit_condition=_safe_str(getattr(var, "edit_condition", None)),
+                is_edit_anywhere=getattr(var, "is_edit_anywhere", False),
+                is_visible_anywhere=getattr(var, "is_visible_anywhere", False),
+                is_blueprint_read_only=getattr(var, "is_blueprint_read_only", False),
+                is_transient=getattr(var, "is_transient", False),
+                is_replicated=getattr(var, "is_replicated", False),
+                is_rep_notify=getattr(var, "is_rep_notify", False),
+                is_expose_on_spawn=getattr(var, "is_expose_on_spawn", False),
+                is_save_game=getattr(var, "is_save_game", False),
+            )
+        )
     return variables
+
 
 # Event alias mapping: Blueprint event names -> common C++/Blueprint implementation function names
 _EVENT_ALIASES: dict[str, list[str]] = {
@@ -1759,7 +1987,9 @@ def _bind_implementations(
             graph_by_name[fn] = g
 
     for func in blueprint.functions:
-        _bind_single_implementation(func, decompiled_by_name, graph_by_name, [func.name])
+        _bind_single_implementation(
+            func, decompiled_by_name, graph_by_name, [func.name]
+        )
 
     for evt in blueprint.events:
         candidates = [evt.name]
@@ -1864,6 +2094,7 @@ def _format_var_type(var) -> str:
         return f"{prefix}<{base}>"
     return base
 
+
 def _get_event_name_from_node(node) -> str:
     """Extract event name from an event node."""
     # Prefer node_comment (event node comments are typically the event name)
@@ -1872,6 +2103,7 @@ def _get_event_name_from_node(node) -> str:
         return comment
     # Fall back to class name
     return getattr(node, "class_name", "Unknown") or "Unknown"
+
 
 def _trace_execution_from_node(start_node, graph) -> list[str]:
     """Trace execution flow chain from a starting node."""
@@ -1889,6 +2121,7 @@ def _trace_execution_from_node(start_node, graph) -> list[str]:
         next_node = _find_next_exec_node(current, graph, visited)
         current = next_node
     return chain
+
 
 def _find_next_exec_node(node, graph, visited) -> object | None:
     """Find the next node from a node's execution output pin."""
@@ -1911,7 +2144,9 @@ def _find_next_exec_node(node, graph, visited) -> object | None:
             elif isinstance(ref, str):
                 target_pin_id = ref
             else:
-                target_pin_id = getattr(ref, "pin_guid", None) or getattr(ref, "pin_id", None)
+                target_pin_id = getattr(ref, "pin_guid", None) or getattr(
+                    ref, "pin_id", None
+                )
             if not target_pin_id:
                 continue
             # Find the node containing the target pin
@@ -1919,6 +2154,7 @@ def _find_next_exec_node(node, graph, visited) -> object | None:
             if target_node:
                 return target_node
     return None
+
 
 def _find_node_by_pin_id(pin_id: str, graph, visited) -> object | None:
     """Find the corresponding node by pin ID (unvisited only)."""
@@ -1932,6 +2168,7 @@ def _find_node_by_pin_id(pin_id: str, graph, visited) -> object | None:
                 return node
     return None
 
+
 def _normalize_guid(guid: str | None) -> str | None:
     """Normalize GUID to 32-character lowercase hex (no dashes)."""
     if not guid:
@@ -1940,6 +2177,7 @@ def _normalize_guid(guid: str | None) -> str | None:
     if cleaned and len(cleaned) == 32 and all(c in "0123456789abcdef" for c in cleaned):
         return cleaned
     return None
+
 
 def _extract_pin_guid(ref) -> str | None:
     """Extract and normalize GUID from a Pin reference."""
@@ -1960,6 +2198,7 @@ def _resolve_default_object_name(ref) -> str | None:
         return ref.get("object_name") or ref.get("name") or None
     return _safe_str(getattr(ref, "object_name", None)) or None
 
+
 def _build_asset_registry_data(result) -> dict | None:
     """Build asset_registry_data dictionary from ParseResult."""
     asset_registry_data = getattr(result, "asset_registry_data", None)
@@ -1969,6 +2208,7 @@ def _build_asset_registry_data(result) -> dict | None:
         return asset_registry_data.to_dict()
     except (AttributeError, TypeError, ValueError):
         return None
+
 
 def _build_debug_ir(
     hex_view_entries: list,

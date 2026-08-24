@@ -129,14 +129,21 @@ def _skip_tagged_properties(archive: Any, name_map: List[str]) -> None:
        - BoolVal: u8 (if TypeName is BoolProperty)
        - EnumName: FName (if TypeName is EnumProperty or ByteProperty)
        - StructName: FName (if TypeName is StructProperty)
+       - StructGuid: FGuid 16 bytes (if TypeName is StructProperty, UE4 >= 441)
        - InnerTypeName: FName (if TypeName is ArrayProperty or SetProperty)
        - KeyType + ValueType: 2 x FName (if TypeName is MapProperty)
-       - Plus other version-dependent fields
+       - HasPropertyGuid: u8 (UE4 >= 503) + optional FGuid (16)
     4. Then skip Value data (Size bytes)
 
     Reference: Engine/Source/Runtime/CoreUObject/Private/UObject/Class.cpp
     FPropertyTag::Serialize
     """
+    # Version gates matching property_tags.py
+    UE4_STRUCT_GUID_IN_PROPERTY_TAG = 441
+    UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 503
+
+    file_version_ue4 = getattr(archive, '_file_version_ue4', 0)
+
     max_properties = 10000  # Safety limit
     for _ in range(max_properties):
         current_pos = archive.tell()
@@ -147,9 +154,15 @@ def _skip_tagged_properties(archive: Any, name_map: List[str]) -> None:
 
         # Read PropertyTag.Name
         name_index = archive.read_i32()
-        _name_number = archive.read_i32()  # noqa: F841 - protocol read
+        name_number = archive.read_i32()
 
-        if name_index == 0:
+        # Resolve name and check for None terminator
+        resolved_name = ""
+        if 0 <= name_index < len(name_map):
+            base_name = name_map[name_index]
+            resolved_name = f"{base_name}_{name_number}" if name_number > 0 else base_name
+
+        if resolved_name == "None":
             # Name == "None", property list ended
             break
 
@@ -177,29 +190,34 @@ def _skip_tagged_properties(archive: Any, name_map: List[str]) -> None:
             archive.read_i32()  # index
             archive.read_i32()  # number
 
-        # StructName: FName (StructProperty)
+        # StructName: FName + StructGuid: FGuid (StructProperty)
         if type_name == "StructProperty":
             archive.read_i32()  # index
             archive.read_i32()  # number
+            # StructGuid: FGuid (16 bytes) — UE4 >= VER_UE4_STRUCT_GUID_IN_PROPERTY_TAG
+            if file_version_ue4 >= UE4_STRUCT_GUID_IN_PROPERTY_TAG:
+                archive.read_bytes(16)
 
         # InnerTypeName: FName (ArrayProperty or SetProperty)
-        # See FPropertyTag::Serialize: InnerType.Serialize(Ar)
         if type_name in ("ArrayProperty", "SetProperty"):
             archive.read_i32()  # index
             archive.read_i32()  # number
 
         # KeyTypeName + ValueTypeName: 2 x FName (MapProperty)
-        # See FPropertyTag::Serialize: KeyType.Serialize(Ar) + ValueType.Serialize(Ar)
         if type_name == "MapProperty":
             archive.read_i32()  # key type index
             archive.read_i32()  # key type number
             archive.read_i32()  # value type index
             archive.read_i32()  # value type number
 
-        # Guid (PropertyGuid): bool(i32) + optional FGuid(16)
-        has_guid = archive.read_i32()
-        if has_guid != 0:
-            archive.read_bytes(16)
+        # HasPropertyGuid: u8 (not i32!) — VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG
+        if file_version_ue4 >= UE4_PROPERTY_GUID_IN_PROPERTY_TAG:
+            has_guid = archive.read_u8()
+            if has_guid != 0:
+                archive.read_bytes(16)
+        else:
+            # Older format: no property guid field
+            pass
 
         # Skip Value data
         if tag_size > 0:
