@@ -64,7 +64,6 @@ def build_standalone_content(
     object_class = getattr(export_ir, "object_class", "") or ""
 
     if not asset_type_data or not isinstance(asset_type_data, dict):
-        coverage_model.track("profile_properties", False)
         return {}
 
     if object_class == "SubsurfaceProfile":
@@ -74,5 +73,4 @@ def build_standalone_content(
     elif object_class in ("FoliageType", "FoliageType_InstancedStaticMesh"):
         return _build_foliage_type(asset_type_data, coverage_model)
     else:
-        coverage_model.track("profile_properties", False)
         return {}
