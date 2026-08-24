@@ -39,6 +39,9 @@ _TAGGED_PROPERTIES_CLASSES = frozenset({
     "EdGraphNode",
     "K2Node",
     "AnimBlueprintGeneratedClass",
+    # #592: AnimSequence/AnimMontage — tagged properties + asset type handler
+    "AnimSequence",
+    "AnimMontage",
     # #320: ControlRig / RigVM blueprint-generated classes (containing tagged properties)
     "ControlRigBlueprintGeneratedClass",
     "RigVMBlueprintGeneratedClass",
@@ -57,8 +60,6 @@ _OPAQUE_CLASSES = frozenset({
     "TextureCube",
     "Material",
     "MaterialInstanceConstant",
-    "AnimSequence",
-    "AnimMontage",
     "SoundWave",
     "SoundCue",
     "ParticleSystem",
