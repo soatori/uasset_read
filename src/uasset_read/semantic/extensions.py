@@ -10,10 +10,7 @@ references}, which a domain format may redefine.
 """
 from __future__ import annotations
 
-from typing import Callable, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from uasset_read.models.ir import PackageIR, ExportIR
+from typing import Callable
 
 _REGISTRY: dict[str, Callable] = {}
 _DOMAIN_FORMATS: dict[str, tuple[str, str]] = {}
@@ -50,6 +47,3 @@ def get_domain_format(class_name: str) -> tuple[str, str] | None:
     return _DOMAIN_FORMATS.get(class_name)
 
 
-def is_registered(class_name: str) -> bool:
-    """Check whether a class has a registered extractor."""
-    return class_name in _REGISTRY

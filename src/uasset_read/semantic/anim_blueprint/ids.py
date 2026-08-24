@@ -6,8 +6,6 @@ import re
 GRAPH_ID_RE = r"animblueprint://graph/[A-Za-z][A-Za-z0-9_.-]*"
 NODE_ID_RE = r"animblueprint://graph/[A-Za-z][A-Za-z0-9_.-]*/node/[a-z][a-z0-9-]*/[A-Za-z][A-Za-z0-9_.-]*/[0-9]+"
 ENDPOINT_RE = r"(input|output|exec|pose)\.[A-Za-z][A-Za-z0-9_.-]*"
-STATE_MACHINE_ID_RE = r"animblueprint://state_machine/[A-Za-z][A-Za-z0-9_.-]*"
-STATE_ID_RE = r"animblueprint://state_machine/[A-Za-z][A-Za-z0-9_.-]*/state/[A-Za-z][A-Za-z0-9_.-]*"
 
 _SLUG_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 _KIND_RE = re.compile(r"[^a-z0-9-]+")

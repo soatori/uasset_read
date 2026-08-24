@@ -99,10 +99,6 @@ class ClassHandlerRegistry:
         self._cache[class_name] = None
         return None
 
-    def get_registered_handlers(self) -> List[ClassHandler]:
-        """Return all registered handlers."""
-        return list(self._handlers)
-
     def clear(self) -> None:
         """Clear all registrations and cache."""
         self._handlers.clear()
@@ -155,8 +151,3 @@ def get_class_registry() -> ClassHandlerRegistry:
     return _default_registry
 
 
-def reset_class_registry() -> None:
-    """Reset the global default registry (for testing)."""
-    global _default_registry, _bootstrap_done
-    _default_registry = None
-    _bootstrap_done = False

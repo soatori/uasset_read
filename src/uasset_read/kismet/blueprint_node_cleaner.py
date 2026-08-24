@@ -577,48 +577,6 @@ class BlueprintNodeCleaner:
         # Fallback: ClassName::FuncName format
         return f"{class_name}::{func_name}({', '.join(params)})"
 
-    @staticmethod
-    def clean_from_string(call_str: str, params: list[str] | None = None) -> str:
-        """Parse and clean from a "ClassName::FuncName" string.
-
-        Args:
-            call_str: Call string in "ClassName::FuncName" format
-            params: Parameter list, uses empty list when None
-
-        Returns:
-            Cleaned C++ expression string
-        """
-        if params is None:
-            params = []
-
-        if "::" in call_str:
-            class_name, func_name = call_str.split("::", 1)
-        else:
-            # When no class name prefix, use empty string as class name
-            class_name = ""
-            func_name = call_str
-
-        return BlueprintNodeCleaner.clean(class_name, func_name, params)
-
-    @staticmethod
-    def has_mapping(class_name: str, func_name: str) -> bool:
-        """Check if a mapping exists for this node.
-
-        Args:
-            class_name: UE class name
-            func_name: Function name
-
-        Returns:
-            True if mapping exists
-        """
-        stripped = _strip_ue_prefix(class_name)
-        key = f"{stripped}::{func_name}"
-        return key in _MAPPINGS
-
-    @staticmethod
-    def get_supported_nodes() -> list[tuple[str, str]]:
-        """Return all supported (class_name, func_name) pairs."""
-        return [(e.class_name, e.func_name) for e in _MAPPINGS.values()]
 
 
 # ===========================================================================

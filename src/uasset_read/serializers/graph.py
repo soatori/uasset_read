@@ -74,16 +74,23 @@ def _extract_graph_properties(
         elif name == "GraphGuid" and isinstance(value, dict):
             fields = value.get("fields", {})
             if fields:
-                a = fields.get("A", 0) & 0xFFFFFFFF
-                b = fields.get("B", 0) & 0xFFFFFFFF
-                c = fields.get("C", 0) & 0xFFFFFFFF
-                d = fields.get("D", 0) & 0xFFFFFFFF
-                graph_guid = (
-                    f"{a & 0xFF:02x}{(a >> 8) & 0xFF:02x}{(a >> 16) & 0xFF:02x}{(a >> 24) & 0xFF:02x}"
-                    f"{b & 0xFF:02x}{(b >> 8) & 0xFF:02x}{c & 0xFF:02x}{(c >> 8) & 0xFF:02x}"
-                    f"{(c >> 16) & 0xFF:02x}{(c >> 24) & 0xFF:02x}{d & 0xFF:02x}{(d >> 8) & 0xFF:02x}"
-                    f"{(d >> 16) & 0xFF:02x}{(d >> 24) & 0xFF:02x}"
-                )
+                try:
+                    a = int(fields.get("A", 0) or 0) & 0xFFFFFFFF
+                    b = int(fields.get("B", 0) or 0) & 0xFFFFFFFF
+                    c = int(fields.get("C", 0) or 0) & 0xFFFFFFFF
+                    d = int(fields.get("D", 0) or 0) & 0xFFFFFFFF
+                    graph_guid = (
+                        f"{a & 0xFF:02x}{(a >> 8) & 0xFF:02x}{(a >> 16) & 0xFF:02x}{(a >> 24) & 0xFF:02x}"
+                        f"{b & 0xFF:02x}{(b >> 8) & 0xFF:02x}{c & 0xFF:02x}{(c >> 8) & 0xFF:02x}"
+                        f"{(c >> 16) & 0xFF:02x}{(c >> 24) & 0xFF:02x}{d & 0xFF:02x}{(d >> 8) & 0xFF:02x}"
+                        f"{(d >> 16) & 0xFF:02x}{(d >> 24) & 0xFF:02x}"
+                    )
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "GraphGuid: non-integer field values in %s, using zero GUID",
+                        fields,
+                    )
+                    graph_guid = ""
 
     return schema_name, node_indices, graph_guid
 

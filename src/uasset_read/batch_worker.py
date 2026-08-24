@@ -1,6 +1,5 @@
 """Subprocess-isolated per-asset worker for :func:`uasset_read.core.parse_batch`."""
 
-
 import argparse
 import collections
 import json
@@ -17,8 +16,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-# Suppress RuntimeWarning from runpy — when launched via `python -m uasset_read.batch_worker`,
-# runpy imports the package before executing the module, causing the "found in sys.modules after import" warning.
+# 抑制 runpy 的 RuntimeWarning — 当通过 `python -m uasset_read.batch_worker` 启动时，
+# runpy 先导入包再执行模块，导致 "found in sys.modules after import" 警告
 warnings.filterwarnings(
     "ignore",
     message=".*found in sys.modules after import.*",
@@ -32,20 +31,18 @@ from uasset_read.memory_safety import (
     ResourceLimits,
     _get_process_rss_mb,
 )
-from uasset_read.config import ParseConfig
 
-# stderr drain default cap: keep the last 1 MB of output
+# stderr drain 默认上限：保留最后 1 MB 输出
 _STDERR_DRAIN_MAX_BYTES = 1024 * 1024
 _STDERR_DRAIN_MAX_LINES = 10_000
 
 
 class _StderrDrain:
-    """Bounded stderr drain — keeps the tail to prevent pipe deadlock.
+    """有界 stderr drain — 保留尾部，防止管道死锁。
 
-    Uses a background thread to continuously read child process stderr, preventing
-    pipe buffer exhaustion that would block the child's writes and cause the parent's
-    ``wait()`` to never return. Internally uses a deque to keep the last N lines /
-    N bytes; excess is automatically dropped.
+    使用后台线程持续读取子进程 stderr，避免管道缓冲区填满后子进程阻塞写入
+    导致父进程 ``wait()`` 永远不返回的死锁。内部使用 deque 保留最后 N 行 /
+    N 字节，超出部分自动丢弃。
     """
 
     def __init__(
@@ -61,13 +58,11 @@ class _StderrDrain:
         self._dropped_count: int = 0
         self._thread: threading.Thread | None = None
         self._line_callback = line_callback
-        self._stderr_pipe: object | None = None
 
     def start(self, proc: subprocess.Popen[bytes]) -> None:
-        """Start background drain thread."""
+        """启动后台 drain 线程。"""
         if proc.stderr is None:
             return
-        self._stderr_pipe = proc.stderr
         self._thread = threading.Thread(
             target=self._drain_loop,
             args=(proc,),
@@ -77,20 +72,24 @@ class _StderrDrain:
         self._thread.start()
 
     def _drain_loop(self, proc: subprocess.Popen[bytes]) -> None:
-        """Continuously read stderr lines until EOF."""
+        """持续读取 stderr 行直到 EOF。"""
         try:
             if proc.stderr is None:
                 return
             for raw_line in proc.stderr:
-                line = raw_line.decode("utf-8", errors="replace") if isinstance(raw_line, bytes) else raw_line
+                line = (
+                    raw_line.decode("utf-8", errors="replace")
+                    if isinstance(raw_line, bytes)
+                    else raw_line
+                )
                 self._append(line)
         except (OSError, ValueError) as exc:
-            logger.debug("stderr drain exception: %s", exc)
+            logger.debug("stderr drain 异常: %s", exc)
 
     def _append(self, line: str) -> None:
-        """Append a line; drop oldest lines when byte limit is exceeded."""
+        """添加一行，超出字节上限时丢弃最旧行。"""
         line_bytes = len(line.encode("utf-8", errors="replace"))
-        # Check if deque will automatically drop the oldest line
+        # 检查 deque 是否会自动丢弃旧行
         if self._lines.maxlen is not None and len(self._lines) >= self._lines.maxlen:
             old = self._lines[0]
             self._total_bytes -= len(old.encode("utf-8", errors="replace"))
@@ -99,30 +98,20 @@ class _StderrDrain:
         self._total_bytes += line_bytes
         if self._line_callback is not None:
             self._line_callback(line)
-        # If total bytes still exceed the limit, continue dropping oldest lines
+        # 如果总字节数仍超限，继续丢弃旧行
         while self._total_bytes > self._max_bytes and len(self._lines) > 1:
             old = self._lines.popleft()
             self._total_bytes -= len(old.encode("utf-8", errors="replace"))
             self._dropped_count += 1
 
     def join(self, timeout: float | None = None) -> None:
-        """Wait for the drain thread to finish."""
+        """等待 drain 线程完成。"""
         if self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=timeout)
 
-    def close(self) -> None:
-        """Join the drain thread and close the stderr pipe.
-
-        Must be called after the worker process has exited to ensure
-        no ResourceWarning or unclosed-file issues.
-        """
-        self.join(timeout=5)
-        if self._stderr_pipe is not None and not self._stderr_pipe.closed:
-            self._stderr_pipe.close()
-
     @property
     def text(self) -> str:
-        """Return the collected stderr text."""
+        """返回收集到的 stderr 文本。"""
         return "".join(self._lines)
 
     @property
@@ -184,25 +173,6 @@ def _request_to_payload(request: BatchWorkerRequest) -> dict[str, Any]:
     policy = options.get("memory_policy")
     if isinstance(policy, MemoryPolicy):
         options["memory_policy"] = {"__memory_policy__": _policy_to_payload(policy)}
-    # #453: Serialize ParseConfig (contains MemoryPolicy which is not JSON-serializable)
-    parse_cfg = options.get("parse_config")
-    if isinstance(parse_cfg, ParseConfig):
-        inner_policy = parse_cfg.memory_policy
-        cfg_dict = {
-            "tolerant": parse_cfg.tolerant,
-            "force_full_parse": parse_cfg.force_full_parse,
-            "hex_view": parse_cfg.hex_view,
-            "include_parent_assets": parse_cfg.include_parent_assets,
-            "asset_roots": list(parse_cfg.asset_roots) if parse_cfg.asset_roots else None,
-            "mappings_path": parse_cfg.mappings_path,
-            "game": parse_cfg.game,
-            "lightweight_threshold": parse_cfg.lightweight_threshold,
-        }
-        if isinstance(inner_policy, MemoryPolicy):
-            cfg_dict["memory_policy"] = {"__memory_policy__": _policy_to_payload(inner_policy)}
-        else:
-            cfg_dict["memory_policy"] = inner_policy
-        options["parse_config"] = {"__parse_config__": cfg_dict}
     return {
         "file_path": request.file_path,
         "output_path": request.output_path,
@@ -216,26 +186,6 @@ def _request_from_payload(payload: dict[str, Any]) -> BatchWorkerRequest:
     policy = options.get("memory_policy")
     if isinstance(policy, dict) and "__memory_policy__" in policy:
         options["memory_policy"] = _policy_from_payload(policy["__memory_policy__"])
-    # #453: Deserialize ParseConfig
-    parse_cfg = options.get("parse_config")
-    if isinstance(parse_cfg, dict) and "__parse_config__" in parse_cfg:
-        cfg_dict = parse_cfg["__parse_config__"]
-        inner_policy_raw = cfg_dict.get("memory_policy")
-        if isinstance(inner_policy_raw, dict) and "__memory_policy__" in inner_policy_raw:
-            inner_policy = _policy_from_payload(inner_policy_raw["__memory_policy__"])
-        else:
-            inner_policy = inner_policy_raw
-        options["parse_config"] = ParseConfig(
-            tolerant=cfg_dict.get("tolerant", True),
-            force_full_parse=cfg_dict.get("force_full_parse", False),
-            hex_view=cfg_dict.get("hex_view", False),
-            include_parent_assets=cfg_dict.get("include_parent_assets", False),
-            asset_roots=cfg_dict.get("asset_roots"),
-            mappings_path=cfg_dict.get("mappings_path"),
-            game=cfg_dict.get("game"),
-            lightweight_threshold=cfg_dict.get("lightweight_threshold"),
-            memory_policy=inner_policy,
-        )
     return BatchWorkerRequest(
         file_path=payload["file_path"],
         output_path=payload["output_path"],
@@ -256,9 +206,15 @@ def _asset_worker(request: BatchWorkerRequest) -> BatchWorkerOutcome:
         logging_options = request.logging_options or {}
         if logging_options.get("enabled", True):
             from uasset_read.project_logging import configure_worker_stream_logging
+
+            run_id = (
+                logging_options.get("run_id")
+                or os.environ.get("UASSET_READ_RUN_ID")
+                or "-"
+            )
             worker_handler = configure_worker_stream_logging(
                 level=logging_options.get("level") or "DEBUG",
-                run_id=logging_options.get("run_id") or "-",
+                run_id=run_id,
                 asset=Path(request.file_path).name,
             )
         rendered = parse_single(request.file_path, **options)
@@ -268,6 +224,7 @@ def _asset_worker(request: BatchWorkerRequest) -> BatchWorkerOutcome:
         return BatchWorkerOutcome(True, str(output_path), "")
     except BaseException as exc:
         import traceback
+
         return BatchWorkerOutcome(
             False,
             "",
@@ -283,7 +240,7 @@ def _asset_worker(request: BatchWorkerRequest) -> BatchWorkerOutcome:
         try:
             temporary_path.unlink(missing_ok=True)
         except OSError as e:
-            logger.debug("Failed to clean up temp file: %s", e)
+            logger.debug("清理临时文件失败: %s", e)
 
 
 class _SubprocessAdapter:
@@ -295,10 +252,6 @@ class _SubprocessAdapter:
 
     def _forward_stderr_line(self, line: str) -> None:
         rendered = line.rstrip("\r\n")
-        from uasset_read.project_logging import forward_worker_log_event
-
-        if forward_worker_log_event(rendered):
-            return
         level = logging.DEBUG
         for name in ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"):
             if f"[{name}]" in rendered:
@@ -327,28 +280,9 @@ class _SubprocessAdapter:
         try:
             self._process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
-            logger.debug("Subprocess join timed out, continuing")
-        # Wait for the drain thread to consume remaining data in the pipe
+            logger.debug("子进程 join 超时，继续执行")
+        # 等待 drain 线程消费完管道中剩余数据
         self._stderr_drain.join(timeout=5)
-
-    def close(self) -> None:
-        """Close stderr pipe and process file descriptors.
-
-        Ensures no ResourceWarning or unclosed-file issues in all exit paths.
-        Safe to call multiple times.
-        """
-        if self._stderr_drain is not None:
-            self._stderr_drain.close()
-            self._stderr_drain = None
-        if self._process is not None:
-            # Popen.close() is POSIX-only; on Windows clean up pipes manually
-            if hasattr(self._process, "close"):
-                self._process.close()
-            else:
-                for stream in (self._process.stdin, self._process.stdout):
-                    if stream is not None and not stream.closed:
-                        stream.close()
-            self._process = None
 
 
 class _ResultFile:
@@ -387,7 +321,7 @@ def _monitor_worker(
     started_at = monotonic()
     while process.is_alive():
         elapsed = monotonic() - started_at
-        if elapsed >= limits.timeout_seconds:
+        if elapsed > limits.timeout_seconds:
             _terminate_worker(process)
             return BatchWorkerOutcome(
                 False,
@@ -409,7 +343,7 @@ def _monitor_worker(
     if process.exitcode and process.exitcode != 0:
         stderr_out = getattr(process, "stderr_text", "")
         if stderr_out:
-            logger.warning("Subprocess stderr (exit %d):\n%s", process.exitcode, stderr_out)
+            logger.warning("子进程 stderr (exit %d):\n%s", process.exitcode, stderr_out)
     if result_queue is None:
         return BatchWorkerOutcome(
             False,
@@ -421,7 +355,9 @@ def _monitor_worker(
     except queue.Empty:
         stderr_out = getattr(process, "stderr_text", "")
         if stderr_out:
-            logger.error("Worker %s failed without result. stderr:\n%s", process.pid, stderr_out)
+            logger.error(
+                "Worker %s failed without result. stderr:\n%s", process.pid, stderr_out
+            )
         return BatchWorkerOutcome(
             False,
             "",
@@ -461,6 +397,9 @@ def run_isolated_asset(
     )
     process = None
     try:
+        env = os.environ.copy()
+        if request.logging_options and request.logging_options.get("run_id"):
+            env["UASSET_READ_RUN_ID"] = request.logging_options["run_id"]
         popen = subprocess.Popen(
             [
                 sys.executable,
@@ -473,6 +412,7 @@ def run_isolated_asset(
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
+            env=env,
         )
         process = _SubprocessAdapter(popen)
         return _monitor_worker(
@@ -490,23 +430,9 @@ def run_isolated_asset(
                     missing_ok=True
                 )
             except OSError as e:
-                logger.debug("Failed to clean up temp output file: %s", e)
-            process.close()
-            # On Windows, wait for process to fully release file handles
-            # before deleting protocol files (WinError 32: file in use)
-            if sys.platform == "win32":
-                time.sleep(0.1)
-        # Retry file deletion with backoff for Windows file handle issues
-        for attempt in range(3):
-            try:
-                request_path.unlink(missing_ok=True)
-                result_path.unlink(missing_ok=True)
-                break
-            except OSError as e:
-                if attempt < 2 and sys.platform == "win32":
-                    time.sleep(0.1 * (attempt + 1))
-                else:
-                    logger.debug("Failed to clean up protocol files: %s", e)
+                logger.debug("清理临时输出文件失败: %s", e)
+        request_path.unlink(missing_ok=True)
+        result_path.unlink(missing_ok=True)
 
 
 def _worker_main(argv: list[str] | None = None) -> int:

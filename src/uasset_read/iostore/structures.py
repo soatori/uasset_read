@@ -91,31 +91,10 @@ class FIoChunkId:
     """
     bytes: bytes  # 12 bytes
 
-    @staticmethod
-    def from_hash(chunk_hash: int) -> FIoChunkId:
-        """Create from 64-bit hash (low 12 bytes)"""
-        data = struct.pack('<Q', chunk_hash) + b'\x00' * 4
-        return FIoChunkId(bytes=data[:12])
-
     @property
     def id(self) -> int:
         """Return 64-bit ID (low 8 bytes)"""
         return struct.unpack('<Q', self.bytes[:8])[0]
-
-    @property
-    def chunk_index(self) -> int:
-        """Return ChunkIndex (bytes 8-9, big-endian)"""
-        return (self.bytes[8] << 8) | self.bytes[9]
-
-    @property
-    def chunk_group(self) -> int:
-        """Return ChunkGroup (byte 10)"""
-        return self.bytes[10]
-
-    @property
-    def chunk_type(self) -> int:
-        """Return ChunkType (byte 11)"""
-        return self.bytes[11]
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, FIoChunkId):

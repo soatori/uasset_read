@@ -141,35 +141,11 @@ class UObjectInstance:
             return f"{pkg_name}.{self.object_name}", False
         return self.object_name, False
 
-    def get_class_object(self) -> Optional["UObjectInstance"]:
-        """Resolve the class of this object to a UObjectInstance."""
-        if self.is_import:
-            return None
-        if self._raw_export and self.linker:
-            return self.linker.resolve_package_index(
-                self._raw_export.class_index
-            )
-        return None
-
-    def get_template_object(self) -> Optional["UObjectInstance"]:
-        """Resolve the template (CDO) object for this export."""
-        if self.is_import or not self._raw_export or not self.linker:
-            return None
-        return self.linker.resolve_package_index(
-            self._raw_export.template_index
-        )
-
     def get_children(self) -> List["UObjectInstance"]:
         """Get child objects (objects whose Outer is this object)."""
         if self.linker is None:
             return []
         return self.linker.get_children(self)
-
-    def ensure_preloaded(self) -> None:
-        """Ensure properties are loaded (lazy load if needed)."""
-        if not self._preloaded and self.is_export and self.linker:
-            exp_idx = self.package_index - 1
-            self.linker.preload(exp_idx)
 
     def __repr__(self) -> str:
         kind = "Import" if self.is_import else "Export"

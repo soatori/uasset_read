@@ -12,6 +12,7 @@ from typing import BinaryIO
 
 from uasset_read.exceptions import ParseError
 from uasset_read.pak.structures import FPakInfo, FPakEntry
+from uasset_read.core.utils import normalize_path
 from uasset_read.pak.index import parse_primary_index
 from uasset_read.pak.decompress import decompress_entry
 

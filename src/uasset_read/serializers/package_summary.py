@@ -18,7 +18,6 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 
 from uasset_read.archive import FArchive
-from uasset_read.core.utils import normalize_hex_guid
 from uasset_read.constants import (
     PACKAGE_FILE_TAG, PACKAGE_FILE_TAG_SWAPPED,
     UE5_VERSION_MIN, UE4_LEGACY_VERSIONS, SUPPORTED_LEGACY_VERSIONS,
@@ -163,14 +162,6 @@ class PackageFileSummary:
     data_resource_offset: int = 0
     depends_map: List[List[int]] = field(default_factory=list)
     preload_dependencies: List[int] = field(default_factory=list)
-
-    def get_custom_version(self, guid: str, default: int = 0) -> int:
-        """Find CustomVersion version value."""
-        normalized_guid = normalize_hex_guid(guid)
-        for cv in self.custom_versions:
-            if cv.guid == normalized_guid:
-                return cv.version
-        return default
 
 
 def _read_custom_versions(archive: FArchive) -> list:

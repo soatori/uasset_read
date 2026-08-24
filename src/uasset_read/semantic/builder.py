@@ -204,25 +204,35 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None, *, 
     # Check if extractor accepts 'mode' parameter
     _pass_mode = _extractor_accepts_mode(extractor)
 
+    _extractor_ran = False
     if extractor is not None and status.representation != "opaque":
         if _pass_mode:
             content = extractor(package_ir, primary, cov, evidence_list, mode=mode)
         else:
             content = extractor(package_ir, primary, cov, evidence_list)
+        _extractor_ran = True
     elif extractor is not None and asset_type == "material" and getattr(package_ir, "material", None) is not None:
         # Material data is built by _build_material_ir in ir_builder, not from export parsing
         # Call the extractor even when the export is opaque
         content = extractor(package_ir, primary, cov, evidence_list)
+        _extractor_ran = True
         # Override representation to full since we have material data
         representation = "full"
         status = AssetStatus(parse=parse, representation="full")
-    else:
+    elif extractor is None:
+        # No extractor registered — domain_content is genuinely unavailable
         cov.track("domain_content", False)
+    # When _extractor_ran but content is empty, the extractor had nothing to
+    # contribute.  Do NOT track domain_content as unavailable (it was never
+    # available) to avoid a coverage/representation mismatch.
 
     # Domain formats own coverage inside content; references and diagnostics
     # are always provided by the envelope so domain extractors need not
     # hardcode empty values.
-    owns_envelope_sections = domain_format is not None and status.representation != "opaque"
+    owns_envelope_sections = (
+        domain_format is not None
+        and status.representation != "opaque"
+    )
     if owns_envelope_sections and content.get("coverage"):
         # Any reported coverage entry means some scope is not complete:
         # representation cannot be "full" (honest status contract).

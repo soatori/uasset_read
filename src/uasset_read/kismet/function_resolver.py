@@ -71,14 +71,6 @@ class FunctionRefResolver:
         self._cache[stack_node] = result
         return result
 
-    def resolve_string(self, stack_node: int) -> str:
-        """Return "ClassName::FuncName" or fallback format "Function_{stack_node}"."""
-        result = self.resolve(stack_node)
-        if result is None:
-            return f"Function_{stack_node}"
-        class_name, func_name = result
-        return f"{class_name}::{func_name}"
-
     def is_local_function(self, stack_node: int) -> bool:
         """Check if StackNode points to a local Blueprint function (export).
 

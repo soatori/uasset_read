@@ -10,6 +10,7 @@ import os
 from uasset_read.archive import FArchive, ArchiveLike, ByteArchive
 from uasset_read.exceptions import ParseError
 from uasset_read.memory_safety import ResourceBudget
+from uasset_read.core.utils import normalize_path
 
 logger = logging.getLogger(__name__)
 
@@ -175,16 +176,6 @@ class PackageBundle:
         uexp = self._open_archive_for(".uexp", tolerant) if ".uexp" in self.package_files else None
         return PackageArchive(main, uexp, tolerant=tolerant)
 
-    def read_payload(self, extension: str) -> Optional[bytes]:
-        extension = _normalize_ext(extension)
-        if extension in self.payloads:
-            return self.payloads[extension]
-        path = self.files.get(extension)
-        if path is None:
-            return None
-        with open(path, "rb") as f:
-            return f.read()
-
     def _open_archive_for(self, extension: str, tolerant: bool) -> ArchiveLike:
         extension = _normalize_ext(extension)
         if extension in self.payloads:
@@ -260,7 +251,7 @@ class PackageProvider(ABC):
         files = set(self.list_files())
         if path in files:
             return path
-        normalized = path.replace("\\", "/")
+        normalized = normalize_path(path)
         if normalized in files:
             return normalized
         for ext in PACKAGE_EXTENSIONS:
@@ -269,7 +260,7 @@ class PackageProvider(ABC):
                 return candidate
         lowered = normalized.lower()
         for candidate in files:
-            candidate_normalized = candidate.replace("\\", "/")
+            candidate_normalized = normalize_path(candidate)
             if candidate_normalized.lower() == lowered:
                 return candidate
             for ext in PACKAGE_EXTENSIONS:
@@ -301,15 +292,6 @@ class MultiSourceProvider(PackageProvider):
         for m in mounts or []:
             self._mounts.append(m)
         self._mounts.sort(key=lambda m: -m.priority)
-
-    def add_mount(self, mount: MountPoint) -> None:
-        """Add a mount point and re-sort by priority."""
-        self._mounts.append(mount)
-        self._mounts.sort(key=lambda m: -m.priority)
-
-    def remove_mount(self, mount_root: str) -> None:
-        """Remove all mounts with the given logical root."""
-        self._mounts = [m for m in self._mounts if m.mount_root != mount_root]
 
     @property
     def mounts(self) -> List[MountPoint]:
@@ -375,21 +357,6 @@ class MultiSourceProvider(PackageProvider):
                 return bundle
         raise FileNotFoundError(path)
 
-    def resolve_source(self, path: str) -> SourceProvenance | None:
-        """Resolve which source serves a given logical path.
-
-        Returns ``None`` if no mount can resolve the path.
-        """
-        for mount in self._mounts:
-            physical = self._to_physical(path, mount)
-            if physical is not None:
-                return SourceProvenance(
-                    mount_root=mount.mount_root,
-                    provider_label=mount.label or mount.provider.container,
-                    container=mount.provider.container,
-                )
-        return None
-
     def _to_logical(self, physical_path: str, mount: MountPoint) -> str:
         """Convert a physical path (from a provider) to a logical path.
 
@@ -397,12 +364,12 @@ class MultiSourceProvider(PackageProvider):
         made relative to the provider's root before prepending the mount root.
         For other providers, the path is treated as already relative.
         """
-        physical = physical_path.replace("\\", "/")
+        physical = normalize_path(physical_path)
         mount_root = mount.mount_root.rstrip("/") + "/"
         # Strip provider root if present (filesystem providers return absolute paths)
         provider_root = getattr(mount.provider, "root", None)
         if provider_root is not None:
-            root_str = str(provider_root).replace("\\", "/").rstrip("/") + "/"
+            root_str = normalize_path(str(provider_root)) + "/"
             if physical.startswith(root_str):
                 physical = physical[len(root_str):]
         # If the physical path already starts with the mount root, strip it
@@ -421,7 +388,7 @@ class MultiSourceProvider(PackageProvider):
         For filesystem providers, the result is an absolute path by prepending
         the provider's root. For other providers, the result is a relative path.
         """
-        logical = logical_path.replace("\\", "/")
+        logical = normalize_path(logical_path)
         mount_root = mount.mount_root.rstrip("/") + "/"
         # Check if the logical path belongs to this mount's prefix
         if not logical.startswith(mount_root) and not logical.startswith(mount.mount_root):
@@ -436,7 +403,7 @@ class MultiSourceProvider(PackageProvider):
         # For filesystem providers, prepend root to get absolute physical path
         provider_root = getattr(mount.provider, "root", None)
         if provider_root is not None:
-            root_str = str(provider_root).replace("\\", "/").rstrip("/")
+            root_str = normalize_path(str(provider_root))
             return root_str + "/" + relative
         return relative
 
@@ -488,11 +455,6 @@ class FileSystemPackageProvider(PackageProvider):
         self._list_files_cache = result
         self._cache_mtime = current_mtime
         return result
-
-    def refresh_file_cache(self) -> None:
-        """Clear the file list cache; next list_files() call will rescan."""
-        self._list_files_cache = None
-        self._cache_mtime = None
 
     def read_file(self, path: str) -> Optional[bytes]:
         p = Path(path)

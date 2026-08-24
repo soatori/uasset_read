@@ -27,3 +27,8 @@ def normalize_hex_guid(guid_str: str | None) -> str | None:
     if not guid_str:
         return guid_str
     return guid_str.replace("-", "").lower()
+
+
+def normalize_path(s: str) -> str:
+    """Normalize Windows backslashes to forward slashes and strip trailing slashes."""
+    return s.replace("\\", "/").rstrip("/")

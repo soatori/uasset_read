@@ -4,7 +4,7 @@ Game version mapping -- infer PAK file version from game identifier.
 Reference: external/CUE4Parse/CUE4Parse/UE4/Versions/EGame.cs implementation.
 """
 
-from typing import Dict, Tuple
+from typing import Dict
 from uasset_read.pak.constants import PakFileVersion
 
 
@@ -144,47 +144,3 @@ def get_pak_version_for_game(game: int) -> int:
     return GAME_PAK_VERSION_MAP.get(game, PakFileVersion.Utf8PakDirectory)
 
 
-def get_game_info(game: int) -> Tuple[str, int]:
-    """Get game information."""
-    game_names = {
-        EGame.UNKNOWN: "Unknown",
-        EGame.OUTLAST_TRIALS: "Outlast Trials",
-        EGame.TORCHLIGHT_INFINITE: "Torchlight Infinite",
-        EGame.WILD_ASSAULT: "Wild Assault",
-        EGame.GAMELOOP_UNDAWN: "Gameloop Undawn",
-        EGame.FRIDAY_THE_13TH: "Friday the 13th",
-        EGame.DREAM_STAR: "Dream Star",
-        EGame.GAME_FOR_PEACE: "Game for Peace",
-        EGame.KART_RIDER_DRIFT: "KartRider Drift",
-        EGame.RACING_MASTER: "Racing Master",
-        EGame.CRYSTAL_OF_ATLAN: "Crystal of Atlan",
-        EGame.PROMISE_MASCOT_AGENCY: "Promise Mascot Agency",
-        EGame.ARENA_BREAKOUT_INFINITE: "Arena Breakout Infinite",
-        EGame.ASSAULT_FIRE_FUTURE: "Assault Fire Future",
-        EGame.BLACK_MYTH_WUKONG: "Black Myth: Wukong",
-        EGame.STALKER_2: "S.T.A.L.K.E.R. 2",
-        EGame.MARVEL_RIVALS: "Marvel Rivals",
-        EGame.THE_FIRST_DESCENDANT: "The First Descendant",
-        EGame.INFINITY_NIKKI: "Infinity Nikki",
-        EGame.WUTHERING_WAVES: "Wuthering Waves",
-        EGame.DELTA_FORCE: "Delta Force",
-        EGame.SILENT_HILL_2_REMAKE: "Silent Hill 2 Remake",
-        EGame.DUNE_AWAKENING: "Dune: Awakening",
-        EGame.BORDERLANDS_4: "Borderlands 4",
-        EGame.GRAY_ZONE_WARFARE: "Gray Zone Warfare",
-        EGame.PUBG: "PUBG: Battlegrounds",
-        EGame.FORTNITE: "Fortnite",
-        EGame.APEX_LEGENDS: "Apex Legends",
-        EGame.KINGDOM_HEARTS_3: "Kingdom Hearts III",
-        EGame.FF7_REMAKE: "Final Fantasy VII Remake",
-        EGame.GTA_TRILOGY: "GTA: The Trilogy",
-        EGame.HOGWARTS_LEGACY: "Hogwarts Legacy",
-        EGame.VALORANT: "VALORANT",
-        EGame.STATE_OF_DECAY_2: "State of Decay 2",
-        EGame.DAYS_GONE: "Days Gone",
-        EGame.TEKKEN_7: "TEKKEN 7",
-        EGame.BORDERLANDS_3: "Borderlands 3",
-    }
-    name = game_names.get(game, "Unknown")
-    version = get_pak_version_for_game(game)
-    return name, version

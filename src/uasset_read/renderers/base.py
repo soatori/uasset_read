@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import IO, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
@@ -114,20 +114,6 @@ class IRenderer(ABC):
             渲染后的字符串
         """
         ...
-
-    def render_to(self, ir: PackageIR, writer: IO[str], options: RenderOptions | None = None) -> None:
-        """渲染到文件/流。
-
-        默认实现写入 render() 结果。
-
-        Args:
-            ir: PackageIR 实例
-            writer: 可写文本流
-            options: 渲染选项，None 时使用默认值
-        """
-        if options is None:
-            options = RenderOptions()
-        writer.write(self.render(ir, options))
 
     @property
     @abstractmethod
