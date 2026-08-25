@@ -501,9 +501,13 @@ def _build_material_properties(material_export) -> dict:
             domain_val = _safe_int(prop_value)
             properties["domain"] = MATERIAL_DOMAIN_MAP.get(domain_val, str(domain_val))
         elif prop_name == "BlendMode":
-            # Handle enum dict format from ByteProperty
+            # Handle enum dict or EnumValue format from ByteProperty
+            enum_name = None
             if isinstance(prop_value, dict) and "value_name" in prop_value:
                 enum_name = prop_value["value_name"]
+            elif hasattr(prop_value, "value_name"):
+                enum_name = getattr(prop_value, "value_name", None)
+            if enum_name:
                 # Extract "Masked" from "EBlendMode::BLEND_Masked"
                 if "::" in enum_name:
                     enum_name = enum_name.split("::")[-1]
