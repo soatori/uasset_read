@@ -145,15 +145,16 @@ def _parse_expression_output(
         mask_a = archive.read_i32()
 
         return {
-            "kind": "expression_output",
-            "type": tag.type,
-            "size": tag.size,
-            "output_name": output_name,
-            "mask": mask,
-            "mask_r": mask_r,
-            "mask_g": mask_g,
-            "mask_b": mask_b,
-            "mask_a": mask_a,
+            "kind": "struct_property",
+            "struct_type": "FExpressionOutput",
+            "fields": {
+                "output_name": output_name,
+                "mask": mask,
+                "mask_r": mask_r,
+                "mask_g": mask_g,
+                "mask_b": mask_b,
+                "mask_a": mask_a,
+            },
         }
     except (struct.error, OSError, ValueError) as e:
         archive.seek(start_pos)
