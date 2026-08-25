@@ -60,6 +60,7 @@ def should_isolate(file_size: int, tier: FileSizeTier) -> bool:
 @dataclass
 class AllocationLimits:
     """Allocation limit configuration — used for resource budget tracking."""
+
     max_single_read_bytes: int = 16 * 1024 * 1024  # 16 MB
     max_decompressed_block_bytes: int = 64 * 1024 * 1024  # 64 MB
     max_total_decompressed_bytes: int = 256 * 1024 * 1024  # 256 MB
@@ -114,6 +115,7 @@ class ResourceBudget:
 @dataclass
 class MemoryStats:
     """Memory usage statistics."""
+
     total_mb: float = 0.0
     available_mb: float = 0.0
     used_mb: float = 0.0
@@ -168,8 +170,7 @@ class MemoryLimitExceeded(MemoryError):
         self.current_rss_mb = current_rss_mb
         self.limit_mb = limit_mb
         super().__init__(
-            f"Memory limit exceeded for {self.asset_path} at {stage}: "
-            f"{current_rss_mb:.1f}MB > {limit_mb:.1f}MB"
+            f"Memory limit exceeded for {self.asset_path} at {stage}: {current_rss_mb:.1f}MB > {limit_mb:.1f}MB"
         )
 
 
@@ -213,6 +214,7 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
     target_pid = os.getpid() if pid is None else pid
     try:
         import psutil
+
         process = psutil.Process(target_pid)
         return process.memory_info().rss / 1024 / 1024
     except ImportError:
@@ -224,6 +226,7 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
         # but not from OSError. If psutil was imported, check isinstance.
         try:
             import psutil
+
             if isinstance(e, psutil.Error):
                 logger.debug("psutil RSS retrieval failed (%s): %s", type(e).__name__, e)
                 return 0.0
@@ -269,9 +272,7 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
                 )
                 close_handle = bool(handle)
             try:
-                if handle and psapi.GetProcessMemoryInfo(
-                    handle, ctypes.byref(counters), counters.cb
-                ):
+                if handle and psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
                     return counters.WorkingSetSize / 1024 / 1024
             finally:
                 if close_handle:
@@ -281,21 +282,16 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
 
     if sys.platform.startswith("linux"):
         try:
-            resident_pages = int(
-                Path(f"/proc/{target_pid}/statm").read_text(encoding="ascii").split()[1]
-            )
+            resident_pages = int(Path(f"/proc/{target_pid}/statm").read_text(encoding="ascii").split()[1])
             return resident_pages * os.sysconf("SC_PAGE_SIZE") / 1024 / 1024
         except (OSError, ValueError, IndexError) as e:
             logger.debug("Linux /proc RSS retrieval failed: %s", e)
 
-    if pid is not None and not (
-        sys.platform == "win32" or sys.platform.startswith("linux")
-    ):
-        raise RuntimeError(
-            "Per-process RSS monitoring requires psutil on this platform"
-        )
+    if pid is not None and not (sys.platform == "win32" or sys.platform.startswith("linux")):
+        raise RuntimeError("Per-process RSS monitoring requires psutil on this platform")
 
     import warnings
+
     warnings.warn(
         "Cannot retrieve process RSS, memory protection is disabled. Consider installing psutil: pip install psutil",
         stacklevel=2,
@@ -313,6 +309,7 @@ def get_memory_stats() -> MemoryStats:
 
     try:
         import psutil
+
         mem = psutil.virtual_memory()
         return MemoryStats(
             total_mb=mem.total / 1024 / 1024,
@@ -375,6 +372,3 @@ def _estimate_memory_stats(process_rss_mb: float = 0.0) -> MemoryStats:
         usage_percent=usage_percent,
         process_rss_mb=process_rss_mb,
     )
-
-
-

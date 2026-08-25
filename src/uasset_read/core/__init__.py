@@ -25,7 +25,10 @@ from uasset_read.project_logging import (
 )
 from uasset_read.renderers import MarkdownRenderer
 from uasset_read.renderers.base import RenderOptions
-from uasset_read.exceptions import ParseError as ParseError, SemanticContractError  # Re-export for backward compatibility
+from uasset_read.exceptions import (
+    ParseError as ParseError,
+    SemanticContractError,
+)  # Re-export for backward compatibility
 
 if TYPE_CHECKING:
     from uasset_read.memory_safety import MemoryPolicy
@@ -44,14 +47,14 @@ class BatchResult:
     partial: list[str] = field(default_factory=list)
     partial_reasons: dict[str, list[str]] = field(default_factory=dict)
     skipped: list[tuple[str, str]] = field(default_factory=list)
-    failed: list[tuple[str, str, str]] = field(
-        default_factory=list
-    )  # (path, error, details)
+    failed: list[tuple[str, str, str]] = field(default_factory=list)  # (path, error, details)
 
 
 def _log_batch_summary(result: BatchResult, elapsed_seconds: float = 0) -> None:
     log_event(
-        logging.getLogger(__name__), logging.INFO, "batch_summary",
+        logging.getLogger(__name__),
+        logging.INFO,
+        "batch_summary",
         total=result.total,
         success=len(result.success),
         partial=len(result.partial),
@@ -118,10 +121,7 @@ def parse_single(
     """
     _VALID_OUTPUT_LEVELS = {"standard", "debug"}
     if output_level not in _VALID_OUTPUT_LEVELS:
-        raise ValueError(
-            f"Invalid output_level: {output_level!r}. "
-            f"Expected one of ['standard', 'debug']"
-        )
+        raise ValueError(f"Invalid output_level: {output_level!r}. Expected one of ['standard', 'debug']")
 
     _configure_logging(log_config=log_config)
 
@@ -194,9 +194,7 @@ def _parse_and_render(
             config=parse_config,
         )
 
-    if not result.is_success and not _can_render_tolerant_json(
-        result, format, tolerant
-    ):
+    if not result.is_success and not _can_render_tolerant_json(result, format, tolerant):
         raise ParseError(f"Parse failed: {'; '.join(result.errors)}")
 
     ir = build_package_ir(result)
@@ -222,9 +220,7 @@ def _parse_and_render(
         semantic_ir = project_semantic(semantic_ir, output_level)
         validation_errors = validate_semantic_document(semantic_ir)
         if validation_errors:
-            raise SemanticContractError(
-                "Semantic contract violated: " + "; ".join(validation_errors)
-            )
+            raise SemanticContractError("Semantic contract violated: " + "; ".join(validation_errors))
         return render_semantic_json(semantic_ir, include_schema=include_schema), result
 
     # Other formats: use renderer registry
@@ -308,16 +304,11 @@ def parse_batch(
     """
     # 验证 isolate_assets 参数
     if not isinstance(isolate_assets, bool) and isolate_assets != "auto":
-        raise ValueError(
-            f"isolate_assets must be bool or 'auto', got {isolate_assets!r}"
-        )
+        raise ValueError(f"isolate_assets must be bool or 'auto', got {isolate_assets!r}")
 
     _VALID_OUTPUT_LEVELS = {"standard", "debug"}
     if output_level not in _VALID_OUTPUT_LEVELS:
-        raise ValueError(
-            f"Invalid output_level: {output_level!r}. "
-            f"Expected one of ['standard', 'debug']"
-        )
+        raise ValueError(f"Invalid output_level: {output_level!r}. Expected one of ['standard', 'debug']")
 
     active_run_id = current_log_run_id() or new_log_run_id()
     _configure_logging(log_config=log_config)
@@ -382,10 +373,7 @@ def parse_batch(
     for idx, pf in enumerate(package_files):
         stats = get_memory_stats()
         if stats.usage_percent > system_usage_limit:
-            reason = (
-                f"System memory usage {stats.usage_percent * 100:.1f}% exceeds "
-                f"{system_usage_limit * 100:.1f}%"
-            )
+            reason = f"System memory usage {stats.usage_percent * 100:.1f}% exceeds {system_usage_limit * 100:.1f}%"
             for remaining in package_files[idx:]:
                 result.skipped.append((str(remaining), reason))
             break
@@ -420,9 +408,7 @@ def parse_batch(
                 if outcome.succeeded:
                     result.success.append(outcome.output_path)
                 else:
-                    result.failed.append(
-                        (str(pf), outcome.error, outcome.error_details)
-                    )
+                    result.failed.append((str(pf), outcome.error, outcome.error_details))
                 continue
 
             output_str, parse_result = _parse_and_render(
@@ -451,17 +437,13 @@ def parse_batch(
                 for exp in getattr(parse_result, "export_map", None) or []:
                     exp_status = getattr(exp, "parse_status", None)
                     if exp_status and exp_status in PARTIAL_STATUSES:
-                        result.partial_reasons.setdefault(exp_status, []).append(
-                            str(pf)
-                        )
+                        result.partial_reasons.setdefault(exp_status, []).append(str(pf))
 
             # 原子写入：先写临时文件再 replace，避免中断产生不完整输出（#434）
             tmp_fd = -1
             tmp_path = ""
             try:
-                tmp_fd, tmp_path = tempfile.mkstemp(
-                    dir=str(output_path.parent), suffix=".tmp"
-                )
+                tmp_fd, tmp_path = tempfile.mkstemp(dir=str(output_path.parent), suffix=".tmp")
                 with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_f:
                     tmp_f.write(output_str)
                 tmp_fd = -1  # fdopen 已接管 fd，无需再 close
@@ -481,9 +463,7 @@ def parse_batch(
             tb = traceback.format_exc()
             error_msg = f"{type(exc).__name__}: {exc}"
             result.failed.append((str(pf), error_msg, tb))
-            logging.getLogger(__name__).error(
-                "parse_batch asset failed: %s — %s", pf, error_msg
-            )
+            logging.getLogger(__name__).error("parse_batch asset failed: %s — %s", pf, error_msg)
 
     elapsed = time.monotonic() - start_time
     _log_batch_summary(result, elapsed_seconds=elapsed)

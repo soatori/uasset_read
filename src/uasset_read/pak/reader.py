@@ -6,6 +6,7 @@ Similar to PakFileReader.cs, provides:
 - list_files / get_entry / extract
 - Automatic FPakInfo detection, index decryption, entry parsing, decompression
 """
+
 import logging
 from pathlib import PurePosixPath
 from typing import BinaryIO
@@ -53,20 +54,22 @@ class PakFileReader:
         logger.debug("Opening pak file: %s", self._path)
 
         try:
-            self._file = open(self._path, 'rb')
+            self._file = open(self._path, "rb")
             self._file.seek(0, 2)
             self._file_size = self._file.tell()
             self._file.seek(0)
 
             # Read FPakInfo
             self._info = FPakInfo.deserialize(self._file, self._file_size)
-            logger.debug("Detected FPakInfo version=%d, index_offset=%d, index_size=%d",
-                         self._info.version, self._info.index_offset, self._info.index_size)
+            logger.debug(
+                "Detected FPakInfo version=%d, index_offset=%d, index_size=%d",
+                self._info.version,
+                self._info.index_offset,
+                self._info.index_size,
+            )
 
             # Parse primary index
-            mount_point, entries, extra = parse_primary_index(
-                self._file, self._info, self._aes_key
-            )
+            mount_point, entries, extra = parse_primary_index(self._file, self._info, self._aes_key)
 
             self._mount_point = mount_point
             self._entries = entries
@@ -78,8 +81,7 @@ class PakFileReader:
                 self._path_hash_seed = extra.get("path_hash_seed", 0)
                 self._path_hash_index = extra.get("path_hash_index", {})
 
-            logger.debug("PakFileReader: %d entries, mount_point='%s'",
-                         len(self._entries), self._mount_point)
+            logger.debug("PakFileReader: %d entries, mount_point='%s'", len(self._entries), self._mount_point)
         except Exception:
             self.close()
             raise
@@ -147,15 +149,14 @@ class PakFileReader:
         # Validate offset bounds
         read_offset = entry.offset
         if read_offset < 0 or read_offset >= self._file_size:
-            raise ParseError(
-                f"Entry offset {read_offset} out of bounds (file size: {self._file_size})"
-            )
+            raise ParseError(f"Entry offset {read_offset} out of bounds (file size: {self._file_size})")
 
         compression_method = self._get_compression_method(entry)
 
         self._file.seek(read_offset)
         return decompress_entry(
-            self._file, entry,
+            self._file,
+            entry,
             compression_method=compression_method,
             encryption_key=self._aes_key if entry.is_encrypted else None,
         )
@@ -177,8 +178,9 @@ class PakFileReader:
             resolved_str = resolved.as_posix()
             mount_str = self._mount_point.replace("\\", "/").strip("/")
             if not resolved_str.startswith(mount_str + "/") and resolved_str != mount_str:
-                logger.warning("Path escaping mount_point boundary rejected: %r (mount_point=%r)",
-                               path, self._mount_point)
+                logger.warning(
+                    "Path escaping mount_point boundary rejected: %r (mount_point=%r)", path, self._mount_point
+                )
                 return None
 
         if path in self._entries:
@@ -189,9 +191,7 @@ class PakFileReader:
 
         candidates = [normalized]
         if "." not in normalized.rsplit("/", 1)[-1]:
-            candidates.extend(
-                f"{normalized}{suffix}" for suffix in (".uasset", ".uexp", ".ubulk", ".umap")
-            )
+            candidates.extend(f"{normalized}{suffix}" for suffix in (".uasset", ".uexp", ".ubulk", ".umap"))
 
         lowered_candidates = [candidate.lower() for candidate in candidates]
         for entry_path in self._entries:

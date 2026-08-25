@@ -2,6 +2,7 @@
 
 Ensures same input -> byte-identical JSON regardless of dict insertion order.
 """
+
 from __future__ import annotations
 
 import json
@@ -15,9 +16,17 @@ def _canonical_value(value: Any) -> str:
 
 # Public contract top-level key order
 _TOP_LEVEL_ORDER = [
-    "format", "format_version", "mode", "asset_type",
-    "asset", "status", "references", "content",
-    "coverage", "diagnostics", "evidence",
+    "format",
+    "format_version",
+    "mode",
+    "asset_type",
+    "asset",
+    "status",
+    "references",
+    "content",
+    "coverage",
+    "diagnostics",
+    "evidence",
 ]
 
 _ASSET_ORDER = ["package", "name", "generated_class"]

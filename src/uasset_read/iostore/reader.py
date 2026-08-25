@@ -28,18 +28,19 @@ from uasset_read.exceptions import ParseError
 logger = logging.getLogger(__name__)
 
 # Resource limit constants — prevent malicious UTOC headers from exhausting resources
-MAX_TOC_ENTRIES = 1_000_000          # Maximum Chunk entry count
-MAX_COMPRESSION_BLOCKS = 1_000_000   # Maximum compression block count
-MAX_COMPRESSION_METHODS = 100        # Maximum compression method count
-MAX_METHOD_NAME_LENGTH = 256         # Maximum single method name length
+MAX_TOC_ENTRIES = 1_000_000  # Maximum Chunk entry count
+MAX_COMPRESSION_BLOCKS = 1_000_000  # Maximum compression block count
+MAX_COMPRESSION_METHODS = 100  # Maximum compression method count
+MAX_METHOD_NAME_LENGTH = 256  # Maximum single method name length
 MAX_DIRECTORY_INDEX_BYTES = 64 * 1024 * 1024  # Directory index maximum 64MB
-MAX_PARTITION_COUNT = 64             # Maximum partition count
+MAX_PARTITION_COUNT = 64  # Maximum partition count
 MAX_DIRECTORY_ARRAY_COUNT = 1_000_000  # Maximum directory/file index entry count
-MAX_STRING_TABLE_COUNT = 1_000_000      # Maximum string table entry count
+MAX_STRING_TABLE_COUNT = 1_000_000  # Maximum string table entry count
 
 
 class IoStoreInfo:
     """Summary information after parsing IoStore TOC"""
+
     def __init__(self) -> None:
         self.version: int = 0
         self.toc_entry_count: int = 0
@@ -131,7 +132,7 @@ class IoStoreReader:
             return self._ucas_path_override
         # Derive from utoc path
         p = Path(self.utoc_path)
-        return str(p.with_suffix('.ucas'))
+        return str(p.with_suffix(".ucas"))
 
     @property
     def info(self) -> Optional[IoStoreInfo]:
@@ -177,7 +178,7 @@ class IoStoreReader:
         """
         logger.debug("Opening IoStore: utoc=%s", self.utoc_path)
 
-        self._utoc_file = open(self.utoc_path, 'rb')
+        self._utoc_file = open(self.utoc_path, "rb")
 
         try:
             # Read and validate TOC header
@@ -288,9 +289,7 @@ class IoStoreReader:
         normalized = path.replace("\\", "/").strip("/")
         candidates = [normalized]
         if "." not in normalized.rsplit("/", 1)[-1]:
-            candidates.extend(
-                f"{normalized}{suffix}" for suffix in (".uasset", ".uexp", ".ubulk", ".umap")
-            )
+            candidates.extend(f"{normalized}{suffix}" for suffix in (".uasset", ".uexp", ".ubulk", ".umap"))
         chunk_id = self._directory_index.get(path) or self._directory_index.get(normalized)
         if chunk_id is None:
             lowered_candidates = [candidate.lower() for candidate in candidates]
@@ -379,7 +378,7 @@ class IoStoreReader:
         - Prime: 0x00000100000001B3 (FNV prime)
         """
         data = chunk_id.bytes
-        hash_val = 0xcbf29ce484222325 ^ seed  # FNV offset basis (64-bit)
+        hash_val = 0xCBF29CE484222325 ^ seed  # FNV offset basis (64-bit)
         for byte in data:
             hash_val ^= byte
             hash_val = (hash_val * 0x00000100000001B3) & 0xFFFFFFFFFFFFFFFF  # FNV prime, 64-bit
@@ -423,7 +422,11 @@ class IoStoreReader:
 
         if first_block_index == last_block_index and self._compression_blocks:
             # Single block read — check if compressed
-            block = self._compression_blocks[first_block_index] if first_block_index < len(self._compression_blocks) else None
+            block = (
+                self._compression_blocks[first_block_index]
+                if first_block_index < len(self._compression_blocks)
+                else None
+            )
             if block and block.compression_method_index == 0:
                 # No compression, read directly
                 if self._header and self._header.is_encrypted:
@@ -449,9 +452,7 @@ class IoStoreReader:
                 reader.seek(partition_offset)
                 raw = reader.read(length)
                 if len(raw) < length:
-                    raise ParseError(
-                        f"IoStore uncompressed block read insufficient: {len(raw)} < {length} bytes"
-                    )
+                    raise ParseError(f"IoStore uncompressed block read insufficient: {len(raw)} < {length} bytes")
                 return raw
 
         # Multi-block or compressed data — read block by block and concatenate
@@ -468,8 +469,16 @@ class IoStoreReader:
             block = self._compression_blocks[block_index]
 
             # Calculate block position in partition
-            block_partition_index = int(block.offset // self._header.partition_size) if self._header and self._header.partition_size > 0 else 0
-            block_partition_offset = block.offset % self._header.partition_size if self._header and self._header.partition_size > 0 else block.offset
+            block_partition_index = (
+                int(block.offset // self._header.partition_size)
+                if self._header and self._header.partition_size > 0
+                else 0
+            )
+            block_partition_offset = (
+                block.offset % self._header.partition_size
+                if self._header and self._header.partition_size > 0
+                else block.offset
+            )
 
             if block_partition_index >= len(self._ucas_files):
                 raise ParseError(
@@ -494,7 +503,7 @@ class IoStoreReader:
                             f"IoStore encrypted block {block_index} aligned read insufficient: "
                             f"{len(raw_data)} < {aligned_size} bytes"
                         )
-                raw_data = decrypt_aes_ecb(raw_data, self._aes_key)[:block.compressed_size]
+                raw_data = decrypt_aes_ecb(raw_data, self._aes_key)[: block.compressed_size]
 
             method = self._compression_method_name(block.compression_method_index)
             raw_data = decompress_block(raw_data, block.uncompressed_size, method)
@@ -528,13 +537,11 @@ class IoStoreReader:
         reader.seek(aligned_offset)
         ciphertext = reader.read(aligned_length)
         if len(ciphertext) < aligned_length:
-            raise ParseError(
-                f"{error_prefix}: {len(ciphertext)} < {aligned_length} bytes"
-            )
+            raise ParseError(f"{error_prefix}: {len(ciphertext)} < {aligned_length} bytes")
 
         plaintext = decrypt_aes_ecb(ciphertext, self._aes_key)
         slice_offset = offset - aligned_offset
-        return plaintext[slice_offset:slice_offset + length]
+        return plaintext[slice_offset : slice_offset + length]
 
     def _read_uncompressed_partitions(self, partition_index: int, partition_offset: int, length: int) -> bytes:
         """Read an uncompressed range, crossing UCAS partitions when necessary."""
@@ -585,9 +592,7 @@ class IoStoreReader:
 
         count = self._header.toc_entry_count
         if count > MAX_TOC_ENTRIES:
-            raise ParseError(
-                f"IoStore toc_entry_count {count} exceeds limit {MAX_TOC_ENTRIES}"
-            )
+            raise ParseError(f"IoStore toc_entry_count {count} exceeds limit {MAX_TOC_ENTRIES}")
         self._chunk_ids = []
         for _ in range(count):
             data = self._utoc_file.read(12)
@@ -628,16 +633,14 @@ class IoStoreReader:
 
         if perfect_hash_seeds_count > 0:
             seed_data = self._utoc_file.read(perfect_hash_seeds_count * 4)
-            self._chunk_perfect_hash_seeds = list(struct.unpack(
-                f'<{perfect_hash_seeds_count}i', seed_data
-            ))
+            self._chunk_perfect_hash_seeds = list(struct.unpack(f"<{perfect_hash_seeds_count}i", seed_data))
             logger.debug("Loaded %d Perfect Hash seeds", perfect_hash_seeds_count)
 
         if chunks_without_perfect_hash_count > 0:
             idx_data = self._utoc_file.read(chunks_without_perfect_hash_count * 4)
-            self._chunk_indices_without_perfect_hash = list(struct.unpack(
-                f'<{chunks_without_perfect_hash_count}i', idx_data
-            ))
+            self._chunk_indices_without_perfect_hash = list(
+                struct.unpack(f"<{chunks_without_perfect_hash_count}i", idx_data)
+            )
             logger.debug("Loaded %d indices without Perfect Hash", chunks_without_perfect_hash_count)
 
     def _load_compression_blocks(self) -> None:
@@ -647,9 +650,7 @@ class IoStoreReader:
 
         count = self._header.toc_compressed_block_entry_count
         if count > MAX_COMPRESSION_BLOCKS:
-            raise ParseError(
-                f"IoStore compression block count {count} exceeds limit {MAX_COMPRESSION_BLOCKS}"
-            )
+            raise ParseError(f"IoStore compression block count {count} exceeds limit {MAX_COMPRESSION_BLOCKS}")
         self._compression_blocks = []
         for _ in range(count):
             block = FIoStoreTocCompressedBlockEntry.from_stream(self._utoc_file)
@@ -669,9 +670,7 @@ class IoStoreReader:
             return
 
         if name_count > MAX_COMPRESSION_METHODS:
-            raise ParseError(
-                f"IoStore compression method count {name_count} exceeds limit {MAX_COMPRESSION_METHODS}"
-            )
+            raise ParseError(f"IoStore compression method count {name_count} exceeds limit {MAX_COMPRESSION_METHODS}")
         if name_length > MAX_METHOD_NAME_LENGTH:
             raise ParseError(
                 f"IoStore compression method name length {name_length} exceeds limit {MAX_METHOD_NAME_LENGTH}"
@@ -688,7 +687,7 @@ class IoStoreReader:
         for i in range(name_count):
             start = i * name_length
             end = start + name_length
-            name = buffer[start:end].split(b'\x00')[0].decode('ascii', errors='replace')
+            name = buffer[start:end].split(b"\x00")[0].decode("ascii", errors="replace")
             if name:
                 self._compression_methods.append(name)
 
@@ -707,7 +706,7 @@ class IoStoreReader:
         hash_size_data = self._utoc_file.read(4)
         if len(hash_size_data) < 4:
             return
-        hash_size = struct.unpack('<I', hash_size_data)[0]
+        hash_size = struct.unpack("<I", hash_size_data)[0]
 
         # Skip tocSignature + blockSignature + FSHAHash[compressedBlockCount]
         skip_size = hash_size + hash_size + 20 * self._header.toc_compressed_block_entry_count
@@ -752,7 +751,7 @@ class IoStoreReader:
         if self._header and self._header.is_encrypted:
             if self._aes_key is None:
                 raise ValueError("IoStore encrypted directory index requires AES key")
-            data = decrypt_aes_ecb(data, self._aes_key)[:len(data)]
+            data = decrypt_aes_ecb(data, self._aes_key)[: len(data)]
 
         stream = BytesIO(data)
         self._mount_point = self._normalize_mount_point(self._read_fstring_from(stream))
@@ -781,9 +780,13 @@ class IoStoreReader:
         MAX_DEPTH = 64
         MAX_ENTRIES = 100_000
 
-        def read_index(dir_index: int, current_path: str, depth: int = 0,
-                       visited_dirs: set | None = None,
-                       visited_files: set | None = None) -> None:
+        def read_index(
+            dir_index: int,
+            current_path: str,
+            depth: int = 0,
+            visited_dirs: set | None = None,
+            visited_files: set | None = None,
+        ) -> None:
             if visited_dirs is None:
                 visited_dirs = set()
             if visited_files is None:
@@ -791,17 +794,11 @@ class IoStoreReader:
 
             while dir_index != invalid and dir_index < len(directory_entries):
                 if dir_index in visited_dirs:
-                    raise ParseError(
-                        f"IoStore directory index cycle: entry {dir_index} visited repeatedly"
-                    )
+                    raise ParseError(f"IoStore directory index cycle: entry {dir_index} visited repeatedly")
                 if depth > MAX_DEPTH:
-                    raise ParseError(
-                        f"IoStore directory index depth exceeds limit {MAX_DEPTH}"
-                    )
+                    raise ParseError(f"IoStore directory index depth exceeds limit {MAX_DEPTH}")
                 if len(visited_dirs) > MAX_ENTRIES:
-                    raise ParseError(
-                        f"IoStore directory index entry count exceeds limit {MAX_ENTRIES}"
-                    )
+                    raise ParseError(f"IoStore directory index entry count exceeds limit {MAX_ENTRIES}")
                 visited_dirs.add(dir_index)
 
                 entry = directory_entries[dir_index]
@@ -811,9 +808,7 @@ class IoStoreReader:
                 file_index = entry.first_file_entry
                 while file_index != invalid and file_index < len(file_entries):
                     if file_index in visited_files:
-                        raise ParseError(
-                            f"IoStore file chain cycle: entry {file_index} visited repeatedly"
-                        )
+                        raise ParseError(f"IoStore file chain cycle: entry {file_index} visited repeatedly")
                     visited_files.add(file_index)
 
                     file_entry = file_entries[file_index]
@@ -822,8 +817,7 @@ class IoStoreReader:
                         self._directory_index[full_path] = self._chunk_ids[file_entry.user_data]
                     file_index = file_entry.next_file_entry
 
-                read_index(entry.first_child_entry, dir_path, depth + 1,
-                           visited_dirs, visited_files)
+                read_index(entry.first_child_entry, dir_path, depth + 1, visited_dirs, visited_files)
                 dir_index = entry.next_sibling_entry
 
         read_index(0, self._mount_point)
@@ -852,9 +846,7 @@ class IoStoreReader:
         if count < 0:
             raise ValueError(f"IoStore directory array count is invalid: {count}")
         if count > MAX_DIRECTORY_ARRAY_COUNT:
-            raise ParseError(
-                f"IoStore directory array count {count} exceeds limit {MAX_DIRECTORY_ARRAY_COUNT}"
-            )
+            raise ParseError(f"IoStore directory array count {count} exceeds limit {MAX_DIRECTORY_ARRAY_COUNT}")
         return [item_reader(stream) for _ in range(count)]
 
     @staticmethod
@@ -866,9 +858,7 @@ class IoStoreReader:
         if count < 0:
             raise ValueError(f"IoStore string table count is invalid: {count}")
         if count > MAX_STRING_TABLE_COUNT:
-            raise ParseError(
-                f"IoStore string table count {count} exceeds limit {MAX_STRING_TABLE_COUNT}"
-            )
+            raise ParseError(f"IoStore string table count {count} exceeds limit {MAX_STRING_TABLE_COUNT}")
         return [IoStoreReader._read_fstring_from(stream) for _ in range(count)]
 
     @staticmethod
@@ -911,16 +901,14 @@ class IoStoreReader:
         if self._header is None:
             return
 
-        base_path = Path(self.utoc_path).with_suffix('')
+        base_path = Path(self.utoc_path).with_suffix("")
 
         if self._header.partition_count <= 1:
             # Single partition
             try:
-                self._ucas_files.append(open(self.ucas_path, 'rb'))
+                self._ucas_files.append(open(self.ucas_path, "rb"))
             except FileNotFoundError as e:
-                raise FileNotFoundError(
-                    f"Cannot open container partition 0: {self.ucas_path}"
-                ) from e
+                raise FileNotFoundError(f"Cannot open container partition 0: {self.ucas_path}") from e
         else:
             # Multiple partitions
             if self._header.partition_count > MAX_PARTITION_COUNT:
@@ -929,16 +917,14 @@ class IoStoreReader:
                 )
             for i in range(self._header.partition_count):
                 if i == 0:
-                    path = str(base_path) + '.ucas'
+                    path = str(base_path) + ".ucas"
                 else:
                     path = f"{base_path}_s{i}.ucas"
 
                 try:
-                    self._ucas_files.append(open(path, 'rb'))
+                    self._ucas_files.append(open(path, "rb"))
                 except FileNotFoundError as e:
-                    raise FileNotFoundError(
-                        f"Cannot open container partition {i}: {path}"
-                    ) from e
+                    raise FileNotFoundError(f"Cannot open container partition {i}: {path}") from e
 
         logger.debug("Opened %d container partitions", len(self._ucas_files))
 
