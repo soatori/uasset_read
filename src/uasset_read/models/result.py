@@ -1,11 +1,11 @@
 """
 Parse result data classes -- BaseResult, ParseResult, and StatusInfo.
 
-BaseResult is the single shared base for ParseResult and LinkerParseResult,
+BaseResult is the single shared base for ParseResult and 
 holding all common fields including post-process data and the unified
 ``status`` property.
 
-Hierarchy:  BaseResult -> ParseResult -> LinkerParseResult
+Hierarchy:  BaseResult -> ParseResult
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ class BaseResult:
     Contains the core table fields (summary, name/import/export maps),
     error/warning accumulators, and all post-process fields that
     ``_post_process()`` populates for both ``ParseResult`` and
-    ``LinkerParseResult``.
+    ``ParseResult``.
 
     Status derivation is delegated to ``status._result_status()``.
     """
@@ -57,7 +57,7 @@ class BaseResult:
     """Number of diagnostics entries dropped by BoundedEventBuffer truncation."""
     _error_keys: set = field(default_factory=set)
 
-    # -- Post-process fields (shared by ParseResult & LinkerParseResult) --
+    # -- Post-process fields  --
     blueprint: BlueprintMetadata | None = None
     graphs: list[UEdGraph] = field(default_factory=list)
     imports: list[dict] = field(default_factory=list)

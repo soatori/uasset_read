@@ -60,44 +60,9 @@ SKIP_CLASS_PREFIXES = (
     "AggGeom_",
 )
 
-# #521 Phase 4: Exact class names that bypass prefix skip (migrated to opaque).
-# These classes have verified tagged properties and dedicated handlers.
-_PREFIX_SKIP_ALLOWLIST: frozenset[str] = frozenset({
-    "NiagaraNodeInput",
-    "NiagaraNodeFunctionCall",
-    "NiagaraNodeParameterMapGet",
-    "NiagaraNodeParameterMapSet",
-    "NiagaraNodeOp",
-    "NiagaraNodeOutput",
-    "NiagaraNodeReroute",
-    "NiagaraNodeSelect",
-    "NiagaraNodeStaticSwitch",
-})
-
 # Exact class names to skip (no prefix matching)
 # These classes use fully custom serialization formats, cannot be handled by generic parser
 #
-# Note: complete skip/strategy uses CLASS_STRATEGY_TABLE (class_serialization_strategy.py)
-# as the single authoritative source. This module's SKIP_CLASS_NAMES and SKIP_CLASS_PREFIXES serve as
-# secondary safety net at property_parser level and query interface for prefix matching at linker.preload() level.
-#
-# Note: classes migrated to class_serialization_strategy.py _SKIP_CLASSES are no longer listed,
-# Includes: NiagaraGraph, NiagaraScript, NiagaraDataInterface and its subclasses,
-# NiagaraSystem (kept in _OPAQUE_CLASSES), AnimBlueprintExtension,
-# AnimComposite, AnimPoseSnapshot, ImpulseResponse, SoundConcurrency,
-# SoundMix, SoundClass, ReverbEffect, AmbientSound.
-# Complete skip strategy uses CLASS_STRATEGY_TABLE as the single authoritative source.
-SKIP_CLASS_NAMES = {
-    # Niagara -- Renderer / Emitter (prefix matching handled by SKIP_CLASS_PREFIXES)
-    "NiagaraEmitter",
-    "NiagaraSpriteRendererProperties",
-    "NiagaraMeshRendererProperties",
-    "NiagaraRibbonRendererProperties",
-    "NiagaraRendererProperties",
-    "NiagaraEmitterProperties",
-}
-
-
 def should_skip_export_class_prefix(class_name: str) -> bool:
     """Determine whether class name matches SKIP_CLASS_PREFIXES prefix.
 
@@ -107,8 +72,6 @@ def should_skip_export_class_prefix(class_name: str) -> bool:
     Returns:
         True if class name starts with any SKIP_CLASS_PREFIXES prefix
     """
-    if class_name in _PREFIX_SKIP_ALLOWLIST:
-        return False
     return class_name.startswith(SKIP_CLASS_PREFIXES)
 
 
@@ -121,8 +84,7 @@ def should_skip_export_for_tolerant_parsing(
     Check order:
     1. class handler registry has a handler with fallback_policy == SKIP
     2. Whether export.object_name starts with SKIP_CLASS_PREFIXES
-    3. Whether class_name is in SKIP_CLASS_NAMES (exact match)
-    4. Whether class_name starts with SKIP_CLASS_PREFIXES
+    3. Whether class_name starts with SKIP_CLASS_PREFIXES
 
     Args:
         export: ObjectExport instance
@@ -140,12 +102,8 @@ def should_skip_export_for_tolerant_parsing(
 
     # Check 2-4: original skip list (as fallback policy)
     # #521: check allowlist first — exact classes with verified tagged properties bypass prefix skip
-    if class_name is not None and class_name in _PREFIX_SKIP_ALLOWLIST:
-        return False
     object_name = str(export.object_name)
     if class_name != "CubeBuilder" and object_name.startswith(SKIP_CLASS_PREFIXES):
-        return True
-    if class_name is not None and class_name in SKIP_CLASS_NAMES:
         return True
     if (
         class_name is not None

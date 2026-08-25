@@ -101,7 +101,7 @@ def _parse_package_core(
 
     Args:
         path: File path
-        result: ParseResult or LinkerParseResult instance (modified in place)
+        result: ParseResult or ParseResult instance (modified in place)
         tolerant: Tolerant mode (None means use default True)
         provider: package provider
         mappings_path: Type mappings file path

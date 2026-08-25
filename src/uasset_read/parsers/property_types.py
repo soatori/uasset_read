@@ -28,25 +28,6 @@ from uasset_read.constants import (
 )
 from uasset_read.parsers.utils import make_enum_value, extract_inner_from_tag, read_validated_count_tolerant
 
-# ============================================================================
-# Table-driven simple property dispatch
-# ============================================================================
-# Maps property type names to archive read methods. Serves as documentation
-# of the simple-property dispatch pattern; individual parse_*_property functions
-# use _simple_read() with the corresponding method name.
-_SIMPLE_PROPERTY_DISPATCH: dict[str, str] = {
-    "UInt16Property": "read_u16",
-    "UInt32Property": "read_u32",
-    "UInt64Property": "read_u64",
-    "ObjectProperty": "read_i32",
-    "WeakObjectProperty": "read_i32",
-    "ClassProperty": "read_i32",
-    "InterfaceProperty": "read_i32",
-    "VerseClassProperty": "read_i32",
-    "VerseFunctionProperty": "read_i32",
-    "VerseDynamicProperty": "read_i32",
-    "DoubleProperty": "read_f64",
-}
 
 def _simple_read(archive, method_name):
     """Dispatch a single archive read method by name."""

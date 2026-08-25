@@ -224,97 +224,86 @@ def _parse_expression_input(
 
 def _decode_vector(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Vector / Vector3f / Vector3d (12 or 24 bytes)."""
-    import struct as _struct
 
     fmt = "<ddd" if size == 24 else "<fff"
-    x, y, z = _struct.unpack(fmt, raw[:size])
+    x, y, z = struct.unpack(fmt, raw[:size])
     return {"X": x, "Y": y, "Z": z}
 
 
 def _decode_rotator(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Rotator / Rotator3f / Rotator3d (12 or 24 bytes)."""
-    import struct as _struct
 
     fmt = "<ddd" if size == 24 else "<fff"
-    pitch, yaw, roll = _struct.unpack(fmt, raw[:size])
+    pitch, yaw, roll = struct.unpack(fmt, raw[:size])
     return {"Pitch": pitch, "Yaw": yaw, "Roll": roll}
 
 
 def _decode_vector2d(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Vector2D / Vector2f / Vector2d (8 or 16 bytes)."""
-    import struct as _struct
 
     fmt = "<dd" if size == 16 else "<ff"
-    x, y = _struct.unpack(fmt, raw[:size])
+    x, y = struct.unpack(fmt, raw[:size])
     return {"X": x, "Y": y}
 
 
 def _decode_vector4(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Vector4 / Vector4f / Vector4d (16 or 32 bytes)."""
-    import struct as _struct
 
     fmt = "<dddd" if size == 32 else "<ffff"
-    x, y, z, w = _struct.unpack(fmt, raw[:size])
+    x, y, z, w = struct.unpack(fmt, raw[:size])
     return {"X": x, "Y": y, "Z": z, "W": w}
 
 
 def _decode_quat(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Quat / Quat4f / Quat4d (16 or 32 bytes)."""
-    import struct as _struct
 
     fmt = "<dddd" if size == 32 else "<ffff"
-    x, y, z, w = _struct.unpack(fmt, raw[:size])
+    x, y, z, w = struct.unpack(fmt, raw[:size])
     return {"X": x, "Y": y, "Z": z, "W": w}
 
 
 def _decode_linear_color(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode LinearColor (16 bytes, 4 float RGBA)."""
-    import struct as _struct
 
-    r, g, b, a = _struct.unpack("<ffff", raw[:16])
+    r, g, b, a = struct.unpack("<ffff", raw[:16])
     return {"R": r, "G": g, "B": b, "A": a}
 
 
 def _decode_color(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Color (4 bytes, 4 uint8 RGBA)."""
-    import struct as _struct
 
-    r, g, b, a = _struct.unpack("<BBBB", raw[:4])
+    r, g, b, a = struct.unpack("<BBBB", raw[:4])
     return {"R": r, "G": g, "B": b, "A": a}
 
 
 def _decode_guid(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Guid (16 bytes, 4 uint32)."""
-    import struct as _struct
 
-    a, b, c, d = _struct.unpack("<IIII", raw[:16])
+    a, b, c, d = struct.unpack("<IIII", raw[:16])
     return {"A": a, "B": b, "C": c, "D": d}
 
 
 def _decode_int_point(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode IntPoint (8 bytes, 2 int32)."""
-    import struct as _struct
 
-    x, y = _struct.unpack("<ii", raw[:8])
+    x, y = struct.unpack("<ii", raw[:8])
     return {"X": x, "Y": y}
 
 
 def _decode_int_vector(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode IntVector / IntVector3 (12 bytes, 3 int32)."""
-    import struct as _struct
 
-    x, y, z = _struct.unpack("<iii", raw[:12])
+    x, y, z = struct.unpack("<iii", raw[:12])
     return {"X": x, "Y": y, "Z": z}
 
 
 def _decode_two_vectors(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode TwoVectors (24 or 48 bytes, two sets of three-component vectors)."""
-    import struct as _struct
 
     fmt = "<ddd" if size == 48 else "<fff"
     elem_size = size // 2
-    v1 = _struct.unpack(fmt, raw[:elem_size])
-    v2 = _struct.unpack(fmt, raw[elem_size:size])
+    v1 = struct.unpack(fmt, raw[:elem_size])
+    v2 = struct.unpack(fmt, raw[elem_size:size])
     return {
         "V1": {"X": v1[0], "Y": v1[1], "Z": v1[2]},
         "V2": {"X": v2[0], "Y": v2[1], "Z": v2[2]},
@@ -323,19 +312,17 @@ def _decode_two_vectors(raw: bytes, size: int) -> Dict[str, Any]:
 
 def _decode_plane(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Plane / Plane4f / Plane4d (16 or 32 bytes)."""
-    import struct as _struct
 
     fmt = "<dddd" if size == 32 else "<ffff"
-    x, y, z, w = _struct.unpack(fmt, raw[:size])
+    x, y, z, w = struct.unpack(fmt, raw[:size])
     return {"X": x, "Y": y, "Z": z, "W": w}
 
 
 def _decode_sphere(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Sphere / Sphere3f / Sphere3d (16 or 32 bytes, center + radius)."""
-    import struct as _struct
 
     fmt = "<dddd" if size == 32 else "<ffff"
-    x, y, z, w = _struct.unpack(fmt, raw[:size])
+    x, y, z, w = struct.unpack(fmt, raw[:size])
     return {"Center": {"X": x, "Y": y, "Z": z}, "Radius": w}
 
 
