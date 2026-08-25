@@ -22,7 +22,6 @@ from .node_types import (  # noqa: F401 — public re-exports
 from .result import (  # noqa: F401 — public re-exports
     BaseResult,
     ParseResult,
-    StatusInfo,
 )
 from .blueprint import (  # noqa: F401 — public re-exports
     BlueprintMetadata,
