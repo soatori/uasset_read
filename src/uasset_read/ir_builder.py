@@ -186,11 +186,11 @@ def _build_material_ir(result: "ParseResult | LinkerParseResult") -> MaterialIR 
         classify_expression_type,
     )
 
-    # Find Material/MaterialInstance export
+    # Pass 1: Find material export and build expression GUID map
     material_export = None
-    expression_exports = []
+    expr_guid_map: dict[int, str] = {}
 
-    for export in result.export_map or []:
+    for export_idx, export in enumerate(result.export_map or []):
         class_name = _safe_str(
             getattr(export, "object_class", None)
         ) or resolve_class_name(
@@ -207,30 +207,16 @@ def _build_material_ir(result: "ParseResult | LinkerParseResult") -> MaterialIR 
                 material_export = export
                 material_export._resolved_class = "MaterialInstance"
         elif class_name and class_name.startswith("MaterialExpression"):
-            expression_exports.append(export)
+            guid = _extract_expression_guid(export)
+            if guid:
+                expr_guid_map[export_idx] = guid
 
     if material_export is None:
         return None
 
     material_type = getattr(material_export, "_resolved_class", "Material")
 
-    # Build expression index -> guid mapping
-    # Key by actual export table position, not sequential position in filtered list
-    expr_guid_map: dict[int, str] = {}
-    for export_idx, export in enumerate(result.export_map or []):
-        class_name = _safe_str(
-            getattr(export, "object_class", None)
-        ) or resolve_class_name(
-            getattr(export, "class_index", None),
-            result.import_map or [],
-            result.export_map or [],
-        )
-        if class_name and class_name.startswith("MaterialExpression"):
-            guid = _extract_expression_guid(export)
-            if guid:
-                expr_guid_map[export_idx] = guid  # Actual export table index
-
-    # Build expressions with export table indices
+    # Pass 2: Build expression IRs (needs complete expr_guid_map)
     expressions = []
     for export_idx, export in enumerate(result.export_map or []):
         class_name = _safe_str(
@@ -241,10 +227,11 @@ def _build_material_ir(result: "ParseResult | LinkerParseResult") -> MaterialIR 
             result.export_map or [],
         )
         if class_name and class_name.startswith("MaterialExpression"):
-            expr_ir = _build_single_expression_ir(
-                export_idx, export, expr_guid_map, result
+            expressions.append(
+                _build_single_expression_ir(
+                    export_idx, export, expr_guid_map, result
+                )
             )
-            expressions.append(expr_ir)
 
     # Build material inputs (Material only)
     material_inputs = []
