@@ -123,24 +123,15 @@ def cpf_flags_to_uproperty_marks(cpf_flags: int, is_component: bool = False) -> 
     # Component default specifiers: UE SCS component default behavior
     # If component and no explicit visibility/edit flags, add VisibleAnywhere + BlueprintReadOnly
     if is_component:
-        has_edit_flag = any(
-            m in marks
-            for m in ["EditAnywhere", "EditInstanceOnly", "EditDefaultsOnly"]
-        )
-        has_visible_flag = any(
-            m in marks
-            for m in ["VisibleAnywhere", "VisibleInstanceOnly", "VisibleDefaultsOnly"]
-        )
+        has_edit_flag = any(m in marks for m in ["EditAnywhere", "EditInstanceOnly", "EditDefaultsOnly"])
+        has_visible_flag = any(m in marks for m in ["VisibleAnywhere", "VisibleInstanceOnly", "VisibleDefaultsOnly"])
 
         # If no edit or visible flags, add default VisibleAnywhere + BlueprintReadOnly
         if not has_edit_flag and not has_visible_flag:
             marks.insert(0, "VisibleAnywhere")
 
         # Components are typically read-only (managed by blueprint)
-        has_blueprint_access = any(
-            m in marks
-            for m in ["BlueprintReadWrite", "BlueprintReadOnly", "BlueprintCallable"]
-        )
+        has_blueprint_access = any(m in marks for m in ["BlueprintReadWrite", "BlueprintReadOnly", "BlueprintCallable"])
         if not has_blueprint_access:
             marks.append("BlueprintReadOnly")
 

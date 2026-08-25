@@ -1,4 +1,5 @@
 """Tests for Batch 2 missing UAsset type mappings."""
+
 from uasset_read.semantic.kinds import resolve_asset_type
 from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
 
@@ -239,18 +240,31 @@ class TestBatch2Integration:
         from uasset_read.semantic.kinds import resolve_asset_type
 
         batch2_classes = [
-            "PhysicsAsset", "PhysicalMaterial",
+            "PhysicsAsset",
+            "PhysicalMaterial",
             "AnimLayerInterface",
-            "SoundMix", "SoundClass", "SoundSubmix",
-            "BehaviorTree", "BlackboardData",
-            "DataAsset", "PrimaryDataAsset",
-            "Landscape", "LandscapeGrassType", "LandscapeLayerInfoObject",
-            "World", "Level",
+            "SoundMix",
+            "SoundClass",
+            "SoundSubmix",
+            "BehaviorTree",
+            "BlackboardData",
+            "DataAsset",
+            "PrimaryDataAsset",
+            "Landscape",
+            "LandscapeGrassType",
+            "LandscapeLayerInfoObject",
+            "World",
+            "Level",
             "ParticleSystem",
-            "WidgetBlueprintGeneratedClass", "WidgetBlueprint",
-            "Texture2DArray", "VolumeTexture",
-            "MediaPlayer", "MediaTexture", "MediaSource",
-            "ClothAsset", "GroomAsset",
+            "WidgetBlueprintGeneratedClass",
+            "WidgetBlueprint",
+            "Texture2DArray",
+            "VolumeTexture",
+            "MediaPlayer",
+            "MediaTexture",
+            "MediaSource",
+            "ClothAsset",
+            "GroomAsset",
             "SparseVolumeTexture",
         ]
 
@@ -260,4 +274,5 @@ class TestBatch2Integration:
     def test_total_type_count_increased(self):
         """Verify _TYPE_MAP has grown significantly."""
         from uasset_read.semantic.kinds import _TYPE_MAP
+
         assert len(_TYPE_MAP) >= 75, f"Expected >=75 types, got {len(_TYPE_MAP)}"

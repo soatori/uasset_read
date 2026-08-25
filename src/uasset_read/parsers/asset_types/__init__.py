@@ -8,6 +8,7 @@ on first access — no module-level side effects required.
 
 All handlers directly implement the ``ClassHandler`` protocol.
 """
+
 from __future__ import annotations
 
 import logging
@@ -147,6 +148,7 @@ class AssetTypeHandler(ClassHandler):
             name_map = context if isinstance(context, list) else []
             # 向后兼容：如果 parse_func 接受第三个参数（export），则传递
             import inspect
+
             sig = inspect.signature(self._parse_func)
             params = list(sig.parameters.keys())
             if len(params) >= 3:
@@ -161,7 +163,9 @@ class AssetTypeHandler(ClassHandler):
         except (KeyError, TypeError, ValueError, struct.error) as e:
             logger.warning(
                 "AssetTypeHandler '%s' failed for '%s': %s",
-                self._handler_name, export.object_name, e,
+                self._handler_name,
+                export.object_name,
+                e,
             )
             return HandlerResult(
                 success=False,
@@ -206,6 +210,8 @@ class PropertyMetadataHandler(ClassHandler):
             data=data,
             fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
         )
+
+
 def register_asset_type_handlers() -> None:
     """Register asset type parsers to ClassHandlerRegistry."""
     registry = get_class_registry()
@@ -246,27 +252,67 @@ def register_asset_type_handlers() -> None:
         ("skeleton", "parse_skeleton", ["Skeleton"], "SkeletonHandler"),
         ("string_table", "parse_string_table", ["StringTable"], "StringTableHandler"),
         ("pose_asset", "parse_pose_asset", ["PoseAsset"], "PoseAssetHandler"),
-        ("anim_bone_compression", "parse_anim_bone_compression_settings", ["AnimBoneCompressionSettings"], "AnimBoneCompressionHandler"),
-        ("anim_curve_compression", "parse_anim_curve_compression_codec", ["AnimCurveCompressionCodec"], "AnimCurveCompressionHandler"),
+        (
+            "anim_bone_compression",
+            "parse_anim_bone_compression_settings",
+            ["AnimBoneCompressionSettings"],
+            "AnimBoneCompressionHandler",
+        ),
+        (
+            "anim_curve_compression",
+            "parse_anim_curve_compression_codec",
+            ["AnimCurveCompressionCodec"],
+            "AnimCurveCompressionHandler",
+        ),
         ("subsurface_profile", "parse_subsurface_profile", ["SubsurfaceProfile"], "SubsurfaceProfileHandler"),
         ("foliage_type", "parse_foliage_type", ["FoliageType"], "FoliageTypeHandler"),
-        ("skeletal_mesh_lod_settings", "parse_skeletal_mesh_lod_settings", ["SkeletalMeshLODSettings"], "SkeletalMeshLODSettingsHandler"),
+        (
+            "skeletal_mesh_lod_settings",
+            "parse_skeletal_mesh_lod_settings",
+            ["SkeletalMeshLODSettings"],
+            "SkeletalMeshLODSettingsHandler",
+        ),
         ("movie_scene", "MovieSceneHandler", ["MovieScene"], "MovieSceneHandler"),
-        ("movie_scene_control_rig", "MovieSceneControlRigParameterTrackHandler", ["MovieSceneControlRigParameterTrack"], "MovieSceneControlRigParameterTrackHandler"),
-        ("movie_scene_control_rig", "MovieSceneControlRigParameterSectionHandler", ["MovieSceneControlRigParameterSection"], "MovieSceneControlRigParameterSectionHandler"),
+        (
+            "movie_scene_control_rig",
+            "MovieSceneControlRigParameterTrackHandler",
+            ["MovieSceneControlRigParameterTrack"],
+            "MovieSceneControlRigParameterTrackHandler",
+        ),
+        (
+            "movie_scene_control_rig",
+            "MovieSceneControlRigParameterSectionHandler",
+            ["MovieSceneControlRigParameterSection"],
+            "MovieSceneControlRigParameterSectionHandler",
+        ),
         # New types from #557
         ("curve_float", "parse_curve_float", ["CurveFloat"], "CurveFloatHandler"),
         ("material_function", "parse_material_function", ["MaterialFunction"], "MaterialFunctionHandler"),
-        ("material_parameter_collection", "parse_material_parameter_collection", ["MaterialParameterCollection"], "MaterialParameterCollectionHandler"),
+        (
+            "material_parameter_collection",
+            "parse_material_parameter_collection",
+            ["MaterialParameterCollection"],
+            "MaterialParameterCollectionHandler",
+        ),
         ("anim_composite", "parse_anim_composite", ["AnimComposite"], "AnimCompositeHandler"),
-        ("anim_blend_space", "parse_anim_blend_space", ["AnimBlendSpace", "AnimBlendSpace1D", "AimOffsetBlendSpace", "AimOffsetBlendSpace1D"], "AnimBlendSpaceHandler"),
+        (
+            "anim_blend_space",
+            "parse_anim_blend_space",
+            ["AnimBlendSpace", "AnimBlendSpace1D", "AimOffsetBlendSpace", "AimOffsetBlendSpace1D"],
+            "AnimBlendSpaceHandler",
+        ),
         ("sound_concurrency", "parse_sound_concurrency", ["SoundConcurrency"], "SoundConcurrencyHandler"),
         ("reverb_effect", "parse_reverb_effect", ["ReverbEffect"], "ReverbEffectHandler"),
         ("dialogue_wave", "parse_dialogue_wave", ["DialogueWave"], "DialogueWaveHandler"),
         ("dialogue_voice", "parse_dialogue_voice", ["DialogueVoice"], "DialogueVoiceHandler"),
         ("curve_linear_color", "parse_curve_linear_color", ["CurveLinearColor"], "CurveLinearColorHandler"),
         ("curve_vector", "parse_curve_vector", ["CurveVector"], "CurveVectorHandler"),
-        ("texture_render_target", "parse_texture_render_target", ["TextureRenderTarget2D", "TextureRenderTargetCube"], "TextureRenderTargetHandler"),
+        (
+            "texture_render_target",
+            "parse_texture_render_target",
+            ["TextureRenderTarget2D", "TextureRenderTargetCube"],
+            "TextureRenderTargetHandler",
+        ),
         # Batch 2: new types
         ("physics_asset", "parse_physics_asset", ["PhysicsAsset"], "PhysicsAssetHandler"),
         ("physical_material", "parse_physical_material", ["PhysicalMaterial"], "PhysicalMaterialHandler"),
@@ -280,11 +326,21 @@ def register_asset_type_handlers() -> None:
         ("primary_data_asset", "parse_primary_data_asset", ["PrimaryDataAsset"], "PrimaryDataAssetHandler"),
         ("landscape", "parse_landscape", ["Landscape"], "LandscapeHandler"),
         ("landscape_grass_type", "parse_landscape_grass_type", ["LandscapeGrassType"], "LandscapeGrassTypeHandler"),
-        ("landscape_layer_info", "parse_landscape_layer_info", ["LandscapeLayerInfoObject"], "LandscapeLayerInfoHandler"),
+        (
+            "landscape_layer_info",
+            "parse_landscape_layer_info",
+            ["LandscapeLayerInfoObject"],
+            "LandscapeLayerInfoHandler",
+        ),
         ("world", "parse_world", ["World"], "WorldHandler"),
         ("level", "parse_level", ["Level"], "LevelHandler"),
         ("particle_system", "parse_particle_system", ["ParticleSystem"], "ParticleSystemHandler"),
-        ("widget_blueprint", "parse_widget_blueprint", ["WidgetBlueprintGeneratedClass", "WidgetBlueprint"], "WidgetBlueprintHandler"),
+        (
+            "widget_blueprint",
+            "parse_widget_blueprint",
+            ["WidgetBlueprintGeneratedClass", "WidgetBlueprint"],
+            "WidgetBlueprintHandler",
+        ),
         ("texture2d_array", "parse_texture2d_array", ["Texture2DArray"], "Texture2DArrayHandler"),
         ("volume_texture", "parse_volume_texture", ["VolumeTexture"], "VolumeTextureHandler"),
         ("media_player", "parse_media_player", ["MediaPlayer"], "MediaPlayerHandler"),

@@ -19,10 +19,10 @@ from uasset_read.cpp_gen.sanitizer import sanitize_string_literal
 # ============================================================================
 
 # Reject values containing these C++ syntax tokens
-CPP_SYNTAX_TOKENS = [';', '{', '}', '//']
+CPP_SYNTAX_TOKENS = [";", "{", "}", "//"]
 
 # UE asset path pattern (T-059-04)
-UE_ASSET_PATH_PATTERN = re.compile(r'^/Game/')
+UE_ASSET_PATH_PATTERN = re.compile(r"^/Game/")
 
 
 def _validate_no_cpp_syntax(value: str) -> str:
@@ -39,9 +39,7 @@ def _validate_no_cpp_syntax(value: str) -> str:
     """
     for token in CPP_SYNTAX_TOKENS:
         if token in value:
-            raise ValueError(
-                f"Value contains C++ syntax token '{token}': {value!r}"
-            )
+            raise ValueError(f"Value contains C++ syntax token '{token}': {value!r}")
     return value
 
 
@@ -200,12 +198,7 @@ def format_cpp_transform(transforms: Dict[str, Any], component_name: str) -> Lis
         loc_expr = _format_fvector(loc.x, loc.y, loc.z)
         # RotatorValue storage order: (roll, pitch, yaw) -> FRotator order: (pitch, yaw, roll)
         rot_expr = _format_frotator(rot.pitch, rot.yaw, rot.roll)
-        lines.append(
-            f"{component_name}->SetRelativeLocationAndRotation(\n"
-            f"    {loc_expr},\n"
-            f"    {rot_expr}\n"
-            f");"
-        )
+        lines.append(f"{component_name}->SetRelativeLocationAndRotation(\n    {loc_expr},\n    {rot_expr}\n);")
     elif loc is not None:
         loc_expr = _format_fvector(loc.x, loc.y, loc.z)
         lines.append(f"{component_name}->SetRelativeLocation({loc_expr});")
@@ -240,9 +233,7 @@ def format_cpp_input_action_load(variable_name: str, asset_path: str) -> str:
 
     # T-059-04: Validate asset path format
     if not UE_ASSET_PATH_PATTERN.match(asset_path):
-        raise ValueError(
-            f"Invalid asset path (must start with /Game/...): {asset_path!r}"
-        )
+        raise ValueError(f"Invalid asset path (must start with /Game/...): {asset_path!r}")
 
     # Escape quotes
     safe_path = sanitize_string_literal(asset_path)

@@ -1440,14 +1440,9 @@ def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive, name_
     return delegates
 
 
-def parse_multicast_inline_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> list:
-    """Parse MulticastInlineDelegateProperty."""
-    return parse_multicast_delegate_property(tag, archive, name_map)
-
-
-def parse_multicast_sparse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> list:
-    """Parse MulticastSparseDelegateProperty."""
-    return parse_multicast_delegate_property(tag, archive, name_map)
+# Direct aliases — all multicast delegate variants share the same serialization
+parse_multicast_inline_delegate_property = parse_multicast_delegate_property
+parse_multicast_sparse_delegate_property = parse_multicast_delegate_property
 
 
 # ============================================================================

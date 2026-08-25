@@ -1,4 +1,5 @@
 """Tests for missing UAsset type mappings and parser stubs."""
+
 from uasset_read.semantic.kinds import resolve_asset_type
 from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
 
@@ -46,7 +47,7 @@ class TestCurveFloatParser:
                 return 100
 
             def read(self, n):
-                return b'\x00' * n
+                return b"\x00" * n
 
         result = parse_curve_float(MockArchive(), [])
         assert result["parse_status"] == "partial_metadata"
@@ -224,9 +225,9 @@ def test_all_parser_types_have_kinds_mapping():
     # Get all registered class names
     registered_classes = set()
     for handler in registry._handlers:
-        if hasattr(handler, '_class_names'):
+        if hasattr(handler, "_class_names"):
             registered_classes.update(handler._class_names)
-        elif hasattr(handler, '_class_name'):
+        elif hasattr(handler, "_class_name"):
             registered_classes.add(handler._class_name)
 
     # Check each has a mapping

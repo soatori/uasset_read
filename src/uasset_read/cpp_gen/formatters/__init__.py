@@ -11,6 +11,7 @@ Exports:
     format_cpp_header: .h header file text generation function
     kismet_to_cpp_body: Kismet expression -> structured C++ statement list
 """
+
 from uasset_read.cpp_gen.formatters.cpp_json_ir import (
     CppProperty,
     CppHeaderMeta,

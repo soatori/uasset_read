@@ -40,18 +40,7 @@ _ARRAY_SORT_KEYS = {
 }
 
 
-def _order_keys(data: dict, key_order: list[str]) -> dict:
-    ordered = {}
-    for key in key_order:
-        if key in data:
-            ordered[key] = data[key]
-    for key in sorted(data.keys()):
-        if key not in ordered:
-            ordered[key] = data[key]
-    return ordered
-
-
-def _order_keys_strict(data: dict, key_order: list[str]) -> dict:
+def _order_keys(data: dict, key_order: list[str], strict: bool = False) -> dict:
     """Order keys: contract keys in defined order, then remaining keys sorted."""
     ordered = {}
     for key in key_order:
@@ -76,7 +65,7 @@ def canonical_sort(data: Any) -> Any:
     elif "format" in keys and "format_version" in keys:
         # Top-level SemanticIR dict (may include merged domain content keys)
         # Contract keys in strict order, then domain keys sorted
-        ordered = _order_keys_strict(data, _TOP_LEVEL_ORDER)
+        ordered = _order_keys(data, _TOP_LEVEL_ORDER)
     elif keys.issubset(set(_ASSET_ORDER)):
         ordered = _order_keys(data, _ASSET_ORDER)
     elif keys.issubset(set(_STATUS_ORDER)):

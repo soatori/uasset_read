@@ -372,7 +372,6 @@ def parse_batch(
     if isolate_assets == "auto":
         from uasset_read.memory_safety import (
             should_isolate,
-            check_file_size,
             FileSizeTier,
         )
 
@@ -395,7 +394,7 @@ def parse_batch(
         try:
             # #346: 智能混合模式
             if isolate_assets == "auto":
-                file_size = check_file_size(pf)
+                file_size = pf.stat().st_size
                 tier = FileSizeTier.from_size(file_size)
                 actual_isolate = should_isolate(file_size, tier)
             else:

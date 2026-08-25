@@ -253,13 +253,6 @@ class IoStoreReader:
                 logger.debug("Failed to close ucas file: %s", e)
         self._ucas_files.clear()
 
-    def __del__(self) -> None:
-        """Safety net: ensure file handles are released."""
-        try:
-            self.close()
-        except Exception:
-            logger.debug("IoStoreReader.__del__ cleanup failed", exc_info=True)
-
     def __enter__(self) -> IoStoreReader:
         self.open()
         return self

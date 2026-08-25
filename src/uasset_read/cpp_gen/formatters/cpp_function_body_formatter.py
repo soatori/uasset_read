@@ -20,6 +20,7 @@ from uasset_read.cpp_gen.formatters import (
 # Core formatting functions
 # ============================================================================
 
+
 def format_cpp_function_body(method_ir: CppMethodIR) -> str:
     """Render a single CppMethodIR into .cpp function implementation text.
 
@@ -80,15 +81,24 @@ def format_cpp_function_body(method_ir: CppMethodIR) -> str:
 
 # Match C++ identifiers (with ::, *, & etc. modifiers) up to '('
 _FUNC_SIG_RE = re.compile(
-    r'^[A-Za-z_]\w*'            # return type (at least one identifier)
-    r'[\s\w:*&]*'               # subsequent modifiers (type pointers, const, namespace, etc.)
-    r'\('                       # opening parenthesis
+    r"^[A-Za-z_]\w*"  # return type (at least one identifier)
+    r"[\s\w:*&]*"  # subsequent modifiers (type pointers, const, namespace, etc.)
+    r"\("  # opening parenthesis
 )
 
 # Control flow keyword set, used to exclude false positives
-_CONTROL_KEYWORDS = frozenset({
-    'if', 'else', 'for', 'while', 'switch', 'do', 'try', 'catch',
-})
+_CONTROL_KEYWORDS = frozenset(
+    {
+        "if",
+        "else",
+        "for",
+        "while",
+        "switch",
+        "do",
+        "try",
+        "catch",
+    }
+)
 
 
 def _strip_function_wrapper(text: str) -> str:
@@ -133,18 +143,18 @@ def _strip_function_wrapper(text: str) -> str:
     last_idx, last_text = non_empty[-1]
 
     # Condition 1: first line is function signature (contains '(' and matches regex)
-    if '(' not in first_text or not _FUNC_SIG_RE.match(first_text):
+    if "(" not in first_text or not _FUNC_SIG_RE.match(first_text):
         return text
 
     # Condition 2: '{ position' — supports two formats:
     #   Format A: signature on its own line, second non-empty line is '{'
     #   Format B: signature line ends with '{' (e.g., "void Func() {")
-    brace_on_first_line = first_text.endswith('{')
+    brace_on_first_line = first_text.endswith("{")
     if not brace_on_first_line:
         if len(non_empty) < 3:
             return text
         second_idx, second_text = non_empty[1]
-        if second_text != '{':
+        if second_text != "{":
             return text
         body_start = second_idx + 1
     else:
@@ -153,11 +163,11 @@ def _strip_function_wrapper(text: str) -> str:
         body_start = first_idx + 1
 
     # Condition 3: last non-empty line is '}'
-    if last_text != '}':
+    if last_text != "}":
         return text
 
     # Condition 4: exclude control flow statements (if/for/while etc.)
-    before_paren = first_text[:first_text.index('(')].split()[-1].lower() if '(' in first_text else ''
+    before_paren = first_text[: first_text.index("(")].split()[-1].lower() if "(" in first_text else ""
     if before_paren in _CONTROL_KEYWORDS:
         return text
 

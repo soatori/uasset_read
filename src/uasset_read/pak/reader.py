@@ -90,13 +90,6 @@ class PakFileReader:
             self._file.close()
             self._file = None
 
-    def __del__(self) -> None:
-        """Safety net: ensure the file handle is released."""
-        try:
-            self.close()
-        except Exception:
-            logger.debug("PakFileReader.__del__ cleanup failed", exc_info=True)
-
     def __enter__(self) -> "PakFileReader":
         self.open()
         return self

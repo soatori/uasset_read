@@ -377,18 +377,4 @@ def _estimate_memory_stats(process_rss_mb: float = 0.0) -> MemoryStats:
     )
 
 
-def check_file_size(path: Path) -> int:
-    """Get file size in bytes.
 
-    Args:
-        path: File path
-
-    Returns:
-        File size in bytes
-
-    Raises:
-        ValueError: If the file does not exist
-    """
-    if not path.exists():
-        raise ValueError(f"File not found: {path}")
-    return path.stat().st_size

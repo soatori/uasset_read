@@ -52,7 +52,6 @@ UE_TO_CPP_TYPE_MAP: Dict[str, str] = {
     "/Script/Engine.InputAxisKeyMapping": "FInputAxisKeyMapping",
     "/Script/Engine.GameplayTag": "FGameplayTag",
     "/Script/Engine.GameplayTagContainer": "FGameplayTagContainer",
-
     # Class types (A prefix for Actor, U prefix for UObject/Component)
     "/Script/Engine.SceneComponent": "USceneComponent",
     "/Script/Engine.ActorComponent": "UActorComponent",
@@ -103,7 +102,6 @@ UE_TO_CPP_TYPE_MAP: Dict[str, str] = {
     "/Script/UMG.EditTextBox": "UEditTextBox",
     "/Script/UMG.ProgressBar": "UProgressBar",
     "/Script/UMG.Spacer": "USpacer",
-
     # Basic types (no prefix or UE-specific wrappers)
     "float": "float",
     "double": "double",
@@ -162,7 +160,6 @@ ENGINE_CLASS_PATHS: Dict[str, str] = {
     "/Script/Engine.CameraActor": "ACameraActor",
     "/Script/Engine.PlayerStart": "APlayerStart",
     "/Script/Engine.TriggerVolume": "ATriggerVolume",
-
     # Components (U prefix)
     "/Script/Engine.ActorComponent": "UActorComponent",
     "/Script/Engine.SceneComponent": "USceneComponent",
@@ -190,7 +187,6 @@ ENGINE_CLASS_PATHS: Dict[str, str] = {
     "/Script/Engine.BoxComponent": "UBoxComponent",
     "/Script/Engine.SphereComponent": "USphereComponent",
     "/Script/Engine.CapsuleComponent": "UCapsuleComponent",
-
     # UObjects (U prefix)
     "/Script/Engine.Object": "UObject",
     "/Script/Engine.Blueprint": "UBlueprint",
@@ -211,17 +207,36 @@ ENGINE_CLASS_PATHS: Dict[str, str] = {
 }
 
 # Actor class suffix set (used for heuristic prefix inference)
-ACTOR_SUFFIXES = frozenset({
-    "Actor", "Pawn", "Character", "Controller", "GameMode", "GameModeBase",
-    "GameState", "GameStateBase", "PlayerState",
-    "HUD", "Manager", "Volume", "Brush", "Light", "Camera", "PlayerStart",
-    "Trigger", "Zone",
-})
+ACTOR_SUFFIXES = frozenset(
+    {
+        "Actor",
+        "Pawn",
+        "Character",
+        "Controller",
+        "GameMode",
+        "GameModeBase",
+        "GameState",
+        "GameStateBase",
+        "PlayerState",
+        "HUD",
+        "Manager",
+        "Volume",
+        "Brush",
+        "Light",
+        "Camera",
+        "PlayerStart",
+        "Trigger",
+        "Zone",
+    }
+)
 
 # Component class suffix set
-COMPONENT_SUFFIXES = frozenset({
-    "Component", "Subcomponent",
-})
+COMPONENT_SUFFIXES = frozenset(
+    {
+        "Component",
+        "Subcomponent",
+    }
+)
 
 
 def ue_path_to_cpp_type(ue_type: str) -> str:
@@ -286,6 +301,7 @@ def ue_path_to_cpp_type(ue_type: str) -> str:
             return UE_TO_CPP_TYPE_MAP[ue_type]
         # World Partition hashed path normalization (e.g. /Script/Engine_3103784960 -> /Script/Engine)
         from uasset_read.link.linker import normalize_world_partition_path
+
         normalized = normalize_world_partition_path(ue_type)
         if normalized != ue_type and normalized in UE_TO_CPP_TYPE_MAP:
             return UE_TO_CPP_TYPE_MAP[normalized]
@@ -307,10 +323,27 @@ def ue_path_to_cpp_type(ue_type: str) -> str:
     if lower_type in ("guid",):
         return "FGuid"
     # Basic types returned directly (already in UE_TO_CPP_TYPE_MAP)
-    if lower_type in ("float", "double", "bool", "int", "int32", "int64",
-                       "uint8", "uint16", "uint32", "uint64",
-                       "byte", "char", "string", "fstring", "fname", "ftext",
-                       "uobject", "uobject*", "fstring*"):
+    if lower_type in (
+        "float",
+        "double",
+        "bool",
+        "int",
+        "int32",
+        "int64",
+        "uint8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "byte",
+        "char",
+        "string",
+        "fstring",
+        "fname",
+        "ftext",
+        "uobject",
+        "uobject*",
+        "fstring*",
+    ):
         return UE_TO_CPP_TYPE_MAP.get(lower_type, ue_type)
 
     # 5. Unknown type -- apply heuristic
