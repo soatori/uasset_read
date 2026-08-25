@@ -64,3 +64,31 @@ def test_expression_output_from_dict_still_works():
     outputs = _build_expression_outputs(expr_export)
     assert len(outputs) == 1
     assert outputs[0].output_name == "R"
+
+
+def test_expression_output_from_wrapped_dict_format():
+    """Expression outputs should work from T6 wrapped dict format."""
+    expr_export = MagicMock()
+    expr_export.properties = [
+        _make_outputs_prop(
+            [
+                {
+                    "kind": "struct_property",
+                    "struct_type": "FExpressionOutput",
+                    "fields": {
+                        "output_name": "A",
+                        "mask": 15,
+                        "mask_r": 1,
+                        "mask_g": 1,
+                        "mask_b": 1,
+                        "mask_a": 1,
+                    },
+                },
+            ],
+        ),
+    ]
+
+    outputs = _build_expression_outputs(expr_export)
+    assert len(outputs) == 1
+    assert outputs[0].output_name == "A"
+    assert outputs[0].mask == 15
