@@ -1031,14 +1031,6 @@ def parse_properties_from_export(
     # (property bag placeholder or class mismatch) -- see LinkerLoad.cpp:4793
     property_start = export.serial_offset
 
-    # Store ScriptSerialization absolute offsets for diagnostics and opt-in strategy
-    export._script_serialization_start_absolute = (  # noqa: SLF001
-        export.serial_offset + getattr(export, 'script_serialization_start_offset', 0)
-    )
-    export._script_serialization_end_absolute = (  # noqa: SLF001
-        export.serial_offset + getattr(export, 'script_serialization_end_offset', 0)
-    )
-
     archive.seek(property_start)
 
     # Tolerant skip: directly skip known incompatible class-specific payloads

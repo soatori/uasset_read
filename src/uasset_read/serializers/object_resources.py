@@ -89,8 +89,6 @@ class ObjectExport:
     b_generate_public_hash: bool = False
     script_serialization_end_offset: int = 0
     script_serialization_start_offset: int = 0
-    _script_serialization_start_absolute: int = 0
-    _script_serialization_end_absolute: int = 0
 
     @property
     def script_serialization_size(self) -> int:

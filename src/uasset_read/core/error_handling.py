@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.models.result import ParseResult
-    from uasset_read.link.result import LinkerParseResult
 
 from uasset_read.exceptions import ParseError
 
@@ -20,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 @contextmanager
 def tolerant_parse(
-    result: "ParseResult | LinkerParseResult",
+    result: "ParseResult",
     stage: str,
 ):
     """Fault-tolerant parse context manager.
@@ -34,7 +33,7 @@ def tolerant_parse(
         Catch ParseError -> log to result.errors -> re-raise
 
     Args:
-        result: ParseResult or LinkerParseResult object (must have errors attribute)
+        result: ParseResult object (must have errors attribute)
         stage: Stage name, used as error message prefix
     """
     try:

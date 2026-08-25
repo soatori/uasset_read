@@ -95,11 +95,9 @@ class ParseResult(BaseResult):
     """
     soft_package_references: list[str] = field(default_factory=list)
     asset_registry_data: AssetRegistryData | None = None
+    root_objects: list = field(default_factory=list)
+    """Top-level object instances from the linker object graph."""
+    all_objects: list = field(default_factory=list)
+    """All object instances from the linker object graph."""
 
 
-@dataclass
-class StatusInfo:
-    """JSend style status field (D-14-02, OUT-01)."""
-    status: str
-    message: str | None = None
-    code: str | None = None

@@ -13,15 +13,6 @@ class MacroExpansionContext:
     blueprint_ref: Optional[str] = None
 
 
-class MacroCycleError(Exception):
-    """Macro cycle detection exception."""
-    def __init__(self, cycle_path: List[MacroExpansionContext]):
-        self.cycle_path = cycle_path
-        names = [ctx.macro_name for ctx in cycle_path]
-        message = f"Macro cycle detected: {' -> '.join(names)} -> {names[0]}"
-        super().__init__(message)
-
-
 @dataclass
 class MacroExpansion:
     """Macro expansion result."""
@@ -229,7 +220,7 @@ class MacroExpander:
             MacroExpansion expansion result
 
         Raises:
-            MacroCycleError: raised when a macro cycle is detected
+            ValueError: raised when a macro cycle is detected
         """
         macro_ref = instance_node.get("macro_graph_reference", {})
         graph_guid = macro_ref.get("graph_guid", "")
@@ -247,13 +238,7 @@ class MacroExpander:
 
         # Cycle detection
         if graph_guid and graph_guid in self.visited_guids:
-            raise MacroCycleError(self.expansion_stack.copy() + [
-                MacroExpansionContext(
-                    macro_name=graph_name,
-                    macro_guid=graph_guid,
-                    macro_graph_ref=macro_ref,
-                )
-            ])
+            raise ValueError("Macro cycle detected: " + " -> ".join(ctx.macro_name for ctx in self.expansion_stack) + " -> " + graph_name)
 
         # Find macro graph
         macro_graph = self._find_macro_graph(macro_ref)

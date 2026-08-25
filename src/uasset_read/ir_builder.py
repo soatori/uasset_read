@@ -53,7 +53,6 @@ from uasset_read.models.ir import (
 
 if TYPE_CHECKING:
     from uasset_read.models.result import ParseResult
-    from uasset_read.link.result import LinkerParseResult
 
 from uasset_read.constants import (
     BLUEPRINT_METADATA_KEYS as _BLUEPRINT_METADATA_KEYS,
@@ -78,7 +77,7 @@ def _classify_variable(var) -> str:
     return "user"
 
 
-def _has_kismet_failure(result: "ParseResult | LinkerParseResult") -> bool:
+def _has_kismet_failure(result: "ParseResult") -> bool:
     """Check if any decompiled function has failed bytecode or partial/failed translation."""
     for func in result.decompiled_functions or []:
         bytecode_status = getattr(func, "bytecode_status", "unknown")
@@ -90,7 +89,7 @@ def _has_kismet_failure(result: "ParseResult | LinkerParseResult") -> bool:
     return False
 
 
-def _count_kismet_failed_functions(result: "ParseResult | LinkerParseResult") -> int:
+def _count_kismet_failed_functions(result: "ParseResult") -> int:
     """Count functions with failed bytecode status."""
     count = 0
     for func in result.decompiled_functions or []:
@@ -99,7 +98,7 @@ def _count_kismet_failed_functions(result: "ParseResult | LinkerParseResult") ->
     return count
 
 
-def _count_kismet_partial_functions(result: "ParseResult | LinkerParseResult") -> int:
+def _count_kismet_partial_functions(result: "ParseResult") -> int:
     """Count functions with partial or failed translation status."""
     count = 0
     for func in result.decompiled_functions or []:
@@ -111,7 +110,7 @@ def _count_kismet_partial_functions(result: "ParseResult | LinkerParseResult") -
 
 
 def _build_statistics(
-    result: "ParseResult | LinkerParseResult", exports_built: int
+    result: "ParseResult", exports_built: int
 ) -> dict:
     """Build statistics dict from parse result for JSON output."""
     export_status_counts: dict[str, int] = {}
@@ -146,7 +145,7 @@ def _build_statistics(
 
 
 def _build_animation_data(
-    result: "ParseResult | LinkerParseResult",
+    result: "ParseResult",
 ) -> AnimationDataIR | None:
     """Aggregate animation data from ParseResult (anim_blueprint, anim_sequence, anim_montage).
 
@@ -172,7 +171,7 @@ def _build_animation_data(
     return None
 
 
-def _build_material_ir(result: "ParseResult | LinkerParseResult") -> MaterialIR | None:
+def _build_material_ir(result: "ParseResult") -> MaterialIR | None:
     """Build MaterialIR from ParseResult by scanning exports.
 
     Scans export_map for Material/MaterialInstance + MaterialExpression* exports.
@@ -710,7 +709,7 @@ def _build_material_data_flow(
 
 
 def _build_user_defined_data(
-    result: "ParseResult | LinkerParseResult",
+    result: "ParseResult",
 ) -> UserDefinedDataIR | None:
     """Extract user-defined type semantic data (enum or struct) from exports.
 
@@ -768,7 +767,7 @@ def _build_user_defined_data(
     return None
 
 
-def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
+def build_package_ir(result: "ParseResult") -> PackageIR:
     """Convert ParseResult to PackageIR.
 
     Build stages:
@@ -936,7 +935,7 @@ def build_package_ir(result: "ParseResult | LinkerParseResult") -> PackageIR:
 
 
 def _build_function_graphs_safe(
-    result: "ParseResult | LinkerParseResult",
+    result: "ParseResult",
 ) -> list[dict]:
     """Build function_graphs with a simple complexity guard for large graphs."""
     graphs = getattr(result, "graphs", None) or []
@@ -965,7 +964,7 @@ def _build_function_graphs_safe(
 
 
 def _build_function_graph_summaries(
-    result: "ParseResult | LinkerParseResult",
+    result: "ParseResult",
 ) -> list[dict]:
     entries = []
     for graph in getattr(result, "graphs", None) or []:

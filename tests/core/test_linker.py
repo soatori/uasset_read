@@ -10,28 +10,28 @@ from pathlib import Path
 import pytest
 
 from uasset_read.pipeline.core import parse_uasset_with_linker
-from uasset_read.link.result import LinkerParseResult
+from uasset_read.models.result import ParseResult
 
 
 class TestLinkerLifecycle:
     """PackageLinker lifecycle with real samples."""
 
     def test_linker_created_for_blueprint(self, samples_dir: Path):
-        """A Blueprint sample produces a LinkerParseResult with linker."""
+        """A Blueprint sample produces a ParseResult with linker."""
         sample = samples_dir / "FirstPerson_BP_FirstPersonCharacter.uasset"
         result = parse_uasset_with_linker(str(sample), tolerant=True)
-        assert isinstance(result, LinkerParseResult)
+        assert isinstance(result, ParseResult)
         assert result.linker is not None
 
     def test_linker_created_for_material(self, samples_dir: Path):
-        """A Material sample produces a LinkerParseResult with linker."""
+        """A Material sample produces a ParseResult with linker."""
         sample = samples_dir / "FirstPerson_M_FlatCol.uasset"
         result = parse_uasset_with_linker(str(sample), tolerant=True)
-        assert isinstance(result, LinkerParseResult)
+        assert isinstance(result, ParseResult)
         assert result.linker is not None
 
     def test_all_objects_populated(self, samples_dir: Path):
-        """LinkerParseResult.all_objects contains import + export objects."""
+        """ParseResult.all_objects contains import + export objects."""
         sample = samples_dir / "FirstPerson_BP_FirstPersonCharacter.uasset"
         result = parse_uasset_with_linker(str(sample), tolerant=True)
         assert hasattr(result, "all_objects")
@@ -39,7 +39,7 @@ class TestLinkerLifecycle:
         assert len(result.all_objects) > 0
 
     def test_root_objects_populated(self, samples_dir: Path):
-        """LinkerParseResult.root_objects is populated."""
+        """ParseResult.root_objects is populated."""
         sample = samples_dir / "FirstPerson_BP_FirstPersonCharacter.uasset"
         result = parse_uasset_with_linker(str(sample), tolerant=True)
         assert hasattr(result, "root_objects")
@@ -52,7 +52,7 @@ class TestLinkerLifecycle:
         result = parse_uasset_with_linker(
             str(sample), tolerant=True, preload_all=True,
         )
-        assert isinstance(result, LinkerParseResult)
+        assert isinstance(result, ParseResult)
         assert result.linker is not None
 
     def test_linker_post_load_populates_graphs(self, samples_dir: Path):
@@ -87,7 +87,7 @@ class TestLinkerWithVariousTypes:
             pytest.skip(f"Sample not found: {filename}")
 
         result = parse_uasset_with_linker(str(sample), tolerant=True)
-        assert isinstance(result, LinkerParseResult)
+        assert isinstance(result, ParseResult)
         assert result.linker is not None
         assert result.is_success or len(result.errors) > 0
 
@@ -107,9 +107,9 @@ class TestLinkerErrorRecovery:
     """Linker error handling."""
 
     def test_nonexistent_file_returns_failed_result(self):
-        """Parsing a nonexistent file returns a failed LinkerParseResult."""
+        """Parsing a nonexistent file returns a failed ParseResult."""
         result = parse_uasset_with_linker("nonexistent_99999.uasset", tolerant=True)
-        assert isinstance(result, LinkerParseResult)
+        assert isinstance(result, ParseResult)
         assert result.status == "failed"
 
     def test_preload_all_tolerant(self, samples_dir: Path):

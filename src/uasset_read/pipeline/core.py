@@ -13,7 +13,6 @@ from pathlib import Path
 
 if TYPE_CHECKING:
     from uasset_read.memory_safety import MemoryPolicy
-    from uasset_read.link.result import LinkerParseResult
     from uasset_read.config import ParseConfig
 
 from uasset_read.memory_safety import ResourceBudget
@@ -318,7 +317,7 @@ def parse_uasset_with_linker(
     memory_policy: MemoryPolicy | None = None,
     config: ParseConfig | None = None,
     log_config: LogConfig | None = None,
-) -> "LinkerParseResult":
+) -> "ParseResult":
     """Parse entry point using PackageLinker (D-01, D-04).
 
     Args:
@@ -331,18 +330,16 @@ def parse_uasset_with_linker(
         config: Optional ParseConfig instance for centralized parameter management.
 
     Returns:
-        LinkerParseResult instance (containing object graph and post-processed data)
+        ParseResult instance (containing object graph and post-processed data)
     """
     # Lazy import of extras module (per #117 core/extras layering)
-    from uasset_read.link.result import LinkerParseResult
-
     # Initialize project logging if log_config is provided
     if log_config:
         configure_project_logging(**log_config.to_configure_kwargs())
     else:
         configure_project_logging()
 
-    result = LinkerParseResult()
+    result = ParseResult()
 
     def extra_linker_setup(linker, res):
         res.all_objects = linker._import_objects + linker._export_objects

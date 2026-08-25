@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from uasset_read.link.linker import PackageLinker
     from uasset_read.archive import FArchive
     from uasset_read.memory_safety import MemoryPolicy
-    from uasset_read.link.result import LinkerParseResult
     from uasset_read.models.result import ParseResult
 
 from uasset_read.exceptions import ParseError
@@ -285,7 +284,7 @@ def _extract_blueprint_graphs_and_metadata(
     name_map: List[str],
     import_map,
     export_map,
-    result: "Union[ParseResult, LinkerParseResult]",
+    result: "ParseResult",
     linker: Optional["PackageLinker"] = None,
     archive_factory=None,
 ):
@@ -382,7 +381,7 @@ def _run_kismet_and_dependency_analysis(
     name_map: List[str],
     import_map,
     export_map,
-    result: "Union[ParseResult, LinkerParseResult]",
+    result: "ParseResult",
     tolerant: bool = True,
     linker: Optional["PackageLinker"] = None,
     blueprint_metadata=None,
@@ -436,7 +435,7 @@ def _post_process(
     name_map: List[str],
     import_map,
     export_map,
-    result: "Union[ParseResult, LinkerParseResult]",
+    result: "ParseResult",
     tolerant: bool = True,
     linker: Optional["PackageLinker"] = None,
     include_parent_assets: bool = False,
@@ -446,7 +445,7 @@ def _post_process(
 ) -> None:
     """Shared post-processing: Blueprint metadata, graph extraction, dependency analysis.
 
-    Writes fields via hasattr guards, supporting both ParseResult and LinkerParseResult.
+    Writes fields via hasattr guards, supporting ParseResult.
     """
     blueprint_metadata = _extract_blueprint_graphs_and_metadata(
         archive, summary, name_map, import_map, export_map,
@@ -503,7 +502,7 @@ def _find_parent_asset_file(parent_class: str, roots: Sequence[Path]) -> Optiona
 
 def _resolve_parent_assets(
     path: str,
-    result: "Union[ParseResult, LinkerParseResult]",
+    result: "ParseResult",
     tolerant: bool,
     asset_roots: Optional[Sequence[str]],
     memory_policy: Optional["MemoryPolicy"] = None,

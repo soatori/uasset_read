@@ -48,67 +48,37 @@ class FallbackReason(str, Enum):
     SIZE_EXCEEDED = "size_exceeded"
 
 
-@dataclass
-class PropertyFallback:
+from uasset_read.models.properties import PropertyValue
+
+
+class PropertyFallback(PropertyValue):
     """Structured fallback for unknown/corrupted properties (replaces original None return)."""
-    name: str
-    type: str
-    size: int
-    raw_bytes: bytes = b""
-    reason: FallbackReason = FallbackReason.UNSUPPORTED_TYPE
-    array_index: int = 0
-    tag_data: Optional[Dict[str, Any]] = None
-    error_message: Optional[str] = None
-    error_context: Optional["ErrorContext"] = None
+
+    def __init__(
+        self,
+        name: str,
+        type: str,
+        size: int = 0,
+        raw_bytes: bytes = b"",
+        reason: FallbackReason = FallbackReason.UNSUPPORTED_TYPE,
+        array_index: int = 0,
+        tag_data: Optional[Dict[str, Any]] = None,
+        error_message: Optional[str] = None,
+        error_context: Optional["ErrorContext"] = None,
+        value: Any = None,
+    ):
+        super().__init__(name=name, type=type, value=value, array_index=array_index)
+        self.size = size
+        self.raw_bytes = raw_bytes
+        self.reason = reason
+        self.tag_data = tag_data
+        self.error_message = error_message
+        self.error_context = error_context
 
     @property
     def kind(self) -> str:
         return "unknown_property"
 
-    def to_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {
-            "kind": self.kind,
-            "name": self.name,
-            "type": self.type,
-            "size": self.size,
-            "array_index": self.array_index,
-            "reason": self.reason.value if isinstance(self.reason, Enum) else self.reason,
-        }
-        if self.raw_bytes:
-            raw = self.raw_bytes[:256]
-            d["raw_data"] = raw.hex()
-            if len(self.raw_bytes) > 256:
-                d["raw_data_truncated"] = True
-                d["raw_data_full_size"] = len(self.raw_bytes)
-        if self.tag_data:
-            d["tag_data"] = self.tag_data
-        if self.error_message:
-            d["error_message"] = self.error_message
-        if self.error_context is not None:
-            d["error_context"] = self._serialize_error_context()
-        return d
-
-    def _serialize_error_context(self) -> Dict[str, Any]:
-        """Serialize ErrorContext to a dictionary."""
-        ctx = self.error_context
-        d: Dict[str, Any] = {
-            "offset": ctx.offset,
-            "phase": ctx.phase,
-            "operation": ctx.operation,
-        }
-        if ctx.context_name:
-            d["context_name"] = ctx.context_name
-        if ctx.export_index is not None:
-            d["export_index"] = ctx.export_index
-        if ctx.expected_offset is not None:
-            d["expected_offset"] = ctx.expected_offset
-        if ctx.actual_offset is not None:
-            d["actual_offset"] = ctx.actual_offset
-        if ctx.field_name:
-            d["field_name"] = ctx.field_name
-        if ctx.version_info:
-            d["version_info"] = ctx.version_info
-        return d
 
 
 @dataclass

@@ -1,4 +1,4 @@
-"""Centralized status computation module — unified status derivation for ParseResult / LinkerParseResult / PackageIR.
+"""Centralized status computation module — unified status derivation for ParseResult / PackageIR.
 
 All statuses use success | partial | failed; legacy fail/error is prohibited.
 """
@@ -10,7 +10,6 @@ from .fallback import ExportParseStatus
 
 if TYPE_CHECKING:
     from uasset_read.models.result import ParseResult
-    from uasset_read.link.result import LinkerParseResult
 
 
 # Partial status set: auto-generated from ExportParseStatus.is_partial
@@ -25,8 +24,8 @@ FAILED_STATUSES: frozenset[str] = frozenset(
 )
 
 
-def _result_status(result: "ParseResult | LinkerParseResult") -> str:
-    """Unified status computation — shared by ParseResult / LinkerParseResult / PackageIR.
+def _result_status(result: "ParseResult") -> str:
+    """Unified status computation — shared by ParseResult / PackageIR.
 
     Status rules:
     - failed: all exports are failed, or no core data and is_success=False
@@ -36,7 +35,7 @@ def _result_status(result: "ParseResult | LinkerParseResult") -> str:
     Check order: export-level status > non-success branch > is_success=True branch
 
     Args:
-        result: ParseResult or LinkerParseResult instance
+        result: ParseResult instance
 
     Returns:
         "success" | "partial" | "failed"

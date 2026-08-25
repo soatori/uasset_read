@@ -6,7 +6,6 @@ All functions are exported via flat exports (per D-03).
 
 from uasset_read.blueprint.variable_extractor import (
     extract_blueprint_variables,
-    parse_component_transform,
     extract_blueprint_metadata,
     parse_property_flags_to_labels,
     read_blueprint_variable,
@@ -24,7 +23,6 @@ from uasset_read.blueprint.component_extractor import (
 
 __all__ = [
     "extract_blueprint_variables",
-    "parse_component_transform",
     "extract_blueprint_metadata",
     "parse_property_flags_to_labels",
     "read_blueprint_variable",

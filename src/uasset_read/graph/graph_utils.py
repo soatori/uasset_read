@@ -263,40 +263,6 @@ def _build_graph_indexes(
     return pin_lookup, node_lookup, pin_object_lookup
 
 
-# ============================================================================
-# Synthetic edge configuration (configurable game-specific mapping tables)
-# ============================================================================
-
-# Game-specific synthetic edges disabled by default (require explicit configuration to enable)
-# Configuration format:
-#   EXEC_PIN_MAPPING: { (source_class, action_name): { target_func: exec_pin_name } }
-#   PARAM_EDGE_MAPPING: { target_func: [(source_pin, target_pin)] }
-
-EXEC_PIN_MAPPING: Dict[str, Dict[str, str]] = {}
-"""EnhancedInputAction/Event -> exec pin name mapping.
-Default is empty (game-specific mapping not enabled)."""
-
-PARAM_EDGE_MAPPING: Dict[str, List[Tuple[str, str]]] = {}
-"""Function parameter edge mapping: { target_func: [(source_pin_name, target_pin_name)] }.
-Default is empty (game-specific mapping not enabled)."""
-
-
-def configure_synthetic_edges(
-    exec_mapping: Optional[Dict[str, Dict[str, str]]] = None,
-    param_mapping: Optional[Dict[str, List[Tuple[str, str]]]] = None,
-) -> None:
-    """Configure synthetic edge mapping tables.
-
-    Args:
-        exec_mapping: EnhancedInputAction -> exec pin name mapping
-        param_mapping: function parameter edge mapping
-    """
-    global EXEC_PIN_MAPPING, PARAM_EDGE_MAPPING
-    if exec_mapping is not None:
-        EXEC_PIN_MAPPING = exec_mapping
-    if param_mapping is not None:
-        PARAM_EDGE_MAPPING = param_mapping
-
 def _node_member_name(node: Optional[UEdGraphNode]) -> str:
     if node is None or not node.node_data:
         return ""
@@ -319,41 +285,20 @@ def _enhanced_input_action_name(node: Optional[UEdGraphNode]) -> str:
 
 
 def _choose_synthetic_source_pin(source_node: UEdGraphNode, target_node: UEdGraphNode, target_pin: UEdGraphPin) -> str:
-    """Infer a readable source pin name when target LinkedTo only retains owning_node but source pin is unresolved.
-
-    Uses configured EXEC_PIN_MAPPING for lookup instead of hardcoding game-specific values.
-    """
+    """Infer a readable source pin name when target LinkedTo only retains owning_node but source pin is unresolved."""
     target_category = target_pin.pin_type.pin_category if target_pin.pin_type else ""
-    target_func = _node_member_name(target_node)
 
     if target_category == "exec":
         if source_node.class_name == "K2Node_Event":
             return "then"
         if source_node.class_name == "K2Node_EnhancedInputAction":
-            action = _enhanced_input_action_name(source_node)
-            # Look up configured exec pin mapping
-            mapping_key = f"{source_node.class_name}:{action}"
-            if mapping_key in EXEC_PIN_MAPPING:
-                pin_map = EXEC_PIN_MAPPING[mapping_key]
-                if target_func in pin_map:
-                    return pin_map[target_func]
-            # Default behavior
             return "Triggered"
 
     return "Output"
 
 
 def _synthetic_parameter_edges(source_node: UEdGraphNode, target_node: UEdGraphNode) -> List[Tuple[str, str]]:
-    """Supplement semantic data edge names for parameter pins missing due to misalignment.
-
-    Uses configured PARAM_EDGE_MAPPING for lookup instead of hardcoding game-specific values.
-    """
-    target_func = _node_member_name(target_node)
-
-    # Look up configured parameter edge mapping
-    if target_func in PARAM_EDGE_MAPPING:
-        return PARAM_EDGE_MAPPING[target_func]
-
+    """Supplement semantic data edge names for parameter pins missing due to misalignment."""
     return []
 
 
