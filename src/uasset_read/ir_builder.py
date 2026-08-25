@@ -453,39 +453,44 @@ def _extract_editor_position(expr_export) -> dict | None:
 def _build_material_inputs(material_export, expr_guid_map: dict[int, str]) -> list:
     """Build MaterialInputIR list from Material export properties."""
     inputs = []
+    _MATERIAL_INPUT_TYPES = (
+        "MaterialInput",
+        "FMaterialInput",
+        "ColorMaterialInput",
+        "FColorMaterialInput",
+        "ScalarMaterialInput",
+        "FScalarMaterialInput",
+        "VectorMaterialInput",
+        "FVectorMaterialInput",
+        "Vector2MaterialInput",
+        "FVector2MaterialInput",
+    )
     for prop in getattr(material_export, "properties", None) or []:
         prop_name = getattr(prop, "name", "")
         prop_value = getattr(prop, "value", None)
+        struct_type = getattr(prop_value, "struct_type", None)
+        if struct_type is None and isinstance(prop_value, dict):
+            struct_type = prop_value.get("struct_type")
+        if struct_type not in _MATERIAL_INPUT_TYPES:
+            continue
+        fields = _get_fields(prop_value)
         if isinstance(prop_value, dict):
-            struct_type = prop_value.get("struct_type", "")
-            if struct_type in (
-                "MaterialInput",
-                "FMaterialInput",
-                "ColorMaterialInput",
-                "FColorMaterialInput",
-                "ScalarMaterialInput",
-                "FScalarMaterialInput",
-                "VectorMaterialInput",
-                "FVectorMaterialInput",
-                "Vector2MaterialInput",
-                "FVector2MaterialInput",
-            ):
-                fields = prop_value.get("fields", {})
-                if isinstance(fields, dict):
-                    expr_idx = fields.get("expression_index", 0)
-                    source_guid = expr_guid_map.get(expr_idx) if expr_idx else None
-                    inputs.append(
-                        MaterialInputIR(
-                            input_name=prop_name,
-                            source_expression_guid=source_guid,
-                            source_output_index=fields.get("output_index", 0),
-                            mask=fields.get("mask", 0),
-                            mask_r=fields.get("mask_r", 0),
-                            mask_g=fields.get("mask_g", 0),
-                            mask_b=fields.get("mask_b", 0),
-                            mask_a=fields.get("mask_a", 0),
-                        )
-                    )
+            fields = prop_value.get("fields", {})
+        if isinstance(fields, dict) and fields:
+            expr_idx = fields.get("expression_index", 0)
+            source_guid = expr_guid_map.get(expr_idx) if expr_idx else None
+            inputs.append(
+                MaterialInputIR(
+                    input_name=prop_name,
+                    source_expression_guid=source_guid,
+                    source_output_index=fields.get("output_index", 0),
+                    mask=fields.get("mask", 0),
+                    mask_r=fields.get("mask_r", 0),
+                    mask_g=fields.get("mask_g", 0),
+                    mask_b=fields.get("mask_b", 0),
+                    mask_a=fields.get("mask_a", 0),
+                )
+            )
     return inputs
 
 
