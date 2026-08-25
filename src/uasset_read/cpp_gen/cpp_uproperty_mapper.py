@@ -148,51 +148,6 @@ def cpf_flags_to_uproperty_marks(cpf_flags: int, is_component: bool = False) -> 
 
 
 # ============================================================================
-# Reverse mapping: UPROPERTY specifier -> CPF flag (for testing and debugging)
-# ============================================================================
-
-_UPROPERTY_TO_CPF: dict[str, int] = {
-    "EditAnywhere": CPF_Edit,
-    "EditInstanceOnly": CPF_Edit,
-    "EditDefaultsOnly": CPF_Edit,
-    "BlueprintReadOnly": CPF_BlueprintReadOnly,
-    "BlueprintReadWrite": CPF_BlueprintVisible,
-    "Instanced": CPF_InstancedReference,
-    "BlueprintAssignable": CPF_BlueprintAssignable,
-    "BlueprintCallable": CPF_BlueprintCallable,
-    "Replicated": CPF_Net,
-    "Net": CPF_Net,
-    "Transient": CPF_Transient,
-    "DuplicateTransient": CPF_DuplicateTransient,
-    "Config": CPF_Config,
-    "SaveGame": CPF_SaveGame,
-    "NoClear": CPF_NoClear,
-    "ExposeOnSpawn": CPF_ExposeOnSpawn,
-    "Interp": CPF_Interp,
-    "RepNotify": CPF_RepNotify,
-    "ReferenceOnly": 0,
-    "Deprecated": CPF_Deprecated,
-    "AdvancedDisplay": CPF_AdvancedDisplay,
-    "Protected": CPF_Protected,
-}
-
-
-def uproperty_mark_to_cpf(mark: str) -> int:
-    """
-    Convert a single UPROPERTY specifier to its corresponding CPF flag.
-
-    For testing and debugging purposes.
-
-    Args:
-        mark: UPROPERTY specifier string
-
-    Returns:
-        Corresponding CPF flag value, or 0 if unknown
-    """
-    return _UPROPERTY_TO_CPF.get(mark, 0)
-
-
-# ============================================================================
 # Export list
 # ============================================================================
 

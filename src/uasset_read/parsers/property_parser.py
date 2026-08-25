@@ -49,24 +49,54 @@ _MAX_RECOVERY_SCAN = 2048
 
 # #428: Known property type name set (used to filter candidates during recovery scan)
 _KNOWN_PROPERTY_TYPES = {
-    "BoolProperty", "IntProperty", "Int64Property", "Int16Property", "Int8Property",
-    "ByteProperty", "UInt16Property", "UInt32Property", "UInt64Property",
-    "FloatProperty", "DoubleProperty",
-    "StrProperty", "NameProperty", "ObjectProperty", "SoftObjectProperty",
-    "ArrayProperty", "StructProperty", "MapProperty", "SetProperty",
-    "EnumProperty", "TextProperty", "DelegateProperty",
-    "Utf8StrProperty", "WeakObjectProperty", "LazyObjectProperty",
-    "ClassProperty", "SoftClassProperty", "AssetObjectProperty", "AssetClassProperty",
-    "MulticastDelegateProperty", "MulticastInlineDelegateProperty",
-    "MulticastSparseDelegateProperty", "InterfaceProperty",
-    "FieldPathProperty", "OptionalProperty",
-    "VerseStringProperty", "VerseClassProperty", "VerseFunctionProperty",
-    "VerseDynamicProperty", "VerseCellProperty", "VerseValueProperty",
-    "AnsiStrProperty", "GuidProperty",
+    "BoolProperty",
+    "IntProperty",
+    "Int64Property",
+    "Int16Property",
+    "Int8Property",
+    "ByteProperty",
+    "UInt16Property",
+    "UInt32Property",
+    "UInt64Property",
+    "FloatProperty",
+    "DoubleProperty",
+    "StrProperty",
+    "NameProperty",
+    "ObjectProperty",
+    "SoftObjectProperty",
+    "ArrayProperty",
+    "StructProperty",
+    "MapProperty",
+    "SetProperty",
+    "EnumProperty",
+    "TextProperty",
+    "DelegateProperty",
+    "Utf8StrProperty",
+    "WeakObjectProperty",
+    "LazyObjectProperty",
+    "ClassProperty",
+    "SoftClassProperty",
+    "AssetObjectProperty",
+    "AssetClassProperty",
+    "MulticastDelegateProperty",
+    "MulticastInlineDelegateProperty",
+    "MulticastSparseDelegateProperty",
+    "InterfaceProperty",
+    "FieldPathProperty",
+    "OptionalProperty",
+    "VerseStringProperty",
+    "VerseClassProperty",
+    "VerseFunctionProperty",
+    "VerseDynamicProperty",
+    "VerseCellProperty",
+    "VerseValueProperty",
+    "AnsiStrProperty",
+    "GuidProperty",
 }
 
 # Lazy import + cache: avoid circular dependency + avoid rebuilding dict per property parse
 _TYPE_HANDLER_MAP: dict | None = None
+
 
 def _get_parse_functions():
     """Get property type -> parse function mapping（module-level cache, not rebuilt after first call）。"""
@@ -74,23 +104,46 @@ def _get_parse_functions():
     if _TYPE_HANDLER_MAP is not None:
         return _TYPE_HANDLER_MAP
     from uasset_read.parsers.property_types import (
-        parse_bool_property, parse_int_property, parse_float_property,
-        parse_str_property, parse_name_property, parse_object_property,
-        parse_soft_object_property, parse_array_property, parse_struct_property,
-        parse_map_property, parse_set_property, parse_enum_property,
-        parse_text_property, parse_delegate_property,
-        parse_uint16_property, parse_uint32_property, parse_uint64_property,
-        parse_utf8_str_property, parse_weak_object_property,
-        parse_lazy_object_property, parse_class_property,
-        parse_soft_class_property, parse_asset_object_property,
-        parse_multicast_delegate_property, parse_multicast_inline_delegate_property,
+        parse_bool_property,
+        parse_int_property,
+        parse_float_property,
+        parse_str_property,
+        parse_name_property,
+        parse_object_property,
+        parse_soft_object_property,
+        parse_array_property,
+        parse_struct_property,
+        parse_map_property,
+        parse_set_property,
+        parse_enum_property,
+        parse_text_property,
+        parse_delegate_property,
+        parse_uint16_property,
+        parse_uint32_property,
+        parse_uint64_property,
+        parse_utf8_str_property,
+        parse_weak_object_property,
+        parse_lazy_object_property,
+        parse_class_property,
+        parse_soft_class_property,
+        parse_asset_object_property,
+        parse_multicast_delegate_property,
+        parse_multicast_inline_delegate_property,
         parse_multicast_sparse_delegate_property,
-        parse_interface_property, parse_field_path_property, parse_optional_property,
-        parse_verse_string_property, parse_verse_class_property,
-        parse_verse_function_property, parse_verse_dynamic_property,
-        parse_ansi_str_property, parse_verse_cell_property, parse_verse_value_property,
-        parse_double_property, parse_guid_property,
+        parse_interface_property,
+        parse_field_path_property,
+        parse_optional_property,
+        parse_verse_string_property,
+        parse_verse_class_property,
+        parse_verse_function_property,
+        parse_verse_dynamic_property,
+        parse_ansi_str_property,
+        parse_verse_cell_property,
+        parse_verse_value_property,
+        parse_double_property,
+        parse_guid_property,
     )
+
     _TYPE_HANDLER_MAP = {
         "BoolProperty": parse_bool_property,
         "IntProperty": parse_int_property,
@@ -138,6 +191,7 @@ def _get_parse_functions():
     }
     return _TYPE_HANDLER_MAP
 
+
 def _skip_type_tree_nodes(
     archive,
     limit: int,
@@ -170,18 +224,19 @@ def _skip_type_tree_nodes(
         node_raw = archive.read(8)
         if len(node_raw) < 8:
             return False
-        node_idx, _ = _struct.unpack('<II', node_raw)
+        node_idx, _ = _struct.unpack("<II", node_raw)
         if not (0 <= node_idx < map_len):
             return False
         # read inner_count
         ic_raw = archive.read(4)
         if len(ic_raw) < 4:
             return False
-        inner_count = _struct.unpack('<i', ic_raw)[0]
+        inner_count = _struct.unpack("<i", ic_raw)[0]
         if inner_count < 0 or inner_count > 100:
             return False
         pending = pending - 1 + inner_count
     return pending == 0
+
 
 def _try_recover_property_tag(
     archive,
@@ -212,7 +267,7 @@ def _try_recover_property_tag(
     # #341: Do NOT limit scan by property_end — when the preceding property's size
     # was miscalculated, property_end itself may be wrong.  Limit only by the
     # scan budget and actual file size to maximise recovery chance.
-    file_size = getattr(archive, '_file_size', None)
+    file_size = getattr(archive, "_file_size", None)
     if isinstance(file_size, int):
         limit = min(limit, file_size)
 
@@ -229,7 +284,8 @@ def _try_recover_property_tag(
     map_len = len(name_map)
     # Get UE5 version number to determine PropertyTag type field format
     from uasset_read.constants import PROPERTY_TAG_COMPLETE_TYPE_NAME
-    file_version_ue5 = getattr(archive, '_file_version_ue5', PROPERTY_TAG_COMPLETE_TYPE_NAME)
+
+    file_version_ue5 = getattr(archive, "_file_version_ue5", PROPERTY_TAG_COMPLETE_TYPE_NAME)
 
     # #341: Use file_size for size validation (not property_end) to avoid rejecting
     # valid candidates whose size spans beyond property_end but within file.
@@ -244,7 +300,7 @@ def _try_recover_property_tag(
             raw = archive.read(8)
             if len(raw) < 8:
                 continue
-            index, number = _struct.unpack('<II', raw)
+            index, number = _struct.unpack("<II", raw)
             # Verify index is within name_map range
             if not (0 <= index < map_len):
                 continue
@@ -268,7 +324,7 @@ def _try_recover_property_tag(
                 type_raw = archive.read(8)  # already seeked to candidate+8 (after name)
                 if len(type_raw) < 8:
                     continue
-                type_idx, _ = _struct.unpack('<II', type_raw)
+                type_idx, _ = _struct.unpack("<II", type_raw)
                 if not (0 <= type_idx < map_len):
                     continue
                 type_name = name_map[type_idx]
@@ -282,7 +338,7 @@ def _try_recover_property_tag(
                 size_raw = archive.read(4)
                 if len(size_raw) < 4:
                     continue
-                tag_size = _struct.unpack('<i', size_raw)[0]
+                tag_size = _struct.unpack("<i", size_raw)[0]
                 size_remaining = size_boundary - (size_pos + 4)
                 if 0 <= tag_size <= size_remaining:
                     size_valid = True
@@ -293,7 +349,7 @@ def _try_recover_property_tag(
                 first_node_raw = archive.read(8)
                 if len(first_node_raw) < 8:
                     continue
-                first_idx, first_ic = _struct.unpack('<II', first_node_raw)
+                first_idx, first_ic = _struct.unpack("<II", first_node_raw)
                 if not (0 <= first_idx < map_len):
                     continue
                 first_type_name = name_map[first_idx]
@@ -311,7 +367,7 @@ def _try_recover_property_tag(
                 size_raw = archive.read(4)
                 if len(size_raw) < 4:
                     continue
-                tag_size = _struct.unpack('<i', size_raw)[0]
+                tag_size = _struct.unpack("<i", size_raw)[0]
                 size_remaining = size_boundary - (size_pos + 4)
                 if 0 <= tag_size <= size_remaining:
                     size_valid = True
@@ -325,6 +381,7 @@ def _try_recover_property_tag(
 
     archive.seek(current)  # restore original position
     return False
+
 
 def _try_asset_type_handler(
     export: ObjectExport,
@@ -399,7 +456,9 @@ def _try_asset_type_handler(
                 setattr(export, "parse_status", validate_parse_status("success"))
             logger.debug(
                 "AssetTypeHandler '%s' extracted data for '%s' (status=%s)",
-                handler.handler_name, export.object_name, handler_status,
+                handler.handler_name,
+                export.object_name,
+                handler_status,
             )
         elif not result.success:
             # Handler reported a recoverable failure via HandlerResult.
@@ -409,16 +468,21 @@ def _try_asset_type_handler(
                 setattr(export, "handler_error", result.error_message)
             logger.warning(
                 "AssetTypeHandler '%s' failed for '%s' (%s): %s",
-                handler.handler_name, export.object_name,
-                class_name, result.error_message,
+                handler.handler_name,
+                export.object_name,
+                class_name,
+                result.error_message,
             )
     except (KeyError, TypeError, ValueError) as e:
         logger.warning(
             "AssetTypeHandler failed for '%s' (%s): %s",
-            export.object_name, class_name, e,
+            export.object_name,
+            class_name,
+            e,
         )
     finally:
         archive.seek(saved_pos)
+
 
 def parse_property_value(
     tag: PropertyTag,
@@ -458,6 +522,7 @@ def parse_property_value(
     if getattr(tag, "serialize_type", "Property") == "BinaryOrNative":
         # Try to use a known type parser
         from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
+
         handler = BINARY_OR_NATIVE_HANDLERS.get(tag.type)
         if handler is not None:
             try:
@@ -495,6 +560,7 @@ def parse_property_value(
         # D-05: Unknown type -- return structured PropertyFallback instead of None
         # First try custom property handling (0xFD/0xFE)
         from uasset_read.parsers.custom_properties import CUSTOM_PROPERTY_HANDLERS, handle_custom_property
+
         type_parts = getattr(tag, "type_parts", None)
         if type_parts:
             first_node_name = type_parts[0][0] if type_parts else ""
@@ -502,13 +568,17 @@ def parse_property_value(
             custom_id = custom_id_map.get(first_node_name)
             if custom_id is not None:
                 try:
-                    return handle_custom_property(custom_id, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
+                    return handle_custom_property(
+                        custom_id, tag, archive, name_map, mappings=mappings, game=game, summary=summary
+                    )
                 except (_struct.error, OSError, ValueError) as e:
                     logger.debug("Custom property handler (0x%02X) failed for %s: %s", custom_id, tag.type, e)
         game_key = game.lower() if game else None
         if (game_key, tag.type) in CUSTOM_PROPERTY_HANDLERS or (None, tag.type) in CUSTOM_PROPERTY_HANDLERS:
             try:
-                return handle_custom_property(0xFF, tag, archive, name_map, mappings=mappings, game=game, summary=summary)
+                return handle_custom_property(
+                    0xFF, tag, archive, name_map, mappings=mappings, game=game, summary=summary
+                )
             except (_struct.error, OSError, ValueError) as e:
                 logger.debug("Game-specific custom property handler failed for %s (game=%s): %s", tag.type, game, e)
 
@@ -529,25 +599,48 @@ def parse_property_value(
         # Special case: ByteProperty with enum backing needs name_map (reads FName)
         if tag.type == "ByteProperty" and tag.enum_type is not None:
             return handler(tag, archive, name_map)
-        elif tag.type in ("BoolProperty", "IntProperty", "Int64Property", "Int16Property",
-                         "Int8Property", "ByteProperty", "UInt16Property", "UInt32Property",
-                         "UInt64Property", "FloatProperty", "DoubleProperty",
-                         "StrProperty", "ObjectProperty", "TextProperty",
-                         "Utf8StrProperty", "WeakObjectProperty", "LazyObjectProperty",
-                         "ClassProperty", "AssetObjectProperty", "AssetClassProperty",
-                         "InterfaceProperty",
-                         "VerseStringProperty", "VerseClassProperty",
-                         "VerseFunctionProperty", "VerseDynamicProperty",
-                         "AnsiStrProperty", "GuidProperty"):
+        elif tag.type in (
+            "BoolProperty",
+            "IntProperty",
+            "Int64Property",
+            "Int16Property",
+            "Int8Property",
+            "ByteProperty",
+            "UInt16Property",
+            "UInt32Property",
+            "UInt64Property",
+            "FloatProperty",
+            "DoubleProperty",
+            "StrProperty",
+            "ObjectProperty",
+            "TextProperty",
+            "Utf8StrProperty",
+            "WeakObjectProperty",
+            "LazyObjectProperty",
+            "ClassProperty",
+            "AssetObjectProperty",
+            "AssetClassProperty",
+            "InterfaceProperty",
+            "VerseStringProperty",
+            "VerseClassProperty",
+            "VerseFunctionProperty",
+            "VerseDynamicProperty",
+            "AnsiStrProperty",
+            "GuidProperty",
+        ):
             return handler(tag, archive)
-        elif tag.type in ("NameProperty", "DelegateProperty",
-                         "MulticastDelegateProperty", "MulticastInlineDelegateProperty",
-                         "MulticastSparseDelegateProperty",
-                         "FieldPathProperty"):
+        elif tag.type in (
+            "NameProperty",
+            "DelegateProperty",
+            "MulticastDelegateProperty",
+            "MulticastInlineDelegateProperty",
+            "MulticastSparseDelegateProperty",
+            "FieldPathProperty",
+        ):
             return handler(tag, archive, name_map)
         elif tag.type in ("SoftObjectProperty", "SoftClassProperty"):
             # These need soft_object_path_list for UE5.7+ index-based resolution
-            soft_path_list = getattr(summary, '_soft_object_path_list', None) if summary is not None else None
+            soft_path_list = getattr(summary, "_soft_object_path_list", None) if summary is not None else None
             return handler(tag, archive, name_map, soft_path_list)
         elif tag.type in ("ArrayProperty",):
             return handler(tag, archive, name_map, export_map, summary, depth)
@@ -574,9 +667,11 @@ def parse_property_value(
             error_message=str(e),
         )
 
+
 # ---------------------------------------------------------------------------
 # parse_properties_from_export sub-functions
 # ---------------------------------------------------------------------------
+
 
 def _handle_serialization_control(
     archive: "FArchive",
@@ -614,10 +709,11 @@ def _handle_serialization_control(
         )
         # Record diagnostic info
         archive._record_diagnostic(
-            module="property_parser", field="serialization_control",
+            module="property_parser",
+            field="serialization_control",
             source="parse_properties_from_export",
             target_offset=control_offset,
-            file_size=getattr(archive, '_file_size', 0),
+            file_size=getattr(archive, "_file_size", 0),
             error=f"SerializationControlExtensions unknown bits: 0x{unknown_bits:02X} ({', '.join(bit_names)})",
         )
         # Store in export transforms, for IR/JSON output
@@ -663,8 +759,15 @@ def _handle_unversioned_properties(
         mapped = getattr(mappings, "mappings", mappings)
         if hasattr(mapped, "get_struct") and mapped.get_struct(struct_name) is not None:
             return _parse_unversioned_properties_from_mapping(
-                export, archive, summary, name_map, export_map,
-                mapped, struct_name, property_end, tolerant=tolerant,
+                export,
+                archive,
+                summary,
+                name_map,
+                export_map,
+                mapped,
+                struct_name,
+                property_end,
+                tolerant=tolerant,
             )
 
     # Unversioned package with no reliable mapping -> output opaque block, do not guess fields
@@ -675,18 +778,21 @@ def _handle_unversioned_properties(
         raw_bytes = b""
     logger.debug(
         "Unversioned export '%s' without mappings, returning opaque block (%d bytes)",
-        export.object_name, len(raw_bytes),
+        export.object_name,
+        len(raw_bytes),
     )
     # Mark export status as opaque_unversioned, not as a full success in the final report
     setattr(export, "parse_status", validate_parse_status("opaque_unversioned"))
     setattr(export, "fallback_reason", "missing_mapping")
-    return [PropertyFallback(
-        name=export.object_name,
-        type="UnversionedOpaque",
-        size=len(raw_bytes),
-        raw_bytes=raw_bytes,
-        reason=FallbackReason.MISSING_MAPPING,
-    )]
+    return [
+        PropertyFallback(
+            name=export.object_name,
+            type="UnversionedOpaque",
+            size=len(raw_bytes),
+            raw_bytes=raw_bytes,
+            reason=FallbackReason.MISSING_MAPPING,
+        )
+    ]
 
 
 def _resolve_object_property(
@@ -715,6 +821,7 @@ def _resolve_object_property(
             }
     elif import_map is not None:
         from uasset_read.serializers.object_resources import resolve_package_index_to_reference
+
         pkg_idx = PackageIndex(value)
         ref = resolve_package_index_to_reference(pkg_idx, import_map, export_map, name_map)
         if ref and ref.get("source") == "import_map":
@@ -741,28 +848,33 @@ def _handle_property_parse_error(
         if target_pos > start_pos:
             archive.seek(target_pos)
         else:
-            archive.seek(min(start_pos + 1, getattr(archive, '_file_size', start_pos + 1)))
+            archive.seek(min(start_pos + 1, getattr(archive, "_file_size", start_pos + 1)))
     else:
         # start_pos unknown (tag read failed early), try smart recovery
         recover_start = archive.tell()
         recovered = _try_recover_property_tag(
-            archive, name_map, max_scan=_MAX_RECOVERY_SCAN, property_end=property_end,
+            archive,
+            name_map,
+            max_scan=_MAX_RECOVERY_SCAN,
+            property_end=property_end,
         )
         if recovered:
             scan_distance = archive.tell() - recover_start
             logger.debug(
                 "PropertyTag early corruption, recovered to a potentially valid position (offset=%d, scan distance=%d)",
-                archive.tell(), scan_distance,
+                archive.tell(),
+                scan_distance,
             )
         else:
             # Recovery failed, advance 1 byte to prevent infinite loop
             next_pos = archive.tell() + 1
-            file_size = getattr(archive, '_file_size', None)
+            file_size = getattr(archive, "_file_size", None)
             if isinstance(file_size, int):
                 next_pos = min(next_pos, file_size)
             logger.debug(
                 "PropertyTag early corruption, cannot recover (scanned %d bytes), skip 1 byte (offset=%d)",
-                _MAX_RECOVERY_SCAN, archive.tell(),
+                _MAX_RECOVERY_SCAN,
+                archive.tell(),
             )
             archive.seek(next_pos)
 
@@ -811,7 +923,7 @@ def _read_property_loop(
                     phase="properties",
                     operation="property_count_check",
                     context_name=str(export.object_name),
-                )
+                ),
             )
         property_count += 1
 
@@ -824,7 +936,7 @@ def _read_property_loop(
             if current_pos >= property_end:
                 break
             # #276: EOF check — prevent infinite retry at EOF when archive data is insufficient
-            file_size = getattr(archive, '_file_size', None)
+            file_size = getattr(archive, "_file_size", None)
             if isinstance(file_size, int) and current_pos >= file_size:
                 break
 
@@ -832,12 +944,15 @@ def _read_property_loop(
             if mappings is not None and import_map is not None:
                 try:
                     from uasset_read.serializers.object_resources import resolve_class_name
+
                     struct_name = resolve_class_name(export.class_index, import_map, export_map)
                 except (KeyError, AttributeError, IndexError) as e:
                     logger.debug("Failed to resolve class name in property loop: %s, using fallback", e)
                     struct_name = export.object_name
             try:
-                tag = read_property_tag(archive, name_map, tolerant=tolerant, mappings=mappings, struct_name=struct_name)
+                tag = read_property_tag(
+                    archive, name_map, tolerant=tolerant, mappings=mappings, struct_name=struct_name
+                )
             except ParseError as e:
                 # #341: PropertyTag read failed — try recovery scan for next valid tag
                 remaining = property_end - archive.tell()
@@ -847,26 +962,32 @@ def _read_property_loop(
                     raise
                 # Try smart recovery: scan forward for next valid PropertyTag boundary
                 recovered = _try_recover_property_tag(
-                    archive, name_map, max_scan=_MAX_RECOVERY_SCAN, property_end=property_end,
+                    archive,
+                    name_map,
+                    max_scan=_MAX_RECOVERY_SCAN,
+                    property_end=property_end,
                 )
                 if recovered:
                     logger.debug(
                         "#341: PropertyTag read failed at offset %d, recovered to %d",
-                        current_pos, archive.tell(),
+                        current_pos,
+                        archive.tell(),
                     )
                     # Record a PropertyFallback for the corrupted tag
-                    properties.append(PropertyValue(
-                        name="Corrupted",
-                        type="Warning",
-                        value=PropertyFallback(
+                    properties.append(
+                        PropertyValue(
                             name="Corrupted",
-                            type="Unknown",
-                            size=0,
-                            raw_bytes=b"",
-                            reason=FallbackReason.PARSE_ERROR,
-                            error_message=f"PropertyTag read failed: {e}",
-                        ),
-                    ))
+                            type="Warning",
+                            value=PropertyFallback(
+                                name="Corrupted",
+                                type="Unknown",
+                                size=0,
+                                raw_bytes=b"",
+                                reason=FallbackReason.PARSE_ERROR,
+                                error_message=f"PropertyTag read failed: {e}",
+                            ),
+                        )
+                    )
                     continue
                 # Recovery failed — break to avoid infinite loop
                 break
@@ -888,42 +1009,50 @@ def _read_property_loop(
                 if recovered_from is not None:
                     archive.seek(recovered_from)
                     recovered = _try_recover_property_tag(
-                        archive, name_map, max_scan=_MAX_RECOVERY_SCAN, property_end=property_end,
+                        archive,
+                        name_map,
+                        max_scan=_MAX_RECOVERY_SCAN,
+                        property_end=property_end,
                     )
                     if recovered:
                         logger.debug(
                             "size_exceeded: recovered from %d to a potentially valid position (offset=%d)",
-                            recovered_from, archive.tell(),
+                            recovered_from,
+                            archive.tell(),
                         )
                         # Record a PropertyFallback for the skipped corrupted tag
-                        properties.append(PropertyValue(
-                            name=tag.name,
-                            type="Warning",
-                            value=PropertyFallback(
+                        properties.append(
+                            PropertyValue(
                                 name=tag.name,
-                                type=tag.type,
-                                size=tag.size,
-                                raw_bytes=b"",
-                                reason=FallbackReason.SIZE_EXCEEDED,
-                                error_message=f"Size {tag.size} exceeds remaining bytes; "
-                                              f"skipped to next valid PropertyTag",
-                            ),
-                        ))
+                                type="Warning",
+                                value=PropertyFallback(
+                                    name=tag.name,
+                                    type=tag.type,
+                                    size=tag.size,
+                                    raw_bytes=b"",
+                                    reason=FallbackReason.SIZE_EXCEEDED,
+                                    error_message=f"Size {tag.size} exceeds remaining bytes; "
+                                    f"skipped to next valid PropertyTag",
+                                ),
+                            )
+                        )
                         continue
                 # Recovery failed, create PropertyFallback
-                properties.append(PropertyValue(
-                    name=tag.name,
-                    type=tag.type,
-                    value=PropertyFallback(
+                properties.append(
+                    PropertyValue(
                         name=tag.name,
                         type=tag.type,
-                        size=tag.size,
-                        raw_bytes=b"",
-                        reason=FallbackReason.SIZE_EXCEEDED,
-                        error_message=f"Size {tag.size} exceeds remaining bytes",
-                    ),
-                    array_index=tag.array_index,
-                ))
+                        value=PropertyFallback(
+                            name=tag.name,
+                            type=tag.type,
+                            size=tag.size,
+                            raw_bytes=b"",
+                            reason=FallbackReason.SIZE_EXCEEDED,
+                            error_message=f"Size {tag.size} exceeds remaining bytes",
+                        ),
+                        array_index=tag.array_index,
+                    )
+                )
                 setattr(export, "parse_status", validate_parse_status("partial"))
                 break
 
@@ -937,7 +1066,7 @@ def _read_property_loop(
                         phase="properties",
                         operation="property_tag_size_check",
                         context_name=str(tag.name),
-                    )
+                    ),
                 )
 
             # Dispatch to type-specific parser
@@ -962,12 +1091,7 @@ def _read_property_loop(
                     error_message="Parser returned None (unsupported or missing handler)",
                 )
 
-            properties.append(PropertyValue(
-                name=tag.name,
-                type=tag.type,
-                value=value,
-                array_index=tag.array_index
-            ))
+            properties.append(PropertyValue(name=tag.name, type=tag.type, value=value, array_index=tag.array_index))
 
             # ObjectProperty enhancement: prefer linker resolution, fall back to import_map resolution
             resolved = _resolve_object_property(tag, value, linker, import_map, export_map, name_map)
@@ -978,9 +1102,16 @@ def _read_property_loop(
             # #276: strict mode: propagate directly, no retry
             if not tolerant:
                 raise
-            properties.append(_handle_property_parse_error(
-                e, tag, start_pos, archive, name_map, property_end,
-            ))
+            properties.append(
+                _handle_property_parse_error(
+                    e,
+                    tag,
+                    start_pos,
+                    archive,
+                    name_map,
+                    property_end,
+                )
+            )
 
     return properties
 
@@ -988,6 +1119,7 @@ def _read_property_loop(
 # ---------------------------------------------------------------------------
 # parse_properties_from_export -- main entry point
 # ---------------------------------------------------------------------------
+
 
 def parse_properties_from_export(
     export: ObjectExport,
@@ -1038,11 +1170,13 @@ def parse_properties_from_export(
         should_skip_export_for_tolerant_parsing,
         skip_export_payload,
     )
+
     # Parse export class name for skip check
     skip_class_name = None
     if import_map is not None:
         try:
             from uasset_read.serializers.object_resources import resolve_class_name
+
             skip_class_name = resolve_class_name(export.class_index, import_map, export_map)
         except (KeyError, AttributeError, IndexError) as e:
             logger.debug("Failed to resolve class name for export: %s", e)
@@ -1070,38 +1204,64 @@ def parse_properties_from_export(
 
     # Unversioned property handling (including opaque fallback)
     unversioned_result = _handle_unversioned_properties(
-        export, archive, summary, name_map, export_map,
-        mappings, import_map, property_end, tolerant,
+        export,
+        archive,
+        summary,
+        name_map,
+        export_map,
+        mappings,
+        import_map,
+        property_end,
+        tolerant,
     )
     if unversioned_result is not None:
         properties = unversioned_result
     else:
         # Main property reading loop
         properties = _read_property_loop(
-            export, archive, summary, name_map, export_map,
-            import_map, linker, mappings, property_end, tolerant,
+            export,
+            archive,
+            summary,
+            name_map,
+            export_map,
+            import_map,
+            linker,
+            mappings,
+            property_end,
+            tolerant,
             skip_class_name=skip_class_name,
         )
 
     # Asset type handler dispatch: called after property parsing
     if skip_class_name is not None:
         _try_asset_type_handler(
-            export, archive, name_map, skip_class_name,
-            parsed_properties=properties, property_end=property_end,
-            export_map=export_map, import_map=import_map,
-            summary=summary, linker=linker,
+            export,
+            archive,
+            name_map,
+            skip_class_name,
+            parsed_properties=properties,
+            property_end=property_end,
+            export_map=export_map,
+            import_map=import_map,
+            summary=summary,
+            linker=linker,
         )
 
     return properties
 
-def _resolve_mapping_struct_name(export: ObjectExport, import_map: Optional[List[ObjectImport]], export_map: List[Any]) -> str:
+
+def _resolve_mapping_struct_name(
+    export: ObjectExport, import_map: Optional[List[ObjectImport]], export_map: List[Any]
+) -> str:
     if import_map is not None:
         try:
             from uasset_read.serializers.object_resources import resolve_class_name
+
             return resolve_class_name(export.class_index, import_map, export_map)
         except (KeyError, AttributeError, IndexError) as e:
             logger.debug("Failed to resolve mapping struct name: %s", e)
     return export.object_name
+
 
 def _parse_unversioned_properties_from_mapping(
     export: ObjectExport,
@@ -1173,24 +1333,27 @@ def _parse_unversioned_properties_from_mapping(
         remaining = property_end - archive.tell()
         # #276: Safely read tail, prevent property_end from exceeding actual archive size
         current_pos = archive.tell()
-        file_size = getattr(archive, '_file_size', None)
+        file_size = getattr(archive, "_file_size", None)
         if isinstance(file_size, int):
             tail_size = max(0, min(remaining, file_size - current_pos))
         else:
             tail_size = remaining
         tail = archive.read(tail_size) if tail_size > 0 else b""
         if tail:
-            out.append(PropertyValue(
-                name="_unversioned_tail",
-                type="Opaque",
-                value={
-                    "parse_status": "opaque",
-                    "raw_offset": property_end - len(tail),
-                    "raw_size": len(tail),
-                    "raw_data": tail,
-                },
-            ))
+            out.append(
+                PropertyValue(
+                    name="_unversioned_tail",
+                    type="Opaque",
+                    value={
+                        "parse_status": "opaque",
+                        "raw_offset": property_end - len(tail),
+                        "raw_size": len(tail),
+                        "raw_data": tail,
+                    },
+                )
+            )
     return out
+
 
 def _try_read_unversioned_header(
     archive: FArchive,
@@ -1249,14 +1412,22 @@ def _try_read_unversioned_header(
         archive.seek(start)
         return None
 
+
 def _unversioned_zero_value(prop_type: Any) -> Any:
     type_name = getattr(prop_type, "type", prop_type)
     if type_name in {"BoolProperty"}:
         return False
     if type_name in {
-        "IntProperty", "UInt32Property", "Int64Property", "UInt64Property",
-        "Int16Property", "UInt16Property", "Int8Property", "ByteProperty",
-        "ObjectProperty", "ClassProperty",
+        "IntProperty",
+        "UInt32Property",
+        "Int64Property",
+        "UInt64Property",
+        "Int16Property",
+        "UInt16Property",
+        "Int8Property",
+        "ByteProperty",
+        "ObjectProperty",
+        "ClassProperty",
     }:
         return 0
     if type_name in {"FloatProperty", "DoubleProperty"}:
@@ -1265,10 +1436,12 @@ def _unversioned_zero_value(prop_type: Any) -> Any:
         return []
     if type_name == "MapProperty":
         from uasset_read.models.properties import MapValue
+
         return MapValue(key_type="Unknown", value_type="Unknown", entries=[])
     if type_name == "OptionalProperty":
         return {"has_value": False, "value": None}
     return None
+
 
 def _ordered_mapping_properties(mappings: Any, struct_mapping: Any) -> list[Any]:
     """Return mapped fields in serialized order, including inherited fields first."""
@@ -1285,6 +1458,7 @@ def _ordered_mapping_properties(mappings: Any, struct_mapping: Any) -> list[Any]
     visit(struct_mapping)
     return chain
 
+
 def _unversioned_property_size(prop_type: Any, archive: FArchive, remaining: int, is_last: bool) -> int:
     fixed = _fixed_unversioned_size(prop_type)
     if fixed > 0:
@@ -1295,6 +1469,7 @@ def _unversioned_property_size(prop_type: Any, archive: FArchive, remaining: int
     if is_last:
         return remaining
     return 0
+
 
 def _estimate_unversioned_variable_size(prop_type: Any, archive: FArchive, remaining: int) -> int:
     """Estimate simple variable-size unversioned containers without consuming bytes."""
@@ -1344,12 +1519,14 @@ def _estimate_unversioned_variable_size(prop_type: Any, archive: FArchive, remai
         archive.seek(current)
     return 0
 
+
 def _fixed_unversioned_size(prop_type: Any) -> int:
     type_name = getattr(prop_type, "type", prop_type)
     if type_name == "EnumProperty":
         inner = getattr(prop_type, "inner_type", None)
         return _fixed_unversioned_size(inner) if inner is not None else 8
     return FIXED_UNVERSIONED_SIZES.get(type_name, 0)
+
 
 def _apply_mapping_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
     tag.struct_type = getattr(prop_type, "struct_type", None)

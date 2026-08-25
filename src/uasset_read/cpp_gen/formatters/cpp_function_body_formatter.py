@@ -9,7 +9,6 @@ from typing import List
 from uasset_read.cpp_gen.formatters import (
     CppAssignmentStmt,
     CppCallStmt,
-    CppClassIR,
     CppIfStmt,
     CppInlineExprStmt,
     CppMethodIR,
@@ -66,51 +65,6 @@ def format_cpp_function_body(method_ir: CppMethodIR) -> str:
                 lines.append(f"    {raw_line}")
 
     lines.append("}")
-
-    return "\n".join(lines)
-
-
-def format_full_cpp_implementation(ir: CppClassIR) -> str:
-    """Render a complete CppClassIR into .cpp implementation file text.
-
-    Output structure:
-    1. // ClassName.cpp comment
-    2. #include "ClassName.h"
-    3. blank line
-    4. function implementation for each method (2 blank lines between methods)
-    5. trailing newline
-
-    Args:
-        ir: CppClassIR data model
-
-    Returns:
-        Complete .cpp file text
-    """
-    lines: List[str] = []
-
-    # File header comment
-    lines.append(f"// {ir.name}.cpp")
-
-    # include
-    lines.append(f'#include "{ir.name}.h"')
-
-    # blank line
-    lines.append("")
-
-    # Method implementations (prefer structured body, fall back to body_text)
-    methods_with_body = [m for m in ir.methods if m.body or m.body_text]
-
-    for i, method in enumerate(methods_with_body):
-        # Ensure method has class_name set for ClassName::Method prefix
-        if not method.class_name:
-            method.class_name = ir.name
-        if i > 0:
-            lines.append("")  # 2 blank lines between methods
-            lines.append("")
-        lines.append(format_cpp_function_body(method))
-
-    # trailing newline
-    lines.append("")
 
     return "\n".join(lines)
 

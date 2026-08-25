@@ -38,7 +38,6 @@ from uasset_read.cpp_gen.formatters.cpp_header_formatter import (
 )
 from uasset_read.cpp_gen.formatters.cpp_function_body_formatter import (
     format_cpp_function_body,
-    format_full_cpp_implementation,
 )
 
 __all__ = [
@@ -65,5 +64,4 @@ __all__ = [
     # Body builder
     "kismet_to_cpp_body",
     "format_cpp_function_body",
-    "format_full_cpp_implementation",
 ]

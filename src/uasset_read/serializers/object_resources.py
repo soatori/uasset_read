@@ -3,6 +3,7 @@ Object Resources — ObjectImport, ObjectExport, PackageIndex and related read f
 
 Extracted from uasset_read.py (core lines 940-3048).
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,13 +19,20 @@ logger = logging.getLogger(__name__)
 from uasset_read.archive import FArchive
 from uasset_read.serializers.package_summary import PackageFileSummary
 from uasset_read.constants import (
-    PKG_UnversionedProperties, PKG_FilterEditorOnly,
-    MAX_IMPORT_COUNT, MAX_EXPORT_COUNT,
-    UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID, UE5_TRACK_OBJECT_EXPORT_IS_INHERITED,
-    UE5_OPTIONAL_RESOURCES, UE5_SCRIPT_SERIALIZATION_OFFSET,
-    UE4_NON_OUTER_PACKAGE_IMPORT, UE4_LOAD_FOR_EDITOR_GAME,
-    UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT, UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS,
-    UE4_TemplateIndex_IN_COOKED_EXPORTS, UE4_64BIT_EXPORTMAP_SERIALSIZES,
+    PKG_UnversionedProperties,
+    PKG_FilterEditorOnly,
+    MAX_IMPORT_COUNT,
+    MAX_EXPORT_COUNT,
+    UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID,
+    UE5_TRACK_OBJECT_EXPORT_IS_INHERITED,
+    UE5_OPTIONAL_RESOURCES,
+    UE5_SCRIPT_SERIALIZATION_OFFSET,
+    UE4_NON_OUTER_PACKAGE_IMPORT,
+    UE4_LOAD_FOR_EDITOR_GAME,
+    UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT,
+    UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS,
+    UE4_TemplateIndex_IN_COOKED_EXPORTS,
+    UE4_64BIT_EXPORTMAP_SERIALSIZES,
 )
 from uasset_read.exceptions import ParseError
 from uasset_read.models.diagnostics import (
@@ -36,6 +44,7 @@ from uasset_read.models.diagnostics import (
 @dataclass
 class PackageIndex:
     """FPackageIndex encoding. Index > 0: Export, Index < 0: Import, Index = 0: null"""
+
     index: int
 
     @property
@@ -60,6 +69,7 @@ class PackageIndex:
 @dataclass
 class ObjectImport:
     """FObjectImport import table entry."""
+
     class_package: str
     class_name: str
     outer_index: PackageIndex
@@ -71,6 +81,7 @@ class ObjectImport:
 @dataclass
 class ObjectExport:
     """FObjectExport export table entry."""
+
     class_index: PackageIndex
     super_index: PackageIndex
     outer_index: PackageIndex
@@ -99,16 +110,13 @@ class ObjectExport:
     def has_script_serialization(self) -> bool:
         """Whether script serialization block exists."""
         return self.script_serialization_end_offset > self.script_serialization_start_offset
+
     properties: List[Any] = field(default_factory=list)
     transforms: Dict[str, Any] = field(default_factory=dict)
     guid: str = ""  # 16 bytes GUID (exists when version < 1005)
 
 
-def read_import_map(
-    archive: FArchive,
-    summary: PackageFileSummary,
-    name_map: List[str]
-) -> List[ObjectImport]:
+def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: List[str]) -> List[ObjectImport]:
     """Read import table."""
     # CR-05: validate import_count range
     if summary.import_count < 0:
@@ -141,11 +149,16 @@ def read_import_map(
         if summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
             b_import_optional = archive.read_bool(f"Import[{i}].bImportOptional")
 
-        import_map.append(ObjectImport(
-            class_package=class_package, class_name=class_name,
-            outer_index=outer_index, object_name=object_name,
-            package_name=package_name, b_import_optional=b_import_optional
-        ))
+        import_map.append(
+            ObjectImport(
+                class_package=class_package,
+                class_name=class_name,
+                outer_index=outer_index,
+                object_name=object_name,
+                package_name=package_name,
+                b_import_optional=b_import_optional,
+            )
+        )
     return import_map
 
 
@@ -157,19 +170,11 @@ def build_imports_list(import_map: List[ObjectImport]) -> List[Dict]:
         key = (imp.class_name, imp.class_package, imp.object_name)
         if key not in seen:
             seen.add(key)
-            imports.append({
-                "class": imp.class_name,
-                "package": imp.class_package,
-                "object": imp.object_name
-            })
+            imports.append({"class": imp.class_name, "package": imp.class_package, "object": imp.object_name})
     return imports
 
 
-def read_soft_object_paths(
-    archive: FArchive,
-    summary: PackageFileSummary,
-    name_map: List[str]
-) -> List[Dict]:
+def read_soft_object_paths(archive: FArchive, summary: PackageFileSummary, name_map: List[str]) -> List[Dict]:
     """Read SoftObjectPaths array (UE5.7 specific)."""
     if summary.soft_object_paths_count <= 0 or summary.soft_object_paths_offset <= 0:
         return []
@@ -186,13 +191,7 @@ def read_soft_object_paths(
     return soft_refs
 
 
-
-
-def read_export_map(
-    archive: FArchive,
-    summary: PackageFileSummary,
-    name_map: List[str]
-) -> List[ObjectExport]:
+def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: List[str]) -> List[ObjectExport]:
     """Read export table."""
     # CR-05: validate export_count range
     if summary.export_count < 0:
@@ -280,7 +279,9 @@ def read_export_map(
             # bNotAlwaysLoadedForEditorGame: VER_UE4_LOAD_FOR_EDITOR_GAME (364)
             b_not_always_loaded_for_editor_game = True
             if file_version >= UE4_LOAD_FOR_EDITOR_GAME:
-                b_not_always_loaded_for_editor_game = archive.read_bool(f"Export[{export_idx}].bNotAlwaysLoadedForEditorGame")
+                b_not_always_loaded_for_editor_game = archive.read_bool(
+                    f"Export[{export_idx}].bNotAlwaysLoadedForEditorGame"
+                )
 
             # bIsAsset: VER_UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT (484)
             b_is_asset = False
@@ -295,65 +296,77 @@ def read_export_map(
             # Dependency arrays: VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS (506)
             if file_version >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:
                 archive.read_i32(f"Export[{export_idx}].FirstExportDependency")  # first_export_dependency
-                archive.read_i32(f"Export[{export_idx}].SerializationBeforeSerializationDeps")  # serialization_before_serialization_deps
-                archive.read_i32(f"Export[{export_idx}].CreateBeforeSerializationDeps")  # create_before_serialization_deps
-                archive.read_i32(f"Export[{export_idx}].SerializationBeforeCreateDeps")  # serialization_before_create_deps
+                archive.read_i32(
+                    f"Export[{export_idx}].SerializationBeforeSerializationDeps"
+                )  # serialization_before_serialization_deps
+                archive.read_i32(
+                    f"Export[{export_idx}].CreateBeforeSerializationDeps"
+                )  # create_before_serialization_deps
+                archive.read_i32(
+                    f"Export[{export_idx}].SerializationBeforeCreateDeps"
+                )  # serialization_before_create_deps
                 archive.read_i32(f"Export[{export_idx}].CreateBeforeCreateDeps")  # create_before_create_deps
 
             # ScriptSerialization offsets (UE5 >= 1010, only for versioned properties)
             script_serialization_start_offset = 0
             script_serialization_end_offset = 0
             uses_unversioned = (summary.package_flags & PKG_UnversionedProperties) != 0
-            if (
-                not uses_unversioned
-                and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET
-            ):
-                script_serialization_start_offset = archive.read_i64(f"Export[{export_idx}].ScriptSerializationStartOffset")
+            if not uses_unversioned and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+                script_serialization_start_offset = archive.read_i64(
+                    f"Export[{export_idx}].ScriptSerializationStartOffset"
+                )
                 script_serialization_end_offset = archive.read_i64(f"Export[{export_idx}].ScriptSerializationEndOffset")
                 # CR-05: validate non-negative (Tolerant: set to 0 and log warning on negative values)
                 if script_serialization_start_offset < 0:
                     logger.debug(
                         "Export #%d ScriptSerializationStartOffset is negative: %d, set to 0",
-                        export_idx, script_serialization_start_offset,
+                        export_idx,
+                        script_serialization_start_offset,
                     )
                     script_serialization_start_offset = 0
                 if script_serialization_end_offset < 0:
                     logger.debug(
                         "Export #%d ScriptSerializationEndOffset is negative: %d, set to 0",
-                        export_idx, script_serialization_end_offset,
+                        export_idx,
+                        script_serialization_end_offset,
                     )
                     script_serialization_end_offset = 0
 
-            export_map.append(ObjectExport(
-                class_index=class_index, super_index=super_index,
-                template_index=template_index, outer_index=outer_index,
-                object_name=object_name, object_flags=object_flags,
-                serial_size=serial_size, serial_offset=serial_offset,
-                b_forced_export=b_forced_export,
-                b_not_for_client=b_not_for_client,
-                b_not_for_server=b_not_for_server,
-                b_is_inherited_instance=b_is_inherited_instance,
-                package_flags=package_flags,
-                b_not_always_loaded_for_editor_game=b_not_always_loaded_for_editor_game,
-                b_is_asset=b_is_asset,
-                b_generate_public_hash=b_generate_public_hash,
-                script_serialization_end_offset=script_serialization_end_offset,
-                script_serialization_start_offset=script_serialization_start_offset,
-                guid=package_guid,
-            ))
+            export_map.append(
+                ObjectExport(
+                    class_index=class_index,
+                    super_index=super_index,
+                    template_index=template_index,
+                    outer_index=outer_index,
+                    object_name=object_name,
+                    object_flags=object_flags,
+                    serial_size=serial_size,
+                    serial_offset=serial_offset,
+                    b_forced_export=b_forced_export,
+                    b_not_for_client=b_not_for_client,
+                    b_not_for_server=b_not_for_server,
+                    b_is_inherited_instance=b_is_inherited_instance,
+                    package_flags=package_flags,
+                    b_not_always_loaded_for_editor_game=b_not_always_loaded_for_editor_game,
+                    b_is_asset=b_is_asset,
+                    b_generate_public_hash=b_generate_public_hash,
+                    script_serialization_end_offset=script_serialization_end_offset,
+                    script_serialization_start_offset=script_serialization_start_offset,
+                    guid=package_guid,
+                )
+            )
         except (struct.error, OSError, ValueError, AttributeError) as e:
             # Tolerant mode: log error and skip failed export, keep successfully parsed exports
             logger.warning(
                 "Export #%d parse failed (%s), skipping and continuing with subsequent exports",
-                export_idx, str(e),
+                export_idx,
+                str(e),
             )
     return export_map
 
 
 def get_asset_class(
-    export: ObjectExport,
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport]
+    export: ObjectExport, import_map: List[ObjectImport], export_map: List[ObjectExport]
 ) -> Optional[str]:
     """Identify asset type from export entry."""
     if export.class_index.is_import:
@@ -368,9 +381,7 @@ def get_asset_class(
 
 
 def resolve_class_name(
-    class_index: PackageIndex,
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport]
+    class_index: PackageIndex, import_map: List[ObjectImport], export_map: List[ObjectExport]
 ) -> Optional[str]:
     """Resolve class name from PackageIndex."""
     if class_index.is_import:
@@ -384,20 +395,14 @@ def resolve_class_name(
     return None
 
 
-def detect_blueprint(
-    export: ObjectExport,
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport]
-) -> bool:
+def detect_blueprint(export: ObjectExport, import_map: List[ObjectImport], export_map: List[ObjectExport]) -> bool:
     """Detect whether export is a Blueprint asset."""
     class_name = get_asset_class(export, import_map, export_map)
     return class_name is not None and "Blueprint" in class_name
 
 
 def detect_blueprint_generated_class(
-    export: ObjectExport,
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport]
+    export: ObjectExport, import_map: List[ObjectImport], export_map: List[ObjectExport]
 ) -> bool:
     """Detect whether export is a BlueprintGeneratedClass.
 
@@ -412,10 +417,7 @@ def detect_blueprint_generated_class(
 
 
 def validate_package_index(
-    index: PackageIndex,
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    context: str = ""
+    index: PackageIndex, import_map: List[ObjectImport], export_map: List[ObjectExport], context: str = ""
 ) -> Optional[str]:
     """PackageIndex full validation."""
     if index.is_null:
@@ -503,9 +505,7 @@ def find_main_blueprint_generated_class(
 
 
 def resolve_parent_class(
-    super_index: PackageIndex,
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport]
+    super_index: PackageIndex, import_map: List[ObjectImport], export_map: List[ObjectExport]
 ) -> Tuple[Optional[str], Optional[str]]:
     """
     Resolve ParentClass FPackageIndex to object name (BLUE-02).
@@ -540,10 +540,7 @@ def resolve_parent_class(
 
 
 def resolve_package_index_to_reference(
-    pkg_idx: PackageIndex,
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    name_map: List[str]
+    pkg_idx: PackageIndex, import_map: List[ObjectImport], export_map: List[ObjectExport], name_map: List[str]
 ) -> Optional[Dict[str, Any]]:
     """Resolve PackageIndex to reference dict using raw maps (no linker).
 

@@ -17,14 +17,23 @@ if TYPE_CHECKING:
     from uasset_read.versioning import VersionContainer
 
 from uasset_read.models.properties import (
-    PropertyTag, StructValue, MapValue, SetValue, EnumValue, TextValue, DelegateValue,
+    PropertyTag,
+    StructValue,
+    MapValue,
+    SetValue,
+    EnumValue,
+    TextValue,
+    DelegateValue,
     SoftObjectPathValue,
 )
 from uasset_read.models.core import FEdGraphPinType
 from uasset_read.exceptions import ParseError, ErrorContext
 from uasset_read.constants import (
-    MAX_PROPERTY_COUNT, MAX_ARRAY_COUNT, UE5_LARGE_WORLD_COORDINATES,
-    MAX_SAFE_COUNT, UE_NONE_SENTINEL,
+    MAX_PROPERTY_COUNT,
+    MAX_ARRAY_COUNT,
+    UE5_LARGE_WORLD_COORDINATES,
+    MAX_SAFE_COUNT,
+    UE_NONE_SENTINEL,
 )
 from uasset_read.parsers.utils import make_enum_value, extract_inner_from_tag, read_validated_count_tolerant
 
@@ -33,64 +42,78 @@ def _simple_read(archive, method_name):
     """Dispatch a single archive read method by name."""
     return getattr(archive, method_name)()
 
+
 # Expected byte sizes for fixed-layout structs (used for fast-path validation)
 _EXPECTED_STRUCT_SIZES: dict[str, int] = {
-    "Vector": 12, "Rotator": 12, "Vector2D": 8, "Vector4": 16,
-    "LinearColor": 16, "Color": 4, "Quat": 16, "Plane": 16,
-    "Guid": 16, "IntPoint": 8, "IntVector": 12,
-    "Box2D": 20, "Box": 28, "Sphere": 16, "BoxSphereBounds": 28,
-    "Matrix": 64, "TwoVectors": 24, "OrientedBox": 60,
-    "Transform": 40,           # FTransform3f: FQuat4f(16) + FVector3f(12) + FVector3f(12)
+    "Vector": 12,
+    "Rotator": 12,
+    "Vector2D": 8,
+    "Vector4": 16,
+    "LinearColor": 16,
+    "Color": 4,
+    "Quat": 16,
+    "Plane": 16,
+    "Guid": 16,
+    "IntPoint": 8,
+    "IntVector": 12,
+    "Box2D": 20,
+    "Box": 28,
+    "Sphere": 16,
+    "BoxSphereBounds": 28,
+    "Matrix": 64,
+    "TwoVectors": 24,
+    "OrientedBox": 60,
+    "Transform": 40,  # FTransform3f: FQuat4f(16) + FVector3f(12) + FVector3f(12)
     "TopLevelAssetPath": None,  # Two FNames, variable size, handled directly by fast-path
     # Time/frame types
-    "Timespan": 8,           # int64
-    "DateTime": 8,           # uint64
-    "FrameNumber": 4,        # int32
+    "Timespan": 8,  # int64
+    "DateTime": 8,  # uint64
+    "FrameNumber": 4,  # int32
     # Integer vector types
-    "IntVector2": 8,         # 2 * int32
-    "Int32Vector2": 8,       # alias
-    "IntVector4": 16,        # 4 * int32
-    "UintVector": 12,        # 3 * uint32
-    "UintVector2": 8,        # 2 * uint32
-    "Uint32Point": 8,        # alias
-    "UintVector4": 16,       # 4 * uint32
+    "IntVector2": 8,  # 2 * int32
+    "Int32Vector2": 8,  # alias
+    "IntVector4": 16,  # 4 * int32
+    "UintVector": 12,  # 3 * uint32
+    "UintVector2": 8,  # 2 * uint32
+    "Uint32Point": 8,  # alias
+    "UintVector4": 16,  # 4 * uint32
     # 64-bit integer vector types
-    "Int64Vector2": 16,      # 2 * int64
-    "Int64Point": 16,        # alias
-    "Int64Vector": 24,       # 3 * int64
-    "Int64Vector4": 32,      # 4 * int64
-    "UInt64Vector2": 16,     # 2 * uint64
-    "UInt64Point": 16,       # alias
-    "UInt64Vector": 24,      # 3 * uint64
-    "UInt64Vector4": 32,     # 4 * uint64
+    "Int64Vector2": 16,  # 2 * int64
+    "Int64Point": 16,  # alias
+    "Int64Vector": 24,  # 3 * int64
+    "Int64Vector4": 32,  # 4 * int64
+    "UInt64Vector2": 16,  # 2 * uint64
+    "UInt64Point": 16,  # alias
+    "UInt64Vector": 24,  # 3 * uint64
+    "UInt64Vector4": 32,  # 4 * uint64
     # Alias types
     "DeprecateSlateVector2D": 16,  # alias of Vector2D
-    "VectorDouble": 24,            # Wuthering Waves alias for Vector3d
-    "Int32Point": 8,               # alias of IntPoint
+    "VectorDouble": 24,  # Wuthering Waves alias for Vector3d
+    "Int32Point": 8,  # alias of IntPoint
     # UE5 LWC math types
-    "Vector2f": 8,           # 2 * float32
-    "Vector3f": 12,          # 3 * float32
-    "Vector3d": 24,          # 3 * float64
-    "Vector4f": 16,          # 4 * float32
-    "Vector4d": 32,          # 4 * float64
-    "Rotator3f": 12,         # 3 * float32
-    "Rotator3d": 24,         # 3 * float64
-    "Quat4f": 16,            # 4 * float32
-    "Quat4d": 32,            # 4 * float64
-    "Plane4f": 16,           # 4 * float32
-    "Plane4d": 32,           # 4 * float64
-    "Sphere3f": 16,          # 4 * float32
-    "Sphere3d": 32,          # 4 * float64
-    "Box2f": 16,             # 2 * Vector2f(8)
-    "Box3f": 24,             # 2 * Vector3f(12)
-    "Matrix44f": 64,         # 4 * Plane4f(16)
-    "Transform3f": 40,       # FTransform3f: Quat4f(16) + Vector3f(12) + Vector3f(12)
+    "Vector2f": 8,  # 2 * float32
+    "Vector3f": 12,  # 3 * float32
+    "Vector3d": 24,  # 3 * float64
+    "Vector4f": 16,  # 4 * float32
+    "Vector4d": 32,  # 4 * float64
+    "Rotator3f": 12,  # 3 * float32
+    "Rotator3d": 24,  # 3 * float64
+    "Quat4f": 16,  # 4 * float32
+    "Quat4d": 32,  # 4 * float64
+    "Plane4f": 16,  # 4 * float32
+    "Plane4d": 32,  # 4 * float64
+    "Sphere3f": 16,  # 4 * float32
+    "Sphere3d": 32,  # 4 * float64
+    "Box2f": 16,  # 2 * Vector2f(8)
+    "Box3f": 24,  # 2 * Vector3f(12)
+    "Matrix44f": 64,  # 4 * Plane4f(16)
+    "Transform3f": 40,  # FTransform3f: Quat4f(16) + Vector3f(12) + Vector3f(12)
     # Animation/blendspace high-frequency structs (reported additions)
-    "FrameRate": 8,          # compact format: int32 Numerator + int32 Denominator
-                             # tagged format size is not fixed (measured 37), silently parsed via tagged fallback
-    "AnimNotifyTrack": 8,    # compact format size
-                             # tagged format size=0, silently parsed via tagged fallback (data actually exists)
-    "GuidProperty": 16,      # FGuid standard size
+    "FrameRate": 8,  # compact format: int32 Numerator + int32 Denominator
+    # tagged format size is not fixed (measured 37), silently parsed via tagged fallback
+    "AnimNotifyTrack": 8,  # compact format size
+    # tagged format size=0, silently parsed via tagged fallback (data actually exists)
+    "GuidProperty": 16,  # FGuid standard size
 }
 
 # LWC (Large World Coordinates) type mapping
@@ -98,41 +121,42 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
 # _LWC_TYPE_MAP: base type name → (float_size, double_size)
 # When version_container's file_version_ue5 >= 1004, base types use double_size.
 _LWC_TYPE_MAP: Dict[str, Tuple[int, int]] = {
-    "Vector":        (12, 24),   # FVector3f → FVector3d
-    "Rotator":       (12, 24),   # FRotator3f → FRotator3d
-    "Vector2D":      (8, 16),    # FVector2f → FVector2d
-    "Vector4":       (16, 32),   # FVector4f → FVector4d
-    "Quat":          (16, 32),   # FQuat4f → FQuat4d
-    "Plane":         (16, 32),   # FPlane4f → FPlane4d
-    "Sphere":        (16, 32),   # FSphere3f → FSphere3d
-    "Box":           (28, 56),   # 2 * FVector + bool (float → double)
-    "BoxSphereBounds": (28, 56), # 3 * FVector + float (float → double)
-    "Matrix":        (64, 128),  # 4 * FPlane (float → double)
-    "TwoVectors":    (24, 48),   # 2 * FVector (float → double)
-    "Transform":     (40, 80),   # FTransform3f(40) → FTransform3d(80), select read precision based on tag.size
+    "Vector": (12, 24),  # FVector3f → FVector3d
+    "Rotator": (12, 24),  # FRotator3f → FRotator3d
+    "Vector2D": (8, 16),  # FVector2f → FVector2d
+    "Vector4": (16, 32),  # FVector4f → FVector4d
+    "Quat": (16, 32),  # FQuat4f → FQuat4d
+    "Plane": (16, 32),  # FPlane4f → FPlane4d
+    "Sphere": (16, 32),  # FSphere3f → FSphere3d
+    "Box": (28, 56),  # 2 * FVector + bool (float → double)
+    "BoxSphereBounds": (28, 56),  # 3 * FVector + float (float → double)
+    "Matrix": (64, 128),  # 4 * FPlane (float → double)
+    "TwoVectors": (24, 48),  # 2 * FVector (float → double)
+    "Transform": (40, 80),  # FTransform3f(40) → FTransform3d(80), select read precision based on tag.size
 }
 
 # LWC double precision type name → corresponding base type name
 # e.g. "Vector3d" → "Vector", used for get_struct_size fallback lookup
 _LWC_DOUBLE_TYPE_TO_BASE: Dict[str, str] = {
-    "Vector3d":    "Vector",
-    "Vector4d":    "Vector4",
-    "Rotator3d":   "Rotator",
-    "Quat4d":      "Quat",
-    "Plane4d":     "Plane",
-    "Sphere3d":    "Sphere",
+    "Vector3d": "Vector",
+    "Vector4d": "Vector4",
+    "Rotator3d": "Rotator",
+    "Quat4d": "Quat",
+    "Plane4d": "Plane",
+    "Sphere3d": "Sphere",
 }
 
 # LWC single precision type name → corresponding base type name
 _LWC_FLOAT_TYPE_TO_BASE: Dict[str, str] = {
-    "Vector3f":    "Vector",
-    "Vector4f":    "Vector4",
-    "Rotator3f":   "Rotator",
-    "Quat4f":      "Quat",
-    "Plane4f":     "Plane",
-    "Sphere3f":    "Sphere",
-    "Vector2f":    "Vector2D",
+    "Vector3f": "Vector",
+    "Vector4f": "Vector4",
+    "Rotator3f": "Rotator",
+    "Quat4f": "Quat",
+    "Plane4f": "Plane",
+    "Sphere3f": "Sphere",
+    "Vector2f": "Vector2D",
 }
+
 
 def get_struct_size(
     struct_type: str,
@@ -175,6 +199,7 @@ def get_struct_size(
     # Non-LWC type: direct table lookup
     return _EXPECTED_STRUCT_SIZES.get(struct_type)
 
+
 _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "MemberReference",
     "SimpleMemberReference",
@@ -192,22 +217,22 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     "EditedDocumentInfo",
     "CategorySorting",
     # AnimSequence structs (some assets use tagged format)
-    "FrameRate",         # some assets tag.size=37, uses tagged PropertyTag format
-    "AnimNotifyTrack",   # some assets tag.size=0, uses tagged PropertyTag format
+    "FrameRate",  # some assets tag.size=37, uses tagged PropertyTag format
+    "AnimNotifyTrack",  # some assets tag.size=0, uses tagged PropertyTag format
     # Editor structs
-    "FEditorElement",    # Blueprint editor combo box options (DisplayName/Value/bIsDefault)
+    "FEditorElement",  # Blueprint editor combo box options (DisplayName/Value/bIsDefault)
     "EditorElement",
     # Material parameter structs (material instance assets use tagged format)
     "ScalarParameterValue",
     "FScalarParameterValue",
     "FMaterialParameterInfo",
     # Animation blendspace structs (some assets use tagged format)
-    "BlendSample",          # FBlendSample — BlendSpace sample point (SampleValue/Time/RateScale/bIsValid)
+    "BlendSample",  # FBlendSample — BlendSpace sample point (SampleValue/Time/RateScale/bIsValid)
     "FBlendSample",
     # Material instance parameter structs (MaterialInstanceConstant assets, tag.size=0 tagged format)
-    "VectorParameterValue",     # FVectorParameterValue — vector parameter (ParameterInfo/ParameterValue)
-    "TextureParameterValue",    # FTextureParameterValue — texture parameter (ParameterInfo/ParameterValue)
-    "MaterialTextureInfo",      # FMaterialTextureInfo — texture streaming info (UVChannelIndex etc.)
+    "VectorParameterValue",  # FVectorParameterValue — vector parameter (ParameterInfo/ParameterValue)
+    "TextureParameterValue",  # FTextureParameterValue — texture parameter (ParameterInfo/ParameterValue)
+    "MaterialTextureInfo",  # FMaterialTextureInfo — texture streaming info (UVChannelIndex etc.)
     # BoxSphereBounds (FBoxSphereBounds UPROPERTY structs always use tagged format,
     # because TBoxSphereBoundsStructOpsTypeTraits does not set WithSerialize)
     "BoxSphereBounds",
@@ -233,8 +258,16 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS for fallback parsing.
 """
 
 _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
-    "MemberReference": [("MemberParent", "ObjectProperty"), ("MemberName", "NameProperty"), ("MemberGuid", "GuidProperty")],
-    "SimpleMemberReference": [("MemberParent", "ObjectProperty"), ("MemberName", "NameProperty"), ("MemberGuid", "GuidProperty")],
+    "MemberReference": [
+        ("MemberParent", "ObjectProperty"),
+        ("MemberName", "NameProperty"),
+        ("MemberGuid", "GuidProperty"),
+    ],
+    "SimpleMemberReference": [
+        ("MemberParent", "ObjectProperty"),
+        ("MemberName", "NameProperty"),
+        ("MemberGuid", "GuidProperty"),
+    ],
     # New UE5.5 structs
     "NewVariables": [
         ("VarName", "NameProperty"),
@@ -257,7 +290,7 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
     ],
     # AnimSequence struct tagged fallback schemas
     "FrameRate": [
-        ("Numerator", "IntProperty"),      # UE source: int32 Numerator (not float)
+        ("Numerator", "IntProperty"),  # UE source: int32 Numerator (not float)
         # Denominator is not serialized in some assets, handled naturally by tagged loop
     ],
     "AnimNotifyTrack": [
@@ -283,50 +316,50 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
     ],
     # FScalarParameterValue
     "ScalarParameterValue": [
-        ("ParameterInfo", "StructProperty"),   # FMaterialParameterInfo
+        ("ParameterInfo", "StructProperty"),  # FMaterialParameterInfo
         ("ParameterValue", "FloatProperty"),
         ("bOverride", "BoolProperty"),
     ],
     "FScalarParameterValue": [
-        ("ParameterInfo", "StructProperty"),   # FMaterialParameterInfo
+        ("ParameterInfo", "StructProperty"),  # FMaterialParameterInfo
         ("ParameterValue", "FloatProperty"),
         ("bOverride", "BoolProperty"),
     ],
     # Animation blend space struct tagged fallback schemas
     "BlendSample": [
-        ("SampleValue", "StructProperty"),   # FVector -- blend space sample point coordinates
-        ("Time", "FloatProperty"),            # float -- animation time value
-        ("RateScale", "IntProperty"),         # int32 -- playback rate scale
-        ("bIsValid", "BoolProperty"),         # bool -- whether sample point is valid
+        ("SampleValue", "StructProperty"),  # FVector -- blend space sample point coordinates
+        ("Time", "FloatProperty"),  # float -- animation time value
+        ("RateScale", "IntProperty"),  # int32 -- playback rate scale
+        ("bIsValid", "BoolProperty"),  # bool -- whether sample point is valid
     ],
     "FBlendSample": [
-        ("SampleValue", "StructProperty"),   # FVector -- blend space sample point coordinates
-        ("Time", "FloatProperty"),            # float -- animation time value
-        ("RateScale", "IntProperty"),         # int32 -- playback rate scale
-        ("bIsValid", "BoolProperty"),         # bool -- whether sample point is valid
+        ("SampleValue", "StructProperty"),  # FVector -- blend space sample point coordinates
+        ("Time", "FloatProperty"),  # float -- animation time value
+        ("RateScale", "IntProperty"),  # int32 -- playback rate scale
+        ("bIsValid", "BoolProperty"),  # bool -- whether sample point is valid
     ],
     # Builder polygon struct (UE source: Engine/BrushBuilder.h)
     "BuilderPoly": [
-        ("VertexIndices", "ArrayProperty"),   # TArray<int32> -- vertex indices into UBrushBuilder::Vertices
-        ("Direction", "IntProperty"),         # int32 -- face normal direction (+1 or -1)
-        ("ItemName", "NameProperty"),         # FName -- surface label (e.g. "Top", "Side")
-        ("PolyFlags", "IntProperty"),         # int32 -- BSP polygon flags
+        ("VertexIndices", "ArrayProperty"),  # TArray<int32> -- vertex indices into UBrushBuilder::Vertices
+        ("Direction", "IntProperty"),  # int32 -- face normal direction (+1 or -1)
+        ("ItemName", "NameProperty"),  # FName -- surface label (e.g. "Top", "Side")
+        ("PolyFlags", "IntProperty"),  # int32 -- BSP polygon flags
     ],
     "FBuilderPoly": [
-        ("VertexIndices", "ArrayProperty"),   # TArray<int32> -- vertex indices into UBrushBuilder::Vertices
-        ("Direction", "IntProperty"),         # int32 -- face normal direction (+1 or -1)
-        ("ItemName", "NameProperty"),         # FName -- surface label (e.g. "Top", "Side")
-        ("PolyFlags", "IntProperty"),         # int32 -- BSP polygon flags
+        ("VertexIndices", "ArrayProperty"),  # TArray<int32> -- vertex indices into UBrushBuilder::Vertices
+        ("Direction", "IntProperty"),  # int32 -- face normal direction (+1 or -1)
+        ("ItemName", "NameProperty"),  # FName -- surface label (e.g. "Top", "Side")
+        ("PolyFlags", "IntProperty"),  # int32 -- BSP polygon flags
     ],
     # StaticMesh section info tagged fallback schemas
     # UE source: Engine/Source/Runtime/Engine/Classes/Engine/StaticMesh.h:344
     "FMeshSectionInfo": [
-        ("MaterialIndex", "IntProperty"),              # int32, default 0
-        ("bEnableCollision", "BoolProperty"),           # bool, default true
-        ("bCastShadow", "BoolProperty"),                # bool, default true
-        ("bVisibleInRayTracing", "BoolProperty"),       # bool, default true
+        ("MaterialIndex", "IntProperty"),  # int32, default 0
+        ("bEnableCollision", "BoolProperty"),  # bool, default true
+        ("bCastShadow", "BoolProperty"),  # bool, default true
+        ("bVisibleInRayTracing", "BoolProperty"),  # bool, default true
         ("bAffectDistanceFieldLighting", "BoolProperty"),  # bool, default true
-        ("bForceOpaque", "BoolProperty"),               # bool, default false
+        ("bForceOpaque", "BoolProperty"),  # bool, default false
     ],
     "MeshSectionInfo": [
         ("MaterialIndex", "IntProperty"),
@@ -342,20 +375,27 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
 # Lazy import helpers (avoid circular dependency with property_parser.py)
 # ============================================================================
 
+
 def _get_parse_property_value():
     """Lazy import to avoid circular dependency (parsers <-> property_types)."""
     from uasset_read.parsers.property_parser import parse_property_value
+
     return parse_property_value
+
 
 def _get_read_property_tag():
     """Lazy import to avoid circular dependency."""
     from uasset_read.serializers.property_tags import read_property_tag
+
     return read_property_tag
+
 
 def _get_read_tag_value_bounded():
     """Lazy import to avoid circular dependency."""
     from uasset_read.serializers.property_tags import read_tag_value_bounded
+
     return read_tag_value_bounded
+
 
 def _build_version_container_from_summary(summary: Any) -> Optional["VersionContainer"]:
     """Build VersionContainer from summary (lazy, to avoid circular imports)."""
@@ -367,6 +407,7 @@ def _build_version_container_from_summary(summary: Any) -> Optional["VersionCont
         return cached
     try:
         from uasset_read.versioning import build_version_container
+
         vc = build_version_container(summary)
         # Cache to summary to avoid rebuilding
         try:
@@ -377,13 +418,16 @@ def _build_version_container_from_summary(summary: Any) -> Optional["VersionCont
     except (AttributeError, TypeError, ValueError, KeyError):
         return None
 
+
 # ============================================================================
 # Basic type parsers (lines 5289-5406 equivalent)
 # ============================================================================
 
+
 def parse_bool_property(tag: PropertyTag, archive: FArchive) -> bool:
     """Parse BoolProperty (PROP-04). Value stored in tag.bool_val, no extra read."""
     return bool(tag.bool_val)
+
 
 def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[List[str]] = None) -> Any:
     """Parse IntProperty/Int64Property/Int16Property/Int8Property/ByteProperty (PROP-02).
@@ -423,17 +467,21 @@ def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[L
     else:  # IntProperty (default)
         return archive.read_i32()
 
+
 def parse_uint16_property(tag: PropertyTag, archive: FArchive) -> int:
     """Parse UInt16Property."""
     return _simple_read(archive, "read_u16")
+
 
 def parse_uint32_property(tag: PropertyTag, archive: FArchive) -> int:
     """Parse UInt32Property."""
     return _simple_read(archive, "read_u32")
 
+
 def parse_uint64_property(tag: PropertyTag, archive: FArchive) -> int:
     """Parse UInt64Property."""
     return _simple_read(archive, "read_u64")
+
 
 def parse_float_property(tag: PropertyTag, archive: FArchive) -> float:
     """Parse FloatProperty/DoubleProperty (PROP-03)."""
@@ -443,17 +491,21 @@ def parse_float_property(tag: PropertyTag, archive: FArchive) -> float:
     else:  # FloatProperty (default)
         return archive.read_f32()
 
+
 def parse_str_property(tag: PropertyTag, archive: FArchive) -> str:
     """Parse StrProperty (PROP-05)."""
     return archive.read_fstring()
+
 
 def parse_name_property(tag: PropertyTag, archive: FArchive, name_map: List[str]) -> str:
     """Parse NameProperty (PROP-06)."""
     return archive.read_name(name_map)
 
+
 def parse_object_property(tag: PropertyTag, archive: FArchive) -> int:
     """Parse ObjectProperty (PROP-07). Returns raw FPackageIndex."""
     return _simple_read(archive, "read_i32")
+
 
 def parse_soft_object_property(
     tag: PropertyTag,
@@ -473,15 +525,15 @@ def parse_soft_object_property(
             entry = soft_object_path_list[index]
             return SoftObjectPathValue(
                 raw_kind=tag.type,
-                asset_path=entry.get('asset_path', ''),
-                sub_path=entry.get('sub_path', ''),
+                asset_path=entry.get("asset_path", ""),
+                sub_path=entry.get("sub_path", ""),
                 index=index,
             )
         else:
             return SoftObjectPathValue(
                 raw_kind=tag.type,
-                asset_path='',
-                sub_path='',
+                asset_path="",
+                sub_path="",
                 index=index,
                 error=f"SoftObjectPath index {index} out of bounds (list size {len(soft_object_path_list)})",
             )
@@ -491,13 +543,16 @@ def parse_soft_object_property(
         sub_path = archive.read_fstring()
         return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
 
+
 def parse_utf8_str_property(tag: PropertyTag, archive: FArchive) -> str:
     """Parse Utf8StrProperty."""
     return archive.read_fstring()
 
+
 def parse_weak_object_property(tag: PropertyTag, archive: FArchive) -> int:
     """Parse WeakObjectProperty."""
     return _simple_read(archive, "read_i32")
+
 
 def parse_lazy_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjectPathValue:
     """Parse LazyObjectProperty."""
@@ -505,9 +560,11 @@ def parse_lazy_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjec
     raw = archive.read_bytes(read_size)
     return SoftObjectPathValue(raw_kind=tag.type, guid=raw.hex())
 
+
 def parse_class_property(tag: PropertyTag, archive: FArchive) -> int:
     """Parse ClassProperty."""
     return _simple_read(archive, "read_i32")
+
 
 def parse_soft_class_property(
     tag: PropertyTag,
@@ -518,15 +575,25 @@ def parse_soft_class_property(
     """Parse SoftClassProperty -- same parsing as SoftObjectProperty."""
     return parse_soft_object_property(tag, archive, name_map or [], soft_object_path_list)
 
+
 def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjectPathValue:
     """Parse AssetObjectProperty."""
     return SoftObjectPathValue(raw_kind=tag.type, asset_path=archive.read_fstring())
+
 
 # ============================================================================
 # Complex type parsers (lines 5441-6004 equivalent)
 # ============================================================================
 
-def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, depth: int = 0) -> List[Any]:
+
+def parse_array_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[Any],
+    summary: Optional[Any] = None,
+    depth: int = 0,
+) -> List[Any]:
     """Parse ArrayProperty (PROP-08, D-16).
 
     UE serialization format:
@@ -553,7 +620,8 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
         # Return early to avoid reading count needlessly
         logger.debug(
             "ArrayProperty '%s': tag.size=%d < 4, returning empty array",
-            tag.name, tag.size,
+            tag.name,
+            tag.size,
         )
         return []
 
@@ -579,7 +647,7 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
             inner_tag = PropertyTag(
                 name=f"{tag.name}[{i}]",
                 type=inner_type,
-                size=0  # Let parse function serialize by type natively
+                size=0,  # Let parse function serialize by type natively
             )
             # For StructProperty array elements, pass struct_type so parse_struct_property can hit fast-path
             if inner_type == "StructProperty":
@@ -588,6 +656,7 @@ def parse_array_property(tag: PropertyTag, archive: FArchive, name_map: List[str
         elements.append(inner_value)
 
     return elements
+
 
 def _try_fast_path_struct(
     struct_type: str,
@@ -616,60 +685,100 @@ def _try_fast_path_struct(
         return StructValue(struct_type="Vector4", fields={"X": x, "Y": y, "Z": z, "W": w})
 
     if struct_type == "LinearColor":
-        return StructValue(struct_type="LinearColor", fields={
-            "R": archive.read_f32(), "G": archive.read_f32(),
-            "B": archive.read_f32(), "A": archive.read_f32(),
-        })
+        return StructValue(
+            struct_type="LinearColor",
+            fields={
+                "R": archive.read_f32(),
+                "G": archive.read_f32(),
+                "B": archive.read_f32(),
+                "A": archive.read_f32(),
+            },
+        )
 
     if struct_type == "Color":
-        return StructValue(struct_type="Color", fields={
-            "B": archive.read_u8(), "G": archive.read_u8(),
-            "R": archive.read_u8(), "A": archive.read_u8(),
-        })
+        return StructValue(
+            struct_type="Color",
+            fields={
+                "B": archive.read_u8(),
+                "G": archive.read_u8(),
+                "R": archive.read_u8(),
+                "A": archive.read_u8(),
+            },
+        )
 
     if struct_type == "Quat":
         reader = archive.read_f64 if tag.size == 32 else archive.read_f32
-        return StructValue(struct_type="Quat", fields={
-            "X": reader(), "Y": reader(), "Z": reader(), "W": reader(),
-        })
+        return StructValue(
+            struct_type="Quat",
+            fields={
+                "X": reader(),
+                "Y": reader(),
+                "Z": reader(),
+                "W": reader(),
+            },
+        )
 
     if struct_type == "Plane":
         reader = archive.read_f64 if tag.size == 32 else archive.read_f32
-        return StructValue(struct_type="Plane", fields={
-            "X": reader(), "Y": reader(), "Z": reader(), "W": reader(),
-        })
+        return StructValue(
+            struct_type="Plane",
+            fields={
+                "X": reader(),
+                "Y": reader(),
+                "Z": reader(),
+                "W": reader(),
+            },
+        )
 
     if struct_type == "Guid":
-        return StructValue(struct_type="Guid", fields={
-            "A": archive.read_u32(), "B": archive.read_u32(),
-            "C": archive.read_u32(), "D": archive.read_u32(),
-        })
+        return StructValue(
+            struct_type="Guid",
+            fields={
+                "A": archive.read_u32(),
+                "B": archive.read_u32(),
+                "C": archive.read_u32(),
+                "D": archive.read_u32(),
+            },
+        )
 
     if struct_type == "IntPoint":
         return StructValue(struct_type="IntPoint", fields={"X": archive.read_i32(), "Y": archive.read_i32()})
 
     if struct_type == "IntVector":
-        return StructValue(struct_type="IntVector", fields={
-            "X": archive.read_i32(), "Y": archive.read_i32(), "Z": archive.read_i32(),
-        })
+        return StructValue(
+            struct_type="IntVector",
+            fields={
+                "X": archive.read_i32(),
+                "Y": archive.read_i32(),
+                "Z": archive.read_i32(),
+            },
+        )
 
     if struct_type == "Box2D":
         min_x, min_y = archive.read_f32(), archive.read_f32()
         max_x, max_y = archive.read_f32(), archive.read_f32()
         b_valid = archive.read_i32() != 0
-        return StructValue(struct_type="Box2D", fields={
-            "Min": {"X": min_x, "Y": min_y}, "Max": {"X": max_x, "Y": max_y}, "bIsValid": b_valid,
-        })
+        return StructValue(
+            struct_type="Box2D",
+            fields={
+                "Min": {"X": min_x, "Y": min_y},
+                "Max": {"X": max_x, "Y": max_y},
+                "bIsValid": b_valid,
+            },
+        )
 
     if struct_type == "Box":
         min_x, min_y, min_z = archive.read_f32(), archive.read_f32(), archive.read_f32()
         max_x, max_y, max_z = archive.read_f32(), archive.read_f32(), archive.read_f32()
         b_valid = archive.read_i32() != 0
-        return StructValue(struct_type="Box", fields={
-            "Min": {"X": min_x, "Y": min_y, "Z": min_z},
-            "Max": {"X": max_x, "Y": max_y, "Z": max_z},
-            "bIsValid": b_valid,
-        })
+        return StructValue(
+            struct_type="Box",
+            fields={
+                "Min": {"X": min_x, "Y": min_y, "Z": min_z},
+                "Max": {"X": max_x, "Y": max_y, "Z": max_z},
+                "bIsValid": b_valid,
+            },
+        )
 
     if struct_type == "Sphere":
         reader = archive.read_f64 if tag.size == 32 else archive.read_f32
@@ -677,9 +786,13 @@ def _try_fast_path_struct(
         return StructValue(struct_type="Sphere", fields={"Center": {"X": cx, "Y": cy, "Z": cz}, "W": w})
 
     if struct_type == "TopLevelAssetPath":
-        return StructValue(struct_type="TopLevelAssetPath", fields={
-            "PackageName": archive.read_name(name_map), "AssetName": archive.read_name(name_map),
-        })
+        return StructValue(
+            struct_type="TopLevelAssetPath",
+            fields={
+                "PackageName": archive.read_name(name_map),
+                "AssetName": archive.read_name(name_map),
+            },
+        )
 
     if struct_type == "PointerToUberGraphFrame":
         return StructValue(struct_type="PointerToUberGraphFrame", fields={"FrameIndex": archive.read_i64()})
@@ -699,9 +812,16 @@ def _try_fast_path_struct(
         az = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
         ext = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
         ctr = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
-        return StructValue(struct_type="OrientedBox", fields={
-            "AxisX": ax, "AxisY": ay, "AxisZ": az, "Extent": ext, "Center": ctr,
-        })
+        return StructValue(
+            struct_type="OrientedBox",
+            fields={
+                "AxisX": ax,
+                "AxisY": ay,
+                "AxisZ": az,
+                "Extent": ext,
+                "Center": ctr,
+            },
+        )
 
     if struct_type == "Transform":
         # Serialization order: Rotation -> Translation -> Scale3D (UE source TransformNonVectorized.h:616-622)
@@ -718,14 +838,20 @@ def _try_fast_path_struct(
             if not archive._tolerant:
                 raise ParseError(f"Transform: unexpected size {tag.size} (expected 40 or 80)")
             logger.warning("Transform: unexpected size %d, skipping (likely corrupted)", tag.size)
-            return StructValue(struct_type="Transform", fields={
-                "_warning": f"unexpected size {tag.size}",
-            })
-        return StructValue(struct_type="Transform", fields={
-            "Translation": {"X": tx, "Y": ty, "Z": tz},
-            "Rotation": {"X": rx, "Y": ry, "Z": rz, "W": rw},
-            "Scale3D": {"X": sx, "Y": sy, "Z": sz},
-        })
+            return StructValue(
+                struct_type="Transform",
+                fields={
+                    "_warning": f"unexpected size {tag.size}",
+                },
+            )
+        return StructValue(
+            struct_type="Transform",
+            fields={
+                "Translation": {"X": tx, "Y": ty, "Z": tz},
+                "Rotation": {"X": rx, "Y": ry, "Z": rz, "W": rw},
+                "Scale3D": {"X": sx, "Y": sy, "Z": sz},
+            },
+        )
 
     if struct_type == "BoxSphereBounds":
         if tag.size == 28:
@@ -751,11 +877,14 @@ def _try_fast_path_struct(
             remaining = tag.size - 28
             if remaining > 0:
                 archive.read_bytes(remaining)
-        return StructValue(struct_type="BoxSphereBounds", fields={
-            "Origin": {"X": ox, "Y": oy, "Z": oz},
-            "BoxExtent": {"X": bx, "Y": by, "Z": bz},
-            "SphereRadius": sr,
-        })
+        return StructValue(
+            struct_type="BoxSphereBounds",
+            fields={
+                "Origin": {"X": ox, "Y": oy, "Z": oz},
+                "BoxExtent": {"X": bx, "Y": by, "Z": bz},
+                "SphereRadius": sr,
+            },
+        )
 
     # MovieSceneDoubleChannel — animation keyframe channel (#515)
     # UE source: Engine/Source/Runtime/MovieScene/Public/MovieSceneChannel.h
@@ -770,8 +899,12 @@ def _try_fast_path_struct(
         bhd = header[3]
 
         # Validate: reasonable counts, header version
-        if (0 < vc < 50 and 0 <= tc <= vc and traits_ver in (0, 1, 2, 3, 4, 5)
-                and start + 4 + vc * 8 + tc * 4 + (8 if bhd else 0) <= start + tag.size + 16):
+        if (
+            0 < vc < 50
+            and 0 <= tc <= vc
+            and traits_ver in (0, 1, 2, 3, 4, 5)
+            and start + 4 + vc * 8 + tc * 4 + (8 if bhd else 0) <= start + tag.size + 16
+        ):
             try:
                 values = [archive.read_f64() for _ in range(vc)]
                 times = [archive.read_i32() for _ in range(tc)]
@@ -805,8 +938,12 @@ def _try_fast_path_struct(
         tc = header[2]
         bhd = header[3]
 
-        if (0 < vc < 50 and 0 <= tc <= vc and traits_ver in (0, 1, 2, 3, 4, 5)
-                and start + 4 + vc * 4 + tc * 4 + (4 if bhd else 0) <= start + tag.size + 16):
+        if (
+            0 < vc < 50
+            and 0 <= tc <= vc
+            and traits_ver in (0, 1, 2, 3, 4, 5)
+            and start + 4 + vc * 4 + tc * 4 + (4 if bhd else 0) <= start + tag.size + 16
+        ):
             try:
                 values = [archive.read_f32() for _ in range(vc)]
                 times = [archive.read_i32() for _ in range(tc)]
@@ -855,8 +992,7 @@ def _try_fast_path_struct(
     # SerializeMaterialInput, MaterialShared.cpp:439-487 (5.8.0-release@7deeb413).
     # Custom Serialize means the tagged fallback is never valid for these
     # types: decode on a known size, otherwise keep the bytes opaque.
-    if struct_type in ("ExpressionInput", "ScalarMaterialInput",
-                       "ColorMaterialInput", "VectorMaterialInput"):
+    if struct_type in ("ExpressionInput", "ScalarMaterialInput", "ColorMaterialInput", "VectorMaterialInput"):
         if struct_type == "ExpressionInput" and tag.size == 36:
             start = archive.tell()
             try:
@@ -870,8 +1006,9 @@ def _try_fast_path_struct(
                     "MaskB": archive.read_i32(),
                     "MaskA": archive.read_i32(),
                 }
-                return StructValue(struct_type="ExpressionInput", fields=fields,
-                                   raw_size=tag.size, parse_status="success")
+                return StructValue(
+                    struct_type="ExpressionInput", fields=fields, raw_size=tag.size, parse_status="success"
+                )
             except Exception:
                 archive.seek(start)
         elif struct_type != "ExpressionInput":
@@ -896,34 +1033,36 @@ def _try_fast_path_struct(
                     fields["Constant"] = {"B": b, "G": g, "R": r, "A": a}
                 elif struct_type == "ColorMaterialInput" and constant_size == 16:
                     fields["Constant"] = {
-                        "R": archive.read_f32(), "G": archive.read_f32(),
-                        "B": archive.read_f32(), "A": archive.read_f32(),
+                        "R": archive.read_f32(),
+                        "G": archive.read_f32(),
+                        "B": archive.read_f32(),
+                        "A": archive.read_f32(),
                     }
                 elif struct_type == "VectorMaterialInput" and constant_size == 12:
-                    fields["Constant"] = {"X": archive.read_f32(),
-                                          "Y": archive.read_f32(),
-                                          "Z": archive.read_f32()}
+                    fields["Constant"] = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
                 elif struct_type == "VectorMaterialInput" and constant_size == 24:
-                    fields["Constant"] = {"X": archive.read_f64(),
-                                          "Y": archive.read_f64(),
-                                          "Z": archive.read_f64()}
+                    fields["Constant"] = {"X": archive.read_f64(), "Y": archive.read_f64(), "Z": archive.read_f64()}
                 else:
-                    raise ValueError(
-                        f"unexpected constant size {constant_size} for {struct_type}")
-                return StructValue(struct_type=struct_type, fields=fields,
-                                   raw_size=tag.size, parse_status="success")
+                    raise ValueError(f"unexpected constant size {constant_size} for {struct_type}")
+                return StructValue(struct_type=struct_type, fields=fields, raw_size=tag.size, parse_status="success")
             except Exception:
                 archive.seek(start)
         # Decode failed or unrecognized size: never fall through to the
         # tagged loop for native-serialize structs; keep raw bytes opaque.
         archive.seek(archive.tell() + tag.size)
-        return StructValue(struct_type=struct_type, fields={},
-                           raw_size=tag.size, parse_status="opaque")
+        return StructValue(struct_type=struct_type, fields={}, raw_size=tag.size, parse_status="opaque")
 
     return None
 
 
-def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, depth: int = 0) -> StructValue:
+def parse_struct_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[Any],
+    summary: Optional[Any] = None,
+    depth: int = 0,
+) -> StructValue:
     """Parse StructProperty (ADVP-01)."""
     MAX_DEPTH = 5
 
@@ -959,13 +1098,18 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
                 if tag.size not in (float_size, double_size):
                     logger.debug(
                         "StructProperty '%s': tag.size=%d does not match float(%d) or double(%d), using fallback",
-                        struct_type, tag.size, float_size, double_size,
+                        struct_type,
+                        tag.size,
+                        float_size,
+                        double_size,
                     )
                     struct_type = None  # Skip all fast-path branches
             else:
                 logger.debug(
                     "StructProperty '%s': tag.size=%d != expected=%d, using fallback",
-                    struct_type, tag.size, expected_size,
+                    struct_type,
+                    tag.size,
+                    expected_size,
                 )
                 struct_type = None  # Skip all fast-path branches
 
@@ -973,7 +1117,8 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
     if tag.size is not None and tag.size < 0:
         logger.warning(
             "StructProperty '%s': negative size %d, treating as unsigned",
-            declared_struct_type, tag.size,
+            declared_struct_type,
+            tag.size,
         )
         unsigned_size = tag.size & 0xFFFFFFFF
         total = archive.total_size()
@@ -1007,7 +1152,10 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
     # Try both with and without "F" prefix to handle UE naming inconsistencies.
     if declared_struct_type:
         from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
-        bn_handler = BINARY_OR_NATIVE_HANDLERS.get(declared_struct_type) or BINARY_OR_NATIVE_HANDLERS.get(f"F{declared_struct_type}")
+
+        bn_handler = BINARY_OR_NATIVE_HANDLERS.get(declared_struct_type) or BINARY_OR_NATIVE_HANDLERS.get(
+            f"F{declared_struct_type}"
+        )
         if bn_handler is not None:
             try:
                 bn_result = bn_handler(tag, archive, name_map, export_map, summary)
@@ -1052,7 +1200,11 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
             if inner_tag.name == UE_NONE_SENTINEL:
                 break
 
-            if struct_end is not None and inner_tag.value_end_offset is not None and inner_tag.value_end_offset > struct_end:
+            if (
+                struct_end is not None
+                and inner_tag.value_end_offset is not None
+                and inner_tag.value_end_offset > struct_end
+            ):
                 raise ParseError(
                     f"Tagged struct '{declared_struct_type}' field '{inner_tag.name}' "
                     f"size {inner_tag.size} exceeds struct boundary",
@@ -1096,7 +1248,10 @@ def parse_struct_property(tag: PropertyTag, archive: FArchive, name_map: List[st
         parse_status="success",
     )
 
-def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None) -> MapValue:
+
+def parse_map_property(
+    tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None
+) -> MapValue:
     """Parse MapProperty (ADVP-02).
 
     UE serialization format:
@@ -1127,13 +1282,12 @@ def parse_map_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
         value = _dispatch_value_parse(value_type, archive, name_map, export_map, summary, tag=tag)
         entries.append({"key": key, "value": value})
 
-    return MapValue(
-        key_type=key_type,
-        value_type=value_type,
-        entries=entries
-    )
+    return MapValue(key_type=key_type, value_type=value_type, entries=entries)
 
-def parse_set_property(tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None) -> SetValue:
+
+def parse_set_property(
+    tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None
+) -> SetValue:
     """Parse SetProperty (ADVP-03).
 
     UE serialization format:
@@ -1144,7 +1298,9 @@ def parse_set_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
     element_type = getattr(tag, "inner_type", None) or _extract_set_type_from_tag(tag)
 
     # Read number of elements to remove (used in UE source for incremental updates)
-    num_elements_to_remove = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "SetProperty elements to remove count")
+    num_elements_to_remove = read_validated_count_tolerant(
+        archive, MAX_PROPERTY_COUNT, "SetProperty elements to remove count"
+    )
     # Skip elements to remove (serialized by element_type)
     parse_property_value = _get_parse_property_value()
     for _ in range(num_elements_to_remove):
@@ -1160,16 +1316,17 @@ def parse_set_property(tag: PropertyTag, archive: FArchive, name_map: List[str],
         element = parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
         elements.append(element)
 
-    return SetValue(
-        element_type=element_type,
-        elements=elements
-    )
+    return SetValue(element_type=element_type, elements=elements)
 
-def parse_enum_property(tag: PropertyTag, archive: FArchive, name_map: List[str], summary: Optional[Any] = None) -> EnumValue:
+
+def parse_enum_property(
+    tag: PropertyTag, archive: FArchive, name_map: List[str], summary: Optional[Any] = None
+) -> EnumValue:
     """Parse EnumProperty (ADVP-04)."""
     enum_type = _extract_enum_type_from_tag(tag)
     enum_value_name = archive.read_name(name_map)
     return make_enum_value(enum_type, enum_value_name)
+
 
 def _read_ftext_base(archive: FArchive) -> tuple[str, str, str]:
     """Read Base FText: namespace + key + source_string."""
@@ -1178,13 +1335,16 @@ def _read_ftext_base(archive: FArchive) -> tuple[str, str, str]:
     source_string = archive.read_fstring()
     return namespace, key, source_string
 
+
 def _read_ftext_args(archive: FArchive) -> None:
     """Read and discard FText argument dictionary (only consumes bytes)."""
     from uasset_read.parsers.utils import read_validated_count_tolerant
+
     count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "FText args")
     for _ in range(count):
         archive.read_fstring()  # key
         archive.read_fstring()  # value
+
 
 def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
     """Parse TextProperty (ADVP-05).
@@ -1200,8 +1360,8 @@ def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
         - history_type == 4-9 (AsNumber/AsPercent/AsCurrency/Date/Time/DateTime): namespace + key + source_string + value
         - history_type == 10 (Transform): namespace + key + source_string + transform_type
     """
-    _flags = archive.read_i32()       # FText flags (unused)
-    history_type = archive.read_u8() # FTextHistory type
+    _flags = archive.read_i32()  # FText flags (unused)
+    history_type = archive.read_u8()  # FTextHistory type
 
     if history_type == 0:  # Base
         namespace, key, source_string = _read_ftext_base(archive)
@@ -1247,25 +1407,21 @@ def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
         key = ""
         source_string = ""
 
-    return TextValue(
-        namespace=namespace or "",
-        key=key or "",
-        source_string=source_string or ""
-    )
+    return TextValue(namespace=namespace or "", key=key or "", source_string=source_string or "")
+
 
 def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str]) -> DelegateValue:
     """Parse DelegateProperty (ADVP-06)."""
     object_ref = archive.read_i32()
     function_name = archive.read_name(name_map)
 
-    return DelegateValue(
-        object_ref=object_ref,
-        function_name=function_name
-    )
+    return DelegateValue(object_ref=object_ref, function_name=function_name)
+
 
 # ============================================================================
 # Multicast delegate type parsers
 # ============================================================================
+
 
 def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> list:
     """Parse MulticastDelegateProperty.
@@ -1274,6 +1430,7 @@ def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive, name_
     (4-byte index + 4-byte instance number), consistent with parse_delegate_property.
     """
     from uasset_read.parsers.utils import read_validated_count_tolerant
+
     count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "MulticastDelegate")
     delegates = []
     for _ in range(count):
@@ -1282,21 +1439,26 @@ def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive, name_
         delegates.append({"object": obj_index, "function": func_name})
     return delegates
 
+
 def parse_multicast_inline_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> list:
     """Parse MulticastInlineDelegateProperty."""
     return parse_multicast_delegate_property(tag, archive, name_map)
+
 
 def parse_multicast_sparse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> list:
     """Parse MulticastSparseDelegateProperty."""
     return parse_multicast_delegate_property(tag, archive, name_map)
 
+
 # ============================================================================
 # Special type parsers
 # ============================================================================
 
+
 def parse_interface_property(tag: PropertyTag, archive: FArchive) -> int:
     """Parse InterfaceProperty."""
     return _simple_read(archive, "read_i32")
+
 
 def parse_field_path_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> dict:
     """Parse FieldPathProperty.
@@ -1305,13 +1467,21 @@ def parse_field_path_property(tag: PropertyTag, archive: FArchive, name_map: Lis
     (int32 count + N * FName), not FString array.
     """
     from uasset_read.parsers.utils import read_validated_count_tolerant
+
     count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "FieldPath")
     path = []
     for _ in range(count):
         path.append(archive.read_name(name_map))
     return {"path": path}
 
-def parse_optional_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None, export_map: List[Any] = None, summary: Optional[Any] = None) -> dict:
+
+def parse_optional_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: List[str] = None,
+    export_map: List[Any] = None,
+    summary: Optional[Any] = None,
+) -> dict:
     """Parse OptionalProperty."""
     has_value = archive.read_bool()
     if has_value:
@@ -1326,25 +1496,31 @@ def parse_optional_property(tag: PropertyTag, archive: FArchive, name_map: List[
         return {"has_value": True, "value": inner_value}
     return {"has_value": False, "value": None}
 
+
 # ============================================================================
 # Verse language type parsers
 # ============================================================================
+
 
 def parse_verse_string_property(tag: PropertyTag, archive: FArchive) -> str:
     """Parse VerseStringProperty."""
     return archive.read_fstring()
 
+
 def parse_verse_class_property(tag: PropertyTag, archive: FArchive) -> int:
     """Parse VerseClassProperty."""
     return _simple_read(archive, "read_i32")
+
 
 def parse_verse_function_property(tag: PropertyTag, archive: FArchive) -> int:
     """Parse VerseFunctionProperty."""
     return _simple_read(archive, "read_i32")
 
+
 def parse_verse_dynamic_property(tag: PropertyTag, archive: FArchive) -> int:
     """Parse VerseDynamicProperty."""
     return _simple_read(archive, "read_i32")
+
 
 def parse_ansi_str_property(tag: PropertyTag, archive: FArchive) -> str:
     """Parse AnsiStrProperty -- ANSI string in UE4/legacy assets.
@@ -1352,6 +1528,7 @@ def parse_ansi_str_property(tag: PropertyTag, archive: FArchive) -> str:
     Uses the same length-prefixed format as FString, but content is decoded as Latin-1 instead of UTF-8/UTF-16.
     """
     return archive.read_fstring()  # read_fstring already handles length-prefixed strings
+
 
 def parse_verse_cell_property(tag: PropertyTag, archive: FArchive) -> dict:
     """Parse VerseCellProperty (UE5.6+ Verse scripting system).
@@ -1369,6 +1546,7 @@ def parse_verse_cell_property(tag: PropertyTag, archive: FArchive) -> dict:
         "ref": {"package_index": package_index, "name_index": name_index},
         "raw": raw,
     }
+
 
 def parse_verse_value_property(tag: PropertyTag, archive: FArchive) -> dict:
     """Parse VerseValueProperty (UE5.6+ Verse scripting system).
@@ -1393,9 +1571,11 @@ def parse_verse_value_property(tag: PropertyTag, archive: FArchive) -> dict:
         "raw": raw,
     }
 
+
 def parse_double_property(tag: PropertyTag, archive: FArchive) -> float:
     """Parse DoubleProperty (standalone parser)."""
     return _simple_read(archive, "read_f64")
+
 
 def parse_guid_property(tag: PropertyTag, archive: FArchive) -> str:
     """Parse GuidProperty -- FGuid struct (16 bytes).
@@ -1412,9 +1592,11 @@ def parse_guid_property(tag: PropertyTag, archive: FArchive) -> str:
         f"{data[10]:02x}{data[11]:02x}{data[12]:02x}{data[13]:02x}{data[14]:02x}{data[15]:02x}"
     )
 
+
 # ============================================================================
 # TypeName extraction helpers (lines 5517-5641 equivalent)
 # ============================================================================
+
 
 def _get_inner_type(array_type: str) -> str:
     """Infer inner element type from ArrayProperty type name.
@@ -1426,7 +1608,7 @@ def _get_inner_type(array_type: str) -> str:
     if "(" in array_type and ")" in array_type:
         start = array_type.find("(")
         end = array_type.find(")")
-        inner = array_type[start + 1:end].strip()
+        inner = array_type[start + 1 : end].strip()
         # Handle types with path: /Script/CoreUObject.IntProperty -> IntProperty
         if "." in inner:
             inner = inner.split(".")[-1]
@@ -1450,6 +1632,7 @@ def _get_inner_type(array_type: str) -> str:
     }
     return type_mapping.get(array_type, "Unknown")
 
+
 def _extract_struct_type_from_tag(tag: PropertyTag) -> str:
     """Extract struct type name from PropertyTag (D-08)."""
     if getattr(tag, "struct_type", None):
@@ -1463,6 +1646,7 @@ def _extract_struct_type_from_tag(tag: PropertyTag) -> str:
 
     return "UnknownStruct"
 
+
 def _extract_map_types_from_tag(tag: PropertyTag) -> Tuple[str, str]:
     """Extract Map Key/Value types from PropertyTag (D-08)."""
     inner = extract_inner_from_tag(tag.type)
@@ -1473,6 +1657,7 @@ def _extract_map_types_from_tag(tag: PropertyTag) -> Tuple[str, str]:
 
     return "IntProperty", "IntProperty"
 
+
 def _extract_set_type_from_tag(tag: PropertyTag) -> str:
     """Extract Set element type from PropertyTag (D-08)."""
     inner = extract_inner_from_tag(tag.type)
@@ -1480,6 +1665,7 @@ def _extract_set_type_from_tag(tag: PropertyTag) -> str:
         return inner.strip()
 
     return "IntProperty"
+
 
 def _extract_enum_type_from_tag(tag: PropertyTag) -> str:
     """Extract enum type name from PropertyTag (D-08)."""
@@ -1491,16 +1677,33 @@ def _extract_enum_type_from_tag(tag: PropertyTag) -> str:
 
     return "UnknownEnum"
 
+
 # ============================================================================
 # Internal dispatch helpers for MapProperty (lines 5773-5841 equivalent)
 # ============================================================================
 
-def _dispatch_key_parse(key_type: str, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, tag: Optional[PropertyTag] = None) -> Any:
+
+def _dispatch_key_parse(
+    key_type: str,
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[Any],
+    summary: Optional[Any] = None,
+    tag: Optional[PropertyTag] = None,
+) -> Any:
     """Key type dispatch parsing (D-02b)."""
     basic_types = [
-        "IntProperty", "Int64Property", "FloatProperty", "DoubleProperty",
-        "StrProperty", "NameProperty", "BoolProperty", "ByteProperty",
-        "UInt16Property", "UInt32Property", "UInt64Property",
+        "IntProperty",
+        "Int64Property",
+        "FloatProperty",
+        "DoubleProperty",
+        "StrProperty",
+        "NameProperty",
+        "BoolProperty",
+        "ByteProperty",
+        "UInt16Property",
+        "UInt32Property",
+        "UInt64Property",
     ]
     if key_type in basic_types:
         dummy_tag = PropertyTag(name="Key", type=key_type, size=0)
@@ -1518,20 +1721,28 @@ def _dispatch_key_parse(key_type: str, archive: FArchive, name_map: List[str], e
         # Get key_type_struct from tag; if tag is None, try to get from archive
         struct_type = None
         if tag is not None:
-            struct_type = getattr(tag, 'key_type_struct', None)
+            struct_type = getattr(tag, "key_type_struct", None)
         dummy_tag = PropertyTag(name="Key", type="StructProperty", size=0, struct_type=struct_type or "Unknown")
         return parse_struct_property(dummy_tag, archive, name_map, export_map, summary)
 
     return None
 
-def _dispatch_value_parse(value_type: str, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None, tag: Optional[PropertyTag] = None) -> Any:
+
+def _dispatch_value_parse(
+    value_type: str,
+    archive: FArchive,
+    name_map: List[str],
+    export_map: List[Any],
+    summary: Optional[Any] = None,
+    tag: Optional[PropertyTag] = None,
+) -> Any:
     """Value type dispatch parsing."""
     if value_type == "StructProperty":
         # Propagate struct type from tag so parse_struct_property can identify
         # the concrete struct rather than falling back to UnknownStruct.
         struct_type = None
         if tag is not None:
-            struct_type = getattr(tag, 'value_type_struct', None)
+            struct_type = getattr(tag, "value_type_struct", None)
         dummy_tag = PropertyTag(name="Value", type="StructProperty", size=0, struct_type=struct_type or "Unknown")
         return parse_struct_property(dummy_tag, archive, name_map, export_map, summary)
 
@@ -1539,9 +1750,11 @@ def _dispatch_value_parse(value_type: str, archive: FArchive, name_map: List[str
     parse_property_value = _get_parse_property_value()
     return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
 
+
 # ============================================================================
 # Default value parsing (equivalent migration of uasset_read.py section 4650-4704)
 # ============================================================================
+
 
 def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> Any:
     """
@@ -1572,13 +1785,13 @@ def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> Any:
 
     # Integer parsing
     if category in ("int", "integer"):
-        if re.match(r'^-?\d+$', value_str):
+        if re.match(r"^-?\d+$", value_str):
             return int(value_str)
         return value_str
 
     # Float/real number parsing
     if category in ("float", "real", "double"):
-        if re.match(r'^-?\d+\.?\d*$', value_str):
+        if re.match(r"^-?\d+\.?\d*$", value_str):
             return float(value_str)
         return value_str
 
@@ -1589,9 +1802,11 @@ def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> Any:
     # Unknown category: fall back to raw string
     return value_str
 
+
 # ============================================================================
 # Variable type formatting (equivalent migration of uasset_read.py section 4829-4907)
 # ============================================================================
+
 
 def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) -> str:
     """
@@ -1601,7 +1816,7 @@ def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) 
     """
     # Container type prefix
     container_prefix = ""
-    container_type = getattr(pin_type, 'container_type', 0)
+    container_type = getattr(pin_type, "container_type", 0)
     if container_type == 1:  # Array
         container_prefix = "TArray<"
     elif container_type == 2:  # Set
@@ -1611,7 +1826,7 @@ def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) 
 
     # Base type from PinCategory
     category = pin_type.pin_category.lower()
-    sub_category = getattr(pin_type, 'pin_subcategory', '') or getattr(pin_type, 'pin_sub_category', '') or ''
+    sub_category = getattr(pin_type, "pin_subcategory", "") or getattr(pin_type, "pin_sub_category", "") or ""
     sub_category = sub_category.lower()
 
     # Type mapping
@@ -1629,7 +1844,7 @@ def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) 
     elif category in ("text",):
         type_str = "FText"
     elif category in ("object", "class", "interface"):
-        pin_subcategory_object = getattr(pin_type, 'pin_subcategory_object', 0)
+        pin_subcategory_object = getattr(pin_type, "pin_subcategory_object", 0)
         if pin_subcategory_object != 0 and name_map:
             if sub_category and sub_category != "none":
                 type_str = sub_category
@@ -1637,7 +1852,7 @@ def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) 
                 type_str = "UObject"
         else:
             type_str = "UObject"
-        is_weak = getattr(pin_type, 'is_weak_pointer', False)
+        is_weak = getattr(pin_type, "is_weak_pointer", False)
         if not is_weak:
             type_str += "*"
     elif sub_category and sub_category != "none":
@@ -1652,7 +1867,7 @@ def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) 
 
     # Const prefix (backward compat: is_const may not exist)
     const_prefix = ""
-    if getattr(pin_type, 'is_const', False):
+    if getattr(pin_type, "is_const", False):
         const_prefix = "const "
 
     return f"{const_prefix}{container_prefix}{type_str}{container_suffix}"

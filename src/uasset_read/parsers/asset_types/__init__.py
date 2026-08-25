@@ -29,12 +29,65 @@ from uasset_read.parsers.asset_types.property_metadata import build_property_met
 logger = logging.getLogger(__name__)
 
 
-# Import dedicated parse functions
-from uasset_read.parsers.asset_types.static_mesh import parse_static_mesh
-from uasset_read.parsers.asset_types.skeletal_mesh import parse_skeletal_mesh
+# Import dedicated parse functions (non-stub modules only)
 from uasset_read.parsers.asset_types.material import parse_material
 from uasset_read.parsers.asset_types.material_instance import parse_material_instance
-from uasset_read.parsers.asset_types.texture2d import parse_texture2d
+
+# Opaque stub factory (replaces 40 deleted stub files)
+from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
+
+# Module -> class names mapping for opaque stubs
+_OPAQUE_STUBS: dict[str, list[str]] = {
+    "anim_blend_space": ["AnimBlendSpace", "AnimBlendSpace1D", "AimOffsetBlendSpace", "AimOffsetBlendSpace1D"],
+    "anim_bone_compression": ["AnimBoneCompressionSettings"],
+    "anim_composite": ["AnimComposite"],
+    "anim_curve_compression": ["AnimCurveCompressionCodec"],
+    "anim_data_model": ["AnimationDataModel"],
+    "anim_layer_interface": ["AnimLayerInterface"],
+    "behavior_tree": ["BehaviorTree"],
+    "blackboard_data": ["BlackboardData"],
+    "cloth_asset": ["ClothAsset"],
+    "curve_float": ["CurveFloat"],
+    "curve_linear_color": ["CurveLinearColor"],
+    "curve_vector": ["CurveVector"],
+    "data_asset": ["DataAsset"],
+    "dialogue_voice": ["DialogueVoice"],
+    "dialogue_wave": ["DialogueWave"],
+    "foliage_type": ["FoliageType"],
+    "groom_asset": ["GroomAsset"],
+    "landscape": ["Landscape"],
+    "landscape_grass_type": ["LandscapeGrassType"],
+    "landscape_layer_info": ["LandscapeLayerInfoObject"],
+    "level": ["Level"],
+    "material_function": ["MaterialFunction"],
+    "material_parameter_collection": ["MaterialParameterCollection"],
+    "media_player": ["MediaPlayer"],
+    "media_source": ["MediaSource"],
+    "media_texture": ["MediaTexture"],
+    "particle_system": ["ParticleSystem"],
+    "physical_material": ["PhysicalMaterial"],
+    "physics_asset": ["PhysicsAsset"],
+    "pose_asset": ["PoseAsset"],
+    "primary_data_asset": ["PrimaryDataAsset"],
+    "reverb_effect": ["ReverbEffect"],
+    "skeletal_mesh": ["SkeletalMesh"],
+    "skeletal_mesh_lod_settings": ["SkeletalMeshLODSettings"],
+    "sound_attenuation": ["SoundAttenuation"],
+    "sound_class": ["SoundClass"],
+    "sound_concurrency": ["SoundConcurrency"],
+    "sound_mix": ["SoundMix"],
+    "sound_submix": ["SoundSubmix"],
+    "sparse_volume_texture": ["SparseVolumeTexture"],
+    "static_mesh": ["StaticMesh"],
+    "string_table": ["StringTable"],
+    "subsurface_profile": ["SubsurfaceProfile"],
+    "texture2d": ["Texture2D"],
+    "texture2d_array": ["Texture2DArray"],
+    "texture_render_target": ["TextureRenderTarget2D", "TextureRenderTargetCube"],
+    "volume_texture": ["VolumeTexture"],
+    "widget_blueprint": ["WidgetBlueprintGeneratedClass", "WidgetBlueprint"],
+    "world": ["World"],
+}
 
 # Import handler classes (for reflection registration)
 from uasset_read.parsers.asset_types.anim_blueprint import AnimBlueprintHandler
@@ -46,11 +99,8 @@ from uasset_read.parsers.asset_types.niagara_node import NiagaraNodeHandler
 from uasset_read.parsers.asset_types.niagara_script_variable import NiagaraScriptVariableHandler
 
 __all__ = [
-    "parse_static_mesh",
-    "parse_skeletal_mesh",
     "parse_material",
     "parse_material_instance",
-    "parse_texture2d",
     "register_asset_type_handlers",
     "AnimBlueprintHandler",
     "AnimSequenceHandler",
@@ -249,6 +299,20 @@ def register_asset_type_handlers() -> None:
     ]
     for module, func_name, class_names, handler_name in _optional:
         try:
+            # Check if this is an opaque stub (module deleted, use inline factory)
+            if module in _OPAQUE_STUBS:
+                # Use first class name from the mapping for the stub factory
+                stub_classes = _OPAQUE_STUBS[module]
+                parse_func = make_opaque_stub(stub_classes[0])
+                handlers.append(
+                    AssetTypeHandler(
+                        class_names=class_names,
+                        parse_func=parse_func,
+                        handler_name=handler_name,
+                    ),
+                )
+                continue
+
             mod = __import__(
                 f"uasset_read.parsers.asset_types.{module}",
                 fromlist=[func_name],

@@ -19,9 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # BinaryOrNative handler type signature
-BinaryOrNativeHandler = Callable[
-    ["PropertyTag", "FArchive", List[str], List[Any], Any], Optional[Dict[str, Any]]
-]
+BinaryOrNativeHandler = Callable[["PropertyTag", "FArchive", List[str], List[Any], Any], Optional[Dict[str, Any]]]
 
 
 def _parse_instanced_struct(
@@ -332,11 +330,7 @@ def _decode_soft_object_path_index(
 ) -> Optional[Dict[str, Any]]:
     """Resolve a UE5 header-table FSoftObjectPath index without guessing."""
     soft_object_path_list = getattr(summary, "_soft_object_path_list", None)
-    if (
-        len(raw) != 4
-        or not isinstance(soft_object_path_list, list)
-        or not soft_object_path_list
-    ):
+    if len(raw) != 4 or not isinstance(soft_object_path_list, list) or not soft_object_path_list:
         return None
 
     index = struct.unpack("<i", raw)[0]

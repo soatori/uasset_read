@@ -3,6 +3,7 @@
 Reference: CUE4Parse: FStructFallback, generic UObject, FPropertyTag fallback.
 Goal: allow unknown property/struct/export to retain diagnostic structured information.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
 
 class ExportParseStatus(str, Enum):
     """Export-level parse status."""
+
     SUCCESS = "success"
     PARTIAL = "partial"
     FAILED = "failed"
@@ -29,7 +31,11 @@ class ExportParseStatus(str, Enum):
     @property
     def is_partial(self) -> bool:
         return self.value.startswith("partial") or self.value in (
-            "opaque", "skipped", "opaque_unversioned", "fallback", "metadata"
+            "opaque",
+            "skipped",
+            "opaque_unversioned",
+            "fallback",
+            "metadata",
         )
 
     @property
@@ -39,6 +45,7 @@ class ExportParseStatus(str, Enum):
 
 class FallbackReason(str, Enum):
     """Fallback reason."""
+
     UNSUPPORTED_TYPE = "unsupported_type"
     UNSUPPORTED_STRUCT = "unsupported_struct"
     PARSE_ERROR = "parse_error"
@@ -80,10 +87,10 @@ class PropertyFallback(PropertyValue):
         return "unknown_property"
 
 
-
 @dataclass
 class StructFallback:
     """Structured fallback for unknown structs (reference: CUE4Parse FStructFallback)."""
+
     struct_type: str
     size: int
     raw_bytes: bytes = b""
@@ -113,6 +120,7 @@ class StructFallback:
 @dataclass
 class GenericUObject:
     """Generic UObject fallback (reference: CUE4Parse generic UObject)."""
+
     name: str
     class_name: str
     serial_offset: int = 0

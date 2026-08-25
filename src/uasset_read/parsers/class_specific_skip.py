@@ -60,6 +60,7 @@ SKIP_CLASS_PREFIXES = (
     "AggGeom_",
 )
 
+
 # Exact class names to skip (no prefix matching)
 # These classes use fully custom serialization formats, cannot be handled by generic parser
 #
@@ -105,11 +106,7 @@ def should_skip_export_for_tolerant_parsing(
     object_name = str(export.object_name)
     if class_name != "CubeBuilder" and object_name.startswith(SKIP_CLASS_PREFIXES):
         return True
-    if (
-        class_name is not None
-        and class_name != "CubeBuilder"
-        and class_name.startswith(SKIP_CLASS_PREFIXES)
-    ):
+    if class_name is not None and class_name != "CubeBuilder" and class_name.startswith(SKIP_CLASS_PREFIXES):
         return True
     return False
 
@@ -132,7 +129,7 @@ def skip_export_payload(
 
     if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
         # Use getattr for safe fallback to prevent AttributeError when attribute does not exist
-        script_serial_end = getattr(export, 'script_serialization_end_offset', None)
+        script_serial_end = getattr(export, "script_serialization_end_offset", None)
         if script_serial_end is None:
             # Fall back to serial_size for compatibility
             script_serial_end = export.serial_size

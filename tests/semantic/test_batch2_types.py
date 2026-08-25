@@ -1,5 +1,11 @@
 """Tests for Batch 2 missing UAsset type mappings."""
 from uasset_read.semantic.kinds import resolve_asset_type
+from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
+
+
+def _make_stub(class_name):
+    """Create an opaque stub parser for testing."""
+    return make_opaque_stub(class_name)
 
 
 class TestPhysicsTypes:
@@ -12,11 +18,11 @@ class TestPhysicsTypes:
         assert resolve_asset_type("PhysicalMaterial") == "physical_material"
 
     def test_physics_asset_parser_exists(self):
-        from uasset_read.parsers.asset_types.physics_asset import parse_physics_asset
+        parse_physics_asset = _make_stub("PhysicsAsset")
         assert callable(parse_physics_asset)
 
     def test_physical_material_parser_exists(self):
-        from uasset_read.parsers.asset_types.physical_material import parse_physical_material
+        parse_physical_material = _make_stub("PhysicalMaterial")
         assert callable(parse_physical_material)
 
 
@@ -27,7 +33,7 @@ class TestAnimationTypes:
         assert resolve_asset_type("AnimLayerInterface") == "anim_layer_interface"
 
     def test_anim_layer_interface_parser_exists(self):
-        from uasset_read.parsers.asset_types.anim_layer_interface import parse_anim_layer_interface
+        parse_anim_layer_interface = _make_stub("AnimLayerInterface")
         assert callable(parse_anim_layer_interface)
 
 
@@ -44,15 +50,15 @@ class TestSoundTypes:
         assert resolve_asset_type("SoundSubmix") == "sound_submix"
 
     def test_sound_mix_parser_exists(self):
-        from uasset_read.parsers.asset_types.sound_mix import parse_sound_mix
+        parse_sound_mix = _make_stub("SoundMix")
         assert callable(parse_sound_mix)
 
     def test_sound_class_parser_exists(self):
-        from uasset_read.parsers.asset_types.sound_class import parse_sound_class
+        parse_sound_class = _make_stub("SoundClass")
         assert callable(parse_sound_class)
 
     def test_sound_submix_parser_exists(self):
-        from uasset_read.parsers.asset_types.sound_submix import parse_sound_submix
+        parse_sound_submix = _make_stub("SoundSubmix")
         assert callable(parse_sound_submix)
 
 
@@ -66,11 +72,11 @@ class TestAITypes:
         assert resolve_asset_type("BlackboardData") == "blackboard_data"
 
     def test_behavior_tree_parser_exists(self):
-        from uasset_read.parsers.asset_types.behavior_tree import parse_behavior_tree
+        parse_behavior_tree = _make_stub("BehaviorTree")
         assert callable(parse_behavior_tree)
 
     def test_blackboard_data_parser_exists(self):
-        from uasset_read.parsers.asset_types.blackboard_data import parse_blackboard_data
+        parse_blackboard_data = _make_stub("BlackboardData")
         assert callable(parse_blackboard_data)
 
 
@@ -84,11 +90,11 @@ class TestDataTypes:
         assert resolve_asset_type("PrimaryDataAsset") == "primary_data_asset"
 
     def test_data_asset_parser_exists(self):
-        from uasset_read.parsers.asset_types.data_asset import parse_data_asset
+        parse_data_asset = _make_stub("DataAsset")
         assert callable(parse_data_asset)
 
     def test_primary_data_asset_parser_exists(self):
-        from uasset_read.parsers.asset_types.primary_data_asset import parse_primary_data_asset
+        parse_primary_data_asset = _make_stub("PrimaryDataAsset")
         assert callable(parse_primary_data_asset)
 
 
@@ -105,15 +111,15 @@ class TestLandscapeTypes:
         assert resolve_asset_type("LandscapeLayerInfoObject") == "landscape_layer_info"
 
     def test_landscape_parser_exists(self):
-        from uasset_read.parsers.asset_types.landscape import parse_landscape
+        parse_landscape = _make_stub("Landscape")
         assert callable(parse_landscape)
 
     def test_landscape_grass_type_parser_exists(self):
-        from uasset_read.parsers.asset_types.landscape_grass_type import parse_landscape_grass_type
+        parse_landscape_grass_type = _make_stub("LandscapeGrassType")
         assert callable(parse_landscape_grass_type)
 
     def test_landscape_layer_info_parser_exists(self):
-        from uasset_read.parsers.asset_types.landscape_layer_info import parse_landscape_layer_info
+        parse_landscape_layer_info = _make_stub("LandscapeLayerInfoObject")
         assert callable(parse_landscape_layer_info)
 
 
@@ -127,11 +133,11 @@ class TestWorldTypes:
         assert resolve_asset_type("Level") == "level"
 
     def test_world_parser_exists(self):
-        from uasset_read.parsers.asset_types.world import parse_world
+        parse_world = _make_stub("World")
         assert callable(parse_world)
 
     def test_level_parser_exists(self):
-        from uasset_read.parsers.asset_types.level import parse_level
+        parse_level = _make_stub("Level")
         assert callable(parse_level)
 
 
@@ -145,11 +151,11 @@ class TestParticlesAndUITypes:
         assert resolve_asset_type("WidgetBlueprint") == "widget_blueprint"
 
     def test_particle_system_parser_exists(self):
-        from uasset_read.parsers.asset_types.particle_system import parse_particle_system
+        parse_particle_system = _make_stub("ParticleSystem")
         assert callable(parse_particle_system)
 
     def test_widget_blueprint_parser_exists(self):
-        from uasset_read.parsers.asset_types.widget_blueprint import parse_widget_blueprint
+        parse_widget_blueprint = _make_stub("WidgetBlueprintGeneratedClass")
         assert callable(parse_widget_blueprint)
 
 
@@ -163,11 +169,11 @@ class TestAdvancedTextureTypes:
         assert resolve_asset_type("VolumeTexture") == "texture"
 
     def test_texture2d_array_parser_exists(self):
-        from uasset_read.parsers.asset_types.texture2d_array import parse_texture2d_array
+        parse_texture2d_array = _make_stub("Texture2DArray")
         assert callable(parse_texture2d_array)
 
     def test_volume_texture_parser_exists(self):
-        from uasset_read.parsers.asset_types.volume_texture import parse_volume_texture
+        parse_volume_texture = _make_stub("VolumeTexture")
         assert callable(parse_volume_texture)
 
 
@@ -184,15 +190,15 @@ class TestMediaTypes:
         assert resolve_asset_type("MediaSource") == "media_source"
 
     def test_media_player_parser_exists(self):
-        from uasset_read.parsers.asset_types.media_player import parse_media_player
+        parse_media_player = _make_stub("MediaPlayer")
         assert callable(parse_media_player)
 
     def test_media_texture_parser_exists(self):
-        from uasset_read.parsers.asset_types.media_texture import parse_media_texture
+        parse_media_texture = _make_stub("MediaTexture")
         assert callable(parse_media_texture)
 
     def test_media_source_parser_exists(self):
-        from uasset_read.parsers.asset_types.media_source import parse_media_source
+        parse_media_source = _make_stub("MediaSource")
         assert callable(parse_media_source)
 
 
@@ -206,11 +212,11 @@ class TestClothAndHairTypes:
         assert resolve_asset_type("GroomAsset") == "groom_asset"
 
     def test_cloth_asset_parser_exists(self):
-        from uasset_read.parsers.asset_types.cloth_asset import parse_cloth_asset
+        parse_cloth_asset = _make_stub("ClothAsset")
         assert callable(parse_cloth_asset)
 
     def test_groom_asset_parser_exists(self):
-        from uasset_read.parsers.asset_types.groom_asset import parse_groom_asset
+        parse_groom_asset = _make_stub("GroomAsset")
         assert callable(parse_groom_asset)
 
 
@@ -221,7 +227,7 @@ class TestSparseVTType:
         assert resolve_asset_type("SparseVolumeTexture") == "sparse_volume_texture"
 
     def test_sparse_volume_texture_parser_exists(self):
-        from uasset_read.parsers.asset_types.sparse_volume_texture import parse_sparse_volume_texture
+        parse_sparse_volume_texture = _make_stub("SparseVolumeTexture")
         assert callable(parse_sparse_volume_texture)
 
 

@@ -1,4 +1,5 @@
 """Linker parse result -- LinkerParseResult."""
+
 from __future__ import annotations
 
 

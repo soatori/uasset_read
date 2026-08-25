@@ -120,21 +120,9 @@ class PackageLinker:
         self._import_objects = []
         for idx, imp in enumerate(self._import_map):
             pkg_idx = -(idx + 1)
-            obj_name = (
-                self._name_map[imp.object_name]
-                if isinstance(imp.object_name, int)
-                else imp.object_name
-            )
-            cls_name = (
-                self._name_map[imp.class_name]
-                if isinstance(imp.class_name, int)
-                else imp.class_name
-            )
-            cls_pkg = (
-                self._name_map[imp.class_package]
-                if isinstance(imp.class_package, int)
-                else imp.class_package
-            )
+            obj_name = self._name_map[imp.object_name] if isinstance(imp.object_name, int) else imp.object_name
+            cls_name = self._name_map[imp.class_name] if isinstance(imp.class_name, int) else imp.class_name
+            cls_pkg = self._name_map[imp.class_package] if isinstance(imp.class_package, int) else imp.class_package
             inst = UObjectInstance(
                 package_index=pkg_idx,
                 object_name=obj_name,
@@ -152,14 +140,8 @@ class PackageLinker:
         self._export_objects = []
         for idx, exp in enumerate(self._export_map):
             pkg_idx = idx + 1
-            obj_name = (
-                self._name_map[exp.object_name]
-                if isinstance(exp.object_name, int)
-                else exp.object_name
-            )
-            cls_name = resolve_class_name(
-                exp.class_index, self._import_map, self._export_map
-            )
+            obj_name = self._name_map[exp.object_name] if isinstance(exp.object_name, int) else exp.object_name
+            cls_name = resolve_class_name(exp.class_index, self._import_map, self._export_map)
 
             # 早期验证 serial_offset（防止溢出值传播到 preload 阶段）
             serial_offset = exp.serial_offset
@@ -208,11 +190,7 @@ class PackageLinker:
         for idx, exp in enumerate(self._export_map):
             if idx < len(self._export_objects):
                 inst = self._export_objects[idx]
-                if (
-                    hasattr(exp, "super_index")
-                    and exp.super_index
-                    and not exp.super_index.is_null
-                ):
+                if hasattr(exp, "super_index") and exp.super_index and not exp.super_index.is_null:
                     super_inst = self.resolve_package_index(exp.super_index)
                     if super_inst is not None:
                         inst.super_object = super_inst
@@ -221,9 +199,7 @@ class PackageLinker:
         """返回导出对象列表的只读副本。"""
         return list(self._export_objects)
 
-    def resolve_package_index(
-        self, pkg_idx: "PackageIndex"
-    ) -> Optional[UObjectInstance]:
+    def resolve_package_index(self, pkg_idx: "PackageIndex") -> Optional[UObjectInstance]:
         """Resolve a PackageIndex to its UObjectInstance.
 
         Validates index bounds and records OffsetRangeDiagnostic on out-of-bounds.
@@ -330,9 +306,7 @@ class PackageLinker:
                 if strategy == SerializationStrategy.SKIP_UNSUPPORTED:
                     # 完全不支持的类，直接跳过（无 asset handler）
                     setattr(instance, "parse_status", validate_parse_status("skipped"))
-                    setattr(
-                        instance, "fallback_reason", f"skip_unsupported:{class_name}"
-                    )
+                    setattr(instance, "fallback_reason", f"skip_unsupported:{class_name}")
                     setattr(exp, "parse_status", validate_parse_status("skipped"))
                     setattr(exp, "fallback_reason", f"skip_unsupported:{class_name}")
                     # 确保 properties 至少为空列表
@@ -485,10 +459,7 @@ class PackageLinker:
         for inst in self._export_objects:
             if not inst._preloaded:
                 continue
-            if (
-                not hasattr(inst, "serialized_properties")
-                or not inst.serialized_properties
-            ):
+            if not hasattr(inst, "serialized_properties") or not inst.serialized_properties:
                 continue
             for prop in inst.serialized_properties:
                 if not isinstance(prop, dict):
@@ -518,10 +489,7 @@ class PackageLinker:
         for inst in self._export_objects:
             if not inst._preloaded:
                 continue
-            if (
-                not hasattr(inst, "serialized_properties")
-                or not inst.serialized_properties
-            ):
+            if not hasattr(inst, "serialized_properties") or not inst.serialized_properties:
                 continue
             for prop in inst.serialized_properties:
                 if not isinstance(prop, dict):
@@ -545,27 +513,19 @@ class PackageLinker:
         """
         errors = []
         for idx, imp in enumerate(self._import_map):
-            inst = (
-                self._import_objects[idx] if idx < len(self._import_objects) else None
-            )
+            inst = self._import_objects[idx] if idx < len(self._import_objects) else None
             if inst is None:
                 continue
 
             # 验证 class_name 在 name_map 中的有效性
             if isinstance(imp.class_name, int):
                 if imp.class_name < 0 or imp.class_name >= len(self._name_map):
-                    errors.append(
-                        f"Import {inst.object_name}: class_name index {imp.class_name} 越界"
-                    )
+                    errors.append(f"Import {inst.object_name}: class_name index {imp.class_name} 越界")
             elif isinstance(imp.class_name, str) and not imp.class_name:
                 errors.append(f"Import {inst.object_name}: class_name 为空")
 
             # 验证 outer_index
-            if (
-                hasattr(imp, "outer_index")
-                and imp.outer_index
-                and not imp.outer_index.is_null
-            ):
+            if hasattr(imp, "outer_index") and imp.outer_index and not imp.outer_index.is_null:
                 outer_inst = self.resolve_package_index(imp.outer_index)
                 if outer_inst is None:
                     # World Partition 子包的 hashed 路径（如 /Script/Engine_3103784960）
@@ -578,9 +538,7 @@ class PackageLinker:
                             obj_name,
                         )
                     else:
-                        errors.append(
-                            f"Import {inst.object_name}: outer_index 无法解析"
-                        )
+                        errors.append(f"Import {inst.object_name}: outer_index 无法解析")
 
         return errors
 
@@ -593,11 +551,7 @@ class PackageLinker:
             if idx >= len(self._export_map):
                 continue
             exp = self._export_map[idx]
-            if (
-                hasattr(exp, "template_index")
-                and exp.template_index
-                and not exp.template_index.is_null
-            ):
+            if hasattr(exp, "template_index") and exp.template_index and not exp.template_index.is_null:
                 template = self.resolve_package_index(exp.template_index)
                 if template:
                     inst.template_object = template

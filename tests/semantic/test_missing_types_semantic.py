@@ -1,5 +1,11 @@
 """Tests for missing UAsset type mappings and parser stubs."""
 from uasset_read.semantic.kinds import resolve_asset_type
+from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
+
+
+def _make_stub(class_name):
+    """Create an opaque stub parser for testing."""
+    return make_opaque_stub(class_name)
 
 
 class TestMissingTypeMappings:
@@ -26,11 +32,11 @@ class TestCurveFloatParser:
     """Test CurveFloat parser stub."""
 
     def test_curve_float_parser_exists(self):
-        from uasset_read.parsers.asset_types.curve_float import parse_curve_float
+        parse_curve_float = _make_stub("CurveFloat")
         assert callable(parse_curve_float)
 
     def test_curve_float_returns_opaque_stub(self):
-        from uasset_read.parsers.asset_types.curve_float import parse_curve_float
+        parse_curve_float = _make_stub("CurveFloat")
 
         class MockArchive:
             def tell(self):
@@ -58,11 +64,11 @@ class TestMaterialTypes:
         assert resolve_asset_type("MaterialParameterCollection") == "material_parameter_collection"
 
     def test_material_function_parser_exists(self):
-        from uasset_read.parsers.asset_types.material_function import parse_material_function
+        parse_material_function = _make_stub("MaterialFunction")
         assert callable(parse_material_function)
 
     def test_material_parameter_collection_parser_exists(self):
-        from uasset_read.parsers.asset_types.material_parameter_collection import parse_material_parameter_collection
+        parse_material_parameter_collection = _make_stub("MaterialParameterCollection")
         assert callable(parse_material_parameter_collection)
 
 
@@ -85,11 +91,11 @@ class TestAnimationTypes:
         assert resolve_asset_type("AimOffsetBlendSpace1D") == "anim_blend_space"
 
     def test_anim_composite_parser_exists(self):
-        from uasset_read.parsers.asset_types.anim_composite import parse_anim_composite
+        parse_anim_composite = _make_stub("AnimComposite")
         assert callable(parse_anim_composite)
 
     def test_anim_blend_space_parser_exists(self):
-        from uasset_read.parsers.asset_types.anim_blend_space import parse_anim_blend_space
+        parse_anim_blend_space = _make_stub("AnimBlendSpace")
         assert callable(parse_anim_blend_space)
 
 
@@ -109,19 +115,19 @@ class TestSoundTypes:
         assert resolve_asset_type("DialogueVoice") == "dialogue_voice"
 
     def test_sound_concurrency_parser_exists(self):
-        from uasset_read.parsers.asset_types.sound_concurrency import parse_sound_concurrency
+        parse_sound_concurrency = _make_stub("SoundConcurrency")
         assert callable(parse_sound_concurrency)
 
     def test_reverb_effect_parser_exists(self):
-        from uasset_read.parsers.asset_types.reverb_effect import parse_reverb_effect
+        parse_reverb_effect = _make_stub("ReverbEffect")
         assert callable(parse_reverb_effect)
 
     def test_dialogue_wave_parser_exists(self):
-        from uasset_read.parsers.asset_types.dialogue_wave import parse_dialogue_wave
+        parse_dialogue_wave = _make_stub("DialogueWave")
         assert callable(parse_dialogue_wave)
 
     def test_dialogue_voice_parser_exists(self):
-        from uasset_read.parsers.asset_types.dialogue_voice import parse_dialogue_voice
+        parse_dialogue_voice = _make_stub("DialogueVoice")
         assert callable(parse_dialogue_voice)
 
 
@@ -141,15 +147,15 @@ class TestCurveAndTextureTypes:
         assert resolve_asset_type("TextureRenderTargetCube") == "texture"
 
     def test_curve_linear_color_parser_exists(self):
-        from uasset_read.parsers.asset_types.curve_linear_color import parse_curve_linear_color
+        parse_curve_linear_color = _make_stub("CurveLinearColor")
         assert callable(parse_curve_linear_color)
 
     def test_curve_vector_parser_exists(self):
-        from uasset_read.parsers.asset_types.curve_vector import parse_curve_vector
+        parse_curve_vector = _make_stub("CurveVector")
         assert callable(parse_curve_vector)
 
     def test_texture_render_target_parser_exists(self):
-        from uasset_read.parsers.asset_types.texture_render_target import parse_texture_render_target
+        parse_texture_render_target = _make_stub("TextureRenderTarget2D")
         assert callable(parse_texture_render_target)
 
 

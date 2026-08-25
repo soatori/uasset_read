@@ -9,7 +9,7 @@ Security mitigations (threat model T-059-03, T-059-04):
 """
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from uasset_read.cpp_gen.sanitizer import sanitize_string_literal
 
@@ -217,49 +217,6 @@ def format_cpp_transform(transforms: Dict[str, Any], component_name: str) -> Lis
     if scale is not None:
         scale_expr = _format_fvector(scale.x, scale.y, scale.z)
         lines.append(f"{component_name}->SetRelativeScale3D({scale_expr});")
-
-    return lines
-
-
-def format_cpp_component_init(
-    component_name: str,
-    cpp_type: str,
-    transforms: Optional[Dict[str, Any]] = None,
-    properties: Optional[Dict[str, Any]] = None,
-) -> List[str]:
-    """Generate complete initialization code block for a single component.
-
-    Generates:
-    1. CreateDefaultSubobject<Type>(TEXT("ComponentName"))
-    2. Transform assignment statements (if any)
-    3. Property assignment statements (if any)
-
-    Args:
-        component_name: Component variable name
-        cpp_type: Dereferenced C++ type name (e.g. USkeletalMeshComponent)
-        transforms: Transform dictionary (relative_location/relative_rotation/relative_scale)
-        properties: Property dictionary (scalar property name -> (cpp_type, value))
-
-    Returns:
-        List of C++ statement strings
-    """
-    lines: List[str] = []
-
-    # 1. Component creation
-    lines.append(
-        f'{component_name} = CreateDefaultSubobject<{cpp_type}>(TEXT("{component_name}"));'
-    )
-
-    # 2. Transform assignment
-    if transforms:
-        lines.extend(format_cpp_transform(transforms, component_name))
-
-    # 3. Property assignment
-    if properties:
-        for prop_name, (prop_type, prop_value) in properties.items():
-            cpp_value = format_cpp_default_value(prop_value, prop_type)
-            if cpp_value:
-                lines.append(f"{component_name}->{prop_name} = {cpp_value};")
 
     return lines
 
