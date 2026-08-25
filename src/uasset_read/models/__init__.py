@@ -37,7 +37,6 @@ from .properties import (  # noqa: F401 — public re-exports
     PropertyTypeName,
     PropertyValue,
     SoftObjectPathValue,
-    AdvancedPropertyValue,
     StructValue,
     MapValue,
     SetValue,

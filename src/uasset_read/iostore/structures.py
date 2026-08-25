@@ -58,13 +58,6 @@ class EIoChunkType(IntEnum):
     PackageResource = 13       # UE5.5+: Package resource
 
 
-class EIoStoreTocEntryMetaFlags(IntEnum):
-    """IoStore TOC entry metadata flags"""
-    None_ = 0
-    Compressed = 1 << 0
-    MemoryMapped = 1 << 1
-
-
 class EIoStoreTocReadOptions(IntFlag):
     """IoStore TOC read options"""
     Default = 0
@@ -103,26 +96,6 @@ class FIoChunkId:
 
     def __hash__(self) -> int:
         return hash(self.bytes)
-
-
-@dataclass
-class FIoOffsetAndSize:
-    """Offset and size (packed as 40-bit offset + 24-bit size) — legacy compatibility"""
-    offset: int
-    size: int
-
-    def pack(self) -> bytes:
-        """Pack into 8 bytes"""
-        value = (self.offset << 24) | (self.size & 0xFFFFFF)
-        return struct.pack('<Q', value)
-
-    @staticmethod
-    def unpack(data: bytes) -> FIoOffsetAndSize:
-        """Unpack from 8 bytes"""
-        value = struct.unpack('<Q', data)[0]
-        offset = value >> 24
-        size = value & 0xFFFFFF
-        return FIoOffsetAndSize(offset=offset, size=size)
 
 
 @dataclass
@@ -375,52 +348,3 @@ class FIoStoreTocCompressedBlockEntry:
             compression_method_index=compression_method_index,
         )
 
-
-@dataclass
-class FIoStoreTocEntryMeta:
-    """IoStore TOC entry metadata
-
-    Contains hash (20 bytes) and flags (1 byte)
-    """
-    chunk_hash: bytes  # 20 bytes (FSHAHash / FIoHash)
-    flags: int  # 1 byte (FIoStoreTocEntryMetaFlags)
-
-    SIZE = 24  # 20 + 1 + 3 (padding)
-
-    @staticmethod
-    def from_stream(stream: BinaryIO, use_io_hash: bool = False) -> FIoStoreTocEntryMeta:
-        """Read from stream
-
-        Args:
-            stream: Input stream
-            use_io_hash: Whether to use FIoHash (20 bytes) instead of FIoChunkHash (20 bytes)
-        """
-        chunk_hash = stream.read(20)
-        if len(chunk_hash) < 20:
-            raise ValueError("Entry metadata hash data insufficient")
-
-        flags_data = stream.read(1)
-        if len(flags_data) < 1:
-            raise ValueError("Entry metadata flags data insufficient")
-        flags = flags_data[0]
-
-        # 3-byte padding (align to 24 bytes)
-        if use_io_hash:
-            stream.read(3)
-
-        return FIoStoreTocEntryMeta(chunk_hash=chunk_hash, flags=flags)
-
-
-@dataclass
-class FIoContainerHeader:
-    """IoStore container header
-
-    Parsed after reading the ContainerHeader chunk
-    """
-    # Simplified version, stores raw data only
-    data: bytes = b''
-
-    @staticmethod
-    def from_bytes(data: bytes) -> FIoContainerHeader:
-        """Create from byte data"""
-        return FIoContainerHeader(data=data)

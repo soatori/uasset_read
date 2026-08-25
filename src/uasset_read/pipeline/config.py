@@ -3,6 +3,7 @@
 Extract scattered configuration parameters from parse_package() and core API into structured objects,
 reducing function parameter count and improving readability and composability.
 """
+
 from __future__ import annotations
 
 import logging
@@ -10,7 +11,7 @@ import warnings
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from uasset_read.models.config import ParseConfig
+    from uasset_read.config import ParseConfig
 
 from uasset_read.constants import (
     LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD,
@@ -31,11 +32,7 @@ def _should_use_lightweight_tolerant_parse(
         return False
     if not tolerant or result.summary is None:
         return False
-    threshold = (
-        lightweight_threshold
-        if lightweight_threshold is not None
-        else LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
-    )
+    threshold = lightweight_threshold if lightweight_threshold is not None else LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
     # Large files like ControlRig: detect export class names, use higher threshold
     if (
         threshold == LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD
@@ -54,14 +51,13 @@ def _is_large_file_asset(result) -> bool:
     Reference: UE ControlRig.cpp serialization structure.
     """
     from uasset_read.serializers.object_resources import resolve_class_name
+
     export_map = getattr(result, "export_map", None) or []
     import_map = getattr(result, "import_map", None) or []
     # Only check first 20 exports' class names for detection (avoid full scan performance overhead)
     for export in export_map[:20]:
         try:
-            class_name = resolve_class_name(
-                export.class_index, import_map, export_map
-            )
+            class_name = resolve_class_name(export.class_index, import_map, export_map)
         except (AttributeError, TypeError, IndexError):
             continue
         if class_name and any(sub in class_name for sub in CONTROL_RIG_LARGE_FILE_CLASSES):
@@ -105,14 +101,16 @@ def _build_lightweight_function_graphs(export_map) -> list[dict]:
             continue
         if name in {"EventGraph", "UberGraphPages", "SimpleConstructionScript"}:
             continue
-        entries.append({
-            "function_name": name,
-            "graph_source": "export_map",
-            "entry_node_guid": "",
-            "signature": {"return_type": "", "parameters": []},
-            "execution_flows": [],
-            "fallback_reason": "lightweight_tolerant_parse",
-        })
+        entries.append(
+            {
+                "function_name": name,
+                "graph_source": "export_map",
+                "entry_node_guid": "",
+                "signature": {"return_type": "", "parameters": []},
+                "execution_flows": [],
+                "fallback_reason": "lightweight_tolerant_parse",
+            }
+        )
         if len(entries) >= 64:
             break
     return entries

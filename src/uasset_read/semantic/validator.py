@@ -3,6 +3,7 @@
 Called in production before rendering. Does NOT perform JSON Schema validation
 (that is test-only via jsonschema).
 """
+
 from __future__ import annotations
 
 import re as _re
@@ -54,7 +55,8 @@ def validate_semantic_document(ir: SemanticIR) -> list[str]:
         errors.append(f"Invalid format: '{ir.format}' is not a known semantic format")
     elif ir.format_version != expected_version:
         errors.append(
-            f"Invalid format_version for '{ir.format}': expected '{expected_version}', got '{ir.format_version}'")
+            f"Invalid format_version for '{ir.format}': expected '{expected_version}', got '{ir.format_version}'"
+        )
 
     if ir.mode not in _VALID_MODES:
         errors.append(f"Invalid mode: expected one of {_VALID_MODES}, got '{ir.mode}'")
@@ -69,7 +71,9 @@ def validate_semantic_document(ir: SemanticIR) -> list[str]:
         errors.append(f"Invalid status.parse: expected one of {_VALID_PARSES}, got '{ir.status.parse}'")
 
     if ir.status.representation not in _VALID_REPRESENTATIONS:
-        errors.append(f"Invalid status.representation: expected one of {_VALID_REPRESENTATIONS}, got '{ir.status.representation}'")
+        errors.append(
+            f"Invalid status.representation: expected one of {_VALID_REPRESENTATIONS}, got '{ir.status.representation}'"
+        )
 
     if ir.mode == "standard" and ir.evidence:
         errors.append("Standard mode must not contain evidence entries")
@@ -109,7 +113,8 @@ def validate_semantic_document(ir: SemanticIR) -> list[str]:
 
 _GRAPH_ID_FULL = _re.compile(r"^blueprint://graph/[A-Za-z][A-Za-z0-9_.-]*$")
 _NODE_ID_FULL = _re.compile(
-    r"^blueprint://graph/[A-Za-z][A-Za-z0-9_.-]*/node/[a-z][a-z0-9-]*/[A-Za-z][A-Za-z0-9_.-]*/[0-9]+$")
+    r"^blueprint://graph/[A-Za-z][A-Za-z0-9_.-]*/node/[a-z][a-z0-9-]*/[A-Za-z][A-Za-z0-9_.-]*/[0-9]+$"
+)
 _ENDPOINT_FULL = _re.compile(r"^(input|output|exec)\.[A-Za-z][A-Za-z0-9_.-]*$")
 
 
@@ -192,16 +197,19 @@ def validate_blueprint_document(ir) -> list[str]:
     if ir.status.representation == "opaque" and not content.get("diagnostics"):
         errors.append("Opaque blueprint representation must have at least one diagnostic")
     if ir.mode == "standard":
+
         def _has_evidence(value) -> bool:
             if isinstance(value, dict):
                 return "evidence" in value or any(_has_evidence(v) for v in value.values())
             if isinstance(value, list):
                 return any(_has_evidence(v) for v in value)
             return False
+
         if _has_evidence(content):
             errors.append("Standard blueprint content must not contain evidence")
 
     return errors
+
 
 # Registration is handled by blueprint/__init__.py via register_domain_validator()
 
@@ -212,11 +220,13 @@ def validate_blueprint_document(ir) -> list[str]:
 
 _ANIM_GRAPH_ID_FULL = _re.compile(r"^animblueprint://graph/[A-Za-z][A-Za-z0-9_.-]*$")
 _ANIM_NODE_ID_FULL = _re.compile(
-    r"^animblueprint://graph/[A-Za-z][A-Za-z0-9_.-]*/node/[a-z][a-z0-9-]*/[A-Za-z][A-Za-z0-9_.-]*/[0-9]+$")
+    r"^animblueprint://graph/[A-Za-z][A-Za-z0-9_.-]*/node/[a-z][a-z0-9-]*/[A-Za-z][A-Za-z0-9_.-]*/[0-9]+$"
+)
 _ANIM_ENDPOINT_FULL = _re.compile(r"^(input|output|exec|pose)\.[A-Za-z][A-Za-z0-9_.-]*$")
 _ANIM_STATE_MACHINE_ID_FULL = _re.compile(r"^animblueprint://state_machine/[A-Za-z][A-Za-z0-9_.-]*$")
 _ANIM_STATE_ID_FULL = _re.compile(
-    r"^animblueprint://state_machine/[A-Za-z][A-Za-z0-9_.-]*/state/[A-Za-z][A-Za-z0-9_.-]*$")
+    r"^animblueprint://state_machine/[A-Za-z][A-Za-z0-9_.-]*/state/[A-Za-z][A-Za-z0-9_.-]*$"
+)
 
 
 def validate_anim_blueprint_document(ir) -> list[str]:
@@ -245,9 +255,11 @@ def validate_anim_blueprint_document(ir) -> list[str]:
             if nid in node_ids:
                 errors.append(f"Duplicate node id: '{nid}'")
             node_ids.add(nid)
-            for endpoint in (list(node.get("data_pins", {}) or {})
-                             + list(node.get("control_ports", {}) or {})
-                             + list(node.get("pose_pins", {}) or {})):
+            for endpoint in (
+                list(node.get("data_pins", {}) or {})
+                + list(node.get("control_ports", {}) or {})
+                + list(node.get("pose_pins", {}) or {})
+            ):
                 if not _ANIM_ENDPOINT_FULL.match(endpoint):
                     errors.append(f"Invalid endpoint id format: '{endpoint}' on node '{nid}'")
                 endpoints.add((gid, nid, endpoint))
@@ -322,16 +334,19 @@ def validate_anim_blueprint_document(ir) -> list[str]:
     if ir.status.representation == "opaque" and not content.get("diagnostics"):
         errors.append("Opaque animation blueprint representation must have at least one diagnostic")
     if ir.mode == "standard":
+
         def _has_evidence(value) -> bool:
             if isinstance(value, dict):
                 return "evidence" in value or any(_has_evidence(v) for v in value.values())
             if isinstance(value, list):
                 return any(_has_evidence(v) for v in value)
             return False
+
         if _has_evidence(content):
             errors.append("Standard animation blueprint content must not contain evidence")
 
     return errors
+
 
 # Registration is handled by anim_blueprint/__init__.py via register_domain_validator()
 
@@ -339,6 +354,7 @@ def validate_anim_blueprint_document(ir) -> list[str]:
 # ---------------------------------------------------------------------------
 # Material-specific semantic rules (#556)
 # ---------------------------------------------------------------------------
+
 
 def validate_material_document(ir) -> list[str]:
     """Material-specific semantic rules for uasset_read.material_semantic content."""
@@ -373,12 +389,14 @@ def validate_material_document(ir) -> list[str]:
 
     return errors
 
+
 # Registration is handled by material/__init__.py via register_domain_validator()
 
 
 # ---------------------------------------------------------------------------
 # DataTable-specific semantic rules (#557)
 # ---------------------------------------------------------------------------
+
 
 def validate_data_table_document(ir) -> list[str]:
     """DataTable-specific semantic rules for uasset_read.data_table_semantic content."""
@@ -420,12 +438,14 @@ def validate_data_table_document(ir) -> list[str]:
 
     return errors
 
+
 # Registration is handled by data_table/__init__.py via register_domain_validator()
 
 
 # ---------------------------------------------------------------------------
 # Skeleton-specific semantic rules (#557)
 # ---------------------------------------------------------------------------
+
 
 def validate_skeleton_document(ir) -> list[str]:
     """Skeleton-specific semantic rules for uasset_read.skeleton_semantic content."""
@@ -472,12 +492,14 @@ def validate_skeleton_document(ir) -> list[str]:
 
     return errors
 
+
 # Registration is handled by skeleton/__init__.py via register_domain_validator()
 
 
 # ---------------------------------------------------------------------------
 # Mesh-specific semantic rules (#557a)
 # ---------------------------------------------------------------------------
+
 
 def validate_mesh_document(ir) -> list[str]:
     """Mesh-specific semantic rules."""
@@ -499,12 +521,14 @@ def validate_mesh_document(ir) -> list[str]:
             errors.append(f"LODInfo[{i}] missing lod_index")
     return errors
 
+
 # Registration is handled by mesh/__init__.py via register_domain_validator()
 
 
 # ---------------------------------------------------------------------------
 # Texture-specific semantic rules (#557b)
 # ---------------------------------------------------------------------------
+
 
 def validate_texture_document(ir) -> list[str]:
     """Texture-specific semantic rules."""
@@ -522,113 +546,9 @@ def validate_texture_document(ir) -> list[str]:
         errors.append(f"Invalid size_y: {resource['size_y']}")
     return errors
 
+
 # Registration is handled by texture/__init__.py via register_domain_validator()
 
 
-# ---------------------------------------------------------------------------
-# Sound-specific semantic rules (#557c)
-# ---------------------------------------------------------------------------
-
-def validate_sound_document(ir) -> list[str]:
-    """Sound-specific semantic rules."""
-    errors: list[str] = []
-    content = ir.content or {}
-    sound = content.get("sound") or {}  # noqa: F841 — scaffold for future validation
-    # Empty content is valid — some sound assets have no asset_type_data
-    return errors
-
-# Registration is handled by sound/__init__.py via register_domain_validator()
 
 
-# ---------------------------------------------------------------------------
-# Animation-specific semantic rules (#557f)
-# ---------------------------------------------------------------------------
-
-def validate_anim_document(ir) -> list[str]:
-    """Animation-specific semantic rules."""
-    errors: list[str] = []
-    content = ir.content or {}
-    anim = content.get("anim") or {}  # noqa: F841 — scaffold for future validation
-    # Empty content is valid — some animation assets are opaque
-    return errors
-
-# Registration is handled by anim/__init__.py via register_domain_validator()
-
-
-# ---------------------------------------------------------------------------
-# CurveTable-specific semantic rules (#557d)
-# ---------------------------------------------------------------------------
-
-def validate_curve_table_document(ir) -> list[str]:
-    """CurveTable-specific semantic rules."""
-    errors: list[str] = []
-    content = ir.content or {}
-    curve_table = content.get("curve_table") or {}
-    if not curve_table:
-        return errors
-    table_summary = curve_table.get("table_summary") or {}
-    if not table_summary:
-        errors.append("CurveTable table_summary is empty")
-    return errors
-
-# Registration is handled by curve_table/__init__.py via register_domain_validator()
-
-
-# ---------------------------------------------------------------------------
-# User-Defined types-specific semantic rules (#557g)
-# ---------------------------------------------------------------------------
-
-def validate_user_defined_document(ir) -> list[str]:
-    """User-Defined types-specific semantic rules."""
-    errors: list[str] = []
-    content = ir.content or {}
-    user_defined = content.get("user_defined") or {}  # noqa: F841 — scaffold for future validation
-    # Empty content is valid — some user-defined assets have no asset_type_data
-    return errors
-
-# Registration is handled by user_defined/__init__.py via register_domain_validator()
-
-
-# ---------------------------------------------------------------------------
-# Standalone types-specific semantic rules (#557h)
-# ---------------------------------------------------------------------------
-
-def validate_standalone_document(ir) -> list[str]:
-    """Standalone types-specific semantic rules."""
-    errors: list[str] = []
-    content = ir.content or {}
-    standalone = content.get("standalone") or {}  # noqa: F841 — scaffold for future validation
-    # Empty content is valid — some standalone assets have no asset_type_data
-    return errors
-
-# Registration is handled by standalone/__init__.py via register_domain_validator()
-
-
-# ---------------------------------------------------------------------------
-# Niagara-specific semantic rules (#557e)
-# ---------------------------------------------------------------------------
-
-def validate_niagara_document(ir) -> list[str]:
-    """Niagara-specific semantic rules."""
-    errors: list[str] = []
-    content = ir.content or {}
-    niagara = content.get("niagara") or {}  # noqa: F841 — scaffold for future validation
-    # Empty content is valid — some niagara assets have no asset_type_data
-    return errors
-
-# Registration is handled by niagara/__init__.py via register_domain_validator()
-
-
-# ---------------------------------------------------------------------------
-# Movie-specific semantic rules (#557i)
-# ---------------------------------------------------------------------------
-
-def validate_movie_document(ir) -> list[str]:
-    """Movie-specific semantic rules."""
-    errors: list[str] = []
-    content = ir.content or {}
-    movie = content.get("movie") or {}  # noqa: F841 — scaffold for future validation
-    # Empty content is valid — some movie assets have no asset_type_data
-    return errors
-
-# Registration is handled by movie/__init__.py via register_domain_validator()

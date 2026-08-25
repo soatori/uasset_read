@@ -9,20 +9,14 @@ Supports Zlib/LZ4/Zstd/Oodle compression method dispatch.
 - Oodle: not supported (proprietary library), graceful degradation
 """
 import gzip
-import io
 import logging
-import warnings
 import zlib
-from typing import TYPE_CHECKING, BinaryIO, Iterator
+from typing import BinaryIO
 
 logger = logging.getLogger(__name__)
 
 from uasset_read.exceptions import ParseError
 from uasset_read.pak.structures import FPakEntry
-
-if TYPE_CHECKING:
-    from uasset_read.memory_safety import ResourceBudget
-
 
 def normalize_compression_method(method: str | int | None) -> str:
     """Return the canonical compression method name used by readers."""
@@ -143,145 +137,6 @@ def decompress_block(data: bytes, uncompressed_size: int, method: str | int | No
     else:
         raise ValueError(f"Unknown compression method: {method}")
 
-
-def decompress_block_chunked(
-    data: bytes,
-    uncompressed_size: int,
-    method: str | int | None,
-    budget: "ResourceBudget | None" = None,
-    chunk_size: int = 64 * 1024,
-) -> Iterator[bytes]:
-    """Chunked decompression with budget checking.
-
-    Similar to ``decompress_block``, but yields decompressed data in chunks
-    as an iterator, and can check decompressed size against a ``ResourceBudget``
-    limit before decompression to prevent compression bombs.
-
-    Args:
-        data: Compressed data
-        uncompressed_size: Expected decompressed size
-        method: Compression method ("Zlib", "Gzip", "LZ4", "Zstd", "Oodle")
-        budget: Resource budget (optional), checked before decompression
-        chunk_size: Size of each yielded chunk (default 64KB)
-
-    Yields:
-        Decompressed data chunks
-
-    Raises:
-        MemoryError: Budget exceeded (via ``MemoryLimitExceeded``)
-        ParseError: Decompression failed
-        ValueError: Unknown compression method
-        NotImplementedError: Oodle not supported
-    """
-    method = normalize_compression_method(method)
-
-    if method == "None":
-        yield data[:uncompressed_size]
-        return
-
-    if budget is not None:
-        budget.reserve(uncompressed_size, "decompress")
-
-    try:
-        if method == "Zlib":
-            yield from _decompress_zlib_chunked(data, uncompressed_size, chunk_size)
-        elif method == "Gzip":
-            yield from _decompress_gzip_chunked(data, uncompressed_size, chunk_size)
-        elif method == "LZ4":
-            result = _decompress_lz4(data, uncompressed_size)
-            for i in range(0, len(result), chunk_size):
-                yield result[i : i + chunk_size]
-        elif method == "Zstd":
-            result = _decompress_zstd(data, uncompressed_size)
-            for i in range(0, len(result), chunk_size):
-                yield result[i : i + chunk_size]
-        elif method == "Oodle":
-            raise NotImplementedError(
-                "Oodle decompression requires oo2core library — "
-                "not available as open-source Python package. "
-                "See https://github.com/Kaldaien/Oodle for proprietary options."
-            )
-        else:
-            raise ValueError(f"Unknown compression method: {method}")
-    except (MemoryError, ParseError, ValueError, NotImplementedError):
-        raise
-    except Exception as exc:
-        raise ParseError(f"Chunked decompression failed ({method}): {exc}") from exc
-
-
-def _decompress_zlib_chunked(
-    data: bytes, expected_size: int, chunk_size: int
-) -> Iterator[bytes]:
-    """Zlib (raw deflate) chunked decompression.
-
-    Uses ``decompressobj`` with ``max_length`` to control chunk output size.
-    All input is passed in the first ``decompress()`` call; subsequent calls
-    pass empty bytes to drain remaining output from the internal buffer.
-    """
-    decompressor = zlib.decompressobj(wbits=-15)
-
-    try:
-        output = decompressor.decompress(data, expected_size)
-        pos = 0
-        while pos < len(output):
-            yield output[pos : pos + chunk_size]
-            pos += chunk_size
-        # Drain remaining output from the internal buffer
-        while True:
-            tail = decompressor.decompress(b"", chunk_size)
-            if not tail:
-                break
-            yield tail
-    except zlib.error:
-        # raw deflate failed -> try format with zlib header
-        try:
-            decompressor = zlib.decompressobj()
-            output = decompressor.decompress(data, expected_size)
-            pos = 0
-            while pos < len(output):
-                yield output[pos : pos + chunk_size]
-                pos += chunk_size
-            while True:
-                tail = decompressor.decompress(b"", chunk_size)
-                if not tail:
-                    break
-                yield tail
-        except zlib.error as exc2:
-            raise ParseError(f"Zlib decompression failed: {exc2}") from exc2
-
-
-def _decompress_gzip_chunked(
-    data: bytes, expected_size: int, chunk_size: int
-) -> Iterator[bytes]:
-    """Gzip chunked decompression."""
-    with gzip.GzipFile(fileobj=io.BytesIO(data)) as f:
-        total_yielded = 0
-        while total_yielded < expected_size:
-            chunk = f.read(min(chunk_size, expected_size - total_yielded))
-            if not chunk:
-                break
-            yield chunk
-            total_yielded += len(chunk)
-
-
-def _decompress_lz4(data: bytes, uncompressed_size: int) -> bytes:
-    """LZ4 decompression (requires full decompression)."""
-    try:
-        import lz4.block
-    except ImportError:
-        raise ImportError("LZ4 decompression requires 'lz4' package")
-    return lz4.block.decompress(data, uncompressed_size=uncompressed_size)
-
-
-def _decompress_zstd(data: bytes, uncompressed_size: int) -> bytes:
-    """Zstd decompression (requires full decompression)."""
-    try:
-        import zstandard
-    except ImportError:
-        raise ImportError("Zstd decompression requires 'zstandard' package")
-    return zstandard.ZstdDecompressor().decompress(
-        data, max_output_size=uncompressed_size
-    )
 
 
 def decompress_entry(

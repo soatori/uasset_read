@@ -4,10 +4,6 @@ Game version mapping -- infer PAK file version from game identifier.
 Reference: external/CUE4Parse/CUE4Parse/UE4/Versions/EGame.cs implementation.
 """
 
-from typing import Dict
-from uasset_read.pak.constants import PakFileVersion
-
-
 # Game identifier enumeration
 class EGame:
     """Game identifier enumeration."""
@@ -56,51 +52,6 @@ class EGame:
     BORDERLANDS_3 = 211
 
 
-# Game to PAK version mapping
-# UE source reference: external/CUE4Parse/CUE4Parse/UE4/Versions/EGame.cs GetVersion()
-GAME_PAK_VERSION_MAP: Dict[int, int] = {
-    # Custom magic games
-    EGame.UNKNOWN: PakFileVersion.Utf8PakDirectory,
-    EGame.OUTLAST_TRIALS: PakFileVersion.PathHashIndex,
-    EGame.TORCHLIGHT_INFINITE: PakFileVersion.PathHashIndex,
-    EGame.WILD_ASSAULT: PakFileVersion.PathHashIndex,
-    EGame.GAMELOOP_UNDAWN: PakFileVersion.PathHashIndex,
-    EGame.FRIDAY_THE_13TH: PakFileVersion.RelativeChunkOffsets,
-    EGame.DREAM_STAR: PakFileVersion.PathHashIndex,
-    EGame.GAME_FOR_PEACE: PakFileVersion.FNameBasedCompressionMethod,
-    EGame.KART_RIDER_DRIFT: PakFileVersion.PathHashIndex,
-    EGame.RACING_MASTER: PakFileVersion.PathHashIndex,
-    EGame.CRYSTAL_OF_ATLAN: PakFileVersion.PathHashIndex,
-    EGame.PROMISE_MASCOT_AGENCY: PakFileVersion.PathHashIndex,
-    EGame.ARENA_BREAKOUT_INFINITE: PakFileVersion.PathHashIndex,
-    EGame.ASSAULT_FIRE_FUTURE: PakFileVersion.PathHashIndex,
-    # UE5 games (file_version_ue5 mapping)
-    EGame.BLACK_MYTH_WUKONG: PakFileVersion.Utf8PakDirectory,     # UE5.0+
-    EGame.STALKER_2: PakFileVersion.Utf8PakDirectory,             # UE5.1
-    EGame.MARVEL_RIVALS: PakFileVersion.Utf8PakDirectory,         # UE5.3
-    EGame.THE_FIRST_DESCENDANT: PakFileVersion.Utf8PakDirectory,  # UE5.2
-    EGame.INFINITY_NIKKI: PakFileVersion.Utf8PakDirectory,        # UE5.4
-    EGame.WUTHERING_WAVES: PakFileVersion.Utf8PakDirectory,       # UE4.26
-    EGame.DELTA_FORCE: PakFileVersion.Utf8PakDirectory,           # UE4.27
-    EGame.SILENT_HILL_2_REMAKE: PakFileVersion.Utf8PakDirectory,  # UE5.1
-    EGame.DUNE_AWAKENING: PakFileVersion.Utf8PakDirectory,        # UE5.2
-    EGame.BORDERLANDS_4: PakFileVersion.Utf8PakDirectory,         # UE5.5
-    EGame.GRAY_ZONE_WARFARE: PakFileVersion.Utf8PakDirectory,     # UE5.5
-    # UE4 games
-    EGame.PUBG: PakFileVersion.FNameBasedCompressionMethod,       # UE4.16
-    EGame.FORTNITE: PakFileVersion.Utf8PakDirectory,              # UE4.20+
-    EGame.APEX_LEGENDS: PakFileVersion.FNameBasedCompressionMethod, # UE4.23
-    EGame.KINGDOM_HEARTS_3: PakFileVersion.FNameBasedCompressionMethod, # UE4.18
-    EGame.FF7_REMAKE: PakFileVersion.FNameBasedCompressionMethod, # UE4.18
-    EGame.GTA_TRILOGY: PakFileVersion.PathHashIndex,              # UE4.26
-    EGame.HOGWARTS_LEGACY: PakFileVersion.PathHashIndex,          # UE4.27
-    EGame.VALORANT: PakFileVersion.PathHashIndex,                 # UE4.27
-    EGame.STATE_OF_DECAY_2: PakFileVersion.Initial,               # UE4.13
-    EGame.DAYS_GONE: PakFileVersion.Initial,                      # UE4.11
-    EGame.TEKKEN_7: PakFileVersion.Initial,                       # UE4.14
-    EGame.BORDERLANDS_3: PakFileVersion.FNameBasedCompressionMethod, # UE4.20
-}
-
 
 # Magic to game identifier mapping
 MAGIC_TO_GAME_MAP: Dict[int, int] = {
@@ -130,17 +81,4 @@ def detect_game_from_magic(magic: int) -> int:
         Game identifier (EGame enum value)
     """
     return MAGIC_TO_GAME_MAP.get(magic, EGame.UNKNOWN)
-
-
-def get_pak_version_for_game(game: int) -> int:
-    """Get PAK file version for a game.
-
-    Args:
-        game: Game identifier (EGame enum value)
-
-    Returns:
-        PAK file version (PakFileVersion enum value)
-    """
-    return GAME_PAK_VERSION_MAP.get(game, PakFileVersion.Utf8PakDirectory)
-
 

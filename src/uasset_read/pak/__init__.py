@@ -3,7 +3,7 @@ Pak file parsing module.
 
 Public API:
 - PakFileReader: Main orchestrator for .pak file parsing
-- FPakInfo, FPakEntry, FPakDirectoryEntry, FPakCompressedBlock: Data models
+- FPakInfo, FPakEntry, FPakCompressedBlock: Data models
 - PAK_FILE_MAGIC: Magic constant for format detection
 - read_fstring: FString deserialization utility
 - parse_primary_index: Index blob parsing
@@ -27,14 +27,12 @@ from uasset_read.pak.structures import (
     FPakCompressedBlock,
     FPakEntry,
     FPakInfo,
-    FPakDirectoryEntry,
     read_fstring,
 )
 
 # Compression
 from uasset_read.pak.decompress import (
     decompress_block,
-    decompress_block_chunked,
     decompress_entry,
 )
 
@@ -69,11 +67,9 @@ __all__ = [
     "FPakCompressedBlock",
     "FPakEntry",
     "FPakInfo",
-    "FPakDirectoryEntry",
     "read_fstring",
     # Compression
     "decompress_block",
-    "decompress_block_chunked",
     "decompress_entry",
     # Crypto
     "decrypt_aes_ecb",

@@ -1,7 +1,7 @@
 """
 Pak file data structures.
 
-Mirrors UE engine IPlatformFilePak.h structures: FPakInfo, FPakEntry, FPakDirectoryEntry, etc.
+Mirrors UE engine IPlatformFilePak.h structures: FPakInfo, FPakEntry, etc.
 """
 import struct
 from dataclasses import dataclass, field
@@ -418,17 +418,3 @@ class FPakInfo:
 
         raise ParseError("Unknown .pak format — no valid FPakInfo trailer found")
 
-
-# ============================================================================
-# FPakDirectoryEntry
-# ============================================================================
-
-@dataclass
-class FPakDirectoryEntry:
-    """Directory tree node.
-
-    Represents a file entry under a directory path.
-    """
-    path: str                    # directory path
-    filename: str                # filename
-    entry: FPakEntry             # actual entry data
