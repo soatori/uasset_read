@@ -8,12 +8,11 @@ import logging
 import mmap
 import os
 import struct
-from typing import Optional, Dict, BinaryIO, Callable, Any, Protocol
+from typing import Optional, Dict, BinaryIO, Any, Protocol
 
 from uasset_read.exceptions import ParseError
 from uasset_read.constants import (
-    MMAP_THRESHOLD, MAX_FSTRING_LENGTH, MAX_ARRAY_COUNT,
-    get_max_reasonable,
+    MMAP_THRESHOLD, MAX_FSTRING_LENGTH, get_max_reasonable,
 )
 from uasset_read.models.diagnostics import (
     OffsetRangeDiagnostic, StructuredDiagnostic,

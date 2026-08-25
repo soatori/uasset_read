@@ -1,5 +1,4 @@
 """Tests for missing UAsset type mappings and parser stubs."""
-import pytest
 from uasset_read.semantic.kinds import resolve_asset_type
 
 

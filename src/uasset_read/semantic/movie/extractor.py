@@ -18,7 +18,6 @@ def build_movie_content(
 ) -> dict:
     """Build the Movie domain content dict."""
     asset_type_data = getattr(export_ir, "asset_type_data", None)
-    object_class = getattr(export_ir, "object_class", "") or ""
 
     if not asset_type_data or not isinstance(asset_type_data, dict):
         coverage_model.track("scene_summary", False)

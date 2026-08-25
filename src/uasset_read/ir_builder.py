@@ -178,13 +178,6 @@ def _build_material_ir(result: "ParseResult | LinkerParseResult") -> MaterialIR 
     Scans export_map for Material/MaterialInstance + MaterialExpression* exports.
     Resolves FExpressionInput/FMaterialInput PackageIndex cross-references.
     """
-    from uasset_read.constants import (
-        MATERIAL_DOMAIN_MAP,
-        BLEND_MODE_MAP,
-        SHADING_MODEL_MAP,
-        MATERIAL_USAGE_FLAG_NAMES,
-        classify_expression_type,
-    )
 
     # Pass 1: Find material export and build expression GUID map
     material_export = None

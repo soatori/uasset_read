@@ -27,7 +27,7 @@ def test_animnotify_debug_validates_against_schema(samples_dir: Path):
     projected = project_semantic(semantic_ir, "debug")
     
     json_str = render_semantic_json(projected, include_schema=False)
-    data = json.loads(json_str)
+    json.loads(json_str)  # verify valid JSON
     
     errors = validate_semantic_document(projected)
     assert not errors, f"Debug AnimNotify should validate: {errors}"

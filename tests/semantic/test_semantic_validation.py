@@ -6,14 +6,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from uasset_read.pipeline.core import parse_uasset_with_linker
 from uasset_read.ir_builder import build_package_ir
 from uasset_read.semantic.builder import build_semantic_ir
 from uasset_read.semantic.projection import project_semantic
 from uasset_read.semantic.validator import validate_semantic_document
-from uasset_read.semantic.models import SemanticIR, AssetStatus
+from uasset_read.semantic.models import SemanticIR
 
 
 def _build_and_project(samples_dir: Path, filename: str, mode: str = "standard") -> SemanticIR:

@@ -160,7 +160,7 @@ def extract_user_defined_struct(export: Any, name_map: List[str]) -> Optional[Di
                     guid = f"{a:08X}-{b:04X}-{c:04X}-{(d >> 16) & 0xFFFF:04X}-{d & 0xFFFF:04X}00000000"
                 else:
                     guid = str(prop_value)
-            elif hasattr(prop_value, "fields") and isinstance(getattr(prop_value, "fields"), dict):
+            elif hasattr(prop_value, "fields") and isinstance(prop_value.fields, dict):
                 # Handle StructValue objects
                 fields = prop_value.fields
                 if all(k in fields for k in ("A", "B", "C", "D")):

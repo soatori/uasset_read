@@ -26,7 +26,6 @@ from uasset_read.serializers.object_resources import resolve_class_name
 from uasset_read.link.object_instance import UObjectInstance
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 from uasset_read.models.validators import validate_parse_status
-from uasset_read.project_logging import log_context
 
 logger = logging.getLogger(__name__)
 
@@ -357,13 +356,11 @@ class PackageLinker:
                     setattr(exp, "fallback_reason", f"opaque_payload:{class_name}")
                     # 存储 ScriptSerialization 绝对偏移用于诊断
                     if hasattr(exp, "script_serialization_start_offset"):
-                        exp._script_serialization_start_absolute = (
-                            exp.serial_offset + exp.script_serialization_start_offset
-                        )
+                        setattr(exp, "_script_serialization_start_absolute",
+                                exp.serial_offset + exp.script_serialization_start_offset)
                     if hasattr(exp, "script_serialization_end_offset"):
-                        exp._script_serialization_end_absolute = (
-                            exp.serial_offset + exp.script_serialization_end_offset
-                        )
+                        setattr(exp, "_script_serialization_end_absolute",
+                                exp.serial_offset + exp.script_serialization_end_offset)
                     logger.debug(
                         "Marking export #%d (%s) as opaque: class '%s' has custom Serialize()",
                         index,

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
 
 from uasset_read.models.properties import StructValue
 from uasset_read.ir_builder import _extract_parameter_values

@@ -47,7 +47,7 @@ from uasset_read.cpp_gen.sanitizer import sanitize_identifier
 
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, BlueprintIR, VariableIR
-    from uasset_read.models.core import FEdGraphPinType, UEdGraph, UEdGraphPin
+    from uasset_read.models.core import UEdGraph, UEdGraphPin
     from uasset_read.models.node_types import K2NodeFunctionEntry, K2NodeEvent
 
 logger = logging.getLogger(__name__)

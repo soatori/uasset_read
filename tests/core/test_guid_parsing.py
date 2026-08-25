@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import io
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +78,7 @@ class TestHandleNodeGuid:
         data = b"\x00" * 20
         archive = _ArchiveStub(data)
         tag = _make_tag(size=16, value_end_offset=20)
-        result = handle(archive, tag, None, None, None, None, None)
+        handle(archive, tag, None, None, None, None, None)
         assert archive.tell() == 20
 
     def test_read_failure_returns_zero_guid(self):
@@ -117,7 +115,7 @@ class TestExtractGraphGuid:
 
     def _extract(self, props):
         from uasset_read.serializers.graph import _extract_graph_properties
-        return _extract_graph_properties(self._make_graph_export(props))
+        return _extract_graph_properties(self._make_graph_export(props))  # type: ignore[arg-type]
 
     def test_normal_guid(self):
         props = [

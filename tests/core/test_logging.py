@@ -10,11 +10,9 @@ import pytest
 from uasset_read.project_logging import (
     JSONFormatter,
     SamplingFilter,
-    current_log_run_id,
     log_context,
     log_event,
     log_stage_timing,
-    project_logging_session,
 )
 
 

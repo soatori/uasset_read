@@ -15,8 +15,6 @@ from uasset_read.semantic.render import render_semantic_json
 from uasset_read.semantic.builder import build_semantic_ir
 from tests.integration.sample_assets import (
     LOCAL_SAMPLE_ROOT,
-    SampleAsset,
-    require_local_sample_path,
 )
 
 # MutableSample contains both Texture2D and TextureCube assets

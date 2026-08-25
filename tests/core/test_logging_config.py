@@ -5,7 +5,6 @@ import logging
 import tempfile
 from pathlib import Path
 
-import pytest
 
 from uasset_read.config import LogConfig
 from uasset_read.project_logging import (

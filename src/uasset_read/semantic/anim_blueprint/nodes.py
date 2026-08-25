@@ -11,7 +11,6 @@ from __future__ import annotations
 from uasset_read.semantic.blueprint.ids import ascii_slug
 from uasset_read.semantic.blueprint.nodes import (
     _NODE_KIND_MAP,
-    _GRAPH_KIND_RULES,
     _graph_kind,
     _node_name,
     _direction_str,

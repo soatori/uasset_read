@@ -135,4 +135,4 @@ jobs:
 
       - name: Run Ruff checks
         run: |
-          ruff check src/uasset_read --select F821,F841,F811,F541,B023
+          ruff check src/uasset_read tests/

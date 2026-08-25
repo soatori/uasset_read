@@ -6,6 +6,7 @@ Called in production before rendering. Does NOT perform JSON Schema validation
 from __future__ import annotations
 
 import re as _re
+from typing import Any, Callable
 
 from uasset_read.semantic.models import SemanticIR
 
@@ -32,10 +33,10 @@ _FORMAT_VERSIONS = {
     "uasset_read.movie_semantic": "1.0.0",
 }
 
-_DOMAIN_VALIDATORS: dict[str, object] = {}
+_DOMAIN_VALIDATORS: dict[str, Callable[[Any], list[str]]] = {}
 
 
-def register_domain_validator(fmt: str, validator) -> None:
+def register_domain_validator(fmt: str, validator: Callable[[Any], list[str]]) -> None:
     """Register a format-specific semantic validator."""
     _DOMAIN_VALIDATORS[fmt] = validator
 
@@ -357,7 +358,7 @@ def validate_material_document(ir) -> list[str]:
     expressions = material.get("expressions", []) or []
     for expr in expressions:
         if not expr.get("expression_class"):
-            errors.append(f"Expression missing expression_class")
+            errors.append("Expression missing expression_class")
 
     # Validate data_flow references
     data_flow = material.get("data_flow", []) or []
@@ -532,7 +533,7 @@ def validate_sound_document(ir) -> list[str]:
     """Sound-specific semantic rules."""
     errors: list[str] = []
     content = ir.content or {}
-    sound = content.get("sound") or {}
+    sound = content.get("sound") or {}  # noqa: F841 — scaffold for future validation
     # Empty content is valid — some sound assets have no asset_type_data
     return errors
 
@@ -547,7 +548,7 @@ def validate_anim_document(ir) -> list[str]:
     """Animation-specific semantic rules."""
     errors: list[str] = []
     content = ir.content or {}
-    anim = content.get("anim") or {}
+    anim = content.get("anim") or {}  # noqa: F841 — scaffold for future validation
     # Empty content is valid — some animation assets are opaque
     return errors
 
@@ -581,7 +582,7 @@ def validate_user_defined_document(ir) -> list[str]:
     """User-Defined types-specific semantic rules."""
     errors: list[str] = []
     content = ir.content or {}
-    user_defined = content.get("user_defined") or {}
+    user_defined = content.get("user_defined") or {}  # noqa: F841 — scaffold for future validation
     # Empty content is valid — some user-defined assets have no asset_type_data
     return errors
 
@@ -596,7 +597,7 @@ def validate_standalone_document(ir) -> list[str]:
     """Standalone types-specific semantic rules."""
     errors: list[str] = []
     content = ir.content or {}
-    standalone = content.get("standalone") or {}
+    standalone = content.get("standalone") or {}  # noqa: F841 — scaffold for future validation
     # Empty content is valid — some standalone assets have no asset_type_data
     return errors
 
@@ -611,7 +612,7 @@ def validate_niagara_document(ir) -> list[str]:
     """Niagara-specific semantic rules."""
     errors: list[str] = []
     content = ir.content or {}
-    niagara = content.get("niagara") or {}
+    niagara = content.get("niagara") or {}  # noqa: F841 — scaffold for future validation
     # Empty content is valid — some niagara assets have no asset_type_data
     return errors
 
@@ -626,7 +627,7 @@ def validate_movie_document(ir) -> list[str]:
     """Movie-specific semantic rules."""
     errors: list[str] = []
     content = ir.content or {}
-    movie = content.get("movie") or {}
+    movie = content.get("movie") or {}  # noqa: F841 — scaffold for future validation
     # Empty content is valid — some movie assets have no asset_type_data
     return errors
 

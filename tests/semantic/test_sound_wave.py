@@ -16,13 +16,11 @@ from uasset_read.archive import ByteArchive
 from uasset_read.parsers.asset_types.sound_wave import (
     parse_sound_wave,
     build_sound_metadata,
-    _extract_property,
     _extract_int,
     _extract_float,
     _extract_enum,
     _extract_bool,
     _COMPRESSION_TYPE_NAMES,
-    _LOADING_BEHAVIOR_NAMES,
 )
 
 

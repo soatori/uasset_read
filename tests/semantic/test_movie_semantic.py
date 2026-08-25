@@ -13,7 +13,6 @@ from uasset_read.semantic import (
     render_semantic_json,
     validate_semantic_document,
 )
-from uasset_read.semantic.movie import build_movie_content
 
 # Movie samples
 _MOVIE_SAMPLES = [

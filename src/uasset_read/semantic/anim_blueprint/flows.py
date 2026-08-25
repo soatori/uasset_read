@@ -37,7 +37,7 @@ def _attach_pose_flows(graphs_json: list[dict], index: dict, reporting, *, mode:
                     })
 
         # Build pose edges from pin connections
-        for node in graph["nodes"]:
+        for _node in graph["nodes"]:
             for pin_id, info in index.items():
                 if not info.get("is_pose"):
                     continue

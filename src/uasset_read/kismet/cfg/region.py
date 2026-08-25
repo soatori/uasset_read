@@ -15,10 +15,7 @@ Algorithm:
 from uasset_read.kismet.cfg.data import (
     CFG,
     DominatorTree,
-    EdgeKind,
-    Region,
     RegionKind,
-    RegionTree,
 )
 
 

@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from uasset_read.kismet.expressions.base import KismetExpression
     from uasset_read.kismet.translator import TypeRegistry
     from uasset_read.link.linker import PackageLinker
-    from uasset_read.kismet.cfg.data import CFG
 
 
 # Statements that already end with ';' internally or shouldn't get one added.

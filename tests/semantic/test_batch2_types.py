@@ -1,5 +1,4 @@
 """Tests for Batch 2 missing UAsset type mappings."""
-import pytest
 from uasset_read.semantic.kinds import resolve_asset_type
 
 

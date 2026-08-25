@@ -408,7 +408,7 @@ def _read_reference_skeleton(
 
     transforms: List[Dict[str, Any]] = []
     is_ue5 = getattr(archive, '_file_version_ue5', 0) > 0
-    for i in range(min(pose_count, bone_count)):
+    for _i in range(min(pose_count, bone_count)):
         transform = _read_ftransform(archive, is_ue5=is_ue5)
         transforms.append(transform)
 

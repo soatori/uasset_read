@@ -6,7 +6,7 @@ Equivalent implementation of IoStoreReader.cs
 Supports TOC parsing, Chunk lookup, Perfect Hash optimization, compressed block reading
 """
 from io import BytesIO
-from typing import BinaryIO, Dict, List, Optional, Tuple
+from typing import BinaryIO, Dict, List, Optional
 from pathlib import Path
 import struct
 import logging
@@ -24,7 +24,6 @@ from uasset_read.iostore.structures import (
 from uasset_read.pak.decompress import decompress_block
 from uasset_read.pak.crypto import decrypt_aes_ecb
 from uasset_read.exceptions import ParseError
-from uasset_read.core.utils import normalize_path
 
 logger = logging.getLogger(__name__)
 

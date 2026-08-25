@@ -99,10 +99,10 @@ def _apply_property_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
     children = getattr(prop_type, "children", None)
     if name:
         tag.type = name
-    if hasattr(prop_type, "struct_type") and getattr(prop_type, "struct_type"):
-        tag.struct_type = getattr(prop_type, "struct_type")
-    if hasattr(prop_type, "enum_name") and getattr(prop_type, "enum_name"):
-        tag.enum_type = getattr(prop_type, "enum_name")
+    if hasattr(prop_type, "struct_type") and prop_type.struct_type:
+        tag.struct_type = prop_type.struct_type
+    if hasattr(prop_type, "enum_name") and prop_type.enum_name:
+        tag.enum_type = prop_type.enum_name
 
     def child_type(index: int) -> Any:
         if children is not None:

@@ -1032,10 +1032,10 @@ def parse_properties_from_export(
     property_start = export.serial_offset
 
     # Store ScriptSerialization absolute offsets for diagnostics and opt-in strategy
-    export._script_serialization_start_absolute = (
+    export._script_serialization_start_absolute = (  # noqa: SLF001
         export.serial_offset + getattr(export, 'script_serialization_start_offset', 0)
     )
-    export._script_serialization_end_absolute = (
+    export._script_serialization_end_absolute = (  # noqa: SLF001
         export.serial_offset + getattr(export, 'script_serialization_end_offset', 0)
     )
 
@@ -1273,7 +1273,7 @@ def _unversioned_zero_value(prop_type: Any) -> Any:
         return []
     if type_name == "MapProperty":
         from uasset_read.models.properties import MapValue
-        return MapValue(entries=[])
+        return MapValue(key_type="Unknown", value_type="Unknown", entries=[])
     if type_name == "OptionalProperty":
         return {"has_value": False, "value": None}
     return None

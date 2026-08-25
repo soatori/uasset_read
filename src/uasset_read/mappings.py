@@ -334,7 +334,7 @@ class JmapParser:
                     if not isinstance(prop, dict):
                         continue
                     info = self._parse_property_info(prop, index)
-                    for offset in range(info.array_size):
+                    for _offset in range(info.array_size):
                         properties[index] = PropertyInfo(index, info.name, info.mapping_type, info.array_size)
                         index += 1
                 mappings.types[short_name] = StructMapping(
