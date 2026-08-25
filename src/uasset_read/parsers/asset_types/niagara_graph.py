@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 
 from uasset_read.parsers.asset_types.property_extractor import build_properties_dict
 from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
-from uasset_read.models.validators import validate_parse_status
 from uasset_read.serializers.object_resources import resolve_class_name
 
 logger = logging.getLogger(__name__)
@@ -107,7 +106,7 @@ class NiagaraGraphHandler(ClassHandler):
             # Build result data
             data: dict[str, Any] = {
                 "asset_type": "NiagaraGraph",
-                "parse_status": validate_parse_status("partial_metadata"),
+                "parse_status": "partial_metadata",
                 "graph_name": str(export.object_name),
                 "tagged_properties": tagged_properties,
                 "node_exports": node_exports,

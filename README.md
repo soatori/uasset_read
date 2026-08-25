@@ -4,7 +4,7 @@
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
-> 📦 **v0.5.5** — Zero runtime dependencies · Python 3.10+ · 188 source files · 30 asset types
+> 📦 **v0.5.5** — Zero runtime dependencies · Python 3.10+ · 207 source files · 30 asset types
 
 ## Why uasset_read?
 
@@ -21,14 +21,15 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 ## Status
 
 | Metric | Value |
-|--------|-------|
+| -------- | ------- |
 | Version | 0.5.5 |
 | Source | Python parser for Unreal Engine .uasset files |
-| Modules | 188 source files across 22 subpackages |
+| Modules | 207 source files across 15 subpackages |
 
 ## Features
 
 ### Core Parsing
+
 - **PackageFileSummary** — file header parsing
 - **NameMap** — name table extraction
 - **ImportMap / ExportMap** — dependency and export mapping
@@ -38,6 +39,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **Error recovery** — tolerant mode with offset range diagnostics
 
 ### Blueprint Analysis
+
 - **Blueprint graph parsing** — UEdGraph / Node / Pin structures with typed node models
 - **Variable extraction** — variables, functions, events, metadata with type inference
 - **Component properties** — Transform / Rotation / Scale + scalar attributes
@@ -45,6 +47,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **Function graph analysis** — FunctionEntry identification, per-function call chains
 
 ### Advanced Features
+
 - **Kismet bytecode decompiler** — EExprToken → AST → C++ pseudo-code with structured control flow
 - **PackageLinker** — two-phase object graph reconstruction
 - **C++ skeleton extraction** — Component declarations, function signatures, UPROPERTY mapping, constructor formatting, default value generation, identifier sanitization
@@ -53,6 +56,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **IR (Intermediate Representation)** — package-level IR builder for decoupled rendering pipeline
 
 ### File Format Support
+
 - **Pak file parsing** — FPakInfo, Zlib compression via the standard library, optional LZ4/Zstd/AES-ECB support when `lz4`, `zstandard`, or `cryptography` are installed; Oodle reports a clear unsupported error
 - **IoStore container** — Chunk ID, offset/size structures
 - **Dedicated asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, AnimBlueprint, AnimMontage, AnimBoneCompression, AnimCurveCompression, AnimationDataModel, SoundWave, SoundCue, SoundAttenuation, DataTable, CurveTable, StringTable, Skeleton, PoseAsset, LevelSequence, MovieScene, MovieSceneControlRig, FoliageType, SkeletalMeshLODSettings, SubsurfaceProfile, OpaqueStub, PropertyExtractor; broader asset categories use generic UObject/property fallback paths. Pak/IoStore parsing lacks real `.pak/.utoc/.ucas` sample coverage.
@@ -61,12 +65,14 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **Binary/native handlers** — binary or native property serialization support
 
 ### Output Formats
+
 - **JSON** — structured output optimized for C++ translation reference
 - **Markdown** — formatted documentation with tables and embedded Mermaid flowcharts
 - **Text** — human-readable text summary
 
 ### Architecture
-- **Renderer system** — pluggable `IRenderer` ABC with format registry (JSON, Markdown)
+
+- **Renderer system** — Markdown renderer via `IRenderer` ABC; JSON output routed through semantic pipeline (`semantic/`)
 - **Core API** — `parse_single()`, `parse_batch()`, `diff_single()`, `list_formats()` for simplified programmatic access
 - **CLI delegation** — lightweight CLI delegates to `core.py`
 
@@ -118,7 +124,7 @@ python run.py path/to/file.uasset --output-level debug   # Output verbosity leve
 ### Logging Parameters
 
 | Parameter | Default | Description |
-|-----------|---------|-------------|
+| ----------- | --------- | ------------- |
 | `--log-level` | debug | File log level: debug, info, warning, error, off |
 | `--log-dir` | ./log | Log output directory |
 | `--log-max-bytes` | 10000000 | Max size per log file (bytes) |
@@ -235,7 +241,7 @@ FArchive pipeline pattern mirroring UE's internal structure:
 ### Module Structure (`src/uasset_read/`)
 
 | Module | Path | Description |
-|--------|------|-------------|
+| -------- | ------ | ------------- |
 | **Core** | | |
 | FArchive | `archive.py` | Binary reader with byte swapping, mmap |
 | Constants | `constants.py` | Version numbers, property type thresholds, CPF/PropertyTag flags |
@@ -258,6 +264,8 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | Report Summary | `report_summary.py` | Structured batch summary generation |
 | Debug | `debug/hex_view.py` | HexView debug system for binary field inspection |
 | JS Compat | `compat/uasset_reader_js.py` | Pinned raw reader for uasset-reader-js JSON profile |
+| Semantic | `semantic/` | Semantic IR builder, projection, validator, renderer for JSON output |
+| Schemas | `schemas/` | JSON Schema definitions for semantic output |
 | **Pipeline** | `pipeline/` | Parsing pipeline orchestration: stages, memory, error handling |
 | **IR** | `ir_builder.py` | Package-level intermediate representation builder |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
@@ -266,15 +274,14 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | ├ Asset Types | `parsers/asset_types/` | 30 asset type parsers including StaticMesh, SkeletalMesh, AnimBlueprint, AnimMontage, DataTable, LevelSequence, MovieScene |
 | **Blueprint** | `blueprint/` | Variable/Transform/Component/Metadata extraction |
 | **Graph** | `graph/` | Execution/data flow tracing, chain builder, graph_utils |
-| **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback |
-| ├ Expressions | `kismet/expressions/` | 16 expression types (assignment, control flow, function calls, literals) |
-| ├ CFG | `kismet/cfg/` | Control flow graph: build, dom, emitter, region, stmt |
+| **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback, UFunction script reader |
+| ├ Expressions | `kismet/expressions/` | 15 expression types (assignments, control flow, function calls, literals, casts, delegates, etc.) |
 | **Linker** | `link/` | PackageLinker two-phase object graph reconstruction, UObjectInstance |
 | **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters, type mapping, UPROPERTY mapping, constructor formatting, body extraction |
 | **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing, compression, AES decryption |
 | **IoStore** | `iostore/` | IoStore container reader, Chunk ID, offset/size structures |
 | **Bulk Data** | `bulk/` | BulkData header parsing, flag definitions |
-| **Renderers** | `renderers/` | Pluggable IRenderer ABC with format registry (JSON, Markdown) |
+| **Renderers** | `renderers/` | Markdown renderer via IRenderer ABC (JSON output via semantic pipeline) |
 
 ## Testing
 
@@ -297,7 +304,7 @@ When Unreal Editor 5.8 is released, use the official Experimental Unreal MCP ser
 ## Use Cases
 
 | Scenario | How uasset_read helps |
-|----------|----------------------|
+| ---------- | ---------------------- |
 | **Programmatic blueprint analysis** | Parse blueprint data → extract structure → automate inspections |
 | **Blueprint → C++ migration** | Extract class structure, variables, functions → generate C++ skeleton |
 | **Dependency auditing** | Build import/export graphs → detect circular references → find orphaned assets |

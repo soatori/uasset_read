@@ -6,100 +6,69 @@ import logging
 import os
 import sys
 from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
 
-class FileSizeTier(Enum):
-    """File size tier, used to determine whether subprocess isolation is needed."""
-
-    SMALL = "small"
-    MEDIUM = "medium"
-    LARGE = "large"
-
-    @classmethod
-    def from_size(cls, file_size: int) -> "FileSizeTier":
-        """Return the tier corresponding to the given file size.
-
-        - SMALL: < 20MB
-        - MEDIUM: 20MB - 100MB
-        - LARGE: > 100MB
-        """
-        if file_size < 20 * 1024 * 1024:
-            return cls.SMALL
-        if file_size <= 100 * 1024 * 1024:
-            return cls.MEDIUM
-        return cls.LARGE
-
-
 MEDIUM_FILE_ISOLATION_THRESHOLD = 50 * 1024 * 1024  # 50 MB
+SMALL_FILE_THRESHOLD = 20 * 1024 * 1024  # 20 MB
+LARGE_FILE_THRESHOLD = 100 * 1024 * 1024  # 100 MB
 
 
-def should_isolate(file_size: int, tier: FileSizeTier) -> bool:
-    """Determine whether a file needs to be processed in an isolated subprocess.
+def should_isolate(file_size: int) -> bool:
+    """Determine whether a file needs subprocess isolation.
 
-    Args:
-        file_size: File size in bytes
-        tier: File size tier
-
-    Returns:
-        True if the file should be processed in an isolated subprocess
+    - SMALL (<20MB): never isolate
+    - MEDIUM (20-100MB): isolate if > 50MB
+    - LARGE (>100MB): always isolate
     """
-    if tier == FileSizeTier.SMALL:
+    if file_size < SMALL_FILE_THRESHOLD:
         return False
-    elif tier == FileSizeTier.MEDIUM:
+    if file_size <= LARGE_FILE_THRESHOLD:
         return file_size > MEDIUM_FILE_ISOLATION_THRESHOLD
-    elif tier == FileSizeTier.LARGE:
-        return True
-    return False
-
-
-@dataclass
-class AllocationLimits:
-    """Allocation limit configuration — used for resource budget tracking."""
-
-    max_single_read_bytes: int = 16 * 1024 * 1024  # 16 MB
-    max_decompressed_block_bytes: int = 64 * 1024 * 1024  # 64 MB
-    max_total_decompressed_bytes: int = 256 * 1024 * 1024  # 256 MB
-    max_compression_ratio: float = 10.0
-    stream_chunk_bytes: int = 1024 * 1024  # 1 MB
-    max_output_buffer_bytes: int = 32 * 1024 * 1024  # 32 MB
+    return True
 
 
 class ResourceBudget:
     """Resource budget tracker — checks quota before actual reads or expansion."""
 
-    def __init__(self, limits: AllocationLimits | None = None):
-        self.limits = limits or AllocationLimits()
+    def __init__(
+        self,
+        max_single_read_bytes: int = 16 * 1024 * 1024,
+        max_decompressed_block_bytes: int = 64 * 1024 * 1024,
+        max_total_decompressed_bytes: int = 256 * 1024 * 1024,
+    ):
+        self.max_single_read_bytes = max_single_read_bytes
+        self.max_decompressed_block_bytes = max_decompressed_block_bytes
+        self.max_total_decompressed_bytes = max_total_decompressed_bytes
         self._total_decompressed = 0
         self._checkpoints: list[int] = []
 
     def reserve(self, bytes_needed: int, stage: str, asset: str = "") -> None:
         """Reserve resources, raises MemoryLimitExceeded if quota exceeded."""
-        if bytes_needed > self.limits.max_single_read_bytes:
+        if bytes_needed > self.max_single_read_bytes:
             raise MemoryLimitExceeded(
                 asset_path=asset,
                 stage=stage,
                 current_rss_mb=0,
-                limit_mb=self.limits.max_single_read_bytes / 1024 / 1024,
+                limit_mb=self.max_single_read_bytes / 1024 / 1024,
             )
-        if bytes_needed > self.limits.max_decompressed_block_bytes:
+        if bytes_needed > self.max_decompressed_block_bytes:
             raise MemoryLimitExceeded(
                 asset_path=asset,
                 stage=stage,
                 current_rss_mb=bytes_needed / 1024 / 1024,
-                limit_mb=self.limits.max_decompressed_block_bytes / 1024 / 1024,
+                limit_mb=self.max_decompressed_block_bytes / 1024 / 1024,
             )
         self._total_decompressed += bytes_needed
-        if self._total_decompressed > self.limits.max_total_decompressed_bytes:
+        if self._total_decompressed > self.max_total_decompressed_bytes:
             raise MemoryLimitExceeded(
                 asset_path=asset,
                 stage=stage,
                 current_rss_mb=self._total_decompressed / 1024 / 1024,
-                limit_mb=self.limits.max_total_decompressed_bytes / 1024 / 1024,
+                limit_mb=self.max_total_decompressed_bytes / 1024 / 1024,
             )
 
     def checkpoint(self) -> None:
@@ -219,14 +188,9 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
         return process.memory_info().rss / 1024 / 1024
     except ImportError:
         logger.debug("psutil not installed, cannot read RSS")
-    except OSError as e:
-        logger.debug("psutil RSS retrieval failed: %s", e, exc_info=True)
     except Exception as e:
-        # psutil.NoSuchProcess, psutil.AccessDenied etc. inherit from psutil.Error
-        # but not from OSError. If psutil was imported, check isinstance.
         try:
             import psutil
-
             if isinstance(e, psutil.Error):
                 logger.debug("psutil RSS retrieval failed (%s): %s", type(e).__name__, e)
                 return 0.0
@@ -280,22 +244,7 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
         except (OSError, ValueError, OverflowError) as e:
             logger.debug("Windows GetProcessMemoryInfo failed to get RSS: %s", e, exc_info=True)
 
-    if sys.platform.startswith("linux"):
-        try:
-            resident_pages = int(Path(f"/proc/{target_pid}/statm").read_text(encoding="ascii").split()[1])
-            return resident_pages * os.sysconf("SC_PAGE_SIZE") / 1024 / 1024
-        except (OSError, ValueError, IndexError) as e:
-            logger.debug("Linux /proc RSS retrieval failed: %s", e)
-
-    if pid is not None and not (sys.platform == "win32" or sys.platform.startswith("linux")):
-        raise RuntimeError("Per-process RSS monitoring requires psutil on this platform")
-
-    import warnings
-
-    warnings.warn(
-        "Cannot retrieve process RSS, memory protection is disabled. Consider installing psutil: pip install psutil",
-        stacklevel=2,
-    )
+    logger.debug("Cannot retrieve process RSS, memory protection disabled")
     return 0.0
 
 
@@ -326,41 +275,10 @@ def get_memory_stats() -> MemoryStats:
 def _estimate_memory_stats(process_rss_mb: float = 0.0) -> MemoryStats:
     """Estimate memory usage (fallback when psutil is unavailable).
 
-    Uses ctypes to get system memory info (Windows), instead of assuming 16GB.
+    Returns default estimates when system info is not available.
     """
-    total_mb = 0.0
-    available_mb = 0.0
-
-    # Windows: use ctypes to call GlobalMemoryStatusEx
-    if sys.platform == "win32":
-        try:
-            import ctypes
-
-            class MEMORYSTATUSEX(ctypes.Structure):
-                _fields_ = [
-                    ("dwLength", ctypes.c_ulong),
-                    ("dwMemoryLoad", ctypes.c_ulong),
-                    ("ullTotalPhys", ctypes.c_ulonglong),
-                    ("ullAvailPhys", ctypes.c_ulonglong),
-                    ("ullTotalPageFile", ctypes.c_ulonglong),
-                    ("ullAvailPageFile", ctypes.c_ulonglong),
-                    ("ullTotalVirtual", ctypes.c_ulonglong),
-                    ("ullAvailVirtual", ctypes.c_ulonglong),
-                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
-                ]
-
-            stat = MEMORYSTATUSEX()
-            stat.dwLength = ctypes.sizeof(stat)
-            kernel32 = ctypes.windll.kernel32
-            if kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
-                total_mb = stat.ullTotalPhys / 1024 / 1024
-                available_mb = stat.ullAvailPhys / 1024 / 1024
-        except (OSError, ValueError, OverflowError) as e:
-            logger.debug("Windows GlobalMemoryStatusEx failed to get memory info: %s", e, exc_info=True)
-
-    if total_mb <= 0:
-        total_mb = 16 * 1024  # Final fallback
-        available_mb = 8 * 1024
+    total_mb = 16 * 1024  # 16 GB default
+    available_mb = 8 * 1024  # 8 GB default
 
     used_mb = total_mb - available_mb
     usage_percent = used_mb / total_mb if total_mb > 0 else 0.0

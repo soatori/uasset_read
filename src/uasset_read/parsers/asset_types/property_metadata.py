@@ -8,7 +8,6 @@ from uasset_read.models.asset_metadata import (
     has_meaningful_metadata,
     sanitize_asset_metadata,
 )
-from uasset_read.models.validators import validate_parse_status
 
 
 def _properties_by_name(properties: list[Any]) -> dict[str, Any]:
@@ -136,7 +135,7 @@ def build_property_metadata(
     values = _properties_by_name(properties)
     data: dict[str, Any] = {
         "asset_type": class_name,
-        "parse_status": validate_parse_status("opaque"),
+        "parse_status": "opaque",
     }
     business_field_count = 0
 
@@ -283,7 +282,7 @@ def build_property_metadata(
                 project(field_name, _enum_value(values[property_name]))
 
     if business_field_count:
-        data["parse_status"] = validate_parse_status("partial_metadata")
+        data["parse_status"] = "partial_metadata"
 
     if tail_offset is not None and tail_size > 0:
         data["tail_offset"] = tail_offset

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import TYPE_CHECKING, Optional, List, Union, Sequence
+from typing import TYPE_CHECKING, Optional, List, Sequence
 from pathlib import Path
 
 if TYPE_CHECKING:
@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from uasset_read.models.result import ParseResult
 
 from uasset_read.exceptions import ParseError
-from uasset_read.core.error_handling import tolerant_parse
 from uasset_read.serializers.object_resources import (
     find_main_blueprint_generated_class, detect_blueprint,
     build_imports_list, read_soft_object_paths,
@@ -301,12 +300,17 @@ def _extract_blueprint_graphs_and_metadata(
     try:
         from uasset_read.graph import extract_blueprint_graphs
         if hasattr(result, 'graphs'):
-            with tolerant_parse(result, "graph extraction"):
+            try:
                 result.graphs = extract_blueprint_graphs(
                     archive, summary, name_map, import_map, export_map,
                     linker=linker,
                 )
                 graphs_list = result.graphs
+            except ParseError as e:
+                error_msg = f"graph extraction error: {e}"
+                if error_msg not in result.errors:
+                    result.errors.append(error_msg)
+                raise
     except ImportError:
         logger.debug("graph module not found, skipping Blueprint graph extraction")
 
@@ -323,7 +327,7 @@ def _extract_blueprint_graphs_and_metadata(
             temp_archive = archive_factory() if archive_factory else archive
             temp_archive.set_byte_swapping(archive._byte_swapping)
             try:
-                with tolerant_parse(result, "blueprint extraction (BPGC)"):
+                try:
                     meta, warn = extract_blueprint_metadata(
                         main_bpgc, temp_archive, import_map,
                         export_map, name_map, summary,
@@ -334,6 +338,11 @@ def _extract_blueprint_graphs_and_metadata(
                         blueprint_metadata = meta
                         if hasattr(result, 'errors') and warn:
                             result.errors.append(f"blueprint parent warning: {warn}")
+                except ParseError as e:
+                    error_msg = f"blueprint extraction (BPGC) error: {e}"
+                    if error_msg not in result.errors:
+                        result.errors.append(error_msg)
+                    raise
             finally:
                 if owned_archive:
                     temp_archive.close()
@@ -351,7 +360,7 @@ def _extract_blueprint_graphs_and_metadata(
                 temp_archive = archive_factory() if archive_factory else archive
                 temp_archive.set_byte_swapping(archive._byte_swapping)
                 try:
-                    with tolerant_parse(result, "blueprint extraction"):
+                    try:
                         meta, warn = extract_blueprint_metadata(
                             export, temp_archive, import_map,
                             export_map, name_map, summary,
@@ -362,6 +371,11 @@ def _extract_blueprint_graphs_and_metadata(
                             blueprint_metadata = meta
                             if hasattr(result, 'errors') and warn:
                                 result.errors.append(f"blueprint parent warning: {warn}")
+                    except ParseError as e:
+                        error_msg = f"blueprint extraction error: {e}"
+                        if error_msg not in result.errors:
+                            result.errors.append(error_msg)
+                        raise
                 finally:
                     if owned_archive:
                         temp_archive.close()
@@ -419,13 +433,18 @@ def _run_kismet_and_dependency_analysis(
             result.errors.append(f"component extraction error: {e}")
 
     # Dependency analysis
-    with tolerant_parse(result, "dependency analysis"):
+    try:
         if hasattr(result, 'imports'):
             result.imports = build_imports_list(import_map)
         if hasattr(result, 'soft_references'):
             result.soft_references = read_soft_object_paths(
                 archive, summary, name_map,
             )
+    except ParseError as e:
+        error_msg = f"dependency analysis error: {e}"
+        if error_msg not in result.errors:
+            result.errors.append(error_msg)
+        raise
 
 
 def _post_process(

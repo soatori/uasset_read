@@ -14,7 +14,6 @@ from uasset_read.graph.macro_expander import (
     MacroExpander, STANDARD_MACROS, STANDARD_MACRO_CPP_MAPPING,
 )
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin
-from uasset_read.core.utils import normalize_hex_guid as _normalize_pin_id
 from uasset_read.graph.graph_utils import (
     _sanitize_pin_dict, _sanitize_recursive,
     _derive_node_name, format_pin_ref, _pin_ref_guid,

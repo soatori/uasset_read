@@ -10,13 +10,17 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
-from uasset_read.core.utils import (
-    safe_str as _safe_str,
-    safe_int as _safe_int,
-    normalize_hex_guid,
-)
+
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_str(v, d=""):
+    return str(v) if v is not None else d
+
+
+def _safe_int(v, d=0):
+    return v if isinstance(v, int) else (int(v) if isinstance(v, str) else d)
 
 from uasset_read.models.ir import (
     PackageIR,
@@ -274,12 +278,12 @@ def _extract_expression_guid(expr_export) -> str | None:
                 return f"{a:08x}{b:08x}{c:08x}{d:08x}"
             # Handle string value (legacy/direct)
             if isinstance(val, str):
-                return normalize_hex_guid(val)
+                return _normalize_guid(val)
             # Handle dict value (fallback)
             if isinstance(val, dict):
                 guid_str = val.get("guid", "") or val.get("value", "")
                 if guid_str:
-                    return normalize_hex_guid(guid_str)
+                    return _normalize_guid(guid_str)
     return None
 
 
@@ -2171,7 +2175,7 @@ def _normalize_guid(guid: str | None) -> str | None:
     """Normalize GUID to 32-character lowercase hex (no dashes)."""
     if not guid:
         return None
-    cleaned = normalize_hex_guid(str(guid))
+    cleaned = str(guid).replace("-", "").lower()
     if cleaned and len(cleaned) == 32 and all(c in "0123456789abcdef" for c in cleaned):
         return cleaned
     return None

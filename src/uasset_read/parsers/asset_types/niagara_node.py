@@ -28,7 +28,6 @@ if TYPE_CHECKING:
 from uasset_read.constants import MAX_NODES_PER_GRAPH
 from uasset_read.parsers.asset_types.property_extractor import build_properties_dict
 from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
-from uasset_read.models.validators import validate_parse_status
 from uasset_read.serializers.graph_helpers import read_ftext
 from uasset_read.serializers.graph_pin import read_ed_graph_pin_type
 
@@ -286,7 +285,7 @@ class NiagaraNodeHandler(ClassHandler):
             # Build result data
             data: dict[str, Any] = {
                 "asset_type": class_name,
-                "parse_status": validate_parse_status("partial_metadata"),
+                "parse_status": "partial_metadata",
                 "node_class": class_name,
                 "node_name": str(export.object_name),
                 "tagged_properties": tagged_properties,

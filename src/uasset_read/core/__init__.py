@@ -361,10 +361,7 @@ def parse_batch(
 
     # #346: 智能混合模式 — 将导入移到循环外部
     if isolate_assets == "auto":
-        from uasset_read.memory_safety import (
-            should_isolate,
-            FileSizeTier,
-        )
+        from uasset_read.memory_safety import should_isolate
 
     import time
 
@@ -383,8 +380,7 @@ def parse_batch(
             # #346: 智能混合模式
             if isolate_assets == "auto":
                 file_size = pf.stat().st_size
-                tier = FileSizeTier.from_size(file_size)
-                actual_isolate = should_isolate(file_size, tier)
+                actual_isolate = should_isolate(file_size)
             else:
                 actual_isolate = bool(isolate_assets)
 

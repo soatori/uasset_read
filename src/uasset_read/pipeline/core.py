@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from uasset_read.memory_safety import MemoryPolicy
     from uasset_read.config import ParseConfig
 
-from uasset_read.memory_safety import ResourceBudget
+from uasset_read.memory_safety import ResourceBudget, MemoryLimitExceeded
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.package import PackageProvider
@@ -36,10 +36,42 @@ from uasset_read.pipeline.config import (
     _apply_lightweight_parse,
     _resolve_parse_params,
 )
-from uasset_read.pipeline.error_handler import _handle_parse_error
-from uasset_read.pipeline.memory import _cleanup_parse_memory
 
 logger = logging.getLogger(__name__)
+
+
+def _cleanup_parse_memory(result) -> None:
+    """Unified memory cleanup: break circular references, reset global caches.
+
+    Called in the finally block of parse_package / parse_package_lazy to prevent
+    memory leaks from UObjectInstance <-> linker circular references during batch parsing,
+    and unbounded growth of global caches (ClassHandlerRegistry).
+    """
+    # Break UObjectInstance <-> linker circular references
+    if result is not None and result.linker:
+        try:
+            if hasattr(result.linker, '_export_objects'):
+                for obj in result.linker._export_objects:
+                    obj.linker = None
+            if hasattr(result.linker, '_import_objects'):
+                for obj in result.linker._import_objects:
+                    obj.linker = None
+            result.linker._export_objects.clear()
+            result.linker._import_objects.clear()
+            result.linker._root_objects.clear()
+            result.linker._preload_cache.clear()
+            result.linker._archive = None
+            logger.debug("linker circular references broken, export/import objects cleared")
+        except Exception as e:
+            logger.debug("linker circular reference cleanup exception, ignored: %s", e)
+
+    # Reset global class_registry cache
+    try:
+        from uasset_read.parsers.class_registry import get_class_registry
+        get_class_registry().reset_cache()
+        logger.debug("class_registry.reset_cache() called")
+    except Exception as e:
+        logger.debug("class_registry.reset_cache() exception, ignored: %s", e)
 
 
 def _cleanup_archive_diagnostics(result, archive) -> None:
@@ -208,7 +240,28 @@ def _parse_package_core(
             result.is_success = not result.errors
 
         except Exception as e:
-            _handle_parse_error(e, result, archive, path, tolerant)
+            if isinstance(e, MemoryLimitExceeded):
+                raise
+            if isinstance(e, VersionError):
+                _record_parse_stage_error(result, archive, path, "version", "legacy_file_version", e)
+                result.is_success = False
+            elif isinstance(e, ParseError):
+                _record_parse_stage_error(result, archive, path, "parse", "parse_error", e)
+                if e.partial_result:
+                    for key, value in e.partial_result.items():
+                        if hasattr(result, key):
+                            setattr(result, key, value)
+                result.is_success = False
+            elif isinstance(e, MemoryError):
+                error_msg = f"MemoryError: {e}"
+                if error_msg not in result.errors:
+                    result.errors.append(error_msg)
+                result.is_success = False
+            else:
+                _record_parse_stage_error(result, archive, path, "parse", "unexpected", e)
+                result.is_success = False
+            if not tolerant:
+                raise
 
         finally:
             _cleanup_archive_diagnostics(result, archive)

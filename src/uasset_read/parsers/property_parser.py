@@ -27,7 +27,6 @@ from uasset_read.constants import (
 )
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
-from uasset_read.models.validators import validate_parse_status
 
 logger = logging.getLogger(__name__)
 
@@ -451,9 +450,9 @@ def _try_asset_type_handler(
             # Propagate handler parse_status to export level
             handler_status = result.data.get("parse_status")
             if handler_status:
-                setattr(export, "parse_status", validate_parse_status(handler_status))
+                setattr(export, "parse_status", handler_status)
             else:
-                setattr(export, "parse_status", validate_parse_status("success"))
+                setattr(export, "parse_status", "success")
             logger.debug(
                 "AssetTypeHandler '%s' extracted data for '%s' (status=%s)",
                 handler.handler_name,
@@ -463,7 +462,7 @@ def _try_asset_type_handler(
         elif not result.success:
             # Handler reported a recoverable failure via HandlerResult.
             # Record the error on the export so callers see it in parse_status.
-            setattr(export, "parse_status", validate_parse_status("partial"))
+            setattr(export, "parse_status", "partial")
             if result.error_message:
                 setattr(export, "handler_error", result.error_message)
             logger.warning(
@@ -782,7 +781,7 @@ def _handle_unversioned_properties(
         len(raw_bytes),
     )
     # Mark export status as opaque_unversioned, not as a full success in the final report
-    setattr(export, "parse_status", validate_parse_status("opaque_unversioned"))
+    setattr(export, "parse_status", "opaque_unversioned")
     setattr(export, "fallback_reason", "missing_mapping")
     return [
         PropertyFallback(
@@ -1053,7 +1052,7 @@ def _read_property_loop(
                         array_index=tag.array_index,
                     )
                 )
-                setattr(export, "parse_status", validate_parse_status("partial"))
+                setattr(export, "parse_status", "partial")
                 break
 
             # Boundary check: PropertyTag.Size should not exceed remaining property data range
@@ -1189,7 +1188,7 @@ def parse_properties_from_export(
             skip_export_payload(archive, export, summary)
         except (_struct.error, OSError, ValueError) as e:
             logger.debug("Failed to skip export '%s' payload: %s", export.object_name, e)
-        setattr(export, "parse_status", validate_parse_status("skipped"))
+        setattr(export, "parse_status", "skipped")
         setattr(export, "fallback_reason", "unsupported_type")
         setattr(export, "class_name", skip_class_name or "")
         return []

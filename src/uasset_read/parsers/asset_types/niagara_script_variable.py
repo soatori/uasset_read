@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 
 from uasset_read.parsers.asset_types.property_extractor import build_properties_dict
 from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
-from uasset_read.models.validators import validate_parse_status
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +72,7 @@ class NiagaraScriptVariableHandler(ClassHandler):
 
             data: dict[str, Any] = {
                 "asset_type": "NiagaraScriptVariable",
-                "parse_status": validate_parse_status("partial_metadata"),
+                "parse_status": "partial_metadata",
                 "variable_name": str(export.object_name),
                 "tagged_properties": tagged_properties,
                 "native_tail": {

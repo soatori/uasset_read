@@ -6,7 +6,6 @@ Use make_opaque_stub() to generate, avoiding one stub file per type.
 """
 
 from typing import Any, Callable
-from ...models.validators import validate_parse_status
 
 
 def make_opaque_stub(class_name: str) -> Callable[[Any, list[str]], dict[str, Any]]:
@@ -29,7 +28,7 @@ def make_opaque_stub(class_name: str) -> Callable[[Any, list[str]], dict[str, An
         return {
             "raw_offset": start,
             "sample_size": len(sample),
-            "parse_status": validate_parse_status("partial_metadata"),
+            "parse_status": "partial_metadata",
         }
 
     return _parse
