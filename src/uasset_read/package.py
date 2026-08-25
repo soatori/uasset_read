@@ -10,9 +10,13 @@ import os
 from uasset_read.archive import FArchive, ArchiveLike, ByteArchive
 from uasset_read.exceptions import ParseError
 from uasset_read.memory_safety import ResourceBudget
-from uasset_read.core.utils import normalize_path
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_path(s: str) -> str:
+    """Normalize Windows backslashes to forward slashes and strip trailing slashes."""
+    return s.replace(chr(92), "/").rstrip("/")
 
 
 PACKAGE_EXTENSIONS = (".uasset", ".umap")
@@ -251,7 +255,7 @@ class PackageProvider(ABC):
         files = set(self.list_files())
         if path in files:
             return path
-        normalized = normalize_path(path)
+        normalized = _normalize_path(path)
         if normalized in files:
             return normalized
         for ext in PACKAGE_EXTENSIONS:
@@ -260,7 +264,7 @@ class PackageProvider(ABC):
                 return candidate
         lowered = normalized.lower()
         for candidate in files:
-            candidate_normalized = normalize_path(candidate)
+            candidate_normalized = _normalize_path(candidate)
             if candidate_normalized.lower() == lowered:
                 return candidate
             for ext in PACKAGE_EXTENSIONS:
@@ -364,12 +368,12 @@ class MultiSourceProvider(PackageProvider):
         made relative to the provider's root before prepending the mount root.
         For other providers, the path is treated as already relative.
         """
-        physical = normalize_path(physical_path)
+        physical = _normalize_path(physical_path)
         mount_root = mount.mount_root.rstrip("/") + "/"
         # Strip provider root if present (filesystem providers return absolute paths)
         provider_root = getattr(mount.provider, "root", None)
         if provider_root is not None:
-            root_str = normalize_path(str(provider_root)) + "/"
+            root_str = _normalize_path(str(provider_root)) + "/"
             if physical.startswith(root_str):
                 physical = physical[len(root_str):]
         # If the physical path already starts with the mount root, strip it
@@ -388,7 +392,7 @@ class MultiSourceProvider(PackageProvider):
         For filesystem providers, the result is an absolute path by prepending
         the provider's root. For other providers, the result is a relative path.
         """
-        logical = normalize_path(logical_path)
+        logical = _normalize_path(logical_path)
         mount_root = mount.mount_root.rstrip("/") + "/"
         # Check if the logical path belongs to this mount's prefix
         if not logical.startswith(mount_root) and not logical.startswith(mount.mount_root):
@@ -403,7 +407,7 @@ class MultiSourceProvider(PackageProvider):
         # For filesystem providers, prepend root to get absolute physical path
         provider_root = getattr(mount.provider, "root", None)
         if provider_root is not None:
-            root_str = normalize_path(str(provider_root))
+            root_str = _normalize_path(str(provider_root))
             return root_str + "/" + relative
         return relative
 

@@ -2,6 +2,7 @@
 
 Split from serializers/graph.py, contains all Pin-related read logic.
 """
+
 from __future__ import annotations
 
 import json
@@ -16,17 +17,22 @@ if TYPE_CHECKING:
     from uasset_read.link.linker import PackageLinker
 
 from uasset_read.constants import (
-    MAX_LINKEDTO_PER_PIN, MAX_FTEXT_CONSUMPTION,
+    MAX_LINKEDTO_PER_PIN,
+    MAX_FTEXT_CONSUMPTION,
 )
 from uasset_read.exceptions import ParseError
 from uasset_read.serializers.object_resources import PackageIndex
 from uasset_read.models.core import UEdGraphPin, FEdGraphPinType
-from uasset_read.core.utils import normalize_hex_guid
 
 from uasset_read.serializers.graph_helpers import (
-    _read_guid, _rcn, _get_thread_local, _pin_trace_enabled,
-    _record_pin_recovery, _trace_fields_append,
-    _read_fstring_safe, _read_ftext_value,
+    _read_guid,
+    _rcn,
+    _get_thread_local,
+    _pin_trace_enabled,
+    _record_pin_recovery,
+    _trace_fields_append,
+    _read_fstring_safe,
+    _read_ftext_value,
     validate_pin_reference_at,
 )
 
@@ -36,6 +42,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # FEdGraphPinType read functions
 # ============================================================================
+
 
 def read_ed_graph_pin_type(
     archive: FArchive,
@@ -64,9 +71,7 @@ def read_ed_graph_pin_type(
                         pin_type.pin_subcategory_object_ref, "object_name", None
                     )
             elif import_map is not None and export_map is not None:
-                pin_type.pin_subcategory_object_name = _rcn(
-                    pkg_idx, import_map, export_map, linker
-                )
+                pin_type.pin_subcategory_object_name = _rcn(pkg_idx, import_map, export_map, linker)
         except (KeyError, IndexError, AttributeError):
             pin_type.pin_subcategory_object_ref = None
             pin_type.pin_subcategory_object_name = None
@@ -86,13 +91,9 @@ def read_ed_graph_pin_type(
                 if linker is not None:
                     ref = linker.resolve_package_index(pkg_idx)
                     if ref is not None:
-                        pin_type.map_key_terminal_sub_category_object_name = getattr(
-                            ref, "object_name", None
-                        )
+                        pin_type.map_key_terminal_sub_category_object_name = getattr(ref, "object_name", None)
                 elif import_map is not None and export_map is not None:
-                    pin_type.map_key_terminal_sub_category_object_name = _rcn(
-                        pkg_idx, import_map, export_map, linker
-                    )
+                    pin_type.map_key_terminal_sub_category_object_name = _rcn(pkg_idx, import_map, export_map, linker)
             except (KeyError, IndexError, AttributeError):
                 pin_type.map_key_terminal_sub_category_object_name = None
 
@@ -121,6 +122,7 @@ def read_ed_graph_pin_type(
 # Pin reference helper functions
 # ============================================================================
 
+
 def read_pin_reference(
     archive: FArchive,
     name_map: List[str],
@@ -137,7 +139,7 @@ def read_pin_reference(
     pin_guid_raw = _read_guid(archive)
 
     # Normalize to 32-char lowercase hex (remove dashes), matching pin_id format
-    pin_guid = normalize_hex_guid(pin_guid_raw)
+    pin_guid = pin_guid_raw.replace("-", "").lower() if pin_guid_raw else pin_guid_raw
 
     # Resolve owning node name
     owning_node_name: Optional[str] = None
@@ -186,49 +188,48 @@ def read_pin_array(
     if array_count < 0 or array_count > MAX_LINKEDTO_PER_PIN:
         # Sliding recovery: scan within ±8 bytes of current pointer for valid count
         recovery_pos = archive.tell()
-        recovered = _recover_pin_array_count(
-            archive, recovery_pos, array_count, export_map, import_map
-        )
+        recovered = _recover_pin_array_count(archive, recovery_pos, array_count, export_map, import_map)
         if recovered is not None:
             original_bad_count = array_count
             array_count = recovered["count"]
-            _record_pin_recovery({
-                "kind": "pin_array_count",
-                "context": recovery_context,
-                "bad_count": original_bad_count,
-                "candidate_pos": recovered["candidate_pos"],
-                "confidence": recovered["confidence"],
-                "reason": recovered["reason"],
-            })
+            _record_pin_recovery(
+                {
+                    "kind": "pin_array_count",
+                    "context": recovery_context,
+                    "bad_count": original_bad_count,
+                    "candidate_pos": recovered["candidate_pos"],
+                    "confidence": recovered["confidence"],
+                    "reason": recovered["reason"],
+                }
+            )
             if recovered["confidence"] == "low" and recovery_context == "linkedto":
                 # Low-confidence recovery excluded from LinkedTo connection building to avoid polluting downstream semantics
                 logger.info(
                     "[P73-RECOVERY] %s low-confidence recovered (count=%d, reason=%s) -> ignored",
-                    recovery_context, array_count, recovered["reason"]
+                    recovery_context,
+                    array_count,
+                    recovered["reason"],
                 )
                 return []
             logger.info(
                 "[P73-RECOVERY] %s recovered: count=%d, confidence=%s, reason=%s",
-                recovery_context, array_count, recovered["confidence"], recovered["reason"]
+                recovery_context,
+                array_count,
+                recovered["confidence"],
+                recovered["reason"],
             )
         else:
             if array_count < 0:
                 raise ParseError(f"Invalid pin array count: {array_count} (negative)")
-            raise ParseError(
-                f"Pin array count {array_count} exceeds MAX_LINKEDTO_PER_PIN {MAX_LINKEDTO_PER_PIN}"
-            )
+            raise ParseError(f"Pin array count {array_count} exceeds MAX_LINKEDTO_PER_PIN {MAX_LINKEDTO_PER_PIN}")
 
     pins: List[dict] = []
     for _ in range(array_count):
         ref_pos = archive.tell()
-        ref_validation = validate_pin_reference_at(
-            archive, ref_pos, export_map, import_map
-        )
+        ref_validation = validate_pin_reference_at(archive, ref_pos, export_map, import_map)
         if ref_validation is None or not ref_validation["valid"]:
             reason = ref_validation["reason"] if ref_validation else "not enough bytes"
-            raise ParseError(
-                f"Invalid pin reference at pos {ref_pos} in {recovery_context}: {reason}"
-            )
+            raise ParseError(f"Invalid pin reference at pos {ref_pos} in {recovery_context}: {reason}")
         pin_ref = read_pin_reference(archive, name_map, export_map, import_map, linker)
         if pin_ref is not None:
             pins.append(pin_ref)
@@ -283,7 +284,7 @@ def _recover_pin_array_count(
         if not isinstance(archive_size, int):
             raise TypeError("total_size() did not return int")
     except (AttributeError, TypeError):
-        archive_size = getattr(archive, '_file_size', 0)
+        archive_size = getattr(archive, "_file_size", 0)
     search_end = min(archive_size, error_pos + scan_window)
 
     archive.seek(search_start)
@@ -294,8 +295,8 @@ def _recover_pin_array_count(
     best_reason = ""
 
     for offset in range(0, len(window) - 4, 1):
-        candidate_bytes = window[offset:offset + 4]
-        candidate = struct.unpack('<i', candidate_bytes)[0]
+        candidate_bytes = window[offset : offset + 4]
+        candidate = struct.unpack("<i", candidate_bytes)[0]
         if candidate < 0 or candidate > 20:
             continue  # Out of reasonable range
 
@@ -307,7 +308,7 @@ def _recover_pin_array_count(
             # count=0 should be followed by a SubPins array or other reasonable structure
             # Check if another small integer count (0..20) follows immediately
             if after_count + 4 <= len(window):
-                next_val = struct.unpack('<i', window[after_count:after_count + 4])[0]
+                next_val = struct.unpack("<i", window[after_count : after_count + 4])[0]
                 if 0 <= next_val <= 20:
                     # Another array count follows, matches SubPins structure
                     best_candidate = (candidate_pos, candidate)
@@ -327,17 +328,13 @@ def _recover_pin_array_count(
             continue  # Insufficient space
 
         # Validate first PinReference
-        pin_ref_1 = validate_pin_reference_at(
-            archive, candidate_pos + 4, export_map, import_map
-        )
+        pin_ref_1 = validate_pin_reference_at(archive, candidate_pos + 4, export_map, import_map)
         if pin_ref_1 is None or not pin_ref_1["valid"]:
             continue
 
         # Validate second PinReference (if count >= 2)
         if candidate >= 2 and after_count + 48 <= len(window):
-            pin_ref_2 = validate_pin_reference_at(
-                archive, candidate_pos + 4 + 24, export_map, import_map
-            )
+            pin_ref_2 = validate_pin_reference_at(archive, candidate_pos + 4 + 24, export_map, import_map)
             if pin_ref_2 is None or not pin_ref_2["valid"]:
                 # Second ref invalid, medium confidence
                 best_candidate = (candidate_pos, candidate)
@@ -354,10 +351,13 @@ def _recover_pin_array_count(
     if best_candidate is not None:
         candidate_pos, recovered_count = best_candidate
         logger.debug(
-            "[P73-RECOVERY] LinkedTo: count=%d at pos %d "
-            "(confidence=%s, scan=%d bytes, bad_count=%d, reason=%s)",
-            recovered_count, candidate_pos,
-            best_confidence, scan_window, bad_count, best_reason,
+            "[P73-RECOVERY] LinkedTo: count=%d at pos %d (confidence=%s, scan=%d bytes, bad_count=%d, reason=%s)",
+            recovered_count,
+            candidate_pos,
+            best_confidence,
+            scan_window,
+            bad_count,
+            best_reason,
         )
         # Seek to just after the valid count (start of first pin ref)
         archive.seek(candidate_pos + 4)
@@ -410,13 +410,13 @@ def _try_recover_to_subpins(
         if not isinstance(archive_size, int):
             raise TypeError("total_size() did not return int")
     except (AttributeError, TypeError):
-        archive_size = getattr(archive, '_file_size', 0)
+        archive_size = getattr(archive, "_file_size", 0)
     scan_end = min(archive_size, scan_start + max_scan)
     archive.seek(scan_start)
     window = archive.read(scan_end - scan_start)
 
     for offset in range(0, len(window) - 4, 1):
-        candidate = struct.unpack('<i', window[offset:offset + 4])[0]
+        candidate = struct.unpack("<i", window[offset : offset + 4])[0]
         if candidate < 0 or candidate > 20:
             continue
 
@@ -425,9 +425,7 @@ def _try_recover_to_subpins(
 
         # Validate using validate_pin_reference_at
         if candidate > 0 and after + 24 <= len(window):
-            pin_ref_result = validate_pin_reference_at(
-                archive, candidate_pos + 4, export_map, import_map
-            )
+            pin_ref_result = validate_pin_reference_at(archive, candidate_pos + 4, export_map, import_map)
             if pin_ref_result is not None and pin_ref_result["valid"]:
                 recovered_pos = candidate_pos
                 archive.seek(recovered_pos)
@@ -435,15 +433,20 @@ def _try_recover_to_subpins(
                 recovery_type = "subpins_resync"
                 logger.debug(
                     "[P73-SUBPINS] Recovery at pos %d (count=%d, type=%s, reason=%s)",
-                    recovered_pos, candidate, recovery_type, pin_ref_result["reason"],
+                    recovered_pos,
+                    candidate,
+                    recovery_type,
+                    pin_ref_result["reason"],
                 )
-                _record_pin_recovery({
-                    "kind": "subpins_resync",
-                    "recovered_pos": recovered_pos,
-                    "count": candidate,
-                    "recovery_type": recovery_type,
-                    "reason": pin_ref_result["reason"],
-                })
+                _record_pin_recovery(
+                    {
+                        "kind": "subpins_resync",
+                        "recovered_pos": recovered_pos,
+                        "count": candidate,
+                        "recovery_type": recovery_type,
+                        "reason": pin_ref_result["reason"],
+                    }
+                )
                 return {
                     "recovered_pos": recovered_pos,
                     "count": candidate,
@@ -453,22 +456,25 @@ def _try_recover_to_subpins(
 
         # count=0 or b_null!=0 case: check if empty array or null ref
         if after + 4 <= len(window):
-            b_null = struct.unpack('<i', window[after:after + 4])[0]
+            b_null = struct.unpack("<i", window[after : after + 4])[0]
             if b_null != 0:
                 # b_null!=0: null reference, valid
                 recovered_pos = candidate_pos
                 archive.seek(recovered_pos)
                 logger.debug(
                     "[P73-SUBPINS] Recovery to SubPins at pos %d (count=%d, null ref)",
-                    recovered_pos, candidate,
+                    recovered_pos,
+                    candidate,
                 )
-                _record_pin_recovery({
-                    "kind": "subpins_resync",
-                    "recovered_pos": recovered_pos,
-                    "count": candidate,
-                    "recovery_type": "subpins_resync",
-                    "reason": "b_null!=0 null reference",
-                })
+                _record_pin_recovery(
+                    {
+                        "kind": "subpins_resync",
+                        "recovered_pos": recovered_pos,
+                        "count": candidate,
+                        "recovery_type": "subpins_resync",
+                        "reason": "b_null!=0 null reference",
+                    }
+                )
                 return {
                     "recovered_pos": recovered_pos,
                     "count": candidate,
@@ -479,9 +485,12 @@ def _try_recover_to_subpins(
     # Recovery failed, stay at current position
     logger.debug(
         "[P73-SUBPINS] Could not find valid structure within %d bytes from pos %d",
-        max_scan, error_pos,
+        max_scan,
+        error_pos,
     )
     return None
+
+
 # ============================================================================
 
 
@@ -495,25 +504,25 @@ def _read_pin_fstring_field(
 ) -> str:
     """Read Pin FString field (DefaultValue / AutogeneratedDefaultValue / PinToolTip)."""
     from uasset_read.archive import _contains_binary_data
+
     _field_start = archive.tell()
     try:
         value = _read_fstring_safe(archive, max_length=max_length)
         if _contains_binary_data(value):
             logger.debug(
-                "Binary %s at pos %d for pin '%s' — returning empty",
-                field_name, archive.tell() - len(value), pin_name
+                "Binary %s at pos %d for pin '%s' — returning empty", field_name, archive.tell() - len(value), pin_name
             )
             if trace_mode:
                 _trace_fields_append(trace_fields, field_name, _field_start, archive.tell(), "[BINARY]")
             return ""
         if trace_mode:
-            _trace_fields_append(trace_fields, field_name, _field_start, archive.tell(),
-                                 value[:30] if value else "[empty]")
+            _trace_fields_append(
+                trace_fields, field_name, _field_start, archive.tell(), value[:30] if value else "[empty]"
+            )
         return value
     except (struct.error, OSError, ValueError):
         if trace_mode:
-            _trace_fields_append(trace_fields, field_name, _field_start, archive.tell(),
-                                 "", is_exception=True)
+            _trace_fields_append(trace_fields, field_name, _field_start, archive.tell(), "", is_exception=True)
         return ""
 
 
@@ -530,27 +539,34 @@ def _read_pin_ftext_field(
         consumed = archive.tell() - _start
         if consumed > MAX_FTEXT_CONSUMPTION:
             logger.debug(
-                "[FTEXT-SAFETY] %s consumed %d bytes (> %d), "
-                "possible corruption, recovering from field start %d",
-                field_name, consumed, MAX_FTEXT_CONSUMPTION, _start
+                "[FTEXT-SAFETY] %s consumed %d bytes (> %d), possible corruption, recovering from field start %d",
+                field_name,
+                consumed,
+                MAX_FTEXT_CONSUMPTION,
+                _start,
             )
             archive._record_diagnostic(
-                module="graph_pin", field="FTEXT-SAFETY",
-                source=field_name, target_offset=_start,
-                read_size=consumed, file_size=archive.total_size(),
+                module="graph_pin",
+                field="FTEXT-SAFETY",
+                source=field_name,
+                target_offset=_start,
+                read_size=consumed,
+                file_size=archive.total_size(),
                 error=f"FText consumed {consumed} bytes, exceeding limit {MAX_FTEXT_CONSUMPTION}",
             )
             archive.seek(_start)  # Seek back to field start, not _start + 5
             value = None
         if trace_mode:
-            _trace_fields_append(trace_fields, field_name, _start, archive.tell(),
-                                 f"flags={flags},htype={history_type}")
+            _trace_fields_append(
+                trace_fields, field_name, _start, archive.tell(), f"flags={flags},htype={history_type}"
+            )
         return value, True
     except (struct.error, OSError, ValueError):
         archive.seek(_start)  # On exception, also seek back to start position
         if trace_mode:
-            _trace_fields_append(trace_fields, field_name, _start, archive.tell(),
-                                 "", is_exception=True, is_fallback=True)
+            _trace_fields_append(
+                trace_fields, field_name, _start, archive.tell(), "", is_exception=True, is_fallback=True
+            )
         return None, False
 
 
@@ -577,22 +593,24 @@ def _read_pin_linkedto(
         linked_to = read_pin_array(archive, name_map, export_map, import_map, linker)
         logger.debug("LinkedTo: %d refs at pos %d", len(linked_to), linkedto_start)
         if trace_mode:
-            refs_preview = [ref.get('owning_node', '?') for ref in linked_to[:2]]
-            _trace_fields_append(trace_fields, "LinkedTo", linkedto_start, archive.tell(),
-                                 f"raw_count={linkedto_raw_count},count={len(linked_to)},refs={refs_preview}")
+            refs_preview = [ref.get("owning_node", "?") for ref in linked_to[:2]]
+            _trace_fields_append(
+                trace_fields,
+                "LinkedTo",
+                linkedto_start,
+                archive.tell(),
+                f"raw_count={linkedto_raw_count},count={len(linked_to)},refs={refs_preview}",
+            )
     except (struct.error, OSError, ValueError) as e:
         failure_key = (linkedto_start, type(e).__name__, pin_name)
         tl = _get_thread_local()
         if failure_key not in tl.linkedto_failure_seen:
             tl.linkedto_failure_seen.add(failure_key)
-            logger.error("LinkedTo read failed at pos %d (pin=%s): %s",
-                         linkedto_start, pin_name, e)
+            logger.error("LinkedTo read failed at pos %d (pin=%s): %s", linkedto_start, pin_name, e)
         else:
-            logger.debug("LinkedTo read failed (deduped) at pos %d (pin=%s): %s",
-                         linkedto_start, pin_name, e)
+            logger.debug("LinkedTo read failed (deduped) at pos %d (pin=%s): %s", linkedto_start, pin_name, e)
         if trace_mode:
-            _trace_fields_append(trace_fields, "LinkedTo", linkedto_start, archive.tell(),
-                                 "", is_exception=True)
+            _trace_fields_append(trace_fields, "LinkedTo", linkedto_start, archive.tell(), "", is_exception=True)
         linked_to = []
         recovery_result = _try_recover_to_subpins(archive, linkedto_start, export_map, import_map)
         if recovery_result is not None:
@@ -625,13 +643,24 @@ def _read_pin_subpins(
     try:
         sub_pins = read_pin_array(archive, name_map, export_map, import_map, linker)
         if trace_mode:
-            _trace_fields_append(trace_fields, "SubPins", subpins_start, archive.tell(),
-                                 f"raw_count={subpins_raw_count},count={len(sub_pins)}")
+            _trace_fields_append(
+                trace_fields,
+                "SubPins",
+                subpins_start,
+                archive.tell(),
+                f"raw_count={subpins_raw_count},count={len(sub_pins)}",
+            )
     except (struct.error, OSError, ValueError):
         sub_pins = []
         if trace_mode:
-            _trace_fields_append(trace_fields, "SubPins", subpins_start, archive.tell(),
-                                 f"raw_count={subpins_raw_count}", is_exception=True)
+            _trace_fields_append(
+                trace_fields,
+                "SubPins",
+                subpins_start,
+                archive.tell(),
+                f"raw_count={subpins_raw_count}",
+                is_exception=True,
+            )
     return sub_pins
 
 
@@ -704,7 +733,7 @@ def read_ue_graph_pin(
         pin_id_bytes = archive.read_bytes(16, "Pin.PinId")
         pin_id = pin_id_bytes.hex()
     if trace_mode:
-        _trace_fields_append(_trace_fields, "PinId", _field_start, archive.tell(), pin_id[:16]+"...")
+        _trace_fields_append(_trace_fields, "PinId", _field_start, archive.tell(), pin_id[:16] + "...")
 
     # 3. PinName
     pin_start_pos = archive.tell()
@@ -736,15 +765,15 @@ def read_ue_graph_pin(
 
     # 8. PinType
     _field_start = archive.tell()
-    pin_type = read_ed_graph_pin_type(
-        archive, name_map, summary, import_map, export_map, linker
-    )
+    pin_type = read_ed_graph_pin_type(archive, name_map, summary, import_map, export_map, linker)
     if trace_mode:
         _trace_fields_append(_trace_fields, "PinType", _field_start, archive.tell(), "[PinType struct]")
 
     # 9-10. DefaultValue strings (tolerant)
     default_value = _read_pin_fstring_field(archive, "DefaultValue", trace_mode, _trace_fields)
-    autogenerated_default_value = _read_pin_fstring_field(archive, "AutogeneratedDefaultValue", trace_mode, _trace_fields)
+    autogenerated_default_value = _read_pin_fstring_field(
+        archive, "AutogeneratedDefaultValue", trace_mode, _trace_fields
+    )
 
     # 11. DefaultObject (FPackageIndex)
     _field_start = archive.tell()
@@ -756,28 +785,38 @@ def read_ue_graph_pin(
     default_text_value, _ = _read_pin_ftext_field(archive, "DefaultTextValue", trace_mode, _trace_fields)
 
     # 13. LinkedTo array
-    linked_to = _read_pin_linkedto(archive, name_map, export_map, import_map, linker,
-                                    trace_mode, _trace_fields, pin_name)
+    linked_to = _read_pin_linkedto(
+        archive, name_map, export_map, import_map, linker, trace_mode, _trace_fields, pin_name
+    )
 
     # 14. SubPins array
-    sub_pins = _read_pin_subpins(archive, name_map, export_map, import_map, linker,
-                                  trace_mode, _trace_fields)
+    sub_pins = _read_pin_subpins(archive, name_map, export_map, import_map, linker, trace_mode, _trace_fields)
 
     # 15. ParentPin — reuse read_pin_reference() (UE5: null → 4B, non-null → 24B)
     parent_start = archive.tell()
     _pp_ref = read_pin_reference(archive, name_map, export_map, import_map, linker)
     parent_pin = _pp_ref
     if trace_mode:
-        _trace_fields_append(_trace_fields, "ParentPin", parent_start, archive.tell(),
-                     f"null={1 if _pp_ref is None else 0},owning={_pp_ref.get('owning_node') if _pp_ref else 'N/A'}")
+        _trace_fields_append(
+            _trace_fields,
+            "ParentPin",
+            parent_start,
+            archive.tell(),
+            f"null={1 if _pp_ref is None else 0},owning={_pp_ref.get('owning_node') if _pp_ref else 'N/A'}",
+        )
 
     # 16. ReferencePassThroughConnection — reuse read_pin_reference()
     ref_start = archive.tell()
     _ref_ref = read_pin_reference(archive, name_map, export_map, import_map, linker)
     ref_pass_through = _ref_ref
     if trace_mode:
-        _trace_fields_append(_trace_fields, "ReferencePassThroughConnection", ref_start, archive.tell(),
-                     f"null={1 if _ref_ref is None else 0},owning={_ref_ref.get('owning_node') if _ref_ref else 'N/A'}")
+        _trace_fields_append(
+            _trace_fields,
+            "ReferencePassThroughConnection",
+            ref_start,
+            archive.tell(),
+            f"null={1 if _ref_ref is None else 0},owning={_ref_ref.get('owning_node') if _ref_ref else 'N/A'}",
+        )
 
     # 17. PersistentGuid (EditorOnly)
     persistent_start = archive.tell()
@@ -786,13 +825,10 @@ def read_ue_graph_pin(
     except (struct.error, OSError, ParseError):
         persistent_guid = None
     if trace_mode:
-        _trace_fields_append(_trace_fields, "PersistentGuid", persistent_start, archive.tell(),
-                     persistent_guid or "")
+        _trace_fields_append(_trace_fields, "PersistentGuid", persistent_start, archive.tell(), persistent_guid or "")
 
     # 18. BitField (EditorOnly) — uint32 in both UE4 and UE5 (EdGraphPin.cpp L1902)
-    hidden, not_connectable, advanced_view, orphaned_pin = _read_pin_bitfield(
-        archive, trace_mode, _trace_fields
-    )
+    hidden, not_connectable, advanced_view, orphaned_pin = _read_pin_bitfield(archive, trace_mode, _trace_fields)
 
     default_object_ref = None
     if linker is not None and default_object not in (None, 0):
@@ -821,20 +857,25 @@ def read_ue_graph_pin(
 
         logger.info(
             "[P73-PINTRACE] Pin '%s' at pos %d: fields=%d, linkedto=%d, first_misaligned='%s'",
-            pin_name, pin_start_pos, len(_trace_fields.get("fields", [])),
-            len(linked_to), first_misaligned
+            pin_name,
+            pin_start_pos,
+            len(_trace_fields.get("fields", [])),
+            len(linked_to),
+            first_misaligned,
         )
-        _get_thread_local().pin_trace_events.append({
-            "pin_name": pin_name,
-            "pin_id": pin_id,
-            "pin_start_pos": pin_start_pos,
-            "linkedto_raw_count": None,
-            "linkedto_count": len(linked_to),
-            "subpins_raw_count": None,
-            "subpins_count": len(sub_pins),
-            "first_misaligned": first_misaligned,
-            "fields": [dict(item) for item in _trace_fields.get("fields", [])],
-        })
+        _get_thread_local().pin_trace_events.append(
+            {
+                "pin_name": pin_name,
+                "pin_id": pin_id,
+                "pin_start_pos": pin_start_pos,
+                "linkedto_raw_count": None,
+                "linkedto_count": len(linked_to),
+                "subpins_raw_count": None,
+                "subpins_count": len(sub_pins),
+                "first_misaligned": first_misaligned,
+                "fields": [dict(item) for item in _trace_fields.get("fields", [])],
+            }
+        )
         if first_misaligned:
             logger.debug("[P73-PINTRACE] Fields detail: %s", json.dumps(_trace_fields.get("fields", [])))
 

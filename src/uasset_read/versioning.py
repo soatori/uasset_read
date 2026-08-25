@@ -10,7 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from uasset_read.core.utils import normalize_hex_guid
 
 from uasset_read.constants import (
     UE5_VERSION_MIN,
@@ -81,13 +80,13 @@ class VersionContainer:
 
         GUID comparison automatically strips hyphens and converts to lowercase.
         """
-        normalized = normalize_hex_guid(guid)
+        normalized = guid.replace("-", "").lower() if guid else guid
         cached = self._guid_cache.get(normalized)
         if cached is not None:
             return cached
 
         for cv in self.custom_versions:
-            cv_guid = normalize_hex_guid(cv.guid)
+            cv_guid = cv.guid.replace("-", "").lower() if cv.guid else cv.guid
             if cv_guid == normalized:
                 self._guid_cache[normalized] = cv.version
                 return cv.version

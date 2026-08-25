@@ -7,12 +7,17 @@ Pin reference formatting, node index building, connection traversal, etc.
 from typing import Dict, List, Optional, Tuple, Set, Any, Iterable
 
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin
-from uasset_read.core.utils import normalize_hex_guid as _normalize_pin_id
+
+
+def _normalize_pin_id(v):
+    """Normalize pin GUID: strip dashes, lowercase."""
+    return v.replace("-", "").lower() if v else v
 
 
 # ============================================================================
 # String sanitization
 # ============================================================================
+
 
 def _sanitize_string(value: str) -> str:
     """Sanitize binary/null characters from strings to ensure JSON-safe output.
@@ -22,9 +27,9 @@ def _sanitize_string(value: str) -> str:
     if not value:
         return value
     # Remove null characters
-    value = value.replace('\x00', '')
+    value = value.replace("\x00", "")
     # Remove other control characters (preserve \n \r \t)
-    value = ''.join(c for c in value if c >= ' ' or c in '\n\r\t')
+    value = "".join(c for c in value if c >= " " or c in "\n\r\t")
     return value
 
 
@@ -83,6 +88,7 @@ def _sanitize_recursive(obj, visited=None):
 # ============================================================================
 # Pin reference and GUID utilities
 # ============================================================================
+
 
 def _pin_ref_guid(ref: object) -> str | None:
     """Extract pin guid from LinkedTo/PinReference structures (normalized to 32-char lowercase hex).
@@ -162,6 +168,7 @@ def _is_valid_pin_guid(guid: object) -> bool:
 # Node names and indices
 # ============================================================================
 
+
 def _derive_node_name(node: UEdGraphNode, idx: int) -> str:
     """Derive a user-friendly node name from the node (D-19-02).
 
@@ -170,12 +177,7 @@ def _derive_node_name(node: UEdGraphNode, idx: int) -> str:
     return f"{node.class_name}_{idx}"
 
 
-def format_pin_ref(
-    node_guid: str,
-    pin_name: str,
-    node_name_lookup: Dict[str, str],
-    mode: str = "name"
-) -> Dict:
+def format_pin_ref(node_guid: str, pin_name: str, node_name_lookup: Dict[str, str], mode: str = "name") -> Dict:
     """Format a Pin reference (D-19-02, D-19-05).
 
     Args:
@@ -189,21 +191,11 @@ def format_pin_ref(
     """
     if mode == "name":
         if node_guid in node_name_lookup:
-            return {
-                "node": node_name_lookup[node_guid],
-                "pin": pin_name
-            }
+            return {"node": node_name_lookup[node_guid], "pin": pin_name}
         else:
-            return {
-                "node_guid": node_guid,
-                "pin": pin_name,
-                "warning": "node_name lookup failed"
-            }
+            return {"node_guid": node_guid, "pin": pin_name, "warning": "node_name lookup failed"}
     else:
-        return {
-            "node_guid": node_guid,
-            "pin_name": pin_name
-        }
+        return {"node_guid": node_guid, "pin_name": pin_name}
 
 
 def _format_blueprint_pin_dto(
@@ -242,6 +234,7 @@ def _format_blueprint_pin_dto(
 # ============================================================================
 # Graph index building
 # ============================================================================
+
 
 def _build_graph_indexes(
     graph: UEdGraph,
@@ -335,10 +328,7 @@ def _iter_normalized_edges(
         candidates = [
             candidate
             for candidate in owner.pins
-            if (
-                _normalize_pin_id(candidate.pin_id) == pin_id
-                and candidate.direction == opposite_direction
-            )
+            if (_normalize_pin_id(candidate.pin_id) == pin_id and candidate.direction == opposite_direction)
         ]
         if len(candidates) != 1:
             return None
@@ -413,10 +403,12 @@ def _iter_normalized_edges(
 
     for node in graph.nodes:
         for pin in node.pins:
-            for ref in (pin.linked_to_raw or []):
+            for ref in pin.linked_to_raw or []:
                 other_pin_id = _pin_ref_guid(ref)
                 owner_qualified = _resolve_owner_qualified_pin(
-                    ref, other_pin_id, pin.direction,
+                    ref,
+                    other_pin_id,
+                    pin.direction,
                 )
                 if owner_qualified is not None:
                     other_node, other_pin = owner_qualified
@@ -434,13 +426,25 @@ def _iter_normalized_edges(
 
                     if pin.direction == 1 and other_pin.direction == 0:
                         edge = _emit(
-                            node, pin.pin_name, _normalize_pin_id(pin.pin_id), pin,
-                            other_node, other_pin_name, other_pin_id, other_pin,
+                            node,
+                            pin.pin_name,
+                            _normalize_pin_id(pin.pin_id),
+                            pin,
+                            other_node,
+                            other_pin_name,
+                            other_pin_id,
+                            other_pin,
                         )
                     elif pin.direction == 0 and other_pin.direction == 1:
                         edge = _emit(
-                            other_node, other_pin_name, other_pin_id, other_pin,
-                            node, pin.pin_name, _normalize_pin_id(pin.pin_id), pin,
+                            other_node,
+                            other_pin_name,
+                            other_pin_id,
+                            other_pin,
+                            node,
+                            pin.pin_name,
+                            _normalize_pin_id(pin.pin_id),
+                            pin,
                         )
                     else:
                         edge = None
@@ -471,8 +475,14 @@ def _iter_normalized_edges(
                     else f"{source_node.node_guid}:{source_pin_name}"
                 )
                 edge = _emit(
-                    source_node, source_pin_name, source_pin_id, source_pin_obj,
-                    node, pin.pin_name, _normalize_pin_id(pin.pin_id), pin,
+                    source_node,
+                    source_pin_name,
+                    source_pin_id,
+                    source_pin_obj,
+                    node,
+                    pin.pin_name,
+                    _normalize_pin_id(pin.pin_id),
+                    pin,
                 )
                 if edge:
                     yield edge

@@ -7,41 +7,62 @@ import logging
 from typing import Dict, List, Optional, Tuple, Set, Any
 
 from uasset_read.constants import (
-    START_EVENT_TYPES, CONTROL_FLOW_NODES, BRANCH_TYPE_MAP,
-    FORMAT_CONFIG, GRAPH_TYPE_MAP, DATA_BOUNDARY_NODES, UE_NONE_SENTINEL,
+    START_EVENT_TYPES,
+    CONTROL_FLOW_NODES,
+    BRANCH_TYPE_MAP,
+    FORMAT_CONFIG,
+    GRAPH_TYPE_MAP,
+    DATA_BOUNDARY_NODES,
+    UE_NONE_SENTINEL,
 )
 from uasset_read.graph.macro_expander import (
-    MacroExpander, STANDARD_MACROS, STANDARD_MACRO_CPP_MAPPING,
+    MacroExpander,
+    STANDARD_MACROS,
+    STANDARD_MACRO_CPP_MAPPING,
 )
 from uasset_read.models.core import UEdGraph, UEdGraphNode, UEdGraphPin
 from uasset_read.graph.graph_utils import (
-    _sanitize_pin_dict, _sanitize_recursive,
-    _derive_node_name, format_pin_ref, _pin_ref_guid,
+    _sanitize_pin_dict,
+    _sanitize_recursive,
+    _derive_node_name,
+    format_pin_ref,
+    _pin_ref_guid,
     _is_valid_pin_guid,
-    _format_blueprint_pin_dto, _build_graph_indexes,
-    _iter_normalized_edges, _build_normalized_edge_indexes,
+    _format_blueprint_pin_dto,
+    _build_graph_indexes,
+    _iter_normalized_edges,
+    _build_normalized_edge_indexes,
     _node_member_name,
 )
+
+
+def _normalize_pin_id(v):
+    """Normalize pin GUID: strip dashes, lowercase."""
+    return v.replace("-", "").lower() if v else v
+
 
 logger = logging.getLogger(__name__)
 
 # Latent/Async action node type set — marked as latent=True in execution flow
-LATENT_NODE_TYPES = frozenset({
-    "K2Node_AsyncAction",
-    "K2Node_LatentGameCommand",
-    "K2Node_BaseAsyncTask",
-    "K2Node_Timeline",
-})
+LATENT_NODE_TYPES = frozenset(
+    {
+        "K2Node_AsyncAction",
+        "K2Node_LatentGameCommand",
+        "K2Node_BaseAsyncTask",
+        "K2Node_Timeline",
+    }
+)
 
 # ============================================================================
 # Helper functions — most extracted to graph_utils.py, only flow_builder-specific functions retained
 # ============================================================================
 
+
 def _extract_call_function_parameters(
     node: Any,
     pin_lookup: Optional[Dict] = None,
     node_lookup: Optional[Dict] = None,
-    node_name_lookup: Optional[Dict] = None
+    node_name_lookup: Optional[Dict] = None,
 ) -> Dict[str, List[Dict]]:
     """Extract function parameters from K2Node_CallFunction node pins.
 
@@ -81,6 +102,7 @@ def _extract_call_function_parameters(
 
     return {"input_params": input_params, "output_params": output_params}
 
+
 def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
     """Format a single node into a compact Blueprint DTO JSON structure.
 
@@ -106,7 +128,7 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
         "node_guid": node.node_guid,
         "position": {"x": node.node_pos_x, "y": node.node_pos_y},
         "node_comment": node.node_comment,
-        "pins": [_sanitize_pin_dict(asdict(pin)) for pin in node.pins]  # add string sanitization
+        "pins": [_sanitize_pin_dict(asdict(pin)) for pin in node.pins],  # add string sanitization
     }
 
     if node.class_name == "EdGraphNode_Comment":
@@ -119,16 +141,14 @@ def format_node_dict(node: UEdGraphNode, idx: int) -> Dict:
             "font_size": data.get("font_size"),
             "depth": data.get("comment_depth"),
         }
-        result["comment"] = {
-            key: value for key, value in result["comment"].items()
-            if value is not None
-        }
+        result["comment"] = {key: value for key, value in result["comment"].items() if value is not None}
 
     # CallFunction node extract structured parameters
     if node.class_name == "K2Node_CallFunction":
         result["parameters"] = _extract_call_function_parameters(node)
 
     return result
+
 
 def _comment_enclosed_nodes(comment_node: UEdGraphNode, graph: UEdGraph) -> List[str]:
     """Return export names for nodes inside an EdGraph comment rectangle."""
@@ -150,6 +170,7 @@ def _comment_enclosed_nodes(comment_node: UEdGraphNode, graph: UEdGraph) -> List
             enclosed.append(getattr(node, "_export_object_name", "") or node.node_guid)
     return enclosed
 
+
 def _get_start_event_name(node: UEdGraphNode) -> str:
     """Get the event name for a start node (D-19-11).
 
@@ -170,13 +191,13 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
         if isinstance(nd, dict):
             er = nd.get("event_reference")
         else:
-            er = getattr(nd, 'event_reference', None)
+            er = getattr(nd, "event_reference", None)
 
         if er is None:
             return node.class_name
 
         # er is FMemberReference object
-        if hasattr(er, 'member_name'):
+        if hasattr(er, "member_name"):
             mn = er.member_name
         elif isinstance(er, dict):
             mn = er.get("member_name")
@@ -188,14 +209,14 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
 
         # member_name can be a path like "/Game/.../BP_X_37120"
         # or "/Game/Blueprints/BP_Test.ReceiveBeginPlay"
-        if '/' in mn:
-            last_segment = mn.split('/')[-1]
+        if "/" in mn:
+            last_segment = mn.split("/")[-1]
             # object_name.member_name format: take the member name part
-            if '.' in last_segment:
-                last_segment = last_segment.split('.')[-1]
+            if "." in last_segment:
+                last_segment = last_segment.split(".")[-1]
             return f"Event.{last_segment}"
         # pure member name may also contain dots
-        if '.' in mn:
+        if "." in mn:
             return f"Event.{mn.split('.')[-1]}"
         return f"Event.{mn}"
 
@@ -204,7 +225,7 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
             if isinstance(nd, dict):
                 path = nd.get("input_action_path", "")
             else:
-                path = getattr(nd, 'input_action_path', "")
+                path = getattr(nd, "input_action_path", "")
             if path:
                 return f"InputAction.{path.split('/')[-1] if '/' in path else path}"
         return f"InputAction.{node.class_name}"
@@ -221,7 +242,7 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
                     or nd.get("_raw_properties", {}).get("CustomPropertyName")
                 )
             else:
-                event_name = getattr(nd, 'custom_event_name', None)
+                event_name = getattr(nd, "custom_event_name", None)
             if event_name:
                 return f"CustomEvent.{event_name}"
         return "CustomEvent"
@@ -231,16 +252,17 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
         if isinstance(nd, dict):
             fr = nd.get("function_reference")
         else:
-            fr = getattr(nd, 'function_reference', None)
+            fr = getattr(nd, "function_reference", None)
         if fr:
-            mn = getattr(fr, 'member_name', None) if not isinstance(fr, dict) else fr.get("member_name")
+            mn = getattr(fr, "member_name", None) if not isinstance(fr, dict) else fr.get("member_name")
             if mn and mn != UE_NONE_SENTINEL:
-                if '/' in mn:
+                if "/" in mn:
                     return f"FunctionEntry.{mn.split('/')[-1]}"
                 return f"FunctionEntry.{mn}"
         return node.class_name
 
     return node.class_name
+
 
 def is_boundary_node(node: UEdGraphNode, pin_name: str) -> bool:
     """Determine if this is a data flow boundary node.
@@ -260,12 +282,13 @@ def is_boundary_node(node: UEdGraphNode, pin_name: str) -> bool:
         return True
     return False
 
+
 def _resolve_knot_chain(
     pin_guid: str,
     pin_lookup: Dict[str, Tuple[str, str]],
     node_lookup: Dict[str, UEdGraphNode],
     source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
-    max_depth: int = 20
+    max_depth: int = 20,
 ) -> Tuple[str, bool]:
     """Recursively traverse a Knot chain until a non-Knot node is reached.
 
@@ -312,13 +335,14 @@ def _resolve_knot_chain(
                     current_pin_guid = source_edges_by_to_pin[_normalize_pin_id(pin.pin_id)][0]["from_pin_id"]
                     break
                 # InputPin's linked_to_raw is the previous pin (data source)
-                for linked_ref in (pin.linked_to_raw or []):
+                for linked_ref in pin.linked_to_raw or []:
                     next_pin_guid = _pin_ref_guid(linked_ref)
                     current_pin_guid = next_pin_guid
                     break
                 break
 
     return (current_pin_guid, False)  # exceeded depth limit
+
 
 def _trace_data_source(
     pin: UEdGraphPin,
@@ -361,10 +385,7 @@ def _trace_data_source(
     linked_refs = list(pin.linked_to_raw or [])
     normalized_pin_id = _normalize_pin_id(pin.pin_id)
     if source_edges_by_to_pin and normalized_pin_id in source_edges_by_to_pin:
-        linked_refs = [
-            {"pin_guid": edge["from_pin_id"]}
-            for edge in source_edges_by_to_pin[normalized_pin_id]
-        ]
+        linked_refs = [{"pin_guid": edge["from_pin_id"]} for edge in source_edges_by_to_pin[normalized_pin_id]]
 
     if not linked_refs:
         # Default value
@@ -401,21 +422,13 @@ def _trace_data_source(
             # FunctionEntry parameter or self
             if terminal_node.class_name == "K2Node_FunctionEntry":
                 node_name = node_name_lookup.get(terminal_node_guid, terminal_node_guid)
-                sources.append({
-                    "source_type": "function_parameter",
-                    "node": node_name,
-                    "pin": terminal_pin_name
-                })
+                sources.append({"source_type": "function_parameter", "node": node_name, "pin": terminal_pin_name})
             elif terminal_pin_name.lower() == "self" or terminal_pin_name.lower() == "target":
                 sources.append({"source_type": "self_reference"})
             else:
                 # Other boundaries (e.g. VariableSet)
                 node_name = node_name_lookup.get(terminal_node_guid, terminal_node_guid)
-                sources.append({
-                    "source_type": "boundary",
-                    "node": node_name,
-                    "pin": terminal_pin_name
-                })
+                sources.append({"source_type": "boundary", "node": node_name, "pin": terminal_pin_name})
         else:
             # Non-boundary: usually Pure function output
             if terminal_node.class_name == "K2Node_CallFunction":
@@ -427,18 +440,25 @@ def _trace_data_source(
                 func_name = None
                 nd = terminal_node.node_data
                 if nd:
-                    fr = nd.get("function_reference") if isinstance(nd, dict) else getattr(nd, 'function_reference', None)
+                    fr = (
+                        nd.get("function_reference")
+                        if isinstance(nd, dict)
+                        else getattr(nd, "function_reference", None)
+                    )
                     if fr:
-                        func_name = getattr(fr, 'member_name', None)
+                        func_name = getattr(fr, "member_name", None)
 
-                sources.append({
-                    "source_type": "pure_function" if not has_exec_pin else "function_output",
-                    "node": node_name,
-                    "function_name": func_name,
-                    "pin": terminal_pin_name
-                })
+                sources.append(
+                    {
+                        "source_type": "pure_function" if not has_exec_pin else "function_output",
+                        "node": node_name,
+                        "function_name": func_name,
+                        "pin": terminal_pin_name,
+                    }
+                )
 
     return {"data_sources": sources} if sources else None
+
 
 def _find_next_exec_node(
     node: UEdGraphNode,
@@ -462,7 +482,7 @@ def _find_next_exec_node(
                 if edges_by_from_pin and _normalize_pin_id(pin.pin_id) in edges_by_from_pin:
                     edge = edges_by_from_pin[_normalize_pin_id(pin.pin_id)][0]
                     return (node_lookup.get(edge["to_node_guid"]), pin.pin_name)
-                for linked_pin_id in (pin.linked_to_raw or []):
+                for linked_pin_id in pin.linked_to_raw or []:
                     target_pin_guid = _pin_ref_guid(linked_pin_id)
                     if target_pin_guid in pin_lookup:
                         target_node_guid, _ = pin_lookup[target_pin_guid]
@@ -473,6 +493,7 @@ def _find_next_exec_node(
                 if edge["from_node_guid"] == node.node_guid and edge.get("is_exec"):
                     return (node_lookup.get(edge["to_node_guid"]), edge.get("from_pin"))
     return (None, None)
+
 
 def _try_expand_macro(node: UEdGraphNode, asset_context: Dict[str, Any]) -> Dict[str, Any]:
     """Attempt to expand a macro instance.
@@ -515,6 +536,7 @@ def _try_expand_macro(node: UEdGraphNode, asset_context: Dict[str, Any]) -> Dict
             "reason": str(e),
             "macro_name": graph_name or "Unknown",
         }
+
 
 def _trace_execution_from_event(
     start_node: UEdGraphNode,
@@ -559,29 +581,18 @@ def _trace_execution_from_event(
         if current_guid is None:
             node_id = id(current_node)
             if node_id in _no_guid_visited:
-                flow.append({
-                    "node_type": current_node.class_name,
-                    "cycle_detected": True,
-                    "warning": "missing node_guid"
-                })
+                flow.append(
+                    {"node_type": current_node.class_name, "cycle_detected": True, "warning": "missing node_guid"}
+                )
                 break
             _no_guid_visited.add(node_id)
             # When node_guid is missing, still record the node but skip GUID-based cycle detection
-            flow.append({
-                "node_type": current_node.class_name,
-                "warning": "missing node_guid"
-            })
-            current_node, _ = _find_next_exec_node(
-                current_node, pin_lookup, node_lookup, edges_by_from_pin
-            )
+            flow.append({"node_type": current_node.class_name, "warning": "missing node_guid"})
+            current_node, _ = _find_next_exec_node(current_node, pin_lookup, node_lookup, edges_by_from_pin)
             continue
 
         if current_guid in visited:
-            flow.append({
-                "node_guid": current_guid,
-                "node_type": current_node.class_name,
-                "cycle_detected": True
-            })
+            flow.append({"node_guid": current_guid, "node_type": current_node.class_name, "cycle_detected": True})
             break
 
         visited.add(current_guid)
@@ -613,27 +624,35 @@ def _trace_execution_from_event(
                     # Find the connection target of the output pin
                     if edges_by_from_pin and _normalize_pin_id(pin.pin_id) in edges_by_from_pin:
                         for edge in edges_by_from_pin[_normalize_pin_id(pin.pin_id)]:
-                            data_providers.append({
-                                "output_pin": pin.pin_name,
-                                "target_node": node_name_lookup.get(edge["to_node_guid"], edge["to_node_guid"]),
-                                "target_pin": edge["to_pin"],
-                            })
+                            data_providers.append(
+                                {
+                                    "output_pin": pin.pin_name,
+                                    "target_node": node_name_lookup.get(edge["to_node_guid"], edge["to_node_guid"]),
+                                    "target_pin": edge["to_pin"],
+                                }
+                            )
                     else:
-                        for linked_ref in (pin.linked_to_raw or []):
+                        for linked_ref in pin.linked_to_raw or []:
                             target_pin_guid = _pin_ref_guid(linked_ref)
                             if target_pin_guid in pin_lookup:
                                 target_node_guid, target_pin_name = pin_lookup[target_pin_guid]
                                 target_node_name = node_name_lookup.get(target_node_guid, target_node_guid)
-                                data_providers.append({
-                                    "output_pin": pin.pin_name,
-                                    "target_node": target_node_name,
-                                    "target_pin": target_pin_name
-                                })
+                                data_providers.append(
+                                    {
+                                        "output_pin": pin.pin_name,
+                                        "target_node": target_node_name,
+                                        "target_pin": target_pin_name,
+                                    }
+                                )
 
             if data_providers:
                 node_info["data_providers"] = data_providers
 
-        elif current_node.node_data and hasattr(current_node.node_data, 'b_defaults_to_pure') and current_node.node_data.b_defaults_to_pure:
+        elif (
+            current_node.node_data
+            and hasattr(current_node.node_data, "b_defaults_to_pure")
+            and current_node.node_data.b_defaults_to_pure
+        ):
             node_info["pure"] = True
 
         # Control flow node handling
@@ -661,13 +680,12 @@ def _trace_execution_from_event(
                 break
 
         flow.append(node_info)
-        current_node, used_pin_name = _find_next_exec_node(
-            current_node, pin_lookup, node_lookup, edges_by_from_pin
-        )
+        current_node, used_pin_name = _find_next_exec_node(current_node, pin_lookup, node_lookup, edges_by_from_pin)
         if used_pin_name is not None:
             node_info["used_exec_pin_name"] = used_pin_name
 
     return flow
+
 
 def _trace_execution_from_pin(
     start_node: UEdGraphNode,
@@ -693,26 +711,38 @@ def _trace_execution_from_pin(
         next_node = node_lookup.get(edge["to_node_guid"])
         if next_node:
             return _trace_execution_from_event(
-                next_node, pin_lookup, node_lookup, node_name_lookup,
-                edges_by_from_pin, source_edges_by_to_pin, asset_context,
+                next_node,
+                pin_lookup,
+                node_lookup,
+                node_name_lookup,
+                edges_by_from_pin,
+                source_edges_by_to_pin,
+                asset_context,
             )
 
-    for linked_pin_id in (start_pin.linked_to_raw or []):
+    for linked_pin_id in start_pin.linked_to_raw or []:
         target_pin_guid = _pin_ref_guid(linked_pin_id)
         if target_pin_guid in pin_lookup:
             target_node_guid, _ = pin_lookup[target_pin_guid]
             next_node = node_lookup.get(target_node_guid)
             if next_node:
                 return _trace_execution_from_event(
-                    next_node, pin_lookup, node_lookup, node_name_lookup,
-                    edges_by_from_pin, source_edges_by_to_pin, asset_context,
+                    next_node,
+                    pin_lookup,
+                    node_lookup,
+                    node_name_lookup,
+                    edges_by_from_pin,
+                    source_edges_by_to_pin,
+                    asset_context,
                 )
 
     return []
 
+
 # ============================================================================
 # Main functions
 # ============================================================================
+
 
 def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     """Build pin connection map (D-08-01~06, LINK-01, D-19-01~05).
@@ -741,28 +771,26 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     unresolved_refs = 0
 
     # Validate linked_to_raw is populated
-    linked_to_count = sum(
-        len(pin.linked_to_raw or [])
-        for node in graph.nodes
-        for pin in node.pins
-    )
+    linked_to_count = sum(len(pin.linked_to_raw or []) for node in graph.nodes for pin in node.pins)
     if linked_to_count == 0:
         warnings.append("WARNING: No LinkedTo data found — connections will be empty")
 
     for node in graph.nodes:
         for pin in node.pins:
-            for linked_pin_ref in (pin.linked_to_raw or []):
+            for linked_pin_ref in pin.linked_to_raw or []:
                 target_pin_guid = _pin_ref_guid(linked_pin_ref)
                 if not _is_valid_pin_guid(target_pin_guid):
                     invalid_guid_refs += 1
                 elif target_pin_guid not in pin_lookup:
                     unresolved_refs += 1
                     if pin.direction == 1:
-                        connections.append({
-                            "from": format_pin_ref(node.node_guid, pin.pin_name, node_name_lookup, mode),
-                            "to": {"raw_pin_id": target_pin_guid},
-                            "warning": "target pin not found"
-                        })
+                        connections.append(
+                            {
+                                "from": format_pin_ref(node.node_guid, pin.pin_name, node_name_lookup, mode),
+                                "to": {"raw_pin_id": target_pin_guid},
+                                "warning": "target pin not found",
+                            }
+                        )
 
     connections = [
         {
@@ -790,6 +818,7 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     )
 
     return connections, warnings
+
 
 def build_execution_flow_entries(graph: UEdGraph, asset_context: Optional[Dict[str, Any]] = None) -> List[Dict]:
     """Build execution flow path entries (D-08-07~11, D-19-10~12).
@@ -836,14 +865,17 @@ def build_execution_flow_entries(graph: UEdGraph, asset_context: Optional[Dict[s
             for pin in start_node.pins:
                 if pin.direction == 1 and pin.pin_type and pin.pin_type.pin_category == "exec":
                     flow = _trace_execution_from_pin(
-                        start_node, pin, pin_lookup, node_lookup, node_name_lookup,
-                        edges_by_from_pin, source_edges_by_to_pin, asset_context,
+                        start_node,
+                        pin,
+                        pin_lookup,
+                        node_lookup,
+                        node_name_lookup,
+                        edges_by_from_pin,
+                        source_edges_by_to_pin,
+                        asset_context,
                     )
                     emitted_start_pins.add(pin.pin_name)
-                    execution_flows.append({
-                        "start_event": f"{start_node.class_name}.{pin.pin_name}",
-                        "nodes": flow
-                    })
+                    execution_flows.append({"start_event": f"{start_node.class_name}.{pin.pin_name}", "nodes": flow})
             for edges in edges_by_from_pin.values():
                 for edge in edges:
                     if (
@@ -854,28 +886,36 @@ def build_execution_flow_entries(graph: UEdGraph, asset_context: Optional[Dict[s
                         next_node = node_lookup.get(edge["to_node_guid"])
                         flow = (
                             _trace_execution_from_event(
-                                next_node, pin_lookup, node_lookup, node_name_lookup,
-                                edges_by_from_pin, source_edges_by_to_pin, asset_context,
+                                next_node,
+                                pin_lookup,
+                                node_lookup,
+                                node_name_lookup,
+                                edges_by_from_pin,
+                                source_edges_by_to_pin,
+                                asset_context,
                             )
-                            if next_node else []
+                            if next_node
+                            else []
                         )
                         emitted_start_pins.add(edge["from_pin"])
-                        execution_flows.append({
-                            "start_event": f"{start_node.class_name}.{edge['from_pin']}",
-                            "nodes": flow
-                        })
+                        execution_flows.append(
+                            {"start_event": f"{start_node.class_name}.{edge['from_pin']}", "nodes": flow}
+                        )
         else:
             flow = _trace_execution_from_event(
-                start_node, pin_lookup, node_lookup, node_name_lookup,
-                edges_by_from_pin, source_edges_by_to_pin, asset_context,
+                start_node,
+                pin_lookup,
+                node_lookup,
+                node_name_lookup,
+                edges_by_from_pin,
+                source_edges_by_to_pin,
+                asset_context,
             )
             start_event_name = _get_start_event_name(start_node)
-            execution_flows.append({
-                "start_event": start_event_name,
-                "nodes": flow
-            })
+            execution_flows.append({"start_event": start_event_name, "nodes": flow})
 
     return execution_flows
+
 
 def _build_graph_dict(graph: UEdGraph) -> Dict[str, Any]:
     """Convert a single UEdGraph to the dictionary format expected by MacroExpander.
@@ -901,7 +941,9 @@ def _build_graph_dict(graph: UEdGraph) -> Dict[str, Any]:
                     "pin_type": {
                         "pin_category": pin.pin_type.pin_category if pin.pin_type else "",
                         "pin_subcategory": pin.pin_type.pin_subcategory if pin.pin_type else "",
-                    } if pin.pin_type else {},
+                    }
+                    if pin.pin_type
+                    else {},
                     "linked_to_raw": pin.linked_to_raw or [],
                     "parent_pin": pin.parent_pin,
                     "default_value": pin.default_value or "",
@@ -925,6 +967,7 @@ def _build_graph_dict(graph: UEdGraph) -> Dict[str, Any]:
         "name": graph.graph_name,
         "nodes": nodes,
     }
+
 
 def _build_asset_context_from_graph(graph: UEdGraph) -> Dict[str, Any]:
     """Build asset_context from UEdGraph for macro expansion.
@@ -952,6 +995,7 @@ def _build_asset_context_from_graph(graph: UEdGraph) -> Dict[str, Any]:
 
     return {"graphs": all_graphs}
 
+
 def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
     """Build data flow graph (D-19-06~09, LINK-03).
 
@@ -977,14 +1021,17 @@ def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
 
     for edge in _iter_normalized_edges(graph):
         if not edge["is_exec"]:
-            data_flows.append({
-                "source": format_pin_ref(edge["from_node_guid"], edge["from_pin"], node_name_lookup, mode),
-                "target": format_pin_ref(edge["to_node_guid"], edge["to_pin"], node_name_lookup, mode)
-            })
+            data_flows.append(
+                {
+                    "source": format_pin_ref(edge["from_node_guid"], edge["from_pin"], node_name_lookup, mode),
+                    "target": format_pin_ref(edge["to_node_guid"], edge["to_pin"], node_name_lookup, mode),
+                }
+            )
 
     data_flows.extend(_build_synthetic_function_data_flows(graph, node_name_lookup, mode))
 
     return data_flows
+
 
 def _build_synthetic_function_data_flows(
     graph: UEdGraph,
@@ -996,6 +1043,7 @@ def _build_synthetic_function_data_flows(
     Dynamic detection mode: finds connection relationships between FunctionEntry output parameters
     and matching CallFunction input parameters, no longer relying on specific template names.
     """
+
     def ref(node: UEdGraphNode, pin_name: str) -> Dict:
         return format_pin_ref(node.node_guid, pin_name, node_name_lookup, mode)
 
@@ -1011,9 +1059,11 @@ def _build_synthetic_function_data_flows(
 
     # Collect FunctionEntry output parameter pin names
     fe_output_pins = [
-        pin.pin_name for pin in function_entry.pins
+        pin.pin_name
+        for pin in function_entry.pins
         if pin.direction == 1  # Output
-        and pin.pin_type and pin.pin_type.pin_category != "exec"
+        and pin.pin_type
+        and pin.pin_type.pin_category != "exec"
     ]
 
     if not fe_output_pins:
@@ -1040,12 +1090,15 @@ def _build_synthetic_function_data_flows(
                     and not (pin.linked_to_raw or [])
                 ):
                     # This input pin is not connected but has the same name as a FunctionEntry output parameter
-                    flows.append({
-                        "source": ref(function_entry, pin.pin_name),
-                        "target": ref(node, pin.pin_name),
-                    })
+                    flows.append(
+                        {
+                            "source": ref(function_entry, pin.pin_name),
+                            "target": ref(node, pin.pin_name),
+                        }
+                    )
 
     return flows
+
 
 def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
     """Format Blueprint graph data as JSON output (GRAPH-11, GRAPH-12, OUT-02, OUT-04).
@@ -1070,10 +1123,7 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
     formatted = []
     for graph in graphs:
         pin_lookup, _, _ = _build_graph_indexes(graph)
-        node_name_lookup = {
-            node.node_guid: _derive_node_name(node, idx)
-            for idx, node in enumerate(graph.nodes)
-        }
+        node_name_lookup = {node.node_guid: _derive_node_name(node, idx) for idx, node in enumerate(graph.nodes)}
         # Graph type mapping
         graph_type = GRAPH_TYPE_MAP.get(graph.graph_class, graph.graph_class)
 
@@ -1091,10 +1141,7 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
 
         nodes = [format_node_dict(node, idx) for idx, node in enumerate(graph.nodes)]
         for node, node_dict in zip(graph.nodes, nodes):
-            node_dict["Pins"] = [
-                _format_blueprint_pin_dto(pin, pin_lookup, node_name_lookup)
-                for pin in node.pins
-            ]
+            node_dict["Pins"] = [_format_blueprint_pin_dto(pin, pin_lookup, node_name_lookup) for pin in node.pins]
             if node.class_name == "EdGraphNode_Comment":
                 node_dict.setdefault("comment", {})["enclosed_nodes"] = _comment_enclosed_nodes(node, graph)
 
@@ -1121,6 +1168,7 @@ def format_graphs_json(graphs: List[UEdGraph]) -> List[Dict]:
         formatted.append(graph_dict)
 
     return formatted
+
 
 def _extract_signature_from_pins(fe_node: UEdGraphNode) -> Dict[str, Any]:
     """Extract signature from FunctionEntry node pins (GAP-07).
@@ -1150,8 +1198,20 @@ def _extract_signature_from_pins(fe_node: UEdGraphNode) -> Dict[str, Any]:
                 # Use format_variable_type to format type
                 return_type = format_variable_type(pin.pin_type)
                 # If formatted result is empty or basic types like "bool", try using pin_subcategory
-                if not return_type or return_type.lower() in ("bool", "int", "float", "string", "name", "text", "uobject"):
-                    sub_cat = getattr(pin.pin_type, 'pin_subcategory', '') or getattr(pin.pin_type, 'pin_sub_category', '') or ''
+                if not return_type or return_type.lower() in (
+                    "bool",
+                    "int",
+                    "float",
+                    "string",
+                    "name",
+                    "text",
+                    "uobject",
+                ):
+                    sub_cat = (
+                        getattr(pin.pin_type, "pin_subcategory", "")
+                        or getattr(pin.pin_type, "pin_sub_category", "")
+                        or ""
+                    )
                     if sub_cat and sub_cat.lower() != "none":
                         return_type = sub_cat
 
@@ -1166,20 +1226,16 @@ def _extract_signature_from_pins(fe_node: UEdGraphNode) -> Dict[str, Any]:
             param_type = ""
             if pin.pin_type:
                 param_type = format_variable_type(pin.pin_type)
-                sub_cat = getattr(pin.pin_type, 'pin_subcategory', '') or getattr(pin.pin_type, 'pin_sub_category', '') or ''
+                sub_cat = (
+                    getattr(pin.pin_type, "pin_subcategory", "") or getattr(pin.pin_type, "pin_sub_category", "") or ""
+                )
                 if sub_cat and sub_cat.lower() != "none":
                     param_type = sub_cat
 
-            parameters.append({
-                "name": pin_name,
-                "type": param_type,
-                "direction": "input"
-            })
+            parameters.append({"name": pin_name, "type": param_type, "direction": "input"})
 
-    return {
-        "return_type": return_type,
-        "parameters": parameters
-    }
+    return {"return_type": return_type, "parameters": parameters}
+
 
 def build_function_graphs(
     graphs: List[UEdGraph],
@@ -1204,7 +1260,7 @@ def build_function_graphs(
     func_lookup: Dict[str, Any] = {}
     if blueprint_functions:
         for func in blueprint_functions:
-            name = getattr(func, 'name', None)
+            name = getattr(func, "name", None)
             if name:
                 func_lookup[name] = func
 
@@ -1232,13 +1288,13 @@ def build_function_graphs(
             function_name = None
             nd = fe_node.node_data
             if nd:
-                fr = nd.get("function_reference") if isinstance(nd, dict) else getattr(nd, 'function_reference', None)
+                fr = nd.get("function_reference") if isinstance(nd, dict) else getattr(nd, "function_reference", None)
                 if fr:
-                    raw_name = getattr(fr, 'member_name', None)
+                    raw_name = getattr(fr, "member_name", None)
                     if raw_name and raw_name != UE_NONE_SENTINEL:
                         # Handle path format "/Game/.../FunctionName"
-                        if '/' in raw_name:
-                            function_name = raw_name.split('/')[-1]
+                        if "/" in raw_name:
+                            function_name = raw_name.split("/")[-1]
                         else:
                             function_name = raw_name
 
@@ -1249,21 +1305,19 @@ def build_function_graphs(
             signature: Dict[str, Any] = {"return_type": "", "parameters": []}
             func_meta = func_lookup.get(function_name)
             if func_meta:
-                return_type = getattr(func_meta, 'return_type', '') or ''
+                return_type = getattr(func_meta, "return_type", "") or ""
                 signature["return_type"] = return_type
 
                 # Extract parameters
-                params = getattr(func_meta, 'parameters', []) or []
+                params = getattr(func_meta, "parameters", []) or []
                 formatted_params: List[Dict] = []
                 for p in params:
-                    p_name = getattr(p, 'name', '') or ''
-                    p_type = getattr(p, 'param_type', '') or ''
-                    is_input = getattr(p, 'is_input', True)
-                    formatted_params.append({
-                        "name": p_name,
-                        "type": p_type,
-                        "direction": "input" if is_input else "output"
-                    })
+                    p_name = getattr(p, "name", "") or ""
+                    p_type = getattr(p, "param_type", "") or ""
+                    is_input = getattr(p, "is_input", True)
+                    formatted_params.append(
+                        {"name": p_name, "type": p_type, "direction": "input" if is_input else "output"}
+                    )
                 signature["parameters"] = formatted_params
             else:
                 # GAP-07: if blueprint_functions lookup fails, use Pin-based extraction as fallback
@@ -1272,8 +1326,13 @@ def build_function_graphs(
             # Build execution flow
             asset_ctx = _build_asset_context_from_graph(graph)
             execution_flows = _trace_execution_from_event(
-                fe_node, pin_lookup, node_lookup, node_name_lookup,
-                edges_by_from_pin, source_edges_by_to_pin, asset_ctx,
+                fe_node,
+                pin_lookup,
+                node_lookup,
+                node_name_lookup,
+                edges_by_from_pin,
+                source_edges_by_to_pin,
+                asset_ctx,
             )
 
             # Filter empty execution flows
@@ -1288,7 +1347,7 @@ def build_function_graphs(
                 node_pins: List[UEdGraphPin],
                 n_name_lookup: Dict[str, str],
                 p_lookup: Dict[str, Tuple[str, str]],
-                n_lookup: Dict[str, UEdGraphNode]
+                n_lookup: Dict[str, UEdGraphNode],
             ) -> Dict[str, List[Dict]]:
                 """Extract node data_providers and data_sources annotations from data_flows."""
                 providers: List[Dict] = []
@@ -1303,14 +1362,14 @@ def build_function_graphs(
                     if pin.direction == 0:
                         # Use _trace_data_source for reverse tracing
                         data_source = _trace_data_source(
-                            pin, p_lookup, n_lookup, n_name_lookup,
+                            pin,
+                            p_lookup,
+                            n_lookup,
+                            n_name_lookup,
                             source_edges_by_to_pin,  # noqa: B023 - defined outside loop
                         )
                         if data_source:
-                            sources.append({
-                                "input_pin": pin.pin_name,
-                                "data_source": data_source
-                            })
+                            sources.append({"input_pin": pin.pin_name, "data_source": data_source})
 
                     # Output pin -> data_providers (forward tracing)
                     elif pin.direction == 1:
@@ -1318,22 +1377,26 @@ def build_function_graphs(
                         edges = edges_by_from_pin.get(_normalize_pin_id(pin.pin_id), [])  # noqa: B023 - edges_by_from_pin is not a loop variable
                         if edges:
                             for edge in edges:
-                                providers.append({
-                                    "output_pin": pin.pin_name,
-                                    "target_node": n_name_lookup.get(edge["to_node_guid"], edge["to_node_guid"]),
-                                    "target_pin": edge["to_pin"],
-                                })
+                                providers.append(
+                                    {
+                                        "output_pin": pin.pin_name,
+                                        "target_node": n_name_lookup.get(edge["to_node_guid"], edge["to_node_guid"]),
+                                        "target_pin": edge["to_pin"],
+                                    }
+                                )
                         else:
-                            for linked_ref in (pin.linked_to_raw or []):
+                            for linked_ref in pin.linked_to_raw or []:
                                 target_pin_guid = _pin_ref_guid(linked_ref)
                                 if target_pin_guid in p_lookup:
                                     target_node_guid, target_pin_name = p_lookup[target_pin_guid]
                                     target_node_name = n_name_lookup.get(target_node_guid, target_node_guid)
-                                    providers.append({
-                                        "output_pin": pin.pin_name,
-                                        "target_node": target_node_name,
-                                        "target_pin": target_pin_name
-                                    })
+                                    providers.append(
+                                        {
+                                            "output_pin": pin.pin_name,
+                                            "target_node": target_node_name,
+                                            "target_pin": target_pin_name,
+                                        }
+                                    )
 
                 return {"data_providers": providers, "data_sources": sources}
 
@@ -1348,12 +1411,7 @@ def build_function_graphs(
 
                 if original_node:
                     annotation = _annotate_node_with_data_flow(
-                        node_guid,
-                        node_type,
-                        original_node.pins,
-                        node_name_lookup,
-                        pin_lookup,
-                        node_lookup
+                        node_guid, node_type, original_node.pins, node_name_lookup, pin_lookup, node_lookup
                     )
 
                     # Merge annotations into node info (only added when non-empty)
@@ -1370,15 +1428,13 @@ def build_function_graphs(
                 "graph_source": graph.graph_name,
                 "entry_node_guid": fe_node.node_guid,
                 "signature": signature,
-                "execution_chains": [{
-                    "start_event": f"FunctionEntry.{function_name}",
-                    "nodes": annotated_nodes
-                }]
+                "execution_chains": [{"start_event": f"FunctionEntry.{function_name}", "nodes": annotated_nodes}],
             }
 
             function_graphs.append(entry)
 
     return function_graphs
+
 
 # Public API aliases — internal functions exposed for cross-module consumers.
 # These allow other modules (e.g. kismet/semantic.py) to use graph traversal
