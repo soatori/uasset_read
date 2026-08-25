@@ -5,14 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from uasset_read.renderers.base import (
-    IRenderer,
     RenderOptions,
     is_blueprint_export,
     EDITOR_PROPERTY_NAMES,
     filter_editor_items,
     filter_variables,
 )
-from uasset_read.renderers import register_renderer
 from uasset_read.constants import decode_package_flags
 
 if TYPE_CHECKING:
@@ -113,7 +111,7 @@ def _collect_input_actions(ir) -> list[tuple[str, list[dict]]]:
     return input_actions
 
 
-class MarkdownRenderer(IRenderer):
+class MarkdownRenderer:
     """Markdown + Mermaid flow chart renderer."""
 
     def render(self, ir: PackageIR, options: RenderOptions) -> str:
@@ -1012,10 +1010,6 @@ class MarkdownRenderer(IRenderer):
             self._render_mermaid_nodes(lines, subgraph, indent + 1)
             lines.append(f"{prefix}    end")
 
-    @property
-    def format_name(self) -> str:
-        return "markdown"
-
     def _render_material_section(self, ir: PackageIR, lines: list[str]) -> None:
         """Render Material section in Markdown."""
         if ir.material is None:
@@ -1049,5 +1043,3 @@ class MarkdownRenderer(IRenderer):
         if mat.data_flow:
             lines.append(f"**Data flow connections:** {len(mat.data_flow)}\n")
 
-
-register_renderer("markdown", MarkdownRenderer)

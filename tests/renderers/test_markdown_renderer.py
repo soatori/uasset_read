@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from uasset_read import parse_single
-from uasset_read.renderers import get_renderer, list_formats
+from uasset_read.renderers import MarkdownRenderer
 from uasset_read.renderers.base import RenderOptions
 from uasset_read.ir_builder import build_package_ir
 from uasset_read.pipeline.core import parse_package
@@ -25,9 +25,9 @@ class TestMarkdownRenderer:
     """Markdown output structure and content."""
 
     def test_markdown_format_registered(self):
-        """Markdown renderer is registered in the format registry."""
-        formats = list_formats()
-        assert "markdown" in formats
+        """Markdown renderer can be instantiated directly."""
+        renderer = MarkdownRenderer()
+        assert renderer is not None
 
     def test_markdown_contains_heading(self, samples_dir: Path):
         """Markdown output contains at least one heading."""
@@ -91,8 +91,8 @@ class TestMarkdownRendererDirect:
     """Direct renderer invocation tests."""
 
     def test_renderer_callable(self):
-        """Markdown renderer can be obtained and called."""
-        renderer = get_renderer("markdown")
+        """Markdown renderer can be instantiated directly."""
+        renderer = MarkdownRenderer()
         assert renderer is not None
 
     def test_renderer_render_method(self, samples_dir: Path):
@@ -103,7 +103,7 @@ class TestMarkdownRendererDirect:
 
         result = parse_package(str(sample), tolerant=True)
         ir = build_package_ir(result)
-        renderer = get_renderer("markdown")
+        renderer = MarkdownRenderer()
         options = RenderOptions(verbose=False, output_level="standard")
         output = renderer.render(ir, options)
         assert isinstance(output, str)

@@ -1,4 +1,4 @@
-"""渲染器基础 — IRenderer ABC + RenderOptions。
+"""渲染器基础 — 共享常量、工具函数、RenderOptions。
 
 渲染器只接收 PackageIR，不访问 ParseResult。
 渲染器不做数据转换（GUID 格式化等在 IR 构建时完成）。
@@ -6,12 +6,11 @@
 """
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from uasset_read.models.ir import PackageIR, ExportIR
+    from uasset_read.models.ir import ExportIR
 
 
 # ── 渲染器共享常量 ──
@@ -99,24 +98,4 @@ class RenderOptions:
             )
 
 
-class IRenderer(ABC):
-    """渲染器抽象基类。"""
 
-    @abstractmethod
-    def render(self, ir: PackageIR, options: RenderOptions) -> str:
-        """将 IR 渲染为字符串。
-
-        Args:
-            ir: PackageIR 实例
-            options: 渲染选项
-
-        Returns:
-            渲染后的字符串
-        """
-        ...
-
-    @property
-    @abstractmethod
-    def format_name(self) -> str:
-        """此渲染器处理的格式名称。"""
-        ...

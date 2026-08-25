@@ -23,7 +23,7 @@ from uasset_read.project_logging import (
     new_log_run_id,
     scoped_project_logging,
 )
-from uasset_read.renderers import get_renderer, list_formats as _list_renderer_formats
+from uasset_read.renderers import MarkdownRenderer
 from uasset_read.renderers.base import RenderOptions
 from uasset_read.exceptions import ParseError as ParseError, SemanticContractError  # Re-export for backward compatibility
 
@@ -31,7 +31,6 @@ if TYPE_CHECKING:
     from uasset_read.memory_safety import MemoryPolicy
     from uasset_read.config import ParseConfig
     from uasset_read.models.result import ParseResult
-    from uasset_read.link.result import LinkerParseResult
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +160,7 @@ def _parse_and_render(
     memory_policy: "MemoryPolicy | None" = None,
     output_level: str = "standard",
     parse_config: "ParseConfig | None" = None,
-) -> tuple[str, "ParseResult | LinkerParseResult"]:
+) -> tuple[str, "ParseResult"]:
     """解析并渲染，返回 (output_str, parse_result)。
 
     parse_single 和 parse_batch 共用的核心逻辑。
@@ -229,7 +228,7 @@ def _parse_and_render(
         return render_semantic_json(semantic_ir, include_schema=include_schema), result
 
     # Other formats: use renderer registry
-    renderer = get_renderer(format)
+    renderer = MarkdownRenderer()
     options = RenderOptions(
         verbose=verbose,
         include_schema=include_schema,
@@ -242,10 +241,9 @@ def _parse_and_render(
 def _can_render_tolerant_json(result, format: str, tolerant: bool | None) -> bool:
     if (tolerant is not None and not tolerant) or format not in {"json"}:
         return False
-    from uasset_read.link.result import LinkerParseResult
     from uasset_read.models.result import ParseResult
 
-    if not isinstance(result, (ParseResult, LinkerParseResult)):
+    if not isinstance(result, ParseResult):
         return False
     if getattr(result, "diagnostics", None):
         return True
@@ -495,9 +493,7 @@ def parse_batch(
 
 def list_formats() -> list[str]:
     """返回所有支持的格式名列表。"""
-    formats = set(_list_renderer_formats())
-    formats.add("json")  # json goes through semantic pipeline, not renderer registry
-    return sorted(formats)
+    return ["json", "markdown"]
 
 
 @scoped_project_logging
