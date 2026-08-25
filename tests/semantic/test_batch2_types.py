@@ -1,6 +1,6 @@
 """Tests for Batch 2 missing UAsset type mappings."""
 
-from uasset_read.semantic.kinds import resolve_asset_type
+from uasset_read.semantic.builder import resolve_asset_type
 from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
 
 
@@ -237,7 +237,7 @@ class TestBatch2Integration:
 
     def test_all_batch2_types_have_kinds_mapping(self):
         """Verify all Batch 2 registered parser types have kinds.py mappings."""
-        from uasset_read.semantic.kinds import resolve_asset_type
+        from uasset_read.semantic.builder import resolve_asset_type
 
         batch2_classes = [
             "PhysicsAsset",
@@ -273,6 +273,6 @@ class TestBatch2Integration:
 
     def test_total_type_count_increased(self):
         """Verify _TYPE_MAP has grown significantly."""
-        from uasset_read.semantic.kinds import _TYPE_MAP
+        from uasset_read.semantic.builder import _TYPE_MAP
 
         assert len(_TYPE_MAP) >= 75, f"Expected >=75 types, got {len(_TYPE_MAP)}"

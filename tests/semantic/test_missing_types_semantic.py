@@ -1,6 +1,6 @@
 """Tests for missing UAsset type mappings and parser stubs."""
 
-from uasset_read.semantic.kinds import resolve_asset_type
+from uasset_read.semantic.builder import resolve_asset_type
 from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
 
 

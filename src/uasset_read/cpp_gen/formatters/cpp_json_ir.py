@@ -256,15 +256,6 @@ class CppCallStatement:
     args: List[str] = field(default_factory=list)
     is_self_context: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "method_name": self.method_name,
-            "target": self.target,
-            "target_type": self.target_type,
-            "args": self.args,
-            "is_self_context": self.is_self_context,
-        }
-
 
 @dataclass
 class CppStatement:
