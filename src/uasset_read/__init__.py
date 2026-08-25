@@ -21,7 +21,7 @@ from .project_logging import (
     project_logging_session,
     shutdown_project_logging,
 )
-from .models import ParseResult
+from .models.result import ParseResult
 from .exceptions import ParseError
 from .archive import FArchive
 

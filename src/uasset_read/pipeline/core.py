@@ -4,6 +4,7 @@ This module is the canonical location for the uasset parse lifecycle.
 Extracted from ``uasset_read.parse_uasset`` as part of the pipeline
 consolidation (task #458).
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,10 +51,10 @@ def _cleanup_parse_memory(result) -> None:
     # Break UObjectInstance <-> linker circular references
     if result is not None and result.linker:
         try:
-            if hasattr(result.linker, '_export_objects'):
+            if hasattr(result.linker, "_export_objects"):
                 for obj in result.linker._export_objects:
                     obj.linker = None
-            if hasattr(result.linker, '_import_objects'):
+            if hasattr(result.linker, "_import_objects"):
                 for obj in result.linker._import_objects:
                     obj.linker = None
             result.linker._export_objects.clear()
@@ -68,6 +69,7 @@ def _cleanup_parse_memory(result) -> None:
     # Reset global class_registry cache
     try:
         from uasset_read.parsers.class_registry import get_class_registry
+
         get_class_registry().reset_cache()
         logger.debug("class_registry.reset_cache() called")
     except Exception as e:
@@ -76,12 +78,12 @@ def _cleanup_parse_memory(result) -> None:
 
 def _cleanup_archive_diagnostics(result, archive) -> None:
     """Collect linker/FArchive diagnostics and close archive at the end."""
-    if result.linker and getattr(result.linker, 'diagnostics', None):
+    if result.linker and getattr(result.linker, "diagnostics", None):
         result.diagnostics.extend(result.linker.diagnostics)
         # Aggregate linker BoundedEventBuffer truncation counts
-        linker_diag_buf = getattr(result.linker, '_diagnostics', None)
+        linker_diag_buf = getattr(result.linker, "_diagnostics", None)
         if linker_diag_buf is not None:
-            result.diagnostics_dropped_count += getattr(linker_diag_buf, 'dropped_count', 0)
+            result.diagnostics_dropped_count += getattr(linker_diag_buf, "dropped_count", 0)
     if archive:
         archive_diagnostics = archive.get_diagnostics()
         if archive_diagnostics:
@@ -109,7 +111,7 @@ def _run_linker_post_load(linker, result, tolerant: bool) -> None:
             raise ParseError(f"Linker post_load failed: {e}") from e
         result.errors.append(f"Linker post_load failed: {e}")
     # Propagate import verification errors from linker to result
-    if hasattr(linker, '_import_verification_errors') and linker._import_verification_errors:
+    if hasattr(linker, "_import_verification_errors") and linker._import_verification_errors:
         result.errors.extend(linker._import_verification_errors)
 
 
@@ -177,8 +179,15 @@ def _parse_package_core(
         try:
             # Initialize environment
             init_result = _init_parse_env(
-                path, result, tolerant, provider, mappings_path, game,
-                check_aes_key, hex_view, budget=budget,
+                path,
+                result,
+                tolerant,
+                provider,
+                mappings_path,
+                game,
+                check_aes_key,
+                hex_view,
+                budget=budget,
             )
             if init_result is None:
                 return
@@ -186,22 +195,35 @@ def _parse_package_core(
 
             # Read core tables (summary/name/import/export)
             if not _read_core_tables(
-                archive, result, path, tolerant, memory_monitor, mappings_provider,
+                archive,
+                result,
+                path,
+                tolerant,
+                memory_monitor,
+                mappings_provider,
                 budget=budget,
             ):
                 return
 
             # Read secondary tables + create linker
             _read_secondary_tables(
-                archive, result, tolerant, linker=None,
+                archive,
+                result,
+                tolerant,
+                linker=None,
                 mappings_provider=mappings_provider,
-                path=path, memory_monitor=memory_monitor,
+                path=path,
+                memory_monitor=memory_monitor,
                 budget=budget,
             )
             linker = _create_linker(
-                archive, result.summary, result.name_map,
-                result.import_map, result.export_map or [],
-                result, tolerant=tolerant,
+                archive,
+                result.summary,
+                result.name_map,
+                result.import_map,
+                result.export_map or [],
+                result,
+                tolerant=tolerant,
                 version_container=result.version_container,
                 extra_linker_setup=extra_linker_setup,
             )
@@ -212,7 +234,13 @@ def _parse_package_core(
 
             # Full parse: preload -> post_load -> post_process
             _parse_export_properties(
-                archive, result, linker, tolerant, mappings_provider, game, memory_monitor,
+                archive,
+                result,
+                linker,
+                tolerant,
+                mappings_provider,
+                game,
+                memory_monitor,
                 budget=budget,
             )
             memory_monitor.checkpoint("post_load")
@@ -220,12 +248,20 @@ def _parse_package_core(
             memory_monitor.checkpoint("post_process")
 
             _post_process(
-                path, archive, result.summary, result.name_map,
-                result.import_map, result.export_map or [], result, tolerant,
+                path,
+                archive,
+                result.summary,
+                result.name_map,
+                result.import_map,
+                result.export_map or [],
+                result,
+                tolerant,
                 linker=linker,
                 include_parent_assets=include_parent_assets,
                 asset_roots=asset_roots,
-                archive_factory=lambda: bundle.open_archive(tolerant=tolerant) if bundle else FArchive(path, tolerant=tolerant),
+                archive_factory=lambda: (
+                    bundle.open_archive(tolerant=tolerant) if bundle else FArchive(path, tolerant=tolerant)
+                ),
                 memory_policy=policy,
             )
 
@@ -303,20 +339,24 @@ def parse_package(
     result = ParseResult()
 
     # Merge config and legacy parameters
-    core_kwargs = _resolve_parse_params(config, {
-        "tolerant": tolerant,
-        "include_parent_assets": include_parent_assets,
-        "asset_roots": asset_roots,
-        "mappings_path": mappings_path,
-        "game": game,
-        "force_full_parse": force_full_parse,
-        "hex_view": hex_view,
-        "lightweight_threshold": lightweight_threshold,
-        "memory_policy": memory_policy,
-    })
+    core_kwargs = _resolve_parse_params(
+        config,
+        {
+            "tolerant": tolerant,
+            "include_parent_assets": include_parent_assets,
+            "asset_roots": asset_roots,
+            "mappings_path": mappings_path,
+            "game": game,
+            "force_full_parse": force_full_parse,
+            "hex_view": hex_view,
+            "lightweight_threshold": lightweight_threshold,
+            "memory_policy": memory_policy,
+        },
+    )
 
     _parse_package_core(
-        path, result,
+        path,
+        result,
         provider=provider,
         **core_kwargs,
     )
@@ -399,20 +439,24 @@ def parse_uasset_with_linker(
         res.root_objects = linker._root_objects
 
     # Merge config and legacy parameters
-    core_kwargs = _resolve_parse_params(config, {
-        "tolerant": tolerant,
-        "include_parent_assets": include_parent_assets,
-        "asset_roots": asset_roots,
-        "mappings_path": mappings_path,
-        "game": game,
-        "force_full_parse": force_full_parse,
-        "hex_view": hex_view,
-        "lightweight_threshold": lightweight_threshold,
-        "memory_policy": memory_policy,
-    })
+    core_kwargs = _resolve_parse_params(
+        config,
+        {
+            "tolerant": tolerant,
+            "include_parent_assets": include_parent_assets,
+            "asset_roots": asset_roots,
+            "mappings_path": mappings_path,
+            "game": game,
+            "force_full_parse": force_full_parse,
+            "hex_view": hex_view,
+            "lightweight_threshold": lightweight_threshold,
+            "memory_policy": memory_policy,
+        },
+    )
 
     _parse_package_core(
-        path, result,
+        path,
+        result,
         provider=provider,
         extra_linker_setup=extra_linker_setup,
         **core_kwargs,
@@ -471,15 +515,14 @@ def parse_package_lazy(
     # to avoid loading the entire file into memory via open_package_bundle().
     # open_file() supports mmap range reads, suitable for lazy loading scenarios.
     use_direct_archive = (
-        provider is not None
-        and hasattr(provider, 'open_file')
-        and callable(getattr(provider, 'open_file', None))
+        provider is not None and hasattr(provider, "open_file") and callable(getattr(provider, "open_file", None))
     )
 
     try:
         mappings_provider = None
         if mappings_path:
             from uasset_read.mappings import TypeMappingsProvider
+
             mappings_provider = TypeMappingsProvider.from_file(mappings_path, budget=budget)
             result.metadata["mappings_path"] = mappings_path
         if game:
@@ -493,25 +536,36 @@ def parse_package_lazy(
 
             # Read core tables
             if not _read_core_tables(
-                archive, result, path, tolerant,
-                validate_range=True, budget=budget,
+                archive,
+                result,
+                path,
+                tolerant,
+                validate_range=True,
+                budget=budget,
             ):
                 if result.summary is None:
                     return result
 
             # Read secondary tables
             _read_secondary_tables(
-                archive, result, tolerant, linker=None,
+                archive,
+                result,
+                tolerant,
+                linker=None,
                 mappings_provider=mappings_provider,
-                path=path, memory_monitor=None,
+                path=path,
+                memory_monitor=None,
                 budget=budget,
             )
         else:
             # Fallback path: read via bundle (read_file)
             bundle_obj, archive, linker, mappings_provider = _read_package_headers(
-                path, result,
-                tolerant=tolerant, provider=provider,
-                mappings_path=mappings_path, game=game,
+                path,
+                result,
+                tolerant=tolerant,
+                provider=provider,
+                mappings_path=mappings_path,
+                game=game,
                 budget=budget,
             )
             if result.summary is None:
@@ -521,7 +575,12 @@ def parse_package_lazy(
         parse_indices = set(export_indices) if export_indices else set()
 
         _parse_export_properties(
-            archive, result, linker, tolerant, mappings_provider, game,
+            archive,
+            result,
+            linker,
+            tolerant,
+            mappings_provider,
+            game,
             memory_monitor=None,  # No memory monitor in lazy path (diagnostic only)
             budget=budget,
             export_indices=parse_indices,
@@ -537,7 +596,7 @@ def parse_package_lazy(
                     raise ParseError(f"Linker post_load failed: {e}") from e
                 result.errors.append(f"Linker post_load failed: {e}")
             # Propagate import verification errors from linker to result
-            if hasattr(linker, '_import_verification_errors') and linker._import_verification_errors:
+            if hasattr(linker, "_import_verification_errors") and linker._import_verification_errors:
                 result.errors.extend(linker._import_verification_errors)
 
         result.is_success = not result.errors

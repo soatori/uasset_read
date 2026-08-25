@@ -191,6 +191,7 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
     except Exception as e:
         try:
             import psutil
+
             if isinstance(e, psutil.Error):
                 logger.debug("psutil RSS retrieval failed (%s): %s", type(e).__name__, e)
                 return 0.0

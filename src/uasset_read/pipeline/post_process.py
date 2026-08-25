@@ -15,8 +15,10 @@ if TYPE_CHECKING:
 
 from uasset_read.exceptions import ParseError
 from uasset_read.serializers.object_resources import (
-    find_main_blueprint_generated_class, detect_blueprint,
-    build_imports_list, read_soft_object_paths,
+    find_main_blueprint_generated_class,
+    detect_blueprint,
+    build_imports_list,
+    read_soft_object_paths,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,7 +57,12 @@ def _extract_kismet_decompiled(
         try:
             # Use the native UFunction reader to extract script bytes and native fields
             script_result = read_ufunction_script(
-                archive, export, summary, name_map, import_map, export_map,
+                archive,
+                export,
+                summary,
+                name_map,
+                import_map,
+                export_map,
                 export_index=export_idx,
             )
 
@@ -109,7 +116,8 @@ def _extract_kismet_decompiled(
                             "package_offset": failure.package_offset,
                             "export_offset": failure.export_offset,
                         }
-                        if failure else None
+                        if failure
+                        else None
                     ),
                     script_metrics=(
                         {
@@ -118,7 +126,8 @@ def _extract_kismet_decompiled(
                             "serialized_bytes_consumed": 0,
                             "bytecode_bytes_consumed": failure.bytecode_index or 0,
                         }
-                        if failure else None
+                        if failure
+                        else None
                     ),
                     warnings=[],
                     fallback_reasons=[f"UFunction script read failed: {reason}"],
@@ -133,7 +142,9 @@ def _extract_kismet_decompiled(
             if script_result.serialized_script:
                 try:
                     expressions = parse_bytecode_stream(
-                        script_result.serialized_script, name_map, summary,
+                        script_result.serialized_script,
+                        name_map,
+                        summary,
                         bytecode_buffer_size=script_result.bytecode_buffer_size,
                         tolerant=tolerant,
                     )
@@ -178,7 +189,8 @@ def _extract_kismet_decompiled(
             type_registry = TypeRegistry()
             builder = FunctionBodyBuilder(type_registry, linker=linker)
             cpp_code = builder.to_function_body_structured(
-                expressions, func_name=export.object_name,
+                expressions,
+                func_name=export.object_name,
             )
             warnings = _collect_pipeline_translation_warnings(cpp_code)
 
@@ -186,6 +198,7 @@ def _extract_kismet_decompiled(
             structured_rate: float | None = None
             try:
                 from uasset_read.kismet.jump_analyzer import JumpAnalyzer
+
                 rate_analyzer = JumpAnalyzer(expressions)
                 rate_report = rate_analyzer.analyze_structured_rate()
                 structured_rate = rate_report.rate
@@ -207,8 +220,10 @@ def _extract_kismet_decompiled(
             if script_result.native_fields:
                 try:
                     from uasset_read.kismet.native_fields import build_native_function_signature
+
                     sig_str, native_params, native_return_type = build_native_function_signature(
-                        export.object_name, script_result.native_fields,
+                        export.object_name,
+                        script_result.native_fields,
                     )
                     signature = sig_str
                     native_signature_used = True
@@ -244,26 +259,28 @@ def _extract_kismet_decompiled(
             # Per D-10: a per-function failure does not block the package, but
             # it must remain visible in the public result list.
             logger.debug("Kismet decompile failed for export '%s': %s", export.object_name, e)
-            results.append(KismetDecompiledResult(
-                function_name=export.object_name,
-                signature=f"void {export.object_name}()",
-                local_variables=[],
-                cpp_code="",
-                bytecode_source="unknown",
-                bytecode_status="failed",
-                translation_status="not_applicable",
-                error_code="function_processing_error",
-                error_message=str(e),
-                error_context={
-                    "function_name": export.object_name,
-                    "export_index": export_idx,
-                    "class_name": class_name,
-                    "package_offset": export.serial_offset,
-                    "export_offset": export.serial_offset,
-                },
-                warnings=[],
-                fallback_reasons=[f"function processing error: {e}"],
-            ))
+            results.append(
+                KismetDecompiledResult(
+                    function_name=export.object_name,
+                    signature=f"void {export.object_name}()",
+                    local_variables=[],
+                    cpp_code="",
+                    bytecode_source="unknown",
+                    bytecode_status="failed",
+                    translation_status="not_applicable",
+                    error_code="function_processing_error",
+                    error_message=str(e),
+                    error_context={
+                        "function_name": export.object_name,
+                        "export_index": export_idx,
+                        "class_name": class_name,
+                        "package_offset": export.serial_offset,
+                        "export_offset": export.serial_offset,
+                    },
+                    warnings=[],
+                    fallback_reasons=[f"function processing error: {e}"],
+                )
+            )
     return results
 
 
@@ -299,10 +316,15 @@ def _extract_blueprint_graphs_and_metadata(
     graphs_list = None
     try:
         from uasset_read.graph import extract_blueprint_graphs
-        if hasattr(result, 'graphs'):
+
+        if hasattr(result, "graphs"):
             try:
                 result.graphs = extract_blueprint_graphs(
-                    archive, summary, name_map, import_map, export_map,
+                    archive,
+                    summary,
+                    name_map,
+                    import_map,
+                    export_map,
                     linker=linker,
                 )
                 graphs_list = result.graphs
@@ -319,9 +341,7 @@ def _extract_blueprint_graphs_and_metadata(
     asset_name = name_map[0] if name_map else None
 
     if asset_name:
-        main_bpgc = find_main_blueprint_generated_class(
-            export_map, import_map, asset_name
-        )
+        main_bpgc = find_main_blueprint_generated_class(export_map, import_map, asset_name)
         if main_bpgc:
             owned_archive = archive_factory is not None
             temp_archive = archive_factory() if archive_factory else archive
@@ -329,14 +349,18 @@ def _extract_blueprint_graphs_and_metadata(
             try:
                 try:
                     meta, warn = extract_blueprint_metadata(
-                        main_bpgc, temp_archive, import_map,
-                        export_map, name_map, summary,
+                        main_bpgc,
+                        temp_archive,
+                        import_map,
+                        export_map,
+                        name_map,
+                        summary,
                         linker=linker,
                         graphs=graphs_list,
                     )
                     if meta:
                         blueprint_metadata = meta
-                        if hasattr(result, 'errors') and warn:
+                        if hasattr(result, "errors") and warn:
                             result.errors.append(f"blueprint parent warning: {warn}")
                 except ParseError as e:
                     error_msg = f"blueprint extraction (BPGC) error: {e}"
@@ -352,6 +376,7 @@ def _extract_blueprint_graphs_and_metadata(
         for export in export_map:
             if linker is not None:
                 from uasset_read.serializers.object_resources import detect_blueprint_with_linker
+
                 is_bp = detect_blueprint_with_linker(export, linker)
             else:
                 is_bp = detect_blueprint(export, import_map, export_map)
@@ -362,14 +387,18 @@ def _extract_blueprint_graphs_and_metadata(
                 try:
                     try:
                         meta, warn = extract_blueprint_metadata(
-                            export, temp_archive, import_map,
-                            export_map, name_map, summary,
+                            export,
+                            temp_archive,
+                            import_map,
+                            export_map,
+                            name_map,
+                            summary,
                             linker=linker,
                             graphs=graphs_list,
                         )
                         if meta:
                             blueprint_metadata = meta
-                            if hasattr(result, 'errors') and warn:
+                            if hasattr(result, "errors") and warn:
                                 result.errors.append(f"blueprint parent warning: {warn}")
                     except ParseError as e:
                         error_msg = f"blueprint extraction error: {e}"
@@ -382,7 +411,7 @@ def _extract_blueprint_graphs_and_metadata(
                 break
 
     # Only assign when blueprint_metadata is not None, to avoid overwriting existing Blueprint data
-    if blueprint_metadata is not None and hasattr(result, 'blueprint'):
+    if blueprint_metadata is not None and hasattr(result, "blueprint"):
         result.blueprint = blueprint_metadata
 
     return blueprint_metadata
@@ -404,41 +433,52 @@ def _run_kismet_and_dependency_analysis(
     # Kismet decompilation (per D-02, D-10)
     try:
         from uasset_read.kismet.pipeline import decompile_single_function  # noqa: F401 — module existence check
-        if hasattr(result, 'decompiled_functions'):
+
+        if hasattr(result, "decompiled_functions"):
             decompiled = _extract_kismet_decompiled(
-                path, archive, summary, name_map,
-                import_map, export_map, tolerant, linker=linker,
+                path,
+                archive,
+                summary,
+                name_map,
+                import_map,
+                export_map,
+                tolerant,
+                linker=linker,
             )
             result.decompiled_functions = decompiled
             if decompiled and getattr(result, "graphs", None):
                 from uasset_read.kismet.semantic import enrich_decompiled_functions
+
                 enrich_decompiled_functions(decompiled, result.graphs)
-            if blueprint_metadata and not decompiled and hasattr(result, 'warnings'):
+            if blueprint_metadata and not decompiled and hasattr(result, "warnings"):
                 result.warnings.append("Kismet decompilation: no functions decompiled (may have no bytecode)")
     except ImportError:
         logger.debug("kismet module not found, skipping bytecode decompilation")
     except (OSError, struct.error, ValueError, KeyError) as e:
-        if hasattr(result, 'warnings'):
+        if hasattr(result, "warnings"):
             result.warnings.append(f"Kismet decompilation error: {e}")
 
     # Component property extraction
     try:
         from uasset_read.blueprint.component_extractor import extract_components
-        if hasattr(result, 'components'):
+
+        if hasattr(result, "components"):
             result.components = extract_components(export_map, import_map)
     except ImportError:
         logger.debug("component_extractor module not found, skipping component property extraction")
     except (KeyError, TypeError, ValueError) as e:
-        if hasattr(result, 'errors'):
+        if hasattr(result, "errors"):
             result.errors.append(f"component extraction error: {e}")
 
     # Dependency analysis
     try:
-        if hasattr(result, 'imports'):
+        if hasattr(result, "imports"):
             result.imports = build_imports_list(import_map)
-        if hasattr(result, 'soft_references'):
+        if hasattr(result, "soft_references"):
             result.soft_references = read_soft_object_paths(
-                archive, summary, name_map,
+                archive,
+                summary,
+                name_map,
             )
     except ParseError as e:
         error_msg = f"dependency analysis error: {e}"
@@ -467,29 +507,44 @@ def _post_process(
     Writes fields via hasattr guards, supporting ParseResult.
     """
     blueprint_metadata = _extract_blueprint_graphs_and_metadata(
-        archive, summary, name_map, import_map, export_map,
-        result, linker=linker, archive_factory=archive_factory,
+        archive,
+        summary,
+        name_map,
+        import_map,
+        export_map,
+        result,
+        linker=linker,
+        archive_factory=archive_factory,
     )
 
     _run_kismet_and_dependency_analysis(
-        path, archive, summary, name_map, import_map, export_map,
-        result, tolerant=tolerant, linker=linker,
+        path,
+        archive,
+        summary,
+        name_map,
+        import_map,
+        export_map,
+        result,
+        tolerant=tolerant,
+        linker=linker,
         blueprint_metadata=blueprint_metadata,
     )
 
     if include_parent_assets:
         _resolve_parent_assets(
-            path, result, tolerant, asset_roots,
+            path,
+            result,
+            tolerant,
+            asset_roots,
             memory_policy=memory_policy,
         )
 
     # name_map consistency check
-    if hasattr(result, 'name_map') and not result.name_map:
-        if summary is not None and getattr(summary, 'name_count', 0) > 0:
-            if hasattr(result, 'errors'):
+    if hasattr(result, "name_map") and not result.name_map:
+        if summary is not None and getattr(summary, "name_count", 0) > 0:
+            if hasattr(result, "errors"):
                 result.errors.append(
-                    f"name_map is empty (summary.name_count={summary.name_count}), "
-                    f"name table read failed"
+                    f"name_map is empty (summary.name_count={summary.name_count}), name table read failed"
                 )
 
     result.is_success = not result.errors
@@ -533,24 +588,26 @@ def _resolve_parent_assets(
     if not parent_class:
         return
 
-    result.logic_sources.append({
-        "source": "current_asset",
-        "asset": path,
-        "blueprint": result.summary.package_name if result.summary else None,
-    })
+    result.logic_sources.append(
+        {
+            "source": "current_asset",
+            "asset": path,
+            "blueprint": result.summary.package_name if result.summary else None,
+        }
+    )
 
     roots = [Path(root) for root in (asset_roots or [])]
     roots.append(Path(path).resolve().parent)
     parent_file = _find_parent_asset_file(parent_class, roots)
     if parent_file is None:
-        result.logic_sources.append({
-            "source": "native_parent",
-            "class": parent_class,
-            "status": "asset_not_found",
-        })
-        result.warnings.append(
-            f"Parent asset '{parent_class}.uasset' not found in asset roots"
+        result.logic_sources.append(
+            {
+                "source": "native_parent",
+                "class": parent_class,
+                "status": "asset_not_found",
+            }
         )
+        result.warnings.append(f"Parent asset '{parent_class}.uasset' not found in asset roots")
         return
 
     # Lazy import to avoid circular dependencies
@@ -564,29 +621,36 @@ def _resolve_parent_assets(
             memory_policy=memory_policy,
         )
     except (OSError, ParseError, struct.error, ValueError) as exc:
-        result.logic_sources.append({
-            "source": "parent_asset",
-            "class": parent_class,
-            "asset": str(parent_file),
-            "status": "parse_error",
-            "error": str(exc),
-        })
+        result.logic_sources.append(
+            {
+                "source": "parent_asset",
+                "class": parent_class,
+                "asset": str(parent_file),
+                "status": "parse_error",
+                "error": str(exc),
+            }
+        )
         result.warnings.append(f"Parent asset '{parent_file}' parse failed: {exc}")
         return
 
-    result.resolved_parent_assets.append({
-        "class": parent_class,
-        "path": str(parent_file),
-        "status": "success" if parent_result.is_success else "failed",
-        "warnings": parent_result.warnings,
-        "errors": parent_result.errors,
-    })
-    result.logic_sources.append({
-        "source": "parent_asset",
-        "class": parent_class,
-        "asset": str(parent_file),
-        "status": "success" if parent_result.is_success else "failed",
-    })
+    result.resolved_parent_assets.append(
+        {
+            "class": parent_class,
+            "path": str(parent_file),
+            "status": "success" if parent_result.is_success else "failed",
+            "warnings": parent_result.warnings,
+            "errors": parent_result.errors,
+        }
+    )
+    result.logic_sources.append(
+        {
+            "source": "parent_asset",
+            "class": parent_class,
+            "asset": str(parent_file),
+            "status": "success" if parent_result.is_success else "failed",
+        }
+    )
     if parent_result.graphs:
         from uasset_read.graph import format_graphs_json
+
         result.inherited_blueprint_graphs.extend(format_graphs_json(parent_result.graphs))

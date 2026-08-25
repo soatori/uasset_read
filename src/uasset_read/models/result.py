@@ -12,8 +12,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from uasset_read.models.status import _result_status
-
 if TYPE_CHECKING:
     from uasset_read.serializers.package_summary import PackageFileSummary
     from uasset_read.serializers.object_resources import ObjectImport, ObjectExport
@@ -24,6 +22,19 @@ if TYPE_CHECKING:
     from uasset_read.link.linker import PackageLinker
     from uasset_read.parsers.asset_registry_parser import AssetRegistryData
     from uasset_read.models.diagnostics import OffsetRangeDiagnostic, StructuredDiagnostic
+
+from uasset_read.models.fallback import ExportParseStatus
+
+# Partial status set: auto-generated from ExportParseStatus.is_partial
+# Fully covers all partial variants, ensuring consistent status determination (#315)
+PARTIAL_STATUSES: frozenset[str] = frozenset(
+    s.value for s in ExportParseStatus if s.is_partial
+)
+
+# Failed status set: auto-generated from ExportParseStatus.is_failed
+FAILED_STATUSES: frozenset[str] = frozenset(
+    s.value for s in ExportParseStatus if s.is_failed
+)
 
 
 @dataclass
@@ -81,9 +92,83 @@ class BaseResult:
     def status(self) -> str:
         """Unified status: success | partial | failed.
 
-        Delegates to ``status._result_status()``.
+        Status rules:
+        - failed: all exports are failed, or no core data and is_success=False
+        - partial: any export is partial / has errors / has structural diagnostics / lightweight tolerant parsing
+        - success: no errors and all exports succeeded
+
+        Check order: export-level status > non-success branch > is_success=True branch
+
+        Returns:
+            "success" | "partial" | "failed"
         """
-        return _result_status(self)
+        # 1. Check export-level status (highest priority)
+        export_map = getattr(self, "export_map", None) or []
+        if export_map and isinstance(export_map, list):
+            failed_count = 0
+            partial_count = 0
+            for exp in export_map:
+                exp_status = getattr(exp, "parse_status", None)
+                if exp_status in FAILED_STATUSES:
+                    failed_count += 1
+                elif exp_status in PARTIAL_STATUSES:
+                    partial_count += 1
+            # All exports failed -> overall failed
+            if failed_count == len(export_map):
+                return "failed"
+            # Any partial or present failed (not all failed) -> overall partial
+            if failed_count > 0 or partial_count > 0:
+                return "partial"
+
+        # 2. Non-success branch: check if core data exists
+        if not getattr(self, "is_success", False):
+            if (
+                getattr(self, "summary", None) is not None
+                or getattr(self, "name_map", None)
+                or getattr(self, "import_map", None)
+                or getattr(self, "export_map", None)
+            ):
+                return "partial"
+            return "failed"
+
+        # 3. is_success=True branch: comprehensive check
+        # 3.1 Check errors
+        if getattr(self, "errors", None):
+            return "partial"
+
+        # 3.2 Check warning-based degradation (corruption / data-skip)
+        warnings = getattr(self, "warnings", None) or []
+        if any("AssetRegistryData is corrupted" in w for w in warnings):
+            return "partial"
+        if any("DependsMap" in w for w in warnings):
+            return "partial"
+
+        # 3.3 Check lightweight tolerant parsing
+        metadata = getattr(self, "metadata", None) or {}
+        if metadata.get("lightweight_tolerant_parse"):
+            return "partial"
+
+        # 3.4 Check structural diagnostics
+        diagnostics = getattr(self, "diagnostics", None) or []
+        has_structural_diagnostic = any(
+            getattr(d, "is_structural", lambda: False)()
+            for d in diagnostics
+            if hasattr(d, "is_structural")
+        )
+        if has_structural_diagnostic:
+            return "partial"
+
+        # 3.5 Check native function status (failed/partial translation)
+        decompiled_functions = getattr(self, "decompiled_functions", None) or []
+        for func in decompiled_functions:
+            bytecode_status = getattr(func, "bytecode_status", "unknown")
+            translation_status = getattr(func, "translation_status", "not_applicable")
+            if bytecode_status == "failed":
+                return "partial"
+            if bytecode_status == "parsed" and translation_status in ("partial", "failed"):
+                return "partial"
+
+        return "success"
 
 
 @dataclass

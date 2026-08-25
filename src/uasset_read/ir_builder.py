@@ -64,7 +64,6 @@ from uasset_read.constants import (
     CONTAINER_TYPE_PREFIX,
     UE_NONE_SENTINEL,
 )
-from uasset_read.models.status import _result_status
 from uasset_read.serializers.object_resources import PackageIndex, resolve_class_name
 from uasset_read.kismet.result import infer_bytecode_confidence
 
@@ -765,7 +764,7 @@ def build_package_ir(result: "ParseResult") -> PackageIR:
             if hasattr(result, "warnings"):
                 result.warnings.append(f"function_graphs generation skipped: {e}")
 
-    status = _result_status(result)
+    status = result.status
     metadata = getattr(result, "metadata", None) or {}
     errors = list(getattr(result, "errors", None) or [])
     warnings = list(getattr(result, "warnings", None) or [])

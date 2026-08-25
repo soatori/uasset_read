@@ -17,7 +17,7 @@ from uasset_read.constants import (
 from uasset_read.models.diagnostics import (
     OffsetRangeDiagnostic, StructuredDiagnostic,
 )
-from uasset_read.bounded_events import BoundedEventBuffer, BoundedSet
+from uasset_read.bounded_events import BoundedEventBuffer
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ class FArchive:
         self._logger = logging.getLogger(__name__)
         self._name_map: Optional[list] = None  # optional name table cache
         self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)  # offset diagnostics (bounded)
-        self._name_warnings_seen: BoundedSet = BoundedSet(max_size=10000)  # read_name out-of-range index dedup (#411, #481)
+        self._name_warnings_seen: set[int] = set()  # read_name out-of-range index dedup (#411, #481)
         self._hex_view_enabled: bool = hex_view
         self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(max_entries=50000)  # list[HexViewEntry], bounded
         self._hex_view_context: str = ""  # current context prefix (e.g. "Summary.")
@@ -333,10 +333,7 @@ class FArchive:
         """Return the number of diagnostic entries dropped due to buffer limit."""
         return self._diagnostics.dropped_count
 
-    @property
-    def name_warnings_dropped_count(self) -> int:
-        """Return the number of name warning entries dropped due to set limit."""
-        return self._name_warnings_seen.dropped_count
+
 
     # HexView support
 
@@ -815,7 +812,7 @@ class FArchive:
         else:
             # Keep "None" return value (PropertyTag terminator depends on it)
             # Deduplication: same out-of-bounds index only logged once (#411)
-            if index not in self._name_warnings_seen:
+            if index not in self._name_warnings_seen and len(self._name_warnings_seen) < 10000:
                 self._name_warnings_seen.add(index)
                 self._record_structured_diagnostic(
                     code="name_index_out_of_range",

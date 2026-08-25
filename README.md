@@ -66,9 +66,8 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 ### Output Formats
 
-- **JSON** — structured output optimized for C++ translation reference
+- **JSON** — structured output via semantic pipeline, optimized for C++ translation reference
 - **Markdown** — formatted documentation with tables and embedded Mermaid flowcharts
-- **Text** — human-readable text summary
 
 ### Architecture
 

@@ -424,12 +424,11 @@ def parse_batch(
                 parse_config=parse_config,
             )
 
-            # 检查 partial 状态并追踪原因
-            from uasset_read.models.status import _result_status, PARTIAL_STATUSES
-
-            status = _result_status(parse_result)
+            status = parse_result.status
             if status == "partial":
                 result.partial.append(str(pf))
+                from uasset_read.models.result import PARTIAL_STATUSES
+
                 for exp in getattr(parse_result, "export_map", None) or []:
                     exp_status = getattr(exp, "parse_status", None)
                     if exp_status and exp_status in PARTIAL_STATUSES:

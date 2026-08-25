@@ -59,7 +59,9 @@ class NiagaraGraphHandler(ClassHandler):
                 continue  # invalid reference: omit per contract fallback
             try:
                 cls = resolve_class_name(
-                    export_map[idx].class_index, import_map, export_map,
+                    export_map[idx].class_index,
+                    import_map,
+                    export_map,
                 )
             except (KeyError, AttributeError, IndexError):
                 continue
@@ -87,8 +89,11 @@ class NiagaraGraphHandler(ClassHandler):
             # Project tagged properties into structured output
             tagged_properties: dict[str, Any] = {}
             for prop_name in (
-                "ChangeId", "LastBuiltTraversalDataChangeId",
-                "CachedUsageInfo", "VariableToScriptVariable", "Nodes",
+                "ChangeId",
+                "LastBuiltTraversalDataChangeId",
+                "CachedUsageInfo",
+                "VariableToScriptVariable",
+                "Nodes",
             ):
                 if prop_name in properties:
                     tagged_properties[prop_name] = properties[prop_name]

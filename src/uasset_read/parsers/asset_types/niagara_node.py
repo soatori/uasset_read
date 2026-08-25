@@ -47,7 +47,9 @@ _HANDLED_CLASSES: Set[str] = {
 }
 
 
-def _decode_single_pin(archive: "FArchive", name_map: list, export: Optional["ObjectExport"] = None) -> Optional[dict[str, Any]]:
+def _decode_single_pin(
+    archive: "FArchive", name_map: list, export: Optional["ObjectExport"] = None
+) -> Optional[dict[str, Any]]:
     """Decode a single UEdGraphPin record.
 
     Source: EdGraphPin.cpp:1838-1948 (UEdGraphPin::Serialize).
@@ -63,10 +65,7 @@ def _decode_single_pin(archive: "FArchive", name_map: list, export: Optional["Ob
     owning_node_index = archive.read_i32()
 
     # PinId (FGuid = 4 x u32)
-    pin_id = (
-        f"{archive.read_u32():08x}-{archive.read_u32():08x}"
-        f"-{archive.read_u32():08x}-{archive.read_u32():08x}"
-    )
+    pin_id = f"{archive.read_u32():08x}-{archive.read_u32():08x}-{archive.read_u32():08x}-{archive.read_u32():08x}"
 
     # --- Pin body (written by Serialize / SerializeAsOwningNode) ---
     # OwningNode (repeated in body)
@@ -74,13 +73,14 @@ def _decode_single_pin(archive: "FArchive", name_map: list, export: Optional["Ob
     if _body_owning_node != owning_node_index:
         logger.debug(
             "Pin body owning_node %d != reference %d at offset %d",
-            _body_owning_node, owning_node_index, archive.tell(),
+            _body_owning_node,
+            owning_node_index,
+            archive.tell(),
         )
 
     # PinId (repeated in body as FGuid)
     _body_pin_id = (
-        f"{archive.read_u32():08x}-{archive.read_u32():08x}"
-        f"-{archive.read_u32():08x}-{archive.read_u32():08x}"
+        f"{archive.read_u32():08x}-{archive.read_u32():08x}-{archive.read_u32():08x}-{archive.read_u32():08x}"
     )
 
     # PinName (FName)
@@ -125,8 +125,7 @@ def _decode_single_pin(archive: "FArchive", name_map: list, export: Optional["Ob
             continue
         lt_node = archive.read_i32()
         lt_pin_id = (
-            f"{archive.read_u32():08x}-{archive.read_u32():08x}"
-            f"-{archive.read_u32():08x}-{archive.read_u32():08x}"
+            f"{archive.read_u32():08x}-{archive.read_u32():08x}-{archive.read_u32():08x}-{archive.read_u32():08x}"
         )
         linked_to.append({"owning_node": lt_node, "pin_id": lt_pin_id})
 
@@ -135,13 +134,13 @@ def _decode_single_pin(archive: "FArchive", name_map: list, export: Optional["Ob
     for _ in range(sub_pin_count):
         archive.read_u32()  # bNullPtr
         archive.read_i32()  # OwningNode
-        archive.read(16)    # PinId FGuid
+        archive.read(16)  # PinId FGuid
 
     # ParentPin object reference
     parent_pin_null = archive.read_u32()
     if not parent_pin_null:
         archive.read_i32()  # OwningNode
-        archive.read(16)    # PinId
+        archive.read(16)  # PinId
 
     # ReferencePassThroughConnection object reference
     ref_null = archive.read_u32()
@@ -152,8 +151,7 @@ def _decode_single_pin(archive: "FArchive", name_map: list, export: Optional["Ob
     # Editor-only tail: PersistentGuid (16) + BitField (4) = 20 bytes
     # Only present when !Ar.IsFilterEditorOnly() (editor-saved assets)
     _persistent_guid = (
-        f"{archive.read_u32():08x}-{archive.read_u32():08x}"
-        f"-{archive.read_u32():08x}-{archive.read_u32():08x}"
+        f"{archive.read_u32():08x}-{archive.read_u32():08x}-{archive.read_u32():08x}-{archive.read_u32():08x}"
     )
     _bit_field = archive.read_u32()
 
@@ -169,7 +167,10 @@ def _decode_single_pin(archive: "FArchive", name_map: list, export: Optional["Ob
 
 
 def _decode_pins_from_tail(
-    archive: "FArchive", name_map: list, tail_offset: int, tail_size: int,
+    archive: "FArchive",
+    name_map: list,
+    tail_offset: int,
+    tail_size: int,
     export: Optional["ObjectExport"] = None,
 ) -> list[dict[str, Any]]:
     """Decode pin records from a node's native tail bytes.
@@ -214,8 +215,20 @@ _CLASS_PROPERTIES: dict[str, list[str]] = {
     "NiagaraNodeOp": ["OpName"],
     "NiagaraNodeOutput": ["Outputs", "ScriptType"],
     "NiagaraNodeReroute": [],
-    "NiagaraNodeSelect": ["SelectorPinType", "SelectorPinGuid", "OutputVars", "OutputVarGuids", "NumOptionsPerVariable"],
-    "NiagaraNodeStaticSwitch": ["InputParameterName", "SwitchTypeData", "OutputVars", "OutputVarGuids", "NumOptionsPerVariable"],
+    "NiagaraNodeSelect": [
+        "SelectorPinType",
+        "SelectorPinGuid",
+        "OutputVars",
+        "OutputVarGuids",
+        "NumOptionsPerVariable",
+    ],
+    "NiagaraNodeStaticSwitch": [
+        "InputParameterName",
+        "SwitchTypeData",
+        "OutputVars",
+        "OutputVarGuids",
+        "NumOptionsPerVariable",
+    ],
 }
 
 
