@@ -670,18 +670,17 @@ def _build_material_instance_overrides(material_export) -> dict | None:
 
 def _resolve_material_parent(material_export, result) -> str | None:
     """Resolve parent material path from MaterialInstance export."""
+    from uasset_read.serializers.object_resources import PackageIndex
+
     for prop in getattr(material_export, "properties", None) or []:
         if getattr(prop, "name", None) == "Parent":
             val = getattr(prop, "value", None)
             if isinstance(val, int):
-                return _resolve_package_index(result, val)
+                return _resolve_package_index(result, PackageIndex(val))
             fields = _get_fields(val)
             if fields:
                 return _safe_str(
-                    fields.get(
-                        "ObjectName",
-                        fields.get("object_name", fields.get("full_name", "")),
-                    )
+                    fields.get("object_name", fields.get("full_name", ""))
                 )
             if isinstance(val, str):
                 return val
