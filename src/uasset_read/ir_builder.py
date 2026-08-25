@@ -394,8 +394,8 @@ def _build_expression_outputs(expr_export) -> list:
             val = getattr(prop, "value", None)
             if isinstance(val, list):
                 for item in val:
-                    if isinstance(item, dict):
-                        fields = item.get("fields", item)
+                    fields = _get_fields(item)
+                    if fields is not None:
                         outputs.append(
                             MaterialExpressionOutputIR(
                                 output_name=fields.get("output_name", ""),
