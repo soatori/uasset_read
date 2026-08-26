@@ -13,9 +13,8 @@ from typing import Any
 
 from uasset_read.semantic.render import render_semantic_json
 from uasset_read.semantic.builder import build_semantic_ir
-from tests.integration.sample_assets import (
-    LOCAL_SAMPLE_ROOT,
-)
+# Use local samples directory
+_LOCAL_SAMPLE_ROOT = Path(__file__).resolve().parents[1] / "samples"
 
 # MutableSample contains both Texture2D and TextureCube assets
 MUTABLE_SAMPLE_ROOT = Path("E:/Develop/lib/Samples/MutableSample/Content")
@@ -32,7 +31,7 @@ def _resolve_texture_path(rel_path: str) -> Path | None:
     if mutable_path.exists():
         return mutable_path
     # Check local samples
-    local_path = LOCAL_SAMPLE_ROOT / Path(rel_path).name
+    local_path = _LOCAL_SAMPLE_ROOT / Path(rel_path).name
     if local_path.exists():
         return local_path
     # Check UE_SAMPLE_ROOT env var
@@ -46,7 +45,7 @@ def _resolve_texture_path(rel_path: str) -> Path | None:
 
 def _parse_and_render(asset_path: Path) -> dict[str, Any]:
     """Parse an asset and render to JSON, returning the parsed dict."""
-    from uasset_read.parse_uasset import parse_uasset
+    from uasset_read import parse_uasset
     from uasset_read.ir_builder import build_package_ir
 
     result = parse_uasset(str(asset_path))
@@ -208,10 +207,12 @@ class TestTextureSemanticConsistency:
 
     def test_non_texture_class_no_texture_block(self):
         """Non-texture exports must NOT have a texture block."""
-        from tests.integration.sample_assets import LOCAL_SAMPLES
-
-        for sample in LOCAL_SAMPLES[:3]:
-            asset_path = LOCAL_SAMPLE_ROOT / sample.relative_path
+        from tests.conftest import _SAMPLE_CATEGORIES
+        sample_stems = []
+        for stems in _SAMPLE_CATEGORIES.values():
+            sample_stems.extend(stems[:1])  # take first from each category
+        for stem in sample_stems[:3]:
+            asset_path = _LOCAL_SAMPLE_ROOT / f"{stem}.uasset"
             if not asset_path.exists():
                 continue
             try:
