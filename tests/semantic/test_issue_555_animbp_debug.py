@@ -1,4 +1,5 @@
 """Test AnimBlueprint debug evidence generation (#555)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -70,6 +71,8 @@ def test_animbp_no_raw_guid_in_standard(samples_dir: Path):
     # No raw GUID-like values in content (except pattern IDs)
     guid_pattern = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
+    found_guids: list[tuple[str, str]] = []
+
     def _find_guids(obj, path=""):
         if isinstance(obj, dict):
             for k, v in obj.items():
@@ -78,7 +81,7 @@ def test_animbp_no_raw_guid_in_standard(samples_dir: Path):
             for i, item in enumerate(obj):
                 _find_guids(item, f"{path}[{i}]")
         elif isinstance(obj, str) and guid_pattern.search(obj):
-            # Allow known pattern IDs but not raw GUIDs
-            pass  # TODO: tighten once we know exact expected values
+            found_guids.append((path, obj))
 
-    _find_guids(doc)  # Should not raise
+    _find_guids(doc)
+    assert not found_guids, f"Standard output contains {len(found_guids)} raw GUIDs: {found_guids[:3]}"
