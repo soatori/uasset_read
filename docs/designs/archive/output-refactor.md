@@ -1,5 +1,7 @@
 # 输出格式重构设计
 
+> **状态：已废弃的目标方案。** 本文保留为历史字段清单，不得用于新的输出实现。唯一权威目标是 [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md)；其中使用 package envelope、`objects[]`、relations 和 view/depth，不采用本文的单一巨型顶层结构。
+
 ## 目标
 
 重构 JSON 输出结构，补齐缺失字段，保持 agent 友好性，避免过度输出。

@@ -1,5 +1,7 @@
 # Core/Extras 分层设计
 
+> **状态：历史分层方案。** 可用于理解现有 lazy import 决策，但新的 core/extension 边界由 [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md) 定义。
+
 > Issue #117 — 定义 core/extras 分层，extras 模块延迟导入
 
 ## 目标

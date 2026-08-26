@@ -1,81 +1,53 @@
-# Agent 开发参考文档索引
+# Agent 开发参考索引
 
-> 本文档面向 AI Agent（Claude Code / 其他 LLM Agent），提供快速查阅 uasset_read 项目开发文档的索引。
+> 本页只提供检索顺序。不得从历史设计、Issue 状态或 Wiki 文案推断功能已经实现。
 
-## 核心参考
+## 首先读取
 
-| 文档 | 路径 | 说明 |
-|------|------|------|
-| **开发指南** | `docs/guides/dev-guide.md` | 完整开发指南，解析管线、模块结构、测试要求 |
-| 项目配置 | `CLAUDE.md` | Agent 会话级指令：语言、架构概览、测试规则、开发命令、关键约束 |
-| 格式文档 | `docs/formats/uasset/` | 60+ 个 Markdown 文件，UE .uasset 格式详解，`Index.md` 为主入口 |
+| 目的 | 文档 |
+|---|---|
+| 仓库级工作规则 | [`AGENTS.md`](../../AGENTS.md) |
+| 最新目标架构 | [`docs/designs/2026-08-26-package-first-uasset-parser-refactor.md`](../designs/2026-08-26-package-first-uasset-parser-refactor.md) |
+| 历史设计状态 | [`docs/designs/README.md`](../designs/README.md) |
+| 已归档仓库级方案 | [`docs/designs/archive/README.md`](../designs/archive/README.md)，仅用于历史追溯 |
+| 当前用户能力 | [`README.md`](../../README.md)，随后核对源码与测试 |
+| UE 格式事实 | [`docs/formats/uasset/Index.md`](../formats/uasset/Index.md) 和 UE 源码 |
+| 当前 v0.5.5 API | [`wiki/07-Dev-Guide/Public-API.md`](../../wiki/07-Dev-Guide/Public-API.md) |
 
-## 开发指南速查
+## 判断顺序
 
-打开 `docs/guides/dev-guide.md` 后，按以下方式快速定位：
+1. 用 CodeGraph 读取当前符号、调用路径和影响范围。
+2. 用源码和严格测试确认当前行为。
+3. 用真实样本确认二进制分支和输出完整度。
+4. 用 UE 源码确认字段、版本门槛和序列化顺序。
+5. 只有在规划未来工作时才使用目标设计。
 
-### 按任务定位
+## 当前与目标边界
 
-| 你要做什么 | 跳转章节 |
-|------------|----------|
-| 解析 .uasset 文件 | [解析管线](../guides/dev-guide.md#架构) |
-| 读取二进制字段 | [FArchive](../guides/dev-guide.md#模块结构) |
-| 新增属性类型解析器 | [属性解析器](../guides/dev-guide.md#模块结构) |
-| 修改蓝图输出格式 | [蓝图解析](../guides/dev-guide.md#模块结构) |
-| 修改图分析逻辑 | [图分析](../guides/dev-guide.md#模块结构) |
-| 修复 Kismet 反编译 | [Kismet 反编译](../guides/dev-guide.md#模块结构) |
-| 修改 C++ 代码生成 | [C++ 代码生成](../guides/dev-guide.md#模块结构) |
-| 新增导出格式 | [导出系统](../guides/dev-guide.md#模块结构) |
-| 对照 UE 源码 | [UE 源码对照](../guides/dev-guide.md#外部参考) |
-| 添加测试用例 | [测试指南](../guides/dev-guide.md#测试) |
+- 当前 JSON 仍使用 Semantic 1.x，并选择单个 primary export。
+- 目标 v2 使用 package-first `PackageDocument`，输出所有 objects。
+- 当前 Pak/IoStore、日志和 Agent 能力不得按目标设计提前宣称完成。
+- 旧领域 Semantic 文档可用于理解 v0.5.5，但不得继续扩展为新的顶层 format。
 
-### 按 API 分类定位
+## 按任务定位
 
-| API 分类 | 章节 | 符号数量 |
-|----------|------|----------|
-| 解析入口 | [解析管线](../guides/dev-guide.md#架构) | 3 |
-| 属性解析器 | [属性解析器](../guides/dev-guide.md#模块结构) | 40+ |
-| 蓝图与图 | [蓝图解析](../guides/dev-guide.md#模块结构) / [图分析](../guides/dev-guide.md#模块结构) | 20+ |
-| Kismet 反编译 | [Kismet 反编译](../guides/dev-guide.md#模块结构) | 8+ |
-| 序列化 | [序列化模块](../guides/dev-guide.md#模块结构) | 12+ |
-| 格式化与导出 | [格式化器](../guides/dev-guide.md#模块结构) / [导出系统](../guides/dev-guide.md#模块结构) | 12+ |
-| C++ 代码生成 | [C++ 代码生成](../guides/dev-guide.md#模块结构) | 10+ |
-| 容器 | [PAK](../guides/dev-guide.md#模块结构) / [IoStore](../guides/dev-guide.md#模块结构) | 8+ |
-| N2C 中间格式 | [N2C 中间格式](../guides/dev-guide.md#模块结构) | 8+ |
-| Agent 管线 | [Agent 速查索引](../guides/dev-guide.md#模块结构) | 4 |
-
-### Agent 解析提示
-
-HTML 文档包含以下结构化标记，可直接 grep 提取：
-
-- `data-api="函数名"` — 所有 API 签名块（33 个）
-- `data-section="章节id"` — 所有 section 标签（29 个）
-- `data-related="true"` — 相关章节交叉引用（11 组）
-- `class="api-sig"` — API 签名块，内含函数名、参数、返回值
-- `class="dep-tree"` — 依赖树，monospace 文本格式
-- `class="nav-link"` — 侧边栏导航链接
-- `<table>` — 所有表格，结构：第 1 列 = 键/名称，第 2 列 = 值/函数，第 3 列 = 说明
-
-## 外部参考
-
-| 资源 | 路径/链接 | 说明 |
-|------|-----------|------|
-| UE 格式文档 | `docs/formats/uasset/Index.md` | 60+ Markdown 文件，主索引 |
-| CUE4Parse C# 参考 | `external/CUE4Parse/` | 交叉验证解析逻辑 |
-| 蓝图节点参考 | `docs/reference/Blueprint_Node_Text_Reference.md` | 节点文本格式参考 |
-| UE 加载流程 | `docs/reference/UE_uasset_Loading_Flow.md` | UE 内部 uasset 加载流程 |
-| 蓝图转 C++ 指南 | `docs/reference/blueprint-to-cpp-guide.md` | 蓝图→C++ 转换指南 |
-
-## 约束速记
-
-- **仅未烘焙资产** — Cooked 资产图数据已剥离
-- **只读** — 不支持修改/写入
-- **零依赖** — 不向 `dependencies` 添加第三方包
-- **参考 UE 源码** — 格式理解必须追溯 UE C++ 源码
+| 任务 | 入口 |
+|---|---|
+| 当前解析管线 | `src/uasset_read/core/__init__.py`, `src/uasset_read/pipeline/` |
+| 当前 Semantic JSON | `src/uasset_read/semantic/`, [`semantic-json.md`](../formats/uasset/semantic-json.md) |
+| Package/sidecar/provider | `src/uasset_read/package.py` |
+| 版本上下文 | `src/uasset_read/versioning.py`, `src/uasset_read/serializers/package_summary.py` |
+| 属性解析 | `src/uasset_read/serializers/property_tags.py`, `src/uasset_read/parsers/` |
+| Blueprint/Kismet | `src/uasset_read/blueprint/`, `src/uasset_read/graph/`, `src/uasset_read/kismet/` |
+| Pak/IoStore | `src/uasset_read/pak/`, `src/uasset_read/iostore/` |
+| 日志 | `src/uasset_read/project_logging.py` |
+| 重构验收条件 | 最新目标架构的 `Acceptance Gates` |
 
 ## 工作规范
 
-- 临时文件放 `temp/` 目录，不放项目根目录
-- 代码注释使用中文，错误提示使用中文
-- 新功能必须配套至少一个单元测试
-- 核心模块覆盖率 ≥ 90%
+- 代码、注释和错误信息使用英文；文档保持所在文档语言一致。
+- 临时调查材料放入 `temp/`。
+- 二进制读取必须有边界验证和严格回归测试。
+- 修改 benchmark 测试前先取得用户确认。
+- 不提交本机 UE 源码绝对路径、外部仓库副本、日志或 Agent 缓存。
+- 报告结论必须标明是 current evidence 还是 target decision。

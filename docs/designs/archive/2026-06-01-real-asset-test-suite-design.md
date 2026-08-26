@@ -1,5 +1,7 @@
 # 真实案例测试套件设计
 
+> **状态：已归档的历史测试方案。** 不再作为当前测试结构或 v2 验收标准；当前目标见 [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md) 的 Testing Strategy 与 Acceptance Gates。
+
 **日期**: 2026-06-01
 **作者**: Claude Code
 **状态**: 待实现

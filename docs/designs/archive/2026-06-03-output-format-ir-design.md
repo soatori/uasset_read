@@ -1,5 +1,7 @@
 # 输出格式统一化与 CLI 核心分离设计
 
+> **状态：历史方案，目标架构已废弃。** 本文记录早期 IR/renderer 决策。新工作必须遵循 [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md)，并以当前源码和测试判断哪些旧能力已经实现。
+
 **日期**: 2026-06-03 | **状态**: 已批准
 
 ## 1. 问题与目标

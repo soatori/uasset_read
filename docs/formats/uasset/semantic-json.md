@@ -1,5 +1,7 @@
 # Semantic JSON Format
 
+> **Status: current v0.5.5 legacy contract, not the v2 target.** This page documents the checked-in Semantic JSON 1.x pipeline. New architecture work must follow the [package-first refactor design](../../designs/2026-08-26-package-first-uasset-parser-refactor.md), which replaces the single-primary-asset envelope with a package document containing all objects. Do not add new top-level domain formats here.
+
 Common JSON contract for `uasset_read` semantic output. Domain schemas compose via `allOf`/`$ref` with this schema.
 
 ## CLI Usage

@@ -1,5 +1,7 @@
 # 外部项目对标改进计划
 
+> **状态：已归档的历史对标方案。** 其中的外部项目结论仅用于历史参考；新的架构取舍与迁移顺序以 [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md) 为准。
+
 > 日期: 2026-07-01
 > 状态: **待评审**
 > 对标项目: uasset-reader-js / UnrealBPInspect / AssetToJson

@@ -1,5 +1,7 @@
 # Blueprint 语义 JSON 输出设计
 
+> **状态：已归档的 Semantic JSON 1.x 设计。** 本文不是当前 v2 目标；新的 Blueprint 语义必须作为 package object extension，遵循 [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md)。
+
 日期：2026-08-11
 
 状态：已通过对话设计评审，等待书面规格复核

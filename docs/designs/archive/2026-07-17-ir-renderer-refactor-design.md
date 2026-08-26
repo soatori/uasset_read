@@ -1,5 +1,7 @@
 # IR 模型层与渲染器可维护性改进设计
 
+> **Status: historical proposal; target architecture superseded.** Retain this document as refactor history only. New work follows [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md).
+
 **日期**: 2026-07-17
 **关联 Issue**: #436
 **状态**: 待审批

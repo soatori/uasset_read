@@ -1,5 +1,7 @@
 # Blueprint Semantic JSON Extension (#554) Implementation Plan
 
+> **Status: archived Semantic JSON 1.x implementation plan.** It records the v0.5.5 Blueprint extension work and must not be replayed as the v2 architecture. Use [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md) for new work.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Emit Blueprint-specific semantic JSON (`format: uasset_read.blueprint_semantic`, `format_version: 1.0.0`) through the #551 common pipeline, covering graphs, nodes, Pin/Port endpoints, control/data flow, types, variables, components, and a declaration index, with Draft 2020-12 schema, semantic validator, honest coverage/diagnostics, standard/debug projection, and byte determinism.
@@ -10,8 +12,8 @@
 
 **Spec:**
 - Issue #554 (GitHub) and its comments (audit findings, #551 migration notes, design references).
-- `docs/superpowers/specs/2026-08-11-blueprint-semantic-json-design.md` (Blueprint design spec — the authoritative contract; sections cited as BP-§N below).
-- `docs/designs/2026-08-13-non-blueprint-semantic-design.md` (shared patterns: §4 collision guard, §7 coverage states, §8 `$bounded`, §9.1 test layers, §11.3 one-shot replacement).
+- `2026-08-11-blueprint-semantic-json-design.md` (archived Blueprint design spec; sections cited as BP-§N below).
+- `2026-08-13-non-blueprint-semantic-design.md` (archived shared Semantic 1.x patterns).
 - `docs/formats/uasset/semantic-json.md` (common envelope contract from #551).
 
 ## Global Constraints

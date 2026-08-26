@@ -1,5 +1,7 @@
 # Remaining UAsset Types — Semantic JSON Output Design
 
+> **Status: implemented current-state history for v0.5.5; future target superseded.** Verify shipped behavior in source/tests. Do not add more Semantic 1.x top-level formats; use [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md).
+
 Date: 2026-08-17
 
 Status: Implemented on `dev-0.5.5`

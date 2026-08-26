@@ -1,5 +1,7 @@
 # Non-Blueprint Semantic JSON Output Design
 
+> **Status: historical Semantic 1.x design; target architecture superseded.** It may explain current code, but new domain work must use object-scoped semantics in [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md), not add another top-level domain format.
+
 Date: 2026-08-13
 
 Status: Design approved, pending implementation

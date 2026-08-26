@@ -6,6 +6,8 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 > 📦 **v0.5.5** — Zero runtime dependencies · Python 3.10+ · 200 source files · 70+ UE class types
 
+> **Refactor status:** v0.5.5 behavior below is the current implementation. The next architecture is package-first, preserves every export, separates Legacy/Zen readers, and exposes bounded Agent tools. It is designed but not yet implemented. See the [authoritative refactor report](docs/designs/2026-08-26-package-first-uasset-parser-refactor.md) and [design status index](docs/designs/README.md).
+
 ## Why uasset_read?
 
 Unreal Engine blueprints are stored as binary `.uasset` files — unreadable without the editor. uasset_read bridges this gap by extracting:
@@ -69,7 +71,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **JSON** — structured output via semantic pipeline, optimized for C++ translation reference
 - **Markdown** — formatted documentation with tables and embedded Mermaid flowcharts
 
-### Architecture
+### Current v0.5.5 Architecture
 
 - **Renderer system** — Markdown renderer; JSON output routed through semantic pipeline (`semantic/`)
 - **Core API** — `parse_single()`, `parse_batch()`, `diff_single()`, `list_formats()` for simplified programmatic access
@@ -134,10 +136,10 @@ python run.py path/to/file.uasset --output-level debug   # Output verbosity leve
 | `--log-repeat-limit` | 5 | Keep the first N repeated DEBUG templates; 0 disables aggregation |
 | `--clean-logs` | false | Plan cleanup only, do not delete |
 
-Each CLI invocation writes a separate
-`uasset_read-<timestamp>-pid<PID>-<run_id>.log` file. Rotated backups remain
-part of the same run family. Isolated workers forward their diagnostics to the
-parent process, so they do not open or rotate the run file independently.
+The current implementation intends one run-scoped log family per CLI invocation.
+Logging is part of the v2 refactor because nested API configuration can currently
+replace handlers. The target library will emit structured diagnostics by default
+and create file logs only when the application explicitly requests them.
 
 Or via module:
 
@@ -198,6 +200,8 @@ from uasset_read.renderers import MarkdownRenderer
 Full API list: see `src/uasset_read/__init__.py` and `wiki/07-Dev-Guide/Public-API.md`.
 
 ## Architecture
+
+The following diagram documents the current v0.5.5 implementation, not the v2 target. The target data flow and migration gates are defined in the [package-first refactor report](docs/designs/2026-08-26-package-first-uasset-parser-refactor.md).
 
 FArchive pipeline pattern mirroring UE's internal structure:
 
@@ -278,12 +282,14 @@ When Unreal Editor 5.8 is released, use the official Experimental Unreal MCP ser
 | **Asset pipeline automation** | Batch-parse thousands of `.uasset` files → extract metadata → build searchable index |
 | **Technical debt analysis** | Trace execution flows → identify deeply nested logic → find dead code |
 
-## Limitations
+## Current v0.5.5 Limitations
 
 - **Only unbaked/editor-saved assets**: Cooked assets have stripped graph data
 - **Limited bytecode decompilation**: Kismet EExprToken→AST→C++ implemented for known token types
 - **No resource export**: Binary data too large; metadata only
 - **Read-only**: Parsing only, no modification
 - **UE source reference required**: No official .uasset format documentation
+
+The v2 target removes “editor-saved only” as an architectural assumption, but it cannot restore graph data stripped during cooking. Cooked/Zen support must report the data that actually remains and mark unavailable semantics honestly.
 
 ---

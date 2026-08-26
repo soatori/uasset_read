@@ -1,5 +1,7 @@
 # 开发范围及统一性设计
 
+> **状态：历史范围方案，未来范围已废弃。** 当前实现状态以源码/测试为准；新的 package-first 范围和里程碑以 [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md) 为准。
+
 **日期**: 2026-06-03 | **状态**: 已批准
 
 ## 1. 项目定位

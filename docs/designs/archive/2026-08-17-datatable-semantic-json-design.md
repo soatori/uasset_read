@@ -1,5 +1,7 @@
 # DataTable Semantic JSON Extension Design
 
+> **Status: historical Semantic 1.x design; target architecture superseded.** Preserve this document for DataTable evidence and current implementation history. New work follows [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md), where DataTable semantics belong to an object inside `PackageDocument`.
+
 > Issue: [#557](https://github.com/soatori/uasset_read/issues/557) (first sub-issue — DataTable)
 > Builds on: [#551](https://github.com/soatori/uasset_read/issues/551) (common infrastructure — CLOSED)
 > Date: 2026-08-17

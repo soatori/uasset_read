@@ -1,5 +1,7 @@
 # Material Semantic JSON Extension Design
 
+> **Status: implemented current-state history for v0.5.5; future target superseded.** Verify implementation claims in source/tests. New architecture work follows [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md), where material semantics are attached to an object inside a package document.
+
 > Issue: [#556](https://github.com/soatori/uasset_read/issues/556)
 > Builds on: [#551](https://github.com/soatori/uasset_read/issues/551) (common infrastructure — CLOSED)
 > Date: 2026-08-15

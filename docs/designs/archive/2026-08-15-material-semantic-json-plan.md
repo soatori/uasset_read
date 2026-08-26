@@ -1,5 +1,7 @@
 # Material Semantic JSON Extension Implementation Plan
 
+> **Status: historical implementation plan for Semantic 1.x.** Do not reuse its envelope/schema architecture for v2. The current target is [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add Material/MaterialInstance semantic JSON output with expression graphs, data-flow connections, parameters, and material properties.
