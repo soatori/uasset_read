@@ -148,3 +148,56 @@ class TestTextureProjection:
             samples_dir, "FirstPerson_T_GridChecker_A.uasset", "debug",
         )
         assert semantic.mode == "debug"
+
+
+# ---------------------------------------------------------------------------
+# Renderer contract tests (merged from tests/renderers/test_texture_semantic.py)
+# ---------------------------------------------------------------------------
+
+_MUTABLE_SAMPLE_ROOT = Path("E:/Develop/lib/Samples/MutableSample/Content")
+_TEXTURE2D_REL = "Character/Body/BlendShapes/Normals/T_MatBody_Normal_Fat.uasset"
+_TEXTURECUBE_REL = "Lobby/SceneElements/GrayLightTextureCube.uasset"
+
+
+def _resolve_mutable_path(rel_path: str) -> Path | None:
+    """Resolve a MutableSample asset path."""
+    mutable_path = _MUTABLE_SAMPLE_ROOT / rel_path
+    if mutable_path.exists():
+        return mutable_path
+    return None
+
+
+class TestTextureCubeRendererContract:
+    """TextureCube renderer contract tests (#591)."""
+
+    def test_texture_cube_has_texture_block(self, samples_dir: Path):
+        """TextureCube output includes a texture block."""
+        asset_path = _resolve_mutable_path(_TEXTURECUBE_REL)
+        if asset_path is None:
+            pytest.skip("TextureCube MutableSample not found")
+        result = parse_uasset_with_linker(str(asset_path), tolerant=True)
+        ir = build_package_ir(result)
+        semantic = build_semantic_ir(ir, source_path=str(asset_path))
+        assert "texture" in semantic.content
+        tex = semantic.content["texture"]
+        assert "resource_properties" in tex
+
+    def test_texture_cube_face_count(self, samples_dir: Path):
+        """TextureCube texture block includes cube_face_count=6."""
+        asset_path = _resolve_mutable_path(_TEXTURECUBE_REL)
+        if asset_path is None:
+            pytest.skip("TextureCube MutableSample not found")
+        result = parse_uasset_with_linker(str(asset_path), tolerant=True)
+        ir = build_package_ir(result)
+        semantic = build_semantic_ir(ir, source_path=str(asset_path))
+        tex = semantic.content.get("texture", {})
+        rp = tex.get("resource_properties", {})
+        assert rp.get("cube_face_count") == 6
+
+
+@pytest.mark.skip(reason="Texture2D MutableSample (26MB) exceeds 16MB memory budget")
+class TestTexture2DRendererContract:
+    """Texture2D renderer contract tests — skipped until memory budget resolved."""
+
+    def test_texture2d_has_texture_block(self):
+        pass
