@@ -1,0 +1,363 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/soatori/uasset_read/schemas/package_document_v2.json",
+  "title": "PackageDocument v2",
+  "description": "Unified package-level output for uasset_read v2. One document per .uasset/.umap file, expressing all exports as first-class objects.",
+  "type": "object",
+  "required": ["format", "format_version", "view", "depth", "source", "package", "objects", "relations", "dependencies", "payloads", "diagnostics", "summary"],
+  "properties": {
+    "format": {
+      "const": "uasset_read.package",
+      "description": "Fixed format identifier."
+    },
+    "format_version": {
+      "const": "2.0",
+      "description": "Schema version."
+    },
+    "view": {
+      "type": "string",
+      "enum": ["semantic", "raw", "debug"],
+      "description": "Determination of field purpose."
+    },
+    "depth": {
+      "type": "string",
+      "enum": ["package", "object", "asset", "decode"],
+      "description": "Determines parsing cost and detail level."
+    },
+    "source": {
+      "$ref": "#/$defs/SourceInfo"
+    },
+    "package": {
+      "$ref": "#/$defs/PackageInfo"
+    },
+    "objects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ObjectEntry"
+      },
+      "description": "All exports in table-index order."
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Relation"
+      },
+      "description": "Object-to-object relationships."
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Dependency"
+      },
+      "description": "Package-level import dependencies."
+    },
+    "payloads": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PayloadDescriptor"
+      },
+      "description": "Large payload descriptors (texture, audio, etc.)."
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Diagnostic"
+      },
+      "description": "Structured diagnostics."
+    },
+    "summary": {
+      "$ref": "#/$defs/Summary"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "SourceInfo": {
+      "type": "object",
+      "required": ["kind", "name", "size"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["loose", "pak", "iostore", "memory"],
+          "description": "Source container type."
+        },
+        "name": {
+          "type": "string",
+          "description": "File or entry name."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total source size in bytes."
+        },
+        "path": {
+          "type": "string",
+          "description": "Relative or absolute path (omitted in agent output for security)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "PackageInfo": {
+      "type": "object",
+      "required": ["name", "layout", "package_flags"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Package object path (e.g. /Game/BP_Light)."
+        },
+        "layout": {
+          "type": "string",
+          "enum": ["legacy", "zen"],
+          "description": "Binary layout family."
+        },
+        "engine_version": {
+          "type": "string",
+          "description": "Saved-by engine version string."
+        },
+        "compatible_engine_version": {
+          "type": "string"
+        },
+        "package_flags": {
+          "type": "integer"
+        },
+        "total_header_size": {
+          "type": "integer"
+        },
+        "export_count": {
+          "type": "integer"
+        },
+        "import_count": {
+          "type": "integer"
+        },
+        "name_count": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ObjectEntry": {
+      "type": "object",
+      "required": ["id", "name", "roles", "status"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^(export|import):[0-9]+$",
+          "description": "Stable id: table type + zero-based index."
+        },
+        "table_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "class": {
+          "type": "string",
+          "description": "Resolved class name (may be null if unresolvable)."
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["asset", "generated_class", "class_default_object", "metadata", "subobject", "graph", "payload_owner"]
+          },
+          "description": "叠加标签，不是互斥类型。"
+        },
+        "serial_region": {
+          "$ref": "#/$defs/Region"
+        },
+        "status": {
+          "$ref": "#/$defs/ObjectStatus"
+        },
+        "properties": {
+          "description": "Property bag (only when depth >= object)."
+        },
+        "semantic": {
+          "type": ["object", "null"],
+          "description": "Domain-specific extension (only when depth >= asset and handler supports this object)."
+        },
+        "coverage": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CoverageEntry"
+          }
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Diagnostic"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "Region": {
+      "type": "object",
+      "required": ["offset", "size"],
+      "properties": {
+        "offset": { "type": "integer", "minimum": 0 },
+        "size": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "ObjectStatus": {
+      "type": "object",
+      "required": ["parse", "semantic"],
+      "properties": {
+        "parse": {
+          "type": "string",
+          "enum": ["complete", "partial", "opaque", "failed"]
+        },
+        "semantic": {
+          "type": "string",
+          "enum": ["complete", "partial", "unavailable", "not_requested"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Relation": {
+      "type": "object",
+      "required": ["kind", "from", "to"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["outer_of", "class_of", "generated_class_of", "default_object_of", "template_of", "depends_on", "references"]
+        },
+        "from": {
+          "type": "string",
+          "pattern": "^(export|import):[0-9]+$"
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^(export|import):[0-9]+$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Dependency": {
+      "type": "object",
+      "required": ["index", "class", "object_name"],
+      "properties": {
+        "index": { "type": "integer" },
+        "class": { "type": "string" },
+        "object_name": { "type": "string" },
+        "package_name": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "PayloadDescriptor": {
+      "type": "object",
+      "required": ["id", "owner", "kind", "source_region", "offset", "stored_size", "status"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^payload:[0-9]+$" },
+        "owner": { "type": "string", "pattern": "^(export|import):[0-9]+$" },
+        "kind": {
+          "type": "string",
+          "enum": ["texture_mip", "audio", "mesh_vertex", "mesh_index", "bulk_data", "other"]
+        },
+        "source_region": {
+          "type": "string",
+          "enum": ["main", "uexp", "ubulk", "uptnl", "ucas"]
+        },
+        "offset": { "type": "integer", "minimum": 0 },
+        "stored_size": { "type": "integer", "minimum": 0 },
+        "logical_size": { "type": "integer", "minimum": 0 },
+        "compression": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["available", "external", "missing", "unsupported"]
+        },
+        "hash": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "Diagnostic": {
+      "type": "object",
+      "required": ["severity", "code", "message", "stage"],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": ["info", "warning", "error", "critical"]
+        },
+        "code": {
+          "type": "string",
+          "description": "Stable diagnostic code (e.g. PROPERTY_VALUE_REMAINDER)."
+        },
+        "message": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string",
+          "description": "Parse stage (e.g. properties.tagged, package.summary)."
+        },
+        "object_id": {
+          "type": "string",
+          "pattern": "^(export|import):[0-9]+$"
+        },
+        "property_path": {
+          "type": "string"
+        },
+        "offset": {
+          "type": "integer"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "effect": {
+          "type": "string",
+          "enum": ["semantic_loss", "data_loss", "parse_failure", "recovery"]
+        },
+        "recoverable": {
+          "type": "boolean"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Aggregation count for repeated identical diagnostics."
+        }
+      },
+      "additionalProperties": false
+    },
+    "CoverageEntry": {
+      "type": "object",
+      "required": ["feature", "status"],
+      "properties": {
+        "feature": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["present", "partial", "missing", "unsupported"]
+        },
+        "detail": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Summary": {
+      "type": "object",
+      "required": ["object_count", "asset_object_ids"],
+      "properties": {
+        "object_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "asset_object_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(export|import):[0-9]+$"
+          },
+          "description": "Objects with the 'asset' role (sorted by table index)."
+        },
+        "total_imports": {
+          "type": "integer"
+        },
+        "total_exports": {
+          "type": "integer"
+        },
+        "diagnostic_counts": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

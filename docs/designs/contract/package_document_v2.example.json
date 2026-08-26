@@ -1,0 +1,90 @@
+{
+  "format": "uasset_read.package",
+  "format_version": "2.0",
+  "view": "semantic",
+  "depth": "asset",
+  "source": {
+    "kind": "loose",
+    "name": "ABP_RifleAnimLayers.uasset",
+    "size": 7138
+  },
+  "package": {
+    "name": "/Game/Weapons/Rifle/ABP_RifleAnimLayers",
+    "layout": "legacy",
+    "engine_version": "5.4.4",
+    "package_flags": 0,
+    "total_header_size": 0,
+    "export_count": 10,
+    "import_count": 191,
+    "name_count": 0
+  },
+  "objects": [
+    {
+      "id": "export:0",
+      "table_index": 0,
+      "name": "Default__ABP_RifleAnimLayers_C",
+      "class": "AnimBlueprintGeneratedClass",
+      "roles": ["class_default_object"],
+      "serial_region": { "offset": 0, "size": 0 },
+      "status": { "parse": "complete", "semantic": "not_requested" },
+      "properties": null,
+      "semantic": null,
+      "coverage": [],
+      "diagnostics": []
+    },
+    {
+      "id": "export:1",
+      "table_index": 1,
+      "name": "ABP_RifleAnimLayers",
+      "class": "AnimBlueprint",
+      "roles": ["asset"],
+      "serial_region": { "offset": 128, "size": 3456 },
+      "status": { "parse": "complete", "semantic": "complete" },
+      "properties": {},
+      "semantic": {
+        "kind": "anim_blueprint",
+        "graphs": [],
+        "variables": [],
+        "state_machines": []
+      },
+      "coverage": [
+        { "feature": "graphs", "status": "present" },
+        { "feature": "variables", "status": "present" },
+        { "feature": "state_machines", "status": "present" }
+      ],
+      "diagnostics": []
+    },
+    {
+      "id": "export:2",
+      "table_index": 2,
+      "name": "ABP_RifleAnimLayers_C",
+      "class": "AnimBlueprintGeneratedClass",
+      "roles": ["asset", "generated_class"],
+      "serial_region": { "offset": 3584, "size": 2048 },
+      "status": { "parse": "complete", "semantic": "partial" },
+      "properties": {},
+      "semantic": {
+        "kind": "class",
+        "defaults": {}
+      },
+      "coverage": [
+        { "feature": "properties", "status": "present" }
+      ],
+      "diagnostics": []
+    }
+  ],
+  "relations": [
+    { "kind": "generated_class_of", "from": "export:2", "to": "export:1" },
+    { "kind": "default_object_of", "from": "export:0", "to": "export:2" }
+  ],
+  "dependencies": [],
+  "payloads": [],
+  "diagnostics": [],
+  "summary": {
+    "object_count": 3,
+    "asset_object_ids": ["export:1", "export:2"],
+    "total_imports": 191,
+    "total_exports": 10,
+    "diagnostic_counts": {}
+  }
+}
