@@ -30,9 +30,7 @@ class EX_AddMulticastDelegate(KismetExpression):
         return EExprToken.EX_AddMulticastDelegate
 
     @classmethod
-    def from_archive(
-        cls, archive: FKismetArchive, name_map: list[str]
-    ) -> EX_AddMulticastDelegate:
+    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_AddMulticastDelegate:
         d = archive.read_expression()
         d_add = archive.read_expression()
         return cls(Delegate=d, DelegateToAdd=d_add)
@@ -55,9 +53,7 @@ class EX_ClearMulticastDelegate(KismetExpression):
         return EExprToken.EX_ClearMulticastDelegate
 
     @classmethod
-    def from_archive(
-        cls, archive: FKismetArchive, name_map: list[str]
-    ) -> EX_ClearMulticastDelegate:
+    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ClearMulticastDelegate:
         d = archive.read_expression()
         return cls(DelegateToClear=d)
 
@@ -81,9 +77,7 @@ class EX_BindDelegate(KismetExpression):
         return EExprToken.EX_BindDelegate
 
     @classmethod
-    def from_archive(
-        cls, archive: FKismetArchive, name_map: list[str]
-    ) -> EX_BindDelegate:
+    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_BindDelegate:
         fname_ref = archive.xfer_fname()
         d = archive.read_expression()
         obj = archive.read_expression()
@@ -114,9 +108,7 @@ class EX_RemoveMulticastDelegate(KismetExpression):
         return EExprToken.EX_RemoveMulticastDelegate
 
     @classmethod
-    def from_archive(
-        cls, archive: FKismetArchive, name_map: list[str]
-    ) -> EX_RemoveMulticastDelegate:
+    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_RemoveMulticastDelegate:
         d = archive.read_expression()
         d_remove = archive.read_expression()
         return cls(Delegate=d, DelegateToRemove=d_remove)
@@ -140,9 +132,7 @@ class EX_InstanceDelegate(KismetExpression):
         return EExprToken.EX_InstanceDelegate
 
     @classmethod
-    def from_archive(
-        cls, archive: FKismetArchive, name_map: list[str]
-    ) -> EX_InstanceDelegate:
+    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_InstanceDelegate:
         fname_ref = archive.xfer_fname()
         return cls(FunctionName=fname_ref.base_name, FunctionNameRef=fname_ref)
 

@@ -2,6 +2,7 @@
 
 Dispatches on object_class for SubsurfaceProfile, CurveFloat, and FoliageType.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -12,9 +13,16 @@ if TYPE_CHECKING:
 
 def _build_subsurface_profile(asset_type_data: dict, cov) -> dict:
     props: dict = {}
-    for key in ("surface_albedo", "mean_free_path", "mean_free_path_dist",
-                "subsurface_color", "boundary_color_bleed", "extinction_scale",
-                "normal_scale", "custom_profile_curve"):
+    for key in (
+        "surface_albedo",
+        "mean_free_path",
+        "mean_free_path_dist",
+        "subsurface_color",
+        "boundary_color_bleed",
+        "extinction_scale",
+        "normal_scale",
+        "custom_profile_curve",
+    ):
         val = asset_type_data.get(key)
         if val is not None:
             props[key] = val
@@ -44,9 +52,17 @@ def _build_curve(asset_type_data: dict, cov) -> dict:
 
 def _build_foliage_type(asset_type_data: dict, cov) -> dict:
     props: dict = {}
-    for key in ("mesh_ref", "material_refs", "density", "scaling",
-                "scale_min", "scale_max", "collision_radius",
-                "height_range_min", "height_range_max"):
+    for key in (
+        "mesh_ref",
+        "material_refs",
+        "density",
+        "scaling",
+        "scale_min",
+        "scale_max",
+        "collision_radius",
+        "height_range_min",
+        "height_range_max",
+    ):
         val = asset_type_data.get(key)
         if val is not None:
             props[key] = val

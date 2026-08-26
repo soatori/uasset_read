@@ -11,6 +11,7 @@ Format reference:
 - Engine/Plugins/Animation/ControlRig/Source/ControlRig/Public/Sequencer/MovieSceneControlRigParameterTrack.h
 - Engine/Plugins/Animation/ControlRig/Source/ControlRig/Public/Sequencer/MovieSceneControlRigParameterSection.h
 """
+
 from __future__ import annotations
 
 import logging

@@ -8,18 +8,39 @@ from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-from uasset_read.models.blueprint import BlueprintVariable, BlueprintMetadata, BlueprintFunction, BlueprintEvent, FunctionParameter
+from uasset_read.models.blueprint import (
+    BlueprintVariable,
+    BlueprintMetadata,
+    BlueprintFunction,
+    BlueprintEvent,
+    FunctionParameter,
+)
 from uasset_read.models.properties import PropertyValue, StructValue
 from uasset_read.models.core import FEdGraphPinType
 from uasset_read.parsers.property_types import parse_default_value
 from uasset_read.serializers.graph import read_ed_graph_pin_type
 from uasset_read.constants import (
-    CPF_Edit, CPF_EditConst, CPF_BlueprintVisible, CPF_BlueprintReadOnly,
-    CPF_Transient, CPF_BlueprintAssignable, CPF_RepNotify, CPF_SaveGame,
-    CPF_Net, CPF_InstancedReference, CPF_Config, CPF_Deprecated,
-    CPF_Protected, CPF_ExposeOnSpawn,
-    CPF_DuplicateTransient, CPF_NoClear, CPF_BlueprintCallable, CPF_Interp,
-    CPF_NonPIEDuplicateTransient, format_guid_bytes, UE_NONE_SENTINEL,
+    CPF_Edit,
+    CPF_EditConst,
+    CPF_BlueprintVisible,
+    CPF_BlueprintReadOnly,
+    CPF_Transient,
+    CPF_BlueprintAssignable,
+    CPF_RepNotify,
+    CPF_SaveGame,
+    CPF_Net,
+    CPF_InstancedReference,
+    CPF_Config,
+    CPF_Deprecated,
+    CPF_Protected,
+    CPF_ExposeOnSpawn,
+    CPF_DuplicateTransient,
+    CPF_NoClear,
+    CPF_BlueprintCallable,
+    CPF_Interp,
+    CPF_NonPIEDuplicateTransient,
+    format_guid_bytes,
+    UE_NONE_SENTINEL,
 )
 
 # UE property type name -> standardized pin_category mapping
@@ -89,6 +110,7 @@ _PIN_CATEGORY_TO_CPP_TYPE = {
     "multicastdelegate": "void",
 }
 
+
 def _map_pin_category_to_cpp_type(pin_category: str) -> str:
     """Map pin_category to C++ type.
 
@@ -117,104 +139,37 @@ def _map_pin_category_to_cpp_type(pin_category: str) -> str:
     # Default: return the original type name
     return normalized
 
+
 # Blueprint asset metadata property names (not user-defined variables)
-BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset({
-    # Core blueprint metadata
-    "ParentClass",
-    "ParentClassProperty",
-    "SuperClass",
-    "BlueprintGuid",
-    "BlueprintCategory",
-    "BlueprintDescription",
-    "BlueprintType",
-    "IsBlueprintBase",
-    "KismetSchemaDeprecationWarning",
-    "NativeParent",
-    "ObjectArchitecture",
-    "ObjectParentClass",
-    "SupportedClasses",
-    "HiddenCategories",
-    "ModulesToIgnoreInReloadAndBlueprints",
-    "None",  # Sentinel marker
-    "NoneProperty",
-    # Internal engine properties (not user-defined variables)
-    "CachedEditorData",
-    "BlueprintStatus",
-    "BlueprintLogLevel",
-    "BlueprintCompileOptions",
-    "BlueprintGeneratedClass",
-    "OriginalClassName",
-    "HasBeenRegenerated",
-    "RegenerateClassAttemptCount",
-    "bBeingCompiled",
-    "bCompiled",
-    "bRegenerating",
-    "bDuplicating",
-    "bImportedFromAnotherAsset",
-    "bCanUseSimplifiedConstructor",
-    "bIsNewObject",
-    "bHasDocumentedClass",
-    "bDisplayCompileSucceededLog",
-    "bForceFullDeployment",
-    "bQueuedForDeletion",
-    "bRecompileOnLoad",
-    "bDisableCompileOnLoad",
-    "bDeferCompilation",
-    "bForceCompilation",
-    "bCreateNewModule",
-    "bLoadPublicModules",
-    "bRecompileAfterLoad",
-    "bEnableParallelCompilation",
-    "bEnableCompilation",
-    "bForceReregistration",
-    "bForceRegeneration",
-    "bIsIncrementalCompile",
-    "bIsRegeneratingOnLoad",
-    "bIsRegenerating",
-    "bIsRegeneratingClass",
-    "bIsRegeneratingInterface",
-    "bIsRegeneratingStruct",
-    "bIsRegeneratingEnum",
-    "bIsRegeneratingFunction",
-    "bIsRegeneratingVariable",
-    "bIsRegeneratingEvent",
-    "bIsRegeneratingDelegate",
-    "bIsRegeneratingInterfaceFunction",
-    "bIsRegeneratingInterfaceVariable",
-    "bIsRegeneratingInterfaceEvent",
-    "bIsRegeneratingInterfaceDelegate",
-    "bIsRegeneratingStructVariable",
-    "bIsRegeneratingStructFunction",
-    "bIsRegeneratingStructEvent",
-    "bIsRegeneratingStructDelegate",
-    "bIsRegeneratingEnumValue",
-    "bIsRegeneratingEnumFunction",
-    "bIsRegeneratingEnumEvent",
-    "bIsRegeneratingEnumDelegate",
-    # Rendering/editor related
-    "SelectedNodes",
-    "GraphZoom",
-    "PanningAmount",
-    "bAllowRenaming",
-    "bAllowMultipleOutputs",
-    "bAllowMultipleInputs",
-    # Variable description array (already handled via NewVariables)
-    "NewVariables",
-    # Function/event lists
-    "UbergraphGraph",
-    "FunctionList",
-    "EventGraphs",
-})
-
-def _is_internal_engine_property(prop_name: str) -> bool:
-    """Determine if property is an internal engine property (not user-defined variable).
-
-    Only matches explicit engine internal property names (e.g. compile status flags, blueprint generated class references).
-    Does not use prefix matching to avoid filtering out legitimate blueprint variables (e.g. bIsPlayer, CachedHealth).
-    """
-    # Explicit internal engine property names (exact match)
-    internal_exact_names = frozenset({
-        # Compile/generation status flags
+BLUEPRINT_METADATA_PROPERTY_NAMES = frozenset(
+    {
+        # Core blueprint metadata
+        "ParentClass",
+        "ParentClassProperty",
+        "SuperClass",
+        "BlueprintGuid",
+        "BlueprintCategory",
+        "BlueprintDescription",
+        "BlueprintType",
+        "IsBlueprintBase",
+        "KismetSchemaDeprecationWarning",
+        "NativeParent",
+        "ObjectArchitecture",
+        "ObjectParentClass",
+        "SupportedClasses",
+        "HiddenCategories",
+        "ModulesToIgnoreInReloadAndBlueprints",
+        "None",  # Sentinel marker
+        "NoneProperty",
+        # Internal engine properties (not user-defined variables)
+        "CachedEditorData",
+        "BlueprintStatus",
+        "BlueprintLogLevel",
+        "BlueprintCompileOptions",
+        "BlueprintGeneratedClass",
+        "OriginalClassName",
+        "HasBeenRegenerated",
+        "RegenerateClassAttemptCount",
         "bBeingCompiled",
         "bCompiled",
         "bRegenerating",
@@ -260,16 +215,89 @@ def _is_internal_engine_property(prop_name: str) -> bool:
         "bIsRegeneratingEnumFunction",
         "bIsRegeneratingEnumEvent",
         "bIsRegeneratingEnumDelegate",
-        # Blueprint generated class references
-        "BlueprintGeneratedClass",
-        # Editor related
+        # Rendering/editor related
         "SelectedNodes",
         "GraphZoom",
         "PanningAmount",
         "bAllowRenaming",
         "bAllowMultipleOutputs",
         "bAllowMultipleInputs",
-    })
+        # Variable description array (already handled via NewVariables)
+        "NewVariables",
+        # Function/event lists
+        "UbergraphGraph",
+        "FunctionList",
+        "EventGraphs",
+    }
+)
+
+
+def _is_internal_engine_property(prop_name: str) -> bool:
+    """Determine if property is an internal engine property (not user-defined variable).
+
+    Only matches explicit engine internal property names (e.g. compile status flags, blueprint generated class references).
+    Does not use prefix matching to avoid filtering out legitimate blueprint variables (e.g. bIsPlayer, CachedHealth).
+    """
+    # Explicit internal engine property names (exact match)
+    internal_exact_names = frozenset(
+        {
+            # Compile/generation status flags
+            "bBeingCompiled",
+            "bCompiled",
+            "bRegenerating",
+            "bDuplicating",
+            "bImportedFromAnotherAsset",
+            "bCanUseSimplifiedConstructor",
+            "bIsNewObject",
+            "bHasDocumentedClass",
+            "bDisplayCompileSucceededLog",
+            "bForceFullDeployment",
+            "bQueuedForDeletion",
+            "bRecompileOnLoad",
+            "bDisableCompileOnLoad",
+            "bDeferCompilation",
+            "bForceCompilation",
+            "bCreateNewModule",
+            "bLoadPublicModules",
+            "bRecompileAfterLoad",
+            "bEnableParallelCompilation",
+            "bEnableCompilation",
+            "bForceReregistration",
+            "bForceRegeneration",
+            "bIsIncrementalCompile",
+            "bIsRegeneratingOnLoad",
+            "bIsRegenerating",
+            "bIsRegeneratingClass",
+            "bIsRegeneratingInterface",
+            "bIsRegeneratingStruct",
+            "bIsRegeneratingEnum",
+            "bIsRegeneratingFunction",
+            "bIsRegeneratingVariable",
+            "bIsRegeneratingEvent",
+            "bIsRegeneratingDelegate",
+            "bIsRegeneratingInterfaceFunction",
+            "bIsRegeneratingInterfaceVariable",
+            "bIsRegeneratingInterfaceEvent",
+            "bIsRegeneratingInterfaceDelegate",
+            "bIsRegeneratingStructVariable",
+            "bIsRegeneratingStructFunction",
+            "bIsRegeneratingStructEvent",
+            "bIsRegeneratingStructDelegate",
+            "bIsRegeneratingEnumValue",
+            "bIsRegeneratingEnumFunction",
+            "bIsRegeneratingEnumEvent",
+            "bIsRegeneratingEnumDelegate",
+            # Blueprint generated class references
+            "BlueprintGeneratedClass",
+            # Editor related
+            "SelectedNodes",
+            "GraphZoom",
+            "PanningAmount",
+            "bAllowRenaming",
+            "bAllowMultipleOutputs",
+            "bAllowMultipleInputs",
+        }
+    )
 
     return prop_name in internal_exact_names
 
@@ -288,6 +316,7 @@ def _map_property_flags(flags: int) -> Dict[str, bool]:
         "is_rep_notify": bool(flags & CPF_RepNotify),
         "is_save_game": bool(flags & CPF_SaveGame),
     }
+
 
 def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
     """Extract FEdGraphPinType type information from PropertyValue."""
@@ -312,7 +341,7 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
 
         # When dict is a property value (containing object_class / struct_type) rather than a pin type dict,
         # infer type info from prop.type and dict content
-        prop_type = getattr(prop, 'type', None)
+        prop_type = getattr(prop, "type", None)
         if not pin_category and prop_type:
             pin_category = _PROPERTY_TYPE_TO_PIN_CATEGORY.get(prop_type, "")
         if not pin_subcategory and prop_type:
@@ -360,7 +389,7 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
     }
 
     # Non-dict values: look up standardized pin_category based on prop.type
-    prop_type = getattr(prop, 'type', None)
+    prop_type = getattr(prop, "type", None)
     if prop_type and prop_type in type_mapping:
         return type_mapping[prop_type]
 
@@ -369,6 +398,7 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
     if prop_type:
         pin_category = _PROPERTY_TYPE_TO_PIN_CATEGORY.get(prop_type, prop_type)
     return FEdGraphPinType(pin_category=pin_category)
+
 
 def extract_blueprint_variables(properties: List[PropertyValue]) -> List[BlueprintVariable]:
     """Extract blueprint variables from parsed property data.
@@ -451,7 +481,9 @@ def extract_blueprint_variables(properties: List[PropertyValue]) -> List[Bluepri
             edit_condition = prop_value.get("edit_condition", prop_value.get("EditCondition", ""))
 
         # Infer additional variable type attributes
-        is_blueprint_writable = flag_mapping.get("is_blueprint_readable", False) and not flag_mapping.get("is_blueprint_read_only", False)
+        is_blueprint_writable = flag_mapping.get("is_blueprint_readable", False) and not flag_mapping.get(
+            "is_blueprint_read_only", False
+        )
 
         var = BlueprintVariable(
             var_name=prop_name,
@@ -470,6 +502,7 @@ def extract_blueprint_variables(properties: List[PropertyValue]) -> List[Bluepri
         variables.append(var)
 
     return variables
+
 
 def _extract_blueprint_variable_descriptions(items: List[Any]) -> List[BlueprintVariable]:
     """Expand FBPVariableDescription structs from UBlueprint.NewVariables."""
@@ -518,6 +551,7 @@ def _extract_blueprint_variable_descriptions(items: List[Any]) -> List[Blueprint
         variables.append(var)
     return variables
 
+
 def _extract_var_type_from_description(value: Any) -> FEdGraphPinType:
     if isinstance(value, StructValue):
         fields = value.fields
@@ -533,9 +567,12 @@ def _extract_var_type_from_description(value: Any) -> FEdGraphPinType:
     raw_category = str(fields.get("PinCategory") or fields.get("pin_category") or "unknown")
     return FEdGraphPinType(
         pin_category=_PROPERTY_TYPE_TO_PIN_CATEGORY.get(raw_category, raw_category),
-        pin_subcategory=str(fields.get("PinSubCategory") or fields.get("PinSubcategory") or fields.get("pin_subcategory") or ""),
+        pin_subcategory=str(
+            fields.get("PinSubCategory") or fields.get("PinSubcategory") or fields.get("pin_subcategory") or ""
+        ),
         container_type=int(fields.get("ContainerType") or fields.get("container_type") or 0),
     )
+
 
 def _guid_from_description(value: Any) -> str:
     # StructValue(Guid, {A:int, B:int, C:int, D:int}) -- StructProperty parsing result
@@ -545,9 +582,11 @@ def _guid_from_description(value: Any) -> str:
         b = int(fields.get("B", 0))
         c = int(fields.get("C", 0))
         d = int(fields.get("D", 0))
+
         # Convert each uint32 to 4 bytes in little-endian order
         def _u32_to_bytes(v: int) -> bytes:
-            return v.to_bytes(4, byteorder='little')
+            return v.to_bytes(4, byteorder="little")
+
         raw = _u32_to_bytes(a) + _u32_to_bytes(b) + _u32_to_bytes(c) + _u32_to_bytes(d)
         return format_guid_bytes(raw)
 
@@ -576,10 +615,12 @@ def _guid_from_description(value: Any) -> str:
         return value
     return ""
 
+
 def _text_or_string(value: Any) -> str:
     if hasattr(value, "source_string"):
         return str(value.source_string)
     return str(value or "")
+
 
 def _metadata_from_description(value: Any) -> Dict[str, str]:
     metadata: Dict[str, str] = {}
@@ -591,6 +632,7 @@ def _metadata_from_description(value: Any) -> Dict[str, str]:
                 metadata[str(key)] = str(fields.get("Value") or fields.get("value") or "")
     return metadata
 
+
 def _replication_condition_value(value: Any) -> int:
     if isinstance(value, int):
         return value
@@ -600,6 +642,7 @@ def _replication_condition_value(value: Any) -> int:
             return 0
     return 0
 
+
 def _extract_functions_from_bpgc_properties(properties: List[Any]) -> List[BlueprintFunction]:
     """Primary path: Extract functions from BPGC export properties.
 
@@ -608,7 +651,7 @@ def _extract_functions_from_bpgc_properties(properties: List[Any]) -> List[Bluep
     """
     functions: List[BlueprintFunction] = []
     for prop in properties:
-        prop_name = getattr(prop, 'name', '')
+        prop_name = getattr(prop, "name", "")
         if prop_name == "UbergraphFunction":
             func_name = _resolve_property_to_function_name(prop.value)
             if func_name:
@@ -620,6 +663,7 @@ def _extract_functions_from_bpgc_properties(properties: List[Any]) -> List[Bluep
                     functions.append(BlueprintFunction(name=func_name))
     return functions
 
+
 def _resolve_property_to_function_name(value: Any) -> Optional[str]:
     """Resolve a property value to a function name string."""
     if value is None:
@@ -627,19 +671,20 @@ def _resolve_property_to_function_name(value: Any) -> Optional[str]:
     if isinstance(value, str) and value and value != UE_NONE_SENTINEL:
         # UE path format: /Game/Path/To/PackageName.ClassName
         # First extract after last '/', then after last '.'
-        raw = value.split('/')[-1] if '/' in value else value
-        return raw.split('.')[-1] if '.' in raw else raw
+        raw = value.split("/")[-1] if "/" in value else value
+        return raw.split(".")[-1] if "." in raw else raw
     if isinstance(value, dict):
-        obj_name = value.get('object_name') or value.get('resolved') or value.get('raw_index')
+        obj_name = value.get("object_name") or value.get("resolved") or value.get("raw_index")
         if obj_name and obj_name != UE_NONE_SENTINEL:
             raw = str(obj_name)
-            return raw.split('.')[-1] if '.' in raw else raw
-    if hasattr(value, 'object_name'):
-        name = getattr(value, 'object_name', None)
+            return raw.split(".")[-1] if "." in raw else raw
+    if hasattr(value, "object_name"):
+        name = getattr(value, "object_name", None)
         if name and name != UE_NONE_SENTINEL:
             raw = str(name)
-            return raw.split('.')[-1] if '.' in raw else raw
+            return raw.split(".")[-1] if "." in raw else raw
     return None
+
 
 def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
     """Extract function metadata from graph K2Node_FunctionEntry and K2Node_Event nodes (fallback path).
@@ -651,8 +696,8 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
         return []
     functions: List[BlueprintFunction] = []
     for graph in graphs:
-        for node in getattr(graph, 'nodes', []):
-            class_name = getattr(node, 'class_name', '')
+        for node in getattr(graph, "nodes", []):
+            class_name = getattr(node, "class_name", "")
             if class_name not in ("K2Node_FunctionEntry", "K2Node_Event"):
                 continue
 
@@ -666,16 +711,16 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
             func_name = "Unknown"
             if is_event_node:
                 er = nd.get("event_reference")
-                if er and hasattr(er, 'member_name'):
+                if er and hasattr(er, "member_name"):
                     mn = er.member_name
-                    func_name = mn.split('/')[-1] if '/' in mn else mn
+                    func_name = mn.split("/")[-1] if "/" in mn else mn
                     if func_name == UE_NONE_SENTINEL:
                         func_name = nd.get("custom_function_name", "Unknown")
                 elif nd.get("custom_function_name"):
                     func_name = nd["custom_function_name"]
             else:
                 fr = nd.get("function_reference")
-                if fr and hasattr(fr, 'member_name'):
+                if fr and hasattr(fr, "member_name"):
                     func_name = fr.member_name if fr.member_name != UE_NONE_SENTINEL else "Unknown"
                 else:
                     func_name = nd.get("function_name", nd.get("custom_function_name", "Unknown"))
@@ -684,12 +729,12 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
             parameters: List[FunctionParameter] = []
             return_type = ""
 
-            for pin in getattr(node, 'pins', []):
-                pin_dir = getattr(pin, 'direction', '')
-                pin_type_obj = getattr(pin, 'pin_type', None)
+            for pin in getattr(node, "pins", []):
+                pin_dir = getattr(pin, "direction", "")
+                pin_type_obj = getattr(pin, "pin_type", None)
                 pin_type_name = ""
-                if pin_type_obj and hasattr(pin_type_obj, 'pin_category'):
-                    pin_type_name = getattr(pin_type_obj, 'pin_category', '') or ""
+                if pin_type_obj and hasattr(pin_type_obj, "pin_category"):
+                    pin_type_name = getattr(pin_type_obj, "pin_category", "") or ""
                 elif isinstance(pin_type_obj, dict):
                     pin_type_name = pin_type_obj.get("pin_category", pin_type_obj.get("category", ""))
 
@@ -704,7 +749,7 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                 if pin_type_name.lower() in ("exec", "delegate", "multicastdelegate"):
                     continue
 
-                pin_name = getattr(pin, 'pin_name', '')
+                pin_name = getattr(pin, "pin_name", "")
                 pin_name_lower = pin_name.lower()
 
                 if not is_event_node and is_output:
@@ -714,32 +759,38 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                             return_type = _map_pin_category_to_cpp_type(pin_type_name)
                     else:
                         cpp_type = _map_pin_category_to_cpp_type(pin_type_name)
-                        parameters.append(FunctionParameter(
-                            name=pin_name,
-                            param_type=cpp_type,
-                            is_input=False,
-                            is_output=True,
-                        ))
+                        parameters.append(
+                            FunctionParameter(
+                                name=pin_name,
+                                param_type=cpp_type,
+                                is_input=False,
+                                is_output=True,
+                            )
+                        )
                 elif is_input:
                     # Input pins as parameters (excluding self/target)
                     if pin_name_lower in ("self", "target", "worldcontext"):
                         continue
                     cpp_type = _map_pin_category_to_cpp_type(pin_type_name)
-                    parameters.append(FunctionParameter(
-                        name=pin_name,
-                        param_type=cpp_type,
-                        is_input=True,
-                        is_output=False,
-                    ))
+                    parameters.append(
+                        FunctionParameter(
+                            name=pin_name,
+                            param_type=cpp_type,
+                            is_input=True,
+                            is_output=False,
+                        )
+                    )
                 elif is_output and is_event_node:
                     # K2Node_Event output pins (non-exec/delegate) = event parameters
                     cpp_type = _map_pin_category_to_cpp_type(pin_type_name)
-                    parameters.append(FunctionParameter(
-                        name=pin_name,
-                        param_type=cpp_type,
-                        is_input=False,
-                        is_output=True,
-                    ))
+                    parameters.append(
+                        FunctionParameter(
+                            name=pin_name,
+                            param_type=cpp_type,
+                            is_input=False,
+                            is_output=True,
+                        )
+                    )
 
             func = BlueprintFunction(
                 name=func_name,
@@ -754,6 +805,7 @@ def _extract_functions_from_graphs(graphs) -> List[BlueprintFunction]:
                     func.is_blueprint_event = True
             functions.append(func)
     return functions
+
 
 def _resolve_parent_class(
     properties: List[Any],
@@ -771,27 +823,46 @@ def _resolve_parent_class(
     for prop in properties:
         if prop.name in ("ParentClass", "ParentClassProperty", "SuperClass"):
             if prop.value and isinstance(prop.value, dict):
-                if prop.value.get('raw_index'):
-                    parent_class = prop.value.get('raw_index')
-                elif prop.value.get('resolved'):
-                    parent_class = prop.value.get('resolved')
-                elif prop.value.get('object_name'):
-                    object_name = prop.value.get('object_name')
-                    class_package = prop.value.get('class_package', '')
+                if prop.value.get("raw_index"):
+                    parent_class = prop.value.get("raw_index")
+                elif prop.value.get("resolved"):
+                    parent_class = prop.value.get("resolved")
+                elif prop.value.get("object_name"):
+                    object_name = prop.value.get("object_name")
+                    class_package = prop.value.get("class_package", "")
                     if class_package:
                         parent_class = f"{class_package}.{object_name}"
                     else:
                         common_engine_classes = [
-                            "Character", "Pawn", "Actor", "ActorComponent",
-                            "SceneComponent", "Object", "Interface", "UserWidget",
-                            "HUD", "PlayerController", "GameModeBase", "GameMode",
-                            "Controller", "PlayerCameraManager", "PawnMovementComponent",
-                            "CharacterMovementComponent", "SpringArmComponent",
-                            "CameraComponent", "SkeletalMeshComponent", "StaticMeshComponent",
-                            "BoxComponent", "SphereComponent", "CapsuleComponent",
-                            "AudioComponent", "ParticleSystemComponent",
-                            "WidgetComponent", "ChildActorComponent",
-                            "Blueprint", "BlueprintGeneratedClass",
+                            "Character",
+                            "Pawn",
+                            "Actor",
+                            "ActorComponent",
+                            "SceneComponent",
+                            "Object",
+                            "Interface",
+                            "UserWidget",
+                            "HUD",
+                            "PlayerController",
+                            "GameModeBase",
+                            "GameMode",
+                            "Controller",
+                            "PlayerCameraManager",
+                            "PawnMovementComponent",
+                            "CharacterMovementComponent",
+                            "SpringArmComponent",
+                            "CameraComponent",
+                            "SkeletalMeshComponent",
+                            "StaticMeshComponent",
+                            "BoxComponent",
+                            "SphereComponent",
+                            "CapsuleComponent",
+                            "AudioComponent",
+                            "ParticleSystemComponent",
+                            "WidgetComponent",
+                            "ChildActorComponent",
+                            "Blueprint",
+                            "BlueprintGeneratedClass",
                         ]
                         if object_name in common_engine_classes:
                             parent_class = f"/Script/Engine.{object_name}"
@@ -799,12 +870,14 @@ def _resolve_parent_class(
                             parent_class = object_name
 
     # Infer parent class from export's super_index
-    if not parent_class and hasattr(export, 'super_index'):
+    if not parent_class and hasattr(export, "super_index"):
         if linker is not None:
             from uasset_read.serializers.object_resources import resolve_parent_class_with_linker as _rpc
+
             parent_name, warn = _rpc(export.super_index, linker)
         else:
             from uasset_read.serializers.object_resources import resolve_parent_class as _rpc
+
             parent_name, warn = _rpc(export.super_index, import_map, export_map)
         if parent_name:
             parent_class = parent_name
@@ -833,14 +906,16 @@ def _extract_events_from_functions(functions: List[BlueprintFunction]) -> List[B
     events: List[BlueprintEvent] = []
     for f in functions:
         if f.is_blueprint_implementable_event or f.is_blueprint_event:
-            events.append(BlueprintEvent(
-                name=f.name,
-                event_type="Override" if f.is_blueprint_event else "Event",
-                function_flags=f.function_flags,
-                is_blueprint_event=f.is_blueprint_event,
-                is_blueprint_implementable_event=f.is_blueprint_implementable_event,
-                parameters=f.parameters,
-            ))
+            events.append(
+                BlueprintEvent(
+                    name=f.name,
+                    event_type="Override" if f.is_blueprint_event else "Event",
+                    function_flags=f.function_flags,
+                    is_blueprint_event=f.is_blueprint_event,
+                    is_blueprint_implementable_event=f.is_blueprint_implementable_event,
+                    parameters=f.parameters,
+                )
+            )
     return events
 
 
@@ -853,6 +928,7 @@ def _extract_interfaces_from_props(
     Parses FBPInterfaceDescription structs, resolves Interface object reference indices to interface names.
     """
     from uasset_read.models.blueprint import BlueprintInterface
+
     result: List[Any] = []
     for prop in props_list:
         if prop.name == "ImplementedInterfaces" and isinstance(prop.value, list):
@@ -899,6 +975,7 @@ def _extract_interfaces(
     # If current export has no ImplementedInterfaces, search in other blueprint exports
     if not interfaces and export_map:
         from uasset_read.serializers.object_resources import detect_blueprint_with_linker as _dbl
+
         for other_export in export_map:
             if other_export is export:
                 continue
@@ -907,7 +984,12 @@ def _extract_interfaces(
                 continue
             try:
                 other_props = parse_properties_from_export(
-                    other_export, archive, summary, name_map, export_map, import_map,
+                    other_export,
+                    archive,
+                    summary,
+                    name_map,
+                    export_map,
+                    import_map,
                 )
                 interfaces = _extract_interfaces_from_props(other_props, import_map)
             except (KeyError, TypeError, ValueError) as e:
@@ -954,7 +1036,12 @@ def extract_blueprint_metadata(
     # Parse export properties
     try:
         properties = parse_properties_from_export(
-            export, archive, summary, name_map, export_map, import_map,
+            export,
+            archive,
+            summary,
+            name_map,
+            export_map,
+            import_map,
         )
     except (KeyError, TypeError, ValueError):
         return None, None
@@ -983,7 +1070,14 @@ def extract_blueprint_metadata(
 
     # Extract interfaces
     interfaces = _extract_interfaces(
-        properties, export, export_map, archive, summary, name_map, import_map, linker,
+        properties,
+        export,
+        export_map,
+        archive,
+        summary,
+        name_map,
+        import_map,
+        linker,
     )
 
     meta = BlueprintMetadata(
@@ -996,6 +1090,7 @@ def extract_blueprint_metadata(
         events=events,
     )
     return meta, None
+
 
 def parse_property_flags_to_labels(flags: int) -> List[str]:
     """Convert CPF_* bit flags to readable label list.
@@ -1051,6 +1146,7 @@ def parse_property_flags_to_labels(flags: int) -> List[str]:
 
     return labels
 
+
 def read_blueprint_variable(
     archive,
     name_map: List[str],
@@ -1073,9 +1169,7 @@ def read_blueprint_variable(
     9. MetaDataArray (TArray)
     10. DefaultValue (FString)
     """
-    var = BlueprintVariable(
-        var_name=archive.read_name(name_map)
-    )
+    var = BlueprintVariable(var_name=archive.read_name(name_map))
 
     var.var_guid = _read_guid(archive)
 
@@ -1127,10 +1221,10 @@ def read_blueprint_variable(
     var.is_non_pi_ed_duplicate_transient = bool(flags & CPF_NonPIEDuplicateTransient)
 
     # Extract metadata fields
-    var.edit_condition = var.metadata.get('EditCondition', '')
-    var.meta_class = var.metadata.get('MetaClass', '')
-    var.edit_category = var.metadata.get('Category', '')
-    var.edit_widget = var.metadata.get('EditWidget', '')
+    var.edit_condition = var.metadata.get("EditCondition", "")
+    var.meta_class = var.metadata.get("MetaClass", "")
+    var.edit_category = var.metadata.get("Category", "")
+    var.edit_widget = var.metadata.get("EditWidget", "")
 
     default_str = archive.read_fstring()
     var.default_value = parse_default_value(default_str, var.var_type)
@@ -1148,6 +1242,7 @@ def read_blueprint_variable(
     var.is_component = is_component_by_name or is_component_by_flag
 
     return var
+
 
 def _read_guid(archive) -> str:
     data = archive.read_bytes(16) if hasattr(archive, "read_bytes") else archive.read(16)

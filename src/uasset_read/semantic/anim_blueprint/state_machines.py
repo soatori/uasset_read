@@ -1,4 +1,5 @@
 """State machine emission for Animation Blueprint semantic JSON."""
+
 from __future__ import annotations
 
 from uasset_read.semantic.anim_blueprint.ids import (
@@ -39,14 +40,10 @@ def emit_state_machines(
         initial_state = getattr(machine, "initial_state", 0)
 
         # Emit states
-        states_json = _emit_states(
-            getattr(machine, "states", []) or [], slug, reporting, mode
-        )
+        states_json = _emit_states(getattr(machine, "states", []) or [], slug, reporting, mode)
 
         # Emit inter-state transitions
-        transitions_json = _emit_transitions(
-            getattr(machine, "transitions", []) or [], reporting, mode
-        )
+        transitions_json = _emit_transitions(getattr(machine, "transitions", []) or [], reporting, mode)
 
         sm_dict: dict = {
             "id": sm_id,
@@ -104,9 +101,7 @@ def _emit_states(
             state_dict["layer_node_indices"] = list(layer_indices)
 
         # Emit exit transitions
-        exit_transitions = _emit_exit_transitions(
-            getattr(state, "transitions", []) or [], reporting, mode
-        )
+        exit_transitions = _emit_exit_transitions(getattr(state, "transitions", []) or [], reporting, mode)
         if exit_transitions:
             state_dict["exit_transitions"] = exit_transitions
 

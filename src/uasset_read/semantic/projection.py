@@ -8,6 +8,7 @@ must produce the same result as ``build_semantic_ir(pkg)`` stamped with
 ``mode="standard"`` (for fields controlled by the common model; domain
 content is exempt).
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -18,11 +19,7 @@ from uasset_read.semantic.models import SemanticIR
 def _recursive_strip_evidence(data: Any) -> Any:
     """Recursively remove evidence and extensions keys from nested structures."""
     if isinstance(data, dict):
-        return {
-            k: _recursive_strip_evidence(v)
-            for k, v in data.items()
-            if k not in ("evidence", "extensions")
-        }
+        return {k: _recursive_strip_evidence(v) for k, v in data.items() if k not in ("evidence", "extensions")}
     if isinstance(data, list):
         return [_recursive_strip_evidence(item) for item in data]
     return data

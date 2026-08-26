@@ -22,48 +22,50 @@ logger = logging.getLogger(__name__)
 # UPROPERTY specifier whitelist
 # ============================================================================
 
-_UPROPERTY_SPECIFIER_WHITELIST = frozenset({
-    # Visibility / Edit
-    "EditAnywhere",
-    "EditInstanceOnly",
-    "EditDefaultsOnly",
-    "VisibleAnywhere",
-    "VisibleInstanceOnly",
-    "VisibleDefaultsOnly",
-    # Blueprint access
-    "BlueprintReadWrite",
-    "BlueprintReadOnly",
-    "BlueprintCallable",
-    "BlueprintAssignable",
-    "BlueprintPure",
-    "BlueprintType",
-    "NotBlueprintType",
-    # Instance
-    "Instanced",
-    "DuplicateTransient",
-    "Transient",
-    # Network
-    "Replicated",
-    "ReplicatedUsing",
-    # Config
-    "Config",
-    "GlobalConfig",
-    # Other
-    "SaveGame",
-    "NoClear",
-    "NoExport",
-    "Interp",
-    "NonTransactional",
-    "ExposeOnSpawn",
-    "AllowPrivateAccess",
-    "Deprecated",
-    "AdvancedDisplay",
-    "Protected",
-    "Meta",
-    "Category",
-    "Ref",
-    "SubobjectReference",
-})
+_UPROPERTY_SPECIFIER_WHITELIST = frozenset(
+    {
+        # Visibility / Edit
+        "EditAnywhere",
+        "EditInstanceOnly",
+        "EditDefaultsOnly",
+        "VisibleAnywhere",
+        "VisibleInstanceOnly",
+        "VisibleDefaultsOnly",
+        # Blueprint access
+        "BlueprintReadWrite",
+        "BlueprintReadOnly",
+        "BlueprintCallable",
+        "BlueprintAssignable",
+        "BlueprintPure",
+        "BlueprintType",
+        "NotBlueprintType",
+        # Instance
+        "Instanced",
+        "DuplicateTransient",
+        "Transient",
+        # Network
+        "Replicated",
+        "ReplicatedUsing",
+        # Config
+        "Config",
+        "GlobalConfig",
+        # Other
+        "SaveGame",
+        "NoClear",
+        "NoExport",
+        "Interp",
+        "NonTransactional",
+        "ExposeOnSpawn",
+        "AllowPrivateAccess",
+        "Deprecated",
+        "AdvancedDisplay",
+        "Protected",
+        "Meta",
+        "Category",
+        "Ref",
+        "SubobjectReference",
+    }
+)
 
 
 def sanitize_identifier(name: str, fallback: str = "_unnamed") -> str:
@@ -102,14 +104,14 @@ def sanitize_identifier(name: str, fallback: str = "_unnamed") -> str:
         return fallback
 
     # 1. Spaces -> underscores
-    cleaned = name.replace(' ', '_')
+    cleaned = name.replace(" ", "_")
 
     # 2. Remove illegal characters (keep only letters, digits, underscores)
-    cleaned = re.sub(r'[^A-Za-z0-9_]', '', cleaned)
+    cleaned = re.sub(r"[^A-Za-z0-9_]", "", cleaned)
 
     # 3. Starts with digit -> prefix _
     if cleaned and cleaned[0].isdigit():
-        cleaned = '_' + cleaned
+        cleaned = "_" + cleaned
 
     # 4. Empty string -> default name
     if not cleaned:
@@ -149,17 +151,17 @@ def sanitize_string_literal(value: str) -> str:
 
     result = value
     # Backslashes must be escaped first (otherwise subsequent escape backslashes would be double-escaped)
-    result = result.replace('\\', '\\\\')
+    result = result.replace("\\", "\\\\")
     # Double quotes
     result = result.replace('"', '\\"')
     # null bytes
-    result = result.replace('\x00', '\\0')
+    result = result.replace("\x00", "\\0")
     # Newlines
-    result = result.replace('\n', '\\n')
+    result = result.replace("\n", "\\n")
     # Carriage returns
-    result = result.replace('\r', '\\r')
+    result = result.replace("\r", "\\r")
     # Tabs
-    result = result.replace('\t', '\\t')
+    result = result.replace("\t", "\\t")
 
     return result
 
@@ -234,17 +236,17 @@ def sanitize_category(category: str) -> str:
         return ""
 
     # Remove quotes (prevent escaping out of Category = "...")
-    result = category.replace('"', '').replace("'", "")
+    result = category.replace('"', "").replace("'", "")
     # Remove backslashes
-    result = result.replace('\\', '')
+    result = result.replace("\\", "")
     # Remove newlines and carriage returns
-    result = result.replace('\n', '').replace('\r', '')
+    result = result.replace("\n", "").replace("\r", "")
     # Remove tabs
-    result = result.replace('\t', ' ')
+    result = result.replace("\t", " ")
     # Keep only letters, digits, spaces, underscores
-    result = re.sub(r'[^A-Za-z0-9 _]', '', result)
+    result = re.sub(r"[^A-Za-z0-9 _]", "", result)
     # Compress consecutive spaces
-    result = re.sub(r' +', ' ', result)
+    result = re.sub(r" +", " ", result)
     # Strip leading/trailing spaces
     result = result.strip()
 

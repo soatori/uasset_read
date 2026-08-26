@@ -6,6 +6,7 @@ used to reference object properties in Kismet bytecode.
 UE5 FFieldPath stores a sequence of FName path segments plus an optional
 resolved owner (PackageIndex). FKismetPropertyPointer wraps FFieldPath.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -49,14 +50,12 @@ class FKismetPropertyPointer:
     path: Optional[FFieldPath] = field(default=None)
 
     @classmethod
-    def from_archive(
-        cls, archive: FArchive, name_map: list[str]
-    ) -> FKismetPropertyPointer:
+    def from_archive(cls, archive: FArchive, name_map: list[str]) -> FKismetPropertyPointer:
         """Deserialize FKismetPropertyPointer from FArchive."""
         # Persistent Kismet Script serialization routes FProperty* through
         # FPropertyProxyArchive, which writes an FFieldPath directly. The
         # archive transfer owns both the physical and logical cursor contract.
-        if hasattr(archive, 'xfer_field_pointer'):
+        if hasattr(archive, "xfer_field_pointer"):
             return cls(bNew=True, path=archive.xfer_field_pointer())
 
         # Preserve the legacy generic-archive contract for callers outside the
@@ -72,18 +71,23 @@ class FKismetPropertyPointer:
                     base_name = name_map[name_index]
                 else:
                     base_name = f"Unknown_{name_index}"
-                segments.append(FFieldPathSegment(
-                    name_index=name_index,
-                    number=number,
-                    base_name=base_name,
-                ))
+                segments.append(
+                    FFieldPathSegment(
+                        name_index=name_index,
+                        number=number,
+                        base_name=base_name,
+                    )
+                )
             return cls(bNew=True, path=FFieldPath(path=segments))
 
         old_index = PackageIndex(archive.read_i32())
-        return cls(bNew=False, path=FFieldPath(
-            path=[],
-            resolved_owner=old_index,
-        ))
+        return cls(
+            bNew=False,
+            path=FFieldPath(
+                path=[],
+                resolved_owner=old_index,
+            ),
+        )
 
     def __str__(self) -> str:
         """Return string representation of the property path."""

@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 class FallbackPolicy(str, Enum):
     """Fallback strategy when a handler cannot process the class."""
+
     GENERIC_UOBJECT = "generic_uobject"
     SKIP = "skip"
     RAISE = "raise"
@@ -38,6 +39,7 @@ class FallbackPolicy(str, Enum):
 @dataclass
 class HandlerResult:
     """Parse result from a class handler."""
+
     success: bool
     data: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
@@ -132,6 +134,7 @@ def _bootstrap_handlers() -> None:
     _bootstrap_done = True
     try:
         from uasset_read.parsers.asset_types import register_asset_type_handlers
+
         register_asset_type_handlers()
     except Exception:
         logger.debug("Failed to bootstrap asset type handlers", exc_info=True)
@@ -156,5 +159,3 @@ def reset_class_registry() -> None:
     global _default_registry, _bootstrap_done
     _default_registry = None
     _bootstrap_done = False
-
-

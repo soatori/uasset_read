@@ -18,9 +18,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class CustomPropertyContext:
     """CustomProperty handler invocation context."""
+
     type_id: int
     tag: PropertyTag
     archive: FArchive
@@ -45,9 +47,11 @@ def register_custom_property(type_id: int | str, game: Optional[str] = None):
         def parse_fd_custom_property(tag, archive, name_map):
             ...
     """
+
     def decorator(func: Callable) -> Callable:
         CUSTOM_PROPERTY_HANDLERS[(game.lower() if game else None, type_id)] = func
         return func
+
     return decorator
 
 
@@ -81,7 +85,8 @@ def handle_custom_property(
     if handler is None:
         logger.debug(
             "CustomProperty 0x%02X: no handler registered, skipping %d bytes",
-            type_id, tag.size,
+            type_id,
+            tag.size,
         )
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
         return {
@@ -91,20 +96,23 @@ def handle_custom_property(
             "size": tag.size,
             "raw_data": raw_data,
         }
-    return handler(CustomPropertyContext(
-        type_id=type_id,
-        tag=tag,
-        archive=archive,
-        name_map=name_map,
-        mappings=mappings,
-        game=game,
-        summary=summary,
-    ))
+    return handler(
+        CustomPropertyContext(
+            type_id=type_id,
+            tag=tag,
+            archive=archive,
+            name_map=name_map,
+            mappings=mappings,
+            game=game,
+            summary=summary,
+        )
+    )
 
 
 # ============================================================================
 # Default handlers -- 0xFD / 0xFE (used by Borderlands 4, 2XKO, etc.)
 # ============================================================================
+
 
 @register_custom_property(0xFD)
 def _parse_fd_custom_property(context: CustomPropertyContext) -> dict:

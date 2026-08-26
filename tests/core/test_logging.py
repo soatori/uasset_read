@@ -1,4 +1,5 @@
 """Tests for project_logging enhancements: log_event, log_stage_timing, JSONFormatter, SamplingFilter."""
+
 from __future__ import annotations
 
 import json
@@ -97,9 +98,13 @@ class TestJSONFormatter:
     def test_json_output_structure(self):
         formatter = JSONFormatter(datefmt="%Y-%m-%dT%H:%M:%S")
         record = logging.LogRecord(
-            name="uasset_read", level=logging.INFO,
-            pathname="", lineno=0, msg="test message",
-            args=(), exc_info=None,
+            name="uasset_read",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="test message",
+            args=(),
+            exc_info=None,
         )
         record.run_id = "abc123"
         record.process_id = 1234
@@ -122,9 +127,13 @@ class TestJSONFormatter:
             raise ValueError("test error")
         except ValueError:
             record = logging.LogRecord(
-                name="uasset_read", level=logging.ERROR,
-                pathname="", lineno=0, msg="failed",
-                args=(), exc_info=sys.exc_info(),
+                name="uasset_read",
+                level=logging.ERROR,
+                pathname="",
+                lineno=0,
+                msg="failed",
+                args=(),
+                exc_info=sys.exc_info(),
             )
             record.run_id = "-"
             record.process_id = 0
@@ -162,8 +171,7 @@ class TestSamplingFilter:
     def test_rate_0_5_keeps_majority(self):
         f = SamplingFilter(rate=0.5)
         kept = sum(
-            1 for i in range(1000)
-            if f.filter(logging.LogRecord("test", logging.DEBUG, "", 0, f"msg_{i}", (), None))
+            1 for i in range(1000) if f.filter(logging.LogRecord("test", logging.DEBUG, "", 0, f"msg_{i}", (), None))
         )
         # Hash distribution varies; just verify filter doesn't drop everything
         assert kept > 0

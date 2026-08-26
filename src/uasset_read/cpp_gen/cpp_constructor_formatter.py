@@ -11,6 +11,7 @@ Security mitigations (threat model):
     T-059-06: Component creation ordered by topological sort (based on attach relationships)
     T-059-07: InputAction asset_path validation for /Game/... pattern
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Dict, List
@@ -186,21 +187,14 @@ def build_constructor_sections(ir: "CppClassIR") -> Dict[str, List[str]]:
     for creation in sorted_creations:
         safe_var = sanitize_identifier(creation.variable_name)
         safe_name = sanitize_string_literal(creation.component_name)
-        line = (
-            f"{safe_var} = "
-            f"CreateDefaultSubobject<{creation.cpp_type}>"
-            f'(TEXT("{safe_name}"));'
-        )
+        line = f'{safe_var} = CreateDefaultSubobject<{creation.cpp_type}>(TEXT("{safe_name}"));'
         sections["creation"].append(line)
 
     # 2. attach section
     for assign in assignments:
         if assign.socket_name:
             safe_socket = sanitize_string_literal(assign.socket_name)
-            line = (
-                f"{assign.child_name}->SetupAttachment("
-                f"{assign.parent_name}, FName(\"{safe_socket}\"));"
-            )
+            line = f'{assign.child_name}->SetupAttachment({assign.parent_name}, FName("{safe_socket}"));'
         else:
             line = f"{assign.child_name}->SetupAttachment({assign.parent_name});"
         sections["attach"].append(line)
@@ -218,10 +212,9 @@ def build_constructor_sections(ir: "CppClassIR") -> Dict[str, List[str]]:
             except ValueError as e:
                 # Path validation failed -- log warning and skip
                 import logging
+
                 logger = logging.getLogger(__name__)
-                logger.warning(
-                    f"Skipping LoadObject for '{entry.target}': {e}"
-                )
+                logger.warning(f"Skipping LoadObject for '{entry.target}': {e}")
             continue
 
         # Transform method call

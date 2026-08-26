@@ -8,6 +8,7 @@ Per T-056-06: Validate class name matches UE naming convention.
 Exports:
     format_cpp_header: CppClassIR -> .h text conversion function
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,7 +19,12 @@ if TYPE_CHECKING:
     from uasset_read.cpp_gen.formatters import CppCallStatement
 
 from uasset_read.cpp_gen.formatters import CppClassIR, CppProperty, CppMethodIR, CppCallStatement
-from uasset_read.cpp_gen.sanitizer import sanitize_identifier, sanitize_category, sanitize_uproperty_marks, sanitize_string_literal
+from uasset_read.cpp_gen.sanitizer import (
+    sanitize_identifier,
+    sanitize_category,
+    sanitize_uproperty_marks,
+    sanitize_string_literal,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +34,13 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 # Allowed UE class name pattern: alphanumeric and underscore, starting with letter or underscore
-UE_CLASS_NAME_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+UE_CLASS_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 # ============================================================================
 # Core formatting functions
 # ============================================================================
+
 
 def format_cpp_header(ir: CppClassIR) -> str:
     """Convert CppClassIR to standard UE .h header file text.
@@ -75,12 +82,12 @@ def format_cpp_header(ir: CppClassIR) -> str:
     # 4. header_meta.includes (deduplicated + sorted)
     includes = sorted(set(ir.header_meta.includes))
     for inc in includes:
-        lines.append(f'#include {inc}')
+        lines.append(f"#include {inc}")
 
     # 5. generated_include (always the last include)
     if ir.header_meta.generated_include:
         generated_inc = _sanitize_generated_include(class_name)
-        lines.append(f'#include {generated_inc}')
+        lines.append(f"#include {generated_inc}")
 
     # 6. blank line
     lines.append("")
@@ -139,12 +146,13 @@ def format_cpp_header(ir: CppClassIR) -> str:
     # 14. trailing newline
     lines.append("")
 
-    return '\n'.join(lines)
+    return "\n".join(lines)
 
 
 # ============================================================================
 # Helper functions
 # ============================================================================
+
 
 def _sanitize_class_name(name: str) -> str:
     """Sanitize class name to match UE naming convention (T-056-06).
@@ -162,7 +170,7 @@ def _sanitize_class_name(name: str) -> str:
         return "UUnknownClass"
 
     # Remove invalid characters, replace with underscore
-    sanitized = re.sub(r'[^A-Za-z0-9_]', '_', name)
+    sanitized = re.sub(r"[^A-Za-z0-9_]", "_", name)
 
     # Ensure starts with letter or underscore
     if sanitized and sanitized[0].isdigit():
@@ -208,8 +216,8 @@ def _sanitize_comment(comment: str) -> str:
     sanitized = comment.replace("*/", "* /")
 
     # Remove other characters that could cause issues
-    sanitized = sanitized.replace('\n', ' ')
-    sanitized = sanitized.replace('\r', '')
+    sanitized = sanitized.replace("\n", " ")
+    sanitized = sanitized.replace("\r", "")
 
     return sanitized
 

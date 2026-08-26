@@ -17,8 +17,16 @@ if TYPE_CHECKING:
 
 # Statements that already end with ';' internally or shouldn't get one added.
 _STATEMENT_TERMINATED = {
-    "goto ", "if ", "return;", "}", "{", "switch ", "case ", "default:",
-    "assert(", "/*",
+    "goto ",
+    "if ",
+    "return;",
+    "}",
+    "{",
+    "switch ",
+    "case ",
+    "default:",
+    "assert(",
+    "/*",
 }
 
 
@@ -76,38 +84,54 @@ def _emit_structured_block(
     for_result = jump_analyzer.detect_for_pattern(start_idx)
     if for_result is not None:
         return _emit_for_block(
-            for_result, translator, expressions,
-            jump_targets, offset_to_index, label_set,
+            for_result,
+            translator,
+            expressions,
+            jump_targets,
+            offset_to_index,
+            label_set,
         )
 
     # --- while pattern ---
     while_result = jump_analyzer.detect_while_pattern(start_idx)
     if while_result is not None:
         return _emit_while_block(
-            while_result, translator, expressions,
-            jump_targets, offset_to_index, label_set,
+            while_result,
+            translator,
+            expressions,
+            jump_targets,
+            offset_to_index,
+            label_set,
         )
 
     # --- Push/Pop if/else pattern ---
     push_pop_result = jump_analyzer.detect_push_pop_pattern(start_idx)
     if push_pop_result is not None:
         return _emit_push_pop_block(
-            push_pop_result, translator, expressions,
+            push_pop_result,
+            translator,
+            expressions,
         )
 
     # --- if/else pattern (JumpIfNot start) ---
     if_else_result = jump_analyzer.detect_if_else_pattern(start_idx)
     if if_else_result is not None:
         return _emit_if_else_block(
-            if_else_result, translator, expressions,
-            jump_targets, offset_to_index, label_set,
+            if_else_result,
+            translator,
+            expressions,
+            jump_targets,
+            offset_to_index,
+            label_set,
         )
 
     # --- switch/case pattern ---
     switch_result = jump_analyzer.detect_switch_pattern(start_idx)
     if switch_result is not None:
         return _emit_switch_block(
-            switch_result, translator, expressions,
+            switch_result,
+            translator,
+            expressions,
         )
 
     return []
@@ -137,7 +161,7 @@ def _emit_for_block(
             inc_parts.append(line.strip().rstrip(";"))
     inc_str = ", ".join(inc_parts) if inc_parts else ""
 
-    result: list[str] = [f"for (; {cond_str}; {inc_str}) {{" ]
+    result: list[str] = [f"for (; {cond_str}; {inc_str}) {{"]
 
     # Emit loop body (excluding increment and back jump)
     for j in range(body_start, inc_start):
@@ -167,7 +191,7 @@ def _emit_switch_block(
     default_term = switch_result["default_term"]
 
     index_str = translator.line_cpp(index_term) if index_term else "?"
-    result: list[str] = [f"switch ({index_str}) {{" ]
+    result: list[str] = [f"switch ({index_str}) {{"]
 
     for case_item in cases:
         case_idx = case_item["index_term"]
@@ -312,6 +336,7 @@ class FunctionBodyBuilder:
 
     def __init__(self, type_registry: "TypeRegistry | None" = None, linker: "PackageLinker | None" = None) -> None:
         from uasset_read.kismet.translator import KismetTranslator, TypeRegistry
+
         self.type_registry = type_registry or TypeRegistry()
         self._linker = linker
         self._translator = KismetTranslator(self.type_registry, linker=linker)
@@ -367,8 +392,13 @@ class FunctionBodyBuilder:
             # Check if starting a structured block
             if _is_structured_block_start(jump_analyzer, idx):
                 block_lines = _emit_structured_block(
-                    jump_analyzer, translator, expressions, idx,
-                    jump_targets, offset_to_index, label_set,
+                    jump_analyzer,
+                    translator,
+                    expressions,
+                    idx,
+                    jump_targets,
+                    offset_to_index,
+                    label_set,
                 )
                 lines.extend(block_lines)
                 # Determine skip range
@@ -430,9 +460,7 @@ class FunctionBodyBuilder:
 
         # Build JumpAnalyzer (unified detector)
         jump_analyzer = JumpAnalyzer(expressions)
-        translator = KismetTranslator(
-            self.type_registry, linker=self._linker, expressions=expressions
-        )
+        translator = KismetTranslator(self.type_registry, linker=self._linker, expressions=expressions)
 
         # Build auxiliary mappings
         offset_to_index: dict[int, int] = {}
@@ -470,8 +498,13 @@ class FunctionBodyBuilder:
 
             if _is_structured_block_start(jump_analyzer, idx):
                 block_lines = _emit_structured_block(
-                    jump_analyzer, translator, expressions, idx,
-                    jump_targets, offset_to_index, label_set,
+                    jump_analyzer,
+                    translator,
+                    expressions,
+                    idx,
+                    jump_targets,
+                    offset_to_index,
+                    label_set,
                 )
                 lines.extend(block_lines)
                 skip_until = _get_structured_block_end(jump_analyzer, idx)
@@ -505,6 +538,7 @@ class FunctionBodyBuilder:
 # ===========================================================================
 # Module-level convenience functions (D-01 dual API)
 # ===========================================================================
+
 
 def to_function_body(
     expressions: list["KismetExpression"],

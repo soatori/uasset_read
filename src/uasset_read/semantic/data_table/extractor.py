@@ -3,6 +3,7 @@
 Reads from ExportIR.asset_type_data (parse_data_table output).
 Projects row summary, row names, and row struct information.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

@@ -52,7 +52,9 @@ class NiagaraScriptHandler(ClassHandler):
             # Project tagged properties into structured output
             tagged_properties: dict[str, Any] = {}
             for prop_name in (
-                "Usage", "ExposedVersion", "VersionData",
+                "Usage",
+                "ExposedVersion",
+                "VersionData",
                 "RapidIterationParameters",
             ):
                 if prop_name in properties:

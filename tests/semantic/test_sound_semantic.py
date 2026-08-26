@@ -2,6 +2,7 @@
 
 Tests the Sound domain extractor with real Sound samples.
 """
+
 from __future__ import annotations
 
 import json
@@ -144,14 +145,18 @@ class TestSoundProjection:
     def test_standard_strips_evidence(self, samples_dir: Path):
         """Standard mode strips evidence from Sound output."""
         semantic = _build_and_project(
-            samples_dir, "ALS_Concrete_Step_01_SoundWave.uasset", "standard",
+            samples_dir,
+            "ALS_Concrete_Step_01_SoundWave.uasset",
+            "standard",
         )
         assert len(semantic.evidence) == 0
 
     def test_debug_keeps_evidence(self, samples_dir: Path):
         """Debug mode keeps evidence in Sound output."""
         semantic = _build_and_project(
-            samples_dir, "ALS_Concrete_Step_01_SoundWave.uasset", "debug",
+            samples_dir,
+            "ALS_Concrete_Step_01_SoundWave.uasset",
+            "debug",
         )
         assert semantic.mode == "debug"
 

@@ -6,10 +6,10 @@ import io
 from types import SimpleNamespace
 
 
-
 # ---------------------------------------------------------------------------
 # _handle_node_guid
 # ---------------------------------------------------------------------------
+
 
 def _make_tag(size: int, value_end_offset: int = 16) -> SimpleNamespace:
     return SimpleNamespace(size=size, value_end_offset=value_end_offset)
@@ -33,6 +33,7 @@ class _ArchiveStub:
 
 def _import_handle_node_guid():
     from uasset_read.serializers.graph_node import _handle_node_guid
+
     return _handle_node_guid
 
 
@@ -49,7 +50,7 @@ class TestHandleNodeGuid:
 
     def test_normal_16_bytes_uppercase(self):
         handle = _import_handle_node_guid()
-        data = b"\xAB\xCD\xEF\x01" * 4
+        data = b"\xab\xcd\xef\x01" * 4
         archive = _ArchiveStub(data)
         tag = _make_tag(size=16)
         result = handle(archive, tag, None, None, None, None, None)
@@ -105,6 +106,7 @@ class TestHandleNodeGuid:
 # _extract_graph_properties — GraphGuid branch
 # ---------------------------------------------------------------------------
 
+
 class TestExtractGraphGuid:
     """Tests for GraphGuid extraction in _extract_graph_properties."""
 
@@ -115,75 +117,63 @@ class TestExtractGraphGuid:
 
     def _extract(self, props):
         from uasset_read.serializers.graph import _extract_graph_properties
+
         return _extract_graph_properties(self._make_graph_export(props))  # type: ignore[arg-type]
 
     def test_normal_guid(self):
         props = [
-            {"name": "GraphGuid", "value": {"fields": {"A": 0x01020304, "B": 0x05060708, "C": 0x090A0B0C, "D": 0x0D0E0F10}}}
+            {
+                "name": "GraphGuid",
+                "value": {"fields": {"A": 0x01020304, "B": 0x05060708, "C": 0x090A0B0C, "D": 0x0D0E0F10}},
+            }
         ]
         _, _, guid = self._extract(props)
         assert isinstance(guid, str)
         assert len(guid) == 28  # UE format: 14 bytes = 28 hex chars
 
     def test_none_field_values(self):
-        props = [
-            {"name": "GraphGuid", "value": {"fields": {"A": None, "B": None, "C": None, "D": None}}}
-        ]
+        props = [{"name": "GraphGuid", "value": {"fields": {"A": None, "B": None, "C": None, "D": None}}}]
         _, _, guid = self._extract(props)
         # Should fallback to zero GUID, not crash
         assert guid == "0" * 28
 
     def test_missing_fields_key(self):
-        props = [
-            {"name": "GraphGuid", "value": {"fields": {}}}
-        ]
+        props = [{"name": "GraphGuid", "value": {"fields": {}}}]
         _, _, guid = self._extract(props)
         # Empty fields dict is falsy → graph_guid stays empty
         assert guid == ""
 
     def test_no_fields_key(self):
-        props = [
-            {"name": "GraphGuid", "value": {}}
-        ]
+        props = [{"name": "GraphGuid", "value": {}}]
         _, _, guid = self._extract(props)
         assert guid == ""
 
     def test_non_dict_value(self):
-        props = [
-            {"name": "GraphGuid", "value": "not_a_dict"}
-        ]
+        props = [{"name": "GraphGuid", "value": "not_a_dict"}]
         _, _, guid = self._extract(props)
         assert guid == ""
 
     def test_string_field_values(self):
-        props = [
-            {"name": "GraphGuid", "value": {"fields": {"A": "bad", "B": "bad", "C": "bad", "D": "bad"}}}
-        ]
+        props = [{"name": "GraphGuid", "value": {"fields": {"A": "bad", "B": "bad", "C": "bad", "D": "bad"}}}]
         _, _, guid = self._extract(props)
         # Should fallback, not crash
         assert guid == ""
 
     def test_large_integer_field_values(self):
         """Values larger than 32-bit should be masked correctly."""
-        props = [
-            {"name": "GraphGuid", "value": {"fields": {"A": 0xFFFFFFFF + 1, "B": 0, "C": 0, "D": 0}}}
-        ]
+        props = [{"name": "GraphGuid", "value": {"fields": {"A": 0xFFFFFFFF + 1, "B": 0, "C": 0, "D": 0}}}]
         _, _, guid = self._extract(props)
         assert len(guid) == 28
 
     def test_negative_field_values(self):
         """Negative values should be masked to unsigned."""
-        props = [
-            {"name": "GraphGuid", "value": {"fields": {"A": -1, "B": 0, "C": 0, "D": 0}}}
-        ]
+        props = [{"name": "GraphGuid", "value": {"fields": {"A": -1, "B": 0, "C": 0, "D": 0}}}]
         _, _, guid = self._extract(props)
         # -1 & 0xFFFFFFFF == 0xFFFFFFFF, should produce valid hex
         assert len(guid) == 28
 
     def test_float_field_values(self):
-        props = [
-            {"name": "GraphGuid", "value": {"fields": {"A": 1.5, "B": 0, "C": 0, "D": 0}}}
-        ]
+        props = [{"name": "GraphGuid", "value": {"fields": {"A": 1.5, "B": 0, "C": 0, "D": 0}}}]
         _, _, guid = self._extract(props)
         # float & 0xFFFFFFFF would fail, int() converts first
         assert guid == "" or len(guid) == 28

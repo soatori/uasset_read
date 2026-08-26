@@ -56,6 +56,7 @@ logger = logging.getLogger(__name__)
 # Backfill missing methods from decompiled_functions (third path)
 # ============================================================================
 
+
 def _backfill_missing_methods(
     methods: List[CppMethodIR],
     decompiled_functions: List[Any],
@@ -68,22 +69,26 @@ def _backfill_missing_methods(
     """
     existing_names = {m.cpp_name for m in methods}
     for decompiled in decompiled_functions:
-        func_name = getattr(decompiled, 'function_name', None) or decompiled.name
+        func_name = getattr(decompiled, "function_name", None) or decompiled.name
         sanitized = sanitize_identifier(func_name)
         if sanitized not in existing_names:
-            methods.append(CppMethodIR(
-                cpp_name=sanitized,
-                return_type="void",
-                parameters=[],
-                ufunction_specifiers=[],
-                is_override=False,
-                body_text=decompiled.cpp_code or "/* no source available */",
-            ))
+            methods.append(
+                CppMethodIR(
+                    cpp_name=sanitized,
+                    return_type="void",
+                    parameters=[],
+                    ufunction_specifiers=[],
+                    is_override=False,
+                    body_text=decompiled.cpp_code or "/* no source available */",
+                )
+            )
             existing_names.add(sanitized)
+
 
 # ============================================================================
 # Core extraction functions
 # ============================================================================
+
 
 def extract_cpp_class_skeleton(ir: "PackageIR") -> CppClassIR:
     """Extract C++ class skeleton from PackageIR.
@@ -177,34 +182,38 @@ def extract_cpp_class_skeleton(ir: "PackageIR") -> CppClassIR:
 
     return skeleton
 
+
 # ============================================================================
 # Blueprint metadata filter (P0 improvement)
 # ============================================================================
 
 # Blueprint internal metadata properties, should not be output as C++ member variables
-BLUEPRINT_METADATA_KEYS = frozenset({
-    # Blueprint system properties
-    'BlueprintSystemVersion',
-    'BlueprintGuid',
-    'bLegacyNeedToPurgeSkelRefs',
-    'bEnforceConstCorrectness',
-    # Construction script
-    'SimpleConstructionScript',
-    # Graph related
-    'UbergraphPages',
-    'FunctionGraphs',
-    'NewVariables',
-    'CategorySorting',
-    'LastEditedDocuments',
-    'ImplementedInterfaces',
-    # Thumbnail and class references
-    'ThumbnailInfo',
-    'GeneratedClass',
-    'PropertyGuids',
-    # Ubergraph
-    'UbergraphFunction',
-    'UbergraphFrame',
-})
+BLUEPRINT_METADATA_KEYS = frozenset(
+    {
+        # Blueprint system properties
+        "BlueprintSystemVersion",
+        "BlueprintGuid",
+        "bLegacyNeedToPurgeSkelRefs",
+        "bEnforceConstCorrectness",
+        # Construction script
+        "SimpleConstructionScript",
+        # Graph related
+        "UbergraphPages",
+        "FunctionGraphs",
+        "NewVariables",
+        "CategorySorting",
+        "LastEditedDocuments",
+        "ImplementedInterfaces",
+        # Thumbnail and class references
+        "ThumbnailInfo",
+        "GeneratedClass",
+        "PropertyGuids",
+        # Ubergraph
+        "UbergraphFunction",
+        "UbergraphFrame",
+    }
+)
+
 
 def _is_blueprint_metadata(prop_name: str) -> bool:
     """Check if property is blueprint internal metadata.
@@ -217,16 +226,18 @@ def _is_blueprint_metadata(prop_name: str) -> bool:
     """
     return prop_name in BLUEPRINT_METADATA_KEYS
 
+
 # ============================================================================
 # Component name cleanup (P1 improvement)
 # ============================================================================
 
 # Component name suffix patterns to remove
 _COMPONENT_SUFFIX_PATTERNS = [
-    (re.compile(r'_GEN_VARIABLE$'), ''),
-    (re.compile(r'_\d+__[A-F0-9]+$'), ''),  # _0__CCE3C0B4 etc. hash suffixes
-    (re.compile(r'_\d+$'), ''),  # _0 etc. numeric suffixes
+    (re.compile(r"_GEN_VARIABLE$"), ""),
+    (re.compile(r"_\d+__[A-F0-9]+$"), ""),  # _0__CCE3C0B4 etc. hash suffixes
+    (re.compile(r"_\d+$"), ""),  # _0 etc. numeric suffixes
 ]
+
 
 def _clean_component_name(name: str) -> str:
     """Clean component name, removing UE internal suffixes.
@@ -247,9 +258,11 @@ def _clean_component_name(name: str) -> str:
         cleaned = pattern.sub(replacement, cleaned)
     return cleaned if cleaned else name
 
+
 # ============================================================================
 # Class name simplification (P0 improvement)
 # ============================================================================
+
 
 def _simplify_class_name(raw_name: str) -> str:
     """Simplify class name, extracting concise name from full package path.
@@ -265,25 +278,27 @@ def _simplify_class_name(raw_name: str) -> str:
         Simplified class name
     """
     # Remove path prefix
-    if '/' in raw_name:
-        raw_name = raw_name.rsplit('/', 1)[-1]
+    if "/" in raw_name:
+        raw_name = raw_name.rsplit("/", 1)[-1]
 
     # Remove dot-separated extension
-    if '.' in raw_name:
-        raw_name = raw_name.rsplit('.', 1)[0]
+    if "." in raw_name:
+        raw_name = raw_name.rsplit(".", 1)[0]
 
     # Replace illegal characters with underscores
-    cleaned = re.sub(r'[^A-Za-z0-9_]', '_', raw_name)
+    cleaned = re.sub(r"[^A-Za-z0-9_]", "_", raw_name)
 
     # Ensure it starts with a valid character
     if cleaned and cleaned[0].isdigit():
-        cleaned = '_' + cleaned
+        cleaned = "_" + cleaned
 
     return cleaned
+
 
 # ============================================================================
 # Helper functions
 # ============================================================================
+
 
 def _build_param_name_map(method: CppMethodIR) -> Dict[str, str]:
     """Build {original parameter name pattern -> sanitized name} mapping.
@@ -296,11 +311,12 @@ def _build_param_name_map(method: CppMethodIR) -> Dict[str, str]:
     """
     name_map = {}
     for param in method.parameters:
-        if '__' in param.name:
+        if "__" in param.name:
             # Reverse infer original name: '__' -> ' / '
-            original = param.name.replace('__', ' / ')
+            original = param.name.replace("__", " / ")
             name_map[original] = param.name
     return name_map
+
 
 def _inject_function_bodies(
     methods: List[CppMethodIR],
@@ -323,7 +339,7 @@ def _inject_function_bodies(
     method_index: Dict[str, CppMethodIR] = {m.cpp_name: m for m in methods}
 
     for decompiled in decompiled_functions:
-        func_name = getattr(decompiled, 'function_name', None) or decompiled.name
+        func_name = getattr(decompiled, "function_name", None) or decompiled.name
 
         # Exact match
         method = method_index.get(func_name)
@@ -347,6 +363,7 @@ def _inject_function_bodies(
                 body = body.replace(original, sanitized)
             method.body_text = body
 
+
 def _extract_class_name(ir: "PackageIR") -> str:
     """Extract C++ class name.
 
@@ -363,7 +380,7 @@ def _extract_class_name(ir: "PackageIR") -> str:
     """
     # Get name from header.package_name or name_map[0]
     raw_name = ""
-    if ir.header and hasattr(ir.header, 'package_name'):
+    if ir.header and hasattr(ir.header, "package_name"):
         raw_name = ir.header.package_name
     elif ir.name_map:
         raw_name = ir.name_map[0]
@@ -386,10 +403,8 @@ def _extract_class_name(ir: "PackageIR") -> str:
 
     return f"{prefix}{clean_name}"
 
-def _resolve_parent_class(
-    blueprint: "BlueprintIR",
-    linker: Optional[Any]
-) -> str:
+
+def _resolve_parent_class(blueprint: "BlueprintIR", linker: Optional[Any]) -> str:
     """Resolve parent class name.
 
     Per D-02: Extract from BlueprintIR.parent_class and convert to C++ class name.
@@ -409,10 +424,8 @@ def _resolve_parent_class(
 
     return ue_package_path_to_cpp_class(parent_path)
 
-def _extract_component_properties(
-    component_vars: List["VariableIR"],
-    components: List[Dict]
-) -> List[CppProperty]:
+
+def _extract_component_properties(component_vars: List["VariableIR"], components: List[Dict]) -> List[CppProperty]:
     """Extract component properties.
 
     Filters variables with kind="component" from the VariableIR list,
@@ -466,6 +479,7 @@ def _extract_component_properties(
 
     return properties
 
+
 def _create_component_property(var: "VariableIR") -> CppProperty:
     """Create component CppProperty from VariableIR.
 
@@ -504,6 +518,7 @@ def _create_component_property(var: "VariableIR") -> CppProperty:
         cpp_comment=f"UE type: {ue_type}",
     )
 
+
 def _extract_variable_properties(user_vars: List["VariableIR"]) -> List[CppProperty]:
     """Extract variable properties.
 
@@ -526,6 +541,7 @@ def _extract_variable_properties(user_vars: List["VariableIR"]) -> List[CppPrope
         properties.append(prop)
 
     return properties
+
 
 def _create_variable_property(var: "VariableIR") -> CppProperty:
     """Create variable CppProperty from VariableIR.
@@ -553,6 +569,7 @@ def _create_variable_property(var: "VariableIR") -> CppProperty:
         default_value=var.default_value,
         cpp_comment=f"UE type: {ue_type}",
     )
+
 
 def _extract_input_action_properties_from_ir(
     input_vars: List["VariableIR"],
@@ -584,6 +601,7 @@ def _extract_input_action_properties_from_ir(
         properties.append(prop)
 
     return properties
+
 
 def _build_methods_from_blueprint_ir(blueprint: "BlueprintIR") -> List[CppMethodIR]:
     """Build CppMethodIR list from BlueprintIR functions and events.
@@ -619,18 +637,20 @@ def _build_methods_from_blueprint_ir(blueprint: "BlueprintIR") -> List[CppMethod
         if func.access_specifier:
             access_modifier = func.access_specifier.lower()
 
-        methods.append(CppMethodIR(
-            cpp_name=sanitize_identifier(func.name),
-            return_type=func.return_type or "void",
-            parameters=parameters,
-            ufunction_specifiers=specifiers,
-            is_override=False,
-            is_const=func.is_const,
-            is_static=func.is_static,
-            is_pure=func.is_pure,
-            access_modifier=access_modifier,
-            source_node_type="BlueprintFunctionIR",
-        ))
+        methods.append(
+            CppMethodIR(
+                cpp_name=sanitize_identifier(func.name),
+                return_type=func.return_type or "void",
+                parameters=parameters,
+                ufunction_specifiers=specifiers,
+                is_override=False,
+                is_const=func.is_const,
+                is_static=func.is_static,
+                is_pure=func.is_pure,
+                access_modifier=access_modifier,
+                source_node_type="BlueprintFunctionIR",
+            )
+        )
 
     # Build methods from events
     for event in blueprint.events:
@@ -643,14 +663,16 @@ def _build_methods_from_blueprint_ir(blueprint: "BlueprintIR") -> List[CppMethod
             for p in event.parameters
         ]
 
-        methods.append(CppMethodIR(
-            cpp_name=sanitize_identifier(event.name),
-            return_type="void",
-            parameters=parameters,
-            ufunction_specifiers=[],
-            is_override=event.is_override,
-            source_node_type="BlueprintEventIR",
-        ))
+        methods.append(
+            CppMethodIR(
+                cpp_name=sanitize_identifier(event.name),
+                return_type="void",
+                parameters=parameters,
+                ufunction_specifiers=[],
+                is_override=event.is_override,
+                source_node_type="BlueprintEventIR",
+            )
+        )
 
     return methods
 
@@ -660,6 +682,7 @@ def _build_methods_from_blueprint_ir(blueprint: "BlueprintIR") -> List[CppMethod
 # ============================================================================
 
 # --- Helper functions (Plan 02) ---
+
 
 def _extract_cpp_type_from_pin(pin: "UEdGraphPin") -> Optional[str]:
     """Convert a single pin to a C++ type string.
@@ -699,10 +722,8 @@ def _extract_cpp_type_from_pin(pin: "UEdGraphPin") -> Optional[str]:
 
     return cpp_type
 
-def _extract_parameters_from_pins(
-    pins: List["UEdGraphPin"],
-    is_event: bool = False
-) -> List[CppCallParameter]:
+
+def _extract_parameters_from_pins(pins: List["UEdGraphPin"], is_event: bool = False) -> List[CppCallParameter]:
     """Extract function parameters from pin list."""
     params: List[CppCallParameter] = []
     for pin in pins:
@@ -723,12 +744,15 @@ def _extract_parameters_from_pins(
         if cpp_type is None:
             continue
 
-        params.append(CppCallParameter(
-            name=sanitize_identifier(pin.pin_name),
-            cpp_type=cpp_type,
-            direction="input" if pin.direction == 0 else "output",
-        ))
+        params.append(
+            CppCallParameter(
+                name=sanitize_identifier(pin.pin_name),
+                cpp_type=cpp_type,
+                direction="input" if pin.direction == 0 else "output",
+            )
+        )
     return params
+
 
 # ============================================================================
 # Function flag constants (UE5 UFunctionFlags) - reference EFunctionFlags.cs
@@ -759,6 +783,7 @@ FUNC_Const = 0x00200000
 FUNC_NetValidate = 0x00400000
 FUNC_BlueprintEvent = 0x08000000
 
+
 def _extractFunctionFlags(flags: int) -> Dict[str, bool]:
     """Extract function flags from extra_flags.
 
@@ -786,11 +811,8 @@ def _extractFunctionFlags(flags: int) -> Dict[str, bool]:
         "is_native": bool(flags & FUNC_Native),
     }
 
-def _infer_ufunction_specifiers(
-    pins: List["UEdGraphPin"],
-    is_override: bool,
-    extra_flags: int = 0
-) -> List[str]:
+
+def _infer_ufunction_specifiers(pins: List["UEdGraphPin"], is_override: bool, extra_flags: int = 0) -> List[str]:
     """Infer UFUNCTION specifiers (D-57-03).
 
     Improvement: Extract flags from extra_flags.
@@ -808,36 +830,28 @@ def _infer_ufunction_specifiers(
         return ["BlueprintCallable"]
 
     # Fallback to pin-based inference
-    has_exec_input = any(
-        p for p in pins
-        if p.pin_type and p.pin_type.pin_category == "exec" and p.direction == 0
-    )
-    has_exec_output = any(
-        p for p in pins
-        if p.pin_type and p.pin_type.pin_category == "exec" and p.direction == 1
-    )
+    has_exec_input = any(p for p in pins if p.pin_type and p.pin_type.pin_category == "exec" and p.direction == 0)
+    has_exec_output = any(p for p in pins if p.pin_type and p.pin_type.pin_category == "exec" and p.direction == 1)
     if has_exec_input or has_exec_output:
         return ["BlueprintCallable"]
     return ["BlueprintPure"]
 
-def _build_cpp_method_from_entry(
-    fe_node: "K2NodeFunctionEntry",
-    blueprint_functions: Dict
-) -> CppMethodIR:
+
+def _build_cpp_method_from_entry(fe_node: "K2NodeFunctionEntry", blueprint_functions: Dict) -> CppMethodIR:
     """Build CppMethodIR from K2Node_FunctionEntry.
 
     Improvement: Extract function flags from extra_flags.
     """
     # Get function_reference from node_data (may be in node_data dictionary)
-    func_ref = getattr(fe_node, 'function_reference', None)
+    func_ref = getattr(fe_node, "function_reference", None)
     extra_flags = 0
     if fe_node.node_data:
         if isinstance(fe_node.node_data, dict):
-            func_ref = fe_node.node_data.get('function_reference', func_ref)
-            extra_flags = fe_node.node_data.get('extra_flags', 0)
+            func_ref = fe_node.node_data.get("function_reference", func_ref)
+            extra_flags = fe_node.node_data.get("extra_flags", 0)
         else:
-            func_ref = getattr(fe_node.node_data, 'function_reference', func_ref)
-            extra_flags = getattr(fe_node.node_data, 'extra_flags', 0)
+            func_ref = getattr(fe_node.node_data, "function_reference", func_ref)
+            extra_flags = getattr(fe_node.node_data, "extra_flags", 0)
 
     if func_ref is None:
         return None
@@ -866,11 +880,7 @@ def _build_cpp_method_from_entry(
         parameters = _extract_parameters_from_pins(fe_node.pins)
         return_type = "void"
 
-    specifiers = _infer_ufunction_specifiers(
-        fe_node.pins,
-        is_override=False,
-        extra_flags=extra_flags
-    )
+    specifiers = _infer_ufunction_specifiers(fe_node.pins, is_override=False, extra_flags=extra_flags)
 
     # Determine access modifier
     access_modifier = "protected"  # Default
@@ -894,6 +904,7 @@ def _build_cpp_method_from_entry(
         source_node_type="K2Node_FunctionEntry",
     )
 
+
 def _build_cpp_method_from_event(event_node: "K2NodeEvent") -> CppMethodIR:
     """Build CppMethodIR from K2Node_Event (is_override=True)."""
     # Get event_reference from node_data
@@ -903,19 +914,19 @@ def _build_cpp_method_from_event(event_node: "K2NodeEvent") -> CppMethodIR:
     if nd is not None:
         if isinstance(nd, dict):
             # Dictionary format: get directly from dictionary
-            event_ref = nd.get('event_reference')
+            event_ref = nd.get("event_reference")
         else:
             # Object format: use getattr
-            event_ref = getattr(nd, 'event_reference', None)
+            event_ref = getattr(nd, "event_reference", None)
 
     # Try to get from node attribute
     if event_ref is None:
-        event_ref = getattr(event_node, 'event_reference', None)
+        event_ref = getattr(event_node, "event_reference", None)
 
     if event_ref is None:
         return None
 
-    event_name = event_ref.member_name if hasattr(event_ref, 'member_name') else None
+    event_name = event_ref.member_name if hasattr(event_ref, "member_name") else None
     if not event_name or event_name == "None":
         return None
 
@@ -930,7 +941,9 @@ def _build_cpp_method_from_event(event_node: "K2NodeEvent") -> CppMethodIR:
         source_node_type="K2Node_Event",
     )
 
+
 # --- Main entry (Plan 02) ---
+
 
 def extract_cpp_functions(
     graphs: List["UEdGraph"],
@@ -958,9 +971,9 @@ def extract_cpp_functions(
                 b_override = False
                 nd = node.node_data
                 if isinstance(nd, dict):
-                    b_override = nd.get('b_override_function', False)
+                    b_override = nd.get("b_override_function", False)
                 else:
-                    b_override = getattr(node, 'b_override_function', False)
+                    b_override = getattr(node, "b_override_function", False)
 
                 if b_override:
                     method = _build_cpp_method_from_event(node)
@@ -968,12 +981,11 @@ def extract_cpp_functions(
                         methods.append(method)
     return methods
 
+
 # --- Call statement extraction (Plan 03) ---
 
-def _derive_call_target(
-    pins: List["UEdGraphPin"],
-    b_self_context: bool
-) -> Tuple[str, str]:
+
+def _derive_call_target(pins: List["UEdGraphPin"], b_self_context: bool) -> Tuple[str, str]:
     """Derive call target.
 
     b_self_context=True -> ("this", "this")
@@ -993,6 +1005,7 @@ def _derive_call_target(
                     return (cpp_type, "pointer")
     return ("Unknown", "pointer")
 
+
 def extract_cpp_call_statements(
     graphs: List["UEdGraph"],
     linker: Optional[Any] = None,
@@ -1005,14 +1018,14 @@ def extract_cpp_call_statements(
                 continue
 
             # Get function_reference
-            func_ref = getattr(node, 'function_reference', None)
+            func_ref = getattr(node, "function_reference", None)
             if func_ref is None:
                 continue
-            member_name = getattr(func_ref, 'member_name', None)
+            member_name = getattr(func_ref, "member_name", None)
             if not member_name or member_name == "None":
                 continue
 
-            b_self_context = getattr(func_ref, 'b_self_context', True)
+            b_self_context = getattr(func_ref, "b_self_context", True)
             target, target_type = _derive_call_target(node.pins, b_self_context)
 
             # Extract arguments (skip exec/then/self)
@@ -1024,18 +1037,22 @@ def extract_cpp_call_statements(
                     continue
                 args.append(sanitize_identifier(pin.pin_name))
 
-            statements.append(CppCallStatement(
-                method_name=member_name,
-                target=target,
-                target_type=target_type,
-                args=args,
-                is_self_context=b_self_context,
-            ))
+            statements.append(
+                CppCallStatement(
+                    method_name=member_name,
+                    target=target,
+                    target_type=target_type,
+                    args=args,
+                    is_self_context=b_self_context,
+                )
+            )
     return statements
+
 
 # ============================================================================
 # Constructor extraction
 # ============================================================================
+
 
 def extract_cpp_constructor(ir: "CppClassIR") -> str:
     """Generate complete C++ constructor text from CppClassIR.
@@ -1049,6 +1066,7 @@ def extract_cpp_constructor(ir: "CppClassIR") -> str:
         Complete C++ constructor text
     """
     return format_cpp_constructor(ir)
+
 
 # ============================================================================
 # Export list

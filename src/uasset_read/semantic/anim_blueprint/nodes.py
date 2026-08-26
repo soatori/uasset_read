@@ -6,6 +6,7 @@ Extends the Blueprint node emission with animation-specific node kinds:
 - Blend nodes
 - Animation-specific nodes
 """
+
 from __future__ import annotations
 
 from uasset_read.semantic.blueprint.ids import ascii_slug
@@ -235,8 +236,7 @@ def emit_anim_node(node, graph_slug, ordinal_counts, table, reporting, mode):
                 "direction": direction,
                 "is_exec": is_exec,
                 "is_pose": is_pose,
-                "orphaned": bool(getattr(pin, "orphaned", False)
-                                 or getattr(pin, "orphaned_pin", False)),
+                "orphaned": bool(getattr(pin, "orphaned", False) or getattr(pin, "orphaned_pin", False)),
                 "not_connectable": bool(getattr(pin, "not_connectable", False)),
                 "linked": linked,
             }
@@ -249,8 +249,7 @@ def emit_anim_node(node, graph_slug, ordinal_counts, table, reporting, mode):
             role = ascii_slug(pin_name).lower().replace("_", "-") or "port"
             control_ports[endpoint] = {"name": pin_name, "direction": direction, "role": role}
         elif _pin_keep(pin, connected):
-            dpin: dict = {"name": pin_name, "direction": direction,
-                          "type": type_ref_from_pin(table, pin)}
+            dpin: dict = {"name": pin_name, "direction": direction, "type": type_ref_from_pin(table, pin)}
             if getattr(pin, "sub_pin_guids", None):
                 dpin["path"] = [ascii_slug(pin_name)]
             if getattr(pin, "parent_pin_guid", ""):
@@ -278,6 +277,5 @@ def emit_anim_node(node, graph_slug, ordinal_counts, table, reporting, mode):
     if pose_pins:
         result["pose_pins"] = pose_pins
     if mode == "debug":
-        result["evidence"] = {"node_guid": getattr(node, "node_guid", "") or "",
-                              "source_class": node_class}
+        result["evidence"] = {"node_guid": getattr(node, "node_guid", "") or "", "source_class": node_class}
     return result, node_index

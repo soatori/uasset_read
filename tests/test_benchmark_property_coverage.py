@@ -5,6 +5,7 @@ Results are informational.
 
 Marker: benchmark
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -36,10 +37,7 @@ class TestPropertyCoverage:
                     if prop_type:
                         seen_types.add(str(prop_type))
 
-        print(
-            f"\nProperty coverage: {len(seen_types)} distinct types "
-            f"across {total_properties} total properties"
-        )
+        print(f"\nProperty coverage: {len(seen_types)} distinct types across {total_properties} total properties")
         if seen_types:
             sorted_types = sorted(seen_types)
             print(f"Types: {', '.join(sorted_types[:30])}")

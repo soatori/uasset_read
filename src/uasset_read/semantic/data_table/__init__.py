@@ -1,4 +1,5 @@
 """DataTable semantic JSON domain (#557)."""
+
 from __future__ import annotations
 
 from uasset_read.semantic.extensions import register_extension

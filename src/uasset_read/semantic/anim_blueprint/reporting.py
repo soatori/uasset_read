@@ -2,6 +2,7 @@
 
 Reuses the BlueprintReporting implementation from the blueprint module.
 """
+
 from uasset_read.semantic.blueprint.reporting import BlueprintReporting
 
 __all__ = ["AnimBlueprintReporting"]

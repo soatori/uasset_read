@@ -16,6 +16,7 @@ The IR Builder is responsible for converting serialization models to presentatio
 Per D-01: Keep UE source naming.
 Per D-10: Python 3.10+ strict type hints.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
 @dataclass
 class FEdGraphPinType:
     """Blueprint pin type structure."""
+
     pin_category: str = ""
     pin_subcategory: str = ""
     pin_subcategory_object: Optional[int] = None  # FPackageIndex (int32)
@@ -51,6 +53,7 @@ class FEdGraphPinType:
 @dataclass
 class UEdGraphPin:
     """UEdGraphPin complete blueprint pin structure."""
+
     # PIN-01: Basic information
     pin_id: str
     pin_name: str
@@ -91,6 +94,7 @@ class UEdGraphPin:
 @dataclass
 class UEdGraphNode:
     """UEdGraphNode base class for blueprint nodes."""
+
     node_guid: str
     node_pos_x: int = 0
     node_pos_y: int = 0
@@ -103,6 +107,7 @@ class UEdGraphNode:
 @dataclass
 class UEdGraph:
     """UEdGraph blueprint graph container."""
+
     graph_name: str
     graph_class: str
     schema: Optional[str] = None
@@ -115,6 +120,7 @@ class UEdGraph:
 @dataclass
 class FMemberReference:
     """FMemberReference member reference structure."""
+
     member_parent: Optional[str] = None
     member_name: str = ""
     member_guid: Optional[str] = None

@@ -1,4 +1,5 @@
 """Animation Blueprint semantic IDs — readable URIs, ASCII slugs, endpoint IDs."""
+
 from __future__ import annotations
 
 import re

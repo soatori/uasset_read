@@ -53,6 +53,7 @@ def has_false_positive_pattern(data: bytes) -> bool:
         return True
     # Detect if more than 50% of bytes are the same value (false positive characteristic)
     from collections import Counter
+
     most_common_count = Counter(data).most_common(1)[0][1]
     if most_common_count / len(data) > 0.5:
         return True
@@ -60,9 +61,8 @@ def has_false_positive_pattern(data: bytes) -> bool:
 
 
 # Scan complexity limits — prevent combinatorial explosion in large Blueprints
-MAX_SCAN_ATTEMPTS = 500       # Maximum (start, end) combinations to try per function
-MAX_CANDIDATE_SIZE = 4096     # Maximum candidate byte stream length (bytes)
-
+MAX_SCAN_ATTEMPTS = 500  # Maximum (start, end) combinations to try per function
+MAX_CANDIDATE_SIZE = 4096  # Maximum candidate byte stream length (bytes)
 
 
 # ===========================================================================
@@ -104,9 +104,7 @@ def parse_bytecode_stream(
 
     if not bytecode_bytes:
         if bytecode_buffer_size != 0:
-            raise ParseError(
-                f"Bytecode size mismatch: logical index 0, expected {bytecode_buffer_size}"
-            )
+            raise ParseError(f"Bytecode size mismatch: logical index 0, expected {bytecode_buffer_size}")
         return []
 
     archive = FKismetArchive(bytecode_bytes, "ScriptBytecode", name_map, tolerant=tolerant)
@@ -118,6 +116,7 @@ def parse_bytecode_stream(
             RELEASE_GUID,
             get_kismet_custom_version,
         )
+
         archive.fortnite_version = get_kismet_custom_version(summary, FORTNITE_GUID)
         archive.release_version = get_kismet_custom_version(summary, RELEASE_GUID)
     expressions: list[KismetExpression] = []
@@ -134,14 +133,12 @@ def parse_bytecode_stream(
 
     if archive.serialized_offset != len(bytecode_bytes):
         raise ParseError(
-            f"Serialized size mismatch: consumed {archive.serialized_offset} bytes, "
-            f"expected {len(bytecode_bytes)}"
+            f"Serialized size mismatch: consumed {archive.serialized_offset} bytes, expected {len(bytecode_bytes)}"
         )
 
     if bytecode_buffer_size > 0 and archive.bytecode_index != bytecode_buffer_size:
         raise ParseError(
-            f"Bytecode size mismatch: logical index {archive.bytecode_index}, "
-            f"expected {bytecode_buffer_size}"
+            f"Bytecode size mismatch: logical index {archive.bytecode_index}, expected {bytecode_buffer_size}"
         )
 
     # --- Jump target validation ---
@@ -169,20 +166,16 @@ def _validate_jump_targets(expressions: list[KismetExpression]) -> None:
             targets.append(expr.PushingAddress)
         elif expr.Token == _EExprToken.EX_SwitchValue:
             targets.append(expr.EndGotoOffset)
-            for case in (expr.Cases or []):
+            for case in expr.Cases or []:
                 targets.append(case.NextOffset)
         elif expr.Token == _EExprToken.EX_AutoRtfmTransact:
             targets.append(expr.CodeOffset)
 
         for target in targets:
             if target not in top_level_indices:
-                raise ParseError(
-                    f"Invalid jump target {target} at offset {expr.StatementIndex}"
-                )
+                raise ParseError(f"Invalid jump target {target} at offset {expr.StatementIndex}")
 
 
 # ===========================================================================
 # Output formatting (BYTECODE-03)
 # ===========================================================================
-
-

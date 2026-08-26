@@ -11,11 +11,7 @@ from uasset_read.models.asset_metadata import (
 
 
 def _properties_by_name(properties: list[Any]) -> dict[str, Any]:
-    return {
-        prop.name: prop.value
-        for prop in properties
-        if getattr(prop, "name", None) is not None
-    }
+    return {prop.name: prop.value for prop in properties if getattr(prop, "name", None) is not None}
 
 
 def _size(value: Any) -> dict[str, int] | None:
@@ -53,6 +49,7 @@ def _normalize_raw_bytes(raw_data: Any) -> bytes | None:
 def _decode_fvector_array(raw_bytes: bytes) -> list[dict[str, float]] | None:
     """Decode TArray<FVector>: u32 count + FVector[count] (3×f64 = 24 bytes each)."""
     import struct
+
     if len(raw_bytes) < 4:
         return None
     count = struct.unpack_from("<I", raw_bytes, 0)[0]
@@ -78,6 +75,7 @@ def _decode_builder_polys(raw_bytes: bytes) -> list[dict[str, Any]] | None:
         PolyFlags:     int32
     """
     import struct
+
     if len(raw_bytes) < 4:
         return None
     poly_count = struct.unpack_from("<I", raw_bytes, 0)[0]
@@ -102,12 +100,14 @@ def _decode_builder_polys(raw_bytes: bytes) -> list[dict[str, Any]] | None:
             return None
         direction, fn_number, fn_pool_idx, poly_flags = struct.unpack_from("<iiii", raw_bytes, off)
         off += 16
-        result.append({
-            "VertexIndices": indices,
-            "Direction": direction,
-            "ItemName": f"NAME_{fn_pool_idx}" if fn_pool_idx >= 0 else f"None_{fn_number}",
-            "PolyFlags": poly_flags,
-        })
+        result.append(
+            {
+                "VertexIndices": indices,
+                "Direction": direction,
+                "ItemName": f"NAME_{fn_pool_idx}" if fn_pool_idx >= 0 else f"None_{fn_number}",
+                "PolyFlags": poly_flags,
+            }
+        )
     return result
 
 
@@ -184,7 +184,9 @@ def build_property_metadata(
     elif class_name == "CubeBuilder":
         # Extract UPROPERTY scalar fields
         for prop_name, field_name in (
-            ("X", "size_x"), ("Y", "size_y"), ("Z", "size_z"),
+            ("X", "size_x"),
+            ("Y", "size_y"),
+            ("Z", "size_z"),
             ("WallThickness", "wall_thickness"),
         ):
             if prop_name in values:
@@ -208,12 +210,14 @@ def build_property_metadata(
                 else:
                     fields = getattr(poly, "fields", {})
                 if fields:
-                    decoded_polys.append({
-                        "VertexIndices": fields.get("VertexIndices", []),
-                        "Direction": fields.get("Direction", 0),
-                        "ItemName": fields.get("ItemName", "None"),
-                        "PolyFlags": fields.get("PolyFlags", 0),
-                    })
+                    decoded_polys.append(
+                        {
+                            "VertexIndices": fields.get("VertexIndices", []),
+                            "Direction": fields.get("Direction", 0),
+                            "ItemName": fields.get("ItemName", "None"),
+                            "PolyFlags": fields.get("PolyFlags", 0),
+                        }
+                    )
             if decoded_polys:
                 project("polygons", decoded_polys)
         elif isinstance(polygons, dict):

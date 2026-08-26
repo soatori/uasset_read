@@ -11,7 +11,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from uasset_read.kismet.expressions.base import (
-    KismetExpression, KismetExpressionT, make_simple_expression,
+    KismetExpression,
+    KismetExpressionT,
+    make_simple_expression,
 )
 from uasset_read.kismet.tokens import EExprToken
 
@@ -58,9 +60,7 @@ class EX_JumpIfNot(EX_Jump):
 
     def to_dict(self) -> dict:
         d = super().to_dict()
-        d["BooleanExpression"] = (
-            self.BooleanExpression.to_dict() if self.BooleanExpression else None
-        )
+        d["BooleanExpression"] = self.BooleanExpression.to_dict() if self.BooleanExpression else None
         return d
 
 
@@ -82,9 +82,7 @@ class EX_Skip(EX_Jump):
 
     def to_dict(self) -> dict:
         d = super().to_dict()
-        d["SkipExpression"] = (
-            self.SkipExpression.to_dict() if self.SkipExpression else None
-        )
+        d["SkipExpression"] = self.SkipExpression.to_dict() if self.SkipExpression else None
         return d
 
 
@@ -105,9 +103,7 @@ class EX_ComputedJump(KismetExpression):
 
     def to_dict(self) -> dict:
         d = super().to_dict()
-        d["CodeOffsetExpression"] = (
-            self.CodeOffsetExpression.to_dict() if self.CodeOffsetExpression else None
-        )
+        d["CodeOffsetExpression"] = self.CodeOffsetExpression.to_dict() if self.CodeOffsetExpression else None
         return d
 
 
@@ -153,9 +149,7 @@ class EX_PopExecutionFlowIfNot(KismetExpression):
 
     def to_dict(self) -> dict:
         d = super().to_dict()
-        d["BooleanExpression"] = (
-            self.BooleanExpression.to_dict() if self.BooleanExpression else None
-        )
+        d["BooleanExpression"] = self.BooleanExpression.to_dict() if self.BooleanExpression else None
         return d
 
 

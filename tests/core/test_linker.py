@@ -3,6 +3,7 @@
 Tests the link() → preload() → post_load() lifecycle and object graph
 resolution using real .uasset samples.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -50,7 +51,9 @@ class TestLinkerLifecycle:
         """Preloading all exports does not crash."""
         sample = samples_dir / "FirstPerson_BP_FirstPersonCharacter.uasset"
         result = parse_uasset_with_linker(
-            str(sample), tolerant=True, preload_all=True,
+            str(sample),
+            tolerant=True,
+            preload_all=True,
         )
         assert isinstance(result, ParseResult)
         assert result.linker is not None
@@ -79,7 +82,9 @@ class TestLinkerWithVariousTypes:
         ids=["anim_bp", "anim_bp2", "data_table", "enum", "static_mesh"],
     )
     def test_linker_succeeds_for_various_types(
-        self, samples_dir: Path, filename: str,
+        self,
+        samples_dir: Path,
+        filename: str,
     ):
         """Linker creation succeeds for various asset types."""
         sample = samples_dir / filename
@@ -116,7 +121,9 @@ class TestLinkerErrorRecovery:
         """preload_all in tolerant mode handles errors gracefully."""
         sample = samples_dir / "FirstPerson_BP_FirstPersonCharacter.uasset"
         result = parse_uasset_with_linker(
-            str(sample), tolerant=True, preload_all=True,
+            str(sample),
+            tolerant=True,
+            preload_all=True,
         )
         # Should not crash, even if some exports fail to preload
         assert result is not None

@@ -16,6 +16,7 @@ UStruct exports have:
 - Properties (tagged properties list)
 - StructFlags: uint32
 """
+
 from __future__ import annotations
 
 import logging
@@ -84,7 +85,7 @@ def extract_user_defined_enum(export: Any, name_map: List[str]) -> Optional[Dict
     for idx, name in enumerate(name_map):
         if name.startswith(enum_prefix):
             # This is a full enum name like "Enum_PanelType::NewEnumerator0"
-            short_name = name[len(enum_prefix):]
+            short_name = name[len(enum_prefix) :]
             # Skip the MAX entry
             if short_name.endswith("::Enum_MAX") or short_name == "Enum_MAX":
                 continue
@@ -95,19 +96,18 @@ def extract_user_defined_enum(export: Any, name_map: List[str]) -> Optional[Dict
             # Get display name from DisplayNameMap if available
             display_name = display_names_map.get(idx, short_name)
 
-            enum_entries.append({
-                "name": short_name,
-                "display_name": display_name if display_name else short_name,
-            })
+            enum_entries.append(
+                {
+                    "name": short_name,
+                    "display_name": display_name if display_name else short_name,
+                }
+            )
 
     if not enum_entries:
         return None
 
     # Sort entries by their order in the name table for determinism
-    enum_entries.sort(key=lambda e: next(
-        (i for i, n in enumerate(name_map) if n.endswith(f"::{e['name']}")),
-        0
-    ))
+    enum_entries.sort(key=lambda e: next((i for i, n in enumerate(name_map) if n.endswith(f"::{e['name']}")), 0))
 
     return {
         "type": "enum",
@@ -179,8 +179,8 @@ def extract_user_defined_struct(export: Any, name_map: List[str]) -> Optional[Di
             continue
 
         # Regular user-defined fields (UPROPERTY)
-        elif prop_name and prop_type and prop_name not in (
-            "None", "ClassDefaultObject", "ClassCDO", "ClassGeneratedBy"
+        elif (
+            prop_name and prop_type and prop_name not in ("None", "ClassDefaultObject", "ClassCDO", "ClassGeneratedBy")
         ):
             field_info: Dict[str, Any] = {
                 "name": prop_name,
@@ -191,10 +191,20 @@ def extract_user_defined_struct(export: Any, name_map: List[str]) -> Optional[Di
             if prop_value is not None:
                 # Don't include complex nested structures as defaults
                 if prop_type in (
-                    "BoolProperty", "ByteProperty", "IntProperty", "Int8Property",
-                    "Int16Property", "Int64Property", "UInt32Property", "UInt64Property",
-                    "FloatProperty", "DoubleProperty", "StrProperty", "NameProperty",
-                    "TextProperty", "EnumProperty",
+                    "BoolProperty",
+                    "ByteProperty",
+                    "IntProperty",
+                    "Int8Property",
+                    "Int16Property",
+                    "Int64Property",
+                    "UInt32Property",
+                    "UInt64Property",
+                    "FloatProperty",
+                    "DoubleProperty",
+                    "StrProperty",
+                    "NameProperty",
+                    "TextProperty",
+                    "EnumProperty",
                 ):
                     field_info["default_value"] = str(prop_value)
                 elif prop_type == "ObjectProperty":

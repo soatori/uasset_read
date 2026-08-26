@@ -9,6 +9,7 @@ This module:
   - defines read_ue_graph / _extract_graph_properties
   - re-exports symbols from graph_pin.py and graph_node.py for backward compat
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,7 +24,7 @@ if TYPE_CHECKING:
 
 from uasset_read.constants import (
     MAX_NODES_PER_GRAPH,  # noqa: F401 — backward-compat re-export
-    MAX_SUBGRAPHS,        # noqa: F401 — backward-compat re-export
+    MAX_SUBGRAPHS,  # noqa: F401 — backward-compat re-export
 )
 from uasset_read.exceptions import ParseError
 from uasset_read.serializers.graph_helpers import _gac
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # UEdGraph reading
 # ============================================================================
+
 
 def _extract_graph_properties(
     graph_export: ObjectExport,
@@ -133,8 +135,9 @@ def read_ue_graph(
 
     # -- 2. Read each node's binary data by node_indices --
     if len(node_indices) > MAX_NODES_PER_GRAPH:
-        logger.debug("node_indices count %d exceeds MAX_NODES_PER_GRAPH %d, truncating",
-                       len(node_indices), MAX_NODES_PER_GRAPH)
+        logger.debug(
+            "node_indices count %d exceeds MAX_NODES_PER_GRAPH %d, truncating", len(node_indices), MAX_NODES_PER_GRAPH
+        )
         node_indices = node_indices[:MAX_NODES_PER_GRAPH]
 
     nodes: List[UEdGraphNode] = []
@@ -148,8 +151,12 @@ def read_ue_graph(
             node._export_index = node_index  # tag for dedup
             nodes.append(node)
         except (ParseError, struct.error, OSError, ValueError, KeyError):
-            logger.debug("Failed to read node %s (export #%d) in graph %s",
-                           node_export.object_name, node_index, graph_export.object_name)
+            logger.debug(
+                "Failed to read node %s (export #%d) in graph %s",
+                node_export.object_name,
+                node_index,
+                graph_export.object_name,
+            )
 
     # UE 5.x fallback: scan export_map for nodes whose outer is this graph.
     # Catches nodes not listed in the Nodes PropertyTag (e.g. dynamically added nodes).
@@ -157,28 +164,31 @@ def read_ue_graph(
         for node_export in export_map:
             if node_export.outer_index.index == graph_export_idx:
                 node_class = _gac(node_export, import_map, export_map, linker)
-                if node_class and (node_class.startswith("K2Node") or node_class.startswith("EdGraphNode") or "Node" in node_class):
+                if node_class and (
+                    node_class.startswith("K2Node") or node_class.startswith("EdGraphNode") or "Node" in node_class
+                ):
                     node_idx = export_map.index(node_export) + 1
-                    already_collected = any(
-                        getattr(n, '_export_index', None) == node_idx
-                        for n in nodes
-                    )
+                    already_collected = any(getattr(n, "_export_index", None) == node_idx for n in nodes)
                     if already_collected:
                         continue
                     try:
-                        node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
+                        node = read_ue_graph_node(
+                            archive, name_map, summary, export_map, import_map, node_export, linker
+                        )
                         node._export_index = node_idx  # tag for dedup
                         nodes.append(node)
                     except (ParseError, struct.error, OSError, ValueError, KeyError):
-                        nodes.append(UEdGraphNode(
-                            node_guid="",
-                            node_pos_x=0,
-                            node_pos_y=0,
-                            node_comment="",
-                            pins=[],
-                            class_name=node_class or "",
-                            node_data={"_parse_error": True, "node_name": node_export.object_name},
-                        ))
+                        nodes.append(
+                            UEdGraphNode(
+                                node_guid="",
+                                node_pos_x=0,
+                                node_pos_y=0,
+                                node_comment="",
+                                pins=[],
+                                class_name=node_class or "",
+                                node_data={"_parse_error": True, "node_name": node_export.object_name},
+                            )
+                        )
                         nodes[-1]._export_object_name = node_export.object_name
 
     # -- 3. bEditable / SubGraphs -- from PropertyTag or fallback --
@@ -196,7 +206,8 @@ def read_ue_graph(
             if len(pvalue) > MAX_SUBGRAPHS:
                 logger.debug(
                     "SubGraphs count %d exceeds limit %d, truncating",
-                    len(pvalue), MAX_SUBGRAPHS,
+                    len(pvalue),
+                    MAX_SUBGRAPHS,
                 )
                 pvalue = pvalue[:MAX_SUBGRAPHS]
             subgraph_indices = [v for v in pvalue if isinstance(v, int) and v > 0]
@@ -219,8 +230,15 @@ def read_ue_graph(
 
         try:
             subgraph = read_ue_graph(
-                archive, name_map, summary, export_map, import_map,
-                subgraph_export, subgraph_class, pkg_idx, linker,
+                archive,
+                name_map,
+                summary,
+                export_map,
+                import_map,
+                subgraph_export,
+                subgraph_class,
+                pkg_idx,
+                linker,
                 _parsed_indices=_parsed_indices,
             )
             subgraphs.append(subgraph)
@@ -252,8 +270,15 @@ def read_ue_graph(
 
             try:
                 subgraph = read_ue_graph(
-                    archive, name_map, summary, export_map, import_map,
-                    subgraph_export, subgraph_class, pkg_idx, linker,
+                    archive,
+                    name_map,
+                    summary,
+                    export_map,
+                    import_map,
+                    subgraph_export,
+                    subgraph_class,
+                    pkg_idx,
+                    linker,
                     _parsed_indices=_parsed_indices,
                 )
                 subgraph.graph_name = f"{node.node_comment or node.class_name}.{ref_key}"

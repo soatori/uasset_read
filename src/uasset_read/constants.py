@@ -18,15 +18,15 @@ EXIT_ARGUMENT_ERROR = 3
 # Package file tags (from UE source code)
 # ============================================================================
 
-PACKAGE_FILE_TAG = 0x9E2A83C1       # Correct byte order magic tag
+PACKAGE_FILE_TAG = 0x9E2A83C1  # Correct byte order magic tag
 PACKAGE_FILE_TAG_SWAPPED = 0xC1832A9E  # Swapped byte order magic tag
 
 # ============================================================================
 # Version constants
 # ============================================================================
 
-UE5_VERSION_MIN = 0                # UE5 version minimum
-UE5_LEGACY_VERSION = -9            # Fixed LegacyFileVersion for UE5.6+ files
+UE5_VERSION_MIN = 0  # UE5 version minimum
+UE5_LEGACY_VERSION = -9  # Fixed LegacyFileVersion for UE5.6+ files
 # -8: FileVersionUE5 field added, -7: texture allocation info removed, -6: custom version serialization optimization
 UE5_LEGACY_VERSIONS = frozenset({-6, -7, -8, UE5_LEGACY_VERSION})  # Supported UE5 LegacyFileVersion
 
@@ -52,24 +52,26 @@ MAX_GENERATIONS = 10_000  # Maximum Generations table entries
 MAX_COMPRESSED_CHUNKS = 100_000  # Maximum CompressedChunks entries
 MAX_SOFT_PACKAGE_REFS = 1_000_000  # Maximum SoftPackageReferences entries
 MMAP_THRESHOLD = 10 * 1024 * 1024  # 10MB - switch to mmap above this (lower threshold to reduce memory peak)
-MAX_PROPERTY_COUNT = 10_000        # Property loop limit
-MAX_RECURSION_DEPTH = 50           # Maximum property nesting recursion depth (prevents stack overflow from malicious/malformed assets)
-MIN_UASSET_SIZE = 64               # Minimum legal .uasset file size (bytes)
-                                      # Contains minimum of Tag(4) + version fields(16~20) + LicenseeVer(4) + Hash(20) + HeaderSize(4)
-MAX_ARRAY_COUNT = 1_000_000       # Maximum ArrayProperty elements (per HIGH-07/35d-01)
-MAX_ARRAY_DIM = 256               # Maximum array dimension in mapping property info
-MAX_FSTRING_LENGTH = 10_000_000   # 10 MB — FString maximum length (UTF-8/UTF-16)
+MAX_PROPERTY_COUNT = 10_000  # Property loop limit
+MAX_RECURSION_DEPTH = (
+    50  # Maximum property nesting recursion depth (prevents stack overflow from malicious/malformed assets)
+)
+MIN_UASSET_SIZE = 64  # Minimum legal .uasset file size (bytes)
+# Contains minimum of Tag(4) + version fields(16~20) + LicenseeVer(4) + Hash(20) + HeaderSize(4)
+MAX_ARRAY_COUNT = 1_000_000  # Maximum ArrayProperty elements (per HIGH-07/35d-01)
+MAX_ARRAY_DIM = 256  # Maximum array dimension in mapping property info
+MAX_FSTRING_LENGTH = 10_000_000  # 10 MB — FString maximum length (UTF-8/UTF-16)
 
 # ============================================================================
 # PropertyTag flags
 # ============================================================================
 
-PROP_TAG_HAS_ARRAY_INDEX = 0x01      # ArrayIndex field present
-PROP_TAG_HAS_PROPERTY_GUID = 0x02    # PropertyGuid field present
-PROP_TAG_HAS_EXTENSIONS = 0x04       # Extension data
-PROP_TAG_HAS_BINARY_OR_NATIVE = 0x08 # Binary/native serialize
-PROP_TAG_BOOL_TRUE = 0x10            # Bool value is true
-PROP_TAG_SKIPPED_SERIALIZE = 0x20    # Skipped serialize
+PROP_TAG_HAS_ARRAY_INDEX = 0x01  # ArrayIndex field present
+PROP_TAG_HAS_PROPERTY_GUID = 0x02  # PropertyGuid field present
+PROP_TAG_HAS_EXTENSIONS = 0x04  # Extension data
+PROP_TAG_HAS_BINARY_OR_NATIVE = 0x08  # Binary/native serialize
+PROP_TAG_BOOL_TRUE = 0x10  # Bool value is true
+PROP_TAG_SKIPPED_SERIALIZE = 0x20  # Skipped serialize
 
 # ============================================================================
 # PropertyTag version thresholds
@@ -82,9 +84,9 @@ PROPERTY_TAG_COMPLETE_TYPE_NAME = 1012  # UE5 format switch threshold
 # Source: UE source code ObjectMacros.h
 # ============================================================================
 
-PKG_Cooked                      = 0x00000200  # Package is cooked
-PKG_UnversionedProperties       = 0x00002000  # Uses unversioned property serialization
-PKG_FilterEditorOnly            = 0x80000000  # Package has editor-only data filtered out
+PKG_Cooked = 0x00000200  # Package is cooked
+PKG_UnversionedProperties = 0x00002000  # Uses unversioned property serialization
+PKG_FilterEditorOnly = 0x80000000  # Package has editor-only data filtered out
 
 
 def decode_package_flags(flags: int) -> list[str]:
@@ -136,11 +138,11 @@ def decode_package_flags(flags: int) -> list[str]:
 # Blueprint graph parsing safety constants
 # ============================================================================
 
-MAX_PINS_PER_NODE = 1000               # Maximum pins per node
-MAX_NODES_PER_GRAPH = 5000             # Maximum nodes per graph
-MAX_SUBGRAPHS = 1000                   # Maximum subgraphs per graph (corrupted asset defense)
-MAX_LINKEDTO_PER_PIN = 100             # Maximum connections per pin
-MAX_FTEXT_CONSUMPTION = 10_240         # 10 KB — FText parsing safety net maximum byte consumption
+MAX_PINS_PER_NODE = 1000  # Maximum pins per node
+MAX_NODES_PER_GRAPH = 5000  # Maximum nodes per graph
+MAX_SUBGRAPHS = 1000  # Maximum subgraphs per graph (corrupted asset defense)
+MAX_LINKEDTO_PER_PIN = 100  # Maximum connections per pin
+MAX_FTEXT_CONSUMPTION = 10_240  # 10 KB — FText parsing safety net maximum byte consumption
 
 # ============================================================================
 # Lightweight tolerant parse threshold
@@ -155,12 +157,14 @@ LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD = 300  # Enable lightweight tolerant parse 
 CONTROL_RIG_LARGE_FILE_THRESHOLD = 50000  # Lightweight parse threshold for ControlRig class files
 
 # Known large file class name substrings — use high threshold when export class name contains any of these substrings
-CONTROL_RIG_LARGE_FILE_CLASSES = frozenset({
-    "ControlRig",
-    "RigHierarchy",
-    "RigVM",
-    "RigUnit",
-})
+CONTROL_RIG_LARGE_FILE_CLASSES = frozenset(
+    {
+        "ControlRig",
+        "RigHierarchy",
+        "RigVM",
+        "RigUnit",
+    }
+)
 
 # ============================================================================
 # FPropertyTypeName type node read limit
@@ -233,45 +237,51 @@ BLUEPRINT_METADATA_KEYS = frozenset(
 # Control flow node set (used in blueprint graph parsing)
 # ============================================================================
 
-CONTROL_FLOW_NODES = frozenset({
-    "K2Node_IfThenElse",
-    "K2Node_Switch",
-    "K2Node_SwitchString",
-    "K2Node_SwitchEnum",
-    "K2Node_SwitchInteger",
-    "K2Node_MacroInstance",
-    # Loop macros
-    "K2Node_ForLoop",
-    "K2Node_WhileLoop",
-    "K2Node_DoOnce",
-    # Multi-gate
-    "K2Node_Sequence",
-    "K2Node_MultiGate",
-    # Selection
-    "K2Node_Select",
-    "K2Node_ExecutionSequence",
-})
+CONTROL_FLOW_NODES = frozenset(
+    {
+        "K2Node_IfThenElse",
+        "K2Node_Switch",
+        "K2Node_SwitchString",
+        "K2Node_SwitchEnum",
+        "K2Node_SwitchInteger",
+        "K2Node_MacroInstance",
+        # Loop macros
+        "K2Node_ForLoop",
+        "K2Node_WhileLoop",
+        "K2Node_DoOnce",
+        # Multi-gate
+        "K2Node_Sequence",
+        "K2Node_MultiGate",
+        # Selection
+        "K2Node_Select",
+        "K2Node_ExecutionSequence",
+    }
+)
 
 # ============================================================================
 # Start event type set
 # ============================================================================
 
-START_EVENT_TYPES = frozenset({
-    "K2Node_Event",
-    "K2Node_EnhancedInputAction",
-    "K2Node_VariableSet",
-    "K2Node_CustomEvent",
-    "K2Node_FunctionEntry",  # Function graph execution flow start point
-})
+START_EVENT_TYPES = frozenset(
+    {
+        "K2Node_Event",
+        "K2Node_EnhancedInputAction",
+        "K2Node_VariableSet",
+        "K2Node_CustomEvent",
+        "K2Node_FunctionEntry",  # Function graph execution flow start point
+    }
+)
 
 # ============================================================================
 # Data flow boundary node set
 # ============================================================================
 
-DATA_BOUNDARY_NODES = frozenset({
-    "K2Node_FunctionEntry",  # Function parameter output as data flow start point
-    "K2Node_VariableSet",    # Local variable definition (boundary)
-})
+DATA_BOUNDARY_NODES = frozenset(
+    {
+        "K2Node_FunctionEntry",  # Function parameter output as data flow start point
+        "K2Node_VariableSet",  # Local variable definition (boundary)
+    }
+)
 
 # ============================================================================
 # EnhancedInput TriggerEvent pin mapping
@@ -415,13 +425,15 @@ def format_guid_bytes(data: bytes, uppercase: bool = True) -> str:
 
 MAX_REASONABLE_CAP = 100 * 1024 * 1024  # 100 MB — Standard property size cap
 
-UE5_LARGE_PROPERTY_TYPES = frozenset({
-    "BoneAnimationTracks",
-    "PoseContainer",
-    "ArrayConnectionMap",
-    "RigVM",
-    "MapProperty",
-})
+UE5_LARGE_PROPERTY_TYPES = frozenset(
+    {
+        "BoneAnimationTracks",
+        "PoseContainer",
+        "ArrayConnectionMap",
+        "RigVM",
+        "MapProperty",
+    }
+)
 
 UE5_LARGE_PROPERTY_MAX_REASONABLE = 500 * 1024 * 1024  # 500 MB — UE5 large property size cap
 
@@ -478,108 +490,239 @@ MATERIAL_USAGE_FLAG_NAMES: tuple[str, ...] = (
 # Expression type classification table
 # Maps expression class name patterns to semantic types
 _EXPRESSION_TYPE_PATTERNS: tuple[tuple[tuple[str, ...], str], ...] = (
-    (("MaterialExpressionConstant", "MaterialExpressionConstant2Vector",
-      "MaterialExpressionConstant3Vector", "MaterialExpressionConstant4Vector"), "constant"),
-    (("MaterialExpressionScalarParameter", "MaterialExpressionVectorParameter",
-      "MaterialExpressionTextureSampleParameter", "MaterialExpressionTextureObjectParameter",
-      "MaterialExpressionDoubleVectorParameter", "MaterialExpressionChannelMaskParameter",
-      "MaterialExpressionStaticBoolParameter", "MaterialExpressionStaticSwitchParameter",
-      "MaterialExpressionStaticComponentMaskParameter",
-      "MaterialExpressionFontSampleParameter", "MaterialExpressionCurveAtlasRowParameter",
-      "MaterialExpressionTextureCollectionParameter",
-      "MaterialExpressionRuntimeVirtualTextureSampleParameter"), "parameter"),
-    (("MaterialExpressionAdd", "MaterialExpressionSubtract", "MaterialExpressionMultiply",
-      "MaterialExpressionDivide", "MaterialExpressionPower", "MaterialExpressionLinearInterpolate",
-      "MaterialExpressionClamp", "MaterialExpressionSaturate", "MaterialExpressionAbs",
-      "MaterialExpressionSine", "MaterialExpressionCosine", "MaterialExpressionFloor",
-      "MaterialExpressionCeil", "MaterialExpressionFrac", "MaterialExpressionRound",
-      "MaterialExpressionSquareRoot", "MaterialExpressionExponential", "MaterialExpressionExponential2",
-      "MaterialExpressionModulo", "MaterialExpressionCrossProduct", "MaterialExpressionDotProduct",
-      "MaterialExpressionLength", "MaterialExpressionNormalize", "MaterialExpressionOneMinus",
-      "MaterialExpressionSign", "MaterialExpressionDesaturation", "MaterialExpressionIf",
-      "MaterialExpressionIfThenElse", "MaterialExpressionInverseLinearInterpolate",
-      "MaterialExpressionSmoothStep", "MaterialExpressionStep", "MaterialExpressionFmod",
-      "MaterialExpressionLogarithm", "MaterialExpressionLogarithm2", "MaterialExpressionLogarithm10",
-      "MaterialExpressionArcsine", "MaterialExpressionArcsineFast",
-      "MaterialExpressionArccosine", "MaterialExpressionArccosineFast",
-      "MaterialExpressionArctangent", "MaterialExpressionArctangentFast",
-      "MaterialExpressionArctangent2", "MaterialExpressionArctangent2Fast",
-      "MaterialExpressionBumpOffset", "MaterialExpressionBlend",
-      "MaterialExpressionComponentMask", "MaterialExpressionAppendVector",
-      "MaterialExpressionConstantBiasScale", "MaterialExpressionDistance",
-      "MaterialExpressionFresnel", "MaterialExpressionNoise", "MaterialExpressionPanner",
-      "MaterialExpressionRotator", "MaterialExpressionSphereMask",
-      "MaterialExpressionSphericalParticleOpacity", "MaterialExpressionDeriveNormalZ",
-      "MaterialExpressionDDX", "MaterialExpressionDDY",
-      "MaterialExpressionMax", "MaterialExpressionMin",
-      "MaterialExpressionTransform", "MaterialExpressionTransformPosition",
-      "MaterialExpressionConvert", "MaterialExpressionHsvToRgb",
-      "MaterialExpressionRgbToHsv", "MaterialExpressionSpeedTree",
-      "MaterialExpressionBlendMaterialAttributes", "MaterialExpressionBreakMaterialAttributes",
-      "MaterialExpressionGetMaterialAttributes", "MaterialExpressionSetMaterialAttributes",
-      "MaterialExpressionMakeMaterialAttributes",
-      "MaterialExpressionMaterialAttributeLayers", "MaterialExpressionLayerStack",
-      "MaterialExpressionSwitch", "MaterialExpressionStaticSwitch",
-      "MaterialExpressionPreviousFrameSwitch", "MaterialExpressionFeatureLevelSwitch",
-      "MaterialExpressionQualitySwitch", "MaterialExpressionShaderStageSwitch",
-      "MaterialExpressionShadingPathSwitch", "MaterialExpressionDataDrivenShaderPlatformInfoSwitch",
-      "MaterialExpressionPathTracingQualitySwitch", "MaterialExpressionRayTracingQualitySwitch",
-      "MaterialExpressionReflectionCapturePassSwitch", "MaterialExpressionShadowReplace",
-      "MaterialExpressionNaniteReplace", "MaterialExpressionVirtualTextureFeatureSwitch",
-      "MaterialExpressionRequiredSamplersSwitch",
-      "MaterialExpressionDistanceFieldsRenderingSwitch", "MaterialExpressionGIReplace",
-      "MaterialExpressionLightmassReplace", "MaterialExpressionBindlessSwitch",
-      "MaterialExpressionMeshPaintTextureReplace",
-      "MaterialExpressionSobol", "MaterialExpressionTemporalSobol"), "operator"),
-    (("MaterialExpressionTextureSample", "MaterialExpressionTextureObject",
-      "MaterialExpressionTextureProperty",
-      "MaterialExpressionSparseVolumeTextureSample", "MaterialExpressionSparseVolumeTextureObject",
-      "MaterialExpressionRuntimeVirtualTextureSample", "MaterialExpressionRuntimeVirtualTextureReplace",
-      "MaterialExpressionVirtualTextureFeatureSwitch",
-      "MaterialExpressionDBufferTexture", "MaterialExpressionSceneTexture",
-      "MaterialExpressionUserSceneTexture", "MaterialExpressionSceneColor",
-      "MaterialExpressionSceneDepth", "MaterialExpressionSceneDepthWithoutWater",
-      "MaterialExpressionSceneTexelSize", "MaterialExpressionScreenPosition",
-      "MaterialExpressionTextureCollection", "MaterialExpressionTextureCollectionParameter"), "texture_sample"),
-    (("MaterialExpressionTextureCoordinate", "MaterialExpressionVertexColor", "MaterialExpressionCameraPositionWS",
-      "MaterialExpressionCameraVectorWS", "MaterialExpressionObjectOrientation",
-      "MaterialExpressionObjectPositionWS", "MaterialExpressionObjectBounds",
-      "MaterialExpressionObjectLocalBounds", "MaterialExpressionObjectRadius",
-      "MaterialExpressionLocalPosition", "MaterialExpressionWorldPosition",
-      "MaterialExpressionViewProperty", "MaterialExpressionViewSize",
-      "MaterialExpressionPixelNormalWS", "MaterialExpressionVertexNormalWS",
-      "MaterialExpressionVertexTangentWS", "MaterialExpressionTangent",
-      "MaterialExpressionTangentOutput",
-      "MaterialExpressionTime", "MaterialExpressionDeltaTime",
-      "MaterialExpressionEyeAdaptation", "MaterialExpressionEyeAdaptationInverse",
-      "MaterialExpressionDistanceCullFade", "MaterialExpressionDistanceToNearestSurface",
-      "MaterialExpressionDistanceFieldGradient", "MaterialExpressionDistanceFieldApproxAO",
-      "MaterialExpressionFogColor", "MaterialExpressionAtmosphericFogColor",
-      "MaterialExpressionAtmosphericLightColor", "MaterialExpressionAtmosphericLightVector",
-      "MaterialExpressionMainDirectionalLight", "MaterialExpressionLightVector",
-      "MaterialExpressionPixelDepth", "MaterialExpressionPreSkinnedNormal",
-      "MaterialExpressionPreSkinnedPosition", "MaterialExpressionPreSkinnedLocalBounds",
-      "MaterialExpressionTwoSidedSign", "MaterialExpressionIsOrthographic",
-      "MaterialExpressionIsFirstPerson", "MaterialExpressionPerInstanceCustomData",
-      "MaterialExpressionPerInstanceFadeAmount", "MaterialExpressionPerInstanceRandom",
-      "MaterialExpressionBounds", "MaterialExpressionSkyAtmosphereLightDirection",
-      "MaterialExpressionSkyAtmosphereLightIlluminance", "MaterialExpressionSkyAtmosphereViewLuminance",
-      "MaterialExpressionSkyLightEnvMapSample", "MaterialExpressionPostVolumeUserFlagTest",
-      "MaterialExpressionParticleColor", "MaterialExpressionParticleDirection",
-      "MaterialExpressionParticleMacroUV", "MaterialExpressionParticleMotionBlurFade",
-      "MaterialExpressionParticlePositionWS", "MaterialExpressionParticleRadius",
-      "MaterialExpressionParticleRandom", "MaterialExpressionParticleRelativeTime",
-      "MaterialExpressionParticleSize", "MaterialExpressionParticleSpeed",
-      "MaterialExpressionParticleSpriteRotation", "MaterialExpressionParticleSubUV",
-      "MaterialExpressionFirstPersonOutput", "MaterialExpressionVolumetricAdvancedMaterialInput",
-      "MaterialExpressionLightmapUVs", "MaterialExpressionMeshPaintTextureCoordinateIndex",
-      "MaterialExpressionRecordTextureStreamingInfo",
-      "MaterialExpressionTemporalResponsivenessOutput"), "input"),
+    (
+        (
+            "MaterialExpressionConstant",
+            "MaterialExpressionConstant2Vector",
+            "MaterialExpressionConstant3Vector",
+            "MaterialExpressionConstant4Vector",
+        ),
+        "constant",
+    ),
+    (
+        (
+            "MaterialExpressionScalarParameter",
+            "MaterialExpressionVectorParameter",
+            "MaterialExpressionTextureSampleParameter",
+            "MaterialExpressionTextureObjectParameter",
+            "MaterialExpressionDoubleVectorParameter",
+            "MaterialExpressionChannelMaskParameter",
+            "MaterialExpressionStaticBoolParameter",
+            "MaterialExpressionStaticSwitchParameter",
+            "MaterialExpressionStaticComponentMaskParameter",
+            "MaterialExpressionFontSampleParameter",
+            "MaterialExpressionCurveAtlasRowParameter",
+            "MaterialExpressionTextureCollectionParameter",
+            "MaterialExpressionRuntimeVirtualTextureSampleParameter",
+        ),
+        "parameter",
+    ),
+    (
+        (
+            "MaterialExpressionAdd",
+            "MaterialExpressionSubtract",
+            "MaterialExpressionMultiply",
+            "MaterialExpressionDivide",
+            "MaterialExpressionPower",
+            "MaterialExpressionLinearInterpolate",
+            "MaterialExpressionClamp",
+            "MaterialExpressionSaturate",
+            "MaterialExpressionAbs",
+            "MaterialExpressionSine",
+            "MaterialExpressionCosine",
+            "MaterialExpressionFloor",
+            "MaterialExpressionCeil",
+            "MaterialExpressionFrac",
+            "MaterialExpressionRound",
+            "MaterialExpressionSquareRoot",
+            "MaterialExpressionExponential",
+            "MaterialExpressionExponential2",
+            "MaterialExpressionModulo",
+            "MaterialExpressionCrossProduct",
+            "MaterialExpressionDotProduct",
+            "MaterialExpressionLength",
+            "MaterialExpressionNormalize",
+            "MaterialExpressionOneMinus",
+            "MaterialExpressionSign",
+            "MaterialExpressionDesaturation",
+            "MaterialExpressionIf",
+            "MaterialExpressionIfThenElse",
+            "MaterialExpressionInverseLinearInterpolate",
+            "MaterialExpressionSmoothStep",
+            "MaterialExpressionStep",
+            "MaterialExpressionFmod",
+            "MaterialExpressionLogarithm",
+            "MaterialExpressionLogarithm2",
+            "MaterialExpressionLogarithm10",
+            "MaterialExpressionArcsine",
+            "MaterialExpressionArcsineFast",
+            "MaterialExpressionArccosine",
+            "MaterialExpressionArccosineFast",
+            "MaterialExpressionArctangent",
+            "MaterialExpressionArctangentFast",
+            "MaterialExpressionArctangent2",
+            "MaterialExpressionArctangent2Fast",
+            "MaterialExpressionBumpOffset",
+            "MaterialExpressionBlend",
+            "MaterialExpressionComponentMask",
+            "MaterialExpressionAppendVector",
+            "MaterialExpressionConstantBiasScale",
+            "MaterialExpressionDistance",
+            "MaterialExpressionFresnel",
+            "MaterialExpressionNoise",
+            "MaterialExpressionPanner",
+            "MaterialExpressionRotator",
+            "MaterialExpressionSphereMask",
+            "MaterialExpressionSphericalParticleOpacity",
+            "MaterialExpressionDeriveNormalZ",
+            "MaterialExpressionDDX",
+            "MaterialExpressionDDY",
+            "MaterialExpressionMax",
+            "MaterialExpressionMin",
+            "MaterialExpressionTransform",
+            "MaterialExpressionTransformPosition",
+            "MaterialExpressionConvert",
+            "MaterialExpressionHsvToRgb",
+            "MaterialExpressionRgbToHsv",
+            "MaterialExpressionSpeedTree",
+            "MaterialExpressionBlendMaterialAttributes",
+            "MaterialExpressionBreakMaterialAttributes",
+            "MaterialExpressionGetMaterialAttributes",
+            "MaterialExpressionSetMaterialAttributes",
+            "MaterialExpressionMakeMaterialAttributes",
+            "MaterialExpressionMaterialAttributeLayers",
+            "MaterialExpressionLayerStack",
+            "MaterialExpressionSwitch",
+            "MaterialExpressionStaticSwitch",
+            "MaterialExpressionPreviousFrameSwitch",
+            "MaterialExpressionFeatureLevelSwitch",
+            "MaterialExpressionQualitySwitch",
+            "MaterialExpressionShaderStageSwitch",
+            "MaterialExpressionShadingPathSwitch",
+            "MaterialExpressionDataDrivenShaderPlatformInfoSwitch",
+            "MaterialExpressionPathTracingQualitySwitch",
+            "MaterialExpressionRayTracingQualitySwitch",
+            "MaterialExpressionReflectionCapturePassSwitch",
+            "MaterialExpressionShadowReplace",
+            "MaterialExpressionNaniteReplace",
+            "MaterialExpressionVirtualTextureFeatureSwitch",
+            "MaterialExpressionRequiredSamplersSwitch",
+            "MaterialExpressionDistanceFieldsRenderingSwitch",
+            "MaterialExpressionGIReplace",
+            "MaterialExpressionLightmassReplace",
+            "MaterialExpressionBindlessSwitch",
+            "MaterialExpressionMeshPaintTextureReplace",
+            "MaterialExpressionSobol",
+            "MaterialExpressionTemporalSobol",
+        ),
+        "operator",
+    ),
+    (
+        (
+            "MaterialExpressionTextureSample",
+            "MaterialExpressionTextureObject",
+            "MaterialExpressionTextureProperty",
+            "MaterialExpressionSparseVolumeTextureSample",
+            "MaterialExpressionSparseVolumeTextureObject",
+            "MaterialExpressionRuntimeVirtualTextureSample",
+            "MaterialExpressionRuntimeVirtualTextureReplace",
+            "MaterialExpressionVirtualTextureFeatureSwitch",
+            "MaterialExpressionDBufferTexture",
+            "MaterialExpressionSceneTexture",
+            "MaterialExpressionUserSceneTexture",
+            "MaterialExpressionSceneColor",
+            "MaterialExpressionSceneDepth",
+            "MaterialExpressionSceneDepthWithoutWater",
+            "MaterialExpressionSceneTexelSize",
+            "MaterialExpressionScreenPosition",
+            "MaterialExpressionTextureCollection",
+            "MaterialExpressionTextureCollectionParameter",
+        ),
+        "texture_sample",
+    ),
+    (
+        (
+            "MaterialExpressionTextureCoordinate",
+            "MaterialExpressionVertexColor",
+            "MaterialExpressionCameraPositionWS",
+            "MaterialExpressionCameraVectorWS",
+            "MaterialExpressionObjectOrientation",
+            "MaterialExpressionObjectPositionWS",
+            "MaterialExpressionObjectBounds",
+            "MaterialExpressionObjectLocalBounds",
+            "MaterialExpressionObjectRadius",
+            "MaterialExpressionLocalPosition",
+            "MaterialExpressionWorldPosition",
+            "MaterialExpressionViewProperty",
+            "MaterialExpressionViewSize",
+            "MaterialExpressionPixelNormalWS",
+            "MaterialExpressionVertexNormalWS",
+            "MaterialExpressionVertexTangentWS",
+            "MaterialExpressionTangent",
+            "MaterialExpressionTangentOutput",
+            "MaterialExpressionTime",
+            "MaterialExpressionDeltaTime",
+            "MaterialExpressionEyeAdaptation",
+            "MaterialExpressionEyeAdaptationInverse",
+            "MaterialExpressionDistanceCullFade",
+            "MaterialExpressionDistanceToNearestSurface",
+            "MaterialExpressionDistanceFieldGradient",
+            "MaterialExpressionDistanceFieldApproxAO",
+            "MaterialExpressionFogColor",
+            "MaterialExpressionAtmosphericFogColor",
+            "MaterialExpressionAtmosphericLightColor",
+            "MaterialExpressionAtmosphericLightVector",
+            "MaterialExpressionMainDirectionalLight",
+            "MaterialExpressionLightVector",
+            "MaterialExpressionPixelDepth",
+            "MaterialExpressionPreSkinnedNormal",
+            "MaterialExpressionPreSkinnedPosition",
+            "MaterialExpressionPreSkinnedLocalBounds",
+            "MaterialExpressionTwoSidedSign",
+            "MaterialExpressionIsOrthographic",
+            "MaterialExpressionIsFirstPerson",
+            "MaterialExpressionPerInstanceCustomData",
+            "MaterialExpressionPerInstanceFadeAmount",
+            "MaterialExpressionPerInstanceRandom",
+            "MaterialExpressionBounds",
+            "MaterialExpressionSkyAtmosphereLightDirection",
+            "MaterialExpressionSkyAtmosphereLightIlluminance",
+            "MaterialExpressionSkyAtmosphereViewLuminance",
+            "MaterialExpressionSkyLightEnvMapSample",
+            "MaterialExpressionPostVolumeUserFlagTest",
+            "MaterialExpressionParticleColor",
+            "MaterialExpressionParticleDirection",
+            "MaterialExpressionParticleMacroUV",
+            "MaterialExpressionParticleMotionBlurFade",
+            "MaterialExpressionParticlePositionWS",
+            "MaterialExpressionParticleRadius",
+            "MaterialExpressionParticleRandom",
+            "MaterialExpressionParticleRelativeTime",
+            "MaterialExpressionParticleSize",
+            "MaterialExpressionParticleSpeed",
+            "MaterialExpressionParticleSpriteRotation",
+            "MaterialExpressionParticleSubUV",
+            "MaterialExpressionFirstPersonOutput",
+            "MaterialExpressionVolumetricAdvancedMaterialInput",
+            "MaterialExpressionLightmapUVs",
+            "MaterialExpressionMeshPaintTextureCoordinateIndex",
+            "MaterialExpressionRecordTextureStreamingInfo",
+            "MaterialExpressionTemporalResponsivenessOutput",
+        ),
+        "input",
+    ),
     (("MaterialExpressionComment",), "comment"),
     (("MaterialExpressionFunctionInput", "MaterialExpressionFunctionOutput"), "function_io"),
-    (("MaterialExpressionReroute", "MaterialExpressionNamedReroute",
-      "MaterialExpressionNamedRerouteUsage", "MaterialExpressionRerouteBase",
-      "MaterialExpressionPinBase"), "reroute"),
+    (
+        (
+            "MaterialExpressionReroute",
+            "MaterialExpressionNamedReroute",
+            "MaterialExpressionNamedRerouteUsage",
+            "MaterialExpressionRerouteBase",
+            "MaterialExpressionPinBase",
+        ),
+        "reroute",
+    ),
 )
 
 

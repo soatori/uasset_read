@@ -32,9 +32,7 @@ class PackageArchive(FArchive):
         uexp_archive: Optional[ArchiveLike] = None,
         tolerant: bool = False,
     ):
-        self._init_archive_attrs(
-            getattr(main_archive, "_path", "<package>"), tolerant, hex_view=False
-        )
+        self._init_archive_attrs(getattr(main_archive, "_path", "<package>"), tolerant, hex_view=False)
         self._main_archive = main_archive
         self._uexp_archive = uexp_archive
         try:
@@ -51,16 +49,11 @@ class PackageArchive(FArchive):
 
     def read(self, size: int) -> bytes:
         if size < 0:
-            raise ParseError(
-                f"read() received negative size ({size}) at position {self.tell()}"
-            )
+            raise ParseError(f"read() received negative size ({size}) at position {self.tell()}")
         current_pos = self.tell()
         remaining = self._file_size - current_pos
         if size > remaining:
-            raise ParseError(
-                f"Cannot read {size} bytes at position {current_pos}, "
-                f"only {remaining} bytes remaining"
-            )
+            raise ParseError(f"Cannot read {size} bytes at position {current_pos}, only {remaining} bytes remaining")
         chunks: list[bytes] = []
         to_read = size
         while to_read:
@@ -80,8 +73,7 @@ class PackageArchive(FArchive):
             chunk = segment.read(take)
             if len(chunk) < take:
                 raise ParseError(
-                    f"short read: requested {take} bytes at segment offset {segment_pos}, "
-                    f"got {len(chunk)} bytes"
+                    f"short read: requested {take} bytes at segment offset {segment_pos}, got {len(chunk)} bytes"
                 )
             chunks.append(chunk)
             self._pos += take
@@ -135,7 +127,9 @@ class SourceProvenance:
     container: str
 
     def __str__(self) -> str:
-        return f"SourceProvenance(root={self.mount_root!r}, label={self.provider_label!r}, container={self.container!r})"
+        return (
+            f"SourceProvenance(root={self.mount_root!r}, label={self.provider_label!r}, container={self.container!r})"
+        )
 
 
 @dataclass
@@ -222,8 +216,9 @@ class PackageProvider(ABC):
             return None
         return ByteArchive(data, name=path)
 
-    def open_package_bundle(self, path: str, tolerant: bool = False,
-                            budget: ResourceBudget | None = None) -> PackageBundle:
+    def open_package_bundle(
+        self, path: str, tolerant: bool = False, budget: ResourceBudget | None = None
+    ) -> PackageBundle:
         path = self._resolve_package_path(path)
         ext = Path(path).suffix.lower()
         package_kind = "map" if ext == ".umap" else "asset"
@@ -348,7 +343,9 @@ class MultiSourceProvider(PackageProvider):
             physical = self._to_physical(path, mount)
             if physical is not None:
                 bundle = mount.provider.open_package_bundle(
-                    physical, tolerant=tolerant, budget=budget,
+                    physical,
+                    tolerant=tolerant,
+                    budget=budget,
                 )
                 # Set provenance from this mount
                 bundle.source = SourceProvenance(
@@ -375,10 +372,10 @@ class MultiSourceProvider(PackageProvider):
         if provider_root is not None:
             root_str = _normalize_path(str(provider_root)) + "/"
             if physical.startswith(root_str):
-                physical = physical[len(root_str):]
+                physical = physical[len(root_str) :]
         # If the physical path already starts with the mount root, strip it
         if physical.startswith(mount_root):
-            relative = physical[len(mount_root):]
+            relative = physical[len(mount_root) :]
             return mount_root + relative if relative else mount_root.rstrip("/")
         # Otherwise, just prefix with mount root
         return mount_root + physical.lstrip("/")
@@ -399,9 +396,9 @@ class MultiSourceProvider(PackageProvider):
             return None
         # Strip the mount root to get the relative path
         if logical.startswith(mount_root):
-            relative = logical[len(mount_root):]
+            relative = logical[len(mount_root) :]
         else:
-            relative = logical[len(mount.mount_root):]
+            relative = logical[len(mount.mount_root) :]
         if not relative:
             return None
         # For filesystem providers, prepend root to get absolute physical path
@@ -438,16 +435,13 @@ class FileSystemPackageProvider(PackageProvider):
         try:
             resolved.relative_to(root)
         except ValueError:
-            raise PermissionError(
-                f"Path '{path}' resolves outside root '{root}': {resolved}"
-            )
+            raise PermissionError(f"Path '{path}' resolves outside root '{root}': {resolved}")
         return resolved
 
     def list_files(self) -> list[str]:
         current_mtime = self._get_root_mtime()
         # Check if cache is valid: exists and modification time unchanged
-        if (self._list_files_cache is not None
-                and self._cache_mtime == current_mtime):
+        if self._list_files_cache is not None and self._cache_mtime == current_mtime:
             return self._list_files_cache
         if self.root is None or self.root.is_file():
             return []
@@ -478,8 +472,9 @@ class FileSystemPackageProvider(PackageProvider):
             return None
         return FArchive(str(p))
 
-    def open_package_bundle(self, path: str, tolerant: bool = False,
-                            budget: ResourceBudget | None = None) -> PackageBundle:
+    def open_package_bundle(
+        self, path: str, tolerant: bool = False, budget: ResourceBudget | None = None
+    ) -> PackageBundle:
         main = Path(path)
         if self.root is not None and not main.is_file() and not main.is_absolute():
             root_relative = self.root / main
@@ -559,4 +554,3 @@ def open_package_bundle(
 
 def _normalize_ext(extension: str) -> str:
     return extension if extension.startswith(".") else f".{extension}"
-

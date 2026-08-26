@@ -2,6 +2,7 @@
 
 Tests the semantic pipeline's validation, projection, and schema compliance.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -32,7 +33,8 @@ class TestSemanticValidation:
     def test_valid_blueprint_passes_validation(self, samples_dir: Path):
         """A well-formed Blueprint SemanticIR passes validation."""
         semantic = _build_and_project(
-            samples_dir, "FirstPerson_BP_FirstPersonCharacter.uasset",
+            samples_dir,
+            "FirstPerson_BP_FirstPersonCharacter.uasset",
         )
         errors = validate_semantic_document(semantic)
         assert errors == [], f"Validation errors: {errors}"
@@ -40,7 +42,8 @@ class TestSemanticValidation:
     def test_valid_material_passes_validation(self, samples_dir: Path):
         """A well-formed Material SemanticIR passes validation."""
         semantic = _build_and_project(
-            samples_dir, "FirstPerson_M_FlatCol.uasset",
+            samples_dir,
+            "FirstPerson_M_FlatCol.uasset",
         )
         errors = validate_semantic_document(semantic)
         assert errors == [], f"Validation errors: {errors}"
@@ -48,7 +51,8 @@ class TestSemanticValidation:
     def test_valid_animbp_passes_validation(self, samples_dir: Path):
         """A well-formed AnimBlueprint SemanticIR passes validation."""
         semantic = _build_and_project(
-            samples_dir, "ABP_RifleAnimLayers.uasset",
+            samples_dir,
+            "ABP_RifleAnimLayers.uasset",
         )
         errors = validate_semantic_document(semantic)
         assert errors == [], f"Validation errors: {errors}"
@@ -70,8 +74,7 @@ class TestSemanticValidation:
             except Exception as e:
                 failures.append((sample_path.name, [str(e)]))
 
-        assert failures == [], \
-            f"Validation failures: {failures}"
+        assert failures == [], f"Validation failures: {failures}"
 
 
 class TestSemanticProjection:
@@ -114,8 +117,9 @@ class TestSemanticStatusContract:
                 continue
             ir = build_package_ir(result)
             semantic = build_semantic_ir(ir, source_path=str(sample_path))
-            assert semantic.status.parse in valid_parse, \
+            assert semantic.status.parse in valid_parse, (
                 f"{sample_path.name}: invalid parse status '{semantic.status.parse}'"
+            )
 
     def test_status_representation_values(self, samples_dir: Path, sample_uassets: list[Path]):
         """All samples have valid representation status values."""
@@ -126,8 +130,9 @@ class TestSemanticStatusContract:
                 continue
             ir = build_package_ir(result)
             semantic = build_semantic_ir(ir, source_path=str(sample_path))
-            assert semantic.status.representation in valid_repr, \
+            assert semantic.status.representation in valid_repr, (
                 f"{sample_path.name}: invalid representation '{semantic.status.representation}'"
+            )
 
     def test_asset_type_values(self, samples_dir: Path, sample_uassets: list[Path]):
         """All samples have non-empty asset_type."""

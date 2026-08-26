@@ -5,6 +5,7 @@ across all samples. Results are informational.
 
 Marker: benchmark
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -72,7 +73,4 @@ class TestExportCoverage:
                 failed += 1
 
         total = len(sample_uassets)
-        print(
-            f"\nSample status: {success}/{total} success, "
-            f"{partial} partial, {failed} failed"
-        )
+        print(f"\nSample status: {success}/{total} success, {partial} partial, {failed} failed")

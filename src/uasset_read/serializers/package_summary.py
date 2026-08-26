@@ -19,15 +19,27 @@ logger = logging.getLogger(__name__)
 
 from uasset_read.archive import FArchive
 from uasset_read.constants import (
-    PACKAGE_FILE_TAG, PACKAGE_FILE_TAG_SWAPPED,
-    UE5_VERSION_MIN, UE4_LEGACY_VERSIONS, SUPPORTED_LEGACY_VERSIONS,
-    MAX_NAME_COUNT, MAX_IMPORT_COUNT, MAX_EXPORT_COUNT, MAX_CUSTOM_VERSIONS,
-    MAX_TOTAL_OBJECT_COUNT, MAX_GENERATIONS, MAX_COMPRESSED_CHUNKS,
-    MAX_SOFT_PACKAGE_REFS, MAX_SAFE_COUNT,
-    UE5_PACKAGE_SAVED_HASH, UE5_ADD_SOFTOBJECTPATH_LIST,
-    UE5_VERSE_CELLS, UE5_METADATA_SERIALIZATION_OFFSET,
+    PACKAGE_FILE_TAG,
+    PACKAGE_FILE_TAG_SWAPPED,
+    UE5_VERSION_MIN,
+    UE4_LEGACY_VERSIONS,
+    SUPPORTED_LEGACY_VERSIONS,
+    MAX_NAME_COUNT,
+    MAX_IMPORT_COUNT,
+    MAX_EXPORT_COUNT,
+    MAX_CUSTOM_VERSIONS,
+    MAX_TOTAL_OBJECT_COUNT,
+    MAX_GENERATIONS,
+    MAX_COMPRESSED_CHUNKS,
+    MAX_SOFT_PACKAGE_REFS,
+    MAX_SAFE_COUNT,
+    UE5_PACKAGE_SAVED_HASH,
+    UE5_ADD_SOFTOBJECTPATH_LIST,
+    UE5_VERSE_CELLS,
+    UE5_METADATA_SERIALIZATION_OFFSET,
     UE5_IMPORT_TYPE_HIERARCHIES,
-    UE5_NAMES_REFERENCED_FROM_EXPORT_DATA, UE5_PAYLOAD_TOC,
+    UE5_NAMES_REFERENCED_FROM_EXPORT_DATA,
+    UE5_PAYLOAD_TOC,
     UE5_DATA_RESOURCES,
     PKG_FilterEditorOnly,
     UE_NONE_SENTINEL,
@@ -76,9 +88,7 @@ def read_validated_count_strict(
     if count < 0:
         raise ParseError(f"Negative {stage} count: {count}")
     if count > max_value:
-        raise ParseError(
-            f"{stage} count {count} exceeds maximum {max_value}"
-        )
+        raise ParseError(f"{stage} count {count} exceeds maximum {max_value}")
     if budget is not None and count > 0:
         budget.reserve(count * bytes_per_entry, stage)
     return count
@@ -87,6 +97,7 @@ def read_validated_count_strict(
 @dataclass
 class GenerationInfo:
     """FGenerationInfo — version generation info."""
+
     export_count: int = 0
     name_count: int = 0
 
@@ -94,6 +105,7 @@ class GenerationInfo:
 @dataclass
 class EngineVersion:
     """FEngineVersion — engine version info."""
+
     major: int = 0
     minor: int = 0
     patch: int = 0
@@ -104,6 +116,7 @@ class EngineVersion:
 @dataclass
 class CustomVersion:
     """Custom version (GUID + version number)."""
+
     guid: str
     version: int
 
@@ -111,13 +124,14 @@ class CustomVersion:
 @dataclass
 class PackageFileSummary:
     """PackageFileSummary file header."""
+
     tag: int
     legacy_file_version: int
     file_version_ue4: int = 0
     is_legacy: bool = False  # UE4 LegacyFileVersion (-3, -4, -5)
     file_version_ue5: int = 0
     file_version_licensee: int = 0
-    saved_hash: bytes = field(default_factory=lambda: b'')
+    saved_hash: bytes = field(default_factory=lambda: b"")
     total_header_size: int = 0
     custom_versions: List[CustomVersion] = field(default_factory=list)
     package_name: str = ""
@@ -211,8 +225,11 @@ def _read_generations(archive: FArchive, budget: "_ResourceBudgetType | None" = 
 def _read_engine_version(archive: FArchive) -> "EngineVersion":
     """Read FEngineVersion structure."""
     return EngineVersion(
-        major=archive.read_u16(), minor=archive.read_u16(), patch=archive.read_u16(),
-        changelist=archive.read_u32(), branch=archive.read_fstring()
+        major=archive.read_u16(),
+        minor=archive.read_u16(),
+        patch=archive.read_u16(),
+        changelist=archive.read_u32(),
+        branch=archive.read_fstring(),
     )
 
 
@@ -244,13 +261,15 @@ def _read_payload_toc_offset(archive: FArchive) -> int:
         if file_size > 0 and payload_toc_offset > file_size * 10:
             logger.debug(
                 "PayloadTocOffset %d clearly out of bounds (file size %d), setting to 0",
-                payload_toc_offset, file_size,
+                payload_toc_offset,
+                file_size,
             )
             payload_toc_offset = 0
         elif file_size > 0 and payload_toc_offset > file_size:
             logger.debug(
                 "PayloadTocOffset %d exceeds file size %d, may be virtualized payload",
-                payload_toc_offset, file_size,
+                payload_toc_offset,
+                file_size,
             )
         else:
             archive.validate_offset(payload_toc_offset, "PayloadTocOffset")
@@ -261,17 +280,19 @@ def _validate_file_size(archive: FArchive) -> None:
     """Truncated file detection: raise error when file is too small."""
     file_size = archive.total_size()
     if file_size < MIN_UASSET_SIZE:
-        archive._diagnostics.append(OffsetRangeDiagnostic(
-            kind="truncated_file",
-            module="package_summary",
-            field="file_size",
-            file_size=file_size,
-            source="read_package_summary",
-            error=(
-                f"File size {file_size} bytes, smaller than minimum valid size {MIN_UASSET_SIZE} bytes, "
-                f"file may be truncated or corrupted"
-            ),
-        ))
+        archive._diagnostics.append(
+            OffsetRangeDiagnostic(
+                kind="truncated_file",
+                module="package_summary",
+                field="file_size",
+                file_size=file_size,
+                source="read_package_summary",
+                error=(
+                    f"File size {file_size} bytes, smaller than minimum valid size {MIN_UASSET_SIZE} bytes, "
+                    f"file may be truncated or corrupted"
+                ),
+            )
+        )
         raise ParseError(
             f"File too small ({file_size} bytes), cannot parse as .uasset file. "
             f"Minimum valid size is {MIN_UASSET_SIZE} bytes, file may be truncated or corrupted"
@@ -296,8 +317,7 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, bytes,
     if legacy_file_version not in SUPPORTED_LEGACY_VERSIONS:
         supported_versions = ", ".join(str(v) for v in sorted(SUPPORTED_LEGACY_VERSIONS))
         raise VersionError(
-            f"Unsupported legacy_file_version {legacy_file_version}. "
-            f"Supported versions: {supported_versions}"
+            f"Unsupported legacy_file_version {legacy_file_version}. Supported versions: {supported_versions}"
         )
 
     is_ue4_legacy = legacy_file_version in UE4_LEGACY_VERSIONS
@@ -334,8 +354,16 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, bytes,
             custom_versions = _read_custom_versions(archive)
         total_header_size = archive.read_i32("TotalHeaderSize")
 
-    return (tag, legacy_file_version, file_version_ue4, file_version_ue5,
-            file_version_licensee, saved_hash, total_header_size, custom_versions)
+    return (
+        tag,
+        legacy_file_version,
+        file_version_ue4,
+        file_version_ue5,
+        file_version_licensee,
+        saved_hash,
+        total_header_size,
+        custom_versions,
+    )
 
 
 def _read_package_identity(archive: FArchive) -> tuple[str, int]:
@@ -466,8 +494,11 @@ def _read_secondary_offset_fields(
     if file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP:
         soft_package_references_count = archive.read_i32("SoftPackageReferencesCount")
         read_validated_count_strict(
-            soft_package_references_count, MAX_SOFT_PACKAGE_REFS,
-            "soft_package_references", 4, budget,
+            soft_package_references_count,
+            MAX_SOFT_PACKAGE_REFS,
+            "soft_package_references",
+            4,
+            budget,
         )
         soft_package_references_offset = archive.read_i32("SoftPackageReferencesOffset")
 
@@ -533,15 +564,19 @@ def _read_guids(
 
 
 def _read_compression_and_source(
-    archive: FArchive, budget: "_ResourceBudgetType | None" = None,
+    archive: FArchive,
+    budget: "_ResourceBudgetType | None" = None,
 ) -> tuple[int, int]:
     """Read CompressionFlags, CompressedChunks, PackageSource."""
     compression_flags = archive.read_u32("CompressionFlags")
 
     compressed_chunks_count = archive.read_i32("CompressedChunksCount")
     read_validated_count_strict(
-        compressed_chunks_count, MAX_COMPRESSED_CHUNKS,
-        "compressed_chunks", 12, budget,
+        compressed_chunks_count,
+        MAX_COMPRESSED_CHUNKS,
+        "compressed_chunks",
+        12,
+        budget,
     )
     for _ in range(compressed_chunks_count):
         archive.read(12)
@@ -637,9 +672,16 @@ def read_package_summary(
     archive.set_hex_view_context("Summary.")
 
     # Step 1-3: Version + SavedHash + CustomVersions
-    (tag, legacy_file_version, file_version_ue4, file_version_ue5,
-     file_version_licensee, saved_hash, total_header_size,
-     custom_versions) = _read_version_and_tag(archive)
+    (
+        tag,
+        legacy_file_version,
+        file_version_ue4,
+        file_version_ue5,
+        file_version_licensee,
+        saved_hash,
+        total_header_size,
+        custom_versions,
+    ) = _read_version_and_tag(archive)
 
     # Step 4: PackageName + PackageFlags
     package_name, package_flags = _read_package_identity(archive)
@@ -650,13 +692,14 @@ def read_package_summary(
 
     # Step 6-8: SoftObjectPaths / Localization / GatherableText (between NameOffset and ExportCount)
     pre_export = _read_pre_export_optional_fields(
-        archive, file_version_ue5, file_version_ue4, has_filter_editor_only,
+        archive,
+        file_version_ue5,
+        file_version_ue4,
+        has_filter_editor_only,
     )
 
     # Step 9-10: ExportCount/Offset + ImportCount/Offset
-    export_count, export_offset, import_count, import_offset = (
-        _read_export_import_offsets(archive)
-    )
+    export_count, export_offset, import_count, import_offset = _read_export_import_offsets(archive)
 
     # Step 11-12: Cells / MetaData (between ImportOffset and DependsOffset)
     post_import = _read_post_import_optional_fields(archive, file_version_ue5)
@@ -665,14 +708,17 @@ def read_package_summary(
     secondary = _read_secondary_offset_fields(archive, file_version_ue4, budget)
 
     # Step 15: ImportTypeHierarchies
-    import_type_hierarchies_count, import_type_hierarchies_offset = (
-        _read_import_type_hierarchies(archive, file_version_ue5)
+    import_type_hierarchies_count, import_type_hierarchies_offset = _read_import_type_hierarchies(
+        archive, file_version_ue5
     )
 
     # Step 16: GUIDs
     persistent_guid = _read_guids(
-        archive, legacy_file_version, file_version_ue4,
-        file_version_ue5, has_filter_editor_only,
+        archive,
+        legacy_file_version,
+        file_version_ue4,
+        file_version_ue5,
+        has_filter_editor_only,
     )
 
     # Step 17-19: Generations + EngineVersions
@@ -693,20 +739,28 @@ def read_package_summary(
     late = _read_late_versioned_fields(archive, file_version_ue4, file_version_ue5)
 
     return PackageFileSummary(
-        tag=tag, legacy_file_version=legacy_file_version,
+        tag=tag,
+        legacy_file_version=legacy_file_version,
         file_version_ue4=file_version_ue4,
-        file_version_ue5=file_version_ue5, file_version_licensee=file_version_licensee,
+        file_version_ue5=file_version_ue5,
+        file_version_licensee=file_version_licensee,
         is_legacy=legacy_file_version in UE4_LEGACY_VERSIONS,
-        saved_hash=saved_hash, total_header_size=total_header_size,
-        custom_versions=custom_versions, package_name=package_name,
-        package_flags=package_flags, name_count=name_count, name_offset=name_offset,
+        saved_hash=saved_hash,
+        total_header_size=total_header_size,
+        custom_versions=custom_versions,
+        package_name=package_name,
+        package_flags=package_flags,
+        name_count=name_count,
+        name_offset=name_offset,
         soft_object_paths_count=pre_export["soft_object_paths_count"],
         soft_object_paths_offset=pre_export["soft_object_paths_offset"],
         localization_id=pre_export["localization_id"],
         gatherable_text_data_count=pre_export["gatherable_text_data_count"],
         gatherable_text_data_offset=pre_export["gatherable_text_data_offset"],
-        export_count=export_count, export_offset=export_offset,
-        import_count=import_count, import_offset=import_offset,
+        export_count=export_count,
+        export_offset=export_offset,
+        import_count=import_count,
+        import_offset=import_offset,
         cell_export_count=post_import["cell_export_count"],
         cell_export_offset=post_import["cell_export_offset"],
         cell_import_count=post_import["cell_import_count"],
@@ -719,10 +773,12 @@ def read_package_summary(
         thumbnail_table_offset=secondary["thumbnail_table_offset"],
         import_type_hierarchies_count=import_type_hierarchies_count,
         import_type_hierarchies_offset=import_type_hierarchies_offset,
-        persistent_guid=persistent_guid, generations=generations,
+        persistent_guid=persistent_guid,
+        generations=generations,
         saved_by_engine_version=saved_by_engine_version,
         compatible_with_engine_version=compatible_with_engine_version,
-        compression_flags=compression_flags, package_source=package_source,
+        compression_flags=compression_flags,
+        package_source=package_source,
         asset_registry_data_offset=tail["asset_registry_data_offset"],
         bulk_data_start_offset=tail["bulk_data_start_offset"],
         world_tile_info_data_offset=tail["world_tile_info_data_offset"],
@@ -760,19 +816,21 @@ def validate_export_data_range(
     export_table_min_entry_size = 72  # Minimum FObjectExport size
     export_table_end = summary.export_offset + summary.export_count * export_table_min_entry_size
     if export_table_end > file_size:
-        archive._diagnostics.append(OffsetRangeDiagnostic(
-            kind="truncated_file",
-            module="package_summary",
-            field="export_table",
-            current_pos=summary.export_offset,
-            target_offset=export_table_end,
-            file_size=file_size,
-            source="validate_export_data_range",
-            error=(
-                f"Export table region [0x{summary.export_offset:X}, 0x{export_table_end:X}] "
-                f"exceeds file size 0x{file_size:X}, file may be truncated in export table region"
-            ),
-        ))
+        archive._diagnostics.append(
+            OffsetRangeDiagnostic(
+                kind="truncated_file",
+                module="package_summary",
+                field="export_table",
+                current_pos=summary.export_offset,
+                target_offset=export_table_end,
+                file_size=file_size,
+                source="validate_export_data_range",
+                error=(
+                    f"Export table region [0x{summary.export_offset:X}, 0x{export_table_end:X}] "
+                    f"exceeds file size 0x{file_size:X}, file may be truncated in export table region"
+                ),
+            )
+        )
 
 
 def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]:
@@ -799,22 +857,16 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]
     """
     # Defensive check: raise error when name_count is 0 (UE package must have name table)
     if summary.name_count <= 0:
-        raise ParseError(
-            f"name_count={summary.name_count}, UE package must have non-empty name table"
-        )
+        raise ParseError(f"name_count={summary.name_count}, UE package must have non-empty name table")
 
     # Validate name_offset
     if summary.name_offset <= 0:
-        raise ParseError(
-            f"name_offset={summary.name_offset} invalid, cannot read name table"
-        )
+        raise ParseError(f"name_offset={summary.name_offset} invalid, cannot read name table")
 
     try:
         archive.seek(summary.name_offset)
     except (OSError, OverflowError) as e:
-        raise ParseError(
-            f"seek({summary.name_offset}) failed, cannot read name table: {e}"
-        ) from e
+        raise ParseError(f"seek({summary.name_offset}) failed, cannot read name table: {e}") from e
 
     name_map: List[str] = []
     for i in range(summary.name_count):
@@ -825,12 +877,16 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]
             # UE5 assets always have name hashes (4 bytes)
             # Old UE4 assets (e.g. legacy -6 with version < 803) don't have hash fields
             from uasset_read.constants import UE4_NAME_HASHES_SERIALIZED
+
             if summary.file_version_ue5 > 0 or summary.file_version_ue4 >= UE4_NAME_HASHES_SERIALIZED:
                 archive.read(4)
         except (struct.error, OSError, ValueError) as e:
             logger.debug(
                 "read_name_table: failed to read name entry %d/%d: %s (read %d names so far)",
-                i, summary.name_count, e, len(name_map),
+                i,
+                summary.name_count,
+                e,
+                len(name_map),
             )
             break
 
@@ -898,16 +954,20 @@ def read_depends_map(
             if pkg_index > 0 and pkg_index > summary.import_count:
                 invalid_indices += 1
                 logger.debug(
-                    "DependsMap: out-of-range import index %d at export %d dep %d "
-                    "(import_count=%d)",
-                    pkg_index, i, j, summary.import_count,
+                    "DependsMap: out-of-range import index %d at export %d dep %d (import_count=%d)",
+                    pkg_index,
+                    i,
+                    j,
+                    summary.import_count,
                 )
             elif pkg_index < 0 and abs(pkg_index) > summary.export_count:
                 invalid_indices += 1
                 logger.debug(
-                    "DependsMap: out-of-range export index %d at export %d dep %d "
-                    "(export_count=%d)",
-                    pkg_index, i, j, summary.export_count,
+                    "DependsMap: out-of-range export index %d at export %d dep %d (export_count=%d)",
+                    pkg_index,
+                    i,
+                    j,
+                    summary.export_count,
                 )
             deps.append(pkg_index)
         depends_map.append(deps)
@@ -916,13 +976,11 @@ def read_depends_map(
     if warnings is not None:
         if skipped_entries > 0:
             warnings.append(
-                f"DependsMap: {skipped_entries}/{summary.export_count} entries skipped "
-                f"due to invalid dependency count"
+                f"DependsMap: {skipped_entries}/{summary.export_count} entries skipped due to invalid dependency count"
             )
         if invalid_indices > 0:
             warnings.append(
-                f"DependsMap: {invalid_indices} PackageIndex value(s) reference "
-                f"non-existent imports/exports"
+                f"DependsMap: {invalid_indices} PackageIndex value(s) reference non-existent imports/exports"
             )
 
     return depends_map

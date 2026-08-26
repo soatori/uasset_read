@@ -1,4 +1,5 @@
 """Control flow, data flow, and pose flow emission for Animation Blueprint semantic JSON."""
+
 from __future__ import annotations
 
 from uasset_read.semantic.blueprint.flows import attach_flows as bp_attach_flows
@@ -39,10 +40,12 @@ def _attach_pose_flows(graphs_json: list[dict], index: dict, reporting, *, mode:
         for node in graph["nodes"]:
             for endpoint, pose_pin in (node.get("pose_pins") or {}).items():
                 if pose_pin.get("direction") == "input":
-                    pose_entries.append({
-                        "node": node["id"],
-                        "pose_pin": endpoint,
-                    })
+                    pose_entries.append(
+                        {
+                            "node": node["id"],
+                            "pose_pin": endpoint,
+                        }
+                    )
 
         # Build pose edges from pin index
         for pin_id, info in index.items():
@@ -108,10 +111,12 @@ def _attach_pose_flows(graphs_json: list[dict], index: dict, reporting, *, mode:
                     )
                     continue
 
-                pose_edges.append({
-                    "from": {"node": info["node"], "pose_pin": info["endpoint"]},
-                    "to": {"node": target["node"], "pose_pin": target["endpoint"]},
-                })
+                pose_edges.append(
+                    {
+                        "from": {"node": info["node"], "pose_pin": info["endpoint"]},
+                        "to": {"node": target["node"], "pose_pin": target["endpoint"]},
+                    }
+                )
 
         # Add ordinal to edges (stable order by source)
         for ordinal, edge in enumerate(pose_edges):

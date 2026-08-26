@@ -3,6 +3,7 @@
 Reads from ExportIR.asset_type_data (parse_curve_table manifest).
 Follows the DataTable manifest domain pattern.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

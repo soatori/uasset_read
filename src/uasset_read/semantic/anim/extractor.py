@@ -2,6 +2,7 @@
 
 Dispatches on object_class for AnimSequence, AnimMontage, PoseAsset, AnimCurveCompressionSettings.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -12,8 +13,16 @@ if TYPE_CHECKING:
 
 def _build_anim_sequence(asset_type_data: dict, cov) -> dict:
     summary: dict = {}
-    for key in ("frame_count", "frame_rate", "duration", "bone_track_count",
-                "curve_count", "motion_extractor_count", "has_additive_animation", "has_root_motion"):
+    for key in (
+        "frame_count",
+        "frame_rate",
+        "duration",
+        "bone_track_count",
+        "curve_count",
+        "motion_extractor_count",
+        "has_additive_animation",
+        "has_root_motion",
+    ):
         val = asset_type_data.get(key)
         if val is not None:
             summary[key] = val
@@ -39,8 +48,7 @@ def _build_anim_sequence(asset_type_data: dict, cov) -> dict:
 
 def _build_anim_montage(asset_type_data: dict, cov) -> dict:
     summary: dict = {}
-    for key in ("slot_count", "section_count", "branching_point_count",
-                "blend_in_time", "blend_out_time", "duration"):
+    for key in ("slot_count", "section_count", "branching_point_count", "blend_in_time", "blend_out_time", "duration"):
         val = asset_type_data.get(key)
         if val is not None:
             summary[key] = val

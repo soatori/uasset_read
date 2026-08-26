@@ -8,7 +8,10 @@ from typing import Any, Dict, List, Optional
 
 from uasset_read.models.properties import PropertyValue, StructValue
 from uasset_read.models.transforms import (
-    VectorValue, RotatorValue, ScaleValue, format_transform_value,
+    VectorValue,
+    RotatorValue,
+    ScaleValue,
+    format_transform_value,
 )
 
 
@@ -20,10 +23,10 @@ def _decode_raw_vector(raw_data: bytes) -> Optional[VectorValue]:
     if not raw_data:
         return None
     if len(raw_data) == 24:
-        x, y, z = struct.unpack('<ddd', raw_data[:24])
+        x, y, z = struct.unpack("<ddd", raw_data[:24])
         return VectorValue(x=x, y=y, z=z)
     elif len(raw_data) == 12:
-        x, y, z = struct.unpack('<fff', raw_data[:12])
+        x, y, z = struct.unpack("<fff", raw_data[:12])
         return VectorValue(x=x, y=y, z=z)
     return None
 
@@ -41,26 +44,26 @@ def _try_extract_struct_value(prop_value: Any) -> Optional[Dict[str, float]]:
         return prop_value.fields
 
     if isinstance(prop_value, dict):
-        kind = prop_value.get('kind')
+        kind = prop_value.get("kind")
 
         # binary_or_native_property dict (#143: raw_data decoding)
-        if kind == 'binary_or_native_property':
-            raw = prop_value.get('raw_data')
+        if kind == "binary_or_native_property":
+            raw = prop_value.get("raw_data")
             if isinstance(raw, bytes):
                 vec = _decode_raw_vector(raw)
                 if vec is not None:
                     return {"X": vec.x, "Y": vec.y, "Z": vec.z}
 
         # struct_binary_decoded dict (#143: decoded struct fields)
-        elif kind == 'struct_binary_decoded':
-            fields = prop_value.get('fields')
+        elif kind == "struct_binary_decoded":
+            fields = prop_value.get("fields")
             if isinstance(fields, dict):
                 return fields
 
     return None
 
 
-def parse_vector_value(struct_value: StructValue, precision_type: str = 'location') -> VectorValue:
+def parse_vector_value(struct_value: StructValue, precision_type: str = "location") -> VectorValue:
     """Parse Vector struct property to VectorValue. Extract X/Y/Z fields from fields."""
     fields = struct_value.fields
     x = format_transform_value(fields.get("X", 0.0), precision_type)
@@ -72,18 +75,18 @@ def parse_vector_value(struct_value: StructValue, precision_type: str = 'locatio
 def parse_rotator_value(struct_value: StructValue) -> RotatorValue:
     """Parse Rotator struct property to RotatorValue. Extract Roll/Pitch/Yaw fields from fields."""
     fields = struct_value.fields
-    roll = format_transform_value(fields.get("Roll", 0.0), 'rotation')
-    pitch = format_transform_value(fields.get("Pitch", 0.0), 'rotation')
-    yaw = format_transform_value(fields.get("Yaw", 0.0), 'rotation')
+    roll = format_transform_value(fields.get("Roll", 0.0), "rotation")
+    pitch = format_transform_value(fields.get("Pitch", 0.0), "rotation")
+    yaw = format_transform_value(fields.get("Yaw", 0.0), "rotation")
     return RotatorValue(roll=roll, pitch=pitch, yaw=yaw)
 
 
 def parse_scale_value(struct_value: StructValue) -> ScaleValue:
     """Parse Scale3D struct property to ScaleValue. Extract X/Y/Z fields from fields."""
     fields = struct_value.fields
-    x = format_transform_value(fields.get("X", 0.0), 'scale')
-    y = format_transform_value(fields.get("Y", 0.0), 'scale')
-    z = format_transform_value(fields.get("Z", 0.0), 'scale')
+    x = format_transform_value(fields.get("X", 0.0), "scale")
+    y = format_transform_value(fields.get("Y", 0.0), "scale")
+    z = format_transform_value(fields.get("Z", 0.0), "scale")
     return ScaleValue(x=x, y=y, z=z)
 
 
@@ -120,18 +123,18 @@ def extract_component_transforms(
             continue
 
         if prop_name == "RelativeLocation":
-            x = format_transform_value(fields.get("X", 0.0), 'location')
-            y = format_transform_value(fields.get("Y", 0.0), 'location')
-            z = format_transform_value(fields.get("Z", 0.0), 'location')
+            x = format_transform_value(fields.get("X", 0.0), "location")
+            y = format_transform_value(fields.get("Y", 0.0), "location")
+            z = format_transform_value(fields.get("Z", 0.0), "location")
             transforms["relative_location"] = VectorValue(x=x, y=y, z=z)
         elif prop_name == "RelativeRotation":
-            roll = format_transform_value(fields.get("Roll", fields.get("X", 0.0)), 'rotation')
-            pitch = format_transform_value(fields.get("Pitch", fields.get("Y", 0.0)), 'rotation')
-            yaw = format_transform_value(fields.get("Yaw", fields.get("Z", 0.0)), 'rotation')
+            roll = format_transform_value(fields.get("Roll", fields.get("X", 0.0)), "rotation")
+            pitch = format_transform_value(fields.get("Pitch", fields.get("Y", 0.0)), "rotation")
+            yaw = format_transform_value(fields.get("Yaw", fields.get("Z", 0.0)), "rotation")
             transforms["relative_rotation"] = RotatorValue(roll=roll, pitch=pitch, yaw=yaw)
         elif prop_name == "RelativeScale3D":
-            x = format_transform_value(fields.get("X", 0.0), 'scale')
-            y = format_transform_value(fields.get("Y", 0.0), 'scale')
-            z = format_transform_value(fields.get("Z", 0.0), 'scale')
+            x = format_transform_value(fields.get("X", 0.0), "scale")
+            y = format_transform_value(fields.get("Y", 0.0), "scale")
+            z = format_transform_value(fields.get("Z", 0.0), "scale")
             transforms["relative_scale"] = ScaleValue(x=x, y=y, z=z)
     return transforms

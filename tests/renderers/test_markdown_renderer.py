@@ -2,6 +2,7 @@
 
 Tests the Markdown output format: structure, headings, tables, Mermaid charts.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -69,10 +70,14 @@ class TestMarkdownRenderer:
             pytest.skip("Sample not found")
 
         standard = _render_markdown(
-            samples_dir, "FirstPerson_BP_FirstPersonCharacter.uasset", verbose=False,
+            samples_dir,
+            "FirstPerson_BP_FirstPersonCharacter.uasset",
+            verbose=False,
         )
         verbose = _render_markdown(
-            samples_dir, "FirstPerson_BP_FirstPersonCharacter.uasset", verbose=True,
+            samples_dir,
+            "FirstPerson_BP_FirstPersonCharacter.uasset",
+            verbose=True,
         )
         # Verbose should produce at least as much output
         assert len(verbose) >= len(standard)

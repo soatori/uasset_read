@@ -1,4 +1,5 @@
 """Control flow and data flow emission (BP-9, BP-10)."""
+
 from __future__ import annotations
 
 _ENTRY_KINDS = {"event", "custom_event", "function_entry"}
@@ -39,25 +40,38 @@ def attach_flows(graphs_json: list[dict], index: dict, reporting, *, mode: str) 
                 continue
             seen_edges.add(edge_key)
             target = index.get(target_guid)
-            if target is None or target["orphaned"] or target["not_connectable"] \
-                    or target["graph"] != gid:
-                reporting.diagnostic("BP_LINK_UNRESOLVED", f"graph:{gid}/data_flow",
-                                     "warning", "semantic_loss",
-                                     occurrence={"pin": pin_id, "target": target_guid})
+            if target is None or target["orphaned"] or target["not_connectable"] or target["graph"] != gid:
+                reporting.diagnostic(
+                    "BP_LINK_UNRESOLVED",
+                    f"graph:{gid}/data_flow",
+                    "warning",
+                    "semantic_loss",
+                    occurrence={"pin": pin_id, "target": target_guid},
+                )
                 continue
             if target["direction"] != "input":
-                reporting.diagnostic("BP_LINK_DIRECTION", f"graph:{gid}/data_flow",
-                                     "warning", "semantic_loss",
-                                     occurrence={"pin": pin_id, "target": target_guid})
+                reporting.diagnostic(
+                    "BP_LINK_DIRECTION",
+                    f"graph:{gid}/data_flow",
+                    "warning",
+                    "semantic_loss",
+                    occurrence={"pin": pin_id, "target": target_guid},
+                )
                 continue
             if info["is_exec"] != target["is_exec"]:
-                reporting.diagnostic("BP_LINK_KIND_MISMATCH", f"graph:{gid}/data_flow",
-                                     "warning", "semantic_loss",
-                                     occurrence={"pin": pin_id, "target": target_guid})
+                reporting.diagnostic(
+                    "BP_LINK_KIND_MISMATCH",
+                    f"graph:{gid}/data_flow",
+                    "warning",
+                    "semantic_loss",
+                    occurrence={"pin": pin_id, "target": target_guid},
+                )
                 continue
             endpoint_key = "port" if info["is_exec"] else "pin"
-            edge = {"from": {"node": info["node"], endpoint_key: info["endpoint"]},
-                    "to": {"node": target["node"], endpoint_key: target["endpoint"]}}
+            edge = {
+                "from": {"node": info["node"], endpoint_key: info["endpoint"]},
+                "to": {"node": target["node"], endpoint_key: target["endpoint"]},
+            }
             (exec_edges[gid] if info["is_exec"] else data_edges[gid]).append(edge)
 
     for graph in graphs_json:

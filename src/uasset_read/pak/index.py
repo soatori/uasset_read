@@ -3,6 +3,7 @@ Pak file Primary Index parsing module.
 
 Handles legacy (v<10) and v10+ (PathHashIndex + bitfield encoded) index formats.
 """
+
 import struct
 import logging
 from io import BytesIO
@@ -46,9 +47,7 @@ def parse_primary_index(
     stream.seek(pak_info.index_offset)
     index_blob = stream.read(pak_info.index_size)
     if len(index_blob) != pak_info.index_size:
-        raise ParseError(
-            f"Index blob truncated: expected {pak_info.index_size}, got {len(index_blob)}"
-        )
+        raise ParseError(f"Index blob truncated: expected {pak_info.index_size}, got {len(index_blob)}")
 
     # Step 2: Decrypt or validate
     if pak_info.encrypted_index:
@@ -68,15 +67,13 @@ def parse_primary_index(
     num_entries_bytes = index_stream.read(4)
     if len(num_entries_bytes) < 4:
         raise ParseError("Unexpected end of index: cannot read entry count")
-    num_entries = struct.unpack('<i', num_entries_bytes)[0]
+    num_entries = struct.unpack("<i", num_entries_bytes)[0]
 
     if num_entries < 0:
         raise ParseError(f"Invalid entry count: {num_entries}")
 
     if num_entries > MAX_PAK_ENTRIES:
-        raise ParseError(
-            f"Entry count {num_entries} exceeds limit {MAX_PAK_ENTRIES}"
-        )
+        raise ParseError(f"Entry count {num_entries} exceeds limit {MAX_PAK_ENTRIES}")
 
     # Step 5: Branch by version
     if pak_info.version < PakFileVersion.PathHashIndex:
@@ -130,15 +127,15 @@ def _parse_v10_index(
     seed_bytes = index_stream.read(8)
     if len(seed_bytes) < 8:
         raise ParseError("Unexpected end of index: cannot read PathHashSeed")
-    path_hash_seed = struct.unpack('<Q', seed_bytes)[0]
+    path_hash_seed = struct.unpack("<Q", seed_bytes)[0]
 
     # Read bHasPathHashIndex
     b_has_path_hash = index_stream.read(1)[0] != 0
 
     path_hash_index: dict[int, tuple[int, int]] = {}
     if b_has_path_hash:
-        ph_offset = struct.unpack('<q', index_stream.read(8))[0]
-        ph_size = struct.unpack('<q', index_stream.read(8))[0]
+        ph_offset = struct.unpack("<q", index_stream.read(8))[0]
+        ph_size = struct.unpack("<q", index_stream.read(8))[0]
         if ph_size > 0:
             path_hash_index = parse_path_hash_index(file_stream, ph_offset, ph_size, pak_info)
 
@@ -147,36 +144,32 @@ def _parse_v10_index(
 
     directory_index: dict[str, dict[str, tuple[int, int]]] = {}
     if b_has_directory:
-        di_offset = struct.unpack('<q', index_stream.read(8))[0]
-        di_size = struct.unpack('<q', index_stream.read(8))[0]
+        di_offset = struct.unpack("<q", index_stream.read(8))[0]
+        di_size = struct.unpack("<q", index_stream.read(8))[0]
         if di_size > 0:
             directory_index = parse_directory_index(file_stream, di_offset, di_size, pak_info)
 
     # Read EncodedPakEntries (bitfield-encoded, no explicit path)
-    num_encoded = struct.unpack('<I', index_stream.read(4))[0]
+    num_encoded = struct.unpack("<I", index_stream.read(4))[0]
     encoded_entries: list[FPakEntry] = []
     for _ in range(num_encoded):
         # Read serialized size first, then the bitfield data
-        serialized_size = struct.unpack('<I', index_stream.read(4))[0]
+        serialized_size = struct.unpack("<I", index_stream.read(4))[0]
         entry_data = index_stream.read(serialized_size)
         if len(entry_data) < serialized_size:
-            raise ParseError(
-                f"Encoded entry truncated: expected {serialized_size} bytes"
-            )
+            raise ParseError(f"Encoded entry truncated: expected {serialized_size} bytes")
         entry, _ = FPakEntry.decode_bitfield(entry_data, 0, pak_info)
         encoded_entries.append(entry)
 
     # Read NonEncodedEntries (FString path + bitfield)
-    num_non_encoded = struct.unpack('<I', index_stream.read(4))[0]
+    num_non_encoded = struct.unpack("<I", index_stream.read(4))[0]
     entries: dict[str, FPakEntry] = {}
     for _ in range(num_non_encoded):
         path = read_fstring(index_stream, pak_info.version)
-        serialized_size = struct.unpack('<I', index_stream.read(4))[0]
+        serialized_size = struct.unpack("<I", index_stream.read(4))[0]
         entry_data = index_stream.read(serialized_size)
         if len(entry_data) < serialized_size:
-            raise ParseError(
-                f"Non-encoded entry truncated: expected {serialized_size} bytes"
-            )
+            raise ParseError(f"Non-encoded entry truncated: expected {serialized_size} bytes")
         entry, _ = FPakEntry.decode_bitfield(entry_data, 0, pak_info)
         entries[path] = entry
 
@@ -189,12 +182,11 @@ def _parse_v10_index(
     }
 
     total = len(entries) + len(encoded_entries)
-    logger.debug("Parsed v10+ index: %d named + %d encoded = %d total entries",
-                 len(entries), len(encoded_entries), total)
+    logger.debug(
+        "Parsed v10+ index: %d named + %d encoded = %d total entries", len(entries), len(encoded_entries), total
+    )
 
     return mount_point, entries, extra_info
-
-
 
 
 def parse_path_hash_index(
@@ -221,18 +213,16 @@ def parse_path_hash_index(
     file_stream.seek(offset)
     data = file_stream.read(size)
     if len(data) != size:
-        raise ParseError(
-            f"PathHashIndex truncated: expected {size}, got {len(data)}"
-        )
+        raise ParseError(f"PathHashIndex truncated: expected {size}, got {len(data)}")
 
     stream = BytesIO(data)
-    num_entries = struct.unpack('<I', stream.read(4))[0]
+    num_entries = struct.unpack("<I", stream.read(4))[0]
 
     result: dict[int, tuple[int, int]] = {}
     for _ in range(num_entries):
-        path_hash = struct.unpack('<Q', stream.read(8))[0]
-        file_offset = struct.unpack('<q', stream.read(8))[0]
-        entry_size = struct.unpack('<q', stream.read(8))[0]
+        path_hash = struct.unpack("<Q", stream.read(8))[0]
+        file_offset = struct.unpack("<q", stream.read(8))[0]
+        entry_size = struct.unpack("<q", stream.read(8))[0]
         result[path_hash] = (file_offset, entry_size)
 
     logger.debug("Parsed PathHashIndex: %d entries", len(result))
@@ -264,23 +254,21 @@ def parse_directory_index(
     file_stream.seek(offset)
     data = file_stream.read(size)
     if len(data) != size:
-        raise ParseError(
-            f"DirectoryIndex truncated: expected {size}, got {len(data)}"
-        )
+        raise ParseError(f"DirectoryIndex truncated: expected {size}, got {len(data)}")
 
     stream = BytesIO(data)
-    num_dirs = struct.unpack('<I', stream.read(4))[0]
+    num_dirs = struct.unpack("<I", stream.read(4))[0]
 
     result: dict[str, dict[str, tuple[int, int]]] = {}
     for _ in range(num_dirs):
         dir_name = read_fstring(stream, pak_info.version)
-        num_files = struct.unpack('<I', stream.read(4))[0]
+        num_files = struct.unpack("<I", stream.read(4))[0]
 
         files: dict[str, tuple[int, int]] = {}
         for _ in range(num_files):
             file_name = read_fstring(stream, pak_info.version)
-            file_offset = struct.unpack('<q', stream.read(8))[0]
-            file_size = struct.unpack('<q', stream.read(8))[0]
+            file_offset = struct.unpack("<q", stream.read(8))[0]
+            file_size = struct.unpack("<q", stream.read(8))[0]
             files[file_name] = (file_offset, file_size)
 
         result[dir_name] = files

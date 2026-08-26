@@ -1,4 +1,5 @@
 """Blueprint type system — TypeRef union and interned types table (BP-§11)."""
+
 from __future__ import annotations
 
 import json
@@ -43,10 +44,17 @@ class TypeTable:
         map_key_terminal_sub_category: str = "",
         map_key_terminal_sub_category_object_name: str | None = None,
     ) -> Any:
-        base = self._base_ref(category, subcategory, subcategory_object_name,
-                              container_type, is_weak_pointer, is_uobject_wrapper,
-                              map_key_terminal_category, map_key_terminal_sub_category,
-                              map_key_terminal_sub_category_object_name)
+        base = self._base_ref(
+            category,
+            subcategory,
+            subcategory_object_name,
+            container_type,
+            is_weak_pointer,
+            is_uobject_wrapper,
+            map_key_terminal_category,
+            map_key_terminal_sub_category,
+            map_key_terminal_sub_category_object_name,
+        )
         if is_reference or is_const:
             entry: dict = {"kind": "ref", "target": base}
             if is_const:
@@ -54,35 +62,66 @@ class TypeTable:
             return self._intern(entry)
         return base
 
-    def _base_ref(self, category, subcategory, subcategory_object_name, container_type,
-                  is_weak_pointer, is_uobject_wrapper,
-                  map_key_terminal_category, map_key_terminal_sub_category,
-                  map_key_terminal_sub_category_object_name) -> Any:
+    def _base_ref(
+        self,
+        category,
+        subcategory,
+        subcategory_object_name,
+        container_type,
+        is_weak_pointer,
+        is_uobject_wrapper,
+        map_key_terminal_category,
+        map_key_terminal_sub_category,
+        map_key_terminal_sub_category_object_name,
+    ) -> Any:
         category = (category or "").lower()
         subcategory = (subcategory or "").lower()
         name = subcategory_object_name or ""
 
         code = _container_code(container_type)
         if code == 1:
-            elem = self.type_ref_for(category=category, subcategory=subcategory,
-                                    subcategory_object_name=subcategory_object_name)
+            elem = self.type_ref_for(
+                category=category, subcategory=subcategory, subcategory_object_name=subcategory_object_name
+            )
             return self._intern({"kind": "array", "element": elem})
         if code == 2:
-            elem = self.type_ref_for(category=category, subcategory=subcategory,
-                                    subcategory_object_name=subcategory_object_name)
+            elem = self.type_ref_for(
+                category=category, subcategory=subcategory, subcategory_object_name=subcategory_object_name
+            )
             return self._intern({"kind": "set", "element": elem})
         if code == 3:
-            key_ref = self.type_ref_for(category=category, subcategory=subcategory,
-                                        subcategory_object_name=subcategory_object_name)
-            value_ref = self.type_ref_for(category=map_key_terminal_category,
-                                          subcategory=map_key_terminal_sub_category,
-                                          subcategory_object_name=map_key_terminal_sub_category_object_name)
+            key_ref = self.type_ref_for(
+                category=category, subcategory=subcategory, subcategory_object_name=subcategory_object_name
+            )
+            value_ref = self.type_ref_for(
+                category=map_key_terminal_category,
+                subcategory=map_key_terminal_sub_category,
+                subcategory_object_name=map_key_terminal_sub_category_object_name,
+            )
             return self._intern({"kind": "map", "key": key_ref, "value": value_ref})
 
-        if category in ("bool", "string", "name", "text", "byte", "int", "int64",
-                        "int8", "uint8", "uint16", "uint32", "uint64", "float",
-                        "double", "vector", "vector2d", "rotator", "transform",
-                        "color", "guid"):
+        if category in (
+            "bool",
+            "string",
+            "name",
+            "text",
+            "byte",
+            "int",
+            "int64",
+            "int8",
+            "uint8",
+            "uint16",
+            "uint32",
+            "uint64",
+            "float",
+            "double",
+            "vector",
+            "vector2d",
+            "rotator",
+            "transform",
+            "color",
+            "guid",
+        ):
             return category
         if category == "real":
             return "double" if subcategory == "double" else "float"
@@ -112,8 +151,7 @@ class TypeTable:
         if category == "wildcard":
             return self._intern({"kind": "wildcard", "declared": "wildcard"})
 
-        return self._intern({"kind": "unknown", "category": category or "unknown",
-                             "name": name or subcategory or ""})
+        return self._intern({"kind": "unknown", "category": category or "unknown", "name": name or subcategory or ""})
 
 
 def type_ref_from_pin(table: TypeTable, pin) -> Any:

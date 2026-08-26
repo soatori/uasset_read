@@ -13,23 +13,28 @@ from typing import Optional, Dict
 # Custom exceptions (graceful degradation)
 # ============================================================================
 
+
 class UAssetError(Exception):
     """uasset parsing error base class"""
+
     pass
 
 
 class VersionError(UAssetError):
     """Unsupported version error"""
+
     pass
 
 
 class DecompressionError(UAssetError):
     """Decompression failure (zlib/Oodle/LZ4, etc.)"""
+
     pass
 
 
 class LinkerError(UAssetError):
     """Linker phase error (import/export parsing failure)"""
+
     pass
 
 
@@ -39,6 +44,7 @@ class SemanticContractError(UAssetError):
     Raised when a SemanticIR fails validation before rendering; invalid
     documents must never be emitted.
     """
+
     pass
 
 
@@ -50,15 +56,15 @@ class ErrorContext:
     Records the parsing state at the time of an error to aid in diagnosis.
     """
 
-    offset: int           # File offset position
-    phase: str            # Parsing phase: header/name_table/import_map/export_map/properties/blueprint
-    operation: str        # Operation type: read_i32/read_name/seek, etc.
+    offset: int  # File offset position
+    phase: str  # Parsing phase: header/name_table/import_map/export_map/properties/blueprint
+    operation: str  # Operation type: read_i32/read_name/seek, etc.
     context_name: str = ""  # Related object or property name
     # Export table parsing stage information
-    export_index: Optional[int] = None    # Current export index (0-based)
+    export_index: Optional[int] = None  # Current export index (0-based)
     expected_offset: Optional[int] = None  # Expected offset
-    actual_offset: Optional[int] = None    # Actual offset
-    field_name: str = ""                  # Field name (e.g. "TemplateIndex")
+    actual_offset: Optional[int] = None  # Actual offset
+    field_name: str = ""  # Field name (e.g. "TemplateIndex")
     version_info: Dict[str, int] = field(default_factory=dict)  # Version check failure info
 
 

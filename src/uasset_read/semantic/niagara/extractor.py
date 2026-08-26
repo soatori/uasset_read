@@ -3,6 +3,7 @@
 Dispatches on object_class for NiagaraSystem, NiagaraEmitter, NiagaraScript.
 Parameter types use basic strings: float, int, vec2, vec3, vec4, bool, string, etc.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

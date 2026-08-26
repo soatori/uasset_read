@@ -11,6 +11,7 @@ from typing import Any
 
 class DiagnosticSeverity(Enum):
     """Diagnostic severity levels."""
+
     INFO = "info"
     WARNING = "warning"
     ERROR = "error"
@@ -49,8 +50,14 @@ class OffsetRangeDiagnostic:
         }
         # String fields: output when non-empty
         for str_field in (
-            "asset_path", "asset_type", "module", "object_name",
-            "field", "source", "error", "fallback_result",
+            "asset_path",
+            "asset_type",
+            "module",
+            "object_name",
+            "field",
+            "source",
+            "error",
+            "fallback_result",
         ):
             val = getattr(self, str_field)
             if val:

@@ -1,4 +1,5 @@
 """Honest coverage model — reports actual semantic loss, not key counts."""
+
 from __future__ import annotations
 
 from uasset_read.semantic.models import CoverageInfo

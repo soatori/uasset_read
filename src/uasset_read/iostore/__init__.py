@@ -1,4 +1,5 @@
 """IoStore container system — UE5.3+ new format support"""
+
 from uasset_read.iostore.structures import (
     FIoChunkId,
     FIoOffsetAndLength,

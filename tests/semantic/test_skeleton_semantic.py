@@ -1,4 +1,5 @@
 """Skeleton 语义输出测试 — 验证层级安全、容错和 JSON 合约。"""
+
 from __future__ import annotations
 
 import json
@@ -19,6 +20,7 @@ from uasset_read.models.ir import (
 # ---------------------------------------------------------------------------
 # 辅助工厂
 # ---------------------------------------------------------------------------
+
 
 def _make_header(**kwargs) -> PackageHeaderIR:
     defaults = dict(
@@ -82,6 +84,7 @@ def _render_json(ir: PackageIR) -> dict:
 # ---------------------------------------------------------------------------
 # 层级验证测试
 # ---------------------------------------------------------------------------
+
 
 class TestHierarchyValidation:
     """验证 _validate_hierarchy 函数的检测能力。"""
@@ -184,6 +187,7 @@ class TestHierarchyValidation:
 # JSON 渲染测试
 # ---------------------------------------------------------------------------
 
+
 class TestSkeletonJSONRendering:
     """验证 skeleton 块在 JSON 输出中的正确渲染。"""
 
@@ -246,11 +250,13 @@ class TestSkeletonJSONRendering:
                 parents=[-1, 999],
             ),
             "valid_hierarchy": False,
-            "hierarchy_diagnostics": [{
-                "code": "SKELETON_INVALID_PARENT_INDEX",
-                "count": 1,
-                "examples": [{"bone_index": 1, "parent_index": 999}],
-            }],
+            "hierarchy_diagnostics": [
+                {
+                    "code": "SKELETON_INVALID_PARENT_INDEX",
+                    "count": 1,
+                    "examples": [{"bone_index": 1, "parent_index": 999}],
+                }
+            ],
         }
         export = _make_skeleton_export(asset_type_data=ad)
         ir = _make_ir(exports=[export])
@@ -265,7 +271,8 @@ class TestSkeletonJSONRendering:
         ad = {
             "parse_status": "partial",
             "reference_skeleton": _make_ref_skeleton(
-                names=["root"], parents=[-1],
+                names=["root"],
+                parents=[-1],
             ),
             "valid_hierarchy": True,
         }
@@ -279,7 +286,8 @@ class TestSkeletonJSONRendering:
         ad = {
             "parse_status": "success",
             "reference_skeleton": _make_ref_skeleton(
-                names=["root"], parents=[-1],
+                names=["root"],
+                parents=[-1],
             ),
             "guid": "00000000-00009100-00000C00-69687400",
             "valid_hierarchy": True,
@@ -301,7 +309,8 @@ class TestSkeletonJSONRendering:
         ad = {
             "parse_status": "success",
             "reference_skeleton": _make_ref_skeleton(
-                names=[], parents=[],
+                names=[],
+                parents=[],
             ),
             "valid_hierarchy": True,
         }
@@ -317,15 +326,18 @@ class TestSkeletonJSONRendering:
         ad = {
             "parse_status": "success",
             "reference_skeleton": _make_ref_skeleton(
-                names=["root"], parents=[-1],
+                names=["root"],
+                parents=[-1],
             ),
-            "retarget_sources": [{
-                "name": "default",
-                "pose_name": "default",
-                "source_mesh": "/Game/Mesh/SK_Mannequin",
-                "transforms": [{"translation": {}, "rotation": {}, "scale": {}}],
-                "transform_count": 1,
-            }],
+            "retarget_sources": [
+                {
+                    "name": "default",
+                    "pose_name": "default",
+                    "source_mesh": "/Game/Mesh/SK_Mannequin",
+                    "transforms": [{"translation": {}, "rotation": {}, "scale": {}}],
+                    "transform_count": 1,
+                }
+            ],
             "valid_hierarchy": True,
         }
         export = _make_skeleton_export(asset_type_data=ad)
@@ -343,41 +355,51 @@ class TestSkeletonJSONRendering:
 # CiciToon 容错集成测试
 # ---------------------------------------------------------------------------
 
+
 class TestCiciToonTolerant:
     """CiciToon_SK_Mannequin.uasset 容错 JSON 输出测试。"""
 
     SAMPLE_PATH = "tests/samples/CiciToon_SK_Mannequin.uasset"
 
     @pytest.mark.skipif(
-        not __import__("os").path.exists(__import__("pathlib").Path(__file__).parent / "samples" / "CiciToon_SK_Mannequin.uasset"),
+        not __import__("os").path.exists(
+            __import__("pathlib").Path(__file__).parent / "samples" / "CiciToon_SK_Mannequin.uasset"
+        ),
         reason="sample not available",
     )
     def test_tolerant_json_no_exception(self):
         """CiciToon 在 tolerant 模式下不抛异常，返回合法 JSON。"""
         from uasset_read.core import parse_single
+
         output = parse_single(self.SAMPLE_PATH, format="json", tolerant=True)
         data = json.loads(output)
         assert "skeleton" in data
 
     @pytest.mark.skipif(
-        not __import__("os").path.exists(__import__("pathlib").Path(__file__).parent / "samples" / "CiciToon_SK_Mannequin.uasset"),
+        not __import__("os").path.exists(
+            __import__("pathlib").Path(__file__).parent / "samples" / "CiciToon_SK_Mannequin.uasset"
+        ),
         reason="sample not available",
     )
     def test_bone_count_matches_bones(self):
         """bone_count 与 emitted bones 数量一致。"""
         from uasset_read.core import parse_single
+
         output = parse_single(self.SAMPLE_PATH, format="json", tolerant=True)
         data = json.loads(output)
         sk = data["skeleton"]
         assert sk["bone_count"] == len(sk["bones"])
 
     @pytest.mark.skipif(
-        not __import__("os").path.exists(__import__("pathlib").Path(__file__).parent / "samples" / "CiciToon_SK_Mannequin.uasset"),
+        not __import__("os").path.exists(
+            __import__("pathlib").Path(__file__).parent / "samples" / "CiciToon_SK_Mannequin.uasset"
+        ),
         reason="sample not available",
     )
     def test_invalid_hierarchy_has_aggregated_diagnostics(self):
         """无效层级产生 aggregated diagnostics 而非逐条展开。"""
         from uasset_read.core import parse_single
+
         output = parse_single(self.SAMPLE_PATH, format="json", tolerant=True)
         data = json.loads(output)
         sk = data["skeleton"]
@@ -391,12 +413,15 @@ class TestCiciToonTolerant:
         assert len(parent_diag[0]["examples"]) <= 5
 
     @pytest.mark.skipif(
-        not __import__("os").path.exists(__import__("pathlib").Path(__file__).parent / "samples" / "CiciToon_SK_Mannequin.uasset"),
+        not __import__("os").path.exists(
+            __import__("pathlib").Path(__file__).parent / "samples" / "CiciToon_SK_Mannequin.uasset"
+        ),
         reason="sample not available",
     )
     def test_partial_status(self):
         """CiciToon skeleton 有层级错误时 parse_status 为 partial。"""
         from uasset_read.core import parse_single
+
         output = parse_single(self.SAMPLE_PATH, format="json", tolerant=True)
         data = json.loads(output)
         sk = data["skeleton"]

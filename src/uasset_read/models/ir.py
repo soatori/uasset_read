@@ -28,6 +28,7 @@ class PackageHeaderIR:
 
     Fields sourced from PackageFileSummary (UE's FPackageFileSummary).
     """
+
     # Core fields (required)
     package_name: str
     package_class: str
@@ -35,7 +36,7 @@ class PackageHeaderIR:
     total_export_count: int
     total_import_count: int
     ue_version: str
-    saved_hash: bytes = field(default_factory=lambda: b'')
+    saved_hash: bytes = field(default_factory=lambda: b"")
 
     # File version
     file_version_ue4: int = 0
@@ -153,6 +154,7 @@ class PinIR:
     - is_map_key: Map container key type flag (from PinValueType)
     - is_map_value: Map container value type flag (from PinValueType)
     """
+
     pin_name: str
     pin_type: str  # Backward compat: FEdGraphPinType _safe_str() output
     linked_to: list[str]
@@ -200,6 +202,7 @@ class NodeIR:
     - Contains IR-specific fields like execution_flow and macro_expansion
     - Does not contain node_pos_x/y (not needed by renderers)
     """
+
     node_guid: str
     node_class: str
     node_comment: str | None
@@ -224,6 +227,7 @@ class GraphIR:
     - Contains IR-specific fields like structured execution_chains entries
     - Does not contain schema/b_editable (not needed by renderers)
     """
+
     graph_guid: str
     graph_name: str
     graph_class: str
@@ -236,6 +240,7 @@ class GraphIR:
 @dataclass
 class PropertyIR:
     """Single property IR representation."""
+
     name: str
     type: str
     value: Any
@@ -256,6 +261,7 @@ class ExportRawIR:
     Different from PackageHeaderIR.package_flags (FPackageFileSummary.PackageFlags).
     See ObjectResource.h:359-363.
     """
+
     class_index: int = 0
     super_index: int = 0
     outer_index: int = 0
@@ -278,6 +284,7 @@ class ExportRawIR:
 @dataclass
 class ImportIR:
     """Single import object IR representation, aligned with UE's FObjectImport."""
+
     index: int
     class_package: str
     class_name: str
@@ -293,6 +300,7 @@ class ImportIR:
 @dataclass
 class ExportIR:
     """Single export object IR representation."""
+
     index: int
     object_name: str
     object_class: str
@@ -367,6 +375,7 @@ class ExportDependencyIR:
     Corresponds to dependency fields in UE's FExportMapEntry.
     Describes serialization and creation order dependencies between exports.
     """
+
     export_index: int
     serialization_before_serialization: list[int]
     create_before_serialization: list[int]
@@ -377,6 +386,7 @@ class ExportDependencyIR:
 @dataclass
 class BlueprintFunctionIR:
     """Blueprint function IR (full metadata, equivalent to UFunction description)."""
+
     name: str
     return_type: str
     parameters: list[dict]
@@ -399,6 +409,7 @@ class BlueprintFunctionIR:
 @dataclass
 class BlueprintEventIR:
     """Blueprint event IR (full metadata, equivalent to blueprint event description)."""
+
     name: str
     event_type: str
     parameters: list[dict]
@@ -422,6 +433,7 @@ class BlueprintEventIR:
 @dataclass
 class BlueprintIR:
     """Blueprint metadata IR (from BlueprintMetadata)."""
+
     parent_class: str | None
     description: str = ""
     interfaces: list[dict] = field(default_factory=list)
@@ -433,6 +445,7 @@ class BlueprintIR:
 @dataclass
 class ScriptMetricsIR:
     """Script metrics for a decompiled function."""
+
     bytecode_buffer_size: int = 0
     serialized_script_size: int = 0
     serialized_bytes_consumed: int = 0
@@ -442,6 +455,7 @@ class ScriptMetricsIR:
 @dataclass
 class DecompiledFunctionIR:
     """Decompiled function IR (from KismetDecompiledResult)."""
+
     name: str
     signature: str
     cpp_code: str
@@ -455,7 +469,7 @@ class DecompiledFunctionIR:
     # "parsed" | "no_script" | "failed" | "unknown"
     translation_status: str = "not_applicable"
     # "complete" | "partial" | "failed" | "not_applicable"
-    bytecode_source: str = "unknown"   # "function_export" | "unknown"
+    bytecode_source: str = "unknown"  # "function_export" | "unknown"
     logic_source: str = "current_asset"  # "current_asset" | "graph_topology"
     warnings: list[str] = field(default_factory=list)
     error_code: str | None = None
@@ -467,6 +481,7 @@ class DecompiledFunctionIR:
 @dataclass
 class ExecutionChainIR:
     """Execution chain IR."""
+
     event: str
     chain: list[str]
 
@@ -474,6 +489,7 @@ class ExecutionChainIR:
 @dataclass
 class FunctionGraphIR:
     """Function graph data (based on _build_function_graphs_safe() actual fields)."""
+
     function_name: str
     graph_source: str = ""
     entry_node_guid: str = ""
@@ -485,6 +501,7 @@ class FunctionGraphIR:
 @dataclass
 class LinkerSummaryIR:
     """Package linker summary."""
+
     has_linker: bool
     import_paths: list[str]
     export_paths: list[str]
@@ -493,6 +510,7 @@ class LinkerSummaryIR:
 @dataclass
 class VariableIR:
     """Blueprint variable IR (full metadata, equivalent to FBPVariableDescription)."""
+
     name: str
     type: str
     default_value: str | None
@@ -523,6 +541,7 @@ class SourceSiteContextIR:
     Reference: GatherableTextData.h:12
     Describes where text is used in source code and its localization attributes.
     """
+
     key_name: str
     site_description: str
     is_editor_only: bool
@@ -536,6 +555,7 @@ class GatherableTextDataIR:
     Reference: GatherableTextData.h:49
     Contains namespace name, source string, and source context list.
     """
+
     namespace_name: str
     source_string: str
     source_site_contexts: list[SourceSiteContextIR]
@@ -544,6 +564,7 @@ class GatherableTextDataIR:
 @dataclass
 class HexViewEntryIR:
     """Single read operation IR representation (converted from HexViewEntry)."""
+
     key: str
     type: str
     value: Any
@@ -559,6 +580,7 @@ class HexViewEntryIR:
 @dataclass
 class DebugIR:
     """Debug data IR (parsing trace information)."""
+
     hex_view: list[HexViewEntryIR] = field(default_factory=list)
     hex_view_truncated_count: int = 0
     """Number of hex view entries dropped by BoundedEventBuffer truncation."""
@@ -567,6 +589,7 @@ class DebugIR:
 @dataclass
 class AnimationDataIR:
     """Animation data aggregation."""
+
     anim_blueprint: AnimBlueprintIR | None = None
     anim_sequence: AnimSequenceIR | None = None
     anim_montage: AnimMontageIR | None = None
@@ -574,7 +597,8 @@ class AnimationDataIR:
 
 @dataclass
 class UserDefinedEnumIR:
-    """UserDefinedEnum semantic data. """
+    """UserDefinedEnum semantic data."""
+
     enum_name: str = ""
     cpp_type: str = ""
     entries: list[dict] = field(default_factory=list)
@@ -582,7 +606,8 @@ class UserDefinedEnumIR:
 
 @dataclass
 class UserDefinedStructIR:
-    """UserDefinedStruct semantic data. """
+    """UserDefinedStruct semantic data."""
+
     struct_name: str = ""
     struct_flags: int = 0
     guid: str = ""
@@ -592,6 +617,7 @@ class UserDefinedStructIR:
 @dataclass
 class UserDefinedDataIR:
     """User-defined type semantic data (enum or struct)."""
+
     type: str = ""  # "enum" or "struct"
     enum: UserDefinedEnumIR | None = None
     struct: UserDefinedStructIR | None = None
@@ -600,6 +626,7 @@ class UserDefinedDataIR:
 @dataclass
 class PackageDependenciesIR:
     """Package dependency data."""
+
     resolved_parent_assets: list[dict] = field(default_factory=list)
     inherited_blueprint_graphs: list[dict] = field(default_factory=list)
     depends_map: list[list[int]] = field(default_factory=list)
@@ -613,6 +640,7 @@ class PackageDependenciesIR:
 @dataclass
 class DiagnosticsDataIR:
     """Diagnostic and status data."""
+
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     status: str = "success"
@@ -625,6 +653,7 @@ class DiagnosticsDataIR:
 @dataclass
 class MaterialExpressionInputIR:
     """An input on a material expression, with resolved data-flow connection."""
+
     input_name: str
     source_expression_guid: str | None
     source_output_index: int
@@ -638,6 +667,7 @@ class MaterialExpressionInputIR:
 @dataclass
 class MaterialExpressionOutputIR:
     """An output on a material expression."""
+
     output_name: str = ""
     mask: int = 0
     mask_r: int = 0
@@ -649,6 +679,7 @@ class MaterialExpressionOutputIR:
 @dataclass
 class MaterialExpressionIR:
     """A single material expression (node in the material graph)."""
+
     expression_guid: str
     expression_class: str
     expression_type: str | None
@@ -663,6 +694,7 @@ class MaterialExpressionIR:
 @dataclass
 class MaterialInputIR:
     """A material channel input (e.g. BaseColor, Roughness) with resolved expression ref."""
+
     input_name: str
     source_expression_guid: str | None
     source_output_index: int
@@ -676,6 +708,7 @@ class MaterialInputIR:
 @dataclass
 class MaterialIR:
     """Material semantic data (top-level on PackageIR)."""
+
     material_type: str
     properties: dict
     expressions: list[MaterialExpressionIR]
@@ -689,6 +722,7 @@ class MaterialIR:
 @dataclass
 class PackageIR:
     """Top-level IR structure (recomposed)."""
+
     header: PackageHeaderIR
     name_map: tuple[str, ...]
     imports: list[ImportIR]  # Fix: original list[dict] was a type annotation bug

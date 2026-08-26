@@ -3,6 +3,7 @@ Pak file constant definitions.
 
 Mirrors magic numbers, version enums, and flag constants from UE engine IPlatformFilePak.h.
 """
+
 from enum import IntEnum, IntFlag
 
 # ============================================================================
@@ -66,6 +67,7 @@ class PakFileVersion(IntEnum):
     - v11: Frostbite (game-specific variant) / Fnv64BugFix
     - v12: FUtf8String directory names (Utf8PakDirectory)
     """
+
     Initial = 1
     NoTimestamps = 2
     CompressionEncryption = 3
@@ -90,6 +92,7 @@ class ECompressionFlags(IntFlag):
 
     Version >= 8 uses FPakInfo.compression_methods table instead of bit flags.
     """
+
     NONE = 0
     Zlib = 1
     Gzip = 2
@@ -110,9 +113,9 @@ MaxNumCompressionMethods = 5  # UE engine constant
 # Computed from field sizes in IPlatformFilePak.h
 # bEncryptedIndex (1 byte) is unconditionally serialized for ALL versions
 PAK_INFO_SIZES = {
-    "v1-6": 45,    # Magic(4) + Version(4) + IndexOffset(8) + IndexSize(8) + IndexHash(20) + bEncryptedIndex(1)
-    "v7": 61,      # + EncryptionKeyGuid(16)
-    "v8": 221,     # + CompressionMethods(32*5=160)
-    "v9": 222,     # + FrozenIndex(1)
-    "v10+": 221,   # - FrozenIndex (removed in v10)
+    "v1-6": 45,  # Magic(4) + Version(4) + IndexOffset(8) + IndexSize(8) + IndexHash(20) + bEncryptedIndex(1)
+    "v7": 61,  # + EncryptionKeyGuid(16)
+    "v8": 221,  # + CompressionMethods(32*5=160)
+    "v9": 222,  # + FrozenIndex(1)
+    "v10+": 221,  # - FrozenIndex (removed in v10)
 }

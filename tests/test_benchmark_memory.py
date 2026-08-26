@@ -4,6 +4,7 @@ Measures peak RSS for parsing the largest samples. Results are informational.
 
 Marker: benchmark
 """
+
 from __future__ import annotations
 
 import os
@@ -26,11 +27,13 @@ def _get_rss_mb() -> float:
     """Get current process RSS in MB (Windows/POSIX)."""
     try:
         import psutil
+
         return psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
     except ImportError:
         # Fallback: use resource module on POSIX
         try:
             import resource
+
             usage = resource.getrusage(resource.RUSAGE_SELF)
             return usage.ru_maxrss / 1024  # KB to MB
         except (ImportError, AttributeError):
@@ -60,8 +63,7 @@ class TestMemoryUsage:
 
         if before > 0 and after > 0:
             delta = after - before
-            print(f"\n{filename}: RSS delta {delta:.1f} MB "
-                  f"(before={before:.1f}, after={after:.1f})")
+            print(f"\n{filename}: RSS delta {delta:.1f} MB (before={before:.1f}, after={after:.1f})")
         else:
             print(f"\n{filename}: RSS measurement unavailable")
 
@@ -76,5 +78,4 @@ class TestMemoryUsage:
 
         if rss_before > 0 and rss_after > 0:
             delta = rss_after - rss_before
-            print(f"\nAll {count} samples: RSS delta {delta:.1f} MB "
-                  f"(before={rss_before:.1f}, after={rss_after:.1f})")
+            print(f"\nAll {count} samples: RSS delta {delta:.1f} MB (before={rss_before:.1f}, after={rss_after:.1f})")

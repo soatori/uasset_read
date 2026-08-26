@@ -142,7 +142,7 @@ def _skip_tagged_properties(archive: Any, name_map: List[str]) -> None:
     UE4_STRUCT_GUID_IN_PROPERTY_TAG = 441
     UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 503
 
-    file_version_ue4 = getattr(archive, '_file_version_ue4', 0)
+    file_version_ue4 = getattr(archive, "_file_version_ue4", 0)
 
     max_properties = 10000  # Safety limit
     for _ in range(max_properties):
@@ -266,11 +266,13 @@ def _validate_hierarchy(ref_skeleton: Dict[str, Any]) -> List[Dict[str, Any]]:
             if len(invalid_examples) < _MAX_EXAMPLES:
                 invalid_examples.append({"bone_index": i, "parent_index": p})
     if invalid_count > 0:
-        diagnostics.append({
-            "code": "SKELETON_INVALID_PARENT_INDEX",
-            "count": invalid_count,
-            "examples": invalid_examples,
-        })
+        diagnostics.append(
+            {
+                "code": "SKELETON_INVALID_PARENT_INDEX",
+                "count": invalid_count,
+                "examples": invalid_examples,
+            }
+        )
 
     # 2. Cycle detection (only when parent index range is valid, otherwise skip)
     if invalid_count == 0:
@@ -302,10 +304,12 @@ def _validate_hierarchy(ref_skeleton: Dict[str, Any]) -> List[Dict[str, Any]]:
                         cycle_path = path[cycle_start:] + [parent]
                         cycle_count += 1
                         if len(cycle_examples) < _MAX_EXAMPLES:
-                            cycle_examples.append({
-                                "cycle": cycle_path,
-                                "names": [names[idx] if idx < len(names) else f"bone_{idx}" for idx in cycle_path],
-                            })
+                            cycle_examples.append(
+                                {
+                                    "cycle": cycle_path,
+                                    "names": [names[idx] if idx < len(names) else f"bone_{idx}" for idx in cycle_path],
+                                }
+                            )
                     elif visited[parent] == 0:
                         stack.append((parent, path + [parent]))
                 else:
@@ -314,30 +318,37 @@ def _validate_hierarchy(ref_skeleton: Dict[str, Any]) -> List[Dict[str, Any]]:
                     stack.pop()
 
         if cycle_count > 0:
-            diagnostics.append({
-                "code": "SKELETON_HIERARCHY_CYCLE",
-                "count": cycle_count,
-                "examples": cycle_examples,
-            })
+            diagnostics.append(
+                {
+                    "code": "SKELETON_HIERARCHY_CYCLE",
+                    "count": cycle_count,
+                    "examples": cycle_examples,
+                }
+            )
 
     # 3. Multiple root bones info (informational, does not upgrade to partial)
     root_count = sum(1 for p in parents if p == -1)
     if root_count > 1:
         root_examples = [
             {"bone_index": i, "name": names[i] if i < len(names) else f"bone_{i}"}
-            for i, p in enumerate(parents) if p == -1
+            for i, p in enumerate(parents)
+            if p == -1
         ][:_MAX_EXAMPLES]
-        diagnostics.append({
-            "code": "SKELETON_MULTIPLE_ROOTS",
-            "count": root_count,
-            "examples": root_examples,
-        })
+        diagnostics.append(
+            {
+                "code": "SKELETON_MULTIPLE_ROOTS",
+                "count": root_count,
+                "examples": root_examples,
+            }
+        )
 
     return diagnostics
 
 
 def _read_reference_skeleton(
-    archive: Any, name_map: List[str], _diagnostics: List[str] | None = None,
+    archive: Any,
+    name_map: List[str],
+    _diagnostics: List[str] | None = None,
 ) -> Dict[str, Any]:
     """Read FReferenceSkeleton custom serialization.
 
@@ -393,21 +404,21 @@ def _read_reference_skeleton(
     if pose_count < 0 or pose_count > _MAX_SKELETON_COUNT:
         logger.debug(
             "ReferenceSkeleton: invalid PoseCount %d (bone_count=%d), truncating to 0",
-            pose_count, bone_count,
+            pose_count,
+            bone_count,
         )
         if _diagnostics is not None:
-            _diagnostics.append(
-                f"ReferenceSkeleton.PoseCount truncated: {pose_count} -> 0"
-            )
+            _diagnostics.append(f"ReferenceSkeleton.PoseCount truncated: {pose_count} -> 0")
         pose_count = 0
     if pose_count != bone_count:
         logger.debug(
             "ReferenceSkeleton: PoseCount(%d) != BoneCount(%d)",
-            pose_count, bone_count,
+            pose_count,
+            bone_count,
         )
 
     transforms: List[Dict[str, Any]] = []
-    is_ue5 = getattr(archive, '_file_version_ue5', 0) > 0
+    is_ue5 = getattr(archive, "_file_version_ue5", 0) > 0
     for _i in range(min(pose_count, bone_count)):
         transform = _read_ftransform(archive, is_ue5=is_ue5)
         transforms.append(transform)
@@ -424,9 +435,7 @@ def _read_reference_skeleton(
             map_count,
         )
         if _diagnostics is not None:
-            _diagnostics.append(
-                f"ReferenceSkeleton.NameToIndexMap.Count truncated: {map_count} -> 0"
-            )
+            _diagnostics.append(f"ReferenceSkeleton.NameToIndexMap.Count truncated: {map_count} -> 0")
         map_count = 0
     name_to_index: Dict[str, int] = {}
     for _ in range(map_count):
@@ -443,7 +452,9 @@ def _read_reference_skeleton(
 
 
 def _read_retarget_sources(
-    archive: Any, name_map: List[str], _diagnostics: List[str] | None = None,
+    archive: Any,
+    name_map: List[str],
+    _diagnostics: List[str] | None = None,
 ) -> List[Dict[str, Any]]:
     """Read RetargetSources: TMap<FName, FReferencePose>.
 
@@ -460,7 +471,7 @@ def _read_retarget_sources(
         RetargetSource list
     """
     sources: List[Dict[str, Any]] = []
-    is_ue5 = getattr(archive, '_file_version_ue5', 0) > 0
+    is_ue5 = getattr(archive, "_file_version_ue5", 0) > 0
 
     num_sources = archive.read_i32("RetargetSources.Count")
     if num_sources < 0 or num_sources > 1000:
@@ -489,12 +500,11 @@ def _read_retarget_sources(
         if pose_count < 0 or pose_count > _MAX_SKELETON_COUNT:
             logger.debug(
                 "RetargetSources[%d]: invalid PoseCount %d, truncating to 0",
-                i, pose_count,
+                i,
+                pose_count,
             )
             if _diagnostics is not None:
-                _diagnostics.append(
-                    f"RetargetSources[{i}].PoseCount truncated: {pose_count} -> 0"
-                )
+                _diagnostics.append(f"RetargetSources[{i}].PoseCount truncated: {pose_count} -> 0")
             pose_count = 0
         transforms: List[Dict[str, Any]] = []
         for _ in range(pose_count):
@@ -573,10 +583,11 @@ def _read_ftransform(archive: Any, is_ue5: bool = True) -> Dict[str, Any]:
 def _format_guid(guid_bytes: bytes) -> str:
     """Format 16-byte FGuid as a string."""
     import struct
+
     if len(guid_bytes) < 16:
         return ""
     # FGuid serialization order: A(i32) B(i32) C(i32) D(i32)
-    a, b, c, d = struct.unpack('<4I', guid_bytes[:16])
+    a, b, c, d = struct.unpack("<4I", guid_bytes[:16])
     return f"{a:08X}-{b:08X}-{c:08X}-{d:08X}"
 
 

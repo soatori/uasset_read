@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 @dataclass
 class MacroExpansionContext:
     """Macro expansion context information."""
+
     macro_name: str
     macro_guid: str
     macro_graph_ref: Dict[str, Any]
@@ -16,6 +17,7 @@ class MacroExpansionContext:
 @dataclass
 class MacroExpansion:
     """Macro expansion result."""
+
     context: MacroExpansionContext
     expanded_nodes: List[Dict[str, Any]] = field(default_factory=list)
     pin_mapping: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -238,7 +240,12 @@ class MacroExpander:
 
         # Cycle detection
         if graph_guid and graph_guid in self.visited_guids:
-            raise ValueError("Macro cycle detected: " + " -> ".join(ctx.macro_name for ctx in self.expansion_stack) + " -> " + graph_name)
+            raise ValueError(
+                "Macro cycle detected: "
+                + " -> ".join(ctx.macro_name for ctx in self.expansion_stack)
+                + " -> "
+                + graph_name
+            )
 
         # Find macro graph
         macro_graph = self._find_macro_graph(macro_ref)
@@ -455,7 +462,7 @@ class MacroExpander:
                 pin_name = pin.get("pin_name", "")
                 # Find the first connected internal node via linked_to_raw
                 first_node = None
-                for linked_ref in (pin.get("linked_to_raw") or []):
+                for linked_ref in pin.get("linked_to_raw") or []:
                     if isinstance(linked_ref, str):
                         target_pid = linked_ref
                     elif isinstance(linked_ref, dict):
@@ -489,7 +496,7 @@ class MacroExpander:
                         out_pt = out_pin.get("pin_type", {})
                         if out_pt.get("pin_category") != "exec":
                             continue
-                        for ref in (out_pin.get("linked_to_raw") or []):
+                        for ref in out_pin.get("linked_to_raw") or []:
                             if isinstance(ref, str):
                                 pending_refs.append(ref)
                             elif isinstance(ref, dict):
@@ -524,7 +531,7 @@ class MacroExpander:
                             out_pt = out_pin.get("pin_type", {})
                             if out_pt.get("pin_category") != "exec":
                                 continue
-                            for ref in (out_pin.get("linked_to_raw") or []):
+                            for ref in out_pin.get("linked_to_raw") or []:
                                 if isinstance(ref, str):
                                     if ref not in visited:
                                         next_refs.append(ref)
@@ -538,10 +545,12 @@ class MacroExpander:
                         break
 
                 if flow_nodes:
-                    flows.append({
-                        "entry_tunnel": pin_name,
-                        "nodes": flow_nodes,
-                    })
+                    flows.append(
+                        {
+                            "entry_tunnel": pin_name,
+                            "nodes": flow_nodes,
+                        }
+                    )
 
         return flows
 

@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 from uasset_read.exceptions import ParseError
 from uasset_read.pak.structures import FPakEntry
 
+
 def normalize_compression_method(method: str | int | None) -> str:
     """Return the canonical compression method name used by readers."""
     if method is None:
@@ -66,9 +67,7 @@ def decompress_block(data: bytes, uncompressed_size: int, method: str | int | No
         ImportError: Missing required package (lz4/zstandard)
     """
     if method is None:
-        raise ValueError(
-            "compression_method is required, cannot default to Zlib"
-        )
+        raise ValueError("compression_method is required, cannot default to Zlib")
     method = normalize_compression_method(method)
 
     # Compression ratio check: prevent decompression bomb
@@ -91,7 +90,8 @@ def decompress_block(data: bytes, uncompressed_size: int, method: str | int | No
         if len(raw) > uncompressed_size:
             logger.warning(
                 "Zlib decompression output %d bytes exceeds declared size %d bytes, truncated (decompression bomb protection)",
-                len(raw), uncompressed_size,
+                len(raw),
+                uncompressed_size,
             )
             warnings.warn(
                 f"Zlib decompression output {len(raw)} bytes exceeds declared size {uncompressed_size} bytes, truncated",
@@ -105,7 +105,8 @@ def decompress_block(data: bytes, uncompressed_size: int, method: str | int | No
         if len(raw) > uncompressed_size:
             logger.warning(
                 "Gzip decompression output %d bytes exceeds declared size %d bytes, truncated (decompression bomb protection)",
-                len(raw), uncompressed_size,
+                len(raw),
+                uncompressed_size,
             )
             warnings.warn(
                 f"Gzip decompression output {len(raw)} bytes exceeds declared size {uncompressed_size} bytes, truncated",
@@ -118,17 +119,13 @@ def decompress_block(data: bytes, uncompressed_size: int, method: str | int | No
         try:
             import lz4.block
         except ImportError:
-            raise ImportError(
-                "LZ4 decompression requires 'lz4' package"
-            )
+            raise ImportError("LZ4 decompression requires 'lz4' package")
         return lz4.block.decompress(data, uncompressed_size=uncompressed_size)
     elif method == "Zstd":
         try:
             import zstandard
         except ImportError:
-            raise ImportError(
-                "Zstd decompression requires 'zstandard' package"
-            )
+            raise ImportError("Zstd decompression requires 'zstandard' package")
         return zstandard.ZstdDecompressor().decompress(data, max_output_size=uncompressed_size)
     elif method == "Oodle":
         raise NotImplementedError(
@@ -138,7 +135,6 @@ def decompress_block(data: bytes, uncompressed_size: int, method: str | int | No
         )
     else:
         raise ValueError(f"Unknown compression method: {method}")
-
 
 
 def decompress_entry(
@@ -174,8 +170,8 @@ def decompress_entry(
                 f"(uncompressed_size={entry.uncompressed_size})"
             )
         if entry.is_encrypted:
-            raw = _decrypt_entry_data(raw, encryption_key)[:entry.uncompressed_size]
-        return raw[:entry.uncompressed_size]
+            raw = _decrypt_entry_data(raw, encryption_key)[: entry.uncompressed_size]
+        return raw[: entry.uncompressed_size]
 
     # Compressed: process block by block
     if not entry.compression_blocks:
@@ -201,9 +197,7 @@ def decompress_entry(
         raw = stream.read(aligned_size)
 
         if len(raw) < block_size:
-            raise ParseError(
-                f"Compression block {i}: insufficient read ({len(raw)} < {block_size} bytes)"
-            )
+            raise ParseError(f"Compression block {i}: insufficient read ({len(raw)} < {block_size} bytes)")
 
         if entry.is_encrypted:
             raw = _decrypt_entry_data(raw, encryption_key)[:block_size]
@@ -212,11 +206,9 @@ def decompress_entry(
         result.extend(decompressed)
 
     if len(result) < entry.uncompressed_size:
-        raise ParseError(
-            f"Decompressed result too short: {len(result)} < {entry.uncompressed_size} bytes"
-        )
+        raise ParseError(f"Decompressed result too short: {len(result)} < {entry.uncompressed_size} bytes")
 
-    return bytes(result[:entry.uncompressed_size])
+    return bytes(result[: entry.uncompressed_size])
 
 
 def _decrypt_entry_data(data: bytes, encryption_key: bytes | None) -> bytes:
@@ -224,8 +216,7 @@ def _decrypt_entry_data(data: bytes, encryption_key: bytes | None) -> bytes:
         raise ParseError("Encrypted pak entry requires AES key")
     try:
         from uasset_read.pak.crypto import decrypt_aes_ecb
+
         return decrypt_aes_ecb(data, encryption_key)
     except ImportError as exc:
-        raise ParseError(
-            "AES decryption requires 'cryptography' package"
-        ) from exc
+        raise ParseError("AES decryption requires 'cryptography' package") from exc

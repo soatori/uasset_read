@@ -4,6 +4,7 @@ Each UObjectInstance represents one entry in the ImportMap or ExportMap,
 with identity (name, type, package_index), references to other
 UObjectInstances (outer, class_ref), and lazily-loaded serialized_properties.
 """
+
 from __future__ import annotations
 
 
@@ -62,9 +63,7 @@ class UObjectInstance:
     serialized_properties: List[Any] = field(default_factory=list)
     """Parsed property values (filled by PackageLinker.preload())."""
 
-    property_references: Dict[str, "UObjectInstance"] = field(
-        default_factory=dict
-    )
+    property_references: Dict[str, "UObjectInstance"] = field(default_factory=dict)
     """ObjectProperty values resolved to UObjectInstance references."""
 
     template_object: Optional["UObjectInstance"] = None
@@ -109,14 +108,10 @@ class UObjectInstance:
         Args:
             _visited: Internal — set of visited object ids for cycle detection.
         """
-        result, hit_cycle = self._get_full_name_inner(
-            frozenset() if _visited is None else _visited
-        )
+        result, hit_cycle = self._get_full_name_inner(frozenset() if _visited is None else _visited)
         return result
 
-    def _get_full_name_inner(
-        self, visited: frozenset
-    ) -> tuple[str, bool]:
+    def _get_full_name_inner(self, visited: frozenset) -> tuple[str, bool]:
         """Recursive helper that also reports whether a cycle was found."""
         obj_id = id(self)
         if obj_id in visited:
@@ -129,6 +124,7 @@ class UObjectInstance:
             return f"{parent_name}.{self.object_name}", False
         elif self.is_import and self.class_package:
             from uasset_read.link.linker import normalize_world_partition_path
+
             return f"{normalize_world_partition_path(self.class_package)}.{self.object_name}", False
         elif self.linker and self.linker.summary:
             pkg_name = getattr(self.linker.summary, "package_name", "Unknown")
@@ -149,7 +145,4 @@ class UObjectInstance:
 
     def __repr__(self) -> str:
         kind = "Import" if self.is_import else "Export"
-        return (
-            f"<UObjectInstance {kind}#{abs(self.package_index)}: "
-            f"{self.object_name} ({self.object_class})>"
-        )
+        return f"<UObjectInstance {kind}#{abs(self.package_index)}: {self.object_name} ({self.object_class})>"

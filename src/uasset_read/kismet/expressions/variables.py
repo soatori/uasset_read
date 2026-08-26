@@ -18,11 +18,13 @@ if TYPE_CHECKING:
 @dataclass
 class EX_VariableBase(KismetExpression):
     """Abstract base for variable expressions."""
+
     Variable: FKismetPropertyPointer = None
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_VariableBase:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
+
         var = FKismetPropertyPointer.from_archive(archive, name_map)
         return cls(Variable=var)
 
@@ -30,28 +32,33 @@ class EX_VariableBase(KismetExpression):
 @dataclass
 class EX_LocalVariable(EX_VariableBase):
     @property
-    def Token(self) -> EExprToken: return EExprToken.EX_LocalVariable
+    def Token(self) -> EExprToken:
+        return EExprToken.EX_LocalVariable
 
 
 @dataclass
 class EX_InstanceVariable(EX_VariableBase):
     @property
-    def Token(self) -> EExprToken: return EExprToken.EX_InstanceVariable
+    def Token(self) -> EExprToken:
+        return EExprToken.EX_InstanceVariable
 
 
 @dataclass
 class EX_DefaultVariable(EX_VariableBase):
     @property
-    def Token(self) -> EExprToken: return EExprToken.EX_DefaultVariable
+    def Token(self) -> EExprToken:
+        return EExprToken.EX_DefaultVariable
 
 
 @dataclass
 class EX_LocalOutVariable(EX_VariableBase):
     @property
-    def Token(self) -> EExprToken: return EExprToken.EX_LocalOutVariable
+    def Token(self) -> EExprToken:
+        return EExprToken.EX_LocalOutVariable
 
 
 @dataclass
 class EX_ClassSparseDataVariable(EX_VariableBase):
     @property
-    def Token(self) -> EExprToken: return EExprToken.EX_ClassSparseDataVariable
+    def Token(self) -> EExprToken:
+        return EExprToken.EX_ClassSparseDataVariable

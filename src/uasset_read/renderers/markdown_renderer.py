@@ -56,11 +56,7 @@ def _format_transforms(transforms) -> str:
         z = getattr(loc, "z", 0) if not isinstance(loc, dict) else loc.get("z", 0)
         parts.append(f"Loc({x:.1f},{y:.1f},{z:.1f})")
     if rot:
-        p = (
-            getattr(rot, "pitch", 0)
-            if not isinstance(rot, dict)
-            else rot.get("pitch", 0)
-        )
+        p = getattr(rot, "pitch", 0) if not isinstance(rot, dict) else rot.get("pitch", 0)
         y = getattr(rot, "yaw", 0) if not isinstance(rot, dict) else rot.get("yaw", 0)
         r = getattr(rot, "roll", 0) if not isinstance(rot, dict) else rot.get("roll", 0)
         parts.append(f"Rot({p:.1f},{y:.1f},{r:.1f})")
@@ -80,6 +76,7 @@ def _collect_input_actions(ir) -> list[tuple[str, list[dict]]]:
     2. InpActEvt_*_K2Node_EnhancedInputActionEvent_* function names in decompiled_functions (fallback)
     """
     import re
+
     input_actions: list[tuple[str, list[dict]]] = []
     seen_actions: set[str] = set()
 
@@ -98,8 +95,8 @@ def _collect_input_actions(ir) -> list[tuple[str, list[dict]]]:
 
     # Source 2: function names in decompiled_functions (fallback path)
     # Format: InpActEvt_IA_Jump_K2Node_EnhancedInputActionEvent_2
-    pattern = re.compile(r'^InpActEvt_(.+)_K2Node_EnhancedInputActionEvent')
-    for func in (ir.decompiled_functions or []):
+    pattern = re.compile(r"^InpActEvt_(.+)_K2Node_EnhancedInputActionEvent")
+    for func in ir.decompiled_functions or []:
         match = pattern.match(func.name)
         if match:
             action_name = match.group(1)
@@ -118,6 +115,7 @@ class MarkdownRenderer:
         # If hex_view is enabled and IR has hex_view data, return hex view format
         if options.hex_view and ir.debug and ir.debug.hex_view:
             from uasset_read.debug import format_hex_view
+
             result = format_hex_view(ir.debug.hex_view)
             if ir.debug.hex_view_truncated_count > 0:
                 result += (
@@ -150,9 +148,7 @@ class MarkdownRenderer:
         self._render_status_section(lines, ir)
 
         # === Opaque Classes ===
-        opaque_count = sum(
-            1 for e in ir.exports if getattr(e, "parse_status", None) == "opaque"
-        )
+        opaque_count = sum(1 for e in ir.exports if getattr(e, "parse_status", None) == "opaque")
         if opaque_count > 0:
             lines.append(f"\n### Opaque Classes ({opaque_count})\n")
             opaque_classes = {}
@@ -169,22 +165,14 @@ class MarkdownRenderer:
             lines.append("| Field | Value |")
             lines.append("|-------|-------|")
             if ir.blueprint.parent_class:
-                lines.append(
-                    f"| Parent Class | {_escape_md_cell(ir.blueprint.parent_class)} |"
-                )
+                lines.append(f"| Parent Class | {_escape_md_cell(ir.blueprint.parent_class)} |")
             if ir.blueprint.description:
-                lines.append(
-                    f"| Description | {_escape_md_cell(ir.blueprint.description)} |"
-                )
+                lines.append(f"| Description | {_escape_md_cell(ir.blueprint.description)} |")
             if ir.blueprint.interfaces:
                 ifaces = ", ".join(i.get("name", "") for i in ir.blueprint.interfaces)
                 lines.append(f"| Interfaces | {_escape_md_cell(ifaces)} |")
             var_count = len(ir.variables) if ir.variables else 0
-            comp_count = (
-                sum(1 for c in ir.blueprint.components)
-                if ir.blueprint.components
-                else 0
-            )
+            comp_count = sum(1 for c in ir.blueprint.components) if ir.blueprint.components else 0
             lines.append(
                 f"| Variables | {var_count} ({comp_count} components, {max(0, var_count - comp_count)} regular) |"
             )
@@ -200,21 +188,15 @@ class MarkdownRenderer:
                 lines.append(f'  {root_name}["{asset_name}"]')
                 for comp in ir.blueprint.components:
                     comp_name = (
-                        comp.get("name", "Unknown")
-                        if isinstance(comp, dict)
-                        else getattr(comp, "name", "Unknown")
+                        comp.get("name", "Unknown") if isinstance(comp, dict) else getattr(comp, "name", "Unknown")
                     )
                     comp_class = (
                         comp.get("class", "Unknown")
                         if isinstance(comp, dict)
                         else getattr(comp, "class_name", "Unknown")
                     )
-                    safe_name = "".join(
-                        c if c.isalnum() or c == "_" else "_" for c in comp_name
-                    )
-                    safe_label = _escape_mermaid_label(
-                        f"{comp_name}<br/><i>{comp_class}</i>"
-                    )
+                    safe_name = "".join(c if c.isalnum() or c == "_" else "_" for c in comp_name)
+                    safe_label = _escape_mermaid_label(f"{comp_name}<br/><i>{comp_class}</i>")
                     lines.append(f'  {root_name} --> {safe_name}["{safe_label}"]')
                 lines.append("```")
                 lines.append("")
@@ -232,9 +214,7 @@ class MarkdownRenderer:
                         comp_class = getattr(comp, "class_name", "Unknown")
                         transforms = getattr(comp, "transforms", {}) or {}
                     transform_str = _format_transforms(transforms)
-                    lines.append(
-                        f"| {_escape_md_cell(comp_name)} | {_escape_md_cell(comp_class)} | {transform_str} |"
-                    )
+                    lines.append(f"| {_escape_md_cell(comp_name)} | {_escape_md_cell(comp_class)} | {transform_str} |")
                 lines.append("")
 
             # === Input Action Bindings ===
@@ -252,9 +232,7 @@ class MarkdownRenderer:
                             trigger_name = trigger.get("trigger_name", "?")
                             event_type = trigger.get("event_type", "?")
                             if first_trigger:
-                                lines.append(
-                                    f"| {action_name} | {trigger_name} | {event_type} |"
-                                )
+                                lines.append(f"| {action_name} | {trigger_name} | {event_type} |")
                                 first_trigger = False
                             else:
                                 lines.append(f"| | {trigger_name} | {event_type} |")
@@ -263,9 +241,7 @@ class MarkdownRenderer:
                 lines.append("")
 
         # Exports — only show blueprint exports, filter editor node class exports (consistent with JSON renderer)
-        blueprint_exports = [
-            e for e in filter_editor_items(ir.exports) if is_blueprint_export(e)
-        ]
+        blueprint_exports = [e for e in filter_editor_items(ir.exports) if is_blueprint_export(e)]
         if blueprint_exports:
             lines.append("## Exports")
             lines.append("| Name | Class | Size | Properties |")
@@ -286,9 +262,7 @@ class MarkdownRenderer:
                 lines.append(f"## Graph: {graph.graph_name}")
                 lines.append(f"- **Nodes**: {len(graph.nodes)}")
                 if graph.execution_chains:
-                    lines.append(
-                        f"- **Execution Chains**: {len(graph.execution_chains)}"
-                    )
+                    lines.append(f"- **Execution Chains**: {len(graph.execution_chains)}")
                 if graph.subgraphs:
                     lines.append(f"- **Subgraphs**: {len(graph.subgraphs)}")
                 if graph.graph_type:
@@ -539,8 +513,7 @@ class MarkdownRenderer:
                 lines.append("|-------|------|")
                 for local in local_variables:
                     lines.append(
-                        f"| {_escape_md_cell(local.get('name', ''))} | "
-                        f"{_escape_md_cell(local.get('type', ''))} |"
+                        f"| {_escape_md_cell(local.get('name', ''))} | {_escape_md_cell(local.get('type', ''))} |"
                     )
                 lines.append("")
 
@@ -584,14 +557,8 @@ class MarkdownRenderer:
         lines.append("| Name | Type | Default Value |")
         lines.append("|------|------|---------------|")
         for var in filtered_variables:
-            default_str = (
-                _escape_md_cell(str(var.default_value))
-                if var.default_value is not None
-                else "-"
-            )
-            lines.append(
-                f"| {_escape_md_cell(var.name)} | {_escape_md_cell(var.type)} | {default_str} |"
-            )
+            default_str = _escape_md_cell(str(var.default_value)) if var.default_value is not None else "-"
+            lines.append(f"| {_escape_md_cell(var.name)} | {_escape_md_cell(var.type)} | {default_str} |")
         lines.append("")
 
     def _render_asset_registry(self, lines: list[str], ir: PackageIR) -> None:
@@ -621,9 +588,7 @@ class MarkdownRenderer:
                 lines.append("| Tag | Value |")
                 lines.append("|-----|-------|")
                 for key, value in tags.items():
-                    lines.append(
-                        f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |"
-                    )
+                    lines.append(f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |")
                 lines.append("")
 
     def _render_anim_data(self, lines: list[str], ir: PackageIR) -> None:
@@ -637,14 +602,10 @@ class MarkdownRenderer:
             lines.append("## Animation Blueprint")
             lines.append("")
             if anim.anim_blueprint.target_skeleton:
-                lines.append(
-                    f"**Target Skeleton**: `{anim.anim_blueprint.target_skeleton}`"
-                )
+                lines.append(f"**Target Skeleton**: `{anim.anim_blueprint.target_skeleton}`")
                 lines.append("")
             if anim.anim_blueprint.sync_group_names:
-                lines.append(
-                    f"**Sync Groups**: {', '.join(anim.anim_blueprint.sync_group_names)}"
-                )
+                lines.append(f"**Sync Groups**: {', '.join(anim.anim_blueprint.sync_group_names)}")
                 lines.append("")
             if anim.anim_blueprint.graph_asset_player_info:
                 lines.append("### Graph Asset Player Info")
@@ -652,9 +613,7 @@ class MarkdownRenderer:
                 lines.append("| Key | Value |")
                 lines.append("|-----|-------|")
                 for key, value in anim.anim_blueprint.graph_asset_player_info.items():
-                    lines.append(
-                        f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |"
-                    )
+                    lines.append(f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |")
                 lines.append("")
             if anim.anim_blueprint.graph_blend_options:
                 lines.append("### Graph Blend Options")
@@ -662,9 +621,7 @@ class MarkdownRenderer:
                 lines.append("| Key | Value |")
                 lines.append("|-----|-------|")
                 for key, value in anim.anim_blueprint.graph_blend_options.items():
-                    lines.append(
-                        f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |"
-                    )
+                    lines.append(f"| {_escape_md_cell(key)} | {_escape_md_cell(value)} |")
                 lines.append("")
             if anim.anim_blueprint.anim_node_data:
                 lines.append("### Anim Node Data")
@@ -685,9 +642,7 @@ class MarkdownRenderer:
                 lines.append("|-------|-----------|---------|")
                 for state in sm.states:
                     conduit = "Yes" if state.b_is_a_conduit else "No"
-                    lines.append(
-                        f"| {state.state_name} | #{state.state_root_node_index} | {conduit} |"
-                    )
+                    lines.append(f"| {state.state_name} | #{state.state_root_node_index} | {conduit} |")
                 lines.append("")
             if anim.anim_blueprint.anim_notifies:
                 lines.append("### Anim Notifies")
@@ -705,19 +660,13 @@ class MarkdownRenderer:
             lines.append("## Animation Sequence")
             lines.append("")
             if anim.anim_sequence.target_skeleton:
-                lines.append(
-                    f"**Target Skeleton**: `{anim.anim_sequence.target_skeleton}`"
-                )
+                lines.append(f"**Target Skeleton**: `{anim.anim_sequence.target_skeleton}`")
             if anim.anim_sequence.sequence_length:
-                lines.append(
-                    f"**Sequence Length**: {anim.anim_sequence.sequence_length:.2f}s"
-                )
+                lines.append(f"**Sequence Length**: {anim.anim_sequence.sequence_length:.2f}s")
             if anim.anim_sequence.rate_scale != 1.0:
                 lines.append(f"**Rate Scale**: {anim.anim_sequence.rate_scale}")
             if anim.anim_sequence.additive_anim_type:
-                lines.append(
-                    f"**Additive Type**: {anim.anim_sequence.additive_anim_type}"
-                )
+                lines.append(f"**Additive Type**: {anim.anim_sequence.additive_anim_type}")
             if anim.anim_sequence.notifies:
                 lines.append("")
                 lines.append("### Anim Notifies")
@@ -730,12 +679,8 @@ class MarkdownRenderer:
                     )
             if anim.anim_sequence.float_curve_names:
                 lines.append("")
-                lines.append(
-                    f"**Float Curves**: {', '.join(anim.anim_sequence.float_curve_names)}"
-                )
-            lines.append(
-                f"**Has Compressed Data**: {anim.anim_sequence.has_compressed_data}"
-            )
+                lines.append(f"**Float Curves**: {', '.join(anim.anim_sequence.float_curve_names)}")
+            lines.append(f"**Has Compressed Data**: {anim.anim_sequence.has_compressed_data}")
             lines.append("")
 
         # AnimMontage
@@ -747,13 +692,9 @@ class MarkdownRenderer:
             if anim.anim_montage.blend_mode_out:
                 lines.append(f"**Blend Out Mode**: {anim.anim_montage.blend_mode_out}")
             if anim.anim_montage.blend_in_option:
-                lines.append(
-                    f"**Blend In Option**: {anim.anim_montage.blend_in_option}"
-                )
+                lines.append(f"**Blend In Option**: {anim.anim_montage.blend_in_option}")
             if anim.anim_montage.blend_out_option:
-                lines.append(
-                    f"**Blend Out Option**: {anim.anim_montage.blend_out_option}"
-                )
+                lines.append(f"**Blend Out Option**: {anim.anim_montage.blend_out_option}")
             if anim.anim_montage.sync_group:
                 lines.append(f"**Sync Group**: {anim.anim_montage.sync_group}")
             if anim.anim_montage.rate_scale != 1.0:
@@ -788,9 +729,7 @@ class MarkdownRenderer:
                     )
             if anim.anim_montage.float_curve_names:
                 lines.append("")
-                lines.append(
-                    f"**Float Curves**: {', '.join(anim.anim_montage.float_curve_names)}"
-                )
+                lines.append(f"**Float Curves**: {', '.join(anim.anim_montage.float_curve_names)}")
             lines.append("")
 
     def _render_diagnostics(self, lines: list[str], ir: PackageIR) -> None:
@@ -822,10 +761,7 @@ class MarkdownRenderer:
 
         # Show truncation notice if any diagnostics were dropped
         if has_truncation:
-            lines.append(
-                f"> **Note**: {dd.diagnostics_truncated_count} diagnostics "
-                f"dropped due to buffer size limit."
-            )
+            lines.append(f"> **Note**: {dd.diagnostics_truncated_count} diagnostics dropped due to buffer size limit.")
             lines.append("")
 
         for severity in ["critical", "error", "warning", "info"]:
@@ -843,9 +779,7 @@ class MarkdownRenderer:
                 object_name = _escape_md_cell(d.get("object_name", ""))
                 field_name = _escape_md_cell(d.get("field", ""))
                 error = _escape_md_cell(d.get("error", ""))
-                lines.append(
-                    f"| {kind} | {module} | {object_name} | {field_name} | {error} |"
-                )
+                lines.append(f"| {kind} | {module} | {object_name} | {field_name} | {error} |")
             lines.append("")
 
     def _render_asset_type_data(self, lines: list[str], data: dict) -> None:
@@ -867,9 +801,7 @@ class MarkdownRenderer:
     def _render_export_properties(self, lines: list[str], export) -> None:
         """Render export property table."""
         # Filter editor properties (standard output level)
-        filtered_props = [
-            p for p in (export.properties or []) if p.name not in EDITOR_PROPERTY_NAMES
-        ]
+        filtered_props = [p for p in (export.properties or []) if p.name not in EDITOR_PROPERTY_NAMES]
         if not filtered_props:
             return
 
@@ -906,6 +838,7 @@ class MarkdownRenderer:
 
         Accepts both DecompiledFunctionIR objects and plain dicts.
         """
+
         def _get(obj, key, default):
             if isinstance(obj, dict):
                 return obj.get(key, default)
@@ -963,7 +896,7 @@ class MarkdownRenderer:
         for node in graph.nodes:
             source_guid = (node.node_guid or "")[:8]
             for pin in node.pins:
-                for linked_pin_guid in (pin.linked_to or []):
+                for linked_pin_guid in pin.linked_to or []:
                     # Convert Pin GUID to Node GUID
                     target_node_guid = pin_to_node.get(linked_pin_guid)
 
@@ -1042,4 +975,3 @@ class MarkdownRenderer:
                     lines.append(f"**{ptype}:** {', '.join(sorted(params.keys()))}\n")
         if mat.data_flow:
             lines.append(f"**Data flow connections:** {len(mat.data_flow)}\n")
-

@@ -32,7 +32,6 @@ class HexViewEntry:
         """Number of bytes read."""
         return self.stop - self.start
 
-
     def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-compatible dictionary."""
         d: dict[str, Any] = {

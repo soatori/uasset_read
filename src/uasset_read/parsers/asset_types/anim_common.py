@@ -35,9 +35,7 @@ def parse_anim_notifies(data: Any) -> list[AnimNotifyIR]:
             notify_trigger_chance=notify_data.get("NotifyTriggerChance", 1.0),
             notify_filter_type=notify_data.get("NotifyFilterType"),
             notify_filter_lod=notify_data.get("NotifyFilterLOD", 0),
-            b_converted_from_branching_point=notify_data.get(
-                "bConvertedFromBranchingPoint", False
-            ),
+            b_converted_from_branching_point=notify_data.get("bConvertedFromBranchingPoint", False),
             track_index=notify_data.get("TrackIndex", 0),
         )
         extract_object_ref(notify_data, "LinkedMontage", notify, "linked_montage")

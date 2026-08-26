@@ -369,8 +369,7 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None, *, 
     if owns_envelope_sections and content.get("coverage"):
         # Only downgrade when coverage reports actual loss (not "ok" entries)
         has_loss = any(
-            entry.get("status") in {"partial", "unavailable", "truncated"}
-            for entry in content.get("coverage", [])
+            entry.get("status") in {"partial", "unavailable", "truncated"} for entry in content.get("coverage", [])
         )
         if has_loss:
             representation = "partial"

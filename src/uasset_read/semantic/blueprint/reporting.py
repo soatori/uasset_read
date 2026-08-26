@@ -1,4 +1,5 @@
 """Blueprint coverage entries and aggregated diagnostics (BP-16)."""
+
 from __future__ import annotations
 
 _MAX_OCCURRENCES = 8
@@ -18,9 +19,16 @@ class BlueprintReporting:
         self._coverage_scopes: set[str] = set()
         self._diags: dict[tuple, dict] = {}
 
-    def coverage(self, scope: str, status: str, *, reason: str = "",
-                 declared: int | None = None, emitted: int | None = None,
-                 omitted: int | None = None) -> None:
+    def coverage(
+        self,
+        scope: str,
+        status: str,
+        *,
+        reason: str = "",
+        declared: int | None = None,
+        emitted: int | None = None,
+        omitted: int | None = None,
+    ) -> None:
         if scope in self._coverage_scopes:
             return
         self._coverage_scopes.add(scope)
@@ -35,13 +43,18 @@ class BlueprintReporting:
             entry["omitted"] = omitted
         self._coverage.append(entry)
 
-    def diagnostic(self, code: str, scope: str, severity: str, effect: str,
-                   occurrence: dict | None = None) -> None:
+    def diagnostic(self, code: str, scope: str, severity: str, effect: str, occurrence: dict | None = None) -> None:
         key = (code, scope, severity, effect)
         entry = self._diags.get(key)
         if entry is None:
-            entry = {"code": code, "scope": scope, "severity": severity,
-                     "effect": effect, "count": 0, "_occurrences": []}
+            entry = {
+                "code": code,
+                "scope": scope,
+                "severity": severity,
+                "effect": effect,
+                "count": 0,
+                "_occurrences": [],
+            }
             self._diags[key] = entry
         entry["count"] += 1
         if occurrence is not None and len(entry["_occurrences"]) < _MAX_OCCURRENCES:
@@ -52,8 +65,7 @@ class BlueprintReporting:
 
     def diagnostics_entries(self, mode: str) -> list[dict]:
         entries = []
-        for entry in sorted(self._diags.values(),
-                            key=lambda e: (e["severity"], e["code"], e["scope"], e["effect"])):
+        for entry in sorted(self._diags.values(), key=lambda e: (e["severity"], e["code"], e["scope"], e["effect"])):
             item = {k: v for k, v in entry.items() if k != "_occurrences"}
             if mode == "debug" and entry["_occurrences"]:
                 item["evidence"] = {"occurrences": entry["_occurrences"]}

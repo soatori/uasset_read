@@ -2,6 +2,7 @@
 
 Tests the Material domain extractor with real Material samples.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -101,7 +102,8 @@ class TestMaterialDomainFormat:
     def test_material_format_field(self, samples_dir: Path):
         """Material domain format is set."""
         semantic = _build_semantic(
-            samples_dir, "FirstPerson_M_FlatCol.uasset",
+            samples_dir,
+            "FirstPerson_M_FlatCol.uasset",
         )
         assert semantic.format is not None
         assert semantic.format_version is not None
@@ -109,7 +111,8 @@ class TestMaterialDomainFormat:
     def test_material_asset_meta(self, samples_dir: Path):
         """Material SemanticIR has correct asset metadata."""
         semantic = _build_semantic(
-            samples_dir, "FirstPerson_M_FlatCol.uasset",
+            samples_dir,
+            "FirstPerson_M_FlatCol.uasset",
         )
         assert semantic.asset.package
         assert semantic.asset.name
@@ -117,7 +120,8 @@ class TestMaterialDomainFormat:
     def test_material_expression_graph(self, samples_dir: Path):
         """Material content includes expression graph data."""
         semantic = _build_semantic(
-            samples_dir, "FirstPerson_M_FlatCol.uasset",
+            samples_dir,
+            "FirstPerson_M_FlatCol.uasset",
         )
         # Material content should have some structure
         if semantic.content:

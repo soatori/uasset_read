@@ -2,6 +2,7 @@
 
 Tests the Niagara domain extractor with real Niagara samples.
 """
+
 from __future__ import annotations
 
 import json
@@ -134,13 +135,17 @@ class TestNiagaraProjection:
     def test_standard_strips_evidence(self, samples_dir: Path):
         """Standard mode strips evidence from Niagara output."""
         semantic = _build_and_project(
-            samples_dir, "NM_BPSystemEvent.uasset", "standard",
+            samples_dir,
+            "NM_BPSystemEvent.uasset",
+            "standard",
         )
         assert len(semantic.evidence) == 0
 
     def test_debug_keeps_evidence(self, samples_dir: Path):
         """Debug mode keeps evidence in Niagara output."""
         semantic = _build_and_project(
-            samples_dir, "NM_BPSystemEvent.uasset", "debug",
+            samples_dir,
+            "NM_BPSystemEvent.uasset",
+            "debug",
         )
         assert semantic.mode == "debug"

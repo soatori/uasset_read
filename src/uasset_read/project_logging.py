@@ -46,9 +46,7 @@ class _LogContextFilter(logging.Filter):
 
 
 class _RepeatedDebugFilter(logging.Filter):
-    def __init__(
-        self, repeat_limit: int, suppress_levels: set[int] | None = None
-    ) -> None:
+    def __init__(self, repeat_limit: int, suppress_levels: set[int] | None = None) -> None:
         super().__init__()
         self.limit = repeat_limit
         self.repeat_limit = repeat_limit
@@ -86,9 +84,7 @@ class _RepeatedDebugFilter(logging.Filter):
         summary_parts = []
         for msg, count in self.message_counts.items():
             if count > self.repeat_limit:
-                summary_parts.append(
-                    f"{msg} (suppressed {count - self.repeat_limit} times)"
-                )
+                summary_parts.append(f"{msg} (suppressed {count - self.repeat_limit} times)")
         return "Repeated warnings: " + "; ".join(summary_parts)
 
 
@@ -232,17 +228,21 @@ def log_stage_timing(
             status = "error" if exc_type else "success"
             logger.debug(
                 "stage_end stage=%s status=%s duration_ms=%.1f",
-                stage_name, status, elapsed_ms,
+                stage_name,
+                status,
+                elapsed_ms,
             )
             return False
 
         def __call__(self, func):
             """Allow use as a decorator."""
             ctx = self
+
             @wraps(func)
             def wrapper(*args, **kwargs):
                 with ctx:
                     return func(*args, **kwargs)
+
             return wrapper
 
     return _TimingContext()
@@ -258,9 +258,7 @@ def new_log_run_id() -> str:
 
 def _build_log_path(log_dir: Path, run_id: str) -> Path:
     log_dir.mkdir(parents=True, exist_ok=True)
-    safe_run_id = "".join(
-        char if char.isalnum() or char in "-_" else "_" for char in run_id
-    )
+    safe_run_id = "".join(char if char.isalnum() or char in "-_" else "_" for char in run_id)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     return log_dir / f"uasset_read-{timestamp}-pid{os.getpid()}-{safe_run_id}.log"
 
@@ -439,11 +437,7 @@ def scoped_project_logging(func):
         if config is None:
             return func(*args, **kwargs)
         bound.arguments["log_config"] = None
-        path_value = (
-            bound.arguments.get("file_path")
-            or bound.arguments.get("path")
-            or bound.arguments.get("input_dir")
-        )
+        path_value = bound.arguments.get("file_path") or bound.arguments.get("path") or bound.arguments.get("input_dir")
         asset = Path(path_value).name if path_value else "-"
         with project_logging_session(**config.to_configure_kwargs()):
             stage = "batch" if func.__name__ == "parse_batch" else "parse"
@@ -551,13 +545,9 @@ def configure_project_logging(
             return None
         _disabled_by_request = False
 
-        root = (
-            Path(project_root) if project_root is not None else _default_project_root()
-        )
+        root = Path(project_root) if project_root is not None else _default_project_root()
         root = root.resolve()
-        resolved_log_dir = (
-            Path(log_dir).resolve() if log_dir is not None else root / "log"
-        )
+        resolved_log_dir = Path(log_dir).resolve() if log_dir is not None else root / "log"
         log_level = _coerce_level(level)
         signature = (
             root,
@@ -607,10 +597,7 @@ def configure_project_logging(
         setattr(handler, _HANDLER_MARKER, True)
         handler.setLevel(log_level)
         handler.addFilter(_LogContextFilter(active_run_id))
-        handler.addFilter(_RepeatedDebugFilter(
-            repeat_limit,
-            suppress_levels={logging.DEBUG, logging.WARNING}
-        ))
+        handler.addFilter(_RepeatedDebugFilter(repeat_limit, suppress_levels={logging.DEBUG, logging.WARNING}))
         if format == "json":
             handler.setFormatter(JSONFormatter(datefmt="%Y-%m-%dT%H:%M:%S"))
         else:
@@ -680,9 +667,7 @@ def cleanup_project_logs(
             raise ValueError("keep_latest must be >= 0")
         effective_keep_latest = max(1, keep_latest)
         selected_families.update(
-            family
-            for family in ordered_families[effective_keep_latest:]
-            if family != active_family
+            family for family in ordered_families[effective_keep_latest:] if family != active_family
         )
 
     if older_than_days is not None:
@@ -693,21 +678,14 @@ def cleanup_project_logs(
             family
             for family in ordered_families
             if family != active_family
-            and datetime.fromtimestamp(
-                max(path.stat().st_mtime for path in families[family])
-            )
-            < cutoff
+            and datetime.fromtimestamp(max(path.stat().st_mtime for path in families[family])) < cutoff
         )
 
     if max_total_bytes is not None:
         if max_total_bytes < 0:
             raise ValueError("max_total_bytes must be >= 0")
         remaining_total = sum(path.stat().st_size for path in files)
-        remaining_total -= sum(
-            path.stat().st_size
-            for family in selected_families
-            for path in families[family]
-        )
+        remaining_total -= sum(path.stat().st_size for family in selected_families for path in families[family])
         newest_family = ordered_families[0] if ordered_families else None
         for family in reversed(ordered_families):
             if remaining_total <= max_total_bytes:

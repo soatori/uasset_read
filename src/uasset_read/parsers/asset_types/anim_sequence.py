@@ -109,9 +109,7 @@ class AnimSequenceHandler(ClassHandler):
             anim_ir.notifies = extract_array_property(properties, "Notifies", parse_anim_notifies)
 
             # Extract FloatCurves names
-            anim_ir.float_curve_names = extract_array_property(
-                properties, "RawCurveData", parse_float_curve_names
-            )
+            anim_ir.float_curve_names = extract_array_property(properties, "RawCurveData", parse_float_curve_names)
 
             # Store in export custom data
             ensure_custom_data(export)["anim_sequence"] = anim_ir

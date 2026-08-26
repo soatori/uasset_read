@@ -2,6 +2,7 @@
 
 Tests the Blueprint domain extractor with real Blueprint samples.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -97,7 +98,8 @@ class TestBlueprintSemanticExtraction:
     def test_blueprint_asset_meta(self, samples_dir: Path):
         """Blueprint SemanticIR has correct asset metadata."""
         semantic = _build_semantic(
-            samples_dir, "FirstPerson_BP_FirstPersonCharacter.uasset",
+            samples_dir,
+            "FirstPerson_BP_FirstPersonCharacter.uasset",
         )
         assert semantic.asset.package
         assert semantic.asset.name
@@ -110,7 +112,8 @@ class TestBlueprintSemanticContent:
     def test_blueprint_format_field(self, samples_dir: Path):
         """Blueprint domain format is set."""
         semantic = _build_semantic(
-            samples_dir, "FirstPerson_BP_FirstPersonCharacter.uasset",
+            samples_dir,
+            "FirstPerson_BP_FirstPersonCharacter.uasset",
         )
         # Blueprint has a domain format
         assert semantic.format is not None

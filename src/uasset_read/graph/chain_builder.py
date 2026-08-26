@@ -9,7 +9,6 @@ from typing import Dict, List, Optional
 from uasset_read.models.core import UEdGraph
 
 
-
 def _detect_cycle(adjacency: dict[str, list[str]]) -> bool:
     """DFS cycle detection.
 
@@ -86,12 +85,7 @@ def build_execution_chains(
             from_node_guid = edge.get("from_node_guid")
             from_pin = edge.get("from_pin")
             to_node_guid = edge.get("to_node_guid")
-            if not (
-                edge.get("is_exec")
-                and from_node_guid
-                and from_pin
-                and to_node_guid
-            ):
+            if not (edge.get("is_exec") and from_node_guid and from_pin and to_node_guid):
                 continue
             edge_key = (from_node_guid, from_pin, to_node_guid)
             if edge_key in seen_exec_edges:
@@ -104,6 +98,7 @@ def build_execution_chains(
     # If execution_flows not provided, call build_execution_flow_entries
     if execution_flows is None:
         from uasset_read.graph.flow_builder import build_execution_flow_entries
+
         execution_flows = build_execution_flow_entries(graph)
 
     # Build GUID -> short ID mapping (based on node order)
@@ -139,11 +134,7 @@ def build_execution_chains(
         if not valid_nodes:
             continue
 
-        branch_node_guids = [
-            node_info["node_guid"]
-            for node_info in valid_nodes
-            if node_info.get("branch_type")
-        ]
+        branch_node_guids = [node_info["node_guid"] for node_info in valid_nodes if node_info.get("branch_type")]
 
         # Convert to short IDs and collect pin names
         short_ids: List[str] = []
@@ -207,8 +198,8 @@ def build_execution_chains(
             for branch_idx in branch_indices:
                 if branch_idx > last_end:
                     chain = _build_chain_segment(
-                        short_ids[last_end + 1:branch_idx + 1],
-                        pin_names[last_end + 1:branch_idx + 1],
+                        short_ids[last_end + 1 : branch_idx + 1],
+                        pin_names[last_end + 1 : branch_idx + 1],
                     )
                     if chain:
                         chains.append(chain)
@@ -216,8 +207,8 @@ def build_execution_chains(
             # Add remaining chain after last branch (if any nodes remain)
             if len(short_ids) > last_end + 1:
                 remaining_chain = _build_chain_segment(
-                    short_ids[last_end + 1:],
-                    pin_names[last_end + 1:],
+                    short_ids[last_end + 1 :],
+                    pin_names[last_end + 1 :],
                 )
                 if remaining_chain:
                     chains.append(remaining_chain)
@@ -239,11 +230,13 @@ def build_execution_chains(
         branch_paths: List[Dict] = []
         for source_guid in branch_node_guids:
             for edge in exec_edges_by_source.get(source_guid, []):
-                branch_paths.append({
-                    "from_node_guid": source_guid,
-                    "output_pin": edge["from_pin"],
-                    "to_node_guid": edge["to_node_guid"],
-                })
+                branch_paths.append(
+                    {
+                        "from_node_guid": source_guid,
+                        "output_pin": edge["from_pin"],
+                        "to_node_guid": edge["to_node_guid"],
+                    }
+                )
         if branch_paths:
             entry["branch_paths"] = branch_paths
 

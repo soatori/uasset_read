@@ -1,4 +1,5 @@
 """Diagnostic aggregator — deduplicated, bounded diagnostics."""
+
 from __future__ import annotations
 
 from uasset_read.semantic.models import DiagnosticEntry

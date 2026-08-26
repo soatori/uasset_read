@@ -10,13 +10,15 @@ from typing import Any
 
 
 # Allowed (bytecode_status, translation_status) pairs
-ALLOWED_STATUS_PAIRS = frozenset({
-    ("parsed", "complete"),
-    ("parsed", "partial"),
-    ("parsed", "failed"),
-    ("no_script", "not_applicable"),
-    ("failed", "not_applicable"),
-})
+ALLOWED_STATUS_PAIRS = frozenset(
+    {
+        ("parsed", "complete"),
+        ("parsed", "partial"),
+        ("parsed", "failed"),
+        ("no_script", "not_applicable"),
+        ("failed", "not_applicable"),
+    }
+)
 
 
 def _validate_status_pair(bytecode_status: str, translation_status: str) -> None:
@@ -62,10 +64,10 @@ class KismetDecompiledResult:
     Supports JSON serialization via to_dict() and to_json().
     """
 
-    function_name: str                    # e.g. "ExecuteUbergraph_MyBP"
-    signature: str                         # e.g. "void ExecuteUbergraph_MyBP(int32 EntryPoint)"
+    function_name: str  # e.g. "ExecuteUbergraph_MyBP"
+    signature: str  # e.g. "void ExecuteUbergraph_MyBP(int32 EntryPoint)"
     local_variables: list[dict[str, str]]  # [{name, type}, ...] from TypeRegistry snapshot
-    cpp_code: str                          # C++ pseudocode string (multi-line, indented)
+    cpp_code: str  # C++ pseudocode string (multi-line, indented)
     expressions: list[Any] = field(default_factory=list)  # raw KismetExpression list for debugging
     bytecode_source: str = "unknown"
     bytecode_status: str = "unknown"
@@ -119,10 +121,7 @@ class KismetDecompiledResult:
             "logic_source": self.logic_source,
             "function_ref_stats": self.function_ref_stats,
             "structured_rate": self.structured_rate,
-            "expressions": [
-                e.to_dict() if hasattr(e, "to_dict") else str(e)
-                for e in self.expressions
-            ],
+            "expressions": [e.to_dict() if hasattr(e, "to_dict") else str(e) for e in self.expressions],
         }
         if self.error_code is not None:
             d["error_code"] = self.error_code

@@ -1,4 +1,5 @@
 """Shared utility functions for the parsers module"""
+
 from typing import Any, List, Optional
 import logging
 
@@ -55,13 +56,19 @@ def read_validated_count_tolerant(
     if count < 0:
         logger.debug(
             "%s: count is negative (%d)，skipping | pos=0x%X, limit=%d",
-            label, count, offset, max_count,
+            label,
+            count,
+            offset,
+            max_count,
         )
         return 0
     if count > max_count:
         logger.debug(
             "%s: count exceeds maximum (%d > %d)，skipping | pos=0x%X",
-            label, count, max_count, offset,
+            label,
+            count,
+            max_count,
+            offset,
         )
         return 0
     return count
@@ -100,5 +107,5 @@ def extract_inner_from_tag(tag_type: str) -> Optional[str]:
     start = tag_type.find("(")
     end = tag_type.rfind(")")
     if start != -1 and end != -1 and end > start:
-        return tag_type[start + 1:end]
+        return tag_type[start + 1 : end]
     return None

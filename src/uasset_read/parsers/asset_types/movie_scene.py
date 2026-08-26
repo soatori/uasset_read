@@ -13,6 +13,7 @@ Format reference:
 - Engine/Source/Runtime/MovieScene/Public/MovieScene.h
 - Engine/Source/Runtime/MovieScene/Private/MovieScene.cpp
 """
+
 from __future__ import annotations
 
 import logging
@@ -65,9 +66,16 @@ class _MovieSceneData:
     """MovieScene parse result container, supports setattr access for extract_property."""
 
     __slots__ = (
-        "display_rate", "tick_resolution", "evaluation_type", "clock_source",
-        "track_count", "track_classes", "spawnable_count", "possessable_count",
-        "binding_count", "marked_frame_count",
+        "display_rate",
+        "tick_resolution",
+        "evaluation_type",
+        "clock_source",
+        "track_count",
+        "track_classes",
+        "spawnable_count",
+        "possessable_count",
+        "binding_count",
+        "marked_frame_count",
     )
 
     def __init__(self) -> None:
@@ -146,10 +154,18 @@ class MovieSceneHandler(ClassHandler):
             data.track_classes = tracks
 
             # Array length extraction
-            data.spawnable_count = len(extract_array_property(properties, "Spawnables", lambda x: x if isinstance(x, list) else []))
-            data.possessable_count = len(extract_array_property(properties, "Possessables", lambda x: x if isinstance(x, list) else []))
-            data.binding_count = len(extract_array_property(properties, "ObjectBindings", lambda x: x if isinstance(x, list) else []))
-            data.marked_frame_count = len(extract_array_property(properties, "MarkedFrames", lambda x: x if isinstance(x, list) else []))
+            data.spawnable_count = len(
+                extract_array_property(properties, "Spawnables", lambda x: x if isinstance(x, list) else [])
+            )
+            data.possessable_count = len(
+                extract_array_property(properties, "Possessables", lambda x: x if isinstance(x, list) else [])
+            )
+            data.binding_count = len(
+                extract_array_property(properties, "ObjectBindings", lambda x: x if isinstance(x, list) else [])
+            )
+            data.marked_frame_count = len(
+                extract_array_property(properties, "MarkedFrames", lambda x: x if isinstance(x, list) else [])
+            )
 
             # Store to export custom data
             ensure_custom_data(export)["movie_scene"] = data.to_dict()

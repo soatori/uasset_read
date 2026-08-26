@@ -1,4 +1,5 @@
 """Tests for user_defined semantic extraction (#589)."""
+
 from __future__ import annotations
 
 import json

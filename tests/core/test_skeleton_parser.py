@@ -1,4 +1,5 @@
 """Tests for Skeleton parser parent_index correctness."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,6 +13,7 @@ from uasset_read import parse_package
 def skeleton_sample(samples_dir: Path) -> Path:
     """Return a Skeleton .uasset sample file."""
     from tests.conftest import get_samples_by_category
+
     assets = get_samples_by_category(samples_dir, "skeleton")
     if not assets:
         pytest.skip("No Skeleton samples found")
@@ -25,15 +27,15 @@ def test_skeleton_parent_index_in_range(skeleton_sample: Path):
 
     skeleton_export = None
     for export in result.export_map or []:
-        atd = getattr(export, '_asset_type_data', None)
-        if atd and atd.get('reference_skeleton'):
+        atd = getattr(export, "_asset_type_data", None)
+        if atd and atd.get("reference_skeleton"):
             skeleton_export = export
             break
 
     if skeleton_export is None:
         pytest.skip("No Skeleton export found in sample")
 
-    handler_result = getattr(skeleton_export, '_asset_type_data', None)
+    handler_result = getattr(skeleton_export, "_asset_type_data", None)
     if handler_result is None:
         pytest.skip("No handler result on Skeleton export")
 

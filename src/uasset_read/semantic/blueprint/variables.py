@@ -1,14 +1,31 @@
 """Variables and declaration index (BP-§13, #551 P0 declaration layer)."""
+
 from __future__ import annotations
 
 from typing import Any
 
 _REPLICATION_CONDITIONS = {
-    0: "always", 1: "initial_only", 2: "initial_or_ongoing", 3: "owner_only",
+    0: "always",
+    1: "initial_only",
+    2: "initial_or_ongoing",
+    3: "owner_only",
 }
 
-_PRIMITIVES = {"bool", "int", "int64", "float", "double", "string", "name",
-               "text", "byte", "object", "vector", "rotator", "transform"}
+_PRIMITIVES = {
+    "bool",
+    "int",
+    "int64",
+    "float",
+    "double",
+    "string",
+    "name",
+    "text",
+    "byte",
+    "object",
+    "vector",
+    "rotator",
+    "transform",
+}
 
 
 def emit_variables(variables, table, reporting) -> list[dict]:
@@ -34,8 +51,7 @@ def emit_variables(variables, table, reporting) -> list[dict]:
             entry["category"] = category
         replication: dict[str, Any] = {}
         if getattr(var, "is_replicated", False):
-            replication["condition"] = _REPLICATION_CONDITIONS.get(
-                getattr(var, "replication_condition", 0), "unknown")
+            replication["condition"] = _REPLICATION_CONDITIONS.get(getattr(var, "replication_condition", 0), "unknown")
             notify = getattr(var, "rep_notify_func", "") or ""
             if notify and "RepNotify" in flags:
                 replication["notify"] = notify

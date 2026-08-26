@@ -1,10 +1,12 @@
 """
 Kismet expression subclasses — Numeric and boolean literal constants.
 """
+
 from __future__ import annotations
 
 from uasset_read.kismet.expressions.base import (
-    make_simple_expression, make_value_expression,
+    make_simple_expression,
+    make_value_expression,
 )
 from uasset_read.kismet.tokens import EExprToken
 

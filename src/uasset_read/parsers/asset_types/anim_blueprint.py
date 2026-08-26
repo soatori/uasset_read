@@ -96,9 +96,7 @@ class AnimBlueprintHandler(ClassHandler):
             )
 
             # Extract AnimNotifies
-            anim_ir.anim_notifies = extract_array_property(
-                properties, "AnimNotifies", parse_anim_notifies
-            )
+            anim_ir.anim_notifies = extract_array_property(properties, "AnimNotifies", parse_anim_notifies)
 
             # Extract TargetSkeleton (object reference)
             extract_object_ref(properties, "TargetSkeleton", anim_ir, "target_skeleton")
@@ -109,12 +107,8 @@ class AnimBlueprintHandler(ClassHandler):
             )
 
             # Extract simple properties
-            extract_property(
-                properties, "GraphAssetPlayerInformation", anim_ir, "graph_asset_player_info"
-            )
-            extract_property(
-                properties, "GraphBlendOptions", anim_ir, "graph_blend_options"
-            )
+            extract_property(properties, "GraphAssetPlayerInformation", anim_ir, "graph_asset_player_info")
+            extract_property(properties, "GraphBlendOptions", anim_ir, "graph_blend_options")
             extract_property(properties, "AnimNodeData", anim_ir, "anim_node_data")
 
             # Store in export custom data
@@ -185,18 +179,10 @@ class AnimBlueprintHandler(ClassHandler):
                 can_take_delegate_index=trans_data.get("CanTakeDelegateIndex", -1),
                 custom_result_node_index=trans_data.get("CustomResultNodeIndex", -1),
                 transition_index=trans_data.get("TransitionIndex", -1),
-                b_desired_transition_return_value=trans_data.get(
-                    "bDesiredTransitionReturnValue", True
-                ),
-                b_automatic_remaining_time_rule=trans_data.get(
-                    "bAutomaticRemainingTimeRule", False
-                ),
-                automatic_rule_trigger_time=trans_data.get(
-                    "AutomaticRuleTriggerTime", 0.0
-                ),
-                b_only_evaluate_when_active=trans_data.get(
-                    "bOnlyEvaluateWhenActive", False
-                ),
+                b_desired_transition_return_value=trans_data.get("bDesiredTransitionReturnValue", True),
+                b_automatic_remaining_time_rule=trans_data.get("bAutomaticRemainingTimeRule", False),
+                automatic_rule_trigger_time=trans_data.get("AutomaticRuleTriggerTime", 0.0),
+                b_only_evaluate_when_active=trans_data.get("bOnlyEvaluateWhenActive", False),
             )
 
         return parse_dict_list(data, _parse_transition)

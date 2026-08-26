@@ -4,6 +4,7 @@ Provides bounded reading of UE5 UFunction serialized scripts, including
 serialization-control prefix parsing, tagged-property navigation, and
 export-boundary cross-checking.
 """
+
 from __future__ import annotations
 
 import logging
@@ -49,9 +50,11 @@ _SER_CTRL_OVERRIDE_OPERATION = 0x02
 # Result models
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class FunctionScriptFailure:
     """Structured failure information for UFunction script reads."""
+
     error_code: str
     error_message: str
     function_name: str
@@ -68,6 +71,7 @@ class FunctionScriptFailure:
 # ---------------------------------------------------------------------------
 # Custom exception types for UFunction script failures
 # ---------------------------------------------------------------------------
+
 
 class UnsupportedSerializationVersion(Exception):
     """Raised when the serialization-control byte contains unknown bits."""
@@ -88,6 +92,7 @@ class InvalidScriptPropertyRange(Exception):
 @dataclass
 class FunctionScriptReadResult:
     """Result of reading a native UFunction script."""
+
     status: Literal["extracted", "no_script", "failed"]
     serialized_script: bytes = b""
     bytecode_buffer_size: int = 0
@@ -100,6 +105,7 @@ class FunctionScriptReadResult:
 # ---------------------------------------------------------------------------
 # Custom version lookup
 # ---------------------------------------------------------------------------
+
 
 def get_kismet_custom_version(
     summary: PackageFileSummary,
@@ -119,6 +125,7 @@ def get_kismet_custom_version(
 # ---------------------------------------------------------------------------
 # Bounded native payload reader
 # ---------------------------------------------------------------------------
+
 
 def _read_native_payload_start(
     archive: FArchive,
@@ -159,7 +166,10 @@ def _read_native_payload_start(
         if ctrl_byte & ~_SER_CTRL_OVERRIDE_OPERATION:
             # Unknown bits set — reject
             raise _make_control_bit_error(
-                ctrl_byte, export, summary, export_index=export_index,
+                ctrl_byte,
+                export,
+                summary,
+                export_index=export_index,
             )
         if ctrl_byte & _SER_CTRL_OVERRIDE_OPERATION:
             # Consume the override-operation byte
@@ -176,7 +186,11 @@ def _read_native_payload_start(
 
         if declared_end != measured_end:
             raise _make_offset_mismatch_error(
-                declared_start, declared_end, measured_end, export, summary,
+                declared_start,
+                declared_end,
+                measured_end,
+                export,
+                summary,
                 export_index=export_index,
             )
 
@@ -223,14 +237,16 @@ def _make_control_bit_error(
     failure = FunctionScriptFailure(
         error_code="unsupported_serialization_version",
         error_message=(
-            f"Unknown serialization-control bits 0x{ctrl_byte:02X} "
-            f"(known: 0x{_SER_CTRL_OVERRIDE_OPERATION:02X})"
+            f"Unknown serialization-control bits 0x{ctrl_byte:02X} (known: 0x{_SER_CTRL_OVERRIDE_OPERATION:02X})"
         ),
         function_name=export.object_name,
         export_index=export_index,
         class_name=resolve_class_name(
-            export.class_index, [], [export],
-        ) or "Unknown",
+            export.class_index,
+            [],
+            [export],
+        )
+        or "Unknown",
         package_offset=export.serial_offset,
         export_offset=export.serial_offset,
     )
@@ -250,14 +266,16 @@ def _make_offset_mismatch_error(
     failure = FunctionScriptFailure(
         error_code="invalid_script_property_range",
         error_message=(
-            f"Script serialization offset mismatch: "
-            f"declared end={declared_end}, measured end={measured_end}"
+            f"Script serialization offset mismatch: declared end={declared_end}, measured end={measured_end}"
         ),
         function_name=export.object_name,
         export_index=export_index,
         class_name=resolve_class_name(
-            export.class_index, [], [export],
-        ) or "Unknown",
+            export.class_index,
+            [],
+            [export],
+        )
+        or "Unknown",
         package_offset=export.serial_offset,
         export_offset=export.serial_offset,
     )
@@ -318,12 +336,16 @@ def _read_ustruct_prefix_and_script(
             if children_count < 0:
                 return _make_invalid_script_size_failure(
                     f"Negative Children count: {children_count}",
-                    export, export_index, native_start,
+                    export,
+                    export_index,
+                    native_start,
                 )
             if children_count > max_i32_slots:
                 return _make_invalid_script_size_failure(
                     f"Children count {children_count} exceeds remaining capacity ({max_i32_slots} slots)",
-                    export, export_index, native_start,
+                    export,
+                    export_index,
+                    native_start,
                 )
             for i in range(children_count):
                 window.read_i32(f"Child[{i}]")
@@ -338,7 +360,9 @@ def _read_ustruct_prefix_and_script(
             if native_property_count < 0:
                 return _make_invalid_script_size_failure(
                     f"Negative NativePropertyCount: {native_property_count}",
-                    export, export_index, native_start,
+                    export,
+                    export_index,
+                    native_start,
                 )
 
         # 3a. Read native field declarations when count > 0
@@ -456,8 +480,7 @@ def _validate_script_sizes(
     if bytecode_buffer_size < 0 or serialized_script_size < 0:
         return (
             "invalid_script_size",
-            f"Negative size: BytecodeBufferSize={bytecode_buffer_size}, "
-            f"SerializedScriptSize={serialized_script_size}",
+            f"Negative size: BytecodeBufferSize={bytecode_buffer_size}, SerializedScriptSize={serialized_script_size}",
         )
     # Both zero is valid (no script)
     # A one-sided zero size pair is invalid
@@ -495,6 +518,7 @@ def _make_invalid_script_size_failure(
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
+
 
 def read_ufunction_script(
     archive: FArchive,
@@ -543,11 +567,18 @@ def read_ufunction_script(
 
     try:
         window, native_start = _read_native_payload_start(
-            archive, export, summary, name_map, import_map, export_map,
+            archive,
+            export,
+            summary,
+            name_map,
+            import_map,
+            export_map,
             export_index=export_index,
         )
         return _read_ustruct_prefix_and_script(
-            window, export, summary,
+            window,
+            export,
+            summary,
             export_index=export_index,
             native_start=native_start,
             name_map=name_map,

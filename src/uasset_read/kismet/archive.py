@@ -33,7 +33,7 @@ class FKismetArchive(FArchive):
 
         # Dual-cursor tracking
         self.serialized_offset: int = 0  # bytes consumed from disk
-        self.bytecode_index: int = 0     # reconstructed in-memory address
+        self.bytecode_index: int = 0  # reconstructed in-memory address
         self.bytecode_buffer_size: int = 0
         self.fortnite_version: int = -1
         self.release_version: int = -1
@@ -50,8 +50,7 @@ class FKismetArchive(FArchive):
         """Read one byte token → look up in EXPR_CLASS_MAP → construct expression → set StatementIndex."""
         if self._expression_depth >= MAX_EXPRESSION_RECURSION_DEPTH:
             raise ParseError(
-                f"Kismet expression recursion depth exceeded "
-                f"{MAX_EXPRESSION_RECURSION_DEPTH} at offset {self.tell()}"
+                f"Kismet expression recursion depth exceeded {MAX_EXPRESSION_RECURSION_DEPTH} at offset {self.tell()}"
             )
 
         consecutive_unknown = 0
@@ -69,9 +68,7 @@ class FKismetArchive(FArchive):
                 if self._tolerant:
                     consecutive_unknown += 1
                     if consecutive_unknown >= 10:
-                        raise ParseError(
-                            "Too many consecutive unknown tokens in tolerant mode"
-                        )
+                        raise ParseError("Too many consecutive unknown tokens in tolerant mode")
                     if serialized_start not in self._warned_offsets and len(self._warned_offsets) < 10000:
                         logger.debug(
                             f"Unknown EExprToken 0x{token_byte:02X} at offset {serialized_start}, skipping in tolerant mode"
@@ -82,16 +79,14 @@ class FKismetArchive(FArchive):
                     continue
                 else:
                     token_name = token.name if token is not None else "<unknown>"
-                    raise ParseError(
-                        f"Unknown EExprToken {token_name} (0x{token_byte:02X}) at offset {stmt_index}"
-                    )
+                    raise ParseError(f"Unknown EExprToken {token_name} (0x{token_byte:02X}) at offset {stmt_index}")
 
             # Reset consecutive unknown counter on successful token match
             consecutive_unknown = 0
 
             self._expression_depth += 1
             try:
-                if hasattr(expr_class, 'from_archive'):
+                if hasattr(expr_class, "from_archive"):
                     expr = expr_class.from_archive(self, self._name_map)
                 else:
                     expr = expr_class()
@@ -128,13 +123,12 @@ class FKismetArchive(FArchive):
         """Read ASCII null-terminated string (does NOT consume the null terminator)."""
         current_pos = self.tell()
         data = self._file.read()
-        null_idx = data.find(b'\x00')
+        null_idx = data.find(b"\x00")
         if null_idx == -1:
             raise ParseError(
-                f"ASCII string at offset {current_pos} has no null terminator "
-                f"(read {len(data)} bytes to EOF)"
+                f"ASCII string at offset {current_pos} has no null terminator (read {len(data)} bytes to EOF)"
             )
-        result = data[:null_idx].decode('ascii', errors='replace')
+        result = data[:null_idx].decode("ascii", errors="replace")
         self.seek(current_pos + null_idx)  # position AT null, not past it
         return result
 
@@ -222,11 +216,13 @@ class FKismetArchive(FArchive):
                 base_name = self._name_map[name_idx]
             else:
                 base_name = f"Unknown_{name_idx}"
-            resolved_path.append(FFieldPathSegment(
-                name_index=name_idx,
-                number=name_num,
-                base_name=base_name,
-            ))
+            resolved_path.append(
+                FFieldPathSegment(
+                    name_index=name_idx,
+                    number=name_num,
+                    base_name=base_name,
+                )
+            )
 
         # Read owner when version threshold met
         resolved_owner: PackageIndex | None = None
@@ -280,10 +276,10 @@ class FKismetArchive(FArchive):
         parts: list[bytes] = []
         while True:
             byte = self.read(1)
-            if byte == b'\x00':
+            if byte == b"\x00":
                 break
             parts.append(byte)
-        return b''.join(parts).decode('ascii', errors='replace')
+        return b"".join(parts).decode("ascii", errors="replace")
 
     def xfer_unicode_string(self) -> str:
         """Read null-terminated UTF-16 string, consuming the double-null terminator.
@@ -293,7 +289,7 @@ class FKismetArchive(FArchive):
         parts: list[bytes] = []
         while True:
             pair = self.read(2)
-            if pair == b'\x00\x00':
+            if pair == b"\x00\x00":
                 break
             parts.append(pair)
-        return b''.join(parts).decode('utf-16-le', errors='replace')
+        return b"".join(parts).decode("utf-16-le", errors="replace")

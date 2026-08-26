@@ -6,6 +6,7 @@ and validated for basic structural integrity.
 
 Marker: samples
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -39,8 +40,9 @@ class TestSampleParsing:
     def test_parse_status_is_valid(self, samples_dir: Path, sample_path: Path):
         """Status must be one of the three valid values."""
         result = parse_package(str(sample_path), tolerant=True)
-        assert result.status in ("success", "partial", "failed"), \
+        assert result.status in ("success", "partial", "failed"), (
             f"{sample_path.name}: invalid status '{result.status}'"
+        )
 
     def test_parse_no_crash(self, samples_dir: Path, sample_path: Path):
         """Parsing must not raise unhandled exceptions in tolerant mode."""
@@ -52,8 +54,7 @@ class TestSampleParsing:
         """Export count from summary must be non-negative."""
         result = parse_package(str(sample_path), tolerant=True)
         if result.summary is not None:
-            assert result.summary.export_count >= 0, \
-                f"{sample_path.name}: negative export count"
+            assert result.summary.export_count >= 0, f"{sample_path.name}: negative export count"
 
 
 # Parameterize across all samples

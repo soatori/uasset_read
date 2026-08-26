@@ -5,6 +5,7 @@ and type-specific tail data.  The ``native_field_cpp_type`` mapper produces
 concrete C++ type strings using the resolved names so callers never need the
 archive for downstream type mapping.
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,6 +36,7 @@ _FFIELD_FLAGS_RESPECT_EDITOR_FILTER_VERSION = (5, 8)
 # Context
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class NativeFieldContext:
     """Resolution context for native field reading.
@@ -55,6 +57,7 @@ class NativeFieldContext:
 # ---------------------------------------------------------------------------
 # Declaration
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class NativeFieldDeclaration:
@@ -83,6 +86,7 @@ class NativeFieldDeclaration:
 # ---------------------------------------------------------------------------
 # Name resolution
 # ---------------------------------------------------------------------------
+
 
 def _resolve_package_index(
     raw_index: int,
@@ -131,6 +135,7 @@ def _read_package_ref(archive: ByteArchive, context: NativeFieldContext) -> tupl
 # FProperty base prefix
 # ---------------------------------------------------------------------------
 
+
 def _read_fproperty_prefix(
     archive: ByteArchive,
     context: NativeFieldContext,
@@ -146,9 +151,8 @@ def _read_fproperty_prefix(
 
     # UE5.0-5.7 always serialize FlagsPrivate. UE5.8 made it conditional on
     # the archive's editor-only filter state.
-    if (
-        context.saved_engine_version < _FFIELD_FLAGS_RESPECT_EDITOR_FILTER_VERSION
-        or not (context.package_flags & PKG_FilterEditorOnly)
+    if context.saved_engine_version < _FFIELD_FLAGS_RESPECT_EDITOR_FILTER_VERSION or not (
+        context.package_flags & PKG_FilterEditorOnly
     ):
         _flags = archive.read_u32()
 
@@ -188,6 +192,7 @@ def _read_fproperty_prefix(
 # Metadata reading (uncooked)
 # ---------------------------------------------------------------------------
 
+
 def _read_metadata(archive: ByteArchive, context: NativeFieldContext) -> dict[str, str]:
     """Read the metadata boolean and, when true, a TMap<FName, FString>.
 
@@ -196,9 +201,7 @@ def _read_metadata(archive: ByteArchive, context: NativeFieldContext) -> dict[st
     UE5.4+ use PKG_Cooked. A present record may still contain false.
     """
     metadata_omission_flag = (
-        PKG_FilterEditorOnly
-        if context.saved_engine_version < _FFIELD_METADATA_USES_COOKED_FLAG_VERSION
-        else PKG_Cooked
+        PKG_FilterEditorOnly if context.saved_engine_version < _FFIELD_METADATA_USES_COOKED_FLAG_VERSION else PKG_Cooked
     )
     if context.package_flags & metadata_omission_flag:
         return {}
@@ -223,6 +226,7 @@ def _read_metadata(archive: ByteArchive, context: NativeFieldContext) -> dict[st
 # ---------------------------------------------------------------------------
 # Leaf type-specific tail readers
 # ---------------------------------------------------------------------------
+
 
 def _read_bool_tail(archive: ByteArchive) -> None:
     """BoolProperty: six uint8 values."""
@@ -318,6 +322,7 @@ def _read_fieldpath_tail(
 # Container / recursive type tail readers (Task 4)
 # ---------------------------------------------------------------------------
 
+
 def _read_enum_tail(
     archive: ByteArchive,
     context: NativeFieldContext,
@@ -378,12 +383,22 @@ def _read_optional_tail(
 
 
 # Scalar types with no extra bytes
-_NO_EXTRA_BYTES_TYPES = frozenset({
-    "Int8Property", "Int16Property", "IntProperty", "Int64Property",
-    "UInt16Property", "UInt32Property", "UInt64Property",
-    "FloatProperty", "DoubleProperty",
-    "NameProperty", "StrProperty", "TextProperty",
-})
+_NO_EXTRA_BYTES_TYPES = frozenset(
+    {
+        "Int8Property",
+        "Int16Property",
+        "IntProperty",
+        "Int64Property",
+        "UInt16Property",
+        "UInt32Property",
+        "UInt64Property",
+        "FloatProperty",
+        "DoubleProperty",
+        "NameProperty",
+        "StrProperty",
+        "TextProperty",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -439,8 +454,15 @@ def _read_single_field(
 
     # Read the common FProperty prefix
     (
-        name, _name_ref, metadata, array_dim, element_size,
-        property_flags, _rep_index, rep_notify_name, replication_condition,
+        name,
+        _name_ref,
+        metadata,
+        array_dim,
+        element_size,
+        property_flags,
+        _rep_index,
+        rep_notify_name,
+        replication_condition,
     ) = _read_fproperty_prefix(archive, context)
 
     decl.name = name
@@ -490,7 +512,8 @@ def _read_single_field(
         # Unknown property class — emit unsupported_native_field failure
         logger.warning(
             "Unsupported native field type: %s at offset %d",
-            type_name, archive.tell(),
+            type_name,
+            archive.tell(),
         )
         decl.type_name = f"unsupported:{type_name}"
 
@@ -561,12 +584,14 @@ def build_native_function_signature(
         if is_return:
             return_cpp = cpp_type
         else:
-            params.append({
-                "name": field.name,
-                "param_type": cpp_type,
-                "is_input": True,
-                "is_output": bool(field.property_flags & _CPF_OutParm),
-            })
+            params.append(
+                {
+                    "name": field.name,
+                    "param_type": cpp_type,
+                    "is_input": True,
+                    "is_output": bool(field.property_flags & _CPF_OutParm),
+                }
+            )
 
     # Build signature string
     param_strs = [f"{p['param_type']} {p['name']}" for p in params]

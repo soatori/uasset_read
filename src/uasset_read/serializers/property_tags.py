@@ -3,6 +3,7 @@
 Equivalent migration from uasset_read.py lines 5186-5282.
 UE5.7 specific version — UE4 compatibility code removed.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, List, Tuple, Optional, Any, TypeVar
@@ -116,7 +117,9 @@ def _apply_property_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
     if tag.type == "StructProperty":
         struct_child = child_type(0)
         if struct_child is not None:
-            tag.struct_type = (getattr(struct_child, "name", None) or getattr(struct_child, "type", None) or "").split(".")[-1]
+            tag.struct_type = (getattr(struct_child, "name", None) or getattr(struct_child, "type", None) or "").split(
+                "."
+            )[-1]
     elif tag.type in ("ArrayProperty", "SetProperty", "OptionalProperty"):
         inner = child_type(0)
         if inner is not None:
@@ -152,8 +155,6 @@ def _apply_property_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
                 tag.enum_type = enum_name
 
 
-
-
 def read_property_tag(
     archive: FArchive,
     name_map: List[str],
@@ -180,12 +181,17 @@ def read_property_tag(
         return tag
 
     # Versions are set after PackageFileSummary parsing.
-    file_version_ue5 = getattr(archive, '_file_version_ue5', PROPERTY_TAG_COMPLETE_TYPE_NAME)
-    file_version_ue4 = getattr(archive, '_file_version_ue4', 0)
+    file_version_ue5 = getattr(archive, "_file_version_ue5", PROPERTY_TAG_COMPLETE_TYPE_NAME)
+    file_version_ue4 = getattr(archive, "_file_version_ue4", 0)
 
     if file_version_ue5 < PROPERTY_TAG_COMPLETE_TYPE_NAME:
         return _read_property_tag_legacy(
-            archive, name_map, tag, tolerant, file_version_ue5, file_version_ue4,
+            archive,
+            name_map,
+            tag,
+            tolerant,
+            file_version_ue5,
+            file_version_ue4,
             struct_name=struct_name,
         )
 
@@ -195,7 +201,11 @@ def read_property_tag(
     _apply_property_type_to_tag(tag, tag.type_name)
 
     mapping_container = getattr(mappings, "mappings", mappings)
-    struct_mapping = mapping_container.get_struct(struct_name) if mapping_container is not None and hasattr(mapping_container, "get_struct") else None
+    struct_mapping = (
+        mapping_container.get_struct(struct_name)
+        if mapping_container is not None and hasattr(mapping_container, "get_struct")
+        else None
+    )
     if struct_mapping is not None:
         if hasattr(mapping_container, "property_by_name"):
             prop_info = mapping_container.property_by_name(struct_name, tag.name)
@@ -391,4 +401,3 @@ def read_tag_value_bounded(
     finally:
         if archive.tell() != final_pos:
             archive.seek(final_pos)
-

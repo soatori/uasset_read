@@ -243,8 +243,7 @@ class MathFunctionCleaner:
     }
 
     @staticmethod
-    def _dispatch_table_lookup(func_name: str, p: list[str],
-                               table: dict[str, Any]) -> str | None:
+    def _dispatch_table_lookup(func_name: str, p: list[str], table: dict[str, Any]) -> str | None:
         """Look up table by longest prefix match, return formatted result or None."""
         # Check exact match first
         if func_name in table:
@@ -262,9 +261,7 @@ class MathFunctionCleaner:
         "RandomFloatInRange": lambda p: f"RandomFloatInRange({p[0]}, {p[1]})",
         "RandomFloat": lambda p: "RandomFloat()",
         "CheckConstrainedFloat": lambda p: f"{p[2]} < {p[0]} or {p[2]} > {p[1]}",
-        "MapRangeClamped": lambda p: (
-            f"MapRangeClamped({p[0]}, {p[1]}, {p[2]}, {p[3]}, {p[4]})"
-        ),
+        "MapRangeClamped": lambda p: f"MapRangeClamped({p[0]}, {p[1]}, {p[2]}, {p[3]}, {p[4]})",
         "NormalizeToRange": lambda p: f"NormalizeToRange({p[0]}, {p[1]}, {p[2]})",
         "Abs": lambda p: f"({p[0]} < 0.0 ? -{p[0]} : {p[0]})",
         "Floor": lambda p: f"Floor({p[0]})",
@@ -273,9 +270,7 @@ class MathFunctionCleaner:
         "Round": lambda p: f"Round({p[0]})",
         "Sqrt": lambda p: f"Sqrt({p[0]})",
         "Negate": lambda p: f"-{p[0]}",
-        "Clamp": lambda p: (
-            f"(({p[0]} < {p[1]}) ? {p[1]} : (({p[0]} > {p[2]}) ? {p[2]} : {p[0]}))"
-        ),
+        "Clamp": lambda p: f"(({p[0]} < {p[1]}) ? {p[1]} : (({p[0]} > {p[2]}) ? {p[2]} : {p[0]}))",
         "Lerp": lambda p: f"{p[0]} + {p[2]} * ({p[1]} - {p[0]})",
         "FInterpEaseIn": lambda p: f"FInterpEaseIn({p[0]}, {p[1]}, {p[2]}, {p[3]})",
         "FInterpEaseOut": lambda p: f"FInterpEaseOut({p[0]}, {p[1]}, {p[2]}, {p[3]})",
@@ -290,9 +285,7 @@ class MathFunctionCleaner:
         if result is not None:
             return result(p)
         # Prefix match
-        return MathFunctionCleaner._dispatch_table_lookup(
-            func_name, p, MathFunctionCleaner._MATH_FN_TABLE
-        )
+        return MathFunctionCleaner._dispatch_table_lookup(func_name, p, MathFunctionCleaner._MATH_FN_TABLE)
 
     # Type conversion prefix -> C++ cast
     _CONV_PREFIX_TABLE: dict[str, str] = {
@@ -379,15 +372,11 @@ class MathFunctionCleaner:
         if result is not None:
             return result(p)
         # Table-driven dispatch: constructors (prefix match)
-        result = MathFunctionCleaner._dispatch_table_lookup(
-            func_name, p, MathFunctionCleaner._CONSTRUCTOR_TABLE
-        )
+        result = MathFunctionCleaner._dispatch_table_lookup(func_name, p, MathFunctionCleaner._CONSTRUCTOR_TABLE)
         if result is not None:
             return result
         # Vector operations (prefix match)
-        result = MathFunctionCleaner._dispatch_table_lookup(
-            func_name, p, MathFunctionCleaner._VECTOR_OP_TABLE
-        )
+        result = MathFunctionCleaner._dispatch_table_lookup(func_name, p, MathFunctionCleaner._VECTOR_OP_TABLE)
         if result is not None:
             return result
         return None
@@ -395,15 +384,9 @@ class MathFunctionCleaner:
     _BREAK_TABLE: dict[str, Any] = {
         "BreakVector": lambda p: f"{p[1]} = {p[0]}.X;\n{p[2]} = {p[0]}.Y;\n{p[3]} = {p[0]}.Z",
         "BreakVector2D": lambda p: f"{p[1]} = {p[0]}.X;\n{p[2]} = {p[0]}.Y",
-        "BreakRotator": lambda p: (
-            f"{p[1]} = {p[0]}.Roll;\n{p[2]} = {p[0]}.Pitch;\n{p[3]} = {p[0]}.Yaw"
-        ),
-        "BreakTransform": lambda p: (
-            f"{p[1]} = {p[0]}.Location;\n{p[2]} = {p[0]}.Rotation;\n{p[3]} = {p[0]}.Scale"
-        ),
-        "BreakColor": lambda p: (
-            f"{p[1]} = {p[0]}.R;\n{p[2]} = {p[0]}.G;\n{p[3]} = {p[0]}.B;\n{p[4]} = {p[0]}.A"
-        ),
+        "BreakRotator": lambda p: f"{p[1]} = {p[0]}.Roll;\n{p[2]} = {p[0]}.Pitch;\n{p[3]} = {p[0]}.Yaw",
+        "BreakTransform": lambda p: f"{p[1]} = {p[0]}.Location;\n{p[2]} = {p[0]}.Rotation;\n{p[3]} = {p[0]}.Scale",
+        "BreakColor": lambda p: f"{p[1]} = {p[0]}.R;\n{p[2]} = {p[0]}.G;\n{p[3]} = {p[0]}.B;\n{p[4]} = {p[0]}.A",
     }
 
     @staticmethod
@@ -455,7 +438,7 @@ class MathFunctionCleaner:
     }
     # String library prefix match table (by length descending)
     _STRING_PREFIX_TABLE: dict[str, Any] = {
-        "Conv_BoolToString": lambda p: f"{p[0]} ? \"true\" : \"false\"",
+        "Conv_BoolToString": lambda p: f'{p[0]} ? "true" : "false"',
         "EqualEqual_": lambda p: f"{p[0]} == {p[1]}",
         "NotEqual_": lambda p: f"({p[0]} != {p[1]})",
         "ToString": lambda p: f"FString({p[0]})",
@@ -467,12 +450,8 @@ class MathFunctionCleaner:
         "Contains": lambda p: (
             f"{p[0]}.Contains({p[1]}, /* bUseCase = */ {p[2]}, /* bSearchFromEnd = */ {p[3] if len(p) > 3 else 'false'})"
         ),
-        "Replace": lambda p: (
-            f"{p[0]}.Replace({p[1]}, {p[2]}, /* SearchCase = */ {p[3] if len(p) > 3 else 'false'})"
-        ),
-        "StartsWith": lambda p: (
-            f"{p[0]}.startswith({p[1]}, /* SearchCase = */ {p[2] if len(p) > 2 else 'false'})"
-        ),
+        "Replace": lambda p: f"{p[0]}.Replace({p[1]}, {p[2]}, /* SearchCase = */ {p[3] if len(p) > 3 else 'false'})",
+        "StartsWith": lambda p: f"{p[0]}.startswith({p[1]}, /* SearchCase = */ {p[2] if len(p) > 2 else 'false'})",
         "Left": lambda p: f"{p[0]}.Left({p[1]})",
         "Right": lambda p: f"{p[0]}.Right({p[1]})",
         "Mid": lambda p: f"{p[0]}.Mid({p[1]}, {p[2] if len(p) > 2 else '-1'})",
@@ -485,9 +464,7 @@ class MathFunctionCleaner:
         if result is not None:
             return result(p)
         # Prefix match
-        result = MathFunctionCleaner._dispatch_table_lookup(
-            func_name, p, MathFunctionCleaner._STRING_PREFIX_TABLE
-        )
+        result = MathFunctionCleaner._dispatch_table_lookup(func_name, p, MathFunctionCleaner._STRING_PREFIX_TABLE)
         if result is not None:
             return result
         return f"KismetStringLibrary::{func_name}({', '.join(p)})"
@@ -499,9 +476,7 @@ class MathFunctionCleaner:
         "Conv_SoftClassPathToSoftClassRef": lambda p: f"TSoftClassPtr<UObject>({p[0]})",
         "Conv_SoftClassReferenceToClass": lambda p: f"{p[0]}",
         "Conv_SoftObjectReferenceToObject": lambda p: f"{p[0]}",
-        "Conv_ObjectToSoftObjectReference": lambda p: (
-            f"TSoftObjectPtr<UObject>({p[0]})"
-        ),
+        "Conv_ObjectToSoftObjectReference": lambda p: f"TSoftObjectPtr<UObject>({p[0]})",
         "Conv_SoftObjPathToSoftObjRef": lambda p: f"TSoftObjectPtr<UObject>({p[0]})",
         "Conv_ClassToSoftClassReference": lambda p: f"TSoftClassPtr<UObject>(*{p[0]})",
     }
@@ -514,9 +489,7 @@ class MathFunctionCleaner:
             return f"{p[0]}"
         if func_name.startswith("IsValid"):
             return f"{p[0]}"
-        result = MathFunctionCleaner._dispatch_table_lookup(
-            func_name, p, MathFunctionCleaner._SYSTEM_PREFIX_TABLE
-        )
+        result = MathFunctionCleaner._dispatch_table_lookup(func_name, p, MathFunctionCleaner._SYSTEM_PREFIX_TABLE)
         if result is not None:
             return result
         return f"KismetSystemLibrary::{func_name}({', '.join(p)})"
@@ -557,9 +530,7 @@ class MathFunctionCleaner:
     @staticmethod
     def _clean_array(func_name: str, p: list[str]) -> str:
         return (
-            MathFunctionCleaner._dispatch_table_lookup(
-                func_name, p, MathFunctionCleaner._ARRAY_CLEAN_TABLE
-            )
+            MathFunctionCleaner._dispatch_table_lookup(func_name, p, MathFunctionCleaner._ARRAY_CLEAN_TABLE)
             or f"KismetArrayLibrary::{func_name}({', '.join(p)})"
         )
 
@@ -577,9 +548,7 @@ class MathFunctionCleaner:
     @staticmethod
     def _clean_map(func_name: str, p: list[str]) -> str:
         return (
-            MathFunctionCleaner._dispatch_table_lookup(
-                func_name, p, MathFunctionCleaner._MAP_CLEAN_TABLE
-            )
+            MathFunctionCleaner._dispatch_table_lookup(func_name, p, MathFunctionCleaner._MAP_CLEAN_TABLE)
             or f"BlueprintMapLibrary::{func_name}({', '.join(p)})"
         )
 
@@ -596,9 +565,7 @@ class MathFunctionCleaner:
     @staticmethod
     def _clean_set(func_name: str, p: list[str]) -> str:
         return (
-            MathFunctionCleaner._dispatch_table_lookup(
-                func_name, p, MathFunctionCleaner._SET_CLEAN_TABLE
-            )
+            MathFunctionCleaner._dispatch_table_lookup(func_name, p, MathFunctionCleaner._SET_CLEAN_TABLE)
             or f"BlueprintSetLibrary::{func_name}({', '.join(p)})"
         )
 
@@ -771,31 +738,16 @@ class KismetTranslator:
             return "false"
         # --- String constants ---
         if isinstance(expr, (EX_StringConst, EX_UnicodeStringConst)):
-            val = (
-                str(expr.Value)
-                .replace("\r\n", "\\n")
-                .replace("\n", "\\n")
-                .replace('"', '\\"')
-            )
+            val = str(expr.Value).replace("\r\n", "\\n").replace("\n", "\\n").replace('"', '\\"')
             return f'"{val}"'
         if isinstance(expr, EX_TextConst):
             if hasattr(expr, "Value") and expr.Value:
                 inner = expr.Value
                 if hasattr(inner, "SourceString") and inner.SourceString:
-                    val = (
-                        str(inner.SourceString)
-                        .replace("\r\n", "\\n")
-                        .replace("\n", "\\n")
-                        .replace('"', '\\"')
-                    )
+                    val = str(inner.SourceString).replace("\r\n", "\\n").replace("\n", "\\n").replace('"', '\\"')
                     return f'FText("{val}")'
                 if hasattr(inner, "Text"):
-                    val = (
-                        str(inner.Text)
-                        .replace("\r\n", "\\n")
-                        .replace("\n", "\\n")
-                        .replace('"', '\\"')
-                    )
+                    val = str(inner.Text).replace("\r\n", "\\n").replace("\n", "\\n").replace('"', '\\"')
                     return f'FText("{val}")'
             return 'FText("")'
         # --- Object / Name ---
@@ -812,11 +764,7 @@ class KismetTranslator:
             val = str(expr.Value) if expr.Value else ""
             return f'FName("{val}")'
         if isinstance(expr, EX_SoftObjectConst):
-            inner = (
-                self.line_cpp(expr.Value)
-                if hasattr(expr, "Value") and expr.Value
-                else '""'
-            )
+            inner = self.line_cpp(expr.Value) if hasattr(expr, "Value") and expr.Value else '""'
             return f"FSoftObjectPath({inner})"
         # --- Vector / Rotation / Transform ---
         # These expressions inherit from KismetExpression (not KismetExpressionT),
@@ -904,12 +852,9 @@ class KismetTranslator:
     ) -> str | None:
         """EX_Return."""
         from uasset_read.kismet.expressions import EX_Return, EX_Nothing, EX_NothingInt32
+
         if isinstance(expr, EX_Return):
-            ret_expr = (
-                expr.ReturnExpression
-                if hasattr(expr, "ReturnExpression")
-                else getattr(expr, "Value", None)
-            )
+            ret_expr = expr.ReturnExpression if hasattr(expr, "ReturnExpression") else getattr(expr, "Value", None)
             if ret_expr is None:
                 return "return"
             if isinstance(ret_expr, (EX_Nothing, EX_NothingInt32)):
@@ -939,11 +884,7 @@ class KismetTranslator:
                 if hasattr(expr, "BooleanExpression") and expr.BooleanExpression
                 else "?"
             )
-            offset = (
-                expr.CodeOffset
-                if hasattr(expr, "CodeOffset")
-                else getattr(expr, "Value", 0)
-            )
+            offset = expr.CodeOffset if hasattr(expr, "CodeOffset") else getattr(expr, "Value", 0)
             if self._jump_analyzer is not None and index is not None:
                 if self._jump_analyzer.detect_for_pattern(index) is not None:
                     return f"for ({cond}) {{"
@@ -953,11 +894,7 @@ class KismetTranslator:
                     return f"if ({cond}) {{"
             return f"if (!{cond}) goto Label_{offset};"
         if isinstance(expr, EX_Jump):
-            offset = (
-                expr.CodeOffset
-                if hasattr(expr, "CodeOffset")
-                else getattr(expr, "Value", 0)
-            )
+            offset = expr.CodeOffset if hasattr(expr, "CodeOffset") else getattr(expr, "Value", 0)
             if self._jump_analyzer is not None and index is not None:
                 if self._jump_analyzer.is_while_backjump(index):
                     return ""
@@ -981,11 +918,7 @@ class KismetTranslator:
                     return "}"
             return "return;"
         if isinstance(expr, EX_PopExecutionFlowIfNot):
-            cond = (
-                self.line_cpp(expr.BooleanExpression)
-                if hasattr(expr, "BooleanExpression")
-                else "?"
-            )
+            cond = self.line_cpp(expr.BooleanExpression) if hasattr(expr, "BooleanExpression") else "?"
             return f"if (!{cond}) return;"
         return None
 
@@ -1018,9 +951,7 @@ class KismetTranslator:
                 ECastToken.CST_DoubleToFloat: "float",
                 ECastToken.CST_FloatToDouble: "double",
             }
-            cpp_type = (
-                type_map.get(conversion, "auto") if conversion is not None else "auto"
-            )
+            cpp_type = type_map.get(conversion, "auto") if conversion is not None else "auto"
             return f"static_cast<{cpp_type}>({target})"
         if isinstance(
             expr,
@@ -1087,9 +1018,7 @@ class KismetTranslator:
             return f"{obj}->{func_name}"
         if isinstance(expr, EX_InterfaceContext):
             return (
-                self.line_cpp(expr.InterfaceValue)
-                if hasattr(expr, "InterfaceValue") and expr.InterfaceValue
-                else "?"
+                self.line_cpp(expr.InterfaceValue) if hasattr(expr, "InterfaceValue") and expr.InterfaceValue else "?"
             )
         if isinstance(expr, EX_StructMemberContext):
             prop = str(expr.Property) if hasattr(expr, "Property") else "?"
@@ -1130,16 +1059,8 @@ class KismetTranslator:
                 EX_LetMulticastDelegate,
             ),
         ):
-            var = (
-                self.line_cpp(expr.Variable)
-                if hasattr(expr, "Variable") and expr.Variable
-                else "?"
-            )
-            assignment = (
-                self.line_cpp(expr.Assignment)
-                if hasattr(expr, "Assignment") and expr.Assignment
-                else "?"
-            )
+            var = self.line_cpp(expr.Variable) if hasattr(expr, "Variable") and expr.Variable else "?"
+            assignment = self.line_cpp(expr.Assignment) if hasattr(expr, "Assignment") and expr.Assignment else "?"
             return f"{var} = {assignment}"
         if isinstance(expr, EX_LetValueOnPersistentFrame):
             assignment = (
@@ -1147,11 +1068,7 @@ class KismetTranslator:
                 if hasattr(expr, "AssignmentExpression") and expr.AssignmentExpression
                 else "?"
             )
-            dest = (
-                str(expr.DestinationProperty)
-                if hasattr(expr, "DestinationProperty")
-                else "?"
-            )
+            dest = str(expr.DestinationProperty) if hasattr(expr, "DestinationProperty") else "?"
             var_name = f"UberGraphFrame->{dest}" if "K2Node_" in dest else dest
             return f"{var_name} = {assignment}"
         return None
@@ -1182,11 +1099,7 @@ class KismetTranslator:
             stack_node = getattr(expr, "StackNode", 0)
             resolved_class, resolved_func = self._resolve_stack_node(stack_node)
             if isinstance(expr, EX_CallMath):
-                cn = resolved_class or (
-                    f"Function_{stack_node}"
-                    if isinstance(stack_node, int)
-                    else str(stack_node)
-                )
+                cn = resolved_class or (f"Function_{stack_node}" if isinstance(stack_node, int) else str(stack_node))
                 fn = resolved_func or f"Call_{stack_node}"
                 return MathFunctionCleaner.clean(cn, fn, params_list)
             if isinstance(expr, EX_LocalFinalFunction):
@@ -1198,9 +1111,7 @@ class KismetTranslator:
                     )
                     if is_local:
                         return f"this->{resolved_func}({', '.join(params_list)})"
-                    return (
-                        f"{resolved_class}::{resolved_func}({', '.join(params_list)})"
-                    )
+                    return f"{resolved_class}::{resolved_func}({', '.join(params_list)})"
                 return f"LocalFunction_{stack_node}({', '.join(params_list)})"
             if resolved_class is not None and resolved_func is not None:
                 return f"{resolved_class}::{resolved_func}({', '.join(params_list)})"
@@ -1208,8 +1119,7 @@ class KismetTranslator:
         if isinstance(expr, (EX_VirtualFunction, EX_LocalVirtualFunction)):
             func_name = (
                 expr.VirtualFunctionName.Text
-                if hasattr(expr, "VirtualFunctionName")
-                and hasattr(expr.VirtualFunctionName, "Text")
+                if hasattr(expr, "VirtualFunctionName") and hasattr(expr.VirtualFunctionName, "Text")
                 else str(getattr(expr, "VirtualFunctionName", "?"))
             )
             params_list = []
@@ -1220,9 +1130,7 @@ class KismetTranslator:
                         params_list.append(p_str)
             class_name = None
             if self._func_resolver and func_name and func_name != "?":
-                class_name = self._func_resolver.resolve_virtual_function_class(
-                    func_name
-                )
+                class_name = self._func_resolver.resolve_virtual_function_class(func_name)
             prefix = f"{class_name}::" if class_name else ""
             return f"{prefix}{func_name}({', '.join(params_list)})"
         if isinstance(expr, EX_CallMulticastDelegate):
@@ -1232,11 +1140,7 @@ class KismetTranslator:
                     p_str = self.line_cpp(param)
                     if p_str:
                         params_list.append(p_str)
-            delegate = (
-                self.line_cpp(expr.Delegate)
-                if hasattr(expr, "Delegate") and expr.Delegate
-                else "?"
-            )
+            delegate = self.line_cpp(expr.Delegate) if hasattr(expr, "Delegate") and expr.Delegate else "?"
             stack_node = getattr(expr, "StackNode", 0)
             _, resolved_func = self._resolve_stack_node(stack_node)
             if resolved_func is not None:
@@ -1273,18 +1177,10 @@ class KismetTranslator:
             return f"{var} = [{', '.join(values)}]"
         if isinstance(expr, EX_ArrayConst):
             values = [v for el in (expr.Elements or []) if (v := self.line_cpp(el))]
-            inner_type = (
-                str(expr.InnerProperty)
-                if hasattr(expr, "InnerProperty") and expr.InnerProperty
-                else "auto"
-            )
+            inner_type = str(expr.InnerProperty) if hasattr(expr, "InnerProperty") and expr.InnerProperty else "auto"
             return f"TArray<{inner_type}>{{{', '.join(values)}}}"
         if isinstance(expr, EX_SetMap):
-            target = (
-                self.line_cpp(expr.MapProperty)
-                if hasattr(expr, "MapProperty") and expr.MapProperty
-                else "?"
-            )
+            target = self.line_cpp(expr.MapProperty) if hasattr(expr, "MapProperty") and expr.MapProperty else "?"
             if not hasattr(expr, "Elements") or not expr.Elements:
                 return f"{target} = TMap {{ }}"
             pairs = self._extract_map_pairs(expr.Elements)
@@ -1295,27 +1191,15 @@ class KismetTranslator:
             pairs = self._extract_map_pairs(expr.Elements)
             return f"TMap {{ {', '.join(pairs)} }}"
         if isinstance(expr, EX_SetSet):
-            target = (
-                self.line_cpp(expr.SetProperty)
-                if hasattr(expr, "SetProperty") and expr.SetProperty
-                else "?"
-            )
+            target = self.line_cpp(expr.SetProperty) if hasattr(expr, "SetProperty") and expr.SetProperty else "?"
             values = [v for el in (expr.Elements or []) if (v := self.line_cpp(el))]
             return f"{target} = TSet{{{', '.join(values)}}}"
         if isinstance(expr, EX_SetConst):
             values = [v for el in (expr.Elements or []) if (v := self.line_cpp(el))]
             return f"TSet{{{', '.join(values)}}}"
         if isinstance(expr, EX_ArrayGetByRef):
-            arr = (
-                self.line_cpp(expr.ArrayVariable)
-                if hasattr(expr, "ArrayVariable") and expr.ArrayVariable
-                else "?"
-            )
-            idx = (
-                self.line_cpp(expr.ArrayIndex)
-                if hasattr(expr, "ArrayIndex") and expr.ArrayIndex
-                else "?"
-            )
+            arr = self.line_cpp(expr.ArrayVariable) if hasattr(expr, "ArrayVariable") and expr.ArrayVariable else "?"
+            idx = self.line_cpp(expr.ArrayIndex) if hasattr(expr, "ArrayIndex") and expr.ArrayIndex else "?"
             return f"{arr}[{idx}]"
         return None
 
@@ -1326,15 +1210,12 @@ class KismetTranslator:
     ) -> str | None:
         """Struct constants / bit fields / property constants."""
         from uasset_read.kismet.expressions import EX_StructConst, EX_BitFieldConst, EX_PropertyConst
+
         if isinstance(expr, EX_StructConst):
             struct_name = (
-                str(expr.Struct.Name)
-                if hasattr(expr, "Struct") and hasattr(expr.Struct, "Name")
-                else "Struct"
+                str(expr.Struct.Name) if hasattr(expr, "Struct") and hasattr(expr.Struct, "Name") else "Struct"
             )
-            values = [
-                v for prop in (expr.Properties or []) if (v := self.line_cpp(prop))
-            ]
+            values = [v for prop in (expr.Properties or []) if (v := self.line_cpp(prop))]
             return f"F{struct_name}{{{', '.join(values)}}}"
         if isinstance(expr, EX_BitFieldConst):
             return str(expr.ConstValue) if hasattr(expr, "ConstValue") else "0"
@@ -1358,16 +1239,8 @@ class KismetTranslator:
         )
 
         if isinstance(expr, EX_AddMulticastDelegate):
-            delegate = (
-                self.line_cpp(expr.Delegate)
-                if hasattr(expr, "Delegate") and expr.Delegate
-                else "?"
-            )
-            to_add = (
-                self.line_cpp(expr.DelegateToAdd)
-                if hasattr(expr, "DelegateToAdd") and expr.DelegateToAdd
-                else "?"
-            )
+            delegate = self.line_cpp(expr.Delegate) if hasattr(expr, "Delegate") and expr.Delegate else "?"
+            to_add = self.line_cpp(expr.DelegateToAdd) if hasattr(expr, "DelegateToAdd") and expr.DelegateToAdd else "?"
             return f"{delegate}->Add({to_add})"
         if isinstance(expr, EX_ClearMulticastDelegate):
             delegate = (
@@ -1377,28 +1250,12 @@ class KismetTranslator:
             )
             return f"{delegate}.Clear()"
         if isinstance(expr, EX_BindDelegate):
-            delegate = (
-                self.line_cpp(expr.Delegate)
-                if hasattr(expr, "Delegate") and expr.Delegate
-                else "?"
-            )
-            obj = (
-                self.line_cpp(expr.ObjectTerm)
-                if hasattr(expr, "ObjectTerm") and expr.ObjectTerm
-                else "?"
-            )
-            fn = (
-                expr.FunctionName.Text
-                if hasattr(expr, "FunctionName") and hasattr(expr.FunctionName, "Text")
-                else "?"
-            )
+            delegate = self.line_cpp(expr.Delegate) if hasattr(expr, "Delegate") and expr.Delegate else "?"
+            obj = self.line_cpp(expr.ObjectTerm) if hasattr(expr, "ObjectTerm") and expr.ObjectTerm else "?"
+            fn = expr.FunctionName.Text if hasattr(expr, "FunctionName") and hasattr(expr.FunctionName, "Text") else "?"
             return f'{delegate}->BindUFunction({obj}, FName("{fn}"))'
         if isinstance(expr, EX_RemoveMulticastDelegate):
-            delegate = (
-                self.line_cpp(expr.Delegate)
-                if hasattr(expr, "Delegate") and expr.Delegate
-                else "?"
-            )
+            delegate = self.line_cpp(expr.Delegate) if hasattr(expr, "Delegate") and expr.Delegate else "?"
             to_remove = (
                 self.line_cpp(expr.DelegateToRemove)
                 if hasattr(expr, "DelegateToRemove") and expr.DelegateToRemove
@@ -1432,11 +1289,7 @@ class KismetTranslator:
         )
 
         if isinstance(expr, EX_SwitchValue):
-            idx = (
-                self.line_cpp(expr.IndexTerm)
-                if hasattr(expr, "IndexTerm") and expr.IndexTerm
-                else "?"
-            )
+            idx = self.line_cpp(expr.IndexTerm) if hasattr(expr, "IndexTerm") and expr.IndexTerm else "?"
             if hasattr(expr, "Cases") and len(expr.Cases) == 2:
                 case0 = self.line_cpp(expr.Cases[0].CaseTerm)
                 case1 = self.line_cpp(expr.Cases[1].CaseTerm)
@@ -1445,38 +1298,26 @@ class KismetTranslator:
             if hasattr(expr, "Cases"):
                 for case_item in expr.Cases:
                     case_idx = (
-                        self.line_cpp(case_item.CaseIndexValueTerm)
-                        if hasattr(case_item, "CaseIndexValueTerm")
-                        else "?"
+                        self.line_cpp(case_item.CaseIndexValueTerm) if hasattr(case_item, "CaseIndexValueTerm") else "?"
                     )
                     case_val = self.line_cpp(case_item.CaseTerm)
                     lines.append(f"  case {case_idx}: return {case_val}; break;")
-            default = (
-                self.line_cpp(expr.DefaultTerm)
-                if hasattr(expr, "DefaultTerm") and expr.DefaultTerm
-                else "?"
-            )
+            default = self.line_cpp(expr.DefaultTerm) if hasattr(expr, "DefaultTerm") and expr.DefaultTerm else "?"
             lines.append(f"  default: return {default};")
             lines.append("}")
             return "\n".join(lines)
         if isinstance(expr, EX_Assert):
-            cond = (
-                str(expr.AssertExpression) if hasattr(expr, "AssertExpression") else "?"
-            )
+            cond = str(expr.AssertExpression) if hasattr(expr, "AssertExpression") else "?"
             return f"assert({cond})"
         if isinstance(expr, EX_DeprecatedOp4A):
-            self.skipped_tokens["EX_DeprecatedOp4A"] = (
-                self.skipped_tokens.get("EX_DeprecatedOp4A", 0) + 1
-            )
+            self.skipped_tokens["EX_DeprecatedOp4A"] = self.skipped_tokens.get("EX_DeprecatedOp4A", 0) + 1
             return ""
         if isinstance(expr, (EX_Breakpoint, EX_Tracepoint, EX_WireTracepoint)):
             name = type(expr).__name__
             self.skipped_tokens[name] = self.skipped_tokens.get(name, 0) + 1
             return ""
         if isinstance(expr, EX_InstrumentationEvent):
-            self.skipped_tokens["EX_InstrumentationEvent"] = (
-                self.skipped_tokens.get("EX_InstrumentationEvent", 0) + 1
-            )
+            self.skipped_tokens["EX_InstrumentationEvent"] = self.skipped_tokens.get("EX_InstrumentationEvent", 0) + 1
             return ""
         if isinstance(expr, EX_FieldPathConst):
             return str(expr.Value) if hasattr(expr, "Value") else "?"

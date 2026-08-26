@@ -1,12 +1,13 @@
 """
 Parse result data classes -- BaseResult, ParseResult, and StatusInfo.
 
-BaseResult is the single shared base for ParseResult and 
+BaseResult is the single shared base for ParseResult and
 holding all common fields including post-process data and the unified
 ``status`` property.
 
 Hierarchy:  BaseResult -> ParseResult
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -27,14 +28,10 @@ from uasset_read.models.fallback import ExportParseStatus
 
 # Partial status set: auto-generated from ExportParseStatus.is_partial
 # Fully covers all partial variants, ensuring consistent status determination (#315)
-PARTIAL_STATUSES: frozenset[str] = frozenset(
-    s.value for s in ExportParseStatus if s.is_partial
-)
+PARTIAL_STATUSES: frozenset[str] = frozenset(s.value for s in ExportParseStatus if s.is_partial)
 
 # Failed status set: auto-generated from ExportParseStatus.is_failed
-FAILED_STATUSES: frozenset[str] = frozenset(
-    s.value for s in ExportParseStatus if s.is_failed
-)
+FAILED_STATUSES: frozenset[str] = frozenset(s.value for s in ExportParseStatus if s.is_failed)
 
 
 @dataclass
@@ -48,6 +45,7 @@ class BaseResult:
 
     Status derivation is delegated to ``status._result_status()``.
     """
+
     # -- Core table fields --
     summary: PackageFileSummary | None = None
     name_map: list[str] = field(default_factory=list)
@@ -151,9 +149,7 @@ class BaseResult:
         # 3.4 Check structural diagnostics
         diagnostics = getattr(self, "diagnostics", None) or []
         has_structural_diagnostic = any(
-            getattr(d, "is_structural", lambda: False)()
-            for d in diagnostics
-            if hasattr(d, "is_structural")
+            getattr(d, "is_structural", lambda: False)() for d in diagnostics if hasattr(d, "is_structural")
         )
         if has_structural_diagnostic:
             return "partial"
@@ -178,11 +174,10 @@ class ParseResult(BaseResult):
     Extends ``BaseResult`` with parse-path-specific fields that do not
     apply to the linker path.
     """
+
     soft_package_references: list[str] = field(default_factory=list)
     asset_registry_data: AssetRegistryData | None = None
     root_objects: list = field(default_factory=list)
     """Top-level object instances from the linker object graph."""
     all_objects: list = field(default_factory=list)
     """All object instances from the linker object graph."""
-
-

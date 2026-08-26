@@ -4,6 +4,7 @@ v1 provenance scope: origin is scs_owned/scs_inherited/native only when an
 explicit evidence key is present in the source dict; otherwise 'unverified'
 with partial coverage. Parent/socket come from the source dict only.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -37,9 +38,13 @@ def emit_components(source_components, table, reporting) -> list[dict]:
         if parent_idx is not None and parent_idx != self_idx:
             entry["parent"] = f"c{parent_idx}"
         else:
-            reporting.diagnostic("BP_COMPONENT_PARENT_UNRESOLVED", "components",
-                                 "warning", "semantic_loss",
-                                 occurrence={"component": entry["name"], "parent": parent_name})
+            reporting.diagnostic(
+                "BP_COMPONENT_PARENT_UNRESOLVED",
+                "components",
+                "warning",
+                "semantic_loss",
+                occurrence={"component": entry["name"], "parent": parent_name},
+            )
 
     if out:
         reporting.coverage("components", "partial", reason="scs_origin_not_fully_verified")

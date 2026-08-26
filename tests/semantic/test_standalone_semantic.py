@@ -2,6 +2,7 @@
 
 Tests the Standalone domain extractor with real standalone type samples.
 """
+
 from __future__ import annotations
 
 import json
@@ -148,7 +149,9 @@ class TestStandaloneProjection:
             pytest.skip("Sample not found")
 
         semantic = _build_and_project(
-            samples_dir, "GameAnimSample_TeethSubsurfaceProfile.uasset", "standard",
+            samples_dir,
+            "GameAnimSample_TeethSubsurfaceProfile.uasset",
+            "standard",
         )
         assert len(semantic.evidence) == 0
 
@@ -158,6 +161,8 @@ class TestStandaloneProjection:
             pytest.skip("Sample not found")
 
         semantic = _build_and_project(
-            samples_dir, "GameAnimSample_TeethSubsurfaceProfile.uasset", "debug",
+            samples_dir,
+            "GameAnimSample_TeethSubsurfaceProfile.uasset",
+            "debug",
         )
         assert semantic.mode == "debug"

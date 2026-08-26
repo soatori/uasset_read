@@ -481,11 +481,13 @@ class TestAnimBlueprintSchemaValidation:
 
     def test_schema_is_valid_draft202012(self):
         from jsonschema import Draft202012Validator
+
         schema = _load_animbp_schema()
         Draft202012Validator.check_schema(schema)
 
     def test_standard_real_sample_validates(self, samples_dir: Path):
         from jsonschema import Draft202012Validator
+
         if not (samples_dir / "ABP_RifleAnimLayers.uasset").exists():
             pytest.skip("Sample not found")
         doc = _build_rendered_dict(samples_dir, "ABP_RifleAnimLayers.uasset", "standard")
@@ -493,6 +495,7 @@ class TestAnimBlueprintSchemaValidation:
 
     def test_debug_real_sample_validates(self, samples_dir: Path):
         from jsonschema import Draft202012Validator
+
         if not (samples_dir / "ABP_RifleAnimLayers.uasset").exists():
             pytest.skip("Sample not found")
         doc = _build_rendered_dict(samples_dir, "ABP_RifleAnimLayers.uasset", "debug")

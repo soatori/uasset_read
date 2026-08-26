@@ -91,9 +91,7 @@ class AnimMontageHandler(ClassHandler):
             extract_property(properties, "RateScale", anim_ir, "rate_scale")
 
             # Extract AnimNotifies
-            anim_ir.notifies = extract_array_property(
-                properties, "AnimNotifies", parse_anim_notifies
-            )
+            anim_ir.notifies = extract_array_property(properties, "AnimNotifies", parse_anim_notifies)
 
             # Extract CompositeSections
             anim_ir.composite_sections = extract_array_property(
@@ -116,9 +114,7 @@ class AnimMontageHandler(ClassHandler):
 
             # Extract FloatCurveNames
             if "RawCurveData" in properties:
-                anim_ir.float_curve_names = parse_float_curve_names(
-                    properties["RawCurveData"]
-                )
+                anim_ir.float_curve_names = parse_float_curve_names(properties["RawCurveData"])
 
             ensure_custom_data(export)["anim_montage"] = anim_ir
 
@@ -167,4 +163,3 @@ class AnimMontageHandler(ClassHandler):
             }
 
         return parse_dict_list(data, _parse_marker)
-

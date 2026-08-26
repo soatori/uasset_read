@@ -16,13 +16,18 @@ if TYPE_CHECKING:
 from uasset_read.exceptions import ParseError, VersionError
 from uasset_read.package import open_package_bundle
 from uasset_read.serializers.package_summary import (
-    read_package_summary, read_name_table, read_depends_map,
-    read_preload_dependencies, validate_export_data_range,
+    read_package_summary,
+    read_name_table,
+    read_depends_map,
+    read_preload_dependencies,
+    validate_export_data_range,
     read_soft_package_references,
 )
 from uasset_read.versioning import build_version_container
 from uasset_read.serializers.object_resources import (
-    read_import_map, read_export_map, read_soft_object_paths,
+    read_import_map,
+    read_export_map,
+    read_soft_object_paths,
 )
 from uasset_read.parsers.property_parser import parse_properties_from_export
 from uasset_read.parsers.asset_registry_parser import read_asset_registry_data
@@ -65,18 +70,20 @@ def _record_parse_stage_error(
             current_pos = archive.tell()
         except (OSError, OverflowError):
             current_pos = 0
-    result.diagnostics.append(OffsetRangeDiagnostic(
-        kind="parse_stage_error",
-        asset_path=path,
-        module=stage,
-        field=field,
-        current_pos=current_pos,
-        file_size=file_size,
-        source="_parse_package_core",
-        error=str(error),
-        fallback_used=True,
-        fallback_result="partial" if getattr(result, "summary", None) is not None else "failed",
-    ))
+    result.diagnostics.append(
+        OffsetRangeDiagnostic(
+            kind="parse_stage_error",
+            asset_path=path,
+            module=stage,
+            field=field,
+            current_pos=current_pos,
+            file_size=file_size,
+            source="_parse_package_core",
+            error=str(error),
+            fallback_used=True,
+            fallback_result="partial" if getattr(result, "summary", None) is not None else "failed",
+        )
+    )
     result.is_success = False
 
 
@@ -108,6 +115,7 @@ def _run_required_stage(
 def _derive_package_name(path: str, summary) -> None:
     """Derive package_name from file path when it is empty."""
     from pathlib import Path
+
     if summary.package_name:
         return
     path_obj = Path(path)
@@ -142,13 +150,13 @@ def _init_parse_env(
     """
     if check_aes_key is not None:
         raise ParseError(
-            "Unsupported argument: aes_key. Pass the key "
-            "when constructing the Pak/IoStore reader and provider"
+            "Unsupported argument: aes_key. Pass the key when constructing the Pak/IoStore reader and provider"
         )
 
     mappings_provider = None
     if mappings_path:
         from uasset_read.mappings import TypeMappingsProvider
+
         mappings_provider = TypeMappingsProvider.from_file(mappings_path, budget=budget)
         result.metadata["mappings_path"] = mappings_path
     if game:
@@ -183,8 +191,12 @@ def _read_core_tables(
     """
     # Read file header
     result.summary = _run_required_stage(
-        result=result, archive=archive, path=path, tolerant=tolerant,
-        stage="package_summary", field="summary",
+        result=result,
+        archive=archive,
+        path=path,
+        tolerant=tolerant,
+        stage="package_summary",
+        field="summary",
         reader=lambda: read_package_summary(archive, budget=budget),
     )
     if result.summary is None:
@@ -206,15 +218,17 @@ def _read_core_tables(
         except (OSError, struct.error, ValueError) as e:
             if not tolerant:
                 raise
-            _record_parse_stage_error(
-                result, archive, path, "package_summary", "export_data_range", e
-            )
+            _record_parse_stage_error(result, archive, path, "package_summary", "export_data_range", e)
             return False
 
     # Read name table
     result.name_map = _run_required_stage(
-        result=result, archive=archive, path=path, tolerant=tolerant,
-        stage="name_table", field="name_map",
+        result=result,
+        archive=archive,
+        path=path,
+        tolerant=tolerant,
+        stage="name_table",
+        field="name_map",
         reader=lambda: read_name_table(archive, result.summary),
     )
     if result.name_map is None:
@@ -226,8 +240,12 @@ def _read_core_tables(
 
     # Read import table
     result.import_map = _run_required_stage(
-        result=result, archive=archive, path=path, tolerant=tolerant,
-        stage="import_map", field="import_map",
+        result=result,
+        archive=archive,
+        path=path,
+        tolerant=tolerant,
+        stage="import_map",
+        field="import_map",
         reader=lambda: read_import_map(archive, result.summary, result.name_map),
     )
     if result.import_map is None:
@@ -238,8 +256,12 @@ def _read_core_tables(
 
     # Read export table
     result.export_map = _run_required_stage(
-        result=result, archive=archive, path=path, tolerant=tolerant,
-        stage="export_map", field="export_map",
+        result=result,
+        archive=archive,
+        path=path,
+        tolerant=tolerant,
+        stage="export_map",
+        field="export_map",
         reader=lambda: read_export_map(archive, result.summary, result.name_map),
     )
     if result.export_map is None:
@@ -264,25 +286,23 @@ def _read_secondary_tables(
 ) -> None:
     """Read DependsMap / SoftPackageReferences / SoftObjectPathList / AssetRegistryData."""
     # Read DependsMap (dependency table) and PreloadDependencies (preload dependencies)
-    if hasattr(result.summary, 'depends_offset'):
+    if hasattr(result.summary, "depends_offset"):
         result.summary.depends_map = read_depends_map(archive, result.summary, budget=budget, warnings=result.warnings)
-    if hasattr(result.summary, 'preload_dependency_count'):
+    if hasattr(result.summary, "preload_dependency_count"):
         result.summary.preload_dependencies = read_preload_dependencies(archive, result.summary)
 
     # Read SoftPackageReferences (soft package reference table)
-    if hasattr(result.summary, 'soft_package_references_count') and result.summary.soft_package_references_count > 0:
+    if hasattr(result.summary, "soft_package_references_count") and result.summary.soft_package_references_count > 0:
         result.soft_package_references = read_soft_package_references(archive, result.summary, result.name_map)
 
     # Read SoftObjectPathList (UE5.7+ for indexed SoftObjectProperty parsing)
-    if hasattr(result.summary, 'soft_object_paths_count') and result.summary.soft_object_paths_count > 0:
-        result.soft_object_path_list = read_soft_object_paths(
-            archive, result.summary, result.name_map
-        )
+    if hasattr(result.summary, "soft_object_paths_count") and result.summary.soft_object_paths_count > 0:
+        result.soft_object_path_list = read_soft_object_paths(archive, result.summary, result.name_map)
     else:
         result.soft_object_path_list = []
 
     # Store soft_object_path_list on summary for property parser access
-    setattr(result.summary, '_soft_object_path_list', result.soft_object_path_list)
+    setattr(result.summary, "_soft_object_path_list", result.soft_object_path_list)
 
     # Read AssetRegistryData (asset metadata tags)
     try:
@@ -300,13 +320,8 @@ def _read_secondary_tables(
         result.asset_registry_data = None
     else:
         # Parser succeeded but returned corrupted data -- surface degradation
-        if (
-            result.asset_registry_data is not None
-            and getattr(result.asset_registry_data, "corrupted", False)
-        ):
-            result.warnings.append(
-                "AssetRegistryData is corrupted -- only partial data was recovered"
-            )
+        if result.asset_registry_data is not None and getattr(result.asset_registry_data, "corrupted", False):
+            result.warnings.append("AssetRegistryData is corrupted -- only partial data was recovered")
 
 
 def _parse_export_properties(
@@ -319,7 +334,7 @@ def _parse_export_properties(
     memory_monitor,
     budget=None,
     export_indices: set[int] | None = None,  # None = all, set = subset
-    store_raw_bytes: bool = False,            # lazy-mode raw byte caching
+    store_raw_bytes: bool = False,  # lazy-mode raw byte caching
 ) -> None:
     """Parse ExportMap properties — unified dispatch via linker.preload().
 
@@ -345,9 +360,7 @@ def _parse_export_properties(
                     setattr(export, "lazy_load_archive", archive.read_bytes(export.serial_size))
                 except (OSError, struct.error) as e:
                     if not tolerant:
-                        raise ParseError(
-                            f"Failed to read raw bytes for export {export.object_name}: {e}"
-                        ) from e
+                        raise ParseError(f"Failed to read raw bytes for export {export.object_name}: {e}") from e
                     setattr(export, "lazy_load_archive", None)
             setattr(export, "is_loaded", False)
             continue
@@ -365,8 +378,12 @@ def _parse_export_properties(
                     export.properties = inst.serialized_properties
                 else:
                     export.properties = parse_properties_from_export(
-                        export, archive, result.summary, result.name_map,
-                        result.export_map or [], result.import_map,
+                        export,
+                        archive,
+                        result.summary,
+                        result.name_map,
+                        result.export_map or [],
+                        result.import_map,
                         linker=linker,
                         mappings=_mappings,
                         game=game,
@@ -379,10 +396,7 @@ def _parse_export_properties(
             except MemoryLimitExceeded:
                 raise
             except MemoryError as e:
-                logger.error(
-                    "MemoryError parsing export %s: %s",
-                    getattr(export, "object_name", "?"), e
-                )
+                logger.error("MemoryError parsing export %s: %s", getattr(export, "object_name", "?"), e)
                 export.properties = []
                 setattr(export, "parse_status", "partial")
                 setattr(export, "fallback_reason", "memory_error_partial")
@@ -409,9 +423,7 @@ def _parse_export_properties(
                 setattr(export, "lazy_load_archive", archive.read_bytes(export.serial_size))
             except (OSError, struct.error) as e:
                 if not tolerant:
-                    raise ParseError(
-                        f"Failed to read raw bytes for export {export.object_name}: {e}"
-                    ) from e
+                    raise ParseError(f"Failed to read raw bytes for export {export.object_name}: {e}") from e
                 setattr(export, "lazy_load_archive", None)
 
         # Lazy-mode: set is_loaded flag on every export
@@ -432,10 +444,14 @@ def _create_linker(
 ) -> Optional["PackageLinker"]:
     """Create and link PackageLinker. Returns linker or None."""
     from uasset_read.link.linker import PackageLinker
+
     try:
         linker = PackageLinker(
-            archive, summary, name_map,
-            import_map, export_map or [],
+            archive,
+            summary,
+            name_map,
+            import_map,
+            export_map or [],
             version_container=version_container,
         )
         linker.link()
@@ -472,14 +488,23 @@ def _read_package_headers(
     """
     # Initialize parse environment (archive, bundle, mappings_provider)
     archive, bundle, mappings_provider = _init_parse_env(
-        path, result, tolerant, provider, mappings_path, game,
-        check_aes_key=check_aes_key, hex_view=hex_view,
+        path,
+        result,
+        tolerant,
+        provider,
+        mappings_path,
+        game,
+        check_aes_key=check_aes_key,
+        hex_view=hex_view,
         budget=budget,
     )
 
     # Read core tables (summary/name/import/export)
     if not _read_core_tables(
-        archive, result, path, tolerant,
+        archive,
+        result,
+        path,
+        tolerant,
         validate_range=validate_range,
         budget=budget,
     ):
@@ -487,9 +512,13 @@ def _read_package_headers(
 
     # Create linker
     linker = _create_linker(
-        archive, result.summary, result.name_map,
-        result.import_map, result.export_map or [],
-        result, tolerant=tolerant,
+        archive,
+        result.summary,
+        result.name_map,
+        result.import_map,
+        result.export_map or [],
+        result,
+        tolerant=tolerant,
         version_container=result.version_container,
     )
 

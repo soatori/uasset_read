@@ -11,8 +11,10 @@ import struct
 # Enum definitions
 # ============================================================================
 
+
 class EIoStoreTocVersion(IntEnum):
     """IoStore TOC version enum"""
+
     Invalid = 0
     Initial = 1
     DirectoryIndex = 2
@@ -28,6 +30,7 @@ class EIoStoreTocVersion(IntEnum):
 
 class EIoContainerFlags(IntFlag):
     """IoStore container flags"""
+
     None_ = 0
     Compressed = 1 << 0
     Encrypted = 1 << 1
@@ -42,24 +45,26 @@ class EIoChunkType(IntEnum):
     UE5 IoStore-specific types. UE4 uses a different storage mechanism.
     Types 0-6 are defined in UE5.0+, types 7+ were added in later versions.
     """
+
     Invalid = 0
-    ExportBundleData = 1       # UE5.0+: Export bundle data
-    BulkData = 2               # UE5.0+: Bulk data
-    OptionalBulkData = 3       # UE5.0+: Optional bulk data
-    MemoryMappedBulkData = 4   # UE5.0+: Memory-mapped bulk data
-    ScriptObjects = 5          # UE5.0+: Script objects
-    ContainerHeader = 6        # UE5.0+: Container header
-    ExternalFile = 7           # UE5.1+: External file reference
-    ShaderCodeLibrary = 8      # UE5.1+: Shader code library
-    ShaderCode = 9             # UE5.1+: Shader code
-    PackageStoreEntry = 10     # UE5.2+: Package store entry
-    DerivedData = 11           # UE5.3+: Derived data
-    EditorDerivedData = 12     # UE5.4+: Editor derived data
-    PackageResource = 13       # UE5.5+: Package resource
+    ExportBundleData = 1  # UE5.0+: Export bundle data
+    BulkData = 2  # UE5.0+: Bulk data
+    OptionalBulkData = 3  # UE5.0+: Optional bulk data
+    MemoryMappedBulkData = 4  # UE5.0+: Memory-mapped bulk data
+    ScriptObjects = 5  # UE5.0+: Script objects
+    ContainerHeader = 6  # UE5.0+: Container header
+    ExternalFile = 7  # UE5.1+: External file reference
+    ShaderCodeLibrary = 8  # UE5.1+: Shader code library
+    ShaderCode = 9  # UE5.1+: Shader code
+    PackageStoreEntry = 10  # UE5.2+: Package store entry
+    DerivedData = 11  # UE5.3+: Derived data
+    EditorDerivedData = 12  # UE5.4+: Editor derived data
+    PackageResource = 13  # UE5.5+: Package resource
 
 
 class EIoStoreTocReadOptions(IntFlag):
     """IoStore TOC read options"""
+
     Default = 0
     ReadDirectoryIndex = 1 << 0
     ReadTocMeta = 1 << 1
@@ -69,6 +74,7 @@ class EIoStoreTocReadOptions(IntFlag):
 # ============================================================================
 # Core data structures
 # ============================================================================
+
 
 @dataclass
 class FIoChunkId:
@@ -82,12 +88,13 @@ class FIoChunkId:
 
     Comparison uses all 12 bytes, consistent with UE source.
     """
+
     bytes: bytes  # 12 bytes
 
     @property
     def id(self) -> int:
         """Return 64-bit ID (low 8 bytes)"""
-        return struct.unpack('<Q', self.bytes[:8])[0]
+        return struct.unpack("<Q", self.bytes[:8])[0]
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, FIoChunkId):
@@ -104,6 +111,7 @@ class FIoOffsetAndLength:
 
     FIoOffsetAndLength — IoStore standard format
     """
+
     offset: int
     length: int
 
@@ -128,6 +136,7 @@ class FIoOffsetAndLength:
 @dataclass
 class FIoDirectoryIndexEntry:
     """Directory index entry"""
+
     name: int
     first_child_entry: int
     next_sibling_entry: int
@@ -140,8 +149,7 @@ class FIoDirectoryIndexEntry:
         if len(data) < 16:
             raise ValueError("Unexpected end of stream")
 
-        name, first_child_entry, next_sibling_entry, first_file_entry = \
-            struct.unpack('<IIII', data)
+        name, first_child_entry, next_sibling_entry, first_file_entry = struct.unpack("<IIII", data)
 
         return FIoDirectoryIndexEntry(
             name=name,
@@ -154,6 +162,7 @@ class FIoDirectoryIndexEntry:
 @dataclass
 class FIoFileIndexEntry:
     """IoStore file index entry."""
+
     name: int
     next_file_entry: int
     user_data: int
@@ -163,7 +172,7 @@ class FIoFileIndexEntry:
         data = stream.read(12)
         if len(data) < 12:
             raise ValueError("Unexpected end of stream")
-        name, next_file_entry, user_data = struct.unpack('<III', data)
+        name, next_file_entry, user_data = struct.unpack("<III", data)
         return FIoFileIndexEntry(
             name=name,
             next_file_entry=next_file_entry,
@@ -176,7 +185,7 @@ class FIoFileIndexEntry:
 # ============================================================================
 
 # IoStore TOC magic number: "-==--==--==--==-" (16 bytes)
-TOC_MAGIC = b'-==--==--==--==-'
+TOC_MAGIC = b"-==--==--==--==-"
 
 # FIoStoreTocHeader size
 TOC_HEADER_SIZE = 144
@@ -188,6 +197,7 @@ class FIoStoreTocHeader:
 
     Mirrors FIoStoreTocHeader
     """
+
     toc_magic: bytes  # 16 bytes
     version: int  # uint8
     reserved0: int  # uint8
@@ -224,15 +234,24 @@ class FIoStoreTocHeader:
             raise ValueError(f"Invalid IoStore TOC magic: {toc_magic!r}")
 
         # Parse header fields (little-endian) offset 16-59
-        (version, reserved0, reserved1,
-         toc_header_size, toc_entry_count,
-         toc_compressed_block_entry_count, toc_compressed_block_entry_size,
-         compression_method_name_count, compression_method_name_length,
-         compression_block_size, directory_index_size,
-         partition_count, reserved2) = struct.unpack_from('<BBHIIIIIIIIII', header_data, 16)
+        (
+            version,
+            reserved0,
+            reserved1,
+            toc_header_size,
+            toc_entry_count,
+            toc_compressed_block_entry_count,
+            toc_compressed_block_entry_size,
+            compression_method_name_count,
+            compression_method_name_length,
+            compression_block_size,
+            directory_index_size,
+            partition_count,
+            reserved2,
+        ) = struct.unpack_from("<BBHIIIIIIIIII", header_data, 16)
 
         # container_id (uint64) at offset 56
-        container_id = struct.unpack_from('<Q', header_data, 56)[0]
+        container_id = struct.unpack_from("<Q", header_data, 56)[0]
 
         # encryption_key_guid (16 bytes) at offset 64
         encryption_key_guid = header_data[64:80]
@@ -244,20 +263,20 @@ class FIoStoreTocHeader:
         # These are reserved fields, skip them
 
         # toc_chunk_perfect_hash_seeds_count (uint32) at offset 84
-        toc_chunk_perfect_hash_seeds_count = struct.unpack_from('<I', header_data, 84)[0]
+        toc_chunk_perfect_hash_seeds_count = struct.unpack_from("<I", header_data, 84)[0]
 
         # partition_size (uint64) at offset 88
-        partition_size = struct.unpack_from('<Q', header_data, 88)[0]
+        partition_size = struct.unpack_from("<Q", header_data, 88)[0]
 
         # toc_chunks_without_perfect_hash_count (uint32) at offset 96
-        toc_chunks_without_perfect_hash_count = struct.unpack_from('<I', header_data, 96)[0]
+        toc_chunks_without_perfect_hash_count = struct.unpack_from("<I", header_data, 96)[0]
 
         # reserved7 (uint32) at offset 100
-        reserved7 = struct.unpack_from('<I', header_data, 100)[0]
+        reserved7 = struct.unpack_from("<I", header_data, 100)[0]
 
         # reserved8 (5 x uint64 = 40 bytes) at offset 104
         reserved8_raw = header_data[104:144]
-        reserved8 = list(struct.unpack_from('<5Q', reserved8_raw, 0))
+        reserved8 = list(struct.unpack_from("<5Q", reserved8_raw, 0))
 
         return FIoStoreTocHeader(
             toc_magic=toc_magic,
@@ -314,6 +333,7 @@ class FIoStoreTocCompressedBlockEntry:
     - UncompressedSize: 3 bytes (bits 64-87)
     - CompressionMethodIndex: 1 byte (bits 88-95)
     """
+
     offset: int  # 5 bytes
     compressed_size: int  # 3 bytes
     uncompressed_size: int  # 3 bytes
@@ -347,4 +367,3 @@ class FIoStoreTocCompressedBlockEntry:
             uncompressed_size=uncompressed_size,
             compression_method_index=compression_method_index,
         )
-

@@ -5,6 +5,7 @@ Provides GUID-based version lookup and file-version comparison,
 replacing hardcoded version checks throughout the codebase.
 Corresponds to COR-02: FCustomVersion system.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -29,6 +30,7 @@ class FPackageFileVersion:
     - FileVersionUE4: int32
     - FileVersionUE5: int32
     """
+
     file_version_ue4: int = 0
     file_version_ue5: int = 0
 
@@ -62,6 +64,7 @@ class VersionContainer:
     After construction from PackageFileSummary, provides:
     - get_version(guid) -> look up CustomVersion number
     """
+
     custom_versions: list[Any] = field(default_factory=list)
     file_version_ue5: int = UE5_VERSION_MIN
     file_version_ue4: int = 0
@@ -104,6 +107,7 @@ class VersionContainer:
 # Convenience functions
 # ============================================================================
 
+
 def build_version_container(summary) -> "VersionContainer":
     """Build a VersionContainer from a PackageFileSummary.
 
@@ -113,5 +117,5 @@ def build_version_container(summary) -> "VersionContainer":
     return VersionContainer(
         custom_versions=summary.custom_versions,
         file_version_ue5=summary.file_version_ue5,
-        file_version_ue4=getattr(summary, 'file_version_ue4', 0),
+        file_version_ue4=getattr(summary, "file_version_ue4", 0),
     )

@@ -37,6 +37,7 @@ class BytecodeCandidateDiagnostic:
     This dataclass contains only offset and count information plus any validation
     error. It is NOT a decompilation result and must never be used as one.
     """
+
     start_offset: int
     end_offset: int
     expression_count: int
@@ -83,7 +84,7 @@ def scan_function_export_for_diagnostics(
         for end in end_positions:
             if end < start:
                 continue
-            candidate = data[start:end + 1]
+            candidate = data[start : end + 1]
             if len(candidate) < 2:
                 continue
             if len(candidate) > MAX_CANDIDATE_SIZE:
@@ -95,26 +96,39 @@ def scan_function_export_for_diagnostics(
             if attempts > MAX_SCAN_ATTEMPTS:
                 logger.debug(
                     "Diagnostic scan for '%s': hit MAX_SCAN_ATTEMPTS (%d), stopping",
-                    export.object_name, MAX_SCAN_ATTEMPTS,
+                    export.object_name,
+                    MAX_SCAN_ATTEMPTS,
                 )
                 return candidates
 
             try:
                 expressions = parse_bytecode_stream(candidate, name_map, tolerant=True)
-                candidates.append(BytecodeCandidateDiagnostic(
-                    start_offset=export.serial_offset + start,
-                    end_offset=export.serial_offset + end + 1,
-                    expression_count=len(expressions),
-                    validation_error=None,
-                ))
-            except (struct.error, ValueError, IndexError, ParseError,
-                    KeyError, TypeError, AttributeError, OverflowError) as exc:
-                candidates.append(BytecodeCandidateDiagnostic(
-                    start_offset=export.serial_offset + start,
-                    end_offset=export.serial_offset + end + 1,
-                    expression_count=0,
-                    validation_error=str(exc),
-                ))
+                candidates.append(
+                    BytecodeCandidateDiagnostic(
+                        start_offset=export.serial_offset + start,
+                        end_offset=export.serial_offset + end + 1,
+                        expression_count=len(expressions),
+                        validation_error=None,
+                    )
+                )
+            except (
+                struct.error,
+                ValueError,
+                IndexError,
+                ParseError,
+                KeyError,
+                TypeError,
+                AttributeError,
+                OverflowError,
+            ) as exc:
+                candidates.append(
+                    BytecodeCandidateDiagnostic(
+                        start_offset=export.serial_offset + start,
+                        end_offset=export.serial_offset + end + 1,
+                        expression_count=0,
+                        validation_error=str(exc),
+                    )
+                )
             break
 
     return candidates

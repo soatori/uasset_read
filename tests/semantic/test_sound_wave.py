@@ -6,6 +6,7 @@
 - sound_semantic 格式输出
 - tolerant fallback（属性缺失时不崩溃）
 """
+
 from __future__ import annotations
 
 import struct
@@ -28,6 +29,7 @@ from uasset_read.parsers.asset_types.sound_wave import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _build_sound_wave_payload(flags: int = 0) -> bytes:
     """构建 SoundWave custom serialize payload（仅 Flags uint32）。"""
     return struct.pack("<I", flags)
@@ -36,6 +38,7 @@ def _build_sound_wave_payload(flags: int = 0) -> bytes:
 def _make_mock_export(properties=None):
     """创建模拟 export 对象，带有 properties 属性。"""
     from unittest.mock import MagicMock
+
     export = MagicMock()
     export.properties = properties or []
     return export
@@ -44,6 +47,7 @@ def _make_mock_export(properties=None):
 def _make_property(name: str, value, prop_type: str = "IntProperty"):
     """创建模拟 PropertyValue。"""
     from unittest.mock import MagicMock
+
     prop = MagicMock()
     prop.name = name
     prop.value = value
@@ -54,6 +58,7 @@ def _make_property(name: str, value, prop_type: str = "IntProperty"):
 def _make_enum_property(name: str, value_name: str, enum_type: str = "EnumProperty"):
     """创建模拟枚举属性（带 value_name）。"""
     from unittest.mock import MagicMock
+
     prop = MagicMock()
     prop.name = name
     prop.value = MagicMock()
@@ -65,6 +70,7 @@ def _make_enum_property(name: str, value_name: str, enum_type: str = "EnumProper
 # ---------------------------------------------------------------------------
 # Flags parsing tests
 # ---------------------------------------------------------------------------
+
 
 class TestParseSoundWaveFlags:
     """Flags uint32 解析测试。"""
@@ -131,6 +137,7 @@ class TestParseSoundWaveFlags:
 # Property extraction tests
 # ---------------------------------------------------------------------------
 
+
 class TestExtractProperty:
     """属性提取辅助函数测试。"""
 
@@ -180,6 +187,7 @@ class TestExtractProperty:
 # ---------------------------------------------------------------------------
 # Sound metadata construction tests
 # ---------------------------------------------------------------------------
+
 
 class TestBuildSoundMetadata:
     """sound 语义元数据构建测试。"""
@@ -278,6 +286,7 @@ class TestBuildSoundMetadata:
 # Integration: parse_sound_wave with export
 # ---------------------------------------------------------------------------
 
+
 class TestParseSoundWaveWithExport:
     """parse_sound_wave 接受 export 参数的集成测试。"""
 
@@ -345,11 +354,13 @@ class TestParseSoundWaveWithExport:
 # Handler registration test
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def _fresh_registry():
     """每个测试前重置 registry 并重新注册 handlers。"""
     from uasset_read.parsers.class_registry import reset_class_registry
     from uasset_read.parsers.asset_types import register_asset_type_handlers
+
     reset_class_registry()
     register_asset_type_handlers()
     yield
@@ -361,10 +372,12 @@ class TestSoundWaveHandlerRegistration:
 
     def test_handler_importable(self):
         from uasset_read.parsers.asset_types.sound_wave import parse_sound_wave as fn
+
         assert callable(fn)
 
     def test_handler_registered(self):
         from uasset_read.parsers.class_registry import get_class_registry
+
         registry = get_class_registry()
         handler = registry.find_handler("SoundWave")
         assert handler is not None
@@ -378,6 +391,7 @@ class TestSoundWaveHandlerRegistration:
         handler = registry.find_handler("SoundWave")
 
         from unittest.mock import MagicMock
+
         export = MagicMock()
         export.object_name = "TestSoundWave"
         export.properties = [

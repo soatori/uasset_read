@@ -5,6 +5,7 @@ are hit across all samples. Results are informational.
 
 Marker: benchmark
 """
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -2,6 +2,7 @@
 
 Tests the Animation domain extractor with real Animation samples.
 """
+
 from __future__ import annotations
 
 import json
@@ -57,8 +58,7 @@ class TestAnimSemanticExtraction:
 
         semantic = _build_semantic(samples_dir, filename)
         assert semantic is not None
-        assert semantic.asset_type in ("anim_sequence", "anim_montage", "pose_asset",
-                                       "anim_curve_compression_settings")
+        assert semantic.asset_type in ("anim_sequence", "anim_montage", "pose_asset", "anim_curve_compression_settings")
         assert semantic.asset.name != "unknown"
 
     @pytest.mark.parametrize(
@@ -142,14 +142,18 @@ class TestAnimProjection:
     def test_standard_strips_evidence(self, samples_dir: Path):
         """Standard mode strips evidence from Animation output."""
         semantic = _build_and_project(
-            samples_dir, "ALS_N_FallLoop.uasset", "standard",
+            samples_dir,
+            "ALS_N_FallLoop.uasset",
+            "standard",
         )
         assert len(semantic.evidence) == 0
 
     def test_debug_keeps_evidence(self, samples_dir: Path):
         """Debug mode keeps evidence in Animation output."""
         semantic = _build_and_project(
-            samples_dir, "ALS_N_FallLoop.uasset", "debug",
+            samples_dir,
+            "ALS_N_FallLoop.uasset",
+            "debug",
         )
         assert semantic.mode == "debug"
 

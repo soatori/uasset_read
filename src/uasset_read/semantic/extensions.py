@@ -8,6 +8,7 @@ The returned dict is merged into SemanticIR.content. Reserved envelope keys
 must not appear in it except the overridable set {coverage, diagnostics,
 references}, which a domain format may redefine.
 """
+
 from __future__ import annotations
 
 from typing import Callable
@@ -45,5 +46,3 @@ def get_extractor(class_name: str) -> Callable | None:
 def get_domain_format(class_name: str) -> tuple[str, str] | None:
     """Get (format, format_version) for a domain-format class, or None."""
     return _DOMAIN_FORMATS.get(class_name)
-
-

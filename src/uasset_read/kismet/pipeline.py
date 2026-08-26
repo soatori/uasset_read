@@ -83,7 +83,12 @@ def decompile_single_function(
 
     try:
         script_result = read_ufunction_script(
-            archive, export, summary, name_map, import_map, export_map,
+            archive,
+            export,
+            summary,
+            name_map,
+            import_map,
+            export_map,
         )
     except (ParseError, ValueError, IndexError, KeyError) as exc:
         if tolerant:
@@ -123,7 +128,9 @@ def decompile_single_function(
     if script_result.serialized_script:
         try:
             expressions = parse_bytecode_stream(
-                script_result.serialized_script, name_map, summary,
+                script_result.serialized_script,
+                name_map,
+                summary,
                 bytecode_buffer_size=script_result.bytecode_buffer_size,
                 tolerant=tolerant,
             )
@@ -174,6 +181,7 @@ def decompile_single_function(
     structured_rate: float | None = None
     try:
         from uasset_read.kismet.jump_analyzer import JumpAnalyzer
+
         rate_analyzer = JumpAnalyzer(expressions)
         rate_report = rate_analyzer.analyze_structured_rate()
         structured_rate = rate_report.rate
@@ -200,8 +208,10 @@ def decompile_single_function(
     if native_fields:
         try:
             from uasset_read.kismet.native_fields import build_native_function_signature
+
             signature, native_params, native_return_type = build_native_function_signature(
-                func_name, native_fields,
+                func_name,
+                native_fields,
             )
             native_signature_used = True
         except (ValueError, KeyError, IndexError):

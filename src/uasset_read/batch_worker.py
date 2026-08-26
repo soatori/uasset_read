@@ -77,11 +77,7 @@ class _StderrDrain:
             if proc.stderr is None:
                 return
             for raw_line in proc.stderr:
-                line = (
-                    raw_line.decode("utf-8", errors="replace")
-                    if isinstance(raw_line, bytes)
-                    else raw_line
-                )
+                line = raw_line.decode("utf-8", errors="replace") if isinstance(raw_line, bytes) else raw_line
                 self._append(line)
         except (OSError, ValueError) as exc:
             logger.debug("stderr drain 异常: %s", exc)
@@ -207,11 +203,7 @@ def _asset_worker(request: BatchWorkerRequest) -> BatchWorkerOutcome:
         if logging_options.get("enabled", True):
             from uasset_read.project_logging import configure_worker_stream_logging
 
-            run_id = (
-                logging_options.get("run_id")
-                or os.environ.get("UASSET_READ_RUN_ID")
-                or "-"
-            )
+            run_id = logging_options.get("run_id") or os.environ.get("UASSET_READ_RUN_ID") or "-"
             worker_handler = configure_worker_stream_logging(
                 level=logging_options.get("level") or "DEBUG",
                 run_id=run_id,
@@ -355,9 +347,7 @@ def _monitor_worker(
     except queue.Empty:
         stderr_out = getattr(process, "stderr_text", "")
         if stderr_out:
-            logger.error(
-                "Worker %s failed without result. stderr:\n%s", process.pid, stderr_out
-            )
+            logger.error("Worker %s failed without result. stderr:\n%s", process.pid, stderr_out)
         return BatchWorkerOutcome(
             False,
             "",
@@ -426,9 +416,7 @@ def run_isolated_asset(
             _terminate_worker(process)
         if process is not None:
             try:
-                _temporary_output_path(request.output_path, process.pid).unlink(
-                    missing_ok=True
-                )
+                _temporary_output_path(request.output_path, process.pid).unlink(missing_ok=True)
             except OSError as e:
                 logger.debug("清理临时输出文件失败: %s", e)
         request_path.unlink(missing_ok=True)
@@ -440,9 +428,7 @@ def _worker_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--request", required=True)
     parser.add_argument("--result", required=True)
     args = parser.parse_args(argv)
-    request = _request_from_payload(
-        json.loads(Path(args.request).read_text(encoding="utf-8"))
-    )
+    request = _request_from_payload(json.loads(Path(args.request).read_text(encoding="utf-8")))
     outcome = _asset_worker(request)
     Path(args.result).write_text(
         json.dumps(asdict(outcome), ensure_ascii=False),

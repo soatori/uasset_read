@@ -4,7 +4,6 @@ Kismet expression system -- base class definitions.
 Contains the KismetExpression abstract base class and the KismetExpressionT generic subclass.
 """
 
-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar
@@ -79,6 +78,7 @@ def make_simple_expression(token: EExprToken):
 
     Used for EX_Nothing, EX_IntZero, EX_IntOne and other data-free expressions.
     """
+
     @dataclass
     class _SimpleExpr(KismetExpression):
         @property
@@ -99,6 +99,7 @@ def make_value_expression(token: EExprToken, read_func_name: str):
         token: The corresponding EExprToken enum value.
         read_func_name: The read method name on FArchive (e.g. "read_i32", "read_f32").
     """
+
     @dataclass
     class _ValueExpr(KismetExpressionT):
         @property

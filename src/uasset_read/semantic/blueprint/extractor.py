@@ -1,4 +1,5 @@
 """Blueprint semantic content orchestrator (#554)."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -14,8 +15,7 @@ if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
 
 
-def build_blueprint_content(package_ir: "PackageIR", export_ir: "ExportIR",
-                            coverage_model, evidence_list) -> dict:
+def build_blueprint_content(package_ir: "PackageIR", export_ir: "ExportIR", coverage_model, evidence_list) -> dict:
     """Build the Blueprint domain content dict (BP-4 top-level shape)."""
     reporting = BlueprintReporting()
     table = TypeTable()
@@ -44,8 +44,11 @@ def build_blueprint_content(package_ir: "PackageIR", export_ir: "ExportIR",
         component_ids=[c["id"] for c in components_json],
         functions=_function_index(blueprint, graphs_json),
         parent_class=getattr(blueprint, "parent_class", None) or "",
-        interfaces=[i.get("name", "") for i in getattr(blueprint, "interfaces", None) or []
-                    if isinstance(i, dict) and i.get("name")],
+        interfaces=[
+            i.get("name", "")
+            for i in getattr(blueprint, "interfaces", None) or []
+            if isinstance(i, dict) and i.get("name")
+        ],
     )
     declaration.update(_asset_identity(package_ir, export_ir, blueprint))
 
@@ -90,8 +93,7 @@ def _collect_graphs(package_ir) -> list:
     graphs = []
     for export in package_ir.exports:
         for graph in getattr(export, "graphs", None) or []:
-            guid = getattr(graph, "graph_guid", "") or \
-                f"{len(graphs)}:{getattr(graph, 'graph_name', '')}"
+            guid = getattr(graph, "graph_guid", "") or f"{len(graphs)}:{getattr(graph, 'graph_name', '')}"
             if guid in seen:
                 continue
             seen.add(guid)
@@ -121,18 +123,30 @@ def _emit_graph_completeness(graphs, graphs_json, index, reporting) -> None:
     pin_status = "ok" if omitted_pins == 0 else "partial"
     edge_status = "ok" if omitted_edges == 0 else "partial"
 
-    reporting.coverage("graph_nodes", node_status,
-                       reason=f"{emitted_nodes}/{total_nodes} nodes emitted",
-                       declared=total_nodes, emitted=emitted_nodes,
-                       omitted=omitted_nodes)
-    reporting.coverage("graph_pins", pin_status,
-                       reason=f"{emitted_pins}/{total_pins} pins emitted",
-                       declared=total_pins, emitted=emitted_pins,
-                       omitted=omitted_pins)
-    reporting.coverage("graph_edges", edge_status,
-                       reason=f"{emitted_edges}/{total_edges} edges emitted",
-                       declared=total_edges, emitted=emitted_edges,
-                       omitted=omitted_edges)
+    reporting.coverage(
+        "graph_nodes",
+        node_status,
+        reason=f"{emitted_nodes}/{total_nodes} nodes emitted",
+        declared=total_nodes,
+        emitted=emitted_nodes,
+        omitted=omitted_nodes,
+    )
+    reporting.coverage(
+        "graph_pins",
+        pin_status,
+        reason=f"{emitted_pins}/{total_pins} pins emitted",
+        declared=total_pins,
+        emitted=emitted_pins,
+        omitted=omitted_pins,
+    )
+    reporting.coverage(
+        "graph_edges",
+        edge_status,
+        reason=f"{emitted_edges}/{total_edges} edges emitted",
+        declared=total_edges,
+        emitted=emitted_edges,
+        omitted=omitted_edges,
+    )
 
 
 def _count_nodes_recursive(graphs) -> int:

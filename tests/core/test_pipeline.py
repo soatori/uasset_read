@@ -2,6 +2,7 @@
 
 Tests normal parsing, error recovery, and tolerant mode with real samples.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -94,6 +95,7 @@ class TestParsePackageErrorRecovery:
         truncated = data[: len(data) // 2]
 
         import tempfile
+
         with tempfile.NamedTemporaryFile(suffix=".uasset", delete=False) as f:
             f.write(truncated)
             tmp_path = f.name

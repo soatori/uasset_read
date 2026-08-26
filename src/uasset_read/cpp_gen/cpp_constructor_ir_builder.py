@@ -16,6 +16,7 @@ Builder functions:
     build_default_values: Extract default values from ir.properties and blueprint_vars
     build_transform_assignments: Extract transform data from component transforms
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -57,6 +58,7 @@ class CppComponentCreation:
         cpp_type: Dereferenced C++ type (e.g. "USkeletalMeshComponent")
         component_name: TEXT() parameter (e.g. "FirstPersonMesh")
     """
+
     variable_name: str
     cpp_type: str
     component_name: str
@@ -84,6 +86,7 @@ class CppComponentAssignment:
         parent_name: Parent component variable name
         socket_name: Socket name (can be empty string)
     """
+
     child_name: str
     parent_name: str
     socket_name: str = ""
@@ -115,6 +118,7 @@ class CppDefaultValue:
         method_type: Method call type classification ("transform" for transform assignments, empty string for regular assignments)
         needs_load_object: Whether LoadObject loading is needed (UInputAction* and similar data assets marked True)
     """
+
     target: str
     value: str
     cpp_type: str
@@ -166,27 +170,23 @@ def build_component_creations(ir: "CppClassIR") -> List[CppComponentCreation]:
 
         # D-59-06: InputAction special handling -- skip CreateDefaultSubobject
         if prop.cpp_type == "UInputAction*":
-            logger.debug(
-                f"Skipping CreateDefaultSubobject for InputAction component: {prop.name}"
-            )
+            logger.debug(f"Skipping CreateDefaultSubobject for InputAction component: {prop.name}")
             continue
 
         cpp_type = prop.cpp_type.rstrip("*").strip()
-        creations.append(CppComponentCreation(
-            variable_name=prop.name,
-            cpp_type=cpp_type,
-            component_name=prop.name,
-        ))
+        creations.append(
+            CppComponentCreation(
+                variable_name=prop.name,
+                cpp_type=cpp_type,
+                component_name=prop.name,
+            )
+        )
 
-    logger.info(
-        f"Built {len(creations)} component creations for class '{ir.name}'"
-    )
+    logger.info(f"Built {len(creations)} component creations for class '{ir.name}'")
     return creations
 
 
-def build_component_assignments(
-    components: List[Dict[str, Any]]
-) -> List[CppComponentAssignment]:
+def build_component_assignments(components: List[Dict[str, Any]]) -> List[CppComponentAssignment]:
     """Extract attach relationships from component data.
 
     Iterates the components list (from extract_components output),
@@ -204,9 +204,7 @@ def build_component_assignments(
     for comp in components:
         # Support multiple field naming conventions
         attach_parent = (
-            comp.get("attach_parent")
-            or comp.get("AttachParent")
-            or comp.get("properties", {}).get("AttachParent")
+            comp.get("attach_parent") or comp.get("AttachParent") or comp.get("properties", {}).get("AttachParent")
         )
 
         if not attach_parent:
@@ -228,11 +226,13 @@ def build_component_assignments(
             or comp.get("properties", {}).get("AttachSocketName", "")
         )
 
-        assignments.append(CppComponentAssignment(
-            child_name=child_name,
-            parent_name=parent_name,
-            socket_name=socket_name or "",
-        ))
+        assignments.append(
+            CppComponentAssignment(
+                child_name=child_name,
+                parent_name=parent_name,
+                socket_name=socket_name or "",
+            )
+        )
 
     logger.info(f"Built {len(assignments)} component assignments")
     return assignments
@@ -269,15 +269,15 @@ def build_default_values(
         # InputAction special handling
         if prop.cpp_type == "UInputAction*":
             if prop.default_value and str(prop.default_value).strip():
-                defaults.append(CppDefaultValue(
-                    target=prop.name,
-                    value=str(prop.default_value),
-                    cpp_type=prop.cpp_type,
-                    needs_load_object=True,
-                ))
-                logger.debug(
-                    f"InputAction variable '{prop.name}' marked with needs_load_object=True"
+                defaults.append(
+                    CppDefaultValue(
+                        target=prop.name,
+                        value=str(prop.default_value),
+                        cpp_type=prop.cpp_type,
+                        needs_load_object=True,
+                    )
                 )
+                logger.debug(f"InputAction variable '{prop.name}' marked with needs_load_object=True")
             continue
 
         # Regular variables -- skip those without default values
@@ -285,39 +285,41 @@ def build_default_values(
             continue
 
         value_str = _sanitize_value(str(prop.default_value), prop.cpp_type)
-        defaults.append(CppDefaultValue(
-            target=prop.name,
-            value=value_str,
-            cpp_type=prop.cpp_type,
-        ))
+        defaults.append(
+            CppDefaultValue(
+                target=prop.name,
+                value=value_str,
+                cpp_type=prop.cpp_type,
+            )
+        )
 
     # Supplement extraction from VariableIR list
     if blueprint_vars:
         for var in blueprint_vars:
             # Compatible with both VariableIR (kind) and BlueprintVariable (is_component)
-            is_comp = getattr(var, 'kind', None) == "component" or getattr(var, 'is_component', False)
+            is_comp = getattr(var, "kind", None) == "component" or getattr(var, "is_component", False)
             if is_comp:
                 continue
             if var.default_value is None:
                 continue
-            var_name = getattr(var, 'name', None) or getattr(var, 'var_name', '')
+            var_name = getattr(var, "name", None) or getattr(var, "var_name", "")
             if _is_blueprint_metadata(var_name):
                 continue
 
             # Skip variables already processed in ir.properties
-            already_processed = any(
-                d.target == var_name for d in defaults
-            )
+            already_processed = any(d.target == var_name for d in defaults)
             if already_processed:
                 continue
 
             cpp_type = _variable_type_to_cpp(var)
             value_str = _sanitize_value(str(var.default_value), cpp_type)
-            defaults.append(CppDefaultValue(
-                target=var_name,
-                value=value_str,
-                cpp_type=cpp_type,
-            ))
+            defaults.append(
+                CppDefaultValue(
+                    target=var_name,
+                    value=value_str,
+                    cpp_type=cpp_type,
+                )
+            )
 
     logger.info(f"Built {len(defaults)} default values")
     return defaults
@@ -360,13 +362,15 @@ def build_transform_assignments(
         if not comp_name:
             continue
 
-        entries.append(CppDefaultValue(
-            target=comp_name,
-            value=transforms,
-            cpp_type="transform",
-            is_method_call=True,
-            method_type="transform",
-        ))
+        entries.append(
+            CppDefaultValue(
+                target=comp_name,
+                value=transforms,
+                cpp_type="transform",
+                is_method_call=True,
+                method_type="transform",
+            )
+        )
 
     logger.info(f"Built {len(entries)} transform assignments")
     return entries
@@ -404,10 +408,7 @@ def _sanitize_value(value: str, cpp_type: str) -> str:
             break
 
     if has_danger:
-        logger.warning(
-            f"Potentially dangerous value for type {cpp_type}: "
-            f"{value!r} — sanitizing"
-        )
+        logger.warning(f"Potentially dangerous value for type {cpp_type}: {value!r} — sanitizing")
         # Remove dangerous characters
         cleaned = value
         for ch in dangerous_chars:
@@ -433,7 +434,7 @@ def _variable_type_to_cpp(var: Any) -> str:
     from uasset_read.cpp_gen.cpp_type_mapper import ue_path_to_cpp_type
 
     # VariableIR: type field is str
-    if hasattr(var, 'type') and isinstance(var.type, str):
+    if hasattr(var, "type") and isinstance(var.type, str):
         ue_type = var.type
         if not ue_type:
             return "FString"
@@ -441,7 +442,7 @@ def _variable_type_to_cpp(var: Any) -> str:
         return cpp_type
 
     # BlueprintVariable: var_type is FEdGraphPinType
-    var_type = getattr(var, 'var_type', None)
+    var_type = getattr(var, "var_type", None)
     category = var_type.pin_category if var_type else ""
     subcategory = var_type.pin_subcategory if var_type else ""
 

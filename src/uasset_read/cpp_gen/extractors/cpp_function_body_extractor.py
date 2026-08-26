@@ -45,8 +45,6 @@ def _build_call_expression(func_name: str, args: List[str]) -> str:
     return inline_fn(*args)
 
 
-
-
 def _resolve_target(node_info: Dict, method_ir: CppMethodIR) -> Tuple[str, str]:
     """Derive call target and type from a CallFunction node.
 
@@ -67,6 +65,8 @@ def _resolve_target(node_info: Dict, method_ir: CppMethodIR) -> Tuple[str, str]:
         return (target_name, "pointer")
 
     return ("this", "this")
+
+
 def _translate_call_function(
     node_info: Dict,
     method_ir: CppMethodIR,
@@ -156,6 +156,7 @@ def _extract_call_args(
 # Pure function inlining decision (D-58-04)
 # ============================================================================
 
+
 def _decide_pure_inline(
     node_info: Dict,
     func_name: str,
@@ -188,6 +189,7 @@ def _decide_pure_inline(
 # ============================================================================
 # Control flow node translation (D-58-01)
 # ============================================================================
+
 
 def _translate_control_flow(
     node_info: Dict,
@@ -244,6 +246,7 @@ def _derive_condition(node_info: Dict, data_flows: List[Dict]) -> str:
 # ============================================================================
 # Macro instance translation (blueprint macro -> C++ control flow)
 # ============================================================================
+
 
 def _translate_macro_instance(
     node_info: Dict,

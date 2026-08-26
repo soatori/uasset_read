@@ -1,4 +1,5 @@
 """Support running via python -m uasset_read."""
+
 import sys
 from pathlib import Path
 

@@ -61,6 +61,7 @@ _PROPERTY_TYPE_NAMES = {
 @dataclass
 class PropertyType:
     """Property type description from mapping file."""
+
     type: str
     struct_type: Optional[str] = None
     inner_type: Optional["PropertyType"] = None
@@ -72,6 +73,7 @@ class PropertyType:
 @dataclass
 class PropertyInfo:
     """Field description from mapping file."""
+
     index: int
     name: str
     mapping_type: PropertyType
@@ -81,6 +83,7 @@ class PropertyInfo:
 @dataclass
 class StructMapping:
     """Class/struct description from mapping file."""
+
     name: str
     super_type: Optional[str] = None
     properties: Dict[int, PropertyInfo] = field(default_factory=dict)
@@ -97,6 +100,7 @@ class StructMapping:
 @dataclass
 class TypeMappings:
     """Unified Usmap/Jmap mapping container."""
+
     types: Dict[str, StructMapping] = field(default_factory=dict)
     enums: Dict[str, Dict[int, str]] = field(default_factory=dict)
 
@@ -127,7 +131,7 @@ class _BytesReader:
     def read(self, size: int) -> bytes:
         if self.pos + size > len(self.data):
             raise ParseError("Mapping file data insufficient")
-        value = self.data[self.pos:self.pos + size]
+        value = self.data[self.pos : self.pos + size]
         self.pos += size
         return value
 
@@ -157,6 +161,7 @@ class _BytesReader:
 
 class UsmapParser:
     """Read CUE4Parse-compatible .usmap mapping file."""
+
     FILE_MAGIC = 0x30C4
 
     def __init__(self, path_or_bytes: str | bytes, budget: ResourceBudget | None = None):
@@ -222,13 +227,12 @@ class UsmapParser:
             mappings.types[struct.name] = struct
         return mappings
 
-    def _decompress(self, payload: bytes, method: int, comp_size: int, decomp_size: int,
-                     budget: "ResourceBudget | None" = None) -> bytes:
+    def _decompress(
+        self, payload: bytes, method: int, comp_size: int, decomp_size: int, budget: "ResourceBudget | None" = None
+    ) -> bytes:
         if method == 0:
             if comp_size != decomp_size:
-                raise ParseError(
-                    f"Usmap uncompressed size mismatch: {comp_size} != {decomp_size}"
-                )
+                raise ParseError(f"Usmap uncompressed size mismatch: {comp_size} != {decomp_size}")
             return payload
         if method == 2:
             try:
@@ -239,9 +243,7 @@ class UsmapParser:
                 budget.reserve(decomp_size, "usmap_brotli_decompress")
             result = brotli.decompress(payload)
             if len(result) > decomp_size:
-                raise ParseError(
-                    f"Usmap Brotli decompressed size exceeds expected: {len(result)} > {decomp_size}"
-                )
+                raise ParseError(f"Usmap Brotli decompressed size exceeds expected: {len(result)} > {decomp_size}")
             return result
         if method == 3:
             try:
@@ -274,7 +276,9 @@ class UsmapParser:
         index = ar.u16()
         array_dim = ar.u8()
         name = ar.name(lut) or ""
-        return PropertyInfo(index=index, name=name, mapping_type=self._parse_property_type(ar, lut), array_size=array_dim)
+        return PropertyInfo(
+            index=index, name=name, mapping_type=self._parse_property_type(ar, lut), array_size=array_dim
+        )
 
     def _parse_property_type(self, ar: _BytesReader, lut: list[str], depth: int = 0) -> PropertyType:
         if depth > MAX_RECURSION_DEPTH:
@@ -289,7 +293,11 @@ class UsmapParser:
         if type_name in {"ArrayProperty", "SetProperty", "OptionalProperty"}:
             return PropertyType(type_name, inner_type=self._parse_property_type(ar, lut, depth + 1))
         if type_name == "MapProperty":
-            return PropertyType(type_name, inner_type=self._parse_property_type(ar, lut, depth + 1), value_type=self._parse_property_type(ar, lut, depth + 1))
+            return PropertyType(
+                type_name,
+                inner_type=self._parse_property_type(ar, lut, depth + 1),
+                value_type=self._parse_property_type(ar, lut, depth + 1),
+            )
         return PropertyType(type_name)
 
 
@@ -349,10 +357,7 @@ class JmapParser:
         raw_dim = prop.get("array_dim")
         array_dim = int(raw_dim) if raw_dim is not None else 1
         if array_dim < 1 or array_dim > MAX_ARRAY_DIM:
-            raise ParseError(
-                f"Jmap array_dim out of range: {array_dim} "
-                f"(must be 1..{MAX_ARRAY_DIM})"
-            )
+            raise ParseError(f"Jmap array_dim out of range: {array_dim} (must be 1..{MAX_ARRAY_DIM})")
         return PropertyInfo(
             index=index,
             name=str(prop.get("name") or ""),
@@ -382,8 +387,6 @@ class JmapParser:
             value_type=value,
             enum_name=(prop.get("enum") or "").split(".")[-1] or None,
         )
-
-
 
 
 class TypeMappingsProvider:

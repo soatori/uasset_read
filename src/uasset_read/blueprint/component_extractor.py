@@ -3,6 +3,7 @@
 Component property recursive parsing (D-01, D-02, D-04).
 Discovers component objects via Outer hierarchy scanning, extracts transforms + scalar attributes.
 """
+
 from __future__ import annotations
 
 import logging
@@ -20,8 +21,12 @@ logger = logging.getLogger(__name__)
 _TRANSFORM_NAMES = {"RelativeLocation", "RelativeRotation", "RelativeScale3D"}
 
 _SCALAR_TYPES = {
-    "FloatProperty", "IntProperty", "Int64Property",
-    "BoolProperty", "ByteProperty", "EnumProperty",
+    "FloatProperty",
+    "IntProperty",
+    "Int64Property",
+    "BoolProperty",
+    "ByteProperty",
+    "EnumProperty",
 }
 
 
@@ -56,16 +61,20 @@ def extract_components(
         transforms = extract_component_transforms(export.properties, export.object_name)
         scalar_props = _filter_scalar_properties(export.properties)
 
-        result.append({
-            "name": export.object_name,
-            "class": class_name,
-            "properties": scalar_props,
-            "transforms": transforms,
-        })
+        result.append(
+            {
+                "name": export.object_name,
+                "class": class_name,
+                "properties": scalar_props,
+                "transforms": transforms,
+            }
+        )
 
     logger.debug(
         "extract_components: found %d components, skipped %d (no props) + %d (no Component class)",
-        len(result), skipped_no_props, skipped_no_class,
+        len(result),
+        skipped_no_props,
+        skipped_no_class,
     )
     return result
 
@@ -82,10 +91,7 @@ def _filter_scalar_properties(properties: List[PropertyValue]) -> Dict[str, Any]
             result[prop.name] = _serialize_scalar_value(prop.value)
         elif prop.type == "StructProperty" and prop.value and prop.name not in _TRANSFORM_NAMES:
             if isinstance(prop.value, StructValue):
-                result[prop.name] = {
-                    k: _serialize_scalar_value(v)
-                    for k, v in prop.value.fields.items()
-                }
+                result[prop.name] = {k: _serialize_scalar_value(v) for k, v in prop.value.fields.items()}
     return result
 
 

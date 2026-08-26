@@ -3,6 +3,7 @@
 Reads from ExportIR.asset_type_data (PropertyMetadataHandler output).
 Projects mesh summary, material slots, and LOD info for StaticMesh and SkeletalMesh.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -35,10 +36,12 @@ def _extract_material_slots(properties: list) -> list[dict]:
         if name and "material" in name.lower():
             value = getattr(prop, "value", None)
             if isinstance(value, dict) and "SlotName" in value:
-                materials.append({
-                    "slot_index": len(materials),
-                    "material_name": value.get("SlotName", ""),
-                })
+                materials.append(
+                    {
+                        "slot_index": len(materials),
+                        "material_name": value.get("SlotName", ""),
+                    }
+                )
     return materials
 
 

@@ -2,6 +2,7 @@
 
 Tests the JSON format output: schema compliance, status values, coverage.
 """
+
 from __future__ import annotations
 
 import json
@@ -65,8 +66,7 @@ class TestJsonOutput:
             try:
                 data = _parse_json(samples_dir, sample_path.name)
                 parse_status = data.get("status", {}).get("parse")
-                assert parse_status in valid_parse, \
-                    f"{sample_path.name}: invalid parse status '{parse_status}'"
+                assert parse_status in valid_parse, f"{sample_path.name}: invalid parse status '{parse_status}'"
             except Exception:
                 continue
 
@@ -77,8 +77,7 @@ class TestJsonOutput:
             try:
                 data = _parse_json(samples_dir, sample_path.name)
                 repr_status = data.get("status", {}).get("representation")
-                assert repr_status in valid_repr, \
-                    f"{sample_path.name}: invalid representation '{repr_status}'"
+                assert repr_status in valid_repr, f"{sample_path.name}: invalid representation '{repr_status}'"
             except Exception:
                 continue
 
@@ -137,7 +136,8 @@ class TestJsonOutputLevels:
             pytest.skip("Sample not found")
 
         data = _parse_json(
-            samples_dir, "FirstPerson_BP_FirstPersonCharacter.uasset",
+            samples_dir,
+            "FirstPerson_BP_FirstPersonCharacter.uasset",
             output_level="standard",
         )
         # Standard mode should not have evidence
@@ -149,7 +149,8 @@ class TestJsonOutputLevels:
             pytest.skip("Sample not found")
 
         data = _parse_json(
-            samples_dir, "FirstPerson_BP_FirstPersonCharacter.uasset",
+            samples_dir,
+            "FirstPerson_BP_FirstPersonCharacter.uasset",
             output_level="debug",
         )
         # Debug mode should have evidence (if the asset has any)
@@ -173,8 +174,7 @@ class TestJsonSchemaCompliance:
         for sample_path in sample_uassets:
             try:
                 data = _parse_json(samples_dir, sample_path.name)
-                assert isinstance(data.get("asset_type"), str), \
-                    f"{sample_path.name}: asset_type is not a string"
+                assert isinstance(data.get("asset_type"), str), f"{sample_path.name}: asset_type is not a string"
             except Exception:
                 continue
 
@@ -188,5 +188,4 @@ class TestJsonSchemaCompliance:
             except Exception as e:
                 failures.append((sample_path.name, str(e)))
 
-        assert failures == [], \
-            f"JSON parse failures: {failures}"
+        assert failures == [], f"JSON parse failures: {failures}"

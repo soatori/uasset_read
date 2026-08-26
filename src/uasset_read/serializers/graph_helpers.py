@@ -8,6 +8,7 @@ instead of from graph.py, eliminating the cycle:
   graph.py -> graph_pin.py -> graph.py (helpers)
   graph.py -> graph_node.py -> graph.py (helpers)
 """
+
 from __future__ import annotations
 
 import logging
@@ -21,12 +22,15 @@ if TYPE_CHECKING:
     from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
 
 from uasset_read.constants import (
-    MAX_SAFE_COUNT, format_guid_bytes,
+    MAX_SAFE_COUNT,
+    format_guid_bytes,
 )
 from uasset_read.exceptions import ParseError
 from uasset_read.serializers.object_resources import (
-    resolve_class_name, resolve_class_name_with_linker,
-    get_asset_class, get_asset_class_with_linker,
+    resolve_class_name,
+    resolve_class_name_with_linker,
+    get_asset_class,
+    get_asset_class_with_linker,
 )
 from uasset_read.serializers.property_tags import read_tag_value_bounded
 
@@ -39,6 +43,7 @@ _thread_local = threading.local()
 # Core helpers
 # ============================================================================
 
+
 def _read_guid(archive: FArchive, uppercase: bool = True) -> str:
     data = archive.read_bytes(16)
     if len(data) != 16:
@@ -48,7 +53,7 @@ def _read_guid(archive: FArchive, uppercase: bool = True) -> str:
 
 def _get_thread_local():
     """Return per-thread isolated diagnostic state, avoiding global mutable race."""
-    if not hasattr(_thread_local, 'linkedto_failure_seen'):
+    if not hasattr(_thread_local, "linkedto_failure_seen"):
         _thread_local.linkedto_failure_seen: set[tuple[int, str, str]] = set()
         _thread_local.pin_trace_events: List[Dict[str, Any]] = []
         _thread_local.pin_recovery_events: List[Dict[str, Any]] = []
@@ -57,21 +62,25 @@ def _get_thread_local():
 
 def _rcn(idx, im, em, lk):
     """Resolve class name - linker version if available."""
-    return (resolve_class_name_with_linker(idx, lk) if lk else resolve_class_name(idx, im, em))
+    return resolve_class_name_with_linker(idx, lk) if lk else resolve_class_name(idx, im, em)
 
 
 def _gac(exp, im, em, lk):
     """Get asset class - linker version if available."""
-    return (get_asset_class_with_linker(exp, lk) if lk else get_asset_class(exp, im, em))
+    return get_asset_class_with_linker(exp, lk) if lk else get_asset_class(exp, im, em)
 
 
 # ============================================================================
 # Diagnostic tracing
 # ============================================================================
 
+
 def _pin_trace_enabled(explicit: bool = False) -> bool:
     return explicit or os.environ.get("UASSET_READ_PIN_TRACE", "").lower() in {
-        "1", "true", "yes", "on",
+        "1",
+        "true",
+        "yes",
+        "on",
     }
 
 
@@ -81,24 +90,31 @@ def _record_pin_recovery(event: Dict[str, Any]) -> None:
 
 def _trace_fields_append(
     trace_fields: Dict[str, Any],
-    name: str, start: int, end: int, value_preview: str = "",
-    is_exception: bool = False, is_fallback: bool = False,
+    name: str,
+    start: int,
+    end: int,
+    value_preview: str = "",
+    is_exception: bool = False,
+    is_fallback: bool = False,
 ) -> None:
     """Record single field trace information."""
-    trace_fields.setdefault("fields", []).append({
-        "name": name,
-        "start": start,
-        "end": end,
-        "consumed": end - start,
-        "value": value_preview[:50],
-        "exception": is_exception,
-        "fallback": is_fallback,
-    })
+    trace_fields.setdefault("fields", []).append(
+        {
+            "name": name,
+            "start": start,
+            "end": end,
+            "consumed": end - start,
+            "value": value_preview[:50],
+            "exception": is_exception,
+            "fallback": is_fallback,
+        }
+    )
 
 
 # ============================================================================
 # PropertyTag helper functions
 # ============================================================================
+
 
 def _read_tag_bool(archive: FArchive, tag) -> bool:
     """Read bool value from PropertyTag.
@@ -114,6 +130,7 @@ def _read_tag_bool(archive: FArchive, tag) -> bool:
     Returns:
         bool value
     """
+
     def _reader() -> bool:
         if tag.size > 0:
             return archive.read_i32() != 0
@@ -157,6 +174,7 @@ def _read_tag_fname(archive: FArchive, tag, name_map: List[str]) -> str:
 # FText reading (UE5 multi history_type support)
 # ============================================================================
 
+
 def _read_fstring_safe(archive: FArchive, max_length: int = MAX_SAFE_COUNT) -> str:
     """Read FString with tolerance for abnormal lengths.
 
@@ -186,9 +204,9 @@ def _read_fstring_safe(archive: FArchive, max_length: int = MAX_SAFE_COUNT) -> s
                 archive.seek(archive.tell() - 4)
             return ""
         data = archive.read(utf16_len)
-        return data.decode('utf-16-le', errors='replace').rstrip('\x00')
+        return data.decode("utf-16-le", errors="replace").rstrip("\x00")
     data = archive.read(length)
-    return data.decode('utf-8', errors='replace').rstrip('\x00')
+    return data.decode("utf-8", errors="replace").rstrip("\x00")
 
 
 def read_ftext_fstring(archive: FArchive) -> str:
@@ -205,9 +223,9 @@ def read_ftext_fstring(archive: FArchive) -> str:
         raise ParseError(f"Invalid FText FString length: {length}")
     if length < -1:
         data = archive.read(-length * 2)
-        return data.decode('utf-16-le', errors='replace').rstrip('\x00')
+        return data.decode("utf-16-le", errors="replace").rstrip("\x00")
     data = archive.read(length)
-    return data.decode('utf-8', errors='replace').rstrip('\x00')
+    return data.decode("utf-8", errors="replace").rstrip("\x00")
 
 
 def _read_ftext_value(
@@ -262,10 +280,7 @@ def read_ftext_with_history(
         if arg_count < 0 or arg_count > MAX_SAFE_COUNT:
             # Design decision: from raise ParseError to warning+skip,
             # aligned with project tolerant mode, avoiding parse interruption from corrupt data
-            logger.debug(
-                "FText NamedFormat arg_count=%d exceeds limit %d, skipping args",
-                arg_count, MAX_SAFE_COUNT
-            )
+            logger.debug("FText NamedFormat arg_count=%d exceeds limit %d, skipping args", arg_count, MAX_SAFE_COUNT)
             arg_count = 0  # Skip subsequent argument reading
         format_args: Dict[str, str] = {}
         for _ in range(arg_count):
@@ -323,6 +338,7 @@ def read_ftext(archive: FArchive, tolerant: bool = True) -> str:
 # Pin reference validation helper
 # ============================================================================
 
+
 def validate_pin_reference_at(
     archive: FArchive,
     pos: int,
@@ -359,11 +375,11 @@ def validate_pin_reference_at(
         archive.seek(current_pos)
         return None
 
-    fmt = '>' if getattr(archive, '_byte_swapping', False) else '<'
+    fmt = ">" if getattr(archive, "_byte_swapping", False) else "<"
 
     archive.seek(pos)
     header_bytes = archive.read(4)
-    b_null = struct.unpack(f'{fmt}i', header_bytes[0:4])[0]
+    b_null = struct.unpack(f"{fmt}i", header_bytes[0:4])[0]
 
     if b_null != 0:
         # Null PinReference: only consumes 4 bytes
@@ -387,7 +403,7 @@ def validate_pin_reference_at(
     header_bytes = archive.read(24)
     archive.seek(current_pos)
 
-    owning_node = struct.unpack(f'{fmt}i', header_bytes[4:8])[0]
+    owning_node = struct.unpack(f"{fmt}i", header_bytes[4:8])[0]
     guid_bytes = header_bytes[8:24]
     guid_nonzero = any(b != 0 for b in guid_bytes)
 
@@ -398,8 +414,8 @@ def validate_pin_reference_at(
     max_valid_index = export_count + import_count + 50  # Allow some margin
 
     owning_node_valid = (
-        owning_node == 0 or  # 0 means no ref
-        owning_node_abs < max_valid_index
+        owning_node == 0  # 0 means no ref
+        or owning_node_abs < max_valid_index
     )
 
     # Validate b_null semantics

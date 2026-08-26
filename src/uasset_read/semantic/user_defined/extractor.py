@@ -2,6 +2,7 @@
 
 Dispatches on object_class for UserDefinedEnum and UserDefinedStruct.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

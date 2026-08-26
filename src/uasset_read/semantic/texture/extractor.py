@@ -3,6 +3,7 @@
 Reads from ExportIR.asset_type_data (PropertyMetadataHandler output).
 Projects resource properties and bulk data summary for Texture2D/TextureCube.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -11,9 +12,17 @@ if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
 
 _RESOURCE_KEYS = (
-    "size_x", "size_y", "format", "num_mips", "is_streaming",
-    "streaming_channels", "lod_group", "address_x", "address_y",
-    "filter", "srgb",
+    "size_x",
+    "size_y",
+    "format",
+    "num_mips",
+    "is_streaming",
+    "streaming_channels",
+    "lod_group",
+    "address_x",
+    "address_y",
+    "filter",
+    "srgb",
 )
 
 _BULK_KEYS = ("total_mip_bytes", "compressed_mip_bytes", "chunk_count", "first_mip")

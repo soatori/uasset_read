@@ -2,6 +2,7 @@
 
 Tests the Mesh domain extractor with real StaticMesh and SkeletalMesh samples.
 """
+
 from __future__ import annotations
 
 import json
@@ -158,13 +159,17 @@ class TestMeshProjection:
     def test_standard_strips_evidence(self, samples_dir: Path):
         """Standard mode strips evidence from Mesh output."""
         semantic = _build_and_project(
-            samples_dir, "StarterContent_SM_Chair.uasset", "standard",
+            samples_dir,
+            "StarterContent_SM_Chair.uasset",
+            "standard",
         )
         assert len(semantic.evidence) == 0
 
     def test_debug_keeps_evidence(self, samples_dir: Path):
         """Debug mode keeps evidence in Mesh output."""
         semantic = _build_and_project(
-            samples_dir, "StarterContent_SM_Chair.uasset", "debug",
+            samples_dir,
+            "StarterContent_SM_Chair.uasset",
+            "debug",
         )
         assert semantic.mode == "debug"

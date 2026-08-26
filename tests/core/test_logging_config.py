@@ -1,4 +1,5 @@
 """Tests for LogConfig.format field and configure_project_logging format param."""
+
 from __future__ import annotations
 
 import logging

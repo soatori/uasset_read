@@ -13,8 +13,6 @@ logger = logging.getLogger(__name__)
 _EMPTY_BODY_THRESHOLD = 3
 
 
-
-
 def enrich_decompiled_functions(
     functions: List[KismetDecompiledResult],
     graphs: List[UEdGraph],
@@ -82,8 +80,7 @@ def _enrich_empty_functions_from_graphs(
             result.cpp_code = cpp_code
             result.logic_source = "graph_topology"
             result.warnings.append(
-                f"Empty bytecode body enriched from UEdGraph K2Node topology "
-                f"({len(result.expressions)} expressions)"
+                f"Empty bytecode body enriched from UEdGraph K2Node topology ({len(result.expressions)} expressions)"
             )
 
 
@@ -119,10 +116,7 @@ def _enrich_empty_function_from_graph(
 
         # Build node_lookup for extracting function names
         _, node_lookup, _ = build_graph_indexes(graph)
-        node_name_lookup = {
-            n.node_guid: f"{n.class_name}_{idx}"
-            for idx, n in enumerate(graph.nodes)
-        }
+        node_name_lookup = {n.node_guid: f"{n.class_name}_{idx}" for idx, n in enumerate(graph.nodes)}
 
         # Trace execution flow
         execution_flows = build_execution_flow_entries(graph)
@@ -130,13 +124,19 @@ def _enrich_empty_function_from_graph(
             # Fallback: trace directly from FunctionEntry
             pin_lookup, _, _ = build_graph_indexes(graph)
             edges_by_from_pin, source_edges_by_to_pin = build_normalized_edge_indexes(graph)
-            execution_flows = [{
-                "start_event": f"FunctionEntry.{function_name}",
-                "nodes": trace_execution_from_event(
-                    entry_node, pin_lookup, node_lookup, node_name_lookup,
-                    edges_by_from_pin, source_edges_by_to_pin,
-                ),
-            }]
+            execution_flows = [
+                {
+                    "start_event": f"FunctionEntry.{function_name}",
+                    "nodes": trace_execution_from_event(
+                        entry_node,
+                        pin_lookup,
+                        node_lookup,
+                        node_name_lookup,
+                        edges_by_from_pin,
+                        source_edges_by_to_pin,
+                    ),
+                }
+            ]
 
         cpp_code = _flow_to_cpp(function_name, execution_flows, node_lookup)
         if cpp_code:
@@ -162,8 +162,8 @@ def _find_function_entry(graph: UEdGraph, function_name: str) -> Optional[Any]:
             continue
         member_name = node_member_name(node)
         # Handle path format "/Game/.../FunctionName"
-        if '/' in member_name:
-            member_name = member_name.split('/')[-1]
+        if "/" in member_name:
+            member_name = member_name.split("/")[-1]
         if member_name == function_name:
             return node
     return None
@@ -442,7 +442,9 @@ def extract_eventgraph_semantic_calls(graphs: List[UEdGraph]) -> List[Dict[str, 
                     ds = param.get("data_source")
                     if isinstance(ds, dict):
                         for src in ds.get("data_sources", []):
-                            if src.get("source_type") in ("pure_function", "function_output") and src.get("function_name"):
+                            if src.get("source_type") in ("pure_function", "function_output") and src.get(
+                                "function_name"
+                            ):
                                 function_name = src["function_name"]
                                 break
                     if function_name:
@@ -455,14 +457,16 @@ def extract_eventgraph_semantic_calls(graphs: List[UEdGraph]) -> List[Dict[str, 
                 continue
 
             args = _call_args_from_flow(call_info)
-            results.append({
-                "event_name": event_name,
-                "event_parent": event_parent,
-                "function_name": function_name,
-                "arguments": args,
-                "call": f"{function_name}({', '.join(args)})",
-                "source": "current_asset",
-            })
+            results.append(
+                {
+                    "event_name": event_name,
+                    "event_parent": event_parent,
+                    "function_name": function_name,
+                    "arguments": args,
+                    "call": f"{function_name}({', '.join(args)})",
+                    "source": "current_asset",
+                }
+            )
 
     return results
 

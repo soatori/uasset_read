@@ -2,6 +2,7 @@
 
 Reads from ExportIR.asset_type_data for MovieScene and LevelSequence assets.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -27,8 +28,7 @@ def build_movie_content(
     scene_data = asset_type_data.get("movie_scene", asset_type_data)
 
     summary: dict = {}
-    for key in ("track_count", "spawnable_count", "possessable_count",
-                "binding_count", "marked_frame_count"):
+    for key in ("track_count", "spawnable_count", "possessable_count", "binding_count", "marked_frame_count"):
         val = scene_data.get(key)
         if val is not None:
             summary[key] = val
@@ -49,8 +49,6 @@ def build_movie_content(
 
     result: dict = {"movie": {"scene_summary": summary}}
     if track_classes:
-        result["movie"]["tracks"] = [
-            {"type": tc} for tc in track_classes
-        ]
+        result["movie"]["tracks"] = [{"type": tc} for tc in track_classes]
 
     return result

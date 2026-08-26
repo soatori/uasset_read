@@ -3,6 +3,7 @@
 Tests that various property types (struct, array, map, enum, bool, string,
 object) are correctly parsed from real .uasset sample exports.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -60,8 +61,7 @@ class TestPropertyParsing:
                         seen_types.add(str(ptype))
 
         # We expect to see at least a few distinct types across all samples
-        assert len(seen_types) >= 3, \
-            f"Expected diverse property types, got: {sorted(seen_types)}"
+        assert len(seen_types) >= 3, f"Expected diverse property types, got: {sorted(seen_types)}"
 
     def test_struct_properties_in_blueprint(self, samples_dir: Path):
         """Blueprint samples should contain struct-typed properties."""
@@ -92,8 +92,7 @@ class TestPropertyParsing:
                 continue
             for export in result.export_map:
                 status = getattr(export, "parse_status", None)
-                assert status in valid_statuses, \
-                    f"{sample_path.name}: invalid parse_status '{status}'"
+                assert status in valid_statuses, f"{sample_path.name}: invalid parse_status '{status}'"
 
 
 class TestPropertyRoundTrip:

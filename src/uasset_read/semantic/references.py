@@ -4,6 +4,7 @@ Import ``package_path`` is the package containing the referenced object,
 resolved through the outer chain. It is deliberately NOT ``class_package``,
 which identifies where the object's *class* is defined.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -67,22 +68,28 @@ def collect_references(
         key = ("import", i)
         if key not in seen:
             seen.add(key)
-            entries.append(ReferenceEntry(
-                index=i, kind="import",
-                class_name=imp.class_name or "",
-                object_name=imp.object_name or "",
-                package_path=_resolve_object_package(imp, imports),
-            ))
+            entries.append(
+                ReferenceEntry(
+                    index=i,
+                    kind="import",
+                    class_name=imp.class_name or "",
+                    object_name=imp.object_name or "",
+                    package_path=_resolve_object_package(imp, imports),
+                )
+            )
 
     for i, exp in enumerate(exports):
         key = ("export", i)
         if key not in seen:
             seen.add(key)
-            entries.append(ReferenceEntry(
-                index=i, kind="export",
-                class_name=exp.object_class or "",
-                object_name=exp.object_name or "",
-                package_path="",
-            ))
+            entries.append(
+                ReferenceEntry(
+                    index=i,
+                    kind="export",
+                    class_name=exp.object_class or "",
+                    object_name=exp.object_name or "",
+                    package_path="",
+                )
+            )
 
     return tuple(sorted(entries, key=lambda r: (r.kind, r.index)))

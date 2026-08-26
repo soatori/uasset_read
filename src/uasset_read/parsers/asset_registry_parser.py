@@ -25,13 +25,13 @@ from typing import Any, Dict, List, Optional
 from uasset_read.exceptions import ParseError
 
 
-
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class AssetRegistryTag:
     """Single asset tag (key-value pair)."""
+
     key: str
     value: str
 
@@ -39,6 +39,7 @@ class AssetRegistryTag:
 @dataclass
 class AssetRegistryObjectData:
     """Asset registry data for a single object."""
+
     object_path: str
     object_class_name: str
     tags: List[AssetRegistryTag] = field(default_factory=list)
@@ -51,6 +52,7 @@ class AssetRegistryObjectData:
 @dataclass
 class AssetRegistryData:
     """AssetRegistryData parse result."""
+
     dependency_data_offset: int = 0
     objects: List[AssetRegistryObjectData] = field(default_factory=list)
     corrupted: bool = False
@@ -126,7 +128,8 @@ def read_asset_registry_data(
                 logger.debug(
                     "AssetRegistryData: DependencyDataOffset=%d exceeds file bounds "
                     "(file_size=%d), likely pre-dependency format, skipping this field",
-                    dep_offset_64, file_size,
+                    dep_offset_64,
+                    file_size,
                 )
             else:
                 result.dependency_data_offset = dep_offset_64
@@ -144,7 +147,8 @@ def read_asset_registry_data(
         if file_size > 0 and object_count > file_size:
             logger.debug(
                 "AssetRegistryData: ObjectCount=%d is clearly too large (file_size=%d), skipping",
-                object_count, file_size,
+                object_count,
+                file_size,
             )
             return result
 

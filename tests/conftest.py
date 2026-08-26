@@ -1,4 +1,5 @@
 """Shared test fixtures and factory helpers for uasset_read test suite."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,6 +11,7 @@ import pytest
 # ---------------------------------------------------------------------------
 # Path fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def samples_dir() -> Path:
@@ -127,6 +129,7 @@ def get_all_categorized_samples(samples_dir: Path) -> list[Path]:
 # ---------------------------------------------------------------------------
 # Lightweight IR factory helpers (for unit tests without file I/O)
 # ---------------------------------------------------------------------------
+
 
 def make_minimal_parse_result(**overrides: Any) -> Any:
     """Build a minimal ParseResult for unit tests that don't need real parsing.

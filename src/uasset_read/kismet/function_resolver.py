@@ -8,6 +8,7 @@ Enhanced features:
 - EX_LocalFinalFunction: Detect if it is a local Blueprint function (export)
 - Unresolved function reference statistics reporting
 """
+
 from __future__ import annotations
 
 
@@ -228,4 +229,3 @@ class FunctionRefResolver:
                 lines.append(f"    ... and {len(sorted_refs) - 10} more")
 
         return "\n".join(lines)
-

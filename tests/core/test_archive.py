@@ -2,6 +2,7 @@
 
 Tests the FArchive class: seek, read, boundary validation, byte swapping.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

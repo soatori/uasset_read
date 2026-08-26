@@ -2,6 +2,7 @@
 
 Tests the Texture domain extractor with real Texture samples.
 """
+
 from __future__ import annotations
 
 import json
@@ -138,14 +139,18 @@ class TestTextureProjection:
     def test_standard_strips_evidence(self, samples_dir: Path):
         """Standard mode strips evidence from Texture output."""
         semantic = _build_and_project(
-            samples_dir, "FirstPerson_T_GridChecker_A.uasset", "standard",
+            samples_dir,
+            "FirstPerson_T_GridChecker_A.uasset",
+            "standard",
         )
         assert len(semantic.evidence) == 0
 
     def test_debug_keeps_evidence(self, samples_dir: Path):
         """Debug mode keeps evidence in Texture output."""
         semantic = _build_and_project(
-            samples_dir, "FirstPerson_T_GridChecker_A.uasset", "debug",
+            samples_dir,
+            "FirstPerson_T_GridChecker_A.uasset",
+            "debug",
         )
         assert semantic.mode == "debug"
 

@@ -1,4 +1,5 @@
 """Property extraction helper functions — Eliminates duplicate patterns in asset_types handlers."""
+
 from typing import Any, Callable, TypeVar
 
 T = TypeVar("T")

@@ -3,6 +3,7 @@
 Provides the lossless ``FNameRef`` model used by native field declarations
 and later by the dual-cursor Kismet archive.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

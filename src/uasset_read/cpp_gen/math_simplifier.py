@@ -9,7 +9,6 @@ Exports:
 """
 
 
-
 class MathSimplifier:
     """Simplify KismetMathLibrary function calls to operators."""
 
@@ -33,7 +32,6 @@ class MathSimplifier:
         "Negate_Int": "-",
         "Negate_Float": "-",
         "Negate_Double": "-",
-
         # Comparison operations
         "EqualEqual_IntInt": "==",
         "EqualEqual_FloatFloat": "==",
@@ -51,19 +49,16 @@ class MathSimplifier:
         "GreaterEqual_FloatFloat": ">=",
         "LessEqual_IntInt": "<=",
         "LessEqual_FloatFloat": "<=",
-
         # Logical operations
         "BooleanAND": "&&",
         "BooleanOR": "||",
         "BooleanNOT": "!",
-
         # Vector operations
         "Add_VectorVector": "+",
         "Subtract_VectorVector": "-",
         "Multiply_VectorFloat": "*",
         "Multiply_FloatVector": "*",
         "Divide_VectorFloat": "/",
-
         # Math functions (keep as function form)
         "Abs_Int": "FMath::Abs",
         "Abs_Float": "FMath::Abs",

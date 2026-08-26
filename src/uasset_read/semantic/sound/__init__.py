@@ -1,4 +1,5 @@
 """Sound semantic JSON domain (#557c)."""
+
 from __future__ import annotations
 
 from uasset_read.semantic.extensions import register_extension

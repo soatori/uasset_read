@@ -7,6 +7,7 @@ Extends the Blueprint semantic infrastructure with animation-specific data:
 - Sync groups
 - Pose flows for animation pose connections
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -39,11 +40,7 @@ def _find_anim_blueprint_ir(package_ir, primary_export):
     if direct is not None:
         return direct
     return next(
-        (
-            export.anim_blueprint
-            for export in package_ir.exports
-            if getattr(export, "anim_blueprint", None) is not None
-        ),
+        (export.anim_blueprint for export in package_ir.exports if getattr(export, "anim_blueprint", None) is not None),
         None,
     )
 
@@ -128,12 +125,8 @@ def build_anim_blueprint_content(
 
     # --- Variables and Components ---
     blueprint = getattr(package_ir, "blueprint", None)
-    variables_json = emit_variables(
-        getattr(package_ir, "variables", None) or [], table, reporting
-    )
-    components_json = emit_components(
-        getattr(blueprint, "components", None) or [], table, reporting
-    )
+    variables_json = emit_variables(getattr(package_ir, "variables", None) or [], table, reporting)
+    components_json = emit_components(getattr(blueprint, "components", None) or [], table, reporting)
 
     # --- Declaration ---
     declaration = emit_declaration(
@@ -197,8 +190,7 @@ def _collect_graphs(package_ir) -> list:
     graphs = []
     for export in package_ir.exports:
         for graph in getattr(export, "graphs", None) or []:
-            guid = getattr(graph, "graph_guid", "") or \
-                f"{len(graphs)}:{getattr(graph, 'graph_name', '')}"
+            guid = getattr(graph, "graph_guid", "") or f"{len(graphs)}:{getattr(graph, 'graph_name', '')}"
             if guid in seen:
                 continue
             seen.add(guid)
@@ -226,9 +218,7 @@ def _emit_anim_graphs(graphs, table, reporting, *, mode: str) -> tuple[list[dict
         ordinal_counts: dict[tuple[str, str], int] = {}
 
         for node in getattr(graph, "nodes", None) or []:
-            node_json, node_index = emit_anim_node(
-                node, slug, ordinal_counts, table, reporting, mode
-            )
+            node_json, node_index = emit_anim_node(node, slug, ordinal_counts, table, reporting, mode)
             if node_json is None:
                 continue
             nodes_json.append(node_json)

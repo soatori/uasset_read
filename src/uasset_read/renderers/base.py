@@ -4,6 +4,7 @@
 渲染器不做数据转换（GUID 格式化等在 IR 构建时完成）。
 渲染器不拼接业务逻辑，只负责格式排版。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,36 +18,53 @@ if TYPE_CHECKING:
 # 以下是各渲染器共用的过滤列表，统一定义于此。
 
 # 编辑器布局属性（不影响运行时和 C++ 翻译）
-EDITOR_PROPERTY_NAMES = frozenset({
-    # 节点布局
-    "NodePosX", "NodePosY", "NodeWidth", "NodeHeight",
-    "NodeGuid", "NodeComment", "bIsCommentBubbleVisible",
-    # 注释相关
-    "CommentColor", "FontSize",
-    "bCommentBubbleVisible_InDetailsPanel",
-    "bCommentBubblePinned", "bCommentBubbleVisible",
-    # 图相关
-    "Schema", "GraphGuid", "ErrorType",
-    "AdvancedPinDisplay", "MoveMode",
-    # 事件/函数引用（已提取到其他字段）
-    "EventReference", "bOverrideFunction",
-})
+EDITOR_PROPERTY_NAMES = frozenset(
+    {
+        # 节点布局
+        "NodePosX",
+        "NodePosY",
+        "NodeWidth",
+        "NodeHeight",
+        "NodeGuid",
+        "NodeComment",
+        "bIsCommentBubbleVisible",
+        # 注释相关
+        "CommentColor",
+        "FontSize",
+        "bCommentBubbleVisible_InDetailsPanel",
+        "bCommentBubblePinned",
+        "bCommentBubbleVisible",
+        # 图相关
+        "Schema",
+        "GraphGuid",
+        "ErrorType",
+        "AdvancedPinDisplay",
+        "MoveMode",
+        # 事件/函数引用（已提取到其他字段）
+        "EventReference",
+        "bOverrideFunction",
+    }
+)
 
 # 编辑器内部变量（不影响运行时和 C++ 翻译）
-EDITOR_VARIABLE_NAMES = frozenset({
-    "UbergraphPages",  # 图页面索引列表
-    "FunctionGraphs",  # 函数图索引列表
-    "CategorySorting",  # 编辑器分类排序
-    "ImplementedInterfaces",  # 已实现接口（已在 blueprint.interfaces 中）
-    "LastEditedDocuments",  # 最后编辑文档
-    "ThumbnailInfo",  # 缩略图信息
-    "bLegacyNeedToPurgeSkelRefs",  # 骨骼引用清理标记
-})
+EDITOR_VARIABLE_NAMES = frozenset(
+    {
+        "UbergraphPages",  # 图页面索引列表
+        "FunctionGraphs",  # 函数图索引列表
+        "CategorySorting",  # 编辑器分类排序
+        "ImplementedInterfaces",  # 已实现接口（已在 blueprint.interfaces 中）
+        "LastEditedDocuments",  # 最后编辑文档
+        "ThumbnailInfo",  # 缩略图信息
+        "bLegacyNeedToPurgeSkelRefs",  # 骨骼引用清理标记
+    }
+)
 
 # 编辑器内部节点类（不影响运行时，UE 编译时移除）
-EDITOR_NODE_CLASSES = frozenset({
-    "K2Node_Knot",  # 重定向节点，仅编辑器布局用途
-})
+EDITOR_NODE_CLASSES = frozenset(
+    {
+        "K2Node_Knot",  # 重定向节点，仅编辑器布局用途
+    }
+)
 
 
 def filter_editor_items(
@@ -83,6 +101,7 @@ def is_blueprint_export(export: ExportIR) -> bool:
 @dataclass
 class RenderOptions:
     """渲染选项（渲染器只读，不修改）。"""
+
     verbose: bool = False
     indent: int = 2
     include_schema: bool = False
@@ -92,10 +111,4 @@ class RenderOptions:
     def __post_init__(self) -> None:
         _valid = {"standard", "debug"}
         if self.output_level not in _valid:
-            raise ValueError(
-                f"Invalid output_level: {self.output_level!r}. "
-                f"Expected one of ['standard', 'debug']"
-            )
-
-
-
+            raise ValueError(f"Invalid output_level: {self.output_level!r}. Expected one of ['standard', 'debug']")

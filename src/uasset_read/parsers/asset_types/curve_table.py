@@ -229,17 +229,19 @@ def _read_rich_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[st
                                 arrive_tangent_weight = struct.unpack_from("<f", prop_data, offset + 15)[0]
                                 leave_tangent = struct.unpack_from("<f", prop_data, offset + 19)[0]
                                 leave_tangent_weight = struct.unpack_from("<f", prop_data, offset + 23)[0]
-                                keys.append({
-                                    "time": time_val,
-                                    "value": value_val,
-                                    "interp_mode": interp_mode,
-                                    "tangent_mode": tangent_mode,
-                                    "tangent_weight_mode": tangent_weight_mode,
-                                    "arrive_tangent": arrive_tangent,
-                                    "arrive_tangent_weight": arrive_tangent_weight,
-                                    "leave_tangent": leave_tangent,
-                                    "leave_tangent_weight": leave_tangent_weight,
-                                })
+                                keys.append(
+                                    {
+                                        "time": time_val,
+                                        "value": value_val,
+                                        "interp_mode": interp_mode,
+                                        "tangent_mode": tangent_mode,
+                                        "tangent_weight_mode": tangent_weight_mode,
+                                        "arrive_tangent": arrive_tangent,
+                                        "arrive_tangent_weight": arrive_tangent_weight,
+                                        "leave_tangent": leave_tangent,
+                                        "leave_tangent_weight": leave_tangent_weight,
+                                    }
+                                )
                                 offset += FRICH_CURVE_KEY_SIZE
 
     except (struct.error, OSError, ValueError, ParseError) as e:
@@ -355,4 +357,5 @@ def _read_simple_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[
 def _resolve_name(name_index: int, name_map: List[str]) -> str:
     """Parse name from name table."""
     from uasset_read.parsers.utils import resolve_name_from_index
+
     return resolve_name_from_index(None, name_map, name_index, fallback_prefix="name")

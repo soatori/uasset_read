@@ -24,26 +24,28 @@ logger = logging.getLogger(__name__)
 
 # Known EdGraph subclass names (used for graph type matching)
 # Includes engine built-in subclasses and common custom graph types
-EDGRAPH_CLASS_NAMES = frozenset({
-    "EdGraph",
-    "UberEdGraph",
-    # Animation graphs
-    "AnimGraph",
-    "AnimBlueprintGeneratedClass",
-    # Control Rig graphs
-    "ControlRigGraph",
-    "RigGraph",
-    # Material graphs
-    "MaterialGraph",
-    "MaterialGraphEdNode",
-    # Particle system graphs
-    "CascadeParticleSystemGraph",
-    # Niagara graphs
-    "NiagaraGraph",
-    "NiagaraScript",
-    # Custom graph types (common prefix matching)
-    "K2Node_Graph",
-})
+EDGRAPH_CLASS_NAMES = frozenset(
+    {
+        "EdGraph",
+        "UberEdGraph",
+        # Animation graphs
+        "AnimGraph",
+        "AnimBlueprintGeneratedClass",
+        # Control Rig graphs
+        "ControlRigGraph",
+        "RigGraph",
+        # Material graphs
+        "MaterialGraph",
+        "MaterialGraphEdNode",
+        # Particle system graphs
+        "CascadeParticleSystemGraph",
+        # Niagara graphs
+        "NiagaraGraph",
+        "NiagaraScript",
+        # Custom graph types (common prefix matching)
+        "K2Node_Graph",
+    }
+)
 
 
 def _validate_graph_export_offset(export, archive_size: int) -> bool:
@@ -69,7 +71,9 @@ def _validate_graph_export_offset(export, archive_size: int) -> bool:
     if serial_offset < 0 or serial_size < 0:
         logger.warning(
             "Graph export '%s' offset abnormal: offset=%d, size=%d",
-            export.object_name, serial_offset, serial_size,
+            export.object_name,
+            serial_offset,
+            serial_size,
         )
         return False
 
@@ -77,7 +81,8 @@ def _validate_graph_export_offset(export, archive_size: int) -> bool:
     if serial_offset == 0 and not str(getattr(export, "object_name", "")).startswith("Default__"):
         logger.warning(
             "Graph export '%s' serial_offset=0 and serial_size=%d, offset abnormal",
-            export.object_name, serial_size,
+            export.object_name,
+            serial_size,
         )
         return False
 
@@ -85,7 +90,10 @@ def _validate_graph_export_offset(export, archive_size: int) -> bool:
     if archive_size > 0 and serial_offset + serial_size > archive_size:
         logger.warning(
             "Graph export '%s' offset out of bounds: offset=%d + size=%d > archive_size=%d",
-            export.object_name, serial_offset, serial_size, archive_size,
+            export.object_name,
+            serial_offset,
+            serial_size,
+            archive_size,
         )
         return False
 
@@ -139,13 +147,8 @@ def extract_blueprint_graphs(
         class_name = get_asset_class(export, import_map, export_map)
 
         # Extended graph type matching: exact match + suffix match (covers custom graph subclasses)
-        is_graph_type = (
-            class_name is not None
-            and (
-                class_name in EDGRAPH_CLASS_NAMES
-                or class_name.endswith("Graph")
-                or class_name.endswith("EdGraph")
-            )
+        is_graph_type = class_name is not None and (
+            class_name in EDGRAPH_CLASS_NAMES or class_name.endswith("Graph") or class_name.endswith("EdGraph")
         )
 
         if class_name and is_graph_type:
@@ -158,9 +161,15 @@ def extract_blueprint_graphs(
                 continue
 
             graph = read_ue_graph(
-                archive, name_map, summary,
-                export_map, import_map,
-                export, class_name, export_idx + 1, linker  # 1-based index
+                archive,
+                name_map,
+                summary,
+                export_map,
+                import_map,
+                export,
+                class_name,
+                export_idx + 1,
+                linker,  # 1-based index
             )
             graphs.append(graph)
 

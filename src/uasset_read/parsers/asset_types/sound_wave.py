@@ -235,9 +235,7 @@ def build_sound_metadata(
         sound["pitch"] = pitch
 
     # Compression format (SoundWave.h:424-468)
-    compression_type = _extract_enum(
-        properties, "SoundAssetCompressionType", _COMPRESSION_TYPE_NAMES
-    )
+    compression_type = _extract_enum(properties, "SoundAssetCompressionType", _COMPRESSION_TYPE_NAMES)
     if compression_type is not None:
         sound["compression_type"] = compression_type
 
@@ -273,9 +271,7 @@ def build_sound_metadata(
         sound["mature"] = True
 
     # Loading behavior from UPROPERTY (SoundWave.h:760-761)
-    loading_behavior = _extract_enum(
-        properties, "LoadingBehavior", _LOADING_BEHAVIOR_NAMES
-    )
+    loading_behavior = _extract_enum(properties, "LoadingBehavior", _LOADING_BEHAVIOR_NAMES)
     if loading_behavior is not None:
         sound["loading_behavior"] = loading_behavior
 

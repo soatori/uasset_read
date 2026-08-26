@@ -1,4 +1,5 @@
 """Bounded event buffer — retains leading entries, trailing entries, and dedup counts."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -76,4 +77,3 @@ class BoundedEventBuffer:
     def __bool__(self) -> bool:
         """Return True if the buffer is non-empty."""
         return len(self._entries) > 0
-

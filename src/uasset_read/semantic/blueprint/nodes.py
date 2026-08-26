@@ -1,8 +1,13 @@
 """Graph/node/pin/port emission for Blueprint semantic JSON (BP-6, 7, 8)."""
+
 from __future__ import annotations
 
 from uasset_read.semantic.blueprint.ids import (
-    ascii_slug, graph_id, node_id, data_endpoint, exec_endpoint,
+    ascii_slug,
+    graph_id,
+    node_id,
+    data_endpoint,
+    exec_endpoint,
 )
 from uasset_read.semantic.blueprint.types import type_ref_from_pin
 
@@ -94,8 +99,11 @@ def _pin_keep(pin, connected: bool) -> bool:
         return True
     if getattr(pin, "orphaned", False) or getattr(pin, "orphaned_pin", False):
         return False
-    if getattr(pin, "default_value", "") or getattr(pin, "default_object_name", None) \
-            or getattr(pin, "default_text_value", None):
+    if (
+        getattr(pin, "default_value", "")
+        or getattr(pin, "default_object_name", None)
+        or getattr(pin, "default_text_value", None)
+    ):
         return True
     if getattr(pin, "is_reference", False):
         return True
@@ -134,8 +142,9 @@ def emit_graphs(graphs, table, reporting, *, mode: str) -> tuple[list[dict], dic
 
         kind = _graph_kind(name, getattr(graph, "graph_class", "") or "")
         if kind == "event_graph" and any(
-                _NODE_KIND_MAP.get(getattr(n, "node_class", "") or getattr(n, "class_name", "") or "") == "function_entry"
-                for n in getattr(graph, "nodes", None) or []):
+            _NODE_KIND_MAP.get(getattr(n, "node_class", "") or getattr(n, "class_name", "") or "") == "function_entry"
+            for n in getattr(graph, "nodes", None) or []
+        ):
             kind = "function"  # evidence-based: graph contains a FunctionEntry node
         entry: dict = {"id": gid, "name": name, "kind": kind, "nodes": nodes_json}
         if mode == "debug":
@@ -157,8 +166,13 @@ def _emit_node(node, graph_slug, ordinal_counts, table, reporting, mode):
     if kind is None:
         kind = "custom"
         status = "opaque"
-        reporting.diagnostic("BP_NODE_UNRECOGNIZED", f"graph:{graph_id(graph_slug)}/nodes",
-                             "warning", "semantic_loss", occurrence={"class": node_class})
+        reporting.diagnostic(
+            "BP_NODE_UNRECOGNIZED",
+            f"graph:{graph_id(graph_slug)}/nodes",
+            "warning",
+            "semantic_loss",
+            occurrence={"class": node_class},
+        )
     if kind == "comment":
         return None, {}
 
@@ -182,10 +196,12 @@ def _emit_node(node, graph_slug, ordinal_counts, table, reporting, mode):
         linked = _linked_guids(pin)
         if pin_id:
             node_index[pin_id] = {
-                "node": nid, "graph": graph_id(graph_slug), "endpoint": endpoint,
-                "direction": direction, "is_exec": is_exec,
-                "orphaned": bool(getattr(pin, "orphaned", False)
-                                 or getattr(pin, "orphaned_pin", False)),
+                "node": nid,
+                "graph": graph_id(graph_slug),
+                "endpoint": endpoint,
+                "direction": direction,
+                "is_exec": is_exec,
+                "orphaned": bool(getattr(pin, "orphaned", False) or getattr(pin, "orphaned_pin", False)),
                 "not_connectable": bool(getattr(pin, "not_connectable", False)),
                 "linked": linked,
             }
@@ -194,8 +210,7 @@ def _emit_node(node, graph_slug, ordinal_counts, table, reporting, mode):
             role = ascii_slug(pin_name).lower().replace("_", "-") or "port"
             control_ports[endpoint] = {"name": pin_name, "direction": direction, "role": role}
         elif _pin_keep(pin, connected):
-            dpin: dict = {"name": pin_name, "direction": direction,
-                          "type": type_ref_from_pin(table, pin)}
+            dpin: dict = {"name": pin_name, "direction": direction, "type": type_ref_from_pin(table, pin)}
             if getattr(pin, "sub_pin_guids", None):
                 dpin["path"] = [ascii_slug(pin_name)]
             if getattr(pin, "parent_pin_guid", ""):
@@ -213,6 +228,5 @@ def _emit_node(node, graph_slug, ordinal_counts, table, reporting, mode):
     if control_ports:
         result["control_ports"] = control_ports
     if mode == "debug":
-        result["evidence"] = {"node_guid": getattr(node, "node_guid", "") or "",
-                              "source_class": node_class}
+        result["evidence"] = {"node_guid": getattr(node, "node_guid", "") or "", "source_class": node_class}
     return result, node_index

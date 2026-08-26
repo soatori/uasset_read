@@ -13,12 +13,14 @@ if TYPE_CHECKING:
 @dataclass
 class EX_SetArray(KismetExpression):
     """SetArray — version-dependent: with CHANGE_SETARRAY_BYTECODE has AssigningProperty."""
+
     AssigningProperty: Optional[KismetExpression] = None
     ArrayInnerProp: Optional[FKismetPropertyPointer] = None
     Elements: list[KismetExpression] = None
 
     @property
-    def Token(self) -> EExprToken: return EExprToken.EX_SetArray
+    def Token(self) -> EExprToken:
+        return EExprToken.EX_SetArray
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetArray:
@@ -39,7 +41,8 @@ class EX_SetMap(KismetExpression):
     Elements: list[KismetExpression] = None
 
     @property
-    def Token(self) -> EExprToken: return EExprToken.EX_SetMap
+    def Token(self) -> EExprToken:
+        return EExprToken.EX_SetMap
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetMap:
@@ -58,7 +61,8 @@ class EX_SetSet(KismetExpression):
     Elements: list[KismetExpression] = None
 
     @property
-    def Token(self) -> EExprToken: return EExprToken.EX_SetSet
+    def Token(self) -> EExprToken:
+        return EExprToken.EX_SetSet
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetSet:
@@ -77,11 +81,13 @@ class EX_ArrayConst(KismetExpression):
     Elements: list[KismetExpression] = None
 
     @property
-    def Token(self) -> EExprToken: return EExprToken.EX_ArrayConst
+    def Token(self) -> EExprToken:
+        return EExprToken.EX_ArrayConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ArrayConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
+
         prop = FKismetPropertyPointer.from_archive(archive, name_map)
         elements = archive.read_expression_array(EExprToken.EX_EndArrayConst)
         return cls(InnerProperty=prop, Elements=elements)
@@ -99,11 +105,13 @@ class EX_MapConst(KismetExpression):
     Elements: list[KismetExpression] = None
 
     @property
-    def Token(self) -> EExprToken: return EExprToken.EX_MapConst
+    def Token(self) -> EExprToken:
+        return EExprToken.EX_MapConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_MapConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
+
         key_prop = FKismetPropertyPointer.from_archive(archive, name_map)
         val_prop = FKismetPropertyPointer.from_archive(archive, name_map)
         num = archive.read_i32()
@@ -126,11 +134,13 @@ class EX_SetConst(KismetExpression):
     Elements: list[KismetExpression] = None
 
     @property
-    def Token(self) -> EExprToken: return EExprToken.EX_SetConst
+    def Token(self) -> EExprToken:
+        return EExprToken.EX_SetConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
+
         prop = FKismetPropertyPointer.from_archive(archive, name_map)
         elements = archive.read_expression_array(EExprToken.EX_EndSetConst)
         return cls(InnerProperty=prop, Elements=elements)
@@ -146,7 +156,8 @@ class EX_ArrayGetByRef(KismetExpression):
     ArrayIndex: KismetExpression = None
 
     @property
-    def Token(self) -> EExprToken: return EExprToken.EX_ArrayGetByRef
+    def Token(self) -> EExprToken:
+        return EExprToken.EX_ArrayGetByRef
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ArrayGetByRef:

@@ -5,6 +5,7 @@ asset category. Results are informational only (no pass/fail thresholds).
 
 Marker: benchmark
 """
+
 from __future__ import annotations
 
 import time
@@ -65,5 +66,4 @@ class TestParseSpeed:
         elapsed = time.perf_counter() - start
 
         total = len(sample_uassets)
-        print(f"\nTotal: {elapsed:.1f}s for {total} samples "
-              f"({elapsed / total:.2f}s avg, {failures} failures)")
+        print(f"\nTotal: {elapsed:.1f}s for {total} samples ({elapsed / total:.2f}s avg, {failures} failures)")

@@ -1,4 +1,5 @@
 """Tests for Movie semantic JSON extension (#557i)."""
+
 from __future__ import annotations
 
 import json
@@ -39,6 +40,7 @@ def _build_ir_for_sample(samples_dir: Path, filename: str, mode: str = "standard
     ir = build_package_ir(result)
     semantic = build_semantic_ir(ir, source_path=str(sample))
     from uasset_read.semantic.projection import project_semantic
+
     return project_semantic(semantic, mode)
 
 

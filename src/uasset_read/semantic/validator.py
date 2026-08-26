@@ -372,20 +372,14 @@ def validate_anim_blueprint_document(ir) -> list[str]:
         transitions = sm.get("transitions", []) or []
         initial = sm.get("initial_state_index")
         if initial is not None and (initial < 0 or initial >= len(states)):
-            errors.append(
-                f"State machine '{sm_id}' initial_state_index {initial} out of range [0, {len(states)})"
-            )
+            errors.append(f"State machine '{sm_id}' initial_state_index {initial} out of range [0, {len(states)})")
         for i, trans in enumerate(transitions):
             prev = trans.get("previous_state", -1)
             nxt = trans.get("next_state", -1)
             if prev < 0 or prev >= len(states):
-                errors.append(
-                    f"Transition[{i}] in '{sm_id}' previous_state {prev} out of range [0, {len(states)})"
-                )
+                errors.append(f"Transition[{i}] in '{sm_id}' previous_state {prev} out of range [0, {len(states)})")
             if nxt < 0 or nxt >= len(states):
-                errors.append(
-                    f"Transition[{i}] in '{sm_id}' next_state {nxt} out of range [0, {len(states)})"
-                )
+                errors.append(f"Transition[{i}] in '{sm_id}' next_state {nxt} out of range [0, {len(states)})")
 
     # --- Opaque node diagnostic check ---
     opaque_nodes = []
@@ -395,7 +389,7 @@ def validate_anim_blueprint_document(ir) -> list[str]:
                 opaque_nodes.append(node.get("source_type", "unknown"))
     if opaque_nodes:
         diag_codes = set()
-        for d in (content.get("diagnostics") or []):
+        for d in content.get("diagnostics") or []:
             diag_codes.add(d.get("code") if isinstance(d, dict) else getattr(d, "code", ""))
         if "ABP_NODE_UNRECOGNIZED" not in diag_codes:
             errors.append("Opaque nodes exist but no ABP_NODE_UNRECOGNIZED diagnostic found")
@@ -613,7 +607,3 @@ def validate_texture_document(ir) -> list[str]:
 
 
 # Registration is handled by texture/__init__.py via register_domain_validator()
-
-
-
-

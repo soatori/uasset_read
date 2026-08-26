@@ -4,9 +4,11 @@ Game version mapping -- infer PAK file version from game identifier.
 Reference: external/CUE4Parse/CUE4Parse/UE4/Versions/EGame.cs implementation.
 """
 
+
 # Game identifier enumeration
 class EGame:
     """Game identifier enumeration."""
+
     UNKNOWN = 0
 
     # Custom magic games (13, fully aligned with CUE4Parse FPakInfo.cs)
@@ -52,7 +54,6 @@ class EGame:
     BORDERLANDS_3 = 211
 
 
-
 # Magic to game identifier mapping
 MAGIC_TO_GAME_MAP: dict[int, int] = {
     0xA590ED1E: EGame.OUTLAST_TRIALS,
@@ -81,4 +82,3 @@ def detect_game_from_magic(magic: int) -> int:
         Game identifier (EGame enum value)
     """
     return MAGIC_TO_GAME_MAP.get(magic, EGame.UNKNOWN)
-

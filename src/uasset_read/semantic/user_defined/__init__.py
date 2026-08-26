@@ -1,4 +1,5 @@
 """User-Defined types semantic JSON domain (#557g)."""
+
 from __future__ import annotations
 
 from uasset_read.semantic.extensions import register_extension

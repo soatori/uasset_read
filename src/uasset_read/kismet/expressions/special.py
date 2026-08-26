@@ -11,7 +11,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 from uasset_read.kismet.expressions.base import (
-    KismetExpression, KismetExpressionT, make_simple_expression,
+    KismetExpression,
+    KismetExpressionT,
+    make_simple_expression,
 )
 from uasset_read.kismet.tokens import EExprToken, EScriptInstrumentationType
 from uasset_read.kismet.value_types import FNameRef

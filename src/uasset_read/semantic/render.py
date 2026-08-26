@@ -3,6 +3,7 @@
 Only canonicalizes key ordering and encodes JSON. Does NOT perform
 asset classification, field omission, or other semantic decisions.
 """
+
 from __future__ import annotations
 
 import json
@@ -17,9 +18,7 @@ def _strip_none_and_empty(data: Any) -> Any:
     """Recursively remove None values and empty containers."""
     if isinstance(data, dict):
         return {
-            k: _strip_none_and_empty(v)
-            for k, v in data.items()
-            if v is not None and v != () and v != [] and v != {}
+            k: _strip_none_and_empty(v) for k, v in data.items() if v is not None and v != () and v != [] and v != {}
         }
     if isinstance(data, (list, tuple)):
         return [_strip_none_and_empty(item) for item in data]
@@ -41,8 +40,18 @@ def render_semantic_json(ir: SemanticIR, *, include_schema: bool = False) -> str
     content = raw.pop("content", {}) or {}
 
     # Merge content but do NOT overwrite common contract fields
-    _COMMON_FIELDS = {"format", "format_version", "mode", "asset_type", "asset", "status",
-                      "references", "coverage", "diagnostics", "evidence"}
+    _COMMON_FIELDS = {
+        "format",
+        "format_version",
+        "mode",
+        "asset_type",
+        "asset",
+        "status",
+        "references",
+        "coverage",
+        "diagnostics",
+        "evidence",
+    }
     _OVERRIDABLE = {"references", "coverage", "diagnostics"}
     for key, value in content.items():
         if key in _COMMON_FIELDS and key not in _OVERRIDABLE:
@@ -73,9 +82,12 @@ def render_semantic_json(ir: SemanticIR, *, include_schema: bool = False) -> str
         raw["$schema"] = f"https://github.com/soatori/uasset_read/schemas/{schema_file}"
     raw = canonical_sort(raw)
     cleaned = _strip_none_and_empty(raw)
-    return json.dumps(
-        cleaned,
-        indent=2,
-        ensure_ascii=False,
-        allow_nan=False,
-    ) + "\n"
+    return (
+        json.dumps(
+            cleaned,
+            indent=2,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        + "\n"
+    )

@@ -1,10 +1,10 @@
 """Tests for --log-format CLI argument."""
+
 from __future__ import annotations
 
 import os
 import subprocess
 import sys
-
 
 
 def _run_cli_help():

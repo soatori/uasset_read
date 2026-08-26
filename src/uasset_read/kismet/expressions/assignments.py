@@ -132,10 +132,6 @@ class EX_LetValueOnPersistentFrame(KismetExpression):
 
     def to_dict(self) -> dict:
         d = super().to_dict()
-        d["DestinationProperty"] = (
-            self.DestinationProperty.to_dict() if self.DestinationProperty else None
-        )
-        d["AssignmentExpression"] = (
-            self.AssignmentExpression.to_dict() if self.AssignmentExpression else None
-        )
+        d["DestinationProperty"] = self.DestinationProperty.to_dict() if self.DestinationProperty else None
+        d["AssignmentExpression"] = self.AssignmentExpression.to_dict() if self.AssignmentExpression else None
         return d

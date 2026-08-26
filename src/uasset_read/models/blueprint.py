@@ -7,6 +7,7 @@ extract_blueprint_metadata(), bypassing the from_archive serialization path.
 
 Per D-10: Python 3.10+ strict type hints.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
 @dataclass
 class FunctionParameter:
     """Function parameter (META-02)."""
+
     name: str = ""
     param_type: str = ""
     default_value: Any = None
@@ -32,6 +34,7 @@ class FunctionParameter:
 @dataclass
 class MulticastDelegate:
     """Multicast delegate."""
+
     delegate_name: str = ""
     signature_function: str = ""
     is_callable_in_blueprint: bool = False
@@ -40,6 +43,7 @@ class MulticastDelegate:
 @dataclass
 class BlueprintEvent:
     """Blueprint event metadata."""
+
     name: str = ""
     event_type: str = ""
     function_flags: int = 0
@@ -67,6 +71,7 @@ class BlueprintEvent:
 @dataclass
 class BlueprintInterface:
     """Blueprint-implemented interface."""
+
     name: str = ""
     guid: str = ""
 
@@ -74,6 +79,7 @@ class BlueprintInterface:
 @dataclass
 class BlueprintFunction:
     """Blueprint function metadata."""
+
     name: str = ""
     return_type: str = ""
     parameters: List[FunctionParameter] = field(default_factory=list)
@@ -111,6 +117,7 @@ class BlueprintFunction:
 @dataclass
 class BlueprintVariable:
     """Blueprint variable definition (FBPVariableDescription)."""
+
     var_name: str
     var_type: Optional["FEdGraphPinType"] = None
     category: str = ""
@@ -154,6 +161,7 @@ class BlueprintVariable:
 @dataclass
 class BlueprintMetadata:
     """Blueprint metadata, extracted from ExportMap."""
+
     is_blueprint: bool
     parent_class: Optional[str] = None
     description: str = ""

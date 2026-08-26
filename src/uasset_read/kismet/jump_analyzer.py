@@ -9,6 +9,7 @@ Usage:
     pattern = analyzer.detect_pattern(start_idx=0)
     stats = analyzer.analyze_structured_rate()
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -28,11 +29,18 @@ def _get_assignment_types() -> tuple[type, ...]:
     global _ASSIGNMENT_TYPES
     if not _ASSIGNMENT_TYPES:
         from uasset_read.kismet.expressions.assignments import (
-            EX_Let, EX_LetBool, EX_LetObj, EX_LetWeakObjPtr,
+            EX_Let,
+            EX_LetBool,
+            EX_LetObj,
+            EX_LetWeakObjPtr,
             EX_LetValueOnPersistentFrame,
         )
+
         _ASSIGNMENT_TYPES = (
-            EX_Let, EX_LetBool, EX_LetObj, EX_LetWeakObjPtr,
+            EX_Let,
+            EX_LetBool,
+            EX_LetObj,
+            EX_LetWeakObjPtr,
             EX_LetValueOnPersistentFrame,
         )
     return _ASSIGNMENT_TYPES
@@ -254,7 +262,9 @@ class JumpAnalyzer:
             None if no match.
         """
         from uasset_read.kismet.expressions.control_flow import (
-            EX_PushExecutionFlow, EX_JumpIfNot, EX_PopExecutionFlow,
+            EX_PushExecutionFlow,
+            EX_JumpIfNot,
+            EX_PopExecutionFlow,
             EX_EndOfScript,
         )
 
@@ -273,9 +283,13 @@ class JumpAnalyzer:
             if isinstance(self._expressions[k], EX_JumpIfNot):
                 jump_if_not_idx = k
                 break
-            if isinstance(self._expressions[k], (
-                EX_PushExecutionFlow, EX_EndOfScript,
-            )):
+            if isinstance(
+                self._expressions[k],
+                (
+                    EX_PushExecutionFlow,
+                    EX_EndOfScript,
+                ),
+            ):
                 break
 
         if jump_if_not_idx is None:
@@ -290,9 +304,13 @@ class JumpAnalyzer:
             if isinstance(self._expressions[j], EX_PopExecutionFlow):
                 pop_idx = j
                 break
-            if isinstance(self._expressions[j], (
-                EX_PushExecutionFlow, EX_EndOfScript,
-            )):
+            if isinstance(
+                self._expressions[j],
+                (
+                    EX_PushExecutionFlow,
+                    EX_EndOfScript,
+                ),
+            ):
                 break
 
         if pop_idx is None:
@@ -478,10 +496,12 @@ class JumpAnalyzer:
         cases = []
         if expr.Cases:
             for case_item in expr.Cases:
-                cases.append({
-                    "index_term": case_item.CaseIndexValueTerm,
-                    "case_term": case_item.CaseTerm,
-                })
+                cases.append(
+                    {
+                        "index_term": case_item.CaseIndexValueTerm,
+                        "case_term": case_item.CaseTerm,
+                    }
+                )
 
         return {
             "type": "switch",
@@ -557,7 +577,8 @@ class JumpAnalyzer:
         Optimization: skip indices already marked as structured to avoid redundant detection.
         """
         from uasset_read.kismet.expressions.control_flow import (
-            EX_JumpIfNot, EX_PushExecutionFlow,
+            EX_JumpIfNot,
+            EX_PushExecutionFlow,
         )
         from uasset_read.kismet.expressions.special import EX_SwitchValue
 
@@ -628,7 +649,9 @@ class JumpAnalyzer:
             StructuredRateReport containing structured rate, pattern counts, and goto reasons.
         """
         from uasset_read.kismet.expressions.control_flow import (
-            EX_Jump, EX_JumpIfNot, EX_ComputedJump,
+            EX_Jump,
+            EX_JumpIfNot,
+            EX_ComputedJump,
         )
         from uasset_read.kismet.expressions.special import EX_SwitchValue
 
@@ -673,7 +696,8 @@ class JumpAnalyzer:
                             structured_set.add(j)
                 elif ptype in ("if_else", "if"):
                     end = pattern.get(
-                        "else_end", pattern.get("then_end", pattern["start"]),
+                        "else_end",
+                        pattern.get("then_end", pattern["start"]),
                     )
                     for j in range(pattern["start"], end + 1):
                         if j in jump_indices:
@@ -681,19 +705,17 @@ class JumpAnalyzer:
             else:
                 # goto fallback
                 reason = self._classify_goto_reason(idx, expr)
-                goto_reasons.append({
-                    "index": idx,
-                    "reason": reason,
-                    "expr_type": type(expr).__name__,
-                })
+                goto_reasons.append(
+                    {
+                        "index": idx,
+                        "reason": reason,
+                        "expr_type": type(expr).__name__,
+                    }
+                )
 
         report.structured_count = len(structured_set)
         report.goto_count = report.total_jump_exprs - report.structured_count
-        report.rate = (
-            report.structured_count / report.total_jump_exprs
-            if report.total_jump_exprs > 0
-            else 1.0
-        )
+        report.rate = report.structured_count / report.total_jump_exprs if report.total_jump_exprs > 0 else 1.0
         report.pattern_counts = pattern_counts
         report.goto_reasons = goto_reasons
 
@@ -710,7 +732,9 @@ class JumpAnalyzer:
             Human-readable fallback reason string.
         """
         from uasset_read.kismet.expressions.control_flow import (
-            EX_Jump, EX_JumpIfNot, EX_ComputedJump,
+            EX_Jump,
+            EX_JumpIfNot,
+            EX_ComputedJump,
         )
 
         if isinstance(expr, EX_ComputedJump):
@@ -732,4 +756,3 @@ class JumpAnalyzer:
             return "unresolved_jump (jump target not found in expression list)"
 
         return "unknown (unrecognized jump type)"
-

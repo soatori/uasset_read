@@ -25,7 +25,11 @@ from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, Han
 logger = logging.getLogger(__name__)
 
 _PROJECTED_PROPERTIES = (
-    "DefaultMode", "Variable", "Metadata", "DefaultValueVariant", "ChangeId",
+    "DefaultMode",
+    "Variable",
+    "Metadata",
+    "DefaultValueVariant",
+    "ChangeId",
 )
 
 
