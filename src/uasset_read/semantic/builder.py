@@ -367,10 +367,14 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None, *, 
         domain_format is not None and status.representation != "opaque" and not _domain_content_empty
     )
     if owns_envelope_sections and content.get("coverage"):
-        # Any reported coverage entry means some scope is not complete:
-        # representation cannot be "full" (honest status contract).
-        representation = "partial"
-        status = AssetStatus(parse=parse, representation="partial")
+        # Only downgrade when coverage reports actual loss (not "ok" entries)
+        has_loss = any(
+            entry.get("status") in {"partial", "unavailable", "truncated"}
+            for entry in content.get("coverage", [])
+        )
+        if has_loss:
+            representation = "partial"
+            status = AssetStatus(parse=parse, representation="partial")
     coverage = None if owns_envelope_sections else cov.build()
     # Merge domain extractor diagnostics into the envelope diagnostics
     for d in content.get("diagnostics", []):
