@@ -345,6 +345,71 @@ def validate_anim_blueprint_document(ir) -> list[str]:
         if _has_evidence(content):
             errors.append("Standard animation blueprint content must not contain evidence")
 
+    # --- Pose flow validation ---
+    for graph in graphs:
+        gid = graph.get("id", "")
+        pose_flow = graph.get("pose_flow", {}) or {}
+        ordinals_seen: set[int] = set()
+        for edge in pose_flow.get("edges", []) or []:
+            from_ref = edge.get("from", {}) or {}
+            to_ref = edge.get("to", {}) or {}
+            from_pin = from_ref.get("pose_pin", "")
+            to_pin = to_ref.get("pose_pin", "")
+            if not from_pin.startswith("pose.output."):
+                errors.append(f"Pose edge source must be output pose, got '{from_pin}' in '{gid}'")
+            if not to_pin.startswith("pose.input."):
+                errors.append(f"Pose edge target must be input pose, got '{to_pin}' in '{gid}'")
+            ordinal = edge.get("ordinal")
+            if ordinal is not None:
+                if ordinal in ordinals_seen:
+                    errors.append(f"Duplicate pose edge ordinal {ordinal} in '{gid}'")
+                ordinals_seen.add(ordinal)
+
+    # --- State machine validation ---
+    for sm in content.get("state_machines", []) or []:
+        sm_id = sm.get("id", "")
+        states = sm.get("states", []) or []
+        transitions = sm.get("transitions", []) or []
+        initial = sm.get("initial_state_index")
+        if initial is not None and (initial < 0 or initial >= len(states)):
+            errors.append(
+                f"State machine '{sm_id}' initial_state_index {initial} out of range [0, {len(states)})"
+            )
+        for i, trans in enumerate(transitions):
+            prev = trans.get("previous_state", -1)
+            nxt = trans.get("next_state", -1)
+            if prev < 0 or prev >= len(states):
+                errors.append(
+                    f"Transition[{i}] in '{sm_id}' previous_state {prev} out of range [0, {len(states)})"
+                )
+            if nxt < 0 or nxt >= len(states):
+                errors.append(
+                    f"Transition[{i}] in '{sm_id}' next_state {nxt} out of range [0, {len(states)})"
+                )
+
+    # --- Opaque node diagnostic check ---
+    opaque_nodes = []
+    for graph in graphs:
+        for node in graph.get("nodes", []) or []:
+            if node.get("status") == "opaque":
+                opaque_nodes.append(node.get("source_type", "unknown"))
+    if opaque_nodes:
+        diag_codes = set()
+        for d in (content.get("diagnostics") or []):
+            diag_codes.add(d.get("code") if isinstance(d, dict) else getattr(d, "code", ""))
+        if "ABP_NODE_UNRECOGNIZED" not in diag_codes:
+            errors.append("Opaque nodes exist but no ABP_NODE_UNRECOGNIZED diagnostic found")
+
+    # --- representation=full must not have partial/unavailable/truncated coverage ---
+    if ir.status.representation == "full":
+        for entry in content.get("coverage", []) or []:
+            entry_status = entry.get("status", "")
+            if entry_status in ("partial", "unavailable", "truncated"):
+                errors.append(
+                    f"representation='full' but coverage has status='{entry_status}' "
+                    f"for scope '{entry.get('scope', '')}'"
+                )
+
     return errors
 
 
