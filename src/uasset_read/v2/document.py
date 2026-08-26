@@ -109,10 +109,7 @@ class PackageDocument:
                 }
                 for obj in self.objects
             ],
-            "relations": [
-                {"kind": r.kind, "from": r.from_id, "to": r.to_id}
-                for r in self.relations
-            ],
+            "relations": [{"kind": r.kind, "from": r.from_id, "to": r.to_id} for r in self.relations],
             "dependencies": [
                 {
                     "index": d.index,

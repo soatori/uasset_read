@@ -105,9 +105,18 @@ class TestDocumentSerialization:
         d = doc.to_dict()
 
         required = [
-            "format", "format_version", "view", "depth",
-            "source", "package", "objects", "relations",
-            "dependencies", "payloads", "diagnostics", "summary",
+            "format",
+            "format_version",
+            "view",
+            "depth",
+            "source",
+            "package",
+            "objects",
+            "relations",
+            "dependencies",
+            "payloads",
+            "diagnostics",
+            "summary",
         ]
         for key in required:
             assert key in d, f"Missing key: {key}"
@@ -200,10 +209,7 @@ class TestAllSamples:
 
     @pytest.mark.parametrize(
         "sample_name",
-        [
-            f.name
-            for f in sorted(SAMPLES_DIR.glob("*.uasset"))
-        ],
+        [f.name for f in sorted(SAMPLES_DIR.glob("*.uasset"))],
     )
     def test_sample_produces_document(self, sample_name):
         from uasset_read.v2.api import parse_package_document

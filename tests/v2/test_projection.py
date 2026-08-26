@@ -12,6 +12,7 @@ SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 @pytest.fixture
 def doc():
     from uasset_read.v2.api import parse_package_document
+
     return parse_package_document(str(SAMPLES_DIR / "ABP_RifleAnimLayers.uasset"))
 
 

@@ -40,9 +40,7 @@ class FileSource:
 
     def read_at(self, offset: int, size: int) -> bytes:
         if offset < 0 or offset + size > self._size:
-            raise IndexError(
-                f"read_at({offset}, {size}) out of range [0, {self._size})"
-            )
+            raise IndexError(f"read_at({offset}, {size}) out of range [0, {self._size})")
         try:
             with open(self._path, "rb") as f:
                 f.seek(offset)
@@ -71,9 +69,7 @@ class MemorySource:
 
     def read_at(self, offset: int, size: int) -> bytes:
         if offset < 0 or offset + size > len(self._data):
-            raise IndexError(
-                f"read_at({offset}, {size}) out of range [0, {len(self._data)})"
-            )
+            raise IndexError(f"read_at({offset}, {size}) out of range [0, {len(self._data)})")
         return self._data[offset : offset + size]
 
     def describe(self) -> SourceInfo:
@@ -92,9 +88,7 @@ class SliceReader:
 
     def __init__(self, source: Source, base: int, length: int):
         if base < 0 or base + length > source.size():
-            raise IndexError(
-                f"SliceReader({base}, {length}) out of range [0, {source.size()})"
-            )
+            raise IndexError(f"SliceReader({base}, {length}) out of range [0, {source.size()})")
         self._source = source
         self._base = base
         self._length = length
@@ -102,9 +96,7 @@ class SliceReader:
 
     def read(self, size: int) -> bytes:
         if self._pos + size > self._length:
-            raise IndexError(
-                f"read({size}) at pos {self._pos} exceeds slice length {self._length}"
-            )
+            raise IndexError(f"read({size}) at pos {self._pos} exceeds slice length {self._length}")
         data = self._source.read_at(self._base + self._pos, size)
         self._pos += size
         return data
@@ -123,9 +115,7 @@ class SliceReader:
     def sub_slice(self, offset: int, length: int) -> SliceReader:
         """Create a child SliceReader within this slice."""
         if offset < 0 or offset + length > self._length:
-            raise IndexError(
-                f"sub_slice({offset}, {length}) out of range [0, {self._length})"
-            )
+            raise IndexError(f"sub_slice({offset}, {length}) out of range [0, {self._length})")
         return SliceReader(self._source, self._base + offset, length)
 
     @property

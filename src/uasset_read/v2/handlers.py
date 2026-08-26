@@ -32,6 +32,7 @@ class AssetHandler(Protocol):
 @dataclass
 class HandlerResult:
     """Result from an asset handler enrichment."""
+
     semantic: dict[str, Any]
     coverage: list[CoverageEntry] = field(default_factory=list)
 
@@ -69,11 +70,13 @@ def run_handlers(
                     obj.status.semantic = "complete"
         except Exception as e:
             # Handler failure must not affect other objects
-            coverage.append(CoverageEntry(
-                feature=f"handler.{type(handler).__name__}",
-                status="missing",
-                detail=f"Handler error: {e}",
-            ))
+            coverage.append(
+                CoverageEntry(
+                    feature=f"handler.{type(handler).__name__}",
+                    status="missing",
+                    detail=f"Handler error: {e}",
+                )
+            )
 
     if not semantic:
         return None, coverage
@@ -123,9 +126,17 @@ class TextureHandler:
     """Enrich Texture2D/TextureCube objects."""
 
     _RESOURCE_KEYS = (
-        "size_x", "size_y", "format", "num_mips",
-        "is_streaming", "streaming_channels", "lod_group",
-        "address_x", "address_y", "filter", "srgb",
+        "size_x",
+        "size_y",
+        "format",
+        "num_mips",
+        "is_streaming",
+        "streaming_channels",
+        "lod_group",
+        "address_x",
+        "address_y",
+        "filter",
+        "srgb",
     )
     _BULK_KEYS = ("total_mip_bytes", "compressed_mip_bytes", "chunk_count", "first_mip")
 

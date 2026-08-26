@@ -25,6 +25,7 @@ class EngineVersion:
 @dataclass(frozen=True)
 class MappingInfo:
     """Type mapping source (e.g. .usmap file path)."""
+
     path: str = ""
 
 

@@ -34,29 +34,27 @@ def _extract_property_diagnostics(
     for prop in properties:
         # size_exceeded means the tag claimed more bytes than available
         if getattr(prop, "size_exceeded", False):
-            diags.append(Diagnostic(
-                severity="warning",
-                code="PROPERTY_SIZE_EXCEEDED",
-                message=(
-                    f"Property '{getattr(prop, 'name', '?')}' "
-                    f"size {getattr(prop, 'size', 0)} exceeded remaining bytes"
-                ),
-                stage="properties.tagged",
-                object_id=f"export:{export_index}",
-                property_path=getattr(prop, "name", "?"),
-                offset=getattr(prop, "tag_start_offset", None),
-                size=getattr(prop, "size", None),
-                effect="semantic_loss",
-                recoverable=True,
-            ))
+            diags.append(
+                Diagnostic(
+                    severity="warning",
+                    code="PROPERTY_SIZE_EXCEEDED",
+                    message=(
+                        f"Property '{getattr(prop, 'name', '?')}' "
+                        f"size {getattr(prop, 'size', 0)} exceeded remaining bytes"
+                    ),
+                    stage="properties.tagged",
+                    object_id=f"export:{export_index}",
+                    property_path=getattr(prop, "name", "?"),
+                    offset=getattr(prop, "tag_start_offset", None),
+                    size=getattr(prop, "size", None),
+                    effect="semantic_loss",
+                    recoverable=True,
+                )
+            )
         # Check for remainder bytes between value_end_offset and actual end
         value_end = getattr(prop, "value_end_offset", None)
         value_start = getattr(prop, "value_start_offset", None)
-        if (
-            value_end is not None
-            and value_start is not None
-            and not getattr(prop, "size_exceeded", False)
-        ):
+        if value_end is not None and value_start is not None and not getattr(prop, "size_exceeded", False):
             expected_size = getattr(prop, "size", 0)
             if expected_size > 0:
                 # This is informational — the property was parsed within bounds
@@ -206,12 +204,14 @@ def _build_dependencies(import_map: list[Any]) -> list[Dependency]:
     """Convert v1 import map to v2 dependencies."""
     deps: list[Dependency] = []
     for i, imp in enumerate(import_map):
-        deps.append(Dependency(
-            index=i,
-            class_name=getattr(imp, "class_name", ""),
-            object_name=getattr(imp, "object_name", ""),
-            package_name=getattr(imp, "class_package", ""),
-        ))
+        deps.append(
+            Dependency(
+                index=i,
+                class_name=getattr(imp, "class_name", ""),
+                object_name=getattr(imp, "object_name", ""),
+                package_name=getattr(imp, "class_package", ""),
+            )
+        )
     return deps
 
 
@@ -227,35 +227,41 @@ def _build_diagnostics_from_v1(
     for i, exp in enumerate(export_map):
         status = getattr(exp, "parse_status", None)
         if status == "failed":
-            diags.append(Diagnostic(
-                severity="error",
-                code="EXPORT_PARSE_FAILED",
-                message=f"Export {i} ({getattr(exp, 'object_name', '?')}) failed to parse",
-                stage="objects.export",
-                object_id=f"export:{i}",
-                effect="parse_failure",
-                recoverable=True,
-            ))
+            diags.append(
+                Diagnostic(
+                    severity="error",
+                    code="EXPORT_PARSE_FAILED",
+                    message=f"Export {i} ({getattr(exp, 'object_name', '?')}) failed to parse",
+                    stage="objects.export",
+                    object_id=f"export:{i}",
+                    effect="parse_failure",
+                    recoverable=True,
+                )
+            )
         elif status == "partial":
-            diags.append(Diagnostic(
-                severity="warning",
-                code="EXPORT_PARTIAL",
-                message=f"Export {i} ({getattr(exp, 'object_name', '?')}) partially parsed",
-                stage="objects.export",
-                object_id=f"export:{i}",
-                effect="semantic_loss",
-                recoverable=True,
-            ))
+            diags.append(
+                Diagnostic(
+                    severity="warning",
+                    code="EXPORT_PARTIAL",
+                    message=f"Export {i} ({getattr(exp, 'object_name', '?')}) partially parsed",
+                    stage="objects.export",
+                    object_id=f"export:{i}",
+                    effect="semantic_loss",
+                    recoverable=True,
+                )
+            )
 
     # Convert top-level errors
     for err in errors:
-        diags.append(Diagnostic(
-            severity="error",
-            code="PACKAGE_HEADER_ERROR",
-            message=err,
-            stage="package.summary",
-            recoverable=True,
-        ))
+        diags.append(
+            Diagnostic(
+                severity="error",
+                code="PACKAGE_HEADER_ERROR",
+                message=err,
+                stage="package.summary",
+                recoverable=True,
+            )
+        )
 
     return diags
 
@@ -275,10 +281,7 @@ def build_package_document(
     name_map = getattr(parse_result, "name_map", []) or []
 
     # Build objects — ALL exports, no filtering
-    objects = [
-        _build_object_record(exp, i, name_map)
-        for i, exp in enumerate(export_map)
-    ]
+    objects = [_build_object_record(exp, i, name_map) for i, exp in enumerate(export_map)]
 
     # Build relations
     relations = _build_relations(export_map)

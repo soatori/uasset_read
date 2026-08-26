@@ -85,7 +85,10 @@ def project_document(
 
     # Paginate
     page, next_offset, truncation_info = paginate(
-        selected, offset=offset, limit=limit, max_bytes=max_bytes,
+        selected,
+        offset=offset,
+        limit=limit,
+        max_bytes=max_bytes,
     )
 
     # Filter fields if requested
@@ -119,13 +122,9 @@ def project_document(
             "name_count": doc.package.name_count,
         },
         "objects": [obj_to_dict(o) for o in page],
-        "relations": [
-            {"kind": r.kind, "from": r.from_id, "to": r.to_id}
-            for r in doc.relations
-        ],
+        "relations": [{"kind": r.kind, "from": r.from_id, "to": r.to_id} for r in doc.relations],
         "dependencies": [
-            {"index": d.index, "class": d.class_name, "object_name": d.object_name}
-            for d in doc.dependencies
+            {"index": d.index, "class": d.class_name, "object_name": d.object_name} for d in doc.dependencies
         ],
         "payloads": [],
         "diagnostics": [d.to_dict() for d in doc.diagnostics],
@@ -153,9 +152,7 @@ def obj_to_dict(obj: ObjectRecord) -> dict[str, Any]:
         "class": obj.class_name,
         "roles": list(obj.roles),
         "serial_region": (
-            {"offset": obj.serial_region.offset, "size": obj.serial_region.size}
-            if obj.serial_region
-            else None
+            {"offset": obj.serial_region.offset, "size": obj.serial_region.size} if obj.serial_region else None
         ),
         "status": {"parse": obj.status.parse, "semantic": obj.status.semantic},
     }

@@ -18,6 +18,7 @@ class Region:
 @dataclass(frozen=True)
 class ObjectRef:
     """Reference to an import or export by table + index."""
+
     table: Literal["import", "export"]
     index: int
 
@@ -63,11 +64,16 @@ class ObjectRecord:
 @dataclass
 class Relation:
     kind: Literal[
-        "outer_of", "class_of", "generated_class_of",
-        "default_object_of", "template_of", "depends_on", "references",
+        "outer_of",
+        "class_of",
+        "generated_class_of",
+        "default_object_of",
+        "template_of",
+        "depends_on",
+        "references",
     ]
     from_id: str  # "export:0" or "import:3"
-    to_id: str    # "export:1" or "import:5"
+    to_id: str  # "export:1" or "import:5"
 
 
 @dataclass
