@@ -158,9 +158,10 @@ class TestSyntheticAnimBlueprintIR:
             not_connectable=False,
             sub_pin_guids=None,
             parent_pin_guid="",
+            linked_to=["pin-root-in"],
         )
         # Mark as output
-        seq_pin_out.direction = 0  # EGPD_Output
+        seq_pin_out.direction = 1  # EGPD_Output
 
         seq_node = SimpleNamespace(
             node_class="AnimGraphNode_SequencePlayer",
@@ -176,7 +177,7 @@ class TestSyntheticAnimBlueprintIR:
             pin_category="struct",
             pin_subcategory="FPoseLink",
             pin_subcategory_object_name="",
-            direction=1,  # EGPD_Input
+            direction=0,  # EGPD_Input
             orphaned=False,
             orphaned_pin=False,
             not_connectable=False,
