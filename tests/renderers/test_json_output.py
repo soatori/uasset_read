@@ -59,28 +59,6 @@ class TestJsonOutput:
         assert "parse" in data["status"]
         assert "representation" in data["status"]
 
-    def test_json_status_parse_valid(self, samples_dir: Path, sample_uassets: list[Path]):
-        """All samples have valid parse status in JSON output."""
-        valid_parse = {"complete", "partial", "failed"}
-        for sample_path in sample_uassets:
-            try:
-                data = _parse_json(samples_dir, sample_path.name)
-                parse_status = data.get("status", {}).get("parse")
-                assert parse_status in valid_parse, f"{sample_path.name}: invalid parse status '{parse_status}'"
-            except Exception:
-                continue
-
-    def test_json_status_representation_valid(self, samples_dir: Path, sample_uassets: list[Path]):
-        """All samples have valid representation status in JSON output."""
-        valid_repr = {"full", "partial", "opaque"}
-        for sample_path in sample_uassets:
-            try:
-                data = _parse_json(samples_dir, sample_path.name)
-                repr_status = data.get("status", {}).get("representation")
-                assert repr_status in valid_repr, f"{sample_path.name}: invalid representation '{repr_status}'"
-            except Exception:
-                continue
-
     def test_json_has_references_or_domain_content(self, samples_dir: Path):
         """JSON output has references or domain-owned content."""
         if not (samples_dir / "FirstPerson_BP_FirstPersonCharacter.uasset").exists():
@@ -168,15 +146,6 @@ class TestJsonSchemaCompliance:
 
         data = _parse_json(samples_dir, "FirstPerson_BP_FirstPersonCharacter.uasset")
         assert "format_version" in data
-
-    def test_json_asset_type_is_string(self, samples_dir: Path, sample_uassets: list[Path]):
-        """asset_type is always a string."""
-        for sample_path in sample_uassets:
-            try:
-                data = _parse_json(samples_dir, sample_path.name)
-                assert isinstance(data.get("asset_type"), str), f"{sample_path.name}: asset_type is not a string"
-            except Exception:
-                continue
 
     def test_json_all_samples_parse(self, samples_dir: Path, sample_uassets: list[Path]):
         """All samples produce valid JSON output."""

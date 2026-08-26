@@ -2,7 +2,7 @@
 
 Date: 2026-08-17
 
-Status: Design approved, ready for implementation
+Status: Implemented on `dev-0.5.5`
 
 Issue: #557
 
@@ -32,18 +32,20 @@ Issue: #557
 | Anim compression | Read from properties, compute as fallback |
 | User-defined metadata | Minimal (no GUID, export flags) |
 
-### Implementation Order
+### Delivery Status
 
-1. **DataTable** (exemplar, in progress)
-2. **Mesh** — most complex, validates structured domain pattern
-3. **Texture** — validates resource domain pattern
-4. **Sound** — validates graph + resource hybrid pattern
-5. **Anim** — validates structured domain with compression
-6. **Niagara** — validates graph domain pattern
-7. **Data (CurveTable)** — sibling to DataTable
-8. **User-defined** — simple property projection
-9. **Standalone** — minimal, can be batched
-10. **Movie** — minimal, can be batched
+All planned families are implemented and registered in the semantic pipeline:
+
+1. **DataTable** — structured table exemplar
+2. **Mesh** — structured domain
+3. **Texture** — resource domain
+4. **Sound** — graph/resource hybrid domain
+5. **Anim** — structured domain with compression metadata
+6. **Niagara** — graph domain
+7. **Data (CurveTable)** — structured curve table domain
+8. **User-defined** — enum and struct projection
+9. **Standalone** — profile, curve, and foliage projection
+10. **Movie** — MovieScene and ControlRig projection
 
 ### Additional Types (Opaque Stubs)
 
@@ -1244,7 +1246,8 @@ Each fixture must:
 | 1.0 | 2026-08-17 | Initial design draft |
 | 1.1 | 2026-08-17 | Resolved open questions with recommended decisions |
 | 1.2 | 2026-08-17 | Added additional types (opaque stubs) to documentation |
+| 1.3 | 2026-08-26 | Recorded completion of all nine semantic asset families |
 
 ---
 
-*Design document for #557. Ready for implementation.*
+*Implemented design for #557 on `dev-0.5.5`.*

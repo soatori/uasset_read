@@ -3,8 +3,12 @@
 > Issue: [#556](https://github.com/soatori/uasset_read/issues/556)
 > Builds on: [#551](https://github.com/soatori/uasset_read/issues/551) (common infrastructure — CLOSED)
 > Date: 2026-08-15
-> Status: Draft
+> Status: Implemented on `dev-0.5.5`
 > Anchor: Unreal Engine 5.8.0
+
+This document records the accepted design and its pre-implementation baseline.
+The implementation now lives in `semantic/material/`, `ir_builder.py`, the
+material schema/validator, and the corresponding core and semantic tests.
 
 ## 1. Goal
 
@@ -28,7 +32,10 @@ The Material semantic JSON must:
 - Partial/opaque with diagnostics — no data loss, no fabricated semantics
 - JSON renderer with conditional domain sections (`_blueprint_to_dict`, `_anim_*_to_dict`)
 
-### 2.2 Current Material Parsing State
+### 2.2 Pre-Implementation Material Parsing State
+
+The following table is retained as the historical baseline that motivated the
+implementation; it does not describe the current repository state.
 
 | Layer | What exists | Gap |
 |-------|-------------|-----|
@@ -41,7 +48,9 @@ The Material semantic JSON must:
 
 ### 2.3 Sibling Issues
 
-#554 (Blueprint semantic JSON) and #555 (AnimBlueprint semantic JSON) are both OPEN. #556 is among the first semantic extensions. The pattern established here will inform #554/#555.
+#554 (Blueprint semantic JSON), #555 (AnimBlueprint semantic JSON), and #556 are
+implemented on `dev-0.5.5`. The shared graph-domain patterns established by
+these issues are now used by their respective semantic extractors.
 
 ## 3. Approach Decision: Tagged Property Aggregation
 
@@ -68,7 +77,10 @@ The Material semantic JSON must:
 4. **`UMaterial::Serialize` native layout** (Approach B) mainly adds shader map data via `SerializeInlineShaderMaps`, which is: (a) complex and version-dependent, (b) typically empty/minimal in editor-saved (unbaked) assets (our target), (c) not required by the acceptance criteria.
 5. **Ponytail principle**: simplest solution that covers the acceptance criteria. Approach B adds significant complexity for marginal gain.
 
-### 3.3 What Approach A Still Requires
+### 3.3 Implementation Checklist
+
+The following design steps have been delivered through the current semantic
+pipeline; filenames below are retained as the original implementation plan.
 
 1. Fix binary handler registration for `ExpressionInput` and `MaterialInput` variants (without "F" prefix)
 2. Add `MaterialIR` + sub-IR dataclasses to `models/ir.py`
