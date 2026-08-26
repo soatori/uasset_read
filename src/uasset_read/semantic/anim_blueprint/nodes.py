@@ -122,16 +122,32 @@ def anim_node_kind(node_class: str) -> tuple[str, str]:
     """Get the node kind and status for an animation node.
 
     Returns (kind, status) where status is 'recognized' or 'opaque'.
+
+    Serialized graph nodes use AnimGraphNode_* class names; the underlying
+    animation nodes use AnimNode_*. We normalize by stripping the "Graph"
+    prefix for lookup.
     """
     if not node_class:
         return "custom", "opaque"
+
+    # Try exact match first (handles both AnimNode_* and K2Node_* etc.)
     kind = _ANIM_NODE_KIND_MAP.get(node_class)
     if kind is not None:
         return kind, "recognized"
+
+    # Normalize AnimGraphNode_* -> AnimNode_* for lookup
+    lookup_name = node_class
+    if node_class.startswith("AnimGraphNode_"):
+        lookup_name = "AnimNode_" + node_class.removeprefix("AnimGraphNode_")
+    kind = _ANIM_NODE_KIND_MAP.get(lookup_name)
+    if kind is not None:
+        return kind, "recognized"
+
     # Fall back to blueprint node kinds
     kind = _NODE_KIND_MAP.get(node_class)
     if kind is not None:
         return kind, "recognized"
+
     return "custom", "opaque"
 
 
