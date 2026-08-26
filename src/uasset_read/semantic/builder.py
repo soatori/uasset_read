@@ -3,6 +3,7 @@
 Orchestrates: main-asset selection, reference normalization, coverage/diagnostics.
 Does NOT perform standard/debug projection (that is project_semantic's job).
 """
+
 from __future__ import annotations
 
 import inspect
@@ -10,7 +11,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from uasset_read.semantic.models import (
-    SemanticIR, AssetMeta, AssetStatus, EvidenceEntry,
+    SemanticIR,
+    AssetMeta,
+    AssetStatus,
+    EvidenceEntry,
 )
 from uasset_read.semantic.references import collect_references
 from uasset_read.semantic.coverage import CoverageModel
@@ -212,9 +216,9 @@ def _select_primary_export(package_ir: PackageIR) -> tuple[ExportIR | None, str]
     """
     # Rule 1: b_is_asset (only top-level)
     candidates = [
-        e for e in package_ir.exports
-        if getattr(e, "b_is_asset", False)
-        and not getattr(e, "outer_index_resolved", None)
+        e
+        for e in package_ir.exports
+        if getattr(e, "b_is_asset", False) and not getattr(e, "outer_index_resolved", None)
     ]
     if len(candidates) == 1:
         return candidates[0], "b_is_asset"
@@ -223,9 +227,7 @@ def _select_primary_export(package_ir: PackageIR) -> tuple[ExportIR | None, str]
     basename = package_ir.header.package_name.rsplit("/", 1)[-1] if package_ir.header.package_name else ""
     if basename:
         name_matches = [
-            e for e in package_ir.exports
-            if e.object_name == basename
-            and not getattr(e, "outer_index_resolved", None)
+            e for e in package_ir.exports if e.object_name == basename and not getattr(e, "outer_index_resolved", None)
         ]
         if len(name_matches) == 1:
             return name_matches[0], "basename_match"
@@ -276,8 +278,20 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None, *, 
 
     # Build status (export-level mapping, then package-level combination)
     parse_status = primary.parse_status or "success"
-    parse_map = {"success": "complete", "partial": "partial", "partial_metadata": "partial", "failed": "failed", "opaque": "partial"}
-    representation_map = {"success": "full", "partial": "partial", "partial_metadata": "partial", "failed": "opaque", "opaque": "opaque"}
+    parse_map = {
+        "success": "complete",
+        "partial": "partial",
+        "partial_metadata": "partial",
+        "failed": "failed",
+        "opaque": "partial",
+    }
+    representation_map = {
+        "success": "full",
+        "partial": "partial",
+        "partial_metadata": "partial",
+        "failed": "opaque",
+        "opaque": "opaque",
+    }
     export_parse = parse_map.get(parse_status, "partial")
     parse = _combine_package_status(export_parse, package_ir.diagnostics_data)
 
@@ -350,9 +364,7 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None, *, 
     # are always provided by the envelope so domain extractors need not
     # hardcode empty values.
     owns_envelope_sections = (
-        domain_format is not None
-        and status.representation != "opaque"
-        and not _domain_content_empty
+        domain_format is not None and status.representation != "opaque" and not _domain_content_empty
     )
     if owns_envelope_sections and content.get("coverage"):
         # Any reported coverage entry means some scope is not complete:

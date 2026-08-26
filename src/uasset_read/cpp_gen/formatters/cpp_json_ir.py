@@ -11,6 +11,7 @@ Exports:
     format_cpp_class_json: JSON IR formatting function
     kismet_to_cpp_body: Kismet expressions → structured C++ statement list
 """
+
 from __future__ import annotations
 
 import re
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 # C++ Property Data Model (Per D-06)
 # ============================================================================
 
+
 @dataclass
 class CppProperty:
     """Single C++ UPROPERTY declaration.
@@ -44,6 +46,7 @@ class CppProperty:
         default_value: default value (None for components, 100.0 for float variables)
         cpp_comment: optional comment (original UE type reference)
     """
+
     cpp_type: str
     name: str
     uproperty_marks: List[str]
@@ -73,6 +76,7 @@ class CppProperty:
 # C++ Header Metadata Model (Per D-05, D-06)
 # ============================================================================
 
+
 @dataclass
 class CppHeaderMeta:
     """Header file metadata.
@@ -85,6 +89,7 @@ class CppHeaderMeta:
         forward_declarations: forward declaration list
         generated_include: .generated.h include path (must be the last include)
     """
+
     pragma_once: bool = True
     includes: List[str] = field(default_factory=list)
     forward_declarations: List[str] = field(default_factory=list)
@@ -107,39 +112,50 @@ class CppHeaderMeta:
         # T-056-04: sanitize class name - allow only alphanumeric and underscores
         if class_name:
             import re
-            if not re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', class_name):
+
+            if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", class_name):
                 logger.warning(f"Invalid class name format: '{class_name}', sanitizing")
                 # Remove invalid characters
-                class_name = re.sub(r'[^A-Za-z0-9_]', '_', class_name)
+                class_name = re.sub(r"[^A-Za-z0-9_]", "_", class_name)
 
         meta = cls(
             pragma_once=True,
             includes=[],
             forward_declarations=[],
-            generated_include=f'"{class_name}.generated.h"' if class_name else ""
+            generated_include=f'"{class_name}.generated.h"' if class_name else "",
         )
 
         # Infer header file path from parent class prefix
         if parent_class:
             # Extract class name part (remove prefix)
             base_name = parent_class
-            if parent_class.startswith(('A', 'U', 'F', 'E', 'I')):
+            if parent_class.startswith(("A", "U", "F", "E", "I")):
                 base_name = parent_class[1:]
 
             # Actor classes use GameFramework path
-            if parent_class.startswith('A'):
+            if parent_class.startswith("A"):
                 meta.includes.append(f'"Engine/GameFramework/{base_name}.h"')
             # Component classes use Components path
-            elif parent_class.startswith('U') and base_name.endswith('Component'):
+            elif parent_class.startswith("U") and base_name.endswith("Component"):
                 meta.includes.append(f'"Components/{base_name}.h"')
             # Other UObject-derived classes
-            elif parent_class.startswith('U'):
+            elif parent_class.startswith("U"):
                 meta.includes.append(f'"Engine/{base_name}.h"')
             # Structs
-            elif parent_class.startswith('F'):
+            elif parent_class.startswith("F"):
                 # Core structs are in CoreUObject
-                if base_name in ('Vector', 'Rotator', 'Transform', 'Vector2D',
-                                  'LinearColor', 'Color', 'Guid', 'Quat', 'Plane', 'Box'):
+                if base_name in (
+                    "Vector",
+                    "Rotator",
+                    "Transform",
+                    "Vector2D",
+                    "LinearColor",
+                    "Color",
+                    "Guid",
+                    "Quat",
+                    "Plane",
+                    "Box",
+                ):
                     meta.includes.append('"CoreUObject.h"')
                 else:
                     meta.includes.append(f'"Engine/{base_name}.h"')
@@ -165,6 +181,7 @@ class CppCallParameter:
         cpp_type: C++ type (with direction modifier, e.g. "const FString&", "double")
         direction: "input" | "output" | "return"
     """
+
     name: str
     cpp_type: str
     direction: str  # "input" | "output" | "return"
@@ -198,6 +215,7 @@ class CppMethodIR:
         body: function body statements (structured IR)
         body_text: Kismet decompiled function body text (raw C++ pseudocode)
     """
+
     cpp_name: str
     return_type: str
     parameters: List[CppCallParameter]
@@ -250,6 +268,7 @@ class CppCallStatement:
         args: argument name list (sanitized identifiers)
         is_self_context: from FMemberReference.b_self_context
     """
+
     method_name: str
     target: str
     target_type: str = "pointer"
@@ -263,6 +282,7 @@ class CppStatement:
 
     All concrete statement types inherit from this class, representing a single C++ statement in a function body.
     """
+
     statement_type: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
@@ -279,6 +299,7 @@ class CppCallStmt(CppStatement):
         args: argument list (strings)
         is_pure: whether this is a pure function call
     """
+
     target: str = ""
     method_name: str = ""
     args: List[str] = field(default_factory=list)
@@ -304,6 +325,7 @@ class CppAssignmentStmt(CppStatement):
         rhs: right-hand side expression
         cpp_type: C++ type
     """
+
     lhs: str = ""
     rhs: str = ""
     cpp_type: str = ""
@@ -327,6 +349,7 @@ class CppIfStmt(CppStatement):
         then_body: then-branch statement list
         else_body: else-branch statement list (may be empty)
     """
+
     condition: str = ""
     then_body: List["CppStatement"] = field(default_factory=list)
     else_body: List["CppStatement"] = field(default_factory=list)
@@ -350,6 +373,7 @@ class CppInlineExprStmt(CppStatement):
     Attributes:
         expression: inline expression text
     """
+
     expression: str = ""
     statement_type: str = "inline_expr"
 
@@ -367,6 +391,7 @@ class CppReturnStmt(CppStatement):
     Attributes:
         value: return value expression (empty string for void return)
     """
+
     value: str = ""
     statement_type: str = "return"
 
@@ -384,6 +409,7 @@ class CppWhileStmt(CppStatement):
     Attributes:
         condition: loop condition expression
     """
+
     condition: str = ""
     statement_type: str = "while"
 
@@ -404,6 +430,7 @@ class CppForStmt(CppStatement):
         increment: increment expression
         body: loop body statement list
     """
+
     init: str = ""
     condition: str = ""
     increment: str = ""
@@ -430,6 +457,7 @@ class CppForEachStmt(CppStatement):
         container: container expression
         body: loop body statement list
     """
+
     element: str = ""
     element_type: str = "auto&"
     container: str = ""
@@ -455,6 +483,7 @@ class CppRawStmt(CppStatement):
     Attributes:
         raw_text: raw C++ text
     """
+
     raw_text: str = ""
     statement_type: str = "raw"
 
@@ -471,11 +500,11 @@ class CppRawStmt(CppStatement):
 
 # Classification priority order: most specific to most general
 # Each pattern tuple: (compiled_regex, factory_function)
-_IF_PATTERN = re.compile(r'^if\s*\((.+)\)\s*\{?$')
-_WHILE_PATTERN = re.compile(r'^while\s*\((.+)\)\s*\{?$')
-_RETURN_PATTERN = re.compile(r'^return(?:\s+(.+))?$')
-_ASSIGN_PATTERN = re.compile(r'^([\w][\w.>-]*)\s*=\s*(.+)$')
-_CALL_PATTERN = re.compile(r'^([\w][\w:>-]*)\((.*)\)$')
+_IF_PATTERN = re.compile(r"^if\s*\((.+)\)\s*\{?$")
+_WHILE_PATTERN = re.compile(r"^while\s*\((.+)\)\s*\{?$")
+_RETURN_PATTERN = re.compile(r"^return(?:\s+(.+))?$")
+_ASSIGN_PATTERN = re.compile(r"^([\w][\w.>-]*)\s*=\s*(.+)$")
+_CALL_PATTERN = re.compile(r"^([\w][\w:>-]*)\((.*)\)$")
 
 
 def _classify_cpp_line(line: str) -> CppStatement:
@@ -519,7 +548,7 @@ def _classify_cpp_line(line: str) -> CppStatement:
         rhs = m.group(2)
         # Exclude false positives: if left side contains :: or -> followed by (, it is a call not an assignment
         # e.g. "Obj->Func()" should not match as assignment
-        if '(' not in lhs and not rhs.lstrip().startswith('('):
+        if "(" not in lhs and not rhs.lstrip().startswith("("):
             return CppAssignmentStmt(lhs=lhs, rhs=rhs)
 
     # 5. function call: Func(args) or Class::Func(args)
@@ -551,20 +580,20 @@ def _split_args(args_str: str) -> List[str]:
     current: List[str] = []
 
     for ch in args_str:
-        if ch in ('(', '<', '[', '{'):
+        if ch in ("(", "<", "[", "{"):
             depth += 1
             current.append(ch)
-        elif ch in (')', '>', ']', '}'):
+        elif ch in (")", ">", "]", "}"):
             depth -= 1
             current.append(ch)
-        elif ch == ',' and depth == 0:
-            result.append(''.join(current).strip())
+        elif ch == "," and depth == 0:
+            result.append("".join(current).strip())
             current = []
         else:
             current.append(ch)
 
     if current:
-        result.append(''.join(current).strip())
+        result.append("".join(current).strip())
 
     return result
 
@@ -603,9 +632,11 @@ def kismet_to_cpp_body(
 
     return statements
 
+
 # ============================================================================
 # C++ Class Skeleton IR Data Model (Per D-01, D-06)
 # ============================================================================
+
 
 @dataclass
 class CppClassIR:
@@ -619,16 +650,19 @@ class CppClassIR:
         methods: method list (available when populated)
         constructor: constructor data (available when populated)
     """
+
     name: str
     parent_class: str
     header_meta: CppHeaderMeta = field(default_factory=CppHeaderMeta)
     properties: List[CppProperty] = field(default_factory=list)
     methods: List["CppMethodIR"] = field(default_factory=list)
-    constructor: Dict[str, List] = field(default_factory=lambda: {
-        "component_creations": [],
-        "component_assignments": [],
-        "default_values": [],
-    })  # to be populated
+    constructor: Dict[str, List] = field(
+        default_factory=lambda: {
+            "component_creations": [],
+            "component_assignments": [],
+            "default_values": [],
+        }
+    )  # to be populated
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to JSON-compatible dict (D-06 format).
@@ -659,6 +693,7 @@ class CppClassIR:
 # ============================================================================
 # JSON IR Formatting Functions
 # ============================================================================
+
 
 def format_cpp_class_json(ir: CppClassIR, output_version: str = "1.0") -> Dict[str, Any]:
     """Format CppClassIR to JSON IR output (D-06).

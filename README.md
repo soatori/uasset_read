@@ -4,7 +4,7 @@
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
-> 📦 **v0.5.5** — Zero runtime dependencies · Python 3.10+ · 207 source files · 30 asset types
+> 📦 **v0.5.5** — Zero runtime dependencies · Python 3.10+ · 200 source files · 70+ UE class types
 
 ## Why uasset_read?
 
@@ -24,7 +24,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 | -------- | ------- |
 | Version | 0.5.5 |
 | Source | Python parser for Unreal Engine .uasset files |
-| Modules | 207 source files across 15 subpackages |
+| Modules | 200 source files across 15 subpackages |
 
 ## Features
 
@@ -71,7 +71,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 ### Architecture
 
-- **Renderer system** — Markdown renderer via `IRenderer` ABC; JSON output routed through semantic pipeline (`semantic/`)
+- **Renderer system** — Markdown renderer; JSON output routed through semantic pipeline (`semantic/`)
 - **Core API** — `parse_single()`, `parse_batch()`, `diff_single()`, `list_formats()` for simplified programmatic access
 - **CLI delegation** — lightweight CLI delegates to `core.py`
 
@@ -176,51 +176,26 @@ json_str = parse_single(
 
 ### Module-level API
 
-Import parser functions directly from the package root. If you need the
-`uasset_read.parse_uasset` module object, use `importlib.import_module()` to
-avoid the root-level `parse_uasset` function name.
+Import directly from submodules for deeper access:
 
 ```python
-import importlib
-
 from uasset_read import (
-    # Data models
-    UEdGraph, UEdGraphNode, UEdGraphPin,
-    ParseResult, BlueprintMetadata, BlueprintVariable,
-
-    # Parsers
-    parse_property_value, parse_properties_from_export,
-
-    # Blueprint
-    extract_blueprint_variables, extract_blueprint_metadata,
-    parse_component_transform, extract_component_transforms,
-
-    # Flow tracing
-    build_execution_flow_entries, build_data_flows, build_connections_map,
-    build_execution_chains,
-
-    # Linker
-    parse_uasset_with_linker, PackageLinker, UObjectInstance,
-
-    # Kismet
-    decompile_uasset, KismetDecompiledResult,
-    KismetTranslator, to_function_body,
-
-    # Fallback models
-    PropertyFallback, StructFallback, GenericUObject,
-
-    # Class registry
-    ClassHandlerRegistry, ClassHandler, HandlerResult, FallbackPolicy,
-
-    # Constants & exceptions
-    PACKAGE_FILE_TAG, MMAP_THRESHOLD,
-    UAssetError, ParseError, VersionError,
+    parse_single, parse_batch, diff_single, list_formats,
+    parse_package, parse_uasset_with_linker,
+    ParseResult, ParseError, FArchive,
 )
 
-parse_module = importlib.import_module("uasset_read.parse_uasset")
+# Submodule imports for extended API
+from uasset_read.models import UEdGraph, UEdGraphNode, UEdGraphPin, BlueprintMetadata
+from uasset_read.blueprint import extract_blueprint_variables, extract_blueprint_metadata
+from uasset_read.graph import build_execution_flow_entries, build_data_flows
+from uasset_read.kismet import decompile_uasset, KismetDecompiledResult
+from uasset_read.link import PackageLinker, UObjectInstance
+from uasset_read.semantic import build_semantic_ir, render_semantic_json
+from uasset_read.renderers import MarkdownRenderer
 ```
 
-Full API list: see `src/uasset_read/__init__.py`.
+Full API list: see `src/uasset_read/__init__.py` and `wiki/07-Dev-Guide/Public-API.md`.
 
 ## Architecture
 
@@ -246,31 +221,23 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | Constants | `constants.py` | Version numbers, property type thresholds, CPF/PropertyTag flags |
 | Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
 | Config | `config.py` | `ParseConfig`, `LogConfig` dataclasses |
-| Main Parser | `parse_uasset.py` | `parse_package()`, `parse_uasset()`, `parse_uasset_with_linker()` |
 | Core API | `core/` | `parse_single()`, `parse_batch()`, `diff_single()`, `list_formats()` |
 | Package Mgmt | `package.py` | `PackageBundle`, `PackageProvider` (filesystem/Pak/IoStore) |
-| Raw Files | `raw.py` | JSON/INI/LocRes/LocMeta/Audio non-uasset parsing |
 | CLI | `cli.py` | argparse entry point, delegates to `core.py` API |
 | Versioning | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
 | Memory Safety | `memory_safety.py` | Central memory policy, RSS measurement, parser checkpoints |
 | Bounded Events | `bounded_events.py` | Bounded event buffer for diagnostics |
-| Parse Stages | `parse_stages.py` | Core table reading, secondary table reading, export property parsing |
-| Post Process | `parse_post_process.py` | Post-processing: Kismet decompilation, graph extraction, dependency analysis |
 | Batch Worker | `batch_worker.py` | Subprocess-isolated per-asset batch worker |
-| Providers | `providers.py` | GameDirectoryProvider for game asset scanning |
 | Project Logging | `project_logging.py` | Structured logging with rotation |
-| Report Summary | `report_summary.py` | Structured batch summary generation |
-| Debug | `debug/hex_view.py` | HexView debug system for binary field inspection |
-| JS Compat | `compat/uasset_reader_js.py` | Pinned raw reader for uasset-reader-js JSON profile |
 | Semantic | `semantic/` | Semantic IR builder, projection, validator, renderer for JSON output |
 | Schemas | `schemas/` | JSON Schema definitions for semantic output |
 | **Pipeline** | `pipeline/` | Parsing pipeline orchestration: stages, memory, error handling |
 | **IR** | `ir_builder.py` | Package-level intermediate representation builder |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult, Status, Diagnostics |
-| **Parsers** | `parsers/` | 40+ property type parsers + dispatcher + custom property registry + AssetRegistry parser + class serialization strategy |
-| ├ Asset Types | `parsers/asset_types/` | 30 asset type parsers including StaticMesh, SkeletalMesh, AnimBlueprint, AnimMontage, DataTable, LevelSequence, MovieScene |
+| **Parsers** | `parsers/` | 36 property type parsers + dispatcher + custom property registry + AssetRegistry parser + class serialization strategy |
+| ├ Asset Types | `parsers/asset_types/` | 22 asset type parser files + opaque stubs covering 70+ UE class types |
 | **Blueprint** | `blueprint/` | Variable/Transform/Component/Metadata extraction |
 | **Graph** | `graph/` | Execution/data flow tracing, chain builder, graph_utils |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback, UFunction script reader |
@@ -280,7 +247,7 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing, compression, AES decryption |
 | **IoStore** | `iostore/` | IoStore container reader, Chunk ID, offset/size structures |
 | **Bulk Data** | `bulk/` | BulkData header parsing, flag definitions |
-| **Renderers** | `renderers/` | Markdown renderer via IRenderer ABC (JSON output via semantic pipeline) |
+| **Renderers** | `renderers/` | Markdown renderer (JSON output via semantic pipeline) |
 
 ## Testing
 

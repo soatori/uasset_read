@@ -33,12 +33,8 @@ from uasset_read.graph.graph_utils import (
     _iter_normalized_edges,
     _build_normalized_edge_indexes,
     _node_member_name,
+    _normalize_pin_id,
 )
-
-
-def _normalize_pin_id(v):
-    """Normalize pin GUID: strip dashes, lowercase."""
-    return v.replace("-", "").lower() if v else v
 
 
 logger = logging.getLogger(__name__)
