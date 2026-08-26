@@ -4,6 +4,7 @@ Tests the semantic pipeline's validation, projection, and schema compliance.
 """
 from __future__ import annotations
 
+import pytest
 from pathlib import Path
 
 
@@ -13,6 +14,7 @@ from uasset_read.semantic.builder import build_semantic_ir
 from uasset_read.semantic.projection import project_semantic
 from uasset_read.semantic.validator import validate_semantic_document
 from uasset_read.semantic.models import SemanticIR
+from uasset_read.semantic.render import render_semantic_json
 
 
 def _build_and_project(samples_dir: Path, filename: str, mode: str = "standard") -> SemanticIR:
@@ -136,3 +138,37 @@ class TestSemanticStatusContract:
             ir = build_package_ir(result)
             semantic = build_semantic_ir(ir, source_path=str(sample_path))
             assert semantic.asset_type, f"{sample_path.name}: empty asset_type"
+
+
+class TestSchemaUri:
+    """Schema URI matches ir.format (#555/#556)."""
+
+    def test_animbp_schema_uri_matches_format(self, samples_dir: Path):
+        """AnimBlueprint semantic JSON has schema URI matching format."""
+        import json
+
+        sample = samples_dir / "ABP_RifleAnimLayers.uasset"
+        if not sample.exists():
+            pytest.skip("Sample not found")
+        result = parse_uasset_with_linker(str(sample), tolerant=True)
+        ir = build_package_ir(result)
+        semantic_ir = build_semantic_ir(ir, source_path=str(sample))
+        json_str = render_semantic_json(semantic_ir, include_schema=True)
+        data = json.loads(json_str)
+        assert "$schema" in data
+        assert "anim_blueprint_semantic.schema.json" in data["$schema"]
+
+    def test_material_schema_uri_matches_format(self, samples_dir: Path):
+        """Material semantic JSON has schema URI matching format."""
+        import json
+
+        sample = samples_dir / "FirstPerson_M_FlatCol.uasset"
+        if not sample.exists():
+            pytest.skip("Sample not found")
+        result = parse_uasset_with_linker(str(sample), tolerant=True)
+        ir = build_package_ir(result)
+        semantic_ir = build_semantic_ir(ir, source_path=str(sample))
+        json_str = render_semantic_json(semantic_ir, include_schema=True)
+        data = json.loads(json_str)
+        assert "$schema" in data
+        assert "material_semantic.schema.json" in data["$schema"]
