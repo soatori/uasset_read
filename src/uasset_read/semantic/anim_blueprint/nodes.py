@@ -263,6 +263,14 @@ def emit_anim_node(node, graph_slug, ordinal_counts, table, reporting, mode):
     if status != "recognized":
         result["status"] = status
         result["source_type"] = node_class
+        # Emit diagnostic for unrecognized nodes
+        reporting.diagnostic(
+            "ABP_NODE_UNRECOGNIZED",
+            f"graph:{ab_graph_id(graph_slug)}/nodes",
+            "warning",
+            "semantic_loss",
+            occurrence={"class": node_class},
+        )
     if data_pins:
         result["data_pins"] = data_pins
     if control_ports:

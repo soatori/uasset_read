@@ -48,6 +48,27 @@ def _find_anim_blueprint_ir(package_ir, primary_export):
     )
 
 
+def _report_opaque_coverage(graphs_json: list[dict], reporting) -> None:
+    """Report coverage for opaque (unrecognized) nodes."""
+    total_nodes = 0
+    opaque_nodes = 0
+    for graph in graphs_json:
+        for node in graph.get("nodes", []):
+            total_nodes += 1
+            if node.get("status") == "opaque":
+                opaque_nodes += 1
+
+    if opaque_nodes > 0:
+        reporting.coverage(
+            "nodes",
+            "partial",
+            reason="opaque_nodes",
+            declared=total_nodes,
+            emitted=total_nodes,
+            omitted=0,
+        )
+
+
 def build_anim_blueprint_content(
     package_ir: "PackageIR",
     export_ir: "ExportIR",
@@ -80,6 +101,9 @@ def build_anim_blueprint_content(
 
     graphs_json, index = _emit_anim_graphs(graphs, table, reporting, mode=mode)
     attach_flows(graphs_json, index, reporting, mode=mode)
+
+    # Report opaque node coverage
+    _report_opaque_coverage(graphs_json, reporting)
 
     # --- State Machines ---
     state_machines = []

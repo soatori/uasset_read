@@ -372,6 +372,12 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None, *, 
         representation = "partial"
         status = AssetStatus(parse=parse, representation="partial")
     coverage = None if owns_envelope_sections else cov.build()
+    # Merge domain extractor diagnostics into the envelope diagnostics
+    for d in content.get("diagnostics", []):
+        if isinstance(d, dict):
+            diag.add(d.get("severity", "warning"), d.get("code", "UNKNOWN"), d.get("message", ""))
+        else:
+            diag.add(getattr(d, "severity", "warning"), getattr(d, "code", "UNKNOWN"), getattr(d, "message", ""))
     diagnostics = diag.build()
     references = collect_references(package_ir.imports, package_ir.exports)
 
