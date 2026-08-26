@@ -12,8 +12,6 @@ from uasset_read.pipeline.core import parse_uasset_with_linker
 from uasset_read.ir_builder import build_package_ir
 from uasset_read.semantic.builder import build_semantic_ir
 from uasset_read.semantic.models import SemanticIR
-from uasset_read.semantic.projection import project_semantic
-from uasset_read.semantic.render import render_semantic_json
 from types import SimpleNamespace
 
 

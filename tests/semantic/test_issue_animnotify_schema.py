@@ -41,18 +41,16 @@ class TestAnimBlueprintSchemaValidation:
         from jsonschema import Draft202012Validator
         if not (samples_dir / "ABP_RifleAnimLayers.uasset").exists():
             pytest.skip("Sample not found")
-        schema = _load_animbp_schema()
         doc = _build_rendered_dict(samples_dir, "ABP_RifleAnimLayers.uasset", "standard")
-        Draft202012Validator(schema).validate(doc)
+        Draft202012Validator(_load_animbp_schema()).validate(doc)
 
     def test_debug_real_sample_validates(self, samples_dir: Path):
         """Debug projection of real ABP sample validates against schema."""
         from jsonschema import Draft202012Validator
         if not (samples_dir / "ABP_RifleAnimLayers.uasset").exists():
             pytest.skip("Sample not found")
-        schema = _load_animbp_schema()
         doc = _build_rendered_dict(samples_dir, "ABP_RifleAnimLayers.uasset", "debug")
-        Draft202012Validator(schema).validate(doc)
+        Draft202012Validator(_load_animbp_schema()).validate(doc)
 
 
 class TestProjectionInvariants:
@@ -75,7 +73,6 @@ class TestProjectionInvariants:
         """Standard projection contains no evidence anywhere."""
         if not (samples_dir / "ABP_RifleAnimLayers.uasset").exists():
             pytest.skip("Sample not found")
-        schema = _load_animbp_schema()
         doc = _build_rendered_dict(samples_dir, "ABP_RifleAnimLayers.uasset", "standard")
 
         def _find_evidence(obj):
