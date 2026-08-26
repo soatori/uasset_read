@@ -151,6 +151,39 @@ def anim_node_kind(node_class: str) -> tuple[str, str]:
     return "custom", "opaque"
 
 
+def _pose_type(pin) -> str | None:
+    """Detect Unreal pose link pin types.
+
+    Returns:
+        "local_space" for FPoseLink/PoseLink
+        "component_space" for FComponentSpacePoseLink/ComponentSpacePoseLink
+        None if not a pose pin
+    """
+    category = (getattr(pin, "pin_category", "") or "").lower()
+    subcategory = (getattr(pin, "pin_subcategory", "") or "").lower()
+    subcategory_obj = (getattr(pin, "pin_subcategory_object_name", "") or "").lower()
+
+    # Explicit pose category
+    if category == "pose":
+        if "component" in subcategory or "componentspace" in subcategory:
+            return "component_space"
+        return "local_space"
+
+    # Struct pins with pose link struct names
+    if category == "struct":
+        if subcategory in ("fposelink", "poselink"):
+            return "local_space"
+        if subcategory in ("fcomponentspaceposelink", "componentspaceposelink"):
+            return "component_space"
+        # Also check subcategory_object_name for the struct type
+        if "fcomponentspaceposelink" in subcategory_obj or "componentspaceposelink" in subcategory_obj:
+            return "component_space"
+        if "fposelink" in subcategory_obj or "poselink" in subcategory_obj:
+            return "local_space"
+
+    return None
+
+
 def emit_anim_node(node, graph_slug, ordinal_counts, table, reporting, mode):
     """Emit a single animation node with pose pin support."""
     node_class = getattr(node, "node_class", "") or getattr(node, "class_name", "") or ""
@@ -178,15 +211,15 @@ def emit_anim_node(node, graph_slug, ordinal_counts, table, reporting, mode):
         pin_name = getattr(pin, "pin_name", "") or ""
 
         # Detect pose pins (animation-specific)
-        pin_category = (getattr(pin, "pin_category", "") or "").lower()
-        is_pose = pin_category == "pose"
+        pose = _pose_type(pin)
+        is_pose = pose is not None
 
-        if is_pose:
+        if pose is not None:
             endpoint = pose_endpoint(pin_name, direction)
             pose_pins[endpoint] = {
                 "name": pin_name,
                 "direction": direction,
-                "pose_type": getattr(pin, "pin_subcategory", "") or "unknown",
+                "pose_type": pose,
             }
         elif is_exec:
             endpoint = exec_endpoint(pin_name)
