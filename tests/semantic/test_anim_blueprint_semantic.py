@@ -2,8 +2,11 @@
 
 Tests the AnimBlueprint domain extractor with real AnimBP samples.
 """
+
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 
 import pytest
@@ -12,6 +15,8 @@ from uasset_read.pipeline.core import parse_uasset_with_linker
 from uasset_read.ir_builder import build_package_ir
 from uasset_read.semantic.builder import build_semantic_ir
 from uasset_read.semantic.models import SemanticIR
+from uasset_read.semantic.projection import project_semantic
+from uasset_read.semantic.render import render_semantic_json
 from types import SimpleNamespace
 
 
@@ -318,6 +323,7 @@ class TestSyntheticAnimBlueprintIR:
     def test_state_machine_extracted_from_generated_class(self):
         """State machines are found even when data is on generated class export."""
         from uasset_read.semantic.builder import build_semantic_ir
+
         pkg = self._make_synthetic_package_ir()
         ir = build_semantic_ir(pkg, source_path="/fake/TestABP.uasset")
         assert ir.format == "uasset_read.anim_blueprint_semantic"
@@ -327,6 +333,7 @@ class TestSyntheticAnimBlueprintIR:
     def test_anim_notify_extracted(self):
         """Anim notifies are extracted from generated class."""
         from uasset_read.semantic.builder import build_semantic_ir
+
         pkg = self._make_synthetic_package_ir()
         ir = build_semantic_ir(pkg, source_path="/fake/TestABP.uasset")
         assert ir.content["anim_notifies"][0]["name"] == "Footstep"
@@ -334,6 +341,7 @@ class TestSyntheticAnimBlueprintIR:
     def test_sync_groups_extracted(self):
         """Sync groups are extracted from generated class."""
         from uasset_read.semantic.builder import build_semantic_ir
+
         pkg = self._make_synthetic_package_ir()
         ir = build_semantic_ir(pkg, source_path="/fake/TestABP.uasset")
         assert ir.content["sync_groups"] == ["Locomotion"]
@@ -341,6 +349,7 @@ class TestSyntheticAnimBlueprintIR:
     def test_anim_graph_node_recognized(self):
         """AnimGraphNode_SequencePlayer is recognized as sequence_player."""
         from uasset_read.semantic.builder import build_semantic_ir
+
         pkg = self._make_synthetic_package_ir()
         ir = build_semantic_ir(pkg, source_path="/fake/TestABP.uasset")
         nodes = ir.content["graphs"][0]["nodes"]
@@ -350,6 +359,7 @@ class TestSyntheticAnimBlueprintIR:
     def test_unknown_node_is_opaque(self):
         """Unknown plugin node has opaque status."""
         from uasset_read.semantic.builder import build_semantic_ir
+
         pkg = self._make_synthetic_package_ir()
         ir = build_semantic_ir(pkg, source_path="/fake/TestABP.uasset")
         nodes = ir.content["graphs"][0]["nodes"]
@@ -359,6 +369,7 @@ class TestSyntheticAnimBlueprintIR:
     def test_opaque_diagnostic_emitted(self):
         """Unknown nodes produce ABP_NODE_UNRECOGNIZED diagnostic."""
         from uasset_read.semantic.builder import build_semantic_ir
+
         pkg = self._make_synthetic_package_ir()
         ir = build_semantic_ir(pkg, source_path="/fake/TestABP.uasset")
         diag_codes = [d.code for d in ir.diagnostics]
@@ -367,6 +378,7 @@ class TestSyntheticAnimBlueprintIR:
     def test_pose_flow_has_edges(self):
         """Pose flow edges connect output pose to input pose."""
         from uasset_read.semantic.builder import build_semantic_ir
+
         pkg = self._make_synthetic_package_ir()
         ir = build_semantic_ir(pkg, source_path="/fake/TestABP.uasset")
         graph = ir.content["graphs"][0]
@@ -380,6 +392,148 @@ class TestSyntheticAnimBlueprintIR:
     def test_representation_partial_with_opaque_nodes(self):
         """Representation is partial when opaque nodes exist."""
         from uasset_read.semantic.builder import build_semantic_ir
+
         pkg = self._make_synthetic_package_ir()
         ir = build_semantic_ir(pkg, source_path="/fake/TestABP.uasset")
         assert ir.status.representation == "partial"
+
+
+class TestAnimBlueprintDebugEvidence:
+    """Debug evidence generation and stripping (#555)."""
+
+    def test_debug_mode_generates_evidence(self, samples_dir: Path):
+        """AnimBlueprint extractor generates debug evidence when mode='debug'."""
+        sample = samples_dir / "ABP_RifleAnimLayers.uasset"
+        if not sample.exists():
+            pytest.skip("Sample not found")
+        result = parse_uasset_with_linker(str(sample), tolerant=True)
+        ir = build_package_ir(result)
+        semantic_ir = build_semantic_ir(ir, source_path=str(sample), mode="debug")
+        projected = project_semantic(semantic_ir, "debug")
+        notifies = projected.content.get("anim_notifies", [])
+        if notifies:
+            has_evidence = any("evidence" in n for n in notifies)
+            assert has_evidence, "Debug mode should generate evidence for anim_notifies"
+
+    def test_standard_mode_strips_evidence(self, samples_dir: Path):
+        """Standard projection strips evidence from debug-built IR."""
+        sample = samples_dir / "ABP_RifleAnimLayers.uasset"
+        if not sample.exists():
+            pytest.skip("Sample not found")
+        result = parse_uasset_with_linker(str(sample), tolerant=True)
+        ir = build_package_ir(result)
+        semantic_ir = build_semantic_ir(ir, source_path=str(sample), mode="debug")
+        projected = project_semantic(semantic_ir, "standard")
+        notifies = projected.content.get("anim_notifies", [])
+        for notify in notifies:
+            assert "evidence" not in notify, "Standard mode should strip evidence"
+
+    def test_no_raw_guid_in_standard(self, samples_dir: Path):
+        """Standard mode has no raw GUIDs in content."""
+        sample = samples_dir / "ABP_RifleAnimLayers.uasset"
+        if not sample.exists():
+            pytest.skip("Sample not found")
+        result = parse_uasset_with_linker(str(sample), tolerant=True)
+        ir = build_package_ir(result)
+        semantic_ir = build_semantic_ir(ir, source_path=str(sample), mode="debug")
+        projected = project_semantic(semantic_ir, "standard")
+        json_str = render_semantic_json(projected)
+        doc = json.loads(json_str)
+        guid_pattern = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+        found_guids: list[tuple[str, str]] = []
+
+        def _find_guids(obj, path=""):
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    _find_guids(v, f"{path}.{k}")
+            elif isinstance(obj, list):
+                for i, item in enumerate(obj):
+                    _find_guids(item, f"{path}[{i}]")
+            elif isinstance(obj, str) and guid_pattern.search(obj):
+                found_guids.append((path, obj))
+
+        _find_guids(doc)
+        assert not found_guids, f"Standard output contains {len(found_guids)} raw GUIDs: {found_guids[:3]}"
+
+
+def _load_animbp_schema():
+    """Load the anim_blueprint_semantic JSON Schema."""
+    schema_path = (
+        Path(__file__).resolve().parents[2] / "src" / "uasset_read" / "schemas" / "anim_blueprint_semantic.schema.json"
+    )
+    with open(schema_path) as f:
+        return json.load(f)
+
+
+def _build_rendered_dict(samples_dir: Path, filename: str, mode: str = "standard") -> dict:
+    """Parse, build, project, render, and return as dict."""
+    sample = samples_dir / filename
+    result = parse_uasset_with_linker(str(sample), tolerant=True)
+    ir = build_package_ir(result)
+    semantic_ir = build_semantic_ir(ir, source_path=str(sample), mode=mode)
+    projected = project_semantic(semantic_ir, mode)
+    json_str = render_semantic_json(projected, include_schema=False)
+    return json.loads(json_str)
+
+
+class TestAnimBlueprintSchemaValidation:
+    """Validate rendered JSON against Draft 2020-12 Schema."""
+
+    def test_schema_is_valid_draft202012(self):
+        from jsonschema import Draft202012Validator
+        schema = _load_animbp_schema()
+        Draft202012Validator.check_schema(schema)
+
+    def test_standard_real_sample_validates(self, samples_dir: Path):
+        from jsonschema import Draft202012Validator
+        if not (samples_dir / "ABP_RifleAnimLayers.uasset").exists():
+            pytest.skip("Sample not found")
+        doc = _build_rendered_dict(samples_dir, "ABP_RifleAnimLayers.uasset", "standard")
+        Draft202012Validator(_load_animbp_schema()).validate(doc)
+
+    def test_debug_real_sample_validates(self, samples_dir: Path):
+        from jsonschema import Draft202012Validator
+        if not (samples_dir / "ABP_RifleAnimLayers.uasset").exists():
+            pytest.skip("Sample not found")
+        doc = _build_rendered_dict(samples_dir, "ABP_RifleAnimLayers.uasset", "debug")
+        Draft202012Validator(_load_animbp_schema()).validate(doc)
+
+
+class TestProjectionInvariants:
+    """Standard/debug projection invariants."""
+
+    def test_standard_from_debug_matches_direct(self, samples_dir: Path):
+        if not (samples_dir / "ABP_RifleAnimLayers.uasset").exists():
+            pytest.skip("Sample not found")
+        sample = samples_dir / "ABP_RifleAnimLayers.uasset"
+        result = parse_uasset_with_linker(str(sample), tolerant=True)
+        ir = build_package_ir(result)
+        direct = project_semantic(build_semantic_ir(ir, source_path=str(sample)), "standard")
+        from_debug = project_semantic(build_semantic_ir(ir, source_path=str(sample), mode="debug"), "standard")
+        assert render_semantic_json(direct) == render_semantic_json(from_debug)
+
+    def test_standard_has_no_evidence(self, samples_dir: Path):
+        if not (samples_dir / "ABP_RifleAnimLayers.uasset").exists():
+            pytest.skip("Sample not found")
+        doc = _build_rendered_dict(samples_dir, "ABP_RifleAnimLayers.uasset", "standard")
+
+        def _find_evidence(obj):
+            if isinstance(obj, dict):
+                if "evidence" in obj:
+                    return True
+                return any(_find_evidence(v) for v in obj.values())
+            if isinstance(obj, list):
+                return any(_find_evidence(item) for item in obj)
+            return False
+
+        assert not _find_evidence(doc), "Standard mode must not contain evidence"
+
+    def test_no_anim_blueprint_data_in_coverage(self, samples_dir: Path):
+        if not (samples_dir / "ABP_RifleAnimLayers.uasset").exists():
+            pytest.skip("Sample not found")
+        sample = samples_dir / "ABP_RifleAnimLayers.uasset"
+        result = parse_uasset_with_linker(str(sample), tolerant=True)
+        ir = build_package_ir(result)
+        semantic = build_semantic_ir(ir, source_path=str(sample))
+        coverage = semantic.content.get("coverage", [])
+        assert not any(entry.get("reason") == "no_anim_blueprint_data" for entry in coverage)
