@@ -54,7 +54,7 @@ class EGame:
 
 
 # Magic to game identifier mapping
-MAGIC_TO_GAME_MAP: Dict[int, int] = {
+MAGIC_TO_GAME_MAP: dict[int, int] = {
     0xA590ED1E: EGame.OUTLAST_TRIALS,
     0x6B2A56B8: EGame.TORCHLIGHT_INFINITE,
     0xA4CCD123: EGame.WILD_ASSAULT,

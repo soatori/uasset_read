@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import warnings
+
 """
 Pak file decompression module.
 
