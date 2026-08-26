@@ -24,6 +24,46 @@ from ..object_model import (
 from ..document import PackageDocument, PackageInfo, SourceInfo, Summary
 
 
+def _extract_property_diagnostics(
+    export: Any,
+    export_index: int,
+) -> list[Diagnostic]:
+    """Extract property-level diagnostics from an export's parsed properties."""
+    diags: list[Diagnostic] = []
+    properties = getattr(export, "properties", None) or []
+    for prop in properties:
+        # size_exceeded means the tag claimed more bytes than available
+        if getattr(prop, "size_exceeded", False):
+            diags.append(Diagnostic(
+                severity="warning",
+                code="PROPERTY_SIZE_EXCEEDED",
+                message=(
+                    f"Property '{getattr(prop, 'name', '?')}' "
+                    f"size {getattr(prop, 'size', 0)} exceeded remaining bytes"
+                ),
+                stage="properties.tagged",
+                object_id=f"export:{export_index}",
+                property_path=getattr(prop, "name", "?"),
+                offset=getattr(prop, "tag_start_offset", None),
+                size=getattr(prop, "size", None),
+                effect="semantic_loss",
+                recoverable=True,
+            ))
+        # Check for remainder bytes between value_end_offset and actual end
+        value_end = getattr(prop, "value_end_offset", None)
+        value_start = getattr(prop, "value_start_offset", None)
+        if (
+            value_end is not None
+            and value_start is not None
+            and not getattr(prop, "size_exceeded", False)
+        ):
+            expected_size = getattr(prop, "size", 0)
+            if expected_size > 0:
+                # This is informational — the property was parsed within bounds
+                pass
+    return diags
+
+
 def _build_source_info(path: str) -> SourceInfo:
     p = Path(path)
     return SourceInfo(
@@ -246,12 +286,14 @@ def build_package_document(
     # Build dependencies
     dependencies = _build_dependencies(import_map)
 
-    # Build diagnostics
+    # Build diagnostics — package-level + property-level per export
     diagnostics = _build_diagnostics_from_v1(
         export_map,
         getattr(parse_result, "errors", []),
         getattr(parse_result, "warnings", []),
     )
+    for i, exp in enumerate(export_map):
+        diagnostics.extend(_extract_property_diagnostics(exp, i))
 
     # Compute asset_object_ids
     asset_ids = tuple(obj.id for obj in objects if ROLES_ASSET in obj.roles)

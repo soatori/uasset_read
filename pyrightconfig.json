@@ -1,0 +1,13 @@
+{
+  "include": ["src"],
+  "exclude": ["**/__pycache__", "external", "docs", "temp"],
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "pythonVersion": "3.10",
+  "executionEnvironments": [
+    {
+      "root": "src",
+      "extraPaths": ["src"]
+    }
+  ]
+}
