@@ -140,6 +140,7 @@ def parse_sound_wave(
     """
     result: Dict[str, Any] = {
         "parse_status": "success",
+        "format": "uasset_read.sound_flags_only",
     }
 
     # === Custom Serialize data (after Super::Serialize / tagged properties) ===
@@ -178,6 +179,7 @@ def parse_sound_wave(
         sound_metadata = build_sound_metadata(handler_data, properties)
         if sound_metadata:
             result["sound"] = sound_metadata
+            result["format"] = "uasset_read.sound_semantic"
         else:
             # Properties exist but no usable sound fields
             pass
