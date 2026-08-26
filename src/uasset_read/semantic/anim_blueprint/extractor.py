@@ -27,6 +27,27 @@ if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
 
 
+def _find_anim_blueprint_ir(package_ir, primary_export):
+    """Find AnimBlueprintIR from primary export or generated class.
+
+    Priority:
+    1. Primary export has anim_blueprint data -> use it
+    2. Search exports in serialization order for generated class data
+    3. None if not found
+    """
+    direct = getattr(primary_export, "anim_blueprint", None)
+    if direct is not None:
+        return direct
+    return next(
+        (
+            export.anim_blueprint
+            for export in package_ir.exports
+            if getattr(export, "anim_blueprint", None) is not None
+        ),
+        None,
+    )
+
+
 def build_anim_blueprint_content(
     package_ir: "PackageIR",
     export_ir: "ExportIR",
@@ -49,7 +70,7 @@ def build_anim_blueprint_content(
     table = TypeTable()
 
     # Get animation data from export
-    anim_blueprint = getattr(export_ir, "anim_blueprint", None)
+    anim_blueprint = _find_anim_blueprint_ir(package_ir, export_ir)
 
     # --- Graphs ---
     graphs = _collect_graphs(package_ir)
