@@ -165,3 +165,67 @@ class TestRealSamples:
         doc = parse_package_document(str(SAMPLES_DIR / "ALS_Concrete_Step_01_SoundWave.uasset"))
         sw_objs = [o for o in doc.objects if o.class_name == "SoundWave"]
         assert len(sw_objs) >= 1
+
+
+class TestMaterialHandler:
+    def test_material_handler_supports(self):
+        from uasset_read.v2.handlers import MaterialHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = MaterialHandler()
+        obj = ObjectRecord(id="export:0", table_index=0, name="M_Test", class_name="Material", status=ObjectStatus())
+        assert handler.supports(obj, VersionContext())
+
+    def test_material_rejects_non_material(self):
+        from uasset_read.v2.handlers import MaterialHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = MaterialHandler()
+        obj = ObjectRecord(id="export:0", table_index=0, name="BP", class_name="Blueprint", status=ObjectStatus())
+        assert not handler.supports(obj, VersionContext())
+
+    def test_material_enrichment(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(
+            str(SAMPLES_DIR / "FirstPerson_M_PrototypeGrid.uasset"), depth="asset"
+        )
+        mat_objs = [o for o in doc.objects if o.class_name == "Material"]
+        assert len(mat_objs) >= 1
+        obj = mat_objs[0]
+        assert obj.semantic is not None
+        assert obj.semantic["kind"] == "material"
+
+
+class TestMaterialInstanceHandler:
+    def test_material_instance_handler_supports(self):
+        from uasset_read.v2.handlers import MaterialInstanceHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = MaterialInstanceHandler()
+        obj = ObjectRecord(id="export:0", table_index=0, name="MI_Test", class_name="MaterialInstanceConstant", status=ObjectStatus())
+        assert handler.supports(obj, VersionContext())
+
+    def test_material_instance_rejects_non_instance(self):
+        from uasset_read.v2.handlers import MaterialInstanceHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = MaterialInstanceHandler()
+        obj = ObjectRecord(id="export:0", table_index=0, name="BP", class_name="Blueprint", status=ObjectStatus())
+        assert not handler.supports(obj, VersionContext())
+
+    def test_material_instance_enrichment(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(
+            str(SAMPLES_DIR / "CassiniSample_MI_Template_BaseGray_Metal.uasset"), depth="asset"
+        )
+        mi_objs = [o for o in doc.objects if o.class_name == "MaterialInstanceConstant"]
+        assert len(mi_objs) >= 1
+        obj = mi_objs[0]
+        assert obj.semantic is not None
+        assert obj.semantic["kind"] == "material_instance"

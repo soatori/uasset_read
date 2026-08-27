@@ -272,3 +272,85 @@ register_handler(UserDefinedStructHandler())
 register_handler(DataTableHandler())
 register_handler(TextureHandler())
 register_handler(SoundHandler())
+
+
+class MaterialHandler:
+    """Enrich Material objects with shader/material property summary."""
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        return (obj.class_name or "") == "Material"
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        result: dict[str, Any] = {"kind": "material", "name": obj.name}
+        coverage: list[CoverageEntry] = []
+        props = obj.properties or {}
+
+        # Shading domain flags
+        for key in ("bUsedWithStaticLighting", "bUsedWithNanite", "bCanMaskedBeAssumedOpaque"):
+            val = props.get(key)
+            if val and isinstance(val, dict):
+                result[key] = val.get("value", False)
+                coverage.append(CoverageEntry(feature=f"material.{key}", status="complete"))
+
+        # Editor position
+        for key in ("EditorX", "EditorY"):
+            val = props.get(key)
+            if val and isinstance(val, dict):
+                result[key] = val.get("value", 0)
+                coverage.append(CoverageEntry(feature=f"material.{key}", status="complete"))
+
+        obj.coverage.extend(coverage)
+        return result if len(result) > 1 else None
+
+
+class MaterialInstanceHandler:
+    """Enrich MaterialInstance/MaterialInstanceConstant objects."""
+
+    _INSTANCE_CLASSES = ("MaterialInstance", "MaterialInstanceConstant")
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        return (obj.class_name or "") in self._INSTANCE_CLASSES
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        result: dict[str, Any] = {"kind": "material_instance", "name": obj.name}
+        coverage: list[CoverageEntry] = []
+        props = obj.properties or {}
+
+        # Parent material reference
+        parent = props.get("Parent")
+        if parent is not None:
+            result["has_parent"] = True
+            coverage.append(CoverageEntry(feature="material_instance.parent", status="complete"))
+
+        # Scalar parameters
+        scalar_params = props.get("ScalarParameterValues")
+        if scalar_params and isinstance(scalar_params, dict):
+            fields = scalar_params.get("fields", {})
+            result["scalar_param_count"] = len(fields) if isinstance(fields, dict) else 0
+            coverage.append(CoverageEntry(feature="material_instance.scalars", status="complete"))
+
+        # Vector parameters
+        vector_params = props.get("VectorParameterValues")
+        if vector_params and isinstance(vector_params, dict):
+            fields = vector_params.get("fields", {})
+            result["vector_param_count"] = len(fields) if isinstance(fields, dict) else 0
+            coverage.append(CoverageEntry(feature="material_instance.vectors", status="complete"))
+
+        obj.coverage.extend(coverage)
+        return result if len(result) > 1 else None
+
+
+register_handler(MaterialHandler())
+register_handler(MaterialInstanceHandler())
