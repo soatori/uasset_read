@@ -115,35 +115,35 @@ Zero runtime dependencies, requires Python 3.10+.
 ### CLI
 
 ```bash
-python run.py path/to/file.uasset              # JSON output to stdout
-python run.py path/to/file.uasset --output output.json   # Save to file
+python -m uasset_read path/to/file.uasset              # JSON output to stdout
+python -m uasset_read path/to/file.uasset --output output.json   # Save to file
 
 # Output modes
-python run.py path/to/file.uasset --json         # JSON output (default)
-python run.py path/to/file.uasset --markdown     # Markdown + Mermaid
-python run.py path/to/file.uasset --list-formats # List available formats
+python -m uasset_read path/to/file.uasset --json         # JSON output (default)
+python -m uasset_read path/to/file.uasset --markdown     # Markdown + Mermaid
+python -m uasset_read path/to/file.uasset --list-formats # List available formats
 
 # Batch export (input directory + output directory)
-python run.py path/to/input/dir/ --batch --batch-dir path/to/output/dir/
+python -m uasset_read path/to/input/dir/ --batch --batch-dir path/to/output/dir/
 
 # Strictness
-python run.py path/to/file.uasset                # Continue on recoverable errors (default)
-python run.py path/to/file.uasset --strict       # Stop on warnings
+python -m uasset_read path/to/file.uasset                # Continue on recoverable errors (default)
+python -m uasset_read path/to/file.uasset --strict       # Stop on warnings
 
 # Debug
-python run.py path/to/file.uasset --verbose      # Enable verbose logging
-python run.py path/to/file.uasset --hex-view     # Enable HexView binary inspection
-python run.py path/to/file.uasset --full-parse   # Force full parse for large blueprints
+python -m uasset_read path/to/file.uasset --verbose      # Enable verbose logging
+python -m uasset_read path/to/file.uasset --hex-view     # Enable HexView binary inspection
+python -m uasset_read path/to/file.uasset --full-parse   # Force full parse for large blueprints
 
 # Diff comparison
-python run.py path/to/file1.uasset --diff path/to/file2.uasset  # Compare two files
+python -m uasset_read path/to/file1.uasset --diff path/to/file2.uasset  # Compare two files
 
 # Advanced options
-python run.py path/to/file.uasset --export 0     # Output only specific export by index
-python run.py path/to/file.uasset --schema        # Include field semantic annotations
-python run.py path/to/file.uasset --function-graphs  # Include function_graphs array
-python run.py path/to/file.uasset --mappings path/to/usmap  # Load type mappings
-python run.py path/to/file.uasset --output-level debug   # Output verbosity level
+python -m uasset_read path/to/file.uasset --export 0     # Output only specific export by index
+python -m uasset_read path/to/file.uasset --schema        # Include field semantic annotations
+python -m uasset_read path/to/file.uasset --function-graphs  # Include function_graphs array
+python -m uasset_read path/to/file.uasset --mappings path/to/usmap  # Load type mappings
+python -m uasset_read path/to/file.uasset --output-level debug   # Output verbosity level
 ```
 
 ### Logging Parameters

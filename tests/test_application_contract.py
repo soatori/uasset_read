@@ -50,6 +50,7 @@ class TestCLI:
 class TestAgentTools:
     def test_inspect_package(self):
         from uasset_read.v2.agent_tools import inspect_package
+
         result = inspect_package(SAMPLE)
         assert "source" in result
         assert "package" in result
@@ -57,12 +58,14 @@ class TestAgentTools:
 
     def test_list_objects(self):
         from uasset_read.v2.agent_tools import list_objects
+
         result = list_objects(SAMPLE)
         assert result["total"] > 0
         assert len(result["objects"]) > 0
 
     def test_list_objects_pagination(self):
         from uasset_read.v2.agent_tools import list_objects
+
         # Use a sample with enough objects to paginate
         bp_sample = str(SAMPLES_DIR / "ABP_RifleAnimLayers.uasset")
         result = list_objects(bp_sample, limit=3)
@@ -71,24 +74,28 @@ class TestAgentTools:
 
     def test_get_object(self):
         from uasset_read.v2.agent_tools import get_object
+
         result = get_object(SAMPLE, "export:0")
         assert result["id"] == "export:0"
         assert "name" in result
 
     def test_list_dependencies(self):
         from uasset_read.v2.agent_tools import list_dependencies
+
         result = list_dependencies(SAMPLE)
         assert "dependencies" in result
         assert "relations" in result
 
     def test_get_diagnostics(self):
         from uasset_read.v2.agent_tools import get_diagnostics
+
         result = get_diagnostics(SAMPLE)
         assert "diagnostics" in result
         assert "total" in result
 
     def test_json_serializable(self):
         from uasset_read.v2.agent_tools import inspect_package
+
         result = inspect_package(SAMPLE)
         json_str = json.dumps(result)
         parsed = json.loads(json_str)
@@ -103,6 +110,7 @@ class TestLoggingLifecycle:
         try:
             logging.root.setLevel(logging.WARNING)
             from uasset_read.v2.api import parse_package_document
+
             parse_package_document(SAMPLE)
         finally:
             logging.root.setLevel(old_level)
@@ -112,6 +120,7 @@ class TestLoggingLifecycle:
         old_level = logging.root.level
         try:
             from uasset_read.v2.api import parse_package_document
+
             parse_package_document(SAMPLE)
             assert len(logging.root.handlers) == old_handler_count
             assert logging.root.level == old_level

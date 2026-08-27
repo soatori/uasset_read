@@ -76,6 +76,7 @@ class UnversionedPropertyReader:
         if schema is None:
             # No schema available — return opaque region
             from .diagnostics import Diagnostic, CODE_UNKNOWN_PROPERTY_TYPE
+
             diag = Diagnostic(
                 severity="warning",
                 code=CODE_UNKNOWN_PROPERTY_TYPE,

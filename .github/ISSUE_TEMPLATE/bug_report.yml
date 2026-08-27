@@ -12,7 +12,7 @@ body:
     id: version
     attributes:
       label: uasset_read version
-      description: What version are you using? (run `python run.py --version` or check source code)
+      description: What version are you using? (run `python -m uasset_read --version` or check source code)
       placeholder: "0.3.4-dev"
     validations:
       required: true
@@ -32,7 +32,7 @@ body:
       label: What happened?
       description: Describe the issue and how to reproduce it.
       placeholder: |
-        1. Run `python run.py BP_MyBlueprint.uasset`
+        1. Run `python -m uasset_read BP_MyBlueprint.uasset`
         2. See error: ...
     validations:
       required: true
