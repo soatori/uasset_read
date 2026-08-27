@@ -13,8 +13,23 @@ __all__ = [
     "FileSource",
     "MemorySource",
     "SliceReader",
+    # Agent tools
+    "inspect_package",
+    "list_objects",
+    "get_object",
+    "list_dependencies",
+    "get_diagnostics",
+    "extract_payload",
 ]
 
 from .api import parse_package_document  # noqa: F401
 from .document import PackageDocument  # noqa: F401
 from .source import Source, FileSource, MemorySource, SliceReader  # noqa: F401
+from .agent_tools import (  # noqa: F401
+    inspect_package,
+    list_objects,
+    get_object,
+    list_dependencies,
+    get_diagnostics,
+    extract_payload,
+)
