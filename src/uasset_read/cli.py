@@ -88,6 +88,7 @@ def create_parser():
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument("--json", action="store_true", help="Output full JSON structure (default)")
     group.add_argument("--markdown", action="store_true", help="Output Markdown format")
+    group.add_argument("--v2", action="store_true", help="Output PackageDocument v2 JSON (all objects, no filtering)")
 
     # Optional flags
     parser.add_argument("--verbose", action="store_true", help="Include extra detail fields")
@@ -403,6 +404,24 @@ def main():
     if args.list_package_files:
         _handle_list_package_files(args.file, tolerant)
         return
+
+    # --v2 模式 (PackageDocument v2)
+    if args.v2:
+        try:
+            from uasset_read.v2.api import parse_package_document
+            doc = parse_package_document(
+                str(file_path),
+                tolerant=tolerant,
+                mappings_path=args.mappings,
+                game=args.game,
+            )
+            output_str = json.dumps(doc.to_dict(), ensure_ascii=False, indent=2)
+        except Exception as e:
+            _logger.debug("V2 parse error (full): %s", e, exc_info=True)
+            print(f"Error: {_sanitize_error_message(e)}", file=sys.stderr)
+            sys.exit(EXIT_PARSE_ERROR)
+        _write_output(output_str, args.output)
+        sys.exit(EXIT_SUCCESS)
 
     # --diff 模式
     if args.diff is not None:
