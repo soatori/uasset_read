@@ -374,30 +374,10 @@ class LegacyPackageReader:
                 continue
 
             try:
-                # Create a bounded sub-slice for this export's serial data
-                source_reader = SliceReader(self._source, 0, self._source.size())
-                sub = source_reader.sub_slice(
-                    obj.serial_region.offset,
-                    obj.serial_region.size,
-                )
-                # Build a temporary archive backed by the sub-slice
-                from ...package import PackageArchive
-
-                tmp_archive = object.__new__(PackageArchive)
-                tmp_archive._init_archive_attrs(
-                    str(self._source._path), self._tolerant, hex_view=False
-                )
-                tmp_archive._main_archive = sub
-                tmp_archive._uexp_archive = None
-                tmp_archive._main_size = sub.total_size()
-                tmp_archive._uexp_size = 0
-                tmp_archive._file_size = sub.total_size()
-                tmp_archive._pos = 0
-                tmp_archive.set_name_map(name_map)
-
+                # Use the full archive — property parser seeks to absolute offsets
                 raw_props = parse_properties_from_export(
                     export=export_map[i],
-                    archive=tmp_archive,
+                    archive=archive,
                     summary=summary,
                     name_map=name_map,
                     export_map=export_map,

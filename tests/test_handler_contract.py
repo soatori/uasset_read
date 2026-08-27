@@ -13,7 +13,7 @@ class TestHandlerRegistry:
         from uasset_read.v2.handlers import get_handlers
 
         handlers = get_handlers()
-        assert len(handlers) >= 3
+        assert len(handlers) >= 4
 
     def test_expected_handlers(self):
         from uasset_read.v2.handlers import get_handlers
@@ -21,6 +21,7 @@ class TestHandlerRegistry:
         names = [type(h).__name__ for h in get_handlers()]
         assert "DataTableHandler" in names
         assert "TextureHandler" in names
+        assert "TexturePayloadHandler" in names
         assert "SoundHandler" in names
 
 
@@ -62,6 +63,140 @@ class TestHandlerFailureIsolation:
         semantic, cov = run_handlers(obj, VersionContext(), [obj], None)
         assert semantic is None
         assert any("BadHandler" in c.feature for c in cov)
+
+
+class TestTexture2DEnrichment:
+    """Texture2D enrichment via depth=asset (properties parsed at object level)."""
+
+    def test_texture2d_semantic_fields(self):
+        from uasset_read.v2.api import parse_package_document
+        from uasset_read.v2.handlers import TextureHandler
+        from uasset_read.v2.version import VersionContext
+
+        doc = parse_package_document(
+            str(SAMPLES_DIR / "FirstPerson_T_GridChecker_A.uasset"),
+            depth="object",
+        )
+        tex_objs = [o for o in doc.objects if o.class_name == "Texture2D"]
+        assert len(tex_objs) >= 1
+
+        handler = TextureHandler()
+        obj = tex_objs[0]
+        ctx = VersionContext()
+        result = handler.enrich(obj, ctx, doc.objects, None)
+
+        assert result is not None
+        assert result["kind"] == "texture"
+        assert result["texture_type"] == "Texture2D"
+        assert "srgb" in result
+        assert isinstance(result["srgb"], bool)
+        assert "compression_settings" in result
+
+    def test_texture2d_coverage_entries(self):
+        from uasset_read.v2.api import parse_package_document
+        from uasset_read.v2.handlers import TextureHandler
+        from uasset_read.v2.version import VersionContext
+
+        doc = parse_package_document(
+            str(SAMPLES_DIR / "FirstPerson_T_GridChecker_A.uasset"),
+            depth="object",
+        )
+        tex_objs = [o for o in doc.objects if o.class_name == "Texture2D"]
+        obj = tex_objs[0]
+
+        handler = TextureHandler()
+        handler.enrich(obj, VersionContext(), doc.objects, None)
+
+        feature_names = [c.feature for c in obj.coverage]
+        assert "texture.kind" in feature_names
+        assert "texture.texture_type" in feature_names
+        assert "texture.srgb" in feature_names
+        assert "texture.compression_settings" in feature_names
+
+    def test_texture2d_no_properties_returns_none(self):
+        from uasset_read.v2.handlers import TextureHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = TextureHandler()
+        obj = ObjectRecord(
+            id="export:0", table_index=0, name="Tex",
+            class_name="Texture2D", status=ObjectStatus(),
+            properties=None,
+        )
+        result = handler.enrich(obj, VersionContext(), [], None)
+        assert result is None
+
+
+class TestTextureCubeEnrichment:
+    """TextureCube enrichment via depth=asset (properties parsed at object level)."""
+
+    def test_texturecube_semantic_fields(self):
+        from uasset_read.v2.api import parse_package_document
+        from uasset_read.v2.handlers import TextureHandler
+        from uasset_read.v2.version import VersionContext
+
+        doc = parse_package_document(
+            str(SAMPLES_DIR / "MutableSample_GrayLightTextureCube.uasset"),
+            depth="object",
+        )
+        tex_objs = [o for o in doc.objects if o.class_name == "TextureCube"]
+        assert len(tex_objs) >= 1
+
+        handler = TextureHandler()
+        obj = tex_objs[0]
+        ctx = VersionContext()
+        result = handler.enrich(obj, ctx, doc.objects, None)
+
+        assert result is not None
+        assert result["kind"] == "texture"
+        assert result["texture_type"] == "TextureCube"
+        assert "srgb" in result
+        assert isinstance(result["srgb"], bool)
+        assert "compression_settings" in result
+        # TextureCube has TC_HDR compression
+        assert result["compression_settings"] == "TextureCompressionSettings::TC_HDR"
+
+    def test_texturecube_coverage_entries(self):
+        from uasset_read.v2.api import parse_package_document
+        from uasset_read.v2.handlers import TextureHandler
+        from uasset_read.v2.version import VersionContext
+
+        doc = parse_package_document(
+            str(SAMPLES_DIR / "MutableSample_GrayLightTextureCube.uasset"),
+            depth="object",
+        )
+        tex_objs = [o for o in doc.objects if o.class_name == "TextureCube"]
+        obj = tex_objs[0]
+
+        handler = TextureHandler()
+        handler.enrich(obj, VersionContext(), doc.objects, None)
+
+        feature_names = [c.feature for c in obj.coverage]
+        assert "texture.kind" in feature_names
+        assert "texture.texture_type" in feature_names
+        assert "texture.srgb" in feature_names
+        assert "texture.compression_settings" in feature_names
+
+    def test_texturecube_payload_handler_returns_none_without_imported_size(self):
+        """TextureCube without ImportedSize returns None from payload handler."""
+        from uasset_read.v2.api import parse_package_document
+        from uasset_read.v2.handlers import TexturePayloadHandler
+        from uasset_read.v2.version import VersionContext
+
+        doc = parse_package_document(
+            str(SAMPLES_DIR / "MutableSample_GrayLightTextureCube.uasset"),
+            depth="object",
+        )
+        tex_objs = [o for o in doc.objects if o.class_name == "TextureCube"]
+        obj = tex_objs[0]
+
+        handler = TexturePayloadHandler()
+        result = handler.enrich(obj, VersionContext(), doc.objects, None)
+
+        # TextureCube doesn't have ImportedSize property, so result is None
+        # This is expected — payload handler only works with ImportedSize data
+        assert result is None
 
 
 class TestRealSamples:
