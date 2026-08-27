@@ -10,7 +10,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal, Sequence
 
-from ...archive import FArchive
 from ...exceptions import ParseError
 from ...package import PackageArchive
 from ...serializers.object_resources import (
@@ -48,50 +47,18 @@ from ...v2.version import build_version_context_from_summary
 def _make_package_archive(source: FileSource, tolerant: bool = False) -> PackageArchive:
     """Create a PackageArchive backed by a FileSource via SliceReader.
 
-    PackageArchive inherits from FArchive but does not call FArchive.__init__.
-    We must initialize the attributes it needs for inherited read methods
-    (read_i32, read_fstring, etc.) and for hex_view/structured_diagnostics.
+    Uses _init_archive_attrs (designed for non-file-backed archives) to
+    initialize all FArchive attributes without opening a real file.
     """
     reader = SliceReader(source, 0, source.size())
 
-    # Initialize FArchive internal state without opening a file.
-    # _init_archive_attrs would open a real file — we override the path
-    # and open/close a temp FArchive to get the attributes set up cleanly.
-    import tempfile, os
-
-    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".tmp")
-    os.close(tmp_fd)
-    try:
-        tmp_archive = FArchive(tmp_path)
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-
-    # Transfer initialized attributes to our SliceReader-backed archive.
     archive = object.__new__(PackageArchive)
-    archive._path = tmp_archive._path  # not used, but kept for repr
-    archive._file = None  # SliceReader handles I/O
-    archive._byte_swapping = tmp_archive._byte_swapping
-    archive._file_size = source.size()
-    archive._tolerant = tolerant
-    archive._mmap = None
-    archive._use_mmap = False
-    archive._mmap_warning = None
-    archive._logger = tmp_archive._logger
-    archive._name_map = None
-    archive._diagnostics = tmp_archive._diagnostics
-    archive._name_warnings_seen = set()
-    archive._hex_view_enabled = tmp_archive._hex_view_enabled
-    archive._hex_view_entries = tmp_archive._hex_view_entries
-    archive._hex_view_context = ""
-    archive._structured_diagnostics = []
-    # PackageArchive position tracking
+    archive._init_archive_attrs(str(source._path), tolerant, hex_view=False)
     archive._main_archive = reader
     archive._uexp_archive = None
     archive._main_size = source.size()
     archive._uexp_size = 0
+    archive._file_size = source.size()
     archive._pos = 0
 
     return archive
@@ -272,10 +239,7 @@ class LegacyPackageReader:
             )
 
             # 9. Build ObjectRecords — ALL exports, no filtering
-            objects = [
-                _build_object_record_direct(exp, i, import_map, export_map)
-                for i, exp in enumerate(export_map)
-            ]
+            objects = [_build_object_record_direct(exp, i, import_map, export_map) for i, exp in enumerate(export_map)]
 
             # 10. Build relations from export indices
             relations: list[Relation] = []
