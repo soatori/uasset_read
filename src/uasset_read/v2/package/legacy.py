@@ -294,7 +294,20 @@ class LegacyPackageReader:
                 total_exports=len(export_map),
             )
 
-            # 16. Build SourceInfo
+            # 16. Parse properties for requested objects at depth="object"
+            if depth == "object":
+                self._parse_requested_object_properties(
+                    archive=archive,
+                    objects=objects,
+                    export_map=export_map,
+                    import_map=import_map,
+                    name_map=name_map,
+                    summary=summary,
+                    object_ids=object_ids,
+                    diagnostics=diagnostics,
+                )
+
+            # 17. Build SourceInfo
             source_info = _build_source_info(str(self._source._path))
 
             return PackageDocument(
@@ -321,6 +334,99 @@ class LegacyPackageReader:
             return self._build_minimal_document(None, diagnostics)
         finally:
             archive.close()
+
+    def _parse_requested_object_properties(
+        self,
+        archive: PackageArchive,
+        objects: list[ObjectRecord],
+        export_map: list[ObjectExport],
+        import_map: list[ObjectImport],
+        name_map: list[str],
+        summary: PackageFileSummary,
+        object_ids: Sequence[str] | None,
+        diagnostics: list[Diagnostic],
+    ) -> None:
+        """Parse properties for requested objects at depth="object".
+
+        If object_ids is None, parses ALL objects.
+        Each export's serial region is bounded via SliceReader.sub_slice().
+        Parse errors on one export do not prevent parsing of others.
+        """
+        from ...parsers.property_parser import parse_properties_from_export
+        from ...v2.properties import normalize_property_bag
+
+        # Determine which exports to parse
+        target_indices: set[int] | None = None
+        if object_ids is not None:
+            target_indices = set()
+            for oid in object_ids:
+                if oid.startswith("export:"):
+                    try:
+                        target_indices.add(int(oid.split(":")[1]))
+                    except (ValueError, IndexError):
+                        pass
+
+        for i, obj in enumerate(objects):
+            if target_indices is not None and i not in target_indices:
+                continue
+            if not obj.serial_region or obj.serial_region.size <= 0:
+                obj.properties = {}
+                continue
+
+            try:
+                # Create a bounded sub-slice for this export's serial data
+                source_reader = SliceReader(self._source, 0, self._source.size())
+                sub = source_reader.sub_slice(
+                    obj.serial_region.offset,
+                    obj.serial_region.size,
+                )
+                # Build a temporary archive backed by the sub-slice
+                from ...package import PackageArchive
+
+                tmp_archive = object.__new__(PackageArchive)
+                tmp_archive._init_archive_attrs(
+                    str(self._source._path), self._tolerant, hex_view=False
+                )
+                tmp_archive._main_archive = sub
+                tmp_archive._uexp_archive = None
+                tmp_archive._main_size = sub.total_size()
+                tmp_archive._uexp_size = 0
+                tmp_archive._file_size = sub.total_size()
+                tmp_archive._pos = 0
+                tmp_archive.set_name_map(name_map)
+
+                raw_props = parse_properties_from_export(
+                    export=export_map[i],
+                    archive=tmp_archive,
+                    summary=summary,
+                    name_map=name_map,
+                    export_map=export_map,
+                    import_map=import_map,
+                    mappings=self._mappings_path,
+                    game=self._game,
+                    tolerant=self._tolerant,
+                )
+
+                obj.properties = normalize_property_bag(raw_props)
+                obj.status = ObjectStatus(
+                    parse=obj.status.parse,
+                    semantic=obj.status.semantic,
+                )
+
+            except Exception as e:
+                obj.properties = {}
+                obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
+                diagnostics.append(
+                    Diagnostic(
+                        severity="warning",
+                        code="EXPORT_PROPERTY_PARSE_FAILED",
+                        message=f"Export {i} ({obj.name}) property parse failed: {type(e).__name__}: {e}",
+                        stage="properties.tagged",
+                        object_id=obj.id,
+                        effect="semantic_loss",
+                        recoverable=True,
+                    )
+                )
 
     def _build_minimal_document(
         self,
