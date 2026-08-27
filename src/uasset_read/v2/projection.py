@@ -78,8 +78,15 @@ def project_document(
 ) -> dict[str, Any]:
     """Project a PackageDocument to a specific view/depth/selection/pagination.
 
-    Returns a dict matching the v2 JSON contract.
+    Views:
+      - semantic (default): object identity, roles, status, coverage
+      - raw: adds flags, serial offsets, header details
+      - debug: raw + parse statistics, recovery info, offset evidence
     """
+    _VALID_VIEWS = {"semantic", "raw", "debug"}
+    if view not in _VALID_VIEWS:
+        raise ValueError(f"Invalid view: {view!r}. Expected one of {_VALID_VIEWS}")
+
     # Select objects
     selected = select_objects(doc, object_ids=object_ids, roles=roles, classes=classes)
 
@@ -94,14 +101,9 @@ def project_document(
     # Filter fields if requested
     if fields:
         field_set = set(fields)
-        page_dicts = []
-        for obj in page:
-            d = obj_to_dict(obj)
-            page_dicts = page_dicts  # keep full for now, filter later
-        # Field filtering on full objects
         filtered = []
         for obj in page:
-            d = obj_to_dict(obj)
+            d = obj_to_dict(obj, view=view)
             filtered.append({k: v for k, v in d.items() if k in field_set or k in ("id", "name")})
         page = filtered
 
@@ -112,16 +114,8 @@ def project_document(
         "view": view,
         "depth": depth,
         "source": {"kind": doc.source.kind, "name": doc.source.name, "size": doc.source.size},
-        "package": {
-            "name": doc.package.name,
-            "layout": doc.package.layout,
-            "engine_version": doc.package.engine_version,
-            "package_flags": doc.package.package_flags,
-            "export_count": doc.package.export_count,
-            "import_count": doc.package.import_count,
-            "name_count": doc.package.name_count,
-        },
-        "objects": [obj_to_dict(o) for o in page],
+        "package": _package_to_dict(doc, view=view),
+        "objects": [obj_to_dict(o, view=view) for o in page],
         "relations": [{"kind": r.kind, "from": r.from_id, "to": r.to_id} for r in doc.relations],
         "dependencies": [
             {"index": d.index, "class": d.class_name, "object_name": d.object_name} for d in doc.dependencies
@@ -140,11 +134,43 @@ def project_document(
         result["next_offset"] = next_offset
         result["truncation"] = truncation_info
 
+    # Debug view adds parse statistics
+    if view == "debug":
+        result["debug"] = {
+            "total_objects": len(doc.objects),
+            "total_relations": len(doc.relations),
+            "total_diagnostics": len(doc.diagnostics),
+            "object_diagnostics": sum(len(o.diagnostics) for o in doc.objects),
+        }
+
     return result
 
 
-def obj_to_dict(obj: ObjectRecord) -> dict[str, Any]:
-    """Convert an ObjectRecord to a dict for JSON serialization."""
+def _package_to_dict(doc: PackageDocument, *, view: str = "semantic") -> dict[str, Any]:
+    """Convert PackageInfo to dict, with extra fields for raw/debug views."""
+    d: dict[str, Any] = {
+        "name": doc.package.name,
+        "layout": doc.package.layout,
+        "engine_version": doc.package.engine_version,
+        "compatible_engine_version": doc.package.compatible_engine_version,
+        "package_flags": doc.package.package_flags,
+        "export_count": doc.package.export_count,
+        "import_count": doc.package.import_count,
+        "name_count": doc.package.name_count,
+    }
+    if view in ("raw", "debug"):
+        d["total_header_size"] = doc.package.total_header_size
+    return d
+
+
+def obj_to_dict(obj: ObjectRecord, *, view: str = "semantic") -> dict[str, Any]:
+    """Convert an ObjectRecord to a dict for JSON serialization.
+
+    Views:
+      - semantic: identity, roles, status, coverage
+      - raw: adds flags, serial_region details
+      - debug: raw + all diagnostics with full detail
+    """
     d: dict[str, Any] = {
         "id": obj.id,
         "table_index": obj.table_index,
@@ -156,6 +182,8 @@ def obj_to_dict(obj: ObjectRecord) -> dict[str, Any]:
         ),
         "status": {"parse": obj.status.parse, "semantic": obj.status.semantic},
     }
+    if view in ("raw", "debug"):
+        d["flags"] = obj.flags
     if obj.properties is not None:
         d["properties"] = obj.properties
     if obj.semantic is not None:
