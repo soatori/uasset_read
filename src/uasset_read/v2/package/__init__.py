@@ -96,16 +96,20 @@ def _build_package_info(summary: Any, name_map: list[str]) -> PackageInfo:
     )
 
 
-def _resolve_class_name(export: Any) -> str | None:
-    """Try to get class name from export."""
+def _resolve_class_name(export: Any, name_map: list[str] | None = None) -> str | None:
+    """Try to get class name from export, resolving through name_map if available."""
     cn = getattr(export, "class_name", None)
     if cn:
         return cn
     # Try to resolve from class_index
     class_index = getattr(export, "class_index", None)
     if class_index is not None:
-        idx = getattr(class_index, "index_value", None)
+        idx = getattr(class_index, "index", None)
         if idx is not None and idx < 0:
+            # Import reference — try to get the name from resolved_class_name attribute
+            resolved = getattr(export, "resolved_class_name", None)
+            if resolved:
+                return resolved
             return f"import:{-idx - 1}"
     return None
 
