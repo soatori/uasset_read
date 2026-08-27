@@ -628,9 +628,9 @@
     }
   ],
   "summary": {
-    "total_samples": 47,
+    "total_samples": 48,
     "layout_distribution": {
-      "legacy": 47
+      "legacy": 48
     },
     "asset_type_distribution": {
       "AnimBlueprint": 2,
@@ -649,7 +649,7 @@
       "LevelSequence": 1,
       "Texture": 1,
       "Niagara": 1,
-      "Blueprint": 2
+      "Blueprint": 3
     },
     "samples_with_sidecars": 0,
     "samples_with_multiple_b_is_asset": [
@@ -668,7 +668,7 @@
       "LevelDesign_ABP_Manny.uasset"
     ],
     "samples_with_parse_errors": [],
-    "fixture_gap_count": 6
+    "fixture_gap_count": 5
   },
   "fixture_gaps": {
     "zen_package": {
@@ -717,8 +717,8 @@
       "recommended_samples": "1 .pak with 10+ packages inside"
     },
     "no_b_is_asset_package": {
-      "status": "coverage_gap",
-      "description": "No sample has exports but zero b_is_asset exports. All samples have at least one b_is_asset. Need a package with only metadata/subobject exports.",
+      "status": "covered",
+      "description": "Covered by uasset_rs_UE410_SimpleRefsSoftRef.uasset (6 exports, 0 bIsAsset).",
       "needed_for": "Phase 0 exit condition verification",
       "acquisition": "1. Find a .uasset that contains only sub-objects\n2. Examples: PackageMetaData, SceneThumbnailInfo, AnimCurveMetaData\n3. These typically have 0 b_is_asset exports",
       "verification": "After obtaining, verify:\n- PackageDocument still produces valid output\n- summary.asset_object_ids is empty\n- No NO_EXPORTS error",
