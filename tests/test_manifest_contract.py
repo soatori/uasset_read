@@ -1,4 +1,4 @@
-"""Manifest contract — all 47 tracked samples exist with correct hash and size."""
+"""Manifest contract — all 48 tracked samples exist with correct hash and size."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def _sha256(path: Path) -> str:
 class TestManifestIntegrity:
     def test_manifest_loads(self, manifest):
         assert manifest["version"] == 1
-        assert len(manifest["samples"]) == 47
+        assert len(manifest["samples"]) == 48
 
     def test_all_samples_exist(self, manifest):
         missing = []
@@ -60,12 +60,24 @@ class TestManifestIntegrity:
     def test_no_extra_files(self, manifest):
         expected = {s["name"] for s in manifest["samples"]}
         expected.add("manifest.json")
+        expected.add("README.md")
         expected.add("ORIGIN-issue-516-plugin-mount.md")
         expected.add("ORIGIN-issue-521-niagara.md")
         expected.add("ORIGIN-issue-522-cube-builder.md")
         actual = {f.name for f in SAMPLES_DIR.iterdir()}
         extra = actual - expected
         assert not extra, f"Unexpected files in samples/: {extra}"
+
+    def test_zero_asset_role_fixture_is_manifested(self, manifest):
+        entry = next(
+            item
+            for item in manifest["samples"]
+            if item["name"] == "uasset_rs_UE410_SimpleRefsSoftRef.uasset"
+        )
+        assert entry["size_bytes"] == 4037
+        assert entry["engine_layout"] == "legacy"
+        assert entry["export_count"] == 6
+        assert entry["b_is_asset_count"] == 0
 
     @pytest.mark.parametrize(
         "sample_name",

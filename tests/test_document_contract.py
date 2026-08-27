@@ -16,12 +16,14 @@ MULTI_ASSET = str(SAMPLES_DIR / "ALS_AnimBP.uasset")
 @pytest.fixture
 def doc():
     from uasset_read.v2.api import parse_package_document
+
     return parse_package_document(SAMPLE)
 
 
 @pytest.fixture
 def multi_doc():
     from uasset_read.v2.api import parse_package_document
+
     return parse_package_document(MULTI_ASSET)
 
 
@@ -37,6 +39,7 @@ class TestExportIdentity:
 
     def test_stable_id_across_calls(self):
         from uasset_read.v2.api import parse_package_document
+
         doc1 = parse_package_document(SAMPLE)
         doc2 = parse_package_document(SAMPLE)
         ids1 = [o.id for o in doc1.objects]
@@ -55,6 +58,17 @@ class TestMultiAsset:
     def test_bisasset_does_not_filter(self, multi_doc):
         all_ids = {o.id for o in multi_doc.objects}
         assert len(all_ids) == 3395
+
+
+class TestZeroAssetRole:
+    def test_exports_survive_without_asset_role(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(
+            SAMPLES_DIR / "uasset_rs_UE410_SimpleRefsSoftRef.uasset"
+        )
+        assert len(doc.objects) == 6
+        assert doc.summary.asset_object_ids == ()
 
 
 class TestRelations:
