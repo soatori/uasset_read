@@ -108,3 +108,15 @@ class TestSliceReader:
         src = MemorySource(b"0123456789")
         with pytest.raises(IndexError):
             SliceReader(src, 8, 5)
+
+
+def test_slice_reader_satisfies_archive_like():
+    from uasset_read.package import PackageArchive
+    from uasset_read.v2.source import MemorySource, SliceReader
+
+    reader = SliceReader(MemorySource(b"abcdef"), 1, 4)
+    archive = PackageArchive(reader)
+    assert archive.total_size() == 4
+    archive.set_byte_swapping(True)
+    assert archive.read(2) == b"bc"
+    archive.close()

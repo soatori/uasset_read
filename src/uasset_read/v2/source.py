@@ -121,3 +121,12 @@ class SliceReader:
     @property
     def source_size(self) -> int:
         return self._length
+
+    def total_size(self) -> int:
+        return self._length
+
+    def set_byte_swapping(self, enabled: bool) -> None:
+        pass  # byte order is applied by PackageArchive's primitive readers
+
+    def close(self) -> None:
+        pass  # Source owns no persistent handle
