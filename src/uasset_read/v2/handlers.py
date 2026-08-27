@@ -168,26 +168,17 @@ class DataTableHandler:
 
 
 class TextureHandler:
-    """Enrich Texture2D/TextureCube objects."""
+    """Enrich Texture2D/TextureCube objects from obj.properties.
 
-    _RESOURCE_KEYS = (
-        "size_x",
-        "size_y",
-        "format",
-        "num_mips",
-        "is_streaming",
-        "streaming_channels",
-        "lod_group",
-        "address_x",
-        "address_y",
-        "filter",
-        "srgb",
-    )
-    _BULK_KEYS = ("total_mip_bytes", "compressed_mip_bytes", "chunk_count", "first_mip")
+    Extracts semantic fields: kind, texture_type, srgb, compression_settings.
+    Each extracted field produces a CoverageEntry.
+    """
+
+    _TEXTURE_CLASSES = ("Texture2D", "TextureCube")
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         cn = obj.class_name or ""
-        return cn in ("Texture2D", "TextureCube")
+        return cn in self._TEXTURE_CLASSES
 
     def enrich(
         self,
@@ -196,22 +187,108 @@ class TextureHandler:
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
-        export_data = _get_export_data(obj, package_data)
-        if not export_data:
+        props = obj.properties
+        if not props:
             return None
 
-        asset_type_data = getattr(export_data, "_asset_type_data", None)
-        if not asset_type_data or not isinstance(asset_type_data, dict):
+        cn = obj.class_name or ""
+        result: dict[str, Any] = {"kind": "texture", "texture_type": cn}
+        coverage: list[CoverageEntry] = [
+            CoverageEntry(feature="texture.kind", status="present"),
+            CoverageEntry(feature="texture.texture_type", status="present", detail=cn),
+        ]
+
+        # SRGB (BoolProperty)
+        srgb_prop = props.get("SRGB")
+        if srgb_prop and srgb_prop.get("kind") == "value":
+            result["srgb"] = srgb_prop["value"]
+            coverage.append(
+                CoverageEntry(feature="texture.srgb", status="present")
+            )
+        else:
+            coverage.append(
+                CoverageEntry(feature="texture.srgb", status="missing")
+            )
+
+        # CompressionSettings (ByteProperty / enum)
+        cs_prop = props.get("CompressionSettings")
+        if cs_prop and cs_prop.get("kind") == "value":
+            raw = cs_prop["value"]
+            if isinstance(raw, dict) and "value_name" in raw:
+                result["compression_settings"] = raw["value_name"]
+            else:
+                result["compression_settings"] = raw
+            coverage.append(
+                CoverageEntry(feature="texture.compression_settings", status="present")
+            )
+        else:
+            coverage.append(
+                CoverageEntry(feature="texture.compression_settings", status="missing")
+            )
+
+        # Attach coverage to the object record
+        obj.coverage.extend(coverage)
+        return result
+
+
+class TexturePayloadHandler:
+    """Extract payload descriptors from texture properties.
+
+    Reads ImportedSize struct to emit a texture_mip payload descriptor
+    with stored_size / logical_size.
+    """
+
+    _TEXTURE_CLASSES = ("Texture2D", "TextureCube")
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        cn = obj.class_name or ""
+        return cn in self._TEXTURE_CLASSES
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        props = obj.properties
+        if not props:
             return None
 
-        result: dict[str, Any] = {"kind": "texture"}
-        resource = {k: asset_type_data[k] for k in self._RESOURCE_KEYS if k in asset_type_data}
-        if resource:
-            result["resource"] = resource
-        bulk = {k: asset_type_data[k] for k in self._BULK_KEYS if k in asset_type_data}
-        if bulk:
-            result["bulk"] = bulk
-        return result if len(result) > 1 else None
+        imported_size = props.get("ImportedSize")
+        if not imported_size or imported_size.get("kind") != "struct":
+            return None
+
+        fields = imported_size.get("fields", {})
+        # ImportedSize may have a nested struct with size fields,
+        # or it may be a struct_binary_decoded with explicit size info.
+        # Extract whatever size info is available.
+        total_size = 0
+        if fields:
+            # Direct fields on the struct (e.g. SizeX, SizeY, or a single Size)
+            size_val = fields.get("Size") or fields.get("total_size") or fields.get("BulkDataSize")
+            if isinstance(size_val, (int, float)):
+                total_size = int(size_val)
+
+        # If the struct_type hints at size (e.g. "5_16"), try to extract
+        struct_type = imported_size.get("struct_type", "")
+
+        payload: dict[str, Any] = {
+            "kind": "texture_mip",
+            "source_region": "main",
+            "logical_size": total_size,
+        }
+        if struct_type:
+            payload["struct_type"] = struct_type
+
+        coverage_entry = CoverageEntry(
+            feature="texture.payload",
+            status="present" if total_size else "partial",
+            detail=f"ImportedSize struct_type={struct_type}" if struct_type else "",
+        )
+        obj.coverage.append(coverage_entry)
+
+        return {"payload": payload}
 
 
 class SoundHandler:
@@ -271,6 +348,7 @@ register_handler(UserDefinedEnumHandler())
 register_handler(UserDefinedStructHandler())
 register_handler(DataTableHandler())
 register_handler(TextureHandler())
+register_handler(TexturePayloadHandler())
 register_handler(SoundHandler())
 
 
@@ -296,14 +374,14 @@ class MaterialHandler:
             val = props.get(key)
             if val and isinstance(val, dict):
                 result[key] = val.get("value", False)
-                coverage.append(CoverageEntry(feature=f"material.{key}", status="complete"))
+                coverage.append(CoverageEntry(feature=f"material.{key}", status="present"))
 
         # Editor position
         for key in ("EditorX", "EditorY"):
             val = props.get(key)
             if val and isinstance(val, dict):
                 result[key] = val.get("value", 0)
-                coverage.append(CoverageEntry(feature=f"material.{key}", status="complete"))
+                coverage.append(CoverageEntry(feature=f"material.{key}", status="present"))
 
         obj.coverage.extend(coverage)
         return result if len(result) > 1 else None
@@ -332,21 +410,21 @@ class MaterialInstanceHandler:
         parent = props.get("Parent")
         if parent is not None:
             result["has_parent"] = True
-            coverage.append(CoverageEntry(feature="material_instance.parent", status="complete"))
+            coverage.append(CoverageEntry(feature="material_instance.parent", status="present"))
 
         # Scalar parameters
         scalar_params = props.get("ScalarParameterValues")
         if scalar_params and isinstance(scalar_params, dict):
             fields = scalar_params.get("fields", {})
             result["scalar_param_count"] = len(fields) if isinstance(fields, dict) else 0
-            coverage.append(CoverageEntry(feature="material_instance.scalars", status="complete"))
+            coverage.append(CoverageEntry(feature="material_instance.scalars", status="present"))
 
         # Vector parameters
         vector_params = props.get("VectorParameterValues")
         if vector_params and isinstance(vector_params, dict):
             fields = vector_params.get("fields", {})
             result["vector_param_count"] = len(fields) if isinstance(fields, dict) else 0
-            coverage.append(CoverageEntry(feature="material_instance.vectors", status="complete"))
+            coverage.append(CoverageEntry(feature="material_instance.vectors", status="present"))
 
         obj.coverage.extend(coverage)
         return result if len(result) > 1 else None
