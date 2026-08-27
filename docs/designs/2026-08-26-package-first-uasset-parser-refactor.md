@@ -71,8 +71,11 @@
 - `temp/output-format-comparison.md`：提供现有输出与外部项目字段对比。
 - 当前项目源码、测试和真实样本扫描。
 - Unreal Engine 源码中的 `FPackageFileSummary`、`FObjectExport`、`FPropertyTag`、`FZenPackageSummary`、`FPackageTrailer`、`FIoStoreReader` 等实现。
+- OpenWiki 的 `entities/asset-registry.md`、`entities/serialization-io.md` 和 MCP 页面仅用于发现候选符号与源码入口；写入本文的结论仍以 UE 源码复核为准。
 
 第三份对比报告中的竞品性能、读写完整性和属性覆盖数字未附带同条件验证，因此不得转化为验收结论。
+
+OpenWiki 是生成式二级资料，不是格式规范。尤其不得采用 `topics/infrastructure/zen-storage.md` 中无法在当前 UE 源码定位的 `.zen/.zen.idx/.zen.meta` 容器、`FZenHandle`、`ZenStorage::LoadAsset*`、固定缓存参数或性能数字。
 
 ## Current State
 
@@ -261,6 +264,8 @@ Pak/IoStore 解密和解压属于 Source，不泄漏到 package reader。读取�
 
 两者共享最终 `ObjectRecord`，不共享错误的二进制布局代码。
 
+这里的 **Zen package** 专指 CoreUObject 中由 `FZenPackageSummary`/`FZenPackageHeader` 描述、通过 IoStore `ExportBundleData` chunk 承载的 package 序列化布局。它不等于 Developer/Zen、StorageServerClient 或 `ZenStoreWriter` 所属的 **Zen Storage Server** 服务与缓存体系；后者若接入，只能作为新的 `Source`/transport capability，不能据此推断 package 二进制布局。
+
 ### VersionContext
 
 ```python
@@ -329,6 +334,16 @@ class ObjectRecord:
 - `references`
 
 多资产包不再选出唯一 primary。为了 CLI 展示可计算 `summary.asset_object_ids`，但该字段不能控制解析或丢弃其他对象。
+
+### Asset Registry 与外部索引
+
+`AssetRegistry.bin`/`FAssetRegistryState` 是可选的目录与依赖证据，不是 package parser 的必需输入：
+
+- 可用于批量发现 package、补充 `FAssetData` 的 class/tags/chunk/package metadata，以及提供 package/manage/searchable-name 依赖候选。
+- Registry 信息必须带 `source="asset_registry"` provenance；包内 import、property reference 和 object relation 保留各自 provenance，不能无来源地合并成一条边。
+- Registry 可能缺失、过期或经过平台过滤；它不能覆盖 export/object identity、解析状态或包内字节证据。
+- 不调用 `GetMostImportantAsset` 一类便利选择来决定输出主对象；Registry 返回多个顶层资产时仍全部保留。
+- 核心读取器在没有 Registry 时必须完整工作；Registry loader 属于可选批处理/索引 adapter。
 
 ### Property System
 
@@ -629,8 +644,19 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - 当前输出 golden 仅用于识别回归，不作为新 Schema 约束。
 - `PackageDocument` v2 schema 与示例。
 - current/target 文档分离完成。
+- 在同一变更中删除旧 `tests/**/*.py`、已跟踪测试缓存和计时 benchmark，并立即建立可全绿的 v2 契约测试；不提交“先删测试、以后再补”的中间状态。
+- 保留全部 47 个真实二进制样本及来源说明，逐项校验 manifest 中的 SHA-256 与大小；样本不得因重写测试而删除或替换。
+- 迁移当前有效的 PackageDocument、projection 和 Agent tool 断言，不把并发中的 v2 Agent 契约随旧测试清空。
+- 删除根目录 `run.py` 与 `extract_function_pins.py`，统一入口为 `python -m uasset_read`；Pin 提取能力待 Blueprint v2 扩展重新设计。
 
-退出条件：多资产样本、无唯一主资产样本、classic、IoStore/Zen、tagged、unversioned、payload sidecar 均有明确 fixture 或“缺少 fixture”记录。
+退出条件：旧 Python 测试模块和根目录独立脚本归零；新基础套件在当前本机 Windows + Python 3.14 全绿；47 个样本的 hash/size 全部匹配；多资产、无唯一主资产、classic、IoStore/Zen、tagged、unversioned、payload sidecar 均有明确 fixture 或 manifest gap。
+
+### Phase 与测试同步规则
+
+- Phase 0 一次性移除旧测试体系；之后每个实现 Phase 只增加该阶段已经实现且具有证据的最小严格测试。
+- 不为缺少 fixture 的目标能力预提交 `skip`、`xfail` 或长期红测；缺口写入 manifest，取得样本并实现后再收集测试。
+- 每个 Phase 的源码、测试、manifest 和文档状态在同一验收边界内交付，不保留永久双测试体系。
+- 允许为新契约通过修复最少量生产源码，但不得借测试重构实现无真实证据的格式分支。
 
 ### Phase 1：Reader 与 Legacy PackageDocument
 
@@ -704,6 +730,16 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 
 ## Testing Strategy
 
+### 证据顺序
+
+测试结论按以下顺序约束，低层证据不得覆盖高层证据：
+
+1. Unreal Engine 源码中的序列化分支和版本条件。
+2. 真实 fixture 的 SHA-256、大小、版本、layout、sidecar 与 manifest 结构断言。
+3. `PackageDocument`、对象关系、状态和 structured diagnostics。
+4. Python API、CLI 与 Agent 投影一致性。
+5. 文本日志只验证开关、单次生命周期和副作用，不作为内容 golden。
+
 ### 测试层级
 
 - Reader unit：边界、endianness、count、overflow、slice。
@@ -713,6 +749,16 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - Container integration：Pak/IoStore range 读取。
 - Output schema：同一 document 的不同 view/depth。
 - Agent contract：分页、max_bytes、稳定 id、错误边界。
+
+### 测试组织约束
+
+- 真实样本支持声明必须来自 manifest 驱动的参数化测试；缺文件或 hash 不匹配直接失败，不在测试内 `skip`。
+- aggregate/sample 测试不得捕获宽泛 `Exception` 后继续；失败必须保留样本名、stage、object 和 diagnostic code。
+- 不用 `MagicMock` 伪造 UE package/export/property 结构；Reader 边界使用受控 bytes，端到端行为使用真实样本。Mock 只允许隔离文件流、时钟或进程边界。
+- manifest 不能由测试自动改写。新增或修改预期值必须先核对样本与 UE 源码，再由评审确认。
+- 不提交墙钟耗时阈值。性能门禁只使用确定性的 bytes、count、range、pagination 和 resource budget。
+- 测试代码只放在 `tests/`；根目录和 `scripts/` 不增加独立验证程序。一次性调查使用命令行或未跟踪的 `temp/` 输出。
+- pytest cache、`__pycache__`、日志、golden 调试转储和本机路径不得进入版本控制。
 
 ### 必须存在的回归
 
@@ -734,6 +780,8 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - 结构断言，而不是仅检查命令退出 0。
 - partial/unsupported 的诚实状态。
 
+当前重构阶段的唯一阻断环境是本机 Windows + Python 3.14，标准命令为 `python -m pytest -q`。GitHub CI 暂停 pytest、coverage 和 Codecov，只保留静态、目录与 wheel smoke 检查。Linux、macOS 和其他 Python 版本暂缓验证；源码仍遵守跨平台约束，但文档和发布说明不得宣称这些环境已通过测试。
+
 ## Acceptance Gates
 
 ### Core v2 Gate
@@ -745,7 +793,8 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - 所有读取受 range 和 count 限制。
 - diagnostics 包含 stage，并可关联 object/offset。
 - Python API 返回 document；JSON 是纯投影。
-- Linux、Windows、macOS CI 运行核心测试。
+- 当前本机 Windows + Python 3.14 的完整新套件通过且无非预期 skip/xfail。
+- Linux、macOS 和其他 Python 版本保留为 deferred，不作为当前 Gate，也不得被描述为已验证。
 
 ### Output v2 Gate
 
@@ -770,6 +819,8 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - Blueprint/Kismet 扩展在 v2 object model 上运行，或明确保留为未迁移可选能力。
 - 旧 builder/projection/promotion 路径已删除，而不是永久并行。
 - 发行包、源码树和文档树的体积基线已记录并进入 CI/发布检查。
+- 根目录独立 Python 入口已删除，公开命令统一为 `python -m uasset_read`。
+- 旧测试脚本、计时 benchmark、测试缓存和调试日志未残留在版本控制中。
 
 ## Risks and Controls
 
@@ -781,6 +832,8 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 | 领域 handler 再次侵入 core | handler 只消费 document/object，不读取全局 archive |
 | Unknown 数据静默丢失 | opaque region + diagnostic + payload descriptor |
 | optional codec 破坏跨平台安装 | capability boundary，缺失时 metadata-only |
+| 把 Zen Storage Server 当成 Zen package 格式 | 按源码模块和符号分名；服务端只作为 Source capability |
+| Asset Registry 缺失或陈旧污染解析结果 | Registry 仅作带 provenance 的可选 enrich/index，不覆盖 package evidence |
 | 文档提前宣布功能完成 | current/target 标记、源码优先、验收 gate |
 | 历史文档继续被检索误用 | 顶部 superseded banner + 统一 design index |
 
@@ -796,6 +849,10 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - Agent tool 是正式接口；MCP 是可选 transport。
 - 默认不写文件日志，不内嵌大型 payload。
 - 最小依赖优先，但不把零依赖作为不可改变的架构限制。
+- Phase 0 原子删除并重建测试体系；后续测试与实现 Phase 同步增长，不保留旧/新双套测试。
+- 当前只以本机 Windows + Python 3.14 作为测试阻断环境；其他系统和 Python 版本暂缓且不得宣称已验证。
+- 真实样本与 structured diagnostics 是测试基准；文本日志不是 golden。
+- 禁止新增根目录独立验证脚本；可复用能力进入包内 API、CLI 或 Agent tool。
 
 ## Source Pointers
 
@@ -815,7 +872,14 @@ UE 源码核验入口使用相对于 Unreal Engine checkout 的路径：
 - `Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectResource.h`
 - `Engine/Source/Runtime/CoreUObject/Public/UObject/PropertyTag.h`
 - `Engine/Source/Runtime/CoreUObject/Public/Serialization/PackageTrailer.h`
-- `Engine/Source/Runtime/CoreUObject/Private/Serialization/AsyncLoading2.h`
+- `Engine/Source/Runtime/CoreUObject/Public/Serialization/AsyncLoading2.h`
+- `Engine/Source/Runtime/CoreUObject/Internal/Serialization/ZenPackageHeader.h`
 - `Engine/Source/Runtime/Core/Public/IO/IoDispatcher.h`
+- `Engine/Source/Runtime/Core/Internal/IO/IoStore.h`
+- `Engine/Source/Runtime/AssetRegistry/Public/AssetRegistry/AssetRegistryState.h`
+- `Engine/Source/Runtime/AssetRegistry/Public/AssetRegistry/IAssetRegistry.h`
+- `Engine/Source/Runtime/CoreUObject/Public/AssetRegistry/AssetData.h`
+- `Engine/Source/Developer/Zen/`
+- `Engine/Source/Runtime/StorageServerClient/`
 
 不在仓库文档中固定本机 UE 源码绝对路径；开发环境通过环境变量、项目配置或用户提供路径定位 checkout。

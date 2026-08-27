@@ -409,6 +409,7 @@ def main():
     if args.v2:
         try:
             from uasset_read.v2.api import parse_package_document
+
             doc = parse_package_document(
                 str(file_path),
                 tolerant=tolerant,

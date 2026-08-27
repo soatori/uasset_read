@@ -48,6 +48,8 @@
 - 代码、注释和错误信息使用英文；文档保持所在文档语言一致。
 - 临时调查材料放入 `temp/`。
 - 二进制读取必须有边界验证和严格回归测试。
-- 修改 benchmark 测试前先取得用户确认。
+- Phase 0 将一次性替换旧测试体系；不要继续扩展 Semantic 1.x 测试，也不要新增独立验证脚本。
+- 样本缺失只登记 manifest gap，不用 skip/xfail/吞异常制造覆盖；支持声明必须有真实 fixture 和 structured diagnostics 断言。
+- 当前只以本机 Windows + Python 3.14 作为阻断测试环境；其他平台和 Python 版本暂缓且不得宣称已验证。
 - 不提交本机 UE 源码绝对路径、外部仓库副本、日志或 Agent 缓存。
 - 报告结论必须标明是 current evidence 还是 target decision。

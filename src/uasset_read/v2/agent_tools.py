@@ -82,14 +82,16 @@ def list_objects(
 
     objects = []
     for obj in page:
-        objects.append({
-            "id": obj.id,
-            "table_index": obj.table_index,
-            "name": obj.name,
-            "class": obj.class_name,
-            "roles": list(obj.roles),
-            "status": {"parse": obj.status.parse, "semantic": obj.status.semantic},
-        })
+        objects.append(
+            {
+                "id": obj.id,
+                "table_index": obj.table_index,
+                "name": obj.name,
+                "class": obj.class_name,
+                "roles": list(obj.roles),
+                "status": {"parse": obj.status.parse, "semantic": obj.status.semantic},
+            }
+        )
 
     result: dict[str, Any] = {
         "objects": objects,
@@ -134,9 +136,7 @@ def get_object(
         "class": obj.class_name,
         "roles": list(obj.roles),
         "serial_region": (
-            {"offset": obj.serial_region.offset, "size": obj.serial_region.size}
-            if obj.serial_region
-            else None
+            {"offset": obj.serial_region.offset, "size": obj.serial_region.size} if obj.serial_region else None
         ),
         "status": {"parse": obj.status.parse, "semantic": obj.status.semantic},
     }
@@ -145,9 +145,7 @@ def get_object(
     if obj.semantic is not None:
         result["semantic"] = obj.semantic
     if obj.coverage:
-        result["coverage"] = [
-            {"feature": c.feature, "status": c.status} for c in obj.coverage
-        ]
+        result["coverage"] = [{"feature": c.feature, "status": c.status} for c in obj.coverage]
     if obj.diagnostics:
         result["diagnostics"] = [d.to_dict() for d in obj.diagnostics]
 
@@ -167,7 +165,9 @@ def list_dependencies(
     """
     doc = parse_package_document(file_path)
     deps_page, next_offset, truncation = paginate(
-        doc.dependencies, offset=offset, limit=limit,
+        doc.dependencies,
+        offset=offset,
+        limit=limit,
     )
 
     return {
@@ -180,10 +180,7 @@ def list_dependencies(
             }
             for d in deps_page
         ],
-        "relations": [
-            {"kind": r.kind, "from": r.from_id, "to": r.to_id}
-            for r in doc.relations
-        ],
+        "relations": [{"kind": r.kind, "from": r.from_id, "to": r.to_id} for r in doc.relations],
         "total_dependencies": len(doc.dependencies),
         "total_relations": len(doc.relations),
         "offset": offset,

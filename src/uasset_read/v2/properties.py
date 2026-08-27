@@ -71,9 +71,7 @@ class UsmapSchemaProvider:
         TODO: Implement .usmap binary parsing.
         Format: magic + version + name_map + struct_count + struct_entries
         """
-        raise NotImplementedError(
-            "UsmapSchemaProvider.load requires .usmap file parsing implementation"
-        )
+        raise NotImplementedError("UsmapSchemaProvider.load requires .usmap file parsing implementation")
 
     def fields_for(self, class_path: str, context: Any = None) -> Sequence[FieldSchema] | None:
         return self._schemas.get(class_path)

@@ -37,8 +37,6 @@ def paginate(
     *,
     offset: int = 0,
     limit: int | None = None,
-    max_bytes: int | None = None,
-    item_byte_estimate: Any = None,
 ) -> tuple[list[Any], int | None, dict[str, int]]:
     """Paginate a list, returning (page, next_offset, truncation_info).
 
@@ -95,7 +93,6 @@ def project_document(
         selected,
         offset=offset,
         limit=limit,
-        max_bytes=max_bytes,
     )
 
     # Filter fields if requested

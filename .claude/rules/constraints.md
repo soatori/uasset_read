@@ -40,10 +40,14 @@ The authoritative target is `docs/designs/2026-08-26-package-first-uasset-parser
 
 ## Test Organization
 
-- Benchmark test changes require user confirmation before modification.
-- New tests go in the domain directory matching the behavior they exercise.
-- `tests/samples/` stores sample assets and their manifest data, not Python test modules.
-- Non-trivial parser behavior requires a strict regression test; aggregate tests must not swallow broad exceptions.
+- Phase 0 deletes and replaces the legacy Python test suite in one atomic change; do not maintain parallel old/new suites.
+- Keep all tracked files under `tests/samples/` and validate SHA-256, size, version, layout and sidecars through the manifest.
+- Missing fixtures are manifest gaps. Do not use `skip`, `xfail`, long-lived failing tests, or broad exception swallowing to simulate coverage.
+- Do not use `MagicMock` for UE binary structures. Use bounded bytes for reader tests and real fixtures for support claims.
+- Structured diagnostics are authoritative; text logs are tested only for lifecycle and unwanted side effects.
+- Do not add wall-clock benchmark thresholds. Test deterministic count/range/byte/resource limits instead.
+- Do not add root-level or `scripts/` verification programs. Reusable behavior belongs in package APIs, `python -m uasset_read`, or Agent tools.
+- The current blocking test environment is local Windows + Python 3.14. Linux, macOS and other Python versions are deferred and must not be claimed as verified.
 - Version or asset-support claims require UE source evidence, a real fixture, structural assertions, and honest partial/unsupported states.
 
 ## Documentation Constraints
