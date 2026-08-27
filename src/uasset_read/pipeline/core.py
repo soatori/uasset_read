@@ -426,11 +426,10 @@ def parse_uasset_with_linker(
         ParseResult instance (containing object graph and post-processed data)
     """
     # Lazy import of extras module (per #117 core/extras layering)
-    # Initialize project logging if log_config is provided
+    # Only configure logging when caller explicitly provides log_config;
+    # the library itself must not create log sessions.
     if log_config:
         configure_project_logging(**log_config.to_configure_kwargs())
-    else:
-        configure_project_logging()
 
     result = ParseResult()
 

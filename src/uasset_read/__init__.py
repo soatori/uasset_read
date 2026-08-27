@@ -15,6 +15,7 @@ __version__ = "0.5.5"
 from .core import parse_single, parse_batch, diff_single, list_formats, BatchResult
 from .config import ParseConfig, LogConfig
 from .pipeline.core import parse_package, parse_uasset, parse_uasset_with_linker
+from .v2.api import parse_package_document
 from .project_logging import (
     ProjectLogSession,
     configure_project_logging,
@@ -45,6 +46,8 @@ __all__ = [
     "ProjectLogSession",
     "project_logging_session",
     "shutdown_project_logging",
+    # v2 package-first API
+    "parse_package_document",
     # Core models
     "ParseResult",
     # Exceptions
