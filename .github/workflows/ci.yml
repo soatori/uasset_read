@@ -61,7 +61,7 @@ jobs:
             echo "  - README.md, README.zh-CN.md, CLAUDE.md, LICENSE"
             echo "  - pytest.ini, tests/ (CI 需要)"
             echo "  - .claude/rules/"
-            echo "  - docs/formats/, docs/designs/, docs/reference/, docs/agents/, docs/release-notes/"
+            echo "  - docs/formats/, docs/designs/, docs/reference/"
             exit 1
           fi
 
@@ -75,7 +75,7 @@ jobs:
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Build wheel
         run: |
@@ -88,7 +88,6 @@ jobs:
           cd "$(mktemp -d)"
           python -c "import uasset_read"
 
-
   ruff-check:
     runs-on: ubuntu-latest
     steps:
@@ -97,7 +96,7 @@ jobs:
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Install Ruff
         run: |
