@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 > 📦 **v0.5.5** — Zero runtime dependencies · Python 3.10+ · 200 source files · 70+ UE class types
 
-> **Refactor status:** v0.5.5 behavior below is the current implementation. The next architecture is package-first, preserves every export, separates Legacy/Zen readers, and exposes bounded Agent tools. It is designed but not yet implemented. See the [authoritative refactor report](docs/designs/2026-08-26-package-first-uasset-parser-refactor.md) and [design status index](docs/designs/README.md).
+> **Refactor status:** v2 architecture (package-first) is implemented on `dev-0.6.0` branch. All exports preserved, multi-asset packages supported, 6 Agent tools available. See [design status](docs/designs/README.md) and [Phase 5-6 gaps](tests/samples/manifest.json#fixture_gaps).
 
 ## Why uasset_read?
 
@@ -24,13 +24,37 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 | -------- | ------- |
-| Version | 0.5.5 |
+| Version | 0.5.5 (stable) / v2 (in development) |
 | Source | Python parser for Unreal Engine .uasset files |
 | Modules | 200 source files across 15 subpackages |
+| v2 Tests | 113+ tests across 5 test files |
+| Multi-asset samples | 13 packages with multiple bIsAsset exports |
 
 ## Features
 
-### Core Parsing
+### v2 Architecture (in development)
+
+> v2 runs alongside v0.5.5 during migration. Use `--v2` CLI flag or `parse_package_document()` Python API.
+
+- **PackageDocument** — one document per .uasset, all exports as first-class objects
+- **Multi-asset support** — no more `_select_primary_export()` filtering
+- **v2 JSON contract** — `uasset_read.package` format with view/depth/selection/pagination
+- **Agent tools** — `inspect_package`, `list_objects`, `get_object`, `list_dependencies`, `get_diagnostics`, `extract_payload`
+- **Projection** — semantic/raw/debug views with object selection and pagination
+- **AssetHandler protocol** — extensible domain enrichment (DataTable, Texture, Sound built-in)
+- **SchemaProvider** — interface for unversioned property schema lookup
+- **Zen/IoStore stubs** — interfaces ready, awaiting real fixtures
+
+```python
+from uasset_read.v2.api import parse_package_document
+doc = parse_package_document("file.uasset")
+print(doc.to_dict())  # PackageDocument v2 JSON
+
+# Or use CLI
+# python -m uasset_read --v2 file.uasset
+```
+
+### Core Parsing (v0.5.5 — current stable)
 
 - **PackageFileSummary** — file header parsing
 - **NameMap** — name table extraction
