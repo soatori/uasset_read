@@ -64,6 +64,86 @@ class TestHandlerFailureIsolation:
         assert any("BadHandler" in c.feature for c in cov)
 
 
+class TestUserDefinedEnumHandler:
+    def test_supports(self):
+        from uasset_read.v2.handlers import UserDefinedEnumHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = UserDefinedEnumHandler()
+        obj = ObjectRecord(
+            id="export:1", table_index=1, name="Enum_PanelType",
+            class_name="UserDefinedEnum", status=ObjectStatus(),
+        )
+        assert handler.supports(obj, VersionContext())
+
+    def test_rejects_non_enum(self):
+        from uasset_read.v2.handlers import UserDefinedEnumHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = UserDefinedEnumHandler()
+        obj = ObjectRecord(
+            id="export:0", table_index=0, name="BP_Something",
+            class_name="Blueprint", status=ObjectStatus(),
+        )
+        assert not handler.supports(obj, VersionContext())
+
+    def test_enrichment(self):
+        from uasset_read.v2.api import parse_package_document
+        from uasset_read.v2.handlers import run_handlers
+        from uasset_read.v2.version import VersionContext
+
+        doc = parse_package_document(str(SAMPLES_DIR / "Lyra_Enum_PanelType.uasset"))
+        enums = [o for o in doc.objects if o.class_name == "UserDefinedEnum"]
+        assert len(enums) >= 1
+        obj = enums[0]
+        semantic, _cov = run_handlers(obj, VersionContext(), doc.objects, doc.package)
+        assert semantic is not None
+        assert semantic["kind"] == "user_defined_enum"
+        assert semantic["enum_name"] == "Enum_PanelType"
+
+
+class TestUserDefinedStructHandler:
+    def test_supports(self):
+        from uasset_read.v2.handlers import UserDefinedStructHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = UserDefinedStructHandler()
+        obj = ObjectRecord(
+            id="export:0", table_index=0, name="Struct_Objective",
+            class_name="UserDefinedStruct", status=ObjectStatus(),
+        )
+        assert handler.supports(obj, VersionContext())
+
+    def test_rejects_non_struct(self):
+        from uasset_read.v2.handlers import UserDefinedStructHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = UserDefinedStructHandler()
+        obj = ObjectRecord(
+            id="export:0", table_index=0, name="DT_Something",
+            class_name="DataTable", status=ObjectStatus(),
+        )
+        assert not handler.supports(obj, VersionContext())
+
+    def test_enrichment(self):
+        from uasset_read.v2.api import parse_package_document
+        from uasset_read.v2.handlers import run_handlers
+        from uasset_read.v2.version import VersionContext
+
+        doc = parse_package_document(str(SAMPLES_DIR / "StackOBot_Struct_Objective.uasset"))
+        structs = [o for o in doc.objects if o.class_name == "UserDefinedStruct"]
+        assert len(structs) >= 1
+        obj = structs[0]
+        semantic, _cov = run_handlers(obj, VersionContext(), doc.objects, doc.package)
+        assert semantic is not None
+        assert semantic["kind"] == "user_defined_struct"
+        assert semantic["struct_name"] == "Struct_Objective"
+
+
 class TestRealSamples:
     def test_datatable_sample(self):
         from uasset_read.v2.api import parse_package_document

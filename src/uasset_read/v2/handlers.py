@@ -86,6 +86,51 @@ def run_handlers(
 # ── Built-in handlers ──────────────────────────────────────────────
 
 
+class UserDefinedEnumHandler:
+    """Enrich UserDefinedEnum objects."""
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        return (obj.class_name or "") == "UserDefinedEnum"
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        # Enum entries live in the name map, not in properties.
+        # We extract what we can from the object record.
+        result: dict[str, Any] = {
+            "kind": "user_defined_enum",
+            "enum_name": obj.name,
+        }
+        return result
+
+
+class UserDefinedStructHandler:
+    """Enrich UserDefinedStruct objects."""
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        return (obj.class_name or "") == "UserDefinedStruct"
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        result: dict[str, Any] = {
+            "kind": "user_defined_struct",
+            "struct_name": obj.name,
+        }
+        props = obj.properties or {}
+        if props:
+            result["field_count"] = len(props)
+        return result
+
+
 class DataTableHandler:
     """Enrich DataTable/CurveTable/StringTable objects."""
 
@@ -222,6 +267,8 @@ def _get_export_data(obj: ObjectRecord, package_data: Any) -> Any:
 
 
 # Register built-in handlers
+register_handler(UserDefinedEnumHandler())
+register_handler(UserDefinedStructHandler())
 register_handler(DataTableHandler())
 register_handler(TextureHandler())
 register_handler(SoundHandler())
