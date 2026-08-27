@@ -28,6 +28,8 @@ from ...serializers.package_summary import (
     read_preload_dependencies,
 )
 from ...v2.diagnostics import Diagnostic
+from ...v2.handlers import run_handlers
+from ...v2.version import VersionContext
 from ...v2.document import PackageDocument, PackageInfo, SourceInfo, Summary
 from ...v2.object_model import (
     Dependency,
@@ -294,8 +296,8 @@ class LegacyPackageReader:
                 total_exports=len(export_map),
             )
 
-            # 16. Parse properties for requested objects at depth="object"
-            if depth == "object":
+            # 16. Parse properties for requested objects at depth >= object
+            if depth in ("object", "asset", "decode"):
                 self._parse_requested_object_properties(
                     archive=archive,
                     objects=objects,
@@ -307,7 +309,32 @@ class LegacyPackageReader:
                     diagnostics=diagnostics,
                 )
 
-            # 17. Build SourceInfo
+            # 17. Run asset handlers at depth >= asset
+            if depth in ("asset", "decode"):
+                context = build_version_context_from_summary(
+                    summary,
+                    package_layout="legacy",
+                    game=self._game,
+                )
+                for obj in objects:
+                    try:
+                        semantic, cov = run_handlers(obj, context, objects, None)
+                        if semantic is not None:
+                            obj.semantic = semantic
+                            obj.coverage.extend(cov)
+                    except Exception as exc:
+                        diagnostics.append(
+                            Diagnostic(
+                                severity="warning",
+                                code="HANDLER_FAILURE",
+                                message=f"Handler error for {obj.id}: {exc}",
+                                stage="semantic.handler",
+                                object_id=obj.id,
+                                recoverable=True,
+                            )
+                        )
+
+            # 18. Build SourceInfo
             source_info = _build_source_info(str(self._source._path))
 
             return PackageDocument(
