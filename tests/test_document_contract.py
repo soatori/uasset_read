@@ -64,9 +64,7 @@ class TestZeroAssetRole:
     def test_exports_survive_without_asset_role(self):
         from uasset_read.v2.api import parse_package_document
 
-        doc = parse_package_document(
-            SAMPLES_DIR / "uasset_rs_UE410_SimpleRefsSoftRef.uasset"
-        )
+        doc = parse_package_document(SAMPLES_DIR / "uasset_rs_UE410_SimpleRefsSoftRef.uasset")
         assert len(doc.objects) == 6
         assert doc.summary.asset_object_ids == ()
 
@@ -109,3 +107,44 @@ class TestSerialization:
         assert d["summary"]["object_count"] == 10
         assert d["summary"]["total_exports"] == 10
         assert "total_imports" in d["summary"]
+
+
+class TestDirectReader:
+    """Verify v2 api uses direct reader, not v1 pipeline."""
+
+    def test_v2_api_does_not_call_v1_pipeline(self, monkeypatch, doc):
+        import uasset_read.pipeline.core as old_core
+
+        def forbidden(*args, **kwargs):
+            raise AssertionError("v1 pipeline called")
+
+        monkeypatch.setattr(old_core, "parse_uasset_with_linker", forbidden)
+        # Re-import to get a fresh module-level reference
+        from uasset_read.v2.api import parse_package_document
+
+        result = parse_package_document(SAMPLE, depth="package")
+        assert result.package.layout == "legacy"
+        assert result.summary.total_exports == len(result.objects)
+
+
+class TestLegacyTableParity:
+    """Verify every tracked legacy fixture parses with correct table counts."""
+
+    @pytest.fixture(scope="class")
+    def manifest(self):
+        import json as _json
+
+        with open(SAMPLES_DIR / "manifest.json") as f:
+            return _json.load(f)
+
+    def test_legacy_reader_matches_manifest_tables(self, manifest):
+        from uasset_read.v2.api import parse_package_document
+
+        for entry in manifest["samples"]:
+            if entry["engine_layout"] != "legacy":
+                continue
+            doc = parse_package_document(SAMPLES_DIR / entry["name"], depth="package")
+            assert doc.package.layout == "legacy", entry["name"]
+            assert doc.package.export_count == entry["export_count"], entry["name"]
+            assert len(doc.objects) == entry["export_count"], entry["name"]
+            assert len(doc.summary.asset_object_ids) == entry["b_is_asset_count"], entry["name"]

@@ -1,8 +1,7 @@
-"""LegacyPackageReader — adapter from v1 ParseResult to v2 PackageDocument.
+"""Package readers — legacy adapter and direct binary reader.
 
-This is the bridge that converts existing parse results into
-the new v2 document model. Phase 1 uses this adapter; later phases
-replace it with a direct binary reader.
+The legacy adapter (build_package_document) converts v1 ParseResults.
+The direct reader (LegacyPackageReader) reads binary format directly.
 """
 
 from __future__ import annotations
