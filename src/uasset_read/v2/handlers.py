@@ -430,5 +430,88 @@ class MaterialInstanceHandler:
         return result if len(result) > 1 else None
 
 
+
+
+class SkeletonHandler:
+    """Enrich Skeleton objects with bone hierarchy summary."""
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        return (obj.class_name or "") == "Skeleton"
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        result: dict[str, Any] = {"kind": "skeleton", "name": obj.name}
+        coverage: list[CoverageEntry] = []
+
+        props = obj.properties or {}
+        bone_tree = props.get("BoneTree")
+        if bone_tree and isinstance(bone_tree, dict):
+            fields = bone_tree.get("fields", {})
+            bone_count = len(fields) if isinstance(fields, dict) else 0
+            result["bone_count"] = bone_count
+            coverage.append(CoverageEntry(feature="skeleton.bone_tree", status="present"))
+        else:
+            result["bone_count"] = 0
+            coverage.append(CoverageEntry(
+                feature="skeleton.bone_tree", status="missing",
+                detail="BoneTree property not available (sidecar .uexp not loaded)"
+            ))
+
+        obj.coverage.extend(coverage)
+        return result
+
+
+class MeshHandler:
+    """Enrich StaticMesh/SkeletalMesh objects with geometry summary."""
+
+    _MESH_CLASSES = ("StaticMesh", "SkeletalMesh")
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        return (obj.class_name or "") in self._MESH_CLASSES
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        cn = obj.class_name or ""
+        result: dict[str, Any] = {"kind": "mesh", "mesh_type": cn, "name": obj.name}
+        coverage: list[CoverageEntry] = []
+
+        props = obj.properties or {}
+
+        # SourceModels count
+        source_models = props.get("SourceModels")
+        if source_models and isinstance(source_models, dict):
+            fields = source_models.get("fields", {})
+            result["source_model_count"] = len(fields) if isinstance(fields, dict) else 0
+            coverage.append(CoverageEntry(feature="mesh.source_models", status="present"))
+        else:
+            result["source_model_count"] = 0
+            coverage.append(CoverageEntry(
+                feature="mesh.source_models", status="missing",
+                detail="SourceModels not available (sidecar .uexp not loaded)"
+            ))
+
+        # Geometry flags
+        for key in ("bRecalculateNormals", "bGenerateUniqueLightmapUVs", "bKeepSymmetry"):
+            val = props.get(key)
+            if val and isinstance(val, dict):
+                result[key] = val.get("value", False)
+                coverage.append(CoverageEntry(feature=f"mesh.{key}", status="present"))
+
+        obj.coverage.extend(coverage)
+        return result
+
+
 register_handler(MaterialHandler())
 register_handler(MaterialInstanceHandler())
+register_handler(SkeletonHandler())
+register_handler(MeshHandler())

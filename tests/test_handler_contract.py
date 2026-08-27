@@ -284,6 +284,81 @@ class TestRealSamples:
         dt_objs = [o for o in doc.objects if o.class_name == "DataTable"]
         assert len(dt_objs) >= 1
 
+
+class TestSkeletonHandler:
+    def test_skeleton_handler_supports(self):
+        from uasset_read.v2.handlers import SkeletonHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = SkeletonHandler()
+        obj = ObjectRecord(id="export:0", table_index=0, name="SK", class_name="Skeleton", status=ObjectStatus())
+        assert handler.supports(obj, VersionContext())
+
+    def test_skeleton_rejects_non_skeleton(self):
+        from uasset_read.v2.handlers import SkeletonHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = SkeletonHandler()
+        obj = ObjectRecord(id="export:0", table_index=0, name="BP", class_name="Blueprint", status=ObjectStatus())
+        assert not handler.supports(obj, VersionContext())
+
+    def test_skeleton_enrichment(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(
+            str(SAMPLES_DIR / "ALS_Mannequin_Skeleton.uasset"), depth="asset"
+        )
+        skel_objs = [o for o in doc.objects if o.class_name == "Skeleton"]
+        assert len(skel_objs) >= 1
+        obj = skel_objs[0]
+        assert obj.semantic is not None
+        assert obj.semantic["kind"] == "skeleton"
+        assert "bone_count" in obj.semantic
+
+
+class TestMeshHandler:
+    def test_mesh_handler_supports_static(self):
+        from uasset_read.v2.handlers import MeshHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = MeshHandler()
+        obj = ObjectRecord(id="export:0", table_index=0, name="SM", class_name="StaticMesh", status=ObjectStatus())
+        assert handler.supports(obj, VersionContext())
+
+    def test_mesh_handler_supports_skeletal(self):
+        from uasset_read.v2.handlers import MeshHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = MeshHandler()
+        obj = ObjectRecord(id="export:0", table_index=0, name="SKM", class_name="SkeletalMesh", status=ObjectStatus())
+        assert handler.supports(obj, VersionContext())
+
+    def test_mesh_rejects_non_mesh(self):
+        from uasset_read.v2.handlers import MeshHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = MeshHandler()
+        obj = ObjectRecord(id="export:0", table_index=0, name="BP", class_name="Blueprint", status=ObjectStatus())
+        assert not handler.supports(obj, VersionContext())
+
+    def test_static_mesh_enrichment(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(
+            str(SAMPLES_DIR / "StarterContent_SM_Chair.uasset"), depth="asset"
+        )
+        mesh_objs = [o for o in doc.objects if o.class_name == "StaticMesh"]
+        assert len(mesh_objs) >= 1
+        obj = mesh_objs[0]
+        assert obj.semantic is not None
+        assert obj.semantic["kind"] == "mesh"
+        assert obj.semantic["mesh_type"] == "StaticMesh"
+
     def test_texture_sample(self):
         from uasset_read.v2.api import parse_package_document
 
