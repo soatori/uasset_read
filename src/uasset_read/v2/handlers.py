@@ -227,13 +227,9 @@ class TextureHandler:
         srgb_prop = props.get("SRGB")
         if srgb_prop and srgb_prop.get("kind") == "value":
             result["srgb"] = srgb_prop["value"]
-            coverage.append(
-                CoverageEntry(feature="texture.srgb", status="present")
-            )
+            coverage.append(CoverageEntry(feature="texture.srgb", status="present"))
         else:
-            coverage.append(
-                CoverageEntry(feature="texture.srgb", status="missing")
-            )
+            coverage.append(CoverageEntry(feature="texture.srgb", status="missing"))
 
         # CompressionSettings (ByteProperty / enum)
         cs_prop = props.get("CompressionSettings")
@@ -243,13 +239,9 @@ class TextureHandler:
                 result["compression_settings"] = raw["value_name"]
             else:
                 result["compression_settings"] = raw
-            coverage.append(
-                CoverageEntry(feature="texture.compression_settings", status="present")
-            )
+            coverage.append(CoverageEntry(feature="texture.compression_settings", status="present"))
         else:
-            coverage.append(
-                CoverageEntry(feature="texture.compression_settings", status="missing")
-            )
+            coverage.append(CoverageEntry(feature="texture.compression_settings", status="missing"))
 
         # Attach coverage to the object record
         obj.coverage.extend(coverage)
@@ -455,8 +447,6 @@ class MaterialInstanceHandler:
         return result if len(result) > 1 else None
 
 
-
-
 class SkeletonHandler:
     """Enrich Skeleton objects with bone hierarchy summary."""
 
@@ -482,10 +472,13 @@ class SkeletonHandler:
             coverage.append(CoverageEntry(feature="skeleton.bone_tree", status="present"))
         else:
             result["bone_count"] = 0
-            coverage.append(CoverageEntry(
-                feature="skeleton.bone_tree", status="missing",
-                detail="BoneTree property not available (sidecar .uexp not loaded)"
-            ))
+            coverage.append(
+                CoverageEntry(
+                    feature="skeleton.bone_tree",
+                    status="missing",
+                    detail="BoneTree property not available (sidecar .uexp not loaded)",
+                )
+            )
 
         obj.coverage.extend(coverage)
         return result
@@ -520,10 +513,13 @@ class MeshHandler:
             coverage.append(CoverageEntry(feature="mesh.source_models", status="present"))
         else:
             result["source_model_count"] = 0
-            coverage.append(CoverageEntry(
-                feature="mesh.source_models", status="missing",
-                detail="SourceModels not available (sidecar .uexp not loaded)"
-            ))
+            coverage.append(
+                CoverageEntry(
+                    feature="mesh.source_models",
+                    status="missing",
+                    detail="SourceModels not available (sidecar .uexp not loaded)",
+                )
+            )
 
         # Geometry flags
         for key in ("bRecalculateNormals", "bGenerateUniqueLightmapUVs", "bKeepSymmetry"):

@@ -121,7 +121,7 @@ def list_dependencies(
 
     # Paginate dependencies
     deps = projected["dependencies"]
-    deps_page = deps[offset:offset + limit] if limit else deps
+    deps_page = deps[offset : offset + limit] if limit else deps
     next_offset_dep = offset + len(deps_page) if len(deps_page) == limit and offset + limit < len(deps) else None
 
     return {

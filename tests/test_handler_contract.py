@@ -68,6 +68,7 @@ class TestHandlerFailureIsolation:
             assert any(d.stage == "semantic.handler" for d in diags)
         finally:
             from uasset_read.v2.handlers import _HANDLERS
+
             _HANDLERS[:] = original_handlers
 
 
@@ -79,8 +80,11 @@ class TestUserDefinedEnumHandler:
 
         handler = UserDefinedEnumHandler()
         obj = ObjectRecord(
-            id="export:1", table_index=1, name="Enum_PanelType",
-            class_name="UserDefinedEnum", status=ObjectStatus(),
+            id="export:1",
+            table_index=1,
+            name="Enum_PanelType",
+            class_name="UserDefinedEnum",
+            status=ObjectStatus(),
         )
         assert handler.supports(obj, VersionContext())
 
@@ -91,8 +95,11 @@ class TestUserDefinedEnumHandler:
 
         handler = UserDefinedEnumHandler()
         obj = ObjectRecord(
-            id="export:0", table_index=0, name="BP_Something",
-            class_name="Blueprint", status=ObjectStatus(),
+            id="export:0",
+            table_index=0,
+            name="BP_Something",
+            class_name="Blueprint",
+            status=ObjectStatus(),
         )
         assert not handler.supports(obj, VersionContext())
 
@@ -119,8 +126,11 @@ class TestUserDefinedStructHandler:
 
         handler = UserDefinedStructHandler()
         obj = ObjectRecord(
-            id="export:0", table_index=0, name="Struct_Objective",
-            class_name="UserDefinedStruct", status=ObjectStatus(),
+            id="export:0",
+            table_index=0,
+            name="Struct_Objective",
+            class_name="UserDefinedStruct",
+            status=ObjectStatus(),
         )
         assert handler.supports(obj, VersionContext())
 
@@ -131,8 +141,11 @@ class TestUserDefinedStructHandler:
 
         handler = UserDefinedStructHandler()
         obj = ObjectRecord(
-            id="export:0", table_index=0, name="DT_Something",
-            class_name="DataTable", status=ObjectStatus(),
+            id="export:0",
+            table_index=0,
+            name="DT_Something",
+            class_name="DataTable",
+            status=ObjectStatus(),
         )
         assert not handler.supports(obj, VersionContext())
 
@@ -206,8 +219,11 @@ class TestTexture2DEnrichment:
 
         handler = TextureHandler()
         obj = ObjectRecord(
-            id="export:0", table_index=0, name="Tex",
-            class_name="Texture2D", status=ObjectStatus(),
+            id="export:0",
+            table_index=0,
+            name="Tex",
+            class_name="Texture2D",
+            status=ObjectStatus(),
             properties=None,
         )
         result = handler.enrich(obj, VersionContext(), [], None)
@@ -313,9 +329,7 @@ class TestSkeletonHandler:
     def test_skeleton_enrichment(self):
         from uasset_read.v2.api import parse_package_document
 
-        doc = parse_package_document(
-            str(SAMPLES_DIR / "ALS_Mannequin_Skeleton.uasset"), depth="asset"
-        )
+        doc = parse_package_document(str(SAMPLES_DIR / "ALS_Mannequin_Skeleton.uasset"), depth="asset")
         skel_objs = [o for o in doc.objects if o.class_name == "Skeleton"]
         assert len(skel_objs) >= 1
         obj = skel_objs[0]
@@ -355,9 +369,7 @@ class TestMeshHandler:
     def test_static_mesh_enrichment(self):
         from uasset_read.v2.api import parse_package_document
 
-        doc = parse_package_document(
-            str(SAMPLES_DIR / "StarterContent_SM_Chair.uasset"), depth="asset"
-        )
+        doc = parse_package_document(str(SAMPLES_DIR / "StarterContent_SM_Chair.uasset"), depth="asset")
         mesh_objs = [o for o in doc.objects if o.class_name == "StaticMesh"]
         assert len(mesh_objs) >= 1
         obj = mesh_objs[0]
@@ -402,9 +414,7 @@ class TestMaterialHandler:
     def test_material_enrichment(self):
         from uasset_read.v2.api import parse_package_document
 
-        doc = parse_package_document(
-            str(SAMPLES_DIR / "FirstPerson_M_PrototypeGrid.uasset"), depth="asset"
-        )
+        doc = parse_package_document(str(SAMPLES_DIR / "FirstPerson_M_PrototypeGrid.uasset"), depth="asset")
         mat_objs = [o for o in doc.objects if o.class_name == "Material"]
         assert len(mat_objs) >= 1
         obj = mat_objs[0]
@@ -416,9 +426,7 @@ class TestHandlerWiringFromPublicAPI:
     def test_datatable_handler_runs_from_public_api(self):
         from uasset_read.v2.api import parse_package_document
 
-        doc = parse_package_document(
-            str(SAMPLES_DIR / "ALS_FootstepDataTable.uasset"), depth="asset"
-        )
+        doc = parse_package_document(str(SAMPLES_DIR / "ALS_FootstepDataTable.uasset"), depth="asset")
         dt_objs = [o for o in doc.objects if o.class_name == "DataTable"]
         assert len(dt_objs) >= 1
         obj = dt_objs[0]
@@ -467,7 +475,9 @@ class TestMaterialInstanceHandler:
         from uasset_read.v2.version import VersionContext
 
         handler = MaterialInstanceHandler()
-        obj = ObjectRecord(id="export:0", table_index=0, name="MI_Test", class_name="MaterialInstanceConstant", status=ObjectStatus())
+        obj = ObjectRecord(
+            id="export:0", table_index=0, name="MI_Test", class_name="MaterialInstanceConstant", status=ObjectStatus()
+        )
         assert handler.supports(obj, VersionContext())
 
     def test_material_instance_rejects_non_instance(self):
