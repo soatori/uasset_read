@@ -33,6 +33,10 @@ compression = [
     "lz4",
     "zstandard",
 ]
+test = [
+    "jsonschema>=4",
+    "pytest",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

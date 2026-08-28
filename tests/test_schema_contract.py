@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import jsonschema  # required test dependency; collection fails fast if missing
 import pytest
 
 SCHEMA_PATH = Path(__file__).parent.parent / "docs" / "designs" / "contract" / "package_document_v2.schema.json"
@@ -29,11 +30,6 @@ def doc():
 class TestSchemaValidation:
     def test_example_validates_against_schema(self, schema):
         """The checked contract example must validate against the schema."""
-        try:
-            import jsonschema
-        except ImportError:
-            pytest.skip("jsonschema not installed")
-
         with open(EXAMPLE_PATH) as f:
             example = json.load(f)
 
@@ -41,11 +37,6 @@ class TestSchemaValidation:
 
     def test_projection_output_validates(self, schema, doc):
         """A real projection output must validate against the schema."""
-        try:
-            import jsonschema
-        except ImportError:
-            pytest.skip("jsonschema not installed")
-
         from uasset_read.v2.projection import project_document
 
         result = project_document(doc, view="semantic", depth="asset", limit=3)
@@ -53,11 +44,6 @@ class TestSchemaValidation:
 
     def test_all_views_validate(self, schema, doc):
         """All view types must produce valid output."""
-        try:
-            import jsonschema
-        except ImportError:
-            pytest.skip("jsonschema not installed")
-
         from uasset_read.v2.projection import project_document
 
         for view in ("semantic", "raw", "debug"):

@@ -67,6 +67,31 @@
     },
     "summary": {
       "$ref": "#/$defs/Summary"
+    },
+    "next_offset": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Continuation cursor when objects were truncated."
+    },
+    "truncation": {
+      "type": "object",
+      "description": "Truncation metadata emitted when limit or max_bytes cut the page.",
+      "properties": {
+        "reason": { "type": "string" },
+        "total": { "type": "integer" },
+        "offset": { "type": "integer" },
+        "returned": { "type": "integer" },
+        "truncated": { "type": "integer" },
+        "budget": { "type": "integer" },
+        "actual": { "type": "integer" },
+        "objects_dropped": { "type": "integer" }
+      },
+      "additionalProperties": false
+    },
+    "debug": {
+      "type": "object",
+      "description": "Extra parse statistics for the debug view.",
+      "additionalProperties": true
     }
   },
   "additionalProperties": false,
@@ -186,6 +211,10 @@
           "items": {
             "$ref": "#/$defs/Diagnostic"
           }
+        },
+        "flags": {
+          "type": "integer",
+          "description": "EObjectFlags raw value (raw/debug views only)."
         }
       },
       "additionalProperties": false
