@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
+from .diagnostics import Diagnostic
 from .object_model import ObjectRecord, CoverageEntry
 from .version import VersionContext
 
@@ -56,10 +57,15 @@ def run_handlers(
     context: VersionContext,
     all_objects: list[ObjectRecord],
     package_data: Any,
-) -> tuple[dict[str, Any] | None, list[CoverageEntry]]:
-    """Run all matching handlers on an object. Returns (semantic, coverage)."""
+) -> tuple[dict[str, Any] | None, list[CoverageEntry], list[Diagnostic]]:
+    """Run all matching handlers on an object.
+
+    Returns (semantic, coverage, diagnostics).
+    Handler failure only affects this object — no propagation.
+    """
     semantic: dict[str, Any] = {}
     coverage: list[CoverageEntry] = []
+    diagnostics: list[Diagnostic] = []
 
     for handler in _HANDLERS:
         try:
@@ -70,17 +76,28 @@ def run_handlers(
                     obj.status.semantic = "complete"
         except Exception as e:
             # Handler failure must not affect other objects
+            handler_name = type(handler).__name__
             coverage.append(
                 CoverageEntry(
-                    feature=f"handler.{type(handler).__name__}",
+                    feature=f"handler.{handler_name}",
                     status="missing",
                     detail=f"Handler error: {e}",
                 )
             )
+            diagnostics.append(
+                Diagnostic(
+                    severity="warning",
+                    code="HANDLER_FAILURE",
+                    message=f"{handler_name} failed for {obj.id}: {e}",
+                    stage="semantic.handler",
+                    object_id=obj.id,
+                    recoverable=True,
+                )
+            )
 
     if not semantic:
-        return None, coverage
-    return semantic, coverage
+        return None, coverage, diagnostics
+    return semantic, coverage, diagnostics
 
 
 # ── Built-in handlers ──────────────────────────────────────────────
@@ -132,7 +149,10 @@ class UserDefinedStructHandler:
 
 
 class DataTableHandler:
-    """Enrich DataTable/CurveTable/StringTable objects."""
+    """Enrich DataTable/CurveTable/StringTable objects.
+
+    Falls back to v2 properties when v1 asset_type_data is unavailable.
+    """
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         cn = obj.class_name or ""
@@ -145,25 +165,30 @@ class DataTableHandler:
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
-        # Read from v1 parse result if available
+        cn = obj.class_name or ""
+        result: dict[str, Any] = {"kind": "data_table", "table_type": cn}
+
+        # Try v1 asset_type_data first
         export_data = _get_export_data(obj, package_data)
-        if not export_data:
-            return None
+        if export_data:
+            asset_type_data = getattr(export_data, "_asset_type_data", None)
+            if asset_type_data and isinstance(asset_type_data, dict):
+                result["row_count"] = asset_type_data.get("row_count", 0)
+                row_struct = asset_type_data.get("row_struct")
+                if row_struct:
+                    result["row_struct"] = row_struct
+                rows = asset_type_data.get("rows", [])
+                if rows:
+                    result["row_names"] = [r.get("name", "") for r in rows[:100]]
+                return result
 
-        asset_type_data = getattr(export_data, "_asset_type_data", None)
-        if not asset_type_data or not isinstance(asset_type_data, dict):
-            return None
+        # Fallback: extract what we can from v2 properties
+        props = obj.properties or {}
+        row_struct = props.get("RowStruct")
+        if row_struct and isinstance(row_struct, dict):
+            # RowStruct is an ObjectProperty referencing the row struct
+            result["row_struct_ref"] = row_struct.get("value")
 
-        row_count = asset_type_data.get("row_count", 0)
-        rows = asset_type_data.get("rows", [])
-        row_struct = asset_type_data.get("row_struct")
-
-        result: dict[str, Any] = {"kind": "data_table"}
-        result["row_count"] = row_count
-        if row_struct:
-            result["row_struct"] = row_struct
-        if rows:
-            result["row_names"] = [r.get("name", "") for r in rows[:100]]
         return result
 
 

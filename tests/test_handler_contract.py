@@ -47,7 +47,7 @@ class TestDataTableHandler:
 
 class TestHandlerFailureIsolation:
     def test_handler_exception_doesnt_crash(self):
-        from uasset_read.v2.handlers import run_handlers, register_handler
+        from uasset_read.v2.handlers import run_handlers, register_handler, get_handlers
         from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
         from uasset_read.v2.version import VersionContext
 
@@ -58,11 +58,17 @@ class TestHandlerFailureIsolation:
             def enrich(self, obj, context, all_objects, package_data):
                 raise RuntimeError("boom")
 
-        register_handler(BadHandler())
-        obj = ObjectRecord(id="export:0", table_index=0, name="X", class_name="Anything", status=ObjectStatus())
-        semantic, cov = run_handlers(obj, VersionContext(), [obj], None)
-        assert semantic is None
-        assert any("BadHandler" in c.feature for c in cov)
+        original_handlers = list(get_handlers())
+        try:
+            register_handler(BadHandler())
+            obj = ObjectRecord(id="export:0", table_index=0, name="X", class_name="Anything", status=ObjectStatus())
+            semantic, cov, diags = run_handlers(obj, VersionContext(), [obj], None)
+            assert semantic is None
+            assert any("BadHandler" in c.feature for c in cov)
+            assert any(d.stage == "semantic.handler" for d in diags)
+        finally:
+            from uasset_read.v2.handlers import _HANDLERS
+            _HANDLERS[:] = original_handlers
 
 
 class TestUserDefinedEnumHandler:
@@ -99,7 +105,7 @@ class TestUserDefinedEnumHandler:
         enums = [o for o in doc.objects if o.class_name == "UserDefinedEnum"]
         assert len(enums) >= 1
         obj = enums[0]
-        semantic, _cov = run_handlers(obj, VersionContext(), doc.objects, doc.package)
+        semantic, _cov, _diags = run_handlers(obj, VersionContext(), doc.objects, doc.package)
         assert semantic is not None
         assert semantic["kind"] == "user_defined_enum"
         assert semantic["enum_name"] == "Enum_PanelType"
@@ -139,7 +145,7 @@ class TestUserDefinedStructHandler:
         structs = [o for o in doc.objects if o.class_name == "UserDefinedStruct"]
         assert len(structs) >= 1
         obj = structs[0]
-        semantic, _cov = run_handlers(obj, VersionContext(), doc.objects, doc.package)
+        semantic, _cov, _diags = run_handlers(obj, VersionContext(), doc.objects, doc.package)
         assert semantic is not None
         assert semantic["kind"] == "user_defined_struct"
         assert semantic["struct_name"] == "Struct_Objective"
@@ -404,6 +410,54 @@ class TestMaterialHandler:
         obj = mat_objs[0]
         assert obj.semantic is not None
         assert obj.semantic["kind"] == "material"
+
+
+class TestHandlerWiringFromPublicAPI:
+    def test_datatable_handler_runs_from_public_api(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(
+            str(SAMPLES_DIR / "ALS_FootstepDataTable.uasset"), depth="asset"
+        )
+        dt_objs = [o for o in doc.objects if o.class_name == "DataTable"]
+        assert len(dt_objs) >= 1
+        obj = dt_objs[0]
+        assert obj.semantic is not None
+        assert obj.semantic["kind"] == "data_table"
+        assert obj.status.semantic == "complete"
+
+    def test_handler_exception_becomes_object_diagnostic(self, monkeypatch):
+        import uasset_read.v2.handlers as handlers
+        from uasset_read.v2.api import parse_package_document
+
+        # We need to re-register a bad handler, then restore after
+        class RaisingHandler:
+            def supports(self, obj, context):
+                return True
+
+            def enrich(self, obj, context, all_objects, package_data):
+                raise ValueError("broken handler")
+
+        original_handlers = list(handlers._HANDLERS)
+        try:
+            handlers._HANDLERS.append(RaisingHandler())
+            sample_doc = parse_package_document(
+                str(SAMPLES_DIR / "ALS_FootstepDataTable.uasset"),
+                depth="object",
+                object_ids=["export:0"],
+            )
+            from uasset_read.v2.version import VersionContext
+
+            semantic, coverage, diagnostics = handlers.run_handlers(
+                sample_doc.objects[0], VersionContext(), sample_doc.objects, None
+            )
+            assert semantic is None
+            assert any(c.status == "missing" for c in coverage)
+            handler_diags = [d for d in diagnostics if d.stage == "semantic.handler"]
+            assert len(handler_diags) >= 1
+            assert handler_diags[0].object_id == sample_doc.objects[0].id
+        finally:
+            handlers._HANDLERS[:] = original_handlers
 
 
 class TestMaterialInstanceHandler:

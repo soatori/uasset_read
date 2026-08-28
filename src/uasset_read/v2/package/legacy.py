@@ -317,10 +317,11 @@ class LegacyPackageReader:
                 )
                 for obj in objects:
                     try:
-                        semantic, cov = run_handlers(obj, context, objects, None)
+                        semantic, cov, handler_diags = run_handlers(obj, context, objects, None)
                         if semantic is not None:
                             obj.semantic = semantic
-                            obj.coverage.extend(cov)
+                        obj.coverage.extend(cov)
+                        diagnostics.extend(handler_diags)
                     except Exception as exc:
                         diagnostics.append(
                             Diagnostic(
