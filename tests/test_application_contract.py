@@ -14,6 +14,19 @@ SAMPLES_DIR = Path(__file__).parent / "samples"
 SAMPLE = str(SAMPLES_DIR / "ALS_FootstepDataTable.uasset")
 
 
+def run_cli_json(*args: str) -> dict:
+    """Run CLI and return parsed JSON output."""
+    result = subprocess.run(
+        [sys.executable, "-m", "uasset_read", *map(str, args)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 0, f"CLI failed: {result.stderr[:500]}"
+    return json.loads(result.stdout)
+
+
 class TestCLI:
     def test_cli_v2_runs(self):
         result = subprocess.run(
@@ -27,14 +40,13 @@ class TestCLI:
         assert data["format"] == "uasset_read.package"
 
     def test_cli_v2_has_objects(self):
-        result = subprocess.run(
-            [sys.executable, "-m", "uasset_read", "--v2", SAMPLE],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        data = json.loads(result.stdout)
+        data = run_cli_json("--v2", SAMPLE)
         assert len(data["objects"]) > 0
+
+    def test_cli_v2_depth_and_limit(self):
+        data = run_cli_json("--v2", "--depth", "package", "--limit", "2", SAMPLE)
+        assert data["depth"] == "package"
+        assert len(data["objects"]) <= 2
 
     def test_cli_no_v2_defaults_to_legacy(self):
         result = subprocess.run(
@@ -45,6 +57,25 @@ class TestCLI:
         )
         assert result.returncode == 0
         assert "--v2" in result.stdout
+
+
+class TestProjectionEquality:
+    """CLI, Python API, and Agent tools produce identical projection output."""
+
+    def test_cli_agent_python_share_projection(self):
+        from uasset_read.v2.api import parse_package_document
+        from uasset_read.v2.projection import project_document
+        from uasset_read.v2.agent_tools import inspect_package
+
+        doc = parse_package_document(SAMPLE, depth="package")
+        expected = project_document(doc, depth="package", limit=2, max_bytes=4096)
+        cli = run_cli_json("--v2", "--depth", "package", "--limit", "2", "--max-bytes", "4096", SAMPLE)
+        agent = inspect_package(SAMPLE, depth="package", limit=2, max_bytes=4096)
+
+        # Compare object IDs
+        for actual in (cli, agent):
+            assert [o["id"] for o in actual["objects"]] == [o["id"] for o in expected["objects"]]
+            assert actual["diagnostics"] == expected["diagnostics"]
 
 
 class TestAgentTools:
@@ -68,7 +99,7 @@ class TestAgentTools:
 
         # Use a sample with enough objects to paginate
         bp_sample = str(SAMPLES_DIR / "ABP_RifleAnimLayers.uasset")
-        result = list_objects(bp_sample, limit=3)
+        result = list_objects(bp_sample, limit=3, max_bytes=65536)
         assert result["returned"] == 3
         assert result["next_offset"] == 3
 

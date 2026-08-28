@@ -90,6 +90,26 @@ def create_parser():
     group.add_argument("--markdown", action="store_true", help="Output Markdown format")
     group.add_argument("--v2", action="store_true", help="Output PackageDocument v2 JSON (all objects, no filtering)")
 
+    # v2 projection controls
+    parser.add_argument(
+        "--depth",
+        choices=["package", "object", "asset", "decode"],
+        default="asset",
+        help="Projection depth: package (headers only), object (properties), asset (semantic), decode (full)",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of objects to include in output",
+    )
+    parser.add_argument(
+        "--max-bytes",
+        type=int,
+        default=None,
+        help="Maximum output size in bytes (truncates objects to fit)",
+    )
+
     # Optional flags
     parser.add_argument("--verbose", action="store_true", help="Include extra detail fields")
     parser.add_argument("--output", metavar="FILE", help="Write output to file instead of stdout")
@@ -409,14 +429,22 @@ def main():
     if args.v2:
         try:
             from uasset_read.v2.api import parse_package_document
+            from uasset_read.v2.projection import project_document
 
             doc = parse_package_document(
                 str(file_path),
                 tolerant=tolerant,
                 mappings_path=args.mappings,
                 game=args.game,
+                depth=args.depth,
             )
-            output_str = json.dumps(doc.to_dict(), ensure_ascii=False, indent=2)
+            projected = project_document(
+                doc,
+                depth=args.depth,
+                limit=args.limit,
+                max_bytes=args.max_bytes,
+            )
+            output_str = json.dumps(projected, ensure_ascii=False, indent=2)
         except Exception as e:
             _logger.debug("V2 parse error (full): %s", e, exc_info=True)
             print(f"Error: {_sanitize_error_message(e)}", file=sys.stderr)

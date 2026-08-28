@@ -16,7 +16,7 @@ from typing import Any
 
 from .api import parse_package_document
 from .document import PackageDocument
-from .projection import select_objects, paginate
+from .projection import select_objects, paginate, project_document
 
 # Max response sizes per tool (bytes)
 _MAX_BYTES_INSPECT = 4096
@@ -31,35 +31,16 @@ def inspect_package(
     file_path: str,
     *,
     max_bytes: int = _MAX_BYTES_INSPECT,
+    depth: str = "package",
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """Tool: inspect_package — source/package/summary/diagnostic overview.
 
     Returns a concise summary of the package without listing all objects.
     """
     doc = parse_package_document(file_path)
-    return {
-        "source": {
-            "kind": doc.source.kind,
-            "name": doc.source.name,
-            "size": doc.source.size,
-        },
-        "package": {
-            "name": doc.package.name,
-            "layout": doc.package.layout,
-            "engine_version": doc.package.engine_version,
-            "package_flags": doc.package.package_flags,
-            "export_count": doc.package.export_count,
-            "import_count": doc.package.import_count,
-        },
-        "summary": {
-            "object_count": doc.summary.object_count,
-            "asset_object_ids": list(doc.summary.asset_object_ids),
-            "total_imports": doc.summary.total_imports,
-            "total_exports": doc.summary.total_exports,
-        },
-        "diagnostics_count": len(doc.diagnostics),
-        "diagnostics_summary": _summarize_diagnostics(doc),
-    }
+    projected = project_document(doc, depth=depth, limit=limit, max_bytes=max_bytes)
+    return projected
 
 
 def list_objects(
@@ -77,31 +58,21 @@ def list_objects(
     Returns object list with pagination info.
     """
     doc = parse_package_document(file_path)
+    projected = project_document(
+        doc,
+        object_ids=object_ids,
+        roles=roles,
+        classes=classes,
+        offset=offset,
+        limit=limit,
+        max_bytes=max_bytes,
+    )
+    # Add total count for agent tools
     selected = select_objects(doc, object_ids=object_ids, roles=roles, classes=classes)
-    page, next_offset, truncation = paginate(selected, offset=offset, limit=limit)
-
-    objects = []
-    for obj in page:
-        objects.append(
-            {
-                "id": obj.id,
-                "table_index": obj.table_index,
-                "name": obj.name,
-                "class": obj.class_name,
-                "roles": list(obj.roles),
-                "status": {"parse": obj.status.parse, "semantic": obj.status.semantic},
-            }
-        )
-
-    result: dict[str, Any] = {
-        "objects": objects,
-        "total": len(selected),
-        "offset": offset,
-        "returned": len(objects),
-    }
-    if next_offset is not None:
-        result["next_offset"] = next_offset
-    return result
+    projected["total"] = len(selected)
+    projected["offset"] = offset
+    projected["returned"] = len(projected["objects"])
+    return projected
 
 
 def get_object(
@@ -116,40 +87,22 @@ def get_object(
     """
     doc = parse_package_document(file_path)
 
-    # Find the object
-    obj = None
-    for o in doc.objects:
-        if o.id == object_id:
-            obj = o
-            break
-
-    if obj is None:
+    # Check if object exists
+    obj_exists = any(o.id == object_id for o in doc.objects)
+    if not obj_exists:
         return {
             "error": f"Object '{object_id}' not found",
             "available_ids": [o.id for o in doc.objects[:20]],
         }
 
-    result: dict[str, Any] = {
-        "id": obj.id,
-        "table_index": obj.table_index,
-        "name": obj.name,
-        "class": obj.class_name,
-        "roles": list(obj.roles),
-        "serial_region": (
-            {"offset": obj.serial_region.offset, "size": obj.serial_region.size} if obj.serial_region else None
-        ),
-        "status": {"parse": obj.status.parse, "semantic": obj.status.semantic},
-    }
-    if obj.properties is not None:
-        result["properties"] = obj.properties
-    if obj.semantic is not None:
-        result["semantic"] = obj.semantic
-    if obj.coverage:
-        result["coverage"] = [{"feature": c.feature, "status": c.status} for c in obj.coverage]
-    if obj.diagnostics:
-        result["diagnostics"] = [d.to_dict() for d in obj.diagnostics]
-
-    return result
+    projected = project_document(
+        doc,
+        object_ids=[object_id],
+        max_bytes=max_bytes,
+    )
+    if projected["objects"]:
+        return projected["objects"][0]
+    return {"error": f"Object '{object_id}' not found"}
 
 
 def list_dependencies(
@@ -164,28 +117,21 @@ def list_dependencies(
     Returns dependencies (imports) and relations (object-to-object links).
     """
     doc = parse_package_document(file_path)
-    deps_page, next_offset, truncation = paginate(
-        doc.dependencies,
-        offset=offset,
-        limit=limit,
-    )
+    projected = project_document(doc, max_bytes=max_bytes)
+
+    # Paginate dependencies
+    deps = projected["dependencies"]
+    deps_page = deps[offset:offset + limit] if limit else deps
+    next_offset_dep = offset + len(deps_page) if len(deps_page) == limit and offset + limit < len(deps) else None
 
     return {
-        "dependencies": [
-            {
-                "index": d.index,
-                "class": d.class_name,
-                "object_name": d.object_name,
-                "package_name": d.package_name,
-            }
-            for d in deps_page
-        ],
-        "relations": [{"kind": r.kind, "from": r.from_id, "to": r.to_id} for r in doc.relations],
-        "total_dependencies": len(doc.dependencies),
-        "total_relations": len(doc.relations),
+        "dependencies": deps_page,
+        "relations": projected["relations"],
+        "total_dependencies": len(deps),
+        "total_relations": len(projected["relations"]),
         "offset": offset,
         "returned": len(deps_page),
-        **({"next_offset": next_offset} if next_offset is not None else {}),
+        **({"next_offset": next_offset_dep} if next_offset_dep is not None else {}),
     }
 
 
