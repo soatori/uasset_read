@@ -196,7 +196,9 @@ def _serialize_value(value: Any) -> Any:
     if isinstance(value, SetValue):
         return [_serialize_value(elem) for elem in value.elements]
     if isinstance(value, MapValue):
-        return [{"key": _serialize_value(e.get("key")), "value": _serialize_value(e.get("value"))} for e in value.entries]
+        return [
+            {"key": _serialize_value(e.get("key")), "value": _serialize_value(e.get("value"))} for e in value.entries
+        ]
     if isinstance(value, list):
         return [_serialize_value(elem) for elem in value]
     if isinstance(value, dict):

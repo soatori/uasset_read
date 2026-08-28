@@ -69,11 +69,7 @@ class TestManifestIntegrity:
         assert not extra, f"Unexpected files in samples/: {extra}"
 
     def test_zero_asset_role_fixture_is_manifested(self, manifest):
-        entry = next(
-            item
-            for item in manifest["samples"]
-            if item["name"] == "uasset_rs_UE410_SimpleRefsSoftRef.uasset"
-        )
+        entry = next(item for item in manifest["samples"] if item["name"] == "uasset_rs_UE410_SimpleRefsSoftRef.uasset")
         assert entry["size_bytes"] == 4037
         assert entry["engine_layout"] == "legacy"
         assert entry["export_count"] == 6

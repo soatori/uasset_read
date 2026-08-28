@@ -16,9 +16,7 @@ class TestTexturePayload:
         from uasset_read.v2.handlers import TexturePayloadHandler
         from uasset_read.v2.version import VersionContext
 
-        doc = parse_package_document(
-            str(SAMPLES_DIR / "FirstPerson_T_GridChecker_A.uasset"), depth="object"
-        )
+        doc = parse_package_document(str(SAMPLES_DIR / "FirstPerson_T_GridChecker_A.uasset"), depth="object")
         tex = next(o for o in doc.objects if o.class_name == "Texture2D")
         handler = TexturePayloadHandler()
         result = handler.enrich(tex, VersionContext(), doc.objects, None)
@@ -38,9 +36,7 @@ class TestTexturePayload:
         from uasset_read.v2.handlers import TexturePayloadHandler
         from uasset_read.v2.version import VersionContext
 
-        doc = parse_package_document(
-            str(SAMPLES_DIR / "MutableSample_GrayLightTextureCube.uasset"), depth="object"
-        )
+        doc = parse_package_document(str(SAMPLES_DIR / "MutableSample_GrayLightTextureCube.uasset"), depth="object")
         tex = next(o for o in doc.objects if o.class_name == "TextureCube")
         handler = TexturePayloadHandler()
         result = handler.enrich(tex, VersionContext(), doc.objects, None)
@@ -50,9 +46,7 @@ class TestTexturePayload:
         """Texture2D handler adds a payload coverage entry at depth=asset."""
         from uasset_read.v2.api import parse_package_document
 
-        doc = parse_package_document(
-            str(SAMPLES_DIR / "FirstPerson_T_GridChecker_A.uasset"), depth="asset"
-        )
+        doc = parse_package_document(str(SAMPLES_DIR / "FirstPerson_T_GridChecker_A.uasset"), depth="asset")
         tex = next(o for o in doc.objects if o.class_name == "Texture2D")
         payload_features = [c for c in tex.coverage if c.feature == "texture.payload"]
         assert len(payload_features) == 1
@@ -66,9 +60,7 @@ class TestSoundPayload:
         """SoundWave handler always produces coverage."""
         from uasset_read.v2.api import parse_package_document
 
-        doc = parse_package_document(
-            str(SAMPLES_DIR / "ALS_Concrete_Step_01_SoundWave.uasset"), depth="asset"
-        )
+        doc = parse_package_document(str(SAMPLES_DIR / "ALS_Concrete_Step_01_SoundWave.uasset"), depth="asset")
         sw = next(o for o in doc.objects if o.class_name == "SoundWave")
         assert sw.semantic is not None
         assert sw.semantic["kind"] == "sound"
@@ -79,9 +71,7 @@ class TestSoundPayload:
         """SoundWave produces stable semantic.kind."""
         from uasset_read.v2.api import parse_package_document
 
-        doc = parse_package_document(
-            str(SAMPLES_DIR / "ALS_Concrete_Step_01_SoundWave.uasset"), depth="asset"
-        )
+        doc = parse_package_document(str(SAMPLES_DIR / "ALS_Concrete_Step_01_SoundWave.uasset"), depth="asset")
         sw = next(o for o in doc.objects if o.class_name == "SoundWave")
         assert sw.semantic is not None
         assert sw.semantic["kind"] == "sound"
