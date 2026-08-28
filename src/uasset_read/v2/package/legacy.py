@@ -237,6 +237,7 @@ class LegacyPackageReader:
                 summary,
                 package_layout="legacy",
                 game=self._game,
+                depth=depth,
             )
 
             # 9. Build ObjectRecords — ALL exports, no filtering
@@ -314,6 +315,7 @@ class LegacyPackageReader:
                     summary,
                     package_layout="legacy",
                     game=self._game,
+                    depth=depth,
                 )
                 for obj in objects:
                     try:

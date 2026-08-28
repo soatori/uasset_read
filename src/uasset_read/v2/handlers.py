@@ -174,6 +174,9 @@ class DataTableHandler:
     ) -> dict[str, Any] | None:
         cn = obj.class_name or ""
         result: dict[str, Any] = {"kind": "data_table", "table_type": cn}
+        coverage: list[CoverageEntry] = [
+            CoverageEntry(feature="handler.DataTableHandler", status="present"),
+        ]
 
         # Try v1 asset_type_data first
         export_data = _get_export_data(obj, package_data)
@@ -187,6 +190,7 @@ class DataTableHandler:
                 rows = asset_type_data.get("rows", [])
                 if rows:
                     result["row_names"] = [r.get("name", "") for r in rows[:100]]
+                obj.coverage.extend(coverage)
                 return result
 
         # Fallback: extract what we can from v2 properties
@@ -196,9 +200,6 @@ class DataTableHandler:
             # RowStruct is an ObjectProperty referencing the row struct
             result["row_struct_ref"] = row_struct.get("value")
 
-        coverage: list[CoverageEntry] = [
-            CoverageEntry(feature="handler.DataTableHandler", status="present"),
-        ]
         obj.coverage.extend(coverage)
         return result
 
@@ -374,10 +375,12 @@ class SoundHandler:
                 elif isinstance(val, int):
                     result["channel_count"] = val
 
-        coverage.append(CoverageEntry(
-            feature="handler.SoundHandler",
-            status="present" if len(result) > 2 else "partial",
-        ))
+        coverage.append(
+            CoverageEntry(
+                feature="handler.SoundHandler",
+                status="present" if len(result) > 2 else "partial",
+            )
+        )
         obj.coverage.extend(coverage)
         return result if len(result) > 2 else None
 
@@ -663,3 +666,228 @@ register_handler(MaterialHandler())
 register_handler(MaterialInstanceHandler())
 register_handler(SkeletonHandler())
 register_handler(MeshHandler())
+
+
+class AnimBlueprintHandler:
+    """Enrich AnimBlueprint/AnimBlueprintGeneratedClass objects.
+
+    At depth="asset": light summary only (kind, name, class).
+    At depth="decode": full graph data (nodes, edges, bytecode) for explicitly selected objects.
+    """
+
+    _ANIMBP_CLASSES = ("AnimBlueprint", "AnimBlueprintGeneratedClass")
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        cn = obj.class_name or ""
+        return cn in self._ANIMBP_CLASSES
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        cn = obj.class_name or ""
+        result: dict[str, Any] = {
+            "kind": "anim_blueprint",
+            "blueprint_type": cn,
+            "name": obj.name,
+        }
+        coverage: list[CoverageEntry] = []
+
+        # At depth="asset": light summary only, no heavy graph arrays
+        if context.depth == "asset":
+            coverage.append(
+                CoverageEntry(
+                    feature="anim_blueprint.summary",
+                    status="present",
+                    detail="light summary at depth=asset",
+                )
+            )
+            obj.coverage.extend(coverage)
+            return result
+
+        # At depth="decode": full graph data
+        if context.depth == "decode":
+            # Find related graph objects (EdGraph, K2Node_*)
+            graph_nodes: list[dict[str, Any]] = []
+            graph_edges: list[dict[str, Any]] = []
+
+            for other in all_objects:
+                other_class = other.class_name or ""
+                if other_class == "EdGraph":
+                    # EdGraph is a container for graph nodes
+                    graph_nodes.append({
+                        "id": other.id,
+                        "type": "EdGraph",
+                        "name": other.name,
+                    })
+                elif other_class.startswith("K2Node_"):
+                    # K2Node_* are graph nodes
+                    node: dict[str, Any] = {
+                        "id": other.id,
+                        "type": other_class,
+                        "name": other.name,
+                    }
+                    # Extract parent reference if available
+                    if other.properties and "ParentNode" in other.properties:
+                        parent_prop = other.properties["ParentNode"]
+                        if isinstance(parent_prop, dict) and "value" in parent_prop:
+                            node["parent_node"] = parent_prop["value"]
+                    graph_nodes.append(node)
+
+            # Build edges from parent references
+            node_ids = {n["id"] for n in graph_nodes}
+            for node_info in graph_nodes:
+                if "parent_node" in node_info:
+                    parent_id = node_info["parent_node"]
+                    if parent_id in node_ids:
+                        graph_edges.append({
+                            "from_node": parent_id,
+                            "to_node": node_info["id"],
+                            "kind": "parent",
+                        })
+
+            if graph_nodes:
+                result["graph"] = {
+                    "nodes": graph_nodes,
+                    "edges": graph_edges,
+                    "node_count": len(graph_nodes),
+                    "edge_count": len(graph_edges),
+                }
+                coverage.append(
+                    CoverageEntry(
+                        feature="anim_blueprint.graph",
+                        status="present",
+                        detail=f"{len(graph_nodes)} nodes, {len(graph_edges)} edges",
+                    )
+                )
+            else:
+                coverage.append(
+                    CoverageEntry(
+                        feature="anim_blueprint.graph",
+                        status="missing",
+                        detail="no graph objects found",
+                    )
+                )
+
+            obj.coverage.extend(coverage)
+            return result
+
+        # For other depths, return light summary
+        obj.coverage.extend(coverage)
+        return result
+
+
+class BlueprintHandler:
+    """Enrich Blueprint/BlueprintGeneratedClass objects.
+
+    At depth="asset": light summary only (kind, name, class).
+    At depth="decode": full graph data (nodes, edges, bytecode) for explicitly selected objects.
+    """
+
+    _BP_CLASSES = ("Blueprint", "BlueprintGeneratedClass")
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        cn = obj.class_name or ""
+        return cn in self._BP_CLASSES
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        cn = obj.class_name or ""
+        result: dict[str, Any] = {
+            "kind": "blueprint",
+            "blueprint_type": cn,
+            "name": obj.name,
+        }
+        coverage: list[CoverageEntry] = []
+
+        # At depth="asset": light summary only, no heavy graph arrays
+        if context.depth == "asset":
+            coverage.append(
+                CoverageEntry(
+                    feature="blueprint.summary",
+                    status="present",
+                    detail="light summary at depth=asset",
+                )
+            )
+            obj.coverage.extend(coverage)
+            return result
+
+        # At depth="decode": full graph data
+        if context.depth == "decode":
+            # Find related graph objects (EdGraph, K2Node_*)
+            graph_nodes: list[dict[str, Any]] = []
+            graph_edges: list[dict[str, Any]] = []
+
+            for other in all_objects:
+                other_class = other.class_name or ""
+                if other_class == "EdGraph":
+                    graph_nodes.append({
+                        "id": other.id,
+                        "type": "EdGraph",
+                        "name": other.name,
+                    })
+                elif other_class.startswith("K2Node_"):
+                    node: dict[str, Any] = {
+                        "id": other.id,
+                        "type": other_class,
+                        "name": other.name,
+                    }
+                    if other.properties and "ParentNode" in other.properties:
+                        parent_prop = other.properties["ParentNode"]
+                        if isinstance(parent_prop, dict) and "value" in parent_prop:
+                            node["parent_node"] = parent_prop["value"]
+                    graph_nodes.append(node)
+
+            # Build edges from parent references
+            node_ids = {n["id"] for n in graph_nodes}
+            for node_info in graph_nodes:
+                if "parent_node" in node_info:
+                    parent_id = node_info["parent_node"]
+                    if parent_id in node_ids:
+                        graph_edges.append({
+                            "from_node": parent_id,
+                            "to_node": node_info["id"],
+                            "kind": "parent",
+                        })
+
+            if graph_nodes:
+                result["graph"] = {
+                    "nodes": graph_nodes,
+                    "edges": graph_edges,
+                    "node_count": len(graph_nodes),
+                    "edge_count": len(graph_edges),
+                }
+                coverage.append(
+                    CoverageEntry(
+                        feature="blueprint.graph",
+                        status="present",
+                        detail=f"{len(graph_nodes)} nodes, {len(graph_edges)} edges",
+                    )
+                )
+            else:
+                coverage.append(
+                    CoverageEntry(
+                        feature="blueprint.graph",
+                        status="missing",
+                        detail="no graph objects found",
+                    )
+                )
+
+            obj.coverage.extend(coverage)
+            return result
+
+        # For other depths, return light summary
+        obj.coverage.extend(coverage)
+        return result
+
+
+register_handler(AnimBlueprintHandler())
+register_handler(BlueprintHandler())

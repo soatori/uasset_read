@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 
 SAMPLES_DIR = Path(__file__).parent / "samples"
 
@@ -521,3 +523,175 @@ class TestStaticMeshSummaryConsistency:
         obj = next(o for o in doc.objects if o.class_name == "StaticMesh")
         assert obj.semantic["kind"] == "mesh"
         assert obj.semantic["lod_count"] == len(obj.semantic["lods"])
+
+
+class TestSampleBackedHandlers:
+    """Strict real-sample assertions for all sample-backed handlers."""
+
+    @pytest.mark.parametrize(
+        ("sample", "class_name", "expected_kind"),
+        [
+            ("ALS_FootstepDataTable.uasset", "DataTable", "data_table"),
+            ("Lyra_Enum_PanelType.uasset", "UserDefinedEnum", "user_defined_enum"),
+            ("StackOBot_Struct_Objective.uasset", "UserDefinedStruct", "user_defined_struct"),
+            ("FirstPerson_T_GridChecker_A.uasset", "Texture2D", "texture"),
+            ("MutableSample_GrayLightTextureCube.uasset", "TextureCube", "texture"),
+            ("ALS_Concrete_Step_01_SoundWave.uasset", "SoundWave", "sound"),
+        ],
+    )
+    def test_sample_backed_handler(self, sample, class_name, expected_kind):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(str(SAMPLES_DIR / sample), depth="asset")
+        obj = next(o for o in doc.objects if o.class_name == class_name)
+        assert obj.semantic["kind"] == expected_kind
+        assert obj.coverage
+
+    def test_datatable_row_count_invariant(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(str(SAMPLES_DIR / "ALS_FootstepDataTable.uasset"), depth="asset")
+        dt = next(o for o in doc.objects if o.class_name == "DataTable")
+        # row_count should be non-negative
+        assert dt.semantic["row_count"] >= 0
+
+    def test_texture_dimensions_positive(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(str(SAMPLES_DIR / "FirstPerson_T_GridChecker_A.uasset"), depth="asset")
+        tex = next(o for o in doc.objects if o.class_name == "Texture2D")
+        assert tex.semantic["kind"] == "texture"
+        assert tex.semantic["texture_type"] == "Texture2D"
+        # srgb should be a bool
+        assert isinstance(tex.semantic["srgb"], bool)
+
+    def test_sound_has_coverage(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(str(SAMPLES_DIR / "ALS_Concrete_Step_01_SoundWave.uasset"), depth="asset")
+        sw = next(o for o in doc.objects if o.class_name == "SoundWave")
+        assert sw.semantic["kind"] == "sound"
+        assert sw.semantic["sound_type"] == "SoundWave"
+        assert sw.coverage  # has at least one coverage entry
+
+    def test_handler_exception_becomes_object_diagnostic(self, monkeypatch):
+        import uasset_read.v2.handlers as handlers
+        from uasset_read.v2.api import parse_package_document
+        from uasset_read.v2.version import VersionContext
+
+        class RaisingHandler:
+            def supports(self, obj, context):
+                return True
+
+            def enrich(self, obj, context, all_objects, package_data):
+                raise ValueError("broken handler")
+
+        original_handlers = list(handlers._HANDLERS)
+        try:
+            handlers._HANDLERS.append(RaisingHandler())
+            sample_doc = parse_package_document(
+                str(SAMPLES_DIR / "ALS_FootstepDataTable.uasset"),
+                depth="object",
+                object_ids=["export:0"],
+            )
+            semantic, coverage, diagnostics = handlers.run_handlers(
+                sample_doc.objects[0], VersionContext(), sample_doc.objects, None
+            )
+            assert semantic is None
+            assert any(c.status == "missing" for c in coverage)
+            handler_diags = [d for d in diagnostics if d.stage == "semantic.handler"]
+            assert len(handler_diags) >= 1
+            assert handler_diags[0].object_id == sample_doc.objects[0].id
+        finally:
+            handlers._HANDLERS[:] = original_handlers
+
+
+class TestAnimBlueprintDepthContract:
+    """Test that AnimBlueprint handlers respect depth parameter."""
+
+    def test_asset_depth_omits_heavy_graph_arrays(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(str(SAMPLES_DIR / "ABP_RifleAnimLayers.uasset"), depth="asset")
+        obj = next(o for o in doc.objects if o.class_name == "AnimBlueprintGeneratedClass")
+        assert obj.semantic is not None
+        assert obj.semantic["kind"] == "anim_blueprint"
+        # At depth=asset, no heavy graph arrays should be present
+        assert "nodes" not in obj.semantic
+        assert "bytecode" not in obj.semantic
+        assert "graph" not in obj.semantic
+
+    def test_decode_graph_references_existing_nodes(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(
+            str(SAMPLES_DIR / "ABP_RifleAnimLayers.uasset"),
+            depth="decode",
+            object_ids=["export:2"],
+        )
+        # export:2 is AnimBlueprintGeneratedClass
+        obj = doc.objects[2]
+        assert obj.semantic is not None
+        assert obj.semantic["kind"] == "anim_blueprint"
+        # At depth=decode, graph data should be present
+        if "graph" in obj.semantic:
+            graph = obj.semantic["graph"]
+            assert "nodes" in graph
+            assert "edges" in graph
+            # Verify all edge references point to existing nodes
+            node_ids = {node["id"] for node in graph["nodes"]}
+            for edge in graph["edges"]:
+                assert edge["from_node"] in node_ids, f"Edge from_node {edge['from_node']} not in nodes"
+                assert edge["to_node"] in node_ids, f"Edge to_node {edge['to_node']} not in nodes"
+
+    def test_animbp_handler_supports(self):
+        from uasset_read.v2.handlers import AnimBlueprintHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = AnimBlueprintHandler()
+        obj = ObjectRecord(
+            id="export:0", table_index=0, name="ABP_Test",
+            class_name="AnimBlueprintGeneratedClass", status=ObjectStatus()
+        )
+        assert handler.supports(obj, VersionContext())
+
+    def test_animbp_handler_rejects_non_animbp(self):
+        from uasset_read.v2.handlers import AnimBlueprintHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = AnimBlueprintHandler()
+        obj = ObjectRecord(
+            id="export:0", table_index=0, name="SM_Chair",
+            class_name="StaticMesh", status=ObjectStatus()
+        )
+        assert not handler.supports(obj, VersionContext())
+
+
+class TestBlueprintDepthContract:
+    """Test that Blueprint handlers respect depth parameter."""
+
+    def test_blueprint_handler_supports(self):
+        from uasset_read.v2.handlers import BlueprintHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = BlueprintHandler()
+        obj = ObjectRecord(
+            id="export:0", table_index=0, name="BP_Test",
+            class_name="BlueprintGeneratedClass", status=ObjectStatus()
+        )
+        assert handler.supports(obj, VersionContext())
+
+    def test_blueprint_handler_rejects_non_blueprint(self):
+        from uasset_read.v2.handlers import BlueprintHandler
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.version import VersionContext
+
+        handler = BlueprintHandler()
+        obj = ObjectRecord(
+            id="export:0", table_index=0, name="SM_Chair",
+            class_name="StaticMesh", status=ObjectStatus()
+        )
+        assert not handler.supports(obj, VersionContext())

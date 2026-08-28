@@ -46,6 +46,7 @@ class VersionContext:
     game: str | None = None
     byte_order: Literal["little", "big"] = "little"
     mappings: MappingInfo | None = None
+    depth: Literal["package", "object", "asset", "decode"] = "package"
 
     @property
     def is_ue5(self) -> bool:
@@ -69,6 +70,7 @@ def build_version_context_from_summary(
     platform: str | None = None,
     game: str | None = None,
     mappings: MappingInfo | None = None,
+    depth: Literal["package", "object", "asset", "decode"] = "package",
 ) -> VersionContext:
     """Build a VersionContext from an existing PackageFileSummary.
 
@@ -119,4 +121,5 @@ def build_version_context_from_summary(
         platform=platform,
         game=game,
         mappings=mappings,
+        depth=depth,
     )
