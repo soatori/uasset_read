@@ -500,3 +500,24 @@ class TestMaterialInstanceHandler:
         obj = mi_objs[0]
         assert obj.semantic is not None
         assert obj.semantic["kind"] == "material_instance"
+
+
+class TestSkeletonSummaryConsistency:
+    def test_skeleton_summary_is_internally_consistent(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(str(SAMPLES_DIR / "ALS_Mannequin_Skeleton.uasset"), depth="asset")
+        obj = next(o for o in doc.objects if o.class_name == "Skeleton")
+        assert obj.semantic["kind"] == "skeleton"
+        assert obj.semantic["bone_count"] == len(obj.semantic["bones"])
+        assert obj.semantic["bone_count"] > 0
+
+
+class TestStaticMeshSummaryConsistency:
+    def test_static_mesh_summary_is_internally_consistent(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(str(SAMPLES_DIR / "StarterContent_SM_Chair.uasset"), depth="asset")
+        obj = next(o for o in doc.objects if o.class_name == "StaticMesh")
+        assert obj.semantic["kind"] == "mesh"
+        assert obj.semantic["lod_count"] == len(obj.semantic["lods"])

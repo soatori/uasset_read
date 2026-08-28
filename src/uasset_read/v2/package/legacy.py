@@ -317,7 +317,7 @@ class LegacyPackageReader:
                 )
                 for obj in objects:
                     try:
-                        semantic, cov, handler_diags = run_handlers(obj, context, objects, None)
+                        semantic, cov, handler_diags = run_handlers(obj, context, objects, (export_map, name_map))
                         if semantic is not None:
                             obj.semantic = semantic
                         obj.coverage.extend(cov)
