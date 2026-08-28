@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 > 📦 **v0.5.5** — Zero runtime dependencies · Python 3.10+ · 200 source files · 70+ UE class types
 
-> **Refactor status:** v2 architecture (package-first) is implemented on `dev-0.6.0` branch. All exports preserved, multi-asset packages supported, 6 Agent tools available. See [design status](docs/designs/README.md) and [test sample manifest](tests/samples/manifest.json).
+> **Refactor status:** v2 package-first architecture implemented on `dev-0.6.0` branch. 48 tracked legacy fixtures, all exports preserved, tagged properties parsed, handlers for DataTable/Enum/Struct/Texture/Sound/Skeleton/Mesh/Blueprint/Material/Niagara. See [design status](docs/designs/README.md) and [test sample manifest](tests/samples/manifest.json).
 
 ## Why uasset_read?
 
@@ -24,26 +24,29 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 | -------- | ------- |
-| Version | 0.5.5 (stable) / v2 (in development) |
+| Version | 0.5.5 (stable) / v2 (package-first implemented) |
 | Source | Python parser for Unreal Engine .uasset files |
 | Modules | 200 source files across 15 subpackages |
-| v2 Tests | 113 tests across 5 test files |
-| Multi-asset samples | 13 packages with multiple bIsAsset exports |
+| v2 Tests | 250+ tests across 10+ test files |
+| Tracked samples | 48 legacy fixtures with manifest validation |
 
 ## Features
 
-### v2 Architecture (in development)
+### v2 Architecture (package-first)
 
-> v2 runs alongside v0.5.5 during migration. Use `--v2` CLI flag or `parse_package_document()` Python API.
+> Use `--v2` CLI flag or `parse_package_document()` Python API. See `tests/samples/manifest.json` for tracked fixtures.
 
 - **PackageDocument** — one document per .uasset, all exports as first-class objects
-- **Multi-asset support** — no more `_select_primary_export()` filtering
-- **v2 JSON contract** — `uasset_read.package` format with view/depth/selection/pagination
+- **LegacyPackageReader** — direct binary reader, no v1 pipeline dependency
+- **Multi-asset support** — all exports preserved, no `_select_primary_export()` filtering
+- **Tagged properties** — parsed at `depth="object"` with bounded slices
+- **v2 JSON contract** — `uasset_read.package` format with view/depth/selection/pagination/byte-budget
 - **Agent tools** — `inspect_package`, `list_objects`, `get_object`, `list_dependencies`, `get_diagnostics`, `extract_payload`
-- **Projection** — semantic/raw/debug views with object selection and pagination
-- **AssetHandler protocol** — extensible domain enrichment (DataTable, Texture, Sound built-in)
+- **Projection** — semantic/raw/debug views, depth filtering, max_bytes enforcement
+- **Handlers** — DataTable, UserDefinedEnum, UserDefinedStruct, Texture2D, TextureCube, SoundWave, Skeleton, StaticMesh, Material, Niagara, Blueprint/AnimBlueprint (decode depth)
 - **SchemaProvider** — interface for unversioned property schema lookup
-- **Zen/IoStore stubs** — interfaces ready, awaiting real fixtures
+
+**Deferred:** Unversioned properties (#623), sidecar payloads (#627), Zen/IoStore (#624), Pak (#625), CurveTable (#626), StringTable (#615), Anim extras (#618), Physics (#619)
 
 ```python
 from uasset_read.v2.api import parse_package_document
