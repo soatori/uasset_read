@@ -36,12 +36,12 @@
 Snapshot used to write this plan:
 
 - Branch: `dev-0.6.0`
-- Baseline commit: `5402757a refactor: expose package API and isolate logging lifecycle (#621)`
+- Baseline commit: `cec8a6b3 docs: synchronize package-first implementation status`
 - Phase 0 issue: [#622](https://github.com/soatori/uasset_read/issues/622), closed
 - Parent refactor issue: [#621](https://github.com/soatori/uasset_read/issues/621), open
-- Current test collection: 227 items; latest full local run before this plan: 227 passed with one pytest-cache warning
-- Current v2 call path: `parse_package_document()` -> `parse_uasset_with_linker()` -> `_parse_package_core()` -> `build_package_document()`
-- Current blockers confirmed in source: v2 runtime does not call `run_handlers`; `depth` and `max_bytes` are output labels/no-ops; Zen, IoStore, Unversioned-with-schema, and payload extraction are stubs.
+- Current test collection: 197 root-level contract tests (after v2 suite removal); all pass with no skips/xfail
+- Current v2 call path: `parse_package_document()` -> `LegacyPackageReader` directly via `v2/api.py`; dead `build_package_document()` adapter removed
+- Current blockers confirmed in source: Zen, IoStore, Unversioned-with-schema, and payload extraction are stubs. Tagged property parsing, run_handlers, depth, and max_bytes all work end-to-end.
 
 ## Fixture Decision Matrix
 

@@ -673,7 +673,7 @@
   "fixture_gaps": {
     "zen_package": {
       "status": "missing",
-      "description": "No Zen package (.uasset with FZenPackageSummary) samples. All 47 samples use legacy FPackageFileSummary layout.",
+      "description": "No Zen package (.uasset with FZenPackageSummary) samples. All 48 samples use legacy FPackageFileSummary layout.",
       "needed_for": "Phase 5 (Zen & Container Streaming) — ZenPackageReader implementation",
       "acquisition": "1. Create a UE5.1+ project (e.g., Third Person template)\n2. Add diverse assets: Blueprint, Material, Texture, DataTable, Skeleton\n3. Package for Windows/Linux/Mac using File > Package Project\n4. The packaged output will contain .uasset files with FZenPackageSummary\n5. Copy 3-5 representative .uasset files to tests/samples/\nExpected: files with file_version_ue5 >= 522 and hash-based table layout",
       "verification": "After copying, verify:\n- struct.unpack_from('<i', data, 4)[0] >= 0 (not legacy negative version)\n- struct.unpack_from('<i', data, 12)[0] >= 522 (UE5.1+)\n- parse_package_document() produces valid PackageDocument",

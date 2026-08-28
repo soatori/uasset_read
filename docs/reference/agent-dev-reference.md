@@ -25,7 +25,7 @@
 ## 当前与目标边界
 
 - 当前 JSON 仍使用 Semantic 1.x，并选择单个 primary export。
-- 目标 v2 使用 package-first `PackageDocument`，输出所有 objects。
+- 当前 v2 使用 package-first `PackageDocument`（legacy + tagged properties + sample-backed handlers 已实现；Zen/IoStore、unversioned、payload extraction 仍 deferred，见 docs/designs/README.md），输出所有 objects。
 - 当前 Pak/IoStore、日志和 Agent 能力不得按目标设计提前宣称完成。
 - 旧领域 Semantic 文档可用于理解 v0.5.5，但不得继续扩展为新的顶层 format。
 
@@ -48,7 +48,7 @@
 - 代码、注释和错误信息使用英文；文档保持所在文档语言一致。
 - 临时调查材料放入 `temp/`。
 - 二进制读取必须有边界验证和严格回归测试。
-- Phase 0 将一次性替换旧测试体系；不要继续扩展 Semantic 1.x 测试，也不要新增独立验证脚本。
+- Phase 0 将一次性替换旧测试体系；不要继续扩展 Semantic 1.x 测试，也不要新增独立验证脚本。root-level `tests/test_*_contract.py` is the strict contract layer; do not re-add a `tests/v2/` duplicate suite.
 - 样本缺失只登记 manifest gap，不用 skip/xfail/吞异常制造覆盖；支持声明必须有真实 fixture 和 structured diagnostics 断言。
 - 当前只以本机 Windows + Python 3.14 作为阻断测试环境；其他平台和 Python 版本暂缓且不得宣称已验证。
 - 不提交本机 UE 源码绝对路径、外部仓库副本、日志或 Agent 缓存。

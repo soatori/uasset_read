@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 > 📦 **v0.5.5** — Zero runtime dependencies · Python 3.10+ · 200 source files · 70+ UE class types
 
-> **Refactor status:** v2 package-first architecture implemented on `dev-0.6.0` branch. 48 tracked legacy fixtures, all exports preserved, tagged properties parsed, handlers for DataTable/Enum/Struct/Texture/Sound/Skeleton/Mesh/Blueprint/Material/Niagara. See [design status](docs/designs/README.md) and [test sample manifest](tests/samples/manifest.json).
+> **Refactor status:** v2 package-first architecture implemented on `dev-0.6.0` branch. 48 tracked legacy fixtures, all exports preserved, tagged properties parsed, handlers for DataTable/Enum/Struct/Texture/Sound/Skeleton/Mesh/Blueprint/Material/Niagara. Zen/IoStore, unversioned-with-usmap, and payload extraction remain deferred (see `docs/designs/README.md`). See [design status](docs/designs/README.md) and [test sample manifest](tests/samples/manifest.json).
 
 ## Why uasset_read?
 
@@ -27,7 +27,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 | Version | 0.5.5 (stable) / v2 (package-first implemented) |
 | Source | Python parser for Unreal Engine .uasset files |
 | Modules | 200 source files across 15 subpackages |
-| v2 Tests | 250+ tests across 10+ test files |
+| v2 Tests | ~197 root-level contract tests (no skips/xfail) |
 | Tracked samples | 48 legacy fixtures with manifest validation |
 
 ## Features
