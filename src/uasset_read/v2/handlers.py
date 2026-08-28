@@ -718,11 +718,13 @@ class AnimBlueprintHandler:
                 other_class = other.class_name or ""
                 if other_class == "EdGraph":
                     # EdGraph is a container for graph nodes
-                    graph_nodes.append({
-                        "id": other.id,
-                        "type": "EdGraph",
-                        "name": other.name,
-                    })
+                    graph_nodes.append(
+                        {
+                            "id": other.id,
+                            "type": "EdGraph",
+                            "name": other.name,
+                        }
+                    )
                 elif other_class.startswith("K2Node_"):
                     # K2Node_* are graph nodes
                     node: dict[str, Any] = {
@@ -743,11 +745,13 @@ class AnimBlueprintHandler:
                 if "parent_node" in node_info:
                     parent_id = node_info["parent_node"]
                     if parent_id in node_ids:
-                        graph_edges.append({
-                            "from_node": parent_id,
-                            "to_node": node_info["id"],
-                            "kind": "parent",
-                        })
+                        graph_edges.append(
+                            {
+                                "from_node": parent_id,
+                                "to_node": node_info["id"],
+                                "kind": "parent",
+                            }
+                        )
 
             if graph_nodes:
                 result["graph"] = {
@@ -829,11 +833,13 @@ class BlueprintHandler:
             for other in all_objects:
                 other_class = other.class_name or ""
                 if other_class == "EdGraph":
-                    graph_nodes.append({
-                        "id": other.id,
-                        "type": "EdGraph",
-                        "name": other.name,
-                    })
+                    graph_nodes.append(
+                        {
+                            "id": other.id,
+                            "type": "EdGraph",
+                            "name": other.name,
+                        }
+                    )
                 elif other_class.startswith("K2Node_"):
                     node: dict[str, Any] = {
                         "id": other.id,
@@ -852,11 +858,13 @@ class BlueprintHandler:
                 if "parent_node" in node_info:
                     parent_id = node_info["parent_node"]
                     if parent_id in node_ids:
-                        graph_edges.append({
-                            "from_node": parent_id,
-                            "to_node": node_info["id"],
-                            "kind": "parent",
-                        })
+                        graph_edges.append(
+                            {
+                                "from_node": parent_id,
+                                "to_node": node_info["id"],
+                                "kind": "parent",
+                            }
+                        )
 
             if graph_nodes:
                 result["graph"] = {

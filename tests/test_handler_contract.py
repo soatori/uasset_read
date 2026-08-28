@@ -651,8 +651,11 @@ class TestAnimBlueprintDepthContract:
 
         handler = AnimBlueprintHandler()
         obj = ObjectRecord(
-            id="export:0", table_index=0, name="ABP_Test",
-            class_name="AnimBlueprintGeneratedClass", status=ObjectStatus()
+            id="export:0",
+            table_index=0,
+            name="ABP_Test",
+            class_name="AnimBlueprintGeneratedClass",
+            status=ObjectStatus(),
         )
         assert handler.supports(obj, VersionContext())
 
@@ -663,8 +666,7 @@ class TestAnimBlueprintDepthContract:
 
         handler = AnimBlueprintHandler()
         obj = ObjectRecord(
-            id="export:0", table_index=0, name="SM_Chair",
-            class_name="StaticMesh", status=ObjectStatus()
+            id="export:0", table_index=0, name="SM_Chair", class_name="StaticMesh", status=ObjectStatus()
         )
         assert not handler.supports(obj, VersionContext())
 
@@ -679,8 +681,7 @@ class TestBlueprintDepthContract:
 
         handler = BlueprintHandler()
         obj = ObjectRecord(
-            id="export:0", table_index=0, name="BP_Test",
-            class_name="BlueprintGeneratedClass", status=ObjectStatus()
+            id="export:0", table_index=0, name="BP_Test", class_name="BlueprintGeneratedClass", status=ObjectStatus()
         )
         assert handler.supports(obj, VersionContext())
 
@@ -691,7 +692,6 @@ class TestBlueprintDepthContract:
 
         handler = BlueprintHandler()
         obj = ObjectRecord(
-            id="export:0", table_index=0, name="SM_Chair",
-            class_name="StaticMesh", status=ObjectStatus()
+            id="export:0", table_index=0, name="SM_Chair", class_name="StaticMesh", status=ObjectStatus()
         )
         assert not handler.supports(obj, VersionContext())
