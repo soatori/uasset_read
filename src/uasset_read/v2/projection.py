@@ -61,6 +61,9 @@ def paginate(
     return page, next_offset, truncation_info
 
 
+_VALID_DEPTHS = {"package", "object", "asset", "decode"}
+
+
 def project_document(
     doc: PackageDocument,
     *,
@@ -81,9 +84,19 @@ def project_document(
       - raw: adds flags, serial offsets, header details
       - debug: raw + parse statistics, recovery info, offset evidence
     """
+    import json as _json
+
     _VALID_VIEWS = {"semantic", "raw", "debug"}
     if view not in _VALID_VIEWS:
         raise ValueError(f"Invalid view: {view!r}. Expected one of {_VALID_VIEWS}")
+    if depth not in _VALID_DEPTHS:
+        raise ValueError(f"Invalid depth: {depth!r}. Expected one of {_VALID_DEPTHS}")
+    if offset < 0:
+        raise ValueError("offset must be non-negative")
+    if limit is not None and limit < 0:
+        raise ValueError("limit must be non-negative")
+    if max_bytes is not None and max_bytes < 0:
+        raise ValueError("max_bytes must be non-negative")
 
     # Select objects
     selected = select_objects(doc, object_ids=object_ids, roles=roles, classes=classes)
@@ -139,6 +152,46 @@ def project_document(
             "total_diagnostics": len(doc.diagnostics),
             "object_diagnostics": sum(len(o.diagnostics) for o in doc.objects),
         }
+
+    # max_bytes enforcement
+    if max_bytes is not None:
+        encoded = _json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if len(encoded) > max_bytes:
+            # Estimate diagnostic overhead (TRUNCATED message ~120 bytes)
+            DIAGNOSTIC_OVERHEAD = 200
+            target = max_bytes - DIAGNOSTIC_OVERHEAD
+            # Truncate objects one by one until we fit
+            while len(result["objects"]) > 0:
+                result["objects"].pop()
+                encoded = _json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                if len(encoded) <= target:
+                    break
+            # If still over budget even with zero objects, raise
+            if len(encoded) > max_bytes:
+                raise ValueError(
+                    f"Output budget {max_bytes} bytes too small for minimal envelope "
+                    f"({len(encoded)} bytes)"
+                )
+            # Record objects_dropped before adding diagnostic
+            objects_dropped = len(selected) - len(result["objects"])
+            # Add truncation diagnostic
+            result["diagnostics"].append({
+                "severity": "warning",
+                "code": "TRUNCATED",
+                "message": f"Output truncated to fit {max_bytes}-byte budget",
+                "stage": "projection",
+                "recoverable": True,
+            })
+            # Final measurement after all additions
+            final_encoded = _json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            result["truncation"] = {
+                "reason": "max_bytes",
+                "budget": max_bytes,
+                "actual": len(final_encoded),
+                "objects_dropped": objects_dropped,
+            }
+            # Update next_offset to reflect what was dropped
+            result["next_offset"] = offset + len(result["objects"])
 
     return result
 
