@@ -117,6 +117,18 @@ def project_document(
             filtered.append({k: v for k, v in d.items() if k in field_set or k in ("id", "name")})
         page = filtered
 
+    # Scope relations and diagnostics to the returned page
+    page_ids = {o.id for o in page}
+    relations = [
+        {"kind": r.kind, "from": r.from_id, "to": r.to_id}
+        for r in doc.relations
+        if r.from_id in page_ids
+    ]
+    page_diagnostics = [
+        d for d in doc.diagnostics
+        if getattr(d, "object_id", None) is None or getattr(d, "object_id", None) in page_ids
+    ]
+
     # Build result
     result: dict[str, Any] = {
         "format": "uasset_read.package",
@@ -126,12 +138,12 @@ def project_document(
         "source": {"kind": doc.source.kind, "name": doc.source.name, "size": doc.source.size},
         "package": _package_to_dict(doc, view=view),
         "objects": [obj_to_dict(o, view=view) for o in page],
-        "relations": [{"kind": r.kind, "from": r.from_id, "to": r.to_id} for r in doc.relations],
+        "relations": relations,
         "dependencies": [
             {"index": d.index, "class": d.class_name, "object_name": d.object_name} for d in doc.dependencies
         ],
         "payloads": [],
-        "diagnostics": [d.to_dict() for d in doc.diagnostics],
+        "diagnostics": [d.to_dict() for d in page_diagnostics],
         "summary": {
             "object_count": doc.summary.object_count,
             "asset_object_ids": list(doc.summary.asset_object_ids),
@@ -153,44 +165,34 @@ def project_document(
             "object_diagnostics": sum(len(o.diagnostics) for o in doc.objects),
         }
 
-    # max_bytes enforcement
+    # max_bytes enforcement — measure AFTER adding TRUNCATED diagnostic
     if max_bytes is not None:
-        encoded = _json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        if len(encoded) > max_bytes:
-            # Estimate diagnostic overhead (TRUNCATED message ~120 bytes)
-            DIAGNOSTIC_OVERHEAD = 200
-            target = max_bytes - DIAGNOSTIC_OVERHEAD
-            # Truncate objects one by one until we fit
-            while len(result["objects"]) > 0:
-                result["objects"].pop()
-                encoded = _json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-                if len(encoded) <= target:
-                    break
-            # If still over budget even with zero objects, raise
-            if len(encoded) > max_bytes:
-                raise ValueError(
-                    f"Output budget {max_bytes} bytes too small for minimal envelope "
-                    f"({len(encoded)} bytes)"
-                )
-            # Record objects_dropped before adding diagnostic
-            objects_dropped = len(selected) - len(result["objects"])
-            # Add truncation diagnostic
-            result["diagnostics"].append({
+        def _encoded() -> int:
+            return len(_json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+        if _encoded() > max_bytes:
+            trunc_diag = {
                 "severity": "warning",
                 "code": "TRUNCATED",
                 "message": f"Output truncated to fit {max_bytes}-byte budget",
                 "stage": "projection",
                 "recoverable": True,
-            })
-            # Final measurement after all additions
-            final_encoded = _json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            }
+            result["diagnostics"].append(trunc_diag)
+            while len(result["objects"]) > 0 and _encoded() > max_bytes:
+                result["objects"].pop()
+            actual = _encoded()
+            if actual > max_bytes:
+                raise ValueError(
+                    f"Output budget {max_bytes} bytes too small for minimal envelope ({actual} bytes)"
+                )
+            objects_dropped = len(selected) - len(result["objects"])
             result["truncation"] = {
                 "reason": "max_bytes",
                 "budget": max_bytes,
-                "actual": len(final_encoded),
+                "actual": actual,
                 "objects_dropped": objects_dropped,
             }
-            # Update next_offset to reflect what was dropped
             result["next_offset"] = offset + len(result["objects"])
 
     return result

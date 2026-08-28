@@ -123,3 +123,46 @@ class TestJsonSerializable:
             json_str = json.dumps(result, ensure_ascii=False)
             parsed = json.loads(json_str)
             assert parsed["view"] == view
+
+
+class TestByteBudget:
+    def test_max_bytes_is_enforced_and_continuable(self, doc):
+        from uasset_read.v2.projection import project_document
+
+        # This sample's envelope is ~19KB; use 21KB budget to test truncation
+        page = project_document(doc, limit=100, max_bytes=21000)
+        encoded = json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        assert len(encoded) <= 21000
+        assert page["truncation"]["reason"] == "max_bytes"
+        assert page["next_offset"] > 0
+        assert any(d["code"] == "TRUNCATED" for d in page["diagnostics"])
+
+    def test_relations_scoped_to_returned_page(self, doc):
+        from uasset_read.v2.projection import project_document
+
+        page = project_document(doc, limit=2)
+        page_ids = {o["id"] for o in page["objects"]}
+        assert len(page_ids) == 2
+        for r in page["relations"]:
+            assert r["from"] in page_ids
+
+    def test_object_diagnostics_scoped_to_page(self, doc):
+        from uasset_read.v2.projection import project_document
+
+        page = project_document(doc, limit=2)
+        page_ids = {o["id"] for o in page["objects"]}
+        for d in page["diagnostics"]:
+            oid = d.get("object_id")
+            assert oid is None or oid in page_ids
+
+    def test_budget_too_small_raises(self, doc):
+        from uasset_read.v2.projection import project_document
+
+        with pytest.raises(ValueError, match="too small"):
+            project_document(doc, max_bytes=64)
+
+    def test_no_truncation_when_budget_generous(self, doc):
+        from uasset_read.v2.projection import project_document
+
+        page = project_document(doc, limit=2, max_bytes=1_000_000)
+        assert page.get("truncation") is None or page["truncation"].get("reason") != "max_bytes"
