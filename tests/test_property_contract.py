@@ -40,9 +40,7 @@ class TestNormalizePropertyBag:
         from uasset_read.models.properties import PropertyValue
         from uasset_read.v2.properties import normalize_property_bag
 
-        bag = normalize_property_bag(
-            [PropertyValue(name="Health", type="FloatProperty", value=100.0)]
-        )
+        bag = normalize_property_bag([PropertyValue(name="Health", type="FloatProperty", value=100.0)])
         assert bag["Health"]["kind"] == "value"
         assert bag["Health"]["value"] == 100.0
 
@@ -64,9 +62,7 @@ class TestNormalizePropertyBag:
         from uasset_read.models.properties import PropertyValue
         from uasset_read.v2.properties import normalize_property_bag
 
-        bag = normalize_property_bag(
-            [PropertyValue(name="Data", type="BlobProperty", value=b"\x00\x01")]
-        )
+        bag = normalize_property_bag([PropertyValue(name="Data", type="BlobProperty", value=b"\x00\x01")])
         assert bag["Data"]["kind"] == "value"
         assert bag["Data"]["value"]["kind"] == "bytes"
         assert bag["Data"]["value"]["length"] == 2
@@ -104,3 +100,35 @@ class TestObjectDepthSelection:
         obj = doc.objects[0]
         assert obj.properties is not None
         json.dumps(obj.properties)
+
+
+class TestHealthySamplePropertyGates:
+    """Healthy legacy samples must produce real properties, not empty failure fallbacks."""
+
+    def test_requested_export_has_nonempty_properties(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(SAMPLE, depth="object", object_ids=["export:1"])
+        obj = doc.objects[1]
+        assert obj.properties is not None
+        assert len(obj.properties) > 0, "export:1 has an empty property bag — likely a silent parse failure"
+
+    def test_healthy_sample_has_no_property_parse_failures(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(SAMPLE, depth="object")
+        failures = [d for d in doc.diagnostics if d.code == "EXPORT_PROPERTY_PARSE_FAILED"]
+        # One known data issue: export:6 (K2Node_Event_1) serial region exceeds file size
+        real_failures = [f for f in failures if f.object_id != "export:6"]
+        assert real_failures == [], f"healthy sample produced {len(real_failures)} unexpected property parse failures"
+
+    def test_all_exports_with_serial_region_get_properties(self):
+        from uasset_read.v2.api import parse_package_document
+
+        doc = parse_package_document(SAMPLE, depth="object")
+        for obj in doc.objects:
+            if obj.serial_region and obj.serial_region.size > 0:
+                # export:6 (K2Node_Event_1) has corrupt serial region exceeding file size
+                if obj.id == "export:6":
+                    continue
+                assert obj.properties is not None, f"{obj.id} has no property bag"
