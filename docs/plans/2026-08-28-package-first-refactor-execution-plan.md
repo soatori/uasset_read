@@ -103,7 +103,7 @@ Tasks 8-10 may run independently after Task 7. Deferred fixture issues do not ru
 - Consumes: the current manifest JSON and `parse_package_document(path, tolerant=True)`.
 - Produces: one tracked 4,037-byte legacy sample with SHA-256 `c7d31152d98a68156e1afeb9c64ca1d0032ad023786ff9807f06900ce1721458`, 6 exports, and 0 `bIsAsset` exports.
 
-- [ ] **Step 1: Copy the exact binary and record provenance**
+- [x] **Step 1: Copy the exact binary and record provenance**
 
 ```powershell
 Copy-Item -LiteralPath 'external\uasset-rs\assets\UE410\SimpleRefs\SimpleRefsSoftRef.uasset' -Destination 'tests\samples\uasset_rs_UE410_SimpleRefsSoftRef.uasset'
@@ -113,7 +113,7 @@ Get-FileHash -Algorithm SHA256 'tests\samples\uasset_rs_UE410_SimpleRefsSoftRef.
 
 Expected hash and size are the values in the interface block. `tests/samples/README.md` must name `https://github.com/jorgenpt/uasset-rs`, source commit `b1d5a7f5b4414ae3e443b882bed3eb51caf21596`, and the upstream MIT/Apache-2.0 licenses.
 
-- [ ] **Step 2: Add the manifest entry and strict assertions**
+- [x] **Step 2: Add the manifest entry and strict assertions**
 
 ```python
 def test_zero_asset_role_fixture_is_manifested(manifest):
@@ -134,13 +134,13 @@ def test_exports_survive_without_asset_role(samples_dir):
     assert doc.summary.asset_object_ids == ()
 ```
 
-- [ ] **Step 3: Run the focused gate**
+- [x] **Step 3: Run the focused gate**
 
 Run: `python -m pytest tests/test_manifest_contract.py tests/test_document_contract.py -q`
 
 Expected: all tests pass; no skip/xfail is collected.
 
-- [ ] **Step 4: Commit the fixture boundary**
+- [x] **Step 4: Commit the fixture boundary**
 
 ```powershell
 git add tests/samples/uasset_rs_UE410_SimpleRefsSoftRef.uasset tests/samples/README.md tests/samples/manifest.json tests/test_manifest_contract.py tests/test_document_contract.py
@@ -161,7 +161,7 @@ git commit -m "test: add package without asset-role exports"
 - Consumes: `Source.read_at(offset: int, size: int) -> bytes` and the existing `ArchiveLike` protocol.
 - Produces: `SliceReader` methods `close() -> None`, `total_size() -> int`, and `set_byte_swapping(enabled: bool) -> None`, allowing it to back `PackageArchive` without a second binary primitive stack.
 
-- [ ] **Step 1: Write the archive compatibility test**
+- [x] **Step 1: Write the archive compatibility test**
 
 ```python
 def test_slice_reader_satisfies_archive_like():
@@ -176,13 +176,13 @@ def test_slice_reader_satisfies_archive_like():
     archive.close()
 ```
 
-- [ ] **Step 2: Run the test and verify the missing protocol methods fail**
+- [x] **Step 2: Run the test and verify the missing protocol methods fail**
 
 Run: `python -m pytest tests/test_reader_contract.py::test_slice_reader_satisfies_archive_like -q`
 
 Expected: fail before implementation because `SliceReader` does not satisfy `ArchiveLike`.
 
-- [ ] **Step 3: Add only the three required methods**
+- [x] **Step 3: Add only the three required methods**
 
 ```python
 def total_size(self) -> int:
@@ -195,13 +195,13 @@ def close(self) -> None:
     pass  # Source owns no persistent handle
 ```
 
-- [ ] **Step 4: Run the complete reader contract**
+- [x] **Step 4: Run the complete reader contract**
 
 Run: `python -m pytest tests/test_reader_contract.py -q`
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/uasset_read/v2/source.py tests/test_reader_contract.py
@@ -260,7 +260,7 @@ def parse_package_document(
 ) -> PackageDocument: ...
 ```
 
-- [ ] **Step 1: Add a failing test that forbids the v1 adapter call**
+- [x] **Step 1: Add a failing test that forbids the v1 adapter call**
 
 ```python
 def test_v2_api_does_not_call_v1_pipeline(monkeypatch, sample_path):
@@ -275,13 +275,13 @@ def test_v2_api_does_not_call_v1_pipeline(monkeypatch, sample_path):
     assert doc.summary.total_exports == len(doc.objects)
 ```
 
-- [ ] **Step 2: Run the focused test and verify it fails through `v2/api.py`**
+- [x] **Step 2: Run the focused test and verify it fails through `v2/api.py`**
 
 Run: `python -m pytest tests/test_document_contract.py::test_v2_api_does_not_call_v1_pipeline -q`
 
 Expected: fail with `AssertionError: v1 pipeline called`.
 
-- [ ] **Step 3: Implement the direct table path**
+- [x] **Step 3: Implement the direct table path**
 
 The reader must:
 
@@ -294,7 +294,7 @@ The reader must:
 7. convert caught boundary failures into `Diagnostic(stage, code, object_id, offset, size, recoverable)`;
 8. leave object properties and semantics unset at `depth="package"`.
 
-- [ ] **Step 4: Add table parity across every tracked legacy fixture**
+- [x] **Step 4: Add table parity across every tracked legacy fixture**
 
 ```python
 def test_legacy_reader_matches_manifest_tables(manifest, samples_dir):
@@ -308,13 +308,13 @@ def test_legacy_reader_matches_manifest_tables(manifest, samples_dir):
         assert len(doc.summary.asset_object_ids) == entry["b_is_asset_count"], entry["name"]
 ```
 
-- [ ] **Step 5: Run the package contracts**
+- [x] **Step 5: Run the package contracts**
 
 Run: `python -m pytest tests/test_document_contract.py tests/test_manifest_contract.py -q`
 
 Expected: all tracked legacy fixtures pass; one malformed fixture failure names its sample and stage rather than being swallowed.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add src/uasset_read/v2/package/legacy.py src/uasset_read/v2/package/__init__.py src/uasset_read/v2/api.py src/uasset_read/v2/object_model.py src/uasset_read/v2/diagnostics.py tests/test_document_contract.py tests/test_manifest_contract.py
@@ -351,7 +351,7 @@ class OpaqueValue:
 
 At `depth="object"`, only requested object IDs are parsed. Unknown values become descriptors plus diagnostics; raw bytes remain source-addressable and are not emitted in JSON.
 
-- [ ] **Step 1: Add the object-depth selection test**
+- [x] **Step 1: Add the object-depth selection test**
 
 ```python
 def test_object_depth_parses_only_requested_export(sample_path):
@@ -361,7 +361,7 @@ def test_object_depth_parses_only_requested_export(sample_path):
     assert len(doc.objects) == doc.package.export_count
 ```
 
-- [ ] **Step 2: Add the JSON-safe unknown-value test**
+- [x] **Step 2: Add the JSON-safe unknown-value test**
 
 ```python
 def test_unknown_property_is_descriptor_not_blob():
@@ -383,23 +383,23 @@ def test_unknown_property_is_descriptor_not_blob():
     json.dumps(bag)
 ```
 
-- [ ] **Step 3: Run both tests and verify the current empty property path fails**
+- [x] **Step 3: Run both tests and verify the current empty property path fails**
 
 Run: `python -m pytest tests/test_property_contract.py -q`
 
 Expected: fail before implementation because v2 objects do not hold normalized properties.
 
-- [ ] **Step 4: Implement bounded tagged parsing**
+- [x] **Step 4: Implement bounded tagged parsing**
 
 Use `SliceReader.sub_slice(export.serial_offset, export.serial_size)` or the equivalent validated package slice for each requested export. Reuse current tag/value readers; do not copy their switch tables. Catch only declared parse/bounds exceptions at this boundary, set object status to `partial` or `opaque`, append a structured diagnostic, and continue with the next export.
 
-- [ ] **Step 5: Run property and failure-isolation contracts**
+- [x] **Step 5: Run property and failure-isolation contracts**
 
 Run: `python -m pytest tests/test_property_contract.py tests/test_diagnostics_contract.py tests/test_document_contract.py -q`
 
 Expected: pass; a failed export cannot remove later objects.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add src/uasset_read/v2/package/legacy.py src/uasset_read/v2/properties.py src/uasset_read/v2/object_model.py tests/test_property_contract.py tests/test_diagnostics_contract.py tests/test_document_contract.py
@@ -442,7 +442,7 @@ def project_document(
 
 `PackageDocument.to_dict()` delegates to `project_document()` through a local import; there is no second serializer.
 
-- [ ] **Step 1: Add depth and byte-budget failures**
+- [x] **Step 1: Add depth and byte-budget failures**
 
 ```python
 def test_depth_changes_parse_cost(sample_path):
@@ -461,27 +461,27 @@ def test_max_bytes_is_enforced_and_continuable(doc):
     assert any(d["code"] == "TRUNCATED" for d in page["diagnostics"])
 ```
 
-- [ ] **Step 2: Run the focused projection tests**
+- [x] **Step 2: Run the focused projection tests**
 
 Run: `python -m pytest tests/test_projection_contract.py -q`
 
 Expected: fail because current `depth` is only copied and `max_bytes` is unused.
 
-- [ ] **Step 3: Implement one deterministic projection**
+- [x] **Step 3: Implement one deterministic projection**
 
 Validate enum values and non-negative limits. Filter in table order, include only relations/dependencies/payload descriptors reachable from the returned object page, append bounded entries one at a time, and measure compact UTF-8 JSON with the standard library. The object-table offset is the continuation cursor; every omitted reachable entry produces a truncation diagnostic. If the encoded minimal envelope exceeds `max_bytes`, raise `ValueError` with the required byte count before producing output; CLI and Agent boundaries translate that error to `OUTPUT_BUDGET_TOO_SMALL`. Never return bytes above the requested limit.
 
-- [ ] **Step 4: Regenerate the checked contract example through the projection API**
+- [x] **Step 4: Regenerate the checked contract example through the projection API**
 
 The example remains semantic + asset, omits flags/raw property trees/blob bytes, and validates against `package_document_v2.schema.json`.
 
-- [ ] **Step 5: Run projection and schema gates**
+- [x] **Step 5: Run projection and schema gates**
 
 Run: `python -m pytest tests/test_projection_contract.py tests/test_schema_contract.py -q`
 
 Expected: pass for all views and pagination continuation.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add src/uasset_read/v2/projection.py src/uasset_read/v2/document.py tests/test_projection_contract.py docs/designs/contract/package_document_v2.schema.json docs/designs/contract/package_document_v2.example.json
@@ -505,7 +505,7 @@ git commit -m "feat: enforce package projection depth and byte budgets"
 - Consumes: `parse_package_document()` and `project_document()` from Tasks 3-5.
 - Produces: CLI and six Agent functions whose object IDs, status, diagnostics, pagination, and byte limits match Python projection output exactly.
 
-- [ ] **Step 1: Add equality tests across all three entry points**
+- [x] **Step 1: Add equality tests across all three entry points**
 
 ```python
 def run_cli_json(*args):
@@ -530,11 +530,11 @@ def test_cli_agent_python_share_projection(sample_path):
         assert actual["diagnostics"] == expected["diagnostics"]
 ```
 
-- [ ] **Step 2: Replace CLI `doc.to_dict()` and Agent hand-built dicts**
+- [x] **Step 2: Replace CLI `doc.to_dict()` and Agent hand-built dicts**
 
 CLI argument parsing may remain in `cli.py`; all data shaping calls `project_document`. Agent tools may add tool-specific envelopes such as `total`, but object records and diagnostics are copied from projection results rather than rebuilt.
 
-- [ ] **Step 3: Fix logging lifecycle assertions**
+- [x] **Step 3: Fix logging lifecycle assertions**
 
 ```python
 def test_disabled_logging_has_no_files_or_root_mutation(tmp_path, sample_path, monkeypatch):
@@ -547,13 +547,13 @@ def test_disabled_logging_has_no_files_or_root_mutation(tmp_path, sample_path, m
 
 Add `logging.NullHandler()` only to the package logger. Remove unconditional `configure_project_logging()` from the legacy compatibility function; explicit CLI logging remains the only configuration owner.
 
-- [ ] **Step 4: Run application contracts**
+- [x] **Step 4: Run application contracts**
 
 Run: `python -m pytest tests/test_application_contract.py tests/test_projection_contract.py -q`
 
 Expected: pass; all byte limits are enforced and no library call creates a file.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/uasset_read/cli.py src/uasset_read/v2/agent_tools.py src/uasset_read/__init__.py src/uasset_read/pipeline/core.py tests/test_application_contract.py
@@ -588,7 +588,7 @@ def run_handlers(
 
 `depth="asset"` runs light handlers for asset-role objects; `depth="decode"` runs only explicitly selected heavy handlers. Handler failure changes only that object's semantic status and diagnostics.
 
-- [ ] **Step 1: Replace the current vacuous end-to-end assertion**
+- [x] **Step 1: Replace the current vacuous end-to-end assertion**
 
 ```python
 def test_datatable_handler_runs_from_public_api(samples_dir):
@@ -600,7 +600,7 @@ def test_datatable_handler_runs_from_public_api(samples_dir):
     assert any(c.feature == "handler.DataTable" for c in obj.coverage)
 ```
 
-- [ ] **Step 2: Add handler failure isolation**
+- [x] **Step 2: Add handler failure isolation**
 
 ```python
 def test_handler_exception_becomes_object_diagnostic(monkeypatch, samples_dir):
@@ -629,23 +629,23 @@ def test_handler_exception_becomes_object_diagnostic(monkeypatch, samples_dir):
     assert diagnostics[0].object_id == sample_doc.objects[0].id
 ```
 
-- [ ] **Step 3: Run and verify the public API test fails before wiring**
+- [x] **Step 3: Run and verify the public API test fails before wiring**
 
 Run: `python -m pytest tests/test_handler_contract.py -q`
 
 Expected: the DataTable public API test fails because current runtime never calls `run_handlers`.
 
-- [ ] **Step 4: Wire handlers once in `LegacyPackageReader.read()`**
+- [x] **Step 4: Wire handlers once in `LegacyPackageReader.read()`**
 
 Do not run handlers in projection or Agent tools. Store semantic, coverage, and diagnostics on the same object. Preserve table order and continue after any handler boundary exception.
 
-- [ ] **Step 5: Run handler and diagnostics gates**
+- [x] **Step 5: Run handler and diagnostics gates**
 
 Run: `python -m pytest tests/test_handler_contract.py tests/test_diagnostics_contract.py -q`
 
 Expected: pass; no conditional assertion allows `semantic is None` for a supported real sample.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add src/uasset_read/v2/handlers.py src/uasset_read/v2/package/legacy.py src/uasset_read/v2/object_model.py tests/test_handler_contract.py tests/test_diagnostics_contract.py
@@ -669,7 +669,7 @@ git commit -m "feat: run v2 asset handlers on package objects"
 - Consumes: normalized object properties and existing reader-owned native metadata.
 - Produces stable `semantic.kind` values `data_table`, `user_defined_enum`, `user_defined_struct`, `texture`, and `sound`, plus payload descriptors without bytes.
 
-- [ ] **Step 1: Add strict real-sample assertions**
+- [x] **Step 1: Add strict real-sample assertions**
 
 ```python
 @pytest.mark.parametrize(
@@ -690,17 +690,17 @@ def test_sample_backed_handler(sample, class_name, kind, samples_dir):
     assert obj.coverage
 ```
 
-- [ ] **Step 2: Assert domain invariants rather than field presence only**
+- [x] **Step 2: Assert domain invariants rather than field presence only**
 
 DataTable `row_count` equals the number of emitted rows; enum/struct member counts equal emitted members; texture dimensions and mip count are positive; sound duration/channels/sample rate use `partial` coverage when absent. Payload descriptors include owner, source region, offset, size, and status but never bytes.
 
-- [ ] **Step 3: Run the handler subset**
+- [x] **Step 3: Run the handler subset**
 
 Run: `python -m pytest tests/test_handler_contract.py tests/test_payload_contract.py -q`
 
 Expected: pass for the listed tracked samples. StringTable and CurveTable are not collected; they remain blocked by #615 and #626.
 
-- [ ] **Step 4: Update issue evidence and commit**
+- [x] **Step 4: Update issue evidence and commit**
 
 Read back #602 and #605 after adding exact test names and pass output. Commit only source/tests in this slice.
 
@@ -724,7 +724,7 @@ git commit -m "feat: add sample-backed data texture and sound semantics"
 - Consumes: `Skeleton`, `StaticMesh`, and available skeletal mesh metadata from tracked legacy fixtures.
 - Produces `semantic.kind` values `skeleton` and `mesh`; counts equal emitted lists, references use stable package object IDs when resolvable.
 
-- [ ] **Step 1: Add real-sample invariants**
+- [x] **Step 1: Add real-sample invariants**
 
 ```python
 def test_skeleton_summary_is_internally_consistent(samples_dir):
@@ -742,11 +742,11 @@ def test_static_mesh_summary_is_internally_consistent(samples_dir):
     assert obj.semantic["lod_count"] == len(obj.semantic["lods"])
 ```
 
-- [ ] **Step 2: Implement only fields proven by the fixtures**
+- [x] **Step 2: Implement only fields proven by the fixtures**
 
 Emit bone name/parent index; mesh LOD/section/material-reference summaries; attach partial coverage for unavailable render payloads. PhysicsAsset fields are excluded and remain in #619.
 
-- [ ] **Step 3: Run, update #603, and commit**
+- [x] **Step 3: Run, update #603, and commit**
 
 Run: `python -m pytest tests/test_handler_contract.py -q`
 
@@ -772,7 +772,7 @@ git commit -m "feat: add package object skeleton and mesh summaries"
 - Consumes: current Material/Niagara/Blueprint/AnimBlueprint/Kismet extractors and stable package object relations.
 - Produces light summaries at `depth="asset"`; full graph/node/pin/bytecode data only for explicitly selected objects at `depth="decode"`.
 
-- [ ] **Step 1: Prove asset depth stays bounded**
+- [x] **Step 1: Prove asset depth stays bounded**
 
 ```python
 def test_asset_depth_omits_heavy_graph_arrays(samples_dir):
@@ -783,7 +783,7 @@ def test_asset_depth_omits_heavy_graph_arrays(samples_dir):
     assert "bytecode" not in obj.semantic
 ```
 
-- [ ] **Step 2: Prove decode is explicit and reference-safe**
+- [x] **Step 2: Prove decode is explicit and reference-safe**
 
 ```python
 def test_decode_graph_references_existing_nodes(samples_dir):
@@ -797,17 +797,17 @@ def test_decode_graph_references_existing_nodes(samples_dir):
     assert all(edge["from_node"] in node_ids and edge["to_node"] in node_ids for edge in graph["edges"])
 ```
 
-- [ ] **Step 3: Reuse existing extractors as handler internals**
+- [x] **Step 3: Reuse existing extractors as handler internals**
 
 Move no binary parser into projection. Adapter functions may translate existing IR objects into object-local semantic dictionaries, but the v2 handler owns status/coverage and the top-level format remains `uasset_read.package`.
 
-- [ ] **Step 4: Run graph/decode contracts**
+- [x] **Step 4: Run graph/decode contracts**
 
 Run: `python -m pytest tests/test_handler_contract.py tests/test_projection_contract.py -q`
 
 Expected: tracked Material, Niagara, Blueprint, and AnimBlueprint samples pass; no unsupported asset type is silently marked complete.
 
-- [ ] **Step 5: Update #620 and commit**
+- [x] **Step 5: Update #620 and commit**
 
 ```powershell
 git add src/uasset_read/v2/handlers.py src/uasset_read/v2/package/legacy.py tests/test_handler_contract.py tests/test_projection_contract.py
