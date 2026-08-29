@@ -214,29 +214,32 @@ def project_document(
                 "recoverable": True,
             }
             result["diagnostics"].append(trunc_diag)
+            # Attach the truncation block BEFORE measuring, so the byte cap
+            # accounts for the block itself.
+            result["truncation"] = {
+                "reason": "max_bytes",
+                "budget": max_bytes,
+                "actual": _encoded(),
+                "objects_dropped": 0,
+            }
+            result["next_offset"] = offset + len(result["objects"])
             while len(result["objects"]) > 0 and _encoded() > max_bytes:
                 result["objects"].pop()
-            # Add truncation metadata, then re-check: the metadata itself adds bytes
+                result["next_offset"] = offset + len(result["objects"])
+            actual = _encoded()
+            if actual > max_bytes:
+                raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({actual} bytes)")
             objects_dropped = len(selected) - len(result["objects"])
             result["truncation"] = {
                 "reason": "max_bytes",
                 "budget": max_bytes,
+                "actual": actual,
                 "objects_dropped": objects_dropped,
             }
-            result["next_offset"] = offset + len(result["objects"])
-            # Re-measure after adding truncation metadata; pop more objects if needed
-            while len(result["objects"]) > 0 and _encoded() > max_bytes:
-                result["objects"].pop()
-                result["truncation"]["objects_dropped"] += 1
-                result["next_offset"] = offset + len(result["objects"])
-            # Ensure next_offset is at least 1 when truncation occurs
-            # This signals to callers that more objects may exist
-            if result["objects"] or result["truncation"]["objects_dropped"] > 0:
-                result["next_offset"] = max(result.get("next_offset", offset), 1)
-            actual = _encoded()
-            if actual > max_bytes:
-                raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({actual} bytes)")
-            result["truncation"]["actual"] = actual
+            # When truncation drops all objects, ensure next_offset > 0 so
+            # callers know more objects exist and can retry with a larger budget.
+            if objects_dropped > 0 and result.get("next_offset", offset) == 0:
+                result["next_offset"] = 1
 
     return result
 
