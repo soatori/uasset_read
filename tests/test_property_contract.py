@@ -9,6 +9,9 @@ from pathlib import Path
 SAMPLES_DIR = Path(__file__).parent / "samples"
 SAMPLE = str(SAMPLES_DIR / "ABP_RifleAnimLayers.uasset")
 
+# Exports with known data issues — serial region extends beyond file size
+KNOWN_CORRUPT_EXPORTS = {"export:6"}  # K2Node_Event_1
+
 
 class TestNormalizePropertyBag:
     """Tests for normalize_property_bag."""
@@ -92,6 +95,9 @@ class TestObjectDepthSelection:
         doc = parse_package_document(SAMPLE, depth="object")
         for obj in doc.objects:
             assert obj.properties is not None, f"{obj.id} should have properties at object depth"
+            if obj.serial_region and obj.serial_region.size > 0:
+                if obj.id in KNOWN_CORRUPT_EXPORTS:
+                    continue
 
     def test_properties_are_json_serializable(self):
         from uasset_read.v2.api import parse_package_document
@@ -118,8 +124,8 @@ class TestHealthySamplePropertyGates:
 
         doc = parse_package_document(SAMPLE, depth="object")
         failures = [d for d in doc.diagnostics if d.code == "EXPORT_PROPERTY_PARSE_FAILED"]
-        # One known data issue: export:6 (K2Node_Event_1) serial region exceeds file size
-        real_failures = [f for f in failures if f.object_id != "export:6"]
+        # Exclude exports with known data issues
+        real_failures = [f for f in failures if f.object_id not in KNOWN_CORRUPT_EXPORTS]
         assert real_failures == [], f"healthy sample produced {len(real_failures)} unexpected property parse failures"
 
     def test_all_exports_with_serial_region_get_properties(self):
@@ -128,7 +134,6 @@ class TestHealthySamplePropertyGates:
         doc = parse_package_document(SAMPLE, depth="object")
         for obj in doc.objects:
             if obj.serial_region and obj.serial_region.size > 0:
-                # export:6 (K2Node_Event_1) has corrupt serial region exceeding file size
-                if obj.id == "export:6":
+                if obj.id in KNOWN_CORRUPT_EXPORTS:
                     continue
                 assert obj.properties is not None, f"{obj.id} has no property bag"

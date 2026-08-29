@@ -129,10 +129,13 @@ class TestByteBudget:
     def test_max_bytes_is_enforced_and_continuable(self, doc):
         from uasset_read.v2.projection import project_document
 
-        # This sample's envelope is ~19KB; use 21KB budget to test truncation
-        page = project_document(doc, limit=100, max_bytes=21000)
+        # Compute budget dynamically: empty envelope + 2KB headroom
+        empty = project_document(doc, limit=0)
+        envelope_size = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        budget = envelope_size + 2000
+        page = project_document(doc, limit=100, max_bytes=budget)
         encoded = json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        assert len(encoded) <= 21000
+        assert len(encoded) <= budget
         assert page["truncation"]["reason"] == "max_bytes"
         assert page["next_offset"] > 0
         assert any(d["code"] == "TRUNCATED" for d in page["diagnostics"])

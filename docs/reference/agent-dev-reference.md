@@ -5,7 +5,7 @@
 ## 首先读取
 
 | 目的 | 文档 |
-|---|---|
+| --- | --- |
 | 仓库级工作规则 | [`AGENTS.md`](../../AGENTS.md) |
 | 最新目标架构 | [`docs/designs/2026-08-26-package-first-uasset-parser-refactor.md`](../designs/2026-08-26-package-first-uasset-parser-refactor.md) |
 | 历史设计状态 | [`docs/designs/README.md`](../designs/README.md) |
@@ -32,7 +32,7 @@
 ## 按任务定位
 
 | 任务 | 入口 |
-|---|---|
+| --- | --- |
 | 当前解析管线 | `src/uasset_read/core/__init__.py`, `src/uasset_read/pipeline/` |
 | 当前 Semantic JSON | `src/uasset_read/semantic/`, [`semantic-json.md`](../formats/uasset/semantic-json.md) |
 | Package/sidecar/provider | `src/uasset_read/package.py` |
@@ -48,7 +48,7 @@
 - 代码、注释和错误信息使用英文；文档保持所在文档语言一致。
 - 临时调查材料放入 `temp/`。
 - 二进制读取必须有边界验证和严格回归测试。
-- Phase 0 将一次性替换旧测试体系；不要继续扩展 Semantic 1.x 测试，也不要新增独立验证脚本。root-level `tests/test_*_contract.py` is the strict contract layer; do not re-add a `tests/v2/` duplicate suite.
+- Phase 0 将一次性替换旧测试体系；不要继续扩展 Semantic 1.x 测试，也不要新增独立验证脚本。仓库根目录 `tests/test_*_contract.py` 是唯一的严格契约层，不得重新添加 `tests/v2/` 重复套件。
 - 样本缺失只登记 manifest gap，不用 skip/xfail/吞异常制造覆盖；支持声明必须有真实 fixture 和 structured diagnostics 断言。
 - 当前只以本机 Windows + Python 3.14 作为阻断测试环境；其他平台和 Python 版本暂缓且不得宣称已验证。
 - 不提交本机 UE 源码绝对路径、外部仓库副本、日志或 Agent 缓存。
