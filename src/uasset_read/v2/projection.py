@@ -119,14 +119,9 @@ def project_document(
 
     # Scope relations and diagnostics to the returned page
     page_ids = {o.id for o in page}
-    relations = [
-        {"kind": r.kind, "from": r.from_id, "to": r.to_id}
-        for r in doc.relations
-        if r.from_id in page_ids
-    ]
+    relations = [{"kind": r.kind, "from": r.from_id, "to": r.to_id} for r in doc.relations if r.from_id in page_ids]
     page_diagnostics = [
-        d for d in doc.diagnostics
-        if getattr(d, "object_id", None) is None or getattr(d, "object_id", None) in page_ids
+        d for d in doc.diagnostics if getattr(d, "object_id", None) is None or getattr(d, "object_id", None) in page_ids
     ]
 
     # Build result
@@ -167,6 +162,7 @@ def project_document(
 
     # max_bytes enforcement — measure AFTER adding TRUNCATED diagnostic
     if max_bytes is not None:
+
         def _encoded() -> int:
             return len(_json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
@@ -183,9 +179,7 @@ def project_document(
                 result["objects"].pop()
             actual = _encoded()
             if actual > max_bytes:
-                raise ValueError(
-                    f"Output budget {max_bytes} bytes too small for minimal envelope ({actual} bytes)"
-                )
+                raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({actual} bytes)")
             objects_dropped = len(selected) - len(result["objects"])
             result["truncation"] = {
                 "reason": "max_bytes",

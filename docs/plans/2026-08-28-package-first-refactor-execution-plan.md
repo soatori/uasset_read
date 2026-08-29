@@ -46,7 +46,7 @@ Snapshot used to write this plan:
 ## Fixture Decision Matrix
 
 | Capability/type | Tracked fixture | `external/` evidence | Can enter tracked tests now? | Plan decision |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | Legacy package, tagged properties | 47 legacy samples | many corroborating cases | yes | execute Tasks 1-10 |
 | Multi-asset package | several, including `ABP_RifleAnimLayers.uasset` | present | yes | keep strict regression |
 | Exports with zero `bIsAsset` | missing | 9 `uasset-rs` UE4.10 samples pass current parser with zero asset roles | yes, after attribution | promote the smallest sample in Task 1 |
@@ -66,7 +66,7 @@ The main path does not implement any row marked “deferred.” Closing the pare
 ## File Responsibility Map
 
 | File | Responsibility after this plan |
-|---|---|
+| --- | --- |
 | `src/uasset_read/v2/source.py` | Addressable sources plus bounded archive-compatible slices; no UObject logic |
 | `src/uasset_read/v2/package/legacy.py` | Legacy summary/tables/object/property reading and direct `PackageDocument` construction |
 | `src/uasset_read/v2/package/__init__.py` | Public package-reader exports only; no v1 `ParseResult` adapter |
