@@ -94,16 +94,25 @@ def test_projection_honors_views_pagination_and_byte_budget():
     from uasset_read.v2.projection import project_document
 
     doc = _document()
+    # View shape: semantic omits flags, raw includes them
     assert "flags" not in project_document(doc, view="semantic", limit=2)["objects"][0]
     assert "flags" in project_document(doc, view="raw", limit=2)["objects"][0]
     assert "debug" in project_document(doc, view="debug", limit=2)
 
+    # Pagination and byte budget
     empty = project_document(doc, limit=0)
     budget = len(json.dumps(empty, separators=(",", ":")).encode()) + 2000
     page = project_document(doc, limit=100, max_bytes=budget)
     assert len(json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode()) <= budget
     assert page["next_offset"] > 0
     assert page["truncation"]["reason"] == "max_bytes"
+
+    # fields filter: only requested fields plus id/name are returned
+    result = project_document(doc, limit=2, fields=["id"])
+    assert len(result["objects"]) == 2
+    assert set(result["objects"][0].keys()).issubset({"id", "name"})
+    assert isinstance(result["payloads"], list)
+    assert isinstance(result["relations"], list)
 
 
 def test_schema_accepts_the_example_and_all_public_views():
@@ -161,29 +170,4 @@ def test_library_parse_has_no_process_global_side_effects(tmp_path, monkeypatch)
     assert list(tmp_path.iterdir()) == []
 
 
-def test_projection_fields_filter_does_not_crash_and_scopes_payloads():
-    """fields= must filter object fields without crashing payload/relation scoping."""
-    from uasset_read.v2.projection import project_document
 
-    doc = _document()
-    result = project_document(doc, limit=2, fields=["class"])
-    assert len(result["objects"]) == 2
-    assert set(result["objects"][0]).issubset({"id", "name", "class"})
-    assert isinstance(result["payloads"], list)
-    assert isinstance(result["relations"], list)
-
-
-def test_max_bytes_caps_final_output_including_truncation_block():
-    """The final encoded projection must not exceed max_bytes once the truncation block is included."""
-    from uasset_read.v2.projection import project_document
-
-    doc = _document()
-    empty = project_document(doc, limit=0)
-    full = project_document(doc, limit=100)
-    empty_size = len(json.dumps(empty, separators=(",", ":")).encode())
-    full_size = len(json.dumps(full, separators=(",", ":")).encode())
-    budget = (empty_size + full_size) // 2  # strictly between envelope and full page
-    page = project_document(doc, limit=100, max_bytes=budget)
-    final = len(json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode())
-    assert final <= budget
-    assert page["truncation"]["reason"] == "max_bytes"

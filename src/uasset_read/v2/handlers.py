@@ -77,6 +77,7 @@ def run_handlers(
         except Exception as e:
             # Handler failure must not affect other objects
             handler_name = type(handler).__name__
+            obj.status.semantic = "partial"
             coverage.append(
                 CoverageEntry(
                     feature=f"handler.{handler_name}",
@@ -132,10 +133,7 @@ class UserDefinedEnumHandler:
         if export is None:
             return None
 
-        try:
-            enum_data = extract_user_defined_enum(export, name_map)
-        except Exception:
-            return None
+        enum_data = extract_user_defined_enum(export, name_map)
 
         if enum_data is None:
             return None
@@ -190,10 +188,7 @@ class UserDefinedStructHandler:
         if export is None:
             return None
 
-        try:
-            struct_data = extract_user_defined_struct(export, name_map)
-        except Exception:
-            return None
+        struct_data = extract_user_defined_struct(export, name_map)
 
         if struct_data is None:
             return None
@@ -638,9 +633,6 @@ class SkeletonHandler:
                         detail="BoneTree property not available",
                     )
                 )
-
-        obj.coverage.extend(coverage)
-        return result
 
         obj.coverage.extend(coverage)
         return result

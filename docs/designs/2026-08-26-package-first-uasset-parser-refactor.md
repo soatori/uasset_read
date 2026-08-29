@@ -758,6 +758,10 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - manifest 不能由测试自动改写。新增或修改预期值必须先核对样本与 UE 源码，再由评审确认。
 - 不提交墙钟耗时阈值。性能门禁只使用确定性的 bytes、count、range、pagination 和 resource budget。
 - 测试代码只放在 `tests/`；根目录和 `scripts/` 不增加独立验证程序。一次性调查使用命令行或未跟踪的 `temp/` 输出。
+- 标准库 AST 门禁要求：
+  - `tests/` 根目录只能有两个正式 Python 测试文件，唯一允许的永久子目录为 `tests/samples/`。
+  - `test_core.py` 只能使用顶层 `test_*` 函数；拒绝测试类、参数化 decorator、动态 `test_*` 赋值，从而使 AST 数量等于 pytest 收集项。
+  - 核心测试收集项不得超过 10；样本参数项不设上限。
 - pytest cache、`__pycache__`、日志、golden 调试转储和本机路径不得进入版本控制。
 
 ### 必须存在的回归

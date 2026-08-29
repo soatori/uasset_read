@@ -63,8 +63,8 @@ class PackageDocument:
     view: str = "semantic"
     depth: str = "asset"
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, *, view: str | None = None, depth: str | None = None) -> dict[str, Any]:
         """Serialize to the v2 JSON contract via project_document."""
         from .projection import project_document
 
-        return project_document(self, view=self.view, depth=self.depth)
+        return project_document(self, view=view or self.view, depth=depth or self.depth)
