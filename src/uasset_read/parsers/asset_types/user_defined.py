@@ -37,8 +37,6 @@ def extract_user_defined_enum(export: Any, name_map: List[str]) -> Optional[Dict
         and cpp_type, or None if no meaningful data found.
     """
     properties = getattr(export, "properties", None) or []
-    if not properties:
-        return None
 
     enum_entries: List[Dict[str, Any]] = []
     cpp_type = ""
@@ -52,8 +50,9 @@ def extract_user_defined_enum(export: Any, name_map: List[str]) -> Optional[Dict
         # DisplayNameMap: TMap<FName, FText> - maps enum value names to display names
         # The keys can be name indices (integers) or FName strings
         if prop_name == "DisplayNameMap" and prop_type == "MapProperty":
-            if hasattr(prop_value, "entries"):
-                for entry in prop_value.entries:
+            entries = getattr(prop_value, "entries", None)
+            if entries is not None:
+                for entry in entries:
                     if isinstance(entry, dict):
                         key = entry.get("key")
                         value = entry.get("value")
@@ -144,7 +143,10 @@ def extract_user_defined_struct(export: Any, name_map: List[str]) -> Optional[Di
         # StructFlags: uint32
         if prop_name == "StructFlags" and prop_type == "UInt32Property":
             if prop_value is not None:
-                struct_flags = int(prop_value)
+                try:
+                    struct_flags = int(prop_value)
+                except (ValueError, TypeError):
+                    pass
 
         # Guid: FGuid
         elif prop_name == "Guid" and prop_type == "StructProperty":
@@ -160,19 +162,17 @@ def extract_user_defined_struct(export: Any, name_map: List[str]) -> Optional[Di
                     guid = f"{a:08X}-{b:04X}-{c:04X}-{(d >> 16) & 0xFFFF:04X}-{d & 0xFFFF:04X}00000000"
                 else:
                     guid = str(prop_value)
-            elif hasattr(prop_value, "fields") and isinstance(prop_value.fields, dict):
-                # Handle StructValue objects
-                fields = prop_value.fields
-                if all(k in fields for k in ("A", "B", "C", "D")):
-                    a = fields.get("A", 0)
-                    b = fields.get("B", 0)
-                    c = fields.get("C", 0)
-                    d = fields.get("D", 0)
+            else:
+                pv_fields = getattr(prop_value, "fields", None)
+                if isinstance(pv_fields, dict) and all(k in pv_fields for k in ("A", "B", "C", "D")):
+                    # Handle StructValue objects
+                    a = pv_fields.get("A", 0)
+                    b = pv_fields.get("B", 0)
+                    c = pv_fields.get("C", 0)
+                    d = pv_fields.get("D", 0)
                     guid = f"{a:08X}-{b:04X}-{c:04X}-{(d >> 16) & 0xFFFF:04X}-{d & 0xFFFF:04X}00000000"
-                else:
+                elif prop_value is not None:
                     guid = str(prop_value)
-            elif prop_value is not None:
-                guid = str(prop_value)
 
         # Skip internal UE properties
         elif prop_name in ("DeprecatedData", "EditorOnlyData", "Native"):

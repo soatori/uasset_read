@@ -12,7 +12,7 @@ Design doc reference:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from .api import parse_package_document
 from .document import PackageDocument
@@ -31,14 +31,15 @@ def inspect_package(
     file_path: str,
     *,
     max_bytes: int = _MAX_BYTES_INSPECT,
-    depth: str = "package",
-    limit: int | None = None,
+    depth: Literal["package", "object", "asset", "decode"] = "package",
+    limit: int = 0,
 ) -> dict[str, Any]:
     """Tool: inspect_package — source/package/summary/diagnostic overview.
 
     Returns a concise summary of the package without listing all objects.
+    Default limit=0 gives "package envelope + diagnostics summary" semantics.
     """
-    doc = parse_package_document(file_path)
+    doc = parse_package_document(file_path, depth=depth)
     projected = project_document(doc, depth=depth, limit=limit, max_bytes=max_bytes)
     return projected
 

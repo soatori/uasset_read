@@ -116,13 +116,46 @@ class UserDefinedEnumHandler:
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
-        # Enum entries live in the name map, not in properties.
+        from uasset_read.parsers.asset_types.user_defined import (
+            extract_user_defined_enum,
+        )
+
+        # package_data is (export_map, name_map) tuple from legacy reader
+        export_map = package_data[0] if isinstance(package_data, tuple) else []
+        name_map = package_data[1] if isinstance(package_data, tuple) else []
+
+        # Find the matching export by index
+        export = None
+        if obj.table_index < len(export_map):
+            export = export_map[obj.table_index]
+
+        if export is None:
+            return None
+
+        try:
+            enum_data = extract_user_defined_enum(export, name_map)
+        except Exception:
+            return None
+
+        if enum_data is None:
+            return None
+
         result: dict[str, Any] = {
             "kind": "user_defined_enum",
-            "enum_name": obj.name,
+            "enum_name": enum_data.get("enum_name", obj.name),
+            "cpp_type": enum_data.get("cpp_type", ""),
+            "entries": enum_data.get("entries", []),
         }
+
+        # Determine coverage
+        entries = result["entries"]
+        if entries:
+            coverage_status = "present"
+        else:
+            coverage_status = "missing"
+
         coverage: list[CoverageEntry] = [
-            CoverageEntry(feature="handler.UserDefinedEnumHandler", status="present"),
+            CoverageEntry(feature="handler.UserDefinedEnumHandler", status=coverage_status),
         ]
         obj.coverage.extend(coverage)
         return result
@@ -141,15 +174,50 @@ class UserDefinedStructHandler:
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
+        from uasset_read.parsers.asset_types.user_defined import (
+            extract_user_defined_struct,
+        )
+
+        # package_data is (export_map, name_map) tuple from legacy reader
+        export_map = package_data[0] if isinstance(package_data, tuple) else []
+        name_map = package_data[1] if isinstance(package_data, tuple) else []
+
+        # Find the matching export by index
+        export = None
+        if obj.table_index < len(export_map):
+            export = export_map[obj.table_index]
+
+        if export is None:
+            return None
+
+        try:
+            struct_data = extract_user_defined_struct(export, name_map)
+        except Exception:
+            return None
+
+        if struct_data is None:
+            return None
+
         result: dict[str, Any] = {
             "kind": "user_defined_struct",
-            "struct_name": obj.name,
+            "struct_name": struct_data.get("struct_name", obj.name),
+            "struct_flags": struct_data.get("struct_flags", 0),
+            "guid": struct_data.get("guid", ""),
+            "fields": struct_data.get("fields", []),
         }
-        props = obj.properties or {}
-        if props:
-            result["field_count"] = len(props)
+
+        # Determine coverage
+        fields = result["fields"]
+        guid = result["guid"]
+        if fields and guid:
+            coverage_status = "present"
+        elif fields:
+            coverage_status = "partial"
+        else:
+            coverage_status = "missing"
+
         coverage: list[CoverageEntry] = [
-            CoverageEntry(feature="handler.UserDefinedStructHandler", status="present"),
+            CoverageEntry(feature="handler.UserDefinedStructHandler", status=coverage_status),
         ]
         obj.coverage.extend(coverage)
         return result
@@ -297,7 +365,7 @@ class TexturePayloadHandler:
             # Direct fields on the struct (e.g. SizeX, SizeY, or a single Size)
             size_val = fields.get("Size") or fields.get("total_size") or fields.get("BulkDataSize")
             if isinstance(size_val, (int, float)):
-                total_size = int(size_val)
+                total_size = int(size_val)  # safe: isinstance guard above
 
         # If the struct_type hints at size (e.g. "5_16"), try to extract
         struct_type = imported_size.get("struct_type", "")

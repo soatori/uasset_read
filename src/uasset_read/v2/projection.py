@@ -108,6 +108,12 @@ def project_document(
         limit=limit,
     )
 
+    # Scope relations and diagnostics to the returned page
+    # IMPORTANT: compute page_ids BEFORE fields filter, since fields converts to dicts
+    page_ids = {o.id for o in page if isinstance(o, ObjectRecord)}
+    if not page_ids and page and isinstance(page[0], dict):
+        page_ids = {o["id"] for o in page if "id" in o}
+
     # Filter fields if requested
     if fields:
         field_set = set(fields)
@@ -116,12 +122,45 @@ def project_document(
             d = obj_to_dict(obj, view=view)
             filtered.append({k: v for k, v in d.items() if k in field_set or k in ("id", "name")})
         page = filtered
-
-    # Scope relations and diagnostics to the returned page
-    page_ids = {o.id for o in page}
     relations = [{"kind": r.kind, "from": r.from_id, "to": r.to_id} for r in doc.relations if r.from_id in page_ids]
     page_diagnostics = [
         d for d in doc.diagnostics if getattr(d, "object_id", None) is None or getattr(d, "object_id", None) in page_ids
+    ]
+
+    # Find all objects reachable from the page through relations
+    reachable_ids = set(page_ids)
+    frontier = set(page_ids)
+    while frontier:
+        next_frontier = set()
+        for r in doc.relations:
+            if r.from_id in frontier and r.to_id not in reachable_ids:
+                next_frontier.add(r.to_id)
+            if r.to_id in frontier and r.from_id not in reachable_ids:
+                next_frontier.add(r.from_id)
+        frontier = next_frontier
+        reachable_ids.update(frontier)
+
+    # Filter dependencies to only those reachable from the page
+    reachable_imports = {idx for idx, imp in enumerate(doc.dependencies) if f"import:{imp.index}" in reachable_ids}
+    filtered_dependencies = [
+        {"index": d.index, "class": d.class_name, "object_name": d.object_name}
+        for i, d in enumerate(doc.dependencies)
+        if i in reachable_imports
+    ]
+
+    # Filter payloads to only those owned by objects in the page
+    filtered_payloads = [
+        {
+            "id": p.id,
+            "owner": p.owner_id,
+            "kind": p.kind,
+            "source_region": p.source_region,
+            "offset": p.offset,
+            "stored_size": p.stored_size,
+            "status": p.status,
+        }
+        for p in doc.payloads
+        if p.owner_id in page_ids
     ]
 
     # Build result
@@ -132,12 +171,12 @@ def project_document(
         "depth": depth,
         "source": {"kind": doc.source.kind, "name": doc.source.name, "size": doc.source.size},
         "package": _package_to_dict(doc, view=view),
-        "objects": [obj_to_dict(o, view=view) for o in page],
+        "objects": page
+        if (fields and page and isinstance(page[0], dict))
+        else [obj_to_dict(o, view=view) for o in page],
         "relations": relations,
-        "dependencies": [
-            {"index": d.index, "class": d.class_name, "object_name": d.object_name} for d in doc.dependencies
-        ],
-        "payloads": [],
+        "dependencies": filtered_dependencies,
+        "payloads": filtered_payloads,
         "diagnostics": [d.to_dict() for d in page_diagnostics],
         "summary": {
             "object_count": doc.summary.object_count,
@@ -177,17 +216,23 @@ def project_document(
             result["diagnostics"].append(trunc_diag)
             while len(result["objects"]) > 0 and _encoded() > max_bytes:
                 result["objects"].pop()
-            actual = _encoded()
-            if actual > max_bytes:
-                raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({actual} bytes)")
+            # Add truncation metadata, then re-check: the metadata itself adds bytes
             objects_dropped = len(selected) - len(result["objects"])
             result["truncation"] = {
                 "reason": "max_bytes",
                 "budget": max_bytes,
-                "actual": actual,
                 "objects_dropped": objects_dropped,
             }
             result["next_offset"] = offset + len(result["objects"])
+            # Re-measure after adding truncation metadata; pop more objects if needed
+            while len(result["objects"]) > 0 and _encoded() > max_bytes:
+                result["objects"].pop()
+                result["truncation"]["objects_dropped"] += 1
+                result["next_offset"] = offset + len(result["objects"])
+            actual = _encoded()
+            if actual > max_bytes:
+                raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({actual} bytes)")
+            result["truncation"]["actual"] = actual
 
     return result
 
