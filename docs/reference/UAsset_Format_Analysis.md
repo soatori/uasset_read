@@ -2,7 +2,7 @@
 
 > 基于 Unreal Engine 源码分析  
 > 分析日期: 2026-08-26  
-> 源码路径: `E:\Develop\lib\UnrealEngine`
+> 源码路径: `<UnrealEngine source root>`（分析者本地 checkout，非仓库内容）
 
 ---
 

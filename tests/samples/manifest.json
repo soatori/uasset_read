@@ -668,7 +668,9 @@
       "LevelDesign_ABP_Manny.uasset"
     ],
     "samples_with_parse_errors": [],
-    "fixture_gap_count": 5
+    "fixture_gap_count": 5,
+    "fixture_gaps_total": 6,
+    "fixture_gaps_note": "one of the six entries (no_b_is_asset_package) is status=covered"
   },
   "fixture_gaps": {
     "zen_package": {

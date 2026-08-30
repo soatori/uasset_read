@@ -24,7 +24,9 @@
 
 ## 当前与目标边界
 
-- 当前 JSON 仍使用 Semantic 1.x，并选择单个 primary export。
+- 三个入口（CLI 默认、Python API、Agent tool）的默认输出均为 PackageDocument v2；legacy Semantic 1.x JSON 仅通过 `--legacy-json` 显式选择，v1 pipeline 在 decode-parity 完成后移除。
+- `extract_payload` 仍是 descriptor 级；真实提取 blocked on Phase 5 containers。
+- 正式测试契约层只有 `tests/test_core.py` 与 `tests/test_samples.py`（`tests/contract/` 已删除并收敛）。
 - 当前 v2 使用 package-first `PackageDocument`（legacy + tagged properties + sample-backed handlers 已实现；Zen/IoStore、unversioned、payload extraction 仍 deferred，见 docs/designs/README.md），输出所有 objects。
 - 当前 Pak/IoStore、日志和 Agent 能力不得按目标设计提前宣称完成。
 - 旧领域 Semantic 文档可用于理解 v0.5.5，但不得继续扩展为新的顶层 format。

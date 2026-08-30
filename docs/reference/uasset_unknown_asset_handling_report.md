@@ -6,9 +6,9 @@
 
 本文研究 `uasset_read` 当前在遇到特殊或未知类型 uasset 资产时的处理方式，并对比两个参考代码库：
 
-- 当前项目：`E:\Develop\uasset_read`
-- CUE4Parse：`E:\Develop\uasset_read\external\CUE4Parse`
-- Unreal Engine：`E:\Develop\lib\UnrealEngine`
+- 当前项目：本仓库（`uasset_read`）
+- CUE4Parse：外部参考库，分析时位于本仓库 checkout 旁的 `external/CUE4Parse`（不随仓库分发）
+- Unreal Engine：`<UnrealEngine source root>`（分析者本地 checkout，非仓库内容）
 
 重点问题：
 
