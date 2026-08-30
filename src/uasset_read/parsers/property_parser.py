@@ -1131,6 +1131,7 @@ def parse_properties_from_export(
     mappings: Optional[Any] = None,
     game: Optional[str] = None,
     tolerant: bool = True,
+    run_class_handlers: bool = True,
 ) -> List[PropertyValue]:
     """Read all properties from an export entry (PROP-01).
 
@@ -1232,7 +1233,7 @@ def parse_properties_from_export(
         )
 
     # Asset type handler dispatch: called after property parsing
-    if skip_class_name is not None:
+    if run_class_handlers and skip_class_name is not None:
         _try_asset_type_handler(
             export,
             archive,

@@ -7,6 +7,7 @@ without going through the v1 pipeline.
 
 from __future__ import annotations
 
+import struct
 from pathlib import Path
 from typing import Literal, Sequence
 
@@ -411,6 +412,7 @@ class LegacyPackageReader:
                     summary=summary,
                     object_ids=object_ids,
                     diagnostics=diagnostics,
+                    run_class_handlers=depth != "object",
                 )
 
             # 17. Run asset handlers at depth >= asset
@@ -478,8 +480,17 @@ class LegacyPackageReader:
         summary: PackageFileSummary,
         object_ids: Sequence[str] | None,
         diagnostics: list[Diagnostic],
+        run_class_handlers: bool = False,
     ) -> None:
         """Parse properties for requested objects at depth="object".
+
+        ``run_class_handlers`` re-enables the v1 AssetTypeHandler dispatch
+        at asset/decode depth only: the v2 handlers in ``v2/handlers.py``
+        still consume the ``_asset_type_data``/``properties`` mutations it
+        makes on exports (DataTable, SoundWave, UserDefinedStruct). Cutting
+        that coupling inside handlers.py is a follow-up; at object depth
+        nothing needs it, so the dispatch — and its ``logger.warning`` leak
+        — stays off there.
 
         If object_ids is None, parses ALL objects.
         Each export's serial region is bounded via SliceReader.sub_slice().
@@ -507,7 +518,8 @@ class LegacyPackageReader:
                 continue
 
             try:
-                # Use the full archive — property parser seeks to absolute offsets
+                # Absolute-offset parser over the full archive, bounded by the
+                # post-parse position check below (recovery plan: do not rebase).
                 raw_props = parse_properties_from_export(
                     export=export_map[i],
                     archive=archive,
@@ -518,15 +530,34 @@ class LegacyPackageReader:
                     mappings=self._mappings_path,
                     game=self._game,
                     tolerant=self._tolerant,
+                    run_class_handlers=run_class_handlers,
                 )
-
+                serial_end = export_map[i].serial_offset + export_map[i].serial_size
+                overrun = archive.tell() - serial_end
                 obj.properties = normalize_property_bag(raw_props)
-                obj.status = ObjectStatus(
-                    parse=obj.status.parse,
-                    semantic=obj.status.semantic,
-                )
+                if overrun > 0:
+                    obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
+                    diagnostics.append(
+                        Diagnostic(
+                            severity="warning",
+                            code="EXPORT_PROPERTY_BOUNDS_EXCEEDED",
+                            message=(
+                                f"Export {i} ({obj.name}) property parse ran "
+                                f"{overrun} bytes past serial_end {serial_end}"
+                            ),
+                            stage="properties.tagged",
+                            object_id=obj.id,
+                            effect="semantic_loss",
+                            recoverable=True,
+                        )
+                    )
+                else:
+                    obj.status = ObjectStatus(
+                        parse=obj.status.parse,
+                        semantic=obj.status.semantic,
+                    )
 
-            except Exception as e:
+            except (ParseError, EOFError, struct.error, ValueError, UnicodeError) as e:
                 obj.properties = {}
                 obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
                 diagnostics.append(

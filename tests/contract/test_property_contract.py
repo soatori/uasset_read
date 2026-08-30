@@ -137,3 +137,40 @@ class TestHealthySamplePropertyGates:
                 if obj.id in KNOWN_CORRUPT_EXPORTS:
                     continue
                 assert obj.properties is not None, f"{obj.id} has no property bag"
+
+
+class TestPropertyBoundEnforcement:
+    def test_parse_past_serial_end_is_flagged_not_silent(self, monkeypatch):
+        import uasset_read.parsers.property_parser as pp
+        from uasset_read.v2.api import parse_package_document
+
+        def fake_overrun(**kwargs):
+            export = kwargs["export"]
+            kwargs["archive"].seek(export.serial_offset + export.serial_size + 8)
+            return []
+
+        monkeypatch.setattr(pp, "parse_properties_from_export", fake_overrun)
+        doc = parse_package_document(SAMPLE, depth="object")
+        overrun = [d for d in doc.diagnostics if d.code == "EXPORT_PROPERTY_BOUNDS_EXCEEDED"]
+        assert overrun, "property parse exceeded the serial region with no diagnostic"
+        assert all(d.object_id and d.stage == "properties.tagged" for d in overrun)
+
+    def test_v2_path_emits_no_handler_warnings(self, capfd, caplog):
+        # capfd alone cannot catch the leak under pytest: the logging plugin
+        # installs a root handler, which suppresses logging.lastResort. Assert
+        # on captured WARNING records too — the real contract is "no warning
+        # logs on the v2 parse path".
+        import logging
+
+        from uasset_read.v2.api import parse_package_document
+
+        with caplog.at_level(logging.WARNING):
+            parse_package_document(
+                SAMPLES_DIR / "NM_BPSystemEvent.uasset", depth="object"
+            )
+        captured = capfd.readouterr()
+        assert captured.err == "", f"v2 parse leaked stderr: {captured.err[:200]}"
+        warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+        assert warnings == [], (
+            f"v2 parse emitted warning logs: {[r.getMessage()[:120] for r in warnings]}"
+        )
