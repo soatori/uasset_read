@@ -833,7 +833,9 @@ git commit -m "refactor: move graph semantics behind object decode depth"
 - Consumes: Tasks 1-10 and their exact test output.
 - Produces: current docs that claim only implemented legacy/tagged/sample-backed behavior, plus a parent issue checklist separating passed gates from fixture-blocked work.
 
-- [ ] **Step 1: Run the full local gate from a clean Python process**
+> **Gate record (closed by the 2026-08-31 v2 closeout plan, Steps 1-3, at HEAD `f2f7b0bc`):** Windows + Python 3.14.7; `pytest --collect-only` = 89; full suite **89 passed, 0 skips/xfail, 5:52**; `ruff check src tests` clean; `python -m build` produced wheel + sdist successfully via `--outdir temp/build-gate` (a stale external process holds file handles on the two `dist/` artifacts dated 2026-08-15, blocking in-place replacement — environment issue, not packaging); `git diff --check` clean. Spot checks: default CLI emits `uasset_read.package` (package + asset depth), `--legacy-json` emits `uasset_read.data_table_semantic`.
+
+- [x] **Step 1: Run the full local gate from a clean Python process**
 
 ```powershell
 python --version
@@ -847,7 +849,7 @@ git status --short
 
 Expected: Python 3.14 on the blocking machine; no unexpected skip/xfail; all commands exit 0. If Ruff/build tooling is absent, install the project development tools before claiming the gate.
 
-- [ ] **Step 2: Run real-sample spot checks through every entry point**
+- [x] **Step 2: Run real-sample spot checks through every entry point**
 
 ```powershell
 python -m uasset_read --v2 --depth package --limit 2 tests/samples/ABP_RifleAnimLayers.uasset
@@ -856,7 +858,7 @@ python -m uasset_read --v2 --depth asset --limit 2 tests/samples/ALS_FootstepDat
 
 Compare Python, CLI, and Agent outputs for IDs, status, diagnostics, truncation, and absence of blob bytes.
 
-- [ ] **Step 3: Update current-state documentation**
+- [x] **Step 3: Update current-state documentation**
 
 Document Legacy + Tagged + implemented handler families as current only after the gate passes. Keep Unversioned, sidecars, Zen/IoStore, Pak, CurveTable, StringTable, Anim extras, and Physics marked deferred with their issue links.
 

@@ -80,7 +80,7 @@ The canonical design (line 789) says CI pauses pytest and only the local Windows
 
 **Files:** none.
 
-- [ ] **Step 1: Confirm the baseline is exactly as documented above**
+- [x] **Step 1: Confirm the baseline is exactly as documented above**
 
 ```powershell
 git status --short                      # expect: empty
@@ -103,7 +103,7 @@ If any command disagrees, STOP and re-derive the baseline before touching later 
 - Consumes: `run_handlers(obj, context, all_objects, package_data) -> tuple[dict|None, list[CoverageEntry], list[Diagnostic]]`; `ObjectStatus` (field `semantic: str`).
 - Produces: same signature; new guarantee — after `run_handlers`, `obj.status.semantic == "partial"` iff any matched handler raised OR (nothing failed and at least one handler matched with `semantic` produced → `"complete"`); no handler mutates status inside the loop.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/contract/test_handler_contract.py` (construction pattern matches `TestHandlerFailureIsolation` already in that file):
 
@@ -165,12 +165,12 @@ class TestHandlerStatusPrecedence:
         assert obj.status.semantic == "complete"
 ```
 
-- [ ] **Step 2: Run to verify the first test fails**
+- [x] **Step 2: Run to verify the first test fails**
 
 Run: `python -m pytest tests/contract/test_handler_contract.py::TestHandlerStatusPrecedence -q`
 Expected: `test_later_success_does_not_mask_earlier_failure` FAIL (`'complete' == 'partial'`); `test_clean_success_still_marks_complete` PASS.
 
-- [ ] **Step 3: Fix `run_handlers`**
+- [x] **Step 3: Fix `run_handlers`**
 
 Replace the body of `run_handlers` (lines 66-101) with loop-scoped status assignment:
 
@@ -219,12 +219,12 @@ Replace the body of `run_handlers` (lines 66-101) with loop-scoped status assign
     return semantic, coverage, diagnostics
 ```
 
-- [ ] **Step 4: Run the handler contract + fast gate**
+- [x] **Step 4: Run the handler contract + fast gate**
 
 Run: `python -m pytest tests/contract/test_handler_contract.py tests/test_core.py tests/test_samples.py -q`
 Expected: all PASS. (If any sample's semantic flips `complete → partial`, that exposes a *real* silently-swallowed handler bug — investigate, do not weaken the test.)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/uasset_read/v2/handlers.py tests/contract/test_handler_contract.py
@@ -246,7 +246,7 @@ Three coupled defects at one boundary (`legacy.py:_parse_object_properties` → 
 - Consumes: `parse_properties_from_export(export, archive, summary, name_map, export_map, import_map, mappings=..., game=..., tolerant=...)` — gains keyword `run_class_handlers: bool = True`; `ObjectExport.serial_offset`/`.serial_size`; `archive.tell()`.
 - Produces: v2 calls it with `run_class_handlers=False`; new diagnostic code `EXPORT_PROPERTY_BOUNDS_EXCEEDED` (stage `properties.tagged`, severity `warning`, `effect="semantic_loss"`, `recoverable=True`); failure diagnostics now only from the narrowed exception tuple.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/contract/test_property_contract.py` (module already defines `SAMPLE` for a healthy legacy fixture; reuse it):
 
@@ -279,16 +279,16 @@ class TestPropertyBoundEnforcement:
 
 (`SAMPLES` is exported by the existing module or `tests/conftest.py`; add `SAMPLES = Path(__file__).parent.parent / "samples"` next to `SAMPLE` if the file only has a single-sample constant.)
 
-- [ ] **Step 2: Run to verify both fail**
+- [x] **Step 2: Run to verify both fail**
 
 Run: `python -m pytest tests/contract/test_property_contract.py::TestPropertyBoundEnforcement -q`
 Expected: FAIL #1 (`EXPORT_PROPERTY_BOUNDS_EXCEEDED` diagnostics missing — the monkeypatch target must also be patched where legacy.py imports it; see Step 3 note), FAIL #2 (stderr shows `AssetTypeHandler ... failed`).
 
-- [ ] **Step 3: Implement the parser flag**
+- [x] **Step 3: Implement the parser flag**
 
 In `src/uasset_read/parsers/property_parser.py`, add `run_class_handlers: bool = True` to `parse_properties_from_export`'s keyword parameters. Guard the asset-type handler dispatch block (~line 1234) with `if run_class_handlers:` — keep v1 behavior byte-identical when the parameter is not passed. In `src/uasset_read/v2/package/legacy.py:511-521` pass `run_class_handlers=False`. Note for the test: `legacy.py` imports the function inside the method (`from ...parsers.property_parser import parse_properties_from_export`), so patching `uasset_read.parsers.property_parser.parse_properties_from_export` takes effect at call time — no extra change needed.
 
-- [ ] **Step 4: Implement the bound check + narrowed exceptions**
+- [x] **Step 4: Implement the bound check + narrowed exceptions**
 
 Replace `legacy.py:509-542` with:
 
@@ -351,12 +351,12 @@ Replace `legacy.py:509-542` with:
 
 Add `import struct` to legacy.py's import block if absent (`ParseError` is already imported at line 13).
 
-- [ ] **Step 5: Run focused, then the whole suite**
+- [x] **Step 5: Run focused, then the whole suite**
 
 Run: `python -m pytest tests/contract/test_property_contract.py tests/contract/test_document_contract.py tests/test_core.py tests/test_samples.py -q` then `python -m pytest -q`
 Expected: all PASS. Any `EXPORT_PROPERTY_PARSE_FAILED` that previously came from an out-of-tuple exception (e.g. `KeyError`, `AttributeError`) now surfaces as a traceback — that is intended (unexpected bugs must not hide as data). If a *malformed-fixture* test fails on a new exception type, add only that concrete type to the tuple with a code comment naming the fixture — never re-widen to `Exception`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add src/uasset_read/v2/package/legacy.py src/uasset_read/parsers/property_parser.py tests/contract/test_property_contract.py
@@ -375,7 +375,7 @@ git commit -m "fix: enforce property serial-region bound and stop v1 handler dis
 - Consumes: existing `NiagaraHandler` lightweight enrichment (`{"kind": "niagara", "niagara_type": <class>, "name": ...}`) and `test_real_sample_proves_claimed_capability` subset-matching (`expected` keys must appear in `obj.semantic`).
 - Produces: `NM_BPSystemEvent.uasset` yields `semantic.kind == "niagara"` for all 43 objects; 5 new capability rows.
 
-- [ ] **Step 1: Write the failing capability rows**
+- [x] **Step 1: Write the failing capability rows**
 
 Add to `CAPABILITIES` in `tests/test_samples.py`:
 
@@ -390,12 +390,12 @@ Add to `CAPABILITIES` in `tests/test_samples.py`:
 
 (`NiagaraGraph` already enriches today — it is included because the class was never capability-gated. Class names verified against the fixture: exactly these 5 were missing.)
 
-- [ ] **Step 2: Run to verify the 5 new rows fail**
+- [x] **Step 2: Run to verify the 5 new rows fail**
 
 Run: `python -m pytest tests/test_samples.py -q -k Niagara`
 Expected: 5 FAIL (`StopIteration` from the `next(...)` finder for missing classes).
 
-- [ ] **Step 3: Extend the handler**
+- [x] **Step 3: Extend the handler**
 
 Edit `_NIAGARA_CLASSES` to the full set (existing 8 + 5):
 
@@ -417,7 +417,7 @@ Edit `_NIAGARA_CLASSES` to the full set (existing 8 + 5):
     )
 ```
 
-- [ ] **Step 4: Verify full coverage of the fixture**
+- [x] **Step 4: Verify full coverage of the fixture**
 
 Run:
 ```powershell
@@ -426,7 +426,7 @@ python -c "from uasset_read.v2.api import parse_package_document as p; d=p('test
 ```
 Expected: tests PASS; probe prints `complete 43 / 43`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src/uasset_read/v2/handlers.py tests/test_samples.py
@@ -447,7 +447,7 @@ Migration Completion Gate item (design line 823): legacy Semantic 1.x is no long
 - Consumes: existing v2 block at `cli.py:428-453` (`parse_package_document` + `project_document`), `resolve_format`, `args.depth/limit/max_bytes`.
 - Produces: `python -m uasset_read FILE` emits `uasset_read.package` v2 JSON; `--legacy-json` selects the previous v1 pipeline output; `--v2` accepted as a deprecated no-op (kept so existing scripts/CI spot checks don't hard-fail during rollout).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/contract/test_application_contract.py`, replace `test_cli_no_v2_defaults_to_legacy` with:
 
@@ -469,12 +469,12 @@ def test_cli_legacy_json_opt_in(run_cli_json, healthy_sample):
 
 Match the existing helper names in that file for CLI invocation (the file's 14 tests already call the CLI through one shared helper — reuse it; if no `healthy_sample` fixture exists, use the module's existing sample path constant).
 
-- [ ] **Step 2: Run to verify failures**
+- [x] **Step 2: Run to verify failures**
 
 Run: `python -m pytest tests/contract/test_application_contract.py -q -k "defaults_to_v2 or noop or legacy_json_opt_in"`
 Expected: `test_cli_defaults_to_v2_package_document` FAIL (default output is v1 shape); others may fail on unknown `--legacy-json` argument (exit 2).
 
-- [ ] **Step 3: Implement the switch**
+- [x] **Step 3: Implement the switch**
 
 In the argument group, change line 91 to a deprecation no-op and add the opt-in:
 
@@ -493,14 +493,14 @@ In the argument group, change line 91 to a deprecation no-op and add the opt-in:
 
 In `run`/main dispatch, replace `if args.v2:` (line 429) with `if not args.legacy_json:` so the existing v2 block becomes the default; everything below (v1 pipeline) runs only with `--legacy-json`. Do not otherwise modify the v1 code path.
 
-- [ ] **Step 4: Update the remaining CLI tests**
+- [x] **Step 4: Update the remaining CLI tests**
 
 Sweep `tests/contract/test_application_contract.py` and `tests/test_core.py` for CLI invocations that pass `"--v2"` and drop the flag (it still works, but the parity tests should prove the *default* path). `test_cli_agent_python_share_projection` must compare the no-flag CLI against the Python/agent projections.
 
 Run: `python -m pytest tests/contract/test_application_contract.py tests/test_core.py -q`
 Expected: PASS.
 
-- [ ] **Step 5: Full gate + manual smoke**
+- [x] **Step 5: Full gate + manual smoke**
 
 Run: `python -m pytest -q` then
 ```powershell
@@ -509,7 +509,7 @@ python -m uasset_read --legacy-json tests/samples/ALS_FootstepDataTable.uasset |
 ```
 Expected: first prints `"format": "uasset_read.package"`; second prints the legacy format string.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add src/uasset_read/cli.py tests/contract/test_application_contract.py tests/test_core.py
@@ -634,19 +634,19 @@ Absorbed into the matrix: `test_document_contract.py` (per-sample: `test_no_dang
 
 4. **Remaining one-off fixtures** stay plain functions in `test_samples.py`: `test_large_sample_all_exports`, `test_zero_asset_role_fixture_is_manifested` (uses `uasset_rs_UE410_SimpleRefsSoftRef.uasset`), `test_v2_api_does_not_call_v1_pipeline` (import-probe; core-eligible but sample-API-focused — it imports no fixture, so place here as a function per the handler-free import check), `test_expected_handlers`-driven Niagara full-coverage check `def test_niagara_fixture_fully_enriched(): ...` asserting `all(o.status.semantic == "complete" for o in _asset_document("NM_BPSystemEvent.uasset").objects)`.
 
-- [ ] **Step 1: Copy the disposition tables above into the task checklist and mark each name as it moves** (executor tracking only — do not commit a copy)
+- [x] **Step 1: Copy the disposition tables above into the task checklist and mark each name as it moves** (executor tracking only — do not commit a copy)
 
-- [ ] **Step 2: Write the new `test_core.py` and `test_samples.py`**
+- [x] **Step 2: Write the new `test_core.py` and `test_samples.py`**
 
 Port assertion *bodies* from the contract files, keeping every original assertion verbatim inside the consolidated loops (sub-test context = case/sample name in the assert message per design line 758). Shared fixtures move to `tests/conftest.py`: merge `tests/contract/conftest.py` content into `tests/conftest.py` (single `samples_dir`/`sample_path`/`multi_asset_sample` set), delete the duplicate.
 
-- [ ] **Step 3: Verify structure gate and counts**
+- [x] **Step 3: Verify structure gate and counts**
 
 Run: `python -m pytest tests/test_core.py --collect-only -q`
 Expected: ≤10 items. Run: `python -m pytest -q`
 Expected: all PASS, no skips; total collected < 300 (48-fixture matrix + capabilities + ~10 core + named one-offs).
 
-- [ ] **Step 4: Delete the old layer and re-verify**
+- [x] **Step 4: Delete the old layer and re-verify**
 
 ```powershell
 Remove-Item -LiteralPath tests\contract -Recurse -Force
@@ -655,7 +655,7 @@ python -m ruff check src tests
 ```
 Expected: green; `tests/` contains only `conftest.py`, `test_core.py`, `test_samples.py`, `samples/` (plus ignored `__pycache__`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add -A tests
@@ -670,21 +670,21 @@ git commit -m "refactor!: converge test system into test_core + manifest-driven 
 - Modify: `docs/designs/2026-08-26-package-first-uasset-parser-refactor.md:789`
 - Modify: `.github/workflows/ci.yml`
 
-- [ ] **Step 1: Amend the design decision**
+- [x] **Step 1: Amend the design decision**
 
 Replace the CI sentence at line 789 with: "GitHub CI 只运行非阻塞的 fast-suite smoke job（`python -m pytest -q`，无墙钟阈值）作为回归证据；阻断性全量门禁仍是本机 Windows + Python 3.14。Linux/3.12 结果不得被描述为已验证环境。coverage 与 Codecov 仍暂停。" Add the same sentence's English gloss to the Decisions list (line ~859) so index readers see one policy.
 
-- [ ] **Step 2: Rewrite the pytest jobs**
+- [x] **Step 2: Rewrite the pytest jobs**
 
 In `.github/workflows/ci.yml`: delete the entire `pytest-contract` job (lines ~126-142). Rename `pytest-fast` → `pytest-smoke`, keep `runs-on: ubuntu-latest` + `python-version: "3.12"`, and change its command to `python -m pytest -q` (after Task 5 the default collection *is* the two formal files). No `--timeout`. Add step comment: `# non-blocking smoke evidence; blocking gate is local Windows + 3.14`.
 
-- [ ] **Step 3: Validate workflow syntax and local equivalence**
+- [x] **Step 3: Validate workflow syntax and local equivalence**
 
 Run: `python -c "import yaml,io; yaml.safe_load(io.open('.github/workflows/ci.yml', encoding='utf-8')); print('yaml ok')"` (if PyYAML is unavailable, use `python -m uasset_read --help` smoke plus `git diff`; do not add a dependency).
 Run locally: `python -m pytest -q`
 Expected: PASS in <60s (fast corpus already proven ~15s; the 48-fixture matrix dominates but was <8 min at the full-suite baseline and runs in CI only as evidence).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add docs/designs/2026-08-26-package-first-uasset-parser-refactor.md .github/workflows/ci.yml
@@ -702,22 +702,22 @@ git commit -m "ci: replace broken contract job with non-blocking fast-suite smok
 - Modify: `tests/samples/manifest.json:671`
 - Modify: `docs/reference/UAsset_Format_Analysis.md:5`, `docs/reference/uasset_unknown_asset_handling_report.md:9-11`
 
-- [ ] **Step 1: README — claims that match the post-Task-5 gate**
+- [x] **Step 1: README — claims that match the post-Task-5 gate**
 
 - Line 9 status banner: keep scope list but change to "v2 package-first architecture: default CLI/API output is `PackageDocument v2` (legacy packages; tagged properties; sample-backed handlers incl. full lightweight Niagara coverage). Zen/IoStore, unversioned-with-usmap, payload extraction remain deferred (see `docs/designs/README.md`); Semantic 1.x JSON is opt-in via `--legacy-json`."
 - Line 27 table: `Version | 0.5.5 (stable) / 0.6.0-dev (v2 default)`.
 - Line 30 table: replace `~197 root-level contract tests` with the exact count recorded in Task 8 Step 1, phrased `test_core (<=10) + manifest-driven test_samples (<N> collected, no skips/xfail)`.
 - Line 37 usage note and line 57 example: remove `--v2` (now default); show `--legacy-json` in a "legacy" sub-line.
 
-- [ ] **Step 2: Agent dev reference** — append to the current-boundary section: v2 is the default projection for all three entry points; `extract_payload` remains descriptor-level (extraction blocked on Phase 5 containers); v1 pipeline is legacy-only behind `--legacy-json` and slated for removal after decode-parity; the two formal test files are the contract layer (`tests/contract/` no longer exists).
+- [x] **Step 2: Agent dev reference** — append to the current-boundary section: v2 is the default projection for all three entry points; `extract_payload` remains descriptor-level (extraction blocked on Phase 5 containers); v1 pipeline is legacy-only behind `--legacy-json` and slated for removal after decode-parity; the two formal test files are the contract layer (`tests/contract/` no longer exists).
 
-- [ ] **Step 3: Wiki examples** — run `Get-ChildItem wiki -Recurse -Filter *.md | Select-String --v2` (as PowerShell: `Select-String -Pattern '\-\-v2'`); replace `--v2` usages with plain invocations and note the deprecation once per page.
+- [x] **Step 3: Wiki examples** — run `Get-ChildItem wiki -Recurse -Filter *.md | Select-String --v2` (as PowerShell: `Select-String -Pattern '\-\-v2'`); replace `--v2` usages with plain invocations and note the deprecation once per page.
 
-- [ ] **Step 4: Manifest gap semantics (description only)** — edit `fixture_gap_count` region at `tests/samples/manifest.json:671` so the field means what it counts: change to `"fixture_gap_count": 5` **plus** a sibling `"fixture_gaps_total": 6, "fixture_gaps_note": "one of the six entries (no_b_is_asset_package) is status=covered"`. This is an expectation-metadata change reviewed against the six existing entries; no sample bytes change. Verify `python -m pytest tests/test_samples.py -q -k manifest` still passes (the manifest test asserts sample tables, not gap counts).
+- [x] **Step 4: Manifest gap semantics (description only)** — edit `fixture_gap_count` region at `tests/samples/manifest.json:671` so the field means what it counts: change to `"fixture_gap_count": 5` **plus** a sibling `"fixture_gaps_total": 6, "fixture_gaps_note": "one of the six entries (no_b_is_asset_package) is status=covered"`. This is an expectation-metadata change reviewed against the six existing entries; no sample bytes change. Verify `python -m pytest tests/test_samples.py -q -k manifest` still passes (the manifest test asserts sample tables, not gap counts).
 
-- [ ] **Step 5: Strip hardcoded developer paths** — replace `E:\Develop\lib\UnrealEngine` with `<UnrealEngine source root>` in `UAsset_Format_Analysis.md:5` and the three path lines in `uasset_unknown_asset_handling_report.md:9-11` with repo-relative descriptions per AGENTS.md.
+- [x] **Step 5: Strip hardcoded developer paths** — replace `E:\Develop\lib\UnrealEngine` with `<UnrealEngine source root>` in `UAsset_Format_Analysis.md:5` and the three path lines in `uasset_unknown_asset_handling_report.md:9-11` with repo-relative descriptions per AGENTS.md.
 
-- [ ] **Step 6: Ruff + commit**
+- [x] **Step 6: Ruff + commit**
 
 ```powershell
 python -m ruff check src tests
@@ -732,7 +732,7 @@ git commit -m "docs: synchronize v2 default-status claims with the green gate"
 **Files:**
 - Modify: `docs/plans/2026-08-28-package-first-refactor-execution-plan.md` (Task 11 checkboxes)
 
-- [ ] **Step 1: Atomic full gate from one clean process on the frozen tree**
+- [x] **Step 1: Atomic full gate from one clean process on the frozen tree**
 
 ```powershell
 git status --short                       # expect empty
@@ -746,7 +746,7 @@ git diff --check
 
 Record `python --version`, collected count, pass count and duration in the execution-plan Task 11 note. Paste the count into README (Task 7 Step 1 placeholder phrasing).
 
-- [ ] **Step 2: Entry-point spot checks (default paths)**
+- [x] **Step 2: Entry-point spot checks (default paths)**
 
 ```powershell
 python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package --limit 2
@@ -755,14 +755,14 @@ python -m uasset_read --legacy-json tests/samples/ALS_FootstepDataTable.uasset
 ```
 Expected: first two print `uasset_read.package` JSON (consistent ids/status/diagnostics/truncation, no blob); third prints legacy shape.
 
-- [ ] **Step 3: Execution plan Task 11 checkboxes** — check off Steps 1-3; Step 4 stays unchecked until Step 5 below completes. Commit:
+- [x] **Step 3: Execution plan Task 11 checkboxes** — check off Steps 1-3; Step 4 stays unchecked until Step 5 below completes. Commit:
 
 ```powershell
 git add README.md docs/plans/2026-08-28-package-first-refactor-execution-plan.md
 git commit -m "docs: record atomic v2 closeout gate results"
 ```
 
-- [ ] **Step 4: Issue synchronization (via `gh`)**
+- [x] **Step 4: Issue synchronization (via `gh`)**
 
 ```powershell
 gh issue comment 621 --body "Closeout plan docs/plans/2026-08-31-v2-correctness-migration-closeout.md completed through Task 8. Gate: HEAD <sha>, Python <ver>, <N> passed (core <=10 + manifest matrix), ruff clean, wheel built. Package-first v2 legacy path is the CLI/API default. Remaining OPEN scope: Zen/IoStore/USMAP/payload (blocked on re-distributable samples, see #623-#627), deeper per-asset semantics, v1 pipeline removal after decode parity."
@@ -775,7 +775,7 @@ gh issue edit 623 624 625 626 627 --repo <owner>/<repo> 2>$null
 
 and comment on each of #623-#627: "Sample acquisition guidance change: do NOT create throwaway UE projects. Request re-distributable real .uasset/.utoc/.ucas/.pak samples (and matching UE editor version metadata) from users/projects with redistribution permission; attach SHA-256 + license note when provided." (One `gh issue comment` per issue with the respective gap name from `fixture_gaps`.)
 
-- [ ] **Step 5: Push**
+- [x] **Step 5: Push**
 
 ```powershell
 git push -u origin dev-0.6.0
