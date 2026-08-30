@@ -226,11 +226,11 @@ class LegacyPackageReader:
             # 5. Read export map
             export_map = read_export_map(archive, summary, name_map)
 
-            # 6. Read depends map (boundary validation only — not stored in document yet)
-            read_depends_map(archive, summary)
+            # 6. Read depends map
+            depends_map = read_depends_map(archive, summary)
 
-            # 7. Read preload dependencies (boundary validation only)
-            read_preload_dependencies(archive, summary)
+            # 7. Read preload dependencies
+            preload_deps = read_preload_dependencies(archive, summary)
 
             # 8. Build VersionContext (reserved for future use — handlers, depth routing)
             build_version_context_from_summary(
@@ -256,6 +256,20 @@ class LegacyPackageReader:
                 template_id = _package_index_to_id(exp.template_index)
                 if template_id is not None:
                     relations.append(Relation(kind="template_of", from_id=from_id, to_id=template_id))
+
+            # 10b. Build depends_on relations from depends_map
+            for i, deps in enumerate(depends_map):
+                from_id = f"export:{i}"
+                for pkg_index in deps:
+                    if pkg_index == 0:
+                        continue  # null reference
+                    if pkg_index > 0:
+                        # Import reference (1-based: PackageIndex 1 = import 0)
+                        to_id = f"import:{pkg_index - 1}"
+                    else:
+                        # Export reference (0-based negated: PackageIndex -1 = export 0)
+                        to_id = f"export:{-pkg_index - 1}"
+                    relations.append(Relation(kind="depends_on", from_id=from_id, to_id=to_id))
 
             # 11. Build dependencies from import map
             dependencies = [

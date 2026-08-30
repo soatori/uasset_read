@@ -506,6 +506,7 @@ class TestSkeletonSummaryConsistency:
 
         doc = parse_package_document(str(SAMPLES_DIR / "ALS_Mannequin_Skeleton.uasset"), depth="asset")
         obj = next(o for o in doc.objects if o.class_name == "Skeleton")
+        assert obj.semantic is not None
         assert obj.semantic["kind"] == "skeleton"
         assert obj.semantic["bone_count"] == len(obj.semantic["bones"])
         assert obj.semantic["bone_count"] > 0
@@ -517,6 +518,7 @@ class TestStaticMeshSummaryConsistency:
 
         doc = parse_package_document(str(SAMPLES_DIR / "StarterContent_SM_Chair.uasset"), depth="asset")
         obj = next(o for o in doc.objects if o.class_name == "StaticMesh")
+        assert obj.semantic is not None
         assert obj.semantic["kind"] == "mesh"
         assert obj.semantic["lod_count"] == len(obj.semantic["lods"])
 
@@ -540,6 +542,7 @@ class TestSampleBackedHandlers:
 
         doc = parse_package_document(str(SAMPLES_DIR / sample), depth="asset")
         obj = next(o for o in doc.objects if o.class_name == class_name)
+        assert obj.semantic is not None
         assert obj.semantic["kind"] == expected_kind
         assert obj.coverage
 
@@ -548,6 +551,7 @@ class TestSampleBackedHandlers:
 
         doc = parse_package_document(str(SAMPLES_DIR / "ALS_FootstepDataTable.uasset"), depth="asset")
         dt = next(o for o in doc.objects if o.class_name == "DataTable")
+        assert dt.semantic is not None
         # row_count should be non-negative
         assert dt.semantic["row_count"] >= 0
 
@@ -556,6 +560,7 @@ class TestSampleBackedHandlers:
 
         doc = parse_package_document(str(SAMPLES_DIR / "FirstPerson_T_GridChecker_A.uasset"), depth="asset")
         tex = next(o for o in doc.objects if o.class_name == "Texture2D")
+        assert tex.semantic is not None
         assert tex.semantic["kind"] == "texture"
         assert tex.semantic["texture_type"] == "Texture2D"
         # srgb should be a bool
@@ -566,6 +571,7 @@ class TestSampleBackedHandlers:
 
         doc = parse_package_document(str(SAMPLES_DIR / "ALS_Concrete_Step_01_SoundWave.uasset"), depth="asset")
         sw = next(o for o in doc.objects if o.class_name == "SoundWave")
+        assert sw.semantic is not None
         assert sw.semantic["kind"] == "sound"
         assert sw.semantic["sound_type"] == "SoundWave"
         assert sw.coverage  # has at least one coverage entry

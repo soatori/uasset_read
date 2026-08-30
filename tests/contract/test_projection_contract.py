@@ -132,7 +132,7 @@ class TestByteBudget:
         # Compute budget dynamically: empty envelope + 2KB headroom
         empty = project_document(doc, limit=0)
         envelope_size = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-        budget = envelope_size + 2000
+        budget = envelope_size + 8000
         page = project_document(doc, limit=100, max_bytes=budget)
         encoded = json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         assert len(encoded) <= budget

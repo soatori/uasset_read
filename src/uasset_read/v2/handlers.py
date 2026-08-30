@@ -360,7 +360,7 @@ class TexturePayloadHandler:
             # Direct fields on the struct (e.g. SizeX, SizeY, or a single Size)
             size_val = fields.get("Size") or fields.get("total_size") or fields.get("BulkDataSize")
             if isinstance(size_val, (int, float)):
-                total_size = int(size_val)  # safe: isinstance guard above
+                total_size = int(size_val)
 
         # If the struct_type hints at size (e.g. "5_16"), try to extract
         struct_type = imported_size.get("struct_type", "")
@@ -959,3 +959,40 @@ class BlueprintHandler:
 
 register_handler(AnimBlueprintHandler())
 register_handler(BlueprintHandler())
+
+
+class NiagaraHandler:
+    """Enrich Niagara objects with light summary."""
+
+    _NIAGARA_CLASSES = (
+        "NiagaraScriptVariable",
+        "NiagaraGraph",
+        "NiagaraNodeFunctionCall",
+        "NiagaraNodeInput",
+        "NiagaraNodeOp",
+        "NiagaraNodeParameterMapGet",
+        "NiagaraNodeParameterMapSet",
+        "NiagaraNodeReroute",
+    )
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        cn = obj.class_name or ""
+        return cn in self._NIAGARA_CLASSES
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        cn = obj.class_name or ""
+        result: dict[str, Any] = {"kind": "niagara", "niagara_type": cn, "name": obj.name}
+        coverage: list[CoverageEntry] = [
+            CoverageEntry(feature="niagara.kind", status="present", detail=cn),
+        ]
+        obj.coverage.extend(coverage)
+        return result
+
+
+register_handler(NiagaraHandler())

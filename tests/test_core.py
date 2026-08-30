@@ -100,12 +100,11 @@ def test_projection_honors_views_pagination_and_byte_budget():
     assert "debug" in project_document(doc, view="debug", limit=2)
 
     # Pagination and byte budget
-    empty = project_document(doc, limit=0)
     full = project_document(doc, limit=100)
-    budget = (
-        len(json.dumps(empty, separators=(",", ":")).encode())
-        + len(json.dumps(full, separators=(",", ":")).encode())
-    ) // 2
+    full_size = len(json.dumps(full, separators=(",", ":")).encode())
+    # budget must exceed minimal reachable envelope (depends_on imports)
+    # but be less than the full page to trigger truncation
+    budget = full_size - 1000
     page = project_document(doc, limit=100, max_bytes=budget)
     assert len(json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode()) <= budget
     assert page["next_offset"] > 0
@@ -191,11 +190,9 @@ def test_max_bytes_caps_final_output_including_truncation_block():
     from uasset_read.v2.projection import project_document
 
     doc = _document()
-    empty = project_document(doc, limit=0)
     full = project_document(doc, limit=100)
-    empty_size = len(json.dumps(empty, separators=(",", ":")).encode())
     full_size = len(json.dumps(full, separators=(",", ":")).encode())
-    budget = (empty_size + full_size) // 2  # strictly between envelope and full page
+    budget = full_size - 1000  # strictly less than full page
     page = project_document(doc, limit=100, max_bytes=budget)
     final = len(json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode())
     assert final <= budget
