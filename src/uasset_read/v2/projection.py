@@ -122,46 +122,52 @@ def project_document(
             d = obj_to_dict(obj, view=view)
             filtered.append({k: v for k, v in d.items() if k in field_set or k in ("id", "name")})
         page = filtered
-    relations = [{"kind": r.kind, "from": r.from_id, "to": r.to_id} for r in doc.relations if r.from_id in page_ids]
-    page_diagnostics = [
-        d for d in doc.diagnostics if getattr(d, "object_id", None) is None or getattr(d, "object_id", None) in page_ids
-    ]
 
-    # Find all objects reachable from the page through relations
-    reachable_ids = set(page_ids)
-    frontier = set(page_ids)
-    while frontier:
-        next_frontier = set()
-        for r in doc.relations:
-            if r.from_id in frontier and r.to_id not in reachable_ids:
-                next_frontier.add(r.to_id)
-            if r.to_id in frontier and r.from_id not in reachable_ids:
-                next_frontier.add(r.from_id)
-        frontier = next_frontier
-        reachable_ids.update(frontier)
+    def _scope_to_page(ids: set[str]) -> tuple[list, list, list, list]:
+        """Scope relations, diagnostics, dependencies, payloads to page ids."""
+        relations = [{"kind": r.kind, "from": r.from_id, "to": r.to_id} for r in doc.relations if r.from_id in ids]
+        page_diagnostics = [
+            d for d in doc.diagnostics if getattr(d, "object_id", None) is None or getattr(d, "object_id", None) in ids
+        ]
 
-    # Filter dependencies to only those reachable from the page
-    reachable_imports = {idx for idx, imp in enumerate(doc.dependencies) if f"import:{imp.index}" in reachable_ids}
-    filtered_dependencies = [
-        {"index": d.index, "class": d.class_name, "object_name": d.object_name}
-        for i, d in enumerate(doc.dependencies)
-        if i in reachable_imports
-    ]
+        # Find all objects reachable from the page through relations
+        reachable_ids = set(ids)
+        frontier = set(ids)
+        while frontier:
+            next_frontier = set()
+            for r in doc.relations:
+                if r.from_id in frontier and r.to_id not in reachable_ids:
+                    next_frontier.add(r.to_id)
+                if r.to_id in frontier and r.from_id not in reachable_ids:
+                    next_frontier.add(r.from_id)
+            frontier = next_frontier
+            reachable_ids.update(frontier)
 
-    # Filter payloads to only those owned by objects in the page
-    filtered_payloads = [
-        {
-            "id": p.id,
-            "owner": p.owner_id,
-            "kind": p.kind,
-            "source_region": p.source_region,
-            "offset": p.offset,
-            "stored_size": p.stored_size,
-            "status": p.status,
-        }
-        for p in doc.payloads
-        if p.owner_id in page_ids
-    ]
+        # Filter dependencies to only those reachable from the page
+        reachable_imports = {idx for idx, imp in enumerate(doc.dependencies) if f"import:{imp.index}" in reachable_ids}
+        filtered_dependencies = [
+            {"index": d.index, "class": d.class_name, "object_name": d.object_name}
+            for i, d in enumerate(doc.dependencies)
+            if i in reachable_imports
+        ]
+
+        # Filter payloads to only those owned by objects in the page
+        filtered_payloads = [
+            {
+                "id": p.id,
+                "owner": p.owner_id,
+                "kind": p.kind,
+                "source_region": p.source_region,
+                "offset": p.offset,
+                "stored_size": p.stored_size,
+                "status": p.status,
+            }
+            for p in doc.payloads
+            if p.owner_id in ids
+        ]
+        return relations, page_diagnostics, filtered_dependencies, filtered_payloads
+
+    relations, page_diagnostics, filtered_dependencies, filtered_payloads = _scope_to_page(page_ids)
 
     # Build result
     result: dict[str, Any] = {
@@ -226,6 +232,12 @@ def project_document(
             while len(result["objects"]) > 0 and _encoded() > max_bytes:
                 result["objects"].pop()
                 result["next_offset"] = offset + len(result["objects"])
+                remaining_ids = {o["id"] for o in result["objects"] if isinstance(o, dict) and "id" in o}
+                rels, diags, deps, pays = _scope_to_page(remaining_ids)
+                result["relations"] = rels
+                result["dependencies"] = deps
+                result["payloads"] = pays
+                result["diagnostics"] = [d.to_dict() for d in diags] + [trunc_diag]
             actual = _encoded()
             if actual > max_bytes:
                 raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({actual} bytes)")

@@ -910,10 +910,10 @@ def read_depends_map(
     UE format: TArray<TArray<FPackageIndex>>
     Each export has a dependency list, values are PackageIndex (int32).
 
-    PackageIndex encoding (UE FPackageIndex):
+    PackageIndex encoding (UE FPackageIndex, ObjectResource.h):
         0       -> null (no reference)
-        > 0     -> Import reference (1-based: PackageIndex 1 = import 0)
-        < 0     -> Export reference (0-based negated: PackageIndex -1 = export 0)
+        > 0     -> Export reference (1-based: PackageIndex 1 = export 0)
+        < 0     -> Import reference (negated 0-based: PackageIndex -1 = import 0)
 
     Args:
         archive: File archive reader
@@ -947,20 +947,11 @@ def read_depends_map(
         deps = []
         for j in range(dep_count):
             pkg_index = archive.read_i32(f"DependsMap[{i}][{j}]")
-            # Validate PackageIndex range:
+            # Validate PackageIndex range (UE FPackageIndex: >0 export, <0 import):
             #   0 → null (valid)
-            #   > 0 → import reference (1-based), valid if pkg_index <= import_count
-            #   < 0 → export reference (negated 0-based), valid if |pkg_index| <= export_count
-            if pkg_index > 0 and pkg_index > summary.import_count:
-                invalid_indices += 1
-                logger.debug(
-                    "DependsMap: out-of-range import index %d at export %d dep %d (import_count=%d)",
-                    pkg_index,
-                    i,
-                    j,
-                    summary.import_count,
-                )
-            elif pkg_index < 0 and abs(pkg_index) > summary.export_count:
+            #   > 0 → export reference (1-based), valid if pkg_index <= export_count
+            #   < 0 → import reference (negated 0-based), valid if |pkg_index| <= import_count
+            if pkg_index > 0 and pkg_index > summary.export_count:
                 invalid_indices += 1
                 logger.debug(
                     "DependsMap: out-of-range export index %d at export %d dep %d (export_count=%d)",
@@ -968,6 +959,15 @@ def read_depends_map(
                     i,
                     j,
                     summary.export_count,
+                )
+            elif pkg_index < 0 and abs(pkg_index) > summary.import_count:
+                invalid_indices += 1
+                logger.debug(
+                    "DependsMap: out-of-range import index %d at export %d dep %d (import_count=%d)",
+                    pkg_index,
+                    i,
+                    j,
+                    summary.import_count,
                 )
             deps.append(pkg_index)
         depends_map.append(deps)

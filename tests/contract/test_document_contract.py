@@ -96,6 +96,73 @@ class TestRelations:
         for r in doc.relations:
             assert r.to_id.startswith("export:") or r.to_id.startswith("import:")
 
+    def test_no_dangling_relations(self, doc):
+        """Every relation target must resolve to a real export or import slot.
+
+        UE FPackageIndex semantics (ObjectResource.h):
+        Index > 0 -> ExportMap[Index-1], Index < 0 -> ImportMap[-Index-1].
+        """
+        valid = {o.id for o in doc.objects} | {
+            f"import:{i}" for i in range(len(doc.dependencies))
+        }
+        for r in doc.relations:
+            assert r.to_id in valid, f"dangling {r.kind}: {r.from_id} -> {r.to_id}"
+
+    def test_depends_on_matches_ue_package_index_semantics(self, doc):
+        """depends_on edges must map raw PackageIndex per UE sign convention.
+
+        The test encodes the UE spec independently of the production helper:
+        positive raw value -> export:(v-1), negative raw value -> import:(-v-1).
+        """
+        from uasset_read.serializers.package_summary import (
+            read_depends_map,
+            read_name_table,
+            read_package_summary,
+        )
+        from uasset_read.v2.package.legacy import _make_package_archive
+        from uasset_read.v2.source import FileSource
+
+        archive = _make_package_archive(FileSource(SAMPLE), tolerant=True)
+        try:
+            summary = read_package_summary(archive)
+            name_map = read_name_table(archive, summary)
+            archive.set_name_map(name_map)
+            depends_map = read_depends_map(archive, summary)
+        finally:
+            archive.close()
+
+        expected: set[tuple[str, str]] = set()
+        for i, deps in enumerate(depends_map):
+            for raw in deps:
+                if raw > 0:
+                    expected.add((f"export:{i}", f"export:{raw - 1}"))
+                elif raw < 0:
+                    expected.add((f"export:{i}", f"import:{-raw - 1}"))
+
+        actual = {
+            (r.from_id, r.to_id) for r in doc.relations if r.kind == "depends_on"
+        }
+        assert actual == expected
+
+    def test_out_of_range_relation_target_yields_diagnostic(self, multi_doc):
+        """ALS_AnimBP contains an out-of-range outer index; it must surface as a diagnostic."""
+        hits = [d for d in multi_doc.diagnostics if d.code == "RELATION_TARGET_OUT_OF_RANGE"]
+        assert len(hits) >= 1
+        assert any(d.object_id == "export:1" for d in hits)
+
+    def test_super_of_relations_match_super_ref(self, doc):
+        """Every ObjectRecord.super_ref must have a matching super_of relation."""
+        expected = set()
+        for obj in doc.objects:
+            ref = obj.super_ref
+            if ref is not None:
+                expected.add((obj.id, f"{ref.table}:{ref.index}"))
+        actual = {
+            (r.from_id, r.to_id) for r in doc.relations if r.kind == "super_of"
+        }
+        assert actual == expected
+        assert len(expected) > 0, "ABP sample must contain exports with a super reference"
+
 
 class TestDiagnostics:
     def test_no_critical_on_healthy(self, doc):
@@ -161,3 +228,6 @@ class TestLegacyTableParity:
             assert doc.package.export_count == entry["export_count"], entry["name"]
             assert len(doc.objects) == entry["export_count"], entry["name"]
             assert len(doc.summary.asset_object_ids) == entry["b_is_asset_count"], entry["name"]
+            valid = {o.id for o in doc.objects} | {f"import:{i}" for i in range(len(doc.dependencies))}
+            for r in doc.relations:
+                assert r.to_id in valid, f"{entry['name']}: dangling {r.kind} {r.from_id} -> {r.to_id}"

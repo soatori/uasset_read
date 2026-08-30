@@ -200,4 +200,123 @@ def test_max_bytes_caps_final_output_including_truncation_block():
     assert page["next_offset"] > 0
 
 
+def _synthetic_export(**kwargs):
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
 
+    base = dict(
+        class_index=PackageIndex(-1),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="Test",
+        object_flags=0,
+        serial_size=0,
+        serial_offset=0,
+    )
+    base.update(kwargs)
+    return ObjectExport(**base)
+
+
+def test_preload_relations_use_ue_ranges_and_sign_semantics():
+    """Per-export preload ranges index the flat summary array; sign maps like FPackageIndex."""
+    from uasset_read.v2.package.legacy import _build_preload_relations
+
+    exports = [
+        _synthetic_export(
+            first_export_dependency=0,
+            serialization_before_serialization_dependencies=2,
+            create_before_create_dependencies=1,
+        ),
+        _synthetic_export(first_export_dependency=-1),
+        _synthetic_export(
+            first_export_dependency=3,
+            serialization_before_serialization_dependencies=2,
+        ),
+    ]
+    # raw values: +2 -> export:1, -4 -> import:3, 0 -> null, -1 -> import:0, +1 -> export:0
+    preload = [2, -4, 0, -1, 1]
+
+    relations, diagnostics = _build_preload_relations(preload, exports)
+    edges = {(r.kind, r.from_id, r.to_id) for r in relations}
+    assert edges == {
+        ("preload_of", "export:0", "export:1"),
+        ("preload_of", "export:0", "import:3"),
+        ("preload_of", "export:2", "import:0"),
+        ("preload_of", "export:2", "export:0"),
+    }
+    assert diagnostics == []
+
+
+def test_relation_targets_out_of_range_are_dropped_with_diagnostic():
+    """A relation whose target exceeds the table size is corrupt data, not an edge."""
+    from uasset_read.v2.object_model import Relation
+    from uasset_read.v2.package.legacy import _validate_relation_targets
+
+    relations = [
+        Relation(kind="outer_of", from_id="export:0", to_id="export:1"),
+        Relation(kind="outer_of", from_id="export:1", to_id="export:67108864"),
+        Relation(kind="class_of", from_id="export:2", to_id="import:5"),
+        Relation(kind="class_of", from_id="export:3", to_id="import:999"),
+    ]
+    kept, diagnostics = _validate_relation_targets(relations, export_count=2, import_count=6)
+    assert [(r.kind, r.from_id, r.to_id) for r in kept] == [
+        ("outer_of", "export:0", "export:1"),
+        ("class_of", "export:2", "import:5"),
+    ]
+    assert len(diagnostics) == 2
+    assert {d.code for d in diagnostics} == {"RELATION_TARGET_OUT_OF_RANGE"}
+    assert {d.object_id for d in diagnostics} == {"export:1", "export:3"}
+    assert all(d.recoverable for d in diagnostics)
+
+
+def test_depends_map_validates_package_index_sign_per_ue_convention():
+    """read_depends_map must range-check positives against exports, negatives against imports."""
+
+    class _StubArchive:
+        def __init__(self, values):
+            self._values = list(values)
+            self._pos = 0
+
+        def seek(self, offset):
+            self._pos = 0
+
+        def read_i32(self, context):
+            value = self._values[self._pos]
+            self._pos += 1
+            return value
+
+    from types import SimpleNamespace
+
+    from uasset_read.serializers.package_summary import read_depends_map
+
+    summary = SimpleNamespace(depends_offset=1, export_count=3, import_count=5)
+    # export 0 list: +2 -> export:1 (valid), -2 -> import:1 (valid),
+    # +4 -> export:3 (missing, export_count=3), -99 -> import:98 (missing)
+    archive = _StubArchive([4, 2, -2, 4, -99, 0, 0])
+    warnings: list[str] = []
+    result = read_depends_map(archive, summary, warnings=warnings)
+    assert result == [[2, -2, 4, -99], [], []]
+    invalid = [w for w in warnings if "non-existent" in w]
+    assert len(invalid) == 1
+    assert "2 PackageIndex value(s)" in invalid[0]
+
+
+def test_preload_relations_report_invalid_ranges_without_crashing():
+    """Out-of-range preload spans produce a structured diagnostic and are skipped."""
+    from uasset_read.v2.package.legacy import _build_preload_relations
+
+    exports = [
+        _synthetic_export(
+            first_export_dependency=2,
+            serialization_before_serialization_dependencies=5,
+        ),
+        _synthetic_export(
+            first_export_dependency=0,
+            serialization_before_serialization_dependencies=1,
+        ),
+    ]
+    relations, diagnostics = _build_preload_relations([3, -2], exports)
+    assert [(r.from_id, r.to_id) for r in relations] == [("export:1", "export:2")]
+    assert len(diagnostics) == 1
+    assert diagnostics[0].code == "PRELOAD_DEPENDENCY_RANGE_INVALID"
+    assert diagnostics[0].object_id == "export:0"
+    assert diagnostics[0].recoverable is True

@@ -83,6 +83,84 @@ def _package_index_to_id(pi: PackageIndex) -> str | None:
     return f"export:{pi.to_export_index()}"
 
 
+def _build_preload_relations(
+    preload_deps: Sequence[int],
+    export_map: Sequence[ObjectExport],
+) -> tuple[list[Relation], list[Diagnostic]]:
+    """Derive preload_of relations from per-export preload dependency spans.
+
+    UE legacy format: each FObjectExport's FirstExportDependency plus the
+    four category counts index into the summary's flat PreloadDependencyValues
+    array; the export's span is
+    [FirstExportDependency, FirstExportDependency + total) (LinkerSave.cpp).
+    """
+    relations: list[Relation] = []
+    diagnostics: list[Diagnostic] = []
+    for i, exp in enumerate(export_map):
+        if exp.first_export_dependency < 0:
+            continue
+        total = (
+            exp.serialization_before_serialization_dependencies
+            + exp.create_before_serialization_dependencies
+            + exp.serialization_before_create_dependencies
+            + exp.create_before_create_dependencies
+        )
+        if total <= 0:
+            continue
+        start = exp.first_export_dependency
+        end = start + total
+        if end > len(preload_deps):
+            diagnostics.append(
+                Diagnostic(
+                    severity="warning",
+                    code="PRELOAD_DEPENDENCY_RANGE_INVALID",
+                    message=f"Export {i} preload span [{start},{end}) exceeds preload array size {len(preload_deps)}",
+                    stage="package.preload",
+                    object_id=f"export:{i}",
+                    recoverable=True,
+                )
+            )
+            continue
+        for raw in preload_deps[start:end]:
+            to_id = _package_index_to_id(PackageIndex(raw))
+            if to_id is not None:
+                relations.append(Relation(kind="preload_of", from_id=f"export:{i}", to_id=to_id))
+    return relations, diagnostics
+
+
+def _validate_relation_targets(
+    relations: Sequence[Relation],
+    *,
+    export_count: int,
+    import_count: int,
+) -> tuple[list[Relation], list[Diagnostic]]:
+    """Drop relations whose target exceeds its table size, with diagnostics.
+
+    Out-of-range table references are corrupt data at a binary trust boundary;
+    they surface as structured, recoverable diagnostics instead of dangling edges.
+    """
+    kept: list[Relation] = []
+    diagnostics: list[Diagnostic] = []
+    for rel in relations:
+        table, _, raw_idx = rel.to_id.partition(":")
+        idx = int(raw_idx)
+        limit = export_count if table == "export" else import_count
+        if table not in ("export", "import") or idx >= limit:
+            diagnostics.append(
+                Diagnostic(
+                    severity="warning",
+                    code="RELATION_TARGET_OUT_OF_RANGE",
+                    message=f"{rel.kind} target {rel.to_id} from {rel.from_id} exceeds {table} table size {limit}",
+                    stage="package.relations",
+                    object_id=rel.from_id,
+                    recoverable=True,
+                )
+            )
+            continue
+        kept.append(rel)
+    return kept, diagnostics
+
+
 def _build_object_record_direct(
     export: ObjectExport,
     index: int,
@@ -256,20 +334,32 @@ class LegacyPackageReader:
                 template_id = _package_index_to_id(exp.template_index)
                 if template_id is not None:
                     relations.append(Relation(kind="template_of", from_id=from_id, to_id=template_id))
+                super_id = _package_index_to_id(exp.super_index)
+                if super_id is not None:
+                    relations.append(Relation(kind="super_of", from_id=from_id, to_id=super_id))
 
             # 10b. Build depends_on relations from depends_map
+            # UE FPackageIndex: positive -> export, negative -> import
+            # (ObjectResource.h FPackageIndex::IsExport/IsImport)
             for i, deps in enumerate(depends_map):
                 from_id = f"export:{i}"
                 for pkg_index in deps:
-                    if pkg_index == 0:
-                        continue  # null reference
-                    if pkg_index > 0:
-                        # Import reference (1-based: PackageIndex 1 = import 0)
-                        to_id = f"import:{pkg_index - 1}"
-                    else:
-                        # Export reference (0-based negated: PackageIndex -1 = export 0)
-                        to_id = f"export:{-pkg_index - 1}"
-                    relations.append(Relation(kind="depends_on", from_id=from_id, to_id=to_id))
+                    to_id = _package_index_to_id(PackageIndex(pkg_index))
+                    if to_id is not None:
+                        relations.append(Relation(kind="depends_on", from_id=from_id, to_id=to_id))
+
+            # 10c. Build preload_of relations from per-export preload spans
+            preload_relations, preload_diags = _build_preload_relations(preload_deps, export_map)
+            relations.extend(preload_relations)
+            diagnostics.extend(preload_diags)
+
+            # 10d. Drop relation targets that exceed their table size
+            relations, target_diags = _validate_relation_targets(
+                relations,
+                export_count=len(export_map),
+                import_count=len(import_map),
+            )
+            diagnostics.extend(target_diags)
 
             # 11. Build dependencies from import map
             dependencies = [

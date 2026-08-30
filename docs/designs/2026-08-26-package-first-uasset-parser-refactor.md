@@ -330,7 +330,9 @@ class ObjectRecord:
 - `generated_class_of`
 - `default_object_of`
 - `template_of`
+- `super_of`
 - `depends_on`
+- `preload_of`
 - `references`
 
 多资产包不再选出唯一 primary。为了 CLI 展示可计算 `summary.asset_object_ids`，但该字段不能控制解析或丢弃其他对象。

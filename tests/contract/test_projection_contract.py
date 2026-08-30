@@ -140,6 +140,22 @@ class TestByteBudget:
         assert page["next_offset"] > 0
         assert any(d["code"] == "TRUNCATED" for d in page["diagnostics"])
 
+    def test_truncated_page_rescopes_relations_and_dependencies(self, doc):
+        """Popping objects for max_bytes must re-scope relations and dependencies."""
+        from uasset_read.v2.projection import project_document
+
+        empty = project_document(doc, limit=0)
+        envelope_size = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        budget = envelope_size + 8000
+        page = project_document(doc, limit=100, max_bytes=budget)
+        page_ids = {o["id"] for o in page["objects"]}
+        assert len(page_ids) < 10, "budget should force dropping at least one object"
+        for rel in page["relations"]:
+            assert rel["from"] in page_ids, f"relation kept for dropped object: {rel}"
+        targets = {rel["to"] for rel in page["relations"]}
+        for dep in page["dependencies"]:
+            assert f"import:{dep['index']}" in targets, f"dependency not reachable from page: {dep}"
+
     def test_relations_scoped_to_returned_page(self, doc):
         from uasset_read.v2.projection import project_document
 

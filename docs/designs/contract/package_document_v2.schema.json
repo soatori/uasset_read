@@ -249,7 +249,7 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["outer_of", "class_of", "generated_class_of", "default_object_of", "template_of", "depends_on", "references"]
+          "enum": ["outer_of", "class_of", "generated_class_of", "default_object_of", "template_of", "super_of", "depends_on", "preload_of", "references"]
         },
         "from": {
           "type": "string",

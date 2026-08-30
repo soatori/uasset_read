@@ -100,6 +100,13 @@ class ObjectExport:
     b_generate_public_hash: bool = False
     script_serialization_end_offset: int = 0
     script_serialization_start_offset: int = 0
+    # Preload dependency span into summary PreloadDependencyValues
+    # (VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS). first=-1 means absent.
+    first_export_dependency: int = -1
+    serialization_before_serialization_dependencies: int = 0
+    create_before_serialization_dependencies: int = 0
+    serialization_before_create_dependencies: int = 0
+    create_before_create_dependencies: int = 0
 
     @property
     def script_serialization_size(self) -> int:
@@ -294,18 +301,25 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
                 b_generate_public_hash = archive.read_bool(f"Export[{export_idx}].bGeneratePublicHash")
 
             # Dependency arrays: VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS (506)
+            # Span into summary PreloadDependencyValues:
+            # [FirstExportDependency, FirstExportDependency + sum of the 4 counts)
+            first_export_dependency = -1
+            ser_before_ser_deps = 0
+            create_before_ser_deps = 0
+            ser_before_create_deps = 0
+            create_before_create_deps = 0
             if file_version >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:
-                archive.read_i32(f"Export[{export_idx}].FirstExportDependency")  # first_export_dependency
-                archive.read_i32(
+                first_export_dependency = archive.read_i32(f"Export[{export_idx}].FirstExportDependency")
+                ser_before_ser_deps = archive.read_i32(
                     f"Export[{export_idx}].SerializationBeforeSerializationDeps"
-                )  # serialization_before_serialization_deps
-                archive.read_i32(
+                )
+                create_before_ser_deps = archive.read_i32(
                     f"Export[{export_idx}].CreateBeforeSerializationDeps"
-                )  # create_before_serialization_deps
-                archive.read_i32(
+                )
+                ser_before_create_deps = archive.read_i32(
                     f"Export[{export_idx}].SerializationBeforeCreateDeps"
-                )  # serialization_before_create_deps
-                archive.read_i32(f"Export[{export_idx}].CreateBeforeCreateDeps")  # create_before_create_deps
+                )
+                create_before_create_deps = archive.read_i32(f"Export[{export_idx}].CreateBeforeCreateDeps")
 
             # ScriptSerialization offsets (UE5 >= 1010, only for versioned properties)
             script_serialization_start_offset = 0
@@ -353,6 +367,11 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
                     script_serialization_end_offset=script_serialization_end_offset,
                     script_serialization_start_offset=script_serialization_start_offset,
                     guid=package_guid,
+                    first_export_dependency=first_export_dependency,
+                    serialization_before_serialization_dependencies=ser_before_ser_deps,
+                    create_before_serialization_dependencies=create_before_ser_deps,
+                    serialization_before_create_dependencies=ser_before_create_deps,
+                    create_before_create_dependencies=create_before_create_deps,
                 )
             )
         except (struct.error, OSError, ValueError, AttributeError) as e:

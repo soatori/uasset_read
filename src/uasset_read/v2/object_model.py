@@ -69,7 +69,9 @@ class Relation:
         "generated_class_of",
         "default_object_of",
         "template_of",
+        "super_of",
         "depends_on",
+        "preload_of",
         "references",
     ]
     from_id: str  # "export:0" or "import:3"
