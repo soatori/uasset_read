@@ -66,18 +66,21 @@ def run_handlers(
     semantic: dict[str, Any] = {}
     coverage: list[CoverageEntry] = []
     diagnostics: list[Diagnostic] = []
+    matched = False
+    failed = False
 
     for handler in _HANDLERS:
         try:
             if handler.supports(obj, context):
+                matched = True
                 result = handler.enrich(obj, context, all_objects, package_data)
                 if result is not None:
                     semantic.update(result)
-                    obj.status.semantic = "complete"
         except Exception as e:
             # Handler failure must not affect other objects
+            matched = True
+            failed = True
             handler_name = type(handler).__name__
-            obj.status.semantic = "partial"
             coverage.append(
                 CoverageEntry(
                     feature=f"handler.{handler_name}",
@@ -95,6 +98,9 @@ def run_handlers(
                     recoverable=True,
                 )
             )
+
+    if matched:
+        obj.status.semantic = "partial" if failed else "complete"
 
     if not semantic:
         return None, coverage, diagnostics

@@ -697,3 +697,60 @@ class TestBlueprintDepthContract:
             id="export:0", table_index=0, name="SM_Chair", class_name="StaticMesh", status=ObjectStatus()
         )
         assert not handler.supports(obj, VersionContext())
+
+
+class TestHandlerStatusPrecedence:
+    def test_later_success_does_not_mask_earlier_failure(self):
+        from uasset_read.v2 import handlers as H
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+
+        class Boom:
+            def supports(self, obj, ctx):
+                return True
+
+            def enrich(self, obj, ctx, all_objs, data):
+                raise RuntimeError("boom")
+
+        class Ok:
+            def supports(self, obj, ctx):
+                return True
+
+            def enrich(self, obj, ctx, all_objs, data):
+                return {"kind": "ok"}
+
+        obj = ObjectRecord(
+            id="export:9", table_index=0, name="X", class_name="Foo",
+            status=ObjectStatus(parse="complete", semantic="not_requested"),
+        )
+        saved = H._HANDLERS[:]
+        try:
+            H._HANDLERS[:] = [Boom(), Ok()]
+            semantic, _cov, diags = H.run_handlers(obj, H.VersionContext(), [], None)
+        finally:
+            H._HANDLERS[:] = saved
+        assert semantic == {"kind": "ok"}
+        assert obj.status.semantic == "partial"
+        assert any(d.code == "HANDLER_FAILURE" for d in diags)
+
+    def test_clean_success_still_marks_complete(self):
+        from uasset_read.v2 import handlers as H
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+
+        class Ok:
+            def supports(self, obj, ctx):
+                return True
+
+            def enrich(self, obj, ctx, all_objs, data):
+                return {"kind": "ok"}
+
+        obj = ObjectRecord(
+            id="export:9", table_index=0, name="X", class_name="Foo",
+            status=ObjectStatus(parse="complete", semantic="not_requested"),
+        )
+        saved = H._HANDLERS[:]
+        try:
+            H._HANDLERS[:] = [Ok()]
+            H.run_handlers(obj, H.VersionContext(), [], None)
+        finally:
+            H._HANDLERS[:] = saved
+        assert obj.status.semantic == "complete"
