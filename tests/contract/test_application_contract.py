@@ -10,7 +10,7 @@ import subprocess
 import sys
 
 
-SAMPLES_DIR = Path(__file__).parent / "samples"
+SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 SAMPLE = str(SAMPLES_DIR / "ALS_FootstepDataTable.uasset")
 
 

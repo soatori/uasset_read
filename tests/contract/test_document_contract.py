@@ -4,27 +4,40 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import copy
 import json
 import pytest
 
-SAMPLES_DIR = Path(__file__).parent / "samples"
+SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 
 SAMPLE = str(SAMPLES_DIR / "ABP_RifleAnimLayers.uasset")
 MULTI_ASSET = str(SAMPLES_DIR / "ALS_AnimBP.uasset")
 
 
-@pytest.fixture
-def doc():
+@pytest.fixture(scope="session")
+def _doc_raw():
     from uasset_read.v2.api import parse_package_document
 
     return parse_package_document(SAMPLE)
 
 
 @pytest.fixture
-def multi_doc():
+def doc(_doc_raw):
+    return copy.deepcopy(_doc_raw)
+
+
+@pytest.fixture(scope="session")
+def _multi_doc_raw():
+    """Session-scoped raw parse — only runs once, ~15s for ALS_AnimBP."""
     from uasset_read.v2.api import parse_package_document
 
-    return parse_package_document(MULTI_ASSET)
+    return parse_package_document(MULTI_ASSET, depth="package")
+
+
+@pytest.fixture
+def multi_doc(_multi_doc_raw):
+    """Per-test deepcopy — prevents handler mutation from polluting siblings."""
+    return copy.deepcopy(_multi_doc_raw)
 
 
 class TestExportIdentity:

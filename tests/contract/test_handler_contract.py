@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 
-SAMPLES_DIR = Path(__file__).parent / "samples"
+SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 
 
 class TestHandlerRegistry:

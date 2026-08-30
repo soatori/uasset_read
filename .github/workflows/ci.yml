@@ -106,7 +106,7 @@ jobs:
         run: |
           ruff check src/uasset_read tests/
 
-  pytest:
+  pytest-fast:
     runs-on: ubuntu-latest
     needs: ruff-check
     steps:
@@ -119,6 +119,24 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install . jsonschema pytest
-      - name: Run root contract tests
+      - name: Run fast gate tests
         run: |
-          python -m pytest tests/ -q
+          python -m pytest tests/test_core.py tests/test_samples.py -q
+
+  pytest-contract:
+    runs-on: ubuntu-latest
+    needs: ruff-check
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install project + test deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . jsonschema pytest
+      - name: Run contract tests
+        run: |
+          python -m pytest tests/contract/ -q --timeout=120

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-SAMPLES_DIR = Path(__file__).parent / "samples"
+SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 MANIFEST_PATH = SAMPLES_DIR / "manifest.json"
 
 
@@ -24,6 +24,11 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: f.read(8192), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+# ponytail: module-level parse cache, session-scoped fixture would be cleaner
+# but this parametrize path doesn't use fixtures
+_DOC_CACHE = {}
 
 
 class TestManifestIntegrity:
@@ -82,6 +87,8 @@ class TestManifestIntegrity:
     def test_sample_parseable(self, sample_name):
         from uasset_read.v2.api import parse_package_document
 
-        doc = parse_package_document(str(SAMPLES_DIR / sample_name))
+        if sample_name not in _DOC_CACHE:
+            _DOC_CACHE[sample_name] = parse_package_document(str(SAMPLES_DIR / sample_name))
+        doc = _DOC_CACHE[sample_name]
         assert doc.summary.total_exports > 0, f"{sample_name}: no exports"
         assert len(doc.objects) > 0, f"{sample_name}: no objects"

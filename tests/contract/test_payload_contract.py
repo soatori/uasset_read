@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-SAMPLES_DIR = Path(__file__).parent / "samples"
+SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 
 
 class TestTexturePayload:

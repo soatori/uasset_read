@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 
-SAMPLES_DIR = Path(__file__).parent / "samples"
+SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 SAMPLE = str(SAMPLES_DIR / "ABP_RifleAnimLayers.uasset")
 
 # Exports with known data issues — serial region extends beyond file size
