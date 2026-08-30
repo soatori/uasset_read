@@ -88,7 +88,16 @@ def create_parser():
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument("--json", action="store_true", help="Output full JSON structure (default)")
     group.add_argument("--markdown", action="store_true", help="Output Markdown format")
-    group.add_argument("--v2", action="store_true", help="Output PackageDocument v2 JSON (all objects, no filtering)")
+    group.add_argument(
+        "--v2",
+        action="store_true",
+        help="(deprecated, no-op) PackageDocument v2 is now the default output",
+    )
+    group.add_argument(
+        "--legacy-json",
+        action="store_true",
+        help="Emit the legacy Semantic 1.x JSON via the v1 pipeline (deprecated compatibility mode)",
+    )
 
     # v2 projection controls
     parser.add_argument(
@@ -425,8 +434,8 @@ def main():
         _handle_list_package_files(args.file, tolerant)
         return
 
-    # --v2 模式 (PackageDocument v2)
-    if args.v2:
+    # PackageDocument v2 (default output)
+    if not args.legacy_json:
         try:
             from uasset_read.v2.api import parse_package_document
             from uasset_read.v2.projection import project_document

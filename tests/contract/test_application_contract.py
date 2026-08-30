@@ -30,7 +30,7 @@ def run_cli_json(*args: str) -> dict:
 class TestCLI:
     def test_cli_v2_runs(self):
         result = subprocess.run(
-            [sys.executable, "-m", "uasset_read", "--v2", SAMPLE],
+            [sys.executable, "-m", "uasset_read", SAMPLE],
             capture_output=True,
             text=True,
             timeout=30,
@@ -40,23 +40,27 @@ class TestCLI:
         assert data["format"] == "uasset_read.package"
 
     def test_cli_v2_has_objects(self):
-        data = run_cli_json("--v2", SAMPLE)
+        data = run_cli_json(SAMPLE)
         assert len(data["objects"]) > 0
 
     def test_cli_v2_depth_and_limit(self):
-        data = run_cli_json("--v2", "--depth", "package", "--limit", "2", SAMPLE)
+        data = run_cli_json("--depth", "package", "--limit", "2", SAMPLE)
         assert data["depth"] == "package"
         assert len(data["objects"]) <= 2
 
-    def test_cli_no_v2_defaults_to_legacy(self):
-        result = subprocess.run(
-            [sys.executable, "-m", "uasset_read", "--help"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        assert result.returncode == 0
-        assert "--v2" in result.stdout
+    def test_cli_defaults_to_v2_package_document(self):
+        out = run_cli_json(SAMPLE)
+        assert out["format"] == "uasset_read.package"
+        assert "objects" in out and out["package"]
+
+    def test_cli_v2_flag_is_accepted_as_noop(self):
+        plain = run_cli_json(SAMPLE)
+        with_flag = run_cli_json("--v2", SAMPLE)
+        assert plain == with_flag
+
+    def test_cli_legacy_json_opt_in(self):
+        out = run_cli_json("--legacy-json", SAMPLE)
+        assert out["format"] != "uasset_read.package" or "objects" not in out
 
 
 class TestProjectionEquality:
@@ -69,7 +73,7 @@ class TestProjectionEquality:
 
         doc = parse_package_document(SAMPLE, depth="package")
         expected = project_document(doc, depth="package", limit=2, max_bytes=4096)
-        cli = run_cli_json("--v2", "--depth", "package", "--limit", "2", "--max-bytes", "4096", SAMPLE)
+        cli = run_cli_json("--depth", "package", "--limit", "2", "--max-bytes", "4096", SAMPLE)
         agent = inspect_package(SAMPLE, depth="package", limit=2, max_bytes=4096)
 
         # Compare object IDs

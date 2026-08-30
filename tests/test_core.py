@@ -139,7 +139,6 @@ def test_cli_python_and_agent_return_the_same_page():
             sys.executable,
             "-m",
             "uasset_read",
-            "--v2",
             "--depth",
             "package",
             "--limit",
