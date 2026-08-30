@@ -37,6 +37,12 @@ CAPABILITIES = (
     ),
     ("StackOBot_BP_Drone.uasset", "BlueprintGeneratedClass", {"kind": "blueprint"}),
     ("ABP_RifleAnimLayers.uasset", "AnimBlueprintGeneratedClass", {"kind": "anim_blueprint"}),
+    ("NM_BPSystemEvent.uasset", "NiagaraGraph", {"kind": "niagara", "niagara_type": "NiagaraGraph"}),
+    ("NM_BPSystemEvent.uasset", "NiagaraScript", {"kind": "niagara", "niagara_type": "NiagaraScript"}),
+    ("NM_BPSystemEvent.uasset", "NiagaraScriptSource", {"kind": "niagara", "niagara_type": "NiagaraScriptSource"}),
+    ("NM_BPSystemEvent.uasset", "NiagaraNodeOutput", {"kind": "niagara", "niagara_type": "NiagaraNodeOutput"}),
+    ("NM_BPSystemEvent.uasset", "NiagaraNodeSelect", {"kind": "niagara", "niagara_type": "NiagaraNodeSelect"}),
+    ("NM_BPSystemEvent.uasset", "NiagaraNodeStaticSwitch", {"kind": "niagara", "niagara_type": "NiagaraNodeStaticSwitch"}),
 )
 
 

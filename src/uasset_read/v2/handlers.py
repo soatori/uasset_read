@@ -971,14 +971,19 @@ class NiagaraHandler:
     """Enrich Niagara objects with light summary."""
 
     _NIAGARA_CLASSES = (
+        "NiagaraScript",
+        "NiagaraScriptSource",
         "NiagaraScriptVariable",
         "NiagaraGraph",
         "NiagaraNodeFunctionCall",
         "NiagaraNodeInput",
+        "NiagaraNodeOutput",
         "NiagaraNodeOp",
         "NiagaraNodeParameterMapGet",
         "NiagaraNodeParameterMapSet",
         "NiagaraNodeReroute",
+        "NiagaraNodeSelect",
+        "NiagaraNodeStaticSwitch",
     )
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
