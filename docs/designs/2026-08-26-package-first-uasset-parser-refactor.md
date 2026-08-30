@@ -786,7 +786,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - 结构断言，而不是仅检查命令退出 0。
 - partial/unsupported 的诚实状态。
 
-当前重构阶段的唯一阻断环境是本机 Windows + Python 3.14，标准命令为 `python -m pytest -q`。GitHub CI 暂停 pytest、coverage 和 Codecov，只保留静态、目录与 wheel smoke 检查。Linux、macOS 和其他 Python 版本暂缓验证；源码仍遵守跨平台约束，但文档和发布说明不得宣称这些环境已通过测试。
+当前重构阶段的唯一阻断环境是本机 Windows + Python 3.14，标准命令为 `python -m pytest -q`。GitHub CI 只运行非阻塞的 fast-suite smoke job（`python -m pytest -q`，无墙钟阈值）作为回归证据；阻断性全量门禁仍是本机 Windows + Python 3.14。Linux/3.12 结果不得被描述为已验证环境。coverage 与 Codecov 仍暂停。Linux、macOS 和其他 Python 版本暂缓验证；源码仍遵守跨平台约束，但文档和发布说明不得宣称这些环境已通过测试。
 
 ## Acceptance Gates
 
@@ -857,6 +857,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - 最小依赖优先，但不把零依赖作为不可改变的架构限制。
 - Phase 0 原子删除并重建测试体系；后续测试与实现 Phase 同步增长，不保留旧/新双套测试。
 - 当前只以本机 Windows + Python 3.14 作为测试阻断环境；其他系统和 Python 版本暂缓且不得宣称已验证。
+- CI keeps one non-blocking fast-suite smoke job as regression evidence; the blocking full gate remains local Windows + Python 3.14.
 - 真实样本与 structured diagnostics 是测试基准；文本日志不是 golden。
 - 禁止新增根目录独立验证脚本；可复用能力进入包内 API、CLI 或 Agent tool。
 
