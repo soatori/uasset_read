@@ -862,11 +862,11 @@ Compare Python, CLI, and Agent outputs for IDs, status, diagnostics, truncation,
 
 Document Legacy + Tagged + implemented handler families as current only after the gate passes. Keep Unversioned, sidecars, Zen/IoStore, Pak, CurveTable, StringTable, Anim extras, and Physics marked deferred with their issue links.
 
-- [ ] **Step 4: Update and read back #621**
+- [x] **Step 4: Update and read back #621**
 
 The parent must link this plan, list completed task commits, and retain open checkboxes for #623-#627, #615, #618, and #619. Do not close #621 while any canonical acceptance gate is blocked.
 
-- [ ] **Step 5: Commit documentation synchronization**
+- [x] **Step 5: Commit documentation synchronization**
 
 ```powershell
 git add README.md docs/designs/README.md docs/designs/2026-08-26-package-first-uasset-parser-refactor.md docs/reference/agent-dev-reference.md .github/ISSUE_TEMPLATE/bug_report.yml .github/workflows/ci.yml
