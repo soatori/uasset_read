@@ -8,8 +8,10 @@ from pathlib import Path
 import jsonschema  # required test dependency; collection fails fast if missing
 import pytest
 
-SCHEMA_PATH = Path(__file__).parent.parent / "docs" / "designs" / "contract" / "package_document_v2.schema.json"
-EXAMPLE_PATH = Path(__file__).parent.parent / "docs" / "designs" / "contract" / "package_document_v2.example.json"
+SCHEMA_PATH = Path(__file__).parent.parent.parent / "docs" / "designs" / "contract" / "package_document_v2.schema.json"
+EXAMPLE_PATH = (
+    Path(__file__).parent.parent.parent / "docs" / "designs" / "contract" / "package_document_v2.example.json"
+)
 SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 SAMPLE = str(SAMPLES_DIR / "ABP_RifleAnimLayers.uasset")
 
