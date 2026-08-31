@@ -26,24 +26,13 @@ SCHEMA = json.loads((ROOT / "docs" / "designs" / "contract" / "package_document_
 MANIFEST_SAMPLES = json.loads(MANIFEST.read_text(encoding="utf-8"))["samples"]
 MANIFEST_BY_NAME = {entry["name"]: entry for entry in MANIFEST_SAMPLES}
 
-# Exports with known data issues — serial region extends beyond file size
-# (ABP_RifleAnimLayers K2Node_Event_1).
-KNOWN_CORRUPT_EXPORTS = {"export:6"}
-
-# Fixtures whose object-depth parse currently produces
-# EXPORT_PROPERTY_BOUNDS_EXCEEDED / EXPORT_PROPERTY_PARSE_FAILED
-# diagnostics. The _read_range enforcement correctly prevents reading
-# past export boundaries; these fixtures have exports with corrupted
-# serial regions that previously caused silent overruns. The UE5.0-5.2
-# property-tag version gate (v2/package/legacy.py) healed the rest.
-# Exports with corrupted serial regions that read past their export bound.
-# Removing the v1 class-handler dispatch from the v2 property path (its
-# archive-position side effects produced spurious overruns) and fixing the
-# UE5.0-5.2 property-tag version gate left ALS_AnimBP as the only fixture
-# with genuine property-parse diagnostics.
-UNHEALTHY_FIXTURES = {
-    "ALS_AnimBP.uasset",
-}
+# Every tracked fixture now parses its property streams inside the declared
+# serial bounds and keeps all relation targets in range. The last remaining
+# "unhealthy" artifacts (ALS_AnimBP bounds overruns and relation drops,
+# ABP_RifleAnimLayers export:6 parse failure) turned out to be reader bugs,
+# not bad data: read_name's #339 recovery scan fired on valid large
+# name-table indices and shifted reads onto bogus (index, number) pairs,
+# corrupting each export record from the FName onward (archive.read_name).
 
 CAPABILITIES = (
     ("ALS_FootstepDataTable.uasset", "DataTable", {"kind": "data_table"}),
@@ -70,6 +59,8 @@ CAPABILITIES = (
     ),
     ("StackOBot_BP_Drone.uasset", "BlueprintGeneratedClass", {"kind": "blueprint"}),
     ("ABP_RifleAnimLayers.uasset", "AnimBlueprintGeneratedClass", {"kind": "anim_blueprint"}),
+    ("ALS_AnimBP.uasset", "AnimBlueprint", {"kind": "anim_blueprint"}),
+    ("ALS_AnimBP.uasset", "AnimBlueprintGeneratedClass", {"kind": "anim_blueprint"}),
     ("NM_BPSystemEvent.uasset", "NiagaraGraph", {"kind": "niagara", "niagara_type": "NiagaraGraph"}),
     ("NM_BPSystemEvent.uasset", "NiagaraScript", {"kind": "niagara", "niagara_type": "NiagaraScript"}),
     ("NM_BPSystemEvent.uasset", "NiagaraScriptSource", {"kind": "niagara", "niagara_type": "NiagaraScriptSource"}),
@@ -170,8 +161,8 @@ def test_real_sample_proves_claimed_capability(sample: str, class_name: str, exp
     elif class_name in {"BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}:
         assert not {"nodes", "bytecode", "graph"} & obj.semantic.keys()
         if class_name == "AnimBlueprintGeneratedClass":
-            dec = _decode_document(sample, ("export:2",))
-            dobj = dec.objects[2]
+            dec = _decode_document(sample, (obj.id,))
+            dobj = next(o for o in dec.objects if o.id == obj.id)
             assert dobj.semantic is not None, f"{sample}:{class_name} decode"
             assert dobj.semantic["kind"] == "anim_blueprint"
             # At depth=decode, graph data should be present
@@ -262,20 +253,10 @@ def test_every_real_sample_forms_a_valid_package_document(sample: str):
 
     bounds = [d for d in doc.diagnostics if d.code == "EXPORT_PROPERTY_BOUNDS_EXCEEDED"]
     failed = [d for d in doc.diagnostics if d.code == "EXPORT_PROPERTY_PARSE_FAILED"]
-    for d in failed:
-        assert d.object_id is not None, sample
-        assert d.stage == "properties.tagged", sample
-    if sample in UNHEALTHY_FIXTURES:
-        assert bounds or failed, f"{sample}: listed as unhealthy but produced no property diagnostics — update UNHEALTHY_FIXTURES"
-    else:
-        assert not bounds and not failed, f"{sample}: unexpected property diagnostics {[d.code for d in bounds + failed]}"
-    if sample == "ABP_RifleAnimLayers.uasset":
-        # export:1 may have empty properties when _read_range enforcement
-        # correctly catches boundary violations. The property parser tries
-        # to read past the export boundary, which is now detected and rejected.
-        assert {d.object_id for d in failed} <= KNOWN_CORRUPT_EXPORTS, (
-            "healthy sample produced unexpected property parse failures"
-        )
+    oob = [d for d in doc.diagnostics if d.code == "RELATION_TARGET_OUT_OF_RANGE"]
+    assert not bounds and not failed and not oob, (
+        f"{sample}: unexpected diagnostics {[d.code for d in bounds + failed + oob]}"
+    )
 
     from uasset_read.v2.projection import project_document
 
@@ -335,14 +316,6 @@ def test_large_sample_all_exports():
     """ALS_AnimBP — 3395 exports, 2 asset roles (shares the matrix parse via cache)."""
     doc = _object_document("ALS_AnimBP.uasset")
     assert len(doc.objects) == 3395
-
-
-def test_out_of_range_relation_target_yields_diagnostic():
-    """ALS_AnimBP contains an out-of-range outer index; it must surface as a diagnostic."""
-    doc = _object_document("ALS_AnimBP.uasset")
-    hits = [d for d in doc.diagnostics if d.code == "RELATION_TARGET_OUT_OF_RANGE"]
-    assert len(hits) >= 1
-    assert any(d.object_id == "export:1" for d in hits)
 
 
 def test_zero_asset_role_fixture_is_manifested():

@@ -25,9 +25,6 @@ from uasset_read.bounded_events import BoundedEventBuffer
 
 logger = logging.getLogger(__name__)
 
-# read_name index recovery threshold
-_FNAME_INDEX_RECOVERY_THRESHOLD = 1000  # attempt recovery when exceeded
-
 
 class ArchiveLike(Protocol):
     """Unified Archive contract — all Archive implementations must satisfy."""
@@ -42,6 +39,10 @@ class ArchiveLike(Protocol):
 
 # Alignment size set for padding detection (#369)
 _ALIGNMENT_SIZES = frozenset({4, 8, 16, 32, 64})
+
+# FName indices at or above this are high-bit garbage, not real names
+# (no realistic package has 16M names); triggers #339 misalignment recovery.
+_FNAME_GARBAGE_MIN = 1 << 24
 
 
 class FArchive:
@@ -794,10 +795,14 @@ class FArchive:
     def read_name(self, name_map: Optional[list] = None, key: str = "") -> str:
         """Read FName (name table index + instance number).
 
-        When index exceeds _FNAME_INDEX_RECOVERY_THRESHOLD (1000), attempts
-        recovery by adjusting offsets in tolerant mode. This handles offset
-        misalignment caused by SerializationControlExtensions unknown high
-        bit flags (#339).
+        Recovery fires only on clearly-garbage high-bit indices
+        (>= 2**24 and out of range for this package's name table), which is
+        the #339 SerializationControlExtensions misalignment signature.
+        Two rejected tighter/looser variants corrupt healthy packages:
+        a fixed >1000 threshold breaks large editor name tables (ALS_AnimBP,
+        1582 names), and any out-of-range-only trigger lets the shifted-scan
+        "recover" to bogus small (index, number) pairs over zero-padding in
+        small-table packages, misaligning the rest of the export.
 
         Args:
             name_map: name table list. If None, uses internally cached name table.
@@ -818,8 +823,8 @@ class FArchive:
         index = self.read_u32()
         number = self.read_u32()
 
-        # Index reasonableness check: abnormally large index may be offset misalignment
-        if index > _FNAME_INDEX_RECOVERY_THRESHOLD and self._tolerant:
+        # Recovery is for the #339 garbage high-bit signature only.
+        if index >= _FNAME_GARBAGE_MIN and index >= len(name_map) and self._tolerant:
             recovered = self._try_recover_fname(start, name_map)
             if recovered is not None:
                 logger.debug("read_name: recovered out-of-range index %d at pos %d", index, start)
@@ -889,7 +894,11 @@ class FArchive:
             try:
                 test_index = self.read_u32()
                 test_number = self.read_u32()
-                if 0 <= test_index < len(name_map):
+                # A recovered FName must look like a real (index, number)
+                # pair, not just a valid index: shifted reads of inline
+                # string/JSON data pass an index-only check far too easily.
+                # Instance numbers are tiny in practice; 24 bits is generous.
+                if 0 <= test_index < len(name_map) and test_number < (1 << 24):
                     self._logger.debug(
                         "read_name: recovered at offset %d (adjust %+d), index=%d", try_pos, offset_adjust, test_index
                     )
