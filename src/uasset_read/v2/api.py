@@ -27,10 +27,13 @@ def parse_package_document(
     Reads the binary format directly using LegacyPackageReader.
     """
     source = FileSource(file_path)
-    reader = LegacyPackageReader(
-        source,
-        tolerant=tolerant,
-        mappings_path=mappings_path,
-        game=game,
-    )
-    return reader.read(depth=depth, object_ids=object_ids)
+    try:
+        reader = LegacyPackageReader(
+            source,
+            tolerant=tolerant,
+            mappings_path=mappings_path,
+            game=game,
+        )
+        return reader.read(depth=depth, object_ids=object_ids)
+    finally:
+        source.close()

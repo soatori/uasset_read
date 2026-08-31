@@ -88,7 +88,7 @@ class Dependency:
 
 @dataclass
 class PayloadDescriptor:
-    id: str  # "payload:0"
+    id: str  # "payload:export:0"
     owner_id: str  # "export:7"
     kind: str  # "texture_mip", "audio", "bulk_data", "other"
     source_region: str  # "main", "uexp", "ubulk", "uptnl", "ucas"
