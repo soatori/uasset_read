@@ -1,5 +1,7 @@
 # Core/Extras 分层设计
 
+status: historical
+
 > **状态：历史分层方案。** 可用于理解现有 lazy import 决策，但新的 core/extension 边界由 [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md) 定义。
 
 > Issue #117 — 定义 core/extras 分层，extras 模块延迟导入
@@ -15,7 +17,7 @@
 基础解析管线所需的所有模块，`from uasset_read.parse_uasset import parse_package` 时自动加载：
 
 | 模块 | 路径 | 职责 |
-|---|---|---|
+| --- | --- | --- |
 | `archive` | `archive.py` | FArchive 二进制读取层 |
 | `parse_uasset` | `parse_uasset.py` | 主解析管线入口 |
 | `models` | `models/` | 数据模型（ParseResult、PropertyTag 等） |
@@ -35,7 +37,7 @@
 可选功能域，仅在实际使用时通过函数内 import 加载：
 
 | 模块 | 路径 | 职责 | 使用场景 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `graph` | `graph/` | 蓝图图解析 | `--markdown` 输出蓝图图 |
 | `kismet` | `kismet/` | Kismet 字节码反编译 | 蓝图函数体提取 |
 | `blueprint` | `blueprint/` | 蓝图变量/组件提取 | 蓝图元数据解析 |

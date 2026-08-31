@@ -1,5 +1,7 @@
 # Remaining UAsset Types — Semantic JSON Output Design
 
+status: historical
+
 > **Status: implemented current-state history for v0.5.5; future target superseded.** Verify shipped behavior in source/tests. Do not add more Semantic 1.x top-level formats; use [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md).
 
 Date: 2026-08-17
@@ -13,7 +15,7 @@ Issue: #557
 ### Asset Families Covered
 
 | Family | Types | Domain | Key Content |
-|--------|-------|--------|-------------|
+| -------- | ------- | -------- | ------------- |
 | Mesh | StaticMesh, SkeletalMesh, Skeleton, LODSettings | structured | mesh_summary, materials, lod_info |
 | Texture | Texture2D, TextureCube | resource | resource_properties, bulk_summary |
 | Sound | SoundWave, SoundCue, SoundAttenuation | resource/graph | resource_properties, graph nodes |
@@ -27,7 +29,7 @@ Issue: #557
 ### Design Decisions Summary
 
 | Decision | Choice |
-|----------|--------|
+| ---------- | -------- |
 | Mesh LOD screen sizes | Omit when unavailable (no fabrication) |
 | SoundWave chunks | Summary only (per-chunk in debug) |
 | Niagara types | Basic types only (float, int, vec3, etc.) |
@@ -54,7 +56,7 @@ All planned families are implemented and registered in the semantic pipeline:
 The following types are registered as opaque stubs with `partial_metadata` status. They provide basic type mapping without semantic content extraction:
 
 | Category | Types | asset_type |
-|----------|-------|------------|
+| ---------- | ------- | ------------ |
 | Physics | PhysicsAsset, PhysicalMaterial | `physics_asset`, `physical_material` |
 | Animation | AnimLayerInterface | `anim_layer_interface` |
 | Sound | SoundMix, SoundClass, SoundSubmix | `sound_mix`, `sound_class`, `sound_submix` |
@@ -97,7 +99,7 @@ This design does NOT cover:
 ## 3. Asset Family Classification
 
 | # | Family | asset_type values | Domain | Parse Machinery |
-|---|--------|-------------------|--------|-----------------|
+| --- | -------- | ------------------- | -------- | ----------------- |
 | 1 | Mesh | `static_mesh`, `skeletal_mesh`, `skeleton`, `skeletal_mesh_lod_settings` | structured | PropertyMetadataHandler + parse_skeleton |
 | 2 | Texture | `texture` | resource | PropertyMetadataHandler |
 | 3 | Sound | `sound_wave`, `sound_cue`, `sound_attenuation` | resource/graph | PropertyMetadataHandler + parse_sound_wave |
@@ -113,7 +115,7 @@ This design does NOT cover:
 ### 4.1 Applicable Types
 
 | asset_type | UE Class | Primary Content |
-|------------|----------|-----------------|
+| ------------ | ---------- | ----------------- |
 | `static_mesh` | StaticMesh | LODs, sections, materials, bounds, lightmap settings |
 | `skeletal_mesh` | SkeletalMesh | LODs, sections, materials, ref skeleton, physics assets |
 | `skeleton` | Skeleton | Bone hierarchy, retarget sources, sockets, slot groups |
@@ -160,7 +162,7 @@ This design does NOT cover:
 **Field Descriptions:**
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `mesh_summary` | object | yes | Business-level mesh statistics |
 | `mesh_summary.lod_count` | int | yes | Number of LOD levels |
 | `mesh_summary.section_count` | int | yes | Total sections across all LODs |
@@ -186,7 +188,7 @@ This design does NOT cover:
 **Coverage Scopes:**
 
 | Scope | Condition | Description |
-|-------|-----------|-------------|
+| ------- | ----------- | ------------- |
 | `mesh_summary` | always | Business-level statistics |
 | `materials` | always | Material slot assignments |
 | `lod_info` | always | Per-LOD statistics |
@@ -195,7 +197,7 @@ This design does NOT cover:
 **Diagnostic Codes:**
 
 | Code | Severity | Description |
-|------|----------|-------------|
+| ------ | ---------- | ------------- |
 | `MESH_TRUNCATED_LOD` | warning | LOD data truncated by safety limit |
 | `MESH_MISSING_BOUNDS` | info | Bounds data not available |
 | `MESH_INVALID_MATERIAL_REF` | error | Material reference index out of range |
@@ -242,7 +244,7 @@ This design does NOT cover:
 **Additional Fields (beyond StaticMesh):**
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `mesh_summary.bone_count` | int | yes | Number of bones |
 | `mesh_summary.has_skeleton` | bool | yes | Skeleton reference present |
 | `mesh_summary.has_physics_asset` | bool | yes | Physics asset reference present |
@@ -287,7 +289,7 @@ This design does NOT cover:
 **Field Descriptions:**
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `skeleton_data` | object | yes | Skeleton-specific data |
 | `skeleton_data.bone_count` | int | yes | Total bone count |
 | `skeleton_data.root_bone` | string | yes | Root bone name |
@@ -374,7 +376,7 @@ This design does NOT cover:
 **Field Descriptions:**
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `resource_properties` | object | yes | Texture metadata |
 | `resource_properties.size_x` | int | yes | Width in pixels |
 | `resource_properties.size_y` | int | yes | Height in pixels |
@@ -396,7 +398,7 @@ This design does NOT cover:
 **Coverage Scopes:**
 
 | Scope | Condition | Description |
-|-------|-----------|-------------|
+| ------- | ----------- | ------------- |
 | `resource_properties` | always | Texture metadata |
 | `bulk_summary` | always | Bulk data summary |
 | `asset_type_data` | if present | Raw property passthrough |
@@ -421,7 +423,7 @@ Same as Texture2D with additional field:
 ### 6.1 Applicable Types
 
 | asset_type | UE Class | Primary Content |
-|------------|----------|-----------------|
+| ------------ | ---------- | ----------------- |
 | `sound_wave` | SoundWave | Format, duration, channels, compression |
 | `sound_cue` | SoundCue | Graph nodes, mixer configuration |
 | `sound_attenuation` | SoundAttenuation | Attenuation settings, spatialization |
@@ -454,7 +456,7 @@ Same as Texture2D with additional field:
 **Field Descriptions:**
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `resource_properties` | object | yes | Sound wave metadata |
 | `resource_properties.duration` | float | yes | Duration in seconds |
 | `resource_properties.sample_rate` | int | yes | Sample rate (Hz) |
@@ -587,7 +589,7 @@ Same as Texture2D with additional field:
 **Field Descriptions:**
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `table_summary` | object | yes | Table metadata |
 | `table_summary.row_count` | int | yes | Number of rows |
 | `table_summary.column_count` | int | yes | Number of columns |
@@ -606,7 +608,7 @@ Same as Texture2D with additional field:
 ### 8.1 Applicable Types
 
 | asset_type | UE Class | Primary Content |
-|------------|----------|-----------------|
+| ------------ | ---------- | ----------------- |
 | `niagara_system` | NiagaraSystem | Emitter references, system properties |
 | `niagara_emitter` | NiagaraEmitter | Scripts, parameters, sim stage |
 | `niagara_script` | NiagaraScript | Script parameters, bytecode summary |
@@ -714,7 +716,7 @@ Same as Texture2D with additional field:
 ### 9.1 Applicable Types
 
 | asset_type | UE Class | Primary Content |
-|------------|----------|-----------------|
+| ------------ | ---------- | ----------------- |
 | `anim_sequence` | AnimSequence | Keyframes, tracks, compression |
 | `anim_montage` | AnimMontage | Sections, slots, branching points |
 | `pose_asset` | PoseAsset | Pose names, blend weights |
@@ -768,7 +770,7 @@ Same as Texture2D with additional field:
 **Field Descriptions:**
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `anim_summary` | object | yes | Animation metadata |
 | `anim_summary.frame_count` | int | yes | Total frames |
 | `anim_summary.frame_rate` | float | yes | Frames per second |
@@ -932,7 +934,7 @@ Same as Texture2D with additional field:
 ### 11.1 Applicable Types
 
 | asset_type | UE Class | Primary Content |
-|------------|----------|-----------------|
+| ------------ | ---------- | ----------------- |
 | `subsurface_profile` | SubsurfaceProfile | Subsurface scattering settings |
 | `curve` | CurveFloat | Float curve keys |
 | `foliage_type` | FoliageType_InstancedStaticMesh | Foliage instance settings |
@@ -1042,7 +1044,7 @@ Same as Texture2D with additional field:
 All families use a `*_summary` or `*_properties` object for business-level fields:
 
 | Family | Summary Key | Purpose |
-|--------|-------------|---------|
+| -------- | ------------- | --------- |
 | Mesh | `mesh_summary` | Vertex/triangle counts, bounds, LOD info |
 | Texture | `resource_properties` | Dimensions, format, streaming |
 | Sound | `resource_properties` | Duration, sample rate, channels |
@@ -1094,7 +1096,7 @@ All families include `asset_type_data` for backward compatibility:
 ### 14.1 Coverage Scopes by Family
 
 | Family | Scope Names |
-|--------|-------------|
+| -------- | ------------- |
 | Mesh | `mesh_summary`, `materials`, `lod_info`, `skeleton_data` (Skeleton only) |
 | Texture | `resource_properties`, `bulk_summary` |
 | Sound | `resource_properties`, `bulk_summary` (SoundWave), `graph_data` (SoundCue) |
@@ -1108,7 +1110,7 @@ All families include `asset_type_data` for backward compatibility:
 ### 14.2 Diagnostic Code Prefixes
 
 | Prefix | Family | Examples |
-|--------|--------|----------|
+| -------- | -------- | ---------- |
 | `MESH_*` | Mesh | `MESH_TRUNCATED_LOD`, `MESH_MISSING_BOUNDS` |
 | `TEXTURE_*` | Texture | `TEXTURE_OPAQUE_FORMAT`, `TEXTURE_MISSING_DIMENSIONS` |
 | `SOUND_*` | Sound | `SOUND_OPAQUE_DATA`, `SOUND_MISSING_DURATION` |
@@ -1123,7 +1125,7 @@ All families include `asset_type_data` for backward compatibility:
 ### 15.1 Real Asset Fixtures
 
 | Family | Fixture Asset | Source | asset_type |
-|--------|--------------|--------|------------|
+| -------- | -------------- | -------- | ------------ |
 | Mesh | `SM_Chair.uasset` | StarterContent | `static_mesh` |
 | Mesh | `SK_Mannequin.uasset` | Mannequin | `skeletal_mesh` |
 | Mesh | `SK_Mannequin_Skeleton.uasset` | Mannequin | `skeleton` |
@@ -1147,7 +1149,7 @@ Each fixture must:
 ### 16.1 Per-Family Sub-Issues
 
 | Family | Sub-Issue | Branch | Scope |
-|--------|-----------|--------|-------|
+| -------- | ----------- | -------- | ------- |
 | Mesh | #557a | `feature/mesh-semantic` | StaticMesh, SkeletalMesh, Skeleton, LODSettings |
 | Texture | #557b | `feature/texture-semantic` | Texture2D, TextureCube |
 | Sound | #557c | `feature/sound-semantic` | SoundWave, SoundCue, SoundAttenuation |
@@ -1191,6 +1193,7 @@ Each fixture must:
 **Rationale:** Screen size thresholds are editor-only data that may not be present in all assets. Fabricating values would produce misleading output. The field is optional and should be omitted when unavailable.
 
 **Impact:**
+
 - `lod_info[].screen_size` is marked as optional in field descriptions
 - Coverage scope does not require this field
 - No diagnostic code needed (natural absence)
@@ -1202,6 +1205,7 @@ Each fixture must:
 **Rationale:** Standard output should provide bounded summaries without enumerating chunk details. Per-chunk data is useful for debugging streaming issues but not for typical semantic analysis.
 
 **Impact:**
+
 - `bulk_summary` structure remains simple: `total_pcm_bytes`, `compressed_bytes`, `chunk_count`, `is_streaming`
 - Debug mode may include `chunks` array with per-chunk sizes
 - No $bounded needed for normal chunk counts
@@ -1213,6 +1217,7 @@ Each fixture must:
 **Rationale:** Detailed type information (e.g., specific struct layouts) would require parsing Niagara script bytecode, which is complex and version-dependent. Basic types provide sufficient semantic information for most use cases.
 
 **Impact:**
+
 - `parameters[].type` uses simple string identifiers
 - No nested type definitions in standard output
 - Complex types (struct, array) may include `element_type` for simple cases
@@ -1224,6 +1229,7 @@ Each fixture must:
 **Rationale:** UE stores compression metadata in `AnimCurveCompressionCodec` properties. Reading directly ensures accuracy. Computing from raw sizes provides fallback when metadata is unavailable.
 
 **Impact:**
+
 - `compression.ratio` is optional (omitted when both source and metadata unavailable)
 - `compression.codec` read from `CodecClass` property
 - Fallback computation: `compressed_size / original_size` when both sizes available
@@ -1235,6 +1241,7 @@ Each fixture must:
 **Rationale:** GUIDs and export flags are implementation details not relevant for semantic analysis. Including them would add noise without value for typical use cases (code generation, documentation, analysis).
 
 **Impact:**
+
 - `struct_data.properties` contains only: `name`, `type`, `display_name`
 - No `guid`, `export_flags`, or `replication` fields
 - Property order preserved from source
@@ -1244,7 +1251,7 @@ Each fixture must:
 ## 19. Version History
 
 | Version | Date | Changes |
-|---------|------|---------|
+| --------- | ------ | --------- |
 | 1.0 | 2026-08-17 | Initial design draft |
 | 1.1 | 2026-08-17 | Resolved open questions with recommended decisions |
 | 1.2 | 2026-08-17 | Added additional types (opaque stubs) to documentation |

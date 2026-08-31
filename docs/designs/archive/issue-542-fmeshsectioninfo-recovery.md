@@ -1,5 +1,7 @@
 # FMeshSectionInfo Recovery Design
 
+status: historical
+
 > Issue #542 — Document UE source evidence for `FMeshSectionInfo` struct layout and `FMeshSectionInfoMap` serialization
 
 ## Goal
@@ -45,7 +47,7 @@ struct FMeshSectionInfo
 ### Field Summary
 
 | Field | Type | Default | Description |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `MaterialIndex` | `int32` | `0` | Index into the Materials array on UStaticMesh |
 | `bEnableCollision` | `bool` | `true` | Whether collision is enabled for this section |
 | `bCastShadow` | `bool` | `true` | Whether this section casts shadows |
@@ -90,7 +92,7 @@ The high 16 bits store the LOD index; the low 16 bits store the section index.
 ### Methods
 
 | Method | Signature | Description |
-|---|---|---|
+| --- | --- | --- |
 | `Clear()` | `void Clear()` | Empties the map |
 | `GetSectionNumber()` | `int32 GetSectionNumber(int32 LODIndex) const` | Returns the number of sections for a given LOD |
 | `IsValidSection()` | `bool IsValidSection(int32 LODIndex, int32 SectionIndex) const` | Returns whether a given LOD+Section entry exists |
@@ -145,7 +147,7 @@ The condition uses **AND** -- the legacy path fires only when **both** custom ve
 ### Version Thresholds
 
 | Enum | Entry | Comment |
-|---|---|---|
+| --- | --- | --- |
 | `FReleaseObjectVersion` | `UPropertryForMeshSectionSerialize` | Release version, corresponding to UE 4.15 |
 | `FEditorObjectVersion` | `UPropertryForMeshSectionSerialize` | Editor version, same semantic threshold |
 | `FEditorObjectVersion` | `UPropertryForMeshSection` | Earlier version that gates the initial `SectionInfoMap` UProperty on `UStaticMesh` |

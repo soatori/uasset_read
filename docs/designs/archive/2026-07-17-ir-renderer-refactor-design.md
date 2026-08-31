@@ -1,5 +1,7 @@
 # IR 模型层与渲染器可维护性改进设计
 
+status: historical
+
 > **Status: historical proposal; target architecture superseded.** Retain this document as refactor history only. New work follows [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md).
 
 **日期**: 2026-07-17
@@ -11,6 +13,7 @@
 基于 #436 架构审查，对 `uasset_read` 项目的 IR 模型层和渲染器进行可维护性改进。项目当前状态：177 个 Python 文件、21 个目录、零运行时依赖。
 
 核心管线设计健康，但存在以下维护性问题：
+
 - PackageIR 上帝对象（29 个字段混合不同关注点）
 - IR 中大量 dict 字段丢失类型安全
 - ExportIR 字段重复
@@ -32,6 +35,7 @@
 ## P1: PackageIR 拆分
 
 ### 目标
+
 将 PackageIR 的 29 个字段按领域分组，减少认知负担。
 
 ### 新结构
@@ -82,6 +86,7 @@ class DiagnosticsDataIR:
 ```
 
 ### 影响范围
+
 - `src/uasset_read/models/ir.py` — PackageIR 定义
 - `src/uasset_read/ir_builder.py` — PackageIR 构建
 - `src/uasset_read/renderers/json_renderer.py` — 渲染逻辑
@@ -93,6 +98,7 @@ class DiagnosticsDataIR:
 ## P2: dict → dataclass
 
 ### 目标
+
 为高频 dict 字段定义专用 dataclass，提升类型安全。
 
 ### 修正说明
@@ -134,6 +140,7 @@ class BulkDataIR:
 ```
 
 ### 替换映射
+
 - `PackageIR.imports: list[dict]` → `list[ImportIR]`（修正类型注解 bug）
 - `PackageIR.function_graphs: list[dict]` → `list[FunctionGraphIR]`
 - `PackageIR.resolved_parent_assets: list[dict]` → `list[dict]`（保持，数据结构简单）
@@ -146,6 +153,7 @@ class BulkDataIR:
 - `ExportIR.asset_type_data: dict` → `AssetTypeDataIR`（新增，结构待确认）
 
 ### 影响范围
+
 - `src/uasset_read/models/ir.py` — 新增 dataclass 定义
 - `src/uasset_read/ir_builder.py` — 构建逻辑
 - `src/uasset_read/renderers/` — 渲染逻辑
@@ -155,6 +163,7 @@ class BulkDataIR:
 ## P8: ir.py 拆分
 
 ### 目标
+
 将动画 IR 模型拆分到独立文件，保持 ir.py 简洁。
 
 ### 新文件结构
@@ -192,6 +201,7 @@ from .ir_anim import *
 ```
 
 ### 影响范围
+
 - `src/uasset_read/models/ir.py` — 移除动画模型
 - `src/uasset_read/models/ir_anim.py` — 新增动画模型
 - `src/uasset_read/models/__init__.py` — 更新导出
@@ -201,11 +211,13 @@ from .ir_anim import *
 ## P9: ExportParseStatus 枚举同步
 
 ### 目标
+
 让枚举自动生成状态集合，消除手动同步需求。
 
 ### 修正说明
 
 **模块归属问题**：`ExportParseStatus` 定义在 `models/fallback.py`，`PARTIAL_STATUSES`/`FAILED_STATUSES` 定义在 `models/status.py`。为避免循环依赖，建议：
+
 - 枚举定义保留在 `fallback.py`
 - 属性方法直接在枚举类上定义
 - 集合由枚举自动生成，保留在 `status.py`（延迟导入）
@@ -237,11 +249,13 @@ FAILED_STATUSES = frozenset(s for s in ExportParseStatus if s.is_failed)
 ```
 
 ### 优势
+
 - 添加新状态只需在枚举中定义
 - 属性方法基于命名规则自动判断
 - 保留在 status.py 的集合仍可直接使用
 
 ### 影响范围
+
 - `src/uasset_read/models/fallback.py` — ExportParseStatus 定义
 - `src/uasset_read/models/status.py` — 状态集合（延迟导入）
 
@@ -250,6 +264,7 @@ FAILED_STATUSES = frozenset(s for s in ExportParseStatus if s.is_failed)
 ## P3: ExportIR 字段重复
 
 ### 目标
+
 消除 ExportIR 和 ExportRawIR 之间的字段重复。
 
 ### 设计方案
@@ -277,6 +292,7 @@ class ExportIR:
 ```
 
 ### 影响范围
+
 - `src/uasset_read/models/ir.py` — ExportIR 定义
 - `src/uasset_read/ir_builder.py` — 构建逻辑
 
@@ -285,6 +301,7 @@ class ExportIR:
 ## P4: 渲染器过滤逻辑重复
 
 ### 目标
+
 提取公共过滤逻辑到 base.py。
 
 ### 修正说明
@@ -317,6 +334,7 @@ class RendererBase(ABC):
 ```
 
 ### 影响范围
+
 - `src/uasset_read/renderers/base.py` — 新增过滤方法
 - `src/uasset_read/renderers/json_renderer.py` — 使用公共过滤
 - `src/uasset_read/renderers/markdown_renderer.py` — 使用公共过滤
@@ -326,6 +344,7 @@ class RendererBase(ABC):
 ## P5: render_to 不在 ABC
 
 ### 目标
+
 将 render_to 提升到 ABC 接口。
 
 ### 设计方案
@@ -350,6 +369,7 @@ class IRenderer(ABC):
 ```
 
 ### 影响范围
+
 - `src/uasset_read/renderers/base.py` — IRenderer 接口
 - `src/uasset_read/renderers/json_renderer.py` — render_to 方法
 
@@ -358,6 +378,7 @@ class IRenderer(ABC):
 ## P6: 双重 skip/strategy 系统
 
 ### 目标
+
 统一到 CLASS_STRATEGY_TABLE。
 
 ### 修正说明
@@ -407,6 +428,7 @@ def get_serialization_strategy(class_name: str) -> SerializationStrategy | None:
 ```
 
 ### 影响范围
+
 - `src/uasset_read/parsers/class_serialization_strategy.py` — 策略表（扩展支持前缀）
 - `src/uasset_read/parsers/class_specific_skip.py` — 删除或简化
 
@@ -415,11 +437,13 @@ def get_serialization_strategy(class_name: str) -> SerializationStrategy | None:
 ## P7: parse_uasset.py 职责过重
 
 ### 目标
+
 将 parse_uasset.py 拆分为更小的模块。
 
 ### 修正说明
 
 **已有拆分**：当前 `parse_uasset.py` 已经将部分逻辑提取到：
+
 - `parse_stages.py` — 阶段执行逻辑
 - `parse_post_process.py` — 后处理逻辑
 
@@ -453,15 +477,18 @@ src/uasset_read/
 ```
 
 ### parse_uasset.py 保留
+
 - `_parse_package_core()` — 核心编排逻辑
 - 公开 API 函数（`parse_uasset()`、`parse_package()` 等）
 
 ### 新模块职责
+
 - `parse_utils.py` — 轻量解析相关的辅助函数
 - `parse_error_handler.py` — 错误处理和恢复逻辑
 - `parse_memory.py` — 内存清理和资源释放
 
 ### 影响范围
+
 - `src/uasset_read/parse_uasset.py` — 移除辅助函数
 - `src/uasset_read/parse_utils.py` — 新增
 - `src/uasset_read/parse_error_handler.py` — 新增
@@ -474,15 +501,18 @@ src/uasset_read/
 ## 验证计划
 
 ### 单元测试
+
 - 为新增的 dataclass 编写构造和访问测试
 - 为过滤函数编写边界条件测试
 - 为枚举属性编写同步测试
 
 ### 集成测试
+
 - 运行现有测试套件，确保无回归
 - 测试 JSON 和 Markdown 渲染器输出一致性
 
 ### 兼容性测试
+
 - 验证向后兼容性（属性访问、导入路径）
 - 测试与现有代码的集成
 
@@ -491,7 +521,7 @@ src/uasset_read/
 ## 风险与缓解
 
 | 风险 | 影响 | 缓解措施 |
-|------|------|----------|
+| ------ | ------ | ---------- |
 | 渲染器输出格式变化 | 高 | 逐字段对比测试 |
 | 性能回归 | 中 | 基准测试对比 |
 | 测试覆盖不足 | 中 | 补充边界条件测试 |
@@ -501,6 +531,7 @@ src/uasset_read/
 ## 总结
 
 本次重构将显著提升 IR 模型层和渲染器的可维护性：
+
 - PackageIR 从 29 字段重组为领域组
 - 修正 ImportIR 类型注解 bug
 - 高频 dict 字段替换为类型安全的 dataclass（含 5 个遗漏字段）

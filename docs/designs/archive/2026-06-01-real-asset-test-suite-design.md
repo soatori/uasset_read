@@ -1,5 +1,7 @@
 # 真实案例测试套件设计
 
+status: historical
+
 > **状态：已归档的历史测试方案。** 不再作为当前测试结构或 v2 验收标准；当前目标见 [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md) 的 Testing Strategy 与 Acceptance Gates。
 
 **日期**: 2026-06-01
@@ -29,7 +31,7 @@
 20 个资产，15+ 种资产类型，验证 `parse_uasset_with_linker` 核心结构返回。
 
 | # | 类型 | 文件 | 来源 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 1-10 | 现有稳定资产 | BP/ SkeletalMesh/Material/StaticMesh/Texture/InputAction/Niagara 等 | 扩展 STABLE_ASSETS |
 | 11 | AnimSequence | Lyra `MM_Pistol_TurnRight_90.uasset` | 新增 |
 | 14 | NiagaraSystem | ThirtPerson `NS_Jump_Trail.uasset` | 新增 |
@@ -59,9 +61,9 @@
 8 类已知失败，每类 2-3 个真实文件，基于 `tests/fixtures/real_asset_failures_*.txt`。
 
 | 类别 | 文件 | 涉及类型 |
-|---|---|---|
+| --- | --- | --- |
 | animation_data_model | Lyra AnimSequence ×3 | AnimSequence/Montage |
-| cube_builder | __ExternalActors__ ×3 | 外部 Actor |
+| cube_builder | **ExternalActors** ×3 | 外部 Actor |
 | k2_nodes | WidgetBlueprint ×3 | K2Node 相关 |
 | material_expression | Material/MaterialFunction ×3 | 材质表达式 |
 | metasound | MetaSound ×2 | 音频 MetaSound |
@@ -76,7 +78,7 @@
 6 个资产 × 7 种格式化器：
 
 | 资产 | 类型 |
-|---|---|
+| --- | --- |
 | BP_FirstPersonCharacter | Blueprint（含图） |
 | SKM_Manny_Simple | SkeletalMesh |
 | M_Mannequin | Material |
@@ -85,7 +87,7 @@
 | MI_Manny_01_New | MaterialInstance |
 
 | 格式化器 | 验证项 |
-|---|---|
+| --- | --- |
 | JSON | 输出可反序列化 |
 | Text | 非空，有可读内容 |
 | Markdown | 有 `#` 标题 |
@@ -97,7 +99,7 @@
 ### 5. `test_asset_type_depth.py` — 资产类型深度字段
 
 | 类型 | 验证项 |
-|---|---|
+| --- | --- |
 | Texture2D | `imported_size_x/y > 0`、`b_cooked`、2 的幂检查 |
 | Material | 表达式数量 > 0、MaterialDomain、BlendMode |
 | MaterialInstance | parent 存在、scalar/vector 参数数量 |
@@ -119,7 +121,7 @@ pytest tests/test_formatter_outputs.py -v
 ## 失败处理
 
 | 场景 | 处理 |
-|---|---|
+| --- | --- |
 | 文件不存在 | `pytest.skip` + 警告 |
 | 已知未修复缺陷 | `xfail(strict=False)` |
 | 意外新失败 | 正常断言失败 |

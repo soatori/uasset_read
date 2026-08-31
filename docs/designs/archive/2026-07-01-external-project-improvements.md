@@ -1,5 +1,7 @@
 # 外部项目对标改进计划
 
+status: historical
+
 > **状态：已归档的历史对标方案。** 其中的外部项目结论仅用于历史参考；新的架构取舍与迁移顺序以 [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md) 为准。
 
 > 日期: 2026-07-01
@@ -13,7 +15,7 @@
 ### 对标项目概况
 
 | 项目 | 语言 | 定位 | 核心优势 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | uasset-reader-js | JavaScript | 浏览器端头部检查器 | HexView 调试体验、零安装 |
 | UnrealBPInspect | Rust | 蓝图专用 CLI 工具 | CFG 字节码反编译、Git textconv、`--diff` |
 | AssetToJson | C++ UE Plugin | 编辑器内 AI 代理导出器 | Pin 类型细粒度表达、Schema 版本化 |
@@ -25,6 +27,7 @@
 **现状**: 扁平列表 + 两套不一致的模式匹配 (`JumpAnalyzer` + `StructuredControlFlow`)
 
 **核心差距**:
+
 - 无基本块 (Basic Block) 构建
 - 无支配树 / 后支配树
 - 无 CFG 边 (predecessor/successor) 追踪
@@ -41,6 +44,7 @@
 **依赖**: #249 M-15 (合并 structured_flow 重复逻辑)
 
 **范围**:
+
 - 新建 `kismet/cfg/` 子模块
 - `BasicBlock` 数据结构: leader 识别、指令分割、单入口单出口
 - CFG 边构建: fall-through / conditional / unconditional / exceptional
@@ -55,6 +59,7 @@
 **依赖**: Issue A
 
 **范围**:
+
 - 后支配树 → join point 检测 → if/else 区域重建
 - 循环体边界细化 (break/continue 识别)
 - PushExecutionFlow / PopExecutionFlow 配对解析
@@ -62,6 +67,7 @@
 - 替换现有 `body_builder.py` 的结构化输出路径
 
 **关键文件**:
+
 - 新建: `kismet/cfg/basic_block.py`, `kismet/cfg/cfg_builder.py`, `kismet/cfg/dominator.py`, `kismet/cfg/structured_emitter.py`
 - 修改: `kismet/body_builder.py` (调用 CFG 输出), `kismet/pipeline.py` (集成 CFG)
 - 删除: `kismet/structured_flow.py` (合并后移除)
@@ -73,12 +79,14 @@
 **参考**: UnrealBPInspect 的 `--diff` 模式 + `.gitattributes` textconv 配置
 
 **范围**:
+
 - `--diff <file1.uasset> <file2.uasset>`: 解析两个资产并输出结构化差异
 - `.gitattributes` 配置脚本 + textconv 驱动脚本
 - 支持 JSON diff (字段级比较) 和文本摘要 diff (人可读)
 - 使用文档: `docs/guides/git-textconv.md`
 
 **关键约束**:
+
 - 依赖现有 JSON 输出结构
 - diff 输出需要 stable field ordering
 - 不修改解析核心，纯输出层功能
@@ -86,6 +94,7 @@
 ### 2.3 JSON 输出 Schema 版本化 (P2, 待决策)
 
 **现状**:
+
 - `output_version: "5.0"` 语义模糊（parser version vs output format version）
 - 无正式 JSON Schema 文件
 - `RenderOptions.include_schema` 是死选项 (从未使用)
@@ -94,24 +103,27 @@
 **设计文档冲突**:
 
 | 文档 | 立场 | 理由 |
-|---|---|---|
+| --- | --- | --- |
 | `2026-06-03-output-format-ir-design.md` | 消除 `output_version` | IR 数据类即 Schema，版本号无意义 |
 | `output-refactor.md` | 升级到 `"6.0"` | 输出结构大幅扩展，需要版本追踪 |
 
 **⚠️ 待决策**: 需在实现前确定方向。两个可选方案:
 
 **方案 A: 消除 version + 启用 Schema**
+
 - 移除 `output_version` 字段
 - 启用 `include_schema=True`，输出中嵌入 `$schema` 引用
 - 为每种资产类型生成 `.schema.json` 文件
 - 与已批准的 IR 设计文档对齐
 
 **方案 B: 保留 version + 升级到 6.0**
+
 - `output_version` 升级到 `"6.0"`
 - 同时生成正式 JSON Schema 文件
 - 与 `output-refactor.md` 对齐
 
 **无论哪种方案，以下工作相同**:
+
 - 为 PackageIR 输出结构编写 JSON Schema
 - 在 `docs/formats/output/` 文档化输出格式
 - 启用 `RenderOptions.include_schema`
@@ -125,7 +137,7 @@
 **缺失字段对照**:
 
 | 字段 | FEdGraphPinType | PinIR | 状态 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `pin_category` | ✅ | ❌ (嵌在字符串中) | 缺失 |
 | `pin_subcategory` | ✅ | ❌ | 缺失 |
 | `pin_subcategory_object_name` | ✅ | ❌ | 缺失 |
@@ -163,6 +175,7 @@ class PinIR:
 **合并到 #247**: 作为新增 M-18 item，与 M-6 (PinSubCategoryObject 提取) 同属 Pin 类型补全。
 
 **涉及文件**:
+
 - `models/ir.py` — PinIR dataclass 扩展
 - `ir_builder.py` — `_build_pin_ir()` 从 FEdGraphPinType 提取结构化字段
 - `renderers/json_renderer.py` — `_pin_to_dict()` 输出新字段
@@ -174,6 +187,7 @@ class PinIR:
 **参考**: uasset-reader-js 的 "每次读取记录到 hexView 数组" 模式
 
 **范围**:
+
 - 将 `hex_view_entries` 从 `ParseResult` 传递到 `PackageIR`
 - JSON 输出增加 `debug.hex_view` 字段 (需 `--debug` 或 `--hex-view` 启用)
 - 增强 `HexViewEntry`: 添加 `field_path` (层级路径如 `Export[0].Properties[2].Value`)
@@ -181,6 +195,7 @@ class PinIR:
 - JSON 解析轨迹格式: `{offset, length, type, value, path, semantic_type}`
 
 **涉及文件**:
+
 - `debug/hex_view.py` — HexViewEntry 扩展
 - `models/ir.py` — PackageIR 增加 debug 字段
 - `ir_builder.py` — 传递 hex_view_entries
@@ -189,7 +204,7 @@ class PinIR:
 ## 3. 冲突处理汇总
 
 | 冲突类型 | 涉及 | 处理 |
-|---|---|---|
+| --- | --- | --- |
 | 功能重叠 | PinIR 字段补全 ↔ #247 M-6 | **合并**: 新增 M-18 到 #247 |
 | 功能重叠 | CFG 统一 ↔ #249 M-15 | **合并**: 新增 M-18 到 #249 |
 | 设计矛盾 | JSON Schema 方向 (两份设计文档) | **待决策**: 实现前需确定 |

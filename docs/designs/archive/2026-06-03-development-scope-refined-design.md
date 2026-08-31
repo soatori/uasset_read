@@ -1,5 +1,7 @@
 # 开发范围及统一性设计
 
+status: historical
+
 > **状态：历史范围方案，未来范围已废弃。** 当前实现状态以源码/测试为准；新的 package-first 范围和里程碑以 [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md) 为准。
 
 **日期**: 2026-06-03 | **状态**: 已批准
@@ -9,7 +11,7 @@
 **只读** `.uasset` 解析器，单向数据流：`.uasset` → 解析 → 输出。
 
 | 铁律 | 说明 |
-|------|------|
+| ------ | ------ |
 | 零写入 | 禁止修改/回写/保存 .uasset |
 | 接口签名 | 仅 `parse_*`、`export_*`、`read_*` |
 | 文档用语 | 禁用"保存/写入/序列化(写入)" |
@@ -22,7 +24,7 @@
 ### 支持级别
 
 | 级别 | 含义 | 测试要求 |
-|------|------|----------|
+| ------ | ------ | ---------- |
 | **L4** | 完整解析（结构+属性+图+逻辑） | 集成+单元 |
 | **L3** | 结构解析（结构+属性+BulkData头部） | 集成 |
 | **L2** | 基础元数据（名称表+导入导出+属性标签） | 单元 |
@@ -32,7 +34,7 @@
 ### 资产矩阵
 
 | 资产类型 | 级别 | 说明 |
-|----------|------|------|
+| ---------- | ------ | ------ |
 | Blueprint / BPGC | L4 | 变量、图、Kismet、调用链 |
 | AnimBlueprint | L4 | 动画节点+事件图 |
 | LevelScriptBlueprint | L3 | Actor 脚本逻辑 |
@@ -61,6 +63,7 @@
 | 其他 UObject 子类 | L2 | 通用解析器 |
 
 ### 约束
+
 1. L2 → L3 → L4 渐进，不可跳级
 2. L3+ 必须有 `parsers/asset_types/` 专用解析器 + 集成测试
 3. 降级必须记录警告，L0 必须 xfail
@@ -72,7 +75,7 @@
 ### 分级定义
 
 | 级别 | tolerant | strict | 示例 |
-|------|----------|--------|------|
+| ------ | ---------- | -------- | ------ |
 | **E0** Info | 记录继续 | 记录继续 | 版本提示、可选数据缺失 |
 | **E1** Warning | 记录继续 | 记录继续 | 未知属性类型 |
 | **E2** Recoverable | 尝试恢复 | **停止** | PropertyTag 偏移异常 |
@@ -88,6 +91,7 @@ class ErrorContext(TypedDict):
 ```
 
 ### 规则
+
 - CLI 退出码：E0/E1→0，E2(tolerant)→1，E3+→2
 - E2 恢复必须有日志去重
 - strict 模式 E2+ 不尝试任何恢复
@@ -97,7 +101,7 @@ class ErrorContext(TypedDict):
 ## 4. 代码统一性约束
 
 | 原则 | 规则 |
-|------|------|
+| ------ | ------ |
 | 单一错误入口 | 统一 `raise_error()`/`log_warn()`，禁止裸 `print()`/`logging.warning()` |
 | 常量集中 | E0-E4 定义在 `constants.py`，禁止复制数值 |
 | 恢复逻辑抽取 | 相同恢复逻辑抽取为函数，禁止复制粘贴 |
@@ -106,7 +110,7 @@ class ErrorContext(TypedDict):
 ### 防重复架构
 
 | 机制 | 状态 | 规则 |
-|------|------|------|
+| ------ | ------ | ------ |
 | 属性解析器注册表 | 已存在 | 禁止 `if/elif` 链，通过 `CUSTOM_PROPERTY_HANDLERS` 注册 |
 | 节点类型读取器 | 已存在 | 禁止 `read_ue_graph_node()` 中硬编码 if |
 | 资产类型解析器 | 已存在 | 通过类名自动路由，禁止核心管线硬编码 |
@@ -126,7 +130,7 @@ Step1 类名匹配 → Step2 父类回退(XXXBlueprint→Blueprint) → Step3 �
 ### 未知属性处理
 
 | 场景 | 行为 |
-|------|------|
+| ------ | ------ |
 | 在已知类型表中 | 使用对应解析器 |
 | ≤ 阈值(旧版UE4) | 序号映射，E1 Warning |
 | > 阈值 | 跳过，E1 Warning |
@@ -143,6 +147,7 @@ def parse_custom_gameplay_tag(ctx: CustomPropertyContext) -> PropertyValue: ...
 - 不污染核心解析管线
 
 ### 约束
+
 1. 未知类型优雅降级（L2→L1），不抛异常
 2. 记录必须含：asset_type、class_name、file_path、offset
 3. 相同未知类型日志去重
@@ -168,7 +173,7 @@ def parse_custom_gameplay_tag(ctx: CustomPropertyContext) -> PropertyValue: ...
 ### 限制
 
 | 项目 | 上限 |
-|------|------|
+| ------ | ------ |
 | 属性样本 | ≤ 20 个 |
 | 类型名长度 | ≤ 128 字符 |
 | 对象路径 | ≤ 256 字符 |
@@ -181,7 +186,7 @@ def parse_custom_gameplay_tag(ctx: CustomPropertyContext) -> PropertyValue: ...
 ## 7. 测试策略
 
 | 测试 | 用例 | 验证 |
-|------|------|------|
+| ------ | ------ | ------ |
 | 未知资产类型 | 不存在于注册表的 class_name | 降级到 L2 |
 | 未知属性类型 | 未知 PropertyTag | 跳过并继续 |
 | 自定义处理器 | 注册并调用 | 正确调用 |
@@ -189,6 +194,7 @@ def parse_custom_gameplay_tag(ctx: CustomPropertyContext) -> PropertyValue: ...
 | 诊断输出限制 | 大量未知类型 | 不超上限 |
 
 ### 现有要求（不变）
+
 ≥ 200 单元测试 · ≥ 40 集成测试 · 100% 通过率(xfail 除外) · 12+ 资产类型 · strict/tolerant 双模式
 
 ---

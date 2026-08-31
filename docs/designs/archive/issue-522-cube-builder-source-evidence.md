@@ -1,5 +1,7 @@
 # Issue #522 — CubeBuilder Source Evidence List
 
+status: historical
+
 > Status: accepted (2026-08-05); issue #522 closed
 > Scope: version-pinned UE source evidence for every attribution claim used to
 > close #522. All paths are relative to the engine checkout below; all line
@@ -8,7 +10,7 @@
 ## Pinned UE version
 
 | Item | Value |
-|------|-------|
+| ------ | ------- |
 | Checkout | `E:/Develop/lib/UnrealEngine` |
 | Commit | `7deeb413d3dc1fc034f48d1aacc0861301829d32` |
 | Tag | `5.8.0-release` (branch `release`, grafted) |
@@ -21,7 +23,7 @@ The complete serialized UPROPERTY inventory of a `CubeBuilder` export:
 ### UCubeBuilder — `Engine/Source/Editor/UnrealEd/Classes/Builders/CubeBuilder.h:17-64`
 
 | Field | Type | Line |
-|-------|------|------|
+| ------- | ------ | ------ |
 | `X` | `float` | 27-28 |
 | `Y` | `float` | 31-32 |
 | `Z` | `float` | 35-36 |
@@ -42,7 +44,7 @@ Adds **no** serialized UPROPERTYs; only interface overrides.
 ### UBrushBuilder — `Engine/Source/Runtime/Engine/Classes/Engine/BrushBuilder.h:51-80`
 
 | Field | Type | Line | Serialized? |
-|-------|------|------|-------------|
+| ------- | ------ | ------ | ------------- |
 | `BitmapFilename` | `FString` | 57-58 | yes (delta) |
 | `ToolTip` | `FString` | 61-62 | yes (delta) |
 | `NotifyBadParams` | `uint32:1` | 65-66 | **never** — `UPROPERTY(Transient)` |
@@ -166,7 +168,7 @@ Scan script: `tests/temp/scan_cube_builder_corpus.py` (byte scan) +
 `tests/temp/scan_cube_builder_tails.py` (parse verification).
 
 | Metric | Value |
-|--------|-------|
+| -------- | ------- |
 | Corpus root | `E:\Develop\lib\Samples` (107 GB) |
 | `.uasset`/`.umap` files scanned | 238,602 |
 | Files containing the name `CubeBuilder` | 936 (50 `.umap`, 886 `.uasset`) |

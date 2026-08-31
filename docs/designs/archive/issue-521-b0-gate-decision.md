@@ -1,5 +1,7 @@
 # Issue #521 B0b — Source Audit Gate Decision
 
+status: historical
+
 > Status: gate decision (2026-08-05)
 > Inputs: `issue-521-b0-pin-existence-evidence.md` (B0a, commit `d6a92f53`); UE checkout
 > `E:/Develop/lib/UnrealEngine` @ `7deeb413d3dc1fc034f48d1aacc0861301829d32` (5.8.0-release) — verified before audit
@@ -86,6 +88,7 @@ EdGraphNode_Comment (`0` + pin count `0` = two zero int32s).
 `u32 Flags` + `i8 HistoryType` + history payload (`FText::SerializeText`,
 `Engine/Source/Runtime/Core/Private/Internationalization/Text.cpp:888–988`; history enum
 `ETextHistoryType::None = -1`, `Base = 0` in `Core/Private/Internationalization/TextHistory.h:24–27`).
+
 - Plain pins: empty FText = `Flags(0)` + `HistoryType(0xFF)` + `u32 bool
   bHasCultureInvariantString(0)` (Text.cpp:978–987) = `00 00 00 00 ff 00 00 00 00` — the B0a
   "constant" bytes, minus the trailing `Direction` byte.

@@ -1,5 +1,7 @@
 # 修复计划：#521 Niagara 导出类型解析
 
+status: historical
+
 > 状态：partial-metadata 最小切片已完成（2026-08-04 契约缺口审计后修订）；Epic 收尾由 `issue-521-completion-roadmap-design.md`（2026-08-05）接管  
 > 范围：把原 Epic 拆成 Graph、Script 和节点族的字段级工作；不以”支持 Niagara”作为不可验证的完成条件。
 

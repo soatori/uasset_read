@@ -1,5 +1,7 @@
 # Material Semantic JSON Extension Design
 
+status: historical
+
 > **Status: implemented current-state history for v0.5.5; future target superseded.** Verify implementation claims in source/tests. New architecture work follows [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md), where material semantics are attached to an object inside a package document.
 
 > Issue: [#556](https://github.com/soatori/uasset_read/issues/556)
@@ -17,6 +19,7 @@ material schema/validator, and the corresponding core and semantic tests.
 Define semantic JSON output for Material (`UMaterial`) and MaterialInstance (`UMaterialInstance`) assets, building on the common infrastructure established by #551.
 
 The Material semantic JSON must:
+
 - Capture material expressions (nodes) with typed inputs/outputs and semantic descriptions
 - Resolve data-flow connections between expressions
 - Capture material properties (domain, blend mode, shading model, usage flags)
@@ -27,7 +30,8 @@ The Material semantic JSON must:
 
 ### 2.1 Common Infrastructure (#551)
 
-#551 established:
+# 551 established:
+
 - `PackageIR` as the unified IR with domain-specific top-level fields (`blueprint`, `animation`)
 - `standard` / `debug` isomorphic projection: `project_debug(debug) == standard`
 - Schema Draft 2020-12 with `package.schema.json`, `additionalProperties: false`
@@ -40,7 +44,7 @@ The following table is retained as the historical baseline that motivated the
 implementation; it does not describe the current repository state.
 
 | Layer | What exists | Gap |
-|-------|-------------|-----|
+| ------- | ------------- | ----- |
 | Object model (`objects/exports/material.py`) | `UMaterial` (domain, blend_mode, expressions list via tagged properties), `UMaterialInstance` (parent, scalar/vector/texture/static_switch params, base_property_overrides) | No semantic IR, no data-flow resolution |
 | Asset type parsers (`parsers/asset_types/material*.py`) | Opaque stubs (`make_opaque_stub`) — metadata only, not parsing `UMaterial::Serialize` native layout | FMaterialInput structs decode as opaque; FExpressionInput cross-refs not resolved |
 | Binary handlers (`parsers/binary_or_native_handlers.py`) | `_parse_material_input` (FMaterialInput), `_parse_expression_output` (FExpressionOutput) | Handlers registered with "F"-prefixed names; actual struct types in file lack "F" prefix; no handler for `ExpressionInput` |
@@ -50,7 +54,7 @@ implementation; it does not describe the current repository state.
 
 ### 2.3 Sibling Issues
 
-#554 (Blueprint semantic JSON), #555 (AnimBlueprint semantic JSON), and #556 are
+# 554 (Blueprint semantic JSON), #555 (AnimBlueprint semantic JSON), and #556 are
 implemented on `dev-0.5.5`. The shared graph-domain patterns established by
 these issues are now used by their respective semantic extractors.
 
@@ -59,7 +63,7 @@ these issues are now used by their respective semantic extractors.
 ### 3.1 Options Considered
 
 | Aspect | Approach A: Tagged Property Aggregation | Approach B: Full Native Serialization |
-|--------|----------------------------------------|---------------------------------------|
+| -------- | ---------------------------------------- | --------------------------------------- |
 | MaterialExpression properties | Already parsed via tagged properties (separate exports) | Same — expressions are separate exports, not in native layout |
 | Data-flow connections (FExpressionInput) | Present as binary struct data (36B), needs handler fix | Same data, no additional source |
 | Material channel inputs (FMaterialInput) | Present as binary struct data (44B), needs handler fix | Same data |
@@ -186,7 +190,7 @@ class MaterialInputIR:
 Binary handlers are registered with "F"-prefixed struct type names, but the actual `struct_type` in the file data does NOT have the "F" prefix:
 
 | Handler registered as | Actual struct_type in file | Match? |
-|------------------------|---------------------------|--------|
+| ------------------------ | --------------------------- | -------- |
 | `FMaterialInput` | `MaterialInput` | No |
 | `FColorMaterialInput` | `ColorMaterialInput` | No |
 | `FScalarMaterialInput` | `ScalarMaterialInput` | No |
@@ -279,7 +283,7 @@ In `_build_material_ir` (`ir_builder.py`):
 Expression type is inferred from the expression class name using prefix matching:
 
 | Class name pattern | expression_type |
-|--------------------|----------------|
+| -------------------- | ---------------- |
 | `MaterialExpressionConstant*` | `"constant"` |
 | `MaterialExpression*Parameter*` | `"parameter"` |
 | `MaterialExpressionAdd`, `*Subtract`, `*Multiply`, `*Divide`, `*Power`, `*Lerp`, `*Clamp`, `*Saturate`, `*Abs`, `*Sine`, `*Cosine`, `*Floor`, `*Ceil`, `*Frac`, etc. | `"operator"` |
@@ -297,12 +301,13 @@ This is a best-effort heuristic classification. Unknown expressions get `"unknow
 Material property enums are stored as integers in tagged properties. Decode to human-readable strings:
 
 | Property | Enum | Values |
-|----------|------|--------|
+| ---------- | ------ | -------- |
 | `MaterialDomain` / `Domain` | EMaterialDomain | `0=Surface`, `1=DeferredDecal`, `2=LightFunction`, `3=Volume`, `4=PostProcess`, `5=UserInterface` |
 | `BlendMode` | EBlendMode | `0=Opaque`, `1=Masked`, `2=Translucent`, `3=Additive`, `4=Modulate`, `5=AlphaComposite`, `8=TranslucentColoredTransmittance` |
 | `ShadingModel` | EMaterialShadingModel | `0=Unlit`, `1=DefaultLit`, `2=Subsurface`, `3=PreintegratedSkin`, `4=SubsurfaceProfile`, `5=ClearCoatTopCoat`, `6=ThinTranslucent`, `8=SingleLayerWater` |
 
 Usage flags are boolean properties starting with `bUsedWith`:
+
 - `bUsedWithSkeletalMesh`, `bUsedWithClothing`, `bUsedWithStatic`, `bUsedWithLandscape`, `bUsedWithNanite`, `bUsedWithUI`, `bUsedWithParticles`, etc.
 
 Decode tables will be added to `constants.py` (following the `decode_package_flags` pattern).
@@ -314,6 +319,7 @@ Decode tables will be added to `constants.py` (following the `decode_package_fla
 **File**: `schemas/package.schema.json`
 
 Add `material` to top-level properties:
+
 ```json
 "material": {
   "$ref": "#/$defs/MaterialData",
@@ -424,6 +430,7 @@ def _material_to_dict(self, material) -> dict[str, Any]:
 ```
 
 In `_build_data`:
+
 ```python
 if ir.material is not None:
     data["material"] = self._material_to_dict(ir.material)
@@ -436,6 +443,7 @@ if ir.material is not None:
 **File**: `src/uasset_read/renderers/markdown_renderer.py`
 
 Add a Material section to the Markdown output, following the existing Blueprint/Animation section pattern. The section should include:
+
 - Material type and properties summary
 - Expression table (guid, class, type, parameter)
 - Data-flow connections (if any)
@@ -444,7 +452,7 @@ Add a Material section to the Markdown output, following the existing Blueprint/
 ## 5. Files to Change
 
 | File | Change | Type |
-|------|--------|------|
+| ------ | -------- | ------ |
 | `src/uasset_read/models/ir.py` | Add `MaterialIR`, `MaterialExpressionIR`, `MaterialExpressionInputIR`, `MaterialExpressionOutputIR`, `MaterialInputIR`; add `material` field to `PackageIR` | New code |
 | `src/uasset_read/ir_builder.py` | Add `_build_material_ir`, call from `build_package_ir` | New code |
 | `src/uasset_read/parsers/binary_or_native_handlers.py` | Add `_parse_expression_input`; fix handler registration (normalize "F" prefix) | Fix |
@@ -466,7 +474,7 @@ Add a Material section to the Markdown output, following the existing Blueprint/
 Use real samples from `E:\Develop\lib\Samples`:
 
 | Sample | Type | Verifications |
-|--------|------|---------------|
+| -------- | ------ | --------------- |
 | `M_AnimMan_Default.uasset` | Material (simple: 2 expressions) | Material properties, expressions (Constant, VectorParameter), material_inputs (BaseColor, Roughness), data_flow |
 | `M_GridLevel_Background.uasset` | Material (operator: 3 expressions) | ExpressionInput resolution (Multiply A→VectorParameter, B→ScalarParameter), data_flow connections |
 | `MI_Neon_White.uasset` | MaterialInstance | Parent, parameters (scalar/vector/texture/static_switch), base_property_overrides |
@@ -486,7 +494,7 @@ Use real samples from `E:\Develop\lib\Samples`:
 ## 7. Acceptance Criteria Mapping
 
 | Issue Criterion | How Satisfied |
-|-----------------|---------------|
+| ----------------- | --------------- |
 | Draft Material Schema based on/derived from Schema/validator | `MaterialData` $def in `package.schema.json`; schema validation tests |
 | Material Expression graphs have typed inputs/outputs and semantic descriptions | `MaterialExpressionIR` with `inputs` (typed via `MaterialExpressionInputIR`), `outputs` (via `MaterialExpressionOutputIR`), `expression_type` semantic classification |
 | Shader compilation information and material properties are captured | Material properties: `properties` dict with decoded domain/blend_mode/shading_model/usage_flags. Shader compilation: opaque with diagnostics (honest — not available in editor-saved assets, not fabricated) |
@@ -503,7 +511,7 @@ Use real samples from `E:\Develop\lib\Samples`:
 ## 9. Risks and Mitigations
 
 | Risk | Mitigation |
-|------|------------|
+| ------ | ------------ |
 | Binary handler "F" prefix normalization breaks other struct types | Use a try-both approach: lookup `struct_type` first, then `f"F{struct_type}"` — only affects handler lookup, not struct parsing |
 | ExpressionInput PackageIndex references an import (not export) | Handle gracefully: if PackageIndex is negative (import), resolve to import path; if zero or unresolved, output `source_expression_guid: null` with diagnostic |
 | MaterialExpression subclass properties not fully extracted | The tagged property parser handles all UPROPERTY fields. Subclass-specific properties (e.g., `R` on Constant, `DefaultValue` on VectorParameter) are already parsed; the IR builder extracts them into `constant_value` / `parameter` fields. |
@@ -515,7 +523,7 @@ Use real samples from `E:\Develop\lib\Samples`:
 All format understanding is grounded in UE 5.8 source at `E:\Develop\lib\UnrealEngine`:
 
 | Structure | Source Location |
-|-----------|----------------|
+| ----------- | ---------------- |
 | `FExpressionInput` | `Engine/Source/Runtime/Engine/Public/Materials/MaterialExpression.h:47-79` |
 | `FExpressionOutput` | `Engine/Source/Runtime/Engine/Public/Materials/MaterialExpression.h:93-112` |
 | `FMaterialExpressionCollection` | `Engine/Source/Runtime/Engine/Public/Materials/MaterialExpression.h:124-149` |

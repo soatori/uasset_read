@@ -1,5 +1,7 @@
 # Issue #541: CurveMetaData Tagged Fallback Resolution
 
+status: historical
+
 ## Summary
 
 Resolve `UnknownStruct` (CurveMetaData) map-value struct types in `CiciToon_SK_Mannequin.uasset` by registering `CurveMetaData` (without F prefix) in the tagged fallback struct set.
@@ -7,6 +9,7 @@ Resolve `UnknownStruct` (CurveMetaData) map-value struct types in `CiciToon_SK_M
 ## Problem
 
 The `AnimCurveMetaData` export contains a `CurveMetaData` MapProperty where:
+
 - Map keys: `NameProperty` (bone/curve names)
 - Map values: `StructProperty` with `struct_type="CurveMetaData"`
 

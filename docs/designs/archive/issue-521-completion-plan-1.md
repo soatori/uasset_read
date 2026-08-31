@@ -1,5 +1,7 @@
 # #521 Epic Completion — First Implementation Plan (A1–A3, B0a/B0b, B1-pre)
 
+status: historical
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Execute the immediately-actionable slices of `docs/designs/issue-521-completion-roadmap-design.md` — Track A (acceptance rewrite, execution-flow disposition, coverage inventory) and Track B's gate + intake (pin existence proof, UE source audit, #515 candidate-intake fix) — so that Epic #521's remaining work is either done, evidence-gated, or formally handed to #525/#515 child issues.
@@ -32,10 +34,12 @@ These apply to every task (copied verbatim in intent from the project constraint
 ### Task 1: A1 — Test-infrastructure issue, Epic body rewrite, plan-doc sync
 
 **Files:**
+
 - Modify: `docs/designs/issue-521-niagara-export-parsing-plan.md`
 - Issues: create one new issue; edit #521 body
 
 **Interfaces:**
+
 - Consumes: `docs/designs/issue-521-completion-roadmap-design.md` (terminal-state table, verified baseline)
 - Produces: the new test-infrastructure issue number (referenced by Tasks 6/7 docs and by the Epic body); the rewritten Epic body that later tasks must not contradict
 
@@ -212,10 +216,12 @@ git commit -m "docs: sync #521 plan doc with completion roadmap (#521)"
 ### Task 2: A2 — Execution-flow disposition record
 
 **Files:**
+
 - Modify: `docs/designs/issue-521-niagara-field-contracts.md`
 - Read-only audit: `E:/Develop/lib/UnrealEngine/Engine/Plugins/FX/Niagara/Source/NiagaraEditor/`
 
 **Interfaces:**
+
 - Consumes: UE checkout commit `7deeb413d3dc1fc034f48d1aacc0861301829d32`
 - Produces: the "Execution flow" section that the convergence gate (roadmap condition 6) requires; wording quoted by Task 1's Epic body ("no assertion made")
 
@@ -303,11 +309,13 @@ git commit -m "docs: record execution-flow disposition for #521 (#521)"
 ### Task 3: A3 (red) — Coverage audit and failing tests
 
 **Files:**
+
 - Create: `tests/temp/test_issue_521_niagara_coverage.py`
 - Modify: `tests/temp/test_issue_521_niagara_routing.py`
 - Read-only audit: UE checkout (Niagara plugin source)
 
 **Interfaces:**
+
 - Consumes: fixture + SHA-256; existing routing-test conventions
 - Produces: failing tests that define A3's acceptance (Task 4 makes them pass); audit notes consumed by Task 5's coverage table
 
@@ -466,11 +474,13 @@ git commit -m "test: add #521 A3 coverage inventory tests (red) (#521)"
 ### Task 4: A3 (green) — NiagaraScriptVariable routing and handler
 
 **Files:**
+
 - Modify: `src/uasset_read/parsers/class_serialization_strategy.py` (add to `_OPAQUE_CLASSES`)
 - Create: `src/uasset_read/parsers/asset_types/niagara_script_variable.py`
 - Modify: `src/uasset_read/parsers/asset_types/__init__.py` (import, `__all__`, registration)
 
 **Interfaces:**
+
 - Consumes: Task 3's red tests; `ClassHandler`/`HandlerResult`/`FallbackPolicy` from `class_registry.py`; `build_properties_dict` from `property_extractor.py`; `validate_parse_status` from `models/validators.py`
 - Produces: `NiagaraScriptVariableHandler` — later B1 work decodes the inner structs this handler currently leaves opaque; Task 5 documents the resulting terminal state
 
@@ -598,9 +608,9 @@ In `src/uasset_read/parsers/asset_types/__init__.py`:
 from uasset_read.parsers.asset_types.niagara_script_variable import NiagaraScriptVariableHandler
 ```
 
-2. In `__all__`, after `"NiagaraNodeHandler",` add `"NiagaraScriptVariableHandler",`.
+1. In `__all__`, after `"NiagaraNodeHandler",` add `"NiagaraScriptVariableHandler",`.
 
-3. In `register_asset_type_handlers()`, in the `handlers` list after `NiagaraNodeHandler(),` add:
+2. In `register_asset_type_handlers()`, in the `handlers` list after `NiagaraNodeHandler(),` add:
 
 ```python
         NiagaraScriptVariableHandler(),
@@ -635,9 +645,11 @@ git commit -m "feat: project NiagaraScriptVariable tagged metadata (#521)"
 ### Task 5: A3 docs — Coverage contract table and ScriptSource skip evidence
 
 **Files:**
+
 - Modify: `docs/designs/issue-521-niagara-field-contracts.md`
 
 **Interfaces:**
+
 - Consumes: Task 3's audit notes (header paths/lines for `UNiagaraScriptVariable`, `UNiagaraScriptSource`), Task 4's implemented state
 - Produces: the coverage contract table required by convergence gate condition 3 ("no Niagara class undecided")
 
@@ -693,11 +705,13 @@ git commit -m "docs: add Niagara coverage contract table (#521)"
 ### Task 6: B0a — Fixture-level pin existence proof (diagnostic)
 
 **Files:**
+
 - Create: `temp/inspect_521_node_tails.py`
 - Create: `docs/designs/issue-521-b0-pin-existence-evidence.md`
 - Scratch output: `temp/b0a_report.txt`
 
 **Interfaces:**
+
 - Consumes: `native_tail` offset/size recorded by all 11 migrated handlers (verified: e.g. NiagaraNodeFunctionCall tail ≈ 458 bytes)
 - Produces: the evidence document that Task 7's gate decision consumes; the `Outputs`/`OutputVars` element-type identification that Task 9's candidate intake consumes
 
@@ -887,10 +901,12 @@ git commit -m "docs: record #521 B0a pin existence evidence (#521)"
 ### Task 7: B0b — UE source audit and gate decision
 
 **Files:**
+
 - Create: `docs/designs/issue-521-b0-gate-decision.md`
 - Issue: comment on #521; conditionally create a fixture-expansion issue
 
 **Interfaces:**
+
 - Consumes: Task 6's evidence document (its conclusion selects the audit focus)
 - Produces: THE gate decision that controls all later B1/B2 planning (roadmap: "B1/B2 plans are written after the B0 gate result is known"); pin-path verdict consumed by #525 scoping
 
@@ -915,6 +931,7 @@ grep -rn "SerializePin\|LinkedTo" "E:/Develop/lib/UnrealEngine/Engine/Source/Run
 ```
 
 Answer with `file:line` citations (all against the recorded checkout commit):
+
 1. Where are pins stored for Niagara nodes (member declarations)?
 2. Are pins serialized into the package at all, and by which function? If version-gated, quote the guard.
 3. How is `LinkedTo` serialized (reference form and boundary — e.g. index-based resolution within the node's pin list)?
@@ -924,7 +941,7 @@ Answer with `file:line` citations (all against the recorded checkout commit):
 Combine B0a's fixture conclusion (Task 6) with Step 2's source answer:
 
 | Source says | Fixture says | Decision |
-|---|---|---|
+| --- | --- | --- |
 | serialized | markers found | **Pin path live** — B1/B2 planning includes the pin half |
 | serialized | not found | **Fixture expansion** — create the Phase 1.5 issue (Step 4); B0a re-entry after expansion |
 | not serialized | not found | **Pin half disproven-closed** — record the source evidence; #525 scope change touches its pin half only (`parameters` acceptance stands) |
@@ -995,10 +1012,12 @@ git commit -m "docs: record #521 B0b source-audit gate decision (#521)"
 ### Task 8: B1-pre code — Extend the #515 struct scan
 
 **Files:**
+
 - Modify: `temp/scan_opaque_structs.py`
 - Scratch output: `temp/b1_pre_scan.json`
 
 **Interfaces:**
+
 - Consumes: nothing from earlier tasks (may run in parallel with B0)
 - Produces: the re-scan JSON that Task 9 turns into candidate entries; the `export_status` field on occurrence records
 
@@ -1022,7 +1041,7 @@ and extracts StructProperty candidates from exports whose parse_status is
 were structurally missed before).
 ```
 
-2. In `scan_opaque_structs()`, replace the filter block
+1. In `scan_opaque_structs()`, replace the filter block
 
 ```python
             ps = exp.get("parse_status", "success")
@@ -1045,7 +1064,7 @@ with
             export_status = ps
 ```
 
-3. In the occurrence record (inside the `for entry in struct_entries:` loop), add the status:
+1. In the occurrence record (inside the `for entry in struct_entries:` loop), add the status:
 
 ```python
                 by_type[entry["struct_type"]].append({
@@ -1088,11 +1107,13 @@ git commit -m "feat: extend #515 struct scan to partial_metadata exports (#515)"
 ### Task 9: B1-pre docs — Candidate intake into the #515 list
 
 **Files:**
+
 - Modify: `docs/designs/issue-515-candidates.md`
 - Modify: `docs/designs/issue-515-opaque-structproperty-roadmap.md`
 - Scratch input: `temp/b1_pre_scan.json`
 
 **Interfaces:**
+
 - Consumes: Task 8's scan JSON; Task 6's `Outputs`/`OutputVars` identification (if any element type was identified, it is added here too); UE checkout for source references
 - Produces: the candidate entries and gate evaluations that Task 10 converts into issues
 
@@ -1160,9 +1181,11 @@ git commit -m "docs: intake Niagara structs into #515 candidate list (#515)"
 ### Task 10: B1-pre issues — Per-struct slice issues and #515 linkage
 
 **Files:**
+
 - Issues only (no repo changes)
 
 **Interfaces:**
+
 - Consumes: Task 9's gate results (only structs marked "yes" get issues)
 - Produces: the per-struct #515 child issues that the later B1 plan executes; the #515 linkage comment
 

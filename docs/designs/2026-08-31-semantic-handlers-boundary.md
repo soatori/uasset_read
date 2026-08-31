@@ -1,5 +1,7 @@
 # D2：`semantic/` 包与 `v2/handlers.py` 职责边界
 
+status: target
+
 > **文档状态：current + target**（§1 为基线 `bd3309a7` current 事实，引用 `file:line`；§2-§4 为边界决策与收敛路径 target）。
 > 关联：权威设计 `2026-08-26-package-first-uasset-parser-refactor.md`（Asset Handlers、Phase 4/6）；退役门禁见 `2026-08-31-v1-retirement-plan.md`（D1）；版本事实契约见 `2026-08-31-version-context-field-contract.md`（G1）。
 

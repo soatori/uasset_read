@@ -1,5 +1,7 @@
 # G1：VersionContext 字段契约
 
+status: target
+
 > **文档状态：current + target**（current = 基线 `bd3309a7` 已实现；target = 本文件末尾的扩展决策）。
 > 关联：`docs/designs/2026-08-26-package-first-uasset-parser-refactor.md`（权威目标，其 VersionContext 一节）；Issue #621。
 > 现状断言全部以基线源码为准，引用 `file:line`。

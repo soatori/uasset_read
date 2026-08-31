@@ -1,5 +1,7 @@
 # #515 Opaque StructProperty Candidates
 
+status: historical
+
 > Original scan: 2026-08-02 (`temp/scan_opaque_structs.py`)
 > Re-scan: 2026-08-05 (`temp/rescan_opaque_structs.py`)
 > Re-scan output: `temp/rescan_opaque_2026-08-05.txt`
@@ -42,7 +44,7 @@ All scans are diagnostic only; they do not modify parsing.
 ### B1-pre export-level scan (2026-08-05, `temp/b1_pre_scan.json`)
 
 | Metric | Value |
-|--------|-------|
+| -------- | ------- |
 | Samples scanned | 42 |
 | Files with in-scope exports (`opaque` or `partial_metadata`) | 21 |
 | Total in-scope exports | 87 |
@@ -52,7 +54,7 @@ All scans are diagnostic only; they do not modify parsing.
 ### Value-level re-scan (2026-08-05, `temp/rescan_opaque_2026-08-05.txt`)
 
 | Metric | Value |
-|--------|-------|
+| -------- | ------- |
 | Samples scanned | 42 |
 | Parse errors | 0 |
 | Opaque struct values found by the script | 37 |
@@ -66,7 +68,7 @@ loop in `parse_struct_property` (`parsers/property_types.py`). They are no
 longer opacity candidates:
 
 | 2026-08-02 candidate | Current status | Verified location |
-|---|---|---|
+| --- | --- | --- |
 | `AlphaBlend` | success (`BlendIn`/`BlendOut`, 37/78 bytes) | `ALS_CLF_GetUp_Back_Montage_Default.uasset` |
 | `MeshSectionInfoMap` | success (`SectionInfoMap`/`OriginalSectionInfoMap`, 228 bytes) | `StarterContent_SM_Chair.uasset` |
 | `MeshNaniteSettings` | success (`NaniteSettings`, 34 bytes) | `StarterContent_SM_Chair.uasset` |
@@ -91,13 +93,14 @@ family structs in `StarterContent_M_Wood_Walnut.uasset` report
 ## Candidate Selection Criteria
 
 | Dimension | Evaluation | Weight |
-|-----------|-----------|--------|
+| ----------- | ----------- | -------- |
 | Frequency | Occurrence count in tracked samples | High |
 | Impact | Importance of user-visible data | High |
 | Complexity | Parsing difficulty (tagged fallback vs native) | Medium |
 | Evidence | UE source documentation level | High |
 
 A candidate qualifies for implementation only when ALL are met:
+
 1. Stable fixture available (version-controlled in `tests/samples/`)
 2. Binary boundaries determinable (tag.size or tagged property loop)
 3. UE source code auditable for the matching engine version
@@ -108,7 +111,7 @@ A candidate qualifies for implementation only when ALL are met:
 From `temp/rescan_opaque_2026-08-05.txt`:
 
 | # | Struct Type | Occurrences | Raw Size | Sample Files |
-|---|------------|-------------|----------|--------------|
+| --- | ------------ | ------------- | ---------- | -------------- |
 | 1 | ExpressionInput | 22 | 36 | StarterContent_M_Wood_Walnut |
 | 2 | NiagaraVariable | 12 | 111-114 | NM_BPSystemEvent |
 | 3 | ColorMaterialInput | 1 | 44 | StarterContent_M_Wood_Walnut |
@@ -140,7 +143,7 @@ byte-level tag walks (`temp/b1_gate_byte_walk.py`) proving exact payload
 consumption:
 
 | Struct Type | Occurrences | Unique locations | export_status | Value-level status (verified) |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | Guid | 83 | 23 | mixed | decoded (fast path) — not a candidate |
 | NiagaraVariable | 12 | 2 | partial_metadata | **opaque ×12** (raw 111-114) |
 | NiagaraVariableMetaData | 11 | 1 | partial_metadata | success ×11 (73/73 bytes consumed) |
@@ -228,7 +231,7 @@ tag walks (`temp/b1_gate_byte_walk.py`) that prove exact payload consumption
 (absent members are writer-side default skips, not dropped bytes).
 
 | Struct | Source reference (checkout `7deeb413d`) | Gate (fixture / boundary / source / semantics) | Qualifies |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | NiagaraVariable | `NiagaraTypes.h:1460` (`FNiagaraVariable`), `:1281` (`FNiagaraVariableBase`); custom `Serialize` `NiagaraModule.cpp:1732`/`:1763` | ✓ / ✓ tag.size / ✓ / ✓ (B0a byte evidence: FName `Name` + `FNiagaraTypeDefinition` tagged stream + data blob; exact size arithmetic) | **yes** — value-level opaque ×12; custom Serialize means the tagged fallback never applies |
 | NiagaraGraphScriptUsageInfo | `NiagaraEditor/Public/NiagaraGraph.h:87` (struct), `:571` (member `CachedUsageInfo`) | ✓ / ✓ per-element tag size / ✓ / ✓ (B0a: 544/544-byte tagged stream decoded) | **yes** — opaque array element (`UnknownStruct`, raw_size 0) |
 | VersionedNiagaraScriptData | `Niagara/Classes/NiagaraScript.h:619` (struct), `:873` (member `VersionData`) | ✓ / ✓ per-element tag size / ✓ / ✓ (B0a: 2038/2038-byte tagged stream decoded) | **yes** — opaque array element (`UnknownStruct`, raw_size 0) |
@@ -272,6 +275,7 @@ the parser does not currently read — hence `UnknownStruct`, `raw_size: 0`,
 per-element tags first.
 
 Version deltas (fixture UE5.0-era vs checkout 5.8), recorded per B0a:
+
 - `FNiagaraGraphScriptUsageInfo`: 5.8 member `ReferenceHashFromGraph` absent
   from the fixture stream.
 - `FVersionedNiagaraScriptData`: 5.8 member `InlineOverviewDisplayName`

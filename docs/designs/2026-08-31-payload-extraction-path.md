@@ -10,6 +10,8 @@ status: target
 
 **已生效决策**（另一工作区执行撤回）：
 
+> **`max_bytes` 契约注记**（审计缺口 #621 遗留）：extraction 恢复时，`max_bytes` 必须限制**序列化后的工具响应整体**（base64 payload + JSON envelope 均计入），而非仅原始 payload 字节。当前响应恒为 DEFERRED 小对象，天然满足此约束。
+
 - `extract_payload`（`agent_tools.py:180-224`）对任意 `payload_id` 恒返回结构化错误 `PAYLOAD_EXTRACTION_DEFERRED`；工具签名与错误 envelope 形状不变。
 - decode 深度不再产出 fabricated descriptor；`payloads[]` 在无可靠 descriptor 前为空数组（信封键保留，schema required 不动）。
 - 真实 descriptor / extraction 等待**可再分发 sidecar/container fixture**（#623–#627）到位后按 UE 源码偏移证据重做；在此之前任何"提取成功"都必须是 fake，故宁可全部 DEFERRED。

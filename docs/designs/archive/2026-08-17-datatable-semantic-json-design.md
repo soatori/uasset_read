@@ -1,5 +1,7 @@
 # DataTable Semantic JSON Extension Design
 
+status: historical
+
 > **Status: historical Semantic 1.x design; target architecture superseded.** Preserve this document for DataTable evidence and current implementation history. New work follows [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md), where DataTable semantics belong to an object inside `PackageDocument`.
 
 > Issue: [#557](https://github.com/soatori/uasset_read/issues/557) (first sub-issue — DataTable)
@@ -12,9 +14,10 @@
 
 Define semantic JSON output for DataTable (`UDataTable`) assets, building on the common infrastructure established by #551.
 
-#557 (Other UAsset asset semantic JSON) covers six heterogeneous asset types (SkeletalMesh, StaticMesh, Skeleton, Texture2D, DataTable, SoundWave) that share almost no domain model. It is decomposed into per-family sub-issues; **DataTable is the first** — the exemplar for "manifest domains" (assets whose data is already parsed by an asset-type handler and projected directly from `ExportIR.asset_type_data`, with no dedicated `PackageIR` field or `ir_builder` change).
+# 557 (Other UAsset asset semantic JSON) covers six heterogeneous asset types (SkeletalMesh, StaticMesh, Skeleton, Texture2D, DataTable, SoundWave) that share almost no domain model. It is decomposed into per-family sub-issues; **DataTable is the first** — the exemplar for "manifest domains" (assets whose data is already parsed by an asset-type handler and projected directly from `ExportIR.asset_type_data`, with no dedicated `PackageIR` field or `ir_builder` change).
 
 The DataTable semantic JSON must:
+
 - Capture the row manifest: row count, per-row name, per-row payload size
 - Resolve the `RowStruct` reference (class name, object name, package path)
 - Report honest coverage: row manifest available, row values unavailable (external struct)
@@ -24,7 +27,8 @@ The DataTable semantic JSON must:
 
 ### 2.1 Common Infrastructure (#551)
 
-#551 established the `semantic/` package with:
+# 551 established the `semantic/` package with:
+
 - `SemanticIR` (`semantic/models.py`) — mode-independent IR with envelope fields (`format`, `asset_type`, `asset`, `status`, `references`, `coverage`, `diagnostics`, `evidence`) plus a `content` staging dict promoted to top-level JSON by the renderer.
 - `build_semantic_ir()` (`semantic/builder.py`) — selects primary export, resolves `asset_type`, calls the registered domain extractor, builds honest status.
 - Domain registry (`semantic/extensions.py`) — `register_extension(class_name, extractor, *, domain_format, domain_format_version)` maps UE class names to extractors; `get_domain_format()` marks a class as owning its envelope sections.
@@ -37,12 +41,12 @@ The DataTable semantic JSON must:
 
 ### 2.2 Existing Domain Extensions
 
-#554 (Blueprint), #555 (AnimBlueprint), #556 (Material) are all CLOSED and ship on `dev-0.5.5`. Each registered a domain format (`uasset_read.<domain>_semantic` v1.0.0), a schema, a validator, and an extractor subpackage under `semantic/<domain>/`. All three are *graph domains*: they parse binary graph data needing archive access during `ir_builder`, so each has a dedicated IR dataclass + `PackageIR` field (`blueprint`, `material`).
+# 554 (Blueprint), #555 (AnimBlueprint), #556 (Material) are all CLOSED and ship on `dev-0.5.5`. Each registered a domain format (`uasset_read.<domain>_semantic` v1.0.0), a schema, a validator, and an extractor subpackage under `semantic/<domain>/`. All three are *graph domains*: they parse binary graph data needing archive access during `ir_builder`, so each has a dedicated IR dataclass + `PackageIR` field (`blueprint`, `material`).
 
 ### 2.3 Current DataTable Parsing State
 
 | Layer | What exists | Gap |
-|-------|-------------|-----|
+| ------- | ------------- | ----- |
 | Asset-type handler (`parsers/asset_types/data_table.py`) | `parse_data_table()` reads `NumRows` + per-row `FName` (index + number) + `RowPayload` (size + raw bytes). Result: `{parse_status, row_count, rows: [{name, name_index, name_number, payload_size}]}` | Row payload bytes are **read and discarded** (`_payload_data` unused). No row values. |
 | Handler wiring (`parsers/asset_types/__init__.py`) | `DataTable` registered via optional `AssetTypeHandler` list; result attached to `export._asset_type_data` | Result flows into `ExportIR.asset_type_data` but no semantic projection exists |
 | Property parsing | `RowStruct` property (an `ObjectProperty` referencing an import) is parsed by the generic property parser into `export.properties` | Reference is not semantically resolved in JSON output |
@@ -54,7 +58,7 @@ The DataTable semantic JSON must:
 Three real DataTable samples exist in `tests/samples/`:
 
 | Sample | `RowStruct` kind | Resolvable in-package? |
-|--------|------------------|------------------------|
+| -------- | ------------------ | ------------------------ |
 | `FirstPerson_DT_WeaponList.uasset` | `UserDefinedStruct` (`ST_WeaponTableRow`) imported from `/Game/.../ST_WeaponTableRow` | No — external package |
 | `ALS_FootstepDataTable.uasset` | `ScriptStruct` (C++ native) | No — native, no layout |
 | `Lyra_DT_SurfaceTypes.uasset` | `ScriptStruct` (C++ native) | No — native, no layout |
@@ -66,7 +70,7 @@ Three real DataTable samples exist in `tests/samples/`:
 ### 3.1 Options Considered
 
 | Aspect | Approach A: Direct-Read Extractor | Approach B: Dedicated `DataTableIR` | Approach C: Shared `structured_domain` Helper |
-|--------|-----------------------------------|-------------------------------------|---------------------------------------------|
+| -------- | ----------------------------------- | ------------------------------------- | --------------------------------------------- |
 | Manifest source | Read `ExportIR.asset_type_data` directly in extractor | Copy manifest dict into a `DataTableIR` dataclass in `ir_builder`, then extractor projects it | Build a reusable row-manifest model in `semantic/structured_domain.py` for DataTable/CurveTable/StringTable |
 | New model code | None — reuses `ExportIR.asset_type_data` | `DataTableIR` dataclass + `PackageIR.data_table` field + `_build_data_table_ir()` | Shared helper + per-domain config |
 | `ir_builder` change | None | Add `_build_data_table_ir` + wire into `build_package_ir` | Varies |
@@ -145,6 +149,7 @@ The extractor returns a `content` dict. The renderer (`render.py:47-53`) promote
 ```
 
 Field semantics:
+
 - `data_table.row_count` — `int32` row count from `LoadStructData`.
 - `data_table.row_struct` — resolved reference to the `RowStruct` property's target. **Nullable**: a DataTable without a resolvable `RowStruct` property omits the field. Shape mirrors `ReferenceEntry` (subset): `{class_name, object_name, package_path}`. `package_path` is the package containing the struct (resolved through the import's outer chain, same logic as `semantic/references.py`); empty string when unresolvable.
 - `data_table.rows[].name` — the row's `FName` (stable within the asset).
@@ -163,6 +168,7 @@ def build_data_table_content(package_ir, export_ir, coverage_model, evidence_lis
 ```
 
 Algorithm:
+
 1. Read `export_ir.asset_type_data` (the manifest). If absent or empty:
    - `coverage_model.track("row_manifest", False)`
    - return `{}` (the envelope reports opaque via `NO_EXTRACTOR`/`PARTIAL_PARSE`; the common-layer evidence already records the export index and parse status).
@@ -174,6 +180,7 @@ Algorithm:
 4. `coverage_model.track("row_values", False)` — values not parsed (external struct; see §4.4).
 5. Build `rows` list from `asset_type_data["rows"]`: `[{name, payload_size} for r in rows]`.
 6. Build `content`:
+
    ```python
    content = {
        "data_table": {
@@ -185,6 +192,7 @@ Algorithm:
        "diagnostics": [_row_values_unresolved_diagnostic(row_struct)],
    }
    ```
+
 7. Return `content`.
 
 The `ROW_VALUES_UNRESOLVED` diagnostic is `info` severity (the parser did nothing wrong; row-value parsing is deferred in this version). The message names the struct's `object_name` and `package_path` so a consumer can locate it. The phrasing "in package '<path>'" is honest for both the external case (path is another package — all three current samples) and a future in-package case (path would be this package); it does not claim the struct is external when it is not. When `row_struct` is `None` (no `RowStruct` property found), the diagnostic instead explains that no row-struct reference was found.
@@ -192,6 +200,7 @@ The `ROW_VALUES_UNRESOLVED` diagnostic is `info` severity (the parser did nothin
 ### 4.4 Honest Status Contract
 
 Because `content["coverage"]` is non-empty and reports `row_values` as unavailable, the builder (`builder.py:225-230`) forces `representation = "partial"`. This is correct and honest:
+
 - `parse` stays `complete` — the file parsed fine; only the cross-package struct layout is out of reach.
 - `representation` is `partial` — we have the manifest but not the semantic values.
 
@@ -247,6 +256,7 @@ Key `$defs`:
 Add `validate_data_table_document(ir) -> list[str]` and register it via `register_domain_validator("uasset_read.data_table_semantic", validate_data_table_document)` (registration call lives in `semantic/data_table/__init__.py`). Add `"uasset_read.data_table_semantic": "1.0.0"` to `_FORMAT_VERSIONS`.
 
 Rules (simpler than blueprint's — no closure/ID checks because there are no graph endpoints):
+
 - `content.data_table` must be present and non-empty.
 - `data_table.row_count` must equal `len(data_table.rows)`.
 - Each `rows[]` entry must have non-empty `name` and integer `payload_size >= 0`.
@@ -257,11 +267,13 @@ Rules (simpler than blueprint's — no closure/ID checks because there are no gr
 ### 4.8 Wiring
 
 **File**: `src/uasset_read/semantic/__init__.py` — add after the existing domain imports:
+
 ```python
 import uasset_read.semantic.data_table  # noqa: F401  (registers #557 DataTable extractors)
 ```
 
 **File**: `src/uasset_read/semantic/render.py` — add to `format_to_schema`:
+
 ```python
 "uasset_read.data_table_semantic": "data_table_semantic.schema.json",
 ```
@@ -269,7 +281,7 @@ import uasset_read.semantic.data_table  # noqa: F401  (registers #557 DataTable 
 ## 5. Files to Change
 
 | File | Change | Type |
-|------|--------|------|
+| ------ | -------- | ------ |
 | `src/uasset_read/semantic/data_table/__init__.py` | Register extractor + domain validator + format/version | New code |
 | `src/uasset_read/semantic/data_table/extractor.py` | `build_data_table_content` + `RowStruct` resolution helper | New code |
 | `src/uasset_read/schemas/data_table_semantic.schema.json` | Draft 2020-12 schema | New schema |
@@ -284,39 +296,46 @@ No changes to: `kinds.py` (already maps `DataTable`), `ir_builder.py`, `models/i
 Reuse the #551/#556 test scaffold. Tests against the three real samples:
 
 | Sample | Verifications |
-|--------|---------------|
+| -------- | --------------- |
 | `FirstPerson_DT_WeaponList.uasset` | `row_struct.class_name == "UserDefinedStruct"`; `row_struct.package_path` points at the external struct package; manifest row names; `representation == "partial"`; `ROW_VALUES_UNRESOLVED` diagnostic present |
 | `ALS_FootstepDataTable.uasset` | `row_struct.class_name == "ScriptStruct"`; native struct path; same status/diagnostic contract |
 | `Lyra_DT_SurfaceTypes.uasset` | Same as ALS (ScriptStruct native) |
 
 ### 6.1 Schema Conformance
+
 - `jsonschema` validates each sample's standard + debug output against `data_table_semantic.schema.json`.
 
 ### 6.2 Manifest Correctness
+
 - `row_count` and row names match the samples' actual rows (regression-checked against `parse_data_table` output).
 
 ### 6.3 RowStruct Resolution
+
 - `row_struct.package_path` is non-empty and points at the external struct package.
 - `ScriptStruct` (native) and `UserDefinedStruct` (external package) both resolve to a reference.
 
 ### 6.4 Honest Status
+
 - `representation == "partial"`.
 - `coverage.scopes_unavailable == ["row_values"]`.
 - A `ROW_VALUES_UNRESOLVED` diagnostic is present.
 
 ### 6.5 Projection Isomorphism
+
 - `project_debug(debug_output) == standard_output` (the #551 contract).
 
 ### 6.6 Byte Determinism
+
 - Same input + parser version + configuration → byte-identical output.
 
 ### 6.7 Validator Unit Tests
+
 - `validate_data_table_document` rules: row_count mismatch, missing `name`, negative `payload_size`, missing `row_struct.class_name`, opaque-without-diagnostic.
 
 ## 7. Acceptance Criteria Mapping
 
 | Issue Criterion (#557) | How Satisfied |
-|------------------------|---------------|
+| ------------------------ | --------------- |
 | Identify common semantic patterns across UAsset types | Establishes the "manifest domain" pattern (direct-read from `ExportIR.asset_type_data`, no dedicated IR) vs the "graph domain" pattern (dedicated IR + `PackageIR` field). Documented in §3.2 and §4.2. |
 | Define Schema/validator for each additional asset type | `data_table_semantic.schema.json` + `validate_data_table_document`. |
 | Capture domain-specific properties and relationships | Row manifest (count, names, payload sizes) + resolved `RowStruct` reference. |
@@ -333,7 +352,7 @@ Reuse the #551/#556 test scaffold. Tests against the three real samples:
 ## 9. Risks and Mitigations
 
 | Risk | Mitigation |
-|------|------------|
+| ------ | ------------ |
 | `RowStruct` property name/shape varies across UE versions | Resolve defensively: scan `export_ir.properties` for a property named `RowStruct`; if absent, emit `row_struct: null` + a diagnostic. No fabricated reference. |
 | `asset_type_data` absent (handler skipped or failed) | Extractor returns `{}` after tracking `row_manifest: False`; the envelope reports opaque/partial with the existing `NO_EXTRACTOR`/`PARTIAL_PARSE` diagnostics. No crash. |
 | Envelope diagnostics overridden by `content["diagnostics"]` on partial parses | Documented limitation (§4.5). For the common case (clean parse) no loss. `ponytail:` comment names the ceiling; merge is a #551-tier builder change. |
@@ -343,7 +362,7 @@ Reuse the #551/#556 test scaffold. Tests against the three real samples:
 ## 10. UE Source References
 
 | Structure | Source Location |
-|-----------|----------------|
+| ----------- | ---------------- |
 | `UDataTable` | `Engine/Source/Runtime/Engine/Classes/Engine/DataTable.h` |
 | `UDataTable::Serialize` / `LoadStructData` | `Engine/Source/Runtime/Engine/Private/DataTable.cpp` |
 | `FTableRowBase` | `Engine/Source/Runtime/Engine/Classes/Engine/DataTable.h` |

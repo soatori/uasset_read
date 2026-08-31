@@ -25,7 +25,8 @@
 ## 当前与目标边界
 
 - 三个入口（CLI 默认、Python API、Agent tool）的默认输出均为 PackageDocument v2；legacy Semantic 1.x JSON 仅通过 `--legacy-json` 显式选择，v1 pipeline 在 decode-parity 完成后移除。
-- `extract_payload` 仍是 descriptor 级；真实提取 blocked on Phase 5 containers。
+- `extract_payload` 恒返回 `code="PAYLOAD_EXTRACTION_DEFERRED"`、`available_ids=[]`，不读文件（已生效决策，见 `docs/designs/2026-08-31-payload-extraction-path.md`）。真实提取（可提取字节、分页续读 `next_offset`）为 historical 承诺，blocked on Phase 5 containers 与 #623–#627 fixture。
+- 默认 `semantic` 视图正在收回 `serial_region`/`properties` 字段（移至 `raw`/`debug`），当前行为以源码为准。
 - 正式测试契约层只有 `tests/test_core.py` 与 `tests/test_samples.py`（`tests/contract/` 已删除并收敛）。
 - 当前 v2 使用 package-first `PackageDocument`（legacy + tagged properties + sample-backed handlers 已实现；Zen/IoStore、unversioned、payload extraction 仍 deferred，见 docs/designs/README.md），输出所有 objects。
 - 当前 Pak/IoStore、日志和 Agent 能力不得按目标设计提前宣称完成。
