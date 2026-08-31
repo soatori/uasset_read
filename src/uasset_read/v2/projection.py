@@ -287,15 +287,15 @@ def obj_to_dict(obj: ObjectRecord, *, view: str = "semantic") -> dict[str, Any]:
         "name": obj.name,
         "class": obj.class_name,
         "roles": list(obj.roles),
-        "serial_region": (
-            {"offset": obj.serial_region.offset, "size": obj.serial_region.size} if obj.serial_region else None
-        ),
         "status": {"parse": obj.status.parse, "semantic": obj.status.semantic},
     }
     if view in ("raw", "debug"):
         d["flags"] = obj.flags
-    if obj.properties is not None:
-        d["properties"] = obj.properties
+        d["serial_region"] = (
+            {"offset": obj.serial_region.offset, "size": obj.serial_region.size} if obj.serial_region else None
+        )
+        if obj.properties is not None:
+            d["properties"] = obj.properties
     if obj.semantic is not None:
         d["semantic"] = obj.semantic
     if obj.coverage:

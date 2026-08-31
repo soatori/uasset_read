@@ -647,6 +647,7 @@ def test_projection_views_depths_pagination_table():
         result = project_document(doc, view="raw", limit=2)
         for obj in result["objects"]:
             assert "flags" in obj
+            assert "serial_region" in obj
 
     def test_debug_has_stats():
         result = project_document(doc, view="debug")
@@ -657,10 +658,12 @@ def test_projection_views_depths_pagination_table():
         with pytest.raises(ValueError, match="Invalid view"):
             project_document(doc, view="invalid")
 
-    def test_semantic_no_flags():
+    def test_semantic_no_raw_fields():
         result = project_document(doc, view="semantic", limit=2)
         for obj in result["objects"]:
             assert "flags" not in obj
+            assert "serial_region" not in obj
+            assert "properties" not in obj
 
     def test_limit_truncates():
         items = list(range(10))
@@ -713,10 +716,15 @@ def test_projection_views_depths_pagination_table():
             assert parsed["view"] == view
 
     def core_projection_honors_views():
-        # View shape: semantic omits flags, raw includes them
+        # View shape: semantic omits raw fields, raw includes them
         pkg_doc = _document()
-        assert "flags" not in project_document(pkg_doc, view="semantic", limit=2)["objects"][0]
-        assert "flags" in project_document(pkg_doc, view="raw", limit=2)["objects"][0]
+        sem_obj = project_document(pkg_doc, view="semantic", limit=2)["objects"][0]
+        raw_obj = project_document(pkg_doc, view="raw", limit=2)["objects"][0]
+        assert "flags" not in sem_obj
+        assert "serial_region" not in sem_obj
+        assert "properties" not in sem_obj
+        assert "flags" in raw_obj
+        assert "serial_region" in raw_obj
         assert "debug" in project_document(pkg_doc, view="debug", limit=2)
 
         # Pagination and byte budget
@@ -743,7 +751,7 @@ def test_projection_views_depths_pagination_table():
             ("projection.test_raw_has_flags", test_raw_has_flags),
             ("projection.test_debug_has_stats", test_debug_has_stats),
             ("projection.test_invalid_view_raises", test_invalid_view_raises),
-            ("projection.test_semantic_no_flags", test_semantic_no_flags),
+            ("projection.test_semantic_no_raw_fields", test_semantic_no_raw_fields),
             ("projection.test_limit_truncates", test_limit_truncates),
             ("projection.test_offset_skips", test_offset_skips),
             ("projection.test_no_limit_returns_all", test_no_limit_returns_all),
@@ -818,6 +826,22 @@ def test_projection_byte_budget_and_fields_filter():
         assert isinstance(result["payloads"], list)
         assert isinstance(result["relations"], list)
 
+    def core_fields_properties_in_raw_view():
+        pkg_doc = _document()
+        result = project_document(pkg_doc, view="raw", limit=2, fields=["properties"])
+        assert len(result["objects"]) == 2
+        for obj in result["objects"]:
+            assert set(obj.keys()).issubset({"id", "name", "properties"})
+            assert "serial_region" not in obj  # not in requested fields
+
+    def core_fields_properties_absent_in_semantic_view():
+        pkg_doc = _document()
+        result = project_document(pkg_doc, view="semantic", limit=2, fields=["properties"])
+        assert len(result["objects"]) == 2
+        for obj in result["objects"]:
+            # semantic view never has properties, so fields=["properties"] yields only id/name
+            assert set(obj.keys()).issubset({"id", "name"})
+
     def core_max_bytes_caps_final_output():
         pkg_doc = _document()
         full = project_document(pkg_doc, limit=100)
@@ -843,6 +867,14 @@ def test_projection_byte_budget_and_fields_filter():
             (
                 "core.test_projection_fields_filter_does_not_crash_and_scopes_payloads",
                 core_fields_filter_scopes_payloads,
+            ),
+            (
+                "core.test_fields_properties_available_in_raw_view",
+                core_fields_properties_in_raw_view,
+            ),
+            (
+                "core.test_fields_properties_absent_in_semantic_view",
+                core_fields_properties_absent_in_semantic_view,
             ),
             ("core.test_max_bytes_caps_final_output_including_truncation_block", core_max_bytes_caps_final_output),
         ]
