@@ -677,7 +677,7 @@
       "status": "missing",
       "description": "No Zen package (.uasset with FZenPackageSummary) samples. All 48 samples use legacy FPackageFileSummary layout.",
       "needed_for": "Phase 5 (Zen & Container Streaming) — ZenPackageReader implementation",
-      "acquisition": "1. Create a UE5.1+ project (e.g., Third Person template)\n2. Add diverse assets: Blueprint, Material, Texture, DataTable, Skeleton\n3. Package for Windows/Linux/Mac using File > Package Project\n4. The packaged output will contain .uasset files with FZenPackageSummary\n5. Copy 3-5 representative .uasset files to tests/samples/\nExpected: files with file_version_ue5 >= 522 and hash-based table layout",
+      "acquisition": "Request legitimate redistributable real samples with version info from the user: 3-5 Zen-layout .uasset files (file_version_ue5 >= 522, hash-based table layout) that may be committed to the repository.",
       "verification": "After copying, verify:\n- struct.unpack_from('<i', data, 4)[0] >= 0 (not legacy negative version)\n- struct.unpack_from('<i', data, 12)[0] >= 522 (UE5.1+)\n- parse_package_document() produces valid PackageDocument",
       "minimum_samples": 3,
       "recommended_samples": "Blueprint, Material, DataTable (diverse types)"
@@ -686,7 +686,7 @@
       "status": "missing",
       "description": "No IoStore (.utoc/.ucas) container samples.",
       "needed_for": "Phase 5 — IoStore container parsing (target design, see docs/designs/)",
-      "acquisition": "1. Create a UE5.3+ project\n2. Enable IoStore in Project Settings > Packaging > Use IoStore\n3. Package the project\n4. Copy the .utoc and .ucas files from the packaged output\n5. Also copy a few .uasset files from inside the container for testing",
+      "acquisition": "Request legitimate redistributable real samples with version info from the user: an IoStore .utoc/.ucas pair (UE5.3+) plus a few contained .uasset files for cross-validation.",
       "verification": "After copying, verify:\n- .utoc file starts with IoStore TOC magic bytes\n- the IoStore TOC header parses\n- Package names can be listed from directory index",
       "minimum_samples": 1,
       "recommended_samples": "1 .utoc + 1 .ucas pair with 5+ packages inside"
@@ -695,7 +695,7 @@
       "status": "missing",
       "description": "No samples have .uexp, .ubulk, or .uptnl sidecar files. All payload data is inline.",
       "needed_for": "Phase 1 (bounded reader for sidecar regions), Phase 4 (payload descriptors)",
-      "acquisition": "1. Create a UE4/5 project with large textures or audio\n2. Package the project (cooked output splits payloads into sidecars)\n3. Look for .uexp files alongside .uasset files\n4. For .ubulk: include streaming textures or bulk data assets\n5. Copy both the .uasset and its matching .uexp/.ubulk",
+      "acquisition": "Request legitimate redistributable real samples with version info from the user: cooked .uasset files with their matching .uexp/.ubulk/.uptnl sidecars.",
       "verification": "After copying, verify:\n- .uexp file exists next to .uasset with same base name\n- PackageArchive correctly spans main + .uexp\n- Payload descriptors reference correct source_region",
       "minimum_samples": 2,
       "recommended_samples": "1 with .uexp, 1 with .ubulk"
@@ -704,7 +704,7 @@
       "status": "unknown",
       "description": "Cannot determine if any samples use unversioned properties without parsing all exports. Unversioned properties typically appear in cooked packages.",
       "needed_for": "Phase 2 (Unversioned reader + SchemaProvider)",
-      "acquisition": "1. Cooked packages (not editor-saved) often use unversioned properties\n2. Package a project and examine the cooked .uasset files\n3. Unversioned properties lack FPropertyTag headers\n4. May need .usmap schema file from the same cook",
+      "acquisition": "Request legitimate redistributable real samples with version info from the user: a cooked .uasset using unversioned properties plus its matching .usmap schema file.",
       "verification": "After obtaining, verify:\n- Property parser detects unversioned format\n- SchemaProvider can supply field schemas\n- Properties round-trip to value model correctly",
       "minimum_samples": 1,
       "recommended_samples": "1 cooked Blueprint with unversioned properties + matching .usmap"
@@ -713,7 +713,7 @@
       "status": "missing",
       "description": "No .pak container samples available. Existing pak/ code reads index only.",
       "needed_for": "Phase 5 (Container Streaming)",
-      "acquisition": "1. Package any UE4/5 project\n2. The output includes .pak files (usually 1-3 partitions)\n3. Copy the .pak file(s) to tests/samples/\n4. Also copy a few .uasset files for cross-validation",
+      "acquisition": "Request legitimate redistributable real samples with version info from the user: a .pak file (with partitions) plus a few .uasset files for cross-validation.",
       "verification": "After copying, verify:\n- PakReader can parse the index\n- Individual .uasset files can be extracted\n- Extracted files parse correctly with PackageDocument",
       "minimum_samples": 1,
       "recommended_samples": "1 .pak with 10+ packages inside"

@@ -891,6 +891,7 @@ def test_schema_contract_statics():
 def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, monkeypatch):
     """CLI (default v2), Python API, and agent tools must agree; parsing must be side-effect free."""
     from uasset_read.v2.agent_tools import (
+        extract_payload,
         get_diagnostics,
         get_object,
         inspect_package,
@@ -987,6 +988,12 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     diags = get_diagnostics(str(DATA_SAMPLE))
     assert "diagnostics" in diags
     assert "total" in diags
+
+    # extract_payload is deferred: stable code, no ids, no payload bytes.
+    extracted = extract_payload(str(DATA_SAMPLE), "payload:export:0")
+    assert extracted["code"] == "PAYLOAD_EXTRACTION_DEFERRED"
+    assert extracted["available_ids"] == []
+    assert not {"data", "data_b64", "truncated", "next_offset"} & extracted.keys()
 
     # Logging lifecycle: no process-global mutation, no stray files.
     handlers = tuple(logging.root.handlers)

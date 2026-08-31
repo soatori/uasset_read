@@ -215,23 +215,26 @@ def test_real_sample_proves_claimed_capability(sample: str, class_name: str, exp
         assert len(handler_features) == 1, f"{sample}:{class_name}"
 
 
-def test_payload_extraction_is_bounded_and_reports_truncation():
-    """Decode payload refs are real bounded slices; budget cuts are explicit."""
-    from uasset_read.v2.payloads import extract_payload_bytes
+def test_payload_extraction_is_deferred():
+    """Decode depth must not fabricate payloads; extraction reports the deferred code."""
+    from uasset_read.v2.agent_tools import extract_payload
+    from uasset_read.v2.payloads import PAYLOAD_EXTRACTION_DEFERRED, extract_payload_bytes
 
     doc = _decode_document("FirstPerson_T_GridChecker_A.uasset", ("export:2",))
-    p = next(x for x in doc.payloads if x.owner_id == "export:2")
-    assert p.status == "available" and p.stored_size > 0
-    assert p.offset + p.stored_size <= p.offset + doc.objects[2].serial_region.size
+    assert doc.payloads == []
+    sem_payload = (doc.objects[2].semantic or {}).get("payload")
+    if isinstance(sem_payload, dict):
+        # Shallow texture metadata may stay; refs/extraction claims may not.
+        assert "ref" not in sem_payload and "stored_size" not in sem_payload
 
-    full = extract_payload_bytes(doc, p.id)
-    assert full.success and not full.truncated
-    assert full.bytes_extracted == p.stored_size and full.data
+    result = extract_payload_bytes(doc, "payload:export:2")
+    assert not result.success
+    assert result.data is None and not result.truncated and result.next_offset is None
 
-    cut = extract_payload_bytes(doc, p.id, max_bytes=8)
-    assert cut.success and cut.truncated and cut.next_offset == 8
-    again = extract_payload_bytes(doc, p.id, max_bytes=8, offset=cut.next_offset)
-    assert again.success and full.data[8:16] == again.data
+    tool = extract_payload(str(SAMPLES / "FirstPerson_T_GridChecker_A.uasset"), "payload:export:2")
+    assert tool["code"] == PAYLOAD_EXTRACTION_DEFERRED
+    assert tool["available_ids"] == []
+    assert not {"data", "data_b64", "sha256"} & tool.keys()
 
 
 @pytest.mark.parametrize("sample", [entry["name"] for entry in MANIFEST_SAMPLES])
