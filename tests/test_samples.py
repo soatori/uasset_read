@@ -32,7 +32,7 @@ KNOWN_CORRUPT_EXPORTS = {"export:6"}
 
 # Fixtures whose object-depth parse currently produces
 # EXPORT_PROPERTY_BOUNDS_EXCEEDED / EXPORT_PROPERTY_PARSE_FAILED
-# diagnostics. The _read_bound enforcement correctly prevents reading
+# diagnostics. The _read_range enforcement correctly prevents reading
 # past export boundaries; these fixtures have exports with corrupted
 # serial regions that previously caused silent overruns. The UE5.0-5.2
 # property-tag version gate (v2/package/legacy.py) healed the rest.
@@ -289,7 +289,7 @@ def test_every_real_sample_forms_a_valid_package_document(sample: str):
     else:
         assert not bounds and not failed, f"{sample}: unexpected property diagnostics {[d.code for d in bounds + failed]}"
     if sample == "ABP_RifleAnimLayers.uasset":
-        # export:1 may have empty properties when _read_bound enforcement
+        # export:1 may have empty properties when _read_range enforcement
         # correctly catches boundary violations. The property parser tries
         # to read past the export boundary, which is now detected and rejected.
         assert {d.object_id for d in failed} <= KNOWN_CORRUPT_EXPORTS, (
