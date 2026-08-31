@@ -32,11 +32,8 @@ from uasset_read.constants import (
     CPF_Deprecated,
     CPF_Protected,
     CPF_ExposeOnSpawn,
-    CPF_DuplicateTransient,
-    CPF_NoClear,
     CPF_BlueprintCallable,
     CPF_Interp,
-    CPF_NonPIEDuplicateTransient,
     format_guid_bytes,
     UE_NONE_SENTINEL,
 )

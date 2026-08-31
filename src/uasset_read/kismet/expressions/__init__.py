@@ -283,5 +283,3 @@ EXPR_CLASS_MAP: dict[EExprToken, type[KismetExpression]] = {
     EExprToken.EX_AutoRtfmStopTransact: EX_AutoRtfmStopTransact,
     EExprToken.EX_AutoRtfmAbortIfNot: EX_AutoRtfmAbortIfNot,
 }
-
-

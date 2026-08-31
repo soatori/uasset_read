@@ -29,11 +29,15 @@ class SourceInfo:
 
 
 class FileSource:
-    """File-backed source."""
+    """File-backed source with a persistent file handle."""
 
     def __init__(self, path: str | Path):
         self._path = Path(path)
         self._size = self._path.stat().st_size
+        try:
+            self._fh = open(self._path, "rb")  # noqa: SIM115
+        except OSError as e:
+            raise IOError(f"Failed to open {self._path}: {e}") from e
 
     def size(self) -> int:
         return self._size
@@ -41,12 +45,14 @@ class FileSource:
     def read_at(self, offset: int, size: int) -> bytes:
         if offset < 0 or offset + size > self._size:
             raise IndexError(f"read_at({offset}, {size}) out of range [0, {self._size})")
-        try:
-            with open(self._path, "rb") as f:
-                f.seek(offset)
-                return f.read(size)
-        except OSError as e:
-            raise IOError(f"Failed to read {self._path} at offset {offset}: {e}") from e
+        self._fh.seek(offset)
+        return self._fh.read(size)
+
+    def close(self) -> None:
+        self._fh.close()
+
+    def __del__(self) -> None:
+        self.close()
 
     def describe(self) -> SourceInfo:
         return SourceInfo(

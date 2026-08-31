@@ -44,7 +44,10 @@ from ...v2.object_model import (
     ROLES_GENERATED_CLASS,
 )
 from ...v2.source import FileSource, SliceReader
-from ...v2.version import VersionContext
+from ...v2.version import (
+    MappingInfo,
+    build_version_context_from_summary,
+)
 
 
 def _make_package_archive(source: FileSource, tolerant: bool = False) -> PackageArchive:
@@ -440,7 +443,13 @@ class LegacyPackageReader:
 
             # 17. Run asset handlers at depth >= asset
             if depth in ("asset", "decode"):
-                context = VersionContext(depth=depth)
+                context = build_version_context_from_summary(
+                    summary,
+                    package_layout="legacy",
+                    game=self._game,
+                    mappings=MappingInfo(path=self._mappings_path) if self._mappings_path else None,
+                    depth=depth,
+                )
                 for obj in objects:
                     try:
                         semantic, cov, handler_diags = run_handlers(

@@ -223,4 +223,3 @@ def get_memory_stats() -> MemoryStats:
     except ImportError:
         logger.debug("psutil not available, returning process RSS only")
         return MemoryStats(process_rss_mb=process_rss)
-
