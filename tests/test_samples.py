@@ -34,15 +34,15 @@ KNOWN_CORRUPT_EXPORTS = {"export:6"}
 # EXPORT_PROPERTY_BOUNDS_EXCEEDED / EXPORT_PROPERTY_PARSE_FAILED
 # diagnostics. The _read_bound enforcement correctly prevents reading
 # past export boundaries; these fixtures have exports with corrupted
-# serial regions that previously caused silent overruns.
+# serial regions that previously caused silent overruns. The UE5.0-5.2
+# property-tag version gate (v2/package/legacy.py) healed the rest.
+# Exports with corrupted serial regions that read past their export bound.
+# Removing the v1 class-handler dispatch from the v2 property path (its
+# archive-position side effects produced spurious overruns) and fixing the
+# UE5.0-5.2 property-tag version gate left ALS_AnimBP as the only fixture
+# with genuine property-parse diagnostics.
 UNHEALTHY_FIXTURES = {
-    "ABP_RifleAnimLayers.uasset",
     "ALS_AnimBP.uasset",
-    "ALS_Mannequin_Skeleton.uasset",
-    "Lyra_SEQ_LobbyScreen_LevelSequence.uasset",
-    "NM_BPSystemEvent.uasset",
-    "StarterContent_M_Wood_Walnut.uasset",
-    "StarterContent_SM_Chair.uasset",
 }
 
 CAPABILITIES = (
@@ -213,6 +213,25 @@ def test_real_sample_proves_claimed_capability(sample: str, class_name: str, exp
     elif class_name == "SoundWave":
         handler_features = [c for c in obj.coverage if c.feature == "handler.SoundHandler"]
         assert len(handler_features) == 1, f"{sample}:{class_name}"
+
+
+def test_payload_extraction_is_bounded_and_reports_truncation():
+    """Decode payload refs are real bounded slices; budget cuts are explicit."""
+    from uasset_read.v2.payloads import extract_payload_bytes
+
+    doc = _decode_document("FirstPerson_T_GridChecker_A.uasset", ("export:2",))
+    p = next(x for x in doc.payloads if x.owner_id == "export:2")
+    assert p.status == "available" and p.stored_size > 0
+    assert p.offset + p.stored_size <= p.offset + doc.objects[2].serial_region.size
+
+    full = extract_payload_bytes(doc, p.id)
+    assert full.success and not full.truncated
+    assert full.bytes_extracted == p.stored_size and full.data
+
+    cut = extract_payload_bytes(doc, p.id, max_bytes=8)
+    assert cut.success and cut.truncated and cut.next_offset == 8
+    again = extract_payload_bytes(doc, p.id, max_bytes=8, offset=cut.next_offset)
+    assert again.success and full.data[8:16] == again.data
 
 
 @pytest.mark.parametrize("sample", [entry["name"] for entry in MANIFEST_SAMPLES])

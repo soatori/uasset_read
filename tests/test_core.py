@@ -287,11 +287,27 @@ def test_package_document_preserves_every_export_and_role():
 
 def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
     """A malformed export must produce an attributable diagnostic without deleting siblings."""
-    doc = _document(depth="object")
+    import uasset_read.parsers.property_parser as pp
+    from uasset_read.exceptions import ParseError
+    from uasset_read.v2.api import parse_package_document
+
+    real = pp.parse_properties_from_export
+    calls = {"n": 0}
+
+    def boom(**kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise ParseError("injected malformed export payload")
+        return real(**kwargs)
+
+    # All fixture exports now parse cleanly, so inject the failure to
+    # exercise the isolation path deterministically.
+    monkeypatch.setattr(pp, "parse_properties_from_export", boom)
+    doc = parse_package_document(str(PACKAGE_SAMPLE), depth="object")
     failures = [item for item in doc.diagnostics if item.code in ("EXPORT_PROPERTY_PARSE_FAILED", "EXPORT_PROPERTY_BOUNDS_EXCEEDED")]
     assert len(doc.objects) == 10
     assert len(doc.relations) > 0
-    assert failures
+    assert [(f.code, f.object_id) for f in failures] == [("EXPORT_PROPERTY_PARSE_FAILED", "export:1")]
     assert all(item.object_id and item.stage == "properties.tagged" for item in failures)
     assert not [item for item in doc.diagnostics if item.severity == "critical"]
 

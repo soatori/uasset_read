@@ -156,6 +156,7 @@ def _serialize_value(value: Any) -> Any:
         StructValue,
         SetValue,
         MapValue,
+        TextValue,
     )
 
     if value is None or isinstance(value, (bool, int, float, str, bytes)):
@@ -176,6 +177,14 @@ def _serialize_value(value: Any) -> Any:
         return {"kind": "struct", "struct_type": value.struct_type, "fields": inner}
     if isinstance(value, StructFallback):
         return value.to_dict()
+    if isinstance(value, TextValue):
+        return {
+            "kind": "text",
+            "namespace": value.namespace,
+            "key": value.key,
+            "source_string": value.source_string,
+            "property_type": value.property_type,
+        }
     if isinstance(value, SetValue):
         return [_serialize_value(elem) for elem in value.elements]
     if isinstance(value, MapValue):

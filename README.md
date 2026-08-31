@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 > 📦 **v0.5.5** — Zero runtime dependencies · Python 3.10+ · 200 source files · 70+ UE class types
 
-> **Refactor status:** v2 package-first architecture: default CLI/API output is `PackageDocument v2` (legacy packages; tagged properties; sample-backed handlers incl. full lightweight Niagara coverage). Zen/IoStore, unversioned-with-usmap, payload extraction remain deferred (see `docs/designs/README.md`); Semantic 1.x JSON is opt-in via `--legacy-json`.
+> **Refactor status:** v2 package-first architecture: default CLI/API output is `PackageDocument v2` (legacy packages; tagged properties parsed within export bounds; sample-backed handlers incl. full lightweight Niagara coverage, no Semantic 1.x handler dependency). Decode payloads expose bounded main-region byte ranges via `extract_payload`. Zen/IoStore, unversioned-with-usmap, and external-container (ubulk/ucas) extraction remain deferred (see `docs/designs/README.md`); Semantic 1.x JSON is opt-in via `--legacy-json`.
 
 ## Why uasset_read?
 
@@ -27,7 +27,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 | Version | 0.5.5 (stable) / 0.6.0-dev (v2 default) |
 | Source | Python parser for Unreal Engine .uasset files |
 | Modules | 200 source files across 15 subpackages |
-| v2 Tests | test_core (≤10 functions) + manifest-driven test_samples (89 collected total, no skips/xfail) |
+| v2 Tests | test_core (≤10 functions) + manifest-driven test_samples (93 collected total, no skips/xfail) |
 | Tracked samples | 48 legacy fixtures with manifest validation |
 
 ## Features

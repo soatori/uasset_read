@@ -103,6 +103,24 @@ def run_handlers(
 # ── Built-in handlers ──────────────────────────────────────────────
 
 
+def _flatten_text(val: Any) -> str | None:
+    """Pull a readable string out of a normalized property value.
+
+    Plain strings pass through; FText/FString structs are unwrapped by
+    looking for a source-string field at any nesting level.
+    """
+    if isinstance(val, str):
+        return val
+    if not isinstance(val, dict):
+        return None
+    fields = val.get("fields")
+    if isinstance(fields, dict):
+        for key in ("source_string", "SourceString"):
+            if isinstance(fields.get(key), str):
+                return fields[key]
+    return _flatten_text(val.get("value"))
+
+
 class UserDefinedEnumHandler:
     """Enrich UserDefinedEnum objects."""
 
@@ -116,46 +134,55 @@ class UserDefinedEnumHandler:
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
-        from uasset_read.parsers.asset_types.user_defined import (
-            extract_user_defined_enum,
-        )
+        name_map = package_data[1] if isinstance(package_data, tuple) and len(package_data) >= 2 else []
 
-        # package_data is (export_map, name_map) tuple from legacy reader
-        export_map = package_data[0] if isinstance(package_data, tuple) else []
-        name_map = package_data[1] if isinstance(package_data, tuple) else []
+        # Enum value names live in the name table as "EnumName::ValueName".
+        prefix = f"{obj.name}::"
+        entries: list[dict[str, Any]] = []
+        display_names: dict[str, str] = {}
 
-        # Find the matching export by index
-        export = None
-        if obj.table_index < len(export_map):
-            export = export_map[obj.table_index]
+        # DisplayNameMap: TMap<FName, FText> — normalized bag value is a list
+        # of {"key": ..., "value": ...} entries; the FText value is a struct
+        # whose fields carry "source_string" (or a plain string).
+        dm = (obj.properties or {}).get("DisplayNameMap")
+        if isinstance(dm, dict) and isinstance(dm.get("value"), list):
+            for entry in dm["value"]:
+                if isinstance(entry, dict):
+                    key = entry.get("key")
+                    val = _flatten_text(entry.get("value"))
+                    if key is not None and val is not None:
+                        display_names[str(key)] = val
 
-        if export is None:
-            return None
+        for name in name_map:
+            if not name.startswith(prefix):
+                continue
+            short = name[len(prefix) :]
+            if short == "Enum_MAX" or short.endswith("::Enum_MAX"):
+                continue
+            if any(e["name"] == short for e in entries):
+                continue
+            entries.append({"name": short, "display_name": display_names.get(short, short)})
 
-        enum_data = extract_user_defined_enum(export, name_map)
-
-        if enum_data is None:
-            return None
+        cpp_type = ""
+        ct = (obj.properties or {}).get("CppType")
+        if isinstance(ct, dict):
+            cpp_type = str(ct.get("value") or "")
 
         result: dict[str, Any] = {
             "kind": "user_defined_enum",
-            "enum_name": enum_data.get("enum_name", obj.name),
-            "cpp_type": enum_data.get("cpp_type", ""),
-            "entries": enum_data.get("entries", []),
+            "enum_name": obj.name,
+            "cpp_type": cpp_type,
+            "entries": entries,
         }
 
-        # Determine coverage
-        entries = result["entries"]
-        if entries:
-            coverage_status = "present"
-        else:
-            coverage_status = "missing"
-
         coverage: list[CoverageEntry] = [
-            CoverageEntry(feature="handler.UserDefinedEnumHandler", status=coverage_status),
+            CoverageEntry(
+                feature="handler.UserDefinedEnumHandler",
+                status="present" if entries else "missing",
+            ),
         ]
         obj.coverage.extend(coverage)
-        return result
+        return result if entries else None
 
 
 class UserDefinedStructHandler:
@@ -164,6 +191,18 @@ class UserDefinedStructHandler:
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         return (obj.class_name or "") == "UserDefinedStruct"
 
+    _INTERNAL_PROPS = (
+        "None",
+        "ClassDefaultObject",
+        "ClassCDO",
+        "ClassGeneratedBy",
+        "DeprecatedData",
+        "EditorOnlyData",
+        "Native",
+        "StructFlags",
+        "Guid",
+    )
+
     def enrich(
         self,
         obj: ObjectRecord,
@@ -171,56 +210,54 @@ class UserDefinedStructHandler:
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
-        from uasset_read.parsers.asset_types.user_defined import (
-            extract_user_defined_struct,
-        )
+        props = obj.properties or {}
+        fields: list[dict[str, Any]] = []
+        for name, val in props.items():
+            if name in self._INTERNAL_PROPS or not isinstance(val, dict):
+                continue
+            field: dict[str, Any] = {"name": name, "type": val.get("type", "")}
+            inner = val.get("value")
+            if val.get("type") == "StructProperty" and isinstance(inner, dict):
+                field["struct_type"] = inner.get("struct_type", "")
+            elif isinstance(inner, (bool, int, float, str)):
+                field["default_value"] = str(inner)
+            fields.append(field)
 
-        # package_data is (export_map, name_map) tuple from legacy reader
-        export_map = package_data[0] if isinstance(package_data, tuple) else []
-        name_map = package_data[1] if isinstance(package_data, tuple) else []
+        struct_flags = 0
+        sf = props.get("StructFlags")
+        if isinstance(sf, dict) and isinstance(sf.get("value"), int):
+            struct_flags = sf["value"]
 
-        # Find the matching export by index
-        export = None
-        if obj.table_index < len(export_map):
-            export = export_map[obj.table_index]
-
-        if export is None:
-            return None
-
-        struct_data = extract_user_defined_struct(export, name_map)
-
-        if struct_data is None:
-            return None
+        guid = ""
+        gv = props.get("Guid")
+        if isinstance(gv, dict) and isinstance(gv.get("value"), dict):
+            gv = gv["value"]  # unwrap {"kind":"value", "value": {...struct...}}
+        if isinstance(gv, dict) and isinstance(gv.get("fields"), dict):
+            f = gv["fields"]
+            if all(k in f for k in ("A", "B", "C", "D")):
+                a, b, c, d = (f.get("A", 0), f.get("B", 0), f.get("C", 0), f.get("D", 0))
+                guid = f"{a:08X}-{b:04X}-{c:04X}-{(d >> 16) & 0xFFFF:04X}-{d & 0xFFFF:04X}00000000"
 
         result: dict[str, Any] = {
             "kind": "user_defined_struct",
-            "struct_name": struct_data.get("struct_name", obj.name),
-            "struct_flags": struct_data.get("struct_flags", 0),
-            "guid": struct_data.get("guid", ""),
-            "fields": struct_data.get("fields", []),
+            "struct_name": obj.name,
+            "struct_flags": struct_flags,
+            "guid": guid,
+            "fields": fields,
         }
 
-        # Determine coverage
-        fields = result["fields"]
-        guid = result["guid"]
-        if fields and guid:
-            coverage_status = "present"
-        elif fields:
-            coverage_status = "partial"
-        else:
-            coverage_status = "missing"
-
-        coverage: list[CoverageEntry] = [
+        coverage_status = "present" if (fields and guid) else ("partial" if fields else "missing")
+        obj.coverage.append(
             CoverageEntry(feature="handler.UserDefinedStructHandler", status=coverage_status),
-        ]
-        obj.coverage.extend(coverage)
-        return result
+        )
+        return result if fields else None
 
 
 class DataTableHandler:
     """Enrich DataTable/CurveTable/StringTable objects.
 
-    Falls back to v2 properties when v1 asset_type_data is unavailable.
+    Row data comes from the bounded table payload slice the legacy reader
+    extracts right after the tagged properties.
     """
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
@@ -236,33 +273,31 @@ class DataTableHandler:
     ) -> dict[str, Any] | None:
         cn = obj.class_name or ""
         result: dict[str, Any] = {"kind": "data_table", "table_type": cn}
-        coverage: list[CoverageEntry] = [
-            CoverageEntry(feature="handler.DataTableHandler", status="present"),
-        ]
-
-        # Try v1 asset_type_data first
-        export_data = _get_export_data(obj, package_data)
-        if export_data:
-            asset_type_data = getattr(export_data, "_asset_type_data", None)
-            if asset_type_data and isinstance(asset_type_data, dict):
-                result["row_count"] = asset_type_data.get("row_count", 0)
-                row_struct = asset_type_data.get("row_struct")
-                if row_struct:
-                    result["row_struct"] = row_struct
-                rows = asset_type_data.get("rows", [])
-                if rows:
-                    result["row_names"] = [r.get("name", "") for r in rows[:100]]
-                obj.coverage.extend(coverage)
-                return result
-
-        # Fallback: extract what we can from v2 properties
         props = obj.properties or {}
-        row_struct = props.get("RowStruct")
-        if row_struct and isinstance(row_struct, dict):
-            # RowStruct is an ObjectProperty referencing the row struct
-            result["row_struct_ref"] = row_struct.get("value")
 
-        obj.coverage.extend(coverage)
+        row_struct_name = props.get("RowStructName")
+        if isinstance(row_struct_name, dict) and isinstance(row_struct_name.get("value"), str):
+            result["row_struct"] = row_struct_name["value"]
+        else:
+            row_struct = props.get("RowStruct")
+            if isinstance(row_struct, dict):
+                # RowStruct is an ObjectProperty referencing the row struct
+                result["row_struct_ref"] = row_struct.get("value")
+
+        # Row count comes from the table payload the legacy reader sliced out
+        # right after the tagged properties (package_data[2] extras dict).
+        extras = package_data[2] if isinstance(package_data, tuple) and len(package_data) >= 3 else None
+        rows = (extras or {}).get(obj.id, {}).get("table_rows")
+        if rows is not None:
+            result["row_count"] = rows["row_count"]
+            if rows.get("row_names"):
+                result["row_names"] = rows["row_names"][:100]
+            status = "present" if rows["complete"] else "partial"
+        else:
+            result["row_count"] = 0
+            status = "missing"
+
+        obj.coverage.append(CoverageEntry(feature="handler.DataTableHandler", status=status))
         return result
 
 
@@ -398,75 +433,30 @@ class SoundHandler:
     ) -> dict[str, Any] | None:
         cn = obj.class_name or ""
         result: dict[str, Any] = {"kind": "sound", "sound_type": cn}
-        coverage: list[CoverageEntry] = []
 
-        # Try v1 asset_type_data first
-        export_data = _get_export_data(obj, package_data)
-        if export_data:
-            asset_type_data = getattr(export_data, "_asset_type_data", None)
-            if asset_type_data and isinstance(asset_type_data, dict):
-                if cn == "SoundWave":
-                    resource_keys = ("duration", "sample_rate", "channel_count", "format", "sound_group")
-                    resource = {k: asset_type_data[k] for k in resource_keys if k in asset_type_data}
-                    if resource:
-                        result["resource"] = resource
-                elif cn == "SoundCue":
-                    result["node_count"] = asset_type_data.get("node_count", 0)
-                elif cn == "SoundAttenuation":
-                    atten_keys = ("attenuation_shape", "attenuation_radius", "falloff_function")
-                    atten = {k: asset_type_data[k] for k in atten_keys if k in asset_type_data}
-                    if atten:
-                        result["attenuation"] = atten
-                if len(result) > 2:
-                    obj.coverage.append(
-                        CoverageEntry(feature="handler.SoundHandler", status="present")
-                    )
-                    return result
-                # No resource data: fall through to property fallback instead of
-                # claiming "present" coverage while returning None.
-
-        # Fallback: extract what we can from v2 properties
+        # SoundWave resource fields from the v2 property bag.
         props = obj.properties or {}
-        if props:
-            num_channels = props.get("NumChannels")
-            if num_channels and isinstance(num_channels, dict):
-                val = num_channels.get("value")
-                if isinstance(val, dict):
-                    inner = val.get("value")
-                    if isinstance(inner, int):
-                        result["channel_count"] = inner
-                    elif isinstance(inner, dict) and inner.get("kind") == "opaque":
-                        # Parse error — still record partial coverage
-                        result["channel_count"] = None
-                elif isinstance(val, int):
-                    result["channel_count"] = val
+        resource: dict[str, Any] = {}
+        for prop_name, key in (
+            ("Duration", "duration"),
+            ("SampleRate", "sample_rate"),
+            ("NumChannels", "channel_count"),
+        ):
+            val = props.get(prop_name)
+            if isinstance(val, dict) and isinstance(val.get("value"), (int, float)):
+                resource[key] = val["value"]
+        if resource:
+            result["resource"] = resource
 
-        coverage.append(
+        # Exactly one coverage entry: "present" only when real resource data
+        # was found; the kind projection alone is "partial".
+        obj.coverage.append(
             CoverageEntry(
                 feature="handler.SoundHandler",
-                status="present" if len(result) > 2 else "partial",
+                status="present" if resource else "partial",
             )
         )
-        obj.coverage.extend(coverage)
-        return result if len(result) > 2 else None
-
-
-def _get_export_data(obj: ObjectRecord, package_data: Any) -> Any:
-    """Get the v1 export object from the parse result by index."""
-    if package_data is None:
-        return None
-    # package_data may be: a list (export_map), a tuple (export_map, name_map),
-    # or an object with export_map attribute
-    if isinstance(package_data, tuple) and len(package_data) == 2:
-        export_map = package_data[0]
-    elif isinstance(package_data, list):
-        export_map = package_data
-    else:
-        export_map = getattr(package_data, "export_map", None) or []
-    idx = obj.table_index
-    if 0 <= idx < len(export_map):
-        return export_map[idx]
-    return None
+        return result
 
 
 # Register built-in handlers
@@ -574,9 +564,9 @@ class SkeletonHandler:
         result: dict[str, Any] = {"kind": "skeleton", "name": obj.name}
         coverage: list[CoverageEntry] = []
 
-        # Extract name_map from package_data tuple (export_map, name_map)
+        # Extract name_map from package_data tuple (export_map, name_map, extras)
         name_map: list[str] = []
-        if isinstance(package_data, tuple) and len(package_data) == 2:
+        if isinstance(package_data, tuple) and len(package_data) >= 2:
             name_map = package_data[1]
 
         # Extract bone names from name map
@@ -595,26 +585,16 @@ class SkeletonHandler:
                 result["bone_count"] = len(bones)
                 coverage.append(CoverageEntry(feature="skeleton.bones", status="present"))
 
-        # Count virtual bones from v1 data
-        export_data = _get_export_data(obj, package_data)
-        if export_data:
-            props = getattr(export_data, "properties", None) or []
-            for p in props:
-                if getattr(p, "name", "") == "VirtualBones":
-                    value = getattr(p, "value", None)
-                    if isinstance(value, list):
-                        result["virtual_bone_count"] = len(value)
-                        coverage.append(CoverageEntry(feature="skeleton.virtual_bones", status="present"))
-                    break
-
-            # Count sockets
-            for p in props:
-                if getattr(p, "name", "") == "Sockets":
-                    value = getattr(p, "value", None)
-                    if isinstance(value, list):
-                        result["socket_count"] = len(value)
-                        coverage.append(CoverageEntry(feature="skeleton.sockets", status="present"))
-                    break
+        # Count virtual bones and sockets from the v2 property bag
+        bag = obj.properties or {}
+        for prop_name, key, feature in (
+            ("VirtualBones", "virtual_bone_count", "skeleton.virtual_bones"),
+            ("Sockets", "socket_count", "skeleton.sockets"),
+        ):
+            val = bag.get(prop_name)
+            if isinstance(val, dict) and isinstance(val.get("value"), list):
+                result[key] = len(val["value"])
+                coverage.append(CoverageEntry(feature=feature, status="present"))
 
         # Fallback: check v2 properties
         if "bone_count" not in result:
@@ -660,58 +640,40 @@ class MeshHandler:
         result: dict[str, Any] = {"kind": "mesh", "mesh_type": cn, "name": obj.name}
         coverage: list[CoverageEntry] = []
 
-        # Try v1 export data first for actual LOD/source model info
-        export_data = _get_export_data(obj, package_data)
-        if export_data:
-            props = getattr(export_data, "properties", None) or []
-            for p in props:
-                pname = getattr(p, "name", "")
-                if pname == "SourceModels":
-                    value = getattr(p, "value", None)
-                    if isinstance(value, list):
-                        lods = []
-                        for i, item in enumerate(value):
-                            lod: dict[str, Any] = {"index": i}
-                            if hasattr(item, "fields") and isinstance(item.fields, dict):
-                                build = item.fields.get("BuildSettings")
-                                if build and hasattr(build, "fields"):
-                                    lod["build_settings"] = {
-                                        k: v
-                                        for k, v in build.fields.items()
-                                        if not isinstance(v, object) or isinstance(v, (bool, int, float, str))
-                                    }
-                                reduction = item.fields.get("ReductionSettings")
-                                if reduction and hasattr(reduction, "fields"):
-                                    lod["reduction_settings"] = {
-                                        k: v
-                                        for k, v in reduction.fields.items()
-                                        if isinstance(v, (bool, int, float, str))
-                                    }
-                            lods.append(lod)
-                        result["lods"] = lods
-                        result["lod_count"] = len(lods)
-                        coverage.append(CoverageEntry(feature="mesh.source_models", status="present"))
-                        break
-
-        # Fallback: check v2 properties
-        if "lod_count" not in result:
-            props = obj.properties or {}
-            source_models = props.get("SourceModels")
-            if source_models and isinstance(source_models, dict):
-                fields = source_models.get("fields", {})
-                result["lod_count"] = len(fields) if isinstance(fields, dict) else 0
-                result["lods"] = []
-                coverage.append(CoverageEntry(feature="mesh.source_models", status="partial"))
-            else:
-                result["lod_count"] = 0
-                result["lods"] = []
-                coverage.append(
-                    CoverageEntry(
-                        feature="mesh.source_models",
-                        status="missing",
-                        detail="SourceModels not available",
-                    )
+        # LOD/source-model summary from the v2 property bag. SourceModels is
+        # an array of structs; each element carries BuildSettings/
+        # ReductionSettings sub-structs as nested "fields" dicts.
+        props = obj.properties or {}
+        source_models = props.get("SourceModels")
+        models = source_models.get("value") if isinstance(source_models, dict) else None
+        if isinstance(models, list) and models:
+            lods: list[dict[str, Any]] = []
+            for i, item in enumerate(models):
+                lod: dict[str, Any] = {"index": i}
+                fields = item.get("fields") if isinstance(item, dict) else None
+                if isinstance(fields, dict):
+                    for sub_key, out_key in (("BuildSettings", "build_settings"), ("ReductionSettings", "reduction_settings")):
+                        sub = fields.get(sub_key)
+                        if isinstance(sub, dict) and isinstance(sub.get("fields"), dict):
+                            lod[out_key] = {
+                                k: v
+                                for k, v in sub["fields"].items()
+                                if isinstance(v, (bool, int, float, str))
+                            }
+                lods.append(lod)
+            result["lods"] = lods
+            result["lod_count"] = len(lods)
+            coverage.append(CoverageEntry(feature="mesh.source_models", status="present"))
+        else:
+            result["lod_count"] = 0
+            result["lods"] = []
+            coverage.append(
+                CoverageEntry(
+                    feature="mesh.source_models",
+                    status="partial" if models == [] else "missing",
+                    detail="SourceModels not available",
                 )
+            )
 
         # Geometry flags from v2 properties
         props = obj.properties or {}

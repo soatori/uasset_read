@@ -182,30 +182,43 @@ def extract_payload(
     payload_id: str,
     *,
     max_bytes: int = _MAX_BYTES_EXTRACT_PAYLOAD,
+    offset: int = 0,
 ) -> dict[str, Any]:
-    """Tool: extract_payload — return or write specified payload.
+    """Tool: extract_payload — bounded byte extraction for a payload descriptor.
 
-    Phase 5 stub — payloads are not yet extracted from external regions.
-    Returns payload descriptor information only.
+    Descriptor ids are "payload:export:<i>"; only the owning export is
+    re-parsed at decode depth.  Bytes come from the export's bounded serial
+    remainder; budget overflow reports ``truncated`` plus a resumable
+    ``next_offset`` instead of silently cutting data.  External regions
+    (ubulk/ucas/Zen) are reported as errors, not fake data.
     """
-    doc = parse_package_document(file_path)
+    from .payloads import extract_payload_bytes
 
-    # Find the payload
-    for p in doc.payloads:
-        if p.id == payload_id:
-            return {
-                "id": p.id,
-                "owner": p.owner_id,
-                "kind": p.kind,
-                "source_region": p.source_region,
-                "offset": p.offset,
-                "stored_size": p.stored_size,
-                "status": p.status,
-                "note": "Payload extraction requires Phase 5 (Zen/Container) implementation",
-            }
+    owner_id = payload_id.removeprefix("payload:")
+    object_ids = [owner_id] if owner_id.startswith(("export:", "import:")) else None
+    doc = parse_package_document(file_path, depth="decode", object_ids=object_ids)
+
+    result = extract_payload_bytes(doc, payload_id, max_bytes=max_bytes, offset=offset)
+    if not result.success:
+        return {
+            "id": payload_id,
+            "error": result.error,
+            "available_ids": [p.id for p in doc.payloads],
+        }
+    p = next(item for item in doc.payloads if item.id == payload_id)
+    import base64
+    import hashlib
 
     return {
-        "error": f"Payload '{payload_id}' not found",
-        "available_ids": [p.id for p in doc.payloads],
-        "note": "Payloads are currently empty — Phase 5 will populate them from external regions",
+        "id": p.id,
+        "owner": p.owner_id,
+        "kind": p.kind,
+        "source_region": p.source_region,
+        "offset": offset,
+        "stored_size": p.stored_size,
+        "bytes_returned": result.bytes_extracted,
+        "truncated": result.truncated,
+        **({"next_offset": result.next_offset} if result.next_offset is not None else {}),
+        "sha256": hashlib.sha256(result.data or b"").hexdigest(),
+        "data_b64": base64.b64encode(result.data or b"").decode("ascii"),
     }

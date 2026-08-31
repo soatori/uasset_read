@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import struct
 from pathlib import Path
-from typing import Literal, Sequence
+from typing import Any, Literal, Sequence
 
 from ...exceptions import ParseError, ExportBoundsExceeded
 from ...package import PackageArchive
@@ -36,6 +36,7 @@ from ...v2.object_model import (
     ObjectRecord,
     ObjectRef,
     ObjectStatus,
+    PayloadDescriptor,
     Region,
     Relation,
     ROLES_ASSET,
@@ -303,6 +304,12 @@ class LegacyPackageReader:
             # 1. Read summary
             summary = read_package_summary(archive)
 
+            # Property tag format is version-gated; set the gates the same
+            # way pipeline/stages.py does so UE5.0-5.2 tags don't fall into
+            # the UE5.3+ FPropertyTypeName path (mirrors v1 behavior).
+            archive._file_version_ue4 = summary.file_version_ue4
+            archive._file_version_ue5 = summary.file_version_ue5
+
             # 2. Validate name table
             if summary.name_count <= 0:
                 diagnostics.append(
@@ -417,8 +424,10 @@ class LegacyPackageReader:
             )
 
             # 16. Parse properties for requested objects at depth >= object
+            payload_ends: dict[int, int] = {}
+            extras: dict[str, dict[str, Any]] = {}
             if depth in ("object", "asset", "decode"):
-                self._parse_requested_object_properties(
+                payload_ends, extras = self._parse_requested_object_properties(
                     archive=archive,
                     objects=objects,
                     export_map=export_map,
@@ -427,7 +436,6 @@ class LegacyPackageReader:
                     summary=summary,
                     object_ids=object_ids,
                     diagnostics=diagnostics,
-                    run_class_handlers=depth != "object",
                 )
 
             # 17. Run asset handlers at depth >= asset
@@ -440,7 +448,9 @@ class LegacyPackageReader:
                 )
                 for obj in objects:
                     try:
-                        semantic, cov, handler_diags = run_handlers(obj, context, objects, (export_map, name_map))
+                        semantic, cov, handler_diags = run_handlers(
+                            obj, context, objects, (export_map, name_map, extras)
+                        )
                         if semantic is not None:
                             obj.semantic = semantic
                         obj.coverage.extend(cov)
@@ -457,6 +467,34 @@ class LegacyPackageReader:
                             )
                         )
 
+            # 17b. At decode depth, expose the post-property export remainder
+            # as real payload descriptors: bounded byte ranges the caller can
+            # extract, with a ref linked from the object's semantic payload.
+            payloads: list[PayloadDescriptor] = []
+            if depth == "decode":
+                for i, obj in enumerate(objects):
+                    start = payload_ends.get(i)
+                    if start is None or not obj.serial_region:
+                        continue
+                    end = obj.serial_region.offset + obj.serial_region.size
+                    if end - start <= 0:
+                        continue
+                    sem_payload = (obj.semantic or {}).get("payload")
+                    kind = sem_payload.get("kind") if isinstance(sem_payload, dict) else None
+                    descriptor = PayloadDescriptor(
+                        id=f"payload:{obj.id}",
+                        owner_id=obj.id,
+                        kind=kind or "bulk_data",
+                        source_region="main",
+                        offset=start,
+                        stored_size=end - start,
+                        status="available",
+                    )
+                    payloads.append(descriptor)
+                    if isinstance(sem_payload, dict):
+                        sem_payload["ref"] = descriptor.id
+                        sem_payload["stored_size"] = descriptor.stored_size
+
             # 18. Build SourceInfo
             source_info = _build_source_info(str(self._source._path))
 
@@ -469,6 +507,7 @@ class LegacyPackageReader:
                 diagnostics=diagnostics,
                 summary=summary_obj,
                 depth=depth,
+                payloads=payloads,
             )
 
         except ParseError as e:
@@ -495,17 +534,18 @@ class LegacyPackageReader:
         summary: PackageFileSummary,
         object_ids: Sequence[str] | None,
         diagnostics: list[Diagnostic],
-        run_class_handlers: bool = False,
-    ) -> None:
-        """Parse properties for requested objects at depth="object".
+    ) -> tuple[dict[int, int], dict[str, dict[str, Any]]]:
+        """Parse properties for requested objects at depth >= object.
 
-        ``run_class_handlers`` re-enables the v1 AssetTypeHandler dispatch
-        at asset/decode depth only: the v2 handlers in ``v2/handlers.py``
-        still consume the ``_asset_type_data``/``properties`` mutations it
-        makes on exports (DataTable, SoundWave, UserDefinedStruct). Cutting
-        that coupling inside handlers.py is a follow-up; at object depth
-        nothing needs it, so the dispatch — and its ``logger.warning`` leak
-        — stays off there.
+        No v1 class-handler dispatch happens here: v2 handlers consume the
+        normalized property bag plus the bounded extras this method slices
+        out itself.
+
+        Returns ``(payload_ends, extras)``: ``payload_ends`` maps export
+        index to the archive position right after the tagged property
+        stream (the start of the object's unexplained payload), and
+        ``extras`` maps object id to per-class bounded data (currently
+        ``table_rows`` for DataTable/CurveTable/StringTable).
 
         If object_ids is None, parses ALL objects.
         Each export's serial region is bounded via _read_bound enforced inside PackageArchive reads.
@@ -525,6 +565,9 @@ class LegacyPackageReader:
                         target_indices.add(int(oid.split(":")[1]))
                     except (ValueError, IndexError):
                         pass
+
+        payload_ends: dict[int, int] = {}
+        extras: dict[str, dict[str, Any]] = {}
 
         for i, obj in enumerate(objects):
             if target_indices is not None and i not in target_indices:
@@ -549,10 +592,17 @@ class LegacyPackageReader:
                     mappings=self._mappings_path,
                     game=self._game,
                     tolerant=self._tolerant,
-                    run_class_handlers=run_class_handlers,
+                    # v2 has no v1 class-handler dispatch at any depth.
+                    run_class_handlers=False,
                 )
                 overrun = archive.tell() - serial_end
                 obj.properties = normalize_property_bag(raw_props)
+                if overrun <= 0:
+                    payload_ends[i] = archive.tell()
+                    if (obj.class_name or "") in _TABLE_CLASSES:
+                        extras[obj.id] = {
+                            "table_rows": _read_table_rows(archive, serial_end, name_map, obj.id, diagnostics)
+                        }
                 if overrun > 0:
                     obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
                     diagnostics.append(
@@ -601,6 +651,8 @@ class LegacyPackageReader:
             finally:
                 archive._read_bound = prev_bound
 
+        return payload_ends, extras
+
     def _build_minimal_document(
         self,
         summary: PackageFileSummary | None,
@@ -618,3 +670,77 @@ class LegacyPackageReader:
             package=package_info,
             diagnostics=diagnostics,
         )
+
+
+# DataTable-family rows are serialized after the tagged properties as
+# NumRows(i32) + per-row FName(Index,Number) + Payload(int32 size + data).
+# UE source: Engine/Source/Runtime/Engine/Private/DataTable.cpp LoadStructData.
+_TABLE_CLASSES = ("DataTable", "CurveTable", "StringTable")
+_MAX_TABLE_BLOB = 64 * 1024 * 1024  # bounded read; larger tables report partial
+_MAX_TABLE_ROWS = 100000  # garbage row counts are rejected, not trusted
+
+
+def _read_table_rows(
+    archive: PackageArchive,
+    serial_end: int,
+    name_map: list[str],
+    object_id: str,
+    diagnostics: list[Diagnostic],
+) -> dict[str, Any]:
+    """Parse NumRows + row names from the bounded payload after properties.
+
+    The archive is positioned at the payload start and its ``_read_bound``
+    is the export's serial end, so the slice read can never escape the
+    export.  Anything that does not fit is reported as ``complete: False``
+    with a diagnostic, never silently truncated.
+    """
+    result: dict[str, Any] = {"row_count": 0, "row_names": [], "complete": False}
+    remaining = serial_end - archive.tell()
+    if remaining < 4:
+        return result
+    blob = archive.read(min(remaining, _MAX_TABLE_BLOB))
+    (row_count,) = struct.unpack_from("<i", blob, 0)
+    if row_count < 0 or row_count > _MAX_TABLE_ROWS:
+        diagnostics.append(
+            Diagnostic(
+                severity="warning",
+                code="TABLE_ROW_COUNT_INVALID",
+                message=f"{object_id}: table row count {row_count} outside sane range",
+                stage="payload.table",
+                object_id=object_id,
+                effect="semantic_loss",
+                recoverable=True,
+            )
+        )
+        return result
+    off = 4
+    names: list[str] = []
+    for _ in range(row_count):
+        if off + 12 > len(blob):
+            break
+        idx, _number, size = struct.unpack_from("<iii", blob, off)
+        off += 12
+        if size < 0 or off + size > len(blob):
+            break
+        names.append(name_map[idx] if 0 <= idx < len(name_map) else f"<row:{idx}>")
+        off += size
+    complete = len(names) == row_count
+    if not complete:
+        diagnostics.append(
+            Diagnostic(
+                severity="warning",
+                code="TABLE_ROWS_TRUNCATED",
+                message=(
+                    f"{object_id}: parsed {len(names)}/{row_count} rows within the "
+                    f"export payload ({min(remaining, _MAX_TABLE_BLOB)} bytes sliced)"
+                ),
+                stage="payload.table",
+                object_id=object_id,
+                effect="semantic_loss",
+                recoverable=True,
+            )
+        )
+    result["row_count"] = len(names)
+    result["row_names"] = names
+    result["complete"] = complete
+    return result
