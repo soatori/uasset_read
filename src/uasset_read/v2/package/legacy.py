@@ -528,7 +528,6 @@ class LegacyPackageReader:
                     tolerant=self._tolerant,
                     run_class_handlers=run_class_handlers,
                 )
-                serial_end = export_map[i].serial_offset + export_map[i].serial_size
                 overrun = archive.tell() - serial_end
                 obj.properties = normalize_property_bag(raw_props)
                 if overrun > 0:
