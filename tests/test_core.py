@@ -12,6 +12,7 @@ from functools import lru_cache
 import json
 import logging
 from pathlib import Path
+import os
 import subprocess
 import sys
 
@@ -304,7 +305,11 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
     # exercise the isolation path deterministically.
     monkeypatch.setattr(pp, "parse_properties_from_export", boom)
     doc = parse_package_document(str(PACKAGE_SAMPLE), depth="object")
-    failures = [item for item in doc.diagnostics if item.code in ("EXPORT_PROPERTY_PARSE_FAILED", "EXPORT_PROPERTY_BOUNDS_EXCEEDED")]
+    failures = [
+        item
+        for item in doc.diagnostics
+        if item.code in ("EXPORT_PROPERTY_PARSE_FAILED", "EXPORT_PROPERTY_BOUNDS_EXCEEDED")
+    ]
     assert len(doc.objects) == 10
     assert len(doc.relations) > 0
     assert [(f.code, f.object_id) for f in failures] == [("EXPORT_PROPERTY_PARSE_FAILED", "export:1")]
@@ -331,7 +336,9 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         assert len(critical) == 0
 
     def test_parse_failure_diagnostic_has_object_id():
-        parse_failures = [d for d in doc.diagnostics if d.code in ("EXPORT_PROPERTY_PARSE_FAILED", "EXPORT_PROPERTY_BOUNDS_EXCEEDED")]
+        parse_failures = [
+            d for d in doc.diagnostics if d.code in ("EXPORT_PROPERTY_PARSE_FAILED", "EXPORT_PROPERTY_BOUNDS_EXCEEDED")
+        ]
         for diag in parse_failures:
             assert diag.object_id is not None
             assert diag.stage == "properties.tagged"
@@ -355,7 +362,10 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
                 return {"kind": "ok"}
 
         obj = ObjectRecord(
-            id="export:9", table_index=0, name="X", class_name="Foo",
+            id="export:9",
+            table_index=0,
+            name="X",
+            class_name="Foo",
             status=ObjectStatus(parse="complete", semantic="not_requested"),
         )
         saved = H._HANDLERS[:]
@@ -380,7 +390,10 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
                 return {"kind": "ok"}
 
         obj = ObjectRecord(
-            id="export:9", table_index=0, name="X", class_name="Foo",
+            id="export:9",
+            table_index=0,
+            name="X",
+            class_name="Foo",
             status=ObjectStatus(parse="complete", semantic="not_requested"),
         )
         saved = H._HANDLERS[:]
@@ -403,7 +416,10 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
                 return None
 
         obj = ObjectRecord(
-            id="export:9", table_index=0, name="X", class_name="Foo",
+            id="export:9",
+            table_index=0,
+            name="X",
+            class_name="Foo",
             status=ObjectStatus(parse="complete", semantic="not_requested"),
         )
         saved = H._HANDLERS[:]
@@ -434,13 +450,28 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         [
             ("document.test_no_critical_on_healthy", test_no_critical_on_healthy),
             ("document.test_diagnostics_have_stage", test_diagnostics_have_stage),
-            ("diagnostics.test_failed_export_does_not_remove_later_objects", test_failed_export_does_not_remove_later_objects),
-            ("diagnostics.test_partial_status_on_bad_export_preserves_document", test_partial_status_on_bad_export_preserves_document),
+            (
+                "diagnostics.test_failed_export_does_not_remove_later_objects",
+                test_failed_export_does_not_remove_later_objects,
+            ),
+            (
+                "diagnostics.test_partial_status_on_bad_export_preserves_document",
+                test_partial_status_on_bad_export_preserves_document,
+            ),
             ("diagnostics.test_parse_failure_diagnostic_has_object_id", test_parse_failure_diagnostic_has_object_id),
-            ("handler.test_later_success_does_not_mask_earlier_failure", test_later_success_does_not_mask_earlier_failure),
+            (
+                "handler.test_later_success_does_not_mask_earlier_failure",
+                test_later_success_does_not_mask_earlier_failure,
+            ),
             ("handler.test_clean_success_still_marks_complete", test_clean_success_still_marks_complete),
-            ("handler.test_matched_handler_returning_none_is_not_complete", test_matched_handler_returning_none_is_not_complete),
-            ("property.test_parse_past_serial_end_is_flagged_not_silent", test_parse_past_serial_end_is_flagged_not_silent),
+            (
+                "handler.test_matched_handler_returning_none_is_not_complete",
+                test_matched_handler_returning_none_is_not_complete,
+            ),
+            (
+                "property.test_parse_past_serial_end_is_flagged_not_silent",
+                test_parse_past_serial_end_is_flagged_not_silent,
+            ),
         ]
     )
 
@@ -486,8 +517,20 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("MeshHandler/Skeletal", MeshHandler(), "SkeletalMesh", "Blueprint"),
             ("MaterialHandler", MaterialHandler(), "Material", "Blueprint"),
             ("MaterialInstanceHandler", MaterialInstanceHandler(), "MaterialInstanceConstant", "Blueprint"),
-            ("BlueprintFamilyHandler/anim", BlueprintFamilyHandler(("AnimBlueprint", "AnimBlueprintGeneratedClass"), "anim_blueprint", "anim_blueprint"), "AnimBlueprintGeneratedClass", "StaticMesh"),
-            ("BlueprintFamilyHandler/bp", BlueprintFamilyHandler(("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint"), "BlueprintGeneratedClass", "StaticMesh"),
+            (
+                "BlueprintFamilyHandler/anim",
+                BlueprintFamilyHandler(
+                    ("AnimBlueprint", "AnimBlueprintGeneratedClass"), "anim_blueprint", "anim_blueprint"
+                ),
+                "AnimBlueprintGeneratedClass",
+                "StaticMesh",
+            ),
+            (
+                "BlueprintFamilyHandler/bp",
+                BlueprintFamilyHandler(("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint"),
+                "BlueprintGeneratedClass",
+                "StaticMesh",
+            ),
         ]
         for name, handler, good_class, bad_class in cases:
             assert handler.supports(record(good_class), VersionContext()), f"{name} must support {good_class}"
@@ -495,8 +538,12 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_texture_no_properties_returns_none():
         obj = ObjectRecord(
-            id="export:0", table_index=0, name="Tex", class_name="Texture2D",
-            status=ObjectStatus(), properties=None,
+            id="export:0",
+            table_index=0,
+            name="Tex",
+            class_name="Texture2D",
+            status=ObjectStatus(),
+            properties=None,
         )
         assert TextureHandler().enrich(obj, VersionContext(), [], None) is None
 
@@ -538,9 +585,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         original_handlers = list(handlers._HANDLERS)
         try:
             handlers._HANDLERS.append(RaisingHandler())
-            sample_doc = parse_package_document(
-                str(DATA_SAMPLE), depth="object", object_ids=["export:0"]
-            )
+            sample_doc = parse_package_document(str(DATA_SAMPLE), depth="object", object_ids=["export:0"])
             semantic, coverage, diagnostics = handlers.run_handlers(
                 sample_doc.objects[0], VersionContext(), sample_doc.objects, None
             )
@@ -576,8 +621,14 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("handler.test_supports_and_rejects", test_supports_and_rejects),
             ("handler.test_texture_no_properties_returns_none", test_texture_no_properties_returns_none),
             ("handler.test_handler_exception_doesnt_crash", test_handler_exception_doesnt_crash),
-            ("handler.test_handler_exception_becomes_object_diagnostic", test_handler_exception_becomes_object_diagnostic),
-            ("handler.test_niagara_handler_supports_all_declared_classes", test_niagara_handler_supports_all_declared_classes),
+            (
+                "handler.test_handler_exception_becomes_object_diagnostic",
+                test_handler_exception_becomes_object_diagnostic,
+            ),
+            (
+                "handler.test_niagara_handler_supports_all_declared_classes",
+                test_niagara_handler_supports_all_declared_classes,
+            ),
             ("handler.test_class_handlers_kwarg_defaults_true_for_v1", test_class_handlers_kwarg_defaults_true_for_v1),
         ]
     )
@@ -781,12 +832,18 @@ def test_projection_byte_budget_and_fields_filter():
     _run_cases(
         [
             ("projection.test_max_bytes_is_enforced_and_continuable", test_max_bytes_is_enforced_and_continuable),
-            ("projection.test_truncated_page_rescopes_relations_and_dependencies", test_truncated_page_rescopes_relations_and_dependencies),
+            (
+                "projection.test_truncated_page_rescopes_relations_and_dependencies",
+                test_truncated_page_rescopes_relations_and_dependencies,
+            ),
             ("projection.test_relations_scoped_to_returned_page", test_relations_scoped_to_returned_page),
             ("projection.test_object_diagnostics_scoped_to_page", test_object_diagnostics_scoped_to_page),
             ("projection.test_budget_too_small_raises", test_budget_too_small_raises),
             ("projection.test_no_truncation_when_budget_generous", test_no_truncation_when_budget_generous),
-            ("core.test_projection_fields_filter_does_not_crash_and_scopes_payloads", core_fields_filter_scopes_payloads),
+            (
+                "core.test_projection_fields_filter_does_not_crash_and_scopes_payloads",
+                core_fields_filter_scopes_payloads,
+            ),
             ("core.test_max_bytes_caps_final_output_including_truncation_block", core_max_bytes_caps_final_output),
         ]
     )
@@ -842,6 +899,8 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     )
     from uasset_read.v2.projection import project_document
 
+    _env = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
+
     def run_cli_json(*args: str) -> dict:
         result = subprocess.run(
             [sys.executable, "-m", "uasset_read", *map(str, args)],
@@ -849,6 +908,7 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
             text=True,
             check=False,
             timeout=30,
+            env=_env,
         )
         assert result.returncode == 0, f"CLI failed: {result.stderr[:500]}"
         return json.loads(result.stdout)
@@ -868,7 +928,11 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     # --markdown renders through the v1 pipeline (the only markdown renderer).
     md = subprocess.run(
         [sys.executable, "-m", "uasset_read", "--markdown", str(DATA_SAMPLE)],
-        capture_output=True, text=True, check=False, timeout=30,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+        env=_env,
     )
     assert md.returncode == 0, md.stderr[:500]
     assert md.stdout.strip() and not md.stdout.lstrip().startswith("{")
@@ -876,7 +940,11 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     # v1-only flags under the v2 default warn instead of silently dropping.
     warned = subprocess.run(
         [sys.executable, "-m", "uasset_read", "--hex-view", str(DATA_SAMPLE)],
-        capture_output=True, text=True, check=False, timeout=30,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+        env=_env,
     )
     assert warned.returncode == 0
     assert "--hex-view" in warned.stderr and "ignored" in warned.stderr
@@ -950,21 +1018,13 @@ def test_test_suite_structure_gate():
     subdirs = {p.name for p in root.iterdir() if p.is_dir() and p.name != "__pycache__"}
     assert subdirs == {"samples"}
     tree = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
-    funcs = [
-        n.name
-        for n in tree.body
-        if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")
-    ]
+    funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
     assert len(funcs) <= 13
     assert not any(isinstance(n, ast.ClassDef) for n in tree.body)
     # The design bans decorators on test functions; cache helpers like
     # _document legitimately carry @lru_cache, so the check is scoped to
     # the collected test_* defs (the plan's gate body over-blocked here).
-    assert all(
-        not n.decorator_list
-        for n in tree.body
-        if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")
-    )
+    assert all(not n.decorator_list for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_"))
     assigned = {
         t.id
         for n in tree.body
