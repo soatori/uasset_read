@@ -221,7 +221,11 @@ def _build_source_info(path: str) -> SourceInfo:
     )
 
 
-def _build_package_info_from_summary(summary: PackageFileSummary, name_map: list[str]) -> PackageInfo:
+def _build_package_info_from_summary(
+    summary: PackageFileSummary,
+    name_map: list[str],
+    source_path: str = "",
+) -> PackageInfo:
     engine_version = ""
     saved = summary.saved_by_engine_version
     if saved and hasattr(saved, "major"):
@@ -232,8 +236,25 @@ def _build_package_info_from_summary(summary: PackageFileSummary, name_map: list
     if compat and hasattr(compat, "major"):
         compat_version = f"{compat.major}.{compat.minor}.{compat.patch}.{compat.changelist}"
 
+    # Derive package name from file path when summary.package_name is empty
+    package_name = summary.package_name
+    if not package_name and source_path:
+        path_obj = Path(source_path)
+        content_dir = next(
+            (parent for parent in path_obj.parents if parent.name.lower() == "content"),
+            None,
+        )
+        if content_dir is not None:
+            relative = path_obj.relative_to(content_dir).with_suffix("").as_posix()
+            plugin_root = content_dir.parent
+            descriptor = plugin_root / f"{plugin_root.name}.uplugin"
+            mount_root = f"/{plugin_root.name}" if descriptor.is_file() else "/Game"
+            package_name = f"{mount_root}/{relative}"
+        else:
+            package_name = f"/Game/{path_obj.stem}"
+
     return PackageInfo(
-        name=summary.package_name,
+        name=package_name,
         layout="legacy",
         engine_version=engine_version,
         compatible_engine_version=compat_version,
@@ -383,7 +404,9 @@ class LegacyPackageReader:
             asset_ids = tuple(obj.id for obj in objects if ROLES_ASSET in obj.roles)
 
             # 14. Build PackageInfo
-            package_info = _build_package_info_from_summary(summary, name_map)
+            package_info = _build_package_info_from_summary(
+                summary, name_map, source_path=str(self._source._path)
+            )
 
             # 15. Build Summary
             summary_obj = Summary(
@@ -586,7 +609,9 @@ class LegacyPackageReader:
         """Build a minimal PackageDocument when parsing fails early."""
         package_info = PackageInfo(name="", layout="legacy")
         if summary:
-            package_info = _build_package_info_from_summary(summary, [])
+            package_info = _build_package_info_from_summary(
+                summary, [], source_path=str(self._source._path)
+            )
 
         return PackageDocument(
             source=_build_source_info(str(self._source._path)),
