@@ -1,13 +1,27 @@
 """Graph-backed semantic enrichment for Kismet decompilation results."""
 
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
-from uasset_read.cpp_gen.sanitizer import sanitize_identifier
 from uasset_read.models.core import UEdGraph
 from uasset_read.kismet.result import KismetDecompiledResult
 
 logger = logging.getLogger(__name__)
+
+
+def sanitize_identifier(name: str, fallback: str = "_unnamed") -> str:
+    """Convert a UE pin/variable name to a safe C++ identifier.
+
+    Spaces -> underscores, strip illegal characters, prefix digit starts with _,
+    empty result -> fallback.
+    """
+    if not name:
+        return fallback
+    cleaned = re.sub(r"[^A-Za-z0-9_]", "", name.replace(" ", "_"))
+    if cleaned and cleaned[0].isdigit():
+        cleaned = "_" + cleaned
+    return cleaned or fallback
 
 # Expression count threshold: function bodies below this are considered "empty", can be supplemented from graph topology
 _EMPTY_BODY_THRESHOLD = 3
@@ -123,7 +137,7 @@ def _enrich_empty_function_from_graph(
         if not execution_flows:
             # Fallback: trace directly from FunctionEntry
             pin_lookup, _, _ = build_graph_indexes(graph)
-            edges_by_from_pin, source_edges_by_to_pin = build_normalized_edge_indexes(graph)
+            edges_by_from_pin, _ = build_normalized_edge_indexes(graph)
             execution_flows = [
                 {
                     "start_event": f"FunctionEntry.{function_name}",
@@ -133,7 +147,6 @@ def _enrich_empty_function_from_graph(
                         node_lookup,
                         node_name_lookup,
                         edges_by_from_pin,
-                        source_edges_by_to_pin,
                     ),
                 }
             ]

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
@@ -199,53 +198,6 @@ def _get_process_rss_mb(pid: Optional[int] = None) -> float:
             pass
         raise
 
-    # Windows fallback: use ctypes to call GetProcessMemoryInfo
-    if sys.platform == "win32":
-        try:
-            import ctypes
-            from ctypes import wintypes
-
-            kernel32 = ctypes.windll.kernel32
-            psapi = ctypes.windll.psapi
-
-            class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
-                _fields_ = [
-                    ("cb", wintypes.DWORD),
-                    ("PageFaultCount", wintypes.DWORD),
-                    ("PeakWorkingSetSize", ctypes.c_size_t),
-                    ("WorkingSetSize", ctypes.c_size_t),
-                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
-                    ("QuotaPagedPoolUsage", ctypes.c_size_t),
-                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
-                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
-                    ("PagefileUsage", ctypes.c_size_t),
-                    ("PeakPagefileUsage", ctypes.c_size_t),
-                ]
-
-            counters = PROCESS_MEMORY_COUNTERS()
-            counters.cb = ctypes.sizeof(counters)
-            close_handle = False
-            if target_pid == os.getpid():
-                handle = kernel32.GetCurrentProcess()
-            else:
-                PROCESS_QUERY_INFORMATION = 0x0400
-                PROCESS_VM_READ = 0x0010
-                handle = kernel32.OpenProcess(
-                    PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
-                    False,
-                    target_pid,
-                )
-                close_handle = bool(handle)
-            try:
-                if handle and psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
-                    return counters.WorkingSetSize / 1024 / 1024
-            finally:
-                if close_handle:
-                    kernel32.CloseHandle(handle)
-        except (OSError, ValueError, OverflowError) as e:
-            logger.debug("Windows GetProcessMemoryInfo failed to get RSS: %s", e, exc_info=True)
-
-    logger.debug("Cannot retrieve process RSS, memory protection disabled")
     return 0.0
 
 
@@ -269,25 +221,6 @@ def get_memory_stats() -> MemoryStats:
             process_rss_mb=process_rss,
         )
     except ImportError:
-        logger.debug("psutil not available, using estimated memory stats")
-        return _estimate_memory_stats(process_rss)
+        logger.debug("psutil not available, returning process RSS only")
+        return MemoryStats(process_rss_mb=process_rss)
 
-
-def _estimate_memory_stats(process_rss_mb: float = 0.0) -> MemoryStats:
-    """Estimate memory usage (fallback when psutil is unavailable).
-
-    Returns default estimates when system info is not available.
-    """
-    total_mb = 16 * 1024  # 16 GB default
-    available_mb = 8 * 1024  # 8 GB default
-
-    used_mb = total_mb - available_mb
-    usage_percent = used_mb / total_mb if total_mb > 0 else 0.0
-
-    return MemoryStats(
-        total_mb=total_mb,
-        available_mb=available_mb,
-        used_mb=used_mb,
-        usage_percent=usage_percent,
-        process_rss_mb=process_rss_mb,
-    )

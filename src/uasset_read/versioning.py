@@ -1,8 +1,6 @@
 """
 Unified version management — VersionContainer.
 
-Provides GUID-based version lookup and file-version comparison,
-replacing hardcoded version checks throughout the codebase.
 Corresponds to COR-02: FCustomVersion system.
 """
 
@@ -23,79 +21,12 @@ from uasset_read.constants import (
 
 
 @dataclass
-class FPackageFileVersion:
-    """UE file version wrapper (dual-version joint comparison).
-
-    Corresponds to UE's FPackageFileVersion struct:
-    - FileVersionUE4: int32
-    - FileVersionUE5: int32
-    """
-
-    file_version_ue4: int = 0
-    file_version_ue5: int = 0
-
-    def to_value(self) -> int:
-        """Return the highest effective version (UE source: FPackageFileVersion::ToValue())."""
-        if self.file_version_ue5 > 0:
-            return self.file_version_ue5
-        return self.file_version_ue4
-
-    def __ge__(self, other: int) -> bool:
-        """Version comparison: whether the threshold is reached."""
-        return self.to_value() >= other
-
-    def __gt__(self, other: int) -> bool:
-        """Version comparison: whether it exceeds the threshold."""
-        return self.to_value() > other
-
-    def __le__(self, other: int) -> bool:
-        """Version comparison: whether it is below the threshold."""
-        return self.to_value() <= other
-
-    def __lt__(self, other: int) -> bool:
-        """Version comparison: whether it has not reached the threshold."""
-        return self.to_value() < other
-
-
-@dataclass
 class VersionContainer:
-    """Unified version query entry point.
-
-    After construction from PackageFileSummary, provides:
-    - get_version(guid) -> look up CustomVersion number
-    """
+    """Unified version query entry point, built from PackageFileSummary."""
 
     custom_versions: list[Any] = field(default_factory=list)
     file_version_ue5: int = UE5_VERSION_MIN
     file_version_ue4: int = 0
-    _guid_cache: dict[str, int] = field(default_factory=dict, repr=False)
-
-    @property
-    def file_version(self) -> FPackageFileVersion:
-        """Return the wrapped file version object."""
-        return FPackageFileVersion(
-            file_version_ue4=self.file_version_ue4,
-            file_version_ue5=self.file_version_ue5,
-        )
-
-    def get_version(self, guid: str, default: int = 0) -> int:
-        """Look up version number by GUID, returning default if not found.
-
-        GUID comparison automatically strips hyphens and converts to lowercase.
-        """
-        normalized = guid.replace("-", "").lower() if guid else guid
-        cached = self._guid_cache.get(normalized)
-        if cached is not None:
-            return cached
-
-        for cv in self.custom_versions:
-            cv_guid = cv.guid.replace("-", "").lower() if cv.guid else cv.guid
-            if cv_guid == normalized:
-                self._guid_cache[normalized] = cv.version
-                return cv.version
-
-        # Do not cache default on miss to avoid cross-caller default pollution
-        return default
 
     @property
     def is_ue5(self) -> bool:

@@ -58,7 +58,7 @@ def extract_components(
                 skipped_no_class += 1
             continue
 
-        transforms = extract_component_transforms(export.properties, export.object_name)
+        transforms = extract_component_transforms(export.properties)
         scalar_props = _filter_scalar_properties(export.properties)
 
         result.append(

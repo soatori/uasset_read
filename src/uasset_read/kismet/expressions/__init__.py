@@ -1,11 +1,15 @@
-"""Kismet expression classes and token-to-class mapping."""
+"""Kismet expression classes and token-to-class mapping.
+
+Re-exports below exist for backward compatibility — translator.py and
+archive.py import from this package directly.  Prefer importing from
+submodules (literals, variables, etc.) in new code.
+"""
 
 from uasset_read.kismet.tokens import EExprToken
 from uasset_read.kismet.expressions.base import KismetExpression
 
 # Variables
 from uasset_read.kismet.expressions.variables import (
-    EX_VariableBase,
     EX_LocalVariable,
     EX_InstanceVariable,
     EX_DefaultVariable,
@@ -64,7 +68,6 @@ from uasset_read.kismet.expressions.control_flow import (
 # Assignments
 from uasset_read.kismet.expressions.assignments import (
     EX_Let,
-    EX_LetBase,
     EX_LetBool,
     EX_LetDelegate,
     EX_LetMulticastDelegate,
@@ -87,7 +90,6 @@ from uasset_read.kismet.expressions.functions import (
 
 # Casts
 from uasset_read.kismet.expressions.casts import (
-    EX_CastBase,
     EX_Cast,
     EX_MetaCast,
     EX_DynamicCast,
@@ -141,7 +143,6 @@ from uasset_read.kismet.expressions.delegates import (
 
 # Special
 from uasset_read.kismet.expressions.special import (
-    FKismetSwitchCase,
     EX_Return,
     EX_Assert,
     EX_NothingInt32,
@@ -283,110 +284,4 @@ EXPR_CLASS_MAP: dict[EExprToken, type[KismetExpression]] = {
     EExprToken.EX_AutoRtfmAbortIfNot: EX_AutoRtfmAbortIfNot,
 }
 
-__all__ = [
-    "EXPR_CLASS_MAP",
-    "FKismetSwitchCase",
-    "EX_VariableBase",
-    "EX_LocalVariable",
-    "EX_InstanceVariable",
-    "EX_DefaultVariable",
-    "EX_LocalOutVariable",
-    "EX_ClassSparseDataVariable",
-    "EX_IntConst",
-    "EX_FloatConst",
-    "EX_ByteConst",
-    "EX_IntConstByte",
-    "EX_Int64Const",
-    "EX_UInt64Const",
-    "EX_DoubleConst",
-    "EX_IntZero",
-    "EX_IntOne",
-    "EX_True",
-    "EX_False",
-    "EX_StringConst",
-    "EX_UnicodeStringConst",
-    "EX_TextConst",
-    "EX_SoftObjectConst",
-    "EX_VectorConst",
-    "EX_RotationConst",
-    "EX_TransformConst",
-    "EX_Vector3fConst",
-    "EX_Jump",
-    "EX_JumpIfNot",
-    "EX_Skip",
-    "EX_ComputedJump",
-    "EX_PushExecutionFlow",
-    "EX_PopExecutionFlow",
-    "EX_PopExecutionFlowIfNot",
-    "EX_EndOfScript",
-    "EX_SkipOffsetConst",
-    "EX_Let",
-    "EX_LetBase",
-    "EX_LetBool",
-    "EX_LetDelegate",
-    "EX_LetMulticastDelegate",
-    "EX_LetObj",
-    "EX_LetWeakObjPtr",
-    "EX_LetValueOnPersistentFrame",
-    "EX_EndParmValue",
-    "EX_EndFunctionParms",
-    "EX_FinalFunction",
-    "EX_CallMath",
-    "EX_LocalFinalFunction",
-    "EX_VirtualFunction",
-    "EX_LocalVirtualFunction",
-    "EX_CallMulticastDelegate",
-    "EX_CastBase",
-    "EX_Cast",
-    "EX_MetaCast",
-    "EX_DynamicCast",
-    "EX_ObjToInterfaceCast",
-    "EX_CrossInterfaceCast",
-    "EX_InterfaceToObjCast",
-    "EX_Context",
-    "EX_Context_FailSilent",
-    "EX_ClassContext",
-    "EX_InterfaceContext",
-    "EX_StructMemberContext",
-    "EX_SetArray",
-    "EX_EndArray",
-    "EX_SetMap",
-    "EX_EndMap",
-    "EX_SetSet",
-    "EX_EndSet",
-    "EX_ArrayConst",
-    "EX_EndArrayConst",
-    "EX_MapConst",
-    "EX_EndMapConst",
-    "EX_SetConst",
-    "EX_EndSetConst",
-    "EX_ArrayGetByRef",
-    "EX_StructConst",
-    "EX_EndStructConst",
-    "EX_BitFieldConst",
-    "EX_PropertyConst",
-    "EX_AddMulticastDelegate",
-    "EX_ClearMulticastDelegate",
-    "EX_BindDelegate",
-    "EX_RemoveMulticastDelegate",
-    "EX_InstanceDelegate",
-    "EX_Return",
-    "EX_Assert",
-    "EX_Nothing",
-    "EX_NothingInt32",
-    "EX_Self",
-    "EX_NoObject",
-    "EX_NoInterface",
-    "EX_SwitchValue",
-    "EX_InstrumentationEvent",
-    "EX_DeprecatedOp4A",
-    "EX_Breakpoint",
-    "EX_Tracepoint",
-    "EX_WireTracepoint",
-    "EX_FieldPathConst",
-    "EX_ObjectConst",
-    "EX_NameConst",
-    "EX_AutoRtfmTransact",
-    "EX_AutoRtfmStopTransact",
-    "EX_AutoRtfmAbortIfNot",
-]
+

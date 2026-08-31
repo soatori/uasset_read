@@ -4,10 +4,6 @@ from __future__ import annotations
 
 import re
 
-GRAPH_ID_RE = r"blueprint://graph/[A-Za-z][A-Za-z0-9_.-]*"
-NODE_ID_RE = r"blueprint://graph/[A-Za-z][A-Za-z0-9_.-]*/node/[a-z][a-z0-9-]*/[A-Za-z][A-Za-z0-9_.-]*/[0-9]+"
-ENDPOINT_RE = r"(input|output|exec)\.[A-Za-z][A-Za-z0-9_.-]*"
-
 _SLUG_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 _KIND_RE = re.compile(r"[^a-z0-9-]+")
 

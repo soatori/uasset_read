@@ -21,9 +21,6 @@ MAX_EXPRESSION_RECURSION_DEPTH = 256
 class FKismetArchive(FArchive):
     """Kismet bytecode reader. Wraps in-memory bytes as an FArchive-compatible stream."""
 
-    # Class-level dedup set: shared across instances, same offset prints warning only once
-    _warned_offsets: set[int] = set()
-
     def __init__(self, data: bytes, name: str, name_map: list[str], tolerant: bool = False):
         self._init_archive_attrs(name, tolerant, hex_view=False)
         self._file = io.BytesIO(data)
@@ -40,11 +37,6 @@ class FKismetArchive(FArchive):
 
         # Package summary reference (set by parse_bytecode_stream for LWC version checks)
         self.summary: PackageFileSummary | None = None
-
-    @classmethod
-    def reset_warned_offsets(cls) -> None:
-        """Reset class-level warning dedup set (called at start of new asset decompilation)."""
-        cls._warned_offsets = set()
 
     def read_expression(self) -> KismetExpression:
         """Read one byte token → look up in EXPR_CLASS_MAP → construct expression → set StatementIndex."""
@@ -69,11 +61,9 @@ class FKismetArchive(FArchive):
                     consecutive_unknown += 1
                     if consecutive_unknown >= 10:
                         raise ParseError("Too many consecutive unknown tokens in tolerant mode")
-                    if serialized_start not in self._warned_offsets and len(self._warned_offsets) < 10000:
-                        logger.debug(
-                            f"Unknown EExprToken 0x{token_byte:02X} at offset {serialized_start}, skipping in tolerant mode"
-                        )
-                        self._warned_offsets.add(serialized_start)
+                    logger.debug(
+                        f"Unknown EExprToken 0x{token_byte:02X} at offset {serialized_start}, skipping in tolerant mode"
+                    )
                     # The unknown byte is already consumed from both cursors.
                     self.seek(serialized_start + 1)
                     continue
@@ -131,31 +121,6 @@ class FKismetArchive(FArchive):
         result = data[:null_idx].decode("ascii", errors="replace")
         self.seek(current_pos + null_idx)  # position AT null, not past it
         return result
-
-    def resolve_fname(self, index: int, number: int = 0) -> str:
-        """Unified FName resolution logic.
-
-        Args:
-            index: Index in name_map
-            number: FName number suffix
-
-        Returns:
-            Formatted FName string (e.g. "ClassName_0")
-        """
-        if 0 <= index < len(self._name_map):
-            base_name = self._name_map[index]
-        else:
-            base_name = f"Unknown_{index}"
-
-        if number > 0:
-            return f"{base_name}_{number}"
-        return base_name
-
-    def read_fname_kismet(self) -> str:
-        """Read FName in Kismet context: index + number → look up in name_map."""
-        index = self.read_i32()
-        number = self.read_i32()
-        return self.resolve_fname(index, number)
 
     def skip(self, n: int) -> None:
         """Skip n bytes forward."""
@@ -263,10 +228,6 @@ class FKismetArchive(FArchive):
             number=number,
             base_name=base_name,
         )
-
-    def xfer_code_skip(self) -> int:
-        """Read i16 code skip offset."""
-        return self.read_i16()
 
     def xfer_ansi_string(self) -> str:
         """Read null-terminated ASCII string, consuming the terminator.

@@ -8,19 +8,19 @@ from uasset_read.semantic.blueprint.flows import attach_flows as bp_attach_flows
 _ENTRY_KINDS = {"event", "custom_event", "function_entry"}
 
 
-def attach_flows(graphs_json: list[dict], index: dict, reporting, *, mode: str) -> None:
+def attach_flows(graphs_json: list[dict], index: dict, reporting) -> None:
     """Attach control_flow, data_flow, and pose_flow to each emitted graph.
 
     Extends the Blueprint flow attachment with pose flow for animation pose pins.
     """
     # Delegate standard control/data flow to blueprint implementation
-    bp_attach_flows(graphs_json, index, reporting, mode=mode)
+    bp_attach_flows(graphs_json, index, reporting)
 
     # Add pose flow for animation pose connections
-    _attach_pose_flows(graphs_json, index, reporting, mode=mode)
+    _attach_pose_flows(graphs_json, index, reporting)
 
 
-def _attach_pose_flows(graphs_json: list[dict], index: dict, reporting, *, mode: str) -> None:
+def _attach_pose_flows(graphs_json: list[dict], index: dict, reporting) -> None:
     """Attach pose_flow to graphs based on pose pin connections.
 
     Rules:

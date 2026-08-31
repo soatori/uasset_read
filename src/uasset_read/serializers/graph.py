@@ -1,13 +1,8 @@
-"""UEdGraph container reader and backward-compatible re-exports.
+"""UEdGraph container reader.
 
 Pin and Node serializers live in graph_pin.py and graph_node.py.
 Shared helpers (GUID, PropertyTag, FText, diagnostic tracing, pin validation)
 are in graph_helpers.py to break the circular import cycle.
-
-This module:
-  - imports helpers it needs from graph_helpers (one-way)
-  - defines read_ue_graph / _extract_graph_properties
-  - re-exports symbols from graph_pin.py and graph_node.py for backward compat
 """
 
 from __future__ import annotations
@@ -22,15 +17,9 @@ if TYPE_CHECKING:
     from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
     from uasset_read.link.linker import PackageLinker
 
-from uasset_read.constants import (
-    MAX_NODES_PER_GRAPH,  # noqa: F401 — backward-compat re-export
-    MAX_SUBGRAPHS,  # noqa: F401 — backward-compat re-export
-)
+from uasset_read.constants import MAX_NODES_PER_GRAPH, MAX_SUBGRAPHS
 from uasset_read.exceptions import ParseError
 from uasset_read.serializers.graph_helpers import _gac
-from uasset_read.serializers.graph_helpers import (  # noqa: F401 — backward-compat re-exports
-    read_ftext_with_history,
-)
 from uasset_read.models.core import UEdGraph, UEdGraphNode
 
 logger = logging.getLogger(__name__)
@@ -121,7 +110,7 @@ def read_ue_graph(
     Reference: UE C++ UEdGraph::Serialize()
     """
     # Lazy import to avoid circular dependency (graph.py -> graph_node.py)
-    from uasset_read.serializers.graph_node import read_ue_graph_node  # noqa: F811
+    from uasset_read.serializers.graph_node import read_ue_graph_node
 
     if _parsed_indices is None:
         _parsed_indices = set()
@@ -295,42 +284,3 @@ def read_ue_graph(
         b_editable=b_editable,
         subgraphs=subgraphs,
     )
-
-
-# ============================================================================
-# Backward-compatible re-exports from graph_pin.py and graph_node.py
-#
-# Import cycle is now broken: graph_pin.py and graph_node.py import shared
-# helpers from graph_helpers.py (not from graph.py).  The re-exports below
-# are safe one-way imports.
-# ============================================================================
-
-from uasset_read.serializers.graph_pin import (  # noqa: E402, F401
-    read_ed_graph_pin_type,
-    read_pin_reference,
-    read_pin_array,
-    read_ue_graph_pin,
-)
-from uasset_read.serializers.graph_node import (  # noqa: E402, F401
-    read_ue_graph_node,
-    create_node_from_archive,
-    read_fmember_reference,
-    read_k2node_call_function,
-    read_k2node_event,
-    read_k2node_knot,
-    read_edgraph_node_comment,
-    read_k2node_enhanced_input,
-    read_k2node_functionentry,
-    read_k2node_message,
-    read_k2node_call_delegate,
-    read_k2node_call_array_function,
-    read_k2node_call_parent_function,
-    read_k2node_function_result,
-    read_k2node_create_widget,
-    read_k2node_add_delegate,
-    read_k2node_macro_instance,
-    read_k2node_assign_delegate,
-    read_k2node_get_data_table_row,
-    read_k2node_load_asset,
-    read_k2node_spawn_actor_from_class,
-)

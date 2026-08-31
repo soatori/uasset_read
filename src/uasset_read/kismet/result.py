@@ -4,7 +4,6 @@ Kismet Decompilation Result — Single function decompilation result.
 Data model for Kismet bytecode decompilation output.
 """
 
-import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -31,7 +30,6 @@ def _validate_status_pair(bytecode_status: str, translation_status: str) -> None
 
 
 def infer_bytecode_confidence(
-    fallback_reasons: list[str],
     bytecode_status: str = "unknown",
     logic_source: str = "current_asset",
 ) -> str:
@@ -61,7 +59,7 @@ class KismetDecompiledResult:
     - cpp_code: Complete C++ pseudocode body
     - expressions: Raw KismetExpression list for debugging
 
-    Supports JSON serialization via to_dict() and to_json().
+    Supports JSON serialization via to_dict().
     """
 
     function_name: str  # e.g. "ExecuteUbergraph_MyBP"
@@ -111,7 +109,6 @@ class KismetDecompiledResult:
             "return_type": self.return_type,
             "native_signature": self.native_signature,
             "bytecode_confidence": infer_bytecode_confidence(
-                self.fallback_reasons,
                 bytecode_status=self.bytecode_status,
                 logic_source=self.logic_source,
             ),
@@ -132,10 +129,6 @@ class KismetDecompiledResult:
         if self.script_metrics is not None:
             d["script_metrics"] = self.script_metrics
         return d
-
-    def to_json(self, indent: int = 2) -> str:
-        """JSON string view (D-08)."""
-        return json.dumps(self.to_dict(), indent=indent)
 
 
 __all__ = ["KismetDecompiledResult", "infer_bytecode_confidence", "ALLOWED_STATUS_PAIRS"]

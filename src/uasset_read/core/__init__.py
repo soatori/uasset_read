@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import IO, TYPE_CHECKING
+from typing import TYPE_CHECKING
 import logging
 import os
 import tempfile
@@ -25,10 +25,7 @@ from uasset_read.project_logging import (
 )
 from uasset_read.renderers import MarkdownRenderer
 from uasset_read.renderers.base import RenderOptions
-from uasset_read.exceptions import (
-    ParseError as ParseError,
-    SemanticContractError,
-)  # Re-export for backward compatibility
+from uasset_read.exceptions import ParseError, SemanticContractError
 
 if TYPE_CHECKING:
     from uasset_read.memory_safety import MemoryPolicy
@@ -36,8 +33,6 @@ if TYPE_CHECKING:
     from uasset_read.models.result import ParseResult
 
 logger = logging.getLogger(__name__)
-
-_VALID_OUTPUT_LEVELS = {"standard", "debug"}
 
 _VALID_OUTPUT_LEVELS = {"standard", "debug"}
 
@@ -219,7 +214,7 @@ def _parse_and_render(
         from uasset_read.semantic.validator import validate_semantic_document
         from uasset_read.semantic.render import render_semantic_json
 
-        semantic_ir = build_semantic_ir(ir, source_path=file_path, mode=output_level)
+        semantic_ir = build_semantic_ir(ir, source_path=file_path)
         semantic_ir = project_semantic(semantic_ir, output_level)
         validation_errors = validate_semantic_document(semantic_ir)
         if validation_errors:
@@ -228,12 +223,7 @@ def _parse_and_render(
 
     # Other formats: use renderer registry
     renderer = MarkdownRenderer()
-    options = RenderOptions(
-        verbose=verbose,
-        include_schema=include_schema,
-        output_level=output_level,
-        hex_view=hex_view,
-    )
+    options = RenderOptions(hex_view=bool(hex_view))
     return renderer.render(ir, options), result
 
 
@@ -482,13 +472,11 @@ def diff_single(
     mappings_path: str | None = None,
     game: str | None = None,
     force_full_parse: bool | None = None,
-    writer: IO[str] | None = None,
     log_config: LogConfig | None = None,
 ) -> str:
     """对比两个 .uasset 文件的文本摘要差异，返回 unified diff 输出。
 
     解析失败不会抛出异常，而是在 diff 输出中标注解析错误信息。
-    当提供 writer 时，diff 写入流而不是返回字符串（流式输出）。
 
     Args:
         file_path1: 第一个 .uasset 文件路径
@@ -498,58 +486,14 @@ def diff_single(
         mappings_path: 可选 .usmap/.jmap 类型映射
         game: 可选游戏名（启用游戏特定属性解析）
         force_full_parse: 是否强制完整蓝图解析
-        writer: 可选输出流，提供时 diff 写入该流
         log_config: 可选 LogConfig 实例，集中管理日志参数。
 
     Returns:
-        writer 为 None 时返回 unified diff 文本；否则返回空字符串
-    """
-    _configure_logging(log_config=log_config)
-
-    if writer is None:
-        from io import StringIO
-
-        buf = StringIO()
-        _diff_to(
-            file_path1,
-            file_path2,
-            buf,
-            tolerant=tolerant,
-            context_lines=context_lines,
-            mappings_path=mappings_path,
-            game=game,
-            force_full_parse=force_full_parse,
-        )
-        return buf.getvalue()
-    _diff_to(
-        file_path1,
-        file_path2,
-        writer,
-        tolerant=tolerant,
-        context_lines=context_lines,
-        mappings_path=mappings_path,
-        game=game,
-        force_full_parse=force_full_parse,
-    )
-    return ""
-
-
-def _diff_to(
-    file_path1: str,
-    file_path2: str,
-    writer: IO[str],
-    *,
-    tolerant: bool | None = None,
-    context_lines: int = 3,
-    mappings_path: str | None = None,
-    game: str | None = None,
-    force_full_parse: bool | None = None,
-) -> None:
-    """将 unified diff 流式写入 writer。
-
-    逐行写入，不累积完整 diff 字符串。
+        unified diff 文本（无差异时返回标注"（无差异）"的头部）
     """
     import difflib
+
+    _configure_logging(log_config=log_config)
 
     # 解析文件 1
     try:
@@ -585,18 +529,13 @@ def _diff_to(
     lines1 = text1.splitlines(keepends=True)
     lines2 = text2.splitlines(keepends=True)
 
-    diff = difflib.unified_diff(
-        lines1,
-        lines2,
-        fromfile=f"a/{name1}",
-        tofile=f"b/{name2}",
-        n=context_lines,
+    diff = "".join(
+        difflib.unified_diff(
+            lines1,
+            lines2,
+            fromfile=f"a/{name1}",
+            tofile=f"b/{name2}",
+            n=context_lines,
+        )
     )
-
-    wrote_any = False
-    for line in diff:
-        writer.write(line)
-        wrote_any = True
-
-    if not wrote_any:
-        writer.write(f"--- a/{name1}\n+++ b/{name2}\n（无差异）\n")
+    return diff or f"--- a/{name1}\n+++ b/{name2}\n（无差异）\n"

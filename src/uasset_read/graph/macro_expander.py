@@ -11,7 +11,6 @@ class MacroExpansionContext:
     macro_name: str
     macro_guid: str
     macro_graph_ref: Dict[str, Any]
-    blueprint_ref: Optional[str] = None
 
 
 @dataclass
@@ -24,7 +23,6 @@ class MacroExpansion:
     entry_tunnels: List[Dict[str, Any]] = field(default_factory=list)
     exit_tunnels: List[Dict[str, Any]] = field(default_factory=list)
     internal_flows: List[Dict[str, Any]] = field(default_factory=list)
-    nested_expansions: List["MacroExpansion"] = field(default_factory=list)
     unresolved: bool = False
 
 
@@ -228,14 +226,9 @@ class MacroExpander:
         graph_guid = macro_ref.get("graph_guid", "")
         graph_name = macro_ref.get("graph_name", "")
 
-        # Prioritize user-defined macro graphs (user-defined takes precedence over standard macros when names match)
-        # If the asset contains a graph with the same name, expand the user-defined version
+        # User-defined macro graphs take precedence over standard macros (one lookup)
         macro_graph = self._find_macro_graph(macro_ref)
-        if macro_graph is not None:
-            # User-defined macro takes priority, expand normally
-            pass
-        elif graph_name in STANDARD_MACROS:
-            # Only use standard macro expansion when no same-name graph exists
+        if macro_graph is None and graph_name in STANDARD_MACROS:
             return self._create_standard_expansion(graph_name, macro_ref)
 
         # Cycle detection
@@ -247,8 +240,6 @@ class MacroExpander:
                 + graph_name
             )
 
-        # Find macro graph
-        macro_graph = self._find_macro_graph(macro_ref)
         if macro_graph is None:
             return self._create_unresolved_expansion(instance_node, macro_ref)
 
@@ -344,12 +335,10 @@ class MacroExpander:
         # Build pin mapping
         pin_mapping = self._build_pin_mapping(entry_tunnels, exit_tunnels)
 
-        # Recursively expand nested macros
-        nested_expansions: List[MacroExpansion] = []
+        # Recursively expand nested macros (raises ValueError on macro cycles)
         for node in internal_nodes:
             if node.get("node_type") == "K2Node_MacroInstance":
-                nested = self.expand_macro_instance(node)
-                nested_expansions.append(nested)
+                self.expand_macro_instance(node)
 
         # Build internal execution flow
         internal_flows = self._build_internal_flows(entry_tunnels, internal_nodes, exit_tunnels)
@@ -361,7 +350,6 @@ class MacroExpander:
             entry_tunnels=entry_tunnels,
             exit_tunnels=exit_tunnels,
             internal_flows=internal_flows,
-            nested_expansions=nested_expansions,
         )
 
     def _build_pin_mapping(

@@ -5,7 +5,7 @@ from __future__ import annotations
 _ENTRY_KINDS = {"event", "custom_event", "function_entry"}
 
 
-def attach_flows(graphs_json: list[dict], index: dict, reporting, *, mode: str) -> None:
+def attach_flows(graphs_json: list[dict], index: dict, reporting) -> None:
     """Attach control_flow/data_flow to each emitted graph, in place.
 
     Canonical edges are emitted from the output side only (LinkedTo is

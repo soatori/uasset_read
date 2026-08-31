@@ -685,9 +685,9 @@
     "iostore_container": {
       "status": "missing",
       "description": "No IoStore (.utoc/.ucas) container samples.",
-      "needed_for": "Phase 5 — IoStoreChunkSource implementation",
+      "needed_for": "Phase 5 — IoStore container parsing (target design, see docs/designs/)",
       "acquisition": "1. Create a UE5.3+ project\n2. Enable IoStore in Project Settings > Packaging > Use IoStore\n3. Package the project\n4. Copy the .utoc and .ucas files from the packaged output\n5. Also copy a few .uasset files from inside the container for testing",
-      "verification": "After copying, verify:\n- .utoc file starts with IoStore TOC magic bytes\n- IoStoreReader can parse the TOC header\n- Package names can be listed from directory index",
+      "verification": "After copying, verify:\n- .utoc file starts with IoStore TOC magic bytes\n- the IoStore TOC header parses\n- Package names can be listed from directory index",
       "minimum_samples": 1,
       "recommended_samples": "1 .utoc + 1 .ucas pair with 5+ packages inside"
     },

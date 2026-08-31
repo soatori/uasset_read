@@ -10,7 +10,7 @@ from functools import wraps
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -45,49 +45,6 @@ class _LogContextFilter(logging.Filter):
         return True
 
 
-class _RepeatedDebugFilter(logging.Filter):
-    def __init__(self, repeat_limit: int, suppress_levels: set[int] | None = None) -> None:
-        super().__init__()
-        self.limit = repeat_limit
-        self.repeat_limit = repeat_limit
-        self.counts: dict[tuple[str, str, str], int] = {}
-        self.message_counts: dict[str, int] = {}
-        self.suppressed_count: int = 0
-        self.suppress_levels = suppress_levels or {logging.DEBUG}
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        msg = record.getMessage()
-        if msg not in self.message_counts:
-            self.message_counts[msg] = 0
-        self.message_counts[msg] += 1
-        # 按 suppress_levels 抑制重复消息，按原始模板分组
-        if self.limit <= 0 or record.levelno not in self.suppress_levels:
-            return True
-        key = (_log_asset.get(), record.name, str(record.msg))
-        count = self.counts.get(key, 0) + 1
-        self.counts[key] = count
-        if count > self.limit:
-            self.suppressed_count += 1
-            return False
-        return True
-
-    def summaries(self) -> list[tuple[str, str, str, int]]:
-        return [
-            (asset, logger_name, template, count - self.limit)
-            for (asset, logger_name, template), count in self.counts.items()
-            if count > self.limit
-        ]
-
-    def get_summary(self) -> str:
-        if not self.suppressed_count:
-            return ""
-        summary_parts = []
-        for msg, count in self.message_counts.items():
-            if count > self.repeat_limit:
-                summary_parts.append(f"{msg} (suppressed {count - self.repeat_limit} times)")
-        return "Repeated warnings: " + "; ".join(summary_parts)
-
-
 class JSONFormatter(logging.Formatter):
     """Format log records as single-line JSON objects.
 
@@ -114,42 +71,6 @@ class JSONFormatter(logging.Formatter):
         return _json.dumps(log_entry, ensure_ascii=False, default=str)
 
 
-class SamplingFilter(logging.Filter):
-    """Drop a fraction of DEBUG records to reduce log volume.
-
-    ``rate`` is the keep probability (0.0 = drop all, 1.0 = keep all).
-    Only applies to records at or below ``sample_level`` (default DEBUG).
-
-    Uses a deterministic hash (sum of char ordinals) so that the same
-    message is always sampled the same way across processes.
-    """
-
-    def __init__(self, rate: float = 1.0, sample_level: int = logging.DEBUG):
-        super().__init__()
-        if not 0.0 <= rate <= 1.0:
-            raise ValueError(f"rate must be 0.0-1.0, got {rate}")
-        self.rate = rate
-        self.sample_level = sample_level
-
-    @staticmethod
-    def _stable_hash(msg: str) -> int:
-        """Deterministic hash — not affected by PYTHONHASHSEED."""
-        h = 0
-        for ch in msg:
-            h = (h * 31 + ord(ch)) & 0xFFFFFFFF
-        return h % 1000
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        if record.levelno > self.sample_level:
-            return True
-        if self.rate >= 1.0:
-            return True
-        if self.rate <= 0.0:
-            return False
-        try:
-            return self._stable_hash(record.msg) < int(self.rate * 1000)
-        except Exception:
-            return True
 
 
 @contextmanager
@@ -213,7 +134,7 @@ def log_stage_timing(
 
     class _TimingContext:
         def __init__(self):
-            self._start: float | None = None
+            self._start: float = 0.0
 
         def __enter__(self):
             if asset is not None:
@@ -294,21 +215,6 @@ def _shutdown_locked(package_logger: logging.Logger) -> None:
     for handler in list(package_logger.handlers):
         if not getattr(handler, _HANDLER_MARKER, False):
             continue
-        for installed_filter in handler.filters:
-            if isinstance(installed_filter, _RepeatedDebugFilter):
-                for (
-                    asset,
-                    logger_name,
-                    template,
-                    suppressed,
-                ) in installed_filter.summaries():
-                    with log_context(asset=asset):
-                        package_logger.info(
-                            "Repeated message summary logger=%s template=%s suppressed=%d",
-                            logger_name,
-                            template,
-                            suppressed,
-                        )
         handler.flush()
     _remove_project_handlers(package_logger)
     if _original_level is not None:
@@ -337,7 +243,6 @@ class ProjectLogSession:
     cleanup_on_close: bool = False
     keep_latest: int | None = None
     max_total_bytes: int | None = None
-    older_than_days: int | None = None
     _started_at: float = field(default_factory=_time.monotonic)
     _owns_scope_lock: bool = False
     _closed: bool = False
@@ -364,7 +269,6 @@ class ProjectLogSession:
                         log_dir=self.log_path.parent,
                         keep_latest=self.keep_latest,
                         max_total_bytes=self.max_total_bytes,
-                        older_than_days=self.older_than_days,
                         dry_run=False,
                     )
             finally:
@@ -400,7 +304,6 @@ def project_logging_session(**kwargs) -> ProjectLogSession | _DisabledLogSession
     cleanup_on_close = bool(kwargs.pop("cleanup_on_close", False))
     keep_latest = kwargs.get("keep_latest")
     max_total_bytes = kwargs.get("max_total_bytes")
-    older_than_days = kwargs.get("older_than_days")
     try:
         log_path = configure_project_logging(**kwargs)
     except BaseException:
@@ -417,7 +320,6 @@ def project_logging_session(**kwargs) -> ProjectLogSession | _DisabledLogSession
         cleanup_on_close=cleanup_on_close,
         keep_latest=keep_latest,
         max_total_bytes=max_total_bytes,
-        older_than_days=older_than_days,
         _owns_scope_lock=True,
     )
 
@@ -503,12 +405,9 @@ def configure_project_logging(
     backup_count: int = 5,
     keep_latest: int | None = None,
     max_total_bytes: int | None = None,
-    older_than_days: int | None = None,
     cleanup: bool = False,
-    repeat_limit: int = 5,
     cleanup_on_close: bool = False,
     format: str = "text",
-    sample_rate: float = 1.0,
 ) -> Path | None:
     """Configure a per-process file logger under <project>/log/."""
     global _configured_log_path
@@ -534,12 +433,9 @@ def configure_project_logging(
             and backup_count == 5
             and keep_latest is None
             and max_total_bytes is None
-            and older_than_days is None
             and cleanup is False
-            and repeat_limit == 5
             and cleanup_on_close is False
             and format == "text"
-            and sample_rate == 1.0
         )
         if _disabled_by_request and default_request:
             return None
@@ -558,12 +454,9 @@ def configure_project_logging(
             backup_count,
             keep_latest,
             max_total_bytes,
-            older_than_days,
             cleanup,
-            repeat_limit,
             cleanup_on_close,
             format,
-            sample_rate,
         )
         if _configured_log_path is not None and signature == _configured_signature:
             return _configured_log_path
@@ -575,7 +468,6 @@ def configure_project_logging(
                 project_root=root,
                 log_dir=resolved_log_dir,
                 keep_latest=keep_latest,
-                older_than_days=older_than_days,
                 max_total_bytes=max_total_bytes,
                 dry_run=False,
             )
@@ -597,7 +489,6 @@ def configure_project_logging(
         setattr(handler, _HANDLER_MARKER, True)
         handler.setLevel(log_level)
         handler.addFilter(_LogContextFilter(active_run_id))
-        handler.addFilter(_RepeatedDebugFilter(repeat_limit, suppress_levels={logging.DEBUG, logging.WARNING}))
         if format == "json":
             handler.setFormatter(JSONFormatter(datefmt="%Y-%m-%dT%H:%M:%S"))
         else:
@@ -611,8 +502,7 @@ def configure_project_logging(
                     datefmt="%Y-%m-%d %H:%M:%S",
                 )
             )
-        if sample_rate < 1.0:
-            handler.addFilter(SamplingFilter(rate=sample_rate))
+
         package_logger.addHandler(handler)
 
         _configured_log_path = log_path
@@ -629,7 +519,6 @@ def cleanup_project_logs(
     project_root: str | Path | None = None,
     log_dir: str | Path | None = None,
     keep_latest: int | None = None,
-    older_than_days: int | None = None,
     max_total_bytes: int | None = None,
     dry_run: bool = True,
 ) -> list[Path]:
@@ -645,6 +534,9 @@ def cleanup_project_logs(
     files = list(resolved_log_dir.glob("uasset_read*.log*"))
 
     def family_base(path: Path) -> Path:
+        # RotatingFileHandler appends .1, .2, … to the base log filename.
+        # Stripping that numeric suffix groups all backups of the same run
+        # into one "family" so they can be kept or deleted as a unit.
         name = path.name
         base, separator, suffix = name.rpartition(".")
         if separator and suffix.isdigit() and base.endswith(".log"):
@@ -668,17 +560,6 @@ def cleanup_project_logs(
         effective_keep_latest = max(1, keep_latest)
         selected_families.update(
             family for family in ordered_families[effective_keep_latest:] if family != active_family
-        )
-
-    if older_than_days is not None:
-        if older_than_days < 0:
-            raise ValueError("older_than_days must be >= 0")
-        cutoff = datetime.now() - timedelta(days=older_than_days)
-        selected_families.update(
-            family
-            for family in ordered_families
-            if family != active_family
-            and datetime.fromtimestamp(max(path.stat().st_mtime for path in families[family])) < cutoff
         )
 
     if max_total_bytes is not None:
@@ -718,14 +599,3 @@ def _reset_logging_state_for_tests() -> None:
         package_logger = logging.getLogger(_LOGGER_NAME)
         _shutdown_locked(package_logger)
         _disabled_by_request = False
-
-
-def setup_logging(
-    *,
-    log_dir: str | Path | None = None,
-    level: str | int | None = "DEBUG",
-    **kwargs,
-) -> Path | None:
-    """便捷日志配置入口，重置状态后调用 configure_project_logging。"""
-    _reset_logging_state_for_tests()
-    return configure_project_logging(log_dir=log_dir, level=level, **kwargs)

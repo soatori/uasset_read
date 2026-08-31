@@ -80,16 +80,13 @@ print(doc.to_dict())  # PackageDocument v2 JSON
 
 - **Kismet bytecode decompiler** — EExprToken → AST → C++ pseudo-code with structured control flow
 - **PackageLinker** — two-phase object graph reconstruction
-- **C++ skeleton extraction** — Component declarations, function signatures, UPROPERTY mapping, constructor formatting, default value generation, identifier sanitization
 - **Dependency analysis** — ImportMap + SoftObjectPaths dependency graph
 - **Circular dependency detection** — mutual reference detection
 - **IR (Intermediate Representation)** — package-level IR builder for decoupled rendering pipeline
 
 ### File Format Support
 
-- **Pak file parsing** — FPakInfo, Zlib compression via the standard library, optional LZ4/Zstd/AES-ECB support when `lz4`, `zstandard`, or `cryptography` are installed; Oodle reports a clear unsupported error
-- **IoStore container** — Chunk ID, offset/size structures
-- **Dedicated asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, AnimBlueprint, AnimMontage, AnimBoneCompression, AnimCurveCompression, AnimationDataModel, SoundWave, SoundCue, SoundAttenuation, DataTable, CurveTable, StringTable, Skeleton, PoseAsset, LevelSequence, MovieScene, MovieSceneControlRig, FoliageType, SkeletalMeshLODSettings, SubsurfaceProfile, OpaqueStub, PropertyExtractor; broader asset categories use generic UObject/property fallback paths. Pak/IoStore parsing lacks real `.pak/.utoc/.ucas` sample coverage.
+- **Dedicated asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, AnimBlueprint, AnimMontage, AnimBoneCompression, AnimCurveCompression, AnimationDataModel, SoundWave, SoundCue, SoundAttenuation, DataTable, CurveTable, StringTable, Skeleton, PoseAsset, LevelSequence, MovieScene, MovieSceneControlRig, FoliageType, SkeletalMeshLODSettings, SubsurfaceProfile, OpaqueStub, PropertyExtractor; broader asset categories use generic UObject/property fallback paths.
 - **Bulk Data** — BulkData header parsing
 - **Game version support** — Game-specific serialization constants
 - **Binary/native handlers** — binary or native property serialization support
@@ -159,7 +156,6 @@ python -m uasset_read path/to/file.uasset --output-level debug   # Output verbos
 | `--log-cleanup` / `--no-log-cleanup` | enabled | Enable or disable cleanup after the CLI run |
 | `--log-keep-latest` | 20 | Number of latest complete runs to keep |
 | `--log-max-total-mb` | 500 | Total log storage limit (MB) |
-| `--log-repeat-limit` | 5 | Keep the first N repeated DEBUG templates; 0 disables aggregation |
 | `--clean-logs` | false | Plan cleanup only, do not delete |
 
 The current implementation intends one run-scoped log family per CLI invocation.
@@ -239,7 +235,6 @@ FArchive pipeline pattern mirroring UE's internal structure:
           DependencyGraphBuilder
           PackageLinker
           KismetDecompiler
-          PakFileReader
 ```
 
 ### Module Structure (`src/uasset_read/`)
@@ -252,7 +247,7 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
 | Config | `config.py` | `ParseConfig`, `LogConfig` dataclasses |
 | Core API | `core/` | `parse_single()`, `parse_batch()`, `diff_single()`, `list_formats()` |
-| Package Mgmt | `package.py` | `PackageBundle`, `PackageProvider` (filesystem/Pak/IoStore) |
+| Package Mgmt | `package.py` | `PackageBundle`, `PackageProvider` (filesystem) |
 | CLI | `cli.py` | argparse entry point, delegates to `core.py` API |
 | Versioning | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
@@ -273,9 +268,6 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback, UFunction script reader |
 | ├ Expressions | `kismet/expressions/` | 15 expression types (assignments, control flow, function calls, literals, casts, delegates, etc.) |
 | **Linker** | `link/` | PackageLinker two-phase object graph reconstruction, UObjectInstance |
-| **CPP Gen** | `cpp_gen/` | C++ skeleton/function extraction, IR formatters, type mapping, UPROPERTY mapping, constructor formatting, body extraction |
-| **Pak** | `pak/` | FPakInfo/PakEntry/FPakDirectoryEntry, PakFileReader, index parsing, compression, AES decryption |
-| **IoStore** | `iostore/` | IoStore container reader, Chunk ID, offset/size structures |
 | **Bulk Data** | `bulk/` | BulkData header parsing, flag definitions |
 | **Renderers** | `renderers/` | Markdown renderer (JSON output via semantic pipeline) |
 

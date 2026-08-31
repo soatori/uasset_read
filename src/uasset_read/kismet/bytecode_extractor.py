@@ -20,49 +20,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-PLAUSIBLE_SCRIPT_START_TOKENS = {
-    0x04,  # EX_Return
-    0x19,  # EX_Context
-    0x1B,  # EX_VirtualFunction
-    0x1C,  # EX_FinalFunction
-    0x46,  # EX_LocalFinalFunction
-}
-
 # ===========================================================================
 # Function export class whitelist — only true Function/UFunction exports
 # ===========================================================================
 
 FUNCTION_EXPORT_CLASSES = frozenset({"Function", "UFunction"})
-
-# ---------------------------------------------------------------------------
-# False positive data detection (#424)
-# ---------------------------------------------------------------------------
-
-
-def has_false_positive_pattern(data: bytes) -> bool:
-    """Detect false positive data patterns: too many consecutive constant tokens or repeated byte patterns.
-
-    Used by diagnostic scanning to filter candidates that are clearly non-code
-    segments using statistical characteristics.
-    """
-    if len(data) < 4:
-        return False
-    # Detect consecutive IntConst (0x1D) followed by 4-byte integer patterns
-    int_const_count = sum(1 for i in range(len(data) - 5) if data[i] == 0x1D)
-    if int_const_count > 3:
-        return True
-    # Detect if more than 50% of bytes are the same value (false positive characteristic)
-    from collections import Counter
-
-    most_common_count = Counter(data).most_common(1)[0][1]
-    if most_common_count / len(data) > 0.5:
-        return True
-    return False
-
-
-# Scan complexity limits — prevent combinatorial explosion in large Blueprints
-MAX_SCAN_ATTEMPTS = 500  # Maximum (start, end) combinations to try per function
-MAX_CANDIDATE_SIZE = 4096  # Maximum candidate byte stream length (bytes)
 
 
 # ===========================================================================

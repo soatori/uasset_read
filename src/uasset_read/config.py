@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Optional, Sequence
 
 if TYPE_CHECKING:
@@ -55,20 +55,6 @@ class ParseConfig:
     memory_policy: Optional["MemoryPolicy"] = None
     """可选内存策略，控制 RSS 限制和隔离行为。"""
 
-    def apply_to_package(self, kwargs: dict) -> dict:
-        """将配置项注入 parse_package() 的调用参数字典。
-
-        用于内部桥接，不覆盖 kwargs 中已有的值（如 path、provider 等），
-        也不注入值为 None 的字段，避免覆盖调用方的显式 None。
-        """
-        for fld in self.__dataclass_fields__:
-            if fld not in kwargs:
-                val = getattr(self, fld)
-                if val is not None:
-                    kwargs[fld] = val
-        return kwargs
-
-
 @dataclass
 class LogConfig:
     """日志配置。
@@ -104,25 +90,26 @@ class LogConfig:
     """单个日志文件最大大小（字节），默认 10MB。"""
     backup_count: int = 5
     """保留的备份日志文件数量，默认 5。"""
-    repeat_limit: int = 5
-    """同一 DEBUG 消息模板保留数量，0 表示不聚合。"""
     format: str = "text"
     """日志输出格式：'text'（默认）或 'json'。"""
 
     def to_configure_kwargs(self) -> dict:
         """转换为 configure_project_logging() 的关键字参数。"""
         effective_enabled = self.enabled and self.level != "off"
-        return {
-            "level": self.level or "DEBUG",
-            "log_dir": self.dir,
-            "enabled": effective_enabled,
-            "max_bytes": self.max_bytes,
-            "backup_count": self.backup_count,
-            "repeat_limit": self.repeat_limit,
-            **({"run_id": self.run_id} if self.run_id is not None else {}),
-            **({"keep_latest": self.keep_latest} if self.keep_latest is not None else {}),
-            **({"max_total_bytes": self.max_total_bytes} if self.max_total_bytes is not None else {}),
-            **({"cleanup": True} if self.cleanup else {}),
-            **({"cleanup_on_close": True} if self.auto_cleanup else {}),
-            **({"format": self.format} if self.format != "text" else {}),
-        }
+        d = asdict(self)
+        d.pop("enabled", None)
+        d.pop("auto_cleanup", None)
+        # Rename fields that differ
+        if d.get("dir"):
+            d["log_dir"] = d.pop("dir")
+        else:
+            d.pop("dir", None)
+        d["enabled"] = effective_enabled
+        if self.cleanup:
+            d["cleanup"] = True
+        if self.auto_cleanup:
+            d["cleanup_on_close"] = True
+        if self.format == "text":
+            d.pop("format", None)
+        # Remove None values to avoid overwriting caller's explicit None
+        return {k: v for k, v in d.items() if v is not None}

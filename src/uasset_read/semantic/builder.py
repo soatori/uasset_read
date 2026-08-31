@@ -6,7 +6,6 @@ Does NOT perform standard/debug projection (that is project_semantic's job).
 
 from __future__ import annotations
 
-import inspect
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -153,17 +152,6 @@ def _worst_parse(a: str, b: str) -> str:
     return a if _PARSE_RANK.get(a, 1) >= _PARSE_RANK.get(b, 1) else b
 
 
-def _extractor_accepts_mode(extractor) -> bool:
-    """Check if a domain extractor function accepts a 'mode' keyword parameter."""
-    if extractor is None:
-        return False
-    try:
-        sig = inspect.signature(extractor)
-        return "mode" in sig.parameters
-    except (ValueError, TypeError):
-        return False
-
-
 def _combine_package_status(export_parse: str, diagnostics_data) -> str:
     """Combine export-level and package-level parse status.
 
@@ -235,20 +223,19 @@ def _select_primary_export(package_ir: PackageIR) -> tuple[ExportIR | None, str]
     return None, "none"
 
 
-def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None, *, mode: str = "standard") -> SemanticIR:
+def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> SemanticIR:
     """Build a mode-independent SemanticIR from PackageIR.
 
     This is the single semantic-projection boundary. It does NOT perform
     standard/debug pruning — use ``project_semantic()`` for that.
-    The returned IR always has ``mode="standard"`` as a placeholder;
-    ``project_semantic()`` stamps the actual target mode.
+    Domain extractors always emit debug evidence; ``project_semantic()``
+    stamps the target mode and strips evidence for standard. The returned IR
+    always has ``mode=""`` until projected.
 
     Args:
         package_ir: PackageIR from ir_builder
         source_path: Optional path of the parsed file, used to derive a stable
             package identity when the header has none.
-        mode: Build mode — "standard" or "debug". Passed to domain extractors
-            that accept it, enabling debug evidence generation before projection.
 
     Returns:
         SemanticIR ready for projection and rendering
@@ -334,15 +321,9 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None, *, 
     content: dict = {}
     evidence_list: list = list(evidence)
 
-    # Check if extractor accepts 'mode' parameter
-    _pass_mode = _extractor_accepts_mode(extractor)
-
     _extractor_ran = False
     if extractor is not None and status.representation != "opaque":
-        if _pass_mode:
-            content = extractor(package_ir, primary, cov, evidence_list, mode=mode)
-        else:
-            content = extractor(package_ir, primary, cov, evidence_list)
+        content = extractor(package_ir, primary, cov, evidence_list)
         _extractor_ran = True
     elif extractor is not None and asset_type == "material" and getattr(package_ir, "material", None) is not None:
         # Material data is built by _build_material_ir in ir_builder, not from export parsing

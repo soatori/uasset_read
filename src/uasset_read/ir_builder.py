@@ -1630,8 +1630,7 @@ def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFuncti
             # Fallback: parse return_type from signature (format: "ReturnType FuncName(params)")
             return_type = _extract_return_type(func.signature)
             parameters = _extract_parameters(func)
-        confidence = _infer_bytecode_confidence(
-            func.fallback_reasons,
+        confidence = infer_bytecode_confidence(
             bytecode_status=func.bytecode_status,
             logic_source=func.logic_source,
         )
@@ -1667,19 +1666,6 @@ def _build_decompiled_functions_ir(result: ParseResult) -> list[DecompiledFuncti
             )
         )
     return decompiled
-
-
-def _infer_bytecode_confidence(
-    fallback_reasons: list[str],
-    bytecode_status: str = "unknown",
-    logic_source: str = "current_asset",
-) -> str:
-    """Backward-compatible local alias for shared provenance inference."""
-    return infer_bytecode_confidence(
-        fallback_reasons,
-        bytecode_status=bytecode_status,
-        logic_source=logic_source,
-    )
 
 
 def _extract_return_type(signature: str) -> str:
@@ -2088,8 +2074,6 @@ def _build_debug_ir(
             start=e.start,
             stop=e.stop,
             size=e.size,
-            field_path=getattr(e, "field_path", None),
-            semantic_type=getattr(e, "semantic_type", None),
         )
         entries.append(entry)
     return DebugIR(

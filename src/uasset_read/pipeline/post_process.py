@@ -200,8 +200,7 @@ def _extract_kismet_decompiled(
                 from uasset_read.kismet.jump_analyzer import JumpAnalyzer
 
                 rate_analyzer = JumpAnalyzer(expressions)
-                rate_report = rate_analyzer.analyze_structured_rate()
-                structured_rate = rate_report.rate
+                structured_rate = rate_analyzer.analyze_structured_rate()
             except (ImportError, AttributeError, TypeError, ValueError):
                 structured_rate = None
 

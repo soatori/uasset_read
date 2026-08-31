@@ -29,8 +29,6 @@ def _detect_cycle(adjacency: dict[str, list[str]]) -> bool:
     def dfs(node: str) -> bool:
         color[node] = GRAY
         for neighbor in adjacency.get(node, []):
-            if neighbor not in color:
-                continue
             if color[neighbor] == GRAY:
                 return True  # Back edge = cycle
             if color[neighbor] == WHITE and dfs(neighbor):
@@ -43,14 +41,6 @@ def _detect_cycle(adjacency: dict[str, list[str]]) -> bool:
             if dfs(node):
                 return True
     return False
-
-
-def _derive_short_id(guid: str, index: int) -> str:
-    """Derive a short ID from GUID and index.
-
-    Format: N{index} (starting from 0)
-    """
-    return f"N{index}"
 
 
 def build_execution_chains(
@@ -105,7 +95,7 @@ def build_execution_chains(
     guid_to_short: Dict[str, str] = {}
     for idx, node in enumerate(graph.nodes):
         if node.node_guid:
-            guid_to_short[node.node_guid] = _derive_short_id(node.node_guid, idx)
+            guid_to_short[node.node_guid] = f"N{idx}"
 
     result: List[Dict] = []
 

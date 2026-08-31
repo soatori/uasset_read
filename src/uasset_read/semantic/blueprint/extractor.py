@@ -30,7 +30,7 @@ def build_blueprint_content(package_ir: "PackageIR", export_ir: "ExportIR", cove
         reporting.diagnostic("BP_GRAPH_MISSING", "asset", "warning", "semantic_loss")
 
     graphs_json, index = emit_graphs(graphs, table, reporting, mode="debug")
-    attach_flows(graphs_json, index, reporting, mode="debug")
+    attach_flows(graphs_json, index, reporting)
 
     # Graph completeness metrics
     _emit_graph_completeness(graphs, graphs_json, index, reporting)

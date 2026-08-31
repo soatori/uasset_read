@@ -84,48 +84,6 @@ class TypeRegistry:
         """Resolve type for a variable, falling back to 'auto' if unknown."""
         return self._types.get(name, "auto")
 
-    def populate_from_metadata(self, metadata: dict) -> None:
-        """
-        Batch-initialize from BlueprintMetadata / BlueprintVariable data.
-
-        Expected metadata format:
-        {
-            "variables": [
-                {"name": "MyVar", "type": "IntProperty", ...},
-                ...
-            ],
-            "functions": [
-                {"name": "MyFunc", "params": [{"name": "Param1", "type": "FloatProperty"}], ...},
-                ...
-            ]
-        }
-        """
-        # Process variables
-        for var in metadata.get("variables", []):
-            var_name = var.get("name")
-            var_type = var.get("type", "")
-            if var_name and var_type:
-                cpp_type = _UE_TO_CPP_TYPES.get(var_type, var_type)
-                self.register_variable(var_name, cpp_type)
-
-        # Process function parameters and return values
-        for func in metadata.get("functions", []):
-            for param in func.get("params", []):
-                param_name = param.get("name")
-                param_type = param.get("type", "")
-                if param_name and param_type:
-                    cpp_type = _UE_TO_CPP_TYPES.get(param_type, param_type)
-                    if param.get("flags") and "OutParm" in param.get("flags", ""):
-                        cpp_type += "&"
-                    self.register_variable(param_name, cpp_type)
-
-            # Return value
-            ret = func.get("return_value")
-            if ret and ret.get("name"):
-                ret_type = ret.get("type", "")
-                cpp_type = _UE_TO_CPP_TYPES.get(ret_type, ret_type)
-                self.register_variable(ret["name"], cpp_type)
-
     def ue_to_cpp(self, ue_type: str) -> str:
         """Convert a single UE property type to C++ type string."""
         return _UE_TO_CPP_TYPES.get(ue_type, ue_type)
@@ -590,8 +548,6 @@ class KismetTranslator:
     ):
         self.type_registry = type_registry or TypeRegistry()
         self._func_resolver: FunctionRefResolver | None = None
-        # Statistics counters: track deprecated / instrumentation tokens
-        self.skipped_tokens: dict[str, int] = {}
         if linker is not None:
             from uasset_read.kismet.function_resolver import FunctionRefResolver
 
@@ -1310,14 +1266,10 @@ class KismetTranslator:
             cond = str(expr.AssertExpression) if hasattr(expr, "AssertExpression") else "?"
             return f"assert({cond})"
         if isinstance(expr, EX_DeprecatedOp4A):
-            self.skipped_tokens["EX_DeprecatedOp4A"] = self.skipped_tokens.get("EX_DeprecatedOp4A", 0) + 1
             return ""
         if isinstance(expr, (EX_Breakpoint, EX_Tracepoint, EX_WireTracepoint)):
-            name = type(expr).__name__
-            self.skipped_tokens[name] = self.skipped_tokens.get(name, 0) + 1
             return ""
         if isinstance(expr, EX_InstrumentationEvent):
-            self.skipped_tokens["EX_InstrumentationEvent"] = self.skipped_tokens.get("EX_InstrumentationEvent", 0) + 1
             return ""
         if isinstance(expr, EX_FieldPathConst):
             return str(expr.Value) if hasattr(expr, "Value") else "?"
@@ -1344,26 +1296,6 @@ class KismetTranslator:
                 val = self.line_cpp(elements[i + 1])
                 pairs.append(f"{key}: {val}")
         return pairs
-
-
-# ===========================================================================
-# Module-level convenience functions (D-01 dual API)
-# ===========================================================================
-
-
-def line_cpp(expr: "KismetExpression") -> str:
-    """
-    Module-level convenience wrapper for KismetTranslator.line_cpp().
-
-    Usage:
-        from uasset_read.kismet import line_cpp
-        from uasset_read.kismet.expressions import EX_IntConst
-
-        expr = EX_IntConst(StatementIndex=0, Value=42)
-        logger.debug("Translated expression: %s", line_cpp(expr))
-    """
-    translator = KismetTranslator()
-    return translator.line_cpp(expr)
 
 
 # Export module-level constants

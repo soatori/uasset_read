@@ -30,7 +30,6 @@ Issues = "https://github.com/soatori/uasset_read/issues"
 [project.optional-dependencies]
 compression = [
     "brotli",
-    "lz4",
     "zstandard",
 ]
 test = [

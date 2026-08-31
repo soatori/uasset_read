@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .object_model import PayloadDescriptor
 from .document import PackageDocument
 
 
@@ -26,11 +25,6 @@ class PayloadExtractionResult:
     bytes_extracted: int = 0
     truncated: bool = False
     next_offset: int | None = None
-
-
-def list_payloads(doc: PackageDocument) -> list[PayloadDescriptor]:
-    """List all payload descriptors in a document."""
-    return list(doc.payloads)
 
 
 def extract_payload_bytes(
@@ -95,28 +89,3 @@ def extract_payload_bytes(
         success=False,
         error=f"Payload '{payload_id}' not found in document",
     )
-
-
-def write_payload_to_file(
-    doc: PackageDocument,
-    payload_id: str,
-    output_path: str,
-    *,
-    max_bytes: int | None = None,
-) -> PayloadExtractionResult:
-    """Extract payload and write to a file.
-
-    Phase 5 stub — same as extract_payload_bytes but writes to disk.
-    """
-    result = extract_payload_bytes(doc, payload_id, max_bytes=max_bytes)
-    if result.success and result.data is not None:
-        try:
-            with open(output_path, "wb") as f:
-                f.write(result.data)
-        except OSError as e:
-            return PayloadExtractionResult(
-                payload_id=payload_id,
-                success=False,
-                error=f"Failed to write file: {e}",
-            )
-    return result

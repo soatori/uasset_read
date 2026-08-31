@@ -533,25 +533,3 @@ class FunctionBodyBuilder:
 
         body = "\n".join(f"    {line}" for line in lines)
         return f"{signature} {{\n{body}\n}}"
-
-
-# ===========================================================================
-# Module-level convenience functions (D-01 dual API)
-# ===========================================================================
-
-
-def to_function_body(
-    expressions: list["KismetExpression"],
-    func_name: str | None = None,
-) -> str:
-    """
-    Module-level convenience wrapper for FunctionBodyBuilder.to_function_body().
-
-    Usage:
-        from uasset_read.kismet import to_function_body
-
-        expressions = [...]  # list of KismetExpression from bytecode parsing
-        cpp = to_function_body(expressions, func_name="MyFunction")
-    """
-    builder = FunctionBodyBuilder()
-    return builder.to_function_body(expressions, func_name)

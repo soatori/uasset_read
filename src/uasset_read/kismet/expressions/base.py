@@ -54,15 +54,7 @@ class KismetExpressionT(KismetExpression, Generic[T]):
     from_archive() without positional-argument conflicts.
     """
 
-    value: T = field(default=None)  # type: ignore[assignment]
-    Value: T = field(default=None)  # alias accepted by from_archive()
-
-    def __init__(self, *, value: T = None, Value: T = None, statement_index: int = 0) -> None:  # type: ignore[assignment]
-        KismetExpression.__init__(self, statement_index)
-        # Prefer explicit Value= (from_archive convention), fall back to value=
-        resolved = Value if Value is not None else value
-        self.value = resolved
-        self.Value = resolved
+    Value: T = field(default=None)  # type: ignore[assignment]
 
     def to_dict(self) -> dict:
         result = super().to_dict()

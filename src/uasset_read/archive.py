@@ -370,14 +370,6 @@ class FArchive:
         """
         self._hex_view_context = context
 
-    def get_hex_view_context(self) -> str:
-        """Return current hex_view context prefix."""
-        return self._hex_view_context
-
-    def clear_hex_view_context(self) -> None:
-        """Clear current hex_view context prefix."""
-        self._hex_view_context = ""
-
     def _record_hex_view(self, key: str, type_name: str, value: Any, start: int, stop: int) -> None:
         """Record a read operation to hex_view.
 
@@ -402,10 +394,6 @@ class FArchive:
         """Return collected hex_view entries list."""
         return list(self._hex_view_entries.entries)
 
-    def get_hex_view_entries_raw(self) -> list:
-        """Return raw hex_view entries list (no copy)."""
-        return self._hex_view_entries.entries
-
     @property
     def hex_view_dropped_count(self) -> int:
         """Return the number of HexView entries dropped due to buffer limit."""
@@ -421,21 +409,6 @@ class FArchive:
         if key:
             self._record_hex_view(key, type_name, value, start, start + size)
         return value
-
-    def _peek_swapped(self, fmt_char: str, size: int, type_name: str, key: str = ""):
-        """General byte-order-aware peek (does not move position)."""
-        current_pos = self.tell()
-        try:
-            fmt = ">" if self._byte_swapping else "<"
-            data = self.read(size)
-            result = struct.unpack(fmt + fmt_char, data)[0]
-            self.seek(current_pos)
-            if key:
-                self._record_hex_view(key, type_name, result, current_pos, current_pos + size)
-            return result
-        except (struct.error, OSError, ValueError):
-            self.seek(current_pos)
-            raise
 
     def read_u8(self, key: str = "") -> int:
         """Read unsigned 8-bit integer (byte-order independent)."""
@@ -875,7 +848,7 @@ class FArchive:
         """Attempt to recover FName reading from offset misalignment.
 
         When an abnormally large index value is detected, tries to find a valid
-        FName nearby. Recovery statistics available via get_read_name_recovery_stats().
+        FName nearby.
 
         Args:
             original_pos: position before read_name call
@@ -884,13 +857,6 @@ class FArchive:
         Returns:
             recovered name string, or None (recovery failed)
         """
-        # Update statistics
-        if not hasattr(self, "_recovery_attempts"):
-            self._recovery_attempts = 0
-            self._recovery_successes = 0
-            self._recovery_failures = 0
-        self._recovery_attempts += 1
-
         # Save current position (read_name already read 8 bytes)
         current_pos = self.tell()
 
@@ -905,8 +871,6 @@ class FArchive:
                 test_index = self.read_u32()
                 test_number = self.read_u32()
                 if 0 <= test_index < len(name_map):
-                    # Found valid index, record recovery info
-                    self._recovery_successes += 1
                     self._logger.debug(
                         "read_name: recovered at offset %d (adjust %+d), index=%d", try_pos, offset_adjust, test_index
                     )
@@ -926,7 +890,6 @@ class FArchive:
                 continue
 
         # Recovery failed, rewind to original position
-        self._recovery_failures += 1
         self.seek(current_pos)
         return None
 

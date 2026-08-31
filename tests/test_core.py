@@ -448,8 +448,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 def test_handler_registry_supports_enriches_and_isolates():
     """Every registered handler must accept its class, reject others, and isolate failures."""
     from uasset_read.v2.handlers import (
-        AnimBlueprintHandler,
-        BlueprintHandler,
+        BlueprintFamilyHandler,
         DataTableHandler,
         MaterialHandler,
         MaterialInstanceHandler,
@@ -487,8 +486,8 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("MeshHandler/Skeletal", MeshHandler(), "SkeletalMesh", "Blueprint"),
             ("MaterialHandler", MaterialHandler(), "Material", "Blueprint"),
             ("MaterialInstanceHandler", MaterialInstanceHandler(), "MaterialInstanceConstant", "Blueprint"),
-            ("AnimBlueprintHandler", AnimBlueprintHandler(), "AnimBlueprintGeneratedClass", "StaticMesh"),
-            ("BlueprintHandler", BlueprintHandler(), "BlueprintGeneratedClass", "StaticMesh"),
+            ("BlueprintFamilyHandler/anim", BlueprintFamilyHandler(("AnimBlueprint", "AnimBlueprintGeneratedClass"), "anim_blueprint", "anim_blueprint"), "AnimBlueprintGeneratedClass", "StaticMesh"),
+            ("BlueprintFamilyHandler/bp", BlueprintFamilyHandler(("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint"), "BlueprintGeneratedClass", "StaticMesh"),
         ]
         for name, handler, good_class, bad_class in cases:
             assert handler.supports(record(good_class), VersionContext()), f"{name} must support {good_class}"

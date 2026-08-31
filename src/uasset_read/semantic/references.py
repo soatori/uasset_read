@@ -61,35 +61,24 @@ def collect_references(
     closure filtering is deferred to the domain extractor issues (#554-#557);
     see docs/formats/uasset/semantic-json.md ("Reference Scope").
     """
-    entries: list[ReferenceEntry] = []
-    seen: set[tuple[str, int]] = set()
-
-    for i, imp in enumerate(imports):
-        key = ("import", i)
-        if key not in seen:
-            seen.add(key)
-            entries.append(
-                ReferenceEntry(
-                    index=i,
-                    kind="import",
-                    class_name=imp.class_name or "",
-                    object_name=imp.object_name or "",
-                    package_path=_resolve_object_package(imp, imports),
-                )
-            )
-
-    for i, exp in enumerate(exports):
-        key = ("export", i)
-        if key not in seen:
-            seen.add(key)
-            entries.append(
-                ReferenceEntry(
-                    index=i,
-                    kind="export",
-                    class_name=exp.object_class or "",
-                    object_name=exp.object_name or "",
-                    package_path="",
-                )
-            )
-
+    entries = [
+        ReferenceEntry(
+            index=i,
+            kind="import",
+            class_name=imp.class_name or "",
+            object_name=imp.object_name or "",
+            package_path=_resolve_object_package(imp, imports),
+        )
+        for i, imp in enumerate(imports)
+    ]
+    entries += [
+        ReferenceEntry(
+            index=i,
+            kind="export",
+            class_name=exp.object_class or "",
+            object_name=exp.object_name or "",
+            package_path="",
+        )
+        for i, exp in enumerate(exports)
+    ]
     return tuple(sorted(entries, key=lambda r: (r.kind, r.index)))

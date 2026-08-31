@@ -176,13 +176,6 @@ def create_parser():
         "--log-backup-count", metavar="N", type=int, default=5, help="Number of backup log files to keep (default: 5)"
     )
     parser.add_argument(
-        "--log-repeat-limit",
-        metavar="N",
-        type=int,
-        default=5,
-        help="Keep the first N repeated DEBUG messages (0 disables aggregation)",
-    )
-    parser.add_argument(
         "--log-format", choices=["text", "json"], default="text", help="Log output format: text (default) or json"
     )
 
@@ -268,7 +261,6 @@ def _log_config_from_args(args) -> LogConfig:
         auto_cleanup=args.log_cleanup,
         max_bytes=args.log_max_bytes,
         backup_count=args.log_backup_count,
-        repeat_limit=args.log_repeat_limit,
         format=args.log_format,
     )
 

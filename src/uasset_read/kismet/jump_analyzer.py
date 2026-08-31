@@ -7,12 +7,11 @@ switch/case control flow patterns.
 Usage:
     analyzer = JumpAnalyzer(expressions)
     pattern = analyzer.detect_pattern(start_idx=0)
-    stats = analyzer.analyze_structured_rate()
+    rate = analyzer.analyze_structured_rate()
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -49,27 +48,6 @@ def _get_assignment_types() -> tuple[type, ...]:
 def _is_assignment(expr: object) -> bool:
     """Check whether the expression is an assignment type."""
     return isinstance(expr, _get_assignment_types())
-
-
-@dataclass
-class StructuredRateReport:
-    """Structured rate analysis report.
-
-    Attributes:
-        total_jump_exprs: Total jump instruction count (EX_Jump + EX_JumpIfNot + EX_ComputedJump)
-        structured_count: Number of jump instructions matched by structured patterns
-        goto_count: Number of jump instructions falling back to goto
-        rate: Structured rate (0.0 ~ 1.0)
-        pattern_counts: Pattern hit counts {"if_else": N, "if": N, "while": N, "for": N, "switch": N}
-        goto_reasons: Goto fallback reason list [{"index": int, "reason": str, "expr_type": str}]
-    """
-
-    total_jump_exprs: int = 0
-    structured_count: int = 0
-    goto_count: int = 0
-    rate: float = 0.0
-    pattern_counts: dict[str, int] = field(default_factory=dict)
-    goto_reasons: list[dict] = field(default_factory=list)
 
 
 class JumpAnalyzer:
@@ -639,14 +617,10 @@ class JumpAnalyzer:
     # Structured rate analysis
     # ================================================================
 
-    def analyze_structured_rate(self) -> StructuredRateReport:
-        """Analyze control flow structured rate.
+    def analyze_structured_rate(self) -> float:
+        """Compute the structured control-flow rate: structured_count / total_jump_exprs.
 
-        Scan all jump instructions, attempt to match control flow patterns, and
-        compute the structured rate and goto fallback reasons.
-
-        Returns:
-            StructuredRateReport containing structured rate, pattern counts, and goto reasons.
+        Returns 1.0 when there are no jump expressions.
         """
         from uasset_read.kismet.expressions.control_flow import (
             EX_Jump,
@@ -655,27 +629,21 @@ class JumpAnalyzer:
         )
         from uasset_read.kismet.expressions.special import EX_SwitchValue
 
-        report = StructuredRateReport()
-        pattern_counts: dict[str, int] = {}
-        goto_reasons: list[dict] = []
+        jump_indices = [
+            idx
+            for idx, expr in enumerate(self._expressions)
+            if isinstance(expr, (EX_Jump, EX_JumpIfNot, EX_ComputedJump, EX_SwitchValue))
+        ]
+        if not jump_indices:
+            return 1.0
 
-        # Collect all jump instruction indices
-        jump_indices: list[int] = []
-        for idx, expr in enumerate(self._expressions):
-            if isinstance(expr, (EX_Jump, EX_JumpIfNot, EX_ComputedJump)):
-                jump_indices.append(idx)
-            elif isinstance(expr, EX_SwitchValue):
-                jump_indices.append(idx)
-
-        report.total_jump_exprs = len(jump_indices)
+        jump_set = set(jump_indices)
         structured_set: set[int] = set()
-
         for idx in jump_indices:
             expr = self._expressions[idx]
 
             # switch pattern
             if isinstance(expr, EX_SwitchValue):
-                pattern_counts["switch"] = pattern_counts.get("switch", 0) + 1
                 structured_set.add(idx)
                 continue
 
@@ -686,73 +654,14 @@ class JumpAnalyzer:
 
             # Try for > while > if_else > if
             pattern = self.detect_pattern(idx)
-            if pattern is not None:
-                ptype = pattern["type"]
-                pattern_counts[ptype] = pattern_counts.get(ptype, 0) + 1
-                # Mark all jump instructions in the block as structured
-                if ptype in ("for", "while"):
-                    for j in range(pattern["start"], pattern["body_end"] + 1):
-                        if j in jump_indices:
-                            structured_set.add(j)
-                elif ptype in ("if_else", "if"):
-                    end = pattern.get(
-                        "else_end",
-                        pattern.get("then_end", pattern["start"]),
-                    )
-                    for j in range(pattern["start"], end + 1):
-                        if j in jump_indices:
-                            structured_set.add(j)
+            if pattern is None:
+                continue
+            if pattern["type"] in ("for", "while"):
+                end = pattern["body_end"]
+            elif pattern["type"] in ("if_else", "if"):
+                end = pattern.get("else_end", pattern.get("then_end", pattern["start"]))
             else:
-                # goto fallback
-                reason = self._classify_goto_reason(idx, expr)
-                goto_reasons.append(
-                    {
-                        "index": idx,
-                        "reason": reason,
-                        "expr_type": type(expr).__name__,
-                    }
-                )
+                continue
+            structured_set.update(j for j in range(pattern["start"], end + 1) if j in jump_set)
 
-        report.structured_count = len(structured_set)
-        report.goto_count = report.total_jump_exprs - report.structured_count
-        report.rate = report.structured_count / report.total_jump_exprs if report.total_jump_exprs > 0 else 1.0
-        report.pattern_counts = pattern_counts
-        report.goto_reasons = goto_reasons
-
-        return report
-
-    def _classify_goto_reason(self, idx: int, expr: object) -> str:
-        """Classify the specific reason for a goto fallback.
-
-        Args:
-            idx: Expression index.
-            expr: Expression object.
-
-        Returns:
-            Human-readable fallback reason string.
-        """
-        from uasset_read.kismet.expressions.control_flow import (
-            EX_Jump,
-            EX_JumpIfNot,
-            EX_ComputedJump,
-        )
-
-        if isinstance(expr, EX_ComputedJump):
-            return "computed_jump (dynamically computed jump target, cannot be statically analyzed)"
-
-        # EX_JumpIfNot is a subclass of EX_Jump; must check first
-        if isinstance(expr, EX_JumpIfNot):
-            target = getattr(expr, "CodeOffset", None)
-            return f"unmatched_conditional (conditional jump to offset={target}, does not match if/while/for pattern)"
-
-        if isinstance(expr, EX_Jump):
-            target = getattr(expr, "CodeOffset", None)
-            if target is not None:
-                target_idx = self.find_label_index(target)
-                if target_idx is not None and target_idx > idx:
-                    return f"forward_jump (forward jump to offset={target}, no matching structured pattern)"
-                elif target_idx is not None and target_idx < idx:
-                    return f"backward_jump (backward jump to offset={target}, not a loop structure)"
-            return "unresolved_jump (jump target not found in expression list)"
-
-        return "unknown (unrecognized jump type)"
+        return len(structured_set) / len(jump_indices)

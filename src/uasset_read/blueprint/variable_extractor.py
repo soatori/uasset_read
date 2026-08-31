@@ -17,8 +17,6 @@ from uasset_read.models.blueprint import (
 )
 from uasset_read.models.properties import PropertyValue, StructValue
 from uasset_read.models.core import FEdGraphPinType
-from uasset_read.parsers.property_types import parse_default_value
-from uasset_read.serializers.graph import read_ed_graph_pin_type
 from uasset_read.constants import (
     CPF_Edit,
     CPF_EditConst,
@@ -537,7 +535,7 @@ def _extract_blueprint_variable_descriptions(items: List[Any]) -> List[Blueprint
         var.rep_notify_func = str(fields.get("RepNotifyFunc") or fields.get("rep_notify_func") or "")
         var.replication_condition = _replication_condition_value(rep_condition)
 
-        # Component variable detection (aligned with read_blueprint_variable logic)
+        # Component variable detection (type name or InstancedReference flag)
         type_str = ""
         if var.var_type:
             if var.var_type.pin_subcategory and var.var_type.pin_subcategory.lower() != "none":
@@ -1145,111 +1143,3 @@ def parse_property_flags_to_labels(flags: int) -> List[str]:
         labels.append("Replicated")
 
     return labels
-
-
-def read_blueprint_variable(
-    archive,
-    name_map: List[str],
-    summary,
-) -> BlueprintVariable:
-    """
-    Read FBPVariableDescription from blueprint export (BLUE-03).
-
-    Reference: UE C++ FBPVariableDescription::Serialize() implementation.
-
-    Serialization order:
-    1. VarName (FName)
-    2. VarGuid (FGuid - 16 bytes) -- skipped
-    3. VarType (FEdGraphPinType)
-    4. FriendlyName (FString)
-    5. Category (FText -- simplified to FString)
-    6. PropertyFlags (uint64)
-    7. RepNotifyFunc (FName) -- skipped
-    8. ReplicationCondition (uint8) -- skipped
-    9. MetaDataArray (TArray)
-    10. DefaultValue (FString)
-    """
-    var = BlueprintVariable(var_name=archive.read_name(name_map))
-
-    var.var_guid = _read_guid(archive)
-
-    # VarType (FEdGraphPinType)
-    var.var_type = read_ed_graph_pin_type(archive, name_map, summary)
-
-    # FriendlyName (FString)
-    var.friendly_name = archive.read_fstring()
-
-    # Category (FText) -- simplified to FString
-    var.category = archive.read_fstring()
-
-    var.property_flags = archive.read_u64()
-
-    var.rep_notify_func = archive.read_name(name_map)
-
-    var.replication_condition = archive.read_u8()
-
-    meta_count = archive.read_i32()
-    var.metadata = {}
-    for _ in range(meta_count):
-        key = archive.read_name(name_map)
-        value = archive.read_fstring()
-        if key:
-            var.metadata[key] = value
-
-    # Parse PropertyFlags to readable labels
-    var.flags_labels = parse_property_flags_to_labels(var.property_flags)
-
-    # Parse property flags to boolean fields
-    flags = var.property_flags
-    var.is_edit_anywhere = bool(flags & CPF_Edit)
-    var.is_edit_instance_only = bool(flags & CPF_Edit) and not bool(flags & CPF_EditConst)
-    var.is_blueprint_read_only = bool(flags & CPF_BlueprintReadOnly)
-    var.is_blueprint_readable = bool(flags & CPF_BlueprintVisible)
-    var.is_blueprint_writable = bool(flags & CPF_BlueprintVisible) and not bool(flags & CPF_BlueprintReadOnly)
-    var.is_transient = bool(flags & CPF_Transient)
-    var.is_duplicate_transient = bool(flags & CPF_DuplicateTransient)
-    var.is_save_game = bool(flags & CPF_SaveGame)
-    var.is_no_clear = bool(flags & CPF_NoClear)
-    var.is_reference_only = False
-    var.is_blueprint_assignable = bool(flags & CPF_BlueprintAssignable)
-    var.is_blueprint_callable = bool(flags & CPF_BlueprintCallable)
-    var.is_rep_notify = bool(flags & CPF_RepNotify)
-    var.is_interp = bool(flags & CPF_Interp)
-    var.is_expose_on_spawn = bool(flags & CPF_ExposeOnSpawn)
-    var.is_net = bool(flags & CPF_Net)
-    var.is_replicated = bool(flags & CPF_Net)
-    var.is_non_pi_ed_duplicate_transient = bool(flags & CPF_NonPIEDuplicateTransient)
-
-    # Extract metadata fields
-    var.edit_condition = var.metadata.get("EditCondition", "")
-    var.meta_class = var.metadata.get("MetaClass", "")
-    var.edit_category = var.metadata.get("Category", "")
-    var.edit_widget = var.metadata.get("EditWidget", "")
-
-    default_str = archive.read_fstring()
-    var.default_value = parse_default_value(default_str, var.var_type)
-
-    # Component variable identification (double verification)
-    type_str = ""
-    if var.var_type:
-        if var.var_type.pin_subcategory and var.var_type.pin_subcategory.lower() != "none":
-            type_str = var.var_type.pin_subcategory
-        elif var.var_type.pin_category:
-            type_str = var.var_type.pin_category
-
-    is_component_by_name = isinstance(type_str, str) and "Component" in type_str
-    is_component_by_flag = (var.property_flags & CPF_InstancedReference) != 0
-    var.is_component = is_component_by_name or is_component_by_flag
-
-    return var
-
-
-def _read_guid(archive) -> str:
-    data = archive.read_bytes(16) if hasattr(archive, "read_bytes") else archive.read(16)
-    return (
-        f"{data[0]:02x}{data[1]:02x}{data[2]:02x}{data[3]:02x}-"
-        f"{data[4]:02x}{data[5]:02x}-"
-        f"{data[6]:02x}{data[7]:02x}-"
-        f"{data[8]:02x}{data[9]:02x}-"
-        f"{data[10]:02x}{data[11]:02x}{data[12]:02x}{data[13]:02x}{data[14]:02x}{data[15]:02x}"
-    )

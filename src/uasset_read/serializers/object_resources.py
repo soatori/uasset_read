@@ -435,24 +435,6 @@ def detect_blueprint_generated_class(
     return False
 
 
-def validate_package_index(
-    index: PackageIndex, import_map: List[ObjectImport], export_map: List[ObjectExport], context: str = ""
-) -> Optional[str]:
-    """PackageIndex full validation."""
-    if index.is_null:
-        return None
-    if index.is_import:
-        import_idx = index.to_import_index()
-        if not (0 <= import_idx < len(import_map)):
-            return f"PackageIndex {index.index} import out of range at {context}"
-        return None
-    elif index.is_export:
-        export_idx = index.to_export_index()
-        if not (0 <= export_idx < len(export_map)):
-            return f"PackageIndex {index.index} export out of range at {context}"
-        return None
-
-
 def resolve_class_name_with_linker(
     class_index: PackageIndex,
     linker: "PackageLinker",

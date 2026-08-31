@@ -177,25 +177,20 @@ def _derive_node_name(node: UEdGraphNode, idx: int) -> str:
     return f"{node.class_name}_{idx}"
 
 
-def format_pin_ref(node_guid: str, pin_name: str, node_name_lookup: Dict[str, str], mode: str = "name") -> Dict:
-    """Format a Pin reference (D-19-02, D-19-05).
+def format_pin_ref(node_guid: str, pin_name: str, node_name_lookup: Dict[str, str]) -> Dict:
+    """Format a Pin reference as a node-name lookup (D-19-02, D-19-05).
 
     Args:
         node_guid: node GUID
         pin_name: Pin name
         node_name_lookup: node_guid -> node_name lookup table
-        mode: "name" or "guid" mode (default "name")
 
     Returns:
         Dict: formatted Pin reference object
     """
-    if mode == "name":
-        if node_guid in node_name_lookup:
-            return {"node": node_name_lookup[node_guid], "pin": pin_name}
-        else:
-            return {"node_guid": node_guid, "pin": pin_name, "warning": "node_name lookup failed"}
-    else:
-        return {"node_guid": node_guid, "pin_name": pin_name}
+    if node_guid in node_name_lookup:
+        return {"node": node_name_lookup[node_guid], "pin": pin_name}
+    return {"node_guid": node_guid, "pin": pin_name, "warning": "node_name lookup failed"}
 
 
 def _format_blueprint_pin_dto(
@@ -269,14 +264,6 @@ def _node_member_name(node: Optional[UEdGraphNode]) -> str:
     return getattr(ref, "member_name", "") or ""
 
 
-def _enhanced_input_action_name(node: Optional[UEdGraphNode]) -> str:
-    if node is None or not node.node_data:
-        return ""
-    data = node.node_data
-    path = data.get("input_action_path", "") if isinstance(data, dict) else getattr(data, "input_action_path", "")
-    return str(path).split("/")[-1].split(".")[0] if path else ""
-
-
 def _choose_synthetic_source_pin(source_node: UEdGraphNode, target_node: UEdGraphNode, target_pin: UEdGraphPin) -> str:
     """Infer a readable source pin name when target LinkedTo only retains owning_node but source pin is unresolved."""
     target_category = target_pin.pin_type.pin_category if target_pin.pin_type else ""
@@ -288,11 +275,6 @@ def _choose_synthetic_source_pin(source_node: UEdGraphNode, target_node: UEdGrap
             return "Triggered"
 
     return "Output"
-
-
-def _synthetic_parameter_edges(source_node: UEdGraphNode, target_node: UEdGraphNode) -> List[Tuple[str, str]]:
-    """Supplement semantic data edge names for parameter pins missing due to misalignment."""
-    return []
 
 
 def _iter_normalized_edges(
@@ -345,8 +327,6 @@ def _iter_normalized_edges(
         to_pin_name: str,
         to_pin_id: str,
         to_pin_obj: Optional[UEdGraphPin],
-        category_override: str = "",
-        is_exec_override: Optional[bool] = None,
     ) -> Optional[Dict[str, Any]]:
         key = (from_node.node_guid, from_pin_name, to_node.node_guid, to_pin_name)
         if key in seen:
@@ -358,8 +338,6 @@ def _iter_normalized_edges(
             category = from_pin_obj.pin_type.pin_category
         elif to_pin_obj and to_pin_obj.pin_type:
             category = to_pin_obj.pin_type.pin_category
-        if category_override:
-            category = category_override
 
         return {
             "from_node_guid": from_node.node_guid,
@@ -374,32 +352,11 @@ def _iter_normalized_edges(
             "to_pin_obj": to_pin_obj,
             "pin_category": category,
             "is_exec": (
-                is_exec_override
-                if is_exec_override is not None
-                else (
-                    (from_pin_obj is not None and _is_exec_pin(from_pin_obj))
-                    or (to_pin_obj is not None and _is_exec_pin(to_pin_obj))
-                    or category == "exec"
-                )
+                (from_pin_obj is not None and _is_exec_pin(from_pin_obj))
+                or (to_pin_obj is not None and _is_exec_pin(to_pin_obj))
+                or category == "exec"
             ),
         }
-
-    def _emit_synthetic_params(source_node: UEdGraphNode, target_node: UEdGraphNode) -> Iterable[Dict[str, Any]]:
-        for source_pin_name, target_pin_name in _synthetic_parameter_edges(source_node, target_node):
-            edge = _emit(
-                source_node,
-                source_pin_name,
-                f"{source_node.node_guid}:{source_pin_name}",
-                None,
-                target_node,
-                target_pin_name,
-                f"{target_node.node_guid}:{target_pin_name}",
-                None,
-                category_override="real",
-                is_exec_override=False,
-            )
-            if edge:
-                yield edge
 
     for node in graph.nodes:
         for pin in node.pins:
@@ -450,8 +407,6 @@ def _iter_normalized_edges(
                         edge = None
                     if edge:
                         yield edge
-                        if edge.get("is_exec"):
-                            yield from _emit_synthetic_params(edge["from_node"], edge["to_node"])
                     continue
 
                 # Fallback: when PinId is not resolved, reconstruct from LinkedTo's owning_node
@@ -486,8 +441,6 @@ def _iter_normalized_edges(
                 )
                 if edge:
                     yield edge
-                    if edge.get("is_exec"):
-                        yield from _emit_synthetic_params(source_node, node)
 
 
 def _build_normalized_edge_indexes(

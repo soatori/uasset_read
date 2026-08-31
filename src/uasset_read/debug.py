@@ -22,10 +22,6 @@ class HexViewEntry:
     """File start offset (bytes)"""
     stop: int
     """File end offset (bytes)"""
-    field_path: str | None = None
-    """Full field path (e.g. "PackageSummary.Magic"), more precise than key"""
-    semantic_type: str | None = None
-    """Semantic type identifier (e.g. "header", "name_table", "export"), used for classification and filtering"""
 
     @property
     def size(self) -> int:
@@ -41,10 +37,6 @@ class HexViewEntry:
             "stop": self.stop,
             "size": self.size,
         }
-        if self.field_path is not None:
-            d["field_path"] = self.field_path
-        if self.semantic_type is not None:
-            d["semantic_type"] = self.semantic_type
         if isinstance(self.value, bytes):
             d["value_hex"] = self.value.hex()
             d["value_size"] = len(self.value)

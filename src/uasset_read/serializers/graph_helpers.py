@@ -56,7 +56,6 @@ def _get_thread_local():
     if not hasattr(_thread_local, "linkedto_failure_seen"):
         _thread_local.linkedto_failure_seen: set[tuple[int, str, str]] = set()
         _thread_local.pin_trace_events: List[Dict[str, Any]] = []
-        _thread_local.pin_recovery_events: List[Dict[str, Any]] = []
     return _thread_local
 
 
@@ -82,10 +81,6 @@ def _pin_trace_enabled(explicit: bool = False) -> bool:
         "yes",
         "on",
     }
-
-
-def _record_pin_recovery(event: Dict[str, Any]) -> None:
-    _get_thread_local().pin_recovery_events.append(dict(event))
 
 
 def _trace_fields_append(

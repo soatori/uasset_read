@@ -150,7 +150,7 @@ def _init_parse_env(
     """
     if check_aes_key is not None:
         raise ParseError(
-            "Unsupported argument: aes_key. Pass the key when constructing the Pak/IoStore reader and provider"
+            "Unsupported argument: aes_key. Encrypted container support is not implemented (see issues #624/#625)"
         )
 
     mappings_provider = None

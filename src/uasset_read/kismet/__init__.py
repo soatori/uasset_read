@@ -23,10 +23,9 @@ from uasset_read.kismet.translator import (
     KismetTranslator,
     MathFunctionCleaner,
     TypeRegistry,
-    line_cpp,
     UE_TYPE_MAP,
 )
-from uasset_read.kismet.body_builder import FunctionBodyBuilder, to_function_body
+from uasset_read.kismet.body_builder import FunctionBodyBuilder
 
 # Decompilation result and pipeline
 from uasset_read.kismet.result import KismetDecompiledResult
@@ -51,10 +50,8 @@ __all__ = [
     "KismetTranslator",
     "MathFunctionCleaner",
     "TypeRegistry",
-    "line_cpp",
     "UE_TYPE_MAP",
     "FunctionBodyBuilder",
-    "to_function_body",
     # Decompilation result and pipeline
     "KismetDecompiledResult",
     "decompile_uasset",

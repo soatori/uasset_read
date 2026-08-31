@@ -1,4 +1,4 @@
-"""Component transform parsing functions -- extract_component_transforms and value parsing helpers.
+"""Component transform parsing -- extract_component_transforms.
 
 Equivalent migration from uasset_read.py section 1514-1630.
 """
@@ -63,36 +63,8 @@ def _try_extract_struct_value(prop_value: Any) -> Optional[Dict[str, float]]:
     return None
 
 
-def parse_vector_value(struct_value: StructValue, precision_type: str = "location") -> VectorValue:
-    """Parse Vector struct property to VectorValue. Extract X/Y/Z fields from fields."""
-    fields = struct_value.fields
-    x = format_transform_value(fields.get("X", 0.0), precision_type)
-    y = format_transform_value(fields.get("Y", 0.0), precision_type)
-    z = format_transform_value(fields.get("Z", 0.0), precision_type)
-    return VectorValue(x=x, y=y, z=z)
-
-
-def parse_rotator_value(struct_value: StructValue) -> RotatorValue:
-    """Parse Rotator struct property to RotatorValue. Extract Roll/Pitch/Yaw fields from fields."""
-    fields = struct_value.fields
-    roll = format_transform_value(fields.get("Roll", 0.0), "rotation")
-    pitch = format_transform_value(fields.get("Pitch", 0.0), "rotation")
-    yaw = format_transform_value(fields.get("Yaw", 0.0), "rotation")
-    return RotatorValue(roll=roll, pitch=pitch, yaw=yaw)
-
-
-def parse_scale_value(struct_value: StructValue) -> ScaleValue:
-    """Parse Scale3D struct property to ScaleValue. Extract X/Y/Z fields from fields."""
-    fields = struct_value.fields
-    x = format_transform_value(fields.get("X", 0.0), "scale")
-    y = format_transform_value(fields.get("Y", 0.0), "scale")
-    z = format_transform_value(fields.get("Z", 0.0), "scale")
-    return ScaleValue(x=x, y=y, z=z)
-
-
 def extract_component_transforms(
     export_properties: List[PropertyValue],
-    component_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Extract transform attributes from component export properties.
@@ -106,7 +78,6 @@ def extract_component_transforms(
 
     Args:
         export_properties: Export property list
-        component_name: Optional component name (currently unused, kept for interface compatibility)
 
     Returns:
         Dict containing relative_location/relative_rotation/relative_scale keys

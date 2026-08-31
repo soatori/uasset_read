@@ -16,10 +16,10 @@ from uasset_read.semantic.anim_blueprint.nodes import (
     anim_graph_kind,
     emit_anim_node,
 )
-from uasset_read.semantic.anim_blueprint.reporting import AnimBlueprintReporting
 from uasset_read.semantic.anim_blueprint.state_machines import emit_state_machines
 from uasset_read.semantic.anim_blueprint.flows import attach_flows
 from uasset_read.semantic.blueprint.ids import ascii_slug
+from uasset_read.semantic.blueprint.reporting import BlueprintReporting
 from uasset_read.semantic.blueprint.types import TypeTable
 from uasset_read.semantic.blueprint.variables import emit_variables, emit_declaration
 from uasset_read.semantic.blueprint.components import emit_components
@@ -71,8 +71,6 @@ def build_anim_blueprint_content(
     export_ir: "ExportIR",
     coverage_model,
     evidence_list,
-    *,
-    mode: str = "standard",
 ) -> dict:
     """Build the Animation Blueprint domain content dict.
 
@@ -84,7 +82,7 @@ def build_anim_blueprint_content(
     5. Extracts variables and components (reuses from blueprint)
     6. Emits pose flows for animation pose connections
     """
-    reporting = AnimBlueprintReporting()
+    reporting = BlueprintReporting()
     table = TypeTable()
 
     # Get animation data from export
@@ -96,8 +94,10 @@ def build_anim_blueprint_content(
         reporting.coverage("graphs", "unavailable", reason="no_graph_exports")
         reporting.diagnostic("ABP_GRAPH_MISSING", "asset", "warning", "semantic_loss")
 
-    graphs_json, index = _emit_anim_graphs(graphs, table, reporting, mode=mode)
-    attach_flows(graphs_json, index, reporting, mode=mode)
+    # Content is always built with debug evidence; project_semantic strips
+    # it for standard mode (same contract as the blueprint extractor).
+    graphs_json, index = _emit_anim_graphs(graphs, table, reporting)
+    attach_flows(graphs_json, index, reporting)
 
     # Report opaque node coverage
     _report_opaque_coverage(graphs_json, reporting)
@@ -106,7 +106,7 @@ def build_anim_blueprint_content(
     state_machines = []
     if anim_blueprint is not None:
         baked_machines = getattr(anim_blueprint, "baked_state_machines", []) or []
-        state_machines = emit_state_machines(baked_machines, reporting, mode=mode)
+        state_machines = emit_state_machines(baked_machines, reporting)
     else:
         reporting.coverage("state_machines", "unavailable", reason="no_anim_blueprint_data")
 
@@ -114,7 +114,7 @@ def build_anim_blueprint_content(
     anim_notifies = []
     if anim_blueprint is not None:
         notifies = getattr(anim_blueprint, "anim_notifies", []) or []
-        anim_notifies = _emit_anim_notifies(notifies, reporting, mode=mode)
+        anim_notifies = _emit_anim_notifies(notifies, reporting)
     else:
         reporting.coverage("anim_notifies", "unavailable", reason="no_anim_blueprint_data")
 
@@ -165,7 +165,7 @@ def build_anim_blueprint_content(
     coverage_entries = reporting.coverage_entries()
     if coverage_entries:
         content["coverage"] = coverage_entries
-    diagnostics = reporting.diagnostics_entries(mode)
+    diagnostics = reporting.diagnostics_entries("debug")
     if diagnostics:
         content["diagnostics"] = diagnostics
 
@@ -198,7 +198,7 @@ def _collect_graphs(package_ir) -> list:
     return graphs
 
 
-def _emit_anim_graphs(graphs, table, reporting, *, mode: str) -> tuple[list[dict], dict]:
+def _emit_anim_graphs(graphs, table, reporting) -> tuple[list[dict], dict]:
     """Emit graphs with animation-specific node kinds."""
     graphs_json: list[dict] = []
     index: dict[str, dict] = {}
@@ -218,7 +218,7 @@ def _emit_anim_graphs(graphs, table, reporting, *, mode: str) -> tuple[list[dict
         ordinal_counts: dict[tuple[str, str], int] = {}
 
         for node in getattr(graph, "nodes", None) or []:
-            node_json, node_index = emit_anim_node(node, slug, ordinal_counts, table, reporting, mode)
+            node_json, node_index = emit_anim_node(node, slug, ordinal_counts, table, reporting)
             if node_json is None:
                 continue
             nodes_json.append(node_json)
@@ -226,15 +226,19 @@ def _emit_anim_graphs(graphs, table, reporting, *, mode: str) -> tuple[list[dict
 
         kind = anim_graph_kind(name, graph_class)
         if kind == "event_graph" and any(
-            emit_anim_node(n, slug, {}, table, reporting, "debug")[0]
-            and emit_anim_node(n, slug, {}, table, reporting, "debug")[0].get("kind") == "function_entry"
+            emit_anim_node(n, slug, {}, table, reporting)[0]
+            and emit_anim_node(n, slug, {}, table, reporting)[0].get("kind") == "function_entry"
             for n in getattr(graph, "nodes", None) or []
         ):
             kind = "function"
 
-        entry: dict = {"id": gid, "name": name, "kind": kind, "nodes": nodes_json}
-        if mode == "debug":
-            entry["evidence"] = {"graph_guid": getattr(graph, "graph_guid", "") or ""}
+        entry: dict = {
+            "id": gid,
+            "name": name,
+            "kind": kind,
+            "nodes": nodes_json,
+            "evidence": {"graph_guid": getattr(graph, "graph_guid", "") or ""},
+        }
         graphs_json.append(entry)
 
         for subgraph in getattr(graph, "subgraphs", None) or []:
@@ -246,7 +250,7 @@ def _emit_anim_graphs(graphs, table, reporting, *, mode: str) -> tuple[list[dict
     return graphs_json, index
 
 
-def _emit_anim_notifies(notifies: list, reporting, *, mode: str) -> list[dict]:
+def _emit_anim_notifies(notifies: list, reporting) -> list[dict]:
     """Emit animation notifies."""
     notifies_json: list[dict] = []
 
@@ -275,37 +279,36 @@ def _emit_anim_notifies(notifies: list, reporting, *, mode: str) -> list[dict]:
         if track_index != 0:
             notify_dict["track_index"] = track_index
 
-        if mode == "debug":
-            evidence: dict = {}
-            end_offset = getattr(notify, "end_trigger_time_offset", 0.0)
-            if end_offset != 0.0:
-                evidence["end_trigger_time_offset"] = end_offset
-            weight_threshold = getattr(notify, "trigger_weight_threshold", 0.0)
-            if weight_threshold != 0.0:
-                evidence["trigger_weight_threshold"] = weight_threshold
-            tick_type = getattr(notify, "montage_tick_type", None)
-            if tick_type:
-                evidence["montage_tick_type"] = tick_type
-            trigger_chance = getattr(notify, "notify_trigger_chance", 1.0)
-            if trigger_chance != 1.0:
-                evidence["notify_trigger_chance"] = trigger_chance
-            filter_type = getattr(notify, "notify_filter_type", None)
-            if filter_type:
-                evidence["notify_filter_type"] = filter_type
-            filter_lod = getattr(notify, "notify_filter_lod", 0)
-            if filter_lod != 0:
-                evidence["notify_filter_lod"] = filter_lod
-            converted = getattr(notify, "b_converted_from_branching_point", False)
-            if converted:
-                evidence["b_converted_from_branching_point"] = True
-            linked_montage = getattr(notify, "linked_montage", None)
-            if linked_montage:
-                evidence["linked_montage"] = linked_montage
-            linked_sequence = getattr(notify, "linked_sequence", None)
-            if linked_sequence:
-                evidence["linked_sequence"] = linked_sequence
-            if evidence:
-                notify_dict["evidence"] = evidence
+        evidence: dict = {}
+        end_offset = getattr(notify, "end_trigger_time_offset", 0.0)
+        if end_offset != 0.0:
+            evidence["end_trigger_time_offset"] = end_offset
+        weight_threshold = getattr(notify, "trigger_weight_threshold", 0.0)
+        if weight_threshold != 0.0:
+            evidence["trigger_weight_threshold"] = weight_threshold
+        tick_type = getattr(notify, "montage_tick_type", None)
+        if tick_type:
+            evidence["montage_tick_type"] = tick_type
+        trigger_chance = getattr(notify, "notify_trigger_chance", 1.0)
+        if trigger_chance != 1.0:
+            evidence["notify_trigger_chance"] = trigger_chance
+        filter_type = getattr(notify, "notify_filter_type", None)
+        if filter_type:
+            evidence["notify_filter_type"] = filter_type
+        filter_lod = getattr(notify, "notify_filter_lod", 0)
+        if filter_lod != 0:
+            evidence["notify_filter_lod"] = filter_lod
+        converted = getattr(notify, "b_converted_from_branching_point", False)
+        if converted:
+            evidence["b_converted_from_branching_point"] = True
+        linked_montage = getattr(notify, "linked_montage", None)
+        if linked_montage:
+            evidence["linked_montage"] = linked_montage
+        linked_sequence = getattr(notify, "linked_sequence", None)
+        if linked_sequence:
+            evidence["linked_sequence"] = linked_sequence
+        if evidence:
+            notify_dict["evidence"] = evidence
 
         notifies_json.append(notify_dict)
 

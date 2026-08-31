@@ -16,14 +16,7 @@ from .object_model import (
     PayloadDescriptor,
     Relation,
 )
-
-
-@dataclass(frozen=True)
-class SourceInfo:
-    kind: str  # "loose" | "pak" | "iostore" | "memory"
-    name: str
-    size: int
-    path: str = ""
+from .source import SourceInfo
 
 
 @dataclass(frozen=True)

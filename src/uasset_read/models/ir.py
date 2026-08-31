@@ -571,8 +571,6 @@ class HexViewEntryIR:
     start: int
     stop: int
     size: int
-    field_path: str | None = None
-    semantic_type: str | None = None
     value_hex: str | None = None
     value_size: int | None = None
 

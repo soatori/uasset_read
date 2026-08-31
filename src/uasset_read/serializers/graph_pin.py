@@ -29,7 +29,6 @@ from uasset_read.serializers.graph_helpers import (
     _rcn,
     _get_thread_local,
     _pin_trace_enabled,
-    _record_pin_recovery,
     _trace_fields_append,
     _read_fstring_safe,
     _read_ftext_value,
@@ -190,18 +189,7 @@ def read_pin_array(
         recovery_pos = archive.tell()
         recovered = _recover_pin_array_count(archive, recovery_pos, array_count, export_map, import_map)
         if recovered is not None:
-            original_bad_count = array_count
             array_count = recovered["count"]
-            _record_pin_recovery(
-                {
-                    "kind": "pin_array_count",
-                    "context": recovery_context,
-                    "bad_count": original_bad_count,
-                    "candidate_pos": recovered["candidate_pos"],
-                    "confidence": recovered["confidence"],
-                    "reason": recovered["reason"],
-                }
-            )
             if recovered["confidence"] == "low" and recovery_context == "linkedto":
                 # Low-confidence recovery excluded from LinkedTo connection building to avoid polluting downstream semantics
                 logger.info(
@@ -438,15 +426,6 @@ def _try_recover_to_subpins(
                     recovery_type,
                     pin_ref_result["reason"],
                 )
-                _record_pin_recovery(
-                    {
-                        "kind": "subpins_resync",
-                        "recovered_pos": recovered_pos,
-                        "count": candidate,
-                        "recovery_type": recovery_type,
-                        "reason": pin_ref_result["reason"],
-                    }
-                )
                 return {
                     "recovered_pos": recovered_pos,
                     "count": candidate,
@@ -465,15 +444,6 @@ def _try_recover_to_subpins(
                     "[P73-SUBPINS] Recovery to SubPins at pos %d (count=%d, null ref)",
                     recovered_pos,
                     candidate,
-                )
-                _record_pin_recovery(
-                    {
-                        "kind": "subpins_resync",
-                        "recovered_pos": recovered_pos,
-                        "count": candidate,
-                        "recovery_type": "subpins_resync",
-                        "reason": "b_null!=0 null reference",
-                    }
                 )
                 return {
                     "recovered_pos": recovered_pos,

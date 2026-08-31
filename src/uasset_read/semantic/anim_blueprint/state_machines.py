@@ -9,18 +9,12 @@ from uasset_read.semantic.anim_blueprint.ids import (
 )
 
 
-def emit_state_machines(
-    baked_state_machines: list,
-    reporting,
-    *,
-    mode: str,
-) -> list[dict]:
+def emit_state_machines(baked_state_machines: list, reporting) -> list[dict]:
     """Emit baked state machines from AnimBlueprintIR.
 
     Args:
         baked_state_machines: List of BakedStateMachineIR objects
-        reporting: AnimBlueprintReporting instance
-        mode: "standard" or "debug"
+        reporting: BlueprintReporting instance
 
     Returns:
         List of state machine dicts
@@ -40,10 +34,10 @@ def emit_state_machines(
         initial_state = getattr(machine, "initial_state", 0)
 
         # Emit states
-        states_json = _emit_states(getattr(machine, "states", []) or [], slug, reporting, mode)
+        states_json = _emit_states(getattr(machine, "states", []) or [], slug, reporting)
 
         # Emit inter-state transitions
-        transitions_json = _emit_transitions(getattr(machine, "transitions", []) or [], reporting, mode)
+        transitions_json = _emit_transitions(getattr(machine, "transitions", []) or [], reporting)
 
         sm_dict: dict = {
             "id": sm_id,
@@ -65,12 +59,7 @@ def emit_state_machines(
     return machines_json
 
 
-def _emit_states(
-    states: list,
-    machine_slug: str,
-    reporting,
-    mode: str,
-) -> list[dict]:
+def _emit_states(states: list, machine_slug: str, reporting) -> list[dict]:
     """Emit baked states."""
     states_json: list[dict] = []
 
@@ -101,29 +90,24 @@ def _emit_states(
             state_dict["layer_node_indices"] = list(layer_indices)
 
         # Emit exit transitions
-        exit_transitions = _emit_exit_transitions(getattr(state, "transitions", []) or [], reporting, mode)
+        exit_transitions = _emit_exit_transitions(getattr(state, "transitions", []) or [], reporting)
         if exit_transitions:
             state_dict["exit_transitions"] = exit_transitions
 
-        if mode == "debug":
-            state_dict["evidence"] = {
-                "state_root_node_index": getattr(state, "state_root_node_index", -1),
-                "entry_rule_node_index": getattr(state, "entry_rule_node_index", -1),
-                "start_notify": getattr(state, "start_notify", -1),
-                "end_notify": getattr(state, "end_notify", -1),
-                "fully_blended_notify": getattr(state, "fully_blended_notify", -1),
-            }
+        state_dict["evidence"] = {
+            "state_root_node_index": getattr(state, "state_root_node_index", -1),
+            "entry_rule_node_index": getattr(state, "entry_rule_node_index", -1),
+            "start_notify": getattr(state, "start_notify", -1),
+            "end_notify": getattr(state, "end_notify", -1),
+            "fully_blended_notify": getattr(state, "fully_blended_notify", -1),
+        }
 
         states_json.append(state_dict)
 
     return states_json
 
 
-def _emit_exit_transitions(
-    transitions: list,
-    reporting,
-    mode: str,
-) -> list[dict]:
+def _emit_exit_transitions(transitions: list, reporting) -> list[dict]:
     """Bake exit transitions from state."""
     trans_json: list[dict] = []
 
@@ -138,7 +122,9 @@ def _emit_exit_transitions(
         if trigger_time != 0.0:
             trans_dict["automatic_rule_trigger_time"] = trigger_time
 
-        if mode == "debug":
+        # ponytail: evidence-only rows are dropped (previously debug kept them);
+        # standard output must not gain empty {} entries after projection strips.
+        if trans_dict:
             trans_dict["evidence"] = {
                 "can_take_delegate_index": getattr(trans, "can_take_delegate_index", -1),
                 "custom_result_node_index": getattr(trans, "custom_result_node_index", -1),
@@ -146,18 +132,12 @@ def _emit_exit_transitions(
                 "b_automatic_remaining_time_rule": getattr(trans, "b_automatic_remaining_time_rule", False),
                 "b_only_evaluate_when_active": getattr(trans, "b_only_evaluate_when_active", False),
             }
-
-        if trans_dict:
             trans_json.append(trans_dict)
 
     return trans_json
 
 
-def _emit_transitions(
-    transitions: list,
-    reporting,
-    mode: str,
-) -> list[dict]:
+def _emit_transitions(transitions: list, reporting) -> list[dict]:
     """Emit inter-state transitions."""
     trans_json: list[dict] = []
 
@@ -185,28 +165,27 @@ def _emit_transitions(
         if logic_type is not None:
             trans_dict["logic_type"] = logic_type
 
-        if mode == "debug":
-            evidence: dict = {}
-            min_reentry = getattr(trans, "min_time_before_reentry", 0.0)
-            if min_reentry != 0.0:
-                evidence["min_time_before_reentry"] = min_reentry
-            start_notify = getattr(trans, "start_notify", -1)
-            if start_notify >= 0:
-                evidence["start_notify"] = start_notify
-            end_notify = getattr(trans, "end_notify", -1)
-            if end_notify >= 0:
-                evidence["end_notify"] = end_notify
-            interrupt_notify = getattr(trans, "interrupt_notify", -1)
-            if interrupt_notify >= 0:
-                evidence["interrupt_notify"] = interrupt_notify
-            custom_curve = getattr(trans, "custom_curve", None)
-            if custom_curve:
-                evidence["custom_curve"] = custom_curve
-            blend_profile = getattr(trans, "blend_profile", None)
-            if blend_profile:
-                evidence["blend_profile"] = blend_profile
-            if evidence:
-                trans_dict["evidence"] = evidence
+        evidence: dict = {}
+        min_reentry = getattr(trans, "min_time_before_reentry", 0.0)
+        if min_reentry != 0.0:
+            evidence["min_time_before_reentry"] = min_reentry
+        start_notify = getattr(trans, "start_notify", -1)
+        if start_notify >= 0:
+            evidence["start_notify"] = start_notify
+        end_notify = getattr(trans, "end_notify", -1)
+        if end_notify >= 0:
+            evidence["end_notify"] = end_notify
+        interrupt_notify = getattr(trans, "interrupt_notify", -1)
+        if interrupt_notify >= 0:
+            evidence["interrupt_notify"] = interrupt_notify
+        custom_curve = getattr(trans, "custom_curve", None)
+        if custom_curve:
+            evidence["custom_curve"] = custom_curve
+        blend_profile = getattr(trans, "blend_profile", None)
+        if blend_profile:
+            evidence["blend_profile"] = blend_profile
+        if evidence:
+            trans_dict["evidence"] = evidence
 
         trans_json.append(trans_dict)
 

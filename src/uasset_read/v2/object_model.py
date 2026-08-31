@@ -100,19 +100,6 @@ class PayloadDescriptor:
     hash: str | None = None
 
 
-@dataclass(frozen=True)
-class OpaqueValue:
-    """Descriptor for an unknown/unsupported property value.
-
-    Raw bytes remain source-addressable and are never emitted in JSON.
-    """
-
-    type_name: str
-    offset: int
-    size: int
-    reason: str
-
-
 ROLES_ASSET = "asset"
 ROLES_GENERATED_CLASS = "generated_class"
 ROLES_CDO = "class_default_object"

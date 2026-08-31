@@ -283,10 +283,6 @@ def _parse_package_core(
                 result.is_success = False
             elif isinstance(e, ParseError):
                 _record_parse_stage_error(result, archive, path, "parse", "parse_error", e)
-                if e.partial_result:
-                    for key, value in e.partial_result.items():
-                        if hasattr(result, key):
-                            setattr(result, key, value)
                 result.is_success = False
             elif isinstance(e, MemoryError):
                 error_msg = f"MemoryError: {e}"

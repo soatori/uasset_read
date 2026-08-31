@@ -693,18 +693,21 @@ register_handler(SkeletonHandler())
 register_handler(MeshHandler())
 
 
-class AnimBlueprintHandler:
-    """Enrich AnimBlueprint/AnimBlueprintGeneratedClass objects.
+class BlueprintFamilyHandler:
+    """Enrich Blueprint-family objects (Blueprint or AnimBlueprint variants).
 
     At depth="asset": light summary only (kind, name, class).
-    At depth="decode": full graph data (nodes, edges, bytecode) for explicitly selected objects.
+    At depth="decode": full graph data (nodes, edges) for explicitly selected objects.
     """
 
-    _ANIMBP_CLASSES = ("AnimBlueprint", "AnimBlueprintGeneratedClass")
+    def __init__(self, classes: tuple[str, ...], kind: str, feature: str):
+        self._classes = classes
+        self._kind = kind
+        self._feature = feature
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         cn = obj.class_name or ""
-        return cn in self._ANIMBP_CLASSES
+        return cn in self._classes
 
     def enrich(
         self,
@@ -715,7 +718,7 @@ class AnimBlueprintHandler:
     ) -> dict[str, Any] | None:
         cn = obj.class_name or ""
         result: dict[str, Any] = {
-            "kind": "anim_blueprint",
+            "kind": self._kind,
             "blueprint_type": cn,
             "name": obj.name,
         }
@@ -725,7 +728,7 @@ class AnimBlueprintHandler:
         if context.depth == "asset":
             coverage.append(
                 CoverageEntry(
-                    feature="anim_blueprint.summary",
+                    feature=f"{self._feature}.summary",
                     status="present",
                     detail="light summary at depth=asset",
                 )
@@ -787,7 +790,7 @@ class AnimBlueprintHandler:
                 }
                 coverage.append(
                     CoverageEntry(
-                        feature="anim_blueprint.graph",
+                        feature=f"{self._feature}.graph",
                         status="present",
                         detail=f"{len(graph_nodes)} nodes, {len(graph_edges)} edges",
                     )
@@ -795,7 +798,7 @@ class AnimBlueprintHandler:
             else:
                 coverage.append(
                     CoverageEntry(
-                        feature="anim_blueprint.graph",
+                        feature=f"{self._feature}.graph",
                         status="missing",
                         detail="no graph objects found",
                     )
@@ -809,121 +812,14 @@ class AnimBlueprintHandler:
         return result
 
 
-class BlueprintHandler:
-    """Enrich Blueprint/BlueprintGeneratedClass objects.
-
-    At depth="asset": light summary only (kind, name, class).
-    At depth="decode": full graph data (nodes, edges, bytecode) for explicitly selected objects.
-    """
-
-    _BP_CLASSES = ("Blueprint", "BlueprintGeneratedClass")
-
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        cn = obj.class_name or ""
-        return cn in self._BP_CLASSES
-
-    def enrich(
-        self,
-        obj: ObjectRecord,
-        context: VersionContext,
-        all_objects: list[ObjectRecord],
-        package_data: Any,
-    ) -> dict[str, Any] | None:
-        cn = obj.class_name or ""
-        result: dict[str, Any] = {
-            "kind": "blueprint",
-            "blueprint_type": cn,
-            "name": obj.name,
-        }
-        coverage: list[CoverageEntry] = []
-
-        # At depth="asset": light summary only, no heavy graph arrays
-        if context.depth == "asset":
-            coverage.append(
-                CoverageEntry(
-                    feature="blueprint.summary",
-                    status="present",
-                    detail="light summary at depth=asset",
-                )
-            )
-            obj.coverage.extend(coverage)
-            return result
-
-        # At depth="decode": full graph data
-        if context.depth == "decode":
-            # Find related graph objects (EdGraph, K2Node_*)
-            graph_nodes: list[dict[str, Any]] = []
-            graph_edges: list[dict[str, Any]] = []
-
-            for other in all_objects:
-                other_class = other.class_name or ""
-                if other_class == "EdGraph":
-                    graph_nodes.append(
-                        {
-                            "id": other.id,
-                            "type": "EdGraph",
-                            "name": other.name,
-                        }
-                    )
-                elif other_class.startswith("K2Node_"):
-                    node: dict[str, Any] = {
-                        "id": other.id,
-                        "type": other_class,
-                        "name": other.name,
-                    }
-                    if other.properties and "ParentNode" in other.properties:
-                        parent_prop = other.properties["ParentNode"]
-                        if isinstance(parent_prop, dict) and "value" in parent_prop:
-                            node["parent_node"] = parent_prop["value"]
-                    graph_nodes.append(node)
-
-            # Build edges from parent references
-            node_ids = {n["id"] for n in graph_nodes}
-            for node_info in graph_nodes:
-                if "parent_node" in node_info:
-                    parent_id = node_info["parent_node"]
-                    if parent_id in node_ids:
-                        graph_edges.append(
-                            {
-                                "from_node": parent_id,
-                                "to_node": node_info["id"],
-                                "kind": "parent",
-                            }
-                        )
-
-            if graph_nodes:
-                result["graph"] = {
-                    "nodes": graph_nodes,
-                    "edges": graph_edges,
-                    "node_count": len(graph_nodes),
-                    "edge_count": len(graph_edges),
-                }
-                coverage.append(
-                    CoverageEntry(
-                        feature="blueprint.graph",
-                        status="present",
-                        detail=f"{len(graph_nodes)} nodes, {len(graph_edges)} edges",
-                    )
-                )
-            else:
-                coverage.append(
-                    CoverageEntry(
-                        feature="blueprint.graph",
-                        status="missing",
-                        detail="no graph objects found",
-                    )
-                )
-
-            obj.coverage.extend(coverage)
-            return result
-
-        # For other depths, return light summary
-        obj.coverage.extend(coverage)
-        return result
-
-
-register_handler(AnimBlueprintHandler())
-register_handler(BlueprintHandler())
+register_handler(
+    BlueprintFamilyHandler(
+        ("AnimBlueprint", "AnimBlueprintGeneratedClass"), "anim_blueprint", "anim_blueprint"
+    )
+)
+register_handler(
+    BlueprintFamilyHandler(("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint")
+)
 
 
 class NiagaraHandler:

@@ -9,6 +9,7 @@ from __future__ import annotations
 import re as _re
 from typing import Any, Callable
 
+from uasset_read.semantic import extensions
 from uasset_read.semantic.models import SemanticIR
 
 _VALID_MODES = {"standard", "debug"}
@@ -16,23 +17,16 @@ _VALID_PARSES = {"complete", "partial", "failed"}
 _VALID_REPRESENTATIONS = {"full", "partial", "opaque"}
 _VALID_SEVERITIES = {"error", "warning", "info"}
 
-_FORMAT_VERSIONS = {
-    "uasset_read.asset_semantic": "1.0",
-    "uasset_read.blueprint_semantic": "1.0.0",
-    "uasset_read.anim_blueprint_semantic": "1.0.0",
-    "uasset_read.material_semantic": "1.0.0",
-    "uasset_read.data_table_semantic": "1.0.0",
-    "uasset_read.skeleton_semantic": "1.0.0",
-    "uasset_read.mesh_semantic": "1.0.0",
-    "uasset_read.texture_semantic": "1.0.0",
-    "uasset_read.sound_semantic": "1.0.0",
-    "uasset_read.anim_semantic": "1.0.0",
-    "uasset_read.curve_table_semantic": "1.0.0",
-    "uasset_read.user_defined_semantic": "1.0.0",
-    "uasset_read.standalone_semantic": "1.0.0",
-    "uasset_read.niagara_semantic": "1.0.0",
-    "uasset_read.movie_semantic": "1.0.0",
-}
+# Domain format/version pairs are declared by register_extension() itself;
+# only the envelope fallback format lives here.
+_FALLBACK_FORMAT = ("uasset_read.asset_semantic", "1.0")
+
+
+def _format_versions() -> dict[str, str]:
+    """Known semantic formats mapped to their expected versions."""
+    versions = {fmt: ver for fmt, ver in extensions._DOMAIN_FORMATS.values()}
+    versions[_FALLBACK_FORMAT[0]] = _FALLBACK_FORMAT[1]
+    return versions
 
 _DOMAIN_VALIDATORS: dict[str, Callable[[Any], list[str]]] = {}
 
@@ -50,7 +44,7 @@ def validate_semantic_document(ir: SemanticIR) -> list[str]:
     """
     errors: list[str] = []
 
-    expected_version = _FORMAT_VERSIONS.get(ir.format)
+    expected_version = _format_versions().get(ir.format)
     if expected_version is None:
         errors.append(f"Invalid format: '{ir.format}' is not a known semantic format")
     elif ir.format_version != expected_version:
@@ -108,7 +102,7 @@ def validate_semantic_document(ir: SemanticIR) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Blueprint-specific semantic rules (BP-§18)
+# Shared Blueprint-family validation helpers
 # ---------------------------------------------------------------------------
 
 _GRAPH_ID_FULL = _re.compile(r"^blueprint://graph/[A-Za-z][A-Za-z0-9_.-]*$")
@@ -116,6 +110,17 @@ _NODE_ID_FULL = _re.compile(
     r"^blueprint://graph/[A-Za-z][A-Za-z0-9_.-]*/node/[a-z][a-z0-9-]*/[A-Za-z][A-Za-z0-9_.-]*/[0-9]+$"
 )
 _ENDPOINT_FULL = _re.compile(r"^(input|output|exec)\.[A-Za-z][A-Za-z0-9_.-]*$")
+
+_BP_PIN_KEYS = ("data_pins", "control_ports")
+_BP_FLOW_SECTIONS = (("control_flow", "port", "Endpoint closure"), ("data_flow", "pin", "Endpoint closure"))
+
+
+def _has_evidence(value) -> bool:
+    if isinstance(value, dict):
+        return "evidence" in value or any(_has_evidence(v) for v in value.values())
+    if isinstance(value, list):
+        return any(_has_evidence(v) for v in value)
+    return False
 
 
 def _validate_type_refs(value, known: set, errors: list, ctx: str) -> None:
@@ -129,53 +134,52 @@ def _validate_type_refs(value, known: set, errors: list, ctx: str) -> None:
             _validate_type_refs(item, known, errors, ctx)
 
 
-def validate_blueprint_document(ir) -> list[str]:
-    """BP-§18 semantic rules for uasset_read.blueprint_semantic content."""
-    errors: list[str] = []
-    content = ir.content or {}
-    graphs = content.get("graphs", []) or []
-    types = content.get("types", {}) or {}
-
+def _scan_graphs(graphs, graph_re, node_re, endpoint_re, pin_keys, errors, *, check_entry_nodes=False):
+    """Validate graph/node id formats and uniqueness; return endpoint keys."""
     graph_ids: set[str] = set()
     node_ids: set[str] = set()
     endpoints: set[tuple[str, str, str]] = set()  # (graph_id, node_id, endpoint)
     for graph in graphs:
         gid = graph.get("id", "")
-        if not _GRAPH_ID_FULL.match(gid):
+        if not graph_re.match(gid):
             errors.append(f"Invalid graph id format: '{gid}'")
         if gid in graph_ids:
             errors.append(f"Duplicate graph id: '{gid}'")
         graph_ids.add(gid)
-        entry_nodes = [n for n in graph.get("nodes", []) or [] if n.get("kind") == "function_entry"]
-        if len(entry_nodes) > 1:
-            errors.append(f"Function graph '{gid}' has {len(entry_nodes)} entry nodes")
+        if check_entry_nodes:
+            entry_nodes = [n for n in graph.get("nodes", []) or [] if n.get("kind") == "function_entry"]
+            if len(entry_nodes) > 1:
+                errors.append(f"Function graph '{gid}' has {len(entry_nodes)} entry nodes")
         for node in graph.get("nodes", []) or []:
             nid = node.get("id", "")
-            if not _NODE_ID_FULL.match(nid):
+            if not node_re.match(nid):
                 errors.append(f"Invalid node id format: '{nid}'")
             if nid in node_ids:
                 errors.append(f"Duplicate node id: '{nid}'")
             node_ids.add(nid)
-            for endpoint in list(node.get("data_pins", {}) or {}) + list(node.get("control_ports", {}) or {}):
-                if not _ENDPOINT_FULL.match(endpoint):
+            for endpoint in [e for key in pin_keys for e in (node.get(key) or {})]:
+                if not endpoint_re.match(endpoint):
                     errors.append(f"Invalid endpoint id format: '{endpoint}' on node '{nid}'")
                 endpoints.add((gid, nid, endpoint))
+    return endpoints
 
-    for section, key in (("control_flow", "port"), ("data_flow", "pin")):
+
+def _validate_flow_closure(graphs, endpoints, sections, errors) -> None:
+    for section, key, label in sections:
         for graph in graphs:
             gid = graph.get("id", "")
             flow = graph.get(section, {}) or {}
             for entry in flow.get("entries", []) or []:
                 if (gid, entry.get("node", ""), entry.get(key, "")) not in endpoints:
-                    errors.append(f"Endpoint closure violation: {section} entry {entry} in '{gid}'")
+                    errors.append(f"{label} violation: {section} entry {entry} in '{gid}'")
             for edge in flow.get("edges", []) or []:
                 for side in ("from", "to"):
                     ref = edge.get(side, {}) or {}
                     if (gid, ref.get("node", ""), ref.get(key, "")) not in endpoints:
-                        errors.append(f"Endpoint closure violation: {section} edge {side} in '{gid}'")
+                        errors.append(f"{label} violation: {section} edge {side} in '{gid}'")
 
-    _validate_type_refs(content, set(types.keys()), errors, "content")
 
+def _validate_component_hierarchy(content, errors) -> None:
     component_ids = {c.get("id") for c in content.get("components", []) or []}
     parent_of: dict[str, str] = {}
     for comp in content.get("components", []) or []:
@@ -194,19 +198,33 @@ def validate_blueprint_document(ir) -> list[str]:
             seen.add(cur)
             cur = parent_of[cur]
 
+
+def _validate_opaque_and_evidence(ir, content, errors, domain_label) -> None:
     if ir.status.representation == "opaque" and not content.get("diagnostics"):
-        errors.append("Opaque blueprint representation must have at least one diagnostic")
-    if ir.mode == "standard":
+        errors.append(f"Opaque {domain_label} representation must have at least one diagnostic")
+    if ir.mode == "standard" and _has_evidence(content):
+        errors.append(f"Standard {domain_label} content must not contain evidence")
 
-        def _has_evidence(value) -> bool:
-            if isinstance(value, dict):
-                return "evidence" in value or any(_has_evidence(v) for v in value.values())
-            if isinstance(value, list):
-                return any(_has_evidence(v) for v in value)
-            return False
 
-        if _has_evidence(content):
-            errors.append("Standard blueprint content must not contain evidence")
+# ---------------------------------------------------------------------------
+# Blueprint-specific semantic rules (BP-§18)
+# ---------------------------------------------------------------------------
+
+
+def validate_blueprint_document(ir) -> list[str]:
+    """BP-§18 semantic rules for uasset_read.blueprint_semantic content."""
+    errors: list[str] = []
+    content = ir.content or {}
+    graphs = content.get("graphs", []) or []
+    types = content.get("types", {}) or {}
+
+    endpoints = _scan_graphs(
+        graphs, _GRAPH_ID_FULL, _NODE_ID_FULL, _ENDPOINT_FULL, _BP_PIN_KEYS, errors, check_entry_nodes=True
+    )
+    _validate_flow_closure(graphs, endpoints, _BP_FLOW_SECTIONS, errors)
+    _validate_type_refs(content, set(types.keys()), errors, "content")
+    _validate_component_hierarchy(content, errors)
+    _validate_opaque_and_evidence(ir, content, errors, "blueprint")
 
     return errors
 
@@ -227,6 +245,8 @@ _ANIM_STATE_MACHINE_ID_FULL = _re.compile(r"^animblueprint://state_machine/[A-Za
 _ANIM_STATE_ID_FULL = _re.compile(
     r"^animblueprint://state_machine/[A-Za-z][A-Za-z0-9_.-]*/state/[A-Za-z][A-Za-z0-9_.-]*$"
 )
+_ANIM_PIN_KEYS = _BP_PIN_KEYS + ("pose_pins",)
+_ANIM_FLOW_SECTIONS = _BP_FLOW_SECTIONS + (("pose_flow", "pose_pin", "Pose endpoint closure"),)
 
 
 def validate_anim_blueprint_document(ir) -> list[str]:
@@ -236,60 +256,10 @@ def validate_anim_blueprint_document(ir) -> list[str]:
     graphs = content.get("graphs", []) or []
     types = content.get("types", {}) or {}
 
-    graph_ids: set[str] = set()
-    node_ids: set[str] = set()
-    endpoints: set[tuple[str, str, str]] = set()
-
-    for graph in graphs:
-        gid = graph.get("id", "")
-        if not _ANIM_GRAPH_ID_FULL.match(gid):
-            errors.append(f"Invalid graph id format: '{gid}'")
-        if gid in graph_ids:
-            errors.append(f"Duplicate graph id: '{gid}'")
-        graph_ids.add(gid)
-
-        for node in graph.get("nodes", []) or []:
-            nid = node.get("id", "")
-            if not _ANIM_NODE_ID_FULL.match(nid):
-                errors.append(f"Invalid node id format: '{nid}'")
-            if nid in node_ids:
-                errors.append(f"Duplicate node id: '{nid}'")
-            node_ids.add(nid)
-            for endpoint in (
-                list(node.get("data_pins", {}) or {})
-                + list(node.get("control_ports", {}) or {})
-                + list(node.get("pose_pins", {}) or {})
-            ):
-                if not _ANIM_ENDPOINT_FULL.match(endpoint):
-                    errors.append(f"Invalid endpoint id format: '{endpoint}' on node '{nid}'")
-                endpoints.add((gid, nid, endpoint))
-
-    # Validate control/data flow endpoint closure
-    for section, key in (("control_flow", "port"), ("data_flow", "pin")):
-        for graph in graphs:
-            gid = graph.get("id", "")
-            flow = graph.get(section, {}) or {}
-            for entry in flow.get("entries", []) or []:
-                if (gid, entry.get("node", ""), entry.get(key, "")) not in endpoints:
-                    errors.append(f"Endpoint closure violation: {section} entry {entry} in '{gid}'")
-            for edge in flow.get("edges", []) or []:
-                for side in ("from", "to"):
-                    ref = edge.get(side, {}) or {}
-                    if (gid, ref.get("node", ""), ref.get(key, "")) not in endpoints:
-                        errors.append(f"Endpoint closure violation: {section} edge {side} in '{gid}'")
-
-    # Validate pose flow endpoint closure
-    for graph in graphs:
-        gid = graph.get("id", "")
-        pose_flow = graph.get("pose_flow", {}) or {}
-        for entry in pose_flow.get("entries", []) or []:
-            if (gid, entry.get("node", ""), entry.get("pose_pin", "")) not in endpoints:
-                errors.append(f"Pose endpoint closure violation: pose_flow entry {entry} in '{gid}'")
-        for edge in pose_flow.get("edges", []) or []:
-            for side in ("from", "to"):
-                ref = edge.get(side, {}) or {}
-                if (gid, ref.get("node", ""), ref.get("pose_pin", "")) not in endpoints:
-                    errors.append(f"Pose endpoint closure violation: pose_flow edge {side} in '{gid}'")
+    endpoints = _scan_graphs(
+        graphs, _ANIM_GRAPH_ID_FULL, _ANIM_NODE_ID_FULL, _ANIM_ENDPOINT_FULL, _ANIM_PIN_KEYS, errors
+    )
+    _validate_flow_closure(graphs, endpoints, _ANIM_FLOW_SECTIONS, errors)
 
     # Validate state machine IDs
     state_machine_ids: set[str] = set()
@@ -311,39 +281,8 @@ def validate_anim_blueprint_document(ir) -> list[str]:
             state_ids.add(sid)
 
     _validate_type_refs(content, set(types.keys()), errors, "content")
-
-    # Component hierarchy validation (reused from blueprint)
-    component_ids = {c.get("id") for c in content.get("components", []) or []}
-    parent_of: dict[str, str] = {}
-    for comp in content.get("components", []) or []:
-        parent = comp.get("parent")
-        if parent is not None:
-            if parent not in component_ids:
-                errors.append(f"Component parent closure violation: '{comp.get('id')}' -> '{parent}'")
-            parent_of[comp.get("id")] = parent
-    for start in parent_of:
-        seen: set[str] = set()
-        cur = start
-        while cur in parent_of:
-            if cur in seen:
-                errors.append(f"Component hierarchy cycle at '{start}'")
-                break
-            seen.add(cur)
-            cur = parent_of[cur]
-
-    if ir.status.representation == "opaque" and not content.get("diagnostics"):
-        errors.append("Opaque animation blueprint representation must have at least one diagnostic")
-    if ir.mode == "standard":
-
-        def _has_evidence(value) -> bool:
-            if isinstance(value, dict):
-                return "evidence" in value or any(_has_evidence(v) for v in value.values())
-            if isinstance(value, list):
-                return any(_has_evidence(v) for v in value)
-            return False
-
-        if _has_evidence(content):
-            errors.append("Standard animation blueprint content must not contain evidence")
+    _validate_component_hierarchy(content, errors)
+    _validate_opaque_and_evidence(ir, content, errors, "animation blueprint")
 
     # --- Pose flow validation ---
     for graph in graphs:

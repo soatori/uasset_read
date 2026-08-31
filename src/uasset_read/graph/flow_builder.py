@@ -10,7 +10,6 @@ from uasset_read.constants import (
     START_EVENT_TYPES,
     CONTROL_FLOW_NODES,
     BRANCH_TYPE_MAP,
-    FORMAT_CONFIG,
     GRAPH_TYPE_MAP,
     DATA_BOUNDARY_NODES,
     UE_NONE_SENTINEL,
@@ -183,7 +182,7 @@ def _get_start_event_name(node: UEdGraphNode) -> str:
     if node.class_name == "K2Node_Event":
         if not nd:
             return node.class_name
-        # node_data is a dict from read_k2node_event(), or a K2NodeEvent dataclass
+        # node_data is a dict from read_k2node_event()
         if isinstance(nd, dict):
             er = nd.get("event_reference")
         else:
@@ -540,7 +539,6 @@ def _trace_execution_from_event(
     node_lookup: Dict[str, UEdGraphNode],
     node_name_lookup: Optional[Dict[str, str]] = None,
     edges_by_from_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
-    source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     asset_context: Optional[Dict[str, Any]] = None,
 ) -> List[Dict]:
     """Trace a single execution flow (D-08-07~11, D-19-13~14).
@@ -690,7 +688,6 @@ def _trace_execution_from_pin(
     node_lookup: Dict[str, UEdGraphNode],
     node_name_lookup: Optional[Dict[str, str]] = None,
     edges_by_from_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
-    source_edges_by_to_pin: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     asset_context: Optional[Dict[str, Any]] = None,
 ) -> List[Dict]:
     """Trace execution flow starting from a specific pin (D-19-12).
@@ -712,7 +709,6 @@ def _trace_execution_from_pin(
                 node_lookup,
                 node_name_lookup,
                 edges_by_from_pin,
-                source_edges_by_to_pin,
                 asset_context,
             )
 
@@ -728,7 +724,6 @@ def _trace_execution_from_pin(
                     node_lookup,
                     node_name_lookup,
                     edges_by_from_pin,
-                    source_edges_by_to_pin,
                     asset_context,
                 )
 
@@ -760,7 +755,6 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
         for pin in node.pins:
             pin_lookup[_normalize_pin_id(pin.pin_id)] = (node.node_guid, pin.pin_name)
 
-    mode = FORMAT_CONFIG["pin_reference_mode"]
     connections: List[Dict] = []
     warnings: List[str] = []
     invalid_guid_refs = 0
@@ -782,7 +776,7 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
                     if pin.direction == 1:
                         connections.append(
                             {
-                                "from": format_pin_ref(node.node_guid, pin.pin_name, node_name_lookup, mode),
+                                "from": format_pin_ref(node.node_guid, pin.pin_name, node_name_lookup),
                                 "to": {"raw_pin_id": target_pin_guid},
                                 "warning": "target pin not found",
                             }
@@ -790,8 +784,8 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
 
     connections = [
         {
-            "from": format_pin_ref(edge["from_node_guid"], edge["from_pin"], node_name_lookup, mode),
-            "to": format_pin_ref(edge["to_node_guid"], edge["to_pin"], node_name_lookup, mode),
+            "from": format_pin_ref(edge["from_node_guid"], edge["from_pin"], node_name_lookup),
+            "to": format_pin_ref(edge["to_node_guid"], edge["to_pin"], node_name_lookup),
         }
         for edge in _iter_normalized_edges(graph)
     ] + connections
@@ -846,7 +840,7 @@ def build_execution_flow_entries(graph: UEdGraph, asset_context: Optional[Dict[s
     for idx, node in enumerate(graph.nodes):
         node_name_lookup[node.node_guid] = _derive_node_name(node, idx)
 
-    edges_by_from_pin, source_edges_by_to_pin = _build_normalized_edge_indexes(graph)
+    edges_by_from_pin, _ = _build_normalized_edge_indexes(graph)
 
     # Build asset_context (for macro expansion)
     if asset_context is None:
@@ -867,7 +861,6 @@ def build_execution_flow_entries(graph: UEdGraph, asset_context: Optional[Dict[s
                         node_lookup,
                         node_name_lookup,
                         edges_by_from_pin,
-                        source_edges_by_to_pin,
                         asset_context,
                     )
                     emitted_start_pins.add(pin.pin_name)
@@ -887,7 +880,6 @@ def build_execution_flow_entries(graph: UEdGraph, asset_context: Optional[Dict[s
                                 node_lookup,
                                 node_name_lookup,
                                 edges_by_from_pin,
-                                source_edges_by_to_pin,
                                 asset_context,
                             )
                             if next_node
@@ -904,7 +896,6 @@ def build_execution_flow_entries(graph: UEdGraph, asset_context: Optional[Dict[s
                 node_lookup,
                 node_name_lookup,
                 edges_by_from_pin,
-                source_edges_by_to_pin,
                 asset_context,
             )
             start_event_name = _get_start_event_name(start_node)
@@ -992,14 +983,13 @@ def _build_asset_context_from_graph(graph: UEdGraph) -> Dict[str, Any]:
     return {"graphs": all_graphs}
 
 
-def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
+def build_data_flows(graph: UEdGraph) -> List[Dict]:
     """Build data flow graph (D-19-06~09, LINK-03).
 
     Extracts data passing relationships from non-exec pins, building the data_flows array.
 
     Args:
         graph: UEdGraph object
-        mode: output format mode ("name" or "guid", default "name")
 
     Returns:
         List[Dict]: data_flows array
@@ -1019,12 +1009,12 @@ def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
         if not edge["is_exec"]:
             data_flows.append(
                 {
-                    "source": format_pin_ref(edge["from_node_guid"], edge["from_pin"], node_name_lookup, mode),
-                    "target": format_pin_ref(edge["to_node_guid"], edge["to_pin"], node_name_lookup, mode),
+                    "source": format_pin_ref(edge["from_node_guid"], edge["from_pin"], node_name_lookup),
+                    "target": format_pin_ref(edge["to_node_guid"], edge["to_pin"], node_name_lookup),
                 }
             )
 
-    data_flows.extend(_build_synthetic_function_data_flows(graph, node_name_lookup, mode))
+    data_flows.extend(_build_synthetic_function_data_flows(graph, node_name_lookup))
 
     return data_flows
 
@@ -1032,7 +1022,6 @@ def build_data_flows(graph: UEdGraph, mode: str = "name") -> List[Dict]:
 def _build_synthetic_function_data_flows(
     graph: UEdGraph,
     node_name_lookup: Dict[str, str],
-    mode: str,
 ) -> List[Dict]:
     """Supplement semantic data flows for parameter edges missing due to misalignment in function graphs.
 
@@ -1041,7 +1030,7 @@ def _build_synthetic_function_data_flows(
     """
 
     def ref(node: UEdGraphNode, pin_name: str) -> Dict:
-        return format_pin_ref(node.node_guid, pin_name, node_name_lookup, mode)
+        return format_pin_ref(node.node_guid, pin_name, node_name_lookup)
 
     # Find FunctionEntry node
     function_entry = None
@@ -1327,7 +1316,6 @@ def build_function_graphs(
                 node_lookup,
                 node_name_lookup,
                 edges_by_from_pin,
-                source_edges_by_to_pin,
                 asset_ctx,
             )
 
@@ -1338,8 +1326,6 @@ def build_function_graphs(
             # For each execution flow node, compute data_providers and data_sources
             # Create helper function: extract node data flow annotations
             def _annotate_node_with_data_flow(  # noqa: B023 - source_edges_by_to_pin and edges_by_from_pin are not loop variables
-                node_guid: str,
-                node_type: str,
                 node_pins: List[UEdGraphPin],
                 n_name_lookup: Dict[str, str],
                 p_lookup: Dict[str, Tuple[str, str]],
@@ -1399,15 +1385,12 @@ def build_function_graphs(
             # Iterate execution flow nodes, add data flow annotations
             annotated_nodes: List[Dict] = []
             for node_info in execution_flows:
-                node_guid = node_info.get("node_guid")
-                node_type = node_info.get("node_type", "")
-
                 # Get original node object
-                original_node = node_lookup.get(node_guid)
+                original_node = node_lookup.get(node_info.get("node_guid"))
 
                 if original_node:
                     annotation = _annotate_node_with_data_flow(
-                        node_guid, node_type, original_node.pins, node_name_lookup, pin_lookup, node_lookup
+                        original_node.pins, node_name_lookup, pin_lookup, node_lookup
                     )
 
                     # Merge annotations into node info (only added when non-empty)

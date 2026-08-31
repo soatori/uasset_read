@@ -102,13 +102,4 @@ def is_blueprint_export(export: ExportIR) -> bool:
 class RenderOptions:
     """渲染选项（渲染器只读，不修改）。"""
 
-    verbose: bool = False
-    indent: int = 2
-    include_schema: bool = False
-    output_level: str = "standard"  # "standard"（默认，过滤 UI/空字段）或 "debug"（完整输出）
     hex_view: bool = False  # 输出 HexView 解析轨迹数据
-
-    def __post_init__(self) -> None:
-        _valid = {"standard", "debug"}
-        if self.output_level not in _valid:
-            raise ValueError(f"Invalid output_level: {self.output_level!r}. Expected one of ['standard', 'debug']")

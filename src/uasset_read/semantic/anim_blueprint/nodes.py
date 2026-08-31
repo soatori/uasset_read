@@ -185,7 +185,7 @@ def _pose_type(pin) -> str | None:
     return None
 
 
-def emit_anim_node(node, graph_slug, ordinal_counts, table, reporting, mode):
+def emit_anim_node(node, graph_slug, ordinal_counts, table, reporting):
     """Emit a single animation node with pose pin support."""
     node_class = getattr(node, "node_class", "") or getattr(node, "class_name", "") or ""
     kind, status = anim_node_kind(node_class)
@@ -276,6 +276,5 @@ def emit_anim_node(node, graph_slug, ordinal_counts, table, reporting, mode):
         result["control_ports"] = control_ports
     if pose_pins:
         result["pose_pins"] = pose_pins
-    if mode == "debug":
-        result["evidence"] = {"node_guid": getattr(node, "node_guid", "") or "", "source_class": node_class}
+    result["evidence"] = {"node_guid": getattr(node, "node_guid", "") or "", "source_class": node_class}
     return result, node_index
