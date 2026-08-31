@@ -2,7 +2,7 @@
 
 status: target
 
-> **文档状态：目标架构基线（2026-08-26）。Legacy 主路径已实现**（`PackageDocument v2` 输出全部 exports；tagged properties 在 export 边界内解析并恢复 Source/ImportedSize 等值；CLI/Python API/Agent 共用 v2 投影；v2 语义不再依赖 Semantic 1.x handler；decode 提供 main-region 有界 payload ref）。**payload 字节提取已撤回为 deferred（`PAYLOAD_EXTRACTION_DEFERRED`），真实提取待 #623–#627 fixture 到位后按 UE 源码偏移证据重做。Zen/IoStore、USMAP/unversioned、外部容器 payload 提取、深层语义与 Semantic 1.x 删除仍是目标。**
+> **文档状态：目标架构基线（2026-08-26）。Legacy 主路径已实现**（`PackageDocument v2` 输出全部 exports；tagged properties 在 export 边界内解析并恢复 Source/ImportedSize 等值；CLI/Python API/Agent 共用 v2 投影；v2 语义不再依赖 Semantic 1.x handler；decode 不产出顶层 payload（伪造 descriptor/ref 已撤回，`payloads[]` 恒为空））。**payload 字节提取已撤回为 deferred（`PAYLOAD_EXTRACTION_DEFERRED`），真实提取待 #623–#627 fixture 到位后按 UE 源码偏移证据重做。Zen/IoStore、USMAP/unversioned、外部容器 payload 提取、深层语义与 Semantic 1.x 删除仍是目标。**
 >
 > 本文是当前项目唯一权威的重构目标。源码与测试仍是“当前已经实现什么”的唯一依据；本文只定义“接下来要实现什么”。旧版输出、Semantic JSON 1.x 和单资产设计文档均为历史资料，不得继续作为新功能的目标架构。
 
