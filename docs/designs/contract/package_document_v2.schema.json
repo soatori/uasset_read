@@ -176,8 +176,8 @@
           "type": "string"
         },
         "class": {
-          "type": "string",
-          "description": "Resolved class name (may be null if unresolvable)."
+          "type": ["string", "null"],
+          "description": "Resolved class name (null when unresolvable, e.g. imports with missing outer)."
         },
         "roles": {
           "type": "array",
@@ -188,7 +188,10 @@
           "description": "叠加标签，不是互斥类型。"
         },
         "serial_region": {
-          "$ref": "#/$defs/Region"
+          "oneOf": [
+            { "$ref": "#/$defs/Region" },
+            { "type": "null" }
+          ]
         },
         "status": {
           "$ref": "#/$defs/ObjectStatus"
