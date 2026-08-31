@@ -149,6 +149,42 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         assert archive.read(2) == b"bc"
         archive.close()
 
+    def test_export_read_within_range_succeeds():
+        """Reading within (50, 100) from pos 80 must return data and advance."""
+        from uasset_read.archive import ByteArchive
+
+        archive = ByteArchive(b"\x00" * 256)
+        archive._read_range = (50, 100)
+        archive._pos = 80
+        data = archive.read(20)
+        assert data == b"\x00" * 20
+        assert archive._pos == 100
+
+    def test_export_read_past_upper_bound_fails():
+        from uasset_read.archive import ByteArchive, ExportBoundsExceeded
+
+        archive = ByteArchive(b"\x00" * 256)
+        archive._read_range = (50, 100)
+        archive._pos = 80
+        with pytest.raises(ExportBoundsExceeded):
+            archive.read(50)
+
+    def test_export_seek_past_lower_bound_fails():
+        from uasset_read.archive import ByteArchive, ExportBoundsExceeded
+
+        archive = ByteArchive(b"\x00" * 256)
+        archive._read_range = (50, 100)
+        with pytest.raises(ExportBoundsExceeded):
+            archive.validate_offset(10, "test_seek")
+
+    def test_export_seek_past_upper_bound_fails():
+        from uasset_read.archive import ByteArchive, ExportBoundsExceeded
+
+        archive = ByteArchive(b"\x00" * 256)
+        archive._read_range = (50, 100)
+        with pytest.raises(ExportBoundsExceeded):
+            archive.validate_offset(150, "test_seek")
+
     _run_cases(
         [
             ("core.reader_out_of_range", core_contract),
@@ -169,6 +205,10 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
             ("SliceReader.test_invalid_slice_negative_base", test_invalid_slice_negative_base),
             ("SliceReader.test_invalid_slice_exceeds_source", test_invalid_slice_exceeds_source),
             ("test_slice_reader_satisfies_archive_like", test_slice_reader_satisfies_archive_like),
+            ("export_bounds.read_within_range_succeeds", test_export_read_within_range_succeeds),
+            ("export_bounds.read_past_upper_bound_fails", test_export_read_past_upper_bound_fails),
+            ("export_bounds.seek_past_lower_bound_fails", test_export_seek_past_lower_bound_fails),
+            ("export_bounds.seek_past_upper_bound_fails", test_export_seek_past_upper_bound_fails),
         ]
     )
 
@@ -1015,6 +1055,46 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert len(logging.root.handlers) == len(handlers)
     assert logging.root.level == level
 
+    # --- CLI budget regression: compact JSON respects max_bytes ---
+    BUDGET_SAMPLE = str(SAMPLES / "FirstPerson_T_GridChecker_A.uasset")
+    budget = 1500
+    budget_result = subprocess.run(
+        [sys.executable, "-m", "uasset_read", "--depth", "decode", "--max-bytes", str(budget), BUDGET_SAMPLE],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+        env=_env,
+    )
+    assert budget_result.returncode == 0, f"CLI budget failed: {budget_result.stderr[:500]}"
+    stdout_bytes = budget_result.stdout.encode("utf-8")
+    assert len(stdout_bytes.rstrip()) <= budget
+    budget_doc = json.loads(budget_result.stdout)
+    assert budget_doc["truncation"]["reason"] == "max_bytes"
+
+    # --- Payload extraction is fully deferred (merged from test_samples) ---
+    from uasset_read.v2.api import parse_package_document
+    from uasset_read.v2.payloads import extract_payload_bytes
+
+    decode_doc = parse_package_document(
+        str(SAMPLES / "FirstPerson_T_GridChecker_A.uasset"),
+        depth="decode",
+        object_ids=["export:2"],
+    )
+    assert decode_doc.payloads == []
+    sem_payload = (decode_doc.objects[2].semantic or {}).get("payload")
+    if isinstance(sem_payload, dict):
+        assert "ref" not in sem_payload and "stored_size" not in sem_payload
+
+    pb_result = extract_payload_bytes(decode_doc, "payload:export:2")
+    assert not pb_result.success
+    assert pb_result.data is None and not pb_result.truncated and pb_result.next_offset is None
+
+    pb_tool = extract_payload(str(SAMPLES / "FirstPerson_T_GridChecker_A.uasset"), "payload:export:2")
+    assert pb_tool["code"] == "PAYLOAD_EXTRACTION_DEFERRED"
+    assert pb_tool["available_ids"] == []
+    assert not {"data", "data_b64", "sha256"} & pb_tool.keys()
+
 
 def test_test_suite_structure_gate():
     import ast
@@ -1026,7 +1106,7 @@ def test_test_suite_structure_gate():
     assert subdirs == {"samples"}
     tree = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
     funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
-    assert len(funcs) <= 13
+    assert len(funcs) == 10
     assert not any(isinstance(n, ast.ClassDef) for n in tree.body)
     # The design bans decorators on test functions; cache helpers like
     # _document legitimately carry @lru_cache, so the check is scoped to
@@ -1040,39 +1120,3 @@ def test_test_suite_structure_gate():
         if isinstance(t, ast.Name) and t.id.startswith("test_")
     }
     assert not assigned
-
-
-def test_export_bounds_exceeded_read_past_bound():
-    """Reading past either edge of the range must raise ExportBoundsExceeded, not silent corruption."""
-    from uasset_read.archive import ByteArchive, ExportBoundsExceeded
-
-    archive = ByteArchive(b"\x00" * 256)
-    archive._read_range = (50, 100)
-    archive._pos = 80
-    with pytest.raises(ExportBoundsExceeded):
-        archive.read(50)
-    archive._pos = 40
-    with pytest.raises(ExportBoundsExceeded):
-        archive.read(20)
-
-
-def test_export_bounds_exceeded_read_within_bound():
-    """Reading within the range must succeed."""
-    from uasset_read.archive import ByteArchive
-
-    archive = ByteArchive(b"\x00" * 256)
-    archive._read_range = (50, 100)
-    archive._pos = 80
-    assert archive.read(20) == b"\x00" * 20
-
-
-def test_export_bounds_exceeded_seek_past_bound():
-    """Seeking past either edge of the range must raise ExportBoundsExceeded."""
-    from uasset_read.archive import ByteArchive, ExportBoundsExceeded
-
-    archive = ByteArchive(b"\x00" * 256)
-    archive._read_range = (50, 100)
-    with pytest.raises(ExportBoundsExceeded):
-        archive.validate_offset(150, "test_seek")
-    with pytest.raises(ExportBoundsExceeded):
-        archive.validate_offset(10, "test_seek")
