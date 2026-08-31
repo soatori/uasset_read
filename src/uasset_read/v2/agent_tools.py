@@ -98,6 +98,7 @@ def get_object(
     projected = project_document(
         doc,
         object_ids=[object_id],
+        view="raw",
         max_bytes=max_bytes,
     )
     if projected["objects"]:
