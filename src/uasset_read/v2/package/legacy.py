@@ -36,7 +36,6 @@ from ...v2.object_model import (
     ObjectRecord,
     ObjectRef,
     ObjectStatus,
-    PayloadDescriptor,
     Region,
     Relation,
     ROLES_ASSET,
@@ -427,10 +426,9 @@ class LegacyPackageReader:
             )
 
             # 16. Parse properties for requested objects at depth >= object
-            payload_ends: dict[int, int] = {}
             extras: dict[str, dict[str, Any]] = {}
             if depth in ("object", "asset", "decode"):
-                payload_ends, extras = self._parse_requested_object_properties(
+                extras = self._parse_requested_object_properties(
                     archive=archive,
                     objects=objects,
                     export_map=export_map,
@@ -471,33 +469,10 @@ class LegacyPackageReader:
                             )
                         )
 
-            # 17b. At decode depth, expose the post-property export remainder
-            # as real payload descriptors: bounded byte ranges the caller can
-            # extract, with a ref linked from the object's semantic payload.
-            payloads: list[PayloadDescriptor] = []
-            if depth == "decode":
-                for i, obj in enumerate(objects):
-                    start = payload_ends.get(i)
-                    if start is None or not obj.serial_region:
-                        continue
-                    end = obj.serial_region.offset + obj.serial_region.size
-                    if end - start <= 0:
-                        continue
-                    sem_payload = (obj.semantic or {}).get("payload")
-                    kind = sem_payload.get("kind") if isinstance(sem_payload, dict) else None
-                    descriptor = PayloadDescriptor(
-                        id=f"payload:{obj.id}",
-                        owner_id=obj.id,
-                        kind=kind or "bulk_data",
-                        source_region="main",
-                        offset=start,
-                        stored_size=end - start,
-                        status="available",
-                    )
-                    payloads.append(descriptor)
-                    if isinstance(sem_payload, dict):
-                        sem_payload["ref"] = descriptor.id
-                        sem_payload["stored_size"] = descriptor.stored_size
+            # 17b. Payloads stay deferred: real descriptors require
+            # .uexp/.ubulk/.utoc/.ucas container support, so Legacy always
+            # emits an empty list (the document field stays for schema
+            # compatibility).
 
             # 18. Build SourceInfo
             source_info = _build_source_info(str(self._source._path))
@@ -511,7 +486,6 @@ class LegacyPackageReader:
                 diagnostics=diagnostics,
                 summary=summary_obj,
                 depth=depth,
-                payloads=payloads,
             )
 
         except ParseError as e:
@@ -538,18 +512,15 @@ class LegacyPackageReader:
         summary: PackageFileSummary,
         object_ids: Sequence[str] | None,
         diagnostics: list[Diagnostic],
-    ) -> tuple[dict[int, int], dict[str, dict[str, Any]]]:
+    ) -> dict[str, dict[str, Any]]:
         """Parse properties for requested objects at depth >= object.
 
         No v1 class-handler dispatch happens here: v2 handlers consume the
         normalized property bag plus the bounded extras this method slices
         out itself.
 
-        Returns ``(payload_ends, extras)``: ``payload_ends`` maps export
-        index to the archive position right after the tagged property
-        stream (the start of the object's unexplained payload), and
-        ``extras`` maps object id to per-class bounded data (currently
-        ``table_rows`` for DataTable/CurveTable/StringTable).
+        Returns ``extras``: maps object id to per-class bounded data
+        (currently ``table_rows`` for DataTable/CurveTable/StringTable).
 
         If object_ids is None, parses ALL objects.
         Each export's serial region is bounded via _read_bound enforced inside PackageArchive reads.
@@ -570,7 +541,6 @@ class LegacyPackageReader:
                     except (ValueError, IndexError):
                         pass
 
-        payload_ends: dict[int, int] = {}
         extras: dict[str, dict[str, Any]] = {}
 
         for i, obj in enumerate(objects):
@@ -601,12 +571,10 @@ class LegacyPackageReader:
                 )
                 overrun = archive.tell() - serial_end
                 obj.properties = normalize_property_bag(raw_props)
-                if overrun <= 0:
-                    payload_ends[i] = archive.tell()
-                    if (obj.class_name or "") in _TABLE_CLASSES:
-                        extras[obj.id] = {
-                            "table_rows": _read_table_rows(archive, serial_end, name_map, obj.id, diagnostics)
-                        }
+                if overrun <= 0 and (obj.class_name or "") in _TABLE_CLASSES:
+                    extras[obj.id] = {
+                        "table_rows": _read_table_rows(archive, serial_end, name_map, obj.id, diagnostics)
+                    }
                 if overrun > 0:
                     obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
                     diagnostics.append(
@@ -655,7 +623,7 @@ class LegacyPackageReader:
             finally:
                 archive._read_bound = prev_bound
 
-        return payload_ends, extras
+        return extras
 
     def _build_minimal_document(
         self,

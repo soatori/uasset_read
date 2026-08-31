@@ -184,41 +184,17 @@ def extract_payload(
     max_bytes: int = _MAX_BYTES_EXTRACT_PAYLOAD,
     offset: int = 0,
 ) -> dict[str, Any]:
-    """Tool: extract_payload — bounded byte extraction for a payload descriptor.
+    """Tool: extract_payload — deferred; never opens or reads the file.
 
-    Descriptor ids are "payload:export:<i>"; only the owning export is
-    re-parsed at decode depth.  Bytes come from the export's bounded serial
-    remainder; budget overflow reports ``truncated`` plus a resumable
-    ``next_offset`` instead of silently cutting data.  External regions
-    (ubulk/ucas/Zen) are reported as errors, not fake data.
+    Real extraction requires .uexp/.ubulk/.utoc/.ucas container support
+    (issue #621).  Legacy emits no payload descriptors, so the response
+    is always the stable deferred error shape.
     """
-    from .payloads import extract_payload_bytes
-
-    owner_id = payload_id.removeprefix("payload:")
-    object_ids = [owner_id] if owner_id.startswith(("export:", "import:")) else None
-    doc = parse_package_document(file_path, depth="decode", object_ids=object_ids)
-
-    result = extract_payload_bytes(doc, payload_id, max_bytes=max_bytes, offset=offset)
-    if not result.success:
-        return {
-            "id": payload_id,
-            "error": result.error,
-            "available_ids": [p.id for p in doc.payloads],
-        }
-    p = next(item for item in doc.payloads if item.id == payload_id)
-    import base64
-    import hashlib
+    from .payloads import PAYLOAD_EXTRACTION_DEFERRED, PAYLOAD_EXTRACTION_DEFERRED_MESSAGE
 
     return {
-        "id": p.id,
-        "owner": p.owner_id,
-        "kind": p.kind,
-        "source_region": p.source_region,
-        "offset": offset,
-        "stored_size": p.stored_size,
-        "bytes_returned": result.bytes_extracted,
-        "truncated": result.truncated,
-        **({"next_offset": result.next_offset} if result.next_offset is not None else {}),
-        "sha256": hashlib.sha256(result.data or b"").hexdigest(),
-        "data_b64": base64.b64encode(result.data or b"").decode("ascii"),
+        "id": payload_id,
+        "error": PAYLOAD_EXTRACTION_DEFERRED_MESSAGE,
+        "code": PAYLOAD_EXTRACTION_DEFERRED,
+        "available_ids": [],
     }
