@@ -280,7 +280,7 @@
       "type": "object",
       "required": ["id", "owner", "kind", "source_region", "offset", "stored_size", "status"],
       "properties": {
-        "id": { "type": "string", "pattern": "^payload:[0-9]+$" },
+        "id": { "type": "string", "pattern": "^payload:(export|import):[0-9]+$" },
         "owner": { "type": "string", "pattern": "^(export|import):[0-9]+$" },
         "kind": {
           "type": "string",

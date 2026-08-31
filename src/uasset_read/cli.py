@@ -452,7 +452,12 @@ def main():
                 limit=args.limit,
                 max_bytes=args.max_bytes,
             )
-            output_str = json.dumps(projected, ensure_ascii=False, indent=2)
+            # Budget mode must serialize exactly like projection's byte measure
+            # (compact separators); otherwise indent inflation breaks the cap.
+            if args.max_bytes is None:
+                output_str = json.dumps(projected, ensure_ascii=False, indent=2)
+            else:
+                output_str = json.dumps(projected, ensure_ascii=False, separators=(",", ":"))
         except Exception as e:
             _logger.debug("V2 parse error (full): %s", e, exc_info=True)
             print(f"Error: {_sanitize_error_message(e)}", file=sys.stderr)
