@@ -143,9 +143,7 @@ python -m uasset_read path/to/file.uasset --full-parse   # Force full parse for 
 python -m uasset_read path/to/file1.uasset --diff path/to/file2.uasset  # Compare two files
 
 # Advanced options
-python -m uasset_read path/to/file.uasset --export 0     # Output only specific export by index
 python -m uasset_read path/to/file.uasset --schema        # Include field semantic annotations
-python -m uasset_read path/to/file.uasset --function-graphs  # Include function_graphs array
 python -m uasset_read path/to/file.uasset --mappings path/to/usmap  # Load type mappings
 python -m uasset_read path/to/file.uasset --output-level debug   # Output verbosity level
 ```
