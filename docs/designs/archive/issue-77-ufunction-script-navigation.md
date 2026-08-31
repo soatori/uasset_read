@@ -1,5 +1,7 @@
 # Design: UFunction Script Navigation Fix (Issue #77)
 
+status: historical
+
 ## Problem Statement
 
 The current parser cannot stably read serialized Kismet Script from real UFunction exports. The root cause is that the parser does not follow UE's native serialization order:
@@ -9,6 +11,7 @@ UObject -> UStruct -> UFunction -> FStructScriptLoader
 ```
 
 Instead, the parser:
+
 1. Misuses `script_serialization_start_offset` as Script start (it's actually for property-range semantics)
 2. Assumes a BPGC function table layout that doesn't exist in UE 5.8
 3. Uses ordinal mapping/serial scan to guess function attribution
@@ -39,6 +42,7 @@ Based on UE source verification:
 ### P1-A: Native UFunction Script Navigation
 
 Implement navigation that follows UE's serialization order:
+
 - For each Function/UFunction export, locate the FStructScriptLoader within its UStruct section
 - Distinguish BytecodeBufferSize vs SerializedScriptSize
 - Script must belong to the current Function export (no BPGC ordinal mapping)
@@ -62,6 +66,7 @@ Implement navigation that follows UE's serialization order:
 ### Phase 1: Reproduce Version Matrix
 
 Copy required assets from `E:\Develop\lib\Samples`:
+
 - UE 5.0: Lyra GA_Hero_Jump
 - UE 5.2: Cropout BP_Villager
 - UE 5.6: FirstPerson BP_FirstPersonCharacter, StackOBot BP_MovingPlatform

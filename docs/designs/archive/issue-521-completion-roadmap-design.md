@@ -1,5 +1,7 @@
 # Issue #521 Epic Completion Roadmap — Design
 
+status: historical
+
 > Status: Approved design (2026-08-05)
 > Related issues: #521 (Epic), #525 (node parameters / pin_references), #515 (opaque StructProperty)
 > Fixture: `tests/samples/NM_BPSystemEvent.uasset`
@@ -43,7 +45,7 @@ must be mapped to state 2 (with evidence) or 3.
 ## Redefined Epic Completion Criteria
 
 | Original requirement | Terminal disposition |
-|---|---|
+| --- | --- |
 | Node connections | Split: node_exports level already achieved. Pin level via Track B, gated by B0. If B0 proves pins unserializable, pin level is disproven-closed and the terminal state is node_exports references + disproval record. |
 | Execution flow | Explicitly out of scope. Rationale phrased per evidence discipline: "insufficient evidence today; no assertion made". (Claiming Niagara graphs are "pure dataflow" without a version-fixed UE source reference would violate commit `db65e66f` attribution rules.) If A2 finds a version-fixed source reference (e.g. absence of exec pins in `UEdGraphSchema_Niagara`), cite it; otherwise use the weaker wording. Re-open condition recorded. |
 | Parameter definitions and values | Achieved via Track B: structured `parameters` from `NiagaraVariable` decoding (B1). Independent of the B0 pin gate. |
@@ -78,7 +80,7 @@ Track A:  A1 ─┬─> A2                     Track B:  B0a ─> B0b ─> gate 
   the stale skip count 26 is corrected, to the actual 1 skipped Niagara export; the
   figure 28 (Nodes refs) is audit-verified and must be preserved) and updated with the
   Lyra-statistics disposition row; a new independent issue created for test promotion
-  + `constraints.md` desync + disposition of the still-reproducing #518-related test
+  - `constraints.md` desync + disposition of the still-reproducing #518-related test
   failure, linked from the Epic.
 - Acceptance: issue body / plan doc / field-contract doc are mutually consistent; every
   original requirement has exactly one terminal state.
@@ -220,7 +222,7 @@ disposition.
 ## Effort Estimate
 
 | Slice | Estimate |
-|---|---|
+| --- | --- |
 | A1 / A2 / A3 | 0.5 d / 0.5 d / 1-2 d |
 | B0a / B0b | 1 d / 1-2 d |
 | B1-pre | 0.5-1 d |

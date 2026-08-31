@@ -1,5 +1,7 @@
 # Issue #554 — Pin/GUID Research Gate: Findings and Conclusions
 
+status: historical
+
 Date: 2026-08-15
 Status: Gate PASSED — semantic IDs safe for primary references; raw GUIDs as debug evidence only
 
@@ -8,7 +10,7 @@ Status: Gate PASSED — semantic IDs safe for primary references; raw GUIDs as d
 ### UEdGraphNode (EdGraphNode.h)
 
 | Field | UE Declaration | Semantics | Serialized |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `NodeGuid` | `FGuid NodeGuid` (line 406) | "GUID to uniquely identify this node, to facilitate diffing versions of this graph" | Yes (UPROPERTY) |
 | `CreateNewGuid()` | line 889 | `NodeGuid = FGuid::NewGuid()` — random per call | — |
 | `CreateDeterministicGuid()` | line 892 | `NodeGuid = FGuid::NewDeterministicGuid(GetPathName())` — deterministic from node path; editor-only | — |
@@ -16,7 +18,7 @@ Status: Gate PASSED — semantic IDs safe for primary references; raw GUIDs as d
 ### UEdGraphPin (EdGraphPin.h)
 
 | Field | UE Declaration | Semantics | Serialized |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `PinId` | `FGuid PinId` (line 303) | "The pin's unique ID" — created via `FGuid::NewGuid()` in `CreatePin()` | Yes (text + binary) |
 | `PinName` | `FName PinName` (line 306) | Display name, can change across versions | Yes |
 | `SourceIndex` | `int32 SourceIndex` (line 309) | Index in source data structure | Yes |
@@ -37,7 +39,7 @@ Status: Gate PASSED — semantic IDs safe for primary references; raw GUIDs as d
 ### FEdGraphPinType (EdGraphPin.h:76-120)
 
 | Field | Semantics |
-|---|---|
+| --- | --- |
 | `PinCategory` | Category string (bool, int, struct, object, exec, etc.) |
 | `PinSubCategory` | Sub-category (e.g. "double" for real) |
 | `PinSubCategoryObject` | Weak pointer to subcategory object (e.g. Vector struct) |
@@ -60,7 +62,7 @@ Binary serialization: `Ar << PersistentGuid` (line 1897) — persists Persistent
 ## 2. Per-Sample Probe Table
 
 | Sample | Graphs | Nodes | Pins | PinId present | PinId zero | PersistentGuid nonzero | ParentPin | SubPins | LinkedTo | RefPassThrough | Orphaned |
-|---|---|---|---|---|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | FirstPerson_BP_FirstPersonCharacter | 4 | 37 | 130 | 130 (100%) | 0 | 130 (100%) | 10 | 5 | 68 | 0 | 0 |
 | FirstPerson_BP_FirstPersonGameMode | 2 | 1 | 1 | 1 (100%) | 0 | 1 (100%) | 0 | 0 | 0 | 0 | 0 |
 | StackOBot_BP_Drone | 2 | 15 | 60 | 60 (100%) | 0 | 60 (100%) | 2 | 1 | 26 | 0 | 0 |
@@ -72,6 +74,7 @@ Binary serialization: `Ar << PersistentGuid` (line 1897) — persists Persistent
 ## 3. LinkedTo Resolution Verification
 
 Tested on FirstPerson_BP_FirstPersonCharacter.uasset:
+
 - Pin index: 115 unique PinIds
 - Total LinkedTo references: 70
 - Resolved against PinId: 70 (100%)
@@ -82,7 +85,7 @@ Tested on FirstPerson_BP_FirstPersonCharacter.uasset:
 ## 4. Confirmed/Unknown Table
 
 | UE Field | Confirmed | Standard Output | Debug Evidence | Notes |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `NodeGuid` | Stable per document, random per creation | Not emitted (no semantic role) | `source.guid` (debug only) | Use only for traceability, never for identity |
 | `PinId` | Stable per document, unique, always present, used for LinkedTo resolution | Not emitted (no semantic role) | `source.guid` (debug only) | Safe for debug traceability only |
 | `PersistentGuid` | Always non-zero in saved assets, set by K2Node subclasses for pin matching during reconstruction | Not emitted (no semantic role) | `source.guid` (debug only) | Maps to VarGuid in struct operations; not universal identity |
@@ -99,6 +102,7 @@ Tested on FirstPerson_BP_FirstPersonCharacter.uasset:
 **Decision**: Enable `source.guid` evidence in debug mode for NodeGuid, PinId, and PersistentGuid.
 
 **Rationale**:
+
 - All three GUID fields are stable within a document and never zero in saved assets
 - They serve as traceability evidence (linking semantic IDs back to raw UE data)
 - They are NOT suitable for identity (semantic IDs are authoritative)
@@ -106,6 +110,7 @@ Tested on FirstPerson_BP_FirstPersonCharacter.uasset:
 - PersistentGuid is a K2Node-specific customization, not a universal identity
 
 **Implementation guidance for Tasks 6-7**:
+
 - `evidence.node_guid` on each node (debug only)
 - `evidence.graph_guid` on each graph (debug only)
 - No `evidence.pin_guid` on individual pins (too verbose); instead, `evidence.pin_index` maps `pin_guid → semantic_endpoint` for debug traceability

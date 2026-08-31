@@ -1,5 +1,7 @@
 # Blueprint Semantic JSON Extension (#554) Implementation Plan
 
+status: historical
+
 > **Status: archived Semantic JSON 1.x implementation plan.** It records the v0.5.5 Blueprint extension work and must not be replayed as the v2 architecture. Use [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md) for new work.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -11,6 +13,7 @@
 **Tech Stack:** Python 3.10+, zero runtime dependencies, pytest, ruff, `jsonschema` (test-only, already used), Draft 2020-12 JSON Schema packaged via `importlib.resources`.
 
 **Spec:**
+
 - Issue #554 (GitHub) and its comments (audit findings, #551 migration notes, design references).
 - `2026-08-11-blueprint-semantic-json-design.md` (archived Blueprint design spec; sections cited as BP-§N below).
 - `2026-08-13-non-blueprint-semantic-design.md` (archived shared Semantic 1.x patterns).
@@ -53,7 +56,7 @@ python -m build
 ## File Structure
 
 | File | Responsibility |
-|---|---|
+| --- | --- |
 | `src/uasset_read/models/ir.py` (modify) | `PinIR`/`NodeIR` enrichment: pin self-ID, split-pin refs, default fields, flags, node member references |
 | `src/uasset_read/ir_builder.py` (modify) | Populate the new `PinIR`/`NodeIR` fields from the raw models |
 | `src/uasset_read/semantic/extensions.py` (modify) | Package-scoped extractor contract + domain format/version registration |
@@ -82,9 +85,11 @@ python -m build
 ### Task 0: Sync branch onto the #551 foundation
 
 **Files:**
+
 - Modify: working branch `soatori/feature-blueprint-semantic-json-extension` (currently at master `v0.5.4.45`, which predates #551)
 
 **Interfaces:**
+
 - Consumes: `dev-0.5.5` branch containing #551 (semantic package, common schema, `json` routing).
 - Produces: a worktree where `src/uasset_read/semantic/` exists and `tests/test_semantic.py` passes.
 
@@ -129,10 +134,12 @@ Expected: a docs commit already present on the branch (merged to dev ahead of ti
 ### Task 1: Pin/GUID research gate
 
 **Files:**
+
 - Create: `docs/designs/issue-554-pin-guid-research.md`
 - Test: `tests/test_blueprint_semantic.py`
 
 **Interfaces:**
+
 - Consumes: raw parse access via `uasset_read.parse_uasset.parse_uasset(path, tolerant=True)`; exports carry `.graphs` lists of `UEdGraph` with `UEdGraphNode.pins` (`UEdGraphPin`: `pin_id`, `persistent_guid`, `parent_pin`, `sub_pins`, `linked_to_raw`, `ref_pass_through`, `orphaned_pin`).
 - Produces: research conclusions doc gating GUID debug evidence; fixture tests pinning the LinkedTo↔PinId relationship used by Tasks 2/7.
 
@@ -220,6 +227,7 @@ Extend the probe (or a second script): for `FirstPerson_BP_FirstPersonCharacter.
 - [ ] **Step 4: Write research conclusions**
 
 Create `docs/designs/issue-554-pin-guid-research.md` containing:
+
 1. UE source locations and field semantics for `NodeGuid`, `PinId`, `PersistentGuid`, `ParentPin`/`SubPins`, `LinkedTo`, `ReferencePassThroughConnection`, `bOrphanedPin` (from Step 1).
 2. Per-sample probe table (Steps 2–3) covering: normal pins, exec pins, struct split pins (parent/sub), reroute (`K2Node_Knot`), macro instances, orphaned pins, function entry/result.
 3. Confirmed/unknown table per field with standard/debug mapping decision.
@@ -329,11 +337,13 @@ git commit -m "test: pin/guid research gate fixtures and conclusions (#554)"
 ### Task 2: Enrich PinIR/NodeIR with full Pin identity fields
 
 **Files:**
+
 - Modify: `src/uasset_read/models/ir.py` (`PinIR`, `NodeIR`)
 - Modify: `src/uasset_read/ir_builder.py` (`_build_pin_ir`, `_build_node_ir`)
 - Test: `tests/test_blueprint_semantic.py`
 
 **Interfaces:**
+
 - Consumes: raw `UEdGraphPin` attributes (`pin_id`, `pin_friendly_name`, `source_index`, `persistent_guid`, `default_text_value`, `auto_default_value`, `default_object_ref`, `parent_pin`, `sub_pins`, `ref_pass_through`, `hidden`, `not_connectable`, `advanced_view`, `orphaned_pin`) and raw node member references (`function_reference`, `event_reference`, `variable_reference` — `FMemberReference` with `.member_name`/`.member_parent`).
 - Produces: `PinIR.pin_guid` holds the normalized PinId; new fields `friendly_name`, `source_index`, `persistent_guid`, `default_text_value`, `auto_default_value`, `default_object_name`, `parent_pin_guid`, `sub_pin_guids: list[str]`, `ref_pass_through_guid`, `hidden`, `not_connectable`, `advanced_view`, `orphaned`; `NodeIR.member_name`, `NodeIR.member_parent`.
 
@@ -474,6 +484,7 @@ git commit -m "feat: carry full pin identity fields through PinIR/NodeIR (#554)"
 ### Task 3: Extension contract v2 + envelope plumbing for a domain format
 
 **Files:**
+
 - Modify: `src/uasset_read/semantic/extensions.py`
 - Modify: `src/uasset_read/semantic/builder.py`
 - Modify: `src/uasset_read/semantic/render.py`
@@ -483,10 +494,12 @@ git commit -m "feat: carry full pin identity fields through PinIR/NodeIR (#554)"
 - Test: `tests/test_semantic.py` (update registry tests), `tests/test_blueprint_semantic.py`
 
 **Interfaces:**
+
 - Consumes: existing #551 pipeline functions.
 - Produces: `register_extension(class_name, extractor, *, domain_format=None, domain_format_version=None)`; extractor signature `(package_ir, export_ir, coverage_model, evidence_list) -> dict`; `get_domain_format(class_name) -> tuple[str, str] | None`; `render_semantic_json` raises `ValueError` on envelope-key collisions and lets content override exactly `{references, coverage, diagnostics}`; `validate_semantic_document` accepts any format in `_FORMAT_VERSIONS` and dispatches `_DOMAIN_VALIDATORS[format](ir)`.
 
 Decisions (one-shot replacement — no extractor is currently registered, so no compatibility layer):
+
 1. Extractor signature becomes `extractor(package_ir, export_ir, coverage_model, evidence_list) -> dict`. Blueprint needs package-wide facts (graphs live on the `BlueprintGeneratedClass` export, metadata on the `Blueprint` export).
 2. When a domain format is registered, the builder stamps it onto `SemanticIR.format`/`format_version`; the domain content owns the `coverage`, `diagnostics`, and `references` top-level keys (the Blueprint format redefines their shapes per BP-§16; `references` is omitted — external refs are inline with `kind` per BP-§5).
 3. Renderer gains the collision guard from non-bp design §4.
@@ -800,11 +813,13 @@ git commit -m "refactor: package-scoped extension contract with domain formats a
 ### Task 4: Blueprint ID module (slugs, URIs, endpoint IDs)
 
 **Files:**
+
 - Create: `src/uasset_read/semantic/blueprint/__init__.py`
 - Create: `src/uasset_read/semantic/blueprint/ids.py`
 - Test: `tests/test_blueprint_semantic.py`
 
 **Interfaces:**
+
 - Produces: `ascii_slug(name) -> str`, `kind_slug(kind) -> str`, `graph_id(slug)`, `node_id(graph_slug, kind, name_slug, ordinal)`, `data_endpoint(pin_name, direction)`, `exec_endpoint(pin_name)`, regexes `GRAPH_ID_RE`, `NODE_ID_RE`, `ENDPOINT_RE` (patterns without anchors; consumers use `re.fullmatch` or wrap with `^...$`).
 
 - [ ] **Step 1: Write the failing test**
@@ -930,10 +945,12 @@ git commit -m "feat: blueprint semantic id builders and slug rules (#554)"
 ### Task 5: Type system — TypeRef union and `types` table
 
 **Files:**
+
 - Create: `src/uasset_read/semantic/blueprint/types.py`
 - Test: `tests/test_blueprint_semantic.py`
 
 **Interfaces:**
+
 - Consumes: PinIR-shaped fields (`pin_category`, `pin_subcategory`, `pin_subcategory_object_name`, `container_type` string `"None"|"Array"|"Set"|"Map"`, `is_reference`, `is_const`, `is_weak_pointer`, `is_uobject_wrapper`, `map_key_pin_category`, `map_key_pin_subcategory`, `map_key_pin_subcategory_object_name`).
 - Produces: `TypeTable` with `.entries: dict[str, dict]` (the emitted `types` object) and `.type_ref_for(**fields) -> str | {"$type": id}`; `type_ref_from_pin(table, pin)`.
 
@@ -1153,11 +1170,13 @@ git commit -m "feat: blueprint type table and typeref union (#554)"
 ### Task 6: Graph and Node emission
 
 **Files:**
+
 - Create: `src/uasset_read/semantic/blueprint/reporting.py` (Task 6 dependency, completed here)
 - Create: `src/uasset_read/semantic/blueprint/nodes.py`
 - Test: `tests/test_blueprint_semantic.py`
 
 **Interfaces:**
+
 - Consumes: `GraphIR` (`graph_guid`, `graph_name`, `graph_class`, `nodes`, `subgraphs`) and `NodeIR`/`PinIR` from Task 2; `TypeTable` (Task 5); `BlueprintReporting` (this task).
 - Produces: `emit_graphs(graphs, table, reporting, mode) -> (graphs_json, index)` where `index` maps `pin_guid -> {"node", "graph", "endpoint", "direction", "is_exec", "orphaned", "not_connectable", "linked": list[str]}` for Task 7; `BlueprintReporting.coverage(scope, status, **kw)`, `.diagnostic(code, scope, severity, effect, occurrence)`, `.coverage_entries()`, `.diagnostics_entries(mode)`.
 
@@ -1546,10 +1565,12 @@ git commit -m "feat: blueprint graph and node emission with pin/port endpoints (
 ### Task 7: Control flow and data flow
 
 **Files:**
+
 - Create: `src/uasset_read/semantic/blueprint/flows.py`
 - Test: `tests/test_blueprint_semantic.py`
 
 **Interfaces:**
+
 - Consumes: `graphs_json` and `index` from `emit_graphs()` (Task 6), `BlueprintReporting`.
 - Produces: `attach_flows(graphs_json, index, reporting, mode)` mutating each graph with `control_flow` (`entries`, `edges` with `ordinal`) and `data_flow` (`edges`).
 
@@ -1734,11 +1755,13 @@ git commit -m "feat: blueprint control flow and data flow edges (#554)"
 ### Task 8: Default values (BP-§12)
 
 **Files:**
+
 - Create: `src/uasset_read/semantic/blueprint/defaults.py`
 - Modify: `src/uasset_read/semantic/blueprint/nodes.py` (wire `defaults` into node output)
 - Test: `tests/test_blueprint_semantic.py`
 
 **Interfaces:**
+
 - Consumes: PinIR default fields (Task 2).
 - Produces: `default_value_for(pin, reporting) -> Any` returning scalars inline and wrappers `{"object": str}`, `{"enum": str}`, `{"text": {"raw": str}}`, `{"raw": {"value", "expected"}}`; returns `None` for connected pins / absent defaults.
 
@@ -1890,10 +1913,12 @@ git commit -m "feat: blueprint pin default value selection (#554)"
 ### Task 9: Variables and declaration index
 
 **Files:**
+
 - Create: `src/uasset_read/semantic/blueprint/variables.py`
 - Test: `tests/test_blueprint_semantic.py`
 
 **Interfaces:**
+
 - Consumes: `PackageIR.variables` (`VariableIR`: `name`, `type`, `default_value`, `guid`, `category`, `property_flags`, `replication_condition`, `rep_notify_func`, `flags_labels`, `is_replicated`, ...), `BlueprintIR` (`parent_class`, `interfaces`, `functions`).
 - Produces: `emit_variables(variables, table, reporting) -> list[dict]` (always registers `variables` coverage `partial`, reason `cdo_and_inheritance_not_resolved`); `emit_declaration(variable_names, component_ids, functions, parent_class, interfaces) -> dict` (index only — no duplicated facts).
 
@@ -2077,10 +2102,12 @@ git commit -m "feat: blueprint variables and declaration index (#554)"
 ### Task 10: Components
 
 **Files:**
+
 - Create: `src/uasset_read/semantic/blueprint/components.py`
 - Test: `tests/test_blueprint_semantic.py`
 
 **Interfaces:**
+
 - Consumes: `BlueprintIR.components` (list of dicts from the existing `extract_components` machinery).
 - Produces: `emit_components(source_components, table, reporting) -> list[dict]` (`id: c<N>`, `name`, `type` TypeRef, `origin`, optional `parent`/`socket`/`transform`); registers `components` coverage `partial` (origin provenance not fully verified in v1); `BP_COMPONENT_PARENT_UNRESOLVED` diagnostic for dangling parents.
 
@@ -2219,12 +2246,14 @@ git commit -m "feat: blueprint components emission with origin and parent closur
 ### Task 11: Orchestrator extractor + end-to-end Blueprint document
 
 **Files:**
+
 - Create: `src/uasset_read/semantic/blueprint/extractor.py`
 - Modify: `src/uasset_read/semantic/blueprint/__init__.py`
 - Modify: `src/uasset_read/semantic/__init__.py` (registration side effect)
 - Test: `tests/test_blueprint_semantic.py`
 
 **Interfaces:**
+
 - Consumes: all `semantic/blueprint` modules (Tasks 4–10), the #551 pipeline after Task 3.
 - Produces: `build_blueprint_content(package_ir, export_ir, coverage_model, evidence_list) -> dict` registered for `Blueprint` and `BlueprintGeneratedClass` with `domain_format="uasset_read.blueprint_semantic"`, `domain_format_version="1.0.0"`; `parse_single(..., format="json")` on a Blueprint asset emits the blueprint_semantic document.
 
@@ -2525,10 +2554,12 @@ git commit -m "feat: blueprint semantic extractor with graphs, variables, compon
 ### Task 12: Semantic validator for the Blueprint format
 
 **Files:**
+
 - Modify: `src/uasset_read/semantic/validator.py`
 - Test: `tests/test_blueprint_semantic.py`
 
 **Interfaces:**
+
 - Consumes: Task 3's `register_domain_validator`; blueprint content shape from Tasks 6–11.
 - Produces: `validate_blueprint_document(ir) -> list[str]` registered for `uasset_read.blueprint_semantic`, enforcing BP-§18: ID format regexes, graph/node ID uniqueness, flow endpoint closure, data/exec edge endpoint existence, type `$type` closure, component parent closure + acyclicity, function graphs single `function_entry`, opaque-requires-diagnostics, standard-mode evidence ban.
 
@@ -2725,12 +2756,14 @@ git commit -m "feat: blueprint semantic validator rules (#554)"
 ### Task 13: Draft 2020-12 JSON Schema + packaging + projection hardening
 
 **Files:**
+
 - Create: `src/uasset_read/schemas/blueprint_semantic.schema.json`
 - Modify: `src/uasset_read/schema_loader.py`
 - Modify: `src/uasset_read/semantic/projection.py`
 - Test: `tests/test_blueprint_semantic.py`
 
 **Interfaces:**
+
 - Consumes: rendered blueprint documents (Tasks 11–12).
 - Produces: `load_blueprint_semantic_schema() -> dict`; wheel-packaged schema (existing `package-data` glob covers it); `project_semantic` also strips debug-only `extensions`.
 
@@ -3060,11 +3093,13 @@ git commit -m "feat: blueprint semantic json schema draft 2020-12 (#554)"
 ### Task 14: Determinism, CLI/API equivalence, real-asset acceptance, docs
 
 **Files:**
+
 - Test: `tests/test_blueprint_semantic.py` (acceptance section)
 - Create: `docs/formats/uasset/blueprint-semantic-json.md`
 - Modify: `docs/formats/uasset/semantic-json.md` (cross-reference + reference-scope note update)
 
 **Interfaces:**
+
 - Consumes: everything above.
 - Produces: byte-determinism proof across `PYTHONHASHSEED`, CLI==API equivalence, multi-sample acceptance assertions, format reference doc, issue-closing comment body.
 
@@ -3217,6 +3252,7 @@ python -m build
 ```
 
 Additional checks performed by tests above:
+
 - byte comparison across subprocesses with different `PYTHONHASHSEED` (Task 14);
 - CLI single-file output == Python API (Task 14);
 - recursive `debug -> standard` projection equality (Task 11);

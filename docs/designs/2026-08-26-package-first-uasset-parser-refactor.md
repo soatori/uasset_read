@@ -1,6 +1,8 @@
 # UAsset 通用解析器重构设计报告：Package-First、多对象与 Agent 工具化
 
-> **文档状态：目标架构基线（2026-08-26）。Legacy 主路径已实现**（`PackageDocument v2` 输出全部 exports；tagged properties 在 export 边界内解析并恢复 Source/ImportedSize 等值；CLI/Python API/Agent 共用 v2 投影；v2 语义不再依赖 Semantic 1.x handler；decode 提供 main-region 有界 payload ref 与字节提取）。**Zen/IoStore、USMAP/unversioned、外部容器 payload 提取、深层语义与 Semantic 1.x 删除仍是目标。**
+status: target
+
+> **文档状态：目标架构基线（2026-08-26）。Legacy 主路径已实现**（`PackageDocument v2` 输出全部 exports；tagged properties 在 export 边界内解析并恢复 Source/ImportedSize 等值；CLI/Python API/Agent 共用 v2 投影；v2 语义不再依赖 Semantic 1.x handler；decode 提供 main-region 有界 payload ref）。**payload 字节提取已撤回为 deferred（`PAYLOAD_EXTRACTION_DEFERRED`），真实提取待 #623–#627 fixture 到位后按 UE 源码偏移证据重做。Zen/IoStore、USMAP/unversioned、外部容器 payload 提取、深层语义与 Semantic 1.x 删除仍是目标。**
 >
 > 本文是当前项目唯一权威的重构目标。源码与测试仍是“当前已经实现什么”的唯一依据；本文只定义“接下来要实现什么”。旧版输出、Semantic JSON 1.x 和单资产设计文档均为历史资料，不得继续作为新功能的目标架构。
 
@@ -546,7 +548,7 @@ View 决定字段用途，Depth 决定解析成本：
 }
 ```
 
-payload 提取使用单独 API/tool。JSON 默认不含 Base64。调用方显式请求且 `max_bytes` 允许时才返回 bytes 或写入目标文件。
+payload 提取使用单独 API/tool（当前恒返回 `PAYLOAD_EXTRACTION_DEFERRED`，`payloads[]` 为空数组）。JSON 默认不含 Base64。extraction 恢复后，调用方显式请求且 `max_bytes` 允许时才返回 bytes 或写入目标文件；`max_bytes` 须限制序列化后的工具响应整体（base64 + JSON envelope），而非仅原始 payload 字节。
 
 ### Schema 策略
 
@@ -577,7 +579,7 @@ payload 提取使用单独 API/tool。JSON 默认不含 Base64。调用方显式
 | `get_object` | 单对象属性与可选 semantic |
 | `list_dependencies` | 分页依赖和关系 |
 | `get_diagnostics` | 按 stage/severity/object 过滤 |
-| `extract_payload` | 在大小上限内返回或写出指定 payload |
+| `extract_payload` | 当前恒返回 `PAYLOAD_EXTRACTION_DEFERRED`；extraction 恢复后在大小上限内返回或写出指定 payload |
 
 工具直接调用 Python document API，不通过 CLI 文本反序列化。MCP 只是 transport adapter；核心包不强制依赖 MCP SDK。
 

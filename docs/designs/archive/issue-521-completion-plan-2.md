@@ -1,5 +1,7 @@
 # #521 Epic Completion — Second Implementation Plan (B1 struct decoding + B2 pin projection)
 
+status: historical
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Decode the three remaining opaque Niagara struct types (B1: `NiagaraVariable`, `NiagaraGraphScriptUsageInfo`, `VersionedNiagaraScriptData`) and project pin-level connections from node native tails (B2), completing the parameter-definition and pin-level-connection paths of Epic #521 and feeding #525's acceptance criteria.
@@ -13,10 +15,12 @@
 ## File Structure
 
 ### New files
+
 - `tests/temp/test_issue_521_niagara_struct_decode.py` — B1 red/green tests (NiagaraVariable, NiagaraGraphScriptUsageInfo, VersionedNiagaraScriptData)
 - `tests/temp/test_issue_521_niagara_pin_decode.py` — B2 red/green tests (pin extraction from node native tails)
 
 ### Modified files
+
 - `src/uasset_read/parsers/binary_or_native_handlers.py` — add `_parse_niagara_variable` handler + register in `_BINARY_OR_NATIVE_HANDLERS`
 - `src/uasset_read/parsers/property_types.py` — add `NiagaraGraphScriptUsageInfo` and `VersionedNiagaraScriptData` to `_TAGGED_FALLBACK_STRUCTS` + `_TAGGED_FALLBACK_STRUCT_SCHEMAS`
 - `src/uasset_read/parsers/asset_types/niagara_node.py` — extend `NiagaraNodeHandler.parse()` to decode pins from native tails; add `_decode_pins_from_tail` helper; add `_decode_ftext`, `_decode_fedgraphpintype` helpers
@@ -46,9 +50,11 @@ These apply to every task (copied verbatim in intent from the project constraint
 ### Task 1: B1 red — failing tests for all three struct decode types
 
 **Files:**
+
 - Create: `tests/temp/test_issue_521_niagara_struct_decode.py`
 
 **Interfaces:**
+
 - Consumes: fixture `tests/samples/NM_BPSystemEvent.uasset` (SHA-256 pinned)
 - Produces: test file that pins the expected decoded output shape for each struct type (green tests in Tasks 2–3 will make these pass)
 
@@ -70,6 +76,7 @@ result = parse_single("tests/samples/NM_BPSystemEvent.uasset", format="json", to
 
 Run: `python tests/temp/probe_struct_type_names.py`
 Record the exact `struct_type` strings for:
+
 1. `NiagaraVariable` — found inside `NiagaraScriptVariable_*.Variable` (StructProperty value)
 2. `NiagaraGraphScriptUsageInfo` — found inside `NiagaraGraph_1.CachedUsageInfo` (ArrayProperty element)
 3. `VersionedNiagaraScriptData` — found inside `NM_BPSystemEvent.VersionData` (ArrayProperty element)
@@ -229,10 +236,12 @@ git commit -m "test: add B1 struct decode tests (red) (#527 #528 #529)"
 ### Task 2: B1 green — NiagaraVariable BinaryOrNative handler
 
 **Files:**
+
 - Modify: `src/uasset_read/parsers/binary_or_native_handlers.py`
 - Test: `tests/temp/test_issue_521_niagara_struct_decode.py` (from Task 1)
 
 **Interfaces:**
+
 - Consumes: `tag.struct_type` == `"NiagaraVariable"` (or the F-prefixed variant); archive positioned at struct data start
 - Produces: dict with `Name` (string) + `TypeDefinition` fields + optional `DataBlob` (hex string); registered in `_BINARY_OR_NATIVE_HANDLERS`
 
@@ -360,10 +369,12 @@ git commit -m "feat: decode NiagaraVariable via BinaryOrNative handler (#527)"
 ### Task 3: B1 green — NiagaraGraphScriptUsageInfo + VersionedNiagaraScriptData tagged fallback
 
 **Files:**
+
 - Modify: `src/uasset_read/parsers/property_types.py` — add to `_TAGGED_FALLBACK_STRUCTS` + `_TAGGED_FALLBACK_STRUCT_SCHEMAS`
 - Test: `tests/temp/test_issue_521_niagara_struct_decode.py` (from Task 1)
 
 **Interfaces:**
+
 - Consumes: `struct_type` strings from the probe (Task 1 Step 1); UE source field lists
 - Produces: both structs decode via the existing tagged-property loop in `parse_struct_property`
 
@@ -443,10 +454,12 @@ git commit -m "feat: decode NiagaraGraphScriptUsageInfo and VersionedNiagaraScri
 ### Task 4: B1 integration — baseline guards + field-contracts update
 
 **Files:**
+
 - Modify: `docs/designs/issue-521-niagara-field-contracts.md` — update struct decode status
 - Test: `tests/temp/test_issue_521_niagara_struct_decode.py` (full file)
 
 **Interfaces:**
+
 - Consumes: Tasks 2–3 completed (all 3 struct types decoded)
 - Produces: updated field-contracts doc; confirmed baseline stability
 
@@ -481,9 +494,11 @@ git commit -m "docs: update field contracts with B1 struct decode results (#527 
 ### Task 5: B2 red — failing tests for pin extraction from native tails
 
 **Files:**
+
 - Create: `tests/temp/test_issue_521_niagara_pin_decode.py`
 
 **Interfaces:**
+
 - Consumes: fixture `tests/samples/NM_BPSystemEvent.uasset` (SHA-256 pinned); `issue-521-b0-gate-decision.md` layout
 - Produces: test file that pins expected pin-count and edge-count per node class
 
@@ -628,14 +643,17 @@ git commit -m "test: add B2 pin decode tests (red) (#525)"
 ### Task 6: B2 green — extend NiagaraNodeHandler to decode pins from native tails
 
 **Files:**
+
 - Modify: `src/uasset_read/parsers/asset_types/niagara_node.py` — add `_decode_pins_from_tail`, `_decode_ftext`, `_decode_fedgraphpintype` helpers; extend `parse()` to call pin decode
 - Test: `tests/temp/test_issue_521_niagara_pin_decode.py` (from Task 5)
 
 **Interfaces:**
+
 - Consumes: `tail_offset`, `tail_size` from the existing handler; archive seekable at `tail_offset`; B0b pin-record layout
 - Produces: `pins` list in handler data; `native_tail.status` updated to `"decoded"`
 
 This task extends `NiagaraNodeHandler` to decode pin records from native tails. The pin layout is fully documented in `issue-521-b0-gate-decision.md` §Pin-record layout. Key version-delta constraints for this fixture (UE 5.0):
+
 - `bSerializeAsSinglePrecisionFloat` **absent** (gate 36 vs fixture UE5ReleaseStream 33)
 - `SourceIndex` **present** as `ff ff ff ff` (INDEX_NONE) on every pin
 - 32-bit booleans throughout (`Archive.h:1542–1548`)
@@ -884,10 +902,12 @@ git commit -m "feat: decode pin records from NiagaraNode native tails (#525)"
 ### Task 7: B2 integration — baseline guards + documentation + Epic comment
 
 **Files:**
+
 - Modify: `docs/designs/issue-521-niagara-field-contracts.md` — update pin projection status
 - Issues: comment on #525 summarizing B2 results
 
 **Interfaces:**
+
 - Consumes: Tasks 5–6 completed (pin decode working)
 - Produces: updated docs; #525 comment; final baseline confirmation
 

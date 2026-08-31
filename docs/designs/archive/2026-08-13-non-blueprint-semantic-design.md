@@ -1,5 +1,7 @@
 # Non-Blueprint Semantic JSON Output Design
 
+status: historical
+
 > **Status: historical Semantic 1.x design; target architecture superseded.** It may explain current code, but new domain work must use object-scoped semantics in [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md), not add another top-level domain format.
 
 Date: 2026-08-13
@@ -67,7 +69,7 @@ This design does NOT cover:
 Maps to `kinds.py` `resolve_asset_type()`:
 
 | Family | asset_type values | Current extractor |
-|--------|-------------------|-------------------|
+| -------- | ------------------- | ------------------- |
 | graph | `material`, `sound_cue`, `niagara_system`, `niagara_emitter`, `niagara_script` | `graph_domain.py` |
 | structured | `static_mesh`, `skeletal_mesh`, `skeleton`, `anim_sequence`, `anim_montage`, `data_table`, `curve_table` | `structured_domain.py` |
 | resource | `texture`, `sound_wave` | `resource_domain.py` |
@@ -276,7 +278,7 @@ def _validate_refs_indices(content: dict, references: list) -> list[str]:
 ### 7.1 Coverage States
 
 | State | Meaning | When used |
-|-------|---------|-----------|
+| ------- | --------- | ----------- |
 | `partial` | Some fields available | Extractor parsed only some expected fields |
 | `unavailable` | Completely unavailable | Native payload cannot be parsed (opaque class) |
 | `truncated` | Bounded truncation | Large data truncated (e.g., DataTable row limit) |
@@ -284,12 +286,14 @@ def _validate_refs_indices(content: dict, references: list) -> list[str]:
 ### 7.2 Per-Domain Coverage Scopes
 
 **Graph domain:**
+
 - `graph_metadata` — always available
 - `asset_type_data` — available if present
 - `graphs` — available if present
 - (Future: `nodes`, `edges`, `control_flow`, `data_flow`)
 
 **Structured domain:**
+
 - `structured_metadata` — always available
 - `asset_type_data` — available if present
 - `skeleton_data` — only for skeleton/anim types
@@ -297,6 +301,7 @@ def _validate_refs_indices(content: dict, references: list) -> list[str]:
 - (Future: `summary`)
 
 **Resource domain:**
+
 - `resource_metadata` — always available
 - `resource_properties` — available if present
 - `asset_type_data` — available if present
@@ -335,7 +340,7 @@ Rules:
 ### 8.1 Prohibited in Standard Output
 
 | Data type | Standard | Debug | Limit method |
-|-----------|----------|-------|-------------|
+| ----------- | ---------- | ------- | ------------- |
 | Vertex/index arrays | ❌ | Bounded summary | `vertex_count` + hash |
 | Weights/skin binding | ❌ | Bounded summary | `bone_count` + hash |
 | Texture pixels | ❌ | Bounded summary | `dimensions` + `format` + hash |
@@ -396,7 +401,7 @@ When parser safety limits (recursion depth, node count cap) trigger:
 ### 9.1 Test Layers
 
 | Layer | Purpose | Status |
-|-------|---------|--------|
+| ------- | --------- | -------- |
 | Schema compliance | Envelope structure correct | ✅ Existing |
 | Semantic validation | ID uniqueness, ref closure, edge direction | ✅ Existing |
 | Projection invariant | `project_debug(debug) == standard` | ✅ Existing |
@@ -409,25 +414,29 @@ When parser safety limits (recursion depth, node count cap) trigger:
 ### 9.2 New Tests
 
 **Domain extractor tests (unskip + extend):**
+
 - `test_graph_extractor_material` — Material produces expected keys
 - `test_structured_extractor_static_mesh` — StaticMesh produces expected keys
 - `test_resource_extractor_texture` — Texture2D produces expected keys
 
 **Domain validator tests:**
+
 - `test_graph_validator_rejects_missing_metadata`
 - `test_structured_validator_accepts_valid_content`
 - `test_resource_validator_rejects_negative_serial_size`
 
 **Collision guard test:**
+
 - `test_content_collision_raises` — extractor returning `{"format": "bad"}` raises `ValueError`
 
 **Reference index validation test:**
+
 - `test_domain_refs_use_valid_indices` — `refs[].target` must be valid index
 
 ### 9.3 Real Asset Fixtures
 
 | Family | Fixture asset | Source |
-|--------|--------------|--------|
+| -------- | -------------- | -------- |
 | graph | `M_Wood_Walnut.uasset` (Material) | StarterContent |
 | graph | `Starter_Background_Cue.uasset` (SoundCue) | StarterContent |
 | structured | `SM_Chair.uasset` (StaticMesh) | StarterContent |

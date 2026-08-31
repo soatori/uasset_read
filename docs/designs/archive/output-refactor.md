@@ -1,5 +1,7 @@
 # 输出格式重构设计
 
+status: historical
+
 > **状态：已废弃的目标方案。** 本文保留为历史字段清单，不得用于新的输出实现。唯一权威目标是 [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md)；其中使用 package envelope、`objects[]`、relations 和 view/depth，不采用本文的单一巨型顶层结构。
 
 ## 目标
@@ -198,7 +200,7 @@
 ## 分层策略
 
 | 层级 | 内容 | 输出条件 |
-|------|------|---------|
+| ------ | ------ | --------- |
 | **Header** | 文件格式元数据 | 始终输出 |
 | **Names** | Name 表 | 始终输出（轻量） |
 | **Imports** | 导入表 | 始终输出 |
@@ -212,7 +214,7 @@
 ## 参考库字段映射
 
 | 参考库字段 | 新输出字段 | 来源 |
-|-----------|-----------|------|
+| ----------- | ----------- | ------ |
 | `header.*` | `header.*` | PackageFileSummary 全量 |
 | `names[]` | `names[]` | NameMap 全量 |
 | `imports.Imports[]` | `imports[]` | ImportMap 全量 |
@@ -227,22 +229,26 @@
 ## 实施计划
 
 ### Phase 1: IR 层扩展
+
 - PackageHeaderIR: 添加 ~30 个字段
 - ExportIR: 添加 object_flags, serial_offset, template_index 等
 - ImportIR: 添加 outer_index, package_name, b_import_optional
 - 添加 DependsIR, ThumbnailIR 等新结构
 
 ### Phase 2: IR Builder 更新
+
 - `_build_header`: 从 PackageFileSummary 提取全量字段
 - `_build_exports`: 从 ExportRawIR 提取全量字段
 - `_build_imports`: 从 ObjectImport 提取全量字段
 
 ### Phase 3: JSON Renderer 重构
+
 - 添加 header 全量输出
 - 添加 names/imports 输出
 - 添加 depends/softRefs 输出
 - 补齐动画子结构字段
 
 ### Phase 4: 测试与验证
+
 - 运行 smoke test 验证不破坏现有功能
 - 对比新旧输出，确认无信息丢失

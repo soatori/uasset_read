@@ -1,5 +1,7 @@
 # 修复计划：#515 Opaque StructProperty 后续路线图
 
+status: historical
+
 > 状态：计划中（2026-08-02）  
 > 范围：为每种已证实的结构建立独立、可验收的解析契约；不把 `opaque` 本身视为错误。
 
@@ -32,7 +34,7 @@
 ### Remaining candidates (each needs its own evidence-backed slice)
 
 | Candidate | Count / fixture | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `NiagaraVariable` | 12 × `NM_BPSystemEvent.uasset` | offset-based payload; adjacent to #521 |
 | `UnknownStruct` (FCurveMetaData values) | 126 × `CiciToon_SK_Mannequin.uasset` | zero-size tagged; needs type-name resolution |
 | `MeshSectionInfoMap` value type | correctness gap, not opacity | map values decode as `IntProperty`; `FMeshSectionInfo` fields not recovered (map value struct names are reflection-only, absent from the stream) |
@@ -84,11 +86,13 @@
 ### Native Parser 触发条件
 
 当满足以下任一条件时需要 native parser（快速路径二进制解析器）：
+
 - 结构体在 UE 源码中有固定二进制布局文档
 - Tagged fallback 无法表达该结构体的二进制布局
 - 性能需求要求原生解析
 
 Tagged fallback 足够的条件：
+
 - 结构体使用 PropertyTag 序列化
 - 字段在 tag 流中自描述
 

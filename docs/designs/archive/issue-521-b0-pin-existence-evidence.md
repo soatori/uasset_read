@@ -1,5 +1,7 @@
 # Issue #521 B0a — Pin Existence Evidence
 
+status: historical
+
 > Status: diagnostic evidence (2026-08-05)
 > Fixture: `tests/samples/NM_BPSystemEvent.uasset`
 > SHA-256: `B182D85907E858086E8B4BA8CC3D527D1DFBA21CA450ADDC2481A5053CE24FBF`
@@ -43,7 +45,7 @@ to the `NiagaraParameterMap` (PackageIndex −26) and `NiagaraFloat` (−23) imp
 `PinSubCategoryObject`.
 
 | Node class | Export | Tail offset | Tail size | Markers found |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | NiagaraGraph | NiagaraGraph_1 | 16059 | 4 | none (single zero int32) |
 | NiagaraNodeFunctionCall | NiagaraNodeFunctionCall_17 | 16396 | 458 | 2 pins; 7 repeated 16-byte blocks; FName pin names `Value`, `Clamped Value`; LinkedTo → Op_4, MapSet_4 |
 | NiagaraNodeInput | NiagaraNodeInput_170 | 17239 | 224 | 1 pin `Input` (EGPD source for reroute links) |
@@ -72,7 +74,7 @@ to the `NiagaraParameterMap` (PackageIndex −26) and `NiagaraFloat` (−23) imp
 | NiagaraNodeStaticSwitch | NiagaraNodeStaticSwitch_1 | 46290 | 972 | 4 pins (`NiagaraParameterMap if true/false`, `NiagaraParameterMap`, `Add`); 24 repeated blocks |
 | NiagaraScript | NM_BPSystemEvent | 49651 | 4 | none (single zero int32) |
 | NiagaraScriptSource | NiagaraScriptSource_1 | — | 0 | skipped export, no tail |
-| NiagaraScriptVariable (×11) | _5, _7, _9, _11, _13, _15, _16, _18, _21, _24, _25 | 50234, 50802, 51303, 51845, 52387, 52888, 53389, 53890, 54432, 54974, 55516 | 4 each | none (single zero int32 each) |
+| NiagaraScriptVariable (×11) | _5,_7, _9,_11, _13,_15, _16,_18, _21,_24, _25 | 50234, 50802, 51303, 51845, 52387, 52888, 53389, 53890, 54432, 54974, 55516 | 4 each | none (single zero int32 each) |
 
 Pin count total: 99 pins across the 25 nodes (2+1+18+1+36+22+10+5+4).
 
@@ -110,7 +112,7 @@ those element tags, hence `UnknownStruct`. Evidence below uses the element-tag s
 name plus payload field decoding plus the 5.8 member declarations.
 
 | Element | Identified type | Evidence |
-|---|---|---|
+| --- | --- | --- |
 | `NiagaraGraph_1.CachedUsageInfo[0]` | `FNiagaraGraphScriptUsageInfo` | Element-tag struct name index 98 = `NiagaraGraphScriptUsageInfo`; element size 544, payload field stream consumed 544/544: `BaseId:StructProperty(Guid)`, `UsageType:EnumProperty(ENiagaraScriptUsage)`, `UsageId:StructProperty(Guid)`, `CompileHash:StructProperty(NiagaraCompileHash)`, `CompileHashFromGraph:StructProperty(NiagaraCompileHash)`, `Traversal:ArrayProperty(ObjectProperty)` (25 node refs); array tag arithmetic 4+49+544=597 exact. Source (5.8): struct `NiagaraEditor/Public/NiagaraGraph.h:87`, member `TArray<FNiagaraGraphScriptUsageInfo> CachedUsageInfo` `NiagaraGraph.h:571`. Version delta: 5.8 member `ReferenceHashFromGraph` absent from the fixture stream. |
 | `NiagaraNodeOutput_1.Outputs[0]` | `FNiagaraVariable` | Element-tag struct name index 106 = `NiagaraVariable`; payload = FName `Name`="OutputMap" + `FNiagaraTypeDefinition` tagged stream (`ClassStructOrEnum:ObjectProperty` = PackageIndex −26 → `NiagaraParameterMap` import; `UnderlyingType:UInt16Property` = 2 = `UT_Struct`; `Flags:ByteProperty` = 0) + trailing data blob (int32 count 1 + 1 byte); 4+49+111=164 exact. Source (5.8): `NiagaraNodeOutput.h:19` `TArray<FNiagaraVariable> Outputs`; `FNiagaraVariable`/`FNiagaraVariableBase` `Niagara/Public/NiagaraTypes.h:1460`/`:1281` (custom `Serialize` at `NiagaraModule.cpp:1732`/`:1763`). |
 | `NiagaraNodeSelect_1.OutputVars[0]` | `FNiagaraVariable` | Same element layout; `Name`="NiagaraFloat" (name index 95), type PackageIndex −23 → `NiagaraFloat` import; 4+49+110=163 exact. Source (5.8): `TArray<FNiagaraVariable> OutputVars` in the shared base `NiagaraEditor/Private/NiagaraNodeUsageSelector.h:14-15` (UE5.0-era `UNiagaraNodeSelect` declares it directly; base class move is a version delta). |

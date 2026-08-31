@@ -1,5 +1,7 @@
 # 输出格式统一化与 CLI 核心分离设计
 
+status: historical
+
 > **状态：历史方案，目标架构已废弃。** 本文记录早期 IR/renderer 决策。新工作必须遵循 [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md)，并以当前源码和测试判断哪些旧能力已经实现。
 
 **日期**: 2026-06-03 | **状态**: 已批准
@@ -157,7 +159,7 @@ class PackageIR:
 **原则**：数据不丢弃，重新归位到正确层级，消除游离的 `blueprint` 顶层对象。
 
 | ParseResult 字段 | 映射到 IR | 处理 |
-|-------------------|-----------|------|
+| ------------------- | ----------- | ------ |
 | `summary` | `PackageIR.header` | 提取 package_class, flags, counts |
 | `name_map` | `PackageIR.name_map` | 直接传递 |
 | `import_map` | `PackageIR.imports` | 通过 linker 解析为路径摘要 |
@@ -190,7 +192,7 @@ class PackageIR:
 **JSON 输出对比**：
 
 | 当前 JSON 顶层字段 | IR JSON 中的位置 | 变化 |
-|---------------------|------------------|------|
+| --------------------- | ------------------ | ------ |
 | `blueprint` | 不存在 | 消除，数据归入 exports |
 | `blueprint.Nodes` | `exports[].graphs[].nodes[]` | 下沉到 Export 级别 |
 | `blueprint.Graphs` | `exports[].graphs[]` | 下沉到 Export 级别 |
@@ -281,7 +283,7 @@ JSONRenderer 输出的顶层结构（消除 blueprint 顶层对象后）：
 **与当前 JSON 的差异**：
 
 | 变化 | 当前 | IR |
-|------|------|-----|
+| ------ | ------ | ----- |
 | `blueprint` 顶层对象 | 存在 | **消除**，数据归入 exports |
 | `output_version` | `"4.0"` | **消除**，不需要 |
 | `components` 顶层 | 存在（蓝图）/ []（非蓝图） | 归入 exports[].properties（可选） |
@@ -358,7 +360,7 @@ uasset_read/
 ### 文件职责
 
 | 文件 | 职责 | 依赖 |
-|------|------|------|
+| ------ | ------ | ------ |
 | `core.py` | 纯解析函数：parse_single, parse_batch, list_formats | 无 argparse |
 | `cli.py` | argparse 定义 + 参数转 options + 委托 core.py | core.py |
 | `simple.py` | 单文件快速诊断入口 | core.py |
@@ -447,7 +449,7 @@ print(parse_single(path, format=fmt))
 ### 删除的模块
 
 | 模块 | 文件数 | 删除理由 |
-|------|--------|----------|
+| ------ | -------- | ---------- |
 | **exporter/** | 13 | IExporter 接口 + 注册表 + 批量导出 = 一个 dict + 循环调 formatter，过度抽象 |
 | **n2c/** | 15+ | 57 种节点处理器 + JSON Schema 验证器，专用工具非核心需求 |
 | **agent/** | 2 | AI 翻译管线，高级功能，与核心解析无关 |
@@ -455,7 +457,7 @@ print(parse_single(path, format=fmt))
 ### 保留为可选
 
 | 模块 | 保留理由 |
-|------|----------|
+| ------ | ---------- |
 | **cpp_gen/** | 蓝图→C++ 骨架有用，但不走快捷路径，仅被 `--cpp-skeleton` 调用 |
 | **kismet/** | 蓝图字节码反编译是核心能力（parse_uasset 已依赖），但 tolerant 失败不阻断主流程，暂不重构（需进一步研究） |
 | **pak/ / iostore/** | 可选依赖，保留 |
@@ -478,6 +480,7 @@ def get_renderer(format: str) -> IRenderer:
 ```
 
 渲染器实例化 + 调用：
+
 ```python
 renderer = get_renderer(format)
 output = renderer.render(ir, RenderOptions(verbose=verbose, indent=2))
@@ -511,7 +514,7 @@ output = renderer.render(ir, RenderOptions(verbose=verbose, indent=2))
 ### 测试矩阵
 
 | 测试类型 | 用例 | 验证 |
-|----------|------|------|
+| ---------- | ------ | ------ |
 | IR 构建正确性 | 每种支持的资产类型 | IR 中 exports/properties/graphs 不为空 |
 | JSON 渲染等价性 | 已知通过的真实资产 | 新输出关键字段与旧输出一致 |
 | 渲染器独立性 | 固定 IR fixture | 给定同一 IR，输出可重复 |

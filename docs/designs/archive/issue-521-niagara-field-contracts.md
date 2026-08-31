@@ -1,5 +1,7 @@
 # #521 Niagara Field Contracts
 
+status: historical
+
 > Generated: 2026-08-02; Revised: 2026-08-05 (B2 pin projection results)
 > Fixture: `tests/samples/NM_BPSystemEvent.uasset`
 > SHA-256: `B182D85907E858086E8B4BA8CC3D527D1DFBA21CA450ADDC2481A5053CE24FBF`
@@ -20,7 +22,7 @@
 ### Actual Properties from Fixture
 
 | Property Name | Type | Description |
-|--------------|------|-------------|
+| -------------- | ------ | ------------- |
 | `ChangeId` | StructProperty (Guid) | Tracks graph change history |
 | `LastBuiltTraversalDataChangeId` | StructProperty (Guid) | Last built traversal data version |
 | `CachedUsageInfo` | ArrayProperty (opaque struct) | Cached script usage information |
@@ -30,7 +32,7 @@
 ### Field Sources
 
 | Output Field | Source | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | `graph_name` | Export `object_name` | `NiagaraGraph_1` |
 | `node_exports` | `Nodes` property, PackageIndex-resolved | 25 entries, all NiagaraNode* classes |
 | `tagged_properties` | All tagged properties | 5 properties parsed |
@@ -48,7 +50,7 @@ Comment nodes are valid references but out of contract scope (not projected).
 Composition pinned by tests (`test_niagara_graph_has_node_exports`):
 
 | Class | Count |
-|-------|-------|
+| ------- | ------- |
 | NiagaraNodeFunctionCall | 1 |
 | NiagaraNodeInput | 1 |
 | NiagaraNodeOp | 5 |
@@ -93,7 +95,7 @@ indirectly (e.g. `NiagaraNodeFunctionCall.FunctionScript` object refs).
 ### Actual Properties from Fixture
 
 | Property Name | Type | Description |
-|--------------|------|-------------|
+| -------------- | ------ | ------------- |
 | `Usage` | EnumProperty | value_name: `ENiagaraScriptUsage::Module` |
 | `ExposedVersion` | StructProperty (Guid) | Exposed version information |
 | `VersionData` | ArrayProperty (opaque struct) | Version compatibility data |
@@ -102,7 +104,7 @@ indirectly (e.g. `NiagaraNodeFunctionCall.FunctionScript` object refs).
 ### Field Sources
 
 | Output Field | Source | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | `script_name` | Export `object_name` | `NM_BPSystemEvent` |
 | `script_usage` | `Usage` property `value_name` | `ENiagaraScriptUsage::Module` |
 | `tagged_properties` | All tagged properties | 4 properties parsed |
@@ -147,7 +149,7 @@ indirectly (e.g. `NiagaraNodeFunctionCall.FunctionScript` object refs).
 ### Field Sources
 
 | Output Field | Source | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | `node_class` | Resolved class name | all 9 migrated classes |
 | `node_name` | Export `object_name` | e.g. `NiagaraNodeInput_170` |
 | `tagged_properties` | Class-specific property map | see handler `_CLASS_PROPERTIES` |
@@ -217,7 +219,7 @@ state. Live enumeration is pinned by `tests/temp/test_issue_521_niagara_coverage
 uncovered classes are exactly two and both are settled below.
 
 | Class | Count | Terminal state | parse_status | Evidence |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | NiagaraGraph | 1 | field-level parse | partial_metadata | NiagaraGraphHandler; §NiagaraGraph above |
 | NiagaraScript | 1 | field-level parse | partial_metadata | NiagaraScriptHandler; §NiagaraScript above |
 | NiagaraNodeFunctionCall / Input / Op / Output / ParameterMapGet / ParameterMapSet / Reroute / Select / StaticSwitch | 25 | field-level parse | partial_metadata | NiagaraNodeHandler; §NiagaraNode* above |
@@ -229,7 +231,7 @@ The inner opaque structs of `NiagaraScriptVariable` (`NiagaraVariableMetaData`,
 the B1/#515 path and are not decoded here. The following structs are now decoded:
 
 | Struct | parse_status | Commit | Issue |
-|--------|--------------|--------|-------|
+| -------- | -------------- | -------- | ------- |
 | `NiagaraVariable` | success | `84825a0e` (BinaryOrNative handler) | #527 |
 | `NiagaraGraphScriptUsageInfo` | success | `6e47a4b9` (element PropertyTag fix) | #521 |
 | `VersionedNiagaraScriptData` | success | `6e47a4b9` (element PropertyTag fix) | #521 |

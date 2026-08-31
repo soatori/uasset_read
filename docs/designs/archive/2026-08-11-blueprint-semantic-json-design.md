@@ -1,5 +1,7 @@
 # Blueprint 语义 JSON 输出设计
 
+status: historical
+
 > **状态：已归档的 Semantic JSON 1.x 设计。** 本文不是当前 v2 目标；新的 Blueprint 语义必须作为 package object extension，遵循 [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md)。
 
 日期：2026-08-11
@@ -125,7 +127,7 @@ Pin 和 UUID 相关实现必须先研究 UE 源码和真实资产，再进入实
 至少区分以下字段：
 
 | UE 字段 | 当前语义假设 | 进入计划前必须确认 |
-|---|---|---|
+| --- | --- | --- |
 | `UEdGraphNode::NodeGuid` | UE API 说明为用于图版本 diff 的节点 GUID | 生成、持久化、复制/重建行为和序列化字节序 |
 | `UEdGraphPin::PinId` | UE API 说明为 Pin 的唯一 ID | 是否跨保存稳定、split/reconstruct 后是否变化、与连接解析的关系 |
 | `UEdGraphPin::PersistentGuid` | UE API 说明为 Pin 改名后用于节点重建匹配的持久 GUID | 非零条件、版本差异、是否能替代 `PinId` |

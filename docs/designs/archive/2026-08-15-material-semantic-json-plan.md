@@ -1,5 +1,7 @@
 # Material Semantic JSON Extension Implementation Plan
 
+status: historical
+
 > **Status: historical implementation plan for Semantic 1.x.** Do not reuse its envelope/schema architecture for v2. The current target is [`../2026-08-26-package-first-uasset-parser-refactor.md`](../2026-08-26-package-first-uasset-parser-refactor.md).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -28,7 +30,7 @@
 ## File Structure
 
 | File | Responsibility |
-|------|----------------|
+| ------ | ---------------- |
 | `src/uasset_read/constants.py` | Material property enum decode tables + expression type classification table |
 | `src/uasset_read/models/ir.py` | MaterialIR + sub-IR dataclasses; `material` field on PackageIR |
 | `src/uasset_read/parsers/binary_or_native_handlers.py` | "F" prefix normalization in handler lookup; `_parse_expression_input` handler |
@@ -51,10 +53,12 @@
 ### Task 1: Material Property Decode Constants
 
 **Files:**
+
 - Modify: `src/uasset_read/constants.py`
 - Test: `tests/test_material_constants.py`
 
 **Interfaces:**
+
 - Produces: `MATERIAL_DOMAIN_MAP: dict[int, str]`, `BLEND_MODE_MAP: dict[int, str]`, `SHADING_MODEL_MAP: dict[int, str]`, `MATERIAL_USAGE_FLAG_NAMES: tuple[str, ...]`, `classify_expression_type(class_name: str) -> str`
 
 - [ ] **Step 1: Write the failing test**
@@ -351,10 +355,12 @@ git commit -m "feat: add material property decode constants and expression type 
 ### Task 2: MaterialIR Dataclasses
 
 **Files:**
+
 - Modify: `src/uasset_read/models/ir.py`
 - Test: `tests/ir/test_material_ir.py`
 
 **Interfaces:**
+
 - Consumes: nothing (foundational types)
 - Produces: `MaterialExpressionInputIR`, `MaterialExpressionOutputIR`, `MaterialExpressionIR`, `MaterialInputIR`, `MaterialIR`; `PackageIR.material` field
 
@@ -589,10 +595,12 @@ git commit -m "feat: add MaterialIR dataclasses and material field to PackageIR"
 ### Task 3: Fix Binary Handler "F" Prefix Normalization
 
 **Files:**
+
 - Modify: `src/uasset_read/parsers/binary_or_native_handlers.py`
 - Test: `tests/parsers/test_binary_handler_prefix.py`
 
 **Interfaces:**
+
 - Consumes: existing `BINARY_OR_NATIVE_HANDLERS` dict, `_parse_struct_binary` function
 - Produces: handler lookup that finds handlers for non-"F"-prefixed struct types (e.g., `MaterialInput`, `ColorMaterialInput`, `ScalarMaterialInput`)
 
@@ -679,10 +687,12 @@ git commit -m "fix: normalize binary handler lookup to try both with and without
 ### Task 4: Add ExpressionInput Handler
 
 **Files:**
+
 - Modify: `src/uasset_read/parsers/binary_or_native_handlers.py`
 - Test: `tests/parsers/test_expression_input_handler.py`
 
 **Interfaces:**
+
 - Consumes: `PropertyTag`, `FArchive` (via the handler signature)
 - Produces: `_parse_expression_input` function, registered as `"ExpressionInput"` in `BINARY_OR_NATIVE_HANDLERS`. Returns dict with `expression_index` (raw PackageIndex int), `output_index`, `input_name`, `mask`, `mask_r/g/b/a`.
 
@@ -876,10 +886,12 @@ git commit -m "feat: add ExpressionInput binary handler for FExpressionInput str
 ### Task 5: Add _build_material_ir to ir_builder
 
 **Files:**
+
 - Modify: `src/uasset_read/ir_builder.py`
 - Test: `tests/ir/test_build_material_ir.py`
 
 **Interfaces:**
+
 - Consumes: `ParseResult` (export_map with Material + MaterialExpression exports), `classify_expression_type` from constants, `MATERIAL_DOMAIN_MAP`/`BLEND_MODE_MAP`/`SHADING_MODEL_MAP`/`MATERIAL_USAGE_FLAG_NAMES` from constants, `MaterialIR`/`MaterialExpressionIR`/etc from models.ir, `normalize_hex_guid` from core.utils
 - Produces: `_build_material_ir(result) -> MaterialIR | None`, called from `build_package_ir` to set `ir.material`
 
@@ -1527,10 +1539,12 @@ git commit -m "feat: add _build_material_ir to build MaterialIR from exports"
 ### Task 6: Add Schema
 
 **Files:**
+
 - Modify: `schemas/package.schema.json`
 - Test: `tests/test_material_schema.py`
 
 **Interfaces:**
+
 - Consumes: existing schema structure with `additionalProperties: false`
 - Produces: `MaterialData` $def + sub-$defs, top-level `material` property
 
@@ -1651,7 +1665,7 @@ In `schemas/package.schema.json`:
 },
 ```
 
-2. Add the new `$defs` entries inside the existing `"$defs"` block (after the last existing def):
+1. Add the new `$defs` entries inside the existing `"$defs"` block (after the last existing def):
 
 ```json
 "MaterialData": {
@@ -1744,10 +1758,12 @@ git commit -m "feat: add MaterialData schema definitions to package.schema.json"
 ### Task 7: Add JSON Rendering
 
 **Files:**
+
 - Modify: `src/uasset_read/renderers/json_renderer.py`
 - Test: `tests/renderers/test_material_json_renderer.py`
 
 **Interfaces:**
+
 - Consumes: `MaterialIR`, `MaterialExpressionIR`, `MaterialInputIR` from models.ir, `RenderOptions` from renderers.base
 - Produces: `_material_to_dict`, `_material_expression_to_dict`, `_material_input_to_dict` methods on `JSONRenderer`
 
@@ -2041,10 +2057,12 @@ git commit -m "feat: add _material_to_dict JSON rendering for Material semantic 
 ### Task 8: Add Markdown Rendering
 
 **Files:**
+
 - Modify: `src/uasset_read/renderers/markdown_renderer.py`
 - Test: `tests/renderers/test_material_markdown.py`
 
 **Interfaces:**
+
 - Consumes: `MaterialIR` from models.ir, `RenderOptions` from renderers.base
 - Produces: Material section in Markdown output
 
@@ -2200,9 +2218,11 @@ git commit -m "feat: add Material section to Markdown renderer"
 ### Task 9: Integration Tests with Real Samples
 
 **Files:**
+
 - Test: `tests/integration/test_material_integration.py`
 
 **Interfaces:**
+
 - Consumes: All previous tasks (constants, IR types, binary handlers, IR builder, schema, renderers)
 - Produces: End-to-end verification with real material assets
 
@@ -2354,6 +2374,7 @@ git commit -m "test: add Material semantic JSON integration tests with real samp
 ## Self-Review
 
 **1. Spec coverage:**
+
 - ✅ MaterialIR architecture (spec 4.1) → Task 2
 - ✅ Binary handler fixes (spec 4.2) → Tasks 3, 4
 - ✅ Data flow resolution (spec 4.3) → Task 5
@@ -2368,6 +2389,7 @@ git commit -m "test: add Material semantic JSON integration tests with real samp
 **2. Placeholder scan:** No TBDs, TODOs, or vague steps. All code blocks contain actual implementation.
 
 **3. Type consistency:**
+
 - `MaterialIR.material_type` — str, consistent across spec, Task 2, Task 7
 - `MaterialExpressionIR.expression_guid` — str, consistent across Tasks 2, 5, 7
 - `classify_expression_type` — returns `str` (fixed: was `str | None` in initial draft, updated to `str` since implementation always returns a string including "unknown")
