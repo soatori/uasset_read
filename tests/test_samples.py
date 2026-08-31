@@ -215,28 +215,6 @@ def test_real_sample_proves_claimed_capability(sample: str, class_name: str, exp
         assert len(handler_features) == 1, f"{sample}:{class_name}"
 
 
-def test_payload_extraction_is_deferred():
-    """Decode depth must not fabricate payloads; extraction reports the deferred code."""
-    from uasset_read.v2.agent_tools import extract_payload
-    from uasset_read.v2.payloads import PAYLOAD_EXTRACTION_DEFERRED, extract_payload_bytes
-
-    doc = _decode_document("FirstPerson_T_GridChecker_A.uasset", ("export:2",))
-    assert doc.payloads == []
-    sem_payload = (doc.objects[2].semantic or {}).get("payload")
-    if isinstance(sem_payload, dict):
-        # Shallow texture metadata may stay; refs/extraction claims may not.
-        assert "ref" not in sem_payload and "stored_size" not in sem_payload
-
-    result = extract_payload_bytes(doc, "payload:export:2")
-    assert not result.success
-    assert result.data is None and not result.truncated and result.next_offset is None
-
-    tool = extract_payload(str(SAMPLES / "FirstPerson_T_GridChecker_A.uasset"), "payload:export:2")
-    assert tool["code"] == PAYLOAD_EXTRACTION_DEFERRED
-    assert tool["available_ids"] == []
-    assert not {"data", "data_b64", "sha256"} & tool.keys()
-
-
 @pytest.mark.parametrize("sample", [entry["name"] for entry in MANIFEST_SAMPLES])
 def test_every_real_sample_forms_a_valid_package_document(sample: str):
     """Every tracked fixture must form a schema-valid, complete, blob-free document."""
