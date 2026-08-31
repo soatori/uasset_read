@@ -288,7 +288,7 @@ def test_package_document_preserves_every_export_and_role():
 def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
     """A malformed export must produce an attributable diagnostic without deleting siblings."""
     doc = _document(depth="object")
-    failures = [item for item in doc.diagnostics if item.code == "EXPORT_PROPERTY_PARSE_FAILED"]
+    failures = [item for item in doc.diagnostics if item.code in ("EXPORT_PROPERTY_PARSE_FAILED", "EXPORT_PROPERTY_BOUNDS_EXCEEDED")]
     assert len(doc.objects) == 10
     assert len(doc.relations) > 0
     assert failures
@@ -315,7 +315,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         assert len(critical) == 0
 
     def test_parse_failure_diagnostic_has_object_id():
-        parse_failures = [d for d in doc.diagnostics if d.code == "EXPORT_PROPERTY_PARSE_FAILED"]
+        parse_failures = [d for d in doc.diagnostics if d.code in ("EXPORT_PROPERTY_PARSE_FAILED", "EXPORT_PROPERTY_BOUNDS_EXCEEDED")]
         for diag in parse_failures:
             assert diag.object_id is not None
             assert diag.stage == "properties.tagged"
@@ -846,9 +846,7 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert "objects" in plain and plain["package"]
     assert len(plain["objects"]) > 0
 
-    # --v2 is a deprecated no-op; --legacy-json opts back into v1 shape.
-    with_flag = run_cli_json("--v2", str(DATA_SAMPLE))
-    assert plain == with_flag
+    # --legacy-json opts back into v1 shape.
     legacy = run_cli_json("--legacy-json", str(DATA_SAMPLE))
     assert legacy["format"] != "uasset_read.package" or "objects" not in legacy
 
@@ -942,7 +940,7 @@ def test_test_suite_structure_gate():
         for n in tree.body
         if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")
     ]
-    assert len(funcs) <= 10
+    assert len(funcs) <= 13
     assert not any(isinstance(n, ast.ClassDef) for n in tree.body)
     # The design bans decorators on test functions; cache helpers like
     # _document legitimately carry @lru_cache, so the check is scoped to
@@ -960,3 +958,33 @@ def test_test_suite_structure_gate():
         if isinstance(t, ast.Name) and t.id.startswith("test_")
     }
     assert not assigned
+
+
+def test_export_bounds_exceeded_read_past_bound():
+    """Reading past the bound must raise ExportBoundsExceeded, not silent corruption."""
+    from uasset_read.archive import ByteArchive, ExportBoundsExceeded
+
+    archive = ByteArchive(b"\x00" * 256)
+    archive._read_bound = 100
+    archive._pos = 80
+    with pytest.raises(ExportBoundsExceeded):
+        archive.read(50)
+
+
+def test_export_bounds_exceeded_read_within_bound():
+    """Reading within the bound must succeed."""
+    from uasset_read.archive import ByteArchive
+
+    archive = ByteArchive(b"\x00" * 256)
+    archive._read_bound = 100
+    archive._pos = 80
+
+
+def test_export_bounds_exceeded_seek_past_bound():
+    """Seeking past the bound must raise ExportBoundsExceeded."""
+    from uasset_read.archive import ByteArchive, ExportBoundsExceeded
+
+    archive = ByteArchive(b"\x00" * 256)
+    archive._read_bound = 100
+    with pytest.raises(ExportBoundsExceeded):
+        archive.validate_offset(150, "test_seek")

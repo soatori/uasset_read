@@ -89,11 +89,6 @@ def create_parser():
     group.add_argument("--json", action="store_true", help="Output full JSON structure (default)")
     group.add_argument("--markdown", action="store_true", help="Output Markdown format (routes to the v1 pipeline)")
     group.add_argument(
-        "--v2",
-        action="store_true",
-        help="(deprecated, no-op) PackageDocument v2 is now the default output",
-    )
-    group.add_argument(
         "--legacy-json",
         action="store_true",
         help="Emit the legacy Semantic 1.x JSON via the v1 pipeline (deprecated compatibility mode)",
@@ -250,10 +245,6 @@ def _write_output(output_str: str, output_path: str | None) -> None:
         except (AttributeError, OSError):
             pass
         print(output_str)
-
-
-def _log_enabled_from_args(args) -> bool:
-    return args.log_level != "off"
 
 
 def _log_max_total_bytes_from_args(args) -> int | None:

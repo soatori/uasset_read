@@ -11,7 +11,7 @@ import struct
 from pathlib import Path
 from typing import Literal, Sequence
 
-from ...exceptions import ParseError
+from ...exceptions import ParseError, ExportBoundsExceeded
 from ...package import PackageArchive
 from ...serializers.object_resources import (
     ObjectExport,
@@ -311,15 +311,7 @@ class LegacyPackageReader:
             # 7. Read preload dependencies
             preload_deps = read_preload_dependencies(archive, summary)
 
-            # 8. Build VersionContext (reserved for future use — handlers, depth routing)
-            build_version_context_from_summary(
-                summary,
-                package_layout="legacy",
-                game=self._game,
-                depth=depth,
-            )
-
-            # 9. Build ObjectRecords — ALL exports, no filtering
+            # 8. Build ObjectRecords — ALL exports, no filtering
             objects = [_build_object_record_direct(exp, i, import_map, export_map) for i, exp in enumerate(export_map)]
 
             # 10. Build relations from export indices
@@ -493,7 +485,7 @@ class LegacyPackageReader:
         — stays off there.
 
         If object_ids is None, parses ALL objects.
-        Each export's serial region is bounded via SliceReader.sub_slice().
+        Each export's serial region is bounded via _read_bound enforced inside PackageArchive reads.
         Caught property-parse errors (bounded exception set) on one export do
         not prevent parsing of others; unexpected exception types propagate.
         """
@@ -518,9 +510,12 @@ class LegacyPackageReader:
                 obj.properties = {}
                 continue
 
+            serial_end = export_map[i].serial_offset + export_map[i].serial_size
+            prev_bound = getattr(archive, "_read_bound", None)
             try:
-                # Absolute-offset parser over the full archive, bounded by the
-                # post-parse position check below (recovery plan: do not rebase).
+                archive._read_bound = serial_end
+                # Absolute-offset parser over the full archive, bounded by
+                # _read_bound enforced inside PackageArchive.read/validate_offset.
                 raw_props = parse_properties_from_export(
                     export=export_map[i],
                     archive=archive,
@@ -552,12 +547,21 @@ class LegacyPackageReader:
                             recoverable=True,
                         )
                     )
-                else:
-                    obj.status = ObjectStatus(
-                        parse=obj.status.parse,
-                        semantic=obj.status.semantic,
-                    )
 
+            except ExportBoundsExceeded as e:
+                obj.properties = {}
+                obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
+                diagnostics.append(
+                    Diagnostic(
+                        severity="warning",
+                        code="EXPORT_PROPERTY_BOUNDS_EXCEEDED",
+                        message=f"Export {i} ({obj.name}) read exceeded serial bound: {e}",
+                        stage="properties.tagged",
+                        object_id=obj.id,
+                        effect="semantic_loss",
+                        recoverable=True,
+                    )
+                )
             except (ParseError, EOFError, struct.error, ValueError, UnicodeError) as e:
                 obj.properties = {}
                 obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
@@ -572,6 +576,8 @@ class LegacyPackageReader:
                         recoverable=True,
                     )
                 )
+            finally:
+                archive._read_bound = prev_bound
 
     def _build_minimal_document(
         self,

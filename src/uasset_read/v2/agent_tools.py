@@ -15,7 +15,6 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from .api import parse_package_document
-from .document import PackageDocument
 from .projection import select_objects, paginate, project_document
 
 # Max response sizes per tool (bytes)
@@ -210,14 +209,3 @@ def extract_payload(
         "available_ids": [p.id for p in doc.payloads],
         "note": "Payloads are currently empty — Phase 5 will populate them from external regions",
     }
-
-
-def _summarize_diagnostics(doc: PackageDocument) -> dict[str, int]:
-    """Count diagnostics by severity."""
-    counts: dict[str, int] = {}
-    for d in doc.diagnostics:
-        counts[d.severity] = counts.get(d.severity, 0) + 1
-    for obj in doc.objects:
-        for d in obj.diagnostics:
-            counts[d.severity] = counts.get(d.severity, 0) + 1
-    return counts

@@ -37,6 +37,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_VALID_OUTPUT_LEVELS = {"standard", "debug"}
+
+_VALID_OUTPUT_LEVELS = {"standard", "debug"}
+
 
 @dataclass
 class BatchResult:
@@ -119,7 +123,6 @@ def parse_single(
         ParseError: 解析失败
         ValueError: 渲染格式不存在
     """
-    _VALID_OUTPUT_LEVELS = {"standard", "debug"}
     if output_level not in _VALID_OUTPUT_LEVELS:
         raise ValueError(f"Invalid output_level: {output_level!r}. Expected one of ['standard', 'debug']")
 
@@ -306,7 +309,6 @@ def parse_batch(
     if not isinstance(isolate_assets, bool) and isolate_assets != "auto":
         raise ValueError(f"isolate_assets must be bool or 'auto', got {isolate_assets!r}")
 
-    _VALID_OUTPUT_LEVELS = {"standard", "debug"}
     if output_level not in _VALID_OUTPUT_LEVELS:
         raise ValueError(f"Invalid output_level: {output_level!r}. Expected one of ['standard', 'debug']")
 

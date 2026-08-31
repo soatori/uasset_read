@@ -135,34 +135,17 @@ def normalize_property_bag(properties: Sequence[Any]) -> dict[str, Any]:
                 "reason": prop.reason.value if hasattr(prop.reason, "value") else str(prop.reason),
             }
         elif isinstance(prop, StructValue):
-            inner: dict[str, Any] = {}
-            for k, v in prop.fields.items():
-                inner[k] = _serialize_value(v)
-            bag[name] = {
-                "kind": "struct",
-                "struct_type": prop.struct_type,
-                "fields": inner,
-            }
+            bag[name] = _serialize_value(prop)
         elif isinstance(prop, PropertyValue):
             inner_val = prop.value
             if isinstance(inner_val, StructValue):
-                inner2: dict[str, Any] = {}
-                for k2, v2 in inner_val.fields.items():
-                    inner2[k2] = _serialize_value(v2)
-                bag[name] = {
-                    "kind": "struct",
-                    "struct_type": inner_val.struct_type,
-                    "fields": inner2,
-                }
+                bag[name] = _serialize_value(inner_val)
             else:
                 bag[name] = {
                     "kind": "value",
                     "type": prop.type,
                     "value": _serialize_value(inner_val),
                 }
-        else:
-            # Fallback for unknown prop shapes — skip silently
-            pass
     return bag
 
 

@@ -8,7 +8,7 @@ import logging
 import os
 
 from uasset_read.archive import FArchive, ArchiveLike, ByteArchive
-from uasset_read.exceptions import ParseError
+from uasset_read.exceptions import ParseError, ExportBoundsExceeded
 from uasset_read.memory_safety import ResourceBudget
 
 logger = logging.getLogger(__name__)
@@ -51,6 +51,10 @@ class PackageArchive(FArchive):
         if size < 0:
             raise ParseError(f"read() received negative size ({size}) at position {self.tell()}")
         current_pos = self.tell()
+        if self._read_bound is not None and current_pos + size > self._read_bound:
+            raise ExportBoundsExceeded(
+                f"Read of {size} bytes at position {current_pos} exceeds export read bound {self._read_bound}"
+            )
         remaining = self._file_size - current_pos
         if size > remaining:
             raise ParseError(f"Cannot read {size} bytes at position {current_pos}, only {remaining} bytes remaining")

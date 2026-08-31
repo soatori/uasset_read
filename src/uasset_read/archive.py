@@ -11,7 +11,7 @@ import os
 import struct
 from typing import Optional, Dict, BinaryIO, Any, Protocol
 
-from uasset_read.exceptions import ParseError
+from uasset_read.exceptions import ParseError, ExportBoundsExceeded
 from uasset_read.constants import (
     MMAP_THRESHOLD,
     MAX_FSTRING_LENGTH,
@@ -74,6 +74,7 @@ class FArchive:
         )  # list[HexViewEntry], bounded
         self._hex_view_context: str = ""  # current context prefix (e.g. "Summary.")
         self._structured_diagnostics: list[StructuredDiagnostic] = []  # stable-code diagnostics
+        self._read_bound: int | None = None  # optional export-scoped upper bound
 
     def __init__(self, path: str, tolerant: bool = False, hex_view: bool = False):
         self._init_archive_attrs(path, tolerant, hex_view)
@@ -98,6 +99,10 @@ class FArchive:
         if size < 0:
             raise ParseError(f"read() received negative size ({size}) at position {self.tell()}")
         current_pos = self.tell()
+        if self._read_bound is not None and current_pos + size > self._read_bound:
+            raise ExportBoundsExceeded(
+                f"Read of {size} bytes at position {current_pos} exceeds export read bound {self._read_bound}"
+            )
         remaining = self._file_size - current_pos
         if size > remaining:
             # record diagnostic before raising (ensures finally block can collect)
@@ -151,6 +156,10 @@ class FArchive:
                 error=f"Invalid offset {offset} (negative) at {context}",
             )
             raise ParseError(f"Invalid offset {offset} (negative) at {context}")
+        if self._read_bound is not None and offset > self._read_bound:
+            raise ExportBoundsExceeded(
+                f"Offset {offset} exceeds export read bound {self._read_bound} at {context}"
+            )
         if offset > self._file_size:
             self._record_diagnostic(
                 module="archive",
@@ -970,6 +979,10 @@ class ByteArchive(FArchive):
         if size < 0:
             raise ParseError(f"read() received negative size ({size}) at position {self._pos}")
         current_pos = self._pos
+        if self._read_bound is not None and current_pos + size > self._read_bound:
+            raise ExportBoundsExceeded(
+                f"Read of {size} bytes at position {current_pos} exceeds export read bound {self._read_bound}"
+            )
         remaining = self._file_size - current_pos
         if size > remaining:
             self._record_diagnostic(

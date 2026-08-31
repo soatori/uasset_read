@@ -7,7 +7,6 @@ name and invoked lazily when depth >= asset.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from .diagnostics import Diagnostic
@@ -28,14 +27,6 @@ class AssetHandler(Protocol):
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None: ...
-
-
-@dataclass
-class HandlerResult:
-    """Result from an asset handler enrichment."""
-
-    semantic: dict[str, Any]
-    coverage: list[CoverageEntry] = field(default_factory=list)
 
 
 # Global handler registry

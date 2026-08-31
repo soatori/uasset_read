@@ -45,7 +45,6 @@ class Summary:
     asset_object_ids: tuple[str, ...] = ()
     total_imports: int = 0
     total_exports: int = 0
-    diagnostic_counts: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass

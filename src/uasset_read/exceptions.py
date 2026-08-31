@@ -100,3 +100,8 @@ class ParseError(UAssetError):
         if self.export_name:
             parts.append(f"Export: {self.export_name}")
         return "\n".join(parts)
+
+
+class ExportBoundsExceeded(ParseError):
+    """Raised when a read or seek would exceed the current export bound."""
+    pass

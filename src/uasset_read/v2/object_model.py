@@ -116,7 +116,3 @@ class OpaqueValue:
 ROLES_ASSET = "asset"
 ROLES_GENERATED_CLASS = "generated_class"
 ROLES_CDO = "class_default_object"
-ROLES_METADATA = "metadata"
-ROLES_SUBOBJECT = "subobject"
-ROLES_GRAPH = "graph"
-ROLES_PAYLOAD_OWNER = "payload_owner"
