@@ -100,7 +100,9 @@ def run_handlers(
             )
 
     if matched:
-        obj.status.semantic = "partial" if failed else "complete"
+        # A handler that matched but produced nothing (enrich returned None)
+        # has not delivered semantics either — never claim "complete".
+        obj.status.semantic = "partial" if (failed or not semantic) else "complete"
 
     if not semantic:
         return None, coverage, diagnostics
@@ -424,9 +426,13 @@ class SoundHandler:
                     atten = {k: asset_type_data[k] for k in atten_keys if k in asset_type_data}
                     if atten:
                         result["attenuation"] = atten
-                coverage.append(CoverageEntry(feature="handler.SoundHandler", status="present"))
-                obj.coverage.extend(coverage)
-                return result if len(result) > 2 else None
+                if len(result) > 2:
+                    obj.coverage.append(
+                        CoverageEntry(feature="handler.SoundHandler", status="present")
+                    )
+                    return result
+                # No resource data: fall through to property fallback instead of
+                # claiming "present" coverage while returning None.
 
         # Fallback: extract what we can from v2 properties
         props = obj.properties or {}

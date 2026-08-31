@@ -494,7 +494,8 @@ class LegacyPackageReader:
 
         If object_ids is None, parses ALL objects.
         Each export's serial region is bounded via SliceReader.sub_slice().
-        Parse errors on one export do not prevent parsing of others.
+        Caught property-parse errors (bounded exception set) on one export do
+        not prevent parsing of others; unexpected exception types propagate.
         """
         from ...parsers.property_parser import parse_properties_from_export
         from ...v2.properties import normalize_property_bag

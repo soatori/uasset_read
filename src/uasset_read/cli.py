@@ -87,7 +87,7 @@ def create_parser():
     # Mutually exclusive output flags
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument("--json", action="store_true", help="Output full JSON structure (default)")
-    group.add_argument("--markdown", action="store_true", help="Output Markdown format")
+    group.add_argument("--markdown", action="store_true", help="Output Markdown format (routes to the v1 pipeline)")
     group.add_argument(
         "--v2",
         action="store_true",
@@ -434,8 +434,26 @@ def main():
         _handle_list_package_files(args.file, tolerant)
         return
 
-    # PackageDocument v2 (default output)
-    if not args.legacy_json:
+    # PackageDocument v2 (default output). Markdown rendering exists only in
+    # the v1 pipeline, so --markdown falls through to it.
+    if not args.legacy_json and not args.markdown:
+        v1_only = (
+            ("--verbose", args.verbose),
+            ("--schema", args.schema),
+            ("--full-parse", args.full_parse),
+            ("--hex-view", args.hex_view),
+            ("--output-level", args.output_level != "standard"),
+            ("--include-parent-assets", args.include_parent_assets),
+            ("--asset-root", bool(args.asset_root)),
+            ("--diff", args.diff is not None),
+        )
+        ignored = [flag for flag, used in v1_only if used]
+        if ignored:
+            print(
+                "Warning: v1-pipeline-only flags ignored by the default v2"
+                f" output: {' '.join(ignored)} (use --legacy-json to enable them).",
+                file=sys.stderr,
+            )
         try:
             from uasset_read.v2.api import parse_package_document
             from uasset_read.v2.projection import project_document

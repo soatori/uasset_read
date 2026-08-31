@@ -375,6 +375,30 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
             H._HANDLERS[:] = saved
         assert obj.status.semantic == "complete"
 
+    def test_matched_handler_returning_none_is_not_complete():
+        from uasset_read.v2 import handlers as H
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+
+        class Decliner:
+            def supports(self, obj, ctx):
+                return True
+
+            def enrich(self, obj, ctx, all_objs, data):
+                return None
+
+        obj = ObjectRecord(
+            id="export:9", table_index=0, name="X", class_name="Foo",
+            status=ObjectStatus(parse="complete", semantic="not_requested"),
+        )
+        saved = H._HANDLERS[:]
+        try:
+            H._HANDLERS[:] = [Decliner()]
+            semantic, _cov, _diags = H.run_handlers(obj, H.VersionContext(), [], None)
+        finally:
+            H._HANDLERS[:] = saved
+        assert semantic is None
+        assert obj.status.semantic == "partial"
+
     def test_parse_past_serial_end_is_flagged_not_silent():
         import uasset_read.parsers.property_parser as pp
         from uasset_read.v2.api import parse_package_document
@@ -399,6 +423,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
             ("diagnostics.test_parse_failure_diagnostic_has_object_id", test_parse_failure_diagnostic_has_object_id),
             ("handler.test_later_success_does_not_mask_earlier_failure", test_later_success_does_not_mask_earlier_failure),
             ("handler.test_clean_success_still_marks_complete", test_clean_success_still_marks_complete),
+            ("handler.test_matched_handler_returning_none_is_not_complete", test_matched_handler_returning_none_is_not_complete),
             ("property.test_parse_past_serial_end_is_flagged_not_silent", test_parse_past_serial_end_is_flagged_not_silent),
         ]
     )
@@ -512,6 +537,23 @@ def test_handler_registry_supports_enriches_and_isolates():
         finally:
             handlers._HANDLERS[:] = original_handlers
 
+    def test_niagara_handler_supports_all_declared_classes():
+        from uasset_read.v2.handlers import NiagaraHandler
+
+        handler = NiagaraHandler()
+        assert len(handler._NIAGARA_CLASSES) == 13
+        for class_name in handler._NIAGARA_CLASSES:
+            assert handler.supports(record(class_name), VersionContext()), class_name
+        assert not handler.supports(record("StaticMesh"), VersionContext())
+
+    def test_class_handlers_kwarg_defaults_true_for_v1():
+        import inspect
+
+        from uasset_read.parsers.property_parser import parse_properties_from_export
+
+        param = inspect.signature(parse_properties_from_export).parameters["run_class_handlers"]
+        assert param.default is True, "v1 default must keep class-handler dispatch byte-identical"
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -520,6 +562,8 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("handler.test_texture_no_properties_returns_none", test_texture_no_properties_returns_none),
             ("handler.test_handler_exception_doesnt_crash", test_handler_exception_doesnt_crash),
             ("handler.test_handler_exception_becomes_object_diagnostic", test_handler_exception_becomes_object_diagnostic),
+            ("handler.test_niagara_handler_supports_all_declared_classes", test_niagara_handler_supports_all_declared_classes),
+            ("handler.test_class_handlers_kwarg_defaults_true_for_v1", test_class_handlers_kwarg_defaults_true_for_v1),
         ]
     )
 
@@ -794,8 +838,9 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
         assert result.returncode == 0, f"CLI failed: {result.stderr[:500]}"
         return json.loads(result.stdout)
 
-    # CLI default output is the v2 package document (correction: package
-    # presence only — package.name is legitimately "" on real fixtures).
+    # CLI default output is the v2 package document; the package assertion is
+    # presence-only because package.name is legitimately "" on real fixtures
+    # (follow-up #621).
     plain = run_cli_json(str(DATA_SAMPLE))
     assert plain["format"] == "uasset_read.package"
     assert "objects" in plain and plain["package"]
@@ -806,6 +851,23 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert plain == with_flag
     legacy = run_cli_json("--legacy-json", str(DATA_SAMPLE))
     assert legacy["format"] != "uasset_read.package" or "objects" not in legacy
+
+    # --markdown renders through the v1 pipeline (the only markdown renderer).
+    md = subprocess.run(
+        [sys.executable, "-m", "uasset_read", "--markdown", str(DATA_SAMPLE)],
+        capture_output=True, text=True, check=False, timeout=30,
+    )
+    assert md.returncode == 0, md.stderr[:500]
+    assert md.stdout.strip() and not md.stdout.lstrip().startswith("{")
+
+    # v1-only flags under the v2 default warn instead of silently dropping.
+    warned = subprocess.run(
+        [sys.executable, "-m", "uasset_read", "--hex-view", str(DATA_SAMPLE)],
+        capture_output=True, text=True, check=False, timeout=30,
+    )
+    assert warned.returncode == 0
+    assert "--hex-view" in warned.stderr and "ignored" in warned.stderr
+    assert json.loads(warned.stdout)["format"] == "uasset_read.package"
 
     # All public entry points project the same page.
     expected = project_document(_document(str(DATA_SAMPLE)), depth="package", limit=2, max_bytes=4096)
