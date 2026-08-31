@@ -74,7 +74,7 @@ class FArchive:
         )  # list[HexViewEntry], bounded
         self._hex_view_context: str = ""  # current context prefix (e.g. "Summary.")
         self._structured_diagnostics: list[StructuredDiagnostic] = []  # stable-code diagnostics
-        self._read_bound: int | None = None  # optional export-scoped upper bound
+        self._read_range: tuple[int, int] | None = None  # optional export-scoped (start, end) read range
 
     def __init__(self, path: str, tolerant: bool = False, hex_view: bool = False):
         self._init_archive_attrs(path, tolerant, hex_view)
@@ -94,15 +94,32 @@ class FArchive:
             self.close()
             raise
 
+    def set_read_range(self, read_range: tuple[int, int] | None) -> tuple[int, int] | None:
+        """Set the export-scoped read range (start, end); returns the previous range for restore."""
+        prev = self._read_range
+        self._read_range = read_range
+        return prev
+
+    def _check_read_range(self, pos: int, size: int) -> None:
+        """Validate that reading size bytes at pos fits inside the active read range."""
+        if self._read_range is None:
+            return
+        start, end = self._read_range
+        if pos < start:
+            raise ExportBoundsExceeded(
+                f"Read of {size} bytes at position {pos} is below export read range start {start}"
+            )
+        if pos + size > end:
+            raise ExportBoundsExceeded(
+                f"Read of {size} bytes at position {pos} exceeds export read range end {end}"
+            )
+
     def read(self, size: int) -> bytes:
         """Base read method — does not swap raw bytes."""
         if size < 0:
             raise ParseError(f"read() received negative size ({size}) at position {self.tell()}")
         current_pos = self.tell()
-        if self._read_bound is not None and current_pos + size > self._read_bound:
-            raise ExportBoundsExceeded(
-                f"Read of {size} bytes at position {current_pos} exceeds export read bound {self._read_bound}"
-            )
+        self._check_read_range(current_pos, size)
         remaining = self._file_size - current_pos
         if size > remaining:
             # record diagnostic before raising (ensures finally block can collect)
@@ -156,10 +173,12 @@ class FArchive:
                 error=f"Invalid offset {offset} (negative) at {context}",
             )
             raise ParseError(f"Invalid offset {offset} (negative) at {context}")
-        if self._read_bound is not None and offset > self._read_bound:
-            raise ExportBoundsExceeded(
-                f"Offset {offset} exceeds export read bound {self._read_bound} at {context}"
-            )
+        if self._read_range is not None:
+            start, end = self._read_range
+            if offset < start or offset > end:
+                raise ExportBoundsExceeded(
+                    f"Offset {offset} outside export read range [{start}, {end}] at {context}"
+                )
         if offset > self._file_size:
             self._record_diagnostic(
                 module="archive",
@@ -942,10 +961,7 @@ class ByteArchive(FArchive):
         if size < 0:
             raise ParseError(f"read() received negative size ({size}) at position {self._pos}")
         current_pos = self._pos
-        if self._read_bound is not None and current_pos + size > self._read_bound:
-            raise ExportBoundsExceeded(
-                f"Read of {size} bytes at position {current_pos} exceeds export read bound {self._read_bound}"
-            )
+        self._check_read_range(current_pos, size)
         remaining = self._file_size - current_pos
         if size > remaining:
             self._record_diagnostic(

@@ -976,30 +976,36 @@ def test_test_suite_structure_gate():
 
 
 def test_export_bounds_exceeded_read_past_bound():
-    """Reading past the bound must raise ExportBoundsExceeded, not silent corruption."""
+    """Reading past either edge of the range must raise ExportBoundsExceeded, not silent corruption."""
     from uasset_read.archive import ByteArchive, ExportBoundsExceeded
 
     archive = ByteArchive(b"\x00" * 256)
-    archive._read_bound = 100
+    archive._read_range = (50, 100)
     archive._pos = 80
     with pytest.raises(ExportBoundsExceeded):
         archive.read(50)
+    archive._pos = 40
+    with pytest.raises(ExportBoundsExceeded):
+        archive.read(20)
 
 
 def test_export_bounds_exceeded_read_within_bound():
-    """Reading within the bound must succeed."""
+    """Reading within the range must succeed."""
     from uasset_read.archive import ByteArchive
 
     archive = ByteArchive(b"\x00" * 256)
-    archive._read_bound = 100
+    archive._read_range = (50, 100)
     archive._pos = 80
+    assert archive.read(20) == b"\x00" * 20
 
 
 def test_export_bounds_exceeded_seek_past_bound():
-    """Seeking past the bound must raise ExportBoundsExceeded."""
+    """Seeking past either edge of the range must raise ExportBoundsExceeded."""
     from uasset_read.archive import ByteArchive, ExportBoundsExceeded
 
     archive = ByteArchive(b"\x00" * 256)
-    archive._read_bound = 100
+    archive._read_range = (50, 100)
     with pytest.raises(ExportBoundsExceeded):
         archive.validate_offset(150, "test_seek")
+    with pytest.raises(ExportBoundsExceeded):
+        archive.validate_offset(10, "test_seek")

@@ -552,7 +552,7 @@ class LegacyPackageReader:
         ``table_rows`` for DataTable/CurveTable/StringTable).
 
         If object_ids is None, parses ALL objects.
-        Each export's serial region is bounded via _read_bound enforced inside PackageArchive reads.
+        Each export's serial region is bounded via _read_range enforced inside PackageArchive reads.
         Caught property-parse errors (bounded exception set) on one export do
         not prevent parsing of others; unexpected exception types propagate.
         """
@@ -581,11 +581,10 @@ class LegacyPackageReader:
                 continue
 
             serial_end = export_map[i].serial_offset + export_map[i].serial_size
-            prev_bound = getattr(archive, "_read_bound", None)
+            prev_range = archive.set_read_range((export_map[i].serial_offset, serial_end))
             try:
-                archive._read_bound = serial_end
                 # Absolute-offset parser over the full archive, bounded by
-                # _read_bound enforced inside PackageArchive.read/validate_offset.
+                # _read_range enforced inside PackageArchive.read/validate_offset.
                 raw_props = parse_properties_from_export(
                     export=export_map[i],
                     archive=archive,
@@ -653,7 +652,7 @@ class LegacyPackageReader:
                     )
                 )
             finally:
-                archive._read_bound = prev_bound
+                archive.set_read_range(prev_range)
 
         return payload_ends, extras
 
@@ -693,7 +692,7 @@ def _read_table_rows(
 ) -> dict[str, Any]:
     """Parse NumRows + row names from the bounded payload after properties.
 
-    The archive is positioned at the payload start and its ``_read_bound``
+    The archive is positioned at the payload start and its ``_read_range``
     is the export's serial end, so the slice read can never escape the
     export.  Anything that does not fit is reported as ``complete: False``
     with a diagnostic, never silently truncated.
