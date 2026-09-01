@@ -13,7 +13,6 @@ jobs:
   # master 分支文件目录合规检查
   directory-compliance:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master' || github.base_ref == 'master'
     steps:
       - uses: actions/checkout@v4
         with:

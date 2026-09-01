@@ -26,14 +26,6 @@ SCHEMA = json.loads((ROOT / "docs" / "designs" / "contract" / "package_document_
 MANIFEST_SAMPLES = json.loads(MANIFEST.read_text(encoding="utf-8"))["samples"]
 MANIFEST_BY_NAME = {entry["name"]: entry for entry in MANIFEST_SAMPLES}
 
-# Every tracked fixture now parses its property streams inside the declared
-# serial bounds and keeps all relation targets in range. The last remaining
-# "unhealthy" artifacts (ALS_AnimBP bounds overruns and relation drops,
-# ABP_RifleAnimLayers export:6 parse failure) turned out to be reader bugs,
-# not bad data: read_name's #339 recovery scan fired on valid large
-# name-table indices and shifted reads onto bogus (index, number) pairs,
-# corrupting each export record from the FName onward (archive.read_name).
-
 CAPABILITIES = (
     ("ALS_FootstepDataTable.uasset", "DataTable", {"kind": "data_table"}),
     ("Lyra_Enum_PanelType.uasset", "UserDefinedEnum", {"kind": "user_defined_enum", "enum_name": "Enum_PanelType"}),

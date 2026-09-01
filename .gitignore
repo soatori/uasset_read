@@ -34,8 +34,6 @@ env/
 .coverage
 htmlcov/
 .coverage.*
-schemas/
-!src/uasset_read/schemas/
 
 # OS
 .DS_Store
@@ -81,18 +79,11 @@ tests/*
 !tests/conftest.py
 !tests/README.md
 !tests/test_*.py
-!tests/core/
-!tests/renderers/
-!tests/semantic/
 !tests/samples/
-!tests/contract/
 
 # AI agent reports (local only)
 docs/firstperson_blueprint_test_report.md
 docs/reference/refactor-reference.md
-
-# Superpowers workflow artifacts (local only)
-.superpowers/sdd/
 
 # Accidentally added submodule (no .gitmodules mapping)
 .claude/skills/unreal-mcp-skills
@@ -108,4 +99,3 @@ docs/compose/
 # Wiki submodule (external)
 wiki/
 worktrees/
-.worktrees/
