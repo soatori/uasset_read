@@ -75,12 +75,14 @@ def fit_list_response(response: dict, max_bytes: int, *, list_key: str, total_ke
     items = response[list_key]
     while _size() > max_bytes and items:
         items.pop()
-        response["returned"] = len(items)
-        response["next_offset"] = response["offset"] + len(items)
+        n = len(items)
+        response["returned"] = n
+        response["next_offset"] = response["offset"] + n
     if not items:
         response.pop("next_offset", None)  # a cursor that doesn't advance ends nothing
-    if _size() > max_bytes:
-        raise ValueError(f"Response budget {max_bytes} bytes too small for minimal envelope ({_size()} bytes)")
+    size = _size()  # one encode serves both the test and the message
+    if size > max_bytes:
+        raise ValueError(f"Response budget {max_bytes} bytes too small for minimal envelope ({size} bytes)")
     if items and response["offset"] + len(items) >= response[total_key]:
         response.pop("next_offset", None)  # a cursor past the real end is a lie
     return response
@@ -110,6 +112,9 @@ def project_document(
       - semantic (default): object identity, roles, status, coverage
       - raw: adds flags, serial offsets, header details
       - debug: raw + parse statistics, recovery info, offset evidence
+    ``response_extras`` entries are merged with ``dict.update()`` (same-named
+    projection keys are overwritten by the extras) before ``max_bytes``
+    trimming runs, so extras count against the byte budget like any envelope key.
     """
     _VALID_VIEWS = {"semantic", "raw", "debug"}
     if view not in _VALID_VIEWS:

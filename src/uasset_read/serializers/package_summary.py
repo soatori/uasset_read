@@ -924,7 +924,9 @@ def read_depends_map(
         warnings: Optional warnings list for collecting degradation info (e.g. invalid entries)
 
     Returns:
-        2D list: first dimension is export index, second dimension is dependency PackageIndex list
+        2D list: first dimension is export index, second dimension is dependency PackageIndex list.
+        On the stop path (invalid dependency count) the list ends at the bad entry and may be
+        shorter than ``export_count``.
     """
     if summary.depends_offset <= 0 or summary.export_count <= 0:
         return []
@@ -987,12 +989,12 @@ def read_depends_map(
     # Surface degradation as warnings
     if warnings is not None:
         if skipped_entries > 0:
-            # On the stop path nothing after the bad count is read, so
-            # "not parsed" is honest where "skipped" would contradict
-            # the "stopped at entry i" warning below.
-            action = "not parsed" if truncated_table else "skipped"
+            # skipped_entries only grows on the stop path, where nothing after the bad
+            # count is read — "not parsed" is honest; "skipped" would contradict the
+            # "stopped at entry i" warning below. If a sized-but-not-stopped path is
+            # ever added, reintroduce the wording split there.
             warnings.append(
-                f"DependsMap: {skipped_entries}/{summary.export_count} entries {action} due to invalid dependency count"
+                f"DependsMap: {skipped_entries}/{summary.export_count} entries not parsed due to invalid dependency count"
             )
         if truncated_table:
             warnings.append(f"DependsMap: stopped at entry {i}; subsequent entries were not parsed")

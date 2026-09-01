@@ -229,7 +229,7 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
             object_name = archive.read_name(name_map, f"Export[{export_idx}].ObjectName")
             object_flags = archive.read_u32(f"Export[{export_idx}].ObjectFlags")
 
-            # SerialSize/Offset: i32 before VER_UE4_64BIT_EXPORTMAP_SERIALSIZES (511), i64 after
+            # SerialSize/Offset: i32 before VER_UE4_64BIT_EXPORTMAP_SERIALSIZES (511), i64 at/after
             if file_version < UE4_64BIT_EXPORTMAP_SERIALSIZES:
                 serial_size_offset = archive.tell()
                 serial_size = archive.read_i32(f"Export[{export_idx}].SerialSize")
