@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from .api import parse_package_document
-from .projection import select_objects, paginate, project_document
+from .projection import fit_list_response, select_objects, paginate, project_document
 
 # Max response sizes per tool (bytes)
 _MAX_BYTES_INSPECT = 4096
@@ -113,27 +113,26 @@ def list_dependencies(
     limit: int = 50,
     max_bytes: int = _MAX_BYTES_LIST_DEPS,
 ) -> dict[str, Any]:
-    """Tool: list_dependencies — paginated import dependencies and relations.
+    """Tool: list_dependencies — paginated full import dependency set.
 
-    Returns dependencies (imports) and relations (object-to-object links).
+    Pages the complete `doc.dependencies` import set; the response is bounded
+    to `max_bytes` by dropping trailing items (adjust `next_offset` accordingly).
     """
     doc = parse_package_document(file_path)
-    projected = project_document(doc, max_bytes=max_bytes)
-
-    # Paginate dependencies
-    deps = projected["dependencies"]
-    deps_page = deps[offset : offset + limit] if limit else deps
-    next_offset_dep = offset + len(deps_page) if len(deps_page) == limit and offset + limit < len(deps) else None
-
-    return {
-        "dependencies": deps_page,
-        "relations": projected["relations"],
+    deps = [
+        {"index": d.index, "class": d.class_name, "object_name": d.object_name}
+        for d in doc.dependencies
+    ]
+    page, next_offset, _trunc = paginate(deps, offset=offset, limit=limit)
+    response: dict[str, Any] = {
+        "dependencies": page,
         "total_dependencies": len(deps),
-        "total_relations": len(projected["relations"]),
         "offset": offset,
-        "returned": len(deps_page),
-        **({"next_offset": next_offset_dep} if next_offset_dep is not None else {}),
+        "returned": len(page),
     }
+    if next_offset is not None:
+        response["next_offset"] = next_offset
+    return fit_list_response(response, max_bytes, list_key="dependencies", total_key="total_dependencies")
 
 
 def get_diagnostics(

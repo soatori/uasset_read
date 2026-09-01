@@ -5,6 +5,7 @@ Transforms a PackageDocument into different views without mutating it.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from .document import PackageDocument
@@ -61,6 +62,23 @@ def paginate(
     return page, next_offset, truncation_info
 
 
+def fit_list_response(response: dict, max_bytes: int, *, list_key: str, total_key: str = "total") -> dict:
+    """Drop trailing items from response[list_key] until the compact encoding fits max_bytes."""
+    def _size() -> int:
+        return len(json.dumps(response, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+    items = response[list_key]
+    while _size() > max_bytes and items:
+        items.pop()
+        response["returned"] = len(items)
+        response["next_offset"] = response["offset"] + len(items)
+    if _size() > max_bytes:
+        raise ValueError(f"Response budget {max_bytes} bytes too small for minimal envelope ({_size()} bytes)")
+    if items and response["offset"] + len(items) >= response[total_key]:
+        response.pop("next_offset", None)  # a cursor past the real end is a lie
+    return response
+
+
 _VALID_DEPTHS = {"package", "object", "asset", "decode"}
 
 
@@ -84,8 +102,6 @@ def project_document(
       - raw: adds flags, serial offsets, header details
       - debug: raw + parse statistics, recovery info, offset evidence
     """
-    import json as _json
-
     _VALID_VIEWS = {"semantic", "raw", "debug"}
     if view not in _VALID_VIEWS:
         raise ValueError(f"Invalid view: {view!r}. Expected one of {_VALID_VIEWS}")
@@ -200,7 +216,7 @@ def project_document(
     if max_bytes is not None:
 
         def _encoded() -> int:
-            return len(_json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+            return len(json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
         if _encoded() > max_bytes:
             trunc_diag = {
@@ -246,7 +262,7 @@ def project_document(
                 # cursor, page-relative dropped count, BUDGET_EXHAUSTED diag.
                 skeleton = {k: v for k, v in result.items() if k not in ("truncation", "next_offset")}
                 skeleton["diagnostics"] = [d for d in skeleton["diagnostics"] if d.get("code") != "TRUNCATED"]
-                minimal = len(_json.dumps(skeleton, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+                minimal = len(json.dumps(skeleton, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
                 if minimal > max_bytes:
                     raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({minimal} bytes)")
                 result.pop("next_offset", None)

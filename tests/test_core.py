@@ -1179,9 +1179,16 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert fetched["id"] == "export:0"
     assert "name" in fetched
 
+    full_deps = _document(str(DATA_SAMPLE), depth="package").dependencies
     deps = list_dependencies(str(DATA_SAMPLE))
-    assert "dependencies" in deps
-    assert "relations" in deps
+    assert deps["total_dependencies"] == len(full_deps)
+    assert [d["index"] for d in deps["dependencies"]] == [d.index for d in full_deps][:50]
+    abp = _document(str(PACKAGE_SAMPLE), depth="package").dependencies
+    paged = list_dependencies(str(PACKAGE_SAMPLE), limit=25)
+    assert paged["total_dependencies"] == len(abp)
+    assert len(paged["dependencies"]) == 25 and paged["next_offset"] == 25
+    with pytest.raises(ValueError, match="too small"):
+        list_dependencies(str(DATA_SAMPLE), max_bytes=64)
 
     diags = get_diagnostics(str(DATA_SAMPLE))
     assert "diagnostics" in diags
