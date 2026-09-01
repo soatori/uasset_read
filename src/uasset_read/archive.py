@@ -157,11 +157,6 @@ class FArchive:
         else:
             self._file.seek(pos)
 
-    def skip(self, n: int) -> None:
-        """Skip n bytes."""
-        current = self.tell()
-        self.seek(current + n)
-
     def validate_offset(self, offset: int, context: str = "") -> None:
         """Full offset validation — checks offset validity before seeking."""
         if offset < 0:
@@ -783,14 +778,6 @@ class FArchive:
             name_map: name table list
         """
         self._name_map = name_map
-
-    def get_name_map(self) -> Optional[list]:
-        """Get the currently cached name table.
-
-        Returns:
-            name table list, or None if not set
-        """
-        return self._name_map
 
     def read_name(self, name_map: Optional[list] = None, key: str = "") -> str:
         """Read FName (name table index + instance number).

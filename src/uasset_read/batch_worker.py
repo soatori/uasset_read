@@ -55,7 +55,6 @@ class _StderrDrain:
         self._max_lines = max_lines
         self._lines: collections.deque[str] = collections.deque(maxlen=max_lines)
         self._total_bytes: int = 0
-        self._dropped_count: int = 0
         self._thread: threading.Thread | None = None
         self._line_callback = line_callback
 
@@ -89,7 +88,6 @@ class _StderrDrain:
         if self._lines.maxlen is not None and len(self._lines) >= self._lines.maxlen:
             old = self._lines[0]
             self._total_bytes -= len(old.encode("utf-8", errors="replace"))
-            self._dropped_count += 1
         self._lines.append(line)
         self._total_bytes += line_bytes
         if self._line_callback is not None:
@@ -98,7 +96,6 @@ class _StderrDrain:
         while self._total_bytes > self._max_bytes and len(self._lines) > 1:
             old = self._lines.popleft()
             self._total_bytes -= len(old.encode("utf-8", errors="replace"))
-            self._dropped_count += 1
 
     def join(self, timeout: float | None = None) -> None:
         """等待 drain 线程完成。"""
@@ -109,14 +106,6 @@ class _StderrDrain:
     def text(self) -> str:
         """返回收集到的 stderr 文本。"""
         return "".join(self._lines)
-
-    @property
-    def dropped_count(self) -> int:
-        return self._dropped_count
-
-    @property
-    def total_bytes(self) -> int:
-        return self._total_bytes
 
 
 @dataclass(frozen=True)
@@ -336,12 +325,6 @@ def _monitor_worker(
         stderr_out = getattr(process, "stderr_text", "")
         if stderr_out:
             logger.warning("子进程 stderr (exit %d):\n%s", process.exitcode, stderr_out)
-    if result_queue is None:
-        return BatchWorkerOutcome(
-            False,
-            "",
-            f"worker_exit: process exited with code {process.exitcode} without a result",
-        )
     try:
         return result_queue.get(timeout=1)
     except queue.Empty:

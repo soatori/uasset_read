@@ -20,6 +20,7 @@ from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .diagnostics import OffsetRangeDiagnostic, StructuredDiagnostic
+    from uasset_read.debug import HexViewEntry
 
 
 @dataclass
@@ -369,21 +370,6 @@ class ExportIR:
 
 
 @dataclass
-class ExportDependencyIR:
-    """Export dependency relationships.
-
-    Corresponds to dependency fields in UE's FExportMapEntry.
-    Describes serialization and creation order dependencies between exports.
-    """
-
-    export_index: int
-    serialization_before_serialization: list[int]
-    create_before_serialization: list[int]
-    serialization_before_create: list[int]
-    create_before_create: list[int]
-
-
-@dataclass
 class BlueprintFunctionIR:
     """Blueprint function IR (full metadata, equivalent to UFunction description)."""
 
@@ -487,27 +473,6 @@ class ExecutionChainIR:
 
 
 @dataclass
-class FunctionGraphIR:
-    """Function graph data (based on _build_function_graphs_safe() actual fields)."""
-
-    function_name: str
-    graph_source: str = ""
-    entry_node_guid: str = ""
-    signature: dict = field(default_factory=dict)
-    execution_flows: list[dict] = field(default_factory=list)
-    fallback_reason: str | None = None
-
-
-@dataclass
-class LinkerSummaryIR:
-    """Package linker summary."""
-
-    has_linker: bool
-    import_paths: list[str]
-    export_paths: list[str]
-
-
-@dataclass
 class VariableIR:
     """Blueprint variable IR (full metadata, equivalent to FBPVariableDescription)."""
 
@@ -535,51 +500,10 @@ class VariableIR:
 
 
 @dataclass
-class SourceSiteContextIR:
-    """Localization context information — FTextSourceSiteContext.
-
-    Reference: GatherableTextData.h:12
-    Describes where text is used in source code and its localization attributes.
-    """
-
-    key_name: str
-    site_description: str
-    is_editor_only: bool
-    is_optional: bool
-
-
-@dataclass
-class GatherableTextDataIR:
-    """Gatherable text data — FGatherableTextData.
-
-    Reference: GatherableTextData.h:49
-    Contains namespace name, source string, and source context list.
-    """
-
-    namespace_name: str
-    source_string: str
-    source_site_contexts: list[SourceSiteContextIR]
-
-
-@dataclass
-class HexViewEntryIR:
-    """Single read operation IR representation (converted from HexViewEntry)."""
-
-    key: str
-    type: str
-    value: Any
-    start: int
-    stop: int
-    size: int
-    value_hex: str | None = None
-    value_size: int | None = None
-
-
-@dataclass
 class DebugIR:
     """Debug data IR (parsing trace information)."""
 
-    hex_view: list[HexViewEntryIR] = field(default_factory=list)
+    hex_view: list["HexViewEntry"] = field(default_factory=list)
     hex_view_truncated_count: int = 0
     """Number of hex view entries dropped by BoundedEventBuffer truncation."""
 
@@ -625,13 +549,6 @@ class UserDefinedDataIR:
 class PackageDependenciesIR:
     """Package dependency data."""
 
-    resolved_parent_assets: list[dict] = field(default_factory=list)
-    inherited_blueprint_graphs: list[dict] = field(default_factory=list)
-    depends_map: list[list[int]] = field(default_factory=list)
-    resolved_depends_map: list[list[dict]] = field(default_factory=list)
-    soft_object_paths: list[dict] = field(default_factory=list)
-    soft_package_references: list[str] = field(default_factory=list)
-    asset_registry_data_offset: int = 0
     asset_registry_data: dict | None = None
 
 
@@ -725,7 +642,6 @@ class PackageIR:
     name_map: tuple[str, ...]
     imports: list[ImportIR]  # Fix: original list[dict] was a type annotation bug
     exports: list[ExportIR]
-    linker: LinkerSummaryIR | None
     blueprint: BlueprintIR | None = None
     decompiled_functions: list[DecompiledFunctionIR] = field(default_factory=list)
     execution_chains: list[ExecutionChainIR] = field(default_factory=list)

@@ -86,7 +86,6 @@ def create_parser():
 
     # Mutually exclusive output flags
     group = parser.add_mutually_exclusive_group(required=False)
-    group.add_argument("--json", action="store_true", help="Output full JSON structure (default)")
     group.add_argument("--markdown", action="store_true", help="Output Markdown format (routes to the v1 pipeline)")
     group.add_argument(
         "--legacy-json",
@@ -216,8 +215,6 @@ def resolve_format(args) -> str:
     """从 CLI 参数解析导出格式名。"""
     if args.markdown:
         return "markdown"
-    if args.json:
-        return "json"
     return "json"
 
 

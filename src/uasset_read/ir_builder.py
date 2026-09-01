@@ -32,14 +32,12 @@ from uasset_read.models.ir import (
     GraphIR,
     NodeIR,
     PinIR,
-    LinkerSummaryIR,
     BlueprintIR,
     BlueprintFunctionIR,
     BlueprintEventIR,
     DecompiledFunctionIR,
     ExecutionChainIR,
     VariableIR,
-    HexViewEntryIR,
     DebugIR,
     AnimationDataIR,
     UserDefinedDataIR,
@@ -64,7 +62,7 @@ from uasset_read.constants import (
     CONTAINER_TYPE_PREFIX,
     UE_NONE_SENTINEL,
 )
-from uasset_read.serializers.object_resources import PackageIndex, resolve_class_name
+from uasset_read.serializers.object_resources import resolve_class_name
 from uasset_read.kismet.result import infer_bytecode_confidence
 
 
@@ -750,7 +748,6 @@ def build_package_ir(result: "ParseResult") -> PackageIR:
     """
     header = _build_header(result)
     exports = _build_exports(result)
-    linker = _build_linker(result)
 
     # Build function_graphs (from result.graphs)
     function_graphs = []
@@ -841,7 +838,6 @@ def build_package_ir(result: "ParseResult") -> PackageIR:
         name_map=tuple(result.name_map) if result.name_map else (),
         imports=_build_imports(result),
         exports=exports,
-        linker=linker,
         blueprint=_build_blueprint_ir(result),
         decompiled_functions=_build_decompiled_functions_ir(result),
         execution_chains=_build_execution_chains_ir(result),
@@ -852,18 +848,7 @@ def build_package_ir(result: "ParseResult") -> PackageIR:
         diagnostics=(result.diagnostics or []) + list(getattr(result, "structured_diagnostics", None) or []),
         function_graphs=function_graphs,
         logic_sources=list(getattr(result, "logic_sources", None) or []),
-        dependencies=PackageDependenciesIR(
-            resolved_parent_assets=list(getattr(result, "resolved_parent_assets", None) or []),
-            inherited_blueprint_graphs=list(getattr(result, "inherited_blueprint_graphs", None) or []),
-            depends_map=list(getattr(result.summary, "depends_map", None) or []) if result.summary else [],
-            resolved_depends_map=_build_resolved_depends_map(result),
-            soft_object_paths=list(getattr(result, "soft_references", None) or []),
-            soft_package_references=list(getattr(result, "soft_package_references", None) or []),
-            asset_registry_data_offset=_safe_int(getattr(result.summary, "asset_registry_data_offset", 0))
-            if result.summary
-            else 0,
-            asset_registry_data=_build_asset_registry_data(result),
-        ),
+        dependencies=PackageDependenciesIR(asset_registry_data=_build_asset_registry_data(result)),
         diagnostics_data=DiagnosticsDataIR(
             errors=errors,
             warnings=warnings,
@@ -1483,57 +1468,6 @@ def _resolve_package_index(result: ParseResult, pkg_index) -> str | None:
         return None
 
 
-def _build_resolved_depends_map(result: "ParseResult") -> list[list[dict]]:
-    """Resolve raw PackageIndex values in DependsMap to human-readable paths.
-
-    Returns:
-        2D list: outer level indexed by export, inner level is a list of [{index, path}].
-    """
-    if not result.summary:
-        return []
-    raw_map = getattr(result.summary, "depends_map", None) or []
-    if not raw_map:
-        return []
-
-    resolved: list[list[dict]] = []
-    for dep_indices in raw_map:
-        row: list[dict] = []
-        for idx in dep_indices:
-            pkg_idx = PackageIndex(idx)
-            path = _resolve_package_index(result, pkg_idx)
-            row.append({"index": idx, "path": path})
-        resolved.append(row)
-    return resolved
-
-
-def _build_linker(result: ParseResult) -> LinkerSummaryIR | None:
-    linker = result.linker
-    if linker is None:
-        return None
-
-    from uasset_read.link.linker import normalize_world_partition_path
-
-    import_paths = []
-    for imp in result.import_map or []:
-        cp = _safe_str(getattr(imp, "class_package", None))
-        cn = _safe_str(getattr(imp, "class_name", None))
-        path = f"{normalize_world_partition_path(cp)}.{cn}"
-        if path.strip():
-            import_paths.append(path)
-
-    export_paths = []
-    for exp in result.export_map or []:
-        name = getattr(exp, "object_name", "")
-        if name:
-            export_paths.append(name)
-
-    return LinkerSummaryIR(
-        has_linker=True,
-        import_paths=import_paths,
-        export_paths=export_paths,
-    )
-
-
 def _build_blueprint_ir(result: ParseResult) -> BlueprintIR | None:
     """Build BlueprintIR from ParseResult.blueprint (full metadata)."""
     bp = result.blueprint
@@ -2065,18 +1999,7 @@ def _build_debug_ir(
     """
     if not hex_view_entries and hex_view_truncated_count == 0:
         return None
-    entries = []
-    for e in hex_view_entries:
-        entry = HexViewEntryIR(
-            key=e.key,
-            type=e.type,
-            value=e.value,
-            start=e.start,
-            stop=e.stop,
-            size=e.size,
-        )
-        entries.append(entry)
     return DebugIR(
-        hex_view=entries,
+        hex_view=list(hex_view_entries),
         hex_view_truncated_count=hex_view_truncated_count,
     )

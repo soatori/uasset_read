@@ -9,7 +9,7 @@ from __future__ import annotations
 
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 if TYPE_CHECKING:
     from uasset_read.serializers.object_resources import (
@@ -62,21 +62,6 @@ class UObjectInstance:
     # ---- Lazy-loaded data ----
     serialized_properties: List[Any] = field(default_factory=list)
     """Parsed property values (filled by PackageLinker.preload())."""
-
-    property_references: Dict[str, "UObjectInstance"] = field(default_factory=dict)
-    """ObjectProperty values resolved to UObjectInstance references."""
-
-    template_object: Optional["UObjectInstance"] = None
-    """Resolved template (CDO) object from template_index."""
-
-    dependencies: List["UObjectInstance"] = field(default_factory=list)
-    """Resolved dependencies from DependsMap."""
-
-    super_object: Optional["UObjectInstance"] = None
-    """Resolved super (parent class) object from super_index."""
-
-    weak_references: List["UObjectInstance"] = field(default_factory=list)
-    """Resolved weak object references (WeakObjectProperty)."""
 
     script_serialization_start_offset: int = 0
     """UE5 blueprint script serialization start offset."""
@@ -136,12 +121,6 @@ class UObjectInstance:
                     pkg_name = "Unknown"
             return f"{pkg_name}.{self.object_name}", False
         return self.object_name, False
-
-    def get_children(self) -> List["UObjectInstance"]:
-        """Get child objects (objects whose Outer is this object)."""
-        if self.linker is None:
-            return []
-        return self.linker.get_children(self)
 
     def __repr__(self) -> str:
         kind = "Import" if self.is_import else "Export"

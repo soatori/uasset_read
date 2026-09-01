@@ -185,15 +185,6 @@ class PackageLinker:
             if parent is not None:
                 inst.outer = parent
 
-        # 解析 super_index（父类引用）
-        for idx, exp in enumerate(self._export_map):
-            if idx < len(self._export_objects):
-                inst = self._export_objects[idx]
-                if hasattr(exp, "super_index") and exp.super_index and not exp.super_index.is_null:
-                    super_inst = self.resolve_package_index(exp.super_index)
-                    if super_inst is not None:
-                        inst.super_object = super_inst
-
     def export_objects(self) -> List[UObjectInstance]:
         """返回导出对象列表的只读副本。"""
         return list(self._export_objects)
@@ -239,11 +230,6 @@ class PackageLinker:
             )
             return None
         return None
-
-    def get_children(self, obj: UObjectInstance) -> List[UObjectInstance]:
-        """Return all objects whose Outer is *obj*."""
-        all_objs = self._import_objects + self._export_objects
-        return [inst for inst in all_objs if inst.outer is obj]
 
     def preload(
         self,
@@ -434,75 +420,9 @@ class PackageLinker:
     def post_load(self) -> None:
         """Stage 4: 后处理阶段（镜像 UE FLinkerLoad::PostLoad）。
 
-        在所有对象创建和预加载后执行：
-        1. 解析 ObjectProperty 引用
-        2. 解析 WeakObjectProperty 引用
-        3. 验证导入对象有效性
-        4. 解析 template_index (CDO) 引用
-        5. 构建依赖图
+        验证导入对象有效性；错误经 _import_verification_errors 汇入 result.errors。
         """
-        self._resolve_property_references()
-        self._resolve_weak_references()
         self._import_verification_errors = self._verify_imports()
-        self._resolve_template_objects()
-        self._build_dependency_graph()
-
-    def _resolve_property_references(self) -> None:
-        """将 ObjectProperty 的 FPackageIndex 解析为 UObjectInstance 引用。
-
-        遍历所有已 preload 的 export 对象，填充 property_references 字段。
-        支持 int 和 PackageIndex 两种值类型。
-        """
-        from uasset_read.serializers.object_resources import PackageIndex
-
-        for inst in self._export_objects:
-            if not inst._preloaded:
-                continue
-            if not hasattr(inst, "serialized_properties") or not inst.serialized_properties:
-                continue
-            for prop in inst.serialized_properties:
-                if not isinstance(prop, dict):
-                    continue
-                if prop.get("type") == "ObjectProperty":
-                    pkg_idx = prop.get("value")
-                    if isinstance(pkg_idx, PackageIndex):
-                        resolved = self.resolve_package_index(pkg_idx)
-                    elif isinstance(pkg_idx, int):
-                        resolved = self.resolve_package_index(PackageIndex(pkg_idx))
-                    else:
-                        continue
-                    if resolved:
-                        prop_name = prop.get("name", "")
-                        if not hasattr(inst, "property_references"):
-                            inst.property_references = {}
-                        inst.property_references[prop_name] = resolved
-
-    def _resolve_weak_references(self) -> None:
-        """将 WeakObjectProperty 的 FPackageIndex 解析为 UObjectInstance 弱引用。
-
-        遍历所有已 preload 的 export 对象，填充 weak_references 字段。
-        支持 int 和 PackageIndex 两种值类型。
-        """
-        from uasset_read.serializers.object_resources import PackageIndex
-
-        for inst in self._export_objects:
-            if not inst._preloaded:
-                continue
-            if not hasattr(inst, "serialized_properties") or not inst.serialized_properties:
-                continue
-            for prop in inst.serialized_properties:
-                if not isinstance(prop, dict):
-                    continue
-                if prop.get("type") == "WeakObjectProperty":
-                    pkg_idx = prop.get("value")
-                    if isinstance(pkg_idx, PackageIndex):
-                        resolved = self.resolve_package_index(pkg_idx)
-                    elif isinstance(pkg_idx, int):
-                        resolved = self.resolve_package_index(PackageIndex(pkg_idx))
-                    else:
-                        continue
-                    if resolved:
-                        inst.weak_references.append(resolved)
 
     def _verify_imports(self) -> List[str]:
         """验证所有导入对象的有效性。
@@ -540,77 +460,3 @@ class PackageLinker:
                         errors.append(f"Import {inst.object_name}: outer_index 无法解析")
 
         return errors
-
-    def _resolve_template_objects(self) -> None:
-        """解析导出对象的 template_index (CDO) 引用。
-
-        为每个已 preload 的 export 设置 template_object 属性。
-        """
-        for idx, inst in enumerate(self._export_objects):
-            if idx >= len(self._export_map):
-                continue
-            exp = self._export_map[idx]
-            if hasattr(exp, "template_index") and exp.template_index and not exp.template_index.is_null:
-                template = self.resolve_package_index(exp.template_index)
-                if template:
-                    inst.template_object = template
-
-    def _build_dependency_graph(self) -> None:
-        """将 DependsMap 转换为 UObjectInstance 之间的依赖链接。
-
-        DependsMap values are FPackageIndex (int32):
-        - Positive: export index (1-based)
-        - Negative: import index (-1 based)
-        - Zero: null
-
-        DependsMap[export_index] = [FPackageIndex 列表]
-        """
-        if not hasattr(self._summary, "depends_map") or not self._summary.depends_map:
-            return
-
-        from uasset_read.serializers.object_resources import PackageIndex
-
-        depends_map = self._summary.depends_map
-        for exp_idx, dep_indices in enumerate(depends_map):
-            if exp_idx >= len(self._export_objects):
-                continue
-
-            inst = self._export_objects[exp_idx]
-            inst.dependencies = []
-
-            for raw_dep in dep_indices:
-                if raw_dep == 0:
-                    # Null dependency, skip
-                    continue
-
-                # 类型校验：仅接受 int 类型的 FPackageIndex 值
-                if not isinstance(raw_dep, int):
-                    self._diagnostics.append(
-                        OffsetRangeDiagnostic(
-                            module="linker",
-                            field="DependsMap",
-                            export_index=exp_idx,
-                            source="_build_dependency_graph",
-                            error=f"Export #{exp_idx} dependency 值类型异常: {type(raw_dep).__name__}({raw_dep})",
-                        )
-                    )
-                    continue
-
-                # Convert FPackageIndex to UObjectInstance
-                pkg_idx = PackageIndex(raw_dep)
-                resolved = self.resolve_package_index(pkg_idx)
-
-                if resolved is not None:
-                    inst.dependencies.append(resolved)
-                else:
-                    # Record diagnostic for unresolvable dependency
-                    self._diagnostics.append(
-                        OffsetRangeDiagnostic(
-                            module="linker",
-                            field="DependsMap",
-                            export_index=exp_idx,
-                            target_offset=raw_dep,
-                            source="_build_dependency_graph",
-                            error=f"Export #{exp_idx} dependency {raw_dep} could not be resolved",
-                        )
-                    )

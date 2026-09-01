@@ -28,24 +28,6 @@ class HexViewEntry:
         """Number of bytes read."""
         return self.stop - self.start
 
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to JSON-compatible dictionary."""
-        d: dict[str, Any] = {
-            "key": self.key,
-            "type": self.type,
-            "start": self.start,
-            "stop": self.stop,
-            "size": self.size,
-        }
-        if isinstance(self.value, bytes):
-            d["value_hex"] = self.value.hex()
-            d["value_size"] = len(self.value)
-        elif isinstance(self.value, str):
-            d["value"] = self.value
-        else:
-            d["value"] = self.value
-        return d
-
 
 def format_hex_view(
     entries: list[HexViewEntry],

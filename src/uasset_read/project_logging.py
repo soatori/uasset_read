@@ -114,61 +114,6 @@ def log_event(
     logger.log(level, "event=%s %s", event, field_str)
 
 
-def log_stage_timing(
-    logger: logging.Logger,
-    stage_name: str,
-    asset: str | None = None,
-):
-    """Return an object usable as both decorator and context manager.
-
-    Usage as context manager::
-
-        with log_stage_timing(logger, "preload", asset="BP_Player"):
-            do_work()
-
-    Usage as decorator::
-
-        @log_stage_timing(logger, "link")
-        def link(self): ...
-    """
-
-    class _TimingContext:
-        def __init__(self):
-            self._start: float = 0.0
-
-        def __enter__(self):
-            if asset is not None:
-                _log_asset.set(asset)
-            _log_stage.set(stage_name)
-            self._start = _time.monotonic()
-            logger.debug("stage_start stage=%s", stage_name)
-            return self
-
-        def __exit__(self, exc_type, exc_val, exc_tb):
-            elapsed_ms = (_time.monotonic() - self._start) * 1000
-            status = "error" if exc_type else "success"
-            logger.debug(
-                "stage_end stage=%s status=%s duration_ms=%.1f",
-                stage_name,
-                status,
-                elapsed_ms,
-            )
-            return False
-
-        def __call__(self, func):
-            """Allow use as a decorator."""
-            ctx = self
-
-            @wraps(func)
-            def wrapper(*args, **kwargs):
-                with ctx:
-                    return func(*args, **kwargs)
-
-            return wrapper
-
-    return _TimingContext()
-
-
 def _default_project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -584,18 +529,3 @@ def cleanup_project_logs(
         for path in planned:
             path.unlink(missing_ok=True)
     return planned
-
-
-def _reset_logging_state_for_tests() -> None:
-    """Remove only handlers installed by configure_project_logging()."""
-    global _configured_log_path
-    global _configured_run_id
-    global _configured_signature
-    global _disabled_by_request
-    global _original_level
-    global _original_propagate
-
-    with _state_lock:
-        package_logger = logging.getLogger(_LOGGER_NAME)
-        _shutdown_locked(package_logger)
-        _disabled_by_request = False

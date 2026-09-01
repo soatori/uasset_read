@@ -1,6 +1,5 @@
 """Package bundle and provider helpers."""
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional
@@ -12,11 +11,6 @@ from uasset_read.exceptions import ParseError
 from uasset_read.memory_safety import ResourceBudget
 
 logger = logging.getLogger(__name__)
-
-
-def _normalize_path(s: str) -> str:
-    """Normalize Windows backslashes to forward slashes and strip trailing slashes."""
-    return s.replace(chr(92), "/").rstrip("/")
 
 
 PACKAGE_EXTENSIONS = (".uasset", ".umap")
@@ -146,90 +140,9 @@ class PackageBundle:
             raise ParseError(f"Package sidecar not found: {extension}")
         return FArchive(path, tolerant=tolerant)
 
-class PackageProvider(ABC):
-    """Abstract package provider used by filesystem and container readers."""
+class FileSystemPackageProvider:
+    """Filesystem package provider: discovers and opens .uasset/.umap bundles."""
 
-    container = "unknown"
-
-    @abstractmethod
-    def list_files(self) -> list[str]:
-        """List all files available from this provider."""
-        ...
-
-    @abstractmethod
-    def read_file(self, path: str) -> Optional[bytes]:
-        """Read the contents of a file by path, returning None if not found."""
-        ...
-
-    def open_file(self, path: str) -> Optional[ArchiveLike]:
-        """Open file and return ArchiveLike, supporting range reads (recommended for large files).
-
-        Default implementation: reads the full bytes and wraps as ByteArchive.
-        Subclasses can override this method for more efficient implementations (e.g., FArchive's mmap support).
-        """
-        data = self.read_file(path)
-        if data is None:
-            return None
-        return ByteArchive(data, name=path)
-
-    def open_package_bundle(
-        self, path: str, tolerant: bool = False, budget: ResourceBudget | None = None
-    ) -> PackageBundle:
-        path = self._resolve_package_path(path)
-        ext = Path(path).suffix.lower()
-        package_kind = "map" if ext == ".umap" else "asset"
-        stem = path[: -len(ext)]
-        files = {ext: path}
-        payloads: dict[str, bytes] = {}
-        main_data = self.read_file(path)
-        if main_data is not None:
-            if budget is not None:
-                budget.reserve(len(main_data), f"bundle_main:{Path(path).name}")
-            payloads[ext] = main_data
-        for payload_ext in PACKAGE_PAYLOAD_EXTENSIONS:
-            sidecar = stem + payload_ext
-            data = self.read_file(sidecar)
-            if data is not None:
-                if budget is not None:
-                    budget.reserve(len(data), f"bundle_sidecar:{Path(sidecar).name}")
-                payloads[payload_ext] = data
-        return PackageBundle(
-            main_path=path,
-            package_kind=package_kind,
-            container=self.container,
-            files=files,
-            payloads=payloads,
-            provider=self,
-        )
-
-    def _resolve_package_path(self, path: str) -> str:
-        files = set(self.list_files())
-        if path in files:
-            return path
-        normalized = _normalize_path(path)
-        if normalized in files:
-            return normalized
-        for ext in PACKAGE_EXTENSIONS:
-            candidate = f"{normalized}{ext}"
-            if candidate in files:
-                return candidate
-        lowered = normalized.lower()
-        for candidate in files:
-            candidate_normalized = _normalize_path(candidate)
-            if candidate_normalized.lower() == lowered:
-                return candidate
-            for ext in PACKAGE_EXTENSIONS:
-                if candidate_normalized.lower() == f"{lowered}{ext}":
-                    return candidate
-            if candidate_normalized.lower().endswith(f"/{lowered}"):
-                return candidate
-            for ext in PACKAGE_EXTENSIONS:
-                if candidate_normalized.lower().endswith(f"/{lowered}{ext}"):
-                    return candidate
-        raise FileNotFoundError(path)
-
-
-class FileSystemPackageProvider(PackageProvider):
     container = "filesystem"
 
     def __init__(self, root: str | os.PathLike[str] | None = None):
@@ -326,6 +239,11 @@ class FileSystemPackageProvider(PackageProvider):
             files=files,
             provider=self,
         )
+
+
+# Type-name alias kept for pipeline annotations; the ABC it came from had a
+# single implementation whose generic base paths never executed.
+PackageProvider = FileSystemPackageProvider
 
 
 def open_package_bundle(

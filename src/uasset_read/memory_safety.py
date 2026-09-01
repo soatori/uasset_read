@@ -43,7 +43,6 @@ class ResourceBudget:
         self.max_decompressed_block_bytes = max_decompressed_block_bytes
         self.max_total_decompressed_bytes = max_total_decompressed_bytes
         self._total_decompressed = 0
-        self._checkpoints: list[int] = []
 
     def reserve(self, bytes_needed: int, stage: str, asset: str = "") -> None:
         """Reserve resources, raises MemoryLimitExceeded if quota exceeded."""
@@ -69,16 +68,6 @@ class ResourceBudget:
                 current_rss_mb=self._total_decompressed / 1024 / 1024,
                 limit_mb=self.max_total_decompressed_bytes / 1024 / 1024,
             )
-
-    def checkpoint(self) -> None:
-        """Save current state."""
-        self._checkpoints.append(self._total_decompressed)
-
-    def rollback(self) -> None:
-        """Roll back to the previous checkpoint."""
-        if self._checkpoints:
-            self._total_decompressed = self._checkpoints.pop()
-
 
 @dataclass
 class MemoryStats:

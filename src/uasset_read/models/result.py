@@ -59,7 +59,6 @@ class ParseResult:
     soft_references: list[dict] = field(default_factory=list)
     soft_object_path_list: list[dict] = field(default_factory=list)
     """SoftObjectPathList for index-based SoftObjectProperty resolution (UE5.7+)."""
-    circular_deps: list[list[str]] = field(default_factory=list)
     components: list[dict] = field(default_factory=list)
     decompiled_functions: list[KismetDecompiledResult] = field(default_factory=list)
     version_container: VersionContainer | None = None
@@ -75,10 +74,6 @@ class ParseResult:
     # -- Parse-path fields (do not apply to the linker path) --
     soft_package_references: list[str] = field(default_factory=list)
     asset_registry_data: AssetRegistryData | None = None
-    root_objects: list = field(default_factory=list)
-    """Top-level object instances from the linker object graph."""
-    all_objects: list = field(default_factory=list)
-    """All object instances from the linker object graph."""
 
     @property
     def status(self) -> str:
