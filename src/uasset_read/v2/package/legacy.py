@@ -44,10 +44,7 @@ from ...v2.object_model import (
     ROLES_GENERATED_CLASS,
 )
 from ...v2.source import FileSource, SliceReader
-from ...v2.version import (
-    MappingInfo,
-    build_version_context_from_summary,
-)
+from ...v2.version import VersionContext
 
 
 def _make_package_archive(source: FileSource, tolerant: bool = False) -> PackageArchive:
@@ -451,13 +448,7 @@ class LegacyPackageReader:
 
             # 17. Run asset handlers at depth >= asset
             if depth in ("asset", "decode"):
-                context = build_version_context_from_summary(
-                    summary,
-                    package_layout="legacy",
-                    game=self._game,
-                    mappings=MappingInfo(path=self._mappings_path) if self._mappings_path else None,
-                    depth=depth,
-                )
+                context = VersionContext(depth=depth)
                 for obj in objects:
                     try:
                         semantic, cov, handler_diags = run_handlers(
@@ -480,9 +471,9 @@ class LegacyPackageReader:
                         )
 
             # 17b. Payloads stay deferred: real descriptors require
-            # .uexp/.ubulk/.utoc/.ucas container support, so Legacy always
-            # emits an empty list (the document field stays for schema
-            # compatibility).
+            # .uexp/.ubulk/.utoc/.ucas container support, so nothing is
+            # emitted (the projection keeps an empty payloads list for
+            # schema compatibility).
 
             # 18. Build SourceInfo
             source_info = _build_source_info(str(self._source._path))

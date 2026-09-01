@@ -170,8 +170,8 @@ def project_document(
     for d in doc.dependencies:
         target_display[f"import:{d.index}"] = f"{d.package_name}.{d.object_name}" if d.package_name else d.object_name
 
-    def _scope_to_page(ids: set[str]) -> tuple[list, list, list, list]:
-        """Scope relations, diagnostics, dependencies, payloads to page ids."""
+    def _scope_to_page(ids: set[str]) -> tuple[list, list, list]:
+        """Scope relations, diagnostics, dependencies to page ids."""
         relations = []
         for r in doc.relations:
             if r.from_id not in ids:
@@ -195,24 +195,9 @@ def project_document(
             for i, d in enumerate(doc.dependencies)
             if i in reachable_imports
         ]
+        return relations, page_diagnostics, filtered_dependencies
 
-        # Filter payloads to only those owned by objects in the page
-        filtered_payloads = [
-            {
-                "id": p.id,
-                "owner": p.owner_id,
-                "kind": p.kind,
-                "source_region": p.source_region,
-                "offset": p.offset,
-                "stored_size": p.stored_size,
-                "status": p.status,
-            }
-            for p in doc.payloads
-            if p.owner_id in ids
-        ]
-        return relations, page_diagnostics, filtered_dependencies, filtered_payloads
-
-    relations, page_diagnostics, filtered_dependencies, filtered_payloads = _scope_to_page(page_ids)
+    relations, page_diagnostics, filtered_dependencies = _scope_to_page(page_ids)
 
     # Build result
     result: dict[str, Any] = {
@@ -227,7 +212,8 @@ def project_document(
         else [_emit(o) for o in page],
         "relations": relations,
         "dependencies": filtered_dependencies,
-        "payloads": filtered_payloads,
+        # Payloads stay deferred (issue #621); the key is schema-required.
+        "payloads": [],
         "diagnostics": [d.to_dict() for d in page_diagnostics],
         "summary": {
             "object_count": doc.summary.object_count,
@@ -247,7 +233,6 @@ def project_document(
             "total_objects": len(doc.objects),
             "total_relations": len(doc.relations),
             "total_diagnostics": len(doc.diagnostics),
-            "object_diagnostics": sum(len(o.diagnostics) for o in doc.objects),
         }
 
     # Merge agent-tool response keys BEFORE measuring, so the trim
@@ -283,10 +268,9 @@ def project_document(
                 result["objects"].pop()
                 result["next_offset"] = offset + len(result["objects"])
                 remaining_ids = {o["id"] for o in result["objects"] if isinstance(o, dict) and "id" in o}
-                rels, diags, deps, pays = _scope_to_page(remaining_ids)
+                rels, diags, deps = _scope_to_page(remaining_ids)
                 result["relations"] = rels
                 result["dependencies"] = deps
-                result["payloads"] = pays
                 result["diagnostics"] = [d.to_dict() for d in diags] + [trunc_diag]
             page_total = max(0, len(selected) - offset)
             if limit is not None:
@@ -382,6 +366,4 @@ def obj_to_dict(obj: ObjectRecord, *, view: str = "semantic") -> dict[str, Any]:
             {"feature": c.feature, "status": c.status, **({"detail": c.detail} if c.detail else {})}
             for c in obj.coverage
         ]
-    if obj.diagnostics:
-        d["diagnostics"] = [diag.to_dict() for diag in obj.diagnostics]
     return d

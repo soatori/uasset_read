@@ -7,14 +7,13 @@ name and invoked lazily when depth >= asset.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol
 
 from .diagnostics import Diagnostic
 from .object_model import ObjectRecord, CoverageEntry
 from .version import VersionContext
 
 
-@runtime_checkable
 class AssetHandler(Protocol):
     """Domain handler that enriches an object with semantic data."""
 
@@ -806,10 +805,6 @@ class BlueprintFamilyHandler:
 
             obj.coverage.extend(coverage)
             return result
-
-        # For other depths, return light summary
-        obj.coverage.extend(coverage)
-        return result
 
 
 register_handler(

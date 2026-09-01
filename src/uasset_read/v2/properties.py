@@ -27,7 +27,7 @@ def normalize_property_bag(properties: Sequence[Any]) -> dict[str, Any]:
                 "kind": "opaque",
                 "type": prop.type,
                 "size": prop.size,
-                "reason": prop.reason.value if hasattr(prop.reason, "value") else str(prop.reason),
+                "reason": prop.reason.value,
             }
         elif isinstance(prop, StructValue):
             bag[name] = _serialize_value(prop)
@@ -63,7 +63,7 @@ def _serialize_value(value: Any) -> Any:
             "kind": "opaque",
             "type": value.type,
             "size": value.size,
-            "reason": value.reason.value if hasattr(value.reason, "value") else str(value.reason),
+            "reason": value.reason.value,
         }
     if isinstance(value, StructValue):
         inner: dict[str, Any] = {}

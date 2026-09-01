@@ -147,13 +147,8 @@ def get_diagnostics(
     """
     doc = parse_package_document(file_path)
 
-    # Collect all diagnostics (package-level + object-level)
-    all_diags = list(doc.diagnostics)
-    for obj in doc.objects:
-        all_diags.extend(obj.diagnostics)
-
     # Apply filters
-    filtered = all_diags
+    filtered = list(doc.diagnostics)
     if stage:
         filtered = [d for d in filtered if d.stage == stage]
     if severity:

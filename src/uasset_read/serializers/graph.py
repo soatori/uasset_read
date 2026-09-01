@@ -1,7 +1,7 @@
 """UEdGraph container reader.
 
 Pin and Node serializers live in graph_pin.py and graph_node.py.
-Shared helpers (GUID, PropertyTag, FText, diagnostic tracing, pin validation)
+Shared helpers (GUID, PropertyTag, FText, pin validation)
 are in graph_helpers.py to break the circular import cycle.
 """
 
@@ -57,9 +57,6 @@ def _extract_graph_properties(
             # ObjectProperty -> import reference
             if isinstance(value, dict):
                 schema_name = value.get("object_name") or value.get("full_name")
-            elif isinstance(value, int):
-                # Unresolved PackageIndex (legacy)
-                pass
         elif name == "Nodes" and isinstance(value, list):
             node_indices = [v for v in value if isinstance(v, int) and v > 0]
         elif name == "GraphGuid" and isinstance(value, dict):
@@ -70,12 +67,7 @@ def _extract_graph_properties(
                     b = int(fields.get("B", 0) or 0) & 0xFFFFFFFF
                     c = int(fields.get("C", 0) or 0) & 0xFFFFFFFF
                     d = int(fields.get("D", 0) or 0) & 0xFFFFFFFF
-                    graph_guid = (
-                        f"{a & 0xFF:02x}{(a >> 8) & 0xFF:02x}{(a >> 16) & 0xFF:02x}{(a >> 24) & 0xFF:02x}"
-                        f"{b & 0xFF:02x}{(b >> 8) & 0xFF:02x}{c & 0xFF:02x}{(c >> 8) & 0xFF:02x}"
-                        f"{(c >> 16) & 0xFF:02x}{(c >> 24) & 0xFF:02x}{d & 0xFF:02x}{(d >> 8) & 0xFF:02x}"
-                        f"{(d >> 16) & 0xFF:02x}{(d >> 24) & 0xFF:02x}"
-                    )
+                    graph_guid = struct.pack("<4I", a, b, c, d).hex()
                 except (TypeError, ValueError):
                     logger.warning(
                         "GraphGuid: non-integer field values in %s, using zero GUID",
@@ -131,14 +123,17 @@ def read_ue_graph(
 
     nodes: List[UEdGraphNode] = []
 
+    def read_node(node_export: ObjectExport, node_idx: int) -> UEdGraphNode:
+        node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
+        node._export_index = node_idx  # tag for dedup
+        return node
+
     for node_index in node_indices:
         if node_index <= 0 or node_index > len(export_map):
             continue
         node_export = export_map[node_index - 1]
         try:
-            node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
-            node._export_index = node_index  # tag for dedup
-            nodes.append(node)
+            nodes.append(read_node(node_export, node_index))
         except (ParseError, struct.error, OSError, ValueError, KeyError):
             logger.debug(
                 "Failed to read node %s (export #%d) in graph %s",
@@ -161,11 +156,7 @@ def read_ue_graph(
                     if already_collected:
                         continue
                     try:
-                        node = read_ue_graph_node(
-                            archive, name_map, summary, export_map, import_map, node_export, linker
-                        )
-                        node._export_index = node_idx  # tag for dedup
-                        nodes.append(node)
+                        nodes.append(read_node(node_export, node_idx))
                     except (ParseError, struct.error, OSError, ValueError, KeyError):
                         nodes.append(
                             UEdGraphNode(
@@ -204,74 +195,50 @@ def read_ue_graph(
     # 6. Parse subgraphs (merge SubGraphs array + AnimGraphNode nested subgraphs)
     subgraphs: List[UEdGraph] = []
 
-    # 6a. Parse from SubGraphs array (directly serialized subgraph references)
-    for pkg_idx in subgraph_indices:
-        if pkg_idx <= 0 or pkg_idx > len(export_map):
-            continue
-        if pkg_idx in _parsed_indices:
-            continue
-
+    def parse_subgraph(pkg_idx: int) -> Optional[UEdGraph]:
+        """Resolve one subgraph export reference; None when absent or not a graph."""
+        if pkg_idx <= 0 or pkg_idx > len(export_map) or pkg_idx in _parsed_indices:
+            return None
         subgraph_export = export_map[pkg_idx - 1]
         subgraph_class = _gac(subgraph_export, import_map, export_map, linker) or ""
-
         if not (subgraph_class.endswith("Graph") or subgraph_class == "EdGraph" or subgraph_class == "UberEdGraph"):
-            continue
+            return None
+        return read_ue_graph(
+            archive,
+            name_map,
+            summary,
+            export_map,
+            import_map,
+            subgraph_export,
+            subgraph_class,
+            pkg_idx,
+            linker,
+            _parsed_indices=_parsed_indices,
+        )
 
+    # 6a. From the SubGraphs array (directly serialized subgraph references)
+    for pkg_idx in subgraph_indices:
         try:
-            subgraph = read_ue_graph(
-                archive,
-                name_map,
-                summary,
-                export_map,
-                import_map,
-                subgraph_export,
-                subgraph_class,
-                pkg_idx,
-                linker,
-                _parsed_indices=_parsed_indices,
-            )
-            subgraphs.append(subgraph)
+            subgraph = parse_subgraph(pkg_idx)
         except (struct.error, OSError, ValueError, KeyError) as e:
             logger.debug("Failed to parse SubGraphs entry %d: %s", pkg_idx, e)
+            subgraph = None
+        if subgraph is not None:
+            subgraphs.append(subgraph)
 
-    # 6b. Parse from AnimGraphNode node_data.subgraph_references
+    # 6b. From AnimGraphNode node_data.subgraph_references (name overridden by owner)
     for node in nodes:
         node_data = getattr(node, "node_data", None)
         if not isinstance(node_data, dict):
             continue
-
-        subgraph_refs = node_data.get("subgraph_references", {})
-        for ref_key, ref_info in subgraph_refs.items():
+        for ref_key, ref_info in node_data.get("subgraph_references", {}).items():
             if not isinstance(ref_info, dict) or "error" in ref_info:
                 continue
-
-            pkg_idx = ref_info.get("package_index", 0)
-            if pkg_idx <= 0 or pkg_idx > len(export_map):
-                continue
-            if pkg_idx in _parsed_indices:
-                continue
-
-            subgraph_export = export_map[pkg_idx - 1]
-            subgraph_class = _gac(subgraph_export, import_map, export_map, linker) or ""
-
-            if not (subgraph_class.endswith("Graph") or subgraph_class == "EdGraph" or subgraph_class == "UberEdGraph"):
-                continue
-
             try:
-                subgraph = read_ue_graph(
-                    archive,
-                    name_map,
-                    summary,
-                    export_map,
-                    import_map,
-                    subgraph_export,
-                    subgraph_class,
-                    pkg_idx,
-                    linker,
-                    _parsed_indices=_parsed_indices,
-                )
-                subgraph.graph_name = f"{node.node_comment or node.class_name}.{ref_key}"
-                subgraphs.append(subgraph)
+                subgraph = parse_subgraph(ref_info.get("package_index", 0))
+                if subgraph is not None:
+                    subgraph.graph_name = f"{node.node_comment or node.class_name}.{ref_key}"
+                    subgraphs.append(subgraph)
             except (struct.error, OSError, ValueError, KeyError) as e:
                 logger.debug("Failed to parse subgraph %s: %s", ref_info.get("object_name", ""), e)
 

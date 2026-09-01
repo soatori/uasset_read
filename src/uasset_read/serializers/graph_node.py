@@ -28,11 +28,9 @@ from uasset_read.serializers.graph_helpers import (
     _read_guid,
     _rcn,
     _gac,
-    _get_thread_local,
     _read_tag_bool,
     _read_tag_i32,
     _read_tag_fname,
-    read_ftext_with_history,
 )
 from uasset_read.serializers.graph_pin import read_ue_graph_pin
 
@@ -286,9 +284,6 @@ def read_k2node_functionentry(
 def read_k2node_message(
     archive: FArchive,
     name_map: List[str],
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"] = None,
 ) -> Dict[str, Any]:
     """Read K2Node_Message specific fields."""
     result = {}
@@ -315,199 +310,6 @@ def read_k2node_call_delegate(archive: FArchive, name_map: List[str]) -> Dict[st
             result["delegate_name"] = name_map[delegate_idx]
     except (struct.error, OSError, ValueError) as e:
         logger.debug("K2Node_CallDelegate read failed: %s", e)
-    return result
-
-
-def _read_k2node_function_reference(
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Extract FunctionReference from raw_properties."""
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    func_ref = raw_properties.get("FunctionReference")
-    if func_ref is not None:
-        result["function_reference"] = func_ref
-
-    return result
-
-
-def read_k2node_call_array_function(
-    archive: FArchive,
-    name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Read K2Node_CallArrayFunction specific fields."""
-    return _read_k2node_function_reference(raw_properties)
-
-
-def read_k2node_call_parent_function(
-    archive: FArchive,
-    name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Read K2Node_CallParentFunction specific fields."""
-    return _read_k2node_function_reference(raw_properties)
-
-
-def read_k2node_function_result(
-    archive: FArchive,
-    name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Read K2Node_FunctionResult specific fields."""
-    return _read_k2node_function_reference(raw_properties)
-
-
-def read_k2node_create_widget(
-    archive: FArchive,
-    name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Read K2Node_CreateWidget specific fields.
-
-    Inherits from K2Node_ConstructObjectFromClass, creates UMG widgets.
-    """
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    # WidgetClass from PropertyTag (FPackageIndex -> class name)
-    widget_class = raw_properties.get("WidgetClass")
-    if widget_class is not None:
-        result["widget_class"] = widget_class
-
-    return result
-
-
-def _read_k2node_delegate_name(
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Extract DelegateName from raw_properties."""
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    delegate_name = raw_properties.get("DelegateName")
-    if delegate_name is not None:
-        result["delegate_name"] = delegate_name
-
-    return result
-
-
-def read_k2node_add_delegate(
-    archive: FArchive,
-    name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Read K2Node_AddDelegate specific fields."""
-    return _read_k2node_delegate_name(raw_properties)
-
-
-def read_k2node_macro_instance(
-    archive: FArchive,
-    name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Read K2Node_MacroInstance specific fields.
-
-    Inherits from K2Node_Tunnel, represents a macro graph instance.
-    """
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    # MacroGraph from PropertyTag (FPackageIndex -> macro graph reference)
-    macro_graph = raw_properties.get("MacroGraph")
-    if macro_graph is not None:
-        result["macro_graph"] = macro_graph
-
-    # Macro from PropertyTag (FName -> macro name)
-    macro = raw_properties.get("Macro")
-    if macro is not None:
-        result["macro_name"] = macro
-
-    # MacroGraphReference structured parsing (new format: FGraphReference)
-    macro_graph_ref = raw_properties.get("MacroGraphReference")
-    if macro_graph_ref is not None:
-        result["macro_graph_reference"] = macro_graph_ref
-
-    # ResolvedWildcardType -- type after wildcard pin resolution
-    resolved_wildcard = raw_properties.get("ResolvedWildcardType")
-    if resolved_wildcard is not None:
-        result["resolved_wildcard_type"] = resolved_wildcard
-
-    return result
-
-
-def read_k2node_assign_delegate(
-    archive: FArchive,
-    name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Read K2Node_AssignDelegate specific fields."""
-    return _read_k2node_delegate_name(raw_properties)
-
-
-def read_k2node_get_data_table_row(
-    archive: FArchive,
-    name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Read K2Node_GetDataTableRow specific fields.
-
-    Retrieves row data from a data table.
-    """
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    # DataTable from PropertyTag
-    data_table = raw_properties.get("DataTable")
-    if data_table is not None:
-        result["data_table"] = data_table
-
-    # RowStructName from PropertyTag
-    row_struct = raw_properties.get("RowStructName")
-    if row_struct is not None:
-        result["row_struct_name"] = row_struct
-
-    return result
-
-
-def read_k2node_load_asset(
-    archive: FArchive,
-    name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Read K2Node_LoadAsset specific fields.
-
-    Asynchronous asset loading node.
-    """
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    # AssetType from PropertyTag
-    asset_type = raw_properties.get("AssetType")
-    if asset_type is not None:
-        result["asset_type"] = asset_type
-
-    return result
-
-
-def read_k2node_spawn_actor_from_class(
-    archive: FArchive,
-    name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Read K2Node_SpawnActorFromClass specific fields.
-
-    Inherits from K2Node_ConstructObjectFromClass, spawns Actors.
-    """
-    raw_properties = raw_properties or {}
-    result: Dict[str, Any] = {}
-
-    # Class from PropertyTag
-    spawn_class = raw_properties.get("Class")
-    if spawn_class is not None:
-        result["spawn_class"] = spawn_class
-
     return result
 
 
@@ -610,16 +412,18 @@ def _handle_unknown_type(ctx: Dict[str, Any]) -> Dict[str, Any]:
     return {"_raw_properties": raw} if raw else {}
 
 
-# Generic handlers: node types that only need archive + name_map + raw_properties
-def _handle_simple_raw_props(ctx: Dict[str, Any], reader) -> Dict[str, Any]:
-    return reader(ctx["archive"], ctx["name_map"], raw_properties=ctx.get("raw_properties"))
+def _handle_raw_prop_copies(copy_spec: Dict[str, str]):
+    """Dispatch handler factory: copy present script tags into node_data under new keys."""
+
+    def handler(ctx: Dict[str, Any]) -> Dict[str, Any]:
+        raw = ctx.get("raw_properties") or {}
+        return {out_key: raw[tag] for tag, out_key in copy_spec.items() if raw.get(tag) is not None}
+
+    return handler
 
 
-def _handle_simple_full(ctx: Dict[str, Any], reader) -> Dict[str, Any]:
-    return reader(ctx["archive"], ctx["name_map"], ctx["import_map"], ctx["export_map"], ctx["linker"])
-
-
-# Node type -> handler mapping
+# Node type -> handler mapping. Classes whose node_data is just a copy of
+# present script tags live in the {node_class: {tag: out_key}} table instead.
 _NODE_TYPE_HANDLERS: Dict[str, Any] = {
     "K2Node_CallFunction": _handle_call_function,
     "K2Node_Event": _handle_event,
@@ -627,18 +431,27 @@ _NODE_TYPE_HANDLERS: Dict[str, Any] = {
     "EdGraphNode_Comment": _handle_comment,
     "K2Node_EnhancedInputAction": _handle_enhanced_input,
     "K2Node_FunctionEntry": _handle_function_entry,
-    "K2Node_Message": lambda ctx: _handle_simple_full(ctx, read_k2node_message),
+    "K2Node_Message": lambda ctx: read_k2node_message(ctx["archive"], ctx["name_map"]),
     "K2Node_CallDelegate": lambda ctx: read_k2node_call_delegate(ctx["archive"], ctx["name_map"]),
-    "K2Node_CallArrayFunction": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_call_array_function),
-    "K2Node_CallParentFunction": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_call_parent_function),
-    "K2Node_FunctionResult": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_function_result),
-    "K2Node_CreateWidget": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_create_widget),
-    "K2Node_AddDelegate": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_add_delegate),
-    "K2Node_MacroInstance": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_macro_instance),
-    "K2Node_AssignDelegate": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_assign_delegate),
-    "K2Node_GetDataTableRow": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_get_data_table_row),
-    "K2Node_LoadAsset": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_load_asset),
-    "K2Node_SpawnActorFromClass": lambda ctx: _handle_simple_raw_props(ctx, read_k2node_spawn_actor_from_class),
+    "K2Node_CallArrayFunction": _handle_raw_prop_copies({"FunctionReference": "function_reference"}),
+    "K2Node_CallParentFunction": _handle_raw_prop_copies({"FunctionReference": "function_reference"}),
+    "K2Node_FunctionResult": _handle_raw_prop_copies({"FunctionReference": "function_reference"}),
+    "K2Node_CreateWidget": _handle_raw_prop_copies({"WidgetClass": "widget_class"}),
+    "K2Node_AddDelegate": _handle_raw_prop_copies({"DelegateName": "delegate_name"}),
+    "K2Node_AssignDelegate": _handle_raw_prop_copies({"DelegateName": "delegate_name"}),
+    "K2Node_MacroInstance": _handle_raw_prop_copies(
+        {
+            "MacroGraph": "macro_graph",
+            "Macro": "macro_name",
+            "MacroGraphReference": "macro_graph_reference",
+            "ResolvedWildcardType": "resolved_wildcard_type",
+        }
+    ),
+    "K2Node_GetDataTableRow": _handle_raw_prop_copies(
+        {"DataTable": "data_table", "RowStructName": "row_struct_name"}
+    ),
+    "K2Node_LoadAsset": _handle_raw_prop_copies({"AssetType": "asset_type"}),
+    "K2Node_SpawnActorFromClass": _handle_raw_prop_copies({"Class": "spawn_class"}),
 }
 
 # ============================================================================
@@ -999,17 +812,9 @@ def _handle_move_mode(archive, tag, name_map, import_map, export_map, linker, ra
 
 
 def _handle_node_details(archive, tag, name_map, import_map, export_map, linker, raw_properties):
-    """Handle NodeDetails tag (FText with history)."""
+    """Handle NodeDetails tag (FText): value is discarded, only the tag span is consumed."""
     if tag.size > 0:
-        try:
-            _flags = archive.read_i32()  # noqa: F841 - protocol read
-            history_type_raw = archive.read_u8()
-            history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
-            read_ftext_with_history(archive, history_type, tolerant=True)
-        except (struct.error, OSError, ValueError) as e:
-            logger.debug("Failed to read NodeDetails FText: %s", e, exc_info=True)
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
+        archive.seek(tag.value_end_offset)
         raw_properties[tag.name] = {"size": tag.size, "type": "FText"}
     return {}
 
@@ -1127,11 +932,6 @@ def _read_node_pins(
                 header_owning_node=header_owning,
                 header_pin_id=header_pin_id,
             )
-            _local_trace = _get_thread_local().pin_trace_events
-            if _local_trace and _local_trace[-1].get("pin_id") == pin.pin_id:
-                _local_trace[-1]["node_name"] = node_export.object_name
-                _local_trace[-1]["node_guid"] = node_guid
-                _local_trace[-1]["node_class"] = _rcn(node_export.class_index, import_map, export_map, linker) or ""
             pins.append(pin)
         except (struct.error, OSError, ValueError, KeyError):
             continue
@@ -1148,34 +948,24 @@ def _read_node_script_serial(
     export_map: List[ObjectExport],
     linker: Optional["PackageLinker"],
     node_name: str,
-) -> tuple:
-    """Read script_serial PropertyTags of a node, returning (function_reference, event_reference, local variables dict, raw_properties)."""
-    function_reference: Optional[FMemberReference] = None
-    event_reference: Optional[FMemberReference] = None
-    b_override_function: Optional[bool] = None
-    b_internal_event: Optional[bool] = None
-    custom_function_name: Optional[str] = None
-    function_flags: Optional[int] = None
-    node_pos_x: int = 0
-    node_pos_y: int = 0
-    node_guid: str = ""
-    node_comment: str = ""
-    raw_properties: Dict[str, Any] = {}
+) -> Dict[str, Any]:
+    """Read script_serial PropertyTags of a node into one dict of parsed fields."""
+    result: Dict[str, Any] = {
+        "function_reference": None,
+        "event_reference": None,
+        "b_override_function": None,
+        "b_internal_event": None,
+        "custom_function_name": None,
+        "function_flags": None,
+        "node_pos_x": 0,
+        "node_pos_y": 0,
+        "node_guid": "",
+        "node_comment": "",
+        "raw_properties": {},
+    }
 
     if not node_export.has_script_serialization:
-        return (
-            function_reference,
-            event_reference,
-            b_override_function,
-            b_internal_event,
-            custom_function_name,
-            function_flags,
-            node_pos_x,
-            node_pos_y,
-            node_guid,
-            node_comment,
-            raw_properties,
-        )
+        return result
 
     script_start = node_export.serial_offset + node_export.script_serialization_start_offset
     script_end = node_export.serial_offset + node_export.script_serialization_end_offset
@@ -1193,19 +983,7 @@ def _read_node_script_serial(
                 ctrl,
                 node_name,
             )
-            return (
-                function_reference,
-                event_reference,
-                b_override_function,
-                b_internal_event,
-                custom_function_name,
-                function_flags,
-                node_pos_x,
-                node_pos_y,
-                node_guid,
-                node_comment,
-                raw_properties,
-            )
+            return result
 
     max_property_iterations = max(1000, node_export.script_serialization_size)
     _property_iterations = 0
@@ -1231,49 +1009,21 @@ def _read_node_script_serial(
             break
 
         if tag.name == "FunctionReference" and tag.size > 0:
-            function_reference = read_tag_value_bounded(
+            result["function_reference"] = read_tag_value_bounded(
                 archive,
                 tag,
                 lambda: _read_member_reference_from_tags(archive, tag, name_map, import_map, export_map, linker),  # noqa: B023 - tag bound at call time
             )
         elif tag.name == "EventReference" and tag.size > 0:
-            event_reference = read_tag_value_bounded(
+            result["event_reference"] = read_tag_value_bounded(
                 archive,
                 tag,
                 lambda: _read_member_reference_from_tags(archive, tag, name_map, import_map, export_map, linker),  # noqa: B023 - tag bound at call time
             )
         else:
-            updates = _read_node_property_tag(archive, tag, name_map, import_map, export_map, linker, raw_properties)
-            if "node_pos_x" in updates:
-                node_pos_x = updates["node_pos_x"]
-            if "node_pos_y" in updates:
-                node_pos_y = updates["node_pos_y"]
-            if "node_guid" in updates:
-                node_guid = updates["node_guid"]
-            if "node_comment" in updates:
-                node_comment = updates["node_comment"]
-            if "b_override_function" in updates:
-                b_override_function = updates["b_override_function"]
-            if "b_internal_event" in updates:
-                b_internal_event = updates["b_internal_event"]
-            if "custom_function_name" in updates:
-                custom_function_name = updates["custom_function_name"]
-            if "function_flags" in updates:
-                function_flags = updates["function_flags"]
+            result.update(_read_node_property_tag(archive, tag, name_map, import_map, export_map, linker, result["raw_properties"]))
 
-    return (
-        function_reference,
-        event_reference,
-        b_override_function,
-        b_internal_event,
-        custom_function_name,
-        function_flags,
-        node_pos_x,
-        node_pos_y,
-        node_guid,
-        node_comment,
-        raw_properties,
-    )
+    return result
 
 
 def read_ue_graph_node(
@@ -1290,19 +1040,8 @@ def read_ue_graph_node(
 
     node_name = node_export.object_name
     # Parse tagged properties in script_serial
-    (
-        function_reference,
-        event_reference,
-        b_override_function,
-        b_internal_event,
-        custom_function_name,
-        function_flags,
-        node_pos_x,
-        node_pos_y,
-        node_guid,
-        node_comment,
-        raw_properties,
-    ) = _read_node_script_serial(archive, name_map, summary, node_export, import_map, export_map, linker, node_name)
+    serial = _read_node_script_serial(archive, name_map, summary, node_export, import_map, export_map, linker, node_name)
+    raw_properties = serial["raw_properties"]
 
     # Read Pins array
     pins = _read_node_pins(
@@ -1314,30 +1053,20 @@ def read_ue_graph_node(
         linker,
         node_export,
         node_name,
-        node_guid,
+        serial["node_guid"],
     )
 
     class_name = _rcn(node_export.class_index, import_map, export_map, linker) or ""
 
     base_node = UEdGraphNode(
-        node_guid=node_guid,
-        node_pos_x=node_pos_x,
-        node_pos_y=node_pos_y,
-        node_comment=node_comment,
+        node_guid=serial["node_guid"],
+        node_pos_x=serial["node_pos_x"],
+        node_pos_y=serial["node_pos_y"],
+        node_comment=serial["node_comment"],
         pins=pins,
         class_name=class_name,
     )
     base_node._export_object_name = node_export.object_name
-
-    node_refs = {
-        "function_reference": function_reference,
-        "event_reference": event_reference,
-        # K2Node_Event PropertyTag fields
-        "b_override_function": b_override_function,
-        "b_internal_event": b_internal_event,
-        "custom_function_name": custom_function_name,
-        "function_flags": function_flags,
-    }
 
     return create_node_from_archive(
         archive,
@@ -1349,5 +1078,6 @@ def read_ue_graph_node(
         base_node,
         raw_properties=raw_properties if raw_properties else None,
         linker=linker,
-        node_refs=node_refs,
+        # serial keys match node_refs names (references + K2Node_Event fields)
+        node_refs=serial,
     )

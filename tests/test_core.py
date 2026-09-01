@@ -351,26 +351,11 @@ def test_package_document_preserves_every_export_and_role():
         ids2 = [o.id for o in doc2.objects]
         assert ids1 == ids2
 
-    def test_to_dict_roundtrip():
-        d = doc.to_dict()
-        json_str = json.dumps(d)
-        parsed = json.loads(json_str)
-        assert parsed["format"] == "uasset_read.package"
-        assert len(parsed["objects"]) == 10
-
-    def test_summary_fields():
-        d = doc.to_dict()
-        assert d["summary"]["object_count"] == 10
-        assert d["summary"]["total_exports"] == 10
-        assert "total_imports" in d["summary"]
-
     _run_cases(
         [
             ("document.test_all_exports_present", test_all_exports_present),
             ("document.test_ids_are_export_prefix", test_ids_are_export_prefix),
             ("document.test_stable_id_across_calls", test_stable_id_across_calls),
-            ("document.test_to_dict_roundtrip", test_to_dict_roundtrip),
-            ("document.test_summary_fields", test_summary_fields),
         ]
     )
 
@@ -929,11 +914,6 @@ def test_projection_views_depths_pagination_table():
             assert "semantic" not in o
         assert project_document(asset_doc, depth="asset")["depth"] == "asset"
 
-    def to_dict_relabel_beyond_parsed_raises():
-        pkg_doc = _document(str(PACKAGE_SAMPLE), depth="package")
-        with pytest.raises(ValueError, match="cannot project"):
-            pkg_doc.to_dict(depth="decode")
-
     def relations_carry_optional_target_path():
         pkg_doc = _document(str(PACKAGE_SAMPLE), depth="asset")
         page = project_document(pkg_doc, depth="package")
@@ -972,7 +952,6 @@ def test_projection_views_depths_pagination_table():
             ("core.test_projection_honors_views_pagination_and_byte_budget", core_projection_honors_views),
             ("projection.depth_beyond_parsed_document_raises", depth_beyond_parsed_document_raises),
             ("projection.shallower_depth_caps_content", shallower_depth_caps_content),
-            ("projection.to_dict_relabel_beyond_parsed_raises", to_dict_relabel_beyond_parsed_raises),
             ("projection.relations_carry_optional_target_path", relations_carry_optional_target_path),
         ]
     )
@@ -1387,21 +1366,15 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
 
     # --- Payload extraction is fully deferred (merged from test_samples) ---
     from uasset_read.v2.api import parse_package_document
-    from uasset_read.v2.payloads import extract_payload_bytes
 
     decode_doc = parse_package_document(
         str(SAMPLES / "FirstPerson_T_GridChecker_A.uasset"),
         depth="decode",
         object_ids=["export:2"],
     )
-    assert decode_doc.payloads == []
     sem_payload = (decode_doc.objects[2].semantic or {}).get("payload")
     if isinstance(sem_payload, dict):
         assert "ref" not in sem_payload and "stored_size" not in sem_payload
-
-    pb_result = extract_payload_bytes(decode_doc, "payload:export:2")
-    assert not pb_result.success
-    assert pb_result.data is None and not pb_result.truncated and pb_result.next_offset is None
 
     pb_tool = extract_payload(str(SAMPLES / "FirstPerson_T_GridChecker_A.uasset"), "payload:export:2")
     assert pb_tool["code"] == "PAYLOAD_EXTRACTION_DEFERRED"

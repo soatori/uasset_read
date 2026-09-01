@@ -12,7 +12,6 @@ instead of from graph.py, eliminating the cycle:
 from __future__ import annotations
 
 import logging
-import os
 import struct
 import threading
 from typing import TYPE_CHECKING, List, Optional, Dict, Any
@@ -55,7 +54,6 @@ def _get_thread_local():
     """Return per-thread isolated diagnostic state, avoiding global mutable race."""
     if not hasattr(_thread_local, "linkedto_failure_seen"):
         _thread_local.linkedto_failure_seen: set[tuple[int, str, str]] = set()
-        _thread_local.pin_trace_events: List[Dict[str, Any]] = []
     return _thread_local
 
 
@@ -67,43 +65,6 @@ def _rcn(idx, im, em, lk):
 def _gac(exp, im, em, lk):
     """Get asset class - linker version if available."""
     return get_asset_class_with_linker(exp, lk) if lk else get_asset_class(exp, im, em)
-
-
-# ============================================================================
-# Diagnostic tracing
-# ============================================================================
-
-
-def _pin_trace_enabled(explicit: bool = False) -> bool:
-    return explicit or os.environ.get("UASSET_READ_PIN_TRACE", "").lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-
-
-def _trace_fields_append(
-    trace_fields: Dict[str, Any],
-    name: str,
-    start: int,
-    end: int,
-    value_preview: str = "",
-    is_exception: bool = False,
-    is_fallback: bool = False,
-) -> None:
-    """Record single field trace information."""
-    trace_fields.setdefault("fields", []).append(
-        {
-            "name": name,
-            "start": start,
-            "end": end,
-            "consumed": end - start,
-            "value": value_preview[:50],
-            "exception": is_exception,
-            "fallback": is_fallback,
-        }
-    )
 
 
 # ============================================================================

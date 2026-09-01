@@ -48,7 +48,6 @@ _MAP_VALUE_STRUCT_TYPES: dict[str, dict[str, str]] = {
 def _read_property_type_name(
     archive: FArchive,
     name_map: List[str],
-    max_nodes: int = MAX_PROPERTY_TYPE_NODES,
     file_version_ue5: int = PROPERTY_TAG_COMPLETE_TYPE_NAME,
 ) -> PropertyTypeName:
     """Read FPropertyTypeName preorder nodes and reconstruct the recursive tree.
@@ -69,7 +68,7 @@ def _read_property_type_name(
     # UE 5.3+: full FPropertyTypeName preorder traversal tree
     parts: List[Tuple[str, int]] = []
     pending = 1
-    while pending > 0 and len(parts) < max_nodes:
+    while pending > 0 and len(parts) < MAX_PROPERTY_TYPE_NODES:
         node_name = archive.read_name(name_map)
         inner_count = archive.read_i32()
         parts.append((node_name, inner_count))

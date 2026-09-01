@@ -58,7 +58,6 @@ class ObjectRecord:
     properties: dict[str, Any] | None = None
     semantic: dict[str, Any] | None = None
     coverage: list[CoverageEntry] = field(default_factory=list)
-    diagnostics: list[Any] = field(default_factory=list)
 
 
 @dataclass
@@ -84,20 +83,6 @@ class Dependency:
     class_name: str
     object_name: str
     package_name: str = ""
-
-
-@dataclass
-class PayloadDescriptor:
-    id: str  # "payload:export:0"
-    owner_id: str  # "export:7"
-    kind: str  # "texture_mip", "audio", "bulk_data", "other"
-    source_region: str  # "main", "uexp", "ubulk", "uptnl", "ucas"
-    offset: int
-    stored_size: int
-    logical_size: int = 0
-    compression: str = ""
-    status: Literal["available", "external", "missing", "unsupported"] = "unsupported"
-    hash: str | None = None
 
 
 ROLES_ASSET = "asset"
