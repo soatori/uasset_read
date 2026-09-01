@@ -83,14 +83,6 @@ def get_object(
     """
     doc = parse_package_document(file_path)
 
-    # Check if object exists
-    obj_exists = any(o.id == object_id for o in doc.objects)
-    if not obj_exists:
-        return {
-            "error": f"Object '{object_id}' not found",
-            "available_ids": [o.id for o in doc.objects[:20]],
-        }
-
     projected = project_document(
         doc,
         object_ids=[object_id],
@@ -99,7 +91,15 @@ def get_object(
     )
     if projected["objects"]:
         return projected["objects"][0]
-    return {"error": f"Object '{object_id}' not found"}
+    # Stable structured-diagnostic shape (cf. extract_payload's deferred code):
+    # consumers branch on code/stage/recoverable, not on message text.
+    return {
+        "error": f"Object '{object_id}' not found",
+        "code": "OBJECT_NOT_FOUND",
+        "stage": "agent.get_object",
+        "recoverable": True,
+        "available_ids": [o.id for o in doc.objects[:20]],
+    }
 
 
 def list_dependencies(

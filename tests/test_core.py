@@ -1326,6 +1326,14 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert fetched["id"] == "export:0"
     assert "name" in fetched
 
+    # Agent Gate: a missing object is a structured diagnostic, not a bare string.
+    missing = get_object(str(DATA_SAMPLE), "export:999999")
+    assert missing["error"] == "Object 'export:999999' not found"
+    assert missing["code"] == "OBJECT_NOT_FOUND"
+    assert missing["stage"] == "agent.get_object"
+    assert missing["recoverable"] is True
+    assert missing["available_ids"] and all(i.startswith("export:") for i in missing["available_ids"])
+
     full_deps = _document(str(DATA_SAMPLE), depth="package").dependencies
     deps = list_dependencies(str(DATA_SAMPLE))
     assert deps["total_dependencies"] == len(full_deps)
