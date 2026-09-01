@@ -7,6 +7,7 @@ name and invoked lazily when depth >= asset.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Protocol
 
 from .diagnostics import Diagnostic
@@ -588,13 +589,59 @@ class MaterialInstanceHandler:
         return result if len(result) > 1 else None
 
 
-class SkeletonHandler:
-    """Enrich Skeleton objects with bone hierarchy summary."""
+_BONE_NAME_RE = re.compile(
+    r"^(root|pelvis|spine_\d+|head|neck|clavicle_[lr]|upperarm_[lr]|"
+    r"lowerarm_[lr]|hand_[lr]|thigh_[lr]|calf_[lr]|foot_[lr]|ball_[lr]|"
+    r"ik_\w+|twist_\d+_[lr]|finger\w*)$"
+)
 
-    capability = "decoded"  # bone counts read from the property bag
+
+def _guess_bone_names(name_map: list[str]) -> list[dict[str, Any]]:
+    """Heuristic NameMap-regex name guess — never a decoded skeleton hierarchy (#630)."""
+    return [
+        {"name": name, "index": i} for i, name in enumerate(name_map) if _BONE_NAME_RE.match(name)
+    ]
+
+
+def _decoded_bone_names(prop: Any) -> list[dict[str, Any]]:
+    """Bone names decoded from a BoneTree/ReferenceSkeleton property value.
+
+    FBoneNode ``Name`` fields surface either as BoneNode struct entries or —
+    the property reader emits each FName twice — as consecutive duplicated
+    string array entries; other array elements are misaligned noise and get
+    skipped. Returns [] when the property carries no decodable names.
+    """
+    if not isinstance(prop, dict) or not isinstance(prop.get("value"), list):
+        return []
+    names: list[dict[str, Any]] = []
+    for entry in prop["value"]:
+        name = None
+        if isinstance(entry, dict) and entry.get("struct_type") == "BoneNode":
+            n = (entry.get("fields") or {}).get("Name")
+            if isinstance(n, str):
+                name = n
+        elif isinstance(entry, str):
+            name = entry
+        if name and name != "None" and (not names or names[-1]["name"] != name):
+            names.append({"name": name, "index": len(names)})
+    return names
+
+
+class SkeletonHandler:
+    """Enrich Skeleton objects with bone hierarchy summary.
+
+    Real bone names decoded from the BoneTree/ReferenceSkeleton properties
+    win; the NameMap regex path is an explicit name guess marked
+    ``bone_source="name_guess"`` and stays summary-tier (#630).
+    """
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         return (obj.class_name or "") == "Skeleton"
+
+    def capability(self, result: dict[str, Any]) -> str:
+        # A name guess or an empty fallback is a summary; only decoded property
+        # bone data counts as complete (#629, #630).
+        return "decoded" if result.get("bone_source") in ("bone_tree", "reference_skeleton") else "summary"
 
     def enrich(
         self,
@@ -603,34 +650,53 @@ class SkeletonHandler:
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
-        import re
-
         result: dict[str, Any] = {"kind": "skeleton", "name": obj.name}
         coverage: list[CoverageEntry] = []
+        bag = obj.properties or {}
 
-        # Extract name_map from package_data tuple (export_map, name_map, extras)
-        name_map: list[str] = []
-        if isinstance(package_data, tuple) and len(package_data) >= 2:
-            name_map = package_data[1]
-
-        # Extract bone names from name map
-        if name_map:
-            bone_pattern = re.compile(
-                r"^(root|pelvis|spine_\d+|head|neck|clavicle_[lr]|upperarm_[lr]|"
-                r"lowerarm_[lr]|hand_[lr]|thigh_[lr]|calf_[lr]|foot_[lr]|ball_[lr]|"
-                r"ik_\w+|twist_\d+_[lr]|finger\w*)$"
-            )
-            bones = []
-            for i, name in enumerate(name_map):
-                if bone_pattern.match(name):
-                    bones.append({"name": name, "index": i})
+        # Real hierarchy first: BoneTree/ReferenceSkeleton property data wins.
+        bones: list[dict[str, Any]] = []
+        bone_source = ""
+        for prop_name, source in (("BoneTree", "bone_tree"), ("ReferenceSkeleton", "reference_skeleton")):
+            bones = _decoded_bone_names(bag.get(prop_name))
             if bones:
-                result["bones"] = bones
-                result["bone_count"] = len(bones)
-                coverage.append(CoverageEntry(feature="skeleton.bones", status="present"))
+                bone_source = source
+                break
+
+        if not bones:
+            # Fallback: heuristic name guess over the NameMap, explicitly marked.
+            name_map: list[str] = []
+            if isinstance(package_data, tuple) and len(package_data) >= 2:
+                name_map = package_data[1]
+            bones = _guess_bone_names(name_map)
+            if bones:
+                bone_source = "name_guess"
+                coverage.append(
+                    CoverageEntry(
+                        feature="skeleton.bones",
+                        status="partial",
+                        detail="heuristic: NameMap regex name-guess, not a decoded hierarchy",
+                    )
+                )
+            else:
+                coverage.append(
+                    CoverageEntry(
+                        feature="skeleton.bones",
+                        status="missing",
+                        detail="BoneTree/ReferenceSkeleton not decoded and no NameMap name matched",
+                    )
+                )
+        else:
+            coverage.append(
+                CoverageEntry(feature="skeleton.bones", status="present", detail=f"from {bone_source} property")
+            )
+
+        result["bones"] = bones
+        result["bone_count"] = len(bones)
+        if bone_source:
+            result["bone_source"] = bone_source
 
         # Count virtual bones and sockets from the v2 property bag
-        bag = obj.properties or {}
         for prop_name, key, feature in (
             ("VirtualBones", "virtual_bone_count", "skeleton.virtual_bones"),
             ("Sockets", "socket_count", "skeleton.sockets"),
@@ -639,27 +705,6 @@ class SkeletonHandler:
             if isinstance(val, dict) and isinstance(val.get("value"), list):
                 result[key] = len(val["value"])
                 coverage.append(CoverageEntry(feature=feature, status="present"))
-
-        # Fallback: check v2 properties
-        if "bone_count" not in result:
-            props = obj.properties or {}
-            bone_tree = props.get("BoneTree")
-            if bone_tree and isinstance(bone_tree, dict):
-                fields = bone_tree.get("fields", {})
-                bone_count = len(fields) if isinstance(fields, dict) else 0
-                result["bone_count"] = bone_count
-                result["bones"] = []
-                coverage.append(CoverageEntry(feature="skeleton.bone_tree", status="partial"))
-            else:
-                result["bone_count"] = 0
-                result["bones"] = []
-                coverage.append(
-                    CoverageEntry(
-                        feature="skeleton.bone_tree",
-                        status="missing",
-                        detail="BoneTree property not available",
-                    )
-                )
 
         obj.coverage.extend(coverage)
         return result

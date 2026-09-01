@@ -205,6 +205,11 @@ def test_real_sample_proves_claimed_capability(
         assert obj.semantic["row_count"] >= 0
     elif class_name == "Skeleton":
         assert obj.semantic["bone_count"] == len(obj.semantic["bones"]) > 0
+        # ALS_Mannequin_Skeleton carries real BoneTree property data; decoded
+        # names must win over the NameMap regex name-guess (#630).
+        assert obj.semantic["bone_source"] == "bone_tree"
+        names = {b["name"] for b in obj.semantic["bones"]}
+        assert "UpperArm_L" in names, "BoneTree names missing — regex fallback used?"
     elif class_name == "StaticMesh":
         assert obj.semantic["lod_count"] == len(obj.semantic["lods"])
     elif class_name in {"BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}:

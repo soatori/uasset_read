@@ -845,6 +845,61 @@ def test_handler_registry_supports_enriches_and_isolates():
             _HANDLERS[:] = saved
         assert obj.status.semantic == "partial"
 
+    def test_skeleton_name_guess_is_marked_heuristic():
+        """NameMap-regex bones are marked bone_source=name_guess and never complete (#630)."""
+        from uasset_read.v2.handlers import _HANDLERS, SkeletonHandler, run_handlers
+        from uasset_read.v2.version import VersionContext
+
+        obj = record("Skeleton")
+        name_map = ["None", "SomeWidget", "root", "pelvis", "spine_01"]
+        saved = list(_HANDLERS)
+        try:
+            _HANDLERS[:] = [SkeletonHandler()]
+            semantic, _cov, _diags = run_handlers(
+                obj, VersionContext(depth="asset"), [obj], (None, name_map, None)
+            )
+        finally:
+            _HANDLERS[:] = saved
+        assert semantic["bone_source"] == "name_guess"
+        assert [b["name"] for b in semantic["bones"]] == ["root", "pelvis", "spine_01"]
+        assert semantic["bone_count"] == 3
+        assert obj.status.semantic == "partial"
+        guess = [c for c in obj.coverage if c.feature == "skeleton.bones"]
+        assert len(guess) == 1
+        assert guess[0].status == "partial" and "heuristic" in guess[0].detail
+
+    def test_skeleton_bone_tree_wins_over_name_guess():
+        """Decoded BoneTree names take precedence over the regex path (#630)."""
+        from uasset_read.v2.handlers import _HANDLERS, SkeletonHandler, run_handlers
+        from uasset_read.v2.version import VersionContext
+
+        obj = record("Skeleton")
+        obj.properties = {
+            "BoneTree": {
+                "kind": "value",
+                "type": "ArrayProperty",
+                "value": [
+                    {"kind": "struct", "struct_type": "BoneNode", "fields": {"Name": "root", "ParentIndex": -1}},
+                    "pelvis",
+                    "pelvis",
+                    {"kind": "opaque", "type": "", "size": 0, "reason": "unsupported_type"},
+                ],
+            }
+        }
+        # "head" would match the NameMap regex — its absence proves the real path won.
+        name_map = ["head", "thigh_l"]
+        saved = list(_HANDLERS)
+        try:
+            _HANDLERS[:] = [SkeletonHandler()]
+            semantic, _cov, _diags = run_handlers(
+                obj, VersionContext(depth="asset"), [obj], (None, name_map, None)
+            )
+        finally:
+            _HANDLERS[:] = saved
+        assert semantic["bone_source"] == "bone_tree"
+        assert [b["name"] for b in semantic["bones"]] == ["root", "pelvis"]
+        assert obj.status.semantic == "complete"
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -864,6 +919,8 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("handler.test_summary_tier_handlers_never_claim_complete", test_summary_tier_handlers_never_claim_complete),
             ("handler.test_decode_tier_blueprint_graph_marks_complete", test_decode_tier_blueprint_graph_marks_complete),
             ("handler.test_undeclared_handler_tier_defaults_to_summary", test_undeclared_handler_tier_defaults_to_summary),
+            ("handler.test_skeleton_name_guess_is_marked_heuristic", test_skeleton_name_guess_is_marked_heuristic),
+            ("handler.test_skeleton_bone_tree_wins_over_name_guess", test_skeleton_bone_tree_wins_over_name_guess),
         ]
     )
 
