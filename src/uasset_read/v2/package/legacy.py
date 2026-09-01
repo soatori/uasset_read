@@ -367,6 +367,43 @@ class LegacyPackageReader:
                 if super_id is not None:
                     relations.append(Relation(kind="super_of", from_id=from_id, to_id=super_id))
 
+            # 10a. Blueprint family edges — derived from the export table only.
+            # UE basis: FObjectExport::ClassIndex is "the class this object
+            # belongs to" (ObjectResource.h), and a CDO is an instance of its
+            # class, so a "Default__X" export's ClassIndex resolves to the X
+            # export itself (UClass::CreateDefaultObject, Class.cpp). The
+            # generated class of a blueprint asset is "<AssetName>_C" in the
+            # same Outer (UBlueprint::GetBlueprintClassName, Blueprint.cpp);
+            # the class gate below keeps this name convention from pairing
+            # arbitrary *_C exports.
+            for i, exp in enumerate(export_map):
+                name = exp.object_name
+                if name.startswith("Default__"):
+                    cls_id = _package_index_to_id(exp.class_index)
+                    if cls_id is not None and cls_id.startswith("export:"):
+                        relations.append(
+                            Relation(kind="default_object_of", from_id=f"export:{i}", to_id=cls_id)
+                        )
+
+            asset_by_outer_name: dict[tuple[str, str], int] = {}
+            for i, exp in enumerate(export_map):
+                if exp.b_is_asset:
+                    key = (_package_index_to_id(exp.outer_index) or "", exp.object_name)
+                    asset_by_outer_name[key] = i
+            for i, exp in enumerate(export_map):
+                name = exp.object_name
+                if not name.endswith("_C") or name.startswith("Default__"):
+                    continue
+                cls_name = resolve_class_name(exp.class_index, import_map, export_map) or ""
+                if not cls_name.endswith("BlueprintGeneratedClass"):
+                    continue
+                key = (_package_index_to_id(exp.outer_index) or "", name[:-2])
+                bp_idx = asset_by_outer_name.get(key)
+                if bp_idx is not None:
+                    relations.append(
+                        Relation(kind="generated_class_of", from_id=f"export:{i}", to_id=f"export:{bp_idx}")
+                    )
+
             # 10b. Build depends_on relations from depends_map
             # UE FPackageIndex: positive -> export, negative -> import
             # (ObjectResource.h FPackageIndex::IsExport/IsImport)
