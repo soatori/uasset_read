@@ -130,21 +130,12 @@ def project_document(
             d for d in doc.diagnostics if getattr(d, "object_id", None) is None or getattr(d, "object_id", None) in ids
         ]
 
-        # Find all objects reachable from the page through relations
-        reachable_ids = set(ids)
-        frontier = set(ids)
-        while frontier:
-            next_frontier = set()
-            for r in doc.relations:
-                if r.from_id in frontier and r.to_id not in reachable_ids:
-                    next_frontier.add(r.to_id)
-                if r.to_id in frontier and r.from_id not in reachable_ids:
-                    next_frontier.add(r.from_id)
-            frontier = next_frontier
-            reachable_ids.update(frontier)
-
-        # Filter dependencies to only those reachable from the page
-        reachable_imports = {idx for idx, imp in enumerate(doc.dependencies) if f"import:{imp.index}" in reachable_ids}
+        # Keep only imports that appear as relation targets of page objects —
+        # one hop, matching the edges the response actually shows. A
+        # multi-hop closure here retained imports the page could not account
+        # for (reachable only through relations of dropped objects).
+        visible_ids = ids | {r["to"] for r in relations}
+        reachable_imports = {idx for idx, imp in enumerate(doc.dependencies) if f"import:{imp.index}" in visible_ids}
         filtered_dependencies = [
             {"index": d.index, "class": d.class_name, "object_name": d.object_name}
             for i, d in enumerate(doc.dependencies)
@@ -239,7 +230,16 @@ def project_document(
                 result["payloads"] = pays
                 result["diagnostics"] = [d.to_dict() for d in diags] + [trunc_diag]
             page_total = max(0, len(selected) - offset)
-            if len(result["objects"]) == 0 and page_total > 0:
+            if limit is not None:
+                page_total = min(limit, page_total)
+            if page_total == 0:
+                # Out-of-range empty page: never a cursor, never over budget.
+                result.pop("next_offset", None)
+                result["truncation"]["actual"] = _encoded()
+                if _encoded() > max_bytes:
+                    raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({_encoded()} bytes)")
+                return result
+            if len(result["objects"]) == 0:
                 # Nothing fit. A budget that cannot even hold the bare
                 # envelope (no objects, no truncation metadata) is a hard
                 # error; otherwise return an explicit retry contract: no

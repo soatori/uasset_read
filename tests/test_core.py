@@ -914,13 +914,21 @@ def test_projection_byte_budget_and_fields_filter():
         page = project_document(doc, offset=5, limit=100, max_bytes=envelope + 1)
         assert page["truncation"]["objects_dropped"] == 5
 
+    def out_of_range_empty_page_never_stalls_or_overshoots():
+        with pytest.raises(ValueError, match="too small"):
+            project_document(doc, offset=10, limit=100, max_bytes=64)
+        page = project_document(doc, offset=10, limit=100, max_bytes=1000)
+        assert page["objects"] == []
+        assert "next_offset" not in page, "empty page must not hand out a self-pointing cursor"
+
     def test_truncated_page_rescopes_relations_and_dependencies():
         """Popping objects for max_bytes must re-scope relations and dependencies."""
         empty = project_document(doc, limit=0)
         envelope_size = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-        budget = envelope_size + 8000
+        budget = envelope_size + 11000  # fits 1-2 of 10 objects: a genuine partial page, not an all-drop
         page = project_document(doc, limit=100, max_bytes=budget)
         page_ids = {o["id"] for o in page["objects"]}
+        assert len(page_ids) > 0, "page must keep at least one object for the re-scope checks to mean anything"
         assert len(page_ids) < 10, "budget should force dropping at least one object"
         for rel in page["relations"]:
             assert rel["from"] in page_ids, f"relation kept for dropped object: {rel}"
@@ -991,6 +999,7 @@ def test_projection_byte_budget_and_fields_filter():
             ("projection.all_objects_dropped_yields_no_cursor", all_objects_dropped_yields_no_cursor),
             ("projection.every_object_returned_exactly_once_under_budget", every_object_returned_exactly_once_under_budget),
             ("projection.dropped_count_is_page_relative", dropped_count_is_page_relative),
+            ("projection.out_of_range_empty_page_never_stalls_or_overshoots", out_of_range_empty_page_never_stalls_or_overshoots),
             (
                 "projection.test_truncated_page_rescopes_relations_and_dependencies",
                 test_truncated_page_rescopes_relations_and_dependencies,
