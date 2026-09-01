@@ -216,6 +216,8 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
     for export_idx in range(summary.export_count):
         object_name = ""
         entry_start = archive.tell()
+        # Attribute any read recovery in this entry to its table slot.
+        archive._current_object_id = f"export:{export_idx}"
         try:
             class_index = PackageIndex(archive.read_i32(f"Export[{export_idx}].ClassIndex"))
             super_index = PackageIndex(archive.read_i32(f"Export[{export_idx}].SuperIndex"))
@@ -378,6 +380,8 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
         except (struct.error, OSError, ValueError, AttributeError) as e:
             # A failed entry leaves the stream position unknown; continuing
             # would silently renumber later exports. Stop the table instead.
+            # The failed slot never materializes, so un-attribute before recording.
+            archive._current_object_id = ""
             archive._record_structured_diagnostic(
                 code="EXPORT_TABLE_TRUNCATED",
                 stage="read_export_map",
@@ -390,6 +394,7 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
             )
             logger.warning("Export #%d parse failed (%s); stopping export table read", export_idx, e)
             break
+    archive._current_object_id = ""
     return export_map
 
 

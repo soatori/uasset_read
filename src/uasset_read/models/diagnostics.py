@@ -101,6 +101,7 @@ class StructuredDiagnostic:
     severity: str = "warning"  # "warning" | "error" | "info"
     asset: str = ""
     stage: str = ""
+    object_id: str = ""  # owning table slot (e.g. "export:3") when a read context is active
     offset: int = 0
     raw_value: Any = None
     ue_version: str = ""

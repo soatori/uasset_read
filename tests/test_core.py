@@ -234,6 +234,60 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         with pytest.raises(ParseError, match="PreloadDependencies"):
             read_preload_dependencies(ByteArchive(data), summary)
 
+    def tolerant_fstring_overrun_records_recovery_not_just_a_log():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.exceptions import ParseError
+        for header, enc in ((6, "UTF-8"), (-6, "UTF-16")):  # claims 6/12 bytes, 2 remain
+            arc = ByteArchive(struct.pack("<i", header) + b"ab", tolerant=True)
+            assert arc.read_fstring() == ""
+            sd = [d for d in arc.get_structured_diagnostics() if d.code == "fstring_out_of_range"]
+            assert sd and sd[0].offset == 0 and sd[0].fallback == "used_empty_string", enc
+        with pytest.raises(ParseError):  # strict mode still fails hard
+            ByteArchive(struct.pack("<i", 6) + b"ab").read_fstring()
+
+    def fstring_internal_null_truncation_is_recorded():
+        import struct
+        from uasset_read.archive import ByteArchive
+        arc = ByteArchive(struct.pack("<i", 4) + b"ab\x00c", tolerant=True)
+        assert arc.read_fstring() == "ab"
+        sd = [d for d in arc.get_structured_diagnostics() if d.code == "fstring_truncated_at_null"]
+        assert sd and sd[0].offset == 0 and sd[0].fallback == "truncated_at_first_null"
+
+    def fname_shift_recovery_is_recorded():
+        import struct
+        from uasset_read.archive import ByteArchive
+        # Garbage FName at pos 4 (index 2**24); a shifted view of the same bytes
+        # carries a valid (index, number) pair, so recovery must fire and report.
+        data = bytearray(b"\x00" * 12)
+        struct.pack_into("<I", data, 4, 1 << 24)
+        data[7] = 0x01  # doubles as the shifted instance number
+        arc = ByteArchive(bytes(data), tolerant=True)
+        arc.seek(4)
+        assert arc.read_name(["Alpha"])
+        sd = [d for d in arc.get_structured_diagnostics() if d.code == "fname_index_shift_recovered"]
+        assert sd and sd[0].offset == 4 and sd[0].fallback == "shifted_read"
+
+    def export_map_recoveries_are_attributed_to_their_slot():
+        import struct
+        from types import SimpleNamespace
+        from uasset_read.archive import ByteArchive
+        from uasset_read.serializers.object_resources import read_export_map
+        # One FObjectExport entry (UE4.5-era version gates: no TemplateIndex,
+        # preload or script-serialization fields) whose ObjectName carries
+        # out-of-range index 5 for a 1-name table. bools are uint32 (7 fields),
+        # plus a 16-byte PackageGuid.
+        entry = struct.pack("<iiiiiiii", 0, 0, -1, 5, 0, 0, 0, 0) + b"\x00" * (7 * 4 + 16 + 4)
+        arc = ByteArchive(b"\x00" * 4 + entry, tolerant=True)
+        summary = SimpleNamespace(
+            export_count=1, export_offset=4, package_flags=0, file_version_ue4=500, file_version_ue5=0
+        )
+        export_map = read_export_map(arc, summary, ["Alpha"])
+        assert len(export_map) == 1
+        sd = [d for d in arc.get_structured_diagnostics() if d.code == "name_index_out_of_range"]
+        assert sd and sd[0].object_id == "export:0"
+        assert arc._current_object_id == ""  # context must not leak past the table
+
     _run_cases(
         [
             ("core.reader_out_of_range", core_contract),
@@ -262,6 +316,10 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
             ("chunk_ids.count_beyond_file_rejected", chunk_ids_count_beyond_file_rejected_immediately),
             ("source.reject_negative_size", sources_reject_negative_size),
             ("preload.count_beyond_file_rejected", preload_count_beyond_file_rejected_immediately),
+            ("recovery.fstring_overrun_recorded", tolerant_fstring_overrun_records_recovery_not_just_a_log),
+            ("recovery.fstring_null_truncation_recorded", fstring_internal_null_truncation_is_recorded),
+            ("recovery.fname_shift_recorded", fname_shift_recovery_is_recorded),
+            ("recovery.export_map_attribution", export_map_recoveries_are_attributed_to_their_slot),
         ]
     )
 
@@ -588,6 +646,43 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         assert not any(d.code == "MAPPINGS_LOAD_FAILED" for d in doc.diagnostics)
         assert isinstance(calls.get("mappings"), TypeMappingsProvider)
 
+    def test_silent_recovery_downgrades_object_and_reaches_document():
+        from uasset_read.models.diagnostics import StructuredDiagnostic
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.v2.package.legacy import _merge_archive_recoveries
+
+        class _RecoveringArchive:
+            """Plain bounded fake — no MagicMock for UE structures."""
+
+            def get_structured_diagnostics(self):
+                return [
+                    StructuredDiagnostic(
+                        code="fstring_out_of_range",
+                        stage="read_fstring",
+                        offset=7,
+                        fallback="used_empty_string",
+                        message="FString overran the file",
+                        object_id="export:0",
+                    )
+                ]
+
+        obj = ObjectRecord(
+            id="export:0", table_index=0, name="X", class_name="Foo",
+            status=ObjectStatus(parse="complete", semantic="not_requested"),
+        )
+        diagnostics: list = []
+        _merge_archive_recoveries(_RecoveringArchive(), [obj], diagnostics)
+        assert obj.status.parse == "partial"  # a recovered read must not claim complete
+        assert obj.status.semantic == "not_requested"  # only parse is downgraded
+        assert len(diagnostics) == 1
+        diag = diagnostics[0]
+        assert (diag.code, diag.effect, diag.offset, diag.object_id) == (
+            "fstring_out_of_range",
+            "recovery",
+            7,
+            "export:0",
+        )
+
     _run_cases(
         [
             ("document.test_no_critical_on_healthy", test_no_critical_on_healthy),
@@ -621,6 +716,10 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
             (
                 "mappings.test_v2_mappings_never_passes_raw_path_string",
                 test_v2_mappings_never_passes_raw_path_string,
+            ),
+            (
+                "recovery.test_silent_recovery_downgrades_object_and_reaches_document",
+                test_silent_recovery_downgrades_object_and_reaches_document,
             ),
             (
                 "mappings.test_v2_mappings_provider_object_on_successful_load",
