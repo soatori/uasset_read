@@ -304,8 +304,12 @@ class LegacyPackageReader:
         diagnostics: list[Diagnostic] = []
 
         try:
-            # 1. Read summary
+            # 0. Load the mappings provider once per document (mirrors v1
+            # _init_parse_env); None + diagnostic when unloadable.
             budget = ResourceBudget()
+            mappings_provider = self._load_mappings(budget, diagnostics)
+
+            # 1. Read summary
             summary = read_package_summary(archive, budget)
 
             # Property tag format is version-gated; set the gates the same
@@ -450,6 +454,7 @@ class LegacyPackageReader:
                     summary=summary,
                     object_ids=object_ids,
                     diagnostics=diagnostics,
+                    mappings=mappings_provider,
                 )
 
             # 17. Run asset handlers at depth >= asset
@@ -515,6 +520,36 @@ class LegacyPackageReader:
         finally:
             archive.close()
 
+    def _load_mappings(self, budget: ResourceBudget, diagnostics: list[Diagnostic]) -> Any | None:
+        """Build the mappings provider once per document (mirrors v1 _init_parse_env).
+
+        The property decoder expects a loaded provider object, never a raw
+        path string. On any load failure (missing file, bad magic, missing
+        optional codec) returns None and records a MAPPINGS_LOAD_FAILED
+        diagnostic; the parse continues and unversioned exports stay opaque.
+        """
+        if not self._mappings_path:
+            return None
+        try:
+            # Lazy import mirrors v1 (pipeline/core.py, pipeline/stages.py):
+            # the mappings module and its optional codecs must not become a
+            # core-import dependency.
+            from ...mappings import TypeMappingsProvider
+
+            return TypeMappingsProvider.from_file(self._mappings_path, budget=budget)
+        except Exception as exc:
+            diagnostics.append(
+                Diagnostic(
+                    severity="warning",
+                    code="MAPPINGS_LOAD_FAILED",
+                    message=f"Failed to load mappings '{self._mappings_path}': {type(exc).__name__}: {exc}",
+                    stage="package.mappings",
+                    effect="semantic_loss",
+                    recoverable=True,
+                )
+            )
+            return None
+
     def _parse_requested_object_properties(
         self,
         archive: PackageArchive,
@@ -525,6 +560,7 @@ class LegacyPackageReader:
         summary: PackageFileSummary,
         object_ids: Sequence[str] | None,
         diagnostics: list[Diagnostic],
+        mappings: Any | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Parse properties for requested objects at depth >= object.
 
@@ -575,7 +611,7 @@ class LegacyPackageReader:
                     name_map=name_map,
                     export_map=export_map,
                     import_map=import_map,
-                    mappings=self._mappings_path,
+                    mappings=mappings,
                     game=self._game,
                     tolerant=self._tolerant,
                     # v2 has no v1 class-handler dispatch at any depth.

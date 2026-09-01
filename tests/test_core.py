@@ -545,6 +545,50 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         assert all(o.name != second_name for o in doc.objects)     # second export did NOT become export:0
         assert any(d.code == "EXPORT_TABLE_TRUNCATED" for d in doc.diagnostics)
 
+    def test_v2_mappings_never_passes_raw_path_string():
+        calls = {}
+
+        def spy(**kw):
+            calls["mappings"] = kw.get("mappings")
+            return {}
+
+        monkeypatch.setattr(pp, "parse_properties_from_export", spy)
+        doc = parse_package_document(
+            str(DATA_SAMPLE), depth="object", mappings_path=str(ROOT / "no-such.usmap")
+        )
+        assert any(d.code == "MAPPINGS_LOAD_FAILED" for d in doc.diagnostics)
+        assert not isinstance(calls.get("mappings"), str)  # never a raw path string
+
+    def test_v2_mappings_provider_object_on_successful_load():
+        import tempfile
+
+        from uasset_read.mappings import TypeMappingsProvider
+
+        # Minimal uncompressed version-0 .usmap: empty name/enum/struct tables.
+        payload = b"\x00" * 12  # name_count=0, enum_count=0, struct_count=0
+        blob = (
+            (0x30C4).to_bytes(2, "little")  # FILE_MAGIC
+            + bytes([0])  # version 0 (skips package/custom-version block)
+            + bytes([0])  # compression method 0 (none)
+            + len(payload).to_bytes(4, "little")
+            + len(payload).to_bytes(4, "little")
+            + payload
+        )
+
+        calls = {}
+
+        def spy(**kw):
+            calls["mappings"] = kw.get("mappings")
+            return {}
+
+        monkeypatch.setattr(pp, "parse_properties_from_export", spy)
+        with tempfile.TemporaryDirectory() as td:
+            ok_path = Path(td) / "ok.usmap"
+            ok_path.write_bytes(blob)
+            doc = parse_package_document(str(DATA_SAMPLE), depth="object", mappings_path=str(ok_path))
+        assert not any(d.code == "MAPPINGS_LOAD_FAILED" for d in doc.diagnostics)
+        assert isinstance(calls.get("mappings"), TypeMappingsProvider)
+
     _run_cases(
         [
             ("document.test_no_critical_on_healthy", test_no_critical_on_healthy),
@@ -574,6 +618,14 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
             (
                 "document.test_export_table_failure_preserves_slot_identity",
                 test_export_table_failure_preserves_slot_identity,
+            ),
+            (
+                "mappings.test_v2_mappings_never_passes_raw_path_string",
+                test_v2_mappings_never_passes_raw_path_string,
+            ),
+            (
+                "mappings.test_v2_mappings_provider_object_on_successful_load",
+                test_v2_mappings_provider_object_on_successful_load,
             ),
         ]
     )
