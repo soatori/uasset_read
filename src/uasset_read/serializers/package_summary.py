@@ -797,7 +797,7 @@ def validate_export_data_range(
     archive: FArchive,
     summary: PackageFileSummary,
 ) -> None:
-    """Validate export data offsets against file bounds.
+    """Validate the export table region against file bounds.
 
     Validates that the export table region fits the file; per-export serial
     ranges are enforced at parse time via `_read_range` in `LegacyPackageReader`.

@@ -1329,8 +1329,10 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
 
     from uasset_read.pipeline.core import parse_package
 
+    pkg_handlers = tuple(logging.getLogger("uasset_read").handlers)
     parse_package(str(DATA_SAMPLE))
     assert tuple(logging.root.handlers) == handlers
+    assert tuple(logging.getLogger("uasset_read").handlers) == pkg_handlers
 
     old_level = logging.root.level
     try:
