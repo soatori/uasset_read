@@ -758,6 +758,8 @@ def test_handler_registry_supports_enriches_and_isolates():
         DataTableHandler,
         MaterialHandler,
         MaterialInstanceHandler,
+        MaterialFunctionHandler,
+        MaterialParameterCollectionHandler,
         MeshHandler,
         PhysicalMaterialHandler,
         PhysicsAssetHandler,
@@ -801,6 +803,8 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("AnimCompositeHandler", AnimCompositeHandler(), "AnimComposite", "Blueprint"),
             ("AnimLayerInterfaceHandler", AnimLayerInterfaceHandler(), "AnimLayerInterface", "Blueprint"),
             ("StringTableHandler", StringTableHandler(), "StringTable", "DataTable"),
+            ("MaterialFunctionHandler", MaterialFunctionHandler(), "MaterialFunction", "Blueprint"),
+            ("MaterialParameterCollectionHandler", MaterialParameterCollectionHandler(), "MaterialParameterCollection", "Blueprint"),
             (
                 "BlueprintFamilyHandler/anim",
                 BlueprintFamilyHandler(
@@ -1262,6 +1266,85 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert bare_axes and bare_axes[0].status == "missing"
         assert bare_samples and bare_samples[0].status == "missing"
 
+    def test_material_family_handlers_summary_tier_synthetic():
+        """#620: function I/O from expression exports; MPC scalar/vector params."""
+        from uasset_read.v2.handlers import (
+            _HANDLERS,
+            MaterialFunctionHandler,
+            MaterialParameterCollectionHandler,
+            run_handlers,
+        )
+        from uasset_read.v2.version import VersionContext
+
+        fn = record("MaterialFunction")
+        inp = record("MaterialExpressionFunctionInput")
+        inp.id = "export:1"
+        inp.properties = {"InputName": {"kind": "value", "type": "NameProperty", "value": "Speed"}}
+        out = record("MaterialExpressionFunctionOutput")
+        out.id = "export:2"
+        out.properties = {"OutputName": {"kind": "value", "type": "NameProperty", "value": "Emissive"}}
+        call = record("MaterialExpressionMaterialFunctionCall")
+        call.id = "export:3"
+        add = record("MaterialExpressionAdd")
+        add.id = "export:4"
+
+        mpc = record("MaterialParameterCollection")
+        mpc.properties = {
+            "ScalarParameters": {
+                "kind": "value",
+                "type": "ArrayProperty",
+                "value": [
+                    {
+                        "kind": "struct",
+                        "struct_type": "CollectionScalarParameter",
+                        "fields": {"ParameterName": "Intensity", "DefaultValue": 0.5},
+                    }
+                ],
+            },
+            "VectorParameters": {
+                "kind": "value",
+                "type": "ArrayProperty",
+                "value": [
+                    {
+                        "kind": "struct",
+                        "struct_type": "CollectionVectorParameter",
+                        "fields": {
+                            "ParameterName": "Tint",
+                            "DefaultValue": {"kind": "struct", "struct_type": "LinearColor", "fields": {"R": 1.0, "G": 0.0, "B": 0.5, "A": 1.0}},
+                        },
+                    }
+                ],
+            },
+        }
+        bare_fn = record("MaterialFunction")
+        bare_fn.properties = {}
+
+        saved = list(_HANDLERS)
+        try:
+            _HANDLERS[:] = [MaterialFunctionHandler(), MaterialParameterCollectionHandler()]
+            sem_fn, _c, _d = run_handlers(fn, VersionContext(depth="asset"), [fn, inp, out, call, add], None)
+            sem_mpc, _c, _d = run_handlers(mpc, VersionContext(depth="asset"), [mpc], None)
+            sem_bfn, _c, _d = run_handlers(bare_fn, VersionContext(depth="asset"), [bare_fn], None)
+        finally:
+            _HANDLERS[:] = saved
+
+        assert sem_fn["kind"] == "material_function"
+        assert sem_fn["input_names"] == ["Speed"]
+        assert sem_fn["output_names"] == ["Emissive"]
+        assert sem_fn["expression_count"] == 4
+        assert sem_fn["function_call_count"] == 1
+        assert fn.status.semantic == "partial"
+
+        assert sem_mpc["scalar_param_count"] == 1
+        assert sem_mpc["scalar_params"] == [{"name": "Intensity", "default_value": 0.5}]
+        assert sem_mpc["vector_param_count"] == 1
+        assert sem_mpc["vector_params"] == [{"name": "Tint", "default_rgba": [1.0, 0.0, 0.5, 1.0]}]
+        assert mpc.status.semantic == "partial"
+
+        assert sem_bfn["expression_count"] == 0
+        expr_cov = [c for c in bare_fn.coverage if c.feature == "material_function.expressions"]
+        assert expr_cov and expr_cov[0].status == "missing"
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -1294,6 +1377,10 @@ def test_handler_registry_supports_enriches_and_isolates():
             ),
             ("handler.test_physics_handlers_summary_tier_synthetic", test_physics_handlers_summary_tier_synthetic),
             ("handler.test_anim_handlers_summary_tier_synthetic", test_anim_handlers_summary_tier_synthetic),
+            (
+                "handler.test_material_family_handlers_summary_tier_synthetic",
+                test_material_family_handlers_summary_tier_synthetic,
+            ),
         ]
     )
 

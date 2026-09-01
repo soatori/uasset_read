@@ -1423,3 +1423,157 @@ class AnimLayerInterfaceHandler:
 register_handler(AnimBlendSpaceHandler())
 register_handler(AnimCompositeHandler())
 register_handler(AnimLayerInterfaceHandler())
+
+
+# ── Material family (#620) — summary tier until decoded fixtures exist ──
+
+
+class MaterialFunctionHandler:
+    """Enrich MaterialFunction objects with input/output and expression counts (#620).
+
+    UE source: ``Engine/Source/Runtime/Engine/Public/Materials/
+    MaterialFunction.h`` — ``UPROPERTY() FMaterialExpressionCollection
+    ExpressionCollection``; the expressions (including
+    ``UMaterialExpressionFunctionInput``/``...Output``, whose UPROPERTY
+    ``FName InputName``/``OutputName`` are in
+    ``Engine/Source/Runtime/Engine/Public/Materials/
+    MaterialExpressionFunctionInput.h`` / ``...Output.h``) are stored as
+    exports in the same editor-saved package. Node graph evaluation is not
+    decoded; counts and connector names are real export data. Summary tier
+    (#629).
+    """
+
+    capability = "summary"
+
+    _FUNCTION_CLASSES = ("MaterialFunction", "MaterialFunctionInterface")
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        return (obj.class_name or "") in self._FUNCTION_CLASSES
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        result: dict[str, Any] = {"kind": "material_function", "name": obj.name}
+        coverage: list[CoverageEntry] = []
+
+        inputs: list[str] = []
+        outputs: list[str] = []
+        expression_count = 0
+        function_calls = 0
+        for other in all_objects:
+            other_class = other.class_name or ""
+            if not other_class.startswith("MaterialExpression"):
+                continue
+            expression_count += 1
+            if other_class == "MaterialExpressionFunctionInput":
+                name = _prop_value(other.properties or {}, "InputName")
+                inputs.append(str(name) if isinstance(name, (str, int)) else other.name)
+            elif other_class == "MaterialExpressionFunctionOutput":
+                name = _prop_value(other.properties or {}, "OutputName")
+                outputs.append(str(name) if isinstance(name, (str, int)) else other.name)
+            elif other_class == "MaterialExpressionMaterialFunctionCall":
+                function_calls += 1
+
+        result["input_names"] = inputs[:100]
+        result["output_names"] = outputs[:100]
+        result["input_count"] = len(inputs)
+        result["output_count"] = len(outputs)
+        result["expression_count"] = expression_count
+        result["function_call_count"] = function_calls
+
+        if expression_count:
+            coverage.append(
+                CoverageEntry(feature="material_function.expressions", status="present", detail=f"{expression_count} expression exports")
+            )
+        else:
+            coverage.append(
+                CoverageEntry(
+                    feature="material_function.expressions",
+                    status="missing",
+                    detail="no MaterialExpression* exports (cooked or stripped editor data)",
+                )
+            )
+        obj.coverage.extend(coverage)
+        return result
+
+
+class MaterialParameterCollectionHandler:
+    """Enrich MaterialParameterCollection objects with scalar/vector parameter summary (#620).
+
+    Property names per UE source:
+    ``Engine/Source/Runtime/Engine/Public/Materials/
+    MaterialParameterCollection.h`` — ``UPROPERTY(EditAnywhere,
+    Category=Material) TArray<FCollectionScalarParameter> ScalarParameters``
+    and ``TArray<FCollectionVectorParameter> VectorParameters``; each carries
+    ``FName ParameterName`` and a ``DefaultValue`` (float / FLinearColor with
+    R/G/B/A float fields). Editor-saved packages carry these as tagged
+    properties. Summary tier (#629).
+    """
+
+    capability = "summary"
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        return (obj.class_name or "") == "MaterialParameterCollection"
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        result: dict[str, Any] = {"kind": "material_parameter_collection", "name": obj.name}
+        props = obj.properties or {}
+        coverage: list[CoverageEntry] = []
+
+        scalars = _array_value(props, "ScalarParameters")
+        if scalars is not None:
+            result["scalar_params"] = self._params(scalars, "default_value")
+            result["scalar_param_count"] = len(scalars)
+            coverage.append(CoverageEntry(feature="material_parameter_collection.scalars", status="present"))
+        else:
+            coverage.append(
+                CoverageEntry(feature="material_parameter_collection.scalars", status="missing", detail="ScalarParameters not in property bag")
+            )
+
+        vectors = _array_value(props, "VectorParameters")
+        if vectors is not None:
+            result["vector_params"] = self._params(vectors, "default_rgba")
+            result["vector_param_count"] = len(vectors)
+            coverage.append(CoverageEntry(feature="material_parameter_collection.vectors", status="present"))
+        else:
+            coverage.append(
+                CoverageEntry(feature="material_parameter_collection.vectors", status="missing", detail="VectorParameters not in property bag")
+            )
+
+        obj.coverage.extend(coverage)
+        return result
+
+    @staticmethod
+    def _params(items: list[Any], value_key: str) -> list[dict[str, Any]]:
+        params: list[dict[str, Any]] = []
+        for item in items:
+            fields = _struct_fields(item)
+            if fields is None:
+                continue
+            entry: dict[str, Any] = {"name": str(fields.get("ParameterName", ""))}
+            default = fields.get("DefaultValue")
+            if value_key == "default_value":
+                num = _number_value(default)
+                if num is not None:
+                    entry[value_key] = num
+            else:
+                color = _struct_fields(default)
+                if color is not None:
+                    rgba = [_number_value(color.get(c)) or 0.0 for c in ("R", "G", "B", "A")]
+                    entry[value_key] = rgba
+            params.append(entry)
+        return params[:100]
+
+
+register_handler(MaterialFunctionHandler())
+register_handler(MaterialParameterCollectionHandler())
