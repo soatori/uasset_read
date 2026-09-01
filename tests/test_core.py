@@ -756,6 +756,8 @@ def test_handler_registry_supports_enriches_and_isolates():
         MaterialHandler,
         MaterialInstanceHandler,
         MeshHandler,
+        PhysicalMaterialHandler,
+        PhysicsAssetHandler,
         SkeletonHandler,
         TextureHandler,
         UserDefinedEnumHandler,
@@ -789,6 +791,8 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("MeshHandler/Skeletal", MeshHandler(), "SkeletalMesh", "Blueprint"),
             ("MaterialHandler", MaterialHandler(), "Material", "Blueprint"),
             ("MaterialInstanceHandler", MaterialInstanceHandler(), "MaterialInstanceConstant", "Blueprint"),
+            ("PhysicsAssetHandler", PhysicsAssetHandler(), "PhysicsAsset", "Blueprint"),
+            ("PhysicalMaterialHandler", PhysicalMaterialHandler(), "PhysicalMaterial", "Blueprint"),
             (
                 "BlueprintFamilyHandler/anim",
                 BlueprintFamilyHandler(
@@ -1105,6 +1109,58 @@ def test_handler_registry_supports_enriches_and_isolates():
         cov = [c for c in obj.coverage if c.feature == "handler.StringTableHandler"]
         assert len(cov) == 1 and cov[0].status == "missing"
 
+    def test_physics_handlers_summary_tier_synthetic():
+        """#619: physics handlers read real fields but never claim complete."""
+        from uasset_read.v2.handlers import (
+            _HANDLERS,
+            PhysicsAssetHandler,
+            PhysicalMaterialHandler,
+            run_handlers,
+        )
+        from uasset_read.v2.version import VersionContext
+
+        pa = record("PhysicsAsset")
+        pa.properties = {
+            "SkeletalBodySetups": {"kind": "value", "type": "ArrayProperty", "value": ["ref0", "ref1"]},
+            "ConstraintSetup": {"kind": "value", "type": "ArrayProperty", "value": []},
+        }
+        body = record("SkeletalBodySetup")
+        body.id = "export:1"
+        body.name = "Body_pelvis"
+        pm = record("PhysicalMaterial")
+        pm.properties = {
+            "Friction": {"kind": "value", "type": "FloatProperty", "value": 0.7},
+            "Restitution": {"kind": "value", "type": "FloatProperty", "value": 0.2},
+            "Density": {"kind": "value", "type": "FloatProperty", "value": 0},
+            "SurfaceType": {"kind": "value", "type": "ByteProperty", "value": {"value_name": "SCE_Plastic"}},
+        }
+        saved = list(_HANDLERS)
+        try:
+            _HANDLERS[:] = [PhysicsAssetHandler(), PhysicalMaterialHandler()]
+            sem_pa, _c, _d = run_handlers(pa, VersionContext(depth="asset"), [pa, body], None)
+            sem_pm, _c, _d = run_handlers(pm, VersionContext(depth="asset"), [pm], None)
+            empty_pm = record("PhysicalMaterial")
+            empty_pm.properties = {}
+            sem_empty, _c, _d = run_handlers(empty_pm, VersionContext(depth="asset"), [empty_pm], None)
+        finally:
+            _HANDLERS[:] = saved
+
+        assert sem_pa["kind"] == "physics_asset"
+        assert sem_pa["body_count"] == 2
+        assert sem_pa["constraint_count"] == 0
+        assert sem_pa["bodies"] == ["Body_pelvis"]
+        assert pa.status.semantic == "partial"
+        disable = [c for c in pa.coverage if c.feature == "physics_asset.collision_disable_table"]
+        assert disable and disable[0].status == "missing"
+
+        assert sem_pm["friction"] == 0.7
+        assert sem_pm["restitution"] == 0.2
+        assert sem_pm["density"] == 0
+        assert sem_pm["surface_type"] == "SCE_Plastic"
+        assert pm.status.semantic == "partial"
+        assert sem_empty is None
+        assert empty_pm.status.semantic == "partial"
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -1135,6 +1191,7 @@ def test_handler_registry_supports_enriches_and_isolates():
                 "handler.test_string_table_handler_missing_trailer_reports_coverage",
                 test_string_table_handler_missing_trailer_reports_coverage,
             ),
+            ("handler.test_physics_handlers_summary_tier_synthetic", test_physics_handlers_summary_tier_synthetic),
         ]
     )
 

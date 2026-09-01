@@ -128,6 +128,34 @@ def run_handlers(
 # ── Built-in handlers ──────────────────────────────────────────────
 
 
+def _prop_value(props: dict[str, Any], name: str) -> Any:
+    """Unwrap a tagged ``{"kind":"value", ...}`` bag entry."""
+    val = props.get(name)
+    if isinstance(val, dict) and val.get("kind") == "value":
+        return val.get("value")
+    return None
+
+
+def _array_value(props: dict[str, Any], name: str) -> list[Any] | None:
+    """Return a normalized array property value, or None when absent/unreadable."""
+    val = _prop_value(props, name)
+    return val if isinstance(val, list) else None
+
+
+def _number_value(value: Any) -> int | float | None:
+    if isinstance(value, bool):
+        return None
+    return value if isinstance(value, (int, float)) else None
+
+
+def _enum_name(value: Any) -> str | None:
+    """ByteProperty/enum values surface as {"value_name": ...} or a plain string."""
+    if isinstance(value, dict):
+        name = value.get("value_name")
+        return str(name) if name is not None else None
+    return str(value) if isinstance(value, str) else None
+
+
 def _flatten_text(val: Any) -> str | None:
     """Pull a readable string out of a normalized property value.
 
@@ -1026,3 +1054,141 @@ class NiagaraHandler:
 
 
 register_handler(NiagaraHandler())
+
+
+# ── Physics family (#619) — summary tier until decoded fixtures exist ──
+
+
+class PhysicsAssetHandler:
+    """Enrich PhysicsAsset objects with body/constraint summary (#619).
+
+    Property names per UE source:
+    ``Engine/Source/Runtime/Engine/Classes/PhysicsEngine/PhysicsAsset.h`` —
+    ``UPROPERTY() TArray<int32> BoundsBodies``, ``UPROPERTY(instanced)
+    TArray<TObjectPtr<USkeletalBodySetup>> SkeletalBodySetups``,
+    ``UPROPERTY(instanced) TArray<TObjectPtr<UPhysicsConstraintTemplate>>
+    ConstraintSetup`` (editor-saved packages carry these as tagged
+    properties; instanced bodies are exports in the same package).
+    ``UPhysicsAsset::Serialize`` in
+    ``Engine/Source/Runtime/Engine/Private/PhysicsEngine/PhysicsAsset.cpp``
+    writes CollisionDisableTable as raw binary after the tagged properties —
+    not decoded here. Summary tier: never yields ``semantic="complete"``
+    (#629).
+    """
+
+    capability = "summary"
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        return (obj.class_name or "") == "PhysicsAsset"
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        result: dict[str, Any] = {"kind": "physics_asset", "name": obj.name}
+        props = obj.properties or {}
+        coverage: list[CoverageEntry] = []
+
+        bodies = _array_value(props, "SkeletalBodySetups")
+        if bodies is not None:
+            result["body_count"] = len(bodies)
+            coverage.append(CoverageEntry(feature="physics_asset.bodies", status="present"))
+        else:
+            coverage.append(
+                CoverageEntry(feature="physics_asset.bodies", status="missing", detail="SkeletalBodySetups not in property bag")
+            )
+
+        constraints = _array_value(props, "ConstraintSetup")
+        if constraints is not None:
+            result["constraint_count"] = len(constraints)
+            coverage.append(CoverageEntry(feature="physics_asset.constraints", status="present"))
+        else:
+            coverage.append(
+                CoverageEntry(feature="physics_asset.constraints", status="missing", detail="ConstraintSetup not in property bag")
+            )
+
+        # Instanced body/constraint exports live in the same package; their
+        # per-body collision shapes are not decoded at this tier.
+        body_exports = [o.name for o in all_objects if (o.class_name or "") == "SkeletalBodySetup"]
+        if body_exports:
+            result["bodies"] = body_exports[:100]
+            coverage.append(
+                CoverageEntry(
+                    feature="physics_asset.shapes",
+                    status="partial",
+                    detail="collision shapes inside USkeletalBodySetup exports not decoded",
+                )
+            )
+
+        coverage.append(
+            CoverageEntry(
+                feature="physics_asset.collision_disable_table",
+                status="missing",
+                detail="raw binary after tagged properties (PhysicsAsset.cpp UPhysicsAsset::Serialize), not decoded",
+            )
+        )
+        obj.coverage.extend(coverage)
+        return result
+
+
+class PhysicalMaterialHandler:
+    """Enrich PhysicalMaterial objects with friction/restitution/density summary (#619).
+
+    Property names per UE source:
+    ``Engine/Source/Runtime/PhysicsCore/Public/PhysicalMaterials/PhysicalMaterial.h`` —
+    ``UPhysicalMaterial : UObject`` with UPROPERTY floats ``Friction``,
+    ``StaticFriction``, ``Restitution``, ``Density`` and
+    ``TEnumAsByte<EPhysicalSurface> SurfaceType``; serialized as ordinary
+    tagged properties (no custom post-property binary). Summary tier until
+    a decoded fixture backfills #619 (#629).
+    """
+
+    capability = "summary"
+
+    _FLOAT_FIELDS = (
+        ("Friction", "friction"),
+        ("StaticFriction", "static_friction"),
+        ("Restitution", "restitution"),
+        ("Density", "density"),
+    )
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        return (obj.class_name or "") == "PhysicalMaterial"
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        result: dict[str, Any] = {"kind": "physical_material", "name": obj.name}
+        props = obj.properties or {}
+        coverage: list[CoverageEntry] = []
+        found = 0
+
+        for prop_name, key in self._FLOAT_FIELDS:
+            num = _number_value(_prop_value(props, prop_name))
+            if num is not None:
+                result[key] = num
+                found += 1
+                coverage.append(CoverageEntry(feature=f"physical_material.{key}", status="present"))
+            else:
+                coverage.append(CoverageEntry(feature=f"physical_material.{key}", status="missing"))
+
+        surface = _enum_name(_prop_value(props, "SurfaceType"))
+        if surface is not None:
+            result["surface_type"] = surface
+            coverage.append(CoverageEntry(feature="physical_material.surface_type", status="present"))
+        else:
+            coverage.append(CoverageEntry(feature="physical_material.surface_type", status="missing"))
+
+        obj.coverage.extend(coverage)
+        return result if found or surface is not None else None
+
+
+register_handler(PhysicsAssetHandler())
+register_handler(PhysicalMaterialHandler())
