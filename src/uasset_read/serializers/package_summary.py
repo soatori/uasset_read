@@ -987,8 +987,12 @@ def read_depends_map(
     # Surface degradation as warnings
     if warnings is not None:
         if skipped_entries > 0:
+            # On the stop path nothing after the bad count is read, so
+            # "not parsed" is honest where "skipped" would contradict
+            # the "stopped at entry i" warning below.
+            action = "not parsed" if truncated_table else "skipped"
             warnings.append(
-                f"DependsMap: {skipped_entries}/{summary.export_count} entries skipped due to invalid dependency count"
+                f"DependsMap: {skipped_entries}/{summary.export_count} entries {action} due to invalid dependency count"
             )
         if truncated_table:
             warnings.append(f"DependsMap: stopped at entry {i}; subsequent entries were not parsed")

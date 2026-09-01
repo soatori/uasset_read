@@ -194,7 +194,11 @@ def extract_payload(
         "error": PAYLOAD_EXTRACTION_DEFERRED_MESSAGE,
         "code": PAYLOAD_EXTRACTION_DEFERRED,
         "available_ids": [],
+        # fit_list_response requires offset/returned/total whenever the list
+        # carries items; there is no larger universe behind available_ids
+        # today, so returned/total are the length of the visible list.
+        "offset": 0,
+        "returned": 0,
+        "total": 0,
     }
-    # The list is always empty (deferred), so the only outcomes are a fit or the
-    # too-small raise; the helper's offset/returned/total keys are never read.
     return fit_list_response(response, max_bytes, list_key="available_ids")
