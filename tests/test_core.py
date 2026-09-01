@@ -491,6 +491,8 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
                 raise RuntimeError("boom")
 
         class Ok:
+            capability = "decoded"
+
             def supports(self, obj, ctx):
                 return True
 
@@ -519,6 +521,8 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
 
         class Ok:
+            capability = "decoded"
+
             def supports(self, obj, ctx):
                 return True
 
@@ -859,32 +863,6 @@ def test_handler_registry_supports_enriches_and_isolates():
             assert handler.supports(record(class_name), VersionContext()), class_name
         assert not handler.supports(record("StaticMesh"), VersionContext())
 
-    def test_shallow_handler_never_marks_complete():
-        from uasset_read.v2 import handlers as H
-        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
-
-        class Shallow:
-            full_coverage = False
-
-            def supports(self, obj, ctx):
-                return True
-
-            def enrich(self, obj, ctx, all_objs, data):
-                return {"kind": "shallow"}
-
-        obj = ObjectRecord(
-            id="export:9", table_index=0, name="X", class_name="Foo",
-            status=ObjectStatus(parse="complete", semantic="not_requested"),
-        )
-        saved = H._HANDLERS[:]
-        try:
-            H._HANDLERS[:] = [Shallow()]
-            semantic, _cov, _diags = H.run_handlers(obj, H.VersionContext(), [], None)
-        finally:
-            H._HANDLERS[:] = saved
-        assert semantic == {"kind": "shallow"}
-        assert obj.status.semantic == "partial"
-
     def test_class_handlers_kwarg_defaults_true_for_v1():
         import inspect
 
@@ -892,6 +870,134 @@ def test_handler_registry_supports_enriches_and_isolates():
 
         param = inspect.signature(parse_properties_from_export).parameters["run_class_handlers"]
         assert param.default is True, "v1 default must keep class-handler dispatch byte-identical"
+
+    def test_summary_tier_handlers_never_claim_complete():
+        """Niagara/Mesh/Blueprint-summary results are partial with coverage (#629)."""
+        from uasset_read.v2.handlers import (
+            _HANDLERS,
+            BlueprintFamilyHandler,
+            MeshHandler,
+            NiagaraHandler,
+            run_handlers,
+        )
+        from uasset_read.v2.version import VersionContext
+
+        cases = [
+            ("NiagaraScript", NiagaraHandler()),
+            ("StaticMesh", MeshHandler()),
+            (
+                "Blueprint",
+                BlueprintFamilyHandler(("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint"),
+            ),
+        ]
+        saved = list(_HANDLERS)
+        try:
+            for class_name, handler in cases:
+                _HANDLERS[:] = [handler]
+                obj = record(class_name)
+                semantic, _cov, _diags = run_handlers(obj, VersionContext(depth="asset"), [obj], None)
+                assert semantic, class_name
+                assert obj.status.semantic == "partial", class_name
+                assert obj.coverage, class_name
+        finally:
+            _HANDLERS[:] = saved
+
+    def test_decode_tier_blueprint_graph_marks_complete():
+        """Only decoded-tier output (Blueprint graph at depth=decode) yields complete (#629)."""
+        from uasset_read.v2.handlers import _HANDLERS, BlueprintFamilyHandler, run_handlers
+        from uasset_read.v2.version import VersionContext
+
+        bp = record("Blueprint")
+        node = record("K2Node_CallFunction")
+        node.id = "export:1"
+        handler = BlueprintFamilyHandler(
+            ("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint"
+        )
+        saved = list(_HANDLERS)
+        try:
+            _HANDLERS[:] = [handler]
+            semantic, _cov, _diags = run_handlers(
+                bp, VersionContext(depth="decode"), [bp, node], None
+            )
+        finally:
+            _HANDLERS[:] = saved
+        assert "graph" in semantic
+        assert bp.status.semantic == "complete"
+
+    def test_undeclared_handler_tier_defaults_to_summary():
+        from uasset_read.v2.handlers import _HANDLERS, run_handlers
+        from uasset_read.v2.version import VersionContext
+
+        class Echo:
+            def supports(self, obj, ctx):
+                return True
+
+            def enrich(self, obj, ctx, all_objs, data):
+                return {"kind": "echo"}
+
+        obj = record("Whatever")
+        saved = list(_HANDLERS)
+        try:
+            _HANDLERS[:] = [Echo()]
+            run_handlers(obj, VersionContext(), [obj], None)
+        finally:
+            _HANDLERS[:] = saved
+        assert obj.status.semantic == "partial"
+
+    def test_skeleton_name_guess_is_marked_heuristic():
+        """NameMap-regex bones are marked bone_source=name_guess and never complete (#630)."""
+        from uasset_read.v2.handlers import _HANDLERS, SkeletonHandler, run_handlers
+        from uasset_read.v2.version import VersionContext
+
+        obj = record("Skeleton")
+        name_map = ["None", "SomeWidget", "root", "pelvis", "spine_01"]
+        saved = list(_HANDLERS)
+        try:
+            _HANDLERS[:] = [SkeletonHandler()]
+            semantic, _cov, _diags = run_handlers(
+                obj, VersionContext(depth="asset"), [obj], (None, name_map, None)
+            )
+        finally:
+            _HANDLERS[:] = saved
+        assert semantic["bone_source"] == "name_guess"
+        assert [b["name"] for b in semantic["bones"]] == ["root", "pelvis", "spine_01"]
+        assert semantic["bone_count"] == 3
+        assert obj.status.semantic == "partial"
+        guess = [c for c in obj.coverage if c.feature == "skeleton.bones"]
+        assert len(guess) == 1
+        assert guess[0].status == "partial" and "heuristic" in guess[0].detail
+
+    def test_skeleton_bone_tree_wins_over_name_guess():
+        """Decoded BoneTree names take precedence over the regex path (#630)."""
+        from uasset_read.v2.handlers import _HANDLERS, SkeletonHandler, run_handlers
+        from uasset_read.v2.version import VersionContext
+
+        obj = record("Skeleton")
+        obj.properties = {
+            "BoneTree": {
+                "kind": "value",
+                "type": "ArrayProperty",
+                "value": [
+                    {"kind": "struct", "struct_type": "BoneNode", "fields": {"Name": "root", "ParentIndex": -1}},
+                    "pelvis",
+                    "pelvis",
+                    {"kind": "opaque", "type": "", "size": 0, "reason": "unsupported_type"},
+                ],
+            }
+        }
+        # "head" would match the NameMap regex — its absence proves the real path won.
+        name_map = ["head", "thigh_l"]
+        saved = list(_HANDLERS)
+        try:
+            _HANDLERS[:] = [SkeletonHandler()]
+            semantic, _cov, _diags = run_handlers(
+                obj, VersionContext(depth="asset"), [obj], (None, name_map, None)
+            )
+        finally:
+            _HANDLERS[:] = saved
+        assert semantic["bone_source"] == "bone_tree"
+        assert [b["name"] for b in semantic["bones"]] == ["root", "pelvis"]
+        assert obj.status.semantic == "complete"
 
     _run_cases(
         [
@@ -909,7 +1015,11 @@ def test_handler_registry_supports_enriches_and_isolates():
                 test_niagara_handler_supports_all_declared_classes,
             ),
             ("handler.test_class_handlers_kwarg_defaults_true_for_v1", test_class_handlers_kwarg_defaults_true_for_v1),
-            ("handler.test_shallow_handler_never_marks_complete", test_shallow_handler_never_marks_complete),
+            ("handler.test_summary_tier_handlers_never_claim_complete", test_summary_tier_handlers_never_claim_complete),
+            ("handler.test_decode_tier_blueprint_graph_marks_complete", test_decode_tier_blueprint_graph_marks_complete),
+            ("handler.test_undeclared_handler_tier_defaults_to_summary", test_undeclared_handler_tier_defaults_to_summary),
+            ("handler.test_skeleton_name_guess_is_marked_heuristic", test_skeleton_name_guess_is_marked_heuristic),
+            ("handler.test_skeleton_bone_tree_wins_over_name_guess", test_skeleton_bone_tree_wins_over_name_guess),
         ]
     )
 

@@ -7,6 +7,7 @@ name and invoked lazily when depth >= asset.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Protocol
 
 from .diagnostics import Diagnostic
@@ -15,7 +16,14 @@ from .version import VersionContext
 
 
 class AssetHandler(Protocol):
-    """Domain handler that enriches an object with semantic data."""
+    """Domain handler that enriches an object with semantic data.
+
+    Handlers may declare a capability tier via a ``capability`` member:
+    either a plain ``"summary"``/``"decoded"`` string, or a callable of the
+    produced result for handlers whose tier depends on the data actually
+    found. Undeclared handlers are summary-tier: only decoded-tier output
+    may yield ``status.semantic = "complete"`` (#629).
+    """
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool: ...
 
@@ -42,6 +50,17 @@ def get_handlers() -> list[AssetHandler]:
     return list(_HANDLERS)
 
 
+def _capability_tier(handler: AssetHandler, result: dict[str, Any]) -> str:
+    """Resolve a handler's declared tier ("decoded"/"summary") for its output.
+
+    ``capability`` may be a plain tier string or a callable of the produced
+    result. Undeclared handlers default to "summary": an undeclared handler
+    must not claim that a type was fully decoded (#629).
+    """
+    cap = getattr(handler, "capability", "summary")
+    return cap(result) if callable(cap) else cap
+
+
 def run_handlers(
     obj: ObjectRecord,
     context: VersionContext,
@@ -52,22 +71,26 @@ def run_handlers(
 
     Returns (semantic, coverage, diagnostics).
     Handler failure only affects this object — no propagation.
+    ``status.semantic`` is bound to the capability tier: "complete" only
+    when a decoded-tier handler produced output; summary-tier results and
+    failures stay "partial" (#629).
     """
     semantic: dict[str, Any] = {}
     coverage: list[CoverageEntry] = []
     diagnostics: list[Diagnostic] = []
     matched = False
     failed = False
-    shallow = False
+    decoded = False
 
     for handler in _HANDLERS:
         try:
             if handler.supports(obj, context):
                 matched = True
-                shallow = shallow or not getattr(handler, "full_coverage", True)
                 result = handler.enrich(obj, context, all_objects, package_data)
                 if result is not None:
                     semantic.update(result)
+                    if _capability_tier(handler, result) == "decoded":
+                        decoded = True
         except Exception as e:
             # Handler failure must not affect other objects
             matched = True
@@ -92,11 +115,10 @@ def run_handlers(
             )
 
     if matched:
-        # A handler that matched but produced nothing (enrich returned None)
-        # has not delivered semantics either — never claim "complete".
-        # Handlers that are deliberately shallow declare full_coverage=False;
-        # their objects cap at "partial" until domain fields back the claim.
-        obj.status.semantic = "partial" if (failed or not semantic or shallow) else "complete"
+        # "complete" means a decoded-tier handler delivered semantics.
+        # A summary-tier result (name/kind echo, light digest), a handler
+        # that matched but produced nothing, or a failure stays "partial".
+        obj.status.semantic = "complete" if (decoded and not failed) else "partial"
 
     if not semantic:
         return None, coverage, diagnostics
@@ -126,6 +148,8 @@ def _flatten_text(val: Any) -> str | None:
 
 class UserDefinedEnumHandler:
     """Enrich UserDefinedEnum objects."""
+
+    capability = "decoded"  # real enum entries decoded from the name table
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         return (obj.class_name or "") == "UserDefinedEnum"
@@ -190,6 +214,8 @@ class UserDefinedEnumHandler:
 
 class UserDefinedStructHandler:
     """Enrich UserDefinedStruct objects."""
+
+    capability = "decoded"  # only returns output when real fields were extracted
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         return (obj.class_name or "") == "UserDefinedStruct"
@@ -263,6 +289,8 @@ class DataTableHandler:
     extracts right after the tagged properties.
     """
 
+    capability = "decoded"  # row struct/count read from real property + payload data
+
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         cn = obj.class_name or ""
         return cn in ("DataTable", "CurveTable", "StringTable")
@@ -310,6 +338,8 @@ class TextureHandler:
     Extracts semantic fields: kind, texture_type, srgb, compression_settings.
     Each extracted field produces a CoverageEntry.
     """
+
+    capability = "decoded"  # fields read from the tagged property bag
 
     _TEXTURE_CLASSES = ("Texture2D", "TextureCube")
 
@@ -366,6 +396,8 @@ class TexturePayloadHandler:
     Reads ImportedSize struct to emit a texture_mip payload descriptor
     with stored_size / logical_size.
     """
+
+    capability = "decoded"  # descriptor read from the real ImportedSize struct
 
     _TEXTURE_CLASSES = ("Texture2D", "TextureCube")
 
@@ -461,6 +493,10 @@ class SoundHandler:
         )
         return result
 
+    def capability(self, result: dict[str, Any]) -> str:
+        # Decoded only with real resource fields; a kind/sound_type echo is a summary.
+        return "decoded" if "resource" in result else "summary"
+
 
 # Register built-in handlers
 register_handler(UserDefinedEnumHandler())
@@ -473,6 +509,8 @@ register_handler(SoundHandler())
 
 class MaterialHandler:
     """Enrich Material objects with shader/material property summary."""
+
+    capability = "decoded"  # returns output only when real properties were read
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         return (obj.class_name or "") == "Material"
@@ -508,6 +546,8 @@ class MaterialHandler:
 
 class MaterialInstanceHandler:
     """Enrich MaterialInstance/MaterialInstanceConstant objects."""
+
+    capability = "decoded"  # returns output only when real properties were read
 
     _INSTANCE_CLASSES = ("MaterialInstance", "MaterialInstanceConstant")
 
@@ -549,11 +589,59 @@ class MaterialInstanceHandler:
         return result if len(result) > 1 else None
 
 
+_BONE_NAME_RE = re.compile(
+    r"^(root|pelvis|spine_\d+|head|neck|clavicle_[lr]|upperarm_[lr]|"
+    r"lowerarm_[lr]|hand_[lr]|thigh_[lr]|calf_[lr]|foot_[lr]|ball_[lr]|"
+    r"ik_\w+|twist_\d+_[lr]|finger\w*)$"
+)
+
+
+def _guess_bone_names(name_map: list[str]) -> list[dict[str, Any]]:
+    """Heuristic NameMap-regex name guess — never a decoded skeleton hierarchy (#630)."""
+    return [
+        {"name": name, "index": i} for i, name in enumerate(name_map) if _BONE_NAME_RE.match(name)
+    ]
+
+
+def _decoded_bone_names(prop: Any) -> list[dict[str, Any]]:
+    """Bone names decoded from a BoneTree/ReferenceSkeleton property value.
+
+    FBoneNode ``Name`` fields surface either as BoneNode struct entries or —
+    the property reader emits each FName twice — as consecutive duplicated
+    string array entries; other array elements are misaligned noise and get
+    skipped. Returns [] when the property carries no decodable names.
+    """
+    if not isinstance(prop, dict) or not isinstance(prop.get("value"), list):
+        return []
+    names: list[dict[str, Any]] = []
+    for entry in prop["value"]:
+        name = None
+        if isinstance(entry, dict) and entry.get("struct_type") == "BoneNode":
+            n = (entry.get("fields") or {}).get("Name")
+            if isinstance(n, str):
+                name = n
+        elif isinstance(entry, str):
+            name = entry
+        if name and name != "None" and (not names or names[-1]["name"] != name):
+            names.append({"name": name, "index": len(names)})
+    return names
+
+
 class SkeletonHandler:
-    """Enrich Skeleton objects with bone hierarchy summary."""
+    """Enrich Skeleton objects with bone hierarchy summary.
+
+    Real bone names decoded from the BoneTree/ReferenceSkeleton properties
+    win; the NameMap regex path is an explicit name guess marked
+    ``bone_source="name_guess"`` and stays summary-tier (#630).
+    """
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         return (obj.class_name or "") == "Skeleton"
+
+    def capability(self, result: dict[str, Any]) -> str:
+        # A name guess or an empty fallback is a summary; only decoded property
+        # bone data counts as complete (#629, #630).
+        return "decoded" if result.get("bone_source") in ("bone_tree", "reference_skeleton") else "summary"
 
     def enrich(
         self,
@@ -562,34 +650,53 @@ class SkeletonHandler:
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
-        import re
-
         result: dict[str, Any] = {"kind": "skeleton", "name": obj.name}
         coverage: list[CoverageEntry] = []
+        bag = obj.properties or {}
 
-        # Extract name_map from package_data tuple (export_map, name_map, extras)
-        name_map: list[str] = []
-        if isinstance(package_data, tuple) and len(package_data) >= 2:
-            name_map = package_data[1]
-
-        # Extract bone names from name map
-        if name_map:
-            bone_pattern = re.compile(
-                r"^(root|pelvis|spine_\d+|head|neck|clavicle_[lr]|upperarm_[lr]|"
-                r"lowerarm_[lr]|hand_[lr]|thigh_[lr]|calf_[lr]|foot_[lr]|ball_[lr]|"
-                r"ik_\w+|twist_\d+_[lr]|finger\w*)$"
-            )
-            bones = []
-            for i, name in enumerate(name_map):
-                if bone_pattern.match(name):
-                    bones.append({"name": name, "index": i})
+        # Real hierarchy first: BoneTree/ReferenceSkeleton property data wins.
+        bones: list[dict[str, Any]] = []
+        bone_source = ""
+        for prop_name, source in (("BoneTree", "bone_tree"), ("ReferenceSkeleton", "reference_skeleton")):
+            bones = _decoded_bone_names(bag.get(prop_name))
             if bones:
-                result["bones"] = bones
-                result["bone_count"] = len(bones)
-                coverage.append(CoverageEntry(feature="skeleton.bones", status="present"))
+                bone_source = source
+                break
+
+        if not bones:
+            # Fallback: heuristic name guess over the NameMap, explicitly marked.
+            name_map: list[str] = []
+            if isinstance(package_data, tuple) and len(package_data) >= 2:
+                name_map = package_data[1]
+            bones = _guess_bone_names(name_map)
+            if bones:
+                bone_source = "name_guess"
+                coverage.append(
+                    CoverageEntry(
+                        feature="skeleton.bones",
+                        status="partial",
+                        detail="heuristic: NameMap regex name-guess, not a decoded hierarchy",
+                    )
+                )
+            else:
+                coverage.append(
+                    CoverageEntry(
+                        feature="skeleton.bones",
+                        status="missing",
+                        detail="BoneTree/ReferenceSkeleton not decoded and no NameMap name matched",
+                    )
+                )
+        else:
+            coverage.append(
+                CoverageEntry(feature="skeleton.bones", status="present", detail=f"from {bone_source} property")
+            )
+
+        result["bones"] = bones
+        result["bone_count"] = len(bones)
+        if bone_source:
+            result["bone_source"] = bone_source
 
         # Count virtual bones and sockets from the v2 property bag
-        bag = obj.properties or {}
         for prop_name, key, feature in (
             ("VirtualBones", "virtual_bone_count", "skeleton.virtual_bones"),
             ("Sockets", "socket_count", "skeleton.sockets"),
@@ -599,33 +706,18 @@ class SkeletonHandler:
                 result[key] = len(val["value"])
                 coverage.append(CoverageEntry(feature=feature, status="present"))
 
-        # Fallback: check v2 properties
-        if "bone_count" not in result:
-            props = obj.properties or {}
-            bone_tree = props.get("BoneTree")
-            if bone_tree and isinstance(bone_tree, dict):
-                fields = bone_tree.get("fields", {})
-                bone_count = len(fields) if isinstance(fields, dict) else 0
-                result["bone_count"] = bone_count
-                result["bones"] = []
-                coverage.append(CoverageEntry(feature="skeleton.bone_tree", status="partial"))
-            else:
-                result["bone_count"] = 0
-                result["bones"] = []
-                coverage.append(
-                    CoverageEntry(
-                        feature="skeleton.bone_tree",
-                        status="missing",
-                        detail="BoneTree property not available",
-                    )
-                )
-
         obj.coverage.extend(coverage)
         return result
 
 
 class MeshHandler:
-    """Enrich StaticMesh/SkeletalMesh objects with geometry summary."""
+    """Enrich StaticMesh/SkeletalMesh objects with geometry summary.
+
+    Summary-tier: mesh geometry is not decoded, so this never yields
+    ``semantic="complete"`` (#629).
+    """
+
+    capability = "summary"
 
     _MESH_CLASSES = ("StaticMesh", "SkeletalMesh")
 
@@ -810,6 +902,10 @@ class BlueprintFamilyHandler:
             obj.coverage.extend(coverage)
             return result
 
+    def capability(self, result: dict[str, Any]) -> str:
+        # Light summary at depth=asset; only decoded graph data counts (#629).
+        return "decoded" if "graph" in result else "summary"
+
 
 register_handler(
     BlueprintFamilyHandler(
@@ -822,14 +918,13 @@ register_handler(
 
 
 class NiagaraHandler:
-    """Enrich Niagara objects with a light summary.
+    """Enrich Niagara objects with light summary.
 
-    Deliberately shallow (kind/name/class identity only): full_coverage is
-    False so semantic status caps at "partial" until graph or domain
-    summary fields backed by fixtures are emitted (review finding, 2026-09-01).
+    Summary-tier: the name/type echo is not a decoded Niagara script, so
+    this never yields ``semantic="complete"`` (#629).
     """
 
-    full_coverage = False
+    capability = "summary"
 
     _NIAGARA_CLASSES = (
         "NiagaraScript",
