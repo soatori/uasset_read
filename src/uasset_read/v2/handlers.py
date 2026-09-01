@@ -58,11 +58,13 @@ def run_handlers(
     diagnostics: list[Diagnostic] = []
     matched = False
     failed = False
+    shallow = False
 
     for handler in _HANDLERS:
         try:
             if handler.supports(obj, context):
                 matched = True
+                shallow = shallow or not getattr(handler, "full_coverage", True)
                 result = handler.enrich(obj, context, all_objects, package_data)
                 if result is not None:
                     semantic.update(result)
@@ -92,7 +94,9 @@ def run_handlers(
     if matched:
         # A handler that matched but produced nothing (enrich returned None)
         # has not delivered semantics either — never claim "complete".
-        obj.status.semantic = "partial" if (failed or not semantic) else "complete"
+        # Handlers that are deliberately shallow declare full_coverage=False;
+        # their objects cap at "partial" until domain fields back the claim.
+        obj.status.semantic = "partial" if (failed or not semantic or shallow) else "complete"
 
     if not semantic:
         return None, coverage, diagnostics
@@ -818,7 +822,14 @@ register_handler(
 
 
 class NiagaraHandler:
-    """Enrich Niagara objects with light summary."""
+    """Enrich Niagara objects with a light summary.
+
+    Deliberately shallow (kind/name/class identity only): full_coverage is
+    False so semantic status caps at "partial" until graph or domain
+    summary fields backed by fixtures are emitted (review finding, 2026-09-01).
+    """
+
+    full_coverage = False
 
     _NIAGARA_CLASSES = (
         "NiagaraScript",
@@ -851,6 +862,11 @@ class NiagaraHandler:
         result: dict[str, Any] = {"kind": "niagara", "niagara_type": cn, "name": obj.name}
         coverage: list[CoverageEntry] = [
             CoverageEntry(feature="niagara.kind", status="present", detail=cn),
+            CoverageEntry(
+                feature="niagara.domain",
+                status="partial",
+                detail="kind/name only; graph and variable summaries not extracted",
+            ),
         ]
         obj.coverage.extend(coverage)
         return result
