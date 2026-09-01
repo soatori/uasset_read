@@ -9,7 +9,7 @@ import json
 from typing import Any
 
 from .document import PackageDocument
-from .object_model import ObjectRecord
+from .object_model import Dependency, ObjectRecord
 
 
 def select_objects(
@@ -91,6 +91,23 @@ def fit_list_response(response: dict, max_bytes: int, *, list_key: str, total_ke
 _VALID_DEPTHS = {"package", "object", "asset", "decode"}
 _DEPTH_ORDER = {"package": 0, "object": 1, "asset": 2, "decode": 3}
 
+# Top-level scoped sections that ``project_document(sections=...)`` may drop.
+_VALID_SECTIONS = {"relations", "dependencies"}
+
+
+def dependency_to_dict(dep: Dependency) -> dict[str, Any]:
+    """Serialize one import-dependency entry (#632).
+
+    Shared by the projection envelope and the agent tools so no caller drops
+    ``package_name``, which the model carries since the import map.
+    """
+    return {
+        "index": dep.index,
+        "class": dep.class_name,
+        "object_name": dep.object_name,
+        "package_name": dep.package_name,
+    }
+
 
 def project_document(
     doc: PackageDocument,
@@ -101,6 +118,7 @@ def project_document(
     roles: list[str] | None = None,
     classes: list[str] | None = None,
     fields: list[str] | None = None,
+    sections: list[str] | None = None,
     offset: int = 0,
     limit: int | None = None,
     max_bytes: int | None = None,
@@ -112,6 +130,10 @@ def project_document(
       - semantic (default): object identity, roles, status, coverage
       - raw: adds flags, serial offsets, header details
       - debug: raw + parse statistics, recovery info, offset evidence
+    ``sections`` is an allowlist of the scoped envelope sections to include
+    (valid names: "relations", "dependencies"); excluded sections are dropped
+    from the response before ``max_bytes`` accounting, so their bytes go to
+    the object page instead. Default None keeps both (unchanged behavior).
     ``response_extras`` entries are merged with ``dict.update()`` (same-named
     projection keys are overwritten by the extras) before ``max_bytes``
     trimming runs, so extras count against the byte budget like any envelope key.
@@ -121,6 +143,10 @@ def project_document(
         raise ValueError(f"Invalid view: {view!r}. Expected one of {_VALID_VIEWS}")
     if depth not in _VALID_DEPTHS:
         raise ValueError(f"Invalid depth: {depth!r}. Expected one of {_VALID_DEPTHS}")
+    if sections is not None:
+        unknown = set(sections) - _VALID_SECTIONS
+        if unknown:
+            raise ValueError(f"Invalid sections: {sorted(unknown)}. Expected from {_VALID_SECTIONS}")
     if offset < 0:
         raise ValueError("offset must be non-negative")
     if limit is not None and limit < 0:
@@ -140,6 +166,7 @@ def project_document(
             d.pop("coverage", None)
         if _DEPTH_ORDER[depth] < _DEPTH_ORDER["object"]:
             d.pop("properties", None)
+            d.pop("properties_summary", None)
         return d
 
     # Select objects
@@ -196,9 +223,7 @@ def project_document(
         visible_ids = ids | {r["to"] for r in relations}
         reachable_imports = {idx for idx, imp in enumerate(doc.dependencies) if f"import:{imp.index}" in visible_ids}
         filtered_dependencies = [
-            {"index": d.index, "class": d.class_name, "object_name": d.object_name}
-            for i, d in enumerate(doc.dependencies)
-            if i in reachable_imports
+            dependency_to_dict(d) for i, d in enumerate(doc.dependencies) if i in reachable_imports
         ]
         return relations, page_diagnostics, filtered_dependencies
 
@@ -227,6 +252,11 @@ def project_document(
             "total_exports": doc.summary.total_exports,
         },
     }
+
+    # Drop opted-out scoped sections BEFORE max_bytes accounting (#631).
+    if sections is not None:
+        for dropped in _VALID_SECTIONS - set(sections):
+            result.pop(dropped)
 
     if next_offset is not None:
         result["next_offset"] = next_offset
@@ -274,8 +304,10 @@ def project_document(
                 result["next_offset"] = offset + len(result["objects"])
                 remaining_ids = {o["id"] for o in result["objects"] if isinstance(o, dict) and "id" in o}
                 rels, diags, deps = _scope_to_page(remaining_ids)
-                result["relations"] = rels
-                result["dependencies"] = deps
+                if "relations" in result:
+                    result["relations"] = rels
+                if "dependencies" in result:
+                    result["dependencies"] = deps
                 result["diagnostics"] = [d.to_dict() for d in diags] + [trunc_diag]
             page_total = max(0, len(selected) - offset)
             if limit is not None:
@@ -341,12 +373,59 @@ def _package_to_dict(doc: PackageDocument, *, view: str = "semantic") -> dict[st
     return d
 
 
+_SUMMARY_MAX_NAMES = 100
+
+
+def _summary_value(val: Any) -> Any:
+    """Compact one property value: scalars pass, containers are length-elided.
+
+    ``normalize_property_bag`` descriptors that are already length-bounded
+    (bytes, opaque) pass through untouched; struct-shaped values (including
+    fallbacks, which may carry raw bytes) collapse to a length-only form.
+    """
+    if isinstance(val, dict):
+        kind = val.get("kind")
+        if kind == "struct":
+            return {"kind": "struct", "struct_type": val.get("struct_type"), "length": len(val.get("fields", {}))}
+        if kind == "struct_fallback":
+            return {
+                "kind": "struct_fallback",
+                "struct_type": val.get("struct_type"),
+                "size": val.get("size"),
+                "length": len(val.get("fields", {})),
+            }
+        if kind == "value":
+            inner = val.get("value")
+            if isinstance(inner, list):
+                return {"kind": "value", "type": val.get("type"), "length": len(inner)}
+            if isinstance(inner, dict) and inner.get("kind") in ("struct", "struct_fallback"):
+                return {"kind": "value", "type": val.get("type"), "value": _summary_value(inner)}
+        return val
+    if isinstance(val, list):
+        return {"kind": "array", "length": len(val)}
+    return val
+
+
+def _property_summary(bag: dict[str, Any]) -> dict[str, Any]:
+    """Bounded compact view of a property bag for the semantic view (#636).
+
+    Names + scalars only; containers keep kind and length, never elements or
+    raw bytes. Truncation is explicit via ``property_count``; the full bag
+    stays available in the raw/debug views.
+    """
+    items = list(bag.items())[:_SUMMARY_MAX_NAMES]
+    return {
+        "properties": {name: _summary_value(v) for name, v in items},
+        "property_count": len(bag),
+    }
+
+
 def obj_to_dict(obj: ObjectRecord, *, view: str = "semantic") -> dict[str, Any]:
     """Convert an ObjectRecord to a dict for JSON serialization.
 
     Views:
-      - semantic: identity, roles, status, coverage
-      - raw: adds flags, serial_region details
+      - semantic: identity, roles, status, coverage, bounded properties_summary
+      - raw: adds flags, serial_region details, the full property bag
       - debug: raw + all diagnostics with full detail
     """
     d: dict[str, Any] = {
@@ -364,6 +443,8 @@ def obj_to_dict(obj: ObjectRecord, *, view: str = "semantic") -> dict[str, Any]:
         )
         if obj.properties is not None:
             d["properties"] = obj.properties
+    elif view == "semantic" and obj.properties is not None:
+        d["properties_summary"] = _property_summary(obj.properties)
     if obj.semantic is not None:
         d["semantic"] = obj.semantic
     if obj.coverage:

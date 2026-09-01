@@ -4,7 +4,7 @@
   "title": "PackageDocument v2",
   "description": "Unified package-level output for uasset_read v2. One document per .uasset/.umap file, expressing all exports as first-class objects.",
   "type": "object",
-  "required": ["format", "format_version", "view", "depth", "source", "package", "objects", "relations", "dependencies", "payloads", "diagnostics", "summary"],
+  "required": ["format", "format_version", "view", "depth", "source", "package", "objects", "payloads", "diagnostics", "summary"],
   "properties": {
     "format": {
       "const": "uasset_read.package",
@@ -42,14 +42,14 @@
       "items": {
         "$ref": "#/$defs/Relation"
       },
-      "description": "Object-to-object relationships."
+      "description": "Object-to-object relationships. Omitted only when the requester opted the section out via projection `sections` (#631)."
     },
     "dependencies": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/Dependency"
       },
-      "description": "Package-level import dependencies."
+      "description": "Package-level import dependencies. Omitted only when the requester opted the section out via projection `sections` (#631)."
     },
     "payloads": {
       "type": "array",
@@ -161,7 +161,8 @@
     },
     "ObjectEntry": {
       "type": "object",
-      "required": ["id", "name", "roles", "status"],
+      "required": ["id", "name"],
+      "description": "id/name are the only keys that survive a projection `fields` trim; untrimmed projections carry roles/status too.",
       "properties": {
         "id": {
           "type": "string",
@@ -197,7 +198,10 @@
           "$ref": "#/$defs/ObjectStatus"
         },
         "properties": {
-          "description": "Property bag (only when depth >= object)."
+          "description": "Property bag (raw/debug views, depth >= object)."
+        },
+        "properties_summary": {
+          "$ref": "#/$defs/PropertySummary"
         },
         "semantic": {
           "type": ["object", "null"],
@@ -247,6 +251,22 @@
       },
       "additionalProperties": false
     },
+    "PropertySummary": {
+      "type": "object",
+      "required": ["properties", "property_count"],
+      "properties": {
+        "properties": {
+          "type": "object",
+          "description": "Bounded compact property view (semantic view, depth >= object, #636): name -> scalar descriptor; containers length-elided; raw blobs excluded."
+        },
+        "property_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total names in the bag; fewer may be listed (bounded view). Full bag: raw/debug views."
+        }
+      },
+      "additionalProperties": false
+    },
     "Relation": {
       "type": "object",
       "description": "Directed edge read as 'from relates-to to': from is the object that carries the reference and to is the referent. Kinds have no universal inverse reading — query the reverse direction by filtering on to with the per-kind meaning. Meaning of to relative to from: outer_of = the Outer (containing object) of from; class_of = the class of from; super_of = the superclass of from; template_of = the template/archetype of from; depends_on = an entry of from's dependency list (from depends on to); preload_of = an object that must be preloaded before from. Contract-reserved kinds (not emitted by the current legacy reader) read from the subject side: generated_class_of = from is the generated class of to; default_object_of = from is the default object of to; references = from references to. Example: {\"kind\": \"outer_of\", \"from\": \"export:5\", \"to\": \"export:2\"} reads 'the Outer of export:5 is export:2', i.e. export:5 is contained in export:2.",
@@ -277,7 +297,10 @@
         "index": { "type": "integer" },
         "class": { "type": "string" },
         "object_name": { "type": "string" },
-        "package_name": { "type": "string" }
+        "package_name": {
+          "type": "string",
+          "description": "Import class package path as carried by the model (#632); empty when the import has no class package."
+        }
       },
       "additionalProperties": false
     },

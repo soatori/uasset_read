@@ -1098,6 +1098,43 @@ def test_projection_views_depths_pagination_table():
         result = select_objects(doc)
         assert len(result) == len(doc.objects)
 
+    def dependencies_carry_package_name():
+        # #632: the model carries package_name from the import map; no
+        # projection path may drop it.
+        from uasset_read.v2.projection import dependency_to_dict
+
+        page = project_document(doc, limit=100)
+        assert page["dependencies"], "fixture must expose page-reachable imports"
+        model = {d.index: d for d in doc.dependencies}
+        for entry in page["dependencies"]:
+            assert set(entry) == {"index", "class", "object_name", "package_name"}
+            assert entry == dependency_to_dict(model[entry["index"]])
+
+    def semantic_object_depth_carries_properties_summary():
+        # #636: bounded compact property view replaces the raw bag in semantic.
+        obj_doc = _document(str(PACKAGE_SAMPLE), depth="object")
+        page = project_document(obj_doc, depth="object", view="semantic")
+        with_props = [o for o in page["objects"] if "properties_summary" in o]
+        assert with_props, "object-depth fixture must produce at least one summary"
+        for o in with_props:
+            assert "properties" not in o, "full bag stays raw/debug-only"
+            summary = o["properties_summary"]
+            assert set(summary) == {"properties", "property_count"}
+            assert summary["property_count"] >= len(summary["properties"])
+            blob = json.dumps(summary, separators=(",", ":"))
+            assert '"fields":' not in blob, "structs must be length-elided"
+            assert '"raw_data' not in blob, "raw bytes must not ride along"
+            assert '"value":[' not in blob, "array values must be length-elided"
+        raw_page = project_document(obj_doc, depth="object", view="raw", limit=5)
+        for o in raw_page["objects"]:
+            assert "properties_summary" not in o, "raw view carries the full bag, not the summary"
+
+    def package_depth_document_has_no_summary():
+        pkg_doc = _document(str(PACKAGE_SAMPLE), depth="package")
+        page = project_document(pkg_doc, depth="package", view="semantic")
+        for o in page["objects"]:
+            assert "properties_summary" not in o
+
     def test_all_views_json():
         for view in ("semantic", "raw", "debug"):
             result = project_document(doc, view=view, limit=3)
@@ -1148,6 +1185,9 @@ def test_projection_views_depths_pagination_table():
         obj_page = project_document(asset_doc, depth="object")
         for o in obj_page["objects"]:
             assert "semantic" not in o
+        sem_pkg = project_document(asset_doc, depth="package", view="semantic")
+        for o in sem_pkg["objects"]:
+            assert "properties_summary" not in o, "summary needs depth >= object"
         assert project_document(asset_doc, depth="asset")["depth"] == "asset"
 
     def relations_carry_optional_target_path():
@@ -1184,6 +1224,9 @@ def test_projection_views_depths_pagination_table():
             ("projection.test_select_by_role", test_select_by_role),
             ("projection.test_select_by_id", test_select_by_id),
             ("projection.test_select_all_when_no_filters", test_select_all_when_no_filters),
+            ("projection.dependencies_carry_package_name", dependencies_carry_package_name),
+            ("projection.semantic_object_depth_carries_properties_summary", semantic_object_depth_carries_properties_summary),
+            ("projection.package_depth_document_has_no_summary", package_depth_document_has_no_summary),
             ("projection.test_all_views_json", test_all_views_json),
             ("core.test_projection_honors_views_pagination_and_byte_budget", core_projection_honors_views),
             ("projection.depth_beyond_parsed_document_raises", depth_beyond_parsed_document_raises),
@@ -1202,9 +1245,10 @@ def test_projection_byte_budget_and_fields_filter():
     def test_max_bytes_is_enforced_and_continuable():
         empty = project_document(doc, limit=0)
         envelope_size = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-        # must fit at least one object, else the page all-drops (16000 covers
-        # the inline target_path display strings on export:0's dense relations)
-        budget = envelope_size + 16000
+        # must fit at least one object, else the page all-drops (24000 covers
+        # export:0's dense relations, target_path strings, and its bounded
+        # properties_summary)
+        budget = envelope_size + 24000
         page = project_document(doc, limit=100, max_bytes=budget)
         encoded = json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         assert len(encoded) <= budget
@@ -1227,7 +1271,7 @@ def test_projection_byte_budget_and_fields_filter():
         seen = []
         offset = 0
         while True:
-            page = project_document(doc, offset=offset, limit=100, max_bytes=envelope_size + 16000)
+            page = project_document(doc, offset=offset, limit=100, max_bytes=envelope_size + 24000)
             seen += [o["id"] for o in page["objects"]]
             if "next_offset" not in page:
                 break
@@ -1261,7 +1305,7 @@ def test_projection_byte_budget_and_fields_filter():
         """Popping objects for max_bytes must re-scope relations and dependencies."""
         empty = project_document(doc, limit=0)
         envelope_size = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-        budget = envelope_size + 16000  # fits 1-2 of 10 objects: a genuine partial page, not an all-drop
+        budget = envelope_size + 24000  # fits 1-2 of 10 objects: a genuine partial page, not an all-drop
         page = project_document(doc, limit=100, max_bytes=budget)
         page_ids = {o["id"] for o in page["objects"]}
         assert len(page_ids) > 0, "page must keep at least one object for the re-scope checks to mean anything"
@@ -1293,6 +1337,34 @@ def test_projection_byte_budget_and_fields_filter():
     def test_no_truncation_when_budget_generous():
         page = project_document(doc, limit=2, max_bytes=1_000_000)
         assert page.get("truncation") is None or page["truncation"].get("reason") != "max_bytes"
+
+    def sections_opt_out_drops_scope_before_budget():
+        # #631: sections is an allowlist of the scoped envelope sections;
+        # excluded ones never enter the response, so max_bytes measures the
+        # leaner envelope (default behavior with sections=None is unchanged).
+        schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+
+        def size(d: dict) -> int:
+            return len(json.dumps(d, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+        default = project_document(doc, limit=3)
+        assert "relations" in default and "dependencies" in default
+        both = project_document(doc, limit=3, sections=[])
+        assert "relations" not in both and "dependencies" not in both
+        jsonschema.validate(both, schema)
+        assert size(both) < size(default), "opted-out sections must free bytes"
+        rel_only = project_document(doc, limit=3, sections=["relations"])
+        assert "relations" in rel_only and "dependencies" not in rel_only
+        with pytest.raises(ValueError, match="Invalid sections"):
+            project_document(doc, sections=["objects"])
+
+        full = project_document(doc, limit=100)
+        trimmed = project_document(doc, limit=100, max_bytes=size(full) - 400)
+        assert len(trimmed["objects"]) < 100, "budget should have trimmed the default page"
+        lean = project_document(doc, limit=100, sections=[], max_bytes=size(trimmed))
+        assert len(lean["objects"]) >= len(trimmed["objects"]), "freed bytes go to the object page"
+        for rel in lean.get("relations", []):
+            assert rel["from"] in {o["id"] for o in lean["objects"]}
 
     def core_fields_filter_scopes_payloads():
         pkg_doc = _document()
@@ -1346,6 +1418,7 @@ def test_projection_byte_budget_and_fields_filter():
             ("projection.test_object_diagnostics_scoped_to_page", test_object_diagnostics_scoped_to_page),
             ("projection.test_budget_too_small_raises", test_budget_too_small_raises),
             ("projection.test_no_truncation_when_budget_generous", test_no_truncation_when_budget_generous),
+            ("projection.sections_opt_out_drops_scope_before_budget", sections_opt_out_drops_scope_before_budget),
             (
                 "core.test_projection_fields_filter_does_not_crash_and_scopes_payloads",
                 core_fields_filter_scopes_payloads,
@@ -1380,11 +1453,13 @@ def test_schema_contract_statics():
         assert "source" in required
         assert "package" in required
         assert "objects" in required
-        assert "relations" in required
-        assert "dependencies" in required
         assert "payloads" in required
         assert "diagnostics" in required
         assert "summary" in required
+        # #631: these ride along unless the requester opts the section out,
+        # so they are properties but not required keys.
+        assert "relations" in schema["properties"] and "relations" not in required
+        assert "dependencies" in schema["properties"] and "dependencies" not in required
 
     def test_schema_enums_match_code():
         view_enum = schema["properties"]["view"]["enum"]
