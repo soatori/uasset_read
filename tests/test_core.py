@@ -190,9 +190,10 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         from types import SimpleNamespace
         from uasset_read.archive import ByteArchive
         from uasset_read.serializers.package_summary import read_depends_map
-        data = struct.pack("<iii", 10_001, 1, 1)
+        # Leading filler int32 so depends_offset=4 is a positive, in-bounds table start.
+        data = struct.pack("<iiii", 0, 10_001, 1, 1)
         arc = ByteArchive(data)
-        summary = SimpleNamespace(depends_offset=0, export_count=3, import_count=0)
+        summary = SimpleNamespace(depends_offset=4, export_count=3, import_count=0)
         warnings: list[str] = []
         result = read_depends_map(arc, summary, warnings=warnings)
         assert result == [[]]

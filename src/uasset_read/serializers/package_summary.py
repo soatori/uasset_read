@@ -924,7 +924,7 @@ def read_depends_map(
     Returns:
         2D list: first dimension is export index, second dimension is dependency PackageIndex list
     """
-    if summary.depends_offset < 0 or summary.export_count <= 0:
+    if summary.depends_offset <= 0 or summary.export_count <= 0:
         return []
 
     archive.seek(summary.depends_offset)
