@@ -212,6 +212,37 @@ def _build_object_record_direct(
     )
 
 
+def _merge_archive_recoveries(
+    archive: PackageArchive,
+    objects: Sequence[ObjectRecord],
+    diagnostics: list[Diagnostic],
+) -> None:
+    """Merge FArchive structured recovery diagnostics into the document.
+
+    Every FArchive structured diagnostic records a fallback a tolerant read
+    took; they surface as effect="recovery" with their offset, and the
+    attributed object's parse status is downgraded to at least partial.
+    """
+    objects_by_id = {obj.id: obj for obj in objects}
+    for sd in archive.get_structured_diagnostics():
+        obj = objects_by_id.get(sd.object_id)
+        if obj is not None and obj.status.parse == "complete":
+            obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
+        sev = sd.severity if sd.severity in ("info", "warning", "error", "critical") else "warning"
+        diagnostics.append(
+            Diagnostic(
+                severity=sev,
+                code=sd.code,
+                message=sd.message or sd.fallback,
+                stage=sd.stage,
+                object_id=sd.object_id or None,
+                offset=sd.offset,
+                effect="recovery",
+                recoverable=True,
+            )
+        )
+
+
 def _build_source_info(path: str) -> SourceInfo:
     p = Path(path)
     return SourceInfo(
@@ -438,19 +469,8 @@ class LegacyPackageReader:
                 for i, imp in enumerate(import_map)
             ]
 
-            # 12. Collect FArchive structured diagnostics
-            for sd in archive.get_structured_diagnostics():
-                sev = sd.severity if sd.severity in ("info", "warning", "error", "critical") else "warning"
-                diagnostics.append(
-                    Diagnostic(
-                        severity=sev,
-                        code=sd.code,
-                        message=sd.message or sd.fallback,
-                        stage=sd.stage,
-                        offset=sd.offset,
-                        recoverable=True,
-                    )
-                )
+            # 12. FArchive structured recoveries are merged in step 17c, after
+            # property parsing has attributed them to their objects.
 
             # 13. Compute asset_object_ids
             asset_ids = tuple(obj.id for obj in objects if ROLES_ASSET in obj.roles)
@@ -517,6 +537,10 @@ class LegacyPackageReader:
             # .uexp/.ubulk/.utoc/.ucas container support, so nothing is
             # emitted (the projection keeps an empty payloads list for
             # schema compatibility).
+
+            # 17c. Merge FArchive structured recoveries (header maps +
+            # property parsing) once every read has had its object context.
+            _merge_archive_recoveries(archive, objects, diagnostics)
 
             # 18. Build SourceInfo
             source_info = _build_source_info(str(self._source._path))
@@ -627,6 +651,7 @@ class LegacyPackageReader:
 
             serial_end = export_map[i].serial_offset + export_map[i].serial_size
             prev_range = archive.set_read_range((export_map[i].serial_offset, serial_end))
+            archive._current_object_id = obj.id
             try:
                 # Absolute-offset parser over the full archive, bounded by
                 # _read_range enforced inside PackageArchive.read/validate_offset.
@@ -695,6 +720,7 @@ class LegacyPackageReader:
                     )
                 )
             finally:
+                archive._current_object_id = ""
                 archive.set_read_range(prev_range)
 
         return extras

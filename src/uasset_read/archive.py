@@ -75,6 +75,7 @@ class FArchive:
         )  # list[HexViewEntry], bounded
         self._hex_view_context: str = ""  # current context prefix (e.g. "Summary.")
         self._structured_diagnostics: list[StructuredDiagnostic] = []  # stable-code diagnostics
+        self._current_object_id: str = ""  # table slot a read is attributed to (e.g. "export:3")
         self._read_range: tuple[int, int] | None = None  # optional export-scoped (start, end) read range
 
     def __init__(self, path: str, tolerant: bool = False, hex_view: bool = False):
@@ -346,6 +347,7 @@ class FArchive:
                 severity=severity,
                 asset=self._path,
                 stage=stage,
+                object_id=self._current_object_id,
                 offset=offset,
                 raw_value=raw_value,
                 ue_version=ue_version,
@@ -559,12 +561,14 @@ class FArchive:
             if pos_before + 4 + utf16_len > self._file_size:
                 self.seek(pos_before)
                 if self._tolerant:
-                    self._logger.warning(
-                        "FString at pos %d: UTF-16 expected %d bytes but only %d remain, "
-                        "returning empty string (tolerant)",
-                        pos_before,
-                        utf16_len,
-                        self._file_size - pos_before - 4,
+                    self._record_structured_diagnostic(
+                        code="fstring_out_of_range",
+                        stage="read_fstring",
+                        offset=pos_before,
+                        raw_value=utf16_len,
+                        fallback="used_empty_string",
+                        message=f"FString at pos {pos_before}: UTF-16 expected {utf16_len} bytes "
+                        f"but only {self._file_size - pos_before - 4} remain",
                     )
                     return ""
                 raise ParseError(
@@ -638,12 +642,14 @@ class FArchive:
             if pos_before + 4 + length > self._file_size:
                 self.seek(pos_before)
                 if self._tolerant:
-                    self._logger.warning(
-                        "FString at pos %d: UTF-8 expected %d bytes but only %d remain, "
-                        "returning empty string (tolerant)",
-                        pos_before,
-                        length,
-                        self._file_size - pos_before - 4,
+                    self._record_structured_diagnostic(
+                        code="fstring_out_of_range",
+                        stage="read_fstring",
+                        offset=pos_before,
+                        raw_value=length,
+                        fallback="used_empty_string",
+                        message=f"FString at pos {pos_before}: UTF-8 expected {length} bytes "
+                        f"but only {self._file_size - pos_before - 4} remain",
                     )
                     return ""
                 raise ParseError(
@@ -687,16 +693,14 @@ class FArchive:
                 if first_null_idx > 0:
                     # Has real content before first null — truncate and continue
                     truncated = result[:first_null_idx]
-                    self._logger.warning(
-                        "FString at pos %d: length=%d, encoding=UTF-8, "
-                        "truncated at null (null_at=%d, nulls_total=%d), "
-                        "consumed=%d bytes, end_pos=%d",
-                        pos_before,
-                        length,
-                        first_null_idx,
-                        null_count,
-                        len(data),
-                        self.tell(),
+                    self._record_structured_diagnostic(
+                        code="fstring_truncated_at_null",
+                        stage="read_fstring",
+                        offset=pos_before,
+                        raw_value=null_count,
+                        fallback="truncated_at_first_null",
+                        message=f"FString at pos {pos_before}: length={length}, encoding=UTF-8, "
+                        f"truncated at null (null_at={first_null_idx}, nulls_total={null_count})",
                     )
                     self._logger.debug(
                         "FString hex detail: pos=%d, hex=%s, preview_orig=%r, truncated_value=%r",
@@ -814,7 +818,14 @@ class FArchive:
         if index >= _FNAME_GARBAGE_MIN and index >= len(name_map) and self._tolerant:
             recovered = self._try_recover_fname(start, name_map)
             if recovered is not None:
-                logger.debug("read_name: recovered out-of-range index %d at pos %d", index, start)
+                self._record_structured_diagnostic(
+                    code="fname_index_shift_recovered",
+                    stage="read_name",
+                    offset=start,
+                    raw_value=index,
+                    fallback="shifted_read",
+                    message=f"FName index {index} at pos {start} recovered via shifted read: {recovered}",
+                )
                 return recovered
 
         if 0 <= index < len(name_map):
