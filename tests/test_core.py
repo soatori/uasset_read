@@ -877,13 +877,42 @@ def test_projection_byte_budget_and_fields_filter():
     def test_max_bytes_is_enforced_and_continuable():
         empty = project_document(doc, limit=0)
         envelope_size = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-        budget = envelope_size + 8000
+        budget = envelope_size + 11000  # must fit at least one object, else the page all-drops
         page = project_document(doc, limit=100, max_bytes=budget)
         encoded = json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         assert len(encoded) <= budget
         assert page["truncation"]["reason"] == "max_bytes"
         assert page["next_offset"] > 0
         assert any(d["code"] == "TRUNCATED" for d in page["diagnostics"])
+
+    def all_objects_dropped_yields_no_cursor():
+        empty = project_document(doc, limit=0)
+        envelope = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        page = project_document(doc, limit=100, max_bytes=envelope + 1)
+        assert page["objects"] == []
+        assert "next_offset" not in page, "all-dropped page must not hand out a cursor"
+        assert page["truncation"]["objects_dropped"] == 10
+        assert any(d["code"] == "BUDGET_EXHAUSTED" for d in page["diagnostics"])
+
+    def every_object_returned_exactly_once_under_budget():
+        empty = project_document(doc, limit=0)
+        envelope_size = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        seen = []
+        offset = 0
+        while True:
+            page = project_document(doc, offset=offset, limit=100, max_bytes=envelope_size + 11000)
+            seen += [o["id"] for o in page["objects"]]
+            if "next_offset" not in page:
+                break
+            assert page["next_offset"] > offset, "cursor must be strictly monotonic"
+            offset = page["next_offset"]
+        assert sorted(seen) == sorted(f"export:{i}" for i in range(10))
+
+    def dropped_count_is_page_relative():
+        empty = project_document(doc, limit=0)
+        envelope = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        page = project_document(doc, offset=5, limit=100, max_bytes=envelope + 1)
+        assert page["truncation"]["objects_dropped"] == 5
 
     def test_truncated_page_rescopes_relations_and_dependencies():
         """Popping objects for max_bytes must re-scope relations and dependencies."""
@@ -959,6 +988,9 @@ def test_projection_byte_budget_and_fields_filter():
     _run_cases(
         [
             ("projection.test_max_bytes_is_enforced_and_continuable", test_max_bytes_is_enforced_and_continuable),
+            ("projection.all_objects_dropped_yields_no_cursor", all_objects_dropped_yields_no_cursor),
+            ("projection.every_object_returned_exactly_once_under_budget", every_object_returned_exactly_once_under_budget),
+            ("projection.dropped_count_is_page_relative", dropped_count_is_page_relative),
             (
                 "projection.test_truncated_page_rescopes_relations_and_dependencies",
                 test_truncated_page_rescopes_relations_and_dependencies,

@@ -238,20 +238,40 @@ def project_document(
                 result["dependencies"] = deps
                 result["payloads"] = pays
                 result["diagnostics"] = [d.to_dict() for d in diags] + [trunc_diag]
+            page_total = max(0, len(selected) - offset)
+            if len(result["objects"]) == 0 and page_total > 0:
+                # Nothing fit. A budget that cannot even hold the bare
+                # envelope (no objects, no truncation metadata) is a hard
+                # error; otherwise return an explicit retry contract: no
+                # cursor, page-relative dropped count, BUDGET_EXHAUSTED diag.
+                skeleton = {k: v for k, v in result.items() if k not in ("truncation", "next_offset")}
+                skeleton["diagnostics"] = [d for d in skeleton["diagnostics"] if d.get("code") != "TRUNCATED"]
+                minimal = len(_json.dumps(skeleton, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+                if minimal > max_bytes:
+                    raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({minimal} bytes)")
+                result.pop("next_offset", None)
+                result["truncation"] = {
+                    "reason": "max_bytes",
+                    "budget": max_bytes,
+                    "actual": _encoded(),
+                    "objects_dropped": page_total,
+                }
+                result["diagnostics"].append({
+                    "severity": "warning",
+                    "code": "BUDGET_EXHAUSTED",
+                    "message": f"Budget {max_bytes} fits 0 of {page_total} page objects; retry offset {offset} with a larger max_bytes",
+                    "stage": "projection",
+                    "recoverable": True,
+                })
+                return result
+            objects_dropped = page_total - len(result["objects"])
             actual = _encoded()
-            if actual > max_bytes:
-                raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({actual} bytes)")
-            objects_dropped = len(selected) - len(result["objects"])
             result["truncation"] = {
                 "reason": "max_bytes",
                 "budget": max_bytes,
                 "actual": actual,
                 "objects_dropped": objects_dropped,
             }
-            # When truncation drops all objects, ensure next_offset > 0 so
-            # callers know more objects exist and can retry with a larger budget.
-            if objects_dropped > 0 and result.get("next_offset", offset) == 0:
-                result["next_offset"] = 1
 
     return result
 
