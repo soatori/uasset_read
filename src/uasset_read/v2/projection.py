@@ -162,9 +162,24 @@ def project_document(
             filtered.append({k: v for k, v in d.items() if k in field_set or k in ("id", "name")})
         page = filtered
 
+    # Display names for relation targets (peer-borrowed readability):
+    # exports -> object name, imports -> "package.object" path (UE class-path
+    # style, matching the f"{package}.{asset}" join in serializers). Ids stay
+    # canonical; duplicate names are fine here (display convenience only).
+    target_display = {o.id: o.name for o in doc.objects}
+    for d in doc.dependencies:
+        target_display[f"import:{d.index}"] = f"{d.package_name}.{d.object_name}" if d.package_name else d.object_name
+
     def _scope_to_page(ids: set[str]) -> tuple[list, list, list, list]:
         """Scope relations, diagnostics, dependencies, payloads to page ids."""
-        relations = [{"kind": r.kind, "from": r.from_id, "to": r.to_id} for r in doc.relations if r.from_id in ids]
+        relations = []
+        for r in doc.relations:
+            if r.from_id not in ids:
+                continue
+            rel: dict[str, Any] = {"kind": r.kind, "from": r.from_id, "to": r.to_id}
+            if r.to_id in target_display:
+                rel["target_path"] = target_display[r.to_id]
+            relations.append(rel)
         page_diagnostics = [
             d for d in doc.diagnostics if getattr(d, "object_id", None) is None or getattr(d, "object_id", None) in ids
         ]

@@ -261,6 +261,9 @@
         "to": {
           "type": "string",
           "pattern": "^(export|import):[0-9]+$"
+        },
+        "target_path": {
+          "type": "string"
         }
       },
       "additionalProperties": false

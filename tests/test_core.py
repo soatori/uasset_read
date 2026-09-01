@@ -934,6 +934,26 @@ def test_projection_views_depths_pagination_table():
         with pytest.raises(ValueError, match="cannot project"):
             pkg_doc.to_dict(depth="decode")
 
+    def relations_carry_optional_target_path():
+        pkg_doc = _document(str(PACKAGE_SAMPLE), depth="asset")
+        page = project_document(pkg_doc, depth="package")
+        display = {o.id: o.name for o in pkg_doc.objects}
+        for d in pkg_doc.dependencies:
+            display[f"import:{d.index}"] = f"{d.package_name}.{d.object_name}" if d.package_name else d.object_name
+        rels = page["relations"]
+        assert any(r["kind"] == "class_of" and r["to"].startswith("import:") for r in rels)
+        assert any(r["kind"] == "outer_of" and r["to"].startswith("export:") for r in rels)
+        for rel in rels:
+            if rel["to"] in display:
+                assert rel.get("target_path") == display[rel["to"]]
+            else:
+                assert "target_path" not in rel
+        # from/kind/to themselves are untouched
+        base = {(r.kind, r.from_id, r.to_id) for r in pkg_doc.relations}
+        for rel in rels:
+            assert (rel["kind"], rel["from"], rel["to"]) in base
+            assert set(rel) <= {"kind", "from", "to", "target_path"}
+
     _run_cases(
         [
             ("projection.test_semantic_default", test_semantic_default),
@@ -953,6 +973,7 @@ def test_projection_views_depths_pagination_table():
             ("projection.depth_beyond_parsed_document_raises", depth_beyond_parsed_document_raises),
             ("projection.shallower_depth_caps_content", shallower_depth_caps_content),
             ("projection.to_dict_relabel_beyond_parsed_raises", to_dict_relabel_beyond_parsed_raises),
+            ("projection.relations_carry_optional_target_path", relations_carry_optional_target_path),
         ]
     )
 
@@ -966,7 +987,9 @@ def test_projection_byte_budget_and_fields_filter():
     def test_max_bytes_is_enforced_and_continuable():
         empty = project_document(doc, limit=0)
         envelope_size = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-        budget = envelope_size + 11000  # must fit at least one object, else the page all-drops
+        # must fit at least one object, else the page all-drops (16000 covers
+        # the inline target_path display strings on export:0's dense relations)
+        budget = envelope_size + 16000
         page = project_document(doc, limit=100, max_bytes=budget)
         encoded = json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         assert len(encoded) <= budget
@@ -989,7 +1012,7 @@ def test_projection_byte_budget_and_fields_filter():
         seen = []
         offset = 0
         while True:
-            page = project_document(doc, offset=offset, limit=100, max_bytes=envelope_size + 11000)
+            page = project_document(doc, offset=offset, limit=100, max_bytes=envelope_size + 16000)
             seen += [o["id"] for o in page["objects"]]
             if "next_offset" not in page:
                 break
@@ -1023,7 +1046,7 @@ def test_projection_byte_budget_and_fields_filter():
         """Popping objects for max_bytes must re-scope relations and dependencies."""
         empty = project_document(doc, limit=0)
         envelope_size = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-        budget = envelope_size + 11000  # fits 1-2 of 10 objects: a genuine partial page, not an all-drop
+        budget = envelope_size + 16000  # fits 1-2 of 10 objects: a genuine partial page, not an all-drop
         page = project_document(doc, limit=100, max_bytes=budget)
         page_ids = {o["id"] for o in page["objects"]}
         assert len(page_ids) > 0, "page must keep at least one object for the re-scope checks to mean anything"
