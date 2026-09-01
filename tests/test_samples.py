@@ -469,3 +469,46 @@ def test_preload_relations_report_invalid_ranges_without_crashing():
     assert diagnostics[0].code == "PRELOAD_DEPENDENCY_RANGE_INVALID"
     assert diagnostics[0].object_id == "export:0"
     assert diagnostics[0].recoverable is True
+
+
+def test_version_context_is_frozen_and_summary_derived():
+    """G1 contract: full immutable context built once from the package summary."""
+    import dataclasses
+
+    from uasset_read.serializers.package_summary import read_package_summary
+    from uasset_read.v2.package.legacy import _make_package_archive
+    from uasset_read.v2.source import FileSource
+    from uasset_read.v2.version import (
+        MappingInfo,
+        build_version_context_from_summary,
+    )
+
+    archive = _make_package_archive(FileSource(SAMPLES / "ABP_RifleAnimLayers.uasset"), tolerant=True)
+    try:
+        summary = read_package_summary(archive)
+    finally:
+        archive.close()
+
+    ctx = build_version_context_from_summary(
+        summary,
+        package_layout="legacy",
+        game="ue",
+        mappings=MappingInfo(path="x.usmap"),
+        depth="asset",
+    )
+    # ABP fixture facts verified at plan time: UE4 522, UE5 1004, 10 custom versions,
+    # saved/compatible engine version 5.0.0.19274859.
+    assert ctx.file_version_ue4 == 522
+    assert ctx.file_version_ue5 == 1004
+    assert len(ctx.custom_versions) == 10
+    assert next(iter(ctx.custom_versions)) == next(iter(summary.custom_versions)).guid
+    assert ctx.engine_version is not None and ctx.engine_version.major == 5
+    assert ctx.compatible_engine_version is not None
+    assert ctx.package_layout == "legacy"
+    assert ctx.game == "ue"
+    assert ctx.mappings is not None and ctx.mappings.path == "x.usmap"
+    assert ctx.depth == "asset"
+    assert ctx.is_ue5 is True
+    assert ctx.version_string.startswith("5.0")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        ctx.file_version_ue5 = 0
