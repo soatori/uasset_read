@@ -1071,6 +1071,34 @@ def test_projection_byte_budget_and_fields_filter():
         page = project_document(doc, limit=2, max_bytes=1_000_000)
         assert page.get("truncation") is None or page["truncation"].get("reason") != "max_bytes"
 
+    def sections_opt_out_drops_scope_before_budget():
+        # #631: sections is an allowlist of the scoped envelope sections;
+        # excluded ones never enter the response, so max_bytes measures the
+        # leaner envelope (default behavior with sections=None is unchanged).
+        schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+
+        def size(d: dict) -> int:
+            return len(json.dumps(d, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+        default = project_document(doc, limit=3)
+        assert "relations" in default and "dependencies" in default
+        both = project_document(doc, limit=3, sections=[])
+        assert "relations" not in both and "dependencies" not in both
+        jsonschema.validate(both, schema)
+        assert size(both) < size(default), "opted-out sections must free bytes"
+        rel_only = project_document(doc, limit=3, sections=["relations"])
+        assert "relations" in rel_only and "dependencies" not in rel_only
+        with pytest.raises(ValueError, match="Invalid sections"):
+            project_document(doc, sections=["objects"])
+
+        full = project_document(doc, limit=100)
+        trimmed = project_document(doc, limit=100, max_bytes=size(full) - 400)
+        assert len(trimmed["objects"]) < 100, "budget should have trimmed the default page"
+        lean = project_document(doc, limit=100, sections=[], max_bytes=size(trimmed))
+        assert len(lean["objects"]) >= len(trimmed["objects"]), "freed bytes go to the object page"
+        for rel in lean.get("relations", []):
+            assert rel["from"] in {o["id"] for o in lean["objects"]}
+
     def core_fields_filter_scopes_payloads():
         pkg_doc = _document()
         result = project_document(pkg_doc, depth="package", limit=2, fields=["class"])
@@ -1123,6 +1151,7 @@ def test_projection_byte_budget_and_fields_filter():
             ("projection.test_object_diagnostics_scoped_to_page", test_object_diagnostics_scoped_to_page),
             ("projection.test_budget_too_small_raises", test_budget_too_small_raises),
             ("projection.test_no_truncation_when_budget_generous", test_no_truncation_when_budget_generous),
+            ("projection.sections_opt_out_drops_scope_before_budget", sections_opt_out_drops_scope_before_budget),
             (
                 "core.test_projection_fields_filter_does_not_crash_and_scopes_payloads",
                 core_fields_filter_scopes_payloads,
@@ -1157,11 +1186,13 @@ def test_schema_contract_statics():
         assert "source" in required
         assert "package" in required
         assert "objects" in required
-        assert "relations" in required
-        assert "dependencies" in required
         assert "payloads" in required
         assert "diagnostics" in required
         assert "summary" in required
+        # #631: these ride along unless the requester opts the section out,
+        # so they are properties but not required keys.
+        assert "relations" in schema["properties"] and "relations" not in required
+        assert "dependencies" in schema["properties"] and "dependencies" not in required
 
     def test_schema_enums_match_code():
         view_enum = schema["properties"]["view"]["enum"]

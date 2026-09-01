@@ -4,7 +4,7 @@
   "title": "PackageDocument v2",
   "description": "Unified package-level output for uasset_read v2. One document per .uasset/.umap file, expressing all exports as first-class objects.",
   "type": "object",
-  "required": ["format", "format_version", "view", "depth", "source", "package", "objects", "relations", "dependencies", "payloads", "diagnostics", "summary"],
+  "required": ["format", "format_version", "view", "depth", "source", "package", "objects", "payloads", "diagnostics", "summary"],
   "properties": {
     "format": {
       "const": "uasset_read.package",
@@ -42,14 +42,14 @@
       "items": {
         "$ref": "#/$defs/Relation"
       },
-      "description": "Object-to-object relationships."
+      "description": "Object-to-object relationships. Omitted only when the requester opted the section out via projection `sections` (#631)."
     },
     "dependencies": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/Dependency"
       },
-      "description": "Package-level import dependencies."
+      "description": "Package-level import dependencies. Omitted only when the requester opted the section out via projection `sections` (#631)."
     },
     "payloads": {
       "type": "array",
@@ -161,7 +161,8 @@
     },
     "ObjectEntry": {
       "type": "object",
-      "required": ["id", "name", "roles", "status"],
+      "required": ["id", "name"],
+      "description": "id/name are the only keys that survive a projection `fields` trim; untrimmed projections carry roles/status too.",
       "properties": {
         "id": {
           "type": "string",

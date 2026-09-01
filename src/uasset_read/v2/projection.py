@@ -91,6 +91,9 @@ def fit_list_response(response: dict, max_bytes: int, *, list_key: str, total_ke
 _VALID_DEPTHS = {"package", "object", "asset", "decode"}
 _DEPTH_ORDER = {"package": 0, "object": 1, "asset": 2, "decode": 3}
 
+# Top-level scoped sections that ``project_document(sections=...)`` may drop.
+_VALID_SECTIONS = {"relations", "dependencies"}
+
 
 def dependency_to_dict(dep: Dependency) -> dict[str, Any]:
     """Serialize one import-dependency entry (#632).
@@ -115,6 +118,7 @@ def project_document(
     roles: list[str] | None = None,
     classes: list[str] | None = None,
     fields: list[str] | None = None,
+    sections: list[str] | None = None,
     offset: int = 0,
     limit: int | None = None,
     max_bytes: int | None = None,
@@ -126,6 +130,10 @@ def project_document(
       - semantic (default): object identity, roles, status, coverage
       - raw: adds flags, serial offsets, header details
       - debug: raw + parse statistics, recovery info, offset evidence
+    ``sections`` is an allowlist of the scoped envelope sections to include
+    (valid names: "relations", "dependencies"); excluded sections are dropped
+    from the response before ``max_bytes`` accounting, so their bytes go to
+    the object page instead. Default None keeps both (unchanged behavior).
     ``response_extras`` entries are merged with ``dict.update()`` (same-named
     projection keys are overwritten by the extras) before ``max_bytes``
     trimming runs, so extras count against the byte budget like any envelope key.
@@ -135,6 +143,10 @@ def project_document(
         raise ValueError(f"Invalid view: {view!r}. Expected one of {_VALID_VIEWS}")
     if depth not in _VALID_DEPTHS:
         raise ValueError(f"Invalid depth: {depth!r}. Expected one of {_VALID_DEPTHS}")
+    if sections is not None:
+        unknown = set(sections) - _VALID_SECTIONS
+        if unknown:
+            raise ValueError(f"Invalid sections: {sorted(unknown)}. Expected from {_VALID_SECTIONS}")
     if offset < 0:
         raise ValueError("offset must be non-negative")
     if limit is not None and limit < 0:
@@ -240,6 +252,11 @@ def project_document(
         },
     }
 
+    # Drop opted-out scoped sections BEFORE max_bytes accounting (#631).
+    if sections is not None:
+        for dropped in _VALID_SECTIONS - set(sections):
+            result.pop(dropped)
+
     if next_offset is not None:
         result["next_offset"] = next_offset
         result["truncation"] = truncation_info
@@ -286,8 +303,10 @@ def project_document(
                 result["next_offset"] = offset + len(result["objects"])
                 remaining_ids = {o["id"] for o in result["objects"] if isinstance(o, dict) and "id" in o}
                 rels, diags, deps = _scope_to_page(remaining_ids)
-                result["relations"] = rels
-                result["dependencies"] = deps
+                if "relations" in result:
+                    result["relations"] = rels
+                if "dependencies" in result:
+                    result["dependencies"] = deps
                 result["diagnostics"] = [d.to_dict() for d in diags] + [trunc_diag]
             page_total = max(0, len(selected) - offset)
             if limit is not None:

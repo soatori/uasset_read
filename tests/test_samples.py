@@ -309,8 +309,23 @@ def test_package_depth_has_no_properties():
 
 def test_large_sample_all_exports():
     """ALS_AnimBP — 3395 exports, 2 asset roles (shares the matrix parse via cache)."""
+    from uasset_read.v2.projection import project_document
+
     doc = _object_document("ALS_AnimBP.uasset")
     assert len(doc.objects) == 3395
+
+    # #631 acceptance: bounded agent request — 25 objects, id/name/class only,
+    # relations/dependencies opted out — fits a 10 KB budget; the opted-out
+    # keys are absent and the page is schema-valid.
+    page = project_document(
+        doc, depth="package", fields=["id", "name", "class"], limit=25, sections=[], max_bytes=10_000
+    )
+    size = len(json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    assert size < 10_000, f"bounded request must fit 10 KB, got {size}"
+    assert len(page["objects"]) == 25, page.get("truncation")
+    assert "relations" not in page and "dependencies" not in page
+    assert not any(d.get("code") in ("TRUNCATED", "BUDGET_EXHAUSTED") for d in page["diagnostics"])
+    jsonschema.validate(page, SCHEMA)
 
 
 def test_zero_asset_role_fixture_is_manifested():
