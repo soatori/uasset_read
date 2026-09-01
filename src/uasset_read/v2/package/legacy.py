@@ -11,6 +11,7 @@ import struct
 from pathlib import Path
 from typing import Any, Literal, Sequence
 
+from ...constants import PKG_FilterEditorOnly
 from ...exceptions import ParseError, ExportBoundsExceeded
 from ...memory_safety import ResourceBudget
 from ...package import PackageArchive
@@ -673,9 +674,16 @@ class LegacyPackageReader:
                 )
                 overrun = archive.tell() - serial_end
                 obj.properties = normalize_property_bag(raw_props)
-                if overrun <= 0 and (obj.class_name or "") in _TABLE_CLASSES:
+                cn = obj.class_name or ""
+                if overrun <= 0 and cn in _TABLE_CLASSES:
                     extras[obj.id] = {
                         "table_rows": _read_table_rows(archive, serial_end, name_map, obj.id, diagnostics)
+                    }
+                elif overrun <= 0 and cn == "StringTable":
+                    extras[obj.id] = {
+                        "string_table": _read_string_table(
+                            archive, obj.id, diagnostics, _string_table_has_dev_notes(summary)
+                        )
                     }
                 if overrun > 0:
                     obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
@@ -750,7 +758,8 @@ class LegacyPackageReader:
 # DataTable-family rows are serialized after the tagged properties as
 # NumRows(i32) + per-row FName(Index,Number) + Payload(int32 size + data).
 # UE source: Engine/Source/Runtime/Engine/Private/DataTable.cpp LoadStructData.
-_TABLE_CLASSES = ("DataTable", "CurveTable", "StringTable")
+# StringTable is NOT this layout — it uses the FStringTable trailer below (#615).
+_TABLE_CLASSES = ("DataTable", "CurveTable")
 _MAX_TABLE_BLOB = 64 * 1024 * 1024  # bounded read; larger tables report partial
 _MAX_TABLE_ROWS = 100000  # garbage row counts are rejected, not trusted
 
@@ -818,4 +827,88 @@ def _read_table_rows(
     result["row_count"] = len(names)
     result["row_names"] = names
     result["complete"] = complete
+    return result
+
+
+# StringTable assets serialize an FStringTable trailer right after the
+# tagged properties. UE source:
+# Engine/Source/Runtime/Core/Private/Internationalization/StringTableCore.cpp
+# FStringTable::Serialize, reached from
+# Engine/Source/Runtime/Engine/Private/Internationalization/StringTable.cpp
+# UStringTable::Serialize (Super::Serialize then StringTable->Serialize(Ar)).
+# Layout: FString Namespace, int32 NumEntries, then NumEntries x
+# (FString Key, FString SourceString[, FString DevNotes]). DevNotes is
+# written only when the package's FFortniteMainBranchObjectVersion is
+# >= AddDevNotesToFText (260) and editor-only data is not filtered —
+# trigger evaluated per package in _string_table_has_dev_notes. The
+# trailing key->(FName,FString) metadata map is not parsed here.
+# Corroborated (not proof): UAssetAPI StringTableExport.Read,
+# CUE4Parse FStringTable ctor.
+_FORTNITE_MB_GUID = "86181d60844f64acded316aad6c7ea0d"  # FGuid(0x601D1886,0xAC644F84,0xAA16D3DE,0x0DEAC7D6), little-endian bytes
+_FORTNITE_ADD_DEV_NOTES = 260  # FFortniteMainBranchObjectVersion::AddDevNotesToFText
+
+
+def _string_table_has_dev_notes(summary: PackageFileSummary) -> bool:
+    """True when the editor-saved trailer wrote per-entry DevNotes strings."""
+    if summary.package_flags & PKG_FilterEditorOnly:
+        return False
+    for cv in getattr(summary, "custom_versions", []):
+        if getattr(cv, "guid", "") == _FORTNITE_MB_GUID:
+            return getattr(cv, "version", 0) >= _FORTNITE_ADD_DEV_NOTES
+    return False
+
+
+def _read_string_table(
+    archive: PackageArchive,
+    object_id: str,
+    diagnostics: list[Diagnostic],
+    dev_notes: bool,
+) -> dict[str, Any]:
+    """Parse the bounded FStringTable trailer (namespace + key/value entries).
+
+    The archive is positioned at the trailer start with its ``_read_range``
+    at the export's serial end, so a corrupt table cannot escape the export.
+    Anything unreadable ends up as ``complete: False`` with a diagnostic,
+    never a silently truncated table.
+    """
+    result: dict[str, Any] = {"namespace": "", "entry_count": 0, "entries": [], "complete": False}
+    try:
+        result["namespace"] = archive.read_fstring()
+        entry_count = archive.read_i32()
+        if entry_count < 0 or entry_count > _MAX_TABLE_ROWS:
+            diagnostics.append(
+                Diagnostic(
+                    severity="warning",
+                    code="TABLE_ENTRY_COUNT_INVALID",
+                    message=f"{object_id}: string table entry count {entry_count} outside sane range",
+                    stage="payload.string_table",
+                    object_id=object_id,
+                    effect="semantic_loss",
+                    recoverable=True,
+                )
+            )
+            return result
+        result["entry_count"] = entry_count
+        for _ in range(entry_count):
+            key = archive.read_fstring()
+            value = archive.read_fstring()
+            if dev_notes:
+                archive.read_fstring()  # DevNotes, parsed but not surfaced
+            result["entries"].append({"key": key, "value": value})
+        result["complete"] = True
+    except (ExportBoundsExceeded, ParseError, EOFError, struct.error, ValueError, UnicodeError) as e:
+        diagnostics.append(
+            Diagnostic(
+                severity="warning",
+                code="STRING_TABLE_TRUNCATED",
+                message=(
+                    f"{object_id}: string table trailer unreadable after "
+                    f"{len(result['entries'])}/{result['entry_count']} entries: {type(e).__name__}: {e}"
+                ),
+                stage="payload.string_table",
+                object_id=object_id,
+                effect="semantic_loss",
+                recoverable=True,
+            )
+        )
     return result

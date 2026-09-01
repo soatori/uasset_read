@@ -283,17 +283,18 @@ class UserDefinedStructHandler:
 
 
 class DataTableHandler:
-    """Enrich DataTable/CurveTable/StringTable objects.
+    """Enrich DataTable/CurveTable objects.
 
     Row data comes from the bounded table payload slice the legacy reader
-    extracts right after the tagged properties.
+    extracts right after the tagged properties. StringTable assets use a
+    different trailer layout and are handled by StringTableHandler (#615).
     """
 
     capability = "decoded"  # row struct/count read from real property + payload data
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         cn = obj.class_name or ""
-        return cn in ("DataTable", "CurveTable", "StringTable")
+        return cn in ("DataTable", "CurveTable")
 
     def enrich(
         self,
@@ -329,6 +330,62 @@ class DataTableHandler:
             status = "missing"
 
         obj.coverage.append(CoverageEntry(feature="handler.DataTableHandler", status=status))
+        return result
+
+
+class StringTableHandler:
+    """Enrich StringTable objects from the bounded FStringTable trailer slice.
+
+    Trailer layout per UE source: Runtime/Core/Private/Internationalization/
+    StringTableCore.cpp ``FStringTable::Serialize`` (namespace + key/value
+    entries), serialized by UStringTable::Serialize after the tagged
+    properties; see the comment on ``_read_string_table`` in
+    ``v2/package/legacy.py`` for the trigger conditions.
+
+    Summary tier until a decoded fixture backfills #615: trailing per-key
+    metadata is not parsed, so this never claims ``semantic="complete"``
+    (#629).
+    """
+
+    capability = "summary"
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        return (obj.class_name or "") == "StringTable"
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        extras = package_data[2] if isinstance(package_data, tuple) and len(package_data) >= 3 else None
+        st = (extras or {}).get(obj.id, {}).get("string_table")
+        result: dict[str, Any] = {"kind": "string_table", "table_type": "StringTable"}
+        if not st:
+            obj.coverage.append(
+                CoverageEntry(
+                    feature="handler.StringTableHandler",
+                    status="missing",
+                    detail="StringTable trailer unavailable (property parse overrun or payload not sliced)",
+                )
+            )
+            return result
+
+        entries = st.get("entries") or []
+        result["namespace"] = st.get("namespace", "")
+        result["entry_count"] = st.get("entry_count", 0)
+        result["entries"] = entries[:100]
+        if len(entries) > 100:
+            result["entries_truncated"] = True
+        detail = "" if st.get("complete") else f"parsed {len(entries)}/{st.get('entry_count', 0)} entries"
+        obj.coverage.append(
+            CoverageEntry(
+                feature="handler.StringTableHandler",
+                status="present" if st.get("complete") else "partial",
+                detail=detail or "metadata map not parsed (summary tier)",
+            )
+        )
         return result
 
 
@@ -502,6 +559,7 @@ class SoundHandler:
 register_handler(UserDefinedEnumHandler())
 register_handler(UserDefinedStructHandler())
 register_handler(DataTableHandler())
+register_handler(StringTableHandler())
 register_handler(TextureHandler())
 register_handler(TexturePayloadHandler())
 register_handler(SoundHandler())

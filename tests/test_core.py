@@ -1014,6 +1014,97 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert [b["name"] for b in semantic["bones"]] == ["root", "pelvis"]
         assert obj.status.semantic == "complete"
 
+    def test_string_table_reader_synthetic_bytes():
+        """#615: the FStringTable trailer parses namespace + key/value entries."""
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.v2.package.legacy import _read_string_table
+
+        def fstring(s: str) -> bytes:
+            data = s.encode("utf-8") + b"\x00"
+            return struct.pack("<i", len(data)) + data
+
+        def read_table(blob: bytes, dev_notes: bool):
+            diags = []
+            archive = ByteArchive(blob)
+            archive._read_range = (0, len(blob))
+            result = _read_string_table(archive, "export:0", diags, dev_notes)
+            return result, diags
+
+        # UE4-era layout: key + value only.
+        blob = fstring("MyNS") + struct.pack("<i", 2) + fstring("K1") + fstring("Hello") + fstring("K2") + fstring("World")
+        result, diags = read_table(blob, dev_notes=False)
+        assert result["namespace"] == "MyNS"
+        assert result["entry_count"] == 2
+        assert result["entries"] == [{"key": "K1", "value": "Hello"}, {"key": "K2", "value": "World"}]
+        assert result["complete"] and not diags
+
+        # DevNotes variant (StringTableCore.cpp writes a third string per
+        # entry for editor-saved packages with the AddDevNotesToFText version).
+        blob_dev = fstring("NS") + struct.pack("<i", 1) + fstring("A") + fstring("V") + fstring("notes")
+        result, diags = read_table(blob_dev, dev_notes=True)
+        assert result["entries"] == [{"key": "A", "value": "V"}]
+        assert result["complete"] and not diags
+
+        # Garbage entry count: diagnostic, no entries trusted.
+        blob = fstring("NS") + struct.pack("<i", 10**7)
+        result, diags = read_table(blob, dev_notes=False)
+        assert not result["complete"] and not result["entries"]
+        assert [d.code for d in diags] == ["TABLE_ENTRY_COUNT_INVALID"]
+
+        # Truncated entries: bounded failure with diagnostic, never silent.
+        blob = fstring("NS") + struct.pack("<i", 5) + fstring("K") + fstring("V")
+        result, diags = read_table(blob, dev_notes=False)
+        assert not result["complete"]
+        assert [d.code for d in diags] == ["STRING_TABLE_TRUNCATED"]
+
+    def test_string_table_handler_is_summary_and_not_table():
+        """#615: StringTable uses StringTableHandler and never claims complete."""
+        from uasset_read.v2.handlers import (
+            _HANDLERS,
+            DataTableHandler,
+            StringTableHandler,
+            run_handlers,
+        )
+        from uasset_read.v2.version import VersionContext
+
+        assert not DataTableHandler().supports(record("StringTable"), VersionContext())
+        assert DataTableHandler().supports(record("DataTable"), VersionContext())
+        assert StringTableHandler().supports(record("StringTable"), VersionContext())
+
+        obj = record("StringTable")
+        obj.id = "export:5"
+        st = {
+            "namespace": "MyNS",
+            "entry_count": 1,
+            "entries": [{"key": "K", "value": "V"}],
+            "complete": True,
+        }
+        saved = list(_HANDLERS)
+        try:
+            _HANDLERS[:] = [DataTableHandler(), StringTableHandler()]
+            semantic, _cov, _diags = run_handlers(
+                obj, VersionContext(depth="asset"), [obj], (None, [], {obj.id: {"string_table": st}})
+            )
+        finally:
+            _HANDLERS[:] = saved
+        assert semantic["kind"] == "string_table"
+        assert semantic["namespace"] == "MyNS"
+        assert semantic["entry_count"] == 1
+        assert semantic["entries"] == [{"key": "K", "value": "V"}]
+        assert obj.status.semantic == "partial", "StringTable must not claim semantic=complete (#615)"
+
+    def test_string_table_handler_missing_trailer_reports_coverage():
+        from uasset_read.v2.handlers import StringTableHandler
+        from uasset_read.v2.version import VersionContext
+
+        obj = record("StringTable")
+        result = StringTableHandler().enrich(obj, VersionContext(), [], (None, [], {}))
+        assert result["kind"] == "string_table"
+        cov = [c for c in obj.coverage if c.feature == "handler.StringTableHandler"]
+        assert len(cov) == 1 and cov[0].status == "missing"
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -1035,6 +1126,15 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("handler.test_undeclared_handler_tier_defaults_to_summary", test_undeclared_handler_tier_defaults_to_summary),
             ("handler.test_skeleton_name_guess_is_marked_heuristic", test_skeleton_name_guess_is_marked_heuristic),
             ("handler.test_skeleton_bone_tree_wins_over_name_guess", test_skeleton_bone_tree_wins_over_name_guess),
+            ("handler.test_string_table_reader_synthetic_bytes", test_string_table_reader_synthetic_bytes),
+            (
+                "handler.test_string_table_handler_is_summary_and_not_table",
+                test_string_table_handler_is_summary_and_not_table,
+            ),
+            (
+                "handler.test_string_table_handler_missing_trailer_reports_coverage",
+                test_string_table_handler_missing_trailer_reports_coverage,
+            ),
         ]
     )
 
