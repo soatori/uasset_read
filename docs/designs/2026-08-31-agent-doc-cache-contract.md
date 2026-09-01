@@ -4,7 +4,7 @@ status: target
 
 > 本轮不实现。定义 `agent_tools` 六个工具共享 `PackageDocument` 的缓存契约；实现落地时对外签名不得变化。
 
-## 现状（基线 bd3309a7 核实）
+## 现状（基线 bd3309a7 核实；下表行号为该基线时点的快照，实现时以当前代码符号为准）
 
 六个工具各自独立全量重 parse，每个工具函数都直接调用 `parse_package_document`：
 
