@@ -36,6 +36,15 @@ def _build_sound_cue(data: dict, cov, _object_class: str) -> dict:
     return {"sound": {"graph_metadata": meta}}
 
 
+def _build_sound_attenuation(data: dict, cov, _object_class: str) -> dict:
+    # Callable spec (not a section table) because the original also tracks
+    # resource_properties=False unconditionally before building the section.
+    cov.track("resource_properties", False)
+    props = pick(data, _ATTEN_KEYS)
+    cov.track("attenuation_properties", len(props) > 0)
+    return {"sound": {"attenuation_properties": props}}
+
+
 # (out_key, source, coverage key, mode) section tables per class; see asset_data.
 build_sound_content = class_extractor(
     "sound",
@@ -45,9 +54,7 @@ build_sound_content = class_extractor(
             ("bulk_summary", _WAVE_BULK_KEYS, "bulk_summary", "section"),
         ),
         "SoundCue": _build_sound_cue,
-        "SoundAttenuation": (
-            ("attenuation_properties", _ATTEN_KEYS, "attenuation_properties", "summary"),
-        ),
+        "SoundAttenuation": _build_sound_attenuation,
     },
     miss_cov="resource_properties",
 )
