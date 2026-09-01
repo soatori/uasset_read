@@ -137,8 +137,14 @@ def _prop_value(props: dict[str, Any], name: str) -> Any:
 
 
 def _array_value(props: dict[str, Any], name: str) -> list[Any] | None:
-    """Return a normalized array property value, or None when absent/unreadable."""
-    val = _prop_value(props, name)
+    """Return a normalized array value, or None when absent/unreadable.
+
+    Top-level tagged arrays arrive as ``{"kind":"value","value":[...]}``;
+    arrays nested inside structs are serialized as plain lists.
+    """
+    val = props.get(name)
+    if isinstance(val, dict) and val.get("kind") == "value":
+        val = val.get("value")
     return val if isinstance(val, list) else None
 
 
@@ -1192,3 +1198,228 @@ class PhysicalMaterialHandler:
 
 register_handler(PhysicsAssetHandler())
 register_handler(PhysicalMaterialHandler())
+
+
+# ── Animation family (#618) — summary tier until decoded fixtures exist ──
+
+
+def _struct_fields(item: Any) -> dict[str, Any] | None:
+    """Fields dict of a normalized struct value, or None."""
+    if isinstance(item, dict) and item.get("kind") == "struct":
+        fields = item.get("fields")
+        return fields if isinstance(fields, dict) else None
+    return None
+
+
+class AnimBlendSpaceHandler:
+    """Enrich BlendSpace/BlendSpace1D objects with axis and sample summary (#618).
+
+    Property names per UE source:
+    ``Engine/Source/Runtime/Engine/Classes/Animation/BlendSpace.h`` —
+    ``UPROPERTY(EditAnywhere, Category = BlendParametersTest) struct
+    FBlendParameter BlendParameters[3]`` (fixed 3-slot axis array; FBlendParameter
+    fields ``DisplayName/Min/Max/GridNum``) and ``UPROPERTY(EditAnywhere,
+    Category=BlendSamples) TArray<FBlendSample> SampleData`` (FBlendSample
+    fields ``Animation/SampleValue``). Editor-saved packages carry both as
+    tagged properties. Summary tier (#629).
+    """
+
+    capability = "summary"
+
+    _BLEND_CLASSES = ("BlendSpace", "BlendSpace1D")
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        return (obj.class_name or "") in self._BLEND_CLASSES
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        cn = obj.class_name or ""
+        result: dict[str, Any] = {"kind": "anim_blend_space", "blend_space_type": cn, "name": obj.name}
+        props = obj.properties or {}
+        coverage: list[CoverageEntry] = []
+
+        # BlendParameters is a fixed 3-slot array; unconfigured slots carry
+        # empty/None display names.
+        params = _array_value(props, "BlendParameters")
+        if params is not None:
+            axes: list[dict[str, Any]] = []
+            for item in params:
+                fields = _struct_fields(item)
+                if fields is None:
+                    continue
+                name = fields.get("DisplayName")
+                if not isinstance(name, str) or name in ("", "None"):
+                    continue
+                axis: dict[str, Any] = {"name": name}
+                for key, out in (("Min", "min"), ("Max", "max"), ("GridNum", "grid_num")):
+                    num = _number_value(fields.get(key))
+                    if num is not None:
+                        axis[out] = num
+                axes.append(axis)
+            result["axes"] = axes
+            result["dimension"] = len(axes)
+            coverage.append(CoverageEntry(feature="anim_blend_space.axes", status="present"))
+        else:
+            coverage.append(
+                CoverageEntry(feature="anim_blend_space.axes", status="missing", detail="BlendParameters not in property bag")
+            )
+
+        samples = _array_value(props, "SampleData")
+        if samples is not None:
+            points: list[dict[str, Any]] = []
+            for item in samples:
+                fields = _struct_fields(item)
+                if fields is None:
+                    continue
+                point: dict[str, Any] = {}
+                ref = fields.get("Animation")
+                if isinstance(ref, str):
+                    point["animation"] = ref
+                value = _struct_fields(fields.get("SampleValue"))
+                if value is not None:
+                    coords = [_number_value(value.get(c)) for c in ("X", "Y", "Z")]
+                    point["position"] = [c if c is not None else 0.0 for c in coords]
+                points.append(point)
+            result["sample_count"] = len(samples)
+            result["samples"] = points[:100]
+            coverage.append(CoverageEntry(feature="anim_blend_space.samples", status="present"))
+        else:
+            coverage.append(
+                CoverageEntry(
+                    feature="anim_blend_space.samples",
+                    status="missing",
+                    detail="SampleData not in property bag; grid/triangulation data not decoded",
+                )
+            )
+
+        obj.coverage.extend(coverage)
+        return result
+
+
+class AnimCompositeHandler:
+    """Enrich AnimComposite objects with track/segment summary (#618).
+
+    Property names per UE source:
+    ``Engine/Source/Runtime/Engine/Classes/Animation/AnimComposite.h`` —
+    ``UPROPERTY() FAnimTrack AnimationTrack``; ``FAnimTrack`` and its
+    ``UPROPERTY(...) TArray<FAnimSegment> AnimSegments`` are defined in
+    ``Engine/Source/Runtime/Engine/Classes/Animation/AnimCompositeBase.h``
+    (FAnimSegment fields ``AnimReference/StartPos/AnimStartTime/AnimEndTime``).
+    Editor-saved packages carry the track as a tagged struct property.
+    Summary tier (#629).
+    """
+
+    capability = "summary"
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        return (obj.class_name or "") == "AnimComposite"
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        result: dict[str, Any] = {"kind": "anim_composite", "name": obj.name}
+        props = obj.properties or {}
+
+        track = _struct_fields(props.get("AnimationTrack"))
+        if track is None:
+            obj.coverage.append(
+                CoverageEntry(
+                    feature="anim_composite.track",
+                    status="missing",
+                    detail="AnimationTrack struct not in property bag",
+                )
+            )
+            return result
+
+        segments = _array_value(track, "AnimSegments") or []
+        entries: list[dict[str, Any]] = []
+        for item in segments:
+            fields = _struct_fields(item)
+            if fields is None:
+                continue
+            seg: dict[str, Any] = {}
+            ref = fields.get("AnimReference")
+            if isinstance(ref, str):
+                seg["animation"] = ref
+            for key, out in (("StartPos", "start"), ("AnimStartTime", "start_time"), ("AnimEndTime", "end_time")):
+                num = _number_value(fields.get(key))
+                if num is not None:
+                    seg[out] = num
+            entries.append(seg)
+        result["segment_count"] = len(segments)
+        result["segments"] = entries[:100]
+        obj.coverage.append(
+            CoverageEntry(
+                feature="anim_composite.track",
+                status="present" if segments else "partial",
+                detail="tracks/blending behaviors beyond segments not decoded",
+            )
+        )
+        return result
+
+
+class AnimLayerInterfaceHandler:
+    """Enrich AnimLayerInterface objects (#618).
+
+    UE source: ``Engine/Source/Runtime/Engine/Classes/Animation/
+    AnimLayerInterface.h`` — in the 5.8 checkout ``UAnimLayerInterface`` is a
+    MinimalAPI ``UInterface`` with no UPROPERTY members; function metadata
+    (``TArray<FAnimFunction> Functions``) existed in older 4.2x-era releases
+    of the same header. This handler reports ``Functions`` when a package
+    carries it, and an explicit missing coverage entry otherwise. No peer
+    parser decodes this type, so nothing is guessed. Summary tier (#629).
+    """
+
+    capability = "summary"
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        return (obj.class_name or "") == "AnimLayerInterface"
+
+    def enrich(
+        self,
+        obj: ObjectRecord,
+        context: VersionContext,
+        all_objects: list[ObjectRecord],
+        package_data: Any,
+    ) -> dict[str, Any] | None:
+        result: dict[str, Any] = {"kind": "anim_layer_interface", "name": obj.name}
+        props = obj.properties or {}
+        functions = _array_value(props, "Functions")
+        if functions is not None:
+            entries: list[dict[str, Any]] = []
+            for item in functions:
+                fields = _struct_fields(item) or {}
+                fn: dict[str, Any] = {}
+                for key, out in (("Name", "name"), ("Type", "type")):
+                    val = fields.get(key)
+                    if isinstance(val, (str, int)):
+                        fn[out] = val
+                entries.append(fn)
+            result["function_count"] = len(functions)
+            result["functions"] = entries[:100]
+            obj.coverage.append(
+                CoverageEntry(feature="anim_layer_interface.functions", status="present")
+            )
+        else:
+            obj.coverage.append(
+                CoverageEntry(
+                    feature="anim_layer_interface.functions",
+                    status="missing",
+                    detail="no Functions property (removed from UAnimLayerInterface in modern UE); inputs/outputs not decoded",
+                )
+            )
+        return result
+
+
+register_handler(AnimBlendSpaceHandler())
+register_handler(AnimCompositeHandler())
+register_handler(AnimLayerInterfaceHandler())

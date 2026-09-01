@@ -751,6 +751,9 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 def test_handler_registry_supports_enriches_and_isolates():
     """Every registered handler must accept its class, reject others, and isolate failures."""
     from uasset_read.v2.handlers import (
+        AnimBlendSpaceHandler,
+        AnimCompositeHandler,
+        AnimLayerInterfaceHandler,
         BlueprintFamilyHandler,
         DataTableHandler,
         MaterialHandler,
@@ -759,6 +762,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         PhysicalMaterialHandler,
         PhysicsAssetHandler,
         SkeletonHandler,
+        StringTableHandler,
         TextureHandler,
         UserDefinedEnumHandler,
         UserDefinedStructHandler,
@@ -793,6 +797,10 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("MaterialInstanceHandler", MaterialInstanceHandler(), "MaterialInstanceConstant", "Blueprint"),
             ("PhysicsAssetHandler", PhysicsAssetHandler(), "PhysicsAsset", "Blueprint"),
             ("PhysicalMaterialHandler", PhysicalMaterialHandler(), "PhysicalMaterial", "Blueprint"),
+            ("AnimBlendSpaceHandler", AnimBlendSpaceHandler(), "BlendSpace1D", "Blueprint"),
+            ("AnimCompositeHandler", AnimCompositeHandler(), "AnimComposite", "Blueprint"),
+            ("AnimLayerInterfaceHandler", AnimLayerInterfaceHandler(), "AnimLayerInterface", "Blueprint"),
+            ("StringTableHandler", StringTableHandler(), "StringTable", "DataTable"),
             (
                 "BlueprintFamilyHandler/anim",
                 BlueprintFamilyHandler(
@@ -1161,6 +1169,99 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert sem_empty is None
         assert empty_pm.status.semantic == "partial"
 
+    def test_anim_handlers_summary_tier_synthetic():
+        """#618: blend space axes/samples, composite track, ALI missing-function state."""
+        from uasset_read.v2.handlers import (
+            _HANDLERS,
+            AnimBlendSpaceHandler,
+            AnimCompositeHandler,
+            AnimLayerInterfaceHandler,
+            run_handlers,
+        )
+        from uasset_read.v2.version import VersionContext
+
+        bs = record("BlendSpace")
+        bs.properties = {
+            "BlendParameters": {
+                "kind": "value",
+                "type": "ArrayProperty",
+                "value": [
+                    {"kind": "struct", "struct_type": "BlendParameter", "fields": {"DisplayName": "Speed", "Min": 0.0, "Max": 200.0, "GridNum": 7}},
+                    {"kind": "struct", "struct_type": "BlendParameter", "fields": {"DisplayName": "Direction", "Min": -90.0, "Max": 90.0, "GridNum": 5}},
+                    {"kind": "struct", "struct_type": "BlendParameter", "fields": {"DisplayName": "None", "Min": 0.0, "Max": 0.0, "GridNum": 2}},
+                ],
+            },
+            "SampleData": {
+                "kind": "value",
+                "type": "ArrayProperty",
+                "value": [
+                    {
+                        "kind": "struct",
+                        "struct_type": "BlendSample",
+                        "fields": {
+                            "Animation": "AnimSequence'A_Walk'",
+                            "SampleValue": {"kind": "struct", "struct_type": "Vector", "fields": {"X": 100.0, "Y": 45.0, "Z": 0.0}},
+                        },
+                    }
+                ],
+            },
+        }
+        comp = record("AnimComposite")
+        comp.properties = {
+            "AnimationTrack": {
+                "kind": "struct",
+                "struct_type": "AnimTrack",
+                "fields": {
+                    "AnimSegments": [
+                        {
+                            "kind": "struct",
+                            "struct_type": "AnimSegment",
+                            "fields": {"AnimReference": "AnimSequence'A_Run'", "StartPos": 0.0, "AnimStartTime": 0.0, "AnimEndTime": 1.5},
+                        }
+                    ]
+                },
+            }
+        }
+        ali = record("AnimLayerInterface")
+        ali.properties = {}
+        bare = record("BlendSpace1D")
+        bare.properties = {}
+
+        saved = list(_HANDLERS)
+        try:
+            _HANDLERS[:] = [AnimBlendSpaceHandler(), AnimCompositeHandler(), AnimLayerInterfaceHandler()]
+            sem_bs, _c, _d = run_handlers(bs, VersionContext(depth="asset"), [bs], None)
+            sem_comp, _c, _d = run_handlers(comp, VersionContext(depth="asset"), [comp], None)
+            sem_ali, _c, _d = run_handlers(ali, VersionContext(depth="asset"), [ali], None)
+            sem_bare, _c, _d = run_handlers(bare, VersionContext(depth="asset"), [bare], None)
+        finally:
+            _HANDLERS[:] = saved
+
+        assert sem_bs["kind"] == "anim_blend_space"
+        assert sem_bs["dimension"] == 2, "unconfigured BlendParameters slot must not count as an axis"
+        assert [a["name"] for a in sem_bs["axes"]] == ["Speed", "Direction"]
+        assert sem_bs["axes"][0]["max"] == 200.0
+        assert sem_bs["sample_count"] == 1
+        assert sem_bs["samples"][0] == {"animation": "AnimSequence'A_Walk'", "position": [100.0, 45.0, 0.0]}
+        assert bs.status.semantic == "partial"
+
+        assert sem_comp["segment_count"] == 1
+        assert sem_comp["segments"][0]["animation"] == "AnimSequence'A_Run'"
+        assert sem_comp["segments"][0]["end_time"] == 1.5
+        assert comp.status.semantic == "partial"
+
+        assert sem_ali["kind"] == "anim_layer_interface"
+        assert "functions" not in sem_ali
+        ali_cov = [c for c in ali.coverage if c.feature == "anim_layer_interface.functions"]
+        assert ali_cov and ali_cov[0].status == "missing"
+        assert ali.status.semantic == "partial"
+
+        assert sem_bare["blend_space_type"] == "BlendSpace1D"
+        bare_axes = [c for c in bare.coverage if c.feature == "anim_blend_space.axes"]
+        bare_samples = [c for c in bare.coverage if c.feature == "anim_blend_space.samples"]
+        assert bare_axes and bare_axes[0].status == "missing"
+        assert bare_samples and bare_samples[0].status == "missing"
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -1192,6 +1293,7 @@ def test_handler_registry_supports_enriches_and_isolates():
                 test_string_table_handler_missing_trailer_reports_coverage,
             ),
             ("handler.test_physics_handlers_summary_tier_synthetic", test_physics_handlers_summary_tier_synthetic),
+            ("handler.test_anim_handlers_summary_tier_synthetic", test_anim_handlers_summary_tier_synthetic),
         ]
     )
 
