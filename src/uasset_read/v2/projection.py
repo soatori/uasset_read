@@ -9,7 +9,7 @@ import json
 from typing import Any
 
 from .document import PackageDocument
-from .object_model import ObjectRecord
+from .object_model import Dependency, ObjectRecord
 
 
 def select_objects(
@@ -90,6 +90,20 @@ def fit_list_response(response: dict, max_bytes: int, *, list_key: str, total_ke
 
 _VALID_DEPTHS = {"package", "object", "asset", "decode"}
 _DEPTH_ORDER = {"package": 0, "object": 1, "asset": 2, "decode": 3}
+
+
+def dependency_to_dict(dep: Dependency) -> dict[str, Any]:
+    """Serialize one import-dependency entry (#632).
+
+    Shared by the projection envelope and the agent tools so no caller drops
+    ``package_name``, which the model carries since the import map.
+    """
+    return {
+        "index": dep.index,
+        "class": dep.class_name,
+        "object_name": dep.object_name,
+        "package_name": dep.package_name,
+    }
 
 
 def project_document(
@@ -196,9 +210,7 @@ def project_document(
         visible_ids = ids | {r["to"] for r in relations}
         reachable_imports = {idx for idx, imp in enumerate(doc.dependencies) if f"import:{imp.index}" in visible_ids}
         filtered_dependencies = [
-            {"index": d.index, "class": d.class_name, "object_name": d.object_name}
-            for i, d in enumerate(doc.dependencies)
-            if i in reachable_imports
+            dependency_to_dict(d) for i, d in enumerate(doc.dependencies) if i in reachable_imports
         ]
         return relations, page_diagnostics, filtered_dependencies
 

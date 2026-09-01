@@ -862,6 +862,18 @@ def test_projection_views_depths_pagination_table():
         result = select_objects(doc)
         assert len(result) == len(doc.objects)
 
+    def dependencies_carry_package_name():
+        # #632: the model carries package_name from the import map; no
+        # projection path may drop it.
+        from uasset_read.v2.projection import dependency_to_dict
+
+        page = project_document(doc, limit=100)
+        assert page["dependencies"], "fixture must expose page-reachable imports"
+        model = {d.index: d for d in doc.dependencies}
+        for entry in page["dependencies"]:
+            assert set(entry) == {"index", "class", "object_name", "package_name"}
+            assert entry == dependency_to_dict(model[entry["index"]])
+
     def test_all_views_json():
         for view in ("semantic", "raw", "debug"):
             result = project_document(doc, view=view, limit=3)
@@ -948,6 +960,7 @@ def test_projection_views_depths_pagination_table():
             ("projection.test_select_by_role", test_select_by_role),
             ("projection.test_select_by_id", test_select_by_id),
             ("projection.test_select_all_when_no_filters", test_select_all_when_no_filters),
+            ("projection.dependencies_carry_package_name", dependencies_carry_package_name),
             ("projection.test_all_views_json", test_all_views_json),
             ("core.test_projection_honors_views_pagination_and_byte_budget", core_projection_honors_views),
             ("projection.depth_beyond_parsed_document_raises", depth_beyond_parsed_document_raises),
@@ -966,9 +979,9 @@ def test_projection_byte_budget_and_fields_filter():
     def test_max_bytes_is_enforced_and_continuable():
         empty = project_document(doc, limit=0)
         envelope_size = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-        # must fit at least one object, else the page all-drops (16000 covers
+        # must fit at least one object, else the page all-drops (18000 covers
         # the inline target_path display strings on export:0's dense relations)
-        budget = envelope_size + 16000
+        budget = envelope_size + 18000
         page = project_document(doc, limit=100, max_bytes=budget)
         encoded = json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         assert len(encoded) <= budget
@@ -991,7 +1004,7 @@ def test_projection_byte_budget_and_fields_filter():
         seen = []
         offset = 0
         while True:
-            page = project_document(doc, offset=offset, limit=100, max_bytes=envelope_size + 16000)
+            page = project_document(doc, offset=offset, limit=100, max_bytes=envelope_size + 18000)
             seen += [o["id"] for o in page["objects"]]
             if "next_offset" not in page:
                 break
@@ -1025,7 +1038,7 @@ def test_projection_byte_budget_and_fields_filter():
         """Popping objects for max_bytes must re-scope relations and dependencies."""
         empty = project_document(doc, limit=0)
         envelope_size = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-        budget = envelope_size + 16000  # fits 1-2 of 10 objects: a genuine partial page, not an all-drop
+        budget = envelope_size + 18000  # fits 1-2 of 10 objects: a genuine partial page, not an all-drop
         page = project_document(doc, limit=100, max_bytes=budget)
         page_ids = {o["id"] for o in page["objects"]}
         assert len(page_ids) > 0, "page must keep at least one object for the re-scope checks to mean anything"

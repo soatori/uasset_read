@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from .api import parse_package_document
-from .projection import fit_list_response, select_objects, paginate, project_document
+from .projection import dependency_to_dict, fit_list_response, select_objects, paginate, project_document
 
 # Max response sizes per tool (bytes)
 _MAX_BYTES_INSPECT = 4096
@@ -115,10 +115,7 @@ def list_dependencies(
     to `max_bytes` by dropping trailing items (adjust `next_offset` accordingly).
     """
     doc = parse_package_document(file_path)
-    deps = [
-        {"index": d.index, "class": d.class_name, "object_name": d.object_name}
-        for d in doc.dependencies
-    ]
+    deps = [dependency_to_dict(d) for d in doc.dependencies]
     page, next_offset, _trunc = paginate(deps, offset=offset, limit=limit)
     response: dict[str, Any] = {
         "dependencies": page,

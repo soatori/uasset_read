@@ -275,7 +275,10 @@
         "index": { "type": "integer" },
         "class": { "type": "string" },
         "object_name": { "type": "string" },
-        "package_name": { "type": "string" }
+        "package_name": {
+          "type": "string",
+          "description": "Import class package path as carried by the model (#632); empty when the import has no class package."
+        }
       },
       "additionalProperties": false
     },
