@@ -94,6 +94,19 @@
       "b_is_asset_count": 1
     },
     {
+      "name": "ALSCommunity_Mannequin_PhysicsAsset.uasset",
+      "sha256": "84da89566a4d8086c0e976f0073bee2e27b053f5bb050c7d0fae14cf560cb14e",
+      "size_bytes": 133851,
+      "engine_layout": "legacy",
+      "file_version_ue4": 522,
+      "file_version_ue5": 0,
+      "sidecars": [],
+      "asset_type_hint": "PhysicsAsset",
+      "has_multiple_b_is_asset": false,
+      "export_count": 40,
+      "b_is_asset_count": 1
+    },
+    {
       "name": "CassiniSample_MI_Template_BaseGray_Metal.uasset",
       "sha256": "7131ae31820c7171d5e943cac67af4ccff5fc87e6b0919e5ea1e32935e888ae8",
       "size_bytes": 9496,
@@ -170,6 +183,19 @@
       "has_multiple_b_is_asset": true,
       "export_count": 10,
       "b_is_asset_count": 2
+    },
+    {
+      "name": "FirstPerson_BS_Idle_Walk_Run.uasset",
+      "sha256": "bc71af8768b569695d4bcb69c79867f998e085693f5e8230854d228de359f5bb",
+      "size_bytes": 52333,
+      "engine_layout": "legacy",
+      "file_version_ue4": 522,
+      "file_version_ue5": 1017,
+      "sidecars": [],
+      "asset_type_hint": "BlendSpace",
+      "has_multiple_b_is_asset": false,
+      "export_count": 1,
+      "b_is_asset_count": 1
     },
     {
       "name": "FirstPerson_DT_WeaponList.uasset",
@@ -328,6 +354,19 @@
       "b_is_asset_count": 1
     },
     {
+      "name": "IntroToUnreal_StrT_Titles.uasset",
+      "sha256": "8cf4e70d63eddbda69d1910af6a9726cd2bb8cf3da5a28d833b6f8cbc00810c7",
+      "size_bytes": 3649,
+      "engine_layout": "legacy",
+      "file_version_ue4": 522,
+      "file_version_ue5": 1018,
+      "sidecars": [],
+      "asset_type_hint": "StringTable",
+      "has_multiple_b_is_asset": false,
+      "export_count": 1,
+      "b_is_asset_count": 1
+    },
+    {
       "name": "Lyra_AnimStruct_CardinalDirections.uasset",
       "sha256": "e6405391d4d77cb92779624cf698cfbd3f2dc5942221bcb5327e2215279b6010",
       "size_bytes": 6437,
@@ -388,6 +427,19 @@
       "file_version_ue5": 0,
       "sidecars": [],
       "asset_type_hint": "UserDefined",
+      "has_multiple_b_is_asset": false,
+      "export_count": 2,
+      "b_is_asset_count": 1
+    },
+    {
+      "name": "Lyra_PM_Concrete.uasset",
+      "sha256": "b863b78d876ec3077c2f4915829d53711fe47cce55158f2c029bd9559f3c5d67",
+      "size_bytes": 1302,
+      "engine_layout": "legacy",
+      "file_version_ue4": 522,
+      "file_version_ue5": 1003,
+      "sidecars": [],
+      "asset_type_hint": "PhysicalMaterial",
       "has_multiple_b_is_asset": false,
       "export_count": 2,
       "b_is_asset_count": 1
@@ -628,9 +680,9 @@
     }
   ],
   "summary": {
-    "total_samples": 48,
+    "total_samples": 52,
     "layout_distribution": {
-      "legacy": 48
+      "legacy": 52
     },
     "asset_type_distribution": {
       "AnimBlueprint": 2,
@@ -649,7 +701,11 @@
       "LevelSequence": 1,
       "Texture": 1,
       "Niagara": 1,
-      "Blueprint": 3
+      "Blueprint": 3,
+      "PhysicsAsset": 1,
+      "BlendSpace": 1,
+      "StringTable": 1,
+      "PhysicalMaterial": 1
     },
     "samples_with_sidecars": 0,
     "samples_with_multiple_b_is_asset": [
@@ -668,14 +724,14 @@
       "LevelDesign_ABP_Manny.uasset"
     ],
     "samples_with_parse_errors": [],
-    "fixture_gap_count": 5,
-    "fixture_gaps_total": 6,
-    "fixture_gaps_note": "one of the six entries (no_b_is_asset_package) is status=covered"
+    "fixture_gap_count": 6,
+    "fixture_gaps_total": 7,
+    "fixture_gaps_note": "one of the seven entries (no_b_is_asset_package) is status=covered"
   },
   "fixture_gaps": {
     "zen_package": {
       "status": "missing",
-      "description": "No Zen package (.uasset with FZenPackageSummary) samples. All 48 samples use legacy FPackageFileSummary layout.",
+      "description": "No Zen package (.uasset with FZenPackageSummary) samples. All 52 samples use legacy FPackageFileSummary layout.",
       "needed_for": "Phase 5 (Zen & Container Streaming) — ZenPackageReader implementation",
       "acquisition": "Request legitimate redistributable real samples with version info from the user: 3-5 Zen-layout .uasset files (file_version_ue5 >= 522, hash-based table layout) that may be committed to the repository.",
       "verification": "After copying, verify:\n- struct.unpack_from('<i', data, 4)[0] >= 0 (not legacy negative version)\n- struct.unpack_from('<i', data, 12)[0] >= 522 (UE5.1+)\n- parse_package_document() produces valid PackageDocument",
@@ -726,6 +782,15 @@
       "verification": "After obtaining, verify:\n- PackageDocument still produces valid output\n- summary.asset_object_ids is empty\n- No NO_EXPORTS error",
       "minimum_samples": 1,
       "recommended_samples": "1 PackageMetaData-only .uasset"
+    },
+    "curve_table": {
+      "status": "missing",
+      "description": "No CurveTable fixture. Name and binary import-table scans over the tracked corpus and all local UE sample projects found zero standalone UCurveTable main assets; matching third-party test assets exist only as license-blocked commercial dumps.",
+      "needed_for": "Phase 4.1 CurveTable AssetHandler (#626)",
+      "acquisition": "Generate a CurveTable in a project we own (>= 2 rows, >= 2 keys, SimpleCurve or RichCurve) or obtain a redistributable one; record UE version, creation steps, row names, mode, and deterministic expected values.",
+      "verification": "After copying, verify:\n- main export class is CurveTable\n- row/key values match the recorded expected values\n- manifest hash check passes",
+      "minimum_samples": 1,
+      "recommended_samples": "1 SimpleCurve table and 1 RichCurve table"
     }
   }
 }

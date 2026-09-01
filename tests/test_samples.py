@@ -1,6 +1,6 @@
 """Real-sample contract home: every fixture-touching check lives here.
 
-The 48-fixture matrix is manifest-driven and uncapped by design; shared
+The 52-fixture matrix is manifest-driven and uncapped by design; shared
 parse results are cached per sample so each fixture is parsed once per
 depth. Case bodies folded from the former ``tests/contract/`` layer are
 kept verbatim with the case/sample name in the failure message.
@@ -117,7 +117,7 @@ def test_manifest_matches_every_real_sample():
     assert manifest["version"] == 1
     expected_files = {entry["name"] for entry in manifest["samples"]}
     actual_files = {path.name for path in SAMPLES.iterdir() if path.suffix in {".uasset", ".umap", ".utoc", ".ucas", ".pak"}}
-    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 48
+    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 52
     assert actual_files == expected_files
     allowed = expected_files | {
         "manifest.json",
@@ -125,6 +125,7 @@ def test_manifest_matches_every_real_sample():
         "ORIGIN-issue-516-plugin-mount.md",
         "ORIGIN-issue-521-niagara.md",
         "ORIGIN-issue-522-cube-builder.md",
+        "ORIGIN-issue-615-618-619-samples.md",
     }
     extra = {path.name for path in SAMPLES.iterdir()} - allowed
     assert not extra, f"Unexpected files in samples/: {extra}"
