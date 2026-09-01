@@ -26,11 +26,7 @@
       "class": "AnimBlueprintGeneratedClass",
       "roles": ["class_default_object"],
       "serial_region": { "offset": 0, "size": 0 },
-      "status": { "parse": "complete", "semantic": "not_requested" },
-      "properties": null,
-      "semantic": null,
-      "coverage": [],
-      "diagnostics": []
+      "status": { "parse": "complete", "semantic": "not_requested" }
     },
     {
       "id": "export:1",
@@ -51,8 +47,7 @@
         { "feature": "graphs", "status": "present" },
         { "feature": "variables", "status": "present" },
         { "feature": "state_machines", "status": "present" }
-      ],
-      "diagnostics": []
+      ]
     },
     {
       "id": "export:2",
@@ -69,8 +64,7 @@
       },
       "coverage": [
         { "feature": "properties", "status": "present" }
-      ],
-      "diagnostics": []
+      ]
     }
   ],
   "relations": [

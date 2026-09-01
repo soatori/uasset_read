@@ -209,6 +209,19 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         with pytest.raises(ParseError, match="ChunkIDs"):
             _read_tail_offsets(ByteArchive(data))
 
+    def sources_reject_negative_size():
+        with pytest.raises(ValueError, match="negative"):
+            FileSource(str(PACKAGE_SAMPLE)).read_at(0, -1)
+        with pytest.raises(ValueError, match="negative"):
+            MemorySource(b"abcd").read_at(0, -1)
+        with pytest.raises(ValueError, match="negative"):
+            SliceReader(MemorySource(b"abcd"), 0, 4).read(-1)
+        sr = SliceReader(MemorySource(b"abcd"), 0, 4)
+        assert sr.read(4) == b"abcd"
+        with pytest.raises(IndexError):
+            sr.read(1)
+        assert sr.tell() == 4  # failed reads must not move the cursor
+
     def preload_count_beyond_file_rejected_immediately():
         import struct
         from types import SimpleNamespace
@@ -247,6 +260,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
             ("export_bounds.seek_past_upper_bound_fails", test_export_seek_past_upper_bound_fails),
             ("depends_map.stops_at_unsized_count", depends_map_stops_at_unsized_count),
             ("chunk_ids.count_beyond_file_rejected", chunk_ids_count_beyond_file_rejected_immediately),
+            ("source.reject_negative_size", sources_reject_negative_size),
             ("preload.count_beyond_file_rejected", preload_count_beyond_file_rejected_immediately),
         ]
     )
@@ -1051,11 +1065,12 @@ def test_projection_byte_budget_and_fields_filter():
         assert isinstance(result["relations"], list)
 
     def core_fields_properties_in_raw_view():
-        pkg_doc = _document()
-        result = project_document(pkg_doc, depth="package", view="raw", limit=2, fields=["properties"])
+        obj_doc = _document(depth="object")
+        result = project_document(obj_doc, depth="object", view="raw", limit=2, fields=["properties"])
         assert len(result["objects"]) == 2
         for obj in result["objects"]:
             assert set(obj.keys()).issubset({"id", "name", "properties"})
+            assert "properties" in obj  # object-depth raw view carries the property bag
             assert "serial_region" not in obj  # not in requested fields
 
     def core_fields_properties_absent_in_semantic_view():
@@ -1311,6 +1326,11 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert tuple(logging.root.handlers) == handlers
     assert logging.root.level == level
     assert list(tmp_path.iterdir()) == []
+
+    from uasset_read.pipeline.core import parse_package
+
+    parse_package(str(DATA_SAMPLE))
+    assert tuple(logging.root.handlers) == handlers
 
     old_level = logging.root.level
     try:

@@ -43,10 +43,15 @@ class FileSource:
         return self._size
 
     def read_at(self, offset: int, size: int) -> bytes:
+        if size < 0:
+            raise ValueError(f"negative size: {size}")
         if offset < 0 or offset + size > self._size:
             raise IndexError(f"read_at({offset}, {size}) out of range [0, {self._size})")
         self._fh.seek(offset)
-        return self._fh.read(size)
+        data = self._fh.read(size)
+        if len(data) != size:
+            raise IOError(f"short read at {offset}: wanted {size}, got {len(data)}")
+        return data
 
     def close(self) -> None:
         self._fh.close()
@@ -74,6 +79,8 @@ class MemorySource:
         return len(self._data)
 
     def read_at(self, offset: int, size: int) -> bytes:
+        if size < 0:
+            raise ValueError(f"negative size: {size}")
         if offset < 0 or offset + size > len(self._data):
             raise IndexError(f"read_at({offset}, {size}) out of range [0, {len(self._data)})")
         return self._data[offset : offset + size]
@@ -101,6 +108,8 @@ class SliceReader:
         self._pos = 0
 
     def read(self, size: int) -> bytes:
+        if size < 0:
+            raise ValueError(f"negative size: {size}")
         if self._pos + size > self._length:
             raise IndexError(f"read({size}) at pos {self._pos} exceeds slice length {self._length}")
         data = self._source.read_at(self._base + self._pos, size)

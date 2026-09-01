@@ -799,8 +799,8 @@ def validate_export_data_range(
 ) -> None:
     """Validate export data offsets against file bounds.
 
-    Checks whether each export entry's serial_offset + serial_size is within file range.
-    Truncated files may have export table entries pointing past end of file.
+    Validates that the export table region fits the file; per-export serial
+    ranges are enforced at parse time via `_read_range` in `LegacyPackageReader`.
 
     Args:
         archive: File archive reader

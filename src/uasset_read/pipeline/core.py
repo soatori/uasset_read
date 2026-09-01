@@ -331,7 +331,6 @@ def parse_package(
     Returns:
         ParseResult instance (containing parse data and error messages)
     """
-    configure_project_logging()
     result = ParseResult()
 
     # Merge config and legacy parameters
