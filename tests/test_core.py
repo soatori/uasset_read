@@ -486,6 +486,26 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         assert overrun, "property parse exceeded the serial region with no diagnostic"
         assert all(d.object_id and d.stage == "properties.tagged" for d in overrun)
 
+    def test_export_table_failure_preserves_slot_identity():
+        import uasset_read.serializers.object_resources as orm
+        healthy = _document(str(PACKAGE_SAMPLE), depth="package")
+        first_name = healthy.objects[0].name
+        second_name = healthy.objects[1].name
+        real = orm.ObjectExport
+        calls = {"n": 0}
+
+        def boom(**kwargs):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise ValueError("injected export table entry failure")
+            return real(**kwargs)
+
+        monkeypatch.setattr(orm, "ObjectExport", boom)
+        doc = parse_package_document(str(PACKAGE_SAMPLE))  # direct call, NOT the lru_cache'd _document
+        assert doc.objects[0].name == first_name                   # slot 0 kept its identity
+        assert all(o.name != second_name for o in doc.objects)     # second export did NOT become export:0
+        assert any(d.code == "EXPORT_TABLE_TRUNCATED" for d in doc.diagnostics)
+
     _run_cases(
         [
             ("document.test_no_critical_on_healthy", test_no_critical_on_healthy),
@@ -511,6 +531,10 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
             (
                 "property.test_parse_past_serial_end_is_flagged_not_silent",
                 test_parse_past_serial_end_is_flagged_not_silent,
+            ),
+            (
+                "document.test_export_table_failure_preserves_slot_identity",
+                test_export_table_failure_preserves_slot_identity,
             ),
         ]
     )

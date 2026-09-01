@@ -335,6 +335,17 @@ class LegacyPackageReader:
             # 5. Read export map
             export_map = read_export_map(archive, summary, name_map)
 
+            if len(export_map) < summary.export_count:
+                diagnostics.append(
+                    Diagnostic(
+                        severity="error",
+                        code="EXPORT_TABLE_TRUNCATED",
+                        message=f"Export table parsed {len(export_map)}/{summary.export_count} entries; later slots dropped, indices preserved",
+                        stage="package.export_map",
+                        recoverable=True,
+                    )
+                )
+
             # 6. Read depends map
             depends_map = read_depends_map(archive, summary)
 

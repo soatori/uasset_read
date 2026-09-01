@@ -215,6 +215,7 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
 
     for export_idx in range(summary.export_count):
         object_name = ""
+        entry_start = archive.tell()
         try:
             class_index = PackageIndex(archive.read_i32(f"Export[{export_idx}].ClassIndex"))
             super_index = PackageIndex(archive.read_i32(f"Export[{export_idx}].SuperIndex"))
@@ -375,12 +376,20 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
                 )
             )
         except (struct.error, OSError, ValueError, AttributeError) as e:
-            # Tolerant mode: log error and skip failed export, keep successfully parsed exports
-            logger.warning(
-                "Export #%d parse failed (%s), skipping and continuing with subsequent exports",
-                export_idx,
-                str(e),
+            # A failed entry leaves the stream position unknown; continuing
+            # would silently renumber later exports. Stop the table instead.
+            archive._record_structured_diagnostic(
+                code="EXPORT_TABLE_TRUNCATED",
+                stage="read_export_map",
+                offset=entry_start,
+                fallback="stop_table",
+                message=(
+                    f"Export #{export_idx} parse failed ({type(e).__name__}: {e}); "
+                    f"stopped export table read with {len(export_map)}/{summary.export_count} entries"
+                ),
             )
+            logger.warning("Export #%d parse failed (%s); stopping export table read", export_idx, e)
+            break
     return export_map
 
 
