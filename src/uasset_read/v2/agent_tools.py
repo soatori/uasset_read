@@ -58,7 +58,8 @@ def list_objects(
     Returns object list with pagination info.
     """
     doc = parse_package_document(file_path)
-    projected = project_document(
+    selected = select_objects(doc, object_ids=object_ids, roles=roles, classes=classes)
+    return project_document(
         doc,
         object_ids=object_ids,
         roles=roles,
@@ -66,13 +67,8 @@ def list_objects(
         offset=offset,
         limit=limit,
         max_bytes=max_bytes,
+        response_extras={"total": len(selected), "offset": offset},
     )
-    # Add total count for agent tools
-    selected = select_objects(doc, object_ids=object_ids, roles=roles, classes=classes)
-    projected["total"] = len(selected)
-    projected["offset"] = offset
-    projected["returned"] = len(projected["objects"])
-    return projected
 
 
 def get_object(
@@ -166,15 +162,16 @@ def get_diagnostics(
         filtered = [d for d in filtered if d.object_id == object_id]
 
     # Paginate
-    page, next_offset, truncation = paginate(filtered, offset=offset, limit=limit)
+    page, next_offset, _truncation = paginate(filtered, offset=offset, limit=limit)
 
-    return {
+    response: dict[str, Any] = {
         "diagnostics": [d.to_dict() for d in page],
         "total": len(filtered),
         "offset": offset,
         "returned": len(page),
         **({"next_offset": next_offset} if next_offset is not None else {}),
     }
+    return fit_list_response(response, max_bytes, list_key="diagnostics")
 
 
 def extract_payload(
@@ -192,9 +189,12 @@ def extract_payload(
     """
     from .payloads import PAYLOAD_EXTRACTION_DEFERRED, PAYLOAD_EXTRACTION_DEFERRED_MESSAGE
 
-    return {
+    response: dict[str, Any] = {
         "id": payload_id,
         "error": PAYLOAD_EXTRACTION_DEFERRED_MESSAGE,
         "code": PAYLOAD_EXTRACTION_DEFERRED,
         "available_ids": [],
     }
+    # The list is always empty (deferred), so the only outcomes are a fit or the
+    # too-small raise; the helper's offset/returned/total keys are never read.
+    return fit_list_response(response, max_bytes, list_key="available_ids")

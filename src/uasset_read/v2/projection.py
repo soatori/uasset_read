@@ -63,7 +63,12 @@ def paginate(
 
 
 def fit_list_response(response: dict, max_bytes: int, *, list_key: str, total_key: str = "total") -> dict:
-    """Drop trailing items from response[list_key] until the compact encoding fits max_bytes."""
+    """Drop trailing items from response[list_key] until the compact encoding fits max_bytes.
+
+    Mutates ``response`` in place; it must carry {list_key (a list), "offset",
+    "returned", total_key}. Raises ValueError when max_bytes cannot hold even
+    the empty-list envelope.
+    """
     def _size() -> int:
         return len(json.dumps(response, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
@@ -72,6 +77,8 @@ def fit_list_response(response: dict, max_bytes: int, *, list_key: str, total_ke
         items.pop()
         response["returned"] = len(items)
         response["next_offset"] = response["offset"] + len(items)
+    if not items:
+        response.pop("next_offset", None)  # a cursor that doesn't advance ends nothing
     if _size() > max_bytes:
         raise ValueError(f"Response budget {max_bytes} bytes too small for minimal envelope ({_size()} bytes)")
     if items and response["offset"] + len(items) >= response[total_key]:
@@ -94,6 +101,7 @@ def project_document(
     offset: int = 0,
     limit: int | None = None,
     max_bytes: int | None = None,
+    response_extras: dict | None = None,
 ) -> dict[str, Any]:
     """Project a PackageDocument to a specific view/depth/selection/pagination.
 
@@ -211,6 +219,11 @@ def project_document(
             "total_diagnostics": len(doc.diagnostics),
             "object_diagnostics": sum(len(o.diagnostics) for o in doc.objects),
         }
+
+    # Merge agent-tool response keys BEFORE measuring, so the trim
+    # machinery below accounts for them like any other envelope bytes.
+    if response_extras:
+        result.update(response_extras)
 
     # max_bytes enforcement — measure AFTER adding TRUNCATED diagnostic
     if max_bytes is not None:

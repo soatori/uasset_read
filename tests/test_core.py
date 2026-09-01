@@ -914,6 +914,15 @@ def test_projection_byte_budget_and_fields_filter():
         page = project_document(doc, offset=5, limit=100, max_bytes=envelope + 1)
         assert page["truncation"]["objects_dropped"] == 5
 
+    def limit_and_budget_compose_page_relative():
+        # With limit=2 only min(limit, len(selected)-offset)=2 objects are in
+        # play; the dropped count must stay page-relative, not 10-kept.
+        one = project_document(doc, limit=1, max_bytes=1_000_000)
+        one_size = len(json.dumps(one, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        page = project_document(doc, offset=0, limit=2, max_bytes=one_size + 500)
+        assert len(page["objects"]) == 1, "budget should keep exactly one of the two page objects"
+        assert page["truncation"]["objects_dropped"] == 1
+
     def out_of_range_empty_page_never_stalls_or_overshoots():
         with pytest.raises(ValueError, match="too small"):
             project_document(doc, offset=10, limit=100, max_bytes=64)
@@ -999,6 +1008,7 @@ def test_projection_byte_budget_and_fields_filter():
             ("projection.all_objects_dropped_yields_no_cursor", all_objects_dropped_yields_no_cursor),
             ("projection.every_object_returned_exactly_once_under_budget", every_object_returned_exactly_once_under_budget),
             ("projection.dropped_count_is_page_relative", dropped_count_is_page_relative),
+            ("projection.limit_and_budget_compose_page_relative", limit_and_budget_compose_page_relative),
             ("projection.out_of_range_empty_page_never_stalls_or_overshoots", out_of_range_empty_page_never_stalls_or_overshoots),
             (
                 "projection.test_truncated_page_rescopes_relations_and_dependencies",
@@ -1172,8 +1182,26 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert len(listed["objects"]) > 0
 
     paged = list_objects(str(PACKAGE_SAMPLE), limit=3, max_bytes=65536)
-    assert paged["returned"] == 3
+    assert len(paged["objects"]) == 3
     assert paged["next_offset"] == 3
+
+    # G7 terminal predicate: every bounded tool's FINAL compact response
+    # respects max_bytes; budgets below the empty-list envelope raise.
+    for budget in (2048, 4096, 8192):
+        r = list_objects(str(PACKAGE_SAMPLE), max_bytes=budget)
+        assert len(json.dumps(r, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) <= budget
+        d = get_diagnostics(str(PACKAGE_SAMPLE), max_bytes=budget)
+        assert len(json.dumps(d, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) <= budget
+        insp = inspect_package(str(PACKAGE_SAMPLE), max_bytes=budget)
+        assert len(json.dumps(insp, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) <= budget
+    with pytest.raises(ValueError, match="too small"):
+        # Healthy samples carry 0 diagnostics, so get_diagnostics' minimal
+        # envelope is the fixed 52-byte empty-list form; 48 < 52 must raise.
+        get_diagnostics(str(PACKAGE_SAMPLE), max_bytes=48)
+    with pytest.raises(ValueError, match="too small"):
+        extract_payload(str(DATA_SAMPLE), "payload:export:0", max_bytes=16)
+    with pytest.raises(ValueError, match="too small"):
+        inspect_package(str(PACKAGE_SAMPLE), max_bytes=64)
 
     fetched = get_object(str(DATA_SAMPLE), "export:0")
     assert fetched["id"] == "export:0"
