@@ -248,6 +248,7 @@
     },
     "Relation": {
       "type": "object",
+      "description": "Directed edge read as 'from relates-to to': from is the object that carries the reference and to is the referent. Kinds have no universal inverse reading — query the reverse direction by filtering on to with the per-kind meaning. Meaning of to relative to from: outer_of = the Outer (containing object) of from; class_of = the class of from; super_of = the superclass of from; template_of = the template/archetype of from; depends_on = an entry of from's dependency list (from depends on to); preload_of = an object that must be preloaded before from. Contract-reserved kinds (not emitted by the current legacy reader) read from the subject side: generated_class_of = from is the generated class of to; default_object_of = from is the default object of to; references = from references to. Example: {\"kind\": \"outer_of\", \"from\": \"export:5\", \"to\": \"export:2\"} reads 'the Outer of export:5 is export:2', i.e. export:5 is contained in export:2.",
       "required": ["kind", "from", "to"],
       "properties": {
         "kind": {

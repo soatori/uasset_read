@@ -337,6 +337,27 @@ class ObjectRecord:
 - `preload_of`
 - `references`
 
+#### 关系方向约定（Edge direction）
+
+每条关系是有向边，统一按 **`from` relates-to `to`** 读取：`from_id` 是携带该引用的对象（export 条目所在侧），`to_id` 是被引用的目标。kind 不提供通用的反向读法；反查（例如"某对象包含哪些子对象"）应按 `to` 加 kind 过滤，并以逐 kind 含义为准。
+
+`to` 相对 `from` 的含义（legacy 读取器实际发射，见 `src/uasset_read/v2/package/legacy.py`）：
+
+- `outer_of` — `to` 是 `from` 的 Outer（包含 `from` 的对象）
+- `class_of` — `to` 是 `from` 的类
+- `super_of` — `to` 是 `from` 的父类
+- `template_of` — `to` 是 `from` 的模板/原型（archetype）
+- `depends_on` — `to` 出现在 `from` 的依赖表中（`from` 依赖 `to`）
+- `preload_of` — `to` 是加载 `from` 前需预加载的对象
+
+契约保留、当前读取器尚未发射的 kind（方向以契约示例为准，从主语侧表述）：
+
+- `generated_class_of` — `from` 是 `to` 的生成类（见 `package_document_v2.example.json`：`export:2`（`ABP_RifleAnimLayers_C`）→ `export:1`（`ABP_RifleAnimLayers`））
+- `default_object_of` — `from` 是 `to` 的默认对象
+- `references` — `from` 引用 `to`
+
+worked example：`{"kind": "outer_of", "from": "export:5", "to": "export:2"}` 读作 "export:5 的 Outer 是 export:2"，即 export:5 包含于 export:2。要列出 export:2 的所有直接子对象，取 `kind == "outer_of" && to == "export:2"` 的边，其 `from` 即子对象。
+
 多资产包不再选出唯一 primary。为了 CLI 展示可计算 `summary.asset_object_ids`，但该字段不能控制解析或丢弃其他对象。
 
 ### Asset Registry 与外部索引
