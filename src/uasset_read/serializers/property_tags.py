@@ -1,7 +1,8 @@
 """PropertyTag serializer — read_property_tag.
 
 Equivalent migration from uasset_read.py lines 5186-5282.
-UE5.7 specific version — UE4 compatibility code removed.
+Supports both UE4 and UE5 PropertyTag layouts, gated by file_version_ue4
+and the UE5 version fields (e.g. PROPERTY_TAG_COMPLETE_TYPE_NAME).
 """
 
 from __future__ import annotations

@@ -4,7 +4,9 @@ from __future__ import annotations
 Package Summary serialization — PackageFileSummary and related read functions.
 
 Extracted from uasset_read.py (lines 901-2543).
-UE5.7-only version — UE4 compatibility code removed.
+Supports both UE4 and UE5 summaries: LegacyFileVersion -3..-5 (UE4,
+GUID-based custom versions) and -6..-9 (UE5), per UE4_LEGACY_VERSIONS
+and UE5_LEGACY_VERSIONS in uasset_read.constants.
 """
 
 import logging
@@ -667,7 +669,7 @@ def read_package_summary(
     archive: FArchive,
     budget: "_ResourceBudgetType | None" = None,
 ) -> PackageFileSummary:
-    """Read PackageFileSummary header (UE5.7-only)."""
+    """Read PackageFileSummary header (UE4 and UE5)."""
     _validate_file_size(archive)
 
     archive.seek(0)
