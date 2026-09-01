@@ -141,7 +141,8 @@ def test_real_sample_proves_claimed_capability(sample: str, class_name: str, exp
     """Each claimed capability must produce stable semantics from a real fixture."""
     doc = _asset_document(sample)
     obj = next(item for item in doc.objects if item.class_name == class_name)
-    assert obj.status.semantic == "complete", f"{sample}:{class_name}"
+    expected_status = "partial" if expected.get("kind") == "niagara" else "complete"
+    assert obj.status.semantic == expected_status, f"{sample}:{class_name}"
     assert obj.coverage, f"{sample}:{class_name}"
     assert {key: obj.semantic[key] for key in expected} == expected, f"{sample}:{class_name}"
 
@@ -334,8 +335,8 @@ def test_v2_api_does_not_call_v1_pipeline(monkeypatch):
     assert result.summary.total_exports == len(result.objects)
 
 
-def test_niagara_fixture_fully_enriched():
-    """Every Niagara-class object in NM_BPSystemEvent must be semantically complete.
+def test_niagara_fixture_lightweight_coverage_is_partial():
+    """NM_BPSystemEvent Niagara objects: kind summary present, status honestly partial.
 
     The fixture also contains EdGraphNode_Comment and MetaData exports that no
     handler covers; those are intentionally not asserted here.
@@ -345,8 +346,12 @@ def test_niagara_fixture_fully_enriched():
     doc = _asset_document("NM_BPSystemEvent.uasset")
     covered = [o for o in doc.objects if o.class_name in NiagaraHandler._NIAGARA_CLASSES]
     assert covered, "Niagara class set must match the fixture"
-    incomplete = [o for o in covered if o.status.semantic != "complete"]
-    assert not incomplete, f" uncovered Niagara objects: {[(o.id, o.class_name, o.status.semantic) for o in incomplete]}"
+    for o in covered:
+        assert o.semantic and o.semantic["kind"] == "niagara", o.id
+        assert o.status.semantic == "partial", f"{o.id}: {o.status.semantic}"
+        assert any(
+            c.feature == "niagara.domain" and c.status == "partial" for c in o.coverage
+        ), f"{o.id}: missing partial domain coverage"
 
 
 def _synthetic_export(**kwargs):

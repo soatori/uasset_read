@@ -760,6 +760,32 @@ def test_handler_registry_supports_enriches_and_isolates():
             assert handler.supports(record(class_name), VersionContext()), class_name
         assert not handler.supports(record("StaticMesh"), VersionContext())
 
+    def test_shallow_handler_never_marks_complete():
+        from uasset_read.v2 import handlers as H
+        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+
+        class Shallow:
+            full_coverage = False
+
+            def supports(self, obj, ctx):
+                return True
+
+            def enrich(self, obj, ctx, all_objs, data):
+                return {"kind": "shallow"}
+
+        obj = ObjectRecord(
+            id="export:9", table_index=0, name="X", class_name="Foo",
+            status=ObjectStatus(parse="complete", semantic="not_requested"),
+        )
+        saved = H._HANDLERS[:]
+        try:
+            H._HANDLERS[:] = [Shallow()]
+            semantic, _cov, _diags = H.run_handlers(obj, H.VersionContext(), [], None)
+        finally:
+            H._HANDLERS[:] = saved
+        assert semantic == {"kind": "shallow"}
+        assert obj.status.semantic == "partial"
+
     def test_class_handlers_kwarg_defaults_true_for_v1():
         import inspect
 
@@ -784,6 +810,7 @@ def test_handler_registry_supports_enriches_and_isolates():
                 test_niagara_handler_supports_all_declared_classes,
             ),
             ("handler.test_class_handlers_kwarg_defaults_true_for_v1", test_class_handlers_kwarg_defaults_true_for_v1),
+            ("handler.test_shallow_handler_never_marks_complete", test_shallow_handler_never_marks_complete),
         ]
     )
 
