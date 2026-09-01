@@ -99,3 +99,7 @@ docs/compose/
 # Wiki submodule (external)
 wiki/
 worktrees/
+
+# dotnet build output for the golden dumper (dev-time only)
+tests/samples/golden/dumper/bin/
+tests/samples/golden/dumper/obj/
