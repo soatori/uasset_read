@@ -821,32 +821,52 @@ def test_projection_views_depths_pagination_table():
     def core_projection_honors_views():
         # View shape: semantic omits raw fields, raw includes them
         pkg_doc = _document()
-        sem_obj = project_document(pkg_doc, view="semantic", limit=2)["objects"][0]
-        raw_obj = project_document(pkg_doc, view="raw", limit=2)["objects"][0]
+        sem_obj = project_document(pkg_doc, depth="package", view="semantic", limit=2)["objects"][0]
+        raw_obj = project_document(pkg_doc, depth="package", view="raw", limit=2)["objects"][0]
         assert "flags" not in sem_obj
         assert "serial_region" not in sem_obj
         assert "properties" not in sem_obj
         assert "flags" in raw_obj
         assert "serial_region" in raw_obj
-        assert "debug" in project_document(pkg_doc, view="debug", limit=2)
+        assert "debug" in project_document(pkg_doc, depth="package", view="debug", limit=2)
 
         # Pagination and byte budget
-        full = project_document(pkg_doc, limit=100)
+        full = project_document(pkg_doc, depth="package", limit=100)
         full_size = len(json.dumps(full, separators=(",", ":")).encode())
         # budget must exceed minimal reachable envelope (depends_on imports)
         # but be less than the full page to trigger truncation
         budget = full_size - 1000
-        page = project_document(pkg_doc, limit=100, max_bytes=budget)
+        page = project_document(pkg_doc, depth="package", limit=100, max_bytes=budget)
         assert len(json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode()) <= budget
         assert page["next_offset"] > 0
         assert page["truncation"]["reason"] == "max_bytes"
 
         # fields filter: only requested fields plus id/name are returned
-        result = project_document(pkg_doc, limit=2, fields=["id"])
+        result = project_document(pkg_doc, depth="package", limit=2, fields=["id"])
         assert len(result["objects"]) == 2
         assert set(result["objects"][0].keys()).issubset({"id", "name"})
         assert isinstance(result["payloads"], list)
         assert isinstance(result["relations"], list)
+
+    def depth_beyond_parsed_document_raises():
+        pkg_doc = _document(str(PACKAGE_SAMPLE), depth="package")
+        with pytest.raises(ValueError, match="cannot project"):
+            project_document(pkg_doc, depth="asset")
+
+    def shallower_depth_caps_content():
+        asset_doc = _document(str(PACKAGE_SAMPLE), depth="asset")
+        page = project_document(asset_doc, depth="package", view="raw")
+        for o in page["objects"]:
+            assert "semantic" not in o and "coverage" not in o and "properties" not in o
+        obj_page = project_document(asset_doc, depth="object")
+        for o in obj_page["objects"]:
+            assert "semantic" not in o
+        assert project_document(asset_doc, depth="asset")["depth"] == "asset"
+
+    def to_dict_relabel_beyond_parsed_raises():
+        pkg_doc = _document(str(PACKAGE_SAMPLE), depth="package")
+        with pytest.raises(ValueError, match="cannot project"):
+            pkg_doc.to_dict(depth="decode")
 
     _run_cases(
         [
@@ -864,6 +884,9 @@ def test_projection_views_depths_pagination_table():
             ("projection.test_select_all_when_no_filters", test_select_all_when_no_filters),
             ("projection.test_all_views_json", test_all_views_json),
             ("core.test_projection_honors_views_pagination_and_byte_budget", core_projection_honors_views),
+            ("projection.depth_beyond_parsed_document_raises", depth_beyond_parsed_document_raises),
+            ("projection.shallower_depth_caps_content", shallower_depth_caps_content),
+            ("projection.to_dict_relabel_beyond_parsed_raises", to_dict_relabel_beyond_parsed_raises),
         ]
     )
 
@@ -969,7 +992,7 @@ def test_projection_byte_budget_and_fields_filter():
 
     def core_fields_filter_scopes_payloads():
         pkg_doc = _document()
-        result = project_document(pkg_doc, limit=2, fields=["class"])
+        result = project_document(pkg_doc, depth="package", limit=2, fields=["class"])
         assert len(result["objects"]) == 2
         assert set(result["objects"][0]).issubset({"id", "name", "class"})
         assert isinstance(result["payloads"], list)
@@ -977,7 +1000,7 @@ def test_projection_byte_budget_and_fields_filter():
 
     def core_fields_properties_in_raw_view():
         pkg_doc = _document()
-        result = project_document(pkg_doc, view="raw", limit=2, fields=["properties"])
+        result = project_document(pkg_doc, depth="package", view="raw", limit=2, fields=["properties"])
         assert len(result["objects"]) == 2
         for obj in result["objects"]:
             assert set(obj.keys()).issubset({"id", "name", "properties"})
@@ -985,7 +1008,7 @@ def test_projection_byte_budget_and_fields_filter():
 
     def core_fields_properties_absent_in_semantic_view():
         pkg_doc = _document()
-        result = project_document(pkg_doc, view="semantic", limit=2, fields=["properties"])
+        result = project_document(pkg_doc, depth="package", view="semantic", limit=2, fields=["properties"])
         assert len(result["objects"]) == 2
         for obj in result["objects"]:
             # semantic view never has properties, so fields=["properties"] yields only id/name
@@ -993,10 +1016,10 @@ def test_projection_byte_budget_and_fields_filter():
 
     def core_max_bytes_caps_final_output():
         pkg_doc = _document()
-        full = project_document(pkg_doc, limit=100)
+        full = project_document(pkg_doc, depth="package", limit=100)
         full_size = len(json.dumps(full, separators=(",", ":")).encode())
         budget = full_size - 1000  # strictly less than full page
-        page = project_document(pkg_doc, limit=100, max_bytes=budget)
+        page = project_document(pkg_doc, depth="package", limit=100, max_bytes=budget)
         final = len(json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode())
         assert final <= budget
         assert page["truncation"]["reason"] == "max_bytes"

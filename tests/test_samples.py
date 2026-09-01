@@ -265,14 +265,14 @@ def test_every_real_sample_forms_a_valid_package_document(sample: str):
     # test-fold decisions. Every fixture's bounded page must still round-trip
     # and echo its view.
     for view in ("semantic", "raw", "debug"):
-        page = project_document(doc, view=view, limit=3)
+        page = project_document(doc, depth="object", view=view, limit=3)
         parsed = json.loads(json.dumps(page, ensure_ascii=False))
         assert parsed["view"] == view, sample
         jsonschema.validate(page, SCHEMA)
     # raw_data legitimately appears as a length-only {"kind": "bytes", ...}
     # descriptor for struct fallbacks; the contract is that it never carries
     # inline bytes, and any truncation marker wins.
-    blob_free = json.dumps(project_document(doc, view="semantic", limit=3))
+    blob_free = json.dumps(project_document(doc, depth="object", view="semantic", limit=3))
     assert "raw_data_truncated" in blob_free or '"raw_data": "' not in blob_free, sample
 
 

@@ -87,6 +87,7 @@ def fit_list_response(response: dict, max_bytes: int, *, list_key: str, total_ke
 
 
 _VALID_DEPTHS = {"package", "object", "asset", "decode"}
+_DEPTH_ORDER = {"package": 0, "object": 1, "asset": 2, "decode": 3}
 
 
 def project_document(
@@ -121,6 +122,20 @@ def project_document(
         raise ValueError("limit must be non-negative")
     if max_bytes is not None and max_bytes < 0:
         raise ValueError("max_bytes must be non-negative")
+    if _DEPTH_ORDER[depth] > _DEPTH_ORDER[doc.depth]:
+        raise ValueError(
+            f"cannot project at depth {depth!r}: document was parsed at depth {doc.depth!r}"
+        )
+
+    def _emit(o: ObjectRecord) -> dict[str, Any]:
+        """Serialize one object, stripping fields the projection depth can't back."""
+        d = obj_to_dict(o, view=view)
+        if _DEPTH_ORDER[depth] < _DEPTH_ORDER["asset"]:
+            d.pop("semantic", None)
+            d.pop("coverage", None)
+        if _DEPTH_ORDER[depth] < _DEPTH_ORDER["object"]:
+            d.pop("properties", None)
+        return d
 
     # Select objects
     selected = select_objects(doc, object_ids=object_ids, roles=roles, classes=classes)
@@ -143,7 +158,7 @@ def project_document(
         field_set = set(fields)
         filtered = []
         for obj in page:
-            d = obj_to_dict(obj, view=view)
+            d = _emit(obj)
             filtered.append({k: v for k, v in d.items() if k in field_set or k in ("id", "name")})
         page = filtered
 
@@ -194,7 +209,7 @@ def project_document(
         "package": _package_to_dict(doc, view=view),
         "objects": page
         if (fields and page and isinstance(page[0], dict))
-        else [obj_to_dict(o, view=view) for o in page],
+        else [_emit(o) for o in page],
         "relations": relations,
         "dependencies": filtered_dependencies,
         "payloads": filtered_payloads,
