@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "generator": "UAssetAPI",
+    "generator_version": "2.0.0",
+    "runtime": ".NET 10.0.11 / Microsoft Windows 10.0.28000",
+    "produced_utc": "2026-09-01T15:51:24Z",
+    "invocation": "dotnet run --project tests/samples/golden/dumper -- <fixture> <output>"
+  },
+  "fixture": {
+    "name": "ALS_FootstepDataTable.uasset",
+    "sha256": "3759a1ad817cd9a40cdef28916fa6c0a97d9b4825cf247fc363f722a4b8940cf",
+    "size_bytes": 3821
+  },
+  "counts": {
+    "name": 58,
+    "import": 11,
+    "export": 3
+  },
+  "depends_map": {
+    "total_edges": 3,
+    "rows": {
+      "1": [
+        1,
+        -11,
+        -4
+      ]
+    }
+  },
+  "preload": {
+    "total_entries": 0,
+    "spans": {}
+  }
+}

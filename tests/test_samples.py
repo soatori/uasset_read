@@ -23,8 +23,11 @@ SAMPLES = Path(__file__).parent / "samples"
 MANIFEST = SAMPLES / "manifest.json"
 SCHEMA = json.loads((ROOT / "docs" / "designs" / "contract" / "package_document_v2.schema.json").read_text(encoding="utf-8"))
 
-MANIFEST_SAMPLES = json.loads(MANIFEST.read_text(encoding="utf-8"))["samples"]
+_MANIFEST_DATA = json.loads(MANIFEST.read_text(encoding="utf-8"))
+MANIFEST_SAMPLES = _MANIFEST_DATA["samples"]
 MANIFEST_BY_NAME = {entry["name"]: entry for entry in MANIFEST_SAMPLES}
+GOLDEN_DIR = SAMPLES / "golden"
+GOLDEN_FILES = _MANIFEST_DATA["golden_files"]
 
 CAPABILITIES = (
     ("ALS_FootstepDataTable.uasset", "DataTable", {"kind": "data_table"}),
@@ -114,7 +117,7 @@ def _raw_depends_map(sample: str):
 def test_manifest_matches_every_real_sample():
     """The retained real-sample corpus must match its review-controlled manifest exactly."""
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    assert manifest["version"] == 1
+    assert manifest["version"] == 2
     expected_files = {entry["name"] for entry in manifest["samples"]}
     actual_files = {path.name for path in SAMPLES.iterdir() if path.suffix in {".uasset", ".umap", ".utoc", ".ucas", ".pak"}}
     assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 52
@@ -122,6 +125,7 @@ def test_manifest_matches_every_real_sample():
     allowed = expected_files | {
         "manifest.json",
         "README.md",
+        "golden",
         "ORIGIN-issue-516-plugin-mount.md",
         "ORIGIN-issue-521-niagara.md",
         "ORIGIN-issue-522-cube-builder.md",
@@ -134,6 +138,68 @@ def test_manifest_matches_every_real_sample():
         assert path.exists(), f"Missing sample: {entry['name']}"
         assert path.stat().st_size == entry["size_bytes"], entry["name"]
         assert _sha256(path) == entry["sha256"], entry["name"]
+    # Golden reference tables are manifest-tracked artifacts too (issue #633).
+    golden_entries = manifest["golden_files"]
+    golden_on_disk = {path.name for path in (SAMPLES / "golden").glob("*.golden.json")}
+    assert golden_on_disk == {entry["name"] for entry in golden_entries}
+    for entry in golden_entries:
+        assert entry["fixture"] in expected_files, entry["name"]
+        path = SAMPLES / "golden" / entry["name"]
+        assert path.stat().st_size == entry["size_bytes"], entry["name"]
+        assert _sha256(path) == entry["sha256"], entry["name"]
+
+
+def _golden_mapped_ids(raws, export_count: int, import_count: int) -> list[str]:
+    """Map raw FPackageIndex int32s like v2 does: null and out-of-range targets drop."""
+    ids = []
+    for raw in raws:
+        if raw > 0 and raw <= export_count:
+            ids.append(f"export:{raw - 1}")
+        elif raw < 0 and -raw <= import_count:
+            ids.append(f"import:{-raw - 1}")
+    return ids
+
+
+@pytest.mark.parametrize("entry", GOLDEN_FILES, ids=[entry["name"] for entry in GOLDEN_FILES])
+def test_v2_tables_match_independent_golden_reference(entry):
+    """Break the circular-verification gap of #633: compare v2 relations and table
+    counts against UAssetAPI-generated golden data, failing on any drift."""
+    golden = json.loads((GOLDEN_DIR / entry["name"]).read_text(encoding="utf-8"))
+    assert golden["provenance"]["generator"] == entry["generator"], entry["name"]
+    assert golden["provenance"]["generator_version"] == entry["generator_version"], entry["name"]
+    sample_entry = MANIFEST_BY_NAME[entry["fixture"]]
+    assert golden["fixture"]["sha256"] == sample_entry["sha256"], (
+        f"{entry['name']} was generated from different bytes than the manifest fixture"
+    )
+
+    doc = _object_document(entry["fixture"])
+    counts = golden["counts"]
+    assert doc.package.name_count == counts["name"], entry["name"]
+    assert doc.package.import_count == counts["import"] == len(doc.dependencies), entry["name"]
+    assert doc.package.export_count == counts["export"] == len(doc.objects), entry["name"]
+
+    export_count, import_count = counts["export"], counts["import"]
+    actual: dict[str, dict[str, list[str]]] = {"depends_on": {}, "preload_of": {}}
+    for rel in doc.relations:
+        if rel.kind in actual:
+            actual[rel.kind].setdefault(rel.from_id, []).append(rel.to_id)
+
+    depends_expected = {
+        f"export:{i}": edges
+        for i, row in golden["depends_map"]["rows"].items()
+        if (edges := _golden_mapped_ids(row, export_count, import_count))
+    }
+    assert actual["depends_on"] == depends_expected, f"{entry['name']} depends_on drift vs UAssetAPI"
+
+    preload_expected = {
+        f"export:{i}": edges
+        for i, span in golden["preload"]["spans"].items()
+        if (edges := _golden_mapped_ids(span, export_count, import_count))
+    }
+    assert actual["preload_of"] == preload_expected, f"{entry['name']} preload_of drift vs UAssetAPI"
+    if not golden["preload"]["spans"]:
+        # Editor-saved corpus: UE only writes the preload table for cooked packages.
+        assert golden["preload"]["total_entries"] == 0, entry["name"]
 
 
 @pytest.mark.parametrize(("sample", "class_name", "expected"), CAPABILITIES, ids=[item[1] for item in CAPABILITIES])

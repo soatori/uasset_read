@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "description": "Test sample manifest for uasset_read v2 refactor",
   "samples": [
     {
@@ -792,5 +792,34 @@
       "minimum_samples": 1,
       "recommended_samples": "1 SimpleCurve table and 1 RichCurve table"
     }
-  }
+  },
+  "golden_files": [
+    {
+      "name": "ALS_AnimBP.uasset.golden.json",
+      "fixture": "ALS_AnimBP.uasset",
+      "sha256": "455a61189574e330d25a9728540e165e53f0cea07601598fc096513cd4895a23",
+      "size_bytes": 169486,
+      "generator": "UAssetAPI",
+      "generator_version": "2.0.0",
+      "generator_commit": "5c22374"
+    },
+    {
+      "name": "ALS_FootstepDataTable.uasset.golden.json",
+      "fixture": "ALS_FootstepDataTable.uasset",
+      "sha256": "8d5944827442e9eb052746be61138013ce5af698c52bbc3f3dd88bd1850d6675",
+      "size_bytes": 730,
+      "generator": "UAssetAPI",
+      "generator_version": "2.0.0",
+      "generator_commit": "5c22374"
+    },
+    {
+      "name": "LevelDesign_ABP_Manny.uasset.golden.json",
+      "fixture": "LevelDesign_ABP_Manny.uasset",
+      "sha256": "e5393414b94261f0c87f83a9c38164d7d2a38fe1cec370f5934d8b44a6d3ae43",
+      "size_bytes": 8204,
+      "generator": "UAssetAPI",
+      "generator_version": "2.0.0",
+      "generator_commit": "5c22374"
+    }
+  ]
 }
