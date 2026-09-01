@@ -18,10 +18,7 @@ class MacroExpansion:
     """Macro expansion result."""
 
     context: MacroExpansionContext
-    expanded_nodes: List[Dict[str, Any]] = field(default_factory=list)
     pin_mapping: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    entry_tunnels: List[Dict[str, Any]] = field(default_factory=list)
-    exit_tunnels: List[Dict[str, Any]] = field(default_factory=list)
     internal_flows: List[Dict[str, Any]] = field(default_factory=list)
     unresolved: bool = False
 
@@ -345,10 +342,7 @@ class MacroExpander:
 
         return MacroExpansion(
             context=ctx,
-            expanded_nodes=internal_nodes,
             pin_mapping=pin_mapping,
-            entry_tunnels=entry_tunnels,
-            exit_tunnels=exit_tunnels,
             internal_flows=internal_flows,
         )
 
@@ -563,7 +557,6 @@ class MacroExpander:
                 macro_graph_ref=macro_ref,
             ),
             pin_mapping=pin_mapping,
-            expanded_nodes=[],
             internal_flows=[],
         )
 

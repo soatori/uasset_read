@@ -124,7 +124,7 @@ def _extract_kismet_decompiled(
                             "bytecode_buffer_size": failure.bytecode_buffer_size,
                             "serialized_script_size": failure.serialized_script_size,
                             "serialized_bytes_consumed": 0,
-                            "bytecode_bytes_consumed": failure.bytecode_index or 0,
+                            "bytecode_bytes_consumed": 0,
                         }
                         if failure
                         else None
@@ -184,11 +184,9 @@ def _extract_kismet_decompiled(
 
             # Build C++ pseudocode from the parsed expressions
             from uasset_read.kismet.body_builder import FunctionBodyBuilder
-            from uasset_read.kismet.translator import TypeRegistry
 
-            type_registry = TypeRegistry()
-            builder = FunctionBodyBuilder(type_registry, linker=linker)
-            cpp_code = builder.to_function_body_structured(
+            builder = FunctionBodyBuilder(linker=linker)
+            cpp_code = builder.to_function_body(
                 expressions,
                 func_name=export.object_name,
             )
@@ -231,15 +229,10 @@ def _extract_kismet_decompiled(
             else:
                 signature = cpp_code.split("{")[0].strip() if "{" in cpp_code else f"void {export.object_name}()"
 
-            # Capture local variables from TypeRegistry snapshot
-            local_vars: list[dict[str, str]] = []
-            for var_name, cpp_type in type_registry._types.items():
-                local_vars.append({"name": var_name, "type": cpp_type})
-
             result = KismetDecompiledResult(
                 function_name=export.object_name,
                 signature=signature,
-                local_variables=local_vars,
+                local_variables=[],
                 cpp_code=cpp_code,
                 expressions=expressions,
                 bytecode_source="function_export",
@@ -431,8 +424,6 @@ def _run_kismet_and_dependency_analysis(
     """Kismet decompilation + component extraction + dependency analysis."""
     # Kismet decompilation (per D-02, D-10)
     try:
-        from uasset_read.kismet.pipeline import decompile_single_function  # noqa: F401 — module existence check
-
         if hasattr(result, "decompiled_functions"):
             decompiled = _extract_kismet_decompiled(
                 path,

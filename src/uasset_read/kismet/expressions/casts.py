@@ -9,7 +9,7 @@ Contains type-cast related expressions (EX_Cast / EX_MetaCast / EX_DynamicCast, 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
-from uasset_read.kismet.expressions.base import KismetExpression
+from uasset_read.kismet.expressions.base import KismetExpression, make_token_subclass
 from uasset_read.kismet.tokens import EExprToken, ECastToken
 from uasset_read.serializers.object_resources import PackageIndex
 
@@ -55,46 +55,9 @@ class EX_Cast(KismetExpression):
         return d
 
 
-@dataclass
-class EX_MetaCast(EX_CastBase):
-    """Metaclass cast."""
-
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_MetaCast
-
-
-@dataclass
-class EX_DynamicCast(EX_CastBase):
-    """Safe dynamic class cast."""
-
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_DynamicCast
-
-
-@dataclass
-class EX_ObjToInterfaceCast(EX_CastBase):
-    """Object reference to native interface."""
-
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_ObjToInterfaceCast
-
-
-@dataclass
-class EX_CrossInterfaceCast(EX_CastBase):
-    """Interface-to-interface cast."""
-
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_CrossInterfaceCast
-
-
-@dataclass
-class EX_InterfaceToObjCast(EX_CastBase):
-    """Interface reference to object."""
-
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_InterfaceToObjCast
+# Token-only cast variants — share EX_CastBase serialization exactly.
+EX_MetaCast = make_token_subclass(EX_CastBase, EExprToken.EX_MetaCast)
+EX_DynamicCast = make_token_subclass(EX_CastBase, EExprToken.EX_DynamicCast)
+EX_ObjToInterfaceCast = make_token_subclass(EX_CastBase, EExprToken.EX_ObjToInterfaceCast)
+EX_CrossInterfaceCast = make_token_subclass(EX_CastBase, EExprToken.EX_CrossInterfaceCast)
+EX_InterfaceToObjCast = make_token_subclass(EX_CastBase, EExprToken.EX_InterfaceToObjCast)

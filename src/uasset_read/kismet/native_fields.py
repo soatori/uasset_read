@@ -234,26 +234,13 @@ def _read_bool_tail(archive: ByteArchive) -> None:
         archive.read_u8()
 
 
-def _read_byte_tail(
+def _read_single_ref_tail(
     archive: ByteArchive,
     context: NativeFieldContext,
     decl: NativeFieldDeclaration,
 ) -> None:
-    """ByteProperty: one int32 UObject reference (enum class).
-
-    Null reference (index 0) maps to uint8.
-    """
-    raw, name = _read_package_ref(archive, context)
-    decl.references.append(raw)
-    decl.reference_names.append(name)
-
-
-def _read_object_tail(
-    archive: ByteArchive,
-    context: NativeFieldContext,
-    decl: NativeFieldDeclaration,
-) -> None:
-    """Object/WeakObject/LazyObject/SoftObjectProperty: one int32 class reference."""
+    """Tail with one int32 package reference: Byte (enum class), Object/SoftObject
+    variants, Interface, Struct, and Delegate signature-function refs."""
     raw, name = _read_package_ref(archive, context)
     decl.references.append(raw)
     decl.reference_names.append(name)
@@ -265,45 +252,8 @@ def _read_class_tail(
     decl: NativeFieldDeclaration,
 ) -> None:
     """Class/SoftClassProperty: base class ref + meta-class ref."""
-    raw1, name1 = _read_package_ref(archive, context)
-    decl.references.append(raw1)
-    decl.reference_names.append(name1)
-    raw2, name2 = _read_package_ref(archive, context)
-    decl.references.append(raw2)
-    decl.reference_names.append(name2)
-
-
-def _read_interface_tail(
-    archive: ByteArchive,
-    context: NativeFieldContext,
-    decl: NativeFieldDeclaration,
-) -> None:
-    """InterfaceProperty: one int32 interface-class reference."""
-    raw, name = _read_package_ref(archive, context)
-    decl.references.append(raw)
-    decl.reference_names.append(name)
-
-
-def _read_struct_tail(
-    archive: ByteArchive,
-    context: NativeFieldContext,
-    decl: NativeFieldDeclaration,
-) -> None:
-    """StructProperty: one int32 struct reference."""
-    raw, name = _read_package_ref(archive, context)
-    decl.references.append(raw)
-    decl.reference_names.append(name)
-
-
-def _read_delegate_tail(
-    archive: ByteArchive,
-    context: NativeFieldContext,
-    decl: NativeFieldDeclaration,
-) -> None:
-    """Delegate / MulticastDelegate variants: one int32 signature-function ref."""
-    raw, name = _read_package_ref(archive, context)
-    decl.references.append(raw)
-    decl.reference_names.append(name)
+    _read_single_ref_tail(archive, context, decl)
+    _read_single_ref_tail(archive, context, decl)
 
 
 def _read_fieldpath_tail(
@@ -337,24 +287,13 @@ def _read_enum_tail(
     decl.inner_fields.append(inner)
 
 
-def _read_array_tail(
+def _read_inner_field_tail(
     archive: ByteArchive,
     context: NativeFieldContext,
     decl: NativeFieldDeclaration,
     depth: int,
 ) -> None:
-    """ArrayProperty: FName inner-type + inner field."""
-    inner = _read_inner_field(archive, context, depth + 1)
-    decl.inner_fields.append(inner)
-
-
-def _read_set_tail(
-    archive: ByteArchive,
-    context: NativeFieldContext,
-    decl: NativeFieldDeclaration,
-    depth: int,
-) -> None:
-    """SetProperty: FName element-type + element field."""
+    """Container tail with one FName inner-type + inner field (Array/Set/Optional)."""
     inner = _read_inner_field(archive, context, depth + 1)
     decl.inner_fields.append(inner)
 
@@ -366,20 +305,8 @@ def _read_map_tail(
     depth: int,
 ) -> None:
     """MapProperty: key FName/field + value FName/field."""
-    key = _read_inner_field(archive, context, depth + 1)
-    val = _read_inner_field(archive, context, depth + 1)
-    decl.inner_fields.extend([key, val])
-
-
-def _read_optional_tail(
-    archive: ByteArchive,
-    context: NativeFieldContext,
-    decl: NativeFieldDeclaration,
-    depth: int,
-) -> None:
-    """OptionalProperty: FName value-type + value field."""
-    inner = _read_inner_field(archive, context, depth + 1)
-    decl.inner_fields.append(inner)
+    _read_inner_field_tail(archive, context, decl, depth)
+    _read_inner_field_tail(archive, context, decl, depth)
 
 
 # Scalar types with no extra bytes
@@ -480,34 +407,28 @@ def _read_single_field(
     elif type_name == "BoolProperty":
         _read_bool_tail(archive)
     elif type_name == "ByteProperty":
-        _read_byte_tail(archive, context, decl)
+        _read_single_ref_tail(archive, context, decl)
     elif type_name in ("ObjectProperty", "WeakObjectProperty", "LazyObjectProperty", "SoftObjectProperty"):
-        _read_object_tail(archive, context, decl)
+        _read_single_ref_tail(archive, context, decl)
     elif type_name in ("ClassProperty", "SoftClassProperty"):
         _read_class_tail(archive, context, decl)
-    elif type_name == "InterfaceProperty":
-        _read_interface_tail(archive, context, decl)
-    elif type_name == "StructProperty":
-        _read_struct_tail(archive, context, decl)
+    elif type_name in ("InterfaceProperty", "StructProperty"):
+        _read_single_ref_tail(archive, context, decl)
     elif type_name in (
         "DelegateProperty",
         "MulticastDelegateProperty",
         "MulticastSparseDelegateProperty",
         "InlineMulticastDelegateProperty",
     ):
-        _read_delegate_tail(archive, context, decl)
+        _read_single_ref_tail(archive, context, decl)
     elif type_name == "FieldPathProperty":
         _read_fieldpath_tail(archive, context, decl)
     elif type_name == "EnumProperty":
         _read_enum_tail(archive, context, decl, depth)
-    elif type_name == "ArrayProperty":
-        _read_array_tail(archive, context, decl, depth)
-    elif type_name == "SetProperty":
-        _read_set_tail(archive, context, decl, depth)
+    elif type_name in ("ArrayProperty", "SetProperty", "OptionalProperty"):
+        _read_inner_field_tail(archive, context, decl, depth)
     elif type_name == "MapProperty":
         _read_map_tail(archive, context, decl, depth)
-    elif type_name == "OptionalProperty":
-        _read_optional_tail(archive, context, decl, depth)
     else:
         # Unknown property class — emit unsupported_native_field failure
         logger.warning(

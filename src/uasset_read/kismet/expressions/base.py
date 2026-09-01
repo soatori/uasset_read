@@ -1,16 +1,16 @@
 """
 Kismet expression system -- base class definitions.
 
-Contains the KismetExpression abstract base class and the KismetExpressionT generic subclass.
+Contains the KismetExpression abstract base class, the value-carrying
+KismetExpressionT subclass, and the class factories used to define
+token-only expression classes.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Generic, TypeVar
+from dataclasses import dataclass
+from typing import Any
 
 from uasset_read.kismet.tokens import EExprToken
-
-T = TypeVar("T")
 
 
 class KismetExpression(ABC):
@@ -44,9 +44,9 @@ class KismetExpression(ABC):
 
 
 @dataclass(kw_only=True)
-class KismetExpressionT(KismetExpression, Generic[T]):
+class KismetExpressionT(KismetExpression):
     """
-    Generic base class for Kismet expressions that carry a value.
+    Base class for Kismet expressions that carry a value.
 
     Suitable for expressions with associated data (constants, variable references, etc.).
 
@@ -54,7 +54,7 @@ class KismetExpressionT(KismetExpression, Generic[T]):
     from_archive() without positional-argument conflicts.
     """
 
-    Value: T = field(default=None)  # type: ignore[assignment]
+    Value: Any = None
 
     def to_dict(self) -> dict:
         result = super().to_dict()
@@ -106,3 +106,21 @@ def make_value_expression(token: EExprToken, read_func_name: str):
     _ValueExpr.__name__ = token.name
     _ValueExpr.__qualname__ = token.name
     return _ValueExpr
+
+
+def make_token_subclass(base: type, token: EExprToken):
+    """Create a token-only subclass of *base* (inherits fields and from_archive).
+
+    Used for expression variants that differ from their base only by Token,
+    e.g. the EX_Let family or EX_CallMath vs EX_FinalFunction.
+    """
+
+    @dataclass
+    class _TokenExpr(base):  # type: ignore[misc,valid-type]
+        @property
+        def Token(self) -> EExprToken:
+            return token
+
+    _TokenExpr.__name__ = token.name
+    _TokenExpr.__qualname__ = token.name
+    return _TokenExpr

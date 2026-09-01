@@ -10,7 +10,7 @@ as well as function parameter end markers (EX_EndFunctionParms / EX_EndParmValue
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
-from uasset_read.kismet.expressions.base import KismetExpression, make_simple_expression
+from uasset_read.kismet.expressions.base import KismetExpression, make_simple_expression, make_token_subclass
 from uasset_read.kismet.tokens import EExprToken
 from uasset_read.kismet.value_types import FNameRef
 
@@ -47,22 +47,9 @@ class EX_FinalFunction(KismetExpression):
         return d
 
 
-@dataclass
-class EX_CallMath(EX_FinalFunction):
-    """Static pure function call (local call space)."""
-
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_CallMath
-
-
-@dataclass
-class EX_LocalFinalFunction(EX_FinalFunction):
-    """Locally executed final function call."""
-
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_LocalFinalFunction
+# Token-only EX_FinalFunction variants — share its serialization exactly.
+EX_CallMath = make_token_subclass(EX_FinalFunction, EExprToken.EX_CallMath)
+EX_LocalFinalFunction = make_token_subclass(EX_FinalFunction, EExprToken.EX_LocalFinalFunction)
 
 
 @dataclass
@@ -99,13 +86,7 @@ class EX_VirtualFunction(KismetExpression):
         return d
 
 
-@dataclass
-class EX_LocalVirtualFunction(EX_VirtualFunction):
-    """Locally executed virtual function call."""
-
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_LocalVirtualFunction
+EX_LocalVirtualFunction = make_token_subclass(EX_VirtualFunction, EExprToken.EX_LocalVirtualFunction)
 
 
 @dataclass

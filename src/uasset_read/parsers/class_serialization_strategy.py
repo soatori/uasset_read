@@ -29,30 +29,9 @@ class SerializationStrategy(str, Enum):
 
 # ========== Strategy mapping table ==========
 
-# Tagged properties only — generic parser can handle
-_TAGGED_PROPERTIES_CLASSES = frozenset(
-    {
-        "BlueprintGeneratedClass",
-        "WidgetBlueprintGeneratedClass",
-        "Function",
-        "UserDefinedStruct",
-        "UserDefinedEnum",
-        "EdGraph",
-        "EdGraphNode",
-        "K2Node",
-        "AnimBlueprintGeneratedClass",
-        # #592: AnimSequence/AnimMontage — tagged properties + asset type handler
-        "AnimSequence",
-        "AnimMontage",
-        # #320: ControlRig / RigVM blueprint-generated classes (containing tagged properties)
-        "ControlRigBlueprintGeneratedClass",
-        "RigVMBlueprintGeneratedClass",
-        # MovieScene series classes (#317)
-        "MovieScene",
-        "MovieSceneControlRigParameterTrack",
-        "MovieSceneControlRigParameterSection",
-    }
-)
+# Classes whose strategy differs from the default TAGGED_PROPERTIES_ONLY;
+# every other class (BlueprintGeneratedClass, EdGraph, Function, ...) already
+# resolves to the default through the fallback path in get_serialization_strategy.
 
 # Opaque class payload — has dedicated Serialize() but not implemented
 _OPAQUE_CLASSES = frozenset(
@@ -167,11 +146,9 @@ _SKIP_CLASSES = frozenset(
     }
 )
 
-CLASS_STRATEGY_TABLE: dict[str, SerializationStrategy] = (
-    {cls: SerializationStrategy.TAGGED_PROPERTIES_ONLY for cls in _TAGGED_PROPERTIES_CLASSES}
-    | {cls: SerializationStrategy.OPAQUE_CLASS_PAYLOAD for cls in _OPAQUE_CLASSES}
-    | {cls: SerializationStrategy.SKIP_UNSUPPORTED for cls in _SKIP_CLASSES}
-)
+CLASS_STRATEGY_TABLE: dict[str, SerializationStrategy] = {
+    cls: SerializationStrategy.OPAQUE_CLASS_PAYLOAD for cls in _OPAQUE_CLASSES
+} | {cls: SerializationStrategy.SKIP_UNSUPPORTED for cls in _SKIP_CLASSES}
 
 
 def get_serialization_strategy(class_name: str) -> SerializationStrategy:

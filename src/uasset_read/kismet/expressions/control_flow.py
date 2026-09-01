@@ -158,7 +158,7 @@ EX_EndOfScript = make_simple_expression(EExprToken.EX_EndOfScript)
 
 
 @dataclass
-class EX_SkipOffsetConst(KismetExpressionT[int]):
+class EX_SkipOffsetConst(KismetExpressionT):
     """Skip offset constant."""
 
     @property

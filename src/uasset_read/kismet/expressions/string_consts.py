@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class EX_StringConst(KismetExpressionT[str]):
+class EX_StringConst(KismetExpressionT):
     """String constant expression (EX_StringConst, 0x1F)."""
 
     @property
@@ -28,7 +28,7 @@ class EX_StringConst(KismetExpressionT[str]):
 
 
 @dataclass
-class EX_UnicodeStringConst(KismetExpressionT[str]):
+class EX_UnicodeStringConst(KismetExpressionT):
     """Unicode string constant expression (EX_UnicodeStringConst, 0x34)."""
 
     @property

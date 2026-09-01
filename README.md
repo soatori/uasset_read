@@ -213,7 +213,6 @@ from uasset_read import (
 from uasset_read.models import UEdGraph, UEdGraphNode, UEdGraphPin, BlueprintMetadata
 from uasset_read.blueprint import extract_blueprint_variables, extract_blueprint_metadata
 from uasset_read.graph import build_execution_flow_entries, build_data_flows
-from uasset_read.kismet import decompile_uasset, KismetDecompiledResult
 from uasset_read.link import PackageLinker, UObjectInstance
 from uasset_read.semantic import build_semantic_ir, render_semantic_json
 from uasset_read.renderers import MarkdownRenderer

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
-from uasset_read.kismet.expressions.base import KismetExpression
+from uasset_read.kismet.expressions.base import KismetExpression, make_token_subclass
 from uasset_read.kismet.tokens import EExprToken
 
 if TYPE_CHECKING:
@@ -32,18 +32,9 @@ class EX_Context(KismetExpression):
         return cls(ObjectExpression=obj, Offset=offset, RValuePointer=rvalue, ContextExpression=ctx)
 
 
-@dataclass
-class EX_Context_FailSilent(EX_Context):
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_Context_FailSilent
-
-
-@dataclass
-class EX_ClassContext(EX_Context):
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_ClassContext
+# Token-only EX_Context variants — share EX_Context serialization exactly.
+EX_Context_FailSilent = make_token_subclass(EX_Context, EExprToken.EX_Context_FailSilent)
+EX_ClassContext = make_token_subclass(EX_Context, EExprToken.EX_ClassContext)
 
 
 @dataclass

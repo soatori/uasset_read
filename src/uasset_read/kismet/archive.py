@@ -109,24 +109,6 @@ class FKismetArchive(FArchive):
             result.append(expr)
         return result
 
-    def xfer_string(self) -> str:
-        """Read ASCII null-terminated string (does NOT consume the null terminator)."""
-        current_pos = self.tell()
-        data = self._file.read()
-        null_idx = data.find(b"\x00")
-        if null_idx == -1:
-            raise ParseError(
-                f"ASCII string at offset {current_pos} has no null terminator (read {len(data)} bytes to EOF)"
-            )
-        result = data[:null_idx].decode("ascii", errors="replace")
-        self.seek(current_pos + null_idx)  # position AT null, not past it
-        return result
-
-    def skip(self, n: int) -> None:
-        """Skip n bytes forward."""
-        current = self.tell()
-        self.seek(current + n)
-
     def remaining(self) -> int:
         """Return remaining bytes."""
         return self._file_size - self.tell()

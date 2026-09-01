@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.kismet.expressions.base import KismetExpression
-    from uasset_read.kismet.translator import TypeRegistry
     from uasset_read.link.linker import PackageLinker
 
 
@@ -330,16 +329,15 @@ class FunctionBodyBuilder:
     Assembles KismetExpression list into a readable C++ function body.
 
     Usage:
-        builder = FunctionBodyBuilder(type_registry)
+        builder = FunctionBodyBuilder()
         cpp = builder.to_function_body(expressions, func_name="MyFunction")
     """
 
-    def __init__(self, type_registry: "TypeRegistry | None" = None, linker: "PackageLinker | None" = None) -> None:
-        from uasset_read.kismet.translator import KismetTranslator, TypeRegistry
+    def __init__(self, linker: "PackageLinker | None" = None) -> None:
+        from uasset_read.kismet.translator import KismetTranslator
 
-        self.type_registry = type_registry or TypeRegistry()
         self._linker = linker
-        self._translator = KismetTranslator(self.type_registry, linker=linker)
+        self._translator = KismetTranslator(linker=linker)
 
     def to_function_body(
         self,
@@ -361,7 +359,7 @@ class FunctionBodyBuilder:
 
         # Create translator with JumpAnalyzer for structured detection
         jump_analyzer = JumpAnalyzer(expressions)
-        translator = KismetTranslator(self.type_registry, linker=self._linker, expressions=expressions)
+        translator = KismetTranslator(linker=self._linker, expressions=expressions)
 
         # Build StatementIndex → expression index map for label generation
         offset_to_index: dict[int, int] = {}
@@ -427,106 +425,6 @@ class FunctionBodyBuilder:
                 lines.append(sub_line)
 
         # Wrap in function signature
-        signature = func_name if func_name else "void UnknownFunction"
-        if "(" not in signature:
-            signature += "()"
-
-        body = "\n".join(f"    {line}" for line in lines)
-        return f"{signature} {{\n{body}\n}}"
-
-    def to_function_body_structured(
-        self,
-        expressions: list["KismetExpression"],
-        func_name: str | None = None,
-    ) -> str:
-        """
-        Unified structured function body construction (JumpAnalyzer as sole detector).
-
-        Uses JumpAnalyzer to detect all control flow patterns (for/while/push_pop/if_else/switch),
-        falls back to goto output when no patterns match.
-
-        Args:
-            expressions: List of expressions parsed from bytecode.
-            func_name: Optional function name wrapper.
-
-        Returns:
-            Formatted C++ function body string.
-        """
-        from uasset_read.kismet.jump_analyzer import JumpAnalyzer
-        from uasset_read.kismet.translator import KismetTranslator
-
-        if not expressions:
-            return self.to_function_body([], func_name)
-
-        # Build JumpAnalyzer (unified detector)
-        jump_analyzer = JumpAnalyzer(expressions)
-        translator = KismetTranslator(self.type_registry, linker=self._linker, expressions=expressions)
-
-        # Build auxiliary mappings
-        offset_to_index: dict[int, int] = {}
-        for idx, expr in enumerate(expressions):
-            stmt_idx = getattr(expr, "StatementIndex", None)
-            if stmt_idx is not None:
-                offset_to_index[stmt_idx] = idx
-            if hasattr(expr, "CodeOffset"):
-                offset_to_index[expr.CodeOffset] = idx
-
-        jump_targets: set[int] = set()
-        for expr in expressions:
-            if hasattr(expr, "CodeOffset"):
-                jump_targets.add(expr.CodeOffset)
-
-        # Check if any structured pattern exists
-        has_structured = False
-        for idx in range(len(expressions)):
-            if jump_analyzer.detect_pattern(idx) is not None:
-                has_structured = True
-                break
-
-        if not has_structured:
-            # No structured pattern → goto fallback
-            return self.to_function_body(expressions, func_name)
-
-        # Use JumpAnalyzer + goto fallback to output structured code
-        lines: list[str] = []
-        label_set: set[int] = set()
-        skip_until: int = -1
-
-        for idx, expr in enumerate(expressions):
-            if idx <= skip_until:
-                continue
-
-            if _is_structured_block_start(jump_analyzer, idx):
-                block_lines = _emit_structured_block(
-                    jump_analyzer,
-                    translator,
-                    expressions,
-                    idx,
-                    jump_targets,
-                    offset_to_index,
-                    label_set,
-                )
-                lines.extend(block_lines)
-                skip_until = _get_structured_block_end(jump_analyzer, idx)
-                continue
-
-            cpp_line = translator.line_cpp(expr, index=idx)
-            if not cpp_line or cpp_line.strip() == "":
-                continue
-
-            for target in sorted(jump_targets):
-                if offset_to_index.get(target) == idx and target not in label_set:
-                    lines.append(f"Label_{target}:")
-                    label_set.add(target)
-
-            for sub_line in cpp_line.split("\n"):
-                sub_line = sub_line.strip()
-                if not sub_line:
-                    continue
-                if _needs_semicolon(sub_line):
-                    sub_line += ";"
-                lines.append(sub_line)
-
         signature = func_name if func_name else "void UnknownFunction"
         if "(" not in signature:
             signature += "()"

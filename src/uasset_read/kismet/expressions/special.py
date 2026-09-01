@@ -76,7 +76,7 @@ class EX_Assert(KismetExpression):
 
 
 @dataclass
-class EX_NothingInt32(KismetExpressionT[int]):
+class EX_NothingInt32(KismetExpressionT):
     """No operation with an int32 argument."""
 
     Value: int = 0
@@ -164,7 +164,7 @@ class EX_FieldPathConst(KismetExpression):
 
 
 @dataclass
-class EX_ObjectConst(KismetExpressionT[int]):
+class EX_ObjectConst(KismetExpressionT):
     """Object constant — reads object reference index."""
 
     Value: int = 0
@@ -181,7 +181,7 @@ class EX_ObjectConst(KismetExpressionT[int]):
 
 
 @dataclass
-class EX_NameConst(KismetExpressionT[str]):
+class EX_NameConst(KismetExpressionT):
     """Name constant — reads FName index + number from name_map."""
 
     Value: str = ""

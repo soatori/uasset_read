@@ -7,7 +7,7 @@ All share FKismetPropertyPointer for the Variable field.
 """
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
-from uasset_read.kismet.expressions.base import KismetExpression
+from uasset_read.kismet.expressions.base import KismetExpression, make_token_subclass
 from uasset_read.kismet.tokens import EExprToken
 
 if TYPE_CHECKING:
@@ -29,36 +29,8 @@ class EX_VariableBase(KismetExpression):
         return cls(Variable=var)
 
 
-@dataclass
-class EX_LocalVariable(EX_VariableBase):
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_LocalVariable
-
-
-@dataclass
-class EX_InstanceVariable(EX_VariableBase):
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_InstanceVariable
-
-
-@dataclass
-class EX_DefaultVariable(EX_VariableBase):
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_DefaultVariable
-
-
-@dataclass
-class EX_LocalOutVariable(EX_VariableBase):
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_LocalOutVariable
-
-
-@dataclass
-class EX_ClassSparseDataVariable(EX_VariableBase):
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_ClassSparseDataVariable
+EX_LocalVariable = make_token_subclass(EX_VariableBase, EExprToken.EX_LocalVariable)
+EX_InstanceVariable = make_token_subclass(EX_VariableBase, EExprToken.EX_InstanceVariable)
+EX_DefaultVariable = make_token_subclass(EX_VariableBase, EExprToken.EX_DefaultVariable)
+EX_LocalOutVariable = make_token_subclass(EX_VariableBase, EExprToken.EX_LocalOutVariable)
+EX_ClassSparseDataVariable = make_token_subclass(EX_VariableBase, EExprToken.EX_ClassSparseDataVariable)

@@ -32,8 +32,6 @@ class FallbackPolicy(str, Enum):
 
     GENERIC_UOBJECT = "generic_uobject"
     SKIP = "skip"
-    RAISE = "raise"
-    PROPERTY_FALLBACK = "property_fallback"
 
 
 @dataclass
@@ -101,11 +99,6 @@ class ClassHandlerRegistry:
         self._cache[class_name] = None
         return None
 
-    def clear(self) -> None:
-        """Clear all registrations and cache."""
-        self._handlers.clear()
-        self._cache.clear()
-
     def reset_cache(self) -> None:
         """Clear the class_name -> handler lookup cache.
 
@@ -152,10 +145,3 @@ def get_class_registry() -> ClassHandlerRegistry:
         _default_registry = ClassHandlerRegistry()
         _bootstrap_handlers()
     return _default_registry
-
-
-def reset_class_registry() -> None:
-    """Reset the global default registry (for testing)."""
-    global _default_registry, _bootstrap_done
-    _default_registry = None
-    _bootstrap_done = False

@@ -503,7 +503,10 @@ def parse_name_property(tag: PropertyTag, archive: FArchive, name_map: List[str]
 
 
 def parse_object_property(tag: PropertyTag, archive: FArchive) -> int:
-    """Parse ObjectProperty (PROP-07). Returns raw FPackageIndex."""
+    """Parse ObjectProperty (PROP-07). Returns raw FPackageIndex.
+
+    Canonical reader for all single-int32-reference property types.
+    """
     return _simple_read(archive, "read_i32")
 
 
@@ -544,14 +547,11 @@ def parse_soft_object_property(
         return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
 
 
-def parse_utf8_str_property(tag: PropertyTag, archive: FArchive) -> str:
-    """Parse Utf8StrProperty."""
-    return archive.read_fstring()
-
-
-def parse_weak_object_property(tag: PropertyTag, archive: FArchive) -> int:
-    """Parse WeakObjectProperty."""
-    return _simple_read(archive, "read_i32")
+# Direct aliases — single-FString types share parse_str_property;
+# single-int32-reference types share parse_object_property.
+parse_utf8_str_property = parse_str_property
+parse_weak_object_property = parse_object_property
+parse_class_property = parse_object_property
 
 
 def parse_lazy_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjectPathValue:
@@ -559,11 +559,6 @@ def parse_lazy_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjec
     read_size = tag.size if tag.size > 0 else 16
     raw = archive.read_bytes(read_size)
     return SoftObjectPathValue(raw_kind=tag.type, guid=raw.hex())
-
-
-def parse_class_property(tag: PropertyTag, archive: FArchive) -> int:
-    """Parse ClassProperty."""
-    return _simple_read(archive, "read_i32")
 
 
 def parse_soft_class_property(
@@ -886,11 +881,14 @@ def _try_fast_path_struct(
             },
         )
 
-    # MovieSceneDoubleChannel — animation keyframe channel (#515)
+    # MovieSceneFloat/DoubleChannel — animation keyframe channels (#515)
     # UE source: Engine/Source/Runtime/MovieScene/Public/MovieSceneChannel.h
     # Binary layout: [Traits_version:u8][Values_count:u8][Times_count:u8][bHasDefaults:u8]
-    #                [Values:f64[]][Times:i32[]][DefaultValue:f64 (if bHasDefaults)]
-    if struct_type == "MovieSceneDoubleChannel" and tag.size >= 4:
+    #                [Values:<T>[]][Times:i32[]][DefaultValue:<T> (if bHasDefaults)]
+    # with T = f32 (Float) or f64 (Double)
+    _channel_value_size = {"MovieSceneFloatChannel": 4, "MovieSceneDoubleChannel": 8}.get(struct_type)
+    if _channel_value_size is not None and tag.size >= 4:
+        read_value = archive.read_f32 if _channel_value_size == 4 else archive.read_f64
         start = archive.tell()
         header = archive.read(4)
         traits_ver = header[0]
@@ -903,12 +901,13 @@ def _try_fast_path_struct(
             0 < vc < 50
             and 0 <= tc <= vc
             and traits_ver in (0, 1, 2, 3, 4, 5)
-            and start + 4 + vc * 8 + tc * 4 + (8 if bhd else 0) <= start + tag.size + 16
+            and start + 4 + vc * _channel_value_size + tc * 4
+            + (_channel_value_size if bhd else 0) <= start + tag.size + 16
         ):
             try:
-                values = [archive.read_f64() for _ in range(vc)]
+                values = [read_value() for _ in range(vc)]
                 times = [archive.read_i32() for _ in range(tc)]
-                default_val = archive.read_f64() if bhd else None
+                default_val = read_value() if bhd else None
                 # Seek to end of struct
                 archive.seek(start + tag.size)
                 fields: Dict[str, Any] = {
@@ -920,45 +919,7 @@ def _try_fast_path_struct(
                 if default_val is not None:
                     fields["DefaultValue"] = default_val
                 return StructValue(
-                    struct_type="MovieSceneDoubleChannel",
-                    fields=fields,
-                    raw_size=tag.size,
-                    parse_status="success",
-                )
-            except Exception:
-                archive.seek(start)
-
-    # MovieSceneFloatChannel — animation keyframe channel, f32 variant (#515)
-    # Same header layout as MovieSceneDoubleChannel but f32 values
-    if struct_type == "MovieSceneFloatChannel" and tag.size >= 4:
-        start = archive.tell()
-        header = archive.read(4)
-        traits_ver = header[0]
-        vc = header[1]
-        tc = header[2]
-        bhd = header[3]
-
-        if (
-            0 < vc < 50
-            and 0 <= tc <= vc
-            and traits_ver in (0, 1, 2, 3, 4, 5)
-            and start + 4 + vc * 4 + tc * 4 + (4 if bhd else 0) <= start + tag.size + 16
-        ):
-            try:
-                values = [archive.read_f32() for _ in range(vc)]
-                times = [archive.read_i32() for _ in range(tc)]
-                default_val = archive.read_f32() if bhd else None
-                archive.seek(start + tag.size)
-                fields: Dict[str, Any] = {
-                    "Values": values,
-                    "Times": times,
-                    "keyframe_count": vc,
-                    "bHasDefaults": bool(bhd),
-                }
-                if default_val is not None:
-                    fields["DefaultValue"] = default_val
-                return StructValue(
-                    struct_type="MovieSceneFloatChannel",
+                    struct_type=struct_type,
                     fields=fields,
                     raw_size=tag.size,
                     parse_status="success",
@@ -1338,8 +1299,6 @@ def _read_ftext_base(archive: FArchive) -> tuple[str, str, str]:
 
 def _read_ftext_args(archive: FArchive) -> None:
     """Read and discard FText argument dictionary (only consumes bytes)."""
-    from uasset_read.parsers.utils import read_validated_count_tolerant
-
     count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "FText args")
     for _ in range(count):
         archive.read_fstring()  # key
@@ -1429,8 +1388,6 @@ def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive, name_
     UE FMulticastScriptDelegate::SerializeItem serializes function name with FName
     (4-byte index + 4-byte instance number), consistent with parse_delegate_property.
     """
-    from uasset_read.parsers.utils import read_validated_count_tolerant
-
     count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "MulticastDelegate")
     delegates = []
     for _ in range(count):
@@ -1450,9 +1407,8 @@ parse_multicast_sparse_delegate_property = parse_multicast_delegate_property
 # ============================================================================
 
 
-def parse_interface_property(tag: PropertyTag, archive: FArchive) -> int:
-    """Parse InterfaceProperty."""
-    return _simple_read(archive, "read_i32")
+# InterfaceProperty: single int32 reference (see parse_object_property).
+parse_interface_property = parse_object_property
 
 
 def parse_field_path_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> dict:
@@ -1461,8 +1417,6 @@ def parse_field_path_property(tag: PropertyTag, archive: FArchive, name_map: Lis
     UE FFieldPath::Serialize serializes the path as TArray<FName>
     (int32 count + N * FName), not FString array.
     """
-    from uasset_read.parsers.utils import read_validated_count_tolerant
-
     count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "FieldPath")
     path = []
     for _ in range(count):
@@ -1497,32 +1451,14 @@ def parse_optional_property(
 # ============================================================================
 
 
-def parse_verse_string_property(tag: PropertyTag, archive: FArchive) -> str:
-    """Parse VerseStringProperty."""
-    return archive.read_fstring()
-
-
-def parse_verse_class_property(tag: PropertyTag, archive: FArchive) -> int:
-    """Parse VerseClassProperty."""
-    return _simple_read(archive, "read_i32")
-
-
-def parse_verse_function_property(tag: PropertyTag, archive: FArchive) -> int:
-    """Parse VerseFunctionProperty."""
-    return _simple_read(archive, "read_i32")
-
-
-def parse_verse_dynamic_property(tag: PropertyTag, archive: FArchive) -> int:
-    """Parse VerseDynamicProperty."""
-    return _simple_read(archive, "read_i32")
-
-
-def parse_ansi_str_property(tag: PropertyTag, archive: FArchive) -> str:
-    """Parse AnsiStrProperty -- ANSI string in UE4/legacy assets.
-
-    Uses the same length-prefixed format as FString, but content is decoded as Latin-1 instead of UTF-8/UTF-16.
-    """
-    return archive.read_fstring()  # read_fstring already handles length-prefixed strings
+# Verse string types are plain FString; Verse class/function/dynamic are
+# single int32 references.  AnsiStrProperty uses the same length-prefixed
+# format as FString (read_fstring already decodes it).
+parse_verse_string_property = parse_str_property
+parse_verse_class_property = parse_object_property
+parse_verse_function_property = parse_object_property
+parse_verse_dynamic_property = parse_object_property
+parse_ansi_str_property = parse_str_property
 
 
 def parse_verse_cell_property(tag: PropertyTag, archive: FArchive) -> dict:
@@ -1596,8 +1532,8 @@ def parse_guid_property(tag: PropertyTag, archive: FArchive) -> str:
 def _get_inner_type(array_type: str) -> str:
     """Infer inner element type from ArrayProperty type name.
 
-    Supports basic type mapping from UE5 full type name format (e.g. ArrayProperty(IntProperty))
-    or underscore-separated type names to infer inner type.
+    Supports the UE5 full type name format, e.g. ArrayProperty(IntProperty)
+    -> IntProperty.  Unknown formats return "Unknown".
     """
     # Try to extract from bracket format: ArrayProperty(IntProperty) -> IntProperty
     if "(" in array_type and ")" in array_type:
@@ -1608,24 +1544,7 @@ def _get_inner_type(array_type: str) -> str:
         if "." in inner:
             inner = inner.split(".")[-1]
         return inner
-
-    # Basic type mapping (for underscore-separated type names)
-    type_mapping = {
-        "ArrayProperty_IntProperty": "IntProperty",
-        "ArrayProperty_FloatProperty": "FloatProperty",
-        "ArrayProperty_StrProperty": "StrProperty",
-        "ArrayProperty_StructProperty": "StructProperty",
-        "ArrayProperty_ObjectProperty": "ObjectProperty",
-        "ArrayProperty_NameProperty": "NameProperty",
-        "ArrayProperty_BoolProperty": "BoolProperty",
-        "ArrayProperty_ByteProperty": "ByteProperty",
-        "ArrayProperty_Int64Property": "Int64Property",
-        "ArrayProperty_DoubleProperty": "DoubleProperty",
-        "ArrayProperty_TextProperty": "TextProperty",
-        "ArrayProperty_SoftObjectProperty": "SoftObjectProperty",
-        "ArrayProperty_EnumProperty": "EnumProperty",
-    }
-    return type_mapping.get(array_type, "Unknown")
+    return "Unknown"
 
 
 def _extract_struct_type_from_tag(tag: PropertyTag) -> str:

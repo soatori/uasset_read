@@ -129,18 +129,9 @@ class EExprToken(IntEnum):
     EX_ArrayGetByRef = 0x6B
     EX_ClassSparseDataVariable = 0x6C  # Sparse data variable
     EX_FieldPathConst = 0x6D
-    EX_6E = 0x6E  # Game-specific (WuWa, DeltaForce, 2XKO, Borderlands4, etc.)
-    EX_6F = 0x6F  # Game-specific
     EX_AutoRtfmTransact = 0x70  # AutoRTFM: run following code in a transaction
     EX_AutoRtfmStopTransact = 0x71  # AutoRTFM: if in transaction, abort or break
     EX_AutoRtfmAbortIfNot = 0x72  # AutoRTFM: evaluate bool condition, abort on false
-
-    # Game-specific tokens (Borderlands 4, 2XKO, etc.)
-    EX_F9 = 0xF9  # Borderlands 4
-    EX_FD = 0xFD  # Borderlands 4, 2XKO
-    EX_FE = 0xFE  # Borderlands 4
-
-    EX_Max = 0xFF
 
 
 class ECastToken(IntEnum):
@@ -158,8 +149,6 @@ class ECastToken(IntEnum):
     CST_FloatToDouble = 0x04
     CST_ObjectToBool2 = 0x47
     CST_InterfaceToBool2 = 0x49
-
-    CST_Max = 0xFF
 
 
 class EScriptInstrumentationType(IntEnum):
@@ -218,7 +207,3 @@ class EAutoRtfmStopTransactMode(IntEnum):
     Commit = 0
     Abort = 1
     AbortAndAbortParent = 2
-    # Aliases for compatibility
-    GracefulExit = 0
-    AbortingExit = 1
-    AbortingExitAndAbortParent = 2

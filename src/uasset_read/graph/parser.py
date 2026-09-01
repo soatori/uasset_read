@@ -22,28 +22,14 @@ from uasset_read.models.core import UEdGraph
 
 logger = logging.getLogger(__name__)
 
-# Known EdGraph subclass names (used for graph type matching)
-# Includes engine built-in subclasses and common custom graph types
+# Graph-type class names that do not end in "Graph" — the endswith check in
+# extract_blueprint_graphs covers every name ending in "Graph" (EdGraph,
+# UberEdGraph, NiagaraGraph, custom subclasses, etc.).
 EDGRAPH_CLASS_NAMES = frozenset(
     {
-        "EdGraph",
-        "UberEdGraph",
-        # Animation graphs
-        "AnimGraph",
         "AnimBlueprintGeneratedClass",
-        # Control Rig graphs
-        "ControlRigGraph",
-        "RigGraph",
-        # Material graphs
-        "MaterialGraph",
         "MaterialGraphEdNode",
-        # Particle system graphs
-        "CascadeParticleSystemGraph",
-        # Niagara graphs
-        "NiagaraGraph",
         "NiagaraScript",
-        # Custom graph types (common prefix matching)
-        "K2Node_Graph",
     }
 )
 
@@ -148,7 +134,7 @@ def extract_blueprint_graphs(
 
         # Extended graph type matching: exact match + suffix match (covers custom graph subclasses)
         is_graph_type = class_name is not None and (
-            class_name in EDGRAPH_CLASS_NAMES or class_name.endswith("Graph") or class_name.endswith("EdGraph")
+            class_name in EDGRAPH_CLASS_NAMES or class_name.endswith("Graph")
         )
 
         if class_name and is_graph_type:

@@ -55,7 +55,7 @@ class KismetDecompiledResult:
     Contains all information extracted from a Blueprint UStruct's bytecode:
     - function_name: Name of the decompiled function
     - signature: Full C++ function signature (return type + params)
-    - local_variables: List of local variable type info from TypeRegistry
+    - local_variables: List of local variable type info (currently unpopulated)
     - cpp_code: Complete C++ pseudocode body
     - expressions: Raw KismetExpression list for debugging
 
@@ -64,7 +64,7 @@ class KismetDecompiledResult:
 
     function_name: str  # e.g. "ExecuteUbergraph_MyBP"
     signature: str  # e.g. "void ExecuteUbergraph_MyBP(int32 EntryPoint)"
-    local_variables: list[dict[str, str]]  # [{name, type}, ...] from TypeRegistry snapshot
+    local_variables: list[dict[str, str]]  # [{name, type}, ...] (currently unpopulated)
     cpp_code: str  # C++ pseudocode string (multi-line, indented)
     expressions: list[Any] = field(default_factory=list)  # raw KismetExpression list for debugging
     bytecode_source: str = "unknown"

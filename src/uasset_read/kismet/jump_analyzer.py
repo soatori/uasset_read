@@ -20,7 +20,6 @@ if TYPE_CHECKING:
 
 # Assignment expression types, used to identify for-loop increment statements
 _ASSIGNMENT_TYPES: tuple[type, ...] = ()
-_ASSIGNMENT_TOKENS: frozenset[int] = frozenset()
 
 
 def _get_assignment_types() -> tuple[type, ...]:

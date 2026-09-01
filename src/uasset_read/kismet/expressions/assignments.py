@@ -9,7 +9,7 @@ Contains expression subclasses for the EX_Let family of assignment instructions.
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from uasset_read.kismet.expressions.base import KismetExpression
+from uasset_read.kismet.expressions.base import KismetExpression, make_token_subclass
 from uasset_read.kismet.tokens import EExprToken
 
 if TYPE_CHECKING:
@@ -66,49 +66,12 @@ class EX_Let(KismetExpression):
         return d
 
 
-@dataclass
-class EX_LetBool(EX_LetBase):
-    """Boolean type assignment."""
-
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_LetBool
-
-
-@dataclass
-class EX_LetDelegate(EX_LetBase):
-    """Delegate type assignment."""
-
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_LetDelegate
-
-
-@dataclass
-class EX_LetMulticastDelegate(EX_LetBase):
-    """Multicast delegate type assignment."""
-
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_LetMulticastDelegate
-
-
-@dataclass
-class EX_LetObj(EX_LetBase):
-    """Object type assignment."""
-
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_LetObj
-
-
-@dataclass
-class EX_LetWeakObjPtr(EX_LetBase):
-    """Weak object pointer assignment."""
-
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_LetWeakObjPtr
+# Token-only EX_Let variants — share EX_LetBase serialization exactly.
+EX_LetBool = make_token_subclass(EX_LetBase, EExprToken.EX_LetBool)
+EX_LetDelegate = make_token_subclass(EX_LetBase, EExprToken.EX_LetDelegate)
+EX_LetMulticastDelegate = make_token_subclass(EX_LetBase, EExprToken.EX_LetMulticastDelegate)
+EX_LetObj = make_token_subclass(EX_LetBase, EExprToken.EX_LetObj)
+EX_LetWeakObjPtr = make_token_subclass(EX_LetBase, EExprToken.EX_LetWeakObjPtr)
 
 
 @dataclass

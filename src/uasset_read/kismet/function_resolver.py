@@ -15,7 +15,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from uasset_read.kismet.expressions.base import KismetExpression
     from uasset_read.link.linker import PackageLinker
 
 
@@ -121,48 +120,6 @@ class FunctionRefResolver:
         # No match found
         self._virtual_class_cache[func_name] = None
         return None
-
-    def build_cache(self, expressions: list["KismetExpression"]) -> None:
-        """Pre-scan expression list to build StackNode cache. Recursively processes nested expressions.
-
-        Enhanced: also handles EX_VirtualFunction / EX_LocalVirtualFunction
-        and EX_CallMulticastDelegate.
-        """
-        from uasset_read.kismet.expressions.functions import (
-            EX_CallMath,
-            EX_CallMulticastDelegate,
-            EX_FinalFunction,
-            EX_LocalFinalFunction,
-            EX_LocalVirtualFunction,
-            EX_VirtualFunction,
-        )
-
-        for expr in expressions:
-            # Handle StackNode-type function calls
-            if isinstance(expr, (EX_FinalFunction, EX_CallMath, EX_LocalFinalFunction)):
-                stack_node = getattr(expr, "StackNode", 0)
-                if isinstance(stack_node, int) and stack_node != 0:
-                    # resolve automatically writes to cache
-                    self.resolve(stack_node)
-                # Recursively process nested expressions in parameters
-                if hasattr(expr, "Parameters") and expr.Parameters:
-                    self.build_cache(expr.Parameters)
-
-            # Handle virtual function calls (pre-resolve class name)
-            elif isinstance(expr, (EX_VirtualFunction, EX_LocalVirtualFunction)):
-                func_name = getattr(expr, "VirtualFunctionName", "")
-                if isinstance(func_name, str) and func_name:
-                    self.resolve_virtual_function_class(func_name)
-                if hasattr(expr, "Parameters") and expr.Parameters:
-                    self.build_cache(expr.Parameters)
-
-            # Handle multicast delegate calls
-            elif isinstance(expr, EX_CallMulticastDelegate):
-                stack_node = getattr(expr, "StackNode", 0)
-                if isinstance(stack_node, int) and stack_node != 0:
-                    self.resolve(stack_node)
-                if hasattr(expr, "Parameters") and expr.Parameters:
-                    self.build_cache(expr.Parameters)
 
     def get_statistics(self) -> dict:
         """Return function reference resolution statistics.

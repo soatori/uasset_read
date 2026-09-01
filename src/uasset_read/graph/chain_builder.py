@@ -9,40 +9,6 @@ from typing import Dict, List, Optional
 from uasset_read.models.core import UEdGraph
 
 
-def _detect_cycle(adjacency: dict[str, list[str]]) -> bool:
-    """DFS cycle detection.
-
-    Args:
-        adjacency: {node_id: [successor_ids]} adjacency list
-
-    Returns:
-        True if a cycle is detected
-    """
-    WHITE, GRAY, BLACK = 0, 1, 2
-    # Collect all nodes appearing in the adjacency list (including nodes that only appear as targets),
-    # ensuring DFS does not miss nodes that only appear as neighbors.
-    all_nodes: set[str] = set(adjacency.keys())
-    for neighbors in adjacency.values():
-        all_nodes.update(neighbors)
-    color: dict[str, int] = {node: WHITE for node in all_nodes}
-
-    def dfs(node: str) -> bool:
-        color[node] = GRAY
-        for neighbor in adjacency.get(node, []):
-            if color[neighbor] == GRAY:
-                return True  # Back edge = cycle
-            if color[neighbor] == WHITE and dfs(neighbor):
-                return True
-        color[node] = BLACK
-        return False
-
-    for node in list(color.keys()):
-        if color[node] == WHITE:
-            if dfs(node):
-                return True
-    return False
-
-
 def build_execution_chains(
     graph: UEdGraph,
     execution_flows: Optional[List[Dict]] = None,
@@ -142,17 +108,9 @@ def build_execution_chains(
         if not short_ids:
             continue
 
-        # Build adjacency for cycle detection
-        adjacency: Dict[str, List[str]] = {}
-        for i in range(len(short_ids) - 1):
-            src = short_ids[i]
-            dst = short_ids[i + 1]
-            if src not in adjacency:
-                adjacency[src] = []
-            adjacency[src].append(dst)
-
-        # Cycle detection
-        has_cycle = _detect_cycle(adjacency)
+        # Cycle detection: the "adjacency" is just the linear path, so a cycle
+        # exists exactly when the path revisits a node.
+        has_cycle = len(short_ids) != len(set(short_ids))
 
         # Check for ControlFlow termination (stopped_at / branch_type)
         branch_count = 0

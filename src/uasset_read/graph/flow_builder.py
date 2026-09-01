@@ -746,14 +746,10 @@ def build_connections_map(graph: UEdGraph) -> Tuple[List[Dict], List[str]]:
     Returns:
         Tuple[List[Dict], List[str]]: (connections list, warnings list)
     """
-    node_name_lookup: Dict[str, str] = {}
-    for idx, node in enumerate(graph.nodes):
-        node_name_lookup[node.node_guid] = _derive_node_name(node, idx)
-
-    pin_lookup: Dict[str, Tuple[str, str]] = {}
-    for node in graph.nodes:
-        for pin in node.pins:
-            pin_lookup[_normalize_pin_id(pin.pin_id)] = (node.node_guid, pin.pin_name)
+    pin_lookup, _, _ = _build_graph_indexes(graph)
+    node_name_lookup: Dict[str, str] = {
+        node.node_guid: _derive_node_name(node, idx) for idx, node in enumerate(graph.nodes)
+    }
 
     connections: List[Dict] = []
     warnings: List[str] = []
@@ -827,18 +823,10 @@ def build_execution_flow_entries(graph: UEdGraph, asset_context: Optional[Dict[s
             - start_event: start event name
             - nodes: execution flow node list
     """
-    pin_lookup: Dict[str, Tuple[str, str]] = {}
-    node_lookup: Dict[str, UEdGraphNode] = {}
-    node_name_lookup: Dict[str, str] = {}  # newly added
-
-    for node in graph.nodes:
-        node_lookup[node.node_guid] = node
-        for pin in node.pins:
-            pin_lookup[_normalize_pin_id(pin.pin_id)] = (node.node_guid, pin.pin_name)
-
-    # Build node_name_lookup
-    for idx, node in enumerate(graph.nodes):
-        node_name_lookup[node.node_guid] = _derive_node_name(node, idx)
+    pin_lookup, node_lookup, _ = _build_graph_indexes(graph)
+    node_name_lookup: Dict[str, str] = {
+        node.node_guid: _derive_node_name(node, idx) for idx, node in enumerate(graph.nodes)
+    }
 
     edges_by_from_pin, _ = _build_normalized_edge_indexes(graph)
 
@@ -994,14 +982,9 @@ def build_data_flows(graph: UEdGraph) -> List[Dict]:
     Returns:
         List[Dict]: data_flows array
     """
-    pin_lookup: Dict[str, Tuple[str, str]] = {}
-    for node in graph.nodes:
-        for pin in node.pins:
-            pin_lookup[_normalize_pin_id(pin.pin_id)] = (node.node_guid, pin.pin_name)
-
-    node_name_lookup: Dict[str, str] = {}
-    for idx, node in enumerate(graph.nodes):
-        node_name_lookup[node.node_guid] = _derive_node_name(node, idx)
+    node_name_lookup: Dict[str, str] = {
+        node.node_guid: _derive_node_name(node, idx) for idx, node in enumerate(graph.nodes)
+    }
 
     data_flows: List[Dict] = []
 
@@ -1252,16 +1235,11 @@ def build_function_graphs(
     function_graphs: List[Dict] = []
 
     for graph in graphs:
-        # Build pin_lookup and node_lookup
-        pin_lookup: Dict[str, Tuple[str, str]] = {}
-        node_lookup: Dict[str, UEdGraphNode] = {}
-        node_name_lookup: Dict[str, str] = {}
-
-        for idx, node in enumerate(graph.nodes):
-            node_lookup[node.node_guid] = node
-            node_name_lookup[node.node_guid] = _derive_node_name(node, idx)
-            for pin in node.pins:
-                pin_lookup[_normalize_pin_id(pin.pin_id)] = (node.node_guid, pin.pin_name)
+        # Build pin/node lookup tables
+        pin_lookup, node_lookup, _ = _build_graph_indexes(graph)
+        node_name_lookup: Dict[str, str] = {
+            node.node_guid: _derive_node_name(node, idx) for idx, node in enumerate(graph.nodes)
+        }
 
         edges_by_from_pin, source_edges_by_to_pin = _build_normalized_edge_indexes(graph)
 

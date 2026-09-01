@@ -6,7 +6,6 @@ Kismet Expression → C++ Pseudocode Translator.
 Translates KismetExpression AST into readable C++ pseudocode.
 
 Provides:
-- TypeRegistry: UE → C++ type mapping with metadata population
 - MathFunctionCleaner: Beautifies UKismetMathLibrary::Add_IntInt(a,b) → a + b
 - KismetTranslator: Central dispatcher with line_cpp() for all expression types
 """
@@ -21,73 +20,6 @@ if TYPE_CHECKING:
     from uasset_read.kismet.function_resolver import FunctionRefResolver
     from uasset_read.kismet.jump_analyzer import JumpAnalyzer
     from uasset_read.link.linker import PackageLinker
-
-# ===========================================================================
-# TypeRegistry — UE → C++ type mapping (Decision D-06, D-07)
-# ===========================================================================
-
-# UE Property type → C++ type mapping (aligned with GetPropertyType)
-_UE_TO_CPP_TYPES: dict[str, str] = {
-    "IntProperty": "int",
-    "Int8Property": "int8",
-    "Int16Property": "int16",
-    "Int64Property": "int64",
-    "UInt8Property": "uint8",
-    "UInt16Property": "uint16",
-    "UInt32Property": "uint32",
-    "UInt64Property": "uint64",
-    "FloatProperty": "float",
-    "DoubleProperty": "double",
-    "BoolProperty": "bool",
-    "ByteProperty": "uint8",
-    "StrProperty": "FString",
-    "VerseStringProperty": "FString",
-    "NameProperty": "FName",
-    "TextProperty": "FText",
-    "ObjectProperty": "UObject*",
-    "ClassProperty": "UClass*",
-    "StructProperty": "FStruct",
-    "InterfaceProperty": "IInterface",
-    "ArrayProperty": "TArray",
-    "MapProperty": "TMap",
-    "SetProperty": "TSet",
-    "EnumProperty": "Enum",
-    "DelegateProperty": "FScriptDelegate",
-    "MulticastDelegateProperty": "FMulticastScriptDelegate",
-    "SoftObjectProperty": "FSoftObjectPath",
-    "SoftClassProperty": "FSoftClassPath",
-    "WeakObjectProperty": "TWeakObjectPtr",
-    "FieldPathProperty": "FFieldPath",
-    "OptionalProperty": "TOptional",
-}
-
-
-class TypeRegistry:
-    """
-    Variable type registry for C++ pseudocode generation.
-
-    Priority: explicitly registered type → metadata-inferred type → `auto`.
-    """
-
-    def __init__(self) -> None:
-        self._types: dict[str, str] = {}
-
-    def register_variable(self, name: str, cpp_type: str) -> None:
-        """Register a variable with an explicit C++ type."""
-        self._types[name] = cpp_type
-
-    def lookup(self, name: str) -> str | None:
-        """Look up the C++ type for a variable. Returns None if not found."""
-        return self._types.get(name)
-
-    def resolve_type(self, name: str) -> str:
-        """Resolve type for a variable, falling back to 'auto' if unknown."""
-        return self._types.get(name, "auto")
-
-    def ue_to_cpp(self, ue_type: str) -> str:
-        """Convert a single UE property type to C++ type string."""
-        return _UE_TO_CPP_TYPES.get(ue_type, ue_type)
-
 
 # ===========================================================================
 # MathFunctionCleaner — beautify Kismet library calls (Decision D-04, D-05)
@@ -542,11 +474,9 @@ class KismetTranslator:
 
     def __init__(
         self,
-        type_registry: TypeRegistry | None = None,
         linker: "PackageLinker | None" = None,
         expressions: list["KismetExpression"] | None = None,
     ):
-        self.type_registry = type_registry or TypeRegistry()
         self._func_resolver: FunctionRefResolver | None = None
         if linker is not None:
             from uasset_read.kismet.function_resolver import FunctionRefResolver
@@ -1296,7 +1226,3 @@ class KismetTranslator:
                 val = self.line_cpp(elements[i + 1])
                 pairs.append(f"{key}: {val}")
         return pairs
-
-
-# Export module-level constants
-UE_TYPE_MAP = _UE_TO_CPP_TYPES

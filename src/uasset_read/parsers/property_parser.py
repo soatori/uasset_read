@@ -191,6 +191,41 @@ def _get_parse_functions():
     return _TYPE_HANDLER_MAP
 
 
+# Positional args parse_property_value passes each handler, keyed by property
+# type; covers exactly the keys of _TYPE_HANDLER_MAP.  "soft_path_list"
+# resolves to summary._soft_object_path_list (UE5.7+ soft object path table).
+_PROPERTY_ARGS: dict[str, tuple[str, ...]] = {
+    t: ("tag", "archive")
+    for t in (
+        "BoolProperty", "IntProperty", "Int64Property", "Int16Property", "Int8Property",
+        "ByteProperty", "UInt16Property", "UInt32Property", "UInt64Property", "FloatProperty",
+        "DoubleProperty", "StrProperty", "ObjectProperty", "TextProperty", "Utf8StrProperty",
+        "WeakObjectProperty", "LazyObjectProperty", "ClassProperty", "AssetObjectProperty",
+        "AssetClassProperty", "InterfaceProperty", "VerseStringProperty", "VerseClassProperty",
+        "VerseFunctionProperty", "VerseDynamicProperty", "AnsiStrProperty", "GuidProperty",
+        "VerseCellProperty", "VerseValueProperty",
+    )
+} | {
+    t: ("tag", "archive", "name_map")
+    for t in (
+        "NameProperty", "DelegateProperty", "MulticastDelegateProperty",
+        "MulticastInlineDelegateProperty", "MulticastSparseDelegateProperty", "FieldPathProperty",
+    )
+} | {
+    t: ("tag", "archive", "name_map", "soft_path_list")
+    for t in ("SoftObjectProperty", "SoftClassProperty")
+} | {
+    t: ("tag", "archive", "name_map", "export_map", "summary", "depth")
+    for t in ("ArrayProperty", "StructProperty")
+} | {
+    t: ("tag", "archive", "name_map", "export_map", "summary")
+    for t in ("MapProperty", "SetProperty", "OptionalProperty")
+} | {
+    t: ("tag", "archive", "name_map", "summary")
+    for t in ("EnumProperty",)
+}
+
+
 def _skip_type_tree_nodes(
     archive,
     limit: int,
@@ -388,7 +423,6 @@ def _try_asset_type_handler(
     name_map: List[str],
     class_name: str,
     parsed_properties: Optional[List["PropertyValue"]] = None,
-    property_end: int = 0,
     export_map: Optional[List[Any]] = None,
     import_map: Optional[List[Any]] = None,
     summary: Optional["PackageFileSummary"] = None,
@@ -397,7 +431,7 @@ def _try_asset_type_handler(
     """Try to extract raw binary data using a registered ClassHandler.
 
     For asset types like StaticMesh, SkeletalMesh, Material, Texture2D,
-    handler reads custom payload from property_end (Super::Serialize completion position),
+    handler reads custom payload from the Super::Serialize completion position,
     attaching results to the export objects _asset_type_data attribute.
 
     For animation types（AnimBlueprint/AnimSequence/AnimMontage），
@@ -598,59 +632,16 @@ def parse_property_value(
         # Special case: ByteProperty with enum backing needs name_map (reads FName)
         if tag.type == "ByteProperty" and tag.enum_type is not None:
             return handler(tag, archive, name_map)
-        elif tag.type in (
-            "BoolProperty",
-            "IntProperty",
-            "Int64Property",
-            "Int16Property",
-            "Int8Property",
-            "ByteProperty",
-            "UInt16Property",
-            "UInt32Property",
-            "UInt64Property",
-            "FloatProperty",
-            "DoubleProperty",
-            "StrProperty",
-            "ObjectProperty",
-            "TextProperty",
-            "Utf8StrProperty",
-            "WeakObjectProperty",
-            "LazyObjectProperty",
-            "ClassProperty",
-            "AssetObjectProperty",
-            "AssetClassProperty",
-            "InterfaceProperty",
-            "VerseStringProperty",
-            "VerseClassProperty",
-            "VerseFunctionProperty",
-            "VerseDynamicProperty",
-            "AnsiStrProperty",
-            "GuidProperty",
-        ):
-            return handler(tag, archive)
-        elif tag.type in (
-            "NameProperty",
-            "DelegateProperty",
-            "MulticastDelegateProperty",
-            "MulticastInlineDelegateProperty",
-            "MulticastSparseDelegateProperty",
-            "FieldPathProperty",
-        ):
-            return handler(tag, archive, name_map)
-        elif tag.type in ("SoftObjectProperty", "SoftClassProperty"):
-            # These need soft_object_path_list for UE5.7+ index-based resolution
-            soft_path_list = getattr(summary, "_soft_object_path_list", None) if summary is not None else None
-            return handler(tag, archive, name_map, soft_path_list)
-        elif tag.type in ("ArrayProperty",):
-            return handler(tag, archive, name_map, export_map, summary, depth)
-        elif tag.type in ("StructProperty",):
-            return handler(tag, archive, name_map, export_map, summary, depth)
-        elif tag.type in ("MapProperty", "SetProperty", "OptionalProperty"):
-            return handler(tag, archive, name_map, export_map, summary)
-        elif tag.type in ("EnumProperty",):
-            return handler(tag, archive, name_map, summary)
-        elif tag.type in ("VerseCellProperty", "VerseValueProperty"):
-            return handler(tag, archive)
+        values = {
+            "tag": tag,
+            "archive": archive,
+            "name_map": name_map,
+            "export_map": export_map,
+            "summary": summary,
+            "depth": depth,
+            "soft_path_list": getattr(summary, "_soft_object_path_list", None) if summary is not None else None,
+        }
+        return handler(*(values[n] for n in _PROPERTY_ARGS[tag.type]))
     except (_struct.error, OSError, ValueError, AttributeError, KeyError, ParseError) as e:
         if not tolerant:
             raise
@@ -906,7 +897,6 @@ def _read_property_loop(
     mappings: Optional[Any],
     property_end: int,
     tolerant: bool,
-    skip_class_name: Optional[str] = None,
 ) -> List[PropertyValue]:
     """Main property reading loop."""
     properties: List[PropertyValue] = []
@@ -1229,7 +1219,6 @@ def parse_properties_from_export(
             mappings,
             property_end,
             tolerant,
-            skip_class_name=skip_class_name,
         )
 
     # Asset type handler dispatch: called after property parsing
@@ -1240,7 +1229,6 @@ def parse_properties_from_export(
             name_map,
             skip_class_name,
             parsed_properties=properties,
-            property_end=property_end,
             export_map=export_map,
             import_map=import_map,
             summary=summary,

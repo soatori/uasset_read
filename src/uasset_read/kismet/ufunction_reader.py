@@ -62,7 +62,6 @@ class FunctionScriptFailure:
     class_name: str
     package_offset: int
     export_offset: int
-    bytecode_index: int | None = None
     bytecode_buffer_size: int | None = None
     serialized_script_size: int | None = None
     remaining_serialized: int | None = None
@@ -97,7 +96,6 @@ class FunctionScriptReadResult:
     serialized_script: bytes = b""
     bytecode_buffer_size: int = 0
     serialized_script_size: int = 0
-    serialized_start: int | None = None
     native_fields: list[NativeFieldDeclaration] = field(default_factory=list)
     failure: FunctionScriptFailure | None = None
 
@@ -136,15 +134,15 @@ def _read_native_payload_start(
     export_map: list[ObjectExport],
     *,
     export_index: int = 0,
-) -> tuple[ByteArchive, int]:
+) -> ByteArchive:
     """Read the UObject prefix before the native UStruct payload.
 
-    The native start is measured after serialization control, tagged
+    The window is positioned after serialization control, tagged
     properties, and UObject's optional lazy-object GUID record.
 
     Returns:
-        (window, native_start) where window is bounded to the export's serial
-        range and positioned at the native UStruct payload.
+        window bounded to the export's serial range and positioned at the
+        native UStruct payload.
 
     Raises:
         UnsupportedSerializationVersion: if control bits are unknown.
@@ -202,8 +200,7 @@ def _read_native_payload_start(
     if has_object_guid:
         window.read(16)
 
-    native_start = window.tell()
-    return window, native_start
+    return window
 
 
 def _consume_tagged_properties(
@@ -297,7 +294,6 @@ def _read_ustruct_prefix_and_script(
     summary: PackageFileSummary,
     *,
     export_index: int = 0,
-    native_start: int = 0,
     name_map: list[str] | None = None,
     import_map: list[ObjectImport] | None = None,
     export_map: list[ObjectExport] | None = None,
@@ -338,14 +334,12 @@ def _read_ustruct_prefix_and_script(
                     f"Negative Children count: {children_count}",
                     export,
                     export_index,
-                    native_start,
                 )
             if children_count > max_i32_slots:
                 return _make_invalid_script_size_failure(
                     f"Children count {children_count} exceeds remaining capacity ({max_i32_slots} slots)",
                     export,
                     export_index,
-                    native_start,
                 )
             for i in range(children_count):
                 window.read_i32(f"Child[{i}]")
@@ -362,7 +356,6 @@ def _read_ustruct_prefix_and_script(
                     f"Negative NativePropertyCount: {native_property_count}",
                     export,
                     export_index,
-                    native_start,
                 )
 
         # 3a. Read native field declarations when count > 0
@@ -410,7 +403,6 @@ def _read_ustruct_prefix_and_script(
                 status="no_script",
                 bytecode_buffer_size=0,
                 serialized_script_size=0,
-                serialized_start=window.tell(),
                 native_fields=native_fields,
             )
 
@@ -437,14 +429,12 @@ def _read_ustruct_prefix_and_script(
             )
 
         # 6. SerializedScript
-        serialized_start = window.tell()
         script = window.read(serialized_script_size)
         return FunctionScriptReadResult(
             status="extracted",
             serialized_script=script,
             bytecode_buffer_size=bytecode_buffer_size,
             serialized_script_size=serialized_script_size,
-            serialized_start=serialized_start,
             native_fields=native_fields,
         )
 
@@ -498,7 +488,6 @@ def _make_invalid_script_size_failure(
     message: str,
     export: ObjectExport,
     export_index: int,
-    native_start: int,
 ) -> FunctionScriptReadResult:
     """Create a failed result for invalid script size."""
     return FunctionScriptReadResult(
@@ -566,7 +555,7 @@ def read_ufunction_script(
         )
 
     try:
-        window, native_start = _read_native_payload_start(
+        window = _read_native_payload_start(
             archive,
             export,
             summary,
@@ -580,7 +569,6 @@ def read_ufunction_script(
             export,
             summary,
             export_index=export_index,
-            native_start=native_start,
             name_map=name_map,
             import_map=import_map,
             export_map=export_map,
