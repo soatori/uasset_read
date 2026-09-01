@@ -924,7 +924,7 @@ def read_depends_map(
     Returns:
         2D list: first dimension is export index, second dimension is dependency PackageIndex list
     """
-    if summary.depends_offset <= 0 or summary.export_count <= 0:
+    if summary.depends_offset < 0 or summary.export_count <= 0:
         return []
 
     archive.seek(summary.depends_offset)
@@ -932,16 +932,26 @@ def read_depends_map(
     depends_map: List[List[int]] = []
     skipped_entries = 0
     invalid_indices = 0
+    truncated_table = False
 
     for i in range(summary.export_count):
         # Read dependency list for each export
         dep_count = archive.read_i32(f"DependsMap[{i}].Count")
-        # Fault-tolerant: skip invalid entries (preserve empty list) instead of aborting entire table parse
         if dep_count < 0 or dep_count > MAX_SAFE_COUNT:
-            logger.debug("DependsMap: abnormal dependency count %d at export %d, skipping", dep_count, i)
+            # Without a reliable count the entry's payload size is unknown;
+            # continuing would reinterpret payload bytes as the next count.
+            archive._record_structured_diagnostic(
+                code="DEPENDS_MAP_TRUNCATED",
+                stage="read_depends_map",
+                offset=archive.tell() - 4,
+                raw_value=dep_count,
+                fallback="stop_table",
+                message=f"DependsMap entry {i} has invalid count {dep_count}; stopped dependency table read",
+            )
             depends_map.append([])
             skipped_entries += 1
-            continue
+            truncated_table = True
+            break
         if budget is not None and dep_count > 0:
             budget.reserve(dep_count * 4, f"DependsMap[{i}]")
         deps = []
@@ -978,6 +988,8 @@ def read_depends_map(
             warnings.append(
                 f"DependsMap: {skipped_entries}/{summary.export_count} entries skipped due to invalid dependency count"
             )
+        if truncated_table:
+            warnings.append(f"DependsMap: stopped at entry {i}; subsequent entries were not parsed")
         if invalid_indices > 0:
             warnings.append(
                 f"DependsMap: {invalid_indices} PackageIndex value(s) reference non-existent imports/exports"
