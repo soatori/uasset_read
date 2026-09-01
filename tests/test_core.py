@@ -951,11 +951,33 @@ def test_schema_contract_statics():
         depth_enum = schema["properties"]["depth"]["enum"]
         assert set(depth_enum) == {"package", "object", "asset", "decode"}
 
+    def ue4_version_constants_are_pinned_to_peer_numbering():
+        """UE4 file versions carry 4.x-era ordinals; newer UE5 headers renumbered -1
+        (Epic's 'version clash'). Values below match CUE4Parse/UAssetAPI/uasset-rs
+        mirrors; changing them without a real boundary-version fixture is forbidden."""
+        from uasset_read import constants as K
+        expected = {
+            "UE4_LOAD_FOR_EDITOR_GAME": 365,
+            "UE4_ADD_STRING_ASSET_REFERENCES_MAP": 384,
+            "UE4_SERIALIZE_TEXT_IN_PACKAGES": 459,
+            "UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT": 485,
+            "UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS": 507,
+            "UE4_TemplateIndex_IN_COOKED_EXPORTS": 508,
+            "UE4_ADDED_SEARCHABLE_NAMES": 510,
+            "UE4_64BIT_EXPORTMAP_SERIALSIZES": 511,
+            "UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID": 516,
+            "UE4_ADDED_PACKAGE_OWNER": 518,
+            "UE4_NON_OUTER_PACKAGE_IMPORT": 520,
+        }
+        for name, value in expected.items():
+            assert getattr(K, name) == value, f"{name} drifted: {getattr(K, name)} != {value}"
+
     _run_cases(
         [
             ("schema.test_example_validates_against_schema", test_example_validates_against_schema),
             ("schema.test_schema_has_required_fields", test_schema_has_required_fields),
             ("schema.test_schema_enums_match_code", test_schema_enums_match_code),
+            ("schema.ue4_version_constants_are_pinned_to_peer_numbering", ue4_version_constants_are_pinned_to_peer_numbering),
         ]
     )
 

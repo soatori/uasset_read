@@ -219,7 +219,7 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
             class_index = PackageIndex(archive.read_i32(f"Export[{export_idx}].ClassIndex"))
             super_index = PackageIndex(archive.read_i32(f"Export[{export_idx}].SuperIndex"))
 
-            # TemplateIndex: VER_UE4_TemplateIndex_IN_COOKED_EXPORTS (507)
+            # TemplateIndex: VER_UE4_TemplateIndex_IN_COOKED_EXPORTS (508)
             template_index = PackageIndex(0)
             if file_version >= UE4_TemplateIndex_IN_COOKED_EXPORTS:
                 template_index = PackageIndex(archive.read_i32(f"Export[{export_idx}].TemplateIndex"))
@@ -228,7 +228,7 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
             object_name = archive.read_name(name_map, f"Export[{export_idx}].ObjectName")
             object_flags = archive.read_u32(f"Export[{export_idx}].ObjectFlags")
 
-            # SerialSize/Offset: i32 before VER_UE4_64BIT_EXPORTMAP_SERIALSIZES (510), i64 after
+            # SerialSize/Offset: i32 before VER_UE4_64BIT_EXPORTMAP_SERIALSIZES (511), i64 after
             if file_version < UE4_64BIT_EXPORTMAP_SERIALSIZES:
                 serial_size_offset = archive.tell()
                 serial_size = archive.read_i32(f"Export[{export_idx}].SerialSize")
@@ -283,14 +283,14 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
 
             package_flags = archive.read_u32(f"Export[{export_idx}].PackageFlags")
 
-            # bNotAlwaysLoadedForEditorGame: VER_UE4_LOAD_FOR_EDITOR_GAME (364)
+            # bNotAlwaysLoadedForEditorGame: VER_UE4_LOAD_FOR_EDITOR_GAME (365)
             b_not_always_loaded_for_editor_game = True
             if file_version >= UE4_LOAD_FOR_EDITOR_GAME:
                 b_not_always_loaded_for_editor_game = archive.read_bool(
                     f"Export[{export_idx}].bNotAlwaysLoadedForEditorGame"
                 )
 
-            # bIsAsset: VER_UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT (484)
+            # bIsAsset: VER_UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT (485; historical 4.x numbering)
             b_is_asset = False
             if file_version >= UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT:
                 b_is_asset = archive.read_bool(f"Export[{export_idx}].bIsAsset")
@@ -300,7 +300,7 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
             if summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
                 b_generate_public_hash = archive.read_bool(f"Export[{export_idx}].bGeneratePublicHash")
 
-            # Dependency arrays: VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS (506)
+            # Dependency arrays: VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS (507)
             # Span into summary PreloadDependencyValues:
             # [FirstExportDependency, FirstExportDependency + sum of the 4 counts)
             first_export_dependency = -1
