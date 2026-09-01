@@ -319,16 +319,15 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> 
 
     cov = CoverageModel()
     content: dict = {}
-    evidence_list: list = list(evidence)
 
     _extractor_ran = False
     if extractor is not None and status.representation != "opaque":
-        content = extractor(package_ir, primary, cov, evidence_list)
+        content = extractor(package_ir, primary, cov)
         _extractor_ran = True
     elif extractor is not None and asset_type == "material" and getattr(package_ir, "material", None) is not None:
         # Material data is built by _build_material_ir in ir_builder, not from export parsing
         # Call the extractor even when the export is opaque
-        content = extractor(package_ir, primary, cov, evidence_list)
+        content = extractor(package_ir, primary, cov)
         _extractor_ran = True
         # Override representation to full since we have material data
         representation = "full"
@@ -388,5 +387,5 @@ def build_semantic_ir(package_ir: PackageIR, source_path: str | None = None) -> 
         content=content,
         coverage=coverage,
         diagnostics=diagnostics,
-        evidence=tuple(evidence_list),
+        evidence=tuple(evidence),
     )

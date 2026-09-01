@@ -32,7 +32,7 @@ from uasset_read.parsers.asset_types.property_extractor import (
     extract_property,
     parse_dict_list,
 )
-from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
+from uasset_read.parsers.class_registry import ClassHandler, HandlerResult
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +46,6 @@ def _extract_int_array(data: Any, key: str) -> list[int]:
 class AnimBlueprintHandler(ClassHandler):
     """AnimBlueprint Asset type handler"""
 
-    # Reflection registration metadata
-    export_type: str = "AnimBlueprintGeneratedClass"
-    priority: int = 100
 
     def can_handle(self, class_name: str) -> bool:
         return class_name == "AnimBlueprintGeneratedClass"
@@ -81,7 +78,6 @@ class AnimBlueprintHandler(ClassHandler):
                 return HandlerResult(
                     success=False,
                     error_message="No properties found",
-                    fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
                 )
 
             # Convert property list to dictionary format（name -> value）
@@ -117,7 +113,6 @@ class AnimBlueprintHandler(ClassHandler):
             return HandlerResult(
                 success=True,
                 data={"anim_blueprint": anim_ir},
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
 
         except (KeyError, TypeError, ValueError) as e:
@@ -125,7 +120,6 @@ class AnimBlueprintHandler(ClassHandler):
             return HandlerResult(
                 success=False,
                 error_message=str(e),
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
 
     def _parse_baked_state_machines(self, data: Any) -> list[BakedStateMachineIR]:

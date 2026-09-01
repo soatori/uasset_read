@@ -5,88 +5,51 @@ Dispatches on object_class for SubsurfaceProfile, CurveFloat, and FoliageType.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from uasset_read.semantic.asset_data import class_extractor, pick
 
-if TYPE_CHECKING:
-    from uasset_read.models.ir import PackageIR, ExportIR
+_SUBSURFACE_KEYS = (
+    "surface_albedo",
+    "mean_free_path",
+    "mean_free_path_dist",
+    "subsurface_color",
+    "boundary_color_bleed",
+    "extinction_scale",
+    "normal_scale",
+    "custom_profile_curve",
+)
+_FOLIAGE_KEYS = (
+    "mesh_ref",
+    "material_refs",
+    "density",
+    "scaling",
+    "scale_min",
+    "scale_max",
+    "collision_radius",
+    "height_range_min",
+    "height_range_max",
+)
 
 
-def _build_subsurface_profile(asset_type_data: dict, cov) -> dict:
-    props: dict = {}
-    for key in (
-        "surface_albedo",
-        "mean_free_path",
-        "mean_free_path_dist",
-        "subsurface_color",
-        "boundary_color_bleed",
-        "extinction_scale",
-        "normal_scale",
-        "custom_profile_curve",
-    ):
-        val = asset_type_data.get(key)
-        if val is not None:
-            props[key] = val
-    cov.track("profile_properties", len(props) > 0)
-    return {"standalone": {"profile_properties": props}}
+def _build_curve(data: dict, cov, _object_class: str) -> dict:
+    keys = data.get("keys", [])
+    key_count = data.get("key_count", len(keys))
 
-
-def _build_curve(asset_type_data: dict, cov) -> dict:
-    keys = asset_type_data.get("keys", [])
-    key_count = asset_type_data.get("key_count", len(keys))
-
-    curve_data: dict = {
-        "key_count": key_count,
-    }
-    for key in ("pre_infinity_extrap", "post_infinity_extrap"):
-        val = asset_type_data.get(key)
-        if val is not None:
-            curve_data[key] = val
-
+    curve_data: dict = {"key_count": key_count, **pick(data, ("pre_infinity_extrap", "post_infinity_extrap"))}
     cov.track("curve_data", key_count > 0)
 
-    result: dict = {"standalone": {"curve_data": curve_data}}
     if keys:
-        result["standalone"]["curve_data"]["keys"] = keys
-    return result
+        curve_data["keys"] = keys
+    return {"standalone": {"curve_data": curve_data}}
 
 
-def _build_foliage_type(asset_type_data: dict, cov) -> dict:
-    props: dict = {}
-    for key in (
-        "mesh_ref",
-        "material_refs",
-        "density",
-        "scaling",
-        "scale_min",
-        "scale_max",
-        "collision_radius",
-        "height_range_min",
-        "height_range_max",
-    ):
-        val = asset_type_data.get(key)
-        if val is not None:
-            props[key] = val
-    cov.track("foliage_properties", len(props) > 0)
-    return {"standalone": {"foliage_properties": props}}
+# (out_key, source, coverage key, mode) section tables per class; see asset_data.
+_CLASSES = {
+    "SubsurfaceProfile": (("profile_properties", _SUBSURFACE_KEYS, "profile_properties", "summary"),),
+    "FoliageType": (("foliage_properties", _FOLIAGE_KEYS, "foliage_properties", "summary"),),
+    "FoliageType_InstancedStaticMesh": (("foliage_properties", _FOLIAGE_KEYS, "foliage_properties", "summary"),),
+    "CurveFloat": _build_curve,
+    "CurveLinearColor": _build_curve,
+    "CurveVector": _build_curve,
+}
 
-
-def build_standalone_content(
-    package_ir: "PackageIR",
-    export_ir: "ExportIR",
-    coverage_model,
-    evidence_list,
-) -> dict:
-    asset_type_data = getattr(export_ir, "asset_type_data", None)
-    object_class = getattr(export_ir, "object_class", "") or ""
-
-    if not asset_type_data or not isinstance(asset_type_data, dict):
-        return {}
-
-    if object_class == "SubsurfaceProfile":
-        return _build_subsurface_profile(asset_type_data, coverage_model)
-    elif object_class in ("CurveFloat", "CurveLinearColor", "CurveVector"):
-        return _build_curve(asset_type_data, coverage_model)
-    elif object_class in ("FoliageType", "FoliageType_InstancedStaticMesh"):
-        return _build_foliage_type(asset_type_data, coverage_model)
-    else:
-        return {}
+build_standalone_content = class_extractor("standalone", _CLASSES)

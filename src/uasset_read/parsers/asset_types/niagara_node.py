@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 from uasset_read.constants import MAX_NODES_PER_GRAPH
 from uasset_read.parsers.asset_types.property_extractor import build_properties_dict
-from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
+from uasset_read.parsers.class_registry import ClassHandler, HandlerResult
 from uasset_read.serializers.graph_helpers import read_ftext
 from uasset_read.serializers.graph_pin import read_ed_graph_pin_type
 
@@ -242,10 +242,6 @@ class NiagaraNodeHandler(ClassHandler):
     def handler_name(self) -> str:
         return "NiagaraNodeHandler"
 
-    @property
-    def fallback_policy(self) -> FallbackPolicy:
-        return FallbackPolicy.GENERIC_UOBJECT
-
     def parse(
         self,
         export: "ObjectExport",
@@ -258,7 +254,6 @@ class NiagaraNodeHandler(ClassHandler):
                 return HandlerResult(
                     success=False,
                     error_message="No properties found",
-                    fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
                 )
 
             properties = build_properties_dict(properties_list)
@@ -313,7 +308,6 @@ class NiagaraNodeHandler(ClassHandler):
             return HandlerResult(
                 success=True,
                 data=data,
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
 
         except (KeyError, TypeError, ValueError) as e:
@@ -321,5 +315,4 @@ class NiagaraNodeHandler(ClassHandler):
             return HandlerResult(
                 success=False,
                 error_message=str(e),
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )

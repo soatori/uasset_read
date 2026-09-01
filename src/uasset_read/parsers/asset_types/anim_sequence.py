@@ -28,7 +28,7 @@ from uasset_read.parsers.asset_types.property_extractor import (
     extract_object_ref,
     extract_property,
 )
-from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
+from uasset_read.parsers.class_registry import ClassHandler, HandlerResult
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +36,6 @@ logger = logging.getLogger(__name__)
 class AnimSequenceHandler(ClassHandler):
     """AnimSequence Asset type handler"""
 
-    # Reflection registration metadata
-    export_type: str = "AnimSequence"
-    priority: int = 100
 
     def can_handle(self, class_name: str) -> bool:
         return class_name == "AnimSequence"
@@ -70,7 +67,6 @@ class AnimSequenceHandler(ClassHandler):
                 return HandlerResult(
                     success=False,
                     error_message="No properties found",
-                    fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
                 )
 
             # Convert property list to dictionary format（name -> value）
@@ -117,7 +113,6 @@ class AnimSequenceHandler(ClassHandler):
             return HandlerResult(
                 success=True,
                 data={"anim_sequence": anim_ir},
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
 
         except (KeyError, TypeError, ValueError) as e:
@@ -125,7 +120,6 @@ class AnimSequenceHandler(ClassHandler):
             return HandlerResult(
                 success=False,
                 error_message=str(e),
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
 
     def _parse_compressed_data(self, data: Any, anim_ir: AnimSequenceIR) -> None:
@@ -181,11 +175,3 @@ class AnimSequenceHandler(ClassHandler):
             anim_ir.curve_compression_codec = curve_codec
         elif isinstance(curve_codec, dict):
             anim_ir.curve_compression_codec = curve_codec.get("object_path") or curve_codec.get("full_name")
-
-
-# Backward compatible: keep old function interface
-def parse_anim_sequence(archive: Any, name_map: list[str]) -> dict[str, Any]:
-    """Extract AnimSequence metadata (deep parse)."""
-    return {
-        "parse_status": "success",
-    }

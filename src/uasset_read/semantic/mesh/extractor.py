@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from uasset_read.semantic.asset_data import pick
+
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
 
@@ -49,7 +51,6 @@ def build_mesh_content(
     package_ir: "PackageIR",
     export_ir: "ExportIR",
     coverage_model,
-    evidence_list,
 ) -> dict:
     """Build the Mesh domain content dict."""
     asset_type_data = getattr(export_ir, "asset_type_data", None)
@@ -62,11 +63,7 @@ def build_mesh_content(
 
     coverage_model.track("mesh_summary", True)
 
-    mesh_summary: dict = {}
-    for key in ("lod_count", "section_count", "vertex_count", "triangle_count", "material_count"):
-        val = asset_type_data.get(key)
-        if val is not None:
-            mesh_summary[key] = val
+    mesh_summary: dict = pick(asset_type_data, ("lod_count", "section_count", "vertex_count", "triangle_count", "material_count"))
 
     bounds = _extract_bounds(properties)
     if bounds:
@@ -74,10 +71,7 @@ def build_mesh_content(
 
     is_skeletal = object_class == "SkeletalMesh"
     if is_skeletal:
-        for key in ("bone_count",):
-            val = asset_type_data.get(key)
-            if val is not None:
-                mesh_summary[key] = val
+        mesh_summary.update(pick(asset_type_data, ("bone_count",)))
 
     materials = _extract_material_slots(properties)
     has_materials = len(materials) > 0

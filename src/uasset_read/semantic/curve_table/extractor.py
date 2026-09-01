@@ -16,7 +16,6 @@ def build_curve_table_content(
     package_ir: "PackageIR",
     export_ir: "ExportIR",
     coverage_model,
-    evidence_list,
 ) -> dict:
     """Build the CurveTable domain content dict.
 

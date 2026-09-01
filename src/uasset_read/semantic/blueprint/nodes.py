@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, Callable
+
 from uasset_read.semantic.blueprint.ids import (
     ascii_slug,
     graph_id,
@@ -111,7 +113,7 @@ def _pin_keep(pin, connected: bool) -> bool:
     return category == "wildcard"
 
 
-def emit_graphs(graphs, table, reporting, *, mode: str) -> tuple[list[dict], dict]:
+def emit_graphs(graphs, table, reporting) -> tuple[list[dict], dict]:
     """Emit graphs with nodes/pins/ports.
 
     Returns (graphs_json, index): index maps pin_guid -> endpoint info for
@@ -134,7 +136,7 @@ def emit_graphs(graphs, table, reporting, *, mode: str) -> tuple[list[dict], dic
         ordinal_counts: dict[tuple[str, str], int] = {}
 
         for node in getattr(graph, "nodes", None) or []:
-            node_json, node_index = _emit_node(node, slug, ordinal_counts, table, reporting, mode)
+            node_json, node_index = _emit_node(node, slug, ordinal_counts, table, reporting)
             if node_json is None:
                 continue
             nodes_json.append(node_json)
@@ -146,9 +148,13 @@ def emit_graphs(graphs, table, reporting, *, mode: str) -> tuple[list[dict], dic
             for n in getattr(graph, "nodes", None) or []
         ):
             kind = "function"  # evidence-based: graph contains a FunctionEntry node
-        entry: dict = {"id": gid, "name": name, "kind": kind, "nodes": nodes_json}
-        if mode == "debug":
-            entry["evidence"] = {"graph_guid": getattr(graph, "graph_guid", "") or ""}
+        entry: dict = {
+            "id": gid,
+            "name": name,
+            "kind": kind,
+            "nodes": nodes_json,
+            "evidence": {"graph_guid": getattr(graph, "graph_guid", "") or ""},
+        }
         graphs_json.append(entry)
 
         for subgraph in getattr(graph, "subgraphs", None) or []:
@@ -159,16 +165,40 @@ def emit_graphs(graphs, table, reporting, *, mode: str) -> tuple[list[dict], dic
     return graphs_json, index
 
 
-def _emit_node(node, graph_slug, ordinal_counts, table, reporting, mode):
-    node_class = getattr(node, "node_class", "") or getattr(node, "class_name", "") or ""
+def _classify_node(node_class: str) -> tuple[str, str]:
+    """Map a node class to (kind, status); unknown classes are opaque."""
     kind = _NODE_KIND_MAP.get(node_class)
-    status = "recognized"
     if kind is None:
-        kind = "custom"
-        status = "opaque"
+        return "custom", "opaque"
+    return kind, "recognized"
+
+
+def _emit_node(
+    node,
+    graph_slug,
+    ordinal_counts,
+    table,
+    reporting,
+    *,
+    classify: Callable[[str], tuple[str, str]] = _classify_node,
+    diag_code: str = "BP_NODE_UNRECOGNIZED",
+    gid_fn: Callable[[str], str] = graph_id,
+    nid_fn: Callable[[str, str, str, int], str] = node_id,
+    pose_fn: Callable[[Any], str | None] | None = None,
+    pose_endpoint_fn: Callable[[str, str], str] | None = None,
+):
+    """Emit one node with pins/ports; shared with the AnimBlueprint module.
+
+    Animation callers override kind classification, ID scheme, diagnostic
+    code and add a pose-pin classifier plus pose endpoint builder via the
+    keyword arguments.
+    """
+    node_class = getattr(node, "node_class", "") or getattr(node, "class_name", "") or ""
+    kind, status = classify(node_class)
+    if status != "recognized":
         reporting.diagnostic(
-            "BP_NODE_UNRECOGNIZED",
-            f"graph:{graph_id(graph_slug)}/nodes",
+            diag_code,
+            f"graph:{gid_fn(graph_slug)}/nodes",
             "warning",
             "semantic_loss",
             occurrence={"class": node_class},
@@ -181,32 +211,48 @@ def _emit_node(node, graph_slug, ordinal_counts, table, reporting, mode):
     key = (kind, name_slug)
     ordinal = ordinal_counts.get(key, 0)
     ordinal_counts[key] = ordinal + 1
-    nid = node_id(graph_slug, kind, name_slug, ordinal)
+    nid = nid_fn(graph_slug, kind, name_slug, ordinal)
 
     node_index: dict[str, dict] = {}
     data_pins: dict[str, dict] = {}
     control_ports: dict[str, dict] = {}
+    pose_pins: dict[str, dict] = {}
 
     for pin in getattr(node, "pins", None) or []:
         pin_id = getattr(pin, "pin_guid", "") or ""
         direction = _direction_str(pin)
         is_exec = _is_exec(pin)
         pin_name = getattr(pin, "pin_name", "") or ""
-        endpoint = exec_endpoint(pin_name) if is_exec else data_endpoint(pin_name, direction)
+        pose = pose_fn(pin) if pose_fn is not None else None
+        if pose is not None:
+            endpoint = pose_endpoint_fn(pin_name, direction)
+            # Pose pins are always emitted, in pose_ports only
+            pose_pins[endpoint] = {
+                "name": pin_name,
+                "direction": direction,
+                "pose_type": pose,
+            }
+        elif is_exec:
+            endpoint = exec_endpoint(pin_name)
+        else:
+            endpoint = data_endpoint(pin_name, direction)
         linked = _linked_guids(pin)
         if pin_id:
             node_index[pin_id] = {
                 "node": nid,
-                "graph": graph_id(graph_slug),
+                "graph": gid_fn(graph_slug),
                 "endpoint": endpoint,
                 "direction": direction,
                 "is_exec": is_exec,
+                "is_pose": pose is not None,
                 "orphaned": bool(getattr(pin, "orphaned", False) or getattr(pin, "orphaned_pin", False)),
                 "not_connectable": bool(getattr(pin, "not_connectable", False)),
                 "linked": linked,
             }
         connected = bool(linked)
-        if is_exec:
+        if pose is not None:
+            pass  # pose pin already recorded in pose_pins above
+        elif is_exec:
             role = ascii_slug(pin_name).lower().replace("_", "-") or "port"
             control_ports[endpoint] = {"name": pin_name, "direction": direction, "role": role}
         elif _pin_keep(pin, connected):
@@ -227,6 +273,7 @@ def _emit_node(node, graph_slug, ordinal_counts, table, reporting, mode):
         result["data_pins"] = data_pins
     if control_ports:
         result["control_ports"] = control_ports
-    if mode == "debug":
-        result["evidence"] = {"node_guid": getattr(node, "node_guid", "") or "", "source_class": node_class}
+    if pose_pins:
+        result["pose_pins"] = pose_pins
+    result["evidence"] = {"node_guid": getattr(node, "node_guid", "") or "", "source_class": node_class}
     return result, node_index

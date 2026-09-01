@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 
 from uasset_read.parsers.class_registry import (
     ClassHandler,
-    FallbackPolicy,
     HandlerResult,
     get_class_registry,
 )
@@ -31,85 +30,68 @@ logger = logging.getLogger(__name__)
 
 
 # Import dedicated parse functions (non-stub modules only)
-from uasset_read.parsers.asset_types.material import parse_material
 from uasset_read.parsers.asset_types.material_instance import parse_material_instance
 
 # Opaque stub factory (replaces 40 deleted stub files)
 from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
 
-# Module -> class names mapping for opaque stubs
-_OPAQUE_STUBS: dict[str, list[str]] = {
-    "anim_blend_space": ["AnimBlendSpace", "AnimBlendSpace1D", "AimOffsetBlendSpace", "AimOffsetBlendSpace1D"],
-    "anim_bone_compression": ["AnimBoneCompressionSettings"],
-    "anim_composite": ["AnimComposite"],
-    "anim_curve_compression": ["AnimCurveCompressionCodec"],
-    "anim_data_model": ["AnimationDataModel"],
-    "anim_layer_interface": ["AnimLayerInterface"],
-    "behavior_tree": ["BehaviorTree"],
-    "blackboard_data": ["BlackboardData"],
-    "cloth_asset": ["ClothAsset"],
-    "curve_float": ["CurveFloat"],
-    "curve_linear_color": ["CurveLinearColor"],
-    "curve_vector": ["CurveVector"],
-    "data_asset": ["DataAsset"],
-    "dialogue_voice": ["DialogueVoice"],
-    "dialogue_wave": ["DialogueWave"],
-    "foliage_type": ["FoliageType"],
-    "groom_asset": ["GroomAsset"],
-    "landscape": ["Landscape"],
-    "landscape_grass_type": ["LandscapeGrassType"],
-    "landscape_layer_info": ["LandscapeLayerInfoObject"],
-    "level": ["Level"],
-    "material_function": ["MaterialFunction"],
-    "material_parameter_collection": ["MaterialParameterCollection"],
-    "media_player": ["MediaPlayer"],
-    "media_source": ["MediaSource"],
-    "media_texture": ["MediaTexture"],
-    "particle_system": ["ParticleSystem"],
-    "physical_material": ["PhysicalMaterial"],
-    "physics_asset": ["PhysicsAsset"],
-    "pose_asset": ["PoseAsset"],
-    "primary_data_asset": ["PrimaryDataAsset"],
-    "reverb_effect": ["ReverbEffect"],
-    "skeletal_mesh": ["SkeletalMesh"],
-    "skeletal_mesh_lod_settings": ["SkeletalMeshLODSettings"],
-    "sound_attenuation": ["SoundAttenuation"],
-    "sound_class": ["SoundClass"],
-    "sound_concurrency": ["SoundConcurrency"],
-    "sound_mix": ["SoundMix"],
-    "sound_submix": ["SoundSubmix"],
-    "sparse_volume_texture": ["SparseVolumeTexture"],
-    "static_mesh": ["StaticMesh"],
-    "string_table": ["StringTable"],
-    "subsurface_profile": ["SubsurfaceProfile"],
-    "texture2d": ["Texture2D"],
-    "texture2d_array": ["Texture2DArray"],
-    "texture_render_target": ["TextureRenderTarget2D", "TextureRenderTargetCube"],
-    "volume_texture": ["VolumeTexture"],
-    "widget_blueprint": ["WidgetBlueprintGeneratedClass", "WidgetBlueprint"],
-    "world": ["World"],
-}
+# Modules whose handler is the generic opaque partial-metadata stub
+_OPAQUE_STUBS = frozenset(
+    {
+        "anim_blend_space",
+        "anim_bone_compression",
+        "anim_composite",
+        "anim_curve_compression",
+        "anim_data_model",
+        "anim_layer_interface",
+        "behavior_tree",
+        "blackboard_data",
+        "cloth_asset",
+        "curve_float",
+        "curve_linear_color",
+        "curve_vector",
+        "data_asset",
+        "dialogue_voice",
+        "dialogue_wave",
+        "foliage_type",
+        "groom_asset",
+        "landscape",
+        "landscape_grass_type",
+        "landscape_layer_info",
+        "level",
+        "media_player",
+        "media_source",
+        "media_texture",
+        "particle_system",
+        "physical_material",
+        "physics_asset",
+        "pose_asset",
+        "primary_data_asset",
+        "skeletal_mesh_lod_settings",
+        "sound_attenuation",
+        "sound_class",
+        "sound_concurrency",
+        "sound_mix",
+        "sound_submix",
+        "sparse_volume_texture",
+        "string_table",
+        "subsurface_profile",
+        "texture2d_array",
+        "texture_render_target",
+        "volume_texture",
+        "widget_blueprint",
+        "world",
+    }
+)
 
 # Import handler classes (for reflection registration)
-from uasset_read.parsers.asset_types.anim_blueprint import AnimBlueprintHandler
-from uasset_read.parsers.asset_types.anim_sequence import AnimSequenceHandler
-from uasset_read.parsers.asset_types.anim_montage import AnimMontageHandler
-from uasset_read.parsers.asset_types.niagara_graph import NiagaraGraphHandler
-from uasset_read.parsers.asset_types.niagara_script import NiagaraScriptHandler
 from uasset_read.parsers.asset_types.niagara_node import NiagaraNodeHandler
-from uasset_read.parsers.asset_types.niagara_script_variable import NiagaraScriptVariableHandler
+from uasset_read.parsers.asset_types.niagara_projection import NIAGARA_HANDLERS
 
 __all__ = [
-    "parse_material",
     "parse_material_instance",
     "register_asset_type_handlers",
-    "AnimBlueprintHandler",
-    "AnimSequenceHandler",
-    "AnimMontageHandler",
-    "NiagaraGraphHandler",
-    "NiagaraScriptHandler",
     "NiagaraNodeHandler",
-    "NiagaraScriptVariableHandler",
     "PropertyMetadataHandler",
 ]
 
@@ -134,10 +116,6 @@ class AssetTypeHandler(ClassHandler):
     def handler_name(self) -> str:
         return self._handler_name
 
-    @property
-    def fallback_policy(self) -> FallbackPolicy:
-        return FallbackPolicy.GENERIC_UOBJECT
-
     def parse(
         self,
         export: "ObjectExport",
@@ -158,7 +136,6 @@ class AssetTypeHandler(ClassHandler):
             return HandlerResult(
                 success=True,
                 data=data,
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
         except (KeyError, TypeError, ValueError, struct.error) as e:
             logger.warning(
@@ -170,7 +147,6 @@ class AssetTypeHandler(ClassHandler):
             return HandlerResult(
                 success=False,
                 error_message=str(e),
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
 
 
@@ -186,10 +162,6 @@ class PropertyMetadataHandler(ClassHandler):
     @property
     def handler_name(self) -> str:
         return f"{self._class_name}PropertyMetadataHandler"
-
-    @property
-    def fallback_policy(self) -> FallbackPolicy:
-        return FallbackPolicy.GENERIC_UOBJECT
 
     def parse(
         self,
@@ -208,7 +180,6 @@ class PropertyMetadataHandler(ClassHandler):
         return HandlerResult(
             success=True,
             data=data,
-            fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
         )
 
 
@@ -233,10 +204,8 @@ def register_asset_type_handlers() -> None:
         PropertyMetadataHandler("MaterialParameterCollection"),
         PropertyMetadataHandler("ReverbEffect"),
         # #521: Niagara handlers
-        NiagaraGraphHandler(),
-        NiagaraScriptHandler(),
+        *NIAGARA_HANDLERS,
         NiagaraNodeHandler(),
-        NiagaraScriptVariableHandler(),
     ]
 
     # Optional parsers (register if import succeeds)
@@ -287,13 +256,6 @@ def register_asset_type_handlers() -> None:
         ),
         # New types from #557
         ("curve_float", "parse_curve_float", ["CurveFloat"], "CurveFloatHandler"),
-        ("material_function", "parse_material_function", ["MaterialFunction"], "MaterialFunctionHandler"),
-        (
-            "material_parameter_collection",
-            "parse_material_parameter_collection",
-            ["MaterialParameterCollection"],
-            "MaterialParameterCollectionHandler",
-        ),
         ("anim_composite", "parse_anim_composite", ["AnimComposite"], "AnimCompositeHandler"),
         (
             "anim_blend_space",
@@ -302,7 +264,6 @@ def register_asset_type_handlers() -> None:
             "AnimBlendSpaceHandler",
         ),
         ("sound_concurrency", "parse_sound_concurrency", ["SoundConcurrency"], "SoundConcurrencyHandler"),
-        ("reverb_effect", "parse_reverb_effect", ["ReverbEffect"], "ReverbEffectHandler"),
         ("dialogue_wave", "parse_dialogue_wave", ["DialogueWave"], "DialogueWaveHandler"),
         ("dialogue_voice", "parse_dialogue_voice", ["DialogueVoice"], "DialogueVoiceHandler"),
         ("curve_linear_color", "parse_curve_linear_color", ["CurveLinearColor"], "CurveLinearColorHandler"),
@@ -350,16 +311,13 @@ def register_asset_type_handlers() -> None:
         ("groom_asset", "parse_groom_asset", ["GroomAsset"], "GroomAssetHandler"),
         ("sparse_volume_texture", "parse_sparse_volume_texture", ["SparseVolumeTexture"], "SparseVolumeTextureHandler"),
         ("level_sequence", "parse_level_sequence", ["LevelSequence"], "LevelSequenceHandler"),
-        ("sound_cue", "parse_sound_cue", ["SoundCue"], "SoundCueHandler"),
         ("user_defined", "parse_user_defined", ["UserDefinedEnum", "UserDefinedStruct"], "UserDefinedHandler"),
     ]
     for module, func_name, class_names, handler_name in _optional:
         try:
             # Check if this is an opaque stub (module deleted, use inline factory)
             if module in _OPAQUE_STUBS:
-                # Use first class name from the mapping for the stub factory
-                stub_classes = _OPAQUE_STUBS[module]
-                parse_func = make_opaque_stub(stub_classes[0])
+                parse_func = make_opaque_stub()
                 handlers.append(
                     AssetTypeHandler(
                         class_names=class_names,

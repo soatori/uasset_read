@@ -16,7 +16,6 @@ def build_data_table_content(
     package_ir: "PackageIR",
     export_ir: "ExportIR",
     coverage_model,
-    evidence_list,
 ) -> dict:
     """Build the DataTable domain content dict.
 

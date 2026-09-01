@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
 
 
-def build_blueprint_content(package_ir: "PackageIR", export_ir: "ExportIR", coverage_model, evidence_list) -> dict:
+def build_blueprint_content(package_ir: "PackageIR", export_ir: "ExportIR", coverage_model) -> dict:
     """Build the Blueprint domain content dict (BP-4 top-level shape)."""
     reporting = BlueprintReporting()
     table = TypeTable()
@@ -29,7 +29,7 @@ def build_blueprint_content(package_ir: "PackageIR", export_ir: "ExportIR", cove
         reporting.coverage("graphs", "unavailable", reason="no_graph_exports")
         reporting.diagnostic("BP_GRAPH_MISSING", "asset", "warning", "semantic_loss")
 
-    graphs_json, index = emit_graphs(graphs, table, reporting, mode="debug")
+    graphs_json, index = emit_graphs(graphs, table, reporting)
     attach_flows(graphs_json, index, reporting)
 
     # Graph completeness metrics
@@ -103,18 +103,15 @@ def _collect_graphs(package_ir) -> list:
 
 def _emit_graph_completeness(graphs, graphs_json, index, reporting) -> None:
     """Emit graph completeness metrics (nodes, pins, edges)."""
-    # Count nodes: total in original graphs vs emitted in graphs_json
-    total_nodes = _count_nodes_recursive(graphs)
+    # One recursive walk supplies totals for all three metrics; each is
+    # compared against what was actually emitted (graphs_json / index).
+    total_nodes, total_pins, total_edges = _count_graph_recursive(graphs)
     emitted_nodes = sum(len(g["nodes"]) for g in graphs_json)
     omitted_nodes = total_nodes - emitted_nodes
 
-    # Count pins: total across all nodes vs emitted in index
-    total_pins = _count_pins_recursive(graphs)
     emitted_pins = len(index)
     omitted_pins = total_pins - emitted_pins
 
-    # Count edges: total linked_to entries vs emitted edges
-    total_edges = _count_edges_recursive(graphs)
     emitted_edges = _count_emitted_edges(graphs_json)
     omitted_edges = total_edges - emitted_edges
 
@@ -149,34 +146,23 @@ def _emit_graph_completeness(graphs, graphs_json, index, reporting) -> None:
     )
 
 
-def _count_nodes_recursive(graphs) -> int:
-    """Count total nodes across all graphs (including subgraphs)."""
-    count = 0
-    for graph in graphs:
-        count += len(getattr(graph, "nodes", None) or [])
-        count += _count_nodes_recursive(getattr(graph, "subgraphs", None) or [])
-    return count
+def _count_graph_recursive(graphs) -> tuple[int, int, int]:
+    """Count (nodes, pins, edges) across all graphs, subgraphs included.
 
-
-def _count_pins_recursive(graphs) -> int:
-    """Count total pins across all nodes in all graphs (including subgraphs)."""
-    count = 0
+    Each linked_to entry on a pin counts as one edge.
+    """
+    nodes = pins = edges = 0
     for graph in graphs:
         for node in getattr(graph, "nodes", None) or []:
-            count += len(getattr(node, "pins", None) or [])
-        count += _count_pins_recursive(getattr(graph, "subgraphs", None) or [])
-    return count
-
-
-def _count_edges_recursive(graphs) -> int:
-    """Count total linked_to entries across all pins (each link is one edge)."""
-    count = 0
-    for graph in graphs:
-        for node in getattr(graph, "nodes", None) or []:
+            nodes += 1
             for pin in getattr(node, "pins", None) or []:
-                count += len(getattr(pin, "linked_to", None) or [])
-        count += _count_edges_recursive(getattr(graph, "subgraphs", None) or [])
-    return count
+                pins += 1
+                edges += len(getattr(pin, "linked_to", None) or [])
+        sub_nodes, sub_pins, sub_edges = _count_graph_recursive(getattr(graph, "subgraphs", None) or [])
+        nodes += sub_nodes
+        pins += sub_pins
+        edges += sub_edges
+    return nodes, pins, edges
 
 
 def _count_emitted_edges(graphs_json) -> int:

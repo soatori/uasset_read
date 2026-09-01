@@ -28,7 +28,7 @@ from uasset_read.parsers.asset_types.property_extractor import (
     extract_array_property,
     extract_property,
 )
-from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
+from uasset_read.parsers.class_registry import ClassHandler, HandlerResult
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +55,6 @@ def _as_list(value: Any) -> list:
 class MovieSceneControlRigParameterTrackHandler(ClassHandler):
     """MovieSceneControlRigParameterTrack Asset type handler"""
 
-    # Reflection registration metadata
-    export_type: str = "MovieSceneControlRigParameterTrack"
-    priority: int = 100
 
     def can_handle(self, class_name: str) -> bool:
         return class_name == "MovieSceneControlRigParameterTrack"
@@ -88,7 +85,6 @@ class MovieSceneControlRigParameterTrackHandler(ClassHandler):
                 return HandlerResult(
                     success=False,
                     error_message="No properties found",
-                    fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
                 )
 
             properties = build_properties_dict(properties_list)
@@ -130,7 +126,6 @@ class MovieSceneControlRigParameterTrackHandler(ClassHandler):
             return HandlerResult(
                 success=True,
                 data={"movie_scene_control_rig_track": vars(ns)},
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
 
         except (KeyError, TypeError, ValueError) as e:
@@ -138,16 +133,12 @@ class MovieSceneControlRigParameterTrackHandler(ClassHandler):
             return HandlerResult(
                 success=False,
                 error_message=str(e),
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
 
 
 class MovieSceneControlRigParameterSectionHandler(ClassHandler):
     """MovieSceneControlRigParameterSection Asset type handler"""
 
-    # Reflection registration metadata
-    export_type: str = "MovieSceneControlRigParameterSection"
-    priority: int = 100
 
     # Parameter array property name -> parameter_counts key mapping
     _PARAM_ARRAY_FIELDS: list[tuple[str, str]] = [
@@ -190,7 +181,6 @@ class MovieSceneControlRigParameterSectionHandler(ClassHandler):
                 return HandlerResult(
                     success=False,
                     error_message="No properties found",
-                    fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
                 )
 
             properties = build_properties_dict(properties_list)
@@ -245,7 +235,6 @@ class MovieSceneControlRigParameterSectionHandler(ClassHandler):
             return HandlerResult(
                 success=True,
                 data={"movie_scene_control_rig_section": vars(ns)},
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
 
         except (KeyError, TypeError, ValueError) as e:
@@ -253,5 +242,4 @@ class MovieSceneControlRigParameterSectionHandler(ClassHandler):
             return HandlerResult(
                 success=False,
                 error_message=str(e),
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )

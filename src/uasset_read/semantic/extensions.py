@@ -2,7 +2,7 @@
 
 Extractor contract (v2, package-scoped):
 
-    extractor(package_ir, export_ir, coverage_model, evidence_list) -> dict
+    extractor(package_ir, export_ir, coverage_model) -> dict
 
 The returned dict is merged into SemanticIR.content. Reserved envelope keys
 must not appear in it except the overridable set {coverage, diagnostics,

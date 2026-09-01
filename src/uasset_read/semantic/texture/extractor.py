@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from uasset_read.semantic.asset_data import pick
+
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
 
@@ -32,7 +34,6 @@ def build_texture_content(
     package_ir: "PackageIR",
     export_ir: "ExportIR",
     coverage_model,
-    evidence_list,
 ) -> dict:
     """Build the Texture domain content dict."""
     asset_type_data = getattr(export_ir, "asset_type_data", None)
@@ -42,20 +43,12 @@ def build_texture_content(
         return {}
 
     # Resource properties
-    resource_properties: dict = {}
-    for key in _RESOURCE_KEYS:
-        val = asset_type_data.get(key)
-        if val is not None:
-            resource_properties[key] = val
+    resource_properties: dict = pick(asset_type_data, _RESOURCE_KEYS)
     has_resources = len(resource_properties) > 0
     coverage_model.track("resource_properties", has_resources)
 
     # Bulk summary
-    bulk_summary: dict = {}
-    for key in _BULK_KEYS:
-        val = asset_type_data.get(key)
-        if val is not None:
-            bulk_summary[key] = val
+    bulk_summary: dict = pick(asset_type_data, _BULK_KEYS)
     has_bulk = len(bulk_summary) > 0
     coverage_model.track("bulk_summary", has_bulk)
 

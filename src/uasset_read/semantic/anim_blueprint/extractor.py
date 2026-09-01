@@ -18,6 +18,7 @@ from uasset_read.semantic.anim_blueprint.nodes import (
 )
 from uasset_read.semantic.anim_blueprint.state_machines import emit_state_machines
 from uasset_read.semantic.anim_blueprint.flows import attach_flows
+from uasset_read.semantic.blueprint.extractor import _collect_graphs, _function_index
 from uasset_read.semantic.blueprint.ids import ascii_slug
 from uasset_read.semantic.blueprint.reporting import BlueprintReporting
 from uasset_read.semantic.blueprint.types import TypeTable
@@ -70,7 +71,6 @@ def build_anim_blueprint_content(
     package_ir: "PackageIR",
     export_ir: "ExportIR",
     coverage_model,
-    evidence_list,
 ) -> dict:
     """Build the Animation Blueprint domain content dict.
 
@@ -182,20 +182,6 @@ def _asset_identity(package_ir, export_ir, anim_blueprint) -> dict:
     if getattr(header, "saved_by_engine_version", ""):
         identity["saved_by_engine"] = header.saved_by_engine_version
     return {"asset": identity}
-
-
-def _collect_graphs(package_ir) -> list:
-    """All GraphIR objects across exports, deduplicated by graph_guid."""
-    seen: set[str] = set()
-    graphs = []
-    for export in package_ir.exports:
-        for graph in getattr(export, "graphs", None) or []:
-            guid = getattr(graph, "graph_guid", "") or f"{len(graphs)}:{getattr(graph, 'graph_name', '')}"
-            if guid in seen:
-                continue
-            seen.add(guid)
-            graphs.append(graph)
-    return graphs
 
 
 def _emit_anim_graphs(graphs, table, reporting) -> tuple[list[dict], dict]:
@@ -313,15 +299,3 @@ def _emit_anim_notifies(notifies: list, reporting) -> list[dict]:
         notifies_json.append(notify_dict)
 
     return notifies_json
-
-
-def _function_index(blueprint, graphs_json) -> list[dict]:
-    """Function declarations joined to implementation graphs by name."""
-    graph_by_name = {g["name"]: g["id"] for g in graphs_json}
-    functions = []
-    for fn in getattr(blueprint, "functions", None) or []:
-        name = getattr(fn, "name", "") or ""
-        if not name:
-            continue
-        functions.append({"name": name, "graph": graph_by_name.get(name)})
-    return functions

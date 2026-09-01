@@ -127,230 +127,159 @@ def parse_curve_table(
     return result
 
 
-def _read_rich_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[str, Any]:
-    """Parse FRichCurve tagged properties format.
+class _InvalidPropSize(Exception):
+    """Tagged property size is out of bounds; aborts the property walk."""
 
-    FRichCurve serialized via SerializeTaggedProperties:
-    - Each property preceded by FName (property name) + FName (type name) + int32 (size) + int32 (array_index)
-    - and type-related extra fields (InnerTypeName, etc.)
-    - Empty FName as property name indicates end
-    - Keys property contains TArray<FRichCurveKey>
 
-    Reference UStruct::SerializeTaggedProperties:
-    Engine/Source/Runtime/CoreUObject/Private/UObject/Class.cpp
+def _walk_tagged_properties(archive: Any, row_idx: int, name_map: List[str]):
+    """Yield ``(prop_name, type_name, prop_data)`` for SerializeTaggedProperties.
+
+    The FPropertyTag framing (name FName, type FName, size, array index,
+    type-dependent extra FNames, optional PropertyGuid) is identical for
+    FRichCurve and FSimpleCurve; empty FName (index=0, number=0) ends the
+    list. Reference UStruct::SerializeTaggedProperties:
+    Engine/Source/Runtime/CoreUObject/Private/UObject/Class.cpp,
     FPropertyTag::Serialize
     """
+    while True:
+        prop_name_index = archive.read_i32(f"Row[{row_idx}].Prop.Name.Index")
+        prop_name_number = archive.read_i32(f"Row[{row_idx}].Prop.Name.Number")
+        if prop_name_index == 0 and prop_name_number == 0:
+            return
+
+        type_name_index = archive.read_i32(f"Row[{row_idx}].Prop.Type.Index")
+        archive.read_i32(f"Row[{row_idx}].Prop.Type.Number")  # protocol read
+        type_name = _resolve_name(type_name_index, name_map)
+
+        prop_size = archive.read_i32(f"Row[{row_idx}].Prop.Size")
+        archive.read_i32(f"Row[{row_idx}].Prop.ArrayIndex")  # protocol read
+
+        # EnumName FName (EnumProperty / ByteProperty)
+        if type_name in ("EnumProperty", "ByteProperty"):
+            archive.read_i32()  # index
+            archive.read_i32()  # number
+        # InnerTypeName FName (ArrayProperty / SetProperty)
+        elif type_name in ("ArrayProperty", "SetProperty"):
+            archive.read_i32()  # index
+            archive.read_i32()  # number
+        # KeyType + ValueType FNames (MapProperty)
+        elif type_name == "MapProperty":
+            archive.read_i32()  # key type index
+            archive.read_i32()  # key type number
+            archive.read_i32()  # value type index
+            archive.read_i32()  # value type number
+
+        # PropertyGuid: bool(i32) + optional FGuid(16)
+        if archive.read_i32() != 0:
+            archive.read_bytes(16)
+
+        if prop_size < 0 or prop_size > archive.total_size():
+            raise _InvalidPropSize(prop_size)
+        if prop_size > 0:
+            yield _resolve_name(prop_name_index, name_map), type_name, archive.read(prop_size)
+
+
+def _parse_rich_keys(prop_data: bytes) -> List[Dict[str, float]]:
+    """Parse a TArray<FRichCurveKey> payload.
+
+    FRichCurveKey layout (RichCurve.h:80-118): InterpMode/TangentMode/
+    TangentWeightMode (3 x u8) + Time/Value/Arrive(Tangent,Weight)/
+    Leave(Tangent,Weight) (8 x f32) = 27 bytes per key.
+    """
+    FRICH_CURVE_KEY_SIZE = 27
     keys: List[Dict[str, float]] = []
-
-    try:
-        # Loop reading tagged properties until an empty FName is encountered
-        while True:
-            # Property name FName
-            prop_name_index = archive.read_i32(f"Row[{row_idx}].Prop.Name.Index")
-            prop_name_number = archive.read_i32(f"Row[{row_idx}].Prop.Name.Number")
-
-            # Empty FName (index=0 and number=0) indicates property list end
-            if prop_name_index == 0 and prop_name_number == 0:
-                break
-
-            # Type name FName
-            type_name_index = archive.read_i32(f"Row[{row_idx}].Prop.Type.Index")
-            _type_name_number = archive.read_i32(f"Row[{row_idx}].Prop.Type.Number")  # noqa: F841 - protocol read
-
-            # Parse type name (to determine if extra fields need skipping)
-            type_name = _resolve_name(type_name_index, name_map)
-
-            # Size: int32
-            prop_size = archive.read_i32(f"Row[{row_idx}].Prop.Size")
-
-            # ArrayIndex: int32
-            _array_index = archive.read_i32(f"Row[{row_idx}].Prop.ArrayIndex")  # noqa: F841 - protocol read
-
-            # EnumName: FName (EnumProperty or ByteProperty specific field)
-            if type_name in ("EnumProperty", "ByteProperty"):
-                archive.read_i32()  # index
-                archive.read_i32()  # number
-
-            # InnerTypeName: FName (ArrayProperty or SetProperty)
-            if type_name in ("ArrayProperty", "SetProperty"):
-                archive.read_i32()  # index
-                archive.read_i32()  # number
-
-            # KeyType + ValueType: 2 x FName (MapProperty)
-            if type_name == "MapProperty":
-                archive.read_i32()  # key type index
-                archive.read_i32()  # key type number
-                archive.read_i32()  # value type index
-                archive.read_i32()  # value type number
-
-            # PropertyGuid: bool(i32) + optional FGuid(16)
-            has_guid = archive.read_i32()
-            if has_guid != 0:
-                archive.read_bytes(16)
-
-            if prop_size < 0 or prop_size > archive.total_size():
-                return {
-                    "type": "RichCurve",
-                    "keys": keys,
-                    "error": f"Invalid property size: {prop_size}",
+    if len(prop_data) < 4:
+        return keys
+    arr_count = struct.unpack("<i", prop_data[:4])[0]
+    offset = 4
+    for _ in range(arr_count):
+        if offset + FRICH_CURVE_KEY_SIZE <= len(prop_data):
+            interp_mode, tangent_mode, tangent_weight_mode = struct.unpack_from("<BBB", prop_data, offset)
+            (
+                time_val,
+                value_val,
+                arrive_tangent,
+                arrive_tangent_weight,
+                leave_tangent,
+                leave_tangent_weight,
+            ) = struct.unpack_from("<ffffff", prop_data, offset + 3)
+            keys.append(
+                {
+                    "time": time_val,
+                    "value": value_val,
+                    "interp_mode": interp_mode,
+                    "tangent_mode": tangent_mode,
+                    "tangent_weight_mode": tangent_weight_mode,
+                    "arrive_tangent": arrive_tangent,
+                    "arrive_tangent_weight": arrive_tangent_weight,
+                    "leave_tangent": leave_tangent,
+                    "leave_tangent_weight": leave_tangent_weight,
                 }
+            )
+            offset += FRICH_CURVE_KEY_SIZE
+    return keys
 
-            # Read property data
-            if prop_size > 0:
-                prop_data = archive.read(prop_size)
 
-                prop_name = _resolve_name(prop_name_index, name_map)
-
-                # If TArray property named "Keys", parse the FRichCurveKey array
-                if "ArrayProperty" in type_name and "Keys" in prop_name:
-                    # FRichCurveKey full layout (RichCurve.h:80-118):
-                    # InterpMode: u8 (1)
-                    # TangentMode: u8 (1)
-                    # TangentWeightMode: u8 (1)
-                    # Time: f32 (4)
-                    # Value: f32 (4)
-                    # ArriveTangent: f32 (4)
-                    # ArriveTangentWeight: f32 (4)
-                    # LeaveTangent: f32 (4)
-                    # LeaveTangentWeight: f32 (4)
-                    # Total 27 bytes per key
-                    FRICH_CURVE_KEY_SIZE = 27
-                    if len(prop_data) >= 4:
-                        arr_count = struct.unpack("<i", prop_data[:4])[0]
-                        offset = 4
-                        for _ in range(arr_count):
-                            if offset + FRICH_CURVE_KEY_SIZE <= len(prop_data):
-                                interp_mode = struct.unpack_from("<B", prop_data, offset)[0]
-                                tangent_mode = struct.unpack_from("<B", prop_data, offset + 1)[0]
-                                tangent_weight_mode = struct.unpack_from("<B", prop_data, offset + 2)[0]
-                                time_val = struct.unpack_from("<f", prop_data, offset + 3)[0]
-                                value_val = struct.unpack_from("<f", prop_data, offset + 7)[0]
-                                arrive_tangent = struct.unpack_from("<f", prop_data, offset + 11)[0]
-                                arrive_tangent_weight = struct.unpack_from("<f", prop_data, offset + 15)[0]
-                                leave_tangent = struct.unpack_from("<f", prop_data, offset + 19)[0]
-                                leave_tangent_weight = struct.unpack_from("<f", prop_data, offset + 23)[0]
-                                keys.append(
-                                    {
-                                        "time": time_val,
-                                        "value": value_val,
-                                        "interp_mode": interp_mode,
-                                        "tangent_mode": tangent_mode,
-                                        "tangent_weight_mode": tangent_weight_mode,
-                                        "arrive_tangent": arrive_tangent,
-                                        "arrive_tangent_weight": arrive_tangent_weight,
-                                        "leave_tangent": leave_tangent,
-                                        "leave_tangent_weight": leave_tangent_weight,
-                                    }
-                                )
-                                offset += FRICH_CURVE_KEY_SIZE
-
+def _read_rich_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[str, Any]:
+    """Parse FRichCurve tagged properties: the Keys array property holds the curve."""
+    keys: List[Dict[str, float]] = []
+    try:
+        for prop_name, type_name, prop_data in _walk_tagged_properties(archive, row_idx, name_map):
+            if "ArrayProperty" in type_name and "Keys" in prop_name:
+                keys.extend(_parse_rich_keys(prop_data))
+    except _InvalidPropSize as e:
+        return {"type": "RichCurve", "keys": keys, "error": f"Invalid property size: {e.args[0]}"}
     except (struct.error, OSError, ValueError, ParseError) as e:
         # Return partially parsed data on parse failure
         logger.warning("RichCurve parse failed: %s", e, exc_info=True)
-
     return {"type": "RichCurve", "keys": keys}
 
 
-def _read_simple_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[str, Any]:
-    """Parse FSimpleCurve tagged properties format.
+def _parse_simple_keys(prop_data: bytes) -> List[Dict[str, float]]:
+    """Parse a TArray<FSimpleCurveKey> payload.
 
-    FSimpleCurve serialized via SerializeTaggedProperties (CurveTable.cpp:138-145):
+    FSimpleCurveKey uses custom serialization (SimpleCurve.cpp:10-18):
+    Time(f32) + Value(f32) = 8 bytes per key.
+    """
+    SIMPLE_CURVE_KEY_SIZE = 8
+    keys: List[Dict[str, float]] = []
+    if len(prop_data) < 4:
+        return keys
+    arr_count = struct.unpack("<i", prop_data[:4])[0]
+    offset = 4
+    for _ in range(arr_count):
+        if offset + SIMPLE_CURVE_KEY_SIZE <= len(prop_data):
+            time_val, value_val = struct.unpack_from("<ff", prop_data, offset)
+            keys.append({"time": time_val, "value": value_val})
+            offset += SIMPLE_CURVE_KEY_SIZE
+    return keys
+
+
+def _read_simple_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[str, Any]:
+    """Parse FSimpleCurve tagged properties (CurveTable.cpp:138-145).
+
     - InterpMode: EnumProperty tagged property (TEnumAsByte<ERichCurveInterpMode>)
     - Keys: ArrayProperty tagged property (TArray<FSimpleCurveKey>)
-    - FSimpleCurveKey: Time(f32) + Value(f32) = 8 bytes (custom serialization, SimpleCurve.cpp:10-18)
-
-    Reference UStruct::SerializeTaggedProperties:
-    Engine/Source/Runtime/CoreUObject/Private/UObject/Class.cpp
-    FPropertyTag::Serialize
     """
     interp_mode: int = 0  # Default RCIM_Linear
     keys: List[Dict[str, float]] = []
-
     try:
-        # Loop reading tagged properties until an empty FName is encountered
-        while True:
-            # Property name FName
-            prop_name_index = archive.read_i32(f"Row[{row_idx}].Prop.Name.Index")
-            prop_name_number = archive.read_i32(f"Row[{row_idx}].Prop.Name.Number")
-
-            # Empty FName (index=0 and number=0) indicates property list end
-            if prop_name_index == 0 and prop_name_number == 0:
-                break
-
-            # Type name FName
-            type_name_index = archive.read_i32(f"Row[{row_idx}].Prop.Type.Index")
-            _type_name_number = archive.read_i32(f"Row[{row_idx}].Prop.Type.Number")  # noqa: F841 - protocol read
-
-            # Parse type name (to determine if extra fields need skipping)
-            type_name = _resolve_name(type_name_index, name_map)
-
-            # Size: int32
-            prop_size = archive.read_i32(f"Row[{row_idx}].Prop.Size")
-
-            # ArrayIndex: int32
-            _array_index = archive.read_i32(f"Row[{row_idx}].Prop.ArrayIndex")  # noqa: F841 - protocol read
-
-            # EnumName: FName (EnumProperty or ByteProperty specific field)
-            if type_name in ("EnumProperty", "ByteProperty"):
-                archive.read_i32()  # index
-                archive.read_i32()  # number
-
-            # InnerTypeName: FName (ArrayProperty or SetProperty)
-            if type_name in ("ArrayProperty", "SetProperty"):
-                archive.read_i32()  # index
-                archive.read_i32()  # number
-
-            # KeyType + ValueType: 2 x FName (MapProperty)
-            if type_name == "MapProperty":
-                archive.read_i32()  # key type index
-                archive.read_i32()  # key type number
-                archive.read_i32()  # value type index
-                archive.read_i32()  # value type number
-
-            # PropertyGuid: bool(i32) + optional FGuid(16)
-            has_guid = archive.read_i32()
-            if has_guid != 0:
-                archive.read_bytes(16)
-
-            if prop_size < 0 or prop_size > archive.total_size():
-                return {
-                    "type": "SimpleCurve",
-                    "interp_mode": interp_mode,
-                    "keys": keys,
-                    "error": f"Invalid property size: {prop_size}",
-                }
-
-            # Read property data
-            if prop_size > 0:
-                prop_data = archive.read(prop_size)
-
-                prop_name = _resolve_name(prop_name_index, name_map)
-
-                # EnumProperty: InterpMode (FSimpleCurve UPROPERTY)
-                if "EnumProperty" in type_name and "InterpMode" in prop_name:
-                    # Enum value stored as u8 in property data
-                    if len(prop_data) >= 1:
-                        interp_mode = struct.unpack_from("<B", prop_data, 0)[0]
-
-                # ArrayProperty: Keys (FSimpleCurveKey array)
-                # FSimpleCurveKey uses custom serialization (SimpleCurve.cpp:10-18):
-                # Time(f32) + Value(f32) = 8 bytes per key
-                if "ArrayProperty" in type_name and "Keys" in prop_name:
-                    SIMPLE_CURVE_KEY_SIZE = 8
-                    if len(prop_data) >= 4:
-                        arr_count = struct.unpack("<i", prop_data[:4])[0]
-                        offset = 4
-                        for _ in range(arr_count):
-                            if offset + SIMPLE_CURVE_KEY_SIZE <= len(prop_data):
-                                time_val = struct.unpack_from("<f", prop_data, offset)[0]
-                                value_val = struct.unpack_from("<f", prop_data, offset + 4)[0]
-                                keys.append({"time": time_val, "value": value_val})
-                                offset += SIMPLE_CURVE_KEY_SIZE
-
+        for prop_name, type_name, prop_data in _walk_tagged_properties(archive, row_idx, name_map):
+            if "EnumProperty" in type_name and "InterpMode" in prop_name:
+                if len(prop_data) >= 1:
+                    interp_mode = struct.unpack_from("<B", prop_data, 0)[0]
+            elif "ArrayProperty" in type_name and "Keys" in prop_name:
+                keys.extend(_parse_simple_keys(prop_data))
+    except _InvalidPropSize as e:
+        return {
+            "type": "SimpleCurve",
+            "interp_mode": interp_mode,
+            "keys": keys,
+            "error": f"Invalid property size: {e.args[0]}",
+        }
     except (struct.error, OSError, ValueError, ParseError) as e:
         # Return partially parsed data on parse failure
         logger.warning("SimpleCurve parse failed: %s", e, exc_info=True)
-
     return {"type": "SimpleCurve", "interp_mode": interp_mode, "keys": keys}
 
 
@@ -358,4 +287,4 @@ def _resolve_name(name_index: int, name_map: List[str]) -> str:
     """Parse name from name table."""
     from uasset_read.parsers.utils import resolve_name_from_index
 
-    return resolve_name_from_index(None, name_map, name_index, fallback_prefix="name")
+    return resolve_name_from_index(name_map, name_index, fallback_prefix="name")

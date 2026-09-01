@@ -17,6 +17,7 @@ Format reference:
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
@@ -29,7 +30,7 @@ from uasset_read.parsers.asset_types.property_extractor import (
     extract_array_property,
     extract_property,
 )
-from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
+from uasset_read.parsers.class_registry import ClassHandler, HandlerResult
 
 logger = logging.getLogger(__name__)
 
@@ -62,44 +63,9 @@ def _parse_track_classes(value: Any) -> list[str]:
     ]
 
 
-class _MovieSceneData:
-    """MovieScene parse result container, supports setattr access for extract_property."""
-
-    __slots__ = (
-        "display_rate",
-        "tick_resolution",
-        "evaluation_type",
-        "clock_source",
-        "track_count",
-        "track_classes",
-        "spawnable_count",
-        "possessable_count",
-        "binding_count",
-        "marked_frame_count",
-    )
-
-    def __init__(self) -> None:
-        self.display_rate = None
-        self.tick_resolution = None
-        self.evaluation_type = None
-        self.clock_source = None
-        self.track_count = 0
-        self.track_classes: list[str] = []
-        self.spawnable_count = 0
-        self.possessable_count = 0
-        self.binding_count = 0
-        self.marked_frame_count = 0
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"type": "MovieScene", **{slot: getattr(self, slot) for slot in self.__slots__}}
-
-
 class MovieSceneHandler(ClassHandler):
     """UMovieScene Asset type handler"""
 
-    # Reflection registration metadata
-    export_type: str = "MovieScene"
-    priority: int = 100
 
     def can_handle(self, class_name: str) -> bool:
         return class_name == "MovieScene"
@@ -131,14 +97,25 @@ class MovieSceneHandler(ClassHandler):
                 return HandlerResult(
                     success=False,
                     error_message="No properties found",
-                    fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
                 )
 
             # Convert property list to dictionary format (name -> value)
             properties = build_properties_dict(properties_list)
 
             # Build MovieScene metadata
-            data = _MovieSceneData()
+            data = SimpleNamespace(
+                type="MovieScene",
+                display_rate=None,
+                tick_resolution=None,
+                evaluation_type=None,
+                clock_source=None,
+                track_count=0,
+                track_classes=[],
+                spawnable_count=0,
+                possessable_count=0,
+                binding_count=0,
+                marked_frame_count=0,
+            )
 
             # FFrameRate property extraction
             extract_property(properties, "DisplayRate", data, "display_rate", transform=_parse_frame_rate)
@@ -168,12 +145,11 @@ class MovieSceneHandler(ClassHandler):
             )
 
             # Store to export custom data
-            ensure_custom_data(export)["movie_scene"] = data.to_dict()
+            ensure_custom_data(export)["movie_scene"] = vars(data)
 
             return HandlerResult(
                 success=True,
-                data={"movie_scene": data.to_dict()},
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
+                data={"movie_scene": vars(data)},
             )
 
         except (KeyError, TypeError, ValueError) as e:
@@ -181,5 +157,4 @@ class MovieSceneHandler(ClassHandler):
             return HandlerResult(
                 success=False,
                 error_message=str(e),
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )

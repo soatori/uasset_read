@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
 
 
-def build_material_content(package_ir: "PackageIR", export_ir: "ExportIR", coverage_model, evidence_list) -> dict:
+def build_material_content(package_ir: "PackageIR", export_ir: "ExportIR", coverage_model) -> dict:
     """Build the Material domain content dict."""
     # Material data comes from PackageIR.material (built by _build_material_ir)
     material_ir = getattr(package_ir, "material", None)

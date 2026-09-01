@@ -55,7 +55,6 @@ def build_skeleton_content(
     package_ir: "PackageIR",
     export_ir: "ExportIR",
     coverage_model,
-    evidence_list,
 ) -> dict:
     """Build the Skeleton domain content dict.
 

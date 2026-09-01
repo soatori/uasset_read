@@ -27,7 +27,7 @@ from uasset_read.parsers.asset_types.property_extractor import (
     extract_property,
     parse_dict_list,
 )
-from uasset_read.parsers.class_registry import ClassHandler, FallbackPolicy, HandlerResult
+from uasset_read.parsers.class_registry import ClassHandler, HandlerResult
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +35,6 @@ logger = logging.getLogger(__name__)
 class AnimMontageHandler(ClassHandler):
     """AnimMontage Asset type handler"""
 
-    # Reflection registration metadata
-    export_type: str = "AnimMontage"
-    priority: int = 100
 
     def can_handle(self, class_name: str) -> bool:
         return class_name == "AnimMontage"
@@ -68,7 +65,6 @@ class AnimMontageHandler(ClassHandler):
                 return HandlerResult(
                     success=False,
                     error_message="No properties found",
-                    fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
                 )
 
             properties = build_properties_dict(properties_list)
@@ -121,7 +117,6 @@ class AnimMontageHandler(ClassHandler):
             return HandlerResult(
                 success=True,
                 data={"anim_montage": anim_ir},
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
 
         except (KeyError, TypeError, ValueError) as e:
@@ -129,7 +124,6 @@ class AnimMontageHandler(ClassHandler):
             return HandlerResult(
                 success=False,
                 error_message=str(e),
-                fallback_policy=FallbackPolicy.GENERIC_UOBJECT,
             )
 
     def _parse_composite_sections(self, data: Any) -> list[dict]:

@@ -16,9 +16,10 @@ Format reference:
 
 import logging
 import struct
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from uasset_read.exceptions import ParseError
+from uasset_read.parsers.asset_types.property_extractor import build_properties_dict
 
 logger = logging.getLogger(__name__)
 
@@ -60,67 +61,53 @@ _SOUND_GROUP_NAMES = {
 }
 
 
-def _extract_property(properties: List[Any], name: str) -> Optional[Any]:
-    """Extract a named property value from parsed property list.
-
-    Args:
-        properties: PropertyValue list (from property parser)
-        name: Property name (e.g. "SampleRate")
-
-    Returns:
-        Property value or None
-    """
-    for prop in properties:
-        if hasattr(prop, "name") and prop.name == name:
-            return getattr(prop, "value", None)
-    return None
+def _as_int(value: Any) -> Optional[int]:
+    return value if isinstance(value, int) else None
 
 
-def _extract_bool(properties: List[Any], name: str) -> bool:
-    """Extract a boolean value from the property list."""
-    val = _extract_property(properties, name)
-    if val is None:
-        return False
-    if isinstance(val, bool):
-        return val
-    if isinstance(val, int):
-        return val != 0
-    return bool(val)
+def _as_float(value: Any) -> Optional[float]:
+    return float(value) if isinstance(value, (int, float)) else None
 
 
-def _extract_int(properties: List[Any], name: str) -> Optional[int]:
-    """Extract an int value from the property list."""
-    val = _extract_property(properties, name)
-    if val is None:
+def _as_flag(value: Any) -> Optional[bool]:
+    """Coerce to bool; only True is projected (caller skips None)."""
+    if value is None:
         return None
-    if isinstance(val, int):
-        return val
-    return None
+    return True if value else None
 
 
-def _extract_float(properties: List[Any], name: str) -> Optional[float]:
-    """Extract a float value from the property list."""
-    val = _extract_property(properties, name)
-    if val is None:
-        return None
-    if isinstance(val, (int, float)):
-        return float(val)
-    return None
-
-
-def _extract_enum(properties: List[Any], name: str, enum_map: Dict[int, str]) -> Optional[str]:
-    """Extract an enum value name from the property list."""
-    val = _extract_property(properties, name)
-    if val is None:
+def _as_enum(value: Any, enum_map: Dict[int, str]) -> Optional[str]:
+    if value is None:
         return None
     # EnumValue wrapper
-    if hasattr(val, "value_name"):
-        return val.value_name
-    if isinstance(val, int):
-        return enum_map.get(val, f"Unknown({val})")
-    if isinstance(val, str):
-        return val
+    if hasattr(value, "value_name"):
+        return value.value_name
+    if isinstance(value, int):
+        return enum_map.get(value, f"Unknown({value})")
+    if isinstance(value, str):
+        return value
     return None
+
+
+# (UPROPERTY name, semantic key, value coercion); fields are skipped when the
+# coercion yields None.
+_SOUND_FIELDS: tuple[tuple[str, str, Callable[[Any], Any]], ...] = (
+    ("SampleRate", "sample_rate", _as_int),
+    ("ImportedSampleRate", "imported_sample_rate", _as_int),
+    ("NumChannels", "num_channels", _as_int),
+    ("Duration", "duration", _as_float),
+    ("Volume", "volume", _as_float),
+    ("Pitch", "pitch", _as_float),
+    ("SoundAssetCompressionType", "compression_type", lambda v: _as_enum(v, _COMPRESSION_TYPE_NAMES)),
+    ("CompressionQuality", "compression_quality", _as_int),
+    ("bLooping", "looping", _as_flag),
+    ("bStreaming", "streaming", _as_flag),
+    ("bProcedural", "procedural", _as_flag),
+    ("SoundGroup", "sound_group", lambda v: _as_enum(v, _SOUND_GROUP_NAMES)),
+    ("SubtitlePriority", "subtitle_priority", _as_float),
+    ("bMature", "mature", _as_flag),
+    ("LoadingBehavior", "loading_behavior", lambda v: _as_enum(v, _LOADING_BEHAVIOR_NAMES)),
+)
 
 
 def parse_sound_wave(
@@ -209,73 +196,15 @@ def build_sound_metadata(
     sound: Dict[str, Any] = {}
 
     # --- Extract semantic fields from UPROPERTY tagged properties ---
+    values = build_properties_dict(list(properties))
+    for prop_name, field, coerce in _SOUND_FIELDS:
+        val = coerce(values.get(prop_name))
+        if val is not None:
+            sound[field] = val
 
-    # Basic audio properties (SoundWave.h:791-822)
-    sample_rate = _extract_int(properties, "SampleRate")
-    if sample_rate is not None:
-        sound["sample_rate"] = sample_rate
-
-    imported_sample_rate = _extract_int(properties, "ImportedSampleRate")
-    if imported_sample_rate is not None:
-        sound["imported_sample_rate"] = imported_sample_rate
-
-    num_channels = _extract_int(properties, "NumChannels")
-    if num_channels is not None:
-        sound["num_channels"] = num_channels
-
-    duration = _extract_float(properties, "Duration")
-    if duration is not None:
-        sound["duration"] = duration
-
-    # Playback controls (SoundWave.h:782-788)
-    volume = _extract_float(properties, "Volume")
-    if volume is not None:
-        sound["volume"] = volume
-
-    pitch = _extract_float(properties, "Pitch")
-    if pitch is not None:
-        sound["pitch"] = pitch
-
-    # Compression format (SoundWave.h:424-468)
-    compression_type = _extract_enum(properties, "SoundAssetCompressionType", _COMPRESSION_TYPE_NAMES)
-    if compression_type is not None:
-        sound["compression_type"] = compression_type
-
-    compression_quality = _extract_int(properties, "CompressionQuality")
-    if compression_quality is not None:
-        sound["compression_quality"] = compression_quality
-
-    # Playback flags (SoundWave.h:446-455) — only output when True
-    b_looping = _extract_bool(properties, "bLooping")
-    if b_looping:
-        sound["looping"] = True
-
-    b_streaming = _extract_bool(properties, "bStreaming")
-    if b_streaming:
-        sound["streaming"] = True
-
-    b_procedural = _extract_bool(properties, "bProcedural")
-    if b_procedural:
-        sound["procedural"] = True
-
-    # Sound group (SoundWave.h:442)
-    sound_group = _extract_enum(properties, "SoundGroup", _SOUND_GROUP_NAMES)
-    if sound_group is not None:
-        sound["sound_group"] = sound_group
-
-    # Subtitle properties (SoundWave.h:685-779)
-    subtitle_priority = _extract_float(properties, "SubtitlePriority")
-    if subtitle_priority is not None:
-        sound["subtitle_priority"] = subtitle_priority
-
-    b_mature = _extract_bool(properties, "bMature")
-    if b_mature:
-        sound["mature"] = True
-
-    # Loading behavior from UPROPERTY (SoundWave.h:760-761)
-    loading_behavior = _extract_enum(properties, "LoadingBehavior", _LOADING_BEHAVIOR_NAMES)
-    if loading_behavior is not None:
-        sound["loading_behavior"] = loading_behavior
+    sample_rate = sound.get("sample_rate")
+    duration = sound.get("duration")
+    num_channels = sound.get("num_channels")
 
     # --- Supplement from custom serialize data ---
     if handler_data.get("is_cooked") is not None:

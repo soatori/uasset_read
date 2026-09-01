@@ -41,7 +41,6 @@ class HandlerResult:
     success: bool
     data: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
-    fallback_policy: FallbackPolicy = FallbackPolicy.GENERIC_UOBJECT
 
 
 class ClassHandler(ABC):

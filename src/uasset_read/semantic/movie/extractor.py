@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from uasset_read.semantic.asset_data import pick
+
 if TYPE_CHECKING:
     from uasset_read.models.ir import PackageIR, ExportIR
 
@@ -15,7 +17,6 @@ def build_movie_content(
     package_ir: "PackageIR",
     export_ir: "ExportIR",
     coverage_model,
-    evidence_list,
 ) -> dict:
     """Build the Movie domain content dict."""
     asset_type_data = getattr(export_ir, "asset_type_data", None)
@@ -27,11 +28,7 @@ def build_movie_content(
     # MovieSceneHandler stores data under "movie_scene" key
     scene_data = asset_type_data.get("movie_scene", asset_type_data)
 
-    summary: dict = {}
-    for key in ("track_count", "spawnable_count", "possessable_count", "binding_count", "marked_frame_count"):
-        val = scene_data.get(key)
-        if val is not None:
-            summary[key] = val
+    summary: dict = pick(scene_data, ("track_count", "spawnable_count", "possessable_count", "binding_count", "marked_frame_count"))
 
     # Frame rate from MovieSceneHandler
     display_rate = scene_data.get("display_rate")

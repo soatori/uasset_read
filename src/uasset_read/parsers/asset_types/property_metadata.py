@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from uasset_read.models.asset_metadata import (
     has_meaningful_metadata,
@@ -124,6 +124,147 @@ def _texture_references(value: Any) -> list[str]:
     return references
 
 
+def _identity(value: Any) -> Any:
+    return value
+
+
+def _bool_enum(value: Any) -> bool:
+    return bool(_enum_value(value))
+
+
+# (source property names, target field, transform) per class; the first
+# present property wins, values are skipped when sanitization finds them
+# meaningless.
+_PROJECTIONS: dict[str, tuple[tuple[tuple[str, ...], str, Callable[[Any], Any]], ...]] = {
+    "Material": (
+        (("BlendMode",), "blend_mode", _enum_value),
+        (("TwoSided",), "two_sided", _enum_value),
+        (("ShadingModel",), "shading_model", _enum_value),
+    ),
+    "Texture2D": (
+        (("ImportedSize",), "imported_size", _size),
+        (("CompressionSettings",), "compression_settings", _enum_value),
+        (("SRGB",), "srgb", _enum_value),
+        (("AddressX",), "address_x", _enum_value),
+        (("AddressY",), "address_y", _enum_value),
+        (("Source",), "source", _enum_value),
+    ),
+    "SoundCue": (
+        (("FirstNode",), "first_node", _identity),
+        (("VolumeMultiplier", "Volume"), "volume_multiplier", _identity),
+        (("PitchMultiplier", "Pitch"), "pitch_multiplier", _identity),
+    ),
+    "CubeBuilder": (
+        (("X",), "size_x", _enum_value),
+        (("Y",), "size_y", _enum_value),
+        (("Z",), "size_z", _enum_value),
+        (("WallThickness",), "wall_thickness", _enum_value),
+        (("Hollow",), "hollow", _bool_enum),
+        (("Tessellated",), "tessellated", _bool_enum),
+    ),
+    "MaterialFunction": (
+        (("Description",), "description", _identity),
+        (("UserExposedCaption",), "user_exposed_caption", _identity),
+        (("bExposeToLibrary",), "expose_to_library", bool),
+    ),
+    "ReverbEffect": (
+        (("bBypassEarlyReflections",), "bypass_early_reflections", _enum_value),
+        (("ReflectionsDelay",), "reflections_delay", _enum_value),
+        (("GainHF",), "gain_hf", _enum_value),
+        (("ReflectionsGain",), "reflections_gain", _enum_value),
+        (("bBypassLateReflections",), "bypass_late_reflections", _enum_value),
+        (("LateDelay",), "late_delay", _enum_value),
+        (("DecayTime",), "decay_time", _enum_value),
+        (("Density",), "density", _enum_value),
+        (("Diffusion",), "diffusion", _enum_value),
+        (("AirAbsorptionGainHF",), "air_absorption_gain_hf", _enum_value),
+        (("DecayHFRatio",), "decay_hf_ratio", _enum_value),
+        (("LateGain",), "late_gain", _enum_value),
+        (("Gain",), "gain", _enum_value),
+    ),
+}
+_PROJECTIONS["TextureCube"] = _PROJECTIONS["Texture2D"]
+
+
+def _material_custom(values: dict[str, Any], project: Callable[..., None]) -> None:
+    texture_data = values.get("TextureStreamingData", values.get("ReferencedTextures"))
+    texture_references = _texture_references(texture_data)
+    if texture_references:
+        project("texture_references", texture_references)
+
+
+def _cube_builder_custom(values: dict[str, Any], project: Callable[..., None]) -> None:
+    layer = values.get("Layer")
+    if isinstance(layer, str) and layer:
+        project("layer", layer)
+
+    polygons = values.get("Polys")
+    if isinstance(polygons, list):
+        project("polygon_count", len(polygons), include_zero=True)
+        # Decode FBuilderPoly structs if available
+        decoded_polys = []
+        for poly in polygons:
+            # Handle both dict and StructValue objects
+            if isinstance(poly, dict):
+                fields = poly.get("fields", {})
+            else:
+                fields = getattr(poly, "fields", {})
+            if fields:
+                decoded_polys.append(
+                    {
+                        "VertexIndices": fields.get("VertexIndices", []),
+                        "Direction": fields.get("Direction", 0),
+                        "ItemName": fields.get("ItemName", "None"),
+                        "PolyFlags": fields.get("PolyFlags", 0),
+                    }
+                )
+        if decoded_polys:
+            project("polygons", decoded_polys)
+    elif isinstance(polygons, dict):
+        # ArrayProperty with raw_data — decode FBuilderPoly[]
+        poly_raw = polygons.get("raw_data")
+        poly_bytes = _normalize_raw_bytes(poly_raw)
+        if poly_bytes:
+            project("poly_payload_size", len(poly_bytes))
+            try:
+                polys = _decode_builder_polys(poly_bytes)
+                if polys:
+                    project("polygons", polys)
+            except Exception:
+                pass
+
+    vertices = values.get("Vertices")
+    if isinstance(vertices, dict):
+        raw_data = vertices.get("raw_data")
+    else:
+        raw_data = getattr(vertices, "raw_data", None)
+    raw_bytes = _normalize_raw_bytes(raw_data)
+    if raw_bytes:
+        project("vertex_payload_size", len(raw_bytes))
+        try:
+            verts = _decode_fvector_array(raw_bytes)
+            if verts is not None:
+                project("vertices", verts)
+        except Exception:
+            pass
+
+
+def _parameter_collection_custom(values: dict[str, Any], project: Callable[..., None]) -> None:
+    scalar_params = values.get("ScalarParameters")
+    if isinstance(scalar_params, list):
+        project("scalar_parameter_count", len(scalar_params), include_zero=True)
+    vector_params = values.get("VectorParameters")
+    if isinstance(vector_params, list):
+        project("vector_parameter_count", len(vector_params), include_zero=True)
+
+
+_CUSTOM: dict[str, Callable[[dict[str, Any], Callable[..., None]], None]] = {
+    "Material": _material_custom,
+    "CubeBuilder": _cube_builder_custom,
+    "MaterialParameterCollection": _parameter_collection_custom,
+}
+
+
 def build_property_metadata(
     class_name: str,
     properties: list[Any],
@@ -146,144 +287,15 @@ def build_property_metadata(
             data[field_name] = sanitized
             business_field_count += 1
 
-    if class_name == "Material":
-        for property_name, field_name in (
-            ("BlendMode", "blend_mode"),
-            ("TwoSided", "two_sided"),
-            ("ShadingModel", "shading_model"),
-        ):
+    for names, field_name, transform in _PROJECTIONS.get(class_name, ()):
+        for property_name in names:
             if property_name in values:
-                project(field_name, _enum_value(values[property_name]))
-        texture_data = values.get("TextureStreamingData", values.get("ReferencedTextures"))
-        texture_references = _texture_references(texture_data)
-        if texture_references:
-            project("texture_references", texture_references)
-    elif class_name in ("Texture2D", "TextureCube"):
-        imported_size = _size(values.get("ImportedSize"))
-        if imported_size is not None:
-            project("imported_size", imported_size)
-        for property_name, field_name in (
-            ("CompressionSettings", "compression_settings"),
-            ("SRGB", "srgb"),
-            ("AddressX", "address_x"),
-            ("AddressY", "address_y"),
-            ("Source", "source"),
-        ):
-            if property_name in values:
-                project(field_name, _enum_value(values[property_name]))
-    elif class_name == "SoundCue":
-        for names, field_name in (
-            (("FirstNode",), "first_node"),
-            (("VolumeMultiplier", "Volume"), "volume_multiplier"),
-            (("PitchMultiplier", "Pitch"), "pitch_multiplier"),
-        ):
-            for property_name in names:
-                if property_name in values:
-                    project(field_name, values[property_name])
-                    break
-    elif class_name == "CubeBuilder":
-        # Extract UPROPERTY scalar fields
-        for prop_name, field_name in (
-            ("X", "size_x"),
-            ("Y", "size_y"),
-            ("Z", "size_z"),
-            ("WallThickness", "wall_thickness"),
-        ):
-            if prop_name in values:
-                project(field_name, _enum_value(values[prop_name]))
-        for prop_name, field_name in (("Hollow", "hollow"), ("Tessellated", "tessellated")):
-            if prop_name in values:
-                project(field_name, bool(_enum_value(values[prop_name])))
-        layer = values.get("Layer")
-        if isinstance(layer, str) and layer:
-            project("layer", layer)
+                project(field_name, transform(values[property_name]))
+                break
 
-        polygons = values.get("Polys")
-        if isinstance(polygons, list):
-            project("polygon_count", len(polygons), include_zero=True)
-            # Decode FBuilderPoly structs if available
-            decoded_polys = []
-            for poly in polygons:
-                # Handle both dict and StructValue objects
-                if isinstance(poly, dict):
-                    fields = poly.get("fields", {})
-                else:
-                    fields = getattr(poly, "fields", {})
-                if fields:
-                    decoded_polys.append(
-                        {
-                            "VertexIndices": fields.get("VertexIndices", []),
-                            "Direction": fields.get("Direction", 0),
-                            "ItemName": fields.get("ItemName", "None"),
-                            "PolyFlags": fields.get("PolyFlags", 0),
-                        }
-                    )
-            if decoded_polys:
-                project("polygons", decoded_polys)
-        elif isinstance(polygons, dict):
-            # ArrayProperty with raw_data — decode FBuilderPoly[]
-            poly_raw = polygons.get("raw_data")
-            poly_bytes = _normalize_raw_bytes(poly_raw)
-            if poly_bytes:
-                project("poly_payload_size", len(poly_bytes))
-                try:
-                    polys = _decode_builder_polys(poly_bytes)
-                    if polys:
-                        project("polygons", polys)
-                except Exception:
-                    pass
-
-        vertices = values.get("Vertices")
-        if isinstance(vertices, dict):
-            raw_data = vertices.get("raw_data")
-        else:
-            raw_data = getattr(vertices, "raw_data", None)
-        raw_bytes = _normalize_raw_bytes(raw_data)
-        if raw_bytes:
-            project("vertex_payload_size", len(raw_bytes))
-            try:
-                verts = _decode_fvector_array(raw_bytes)
-                if verts is not None:
-                    project("vertices", verts)
-            except Exception:
-                pass
-
-    elif class_name == "MaterialFunction":
-        for property_name, field_name in (
-            ("Description", "description"),
-            ("UserExposedCaption", "user_exposed_caption"),
-        ):
-            if property_name in values:
-                project(field_name, values[property_name])
-        if "bExposeToLibrary" in values:
-            project("expose_to_library", bool(values["bExposeToLibrary"]))
-
-    elif class_name == "MaterialParameterCollection":
-        scalar_params = values.get("ScalarParameters")
-        if isinstance(scalar_params, list):
-            project("scalar_parameter_count", len(scalar_params), include_zero=True)
-        vector_params = values.get("VectorParameters")
-        if isinstance(vector_params, list):
-            project("vector_parameter_count", len(vector_params), include_zero=True)
-
-    elif class_name == "ReverbEffect":
-        for property_name, field_name in (
-            ("bBypassEarlyReflections", "bypass_early_reflections"),
-            ("ReflectionsDelay", "reflections_delay"),
-            ("GainHF", "gain_hf"),
-            ("ReflectionsGain", "reflections_gain"),
-            ("bBypassLateReflections", "bypass_late_reflections"),
-            ("LateDelay", "late_delay"),
-            ("DecayTime", "decay_time"),
-            ("Density", "density"),
-            ("Diffusion", "diffusion"),
-            ("AirAbsorptionGainHF", "air_absorption_gain_hf"),
-            ("DecayHFRatio", "decay_hf_ratio"),
-            ("LateGain", "late_gain"),
-            ("Gain", "gain"),
-        ):
-            if property_name in values:
-                project(field_name, _enum_value(values[property_name]))
+    custom = _CUSTOM.get(class_name)
+    if custom is not None:
+        custom(values, project)
 
     if business_field_count:
         data["parse_status"] = "partial_metadata"

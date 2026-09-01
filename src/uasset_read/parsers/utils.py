@@ -8,7 +8,6 @@ logger = logging.getLogger(__name__)
 
 
 def resolve_name_from_index(
-    archive: Any,
     name_map: List[str],
     index: int,
     fallback_prefix: str = "param",
@@ -16,7 +15,6 @@ def resolve_name_from_index(
     """Unified name index resolution logic
 
     Args:
-        archive: FArchive instance
         name_map: name mapping table
         index: index value
         fallback_prefix: fallback prefix when index is out of bounds
