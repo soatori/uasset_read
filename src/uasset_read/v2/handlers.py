@@ -15,7 +15,14 @@ from .version import VersionContext
 
 
 class AssetHandler(Protocol):
-    """Domain handler that enriches an object with semantic data."""
+    """Domain handler that enriches an object with semantic data.
+
+    Handlers may declare a capability tier via a ``capability`` member:
+    either a plain ``"summary"``/``"decoded"`` string, or a callable of the
+    produced result for handlers whose tier depends on the data actually
+    found. Undeclared handlers are summary-tier: only decoded-tier output
+    may yield ``status.semantic = "complete"`` (#629).
+    """
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool: ...
 
@@ -42,6 +49,17 @@ def get_handlers() -> list[AssetHandler]:
     return list(_HANDLERS)
 
 
+def _capability_tier(handler: AssetHandler, result: dict[str, Any]) -> str:
+    """Resolve a handler's declared tier ("decoded"/"summary") for its output.
+
+    ``capability`` may be a plain tier string or a callable of the produced
+    result. Undeclared handlers default to "summary": an undeclared handler
+    must not claim that a type was fully decoded (#629).
+    """
+    cap = getattr(handler, "capability", "summary")
+    return cap(result) if callable(cap) else cap
+
+
 def run_handlers(
     obj: ObjectRecord,
     context: VersionContext,
@@ -52,12 +70,16 @@ def run_handlers(
 
     Returns (semantic, coverage, diagnostics).
     Handler failure only affects this object — no propagation.
+    ``status.semantic`` is bound to the capability tier: "complete" only
+    when a decoded-tier handler produced output; summary-tier results and
+    failures stay "partial" (#629).
     """
     semantic: dict[str, Any] = {}
     coverage: list[CoverageEntry] = []
     diagnostics: list[Diagnostic] = []
     matched = False
     failed = False
+    decoded = False
 
     for handler in _HANDLERS:
         try:
@@ -66,6 +88,8 @@ def run_handlers(
                 result = handler.enrich(obj, context, all_objects, package_data)
                 if result is not None:
                     semantic.update(result)
+                    if _capability_tier(handler, result) == "decoded":
+                        decoded = True
         except Exception as e:
             # Handler failure must not affect other objects
             matched = True
@@ -90,9 +114,10 @@ def run_handlers(
             )
 
     if matched:
-        # A handler that matched but produced nothing (enrich returned None)
-        # has not delivered semantics either — never claim "complete".
-        obj.status.semantic = "partial" if (failed or not semantic) else "complete"
+        # "complete" means a decoded-tier handler delivered semantics.
+        # A summary-tier result (name/kind echo, light digest), a handler
+        # that matched but produced nothing, or a failure stays "partial".
+        obj.status.semantic = "complete" if (decoded and not failed) else "partial"
 
     if not semantic:
         return None, coverage, diagnostics
@@ -122,6 +147,8 @@ def _flatten_text(val: Any) -> str | None:
 
 class UserDefinedEnumHandler:
     """Enrich UserDefinedEnum objects."""
+
+    capability = "decoded"  # real enum entries decoded from the name table
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         return (obj.class_name or "") == "UserDefinedEnum"
@@ -186,6 +213,8 @@ class UserDefinedEnumHandler:
 
 class UserDefinedStructHandler:
     """Enrich UserDefinedStruct objects."""
+
+    capability = "decoded"  # only returns output when real fields were extracted
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         return (obj.class_name or "") == "UserDefinedStruct"
@@ -259,6 +288,8 @@ class DataTableHandler:
     extracts right after the tagged properties.
     """
 
+    capability = "decoded"  # row struct/count read from real property + payload data
+
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         cn = obj.class_name or ""
         return cn in ("DataTable", "CurveTable", "StringTable")
@@ -306,6 +337,8 @@ class TextureHandler:
     Extracts semantic fields: kind, texture_type, srgb, compression_settings.
     Each extracted field produces a CoverageEntry.
     """
+
+    capability = "decoded"  # fields read from the tagged property bag
 
     _TEXTURE_CLASSES = ("Texture2D", "TextureCube")
 
@@ -362,6 +395,8 @@ class TexturePayloadHandler:
     Reads ImportedSize struct to emit a texture_mip payload descriptor
     with stored_size / logical_size.
     """
+
+    capability = "decoded"  # descriptor read from the real ImportedSize struct
 
     _TEXTURE_CLASSES = ("Texture2D", "TextureCube")
 
@@ -457,6 +492,10 @@ class SoundHandler:
         )
         return result
 
+    def capability(self, result: dict[str, Any]) -> str:
+        # Decoded only with real resource fields; a kind/sound_type echo is a summary.
+        return "decoded" if "resource" in result else "summary"
+
 
 # Register built-in handlers
 register_handler(UserDefinedEnumHandler())
@@ -469,6 +508,8 @@ register_handler(SoundHandler())
 
 class MaterialHandler:
     """Enrich Material objects with shader/material property summary."""
+
+    capability = "decoded"  # returns output only when real properties were read
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         return (obj.class_name or "") == "Material"
@@ -504,6 +545,8 @@ class MaterialHandler:
 
 class MaterialInstanceHandler:
     """Enrich MaterialInstance/MaterialInstanceConstant objects."""
+
+    capability = "decoded"  # returns output only when real properties were read
 
     _INSTANCE_CLASSES = ("MaterialInstance", "MaterialInstanceConstant")
 
@@ -547,6 +590,8 @@ class MaterialInstanceHandler:
 
 class SkeletonHandler:
     """Enrich Skeleton objects with bone hierarchy summary."""
+
+    capability = "decoded"  # bone counts read from the property bag
 
     def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
         return (obj.class_name or "") == "Skeleton"
@@ -621,7 +666,13 @@ class SkeletonHandler:
 
 
 class MeshHandler:
-    """Enrich StaticMesh/SkeletalMesh objects with geometry summary."""
+    """Enrich StaticMesh/SkeletalMesh objects with geometry summary.
+
+    Summary-tier: mesh geometry is not decoded, so this never yields
+    ``semantic="complete"`` (#629).
+    """
+
+    capability = "summary"
 
     _MESH_CLASSES = ("StaticMesh", "SkeletalMesh")
 
@@ -806,6 +857,10 @@ class BlueprintFamilyHandler:
             obj.coverage.extend(coverage)
             return result
 
+    def capability(self, result: dict[str, Any]) -> str:
+        # Light summary at depth=asset; only decoded graph data counts (#629).
+        return "decoded" if "graph" in result else "summary"
+
 
 register_handler(
     BlueprintFamilyHandler(
@@ -818,7 +873,13 @@ register_handler(
 
 
 class NiagaraHandler:
-    """Enrich Niagara objects with light summary."""
+    """Enrich Niagara objects with light summary.
+
+    Summary-tier: the name/type echo is not a decoded Niagara script, so
+    this never yields ``semantic="complete"`` (#629).
+    """
+
+    capability = "summary"
 
     _NIAGARA_CLASSES = (
         "NiagaraScript",

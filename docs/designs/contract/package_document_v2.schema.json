@@ -241,7 +241,8 @@
         },
         "semantic": {
           "type": "string",
-          "enum": ["complete", "partial", "unavailable", "not_requested"]
+          "enum": ["complete", "partial", "unavailable", "not_requested"],
+          "description": "'complete' means a decoded-tier handler produced the semantics for this object. Summary-tier output (kind/name echoes, light digests such as Niagara, mesh or depth=asset Blueprint summaries) stays 'partial'."
         }
       },
       "additionalProperties": false

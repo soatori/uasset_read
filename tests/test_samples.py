@@ -26,39 +26,85 @@ SCHEMA = json.loads((ROOT / "docs" / "designs" / "contract" / "package_document_
 MANIFEST_SAMPLES = json.loads(MANIFEST.read_text(encoding="utf-8"))["samples"]
 MANIFEST_BY_NAME = {entry["name"]: entry for entry in MANIFEST_SAMPLES}
 
+# (sample, class, expected keys, expected status.semantic at depth=asset).
+# "complete" requires decoded-tier handler output; summary-tier handlers
+# (mesh, blueprint summary, niagara) stay "partial" (#629).
 CAPABILITIES = (
-    ("ALS_FootstepDataTable.uasset", "DataTable", {"kind": "data_table"}),
-    ("Lyra_Enum_PanelType.uasset", "UserDefinedEnum", {"kind": "user_defined_enum", "enum_name": "Enum_PanelType"}),
+    ("ALS_FootstepDataTable.uasset", "DataTable", {"kind": "data_table"}, "complete"),
+    (
+        "Lyra_Enum_PanelType.uasset",
+        "UserDefinedEnum",
+        {"kind": "user_defined_enum", "enum_name": "Enum_PanelType"},
+        "complete",
+    ),
     (
         "StackOBot_Struct_Objective.uasset",
         "UserDefinedStruct",
         {"kind": "user_defined_struct", "struct_name": "Struct_Objective"},
+        "complete",
     ),
-    ("FirstPerson_T_GridChecker_A.uasset", "Texture2D", {"kind": "texture", "texture_type": "Texture2D"}),
+    ("FirstPerson_T_GridChecker_A.uasset", "Texture2D", {"kind": "texture", "texture_type": "Texture2D"}, "complete"),
     (
         "MutableSample_GrayLightTextureCube.uasset",
         "TextureCube",
         {"kind": "texture", "texture_type": "TextureCube"},
+        "complete",
     ),
-    ("ALS_Concrete_Step_01_SoundWave.uasset", "SoundWave", {"kind": "sound", "sound_type": "SoundWave"}),
-    ("ALS_Mannequin_Skeleton.uasset", "Skeleton", {"kind": "skeleton"}),
-    ("StarterContent_SM_Chair.uasset", "StaticMesh", {"kind": "mesh", "mesh_type": "StaticMesh"}),
-    ("FirstPerson_M_PrototypeGrid.uasset", "Material", {"kind": "material"}),
+    ("ALS_Concrete_Step_01_SoundWave.uasset", "SoundWave", {"kind": "sound", "sound_type": "SoundWave"}, "complete"),
+    ("ALS_Mannequin_Skeleton.uasset", "Skeleton", {"kind": "skeleton"}, "complete"),
+    (
+        "StarterContent_SM_Chair.uasset",
+        "StaticMesh",
+        {"kind": "mesh", "mesh_type": "StaticMesh"},
+        "partial",  # summary tier: geometry is not decoded
+    ),
+    ("FirstPerson_M_PrototypeGrid.uasset", "Material", {"kind": "material"}, "complete"),
     (
         "CassiniSample_MI_Template_BaseGray_Metal.uasset",
         "MaterialInstanceConstant",
         {"kind": "material_instance"},
+        "complete",
     ),
-    ("StackOBot_BP_Drone.uasset", "BlueprintGeneratedClass", {"kind": "blueprint"}),
-    ("ABP_RifleAnimLayers.uasset", "AnimBlueprintGeneratedClass", {"kind": "anim_blueprint"}),
-    ("ALS_AnimBP.uasset", "AnimBlueprint", {"kind": "anim_blueprint"}),
-    ("ALS_AnimBP.uasset", "AnimBlueprintGeneratedClass", {"kind": "anim_blueprint"}),
-    ("NM_BPSystemEvent.uasset", "NiagaraGraph", {"kind": "niagara", "niagara_type": "NiagaraGraph"}),
-    ("NM_BPSystemEvent.uasset", "NiagaraScript", {"kind": "niagara", "niagara_type": "NiagaraScript"}),
-    ("NM_BPSystemEvent.uasset", "NiagaraScriptSource", {"kind": "niagara", "niagara_type": "NiagaraScriptSource"}),
-    ("NM_BPSystemEvent.uasset", "NiagaraNodeOutput", {"kind": "niagara", "niagara_type": "NiagaraNodeOutput"}),
-    ("NM_BPSystemEvent.uasset", "NiagaraNodeSelect", {"kind": "niagara", "niagara_type": "NiagaraNodeSelect"}),
-    ("NM_BPSystemEvent.uasset", "NiagaraNodeStaticSwitch", {"kind": "niagara", "niagara_type": "NiagaraNodeStaticSwitch"}),
+    (
+        "StackOBot_BP_Drone.uasset",
+        "BlueprintGeneratedClass",
+        {"kind": "blueprint"},
+        "partial",  # summary tier at depth=asset
+    ),
+    ("ABP_RifleAnimLayers.uasset", "AnimBlueprintGeneratedClass", {"kind": "anim_blueprint"}, "partial"),
+    ("ALS_AnimBP.uasset", "AnimBlueprint", {"kind": "anim_blueprint"}, "partial"),
+    ("ALS_AnimBP.uasset", "AnimBlueprintGeneratedClass", {"kind": "anim_blueprint"}, "partial"),
+    (
+        "NM_BPSystemEvent.uasset",
+        "NiagaraGraph",
+        {"kind": "niagara", "niagara_type": "NiagaraGraph"},
+        "partial",  # summary tier: name/type echo
+    ),
+    ("NM_BPSystemEvent.uasset", "NiagaraScript", {"kind": "niagara", "niagara_type": "NiagaraScript"}, "partial"),
+    (
+        "NM_BPSystemEvent.uasset",
+        "NiagaraScriptSource",
+        {"kind": "niagara", "niagara_type": "NiagaraScriptSource"},
+        "partial",
+    ),
+    (
+        "NM_BPSystemEvent.uasset",
+        "NiagaraNodeOutput",
+        {"kind": "niagara", "niagara_type": "NiagaraNodeOutput"},
+        "partial",
+    ),
+    (
+        "NM_BPSystemEvent.uasset",
+        "NiagaraNodeSelect",
+        {"kind": "niagara", "niagara_type": "NiagaraNodeSelect"},
+        "partial",
+    ),
+    (
+        "NM_BPSystemEvent.uasset",
+        "NiagaraNodeStaticSwitch",
+        {"kind": "niagara", "niagara_type": "NiagaraNodeStaticSwitch"},
+        "partial",
+    ),
 )
 
 
@@ -136,12 +182,22 @@ def test_manifest_matches_every_real_sample():
         assert _sha256(path) == entry["sha256"], entry["name"]
 
 
-@pytest.mark.parametrize(("sample", "class_name", "expected"), CAPABILITIES, ids=[item[1] for item in CAPABILITIES])
-def test_real_sample_proves_claimed_capability(sample: str, class_name: str, expected: dict[str, object]):
-    """Each claimed capability must produce stable semantics from a real fixture."""
+@pytest.mark.parametrize(
+    ("sample", "class_name", "expected", "expected_semantic"),
+    CAPABILITIES,
+    ids=[f"{item[1]}-{item[3]}" for item in CAPABILITIES],
+)
+def test_real_sample_proves_claimed_capability(
+    sample: str, class_name: str, expected: dict[str, object], expected_semantic: str
+):
+    """Each claimed capability must produce stable semantics from a real fixture.
+
+    The status column pins the #629 tier contract: decoded-tier fixtures are
+    ``complete``; summary-tier fixtures prove ``partial`` with coverage.
+    """
     doc = _asset_document(sample)
     obj = next(item for item in doc.objects if item.class_name == class_name)
-    assert obj.status.semantic == "complete", f"{sample}:{class_name}"
+    assert obj.status.semantic == expected_semantic, f"{sample}:{class_name}"
     assert obj.coverage, f"{sample}:{class_name}"
     assert {key: obj.semantic[key] for key in expected} == expected, f"{sample}:{class_name}"
 
@@ -163,6 +219,8 @@ def test_real_sample_proves_claimed_capability(sample: str, class_name: str, exp
                 graph = dobj.semantic["graph"]
                 assert "nodes" in graph
                 assert "edges" in graph
+                # Decoded-tier output is what lifts the status to complete (#629).
+                assert dobj.status.semantic == "complete", f"{sample}:{class_name} decode tier"
                 # Verify all edge references point to existing nodes
                 node_ids = {node["id"] for node in graph["nodes"]}
                 for edge in graph["edges"]:
@@ -334,8 +392,8 @@ def test_v2_api_does_not_call_v1_pipeline(monkeypatch):
     assert result.summary.total_exports == len(result.objects)
 
 
-def test_niagara_fixture_fully_enriched():
-    """Every Niagara-class object in NM_BPSystemEvent must be semantically complete.
+def test_niagara_fixture_enriched_at_summary_tier():
+    """Every Niagara-class object is enriched, but the summary tier stays partial (#629).
 
     The fixture also contains EdGraphNode_Comment and MetaData exports that no
     handler covers; those are intentionally not asserted here.
@@ -345,8 +403,10 @@ def test_niagara_fixture_fully_enriched():
     doc = _asset_document("NM_BPSystemEvent.uasset")
     covered = [o for o in doc.objects if o.class_name in NiagaraHandler._NIAGARA_CLASSES]
     assert covered, "Niagara class set must match the fixture"
-    incomplete = [o for o in covered if o.status.semantic != "complete"]
-    assert not incomplete, f" uncovered Niagara objects: {[(o.id, o.class_name, o.status.semantic) for o in incomplete]}"
+    for o in covered:
+        assert o.semantic and o.semantic["kind"] == "niagara", o.id
+        assert o.coverage, o.id
+        assert o.status.semantic == "partial", (o.id, o.class_name, o.status.semantic)
 
 
 def _synthetic_export(**kwargs):

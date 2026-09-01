@@ -511,6 +511,8 @@ View 决定字段用途，Depth 决定解析成本：
 
 `coverage` 表达“预期语义中已输出多少”；它不能替代 parse status，也不能仅通过字段数量推导。
 
+object semantic 的 `complete` 绑定到 handler 声明的能力层级（#629）：handler 声明 `summary` 或 `decoded`，只有 decoded 层级产出语义时才能记 `complete`；summary 层级（kind/name 回显、light digest，如 Niagara、mesh 概要、depth=asset 的 Blueprint 概要）一律 `partial`，coverage 条目照常输出。
+
 ### Diagnostics
 
 ```json

@@ -433,6 +433,8 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
                 raise RuntimeError("boom")
 
         class Ok:
+            capability = "decoded"
+
             def supports(self, obj, ctx):
                 return True
 
@@ -461,6 +463,8 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
 
         class Ok:
+            capability = "decoded"
+
             def supports(self, obj, ctx):
                 return True
 
@@ -768,6 +772,79 @@ def test_handler_registry_supports_enriches_and_isolates():
         param = inspect.signature(parse_properties_from_export).parameters["run_class_handlers"]
         assert param.default is True, "v1 default must keep class-handler dispatch byte-identical"
 
+    def test_summary_tier_handlers_never_claim_complete():
+        """Niagara/Mesh/Blueprint-summary results are partial with coverage (#629)."""
+        from uasset_read.v2.handlers import (
+            _HANDLERS,
+            BlueprintFamilyHandler,
+            MeshHandler,
+            NiagaraHandler,
+            run_handlers,
+        )
+        from uasset_read.v2.version import VersionContext
+
+        cases = [
+            ("NiagaraScript", NiagaraHandler()),
+            ("StaticMesh", MeshHandler()),
+            (
+                "Blueprint",
+                BlueprintFamilyHandler(("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint"),
+            ),
+        ]
+        saved = list(_HANDLERS)
+        try:
+            for class_name, handler in cases:
+                _HANDLERS[:] = [handler]
+                obj = record(class_name)
+                semantic, _cov, _diags = run_handlers(obj, VersionContext(depth="asset"), [obj], None)
+                assert semantic, class_name
+                assert obj.status.semantic == "partial", class_name
+                assert obj.coverage, class_name
+        finally:
+            _HANDLERS[:] = saved
+
+    def test_decode_tier_blueprint_graph_marks_complete():
+        """Only decoded-tier output (Blueprint graph at depth=decode) yields complete (#629)."""
+        from uasset_read.v2.handlers import _HANDLERS, BlueprintFamilyHandler, run_handlers
+        from uasset_read.v2.version import VersionContext
+
+        bp = record("Blueprint")
+        node = record("K2Node_CallFunction")
+        node.id = "export:1"
+        handler = BlueprintFamilyHandler(
+            ("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint"
+        )
+        saved = list(_HANDLERS)
+        try:
+            _HANDLERS[:] = [handler]
+            semantic, _cov, _diags = run_handlers(
+                bp, VersionContext(depth="decode"), [bp, node], None
+            )
+        finally:
+            _HANDLERS[:] = saved
+        assert "graph" in semantic
+        assert bp.status.semantic == "complete"
+
+    def test_undeclared_handler_tier_defaults_to_summary():
+        from uasset_read.v2.handlers import _HANDLERS, run_handlers
+        from uasset_read.v2.version import VersionContext
+
+        class Echo:
+            def supports(self, obj, ctx):
+                return True
+
+            def enrich(self, obj, ctx, all_objs, data):
+                return {"kind": "echo"}
+
+        obj = record("Whatever")
+        saved = list(_HANDLERS)
+        try:
+            _HANDLERS[:] = [Echo()]
+            run_handlers(obj, VersionContext(), [obj], None)
+        finally:
+            _HANDLERS[:] = saved
+        assert obj.status.semantic == "partial"
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -784,6 +861,9 @@ def test_handler_registry_supports_enriches_and_isolates():
                 test_niagara_handler_supports_all_declared_classes,
             ),
             ("handler.test_class_handlers_kwarg_defaults_true_for_v1", test_class_handlers_kwarg_defaults_true_for_v1),
+            ("handler.test_summary_tier_handlers_never_claim_complete", test_summary_tier_handlers_never_claim_complete),
+            ("handler.test_decode_tier_blueprint_graph_marks_complete", test_decode_tier_blueprint_graph_marks_complete),
+            ("handler.test_undeclared_handler_tier_defaults_to_summary", test_undeclared_handler_tier_defaults_to_summary),
         ]
     )
 
