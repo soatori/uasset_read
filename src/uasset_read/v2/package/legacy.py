@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Literal, Sequence
 
 from ...exceptions import ParseError, ExportBoundsExceeded
+from ...memory_safety import ResourceBudget
 from ...package import PackageArchive
 from ...serializers.object_resources import (
     ObjectExport,
@@ -304,7 +305,8 @@ class LegacyPackageReader:
 
         try:
             # 1. Read summary
-            summary = read_package_summary(archive)
+            budget = ResourceBudget()
+            summary = read_package_summary(archive, budget)
 
             # Property tag format is version-gated; set the gates the same
             # way pipeline/stages.py does so UE5.0-5.2 tags don't fall into
@@ -347,7 +349,7 @@ class LegacyPackageReader:
                 )
 
             # 6. Read depends map
-            depends_map = read_depends_map(archive, summary)
+            depends_map = read_depends_map(archive, summary, budget)
 
             # 7. Read preload dependencies
             preload_deps = read_preload_dependencies(archive, summary)

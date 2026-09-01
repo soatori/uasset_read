@@ -200,6 +200,27 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         assert any("stopped" in w for w in warnings)
         assert any(d.code == "DEPENDS_MAP_TRUNCATED" for d in arc.get_structured_diagnostics())
 
+    def chunk_ids_count_beyond_file_rejected_immediately():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.exceptions import ParseError
+        from uasset_read.serializers.package_summary import _read_tail_offsets
+        data = struct.pack("<iqii", 0, 0, 0, 10_000_000)
+        with pytest.raises(ParseError, match="ChunkIDs"):
+            _read_tail_offsets(ByteArchive(data))
+
+    def preload_count_beyond_file_rejected_immediately():
+        import struct
+        from types import SimpleNamespace
+        from uasset_read.archive import ByteArchive
+        from uasset_read.exceptions import ParseError
+        from uasset_read.serializers.package_summary import read_preload_dependencies
+        # offset 4 is a positive, in-bounds table start in the 8-byte payload.
+        data = struct.pack("<ii", 7, 9)
+        summary = SimpleNamespace(preload_dependency_offset=4, preload_dependency_count=10_000_000)
+        with pytest.raises(ParseError, match="PreloadDependencies"):
+            read_preload_dependencies(ByteArchive(data), summary)
+
     _run_cases(
         [
             ("core.reader_out_of_range", core_contract),
@@ -225,6 +246,8 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
             ("export_bounds.seek_past_lower_bound_fails", test_export_seek_past_lower_bound_fails),
             ("export_bounds.seek_past_upper_bound_fails", test_export_seek_past_upper_bound_fails),
             ("depends_map.stops_at_unsized_count", depends_map_stops_at_unsized_count),
+            ("chunk_ids.count_beyond_file_rejected", chunk_ids_count_beyond_file_rejected_immediately),
+            ("preload.count_beyond_file_rejected", preload_count_beyond_file_rejected_immediately),
         ]
     )
 
