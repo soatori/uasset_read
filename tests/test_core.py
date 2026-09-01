@@ -667,7 +667,14 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
                         fallback="used_empty_string",
                         message="FString overran the file",
                         object_id="export:0",
-                    )
+                    ),
+                    StructuredDiagnostic(
+                        code="EXPORT_TABLE_TRUNCATED",
+                        stage="read_export_map",
+                        offset=9,
+                        fallback="stop_table",
+                        message="stopped export table read with 1/2 entries",
+                    ),
                 ]
 
         obj = ObjectRecord(
@@ -678,13 +685,21 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         _merge_archive_recoveries(_RecoveringArchive(), [obj], diagnostics)
         assert obj.status.parse == "partial"  # a recovered read must not claim complete
         assert obj.status.semantic == "not_requested"  # only parse is downgraded
-        assert len(diagnostics) == 1
+        assert len(diagnostics) == 2
         diag = diagnostics[0]
         assert (diag.code, diag.effect, diag.offset, diag.object_id) == (
             "fstring_out_of_range",
             "recovery",
             7,
             "export:0",
+        )
+        # A stop_table abort lost entries — it must not masquerade as a recovery.
+        trunc = diagnostics[1]
+        assert (trunc.code, trunc.effect, trunc.recoverable, trunc.object_id) == (
+            "EXPORT_TABLE_TRUNCATED",
+            "data_loss",
+            False,
+            None,
         )
 
     _run_cases(

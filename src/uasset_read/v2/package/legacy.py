@@ -217,11 +217,13 @@ def _merge_archive_recoveries(
     objects: Sequence[ObjectRecord],
     diagnostics: list[Diagnostic],
 ) -> None:
-    """Merge FArchive structured recovery diagnostics into the document.
+    """Merge FArchive structured diagnostics into the document.
 
-    Every FArchive structured diagnostic records a fallback a tolerant read
-    took; they surface as effect="recovery" with their offset, and the
-    attributed object's parse status is downgraded to at least partial.
+    A diagnostic whose fallback rescued the read surfaces as
+    effect="recovery" and downgrades the attributed object's parse status
+    to at least partial. A "stop_table" fallback (e.g.
+    EXPORT_TABLE_TRUNCATED) aborted the read instead — data past the stop
+    point is lost, so it is labeled effect="data_loss", recoverable=False.
     """
     objects_by_id = {obj.id: obj for obj in objects}
     for sd in archive.get_structured_diagnostics():
@@ -229,6 +231,7 @@ def _merge_archive_recoveries(
         if obj is not None and obj.status.parse == "complete":
             obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
         sev = sd.severity if sd.severity in ("info", "warning", "error", "critical") else "warning"
+        recovered = sd.fallback != "stop_table"
         diagnostics.append(
             Diagnostic(
                 severity=sev,
@@ -237,8 +240,8 @@ def _merge_archive_recoveries(
                 stage=sd.stage,
                 object_id=sd.object_id or None,
                 offset=sd.offset,
-                effect="recovery",
-                recoverable=True,
+                effect="recovery" if recovered else "data_loss",
+                recoverable=recovered,
             )
         )
 
