@@ -264,6 +264,13 @@ def test_every_real_sample_forms_a_valid_package_document(sample: str):
         jsonschema.validate(page, SCHEMA)
         for dep in page["dependencies"]:
             assert set(dep) == {"index", "class", "object_name", "package_name"}, f"{sample}: {dep}"
+        for o in page["objects"]:
+            if view == "semantic":
+                assert "properties" not in o, sample
+                if "properties_summary" in o:
+                    assert set(o["properties_summary"]) == {"properties", "property_count"}, sample
+            else:
+                assert "properties_summary" not in o, sample
     # raw_data legitimately appears as a length-only {"kind": "bytes", ...}
     # descriptor for struct fallbacks; the contract is that it never carries
     # inline bytes, and any truncation marker wins.

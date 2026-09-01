@@ -166,6 +166,7 @@ def project_document(
             d.pop("coverage", None)
         if _DEPTH_ORDER[depth] < _DEPTH_ORDER["object"]:
             d.pop("properties", None)
+            d.pop("properties_summary", None)
         return d
 
     # Select objects
@@ -372,12 +373,59 @@ def _package_to_dict(doc: PackageDocument, *, view: str = "semantic") -> dict[st
     return d
 
 
+_SUMMARY_MAX_NAMES = 100
+
+
+def _summary_value(val: Any) -> Any:
+    """Compact one property value: scalars pass, containers are length-elided.
+
+    ``normalize_property_bag`` descriptors that are already length-bounded
+    (bytes, opaque) pass through untouched; struct-shaped values (including
+    fallbacks, which may carry raw bytes) collapse to a length-only form.
+    """
+    if isinstance(val, dict):
+        kind = val.get("kind")
+        if kind == "struct":
+            return {"kind": "struct", "struct_type": val.get("struct_type"), "length": len(val.get("fields", {}))}
+        if kind == "struct_fallback":
+            return {
+                "kind": "struct_fallback",
+                "struct_type": val.get("struct_type"),
+                "size": val.get("size"),
+                "length": len(val.get("fields", {})),
+            }
+        if kind == "value":
+            inner = val.get("value")
+            if isinstance(inner, list):
+                return {"kind": "value", "type": val.get("type"), "length": len(inner)}
+            if isinstance(inner, dict) and inner.get("kind") in ("struct", "struct_fallback"):
+                return {"kind": "value", "type": val.get("type"), "value": _summary_value(inner)}
+        return val
+    if isinstance(val, list):
+        return {"kind": "array", "length": len(val)}
+    return val
+
+
+def _property_summary(bag: dict[str, Any]) -> dict[str, Any]:
+    """Bounded compact view of a property bag for the semantic view (#636).
+
+    Names + scalars only; containers keep kind and length, never elements or
+    raw bytes. Truncation is explicit via ``property_count``; the full bag
+    stays available in the raw/debug views.
+    """
+    items = list(bag.items())[:_SUMMARY_MAX_NAMES]
+    return {
+        "properties": {name: _summary_value(v) for name, v in items},
+        "property_count": len(bag),
+    }
+
+
 def obj_to_dict(obj: ObjectRecord, *, view: str = "semantic") -> dict[str, Any]:
     """Convert an ObjectRecord to a dict for JSON serialization.
 
     Views:
-      - semantic: identity, roles, status, coverage
-      - raw: adds flags, serial_region details
+      - semantic: identity, roles, status, coverage, bounded properties_summary
+      - raw: adds flags, serial_region details, the full property bag
       - debug: raw + all diagnostics with full detail
     """
     d: dict[str, Any] = {
@@ -395,6 +443,8 @@ def obj_to_dict(obj: ObjectRecord, *, view: str = "semantic") -> dict[str, Any]:
         )
         if obj.properties is not None:
             d["properties"] = obj.properties
+    elif view == "semantic" and obj.properties is not None:
+        d["properties_summary"] = _property_summary(obj.properties)
     if obj.semantic is not None:
         d["semantic"] = obj.semantic
     if obj.coverage:

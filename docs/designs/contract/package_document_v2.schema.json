@@ -198,7 +198,10 @@
           "$ref": "#/$defs/ObjectStatus"
         },
         "properties": {
-          "description": "Property bag (only when depth >= object)."
+          "description": "Property bag (raw/debug views, depth >= object)."
+        },
+        "properties_summary": {
+          "$ref": "#/$defs/PropertySummary"
         },
         "semantic": {
           "type": ["object", "null"],
@@ -243,6 +246,22 @@
         "semantic": {
           "type": "string",
           "enum": ["complete", "partial", "unavailable", "not_requested"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "PropertySummary": {
+      "type": "object",
+      "required": ["properties", "property_count"],
+      "properties": {
+        "properties": {
+          "type": "object",
+          "description": "Bounded compact property view (semantic view, depth >= object, #636): name -> scalar descriptor; containers length-elided; raw blobs excluded."
+        },
+        "property_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total names in the bag; fewer may be listed (bounded view). Full bag: raw/debug views."
         }
       },
       "additionalProperties": false
