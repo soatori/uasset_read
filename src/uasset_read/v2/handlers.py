@@ -522,10 +522,10 @@ class TexturePayloadHandler:
             # Direct fields on the struct (e.g. SizeX, SizeY, or a single Size)
             size_val = fields.get("Size") or fields.get("total_size") or fields.get("BulkDataSize")
             if isinstance(size_val, (int, float)):
-                    try:
-                        total_size = int(size_val)
-                    except (ValueError, TypeError):
-                        total_size = 0
+                try:
+                    total_size = int(size_val)
+                except (ValueError, TypeError):
+                    total_size = 0
 
         # If the struct_type hints at size (e.g. "5_16"), try to extract
         struct_type = imported_size.get("struct_type", "")
@@ -695,9 +695,7 @@ _BONE_NAME_RE = re.compile(
 
 def _guess_bone_names(name_map: list[str]) -> list[dict[str, Any]]:
     """Heuristic NameMap-regex name guess — never a decoded skeleton hierarchy (#630)."""
-    return [
-        {"name": name, "index": i} for i, name in enumerate(name_map) if _BONE_NAME_RE.match(name)
-    ]
+    return [{"name": name, "index": i} for i, name in enumerate(name_map) if _BONE_NAME_RE.match(name)]
 
 
 def _decoded_bone_names(prop: Any) -> list[dict[str, Any]]:
@@ -844,13 +842,14 @@ class MeshHandler:
                 lod: dict[str, Any] = {"index": i}
                 fields = item.get("fields") if isinstance(item, dict) else None
                 if isinstance(fields, dict):
-                    for sub_key, out_key in (("BuildSettings", "build_settings"), ("ReductionSettings", "reduction_settings")):
+                    for sub_key, out_key in (
+                        ("BuildSettings", "build_settings"),
+                        ("ReductionSettings", "reduction_settings"),
+                    ):
                         sub = fields.get(sub_key)
                         if isinstance(sub, dict) and isinstance(sub.get("fields"), dict):
                             lod[out_key] = {
-                                k: v
-                                for k, v in sub["fields"].items()
-                                if isinstance(v, (bool, int, float, str))
+                                k: v for k, v in sub["fields"].items() if isinstance(v, (bool, int, float, str))
                             }
                 lods.append(lod)
             result["lods"] = lods
@@ -1005,13 +1004,9 @@ class BlueprintFamilyHandler:
 
 
 register_handler(
-    BlueprintFamilyHandler(
-        ("AnimBlueprint", "AnimBlueprintGeneratedClass"), "anim_blueprint", "anim_blueprint"
-    )
+    BlueprintFamilyHandler(("AnimBlueprint", "AnimBlueprintGeneratedClass"), "anim_blueprint", "anim_blueprint")
 )
-register_handler(
-    BlueprintFamilyHandler(("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint")
-)
+register_handler(BlueprintFamilyHandler(("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint"))
 
 
 class NiagaraHandler:
@@ -1109,7 +1104,9 @@ class PhysicsAssetHandler:
             coverage.append(CoverageEntry(feature="physics_asset.bodies", status="present"))
         else:
             coverage.append(
-                CoverageEntry(feature="physics_asset.bodies", status="missing", detail="SkeletalBodySetups not in property bag")
+                CoverageEntry(
+                    feature="physics_asset.bodies", status="missing", detail="SkeletalBodySetups not in property bag"
+                )
             )
 
         constraints = _array_value(props, "ConstraintSetup")
@@ -1118,7 +1115,9 @@ class PhysicsAssetHandler:
             coverage.append(CoverageEntry(feature="physics_asset.constraints", status="present"))
         else:
             coverage.append(
-                CoverageEntry(feature="physics_asset.constraints", status="missing", detail="ConstraintSetup not in property bag")
+                CoverageEntry(
+                    feature="physics_asset.constraints", status="missing", detail="ConstraintSetup not in property bag"
+                )
             )
 
         # Instanced body/constraint exports live in the same package; their
@@ -1271,7 +1270,9 @@ class AnimBlendSpaceHandler:
             coverage.append(CoverageEntry(feature="anim_blend_space.axes", status="present"))
         else:
             coverage.append(
-                CoverageEntry(feature="anim_blend_space.axes", status="missing", detail="BlendParameters not in property bag")
+                CoverageEntry(
+                    feature="anim_blend_space.axes", status="missing", detail="BlendParameters not in property bag"
+                )
             )
 
         samples = _array_value(props, "SampleData")
@@ -1411,9 +1412,7 @@ class AnimLayerInterfaceHandler:
                 entries.append(fn)
             result["function_count"] = len(functions)
             result["functions"] = entries[:100]
-            obj.coverage.append(
-                CoverageEntry(feature="anim_layer_interface.functions", status="present")
-            )
+            obj.coverage.append(CoverageEntry(feature="anim_layer_interface.functions", status="present"))
         else:
             obj.coverage.append(
                 CoverageEntry(
@@ -1492,7 +1491,11 @@ class MaterialFunctionHandler:
 
         if expression_count:
             coverage.append(
-                CoverageEntry(feature="material_function.expressions", status="present", detail=f"{expression_count} expression exports")
+                CoverageEntry(
+                    feature="material_function.expressions",
+                    status="present",
+                    detail=f"{expression_count} expression exports",
+                )
             )
         else:
             coverage.append(
@@ -1542,7 +1545,11 @@ class MaterialParameterCollectionHandler:
             coverage.append(CoverageEntry(feature="material_parameter_collection.scalars", status="present"))
         else:
             coverage.append(
-                CoverageEntry(feature="material_parameter_collection.scalars", status="missing", detail="ScalarParameters not in property bag")
+                CoverageEntry(
+                    feature="material_parameter_collection.scalars",
+                    status="missing",
+                    detail="ScalarParameters not in property bag",
+                )
             )
 
         vectors = _array_value(props, "VectorParameters")
@@ -1552,7 +1559,11 @@ class MaterialParameterCollectionHandler:
             coverage.append(CoverageEntry(feature="material_parameter_collection.vectors", status="present"))
         else:
             coverage.append(
-                CoverageEntry(feature="material_parameter_collection.vectors", status="missing", detail="VectorParameters not in property bag")
+                CoverageEntry(
+                    feature="material_parameter_collection.vectors",
+                    status="missing",
+                    detail="VectorParameters not in property bag",
+                )
             )
 
         obj.coverage.extend(coverage)

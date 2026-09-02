@@ -924,6 +924,13 @@ def _read_string_table(
     at the export's serial end, so a corrupt table cannot escape the export.
     Anything unreadable ends up as ``complete: False`` with a diagnostic,
     never a silently truncated table.
+
+    Key format note: FTextKey in StringTable packages is serialized as a raw
+    null-terminated ANSI string (``read_cstring``), NOT a length-prefixed
+    FString.  The namespace and values remain FStrings.  This matches the
+    binary layout observed in real UE4.27/5.2 editor-saved StringTable assets
+    and corroborates CUE4Parse's ``FStringTable`` read path where the archive
+    position yields null-terminated keys.
     """
     result: dict[str, Any] = {"namespace": "", "entry_count": 0, "entries": [], "complete": False}
     try:
@@ -944,7 +951,7 @@ def _read_string_table(
             return result
         result["entry_count"] = entry_count
         for _ in range(entry_count):
-            key = archive.read_fstring()
+            key = archive.read_cstring()
             value = archive.read_fstring()
             if dev_notes:
                 archive.read_fstring()  # DevNotes, parsed but not surfaced

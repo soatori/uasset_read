@@ -21,7 +21,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = Path(__file__).parent / "samples"
 MANIFEST = SAMPLES / "manifest.json"
-SCHEMA = json.loads((ROOT / "docs" / "designs" / "contract" / "package_document_v2.schema.json").read_text(encoding="utf-8"))
+SCHEMA = json.loads(
+    (ROOT / "docs" / "designs" / "contract" / "package_document_v2.schema.json").read_text(encoding="utf-8")
+)
 
 _MANIFEST_DATA = json.loads(MANIFEST.read_text(encoding="utf-8"))
 MANIFEST_SAMPLES = _MANIFEST_DATA["samples"]
@@ -177,7 +179,9 @@ def test_manifest_matches_every_real_sample():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert manifest["version"] == 2
     expected_files = {entry["name"] for entry in manifest["samples"]}
-    actual_files = {path.name for path in SAMPLES.iterdir() if path.suffix in {".uasset", ".umap", ".utoc", ".ucas", ".pak"}}
+    actual_files = {
+        path.name for path in SAMPLES.iterdir() if path.suffix in {".uasset", ".umap", ".utoc", ".ucas", ".pak"}
+    }
     assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 52
     assert actual_files == expected_files
     allowed = expected_files | {
@@ -348,9 +352,9 @@ def test_real_sample_proves_claimed_capability(
         features = {c.feature: c.status for c in obj.coverage}
         assert features["physics_asset.bodies"] == "present", f"{sample}:{class_name}"
         assert features["physics_asset.collision_disable_table"] == "missing", f"{sample}:{class_name}"
-        assert any(
-            d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" for d in doc.diagnostics
-        ), f"{sample}:{class_name} must disclose the undecoded raw trailer"
+        assert any(d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" for d in doc.diagnostics), (
+            f"{sample}:{class_name} must disclose the undecoded raw trailer"
+        )
     elif class_name == "PhysicalMaterial":
         # Editor defaulted the four floats out of the tag stream: "missing"
         # coverage is correct UE behavior, not a parser failure.
@@ -359,8 +363,7 @@ def test_real_sample_proves_claimed_capability(
             assert features[f"physical_material.{key}"] == "missing", f"{sample}:{class_name}"
             assert f"physical_material.{key}" not in obj.semantic, f"{sample}:{class_name}"
         assert not any(
-            d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id != "export:0"
-            for d in doc.diagnostics
+            d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id != "export:0" for d in doc.diagnostics
         ), f"{sample}:{class_name} has no raw trailer by design (export:0 MetaData excluded)"
 
 
@@ -457,9 +460,7 @@ def test_v2_path_emits_no_handler_warnings(capfd, caplog):
     captured = capfd.readouterr()
     assert captured.err == "", f"v2 parse leaked stderr: {captured.err[:200]}"
     warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
-    assert warnings == [], (
-        f"v2 parse emitted warning logs: {[r.getMessage()[:120] for r in warnings]}"
-    )
+    assert warnings == [], f"v2 parse emitted warning logs: {[r.getMessage()[:120] for r in warnings]}"
 
 
 def test_object_depth_parses_only_requested_export():
@@ -752,10 +753,6 @@ def test_blueprint_graph_decodes_without_parse_errors():
     result = parse_uasset(str(SAMPLES / "BP_CombatCharacter.uasset"), force_full_parse=True)
     graphs = getattr(result, "graphs", None) or []
     nodes = [n for g in graphs for n in (getattr(g, "nodes", None) or [])]
-    bad = [
-        n
-        for n in nodes
-        if isinstance(getattr(n, "node_data", None), dict) and n.node_data.get("_parse_error")
-    ]
+    bad = [n for n in nodes if isinstance(getattr(n, "node_data", None), dict) and n.node_data.get("_parse_error")]
     assert len(nodes) == 370, f"expected 370 graph nodes across 4 graphs, got {len(nodes)}"
     assert not bad, f"{len(bad)}/{len(nodes)} graph nodes failed to parse"
