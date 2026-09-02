@@ -1041,9 +1041,7 @@ class BlueprintFamilyHandler:
         for graph in graphs:
             if graph.get("kind") == "state_machine" and graph.get("node_count", 0) > 1:
                 nodes = graph.get("nodes", [])
-                states = sum(
-                    1 for n in nodes if n.get("subgraph_references")
-                )
+                states = sum(1 for n in nodes if n.get("subgraph_references"))
                 state_machines.append(
                     {
                         "name": graph["name"],

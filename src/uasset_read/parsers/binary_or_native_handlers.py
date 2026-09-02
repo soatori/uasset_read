@@ -356,14 +356,16 @@ def _decode_soft_object_path_index(
 def _decode_ed_graph_pin_type(raw: bytes, size: int, name_map: list[str]) -> Optional[Dict[str, Any]]:
     """Decode FEdGraphPinType from raw binary.
 
-    Binary layout (UE5, 69 bytes):
+    Binary layout (UE5):
         PinCategory (FName: 8) + PinSubCategory (FName: 8) +
         PinSubCategoryObject (int32: 4) + ContainerType (uint8: 1) +
+        [if Map (3): TerminalCategory (FName: 8) + TerminalSubCategory (FName: 8) +
+         TerminalSubCategoryObject (int32: 4)] +
         bIsReference (uint32: 4) + bIsWeakPointer (uint32: 4) +
         MemberParent (int32: 4) + MemberName (FName: 8) +
         MemberGuid (bytes: 16) + bIsConst (uint32: 4) +
         bIsUObjectWrapper (uint32: 4) + bSerializeAsSinglePrecisionFloat (uint32: 4)
-    Total: 69 bytes.
+    Size: 69 bytes (non-map) or 89 bytes (map, +20 for FEdGraphTerminalType).
     """
     if size < 69 or len(raw) < 69:
         return None
@@ -384,6 +386,19 @@ def _decode_ed_graph_pin_type(raw: bytes, size: int, name_map: list[str]) -> Opt
         # ContainerType: uint8
         ct = raw[off]
         off += 1
+        # Map (3) has extra FEdGraphTerminalType: 2 FNames + int32 = 20 bytes
+        term_cat_idx = term_sub_idx = term_pco = None
+        if ct == 3 and len(raw) >= off + 20:
+            term_cat_idx = struct.unpack_from("<I", raw, off)[0]
+            off += 4
+            _ = struct.unpack_from("<I", raw, off)[0]
+            off += 4  # term_cat_num
+            term_sub_idx = struct.unpack_from("<I", raw, off)[0]
+            off += 4
+            _ = struct.unpack_from("<I", raw, off)[0]
+            off += 4  # term_sub_num
+            term_pco = struct.unpack_from("<i", raw, off)[0]
+            off += 4
         # bIsReference / bIsWeakPointer: uint32 (FArchive bool)
         is_ref = struct.unpack_from("<I", raw, off)[0]
         off += 4
@@ -408,28 +423,28 @@ def _decode_ed_graph_pin_type(raw: bytes, size: int, name_map: list[str]) -> Opt
     except (struct.error, IndexError):
         return None
 
-    def _fname(idx: int, num: int) -> str:
+    def _fname(idx: int, num: int = 0) -> str:
         base = name_map[idx] if 0 <= idx < len(name_map) else f"None_{idx}"
         return f"{base}_{num}" if num > 0 else base
 
-    pin_category = _fname(cat_idx, cat_num)
-    pin_subcategory = _fname(sub_idx, sub_num)
-    member_name = _fname(mn_idx, mn_num)
-
     fields: Dict[str, Any] = {
-        "pin_category": pin_category,
-        "pin_subcategory": pin_subcategory,
+        "pin_category": _fname(cat_idx, cat_num),
+        "pin_subcategory": _fname(sub_idx, sub_num),
         "pin_subcategory_object": pco,
         "container_type": ct,
         "is_reference": bool(is_ref),
         "is_weak_pointer": bool(is_wp),
         "member_parent": mp,
-        "member_name": member_name,
+        "member_name": _fname(mn_idx, mn_num),
         "member_guid": guid.hex(),
         "is_const": bool(is_const),
         "is_uobject_wrapper": bool(is_uobj),
         "b_serialize_as_single_precision_float": bool(is_float),
     }
+    if ct == 3 and term_cat_idx is not None and term_sub_idx is not None:
+        fields["map_terminal_category"] = _fname(term_cat_idx)
+        fields["map_terminal_subcategory"] = _fname(term_sub_idx)
+        fields["map_terminal_subcategory_object"] = term_pco
 
     return {
         "kind": "struct_binary_decoded",
