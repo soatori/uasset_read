@@ -696,3 +696,19 @@ def test_blueprint_fixtures_carry_generated_and_cdo_relations():
         actual = {(r.kind, r.from_id, r.to_id) for r in doc.relations}
         for edge in edges:
             assert edge in actual, f"{sample}: missing {edge}"
+
+
+def test_blueprint_graph_decodes_without_parse_errors():
+    """G2 regression (2026-09-02 ue-source audit): editor FText Base carries gated DevNotes."""
+    from uasset_read.pipeline.core import parse_uasset
+
+    result = parse_uasset(str(SAMPLES / "BP_CombatCharacter.uasset"), force_full_parse=True)
+    graphs = getattr(result, "graphs", None) or []
+    nodes = [n for g in graphs for n in (getattr(g, "nodes", None) or [])]
+    bad = [
+        n
+        for n in nodes
+        if isinstance(getattr(n, "node_data", None), dict) and n.node_data.get("_parse_error")
+    ]
+    assert len(nodes) == 370, f"expected 370 graph nodes across 4 graphs, got {len(nodes)}"
+    assert not bad, f"{len(bad)}/{len(nodes)} graph nodes failed to parse"

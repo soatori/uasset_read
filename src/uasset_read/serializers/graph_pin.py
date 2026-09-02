@@ -29,6 +29,7 @@ from uasset_read.serializers.graph_helpers import (
     _get_thread_local,
     _read_fstring_safe,
     _read_ftext_value,
+    ftext_dev_notes_enabled,
     validate_pin_reference_at,
 )
 
@@ -476,11 +477,12 @@ def _read_pin_fstring_field(
 def _read_pin_ftext_field(
     archive: FArchive,
     field_name: str,
+    dev_notes: bool = False,
 ) -> tuple:
     """Read Pin FText field (PinFriendlyName / DefaultTextValue)."""
     _start = archive.tell()
     try:
-        value, flags, history_type, _ = _read_ftext_value(archive, tolerant=True)
+        value, flags, history_type, _ = _read_ftext_value(archive, tolerant=True, dev_notes=dev_notes)
         consumed = archive.tell() - _start
         if consumed > MAX_FTEXT_CONSUMPTION:
             logger.debug(
@@ -601,8 +603,9 @@ def read_ue_graph_pin(
     # 3. PinName
     pin_name = archive.read_name(name_map)
 
-    # 4. PinFriendlyName (FText)
-    pin_friendly_name, _ = _read_pin_ftext_field(archive, "PinFriendlyName")
+    # 4. PinFriendlyName (FText) — DevNotes gated per package custom version
+    dev_notes = ftext_dev_notes_enabled(summary)
+    pin_friendly_name, _ = _read_pin_ftext_field(archive, "PinFriendlyName", dev_notes=dev_notes)
 
     # 5. SourceIndex (UE5 always present)
     source_index = archive.read_i32("Pin.SourceIndex")
@@ -624,7 +627,7 @@ def read_ue_graph_pin(
     default_object = archive.read_i32("Pin.DefaultObject")
 
     # 12. DefaultTextValue (FText)
-    default_text_value, _ = _read_pin_ftext_field(archive, "DefaultTextValue")
+    default_text_value, _ = _read_pin_ftext_field(archive, "DefaultTextValue", dev_notes=dev_notes)
 
     # 13. LinkedTo array
     linked_to = _read_pin_ref_array(
