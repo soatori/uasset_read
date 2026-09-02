@@ -533,6 +533,12 @@ def test_property_bag_normalization_is_bounded_lossless():
         v1 = parse_text_property(PropertyTag(name="T", type="TextProperty", size=len(body1)), arc1, dev_notes=False)
         assert v1.source_string == "" and getattr(v1, "history_type", None) == 1
 
+    def test_fcolor_bgra_decode():
+        from uasset_read.parsers.binary_or_native_handlers import _decode_color
+
+        out = _decode_color(bytes([10, 20, 30, 40]), 4)
+        assert out == {"R": 30, "G": 20, "B": 10, "A": 40}
+
     _run_cases(
         [
             ("property.test_empty_list_returns_empty_dict", test_empty_list_returns_empty_dict),
@@ -546,6 +552,7 @@ def test_property_bag_normalization_is_bounded_lossless():
             ("property.legacy_struct_array_single_inner_tag", test_legacy_struct_array_reads_single_inner_tag),
             ("property.soft_object_path_inline_fname_based", test_soft_object_path_inline_is_fname_based),
             ("property.ftext_base_dev_notes_and_demotion", test_ftext_history_demoted_and_base_reads_dev_notes),
+            ("property.fcolor_bgra_decode", test_fcolor_bgra_decode),
         ]
     )
 

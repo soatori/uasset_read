@@ -268,9 +268,9 @@ def _decode_linear_color(raw: bytes, size: int) -> Dict[str, Any]:
 
 
 def _decode_color(raw: bytes, size: int) -> Dict[str, Any]:
-    """Decode Color (4 bytes, 4 uint8 RGBA)."""
+    """Decode Color (4 bytes). FColor little-endian byte order is B,G,R,A (Color.h union)."""
 
-    r, g, b, a = struct.unpack("<BBBB", raw[:4])
+    b, g, r, a = struct.unpack("<BBBB", raw[:4])
     return {"R": r, "G": g, "B": b, "A": a}
 
 
