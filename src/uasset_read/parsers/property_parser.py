@@ -1196,12 +1196,7 @@ def parse_properties_from_export(
         return []
 
     # D-02: SerializationControlExtensions header handling
-    # Gate on BOTH file_version_ue5 (feature exists) AND file_version_ue4 (content is
-    # actually UE5, not UE4 content saved under a UE5 header).  UE4 content
-    # (file_version_ue4 < 1000) never has the serialization_control byte, even
-    # when legacy_file_version = -9 causes file_version_ue5 to be parsed from
-    # the header (#615 StringTable empty-entries bug).
-    if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION and summary.file_version_ue4 >= 1000:
+    if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
         _handle_serialization_control(archive, summary, export)
 
     # Calculate property data boundary
