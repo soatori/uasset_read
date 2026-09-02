@@ -208,7 +208,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         from uasset_read.serializers.package_summary import _read_tail_offsets
         data = struct.pack("<iqii", 0, 0, 0, 10_000_000)
         with pytest.raises(ParseError, match="ChunkIDs"):
-            _read_tail_offsets(ByteArchive(data))
+            _read_tail_offsets(ByteArchive(data), 522)  # array-mode ChunkIDs at UE4 >= 326
 
     def sources_reject_negative_size():
         with pytest.raises(ValueError, match="negative"):
@@ -430,6 +430,17 @@ def test_package_document_preserves_every_export_and_role():
         flags, source = _read_compression_and_source(arc)
         assert source == 0x11223344  # wrong 12-byte skip desyncs PackageSource
 
+    def test_summary_gate_modes_are_versioned():
+        from uasset_read.serializers.package_summary import summary_gate_modes
+        assert summary_gate_modes(214) == {"engine_versions": "legacy", "compatible": False,
+                                           "world_tile": False, "chunk_ids": "none"}
+        assert summary_gate_modes(278) == {"engine_versions": "legacy", "compatible": False,
+                                           "world_tile": True, "chunk_ids": "single"}
+        assert summary_gate_modes(326) == {"engine_versions": "legacy", "compatible": False,
+                                           "world_tile": True, "chunk_ids": "array"}
+        assert summary_gate_modes(443) == {"engine_versions": "full", "compatible": True,
+                                           "world_tile": True, "chunk_ids": "array"}
+
     def test_import_package_name_not_gated_by_filter_editor_only():
         src = (SRC / "uasset_read/serializers/object_resources.py").read_text(encoding="utf-8")
         assert "and not is_filter_editor_only" not in src.split("def build_imports_list")[0]
@@ -453,6 +464,7 @@ def test_package_document_preserves_every_export_and_role():
                 "summary.test_import_package_name_not_gated_by_filter_editor_only",
                 test_import_package_name_not_gated_by_filter_editor_only,
             ),
+            ("summary.test_summary_gate_modes_are_versioned", test_summary_gate_modes_are_versioned),
         ]
     )
 
