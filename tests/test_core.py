@@ -1482,6 +1482,28 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert pt.map_key_terminal_is_uobject_wrapper is True
         assert pt.is_reference is False  # reads the 4-byte value AFTER the tail: desync guard
 
+    def test_byte_enum_node_tag_decodes_fname():
+        """G5: UENUM-backed byte tags carry the enum-entry FName (PropertyByte.cpp SerializeItem)."""
+        import struct
+
+        from types import SimpleNamespace
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.serializers.graph_node import _handle_advanced_pin_display, _handle_move_mode
+
+        names = ["None", "Hidden", "Copy"]
+        payload = struct.pack("<ii", 1, 0)  # FName pointing at name "Hidden", number 0
+        arc = ByteArchive(payload)
+        tag = SimpleNamespace(name="AdvancedPinDisplay", size=8, value_end_offset=8)
+        raw: dict = {}
+        _handle_advanced_pin_display(arc, tag, names, [], [], None, raw)
+        assert raw["AdvancedPinDisplayFormatted"] == "Hidden"
+        arc2 = ByteArchive(struct.pack("<ii", 2, 0))
+        raw2: dict = {}
+        tag2 = SimpleNamespace(name="MoveMode", size=8, value_end_offset=8)
+        _handle_move_mode(arc2, tag2, names, [], [], None, raw2)
+        assert raw2["MoveMode"] == "Copy"
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -1526,6 +1548,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("handler.test_ex_assert_u8_and_container_counts", test_ex_assert_u8_and_container_counts),
             ("handler.test_fstring_negative_one_consumes_two_bytes", test_fstring_negative_one_consumes_two_bytes),
             ("handler.test_map_pin_terminal_reads_trailing_bools", test_map_pin_terminal_reads_trailing_bools),
+            ("handler.test_byte_enum_node_tag_decodes_fname", test_byte_enum_node_tag_decodes_fname),
         ]
     )
 

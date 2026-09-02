@@ -744,13 +744,26 @@ def _handle_bool_to_raw(archive, tag, name_map, import_map, export_map, linker, 
     return {}
 
 
+def _read_byte_enum_tag_name(archive, tag, name_map):
+    """FByteProperty with UENUM underlying serializes the enum-entry FName (PropertyByte.cpp
+    SerializeItem); consume the full value span so the stream stays aligned regardless."""
+    enum_name = ""
+    if tag.size >= 8:
+        enum_name = archive.read_name(name_map) or ""
+    if tag.value_end_offset and archive.tell() != tag.value_end_offset:
+        archive.seek(tag.value_end_offset)
+    return enum_name
+
+
 def _handle_advanced_pin_display(archive, tag, name_map, import_map, export_map, linker, raw_properties):
-    """Handle AdvancedPinDisplay tag (enum value + formatted name)."""
-    if tag.size > 0:
-        raw_val = _read_tag_i32(archive, tag)
-        raw_properties[tag.name] = raw_val
-        enum_map = {0: "Default", 1: "Hidden", 2: "Shown"}
-        raw_properties["AdvancedPinDisplayFormatted"] = enum_map.get(raw_val, f"Unknown({raw_val})")
+    """Handle AdvancedPinDisplay tag — byte-enum payload is the enum FName
+    (EdGraphNode.h ENodeAdvancedPins: NoPins=0, Shown=1, Hidden=2)."""
+    enum_name = _read_byte_enum_tag_name(archive, tag, name_map)
+    raw_properties[tag.name] = enum_name
+    ordinal = {"NoPins": 0, "Shown": 1, "Hidden": 2}.get(enum_name)
+    raw_properties["AdvancedPinDisplayFormatted"] = enum_name or f"Unknown({enum_name!r})"
+    if ordinal is not None:
+        raw_properties["AdvancedPinDisplayRaw"] = ordinal
     return {}
 
 
@@ -802,12 +815,10 @@ def _handle_package_index(archive, tag, name_map, import_map, export_map, linker
 
 
 def _handle_move_mode(archive, tag, name_map, import_map, export_map, linker, raw_properties):
-    """Handle MoveMode tag (single-byte enum value)."""
-    if tag.size > 0:
-        raw_val = archive.read_u8() if tag.size >= 1 else 0
-        raw_properties[tag.name] = raw_val
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
+    """Handle MoveMode tag — byte-enum payload is the enum-entry FName
+    (comment-node TEnumAsByte<ECommentBoxMode>, PropertyByte.cpp SerializeItem)."""
+    enum_name = _read_byte_enum_tag_name(archive, tag, name_map)
+    raw_properties[tag.name] = enum_name
     return {}
 
 
