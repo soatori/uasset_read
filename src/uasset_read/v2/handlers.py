@@ -58,7 +58,7 @@ def _capability_tier(handler: AssetHandler, result: dict[str, Any]) -> str:
     must not claim that a type was fully decoded (#629).
     """
     cap = getattr(handler, "capability", "summary")
-    return cap(result) if callable(cap) else cap
+    return cap(result) if callable(cap) else str(cap)
 
 
 def run_handlers(
@@ -373,8 +373,10 @@ class StringTableHandler:
     Trailer layout per UE source: Runtime/Core/Private/Internationalization/
     StringTableCore.cpp ``FStringTable::Serialize`` (namespace + key/value
     entries), serialized by UStringTable::Serialize after the tagged
-    properties; see the comment on ``_read_string_table`` in
-    ``v2/package/legacy.py`` for the trigger conditions.
+    properties; namespace and keys are FTextKey values whose disk form is
+    byte-compatible with FString (TextKey.cpp SaveKeyString/LoadKeyString);
+    see the comment on ``_read_string_table`` in ``v2/package/legacy.py``
+    for the trigger conditions.
 
     Summary tier until a decoded fixture backfills #615: trailing per-key
     metadata is not parsed, so this never claims ``semantic="complete"``
@@ -520,7 +522,10 @@ class TexturePayloadHandler:
             # Direct fields on the struct (e.g. SizeX, SizeY, or a single Size)
             size_val = fields.get("Size") or fields.get("total_size") or fields.get("BulkDataSize")
             if isinstance(size_val, (int, float)):
-                total_size = int(size_val)
+                    try:
+                        total_size = int(size_val)
+                    except (ValueError, TypeError):
+                        total_size = 0
 
         # If the struct_type hints at size (e.g. "5_16"), try to extract
         struct_type = imported_size.get("struct_type", "")
@@ -1216,7 +1221,7 @@ class AnimBlendSpaceHandler:
 
     Property names per UE source:
     ``Engine/Source/Runtime/Engine/Classes/Animation/BlendSpace.h`` —
-    ``UPROPERTY(EditAnywhere, Category = BlendParametersTest) struct
+    ``UPROPERTY(EditAnywhere, Category = BlendParameter) struct
     FBlendParameter BlendParameters[3]`` (fixed 3-slot axis array; FBlendParameter
     fields ``DisplayName/Min/Max/GridNum``) and ``UPROPERTY(EditAnywhere,
     Category=BlendSamples) TArray<FBlendSample> SampleData`` (FBlendSample
