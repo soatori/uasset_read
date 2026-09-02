@@ -884,7 +884,9 @@ class BlueprintFamilyHandler:
     """Enrich Blueprint-family objects (Blueprint or AnimBlueprint variants).
 
     At depth="asset": light summary only (kind, name, class).
-    At depth="decode": full graph data (nodes, edges) for explicitly selected objects.
+    At depth="decode": real graphs arrive via extras (reader-side pass).
+    Only the owning asset export carries them; GeneratedClass exports
+    keep the summary and stay "partial" (#629 tier contract).
     """
 
     def __init__(self, classes: tuple[str, ...], kind: str, feature: str):
@@ -909,94 +911,159 @@ class BlueprintFamilyHandler:
             "blueprint_type": cn,
             "name": obj.name,
         }
-        coverage: list[CoverageEntry] = []
 
-        # At depth="asset": light summary only, no heavy graph arrays
         if context.depth == "asset":
-            coverage.append(
+            obj.coverage.append(
                 CoverageEntry(
                     feature=f"{self._feature}.summary",
                     status="present",
                     detail="light summary at depth=asset",
                 )
             )
-            obj.coverage.extend(coverage)
             return result
 
-        # At depth="decode": full graph data
+        # depth == "decode": real graphs arrive via extras (reader-side pass).
+        # Only the owning asset export carries them; GeneratedClass exports
+        # keep the summary and stay "partial" (#629 tier contract).
         if context.depth == "decode":
-            # Find related graph objects (EdGraph, K2Node_*)
-            graph_nodes: list[dict[str, Any]] = []
-            graph_edges: list[dict[str, Any]] = []
-
-            for other in all_objects:
-                other_class = other.class_name or ""
-                if other_class == "EdGraph":
-                    # EdGraph is a container for graph nodes
-                    graph_nodes.append(
-                        {
-                            "id": other.id,
-                            "type": "EdGraph",
-                            "name": other.name,
-                        }
-                    )
-                elif other_class.startswith("K2Node_"):
-                    # K2Node_* are graph nodes
-                    node: dict[str, Any] = {
-                        "id": other.id,
-                        "type": other_class,
-                        "name": other.name,
-                    }
-                    # Extract parent reference if available
-                    if other.properties and "ParentNode" in other.properties:
-                        parent_prop = other.properties["ParentNode"]
-                        if isinstance(parent_prop, dict) and "value" in parent_prop:
-                            node["parent_node"] = parent_prop["value"]
-                    graph_nodes.append(node)
-
-            # Build edges from parent references
-            node_ids = {n["id"] for n in graph_nodes}
-            for node_info in graph_nodes:
-                if "parent_node" in node_info:
-                    parent_id = node_info["parent_node"]
-                    if parent_id in node_ids:
-                        graph_edges.append(
-                            {
-                                "from_node": parent_id,
-                                "to_node": node_info["id"],
-                                "kind": "parent",
-                            }
-                        )
-
-            if graph_nodes:
-                result["graph"] = {
-                    "nodes": graph_nodes,
-                    "edges": graph_edges,
-                    "node_count": len(graph_nodes),
-                    "edge_count": len(graph_edges),
-                }
-                coverage.append(
+            extras = package_data[2] if package_data else {}
+            entry = extras.get(obj.id, {}) if isinstance(extras, dict) else {}
+            graphs = entry.get("graphs", []) if isinstance(entry, dict) else []
+            if graphs:
+                fg_ids = _function_graph_ids(obj.properties)
+                self._finalize_graph_kinds(graphs, fg_ids)
+                truncated = any(
+                    g["truncated"]["nodes"] or g["truncated"]["pins"] for g in graphs
+                )
+                result["graphs"] = graphs
+                result["truncated_graphs"] = truncated
+                result["declaration"] = _extract_declaration(
+                    obj, entry, graphs, fg_ids, package_data[0] if package_data else None
+                )
+                result["variables"] = _extract_variables(obj)
+                detail = f"{len(graphs)} graphs, {sum(g['node_count'] for g in graphs)} nodes"
+                if truncated:
+                    detail += " (truncated)"
+                obj.coverage.append(
                     CoverageEntry(
                         feature=f"{self._feature}.graph",
-                        status="present",
-                        detail=f"{len(graph_nodes)} nodes, {len(graph_edges)} edges",
+                        status="truncated" if truncated else "present",
+                        detail=detail,
                     )
                 )
             else:
-                coverage.append(
+                obj.coverage.append(
                     CoverageEntry(
                         feature=f"{self._feature}.graph",
                         status="missing",
-                        detail="no graph objects found",
+                        detail="no graphs owned by this export",
                     )
                 )
-
-            obj.coverage.extend(coverage)
             return result
 
+    @staticmethod
+    def _finalize_graph_kinds(graphs: list[dict[str, Any]], fg_ids: set[str]) -> None:
+        """Set per-graph kind from name / FunctionGraphs membership.
+
+        Deterministic derivation: EventGraph/UserConstructionScript by name,
+        graphs listed in FunctionGraphs -> "function", else "unknown".
+        """
+        for graph in graphs:
+            if graph["name"] == "EventGraph":
+                graph["kind"] = "event_graph"
+            elif graph["name"] == "UserConstructionScript":
+                graph["kind"] = "construction_script"
+            elif graph["id"] in fg_ids:
+                graph["kind"] = "function"
+            else:
+                graph["kind"] = "unknown"
+
     def capability(self, result: dict[str, Any]) -> str:
-        # Light summary at depth=asset; only decoded graph data counts (#629).
-        return "decoded" if "graph" in result else "summary"
+        # Truncated decode output must not claim "complete" (#629, bounded by
+        # default); summary echoes stay summary tier.
+        if result.get("graphs") and not result.get("truncated_graphs"):
+            return "decoded"
+        return "summary"
+
+
+def _function_graph_ids(properties: dict[str, Any] | None) -> set[str]:
+    """Export ids of the FunctionGraphs property (positive refs = export idx + 1)."""
+    fg = properties.get("FunctionGraphs", {}).get("value") if properties else None
+    ids: set[str] = set()
+    if isinstance(fg, list):
+        for ref in fg:
+            if isinstance(ref, int) and ref > 0:
+                ids.add(f"export:{ref - 1}")
+    return ids
+
+
+def _extract_declaration(
+    obj: ObjectRecord,
+    entry: dict[str, Any],
+    graphs: list[dict[str, Any]],
+    fg_ids: set[str],
+    export_map: Any,
+) -> dict[str, Any]:
+    """parent_class / interfaces / functions for the owning asset export."""
+    props = obj.properties or {}
+    parent = None
+    parent_value = props.get("ParentClass")
+    if isinstance(parent_value, dict):
+        value = parent_value.get("value")
+        if isinstance(value, dict):
+            parent = value.get("object_name")
+        elif isinstance(value, int) and value > 0 and export_map is not None:
+            entry_obj = export_map[value - 1] if value - 1 < len(export_map) else None
+            if entry_obj is not None:
+                parent = getattr(entry_obj, "object_name", None)
+    functions: list[dict[str, Any]] = []
+    graph_by_id = {g["id"]: g for g in graphs}
+    for oid in sorted(fg_ids):
+        graph = graph_by_id.get(oid)
+        if graph is not None and graph.get("name"):
+            functions.append({"id": oid, "name": graph["name"]})
+    return {
+        "parent_class": parent,
+        "interfaces": entry.get("interfaces", []),
+        "functions": functions,
+    }
+
+
+def _guid_hex(guid_fields: Any) -> str:
+    """Serialize a decoded Guid struct fields dict (A/B/C/D int32) to 32 hex."""
+    if not isinstance(guid_fields, dict):
+        return ""
+    return "".join(f"{int(guid_fields.get(k, 0)) & 0xFFFFFFFF:08x}" for k in ("A", "B", "C", "D"))
+
+
+def _extract_variables(obj: ObjectRecord) -> list[dict[str, Any]]:
+    """NewVariables (BPVariableDescription) names and GUIDs; VarType stays opaque.
+
+    VarType bodies are serialized member-wise (FEdGraphPinType, TStructOpsTypeTraits)
+    and are NOT decoded — type claims are therefore never made (#630). A
+    UE-source-verified VarType decode is a tracked follow-up.
+    """
+    props = obj.properties or {}
+    raw = props.get("NewVariables")
+    if not isinstance(raw, dict) or not isinstance(raw.get("value"), list):
+        return []
+    out: list[dict[str, Any]] = []
+    for desc in raw["value"]:
+        if not isinstance(desc, dict):
+            continue
+        fields = desc.get("fields", {})
+        if not isinstance(fields, dict):
+            continue
+        out.append(
+            {
+                "name": fields.get("VarName"),
+                "guid": _guid_hex(fields.get("VarGuid", {}).get("fields"))
+                if isinstance(fields.get("VarGuid"), dict)
+                else "",
+                "type": "opaque",
+            }
+        )
+    return out
 
 
 register_handler(

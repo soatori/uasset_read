@@ -132,6 +132,32 @@ def _decode_document(sample: str, object_ids: tuple[str, ...]):
     return parse_package_document(SAMPLES / sample, depth="decode", object_ids=list(object_ids))
 
 
+def _graph_owner_id(doc) -> str | None:
+    """Export id of the Blueprint-family asset that owns the package's graphs.
+
+    A graph export's outer chain resolves to the UBlueprint/UAnimBlueprint
+    asset export (verified on ABP_RifleAnimLayers and ALS_AnimBP). Returns the
+    first family-class export reachable from any EdGraph export's outer.
+    """
+    family = {"Blueprint", "AnimBlueprint", "BlueprintGeneratedClass",
+              "AnimBlueprintGeneratedClass"}
+    by_id = {o.id: o for o in doc.objects}
+    for o in doc.objects:
+        if (o.class_name or "").endswith("Graph") or (o.class_name or "") == "EdGraph":
+            cur = o
+            for _ in range(8):
+                outer = cur.outer_ref
+                if outer is None or outer.table != "export":
+                    break
+                nxt = by_id.get(f"export:{outer.index}")
+                if nxt is None:
+                    break
+                if (nxt.class_name or "") in family:
+                    return nxt.id
+                cur = nxt
+    return None
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -279,24 +305,22 @@ def test_real_sample_proves_claimed_capability(
     elif class_name == "StaticMesh":
         assert obj.semantic["lod_count"] == len(obj.semantic["lods"])
     elif class_name in {"BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}:
-        assert not {"nodes", "bytecode", "graph"} & obj.semantic.keys()
+        assert not {"nodes", "bytecode", "graph", "graphs"} & obj.semantic.keys()
         if class_name == "AnimBlueprintGeneratedClass":
-            dec = _decode_document(sample, (obj.id,))
-            dobj = next(o for o in dec.objects if o.id == obj.id)
-            assert dobj.semantic is not None, f"{sample}:{class_name} decode"
-            assert dobj.semantic["kind"] == "anim_blueprint"
-            # At depth=decode, graph data should be present
-            if "graph" in dobj.semantic:
-                graph = dobj.semantic["graph"]
-                assert "nodes" in graph
-                assert "edges" in graph
-                # Decoded-tier output is what lifts the status to complete (#629).
-                assert dobj.status.semantic == "complete", f"{sample}:{class_name} decode tier"
-                # Verify all edge references point to existing nodes
-                node_ids = {node["id"] for node in graph["nodes"]}
-                for edge in graph["edges"]:
-                    assert edge["from_node"] in node_ids, f"Edge from_node {edge['from_node']} not in nodes"
-                    assert edge["to_node"] in node_ids, f"Edge to_node {edge['to_node']} not in nodes"
+            owner = _graph_owner_id(doc)
+            assert owner is not None, f"{sample}:{class_name} graph owner not found"
+            dec = _decode_document(sample, (owner,))
+            abp = next(o for o in dec.objects if o.id == owner)
+            assert abp.semantic is not None, f"{sample}:{class_name} decode"
+            assert abp.semantic["kind"] == "anim_blueprint"
+            assert abp.semantic.get("graphs"), f"{sample}:{class_name} graphs missing"
+            assert abp.status.semantic == "complete", f"{sample}:{class_name} decode tier"
+            node_ids = {n["id"] for g in abp.semantic["graphs"] for n in g["nodes"]}
+            for graph in abp.semantic["graphs"]:
+                for node in graph["nodes"]:
+                    for pin in node["pins"]:
+                        for link in pin["linked"]:
+                            assert link["to_node"] in node_ids, f"{sample} dangling link"
     elif class_name in {"Texture2D", "TextureCube"}:
         assert isinstance(obj.semantic["srgb"], bool), f"{sample}:{class_name}"
         assert "compression_settings" in obj.semantic, f"{sample}:{class_name}"

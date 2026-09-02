@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 # (ALS_AnimBP: 275 graphs, ~2,700 node exports) passes without cap engagement
 # while runaway editor graphs stay bounded (canonical design: bounded by default).
 MAX_GRAPHS_PER_PACKAGE = 512
-MAX_NODES_PER_GRAPH_OUTPUT = 256
+MAX_NODES_PER_GRAPH_OUTPUT = 512
 MAX_PINS_PER_NODE_OUTPUT = 64
 
 
@@ -75,7 +75,7 @@ def read_blueprint_graphs(
     processed = 0
     for export_idx, export in enumerate(export_map):
         class_name = get_asset_class(export, import_map, export_map)
-        if not _is_graph_class(class_name):
+        if not class_name or not _is_graph_class(class_name):
             continue
         if processed >= max_graphs:
             break
@@ -117,21 +117,15 @@ def _error_graph(export_idx: int, class_name: str, reason: str) -> dict[str, Any
     }
 
 
-def _graph_to_dict(graph: Any, export_idx: int, class_name: str) -> dict[str, Any]:
-    """Convert one UEdGraph tree into a JSON-safe dict (bounded).
+def _convert_nodes(graph: Any, nodes: list[dict[str, Any]], pin_count: int, node_limit: int) -> tuple[int, bool, bool]:
+    """Convert nodes from a UEdGraph into dicts, appending to *nodes*.
 
-    Node object model (models/core.py UEdGraphNode): ``_export_index`` is the
-    1-based export index stamped by the shared readers; ``node_pos_x/y`` carry
-    the editor position; ``pin_id`` is the 32-hex serialized pin GUID. Node
-    display names come from the export entry (models/core UEdGraphNode has no
-    name field); ``export.object_name`` is the serialized object name.
+    Returns (pin_count, node_truncated, pin_truncated).
     """
-    nodes: list[dict[str, Any]] = []
-    pin_count = 0
     node_truncated = False
     pin_truncated = False
     for node in graph.nodes:
-        if len(nodes) >= MAX_NODES_PER_GRAPH_OUTPUT:
+        if len(nodes) >= node_limit:
             node_truncated = True
             break
         pins: list[dict[str, Any]] = []
@@ -145,7 +139,6 @@ def _graph_to_dict(graph: Any, export_idx: int, class_name: str) -> dict[str, An
                     "name": str(pin.pin_name),
                     "direction": _pin_direction(pin.direction),
                     "category": str(pin.pin_type.pin_category) if pin.pin_type else "",
-                    # links are resolved package-wide by resolve_pin_links
                     "linked": [],
                 }
             )
@@ -162,9 +155,46 @@ def _graph_to_dict(graph: Any, export_idx: int, class_name: str) -> dict[str, An
                 "pins": pins,
             }
         )
-    # _pin_links carries the raw GUID-keyed link records for the resolver;
-    # resolve_pin_links consumes and removes it before the dicts leave the
-    # module (extras and semantic output never contain non-JSON keys).
+    return pin_count, node_truncated, pin_truncated
+
+
+def _collect_pin_links_recursive(graph: Any) -> list[dict[str, Any]]:
+    """Collect pin links from a UEdGraph and all its subgraphs."""
+    links = _collect_pin_links(graph)
+    for sub in graph.subgraphs:
+        links.extend(_collect_pin_links_recursive(sub))
+    return links
+
+
+def _graph_to_dict(graph: Any, export_idx: int, class_name: str) -> dict[str, Any]:
+    """Convert one UEdGraph tree into a JSON-safe dict (bounded).
+
+    Recursively flattens subgraph nodes into the parent's ``nodes`` list,
+    since UE subgraphs are a visual-organization concept and the output
+    contract uses a flat node array per graph.
+    """
+    nodes: list[dict[str, Any]] = []
+    pin_count = 0
+    node_truncated = False
+    pin_truncated = False
+
+    # Top-level nodes
+    pin_count, node_truncated, pin_truncated = _convert_nodes(
+        graph, nodes, pin_count, MAX_NODES_PER_GRAPH_OUTPUT
+    )
+    # Subgraph nodes (flattened into the same list)
+    for sub in graph.subgraphs:
+        if node_truncated:
+            break
+        sub_pin_count, sub_node_trunc, sub_pin_trunc = _convert_nodes(
+            sub, nodes, pin_count, MAX_NODES_PER_GRAPH_OUTPUT
+        )
+        pin_count = sub_pin_count
+        if sub_node_trunc:
+            node_truncated = True
+        if sub_pin_trunc:
+            pin_truncated = True
+
     return {
         "id": f"export:{export_idx}",
         "name": str(graph.graph_name or ""),
@@ -175,7 +205,7 @@ def _graph_to_dict(graph: Any, export_idx: int, class_name: str) -> dict[str, An
         "pin_count": pin_count,
         "edge_count": 0,  # set by resolve_pin_links
         "truncated": {"nodes": node_truncated, "pins": pin_truncated},
-        "_pin_links": _collect_pin_links(graph),
+        "_pin_links": _collect_pin_links_recursive(graph),
     }
 
 
@@ -202,6 +232,15 @@ def _collect_pin_links(graph: Any) -> list[dict[str, Any]]:
     return links
 
 
+def _collect_all_nodes(graphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Recursively collect all node dicts from graphs, including subgraphs."""
+    result: list[dict[str, Any]] = []
+    for g in graphs:
+        result.extend(g.get("nodes", []))
+        result.extend(_collect_all_nodes(g.get("subgraphs", [])))
+    return result
+
+
 def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:
     """Resolve every graph's GUID-keyed links to (to_node, to_pin), in place.
 
@@ -211,12 +250,12 @@ def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:
     and dropped — the reader pass turns that counter into a diagnostic, never
     a silent loss. Consumes and deletes ``_pin_links``; sets ``edge_count``.
     """
+    all_nodes = _collect_all_nodes(graphs)
     guid_index: dict[str, tuple[str, str]] = {}
-    for graph in graphs:
-        for node in graph["nodes"]:
-            for pin in node["pins"]:
-                if pin["id"]:
-                    guid_index[pin["id"]] = (node["id"], pin["id"])
+    for node in all_nodes:
+        for pin in node.get("pins", []):
+            if pin["id"]:
+                guid_index[pin["id"]] = (node["id"], pin["id"])
     for graph in graphs:
         graph["unresolved_links"] = 0
         edge_count = 0
