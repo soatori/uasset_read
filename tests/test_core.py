@@ -430,6 +430,24 @@ def test_package_document_preserves_every_export_and_role():
         flags, source = _read_compression_and_source(arc)
         assert source == 0x11223344  # wrong 12-byte skip desyncs PackageSource
 
+    def test_table_rows_skip_tagged_stream_not_size_prefix():
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.v2.package.legacy import _read_table_rows
+        # A None-terminator tagged property tag is exactly its 8-byte name FName
+        # (read_property_tag early-returns at UE_NONE_SENTINEL). Two empty rows:
+        # count | rowName FName | None tag | rowName FName | None tag
+        data = (struct.pack("<i", 2)
+                + struct.pack("<ii", 1, 0) + struct.pack("<ii", 0, 0)
+                + struct.pack("<ii", 2, 0) + struct.pack("<ii", 0, 0))
+        arc = ByteArchive(data)
+        diags: list = []
+        result = _read_table_rows(arc, serial_end=len(data), name_map=["None", "A", "B"],
+                                  object_id="export:1", diagnostics=diags)
+        assert result["row_names"] == ["A", "B"] and result["complete"] is True
+        assert not any(d.code == "TABLE_ROWS_TRUNCATED" for d in diags)
+
     def test_summary_gate_modes_are_versioned():
         from uasset_read.serializers.package_summary import summary_gate_modes
         assert summary_gate_modes(214) == {"engine_versions": "legacy", "compatible": False,
@@ -465,6 +483,7 @@ def test_package_document_preserves_every_export_and_role():
                 test_import_package_name_not_gated_by_filter_editor_only,
             ),
             ("summary.test_summary_gate_modes_are_versioned", test_summary_gate_modes_are_versioned),
+            ("table.test_table_rows_skip_tagged_stream_not_size_prefix", test_table_rows_skip_tagged_stream_not_size_prefix),
         ]
     )
 

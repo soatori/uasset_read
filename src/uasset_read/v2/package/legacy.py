@@ -11,10 +11,12 @@ import struct
 from pathlib import Path
 from typing import Any, Literal, Sequence
 
+from ...archive import ByteArchive
 from ...constants import PKG_FilterEditorOnly
 from ...exceptions import ParseError, ExportBoundsExceeded
 from ...memory_safety import ResourceBudget
 from ...package import PackageArchive
+from ...serializers.property_tags import read_property_tag
 from ...serializers.object_resources import (
     ObjectExport,
     ObjectImport,
@@ -756,7 +758,8 @@ class LegacyPackageReader:
 
 
 # DataTable-family rows are serialized after the tagged properties as
-# NumRows(i32) + per-row FName(Index,Number) + Payload(int32 size + data).
+# NumRows(i32) + per-row FName(Index,Number) + row value (tagged property
+# stream terminated by the None tag, no int32 size prefix).
 # UE source: Engine/Source/Runtime/Engine/Private/DataTable.cpp LoadStructData.
 # StringTable is NOT this layout — it uses the FStringTable trailer below (#615).
 _TABLE_CLASSES = ("DataTable", "CurveTable")
@@ -799,15 +802,34 @@ def _read_table_rows(
         return result
     off = 4
     names: list[str] = []
+    payload = ByteArchive(blob[4:])
+    # Tag reads must use the real package layout version, not a fresh default.
+    payload._file_version_ue4 = getattr(archive, "_file_version_ue4", 0)
+    payload._file_version_ue5 = getattr(archive, "_file_version_ue5", 0)
+    limit = len(blob) - 4
     for _ in range(row_count):
-        if off + 12 > len(blob):
+        if payload.tell() + 8 > limit:
             break
-        idx, _number, size = struct.unpack_from("<iii", blob, off)
-        off += 12
-        if size < 0 or off + size > len(blob):
-            break
+        idx = payload.read_u32()
+        payload.read_u32()  # on-disk FName internal number (unused for row lookup)
         names.append(name_map[idx] if 0 <= idx < len(name_map) else f"<row:{idx}>")
-        off += size
+        # Each row is a tagged property stream terminated by the None tag (DataTable.cpp
+        # LoadStructData -> SerializeItem; versioned path = SerializeTaggedProperties,
+        # CurveTable.cpp:112-171 same). Skip field values; stop at None.
+        while payload.tell() < limit:
+            header_pos = payload.tell()
+            try:
+                t = read_property_tag(payload, name_map)
+            except ParseError:
+                payload.seek(header_pos)
+                break
+            if t.name == "None":
+                break
+            if t.value_end_offset <= payload.tell():
+                # Non-advancing tag (e.g. zero size, no in-tag payload): malformed row.
+                payload.seek(header_pos)
+                break
+            payload.seek(t.value_end_offset)
     complete = len(names) == row_count
     if not complete:
         diagnostics.append(
