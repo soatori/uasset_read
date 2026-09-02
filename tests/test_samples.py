@@ -668,6 +668,17 @@ def test_version_context_is_frozen_and_summary_derived():
     with pytest.raises(dataclasses.FrozenInstanceError):
         ctx.file_version_ue5 = 0
 
+    # UE5 floor is 1000 (ObjectVersion.h INITIAL_VERSION / FPackageFileVersion::ToValue)
+    from uasset_read.versioning import VersionContainer
+    from uasset_read.v2.version import VersionContext
+
+    assert VersionContainer(file_version_ue5=0).is_ue5 is False
+    assert VersionContainer(file_version_ue5=999).is_ue5 is False
+    assert VersionContainer(file_version_ue5=1000).is_ue5 is True
+    assert VersionContainer().is_ue5 is False  # default must not claim UE5
+    assert VersionContext(file_version_ue5=522).is_ue5 is False
+    assert VersionContext(file_version_ue5=1000).is_ue5 is True
+
 
 def test_blueprint_fixtures_carry_generated_and_cdo_relations():
     """Output Gate: blueprint packages expose generated-class and CDO edges."""
