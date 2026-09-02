@@ -939,11 +939,11 @@ class BlueprintFamilyHandler:
                 )
                 result["variables"] = _extract_variables(obj)
                 result["components"] = _extract_components(obj, all_objects, package_data)
-                
+
                 # Build state_machines list for AnimBlueprint family
                 if self._kind == "anim_blueprint":
                     result["state_machines"] = self._extract_state_machines(graphs)
-                
+
                 detail = f"{len(graphs)} graphs, {sum(g['node_count'] for g in graphs)} nodes"
                 if truncated:
                     detail += " (truncated)"
@@ -1033,19 +1033,25 @@ class BlueprintFamilyHandler:
         """Extract state machine summary from graphs.
 
         State machines are identified by graph kind == "state_machine".
-        Only graphs with more than 1 node are considered state machines
-        (a single node is not a meaningful state machine).
-        Each entry contains: name, kind, state_count, node_count.
+        state_count = number of nodes that represent distinct states
+        (nodes carrying at least one subgraph reference);
+        node_count = total node count in the graph.
         """
         state_machines: list[dict[str, Any]] = []
         for graph in graphs:
             if graph.get("kind") == "state_machine" and graph.get("node_count", 0) > 1:
-                state_machines.append({
-                    "name": graph["name"],
-                    "kind": "state_machine",
-                    "state_count": graph.get("node_count", 0),
-                    "node_count": graph.get("node_count", 0),
-                })
+                nodes = graph.get("nodes", [])
+                states = sum(
+                    1 for n in nodes if n.get("subgraph_references")
+                )
+                state_machines.append(
+                    {
+                        "name": graph["name"],
+                        "kind": "state_machine",
+                        "state_count": states if states else graph.get("node_count", 0),
+                        "node_count": graph.get("node_count", 0),
+                    }
+                )
         return state_machines
 
     def capability(self, result: dict[str, Any]) -> str:
@@ -1125,9 +1131,7 @@ def _extract_variables(obj: ObjectRecord) -> list[dict[str, Any]]:
         if isinstance(vt_raw, dict):
             vt_fields = vt_raw.get("fields") if vt_raw.get("kind") == "struct_binary_decoded" else None
             if isinstance(vt_fields, dict):
-                container = {0: None, 1: "array", 2: "set", 3: "map"}.get(
-                    vt_fields.get("container_type", -1)
-                )
+                container = {0: None, 1: "array", 2: "set", 3: "map"}.get(vt_fields.get("container_type", -1))
                 vt_info = {
                     "pin_category": vt_fields.get("pin_category", ""),
                     "pin_subcategory": vt_fields.get("pin_subcategory", ""),

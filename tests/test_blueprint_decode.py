@@ -108,7 +108,10 @@ def test_combat_character_kismet_functions():
         assert fn["function_name"], "function_name must be non-empty"
         assert fn["signature"], "signature must be non-empty"
         assert fn["bytecode_status"] in {
-            "parsed", "no_script", "failed", "unknown",
+            "parsed",
+            "no_script",
+            "failed",
+            "unknown",
         }, f"unexpected bytecode_status: {fn['bytecode_status']}"
     # Coverage entry
     feature_names = [c.feature for c in bp.coverage]
@@ -123,12 +126,12 @@ def test_als_animbp_state_machines():
     abp = next(o for o in dec.objects if o.id == "export:274")
     assert abp.semantic is not None
     assert abp.status.semantic == "complete", abp.status
-    
+
     # Verify state_machines exists and has at least one entry
     state_machines = abp.semantic.get("state_machines")
     assert state_machines is not None, "expected 'state_machines' key in semantic output"
     assert len(state_machines) > 0, "expected at least one state machine"
-    
+
     # Verify each state machine has the required fields
     for sm in state_machines:
         assert "name" in sm, "state machine must have 'name' field"
@@ -138,13 +141,13 @@ def test_als_animbp_state_machines():
         assert sm["kind"] == "state_machine", f"expected kind='state_machine', got '{sm['kind']}'"
         assert sm["state_count"] > 0, "state_count must be positive"
         assert sm["node_count"] > 0, "node_count must be positive"
-    
+
     # Verify specific state machines exist (based on ALS_AnimBP structure)
     sm_names = {sm["name"] for sm in state_machines}
     assert "Overlay States" in sm_names, "expected 'Overlay States' state machine"
     assert "Main Movement States" in sm_names, "expected 'Main Movement States' state machine"
     assert "Jump States" in sm_names, "expected 'Jump States' state machine"
-    
+
     # Coverage entry
     feature_names = [c.feature for c in abp.coverage]
     assert "anim_blueprint.state_machines" in feature_names

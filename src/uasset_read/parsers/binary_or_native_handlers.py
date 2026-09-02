@@ -353,9 +353,7 @@ def _decode_soft_object_path_index(
     }
 
 
-def _decode_ed_graph_pin_type(
-    raw: bytes, size: int, name_map: list[str]
-) -> Optional[Dict[str, Any]]:
+def _decode_ed_graph_pin_type(raw: bytes, size: int, name_map: list[str]) -> Optional[Dict[str, Any]]:
     """Decode FEdGraphPinType from raw binary.
 
     Binary layout (UE5, 69 bytes):
@@ -372,26 +370,41 @@ def _decode_ed_graph_pin_type(
     try:
         off = 0
         # PinCategory / PinSubCategory: FName = u32 index + u32 number
-        cat_idx = struct.unpack_from("<I", raw, off)[0]; off += 4
-        cat_num = struct.unpack_from("<I", raw, off)[0]; off += 4
-        sub_idx = struct.unpack_from("<I", raw, off)[0]; off += 4
-        sub_num = struct.unpack_from("<I", raw, off)[0]; off += 4
+        cat_idx = struct.unpack_from("<I", raw, off)[0]
+        off += 4
+        cat_num = struct.unpack_from("<I", raw, off)[0]
+        off += 4
+        sub_idx = struct.unpack_from("<I", raw, off)[0]
+        off += 4
+        sub_num = struct.unpack_from("<I", raw, off)[0]
+        off += 4
         # PinSubCategoryObject: int32 FPackageIndex
-        pco = struct.unpack_from("<i", raw, off)[0]; off += 4
+        pco = struct.unpack_from("<i", raw, off)[0]
+        off += 4
         # ContainerType: uint8
-        ct = raw[off]; off += 1
+        ct = raw[off]
+        off += 1
         # bIsReference / bIsWeakPointer: uint32 (FArchive bool)
-        is_ref = struct.unpack_from("<I", raw, off)[0]; off += 4
-        is_wp = struct.unpack_from("<I", raw, off)[0]; off += 4
+        is_ref = struct.unpack_from("<I", raw, off)[0]
+        off += 4
+        is_wp = struct.unpack_from("<I", raw, off)[0]
+        off += 4
         # FSimpleMemberReference: MemberParent (int32) + MemberName (FName:8) + MemberGuid (16)
-        mp = struct.unpack_from("<i", raw, off)[0]; off += 4
-        mn_idx = struct.unpack_from("<I", raw, off)[0]; off += 4
-        mn_num = struct.unpack_from("<I", raw, off)[0]; off += 4
-        guid = raw[off:off + 16]; off += 16
+        mp = struct.unpack_from("<i", raw, off)[0]
+        off += 4
+        mn_idx = struct.unpack_from("<I", raw, off)[0]
+        off += 4
+        mn_num = struct.unpack_from("<I", raw, off)[0]
+        off += 4
+        guid = raw[off : off + 16]
+        off += 16
         # Tail bools: uint32 each
-        is_const = struct.unpack_from("<I", raw, off)[0]; off += 4
-        is_uobj = struct.unpack_from("<I", raw, off)[0]; off += 4
-        is_float = struct.unpack_from("<I", raw, off)[0]; off += 4
+        is_const = struct.unpack_from("<I", raw, off)[0]
+        off += 4
+        is_uobj = struct.unpack_from("<I", raw, off)[0]
+        off += 4
+        is_float = struct.unpack_from("<I", raw, off)[0]
+        off += 4
     except (struct.error, IndexError):
         return None
 

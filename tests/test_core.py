@@ -190,6 +190,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         from types import SimpleNamespace
         from uasset_read.archive import ByteArchive
         from uasset_read.serializers.package_summary import read_depends_map
+
         # Leading filler int32 so depends_offset=4 is a positive, in-bounds table start.
         data = struct.pack("<iiii", 0, 10_001, 1, 1)
         arc = ByteArchive(data)
@@ -205,6 +206,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         from uasset_read.archive import ByteArchive
         from uasset_read.exceptions import ParseError
         from uasset_read.serializers.package_summary import _read_tail_offsets
+
         data = struct.pack("<iqii", 0, 0, 0, 10_000_000)
         with pytest.raises(ParseError, match="ChunkIDs"):
             _read_tail_offsets(ByteArchive(data))
@@ -228,6 +230,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         from uasset_read.archive import ByteArchive
         from uasset_read.exceptions import ParseError
         from uasset_read.serializers.package_summary import read_preload_dependencies
+
         # offset 4 is a positive, in-bounds table start in the 8-byte payload.
         data = struct.pack("<ii", 7, 9)
         summary = SimpleNamespace(preload_dependency_offset=4, preload_dependency_count=10_000_000)
@@ -238,6 +241,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         import struct
         from uasset_read.archive import ByteArchive
         from uasset_read.exceptions import ParseError
+
         for header, enc in ((6, "UTF-8"), (-6, "UTF-16")):  # claims 6/12 bytes, 2 remain
             arc = ByteArchive(struct.pack("<i", header) + b"ab", tolerant=True)
             assert arc.read_fstring() == ""
@@ -249,6 +253,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
     def fstring_internal_null_truncation_is_recorded():
         import struct
         from uasset_read.archive import ByteArchive
+
         arc = ByteArchive(struct.pack("<i", 4) + b"ab\x00c", tolerant=True)
         assert arc.read_fstring() == "ab"
         sd = [d for d in arc.get_structured_diagnostics() if d.code == "fstring_truncated_at_null"]
@@ -257,6 +262,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
     def fname_shift_recovery_is_recorded():
         import struct
         from uasset_read.archive import ByteArchive
+
         # Garbage FName at pos 4 (index 2**24); a shifted view of the same bytes
         # carries a valid (index, number) pair, so recovery must fire and report.
         data = bytearray(b"\x00" * 12)
@@ -273,6 +279,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         from types import SimpleNamespace
         from uasset_read.archive import ByteArchive
         from uasset_read.serializers.object_resources import read_export_map
+
         # One FObjectExport entry (UE4.5-era version gates: no TemplateIndex,
         # preload or script-serialization fields) whose ObjectName carries
         # out-of-range index 5 for a 1-name table. bools are uint32 (7 fields),
@@ -588,6 +595,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
     def test_export_table_failure_preserves_slot_identity():
         import uasset_read.serializers.object_resources as orm
+
         healthy = _document(str(PACKAGE_SAMPLE), depth="package")
         first_name = healthy.objects[0].name
         second_name = healthy.objects[1].name
@@ -602,8 +610,8 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
         monkeypatch.setattr(orm, "ObjectExport", boom)
         doc = parse_package_document(str(PACKAGE_SAMPLE))  # direct call, NOT the lru_cache'd _document
-        assert doc.objects[0].name == first_name                   # slot 0 kept its identity
-        assert all(o.name != second_name for o in doc.objects)     # second export did NOT become export:0
+        assert doc.objects[0].name == first_name  # slot 0 kept its identity
+        assert all(o.name != second_name for o in doc.objects)  # second export did NOT become export:0
         assert any(d.code == "EXPORT_TABLE_TRUNCATED" for d in doc.diagnostics)
 
     def test_v2_mappings_never_passes_raw_path_string():
@@ -614,9 +622,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
             return {}
 
         monkeypatch.setattr(pp, "parse_properties_from_export", spy)
-        doc = parse_package_document(
-            str(DATA_SAMPLE), depth="object", mappings_path=str(ROOT / "no-such.usmap")
-        )
+        doc = parse_package_document(str(DATA_SAMPLE), depth="object", mappings_path=str(ROOT / "no-such.usmap"))
         assert any(d.code == "MAPPINGS_LOAD_FAILED" for d in doc.diagnostics)
         assert not isinstance(calls.get("mappings"), str)  # never a raw path string
 
@@ -678,7 +684,10 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
                 ]
 
         obj = ObjectRecord(
-            id="export:0", table_index=0, name="X", class_name="Foo",
+            id="export:0",
+            table_index=0,
+            name="X",
+            class_name="Foo",
             status=ObjectStatus(parse="complete", semantic="not_requested"),
         )
         diagnostics: list = []
@@ -804,7 +813,12 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("AnimLayerInterfaceHandler", AnimLayerInterfaceHandler(), "AnimLayerInterface", "Blueprint"),
             ("StringTableHandler", StringTableHandler(), "StringTable", "DataTable"),
             ("MaterialFunctionHandler", MaterialFunctionHandler(), "MaterialFunction", "Blueprint"),
-            ("MaterialParameterCollectionHandler", MaterialParameterCollectionHandler(), "MaterialParameterCollection", "Blueprint"),
+            (
+                "MaterialParameterCollectionHandler",
+                MaterialParameterCollectionHandler(),
+                "MaterialParameterCollection",
+                "Blueprint",
+            ),
             (
                 "BlueprintFamilyHandler/anim",
                 BlueprintFamilyHandler(
@@ -941,9 +955,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         bp = record("Blueprint")
         node = record("K2Node_CallFunction")
         node.id = "export:1"
-        handler = BlueprintFamilyHandler(
-            ("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint"
-        )
+        handler = BlueprintFamilyHandler(("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint")
         # Phase 4.5: graphs arrive via extras dict in package_data
         dummy_graph = {
             "id": "export:0",
@@ -959,9 +971,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         saved = list(_HANDLERS)
         try:
             _HANDLERS[:] = [handler]
-            semantic, _cov, _diags = run_handlers(
-                bp, VersionContext(depth="decode"), [bp, node], (None, [], extras)
-            )
+            semantic, _cov, _diags = run_handlers(bp, VersionContext(depth="decode"), [bp, node], (None, [], extras))
         finally:
             _HANDLERS[:] = saved
         assert "graphs" in semantic
@@ -997,9 +1007,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         saved = list(_HANDLERS)
         try:
             _HANDLERS[:] = [SkeletonHandler()]
-            semantic, _cov, _diags = run_handlers(
-                obj, VersionContext(depth="asset"), [obj], (None, name_map, None)
-            )
+            semantic, _cov, _diags = run_handlers(obj, VersionContext(depth="asset"), [obj], (None, name_map, None))
         finally:
             _HANDLERS[:] = saved
         assert semantic["bone_source"] == "name_guess"
@@ -1033,9 +1041,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         saved = list(_HANDLERS)
         try:
             _HANDLERS[:] = [SkeletonHandler()]
-            semantic, _cov, _diags = run_handlers(
-                obj, VersionContext(depth="asset"), [obj], (None, name_map, None)
-            )
+            semantic, _cov, _diags = run_handlers(obj, VersionContext(depth="asset"), [obj], (None, name_map, None))
         finally:
             _HANDLERS[:] = saved
         assert semantic["bone_source"] == "bone_tree"
@@ -1061,7 +1067,9 @@ def test_handler_registry_supports_enriches_and_isolates():
             return result, diags
 
         # UE4-era layout: key + value only.
-        blob = fstring("MyNS") + struct.pack("<i", 2) + fstring("K1") + fstring("Hello") + fstring("K2") + fstring("World")
+        blob = (
+            fstring("MyNS") + struct.pack("<i", 2) + fstring("K1") + fstring("Hello") + fstring("K2") + fstring("World")
+        )
         result, diags = read_table(blob, dev_notes=False)
         assert result["namespace"] == "MyNS"
         assert result["entry_count"] == 2
@@ -1202,9 +1210,21 @@ def test_handler_registry_supports_enriches_and_isolates():
                 "kind": "value",
                 "type": "ArrayProperty",
                 "value": [
-                    {"kind": "struct", "struct_type": "BlendParameter", "fields": {"DisplayName": "Speed", "Min": 0.0, "Max": 200.0, "GridNum": 7}},
-                    {"kind": "struct", "struct_type": "BlendParameter", "fields": {"DisplayName": "Direction", "Min": -90.0, "Max": 90.0, "GridNum": 5}},
-                    {"kind": "struct", "struct_type": "BlendParameter", "fields": {"DisplayName": "None", "Min": 0.0, "Max": 0.0, "GridNum": 2}},
+                    {
+                        "kind": "struct",
+                        "struct_type": "BlendParameter",
+                        "fields": {"DisplayName": "Speed", "Min": 0.0, "Max": 200.0, "GridNum": 7},
+                    },
+                    {
+                        "kind": "struct",
+                        "struct_type": "BlendParameter",
+                        "fields": {"DisplayName": "Direction", "Min": -90.0, "Max": 90.0, "GridNum": 5},
+                    },
+                    {
+                        "kind": "struct",
+                        "struct_type": "BlendParameter",
+                        "fields": {"DisplayName": "None", "Min": 0.0, "Max": 0.0, "GridNum": 2},
+                    },
                 ],
             },
             "SampleData": {
@@ -1216,7 +1236,11 @@ def test_handler_registry_supports_enriches_and_isolates():
                         "struct_type": "BlendSample",
                         "fields": {
                             "Animation": "AnimSequence'A_Walk'",
-                            "SampleValue": {"kind": "struct", "struct_type": "Vector", "fields": {"X": 100.0, "Y": 45.0, "Z": 0.0}},
+                            "SampleValue": {
+                                "kind": "struct",
+                                "struct_type": "Vector",
+                                "fields": {"X": 100.0, "Y": 45.0, "Z": 0.0},
+                            },
                         },
                     }
                 ],
@@ -1232,7 +1256,12 @@ def test_handler_registry_supports_enriches_and_isolates():
                         {
                             "kind": "struct",
                             "struct_type": "AnimSegment",
-                            "fields": {"AnimReference": "AnimSequence'A_Run'", "StartPos": 0.0, "AnimStartTime": 0.0, "AnimEndTime": 1.5},
+                            "fields": {
+                                "AnimReference": "AnimSequence'A_Run'",
+                                "StartPos": 0.0,
+                                "AnimStartTime": 0.0,
+                                "AnimEndTime": 1.5,
+                            },
                         }
                     ]
                 },
@@ -1322,7 +1351,11 @@ def test_handler_registry_supports_enriches_and_isolates():
                         "struct_type": "CollectionVectorParameter",
                         "fields": {
                             "ParameterName": "Tint",
-                            "DefaultValue": {"kind": "struct", "struct_type": "LinearColor", "fields": {"R": 1.0, "G": 0.0, "B": 0.5, "A": 1.0}},
+                            "DefaultValue": {
+                                "kind": "struct",
+                                "struct_type": "LinearColor",
+                                "fields": {"R": 1.0, "G": 0.0, "B": 0.5, "A": 1.0},
+                            },
                         },
                     }
                 ],
@@ -1373,9 +1406,18 @@ def test_handler_registry_supports_enriches_and_isolates():
                 test_niagara_handler_supports_all_declared_classes,
             ),
             ("handler.test_class_handlers_kwarg_defaults_true_for_v1", test_class_handlers_kwarg_defaults_true_for_v1),
-            ("handler.test_summary_tier_handlers_never_claim_complete", test_summary_tier_handlers_never_claim_complete),
-            ("handler.test_decode_tier_blueprint_graph_marks_complete", test_decode_tier_blueprint_graph_marks_complete),
-            ("handler.test_undeclared_handler_tier_defaults_to_summary", test_undeclared_handler_tier_defaults_to_summary),
+            (
+                "handler.test_summary_tier_handlers_never_claim_complete",
+                test_summary_tier_handlers_never_claim_complete,
+            ),
+            (
+                "handler.test_decode_tier_blueprint_graph_marks_complete",
+                test_decode_tier_blueprint_graph_marks_complete,
+            ),
+            (
+                "handler.test_undeclared_handler_tier_defaults_to_summary",
+                test_undeclared_handler_tier_defaults_to_summary,
+            ),
             ("handler.test_skeleton_name_guess_is_marked_heuristic", test_skeleton_name_guess_is_marked_heuristic),
             ("handler.test_skeleton_bone_tree_wins_over_name_guess", test_skeleton_bone_tree_wins_over_name_guess),
             ("handler.test_string_table_reader_synthetic_bytes", test_string_table_reader_synthetic_bytes),
@@ -1598,7 +1640,10 @@ def test_projection_views_depths_pagination_table():
             ("projection.test_select_by_id", test_select_by_id),
             ("projection.test_select_all_when_no_filters", test_select_all_when_no_filters),
             ("projection.dependencies_carry_package_name", dependencies_carry_package_name),
-            ("projection.semantic_object_depth_carries_properties_summary", semantic_object_depth_carries_properties_summary),
+            (
+                "projection.semantic_object_depth_carries_properties_summary",
+                semantic_object_depth_carries_properties_summary,
+            ),
             ("projection.package_depth_document_has_no_summary", package_depth_document_has_no_summary),
             ("projection.test_all_views_json", test_all_views_json),
             ("core.test_projection_honors_views_pagination_and_byte_budget", core_projection_honors_views),
@@ -1779,10 +1824,16 @@ def test_projection_byte_budget_and_fields_filter():
         [
             ("projection.test_max_bytes_is_enforced_and_continuable", test_max_bytes_is_enforced_and_continuable),
             ("projection.all_objects_dropped_yields_no_cursor", all_objects_dropped_yields_no_cursor),
-            ("projection.every_object_returned_exactly_once_under_budget", every_object_returned_exactly_once_under_budget),
+            (
+                "projection.every_object_returned_exactly_once_under_budget",
+                every_object_returned_exactly_once_under_budget,
+            ),
             ("projection.dropped_count_is_page_relative", dropped_count_is_page_relative),
             ("projection.limit_and_budget_compose_page_relative", limit_and_budget_compose_page_relative),
-            ("projection.out_of_range_empty_page_never_stalls_or_overshoots", out_of_range_empty_page_never_stalls_or_overshoots),
+            (
+                "projection.out_of_range_empty_page_never_stalls_or_overshoots",
+                out_of_range_empty_page_never_stalls_or_overshoots,
+            ),
             (
                 "projection.test_truncated_page_rescopes_relations_and_dependencies",
                 test_truncated_page_rescopes_relations_and_dependencies,
@@ -1846,6 +1897,7 @@ def test_schema_contract_statics():
         (Epic's 'version clash'). Values below match CUE4Parse/UAssetAPI/uasset-rs
         mirrors; changing them without a real boundary-version fixture is forbidden."""
         from uasset_read import constants as K
+
         expected = {
             "UE4_LOAD_FOR_EDITOR_GAME": 365,
             "UE4_ADD_STRING_ASSET_REFERENCES_MAP": 384,
@@ -1867,7 +1919,10 @@ def test_schema_contract_statics():
             ("schema.test_example_validates_against_schema", test_example_validates_against_schema),
             ("schema.test_schema_has_required_fields", test_schema_has_required_fields),
             ("schema.test_schema_enums_match_code", test_schema_enums_match_code),
-            ("schema.ue4_version_constants_are_pinned_to_peer_numbering", ue4_version_constants_are_pinned_to_peer_numbering),
+            (
+                "schema.ue4_version_constants_are_pinned_to_peer_numbering",
+                ue4_version_constants_are_pinned_to_peer_numbering,
+            ),
         ]
     )
 
