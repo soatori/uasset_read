@@ -26,6 +26,7 @@ PACKAGE_SAMPLE = SAMPLES / "ABP_RifleAnimLayers.uasset"
 DATA_SAMPLE = SAMPLES / "ALS_FootstepDataTable.uasset"
 SCHEMA = ROOT / "docs/designs/contract/package_document_v2.schema.json"
 EXAMPLE = ROOT / "docs/designs/contract/package_document_v2.example.json"
+SRC = Path(__file__).resolve().parents[1] / "src"
 
 
 @lru_cache(maxsize=None)
@@ -1345,6 +1346,12 @@ def test_handler_registry_supports_enriches_and_isolates():
         expr_cov = [c for c in bare_fn.coverage if c.feature == "material_function.expressions"]
         assert expr_cov and expr_cov[0].status == "missing"
 
+    def test_native_fields_delegate_type_name():
+        """K5: FField class name is MulticastInlineDelegateProperty (UnrealType.h)."""
+        src = (SRC / "uasset_read/kismet/native_fields.py").read_text(encoding="utf-8")
+        assert "InlineMulticastDelegateProperty" not in src
+        assert src.count("MulticastInlineDelegateProperty") >= 3
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -1380,6 +1387,10 @@ def test_handler_registry_supports_enriches_and_isolates():
             (
                 "handler.test_material_family_handlers_summary_tier_synthetic",
                 test_material_family_handlers_summary_tier_synthetic,
+            ),
+            (
+                "handler.test_native_fields_delegate_type_name",
+                test_native_fields_delegate_type_name,
             ),
         ]
     )
