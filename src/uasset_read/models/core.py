@@ -102,6 +102,9 @@ class UEdGraphNode:
     pins: List["UEdGraphPin"] = field(default_factory=list)
     class_name: str = ""
     node_data: Optional[Any] = None
+    # Internal bookkeeping set during graph reading (1-based export index)
+    _export_index: Optional[int] = None
+    _export_object_name: Optional[str] = None
 
 
 @dataclass

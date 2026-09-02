@@ -146,7 +146,20 @@ def _validate_relation_targets(
     diagnostics: list[Diagnostic] = []
     for rel in relations:
         table, _, raw_idx = rel.to_id.partition(":")
-        idx = int(raw_idx)
+        try:
+            idx = int(raw_idx)
+        except ValueError:
+            diagnostics.append(
+                Diagnostic(
+                    severity="warning",
+                    code="RELATION_TARGET_INVALID",
+                    message=f"{rel.kind} target {rel.to_id} from {rel.from_id} has unparseable index",
+                    stage="package.relations",
+                    object_id=rel.from_id,
+                    recoverable=True,
+                )
+            )
+            continue
         limit = export_count if table == "export" else import_count
         if table not in ("export", "import") or idx >= limit:
             diagnostics.append(
@@ -852,7 +865,20 @@ def _attach_blueprint_graph_extras(
                 )
             )
             continue
-        export_idx = int(graph["id"].split(":")[1])
+        try:
+            export_idx = int(graph["id"].split(":")[1])
+        except (ValueError, IndexError):
+            diagnostics.append(
+                Diagnostic(
+                    severity="warning",
+                    code="BLUEPRINT_GRAPH_ID_INVALID",
+                    message=f"graph export {graph['id']} has unparseable export index",
+                    stage="semantic.blueprint",
+                    object_id=graph["id"],
+                    recoverable=True,
+                )
+            )
+            continue
         owner = _resolve_graph_owner(export_idx, export_map, objects)
         if owner is None:
             diagnostics.append(

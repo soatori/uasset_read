@@ -391,7 +391,7 @@ def _extract_pin_type_from_property(prop: PropertyValue) -> FEdGraphPinType:
     # Fallback: standardize property type name to pin_category
     pin_category = "unknown"
     if prop_type:
-        pin_category = _PROPERTY_TYPE_TO_PIN_CATEGORY.get(prop_type, prop_type)
+        pin_category = _PROPERTY_TYPE_TO_PIN_CATEGORY.get(prop_type, prop_type) or ""
     return FEdGraphPinType(pin_category=pin_category)
 
 
@@ -476,9 +476,9 @@ def extract_blueprint_variables(properties: List[PropertyValue]) -> List[Bluepri
             edit_condition = prop_value.get("edit_condition", prop_value.get("EditCondition", ""))
 
         # Infer additional variable type attributes
-        is_blueprint_writable = flag_mapping.get("is_blueprint_readable", False) and not flag_mapping.get(
-            "is_blueprint_read_only", False
-        )
+        is_readable = flag_mapping.get("is_blueprint_readable", False)
+        is_read_only = flag_mapping.get("is_blueprint_read_only", False)
+        is_blueprint_writable = bool(is_readable and not is_read_only)
 
         var = BlueprintVariable(
             var_name=prop_name,
@@ -491,7 +491,16 @@ def extract_blueprint_variables(properties: List[PropertyValue]) -> List[Bluepri
             flags_labels=flags_labels,
             edit_condition=edit_condition,
             meta_class=meta_class,
-            **flag_mapping,
+            is_edit_anywhere=flag_mapping["is_edit_anywhere"],
+            is_edit_instance_only=flag_mapping["is_edit_instance_only"],
+            is_blueprint_readable=flag_mapping["is_blueprint_readable"],
+            is_blueprint_read_only=flag_mapping["is_blueprint_read_only"],
+            is_net=flag_mapping["is_net"],
+            is_replicated=flag_mapping["is_replicated"],
+            is_transient=flag_mapping["is_transient"],
+            is_blueprint_assignable=flag_mapping["is_blueprint_assignable"],
+            is_rep_notify=flag_mapping["is_rep_notify"],
+            is_save_game=flag_mapping["is_save_game"],
             is_blueprint_writable=is_blueprint_writable,
         )
         variables.append(var)
@@ -515,6 +524,9 @@ def _extract_blueprint_variable_descriptions(items: List[Any]) -> List[Blueprint
         category = _text_or_string(fields.get("Category") or fields.get("category"))
         default_value = fields.get("DefaultValue", fields.get("default_value"))
         rep_condition = fields.get("ReplicationCondition", fields.get("replication_condition", 0))
+        is_readable = flag_mapping.get("is_blueprint_readable", False)
+        is_read_only = flag_mapping.get("is_blueprint_read_only", False)
+        is_blueprint_writable = bool(is_readable and not is_read_only)
         var = BlueprintVariable(
             var_name=str(var_name),
             var_type=_extract_var_type_from_description(fields.get("VarType")),
@@ -523,9 +535,17 @@ def _extract_blueprint_variable_descriptions(items: List[Any]) -> List[Blueprint
             default_value=default_value,
             metadata=_metadata_from_description(fields.get("MetaDataArray")),
             flags_labels=flags_labels,
-            **flag_mapping,
-            is_blueprint_writable=flag_mapping.get("is_blueprint_readable", False)
-            and not flag_mapping.get("is_blueprint_read_only", False),
+            is_edit_anywhere=flag_mapping["is_edit_anywhere"],
+            is_edit_instance_only=flag_mapping["is_edit_instance_only"],
+            is_blueprint_readable=flag_mapping["is_blueprint_readable"],
+            is_blueprint_read_only=flag_mapping["is_blueprint_read_only"],
+            is_net=flag_mapping["is_net"],
+            is_replicated=flag_mapping["is_replicated"],
+            is_transient=flag_mapping["is_transient"],
+            is_blueprint_assignable=flag_mapping["is_blueprint_assignable"],
+            is_rep_notify=flag_mapping["is_rep_notify"],
+            is_save_game=flag_mapping["is_save_game"],
+            is_blueprint_writable=is_blueprint_writable,
         )
         var.var_guid = _guid_from_description(fields.get("VarGuid"))
         var.friendly_name = str(fields.get("FriendlyName") or fields.get("friendly_name") or "")

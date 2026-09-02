@@ -1245,7 +1245,9 @@ def _resolve_mapping_struct_name(
         try:
             from uasset_read.serializers.object_resources import resolve_class_name
 
-            return resolve_class_name(export.class_index, import_map, export_map)
+            resolved = resolve_class_name(export.class_index, import_map, export_map)
+            if resolved is not None:
+                return resolved
         except (KeyError, AttributeError, IndexError) as e:
             logger.debug("Failed to resolve mapping struct name: %s", e)
     return export.object_name

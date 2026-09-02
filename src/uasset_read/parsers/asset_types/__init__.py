@@ -102,7 +102,7 @@ class AssetTypeHandler(ClassHandler):
     def __init__(
         self,
         class_names: List[str],
-        parse_func: Callable[["FArchive", List[str]], Dict[str, Any]],
+        parse_func: Callable[..., Dict[str, Any]],
         handler_name: str,
     ) -> None:
         self._class_names = set(class_names)

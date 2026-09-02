@@ -44,7 +44,7 @@ def _simple_read(archive, method_name):
 
 
 # Expected byte sizes for fixed-layout structs (used for fast-path validation)
-_EXPECTED_STRUCT_SIZES: dict[str, int] = {
+_EXPECTED_STRUCT_SIZES: dict[str, int | None] = {
     "Vector": 12,
     "Rotator": 12,
     "Vector2D": 8,
@@ -564,7 +564,7 @@ def parse_lazy_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjec
 def parse_soft_class_property(
     tag: PropertyTag,
     archive: FArchive,
-    name_map: List[str] = None,
+    name_map: Optional[List[str]] = None,
     soft_object_path_list: Optional[List[Dict]] = None,
 ) -> SoftObjectPathValue:
     """Parse SoftClassProperty -- same parsing as SoftObjectProperty."""
@@ -1096,7 +1096,7 @@ def parse_struct_property(
 
     # Fast-path for simple structs (FScriptStruct.cs L174-178)
     # These structs have no PropertyTags loop — just raw float reads.
-    fast_result = _try_fast_path_struct(struct_type, tag, archive, name_map)
+    fast_result = _try_fast_path_struct(struct_type or '', tag, archive, name_map)
     if fast_result is not None:
         return fast_result
 
@@ -1286,7 +1286,8 @@ def parse_enum_property(
     """Parse EnumProperty (ADVP-04)."""
     enum_type = _extract_enum_type_from_tag(tag)
     enum_value_name = archive.read_name(name_map)
-    return make_enum_value(enum_type, enum_value_name)
+    result = make_enum_value(enum_type, enum_value_name)
+    return EnumValue(enum_type=result["enum_type"], value_name=result["value_name"])
 
 
 def _read_ftext_base(archive: FArchive) -> tuple[str, str, str]:
@@ -1382,7 +1383,7 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[
 # ============================================================================
 
 
-def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> list:
+def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive, name_map: Optional[List[str]] = None) -> list:
     """Parse MulticastDelegateProperty.
 
     UE FMulticastScriptDelegate::SerializeItem serializes function name with FName
@@ -1411,7 +1412,7 @@ parse_multicast_sparse_delegate_property = parse_multicast_delegate_property
 parse_interface_property = parse_object_property
 
 
-def parse_field_path_property(tag: PropertyTag, archive: FArchive, name_map: List[str] = None) -> dict:
+def parse_field_path_property(tag: PropertyTag, archive: FArchive, name_map: Optional[List[str]] = None) -> dict:
     """Parse FieldPathProperty.
 
     UE FFieldPath::Serialize serializes the path as TArray<FName>
@@ -1427,8 +1428,8 @@ def parse_field_path_property(tag: PropertyTag, archive: FArchive, name_map: Lis
 def parse_optional_property(
     tag: PropertyTag,
     archive: FArchive,
-    name_map: List[str] = None,
-    export_map: List[Any] = None,
+    name_map: Optional[List[str]] = None,
+    export_map: Optional[List[Any]] = None,
     summary: Optional[Any] = None,
 ) -> dict:
     """Parse OptionalProperty."""
@@ -1722,7 +1723,7 @@ def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> Any:
 # ============================================================================
 
 
-def format_variable_type(pin_type: FEdGraphPinType, name_map: List[str] = None) -> str:
+def format_variable_type(pin_type: FEdGraphPinType, name_map: Optional[List[str]] = None) -> str:
     """
     Format FEdGraphPinType into a complete type string (per D-04).
 

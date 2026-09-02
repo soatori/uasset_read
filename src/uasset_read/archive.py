@@ -51,6 +51,10 @@ class FArchive:
     Supports byte-order detection and swapping, boundary validation.
     """
 
+    # Version gates set by callers after summary read (not all code paths set these).
+    _file_version_ue4: int
+    _file_version_ue5: int
+
     def _init_archive_attrs(self, path: str, tolerant: bool = False, hex_view: bool = False):
         """Initialize common archive attributes without opening a file.
 
@@ -112,9 +116,7 @@ class FArchive:
                 f"Read of {size} bytes at position {pos} is below export read range start {start}"
             )
         if pos + size > end:
-            raise ExportBoundsExceeded(
-                f"Read of {size} bytes at position {pos} exceeds export read range end {end}"
-            )
+            raise ExportBoundsExceeded(f"Read of {size} bytes at position {pos} exceeds export read range end {end}")
 
     def read(self, size: int) -> bytes:
         """Base read method — does not swap raw bytes."""
@@ -140,7 +142,9 @@ class FArchive:
             if len(data) < size:
                 raise ParseError(f"mmap.read() returned {len(data)} bytes, expected {size}")
             return data
-        return self._file.read(size)
+        f = self._file
+        assert f is not None  # opened in __init__ or subclass
+        return f.read(size)
 
     @property
     def is_byte_swapping(self) -> bool:
@@ -156,7 +160,9 @@ class FArchive:
         if self._use_mmap and self._mmap:
             self._mmap.seek(pos)
         else:
-            self._file.seek(pos)
+            f = self._file
+            assert f is not None  # opened in __init__ or subclass
+            f.seek(pos)
 
     def validate_offset(self, offset: int, context: str = "") -> None:
         """Full offset validation — checks offset validity before seeking."""
@@ -173,9 +179,7 @@ class FArchive:
         if self._read_range is not None:
             start, end = self._read_range
             if offset < start or offset > end:
-                raise ExportBoundsExceeded(
-                    f"Offset {offset} outside export read range [{start}, {end}] at {context}"
-                )
+                raise ExportBoundsExceeded(f"Offset {offset} outside export read range [{start}, {end}] at {context}")
         if offset > self._file_size:
             self._record_diagnostic(
                 module="archive",
@@ -255,7 +259,9 @@ class FArchive:
         """Return current position."""
         if self._use_mmap and self._mmap:
             return self._mmap.tell()
-        return self._file.tell()
+        f = self._file
+        assert f is not None  # opened in __init__ or subclass
+        return f.tell()
 
     def __repr__(self) -> str:
         """Return readable repr with path and file size."""

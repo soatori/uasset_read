@@ -351,10 +351,6 @@ def parse_batch(
     if parse_config is not None:
         parse_options["parse_config"] = parse_config
 
-    # #346: 智能混合模式 — 将导入移到循环外部
-    if isolate_assets == "auto":
-        from uasset_read.memory_safety import should_isolate
-
     import time
 
     start_time = time.monotonic()
@@ -371,6 +367,8 @@ def parse_batch(
         try:
             # #346: 智能混合模式
             if isolate_assets == "auto":
+                from uasset_read.memory_safety import should_isolate
+
                 file_size = pf.stat().st_size
                 actual_isolate = should_isolate(file_size)
             else:

@@ -221,7 +221,7 @@ def _recover_pin_array_count(
     error_pos: int,
     bad_count: int,
     export_map: List[ObjectExport],
-    import_map: List[ObjectImport] = None,
+    import_map: Optional[List[ObjectImport]] = None,
     scan_window: int = 16,
 ) -> Optional[Dict[str, Any]]:
     """Sliding recovery enhanced validation (Phase 75: dynamic window).
@@ -355,7 +355,7 @@ def _try_recover_to_subpins(
     archive: FArchive,
     error_pos: int,
     export_map: List[ObjectExport],
-    import_map: List[ObjectImport] = None,
+    import_map: Optional[List[ObjectImport]] = None,
     max_scan: int = 256,
 ) -> Optional[Dict[str, Any]]:
     """Recover to SubPins after LinkedTo failure.

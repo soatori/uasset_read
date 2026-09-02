@@ -635,11 +635,11 @@ def _read_member_reference_from_tags(
 
         inner_value = read_tag_value_bounded(archive, inner, _read_inner)
         if inner.name == "MemberParent":
-            mp_idx = inner_value or 0
+            mp_idx = int(inner_value) if inner_value else 0
         elif inner.name == "MemberName":
-            m_name = inner_value or ""
+            m_name = str(inner_value) if inner_value else ""
         elif inner.name == "MemberGuid":
-            m_guid = inner_value or ""
+            m_guid = str(inner_value) if inner_value else ""
         elif inner.name == "bSelfContext":
             m_self = bool(inner_value)
 
@@ -1066,7 +1066,7 @@ def read_ue_graph_node(
         pins=pins,
         class_name=class_name,
     )
-    base_node._export_object_name = node_export.object_name
+    setattr(base_node, "_export_object_name", node_export.object_name)
 
     return create_node_from_archive(
         archive,

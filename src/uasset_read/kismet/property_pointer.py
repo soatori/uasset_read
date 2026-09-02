@@ -56,7 +56,7 @@ class FKismetPropertyPointer:
         # FPropertyProxyArchive, which writes an FFieldPath directly. The
         # archive transfer owns both the physical and logical cursor contract.
         if hasattr(archive, "xfer_field_pointer"):
-            return cls(bNew=True, path=archive.xfer_field_pointer())
+            return cls(bNew=True, path=archive.xfer_field_pointer())  # type: ignore[reportAttributeAccessIssue]
 
         # Preserve the legacy generic-archive contract for callers outside the
         # persistent Script loader.
