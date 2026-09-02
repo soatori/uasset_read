@@ -32,6 +32,7 @@ from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
     MAX_ARRAY_COUNT,
     UE5_LARGE_WORLD_COORDINATES,
+    UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES,
     MAX_SAFE_COUNT,
     UE_NONE_SENTINEL,
 )
@@ -128,7 +129,7 @@ _LWC_TYPE_MAP: Dict[str, Tuple[int, int]] = {
     "Quat": (16, 32),  # FQuat4f → FQuat4d
     "Plane": (16, 32),  # FPlane4f → FPlane4d
     "Sphere": (16, 32),  # FSphere3f → FSphere3d
-    "Box": (28, 56),  # 2 * FVector + bool (float → double)
+    "Box": (28, 52),  # 2 * FVector + 4-byte IsValid bool (Box.h: double = 24+24+4)
     "BoxSphereBounds": (28, 56),  # 3 * FVector + float (float → double)
     "Matrix": (64, 128),  # 4 * FPlane (float → double)
     "TwoVectors": (24, 48),  # 2 * FVector (float → double)
@@ -515,11 +516,12 @@ def parse_soft_object_property(
     archive: FArchive,
     name_map: List[str],
     soft_object_path_list: Optional[List[Dict]] = None,
+    summary: Optional[Any] = None,
 ) -> SoftObjectPathValue:
     """Parse SoftObjectProperty (FSoftObjectPath).
 
     When soft_object_path_list exists (UE5.7+), read int32 index.
-    Otherwise read FString pair (legacy format).
+    Otherwise read the inline FSoftObjectPath layout (FName-based).
     """
     if soft_object_path_list is not None and len(soft_object_path_list) > 0:
         # UE5.7+ index format
@@ -541,9 +543,21 @@ def parse_soft_object_property(
                 error=f"SoftObjectPath index {index} out of bounds (list size {len(soft_object_path_list)})",
             )
     else:
-        # Legacy FString format
-        asset_path = archive.read_fstring()
+        # No summary table (UE5 < 1008): FSoftObjectPath inline. A two-FString layout
+        # never existed in UE (SoftObjectPath.cpp SerializePathWithoutFixup). UE5 >= 1007:
+        # FTopLevelAssetPath = PackageName FName + AssetName FName, then subpath FString.
+        # Older: one FName + subpath FString. The pre-4.19 single-FString form is outside
+        # this project's supported window; such a package hits the tolerant skip, not a
+        # fabricated decode.
+        ue5 = getattr(summary, "file_version_ue5", 0) if summary is not None else 0
+        package_name = ""
+        if ue5 >= UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES:
+            package_name = archive.read_name(name_map)
+        asset_path = archive.read_name(name_map)
         sub_path = archive.read_fstring()
+        if package_name:
+            # FTopLevelAssetPath renders as "PackageName.AssetPath" in FSoftObjectPath
+            asset_path = f"{package_name}.{asset_path}"
         return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
 
 
@@ -566,9 +580,10 @@ def parse_soft_class_property(
     archive: FArchive,
     name_map: List[str] = None,
     soft_object_path_list: Optional[List[Dict]] = None,
+    summary: Optional[Any] = None,
 ) -> SoftObjectPathValue:
     """Parse SoftClassProperty -- same parsing as SoftObjectProperty."""
-    return parse_soft_object_property(tag, archive, name_map or [], soft_object_path_list)
+    return parse_soft_object_property(tag, archive, name_map or [], soft_object_path_list, summary)
 
 
 def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjectPathValue:
@@ -627,16 +642,27 @@ def parse_array_property(
 
     inner_type = getattr(tag, "inner_type", None) or _get_inner_type(tag.type)
 
+    if inner_type == "BoolProperty":
+        # PropertyBool.cpp SerializeItem: bool container elements serialize as inline
+        # 1-byte values, NOT via the property-level tag BoolTrue bit.
+        for _ in range(count):
+            elements.append(archive.read_u8() != 0)
+        return elements
+
     # For StructProperty array elements, UE uses complete PropertyTag serialization
     # For other types, serialized natively by type (each element size determined by type)
     inner_type_struct = getattr(tag, "inner_type_struct", None) if inner_type == "StructProperty" else None
+    legacy_inner_tag = None
+    if inner_type == "StructProperty" and inner_type_struct is None:
+        # PropertyArray.cpp: legacy struct arrays serialize ONE inner FPropertyTag
+        # after the count; each element is then the struct's tagged-field stream
+        # (None-terminated), NOT a per-element tag (the old per-element read
+        # flattened multi-field elements).
+        legacy_inner_tag = read_property_tag(archive, name_map)
     for i in range(count):
-        if inner_type == "StructProperty" and inner_type_struct is None:
-            # Legacy format (UE5 < 1012): parent ArrayProperty tag only stores
-            # inner_type name, not the nested struct type.  Each element in the
-            # archive carries its own PropertyTag with the correct struct_type.
-            # Read it from the archive so parse_struct_property gets the real name.
-            inner_tag = read_property_tag(archive, name_map)
+        if legacy_inner_tag is not None:
+            inner_tag = PropertyTag(name=f"{tag.name}[{i}]", type=legacy_inner_tag.type, size=0)
+            inner_tag.struct_type = getattr(legacy_inner_tag, "struct_type", None)
         else:
             # Create inner tag, size=0 means the parse function decides how many bytes to read
             inner_tag = PropertyTag(
@@ -763,8 +789,11 @@ def _try_fast_path_struct(
         )
 
     if struct_type == "Box":
-        min_x, min_y, min_z = archive.read_f32(), archive.read_f32(), archive.read_f32()
-        max_x, max_y, max_z = archive.read_f32(), archive.read_f32(), archive.read_f32()
+        # Box.h operator<<: Min + Max + IsValid (bool as 4-byte UBOOL, Archive.h).
+        # LWC double variant is 52 bytes; select precision by tag.size like Vector/Rotator.
+        reader = archive.read_f64 if tag.size == 52 else archive.read_f32
+        min_x, min_y, min_z = reader(), reader(), reader()
+        max_x, max_y, max_z = reader(), reader(), reader()
         b_valid = archive.read_i32() != 0
         return StructValue(
             struct_type="Box",
@@ -1265,6 +1294,9 @@ def parse_set_property(
     # Skip elements to remove (serialized by element_type)
     parse_property_value = _get_parse_property_value()
     for _ in range(num_elements_to_remove):
+        if element_type == "BoolProperty":
+            archive.read_u8()  # inline 1-byte bool (PropertyBool.cpp)
+            continue
         dummy_tag = PropertyTag(name="RemovedElement", type=element_type, size=0)
         parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
 
@@ -1273,6 +1305,10 @@ def parse_set_property(
     elements: List[Any] = []
 
     for _ in range(num_elements):
+        if element_type == "BoolProperty":
+            # PropertyBool.cpp: set elements are inline 1-byte values, not tag BoolTrue.
+            elements.append(archive.read_u8() != 0)
+            continue
         dummy_tag = PropertyTag(name="Element", type=element_type, size=0)
         element = parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
         elements.append(element)
@@ -1289,74 +1325,44 @@ def parse_enum_property(
     return make_enum_value(enum_type, enum_value_name)
 
 
-def _read_ftext_base(archive: FArchive) -> tuple[str, str, str]:
+def _read_ftext_base(archive: FArchive, dev_notes: bool = False) -> tuple[str, str, str]:
     """Read Base FText: namespace + key + source_string."""
     namespace = archive.read_fstring()
     key = archive.read_fstring()
     source_string = archive.read_fstring()
+    if dev_notes:
+        # TextHistory.cpp:915-937 — editor-saved UE5 assets append a fourth (often empty)
+        # DevNotes FString after SourceString (FortniteMainBranch >= AddDevNotesToFText=260,
+        # !FilterEditorOnly). Without consuming it the value stream is misaligned.
+        archive.read_fstring()
     return namespace, key, source_string
 
 
-def _read_ftext_args(archive: FArchive) -> None:
-    """Read and discard FText argument dictionary (only consumes bytes)."""
-    count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "FText args")
-    for _ in range(count):
-        archive.read_fstring()  # key
-        archive.read_fstring()  # value
-
-
-def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
+def parse_text_property(tag: PropertyTag, archive: FArchive, dev_notes: bool = False) -> TextValue:
     """Parse TextProperty (ADVP-05).
 
     UE FText serialization format:
       - flags: i32 (4 bytes)
-      - history_type: u8 (1 byte) -- FTextHistory type identifier
+      - history_type: u8 (1 byte) -- ETextHistoryType identifier
       - body: varies based on history_type
         - history_type == 0 (Base): namespace + key + source_string
-        - history_type == 1 (NamedFormat): namespace + key + args
-        - history_type == 2 (OrderedFormat): namespace + key + source_string + args
-        - history_type == 3 (ArgumentFormat): namespace + key + source_string + args
-        - history_type == 4-9 (AsNumber/AsPercent/AsCurrency/Date/Time/DateTime): namespace + key + source_string + value
-        - history_type == 10 (Transform): namespace + key + source_string + transform_type
+          (+ DevNotes FString when dev_notes is set, TextHistory.cpp:915-937)
+        - history_type 1-10 are NOT decoded: their UE layouts (TextHistory.cpp)
+          differ from the old flat 3-FString reads, and a wrong decode silently
+          produced wrong values; consume nothing and report the type honestly.
     """
     _flags = archive.read_i32()  # FText flags (unused)
     history_type = archive.read_u8()  # FTextHistory type
+    history_note = history_type
 
     if history_type == 0:  # Base
-        namespace, key, source_string = _read_ftext_base(archive)
-    elif history_type == 1:  # NamedFormat
-        namespace = archive.read_fstring()
-        key = archive.read_fstring()
-        _read_ftext_args(archive)
-        source_string = ""
-    elif history_type == 2:  # OrderedFormat
-        namespace, key, source_string = _read_ftext_base(archive)
-        _read_ftext_args(archive)
-    elif history_type == 3:  # ArgumentFormat
-        namespace, key, source_string = _read_ftext_base(archive)
-        _read_ftext_args(archive)
-    elif history_type == 4:  # AsNumber
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # target_number
-    elif history_type == 5:  # AsPercent
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # target_value
-    elif history_type == 6:  # AsCurrency
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # currency_code
-        archive.read_fstring()  # target_amount
-    elif history_type == 7:  # DateString
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # date
-    elif history_type == 8:  # TimeString
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # time
-    elif history_type == 9:  # DateTimeString
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # datetime
-    elif history_type == 10:  # Transform
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # transform_type
+        namespace, key, source_string = _read_ftext_base(archive, dev_notes=dev_notes)
+    elif 1 <= history_type <= 10:
+        # UE layouts here differ from the old flat decode (TextHistory.cpp: nested FText +
+        # typed FFormatArgumentData args / generated histories without the 3-string prefix).
+        # Decoding them incorrectly silently produced wrong values; the value stream is
+        # bounded by tag.size, so consume nothing and report the history type honestly.
+        namespace = key = source_string = ""
     else:
         # Unknown history type: skip remaining data
         remaining = tag.size - 5  # 5 = flags(4) + history_type(1)
@@ -1366,7 +1372,12 @@ def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
         key = ""
         source_string = ""
 
-    return TextValue(namespace=namespace or "", key=key or "", source_string=source_string or "")
+    return TextValue(
+        namespace=namespace or "",
+        key=key or "",
+        source_string=source_string or "",
+        history_type=history_note,
+    )
 
 
 def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str]) -> DelegateValue:
@@ -1606,6 +1617,9 @@ def _dispatch_key_parse(
     tag: Optional[PropertyTag] = None,
 ) -> Any:
     """Key type dispatch parsing (D-02b)."""
+    if key_type == "BoolProperty":
+        # PropertyBool.cpp: bool map keys are inline 1-byte values, not tag BoolTrue.
+        return archive.read_u8() != 0
     basic_types = [
         "IntProperty",
         "Int64Property",
@@ -1613,7 +1627,6 @@ def _dispatch_key_parse(
         "DoubleProperty",
         "StrProperty",
         "NameProperty",
-        "BoolProperty",
         "ByteProperty",
         "UInt16Property",
         "UInt32Property",
@@ -1651,6 +1664,9 @@ def _dispatch_value_parse(
     tag: Optional[PropertyTag] = None,
 ) -> Any:
     """Value type dispatch parsing."""
+    if value_type == "BoolProperty":
+        # PropertyBool.cpp: bool map values are inline 1-byte values, not tag BoolTrue.
+        return archive.read_u8() != 0
     if value_type == "StructProperty":
         # Propagate struct type from tag so parse_struct_property can identify
         # the concrete struct rather than falling back to UnknownStruct.

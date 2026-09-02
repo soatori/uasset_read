@@ -374,6 +374,140 @@ def test_property_bag_normalization_is_bounded_lossless():
         assert bag["Data"]["value"]["length"] == 2
         json.dumps(bag)
 
+    def test_lwc_box_size_52_and_double_read():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types import _LWC_TYPE_MAP, parse_struct_property
+        assert _LWC_TYPE_MAP["Box"] == (28, 52)
+        payload = struct.pack("<ddddddi", 1, 2, 3, 4, 5, 6, 1)  # Min 3xd + Max 3xd + IsValid i32 = 52
+        assert len(payload) == 52
+        tag = PropertyTag(name="B", type="StructProperty", size=52)
+        tag.struct_type = "Box"
+        arc = ByteArchive(payload)
+        out = parse_struct_property(tag, arc, ["None"], [], None)
+        assert out.struct_type == "Box"
+        assert out.fields["Min"]["X"] == 1.0 and out.fields["Max"]["Z"] == 6.0
+        # IsValid is a 4-byte UBOOL (Archive.h); float Box branch names the field bIsValid.
+        assert out.fields["bIsValid"] is True
+
+    def test_property_tag_extension_external_objects():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.constants import PROP_EXT_HAS_EXTERNAL_OBJECTS
+        from uasset_read.serializers.property_tags import read_property_tag
+        assert PROP_EXT_HAS_EXTERNAL_OBJECTS == 0x04
+        # Legacy header (routes via archive._file_version_ue5 < 1012):
+        # name FName + type FName + size i32 + array_index i32 + HasPropertyGuid u8=0 + ext u8 [+ payload]
+        names = ["None", "IntProperty"]
+
+        def legacy_tag(ext: bytes):
+            # Name uses index 1; index 0 would hit the "None" sentinel early-return.
+            return struct.pack("<ii", 1, 0) + struct.pack("<ii", 1, 0) + struct.pack("<ii", 4, 0) + b"\x00" + ext
+
+        arc = ByteArchive(legacy_tag(b"\x04\x07") + struct.pack("<i", 99))
+        arc._file_version_ue5 = 1011  # legacy routing (<1012) with the extension block on (>=1011)
+        arc._file_version_ue4 = 522
+        tag = read_property_tag(arc, names)
+        assert tag.value_start_offset == 27  # 8+8+4+4+1 header + 1 ext + 1 external-object slot
+        assert tag.flags == 0x04
+        assert arc.read_i32() == 99  # value stream starts right after the consumed slot
+        # and the 0x02|0x04 combined case: two control bytes + one external byte
+        arc2 = ByteArchive(legacy_tag(b"\x06\x00\x00\x07") + struct.pack("<i", 99))
+        arc2._file_version_ue5 = 1011
+        arc2._file_version_ue4 = 522
+        assert read_property_tag(arc2, names).value_start_offset == 29
+
+    def test_array_of_bools_consumes_one_byte_per_element():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types import parse_array_property
+        data = struct.pack("<i", 3) + bytes([1, 0, 1]) + b"X"
+        arc = ByteArchive(data)
+        tag = PropertyTag(name="A", type="ArrayProperty", size=len(data))
+        tag.inner_type = "BoolProperty"
+        out = parse_array_property(tag, arc, ["None"], [], None)
+        assert out == [True, False, True]
+        assert arc.tell() == 4 + 3
+
+    def test_legacy_struct_array_reads_single_inner_tag():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types import parse_array_property
+        # The inner struct is one of the tagged-fallback structs so a size-0 inner
+        # tag parses as a tagged-field stream instead of returning opaque (a plain
+        # fast-path name like "Vector" cannot exercise the tagged element loop).
+        names = ["None", "StructProperty", "IntProperty", "BlendSample", "HP"]
+
+        def legacy_tag(name_i, type_i, size, extra=b""):
+            # name + type FNames, size + array_index int32s, [extras], HasPropertyGuid=0
+            return struct.pack("<ii", name_i, 0) + struct.pack("<ii", type_i, 0) + struct.pack("<ii", size, 0) + extra + b"\x00"
+
+        inner = legacy_tag(4, 1, 0, struct.pack("<ii", 3, 0) + bytes(16))  # StructProperty/BlendSample + StructGuid
+        field = legacy_tag(4, 2, 4) + struct.pack("<i", 111) + struct.pack("<ii", 0, 0)  # HP=111 then None tag
+        field2 = legacy_tag(4, 2, 4) + struct.pack("<i", 222) + struct.pack("<ii", 0, 0)
+        data = struct.pack("<i", 2) + inner + field + field2
+        arc = ByteArchive(data)
+        arc._file_version_ue5 = 500  # legacy routing (<1012); no extension byte in tags
+        arc._file_version_ue4 = 522
+        tag = PropertyTag(name="A", type="ArrayProperty", size=len(data))
+        tag.inner_type = "StructProperty"
+        tag.inner_type_struct = None
+        out = parse_array_property(tag, arc, names, [], None, 0)
+        assert len(out) == 2
+        assert out[0].fields["HP"] == 111 and out[1].fields["HP"] == 222
+        assert arc.tell() == len(data)
+
+    def test_soft_object_path_inline_is_fname_based():
+        import struct
+        from types import SimpleNamespace
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types import parse_soft_object_property
+        names = ["None", "Game/Foo/Bar", "Bar", "SubPath"]
+        # UE5 < 1007 legacy inline: FName(index+number) + FString (SerializePathWithoutFixup)
+        body = struct.pack("<ii", 2, 0) + struct.pack("<i", len("SubPath") + 1) + b"SubPath\x00"
+        arc = ByteArchive(body)
+        summary = SimpleNamespace(file_version_ue5=500, _soft_object_path_list=None, package_flags=0, custom_versions=[])
+        val = parse_soft_object_property(
+            PropertyTag(name="S", type="SoftObjectProperty", size=len(body)), arc, names, None, summary
+        )
+        assert val.asset_path == "Bar" and val.sub_path == "SubPath"
+        # UE5 >= 1007: FTopLevelAssetPath = PackageName FName + AssetName FName, then subpath FString
+        body2 = struct.pack("<iiii", 1, 0, 2, 0) + struct.pack("<i", 1) + b"\x00"
+        arc2 = ByteArchive(body2)
+        summary2 = SimpleNamespace(file_version_ue5=1007, _soft_object_path_list=None, package_flags=0, custom_versions=[])
+        val2 = parse_soft_object_property(
+            PropertyTag(name="S", type="SoftObjectProperty", size=len(body2)), arc2, names, None, summary2
+        )
+        assert val2.asset_path == "Game/Foo/Bar.Bar"
+
+    def test_ftext_history_demoted_and_base_reads_dev_notes():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types import parse_text_property
+
+        def ft_body(hist, strings=(), extra=b""):
+            tail = extra
+            for s in strings:
+                tail += struct.pack("<i", len(s) + 1) + s.encode("utf-8") + b"\x00"
+            return struct.pack("<iB", 0, hist) + tail
+
+        # Base + DevNotes (gate on): 4 strings; value is the third.
+        body = ft_body(0, ("ns", "key", "Hello", "notes"), )
+        arc = ByteArchive(body)
+        v = parse_text_property(PropertyTag(name="T", type="TextProperty", size=len(body)), arc, dev_notes=True)
+        assert v.source_string == "Hello" and arc.tell() == len(body)
+        # NamedFormat (1): nested FText (flags+hist+its own 4 strings) + args — demoted, not misparsed
+        nested = struct.pack("<iB", 0, 0) + struct.pack("<i", 1) + b"\x00"
+        body1 = struct.pack("<iB", 0, 1) + nested + struct.pack("<i", 0)
+        arc1 = ByteArchive(body1)
+        v1 = parse_text_property(PropertyTag(name="T", type="TextProperty", size=len(body1)), arc1, dev_notes=False)
+        assert v1.source_string == "" and getattr(v1, "history_type", None) == 1
+
     _run_cases(
         [
             ("property.test_empty_list_returns_empty_dict", test_empty_list_returns_empty_dict),
@@ -381,6 +515,12 @@ def test_property_bag_normalization_is_bounded_lossless():
             ("property.test_known_property_preserves_value", test_known_property_preserves_value),
             ("property.test_struct_property_normalizes", test_struct_property_normalizes),
             ("property.test_bytes_value_serializes", test_bytes_value_serializes),
+            ("property.lwc_box_size_52_and_double_read", test_lwc_box_size_52_and_double_read),
+            ("property.tag_extension_external_objects", test_property_tag_extension_external_objects),
+            ("property.array_of_bools_inline_bytes", test_array_of_bools_consumes_one_byte_per_element),
+            ("property.legacy_struct_array_single_inner_tag", test_legacy_struct_array_reads_single_inner_tag),
+            ("property.soft_object_path_inline_fname_based", test_soft_object_path_inline_is_fname_based),
+            ("property.ftext_base_dev_notes_and_demotion", test_ftext_history_demoted_and_base_reads_dev_notes),
         ]
     )
 

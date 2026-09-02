@@ -21,6 +21,7 @@ from uasset_read.exceptions import ParseError, ErrorContext
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
     PKG_UnversionedProperties,
+    PKG_FilterEditorOnly,
     UE5_PROPERTY_TAG_EXTENSION,
     FIXED_UNVERSIONED_SIZES,
     UE_NONE_SENTINEL,
@@ -199,12 +200,14 @@ _PROPERTY_ARGS: dict[str, tuple[str, ...]] = {
     for t in (
         "BoolProperty", "IntProperty", "Int64Property", "Int16Property", "Int8Property",
         "ByteProperty", "UInt16Property", "UInt32Property", "UInt64Property", "FloatProperty",
-        "DoubleProperty", "StrProperty", "ObjectProperty", "TextProperty", "Utf8StrProperty",
+        "DoubleProperty", "StrProperty", "ObjectProperty", "Utf8StrProperty",
         "WeakObjectProperty", "LazyObjectProperty", "ClassProperty", "AssetObjectProperty",
         "AssetClassProperty", "InterfaceProperty", "VerseStringProperty", "VerseClassProperty",
         "VerseFunctionProperty", "VerseDynamicProperty", "AnsiStrProperty", "GuidProperty",
         "VerseCellProperty", "VerseValueProperty",
     )
+} | {
+    "TextProperty": ("tag", "archive", "dev_notes"),
 } | {
     t: ("tag", "archive", "name_map")
     for t in (
@@ -212,7 +215,7 @@ _PROPERTY_ARGS: dict[str, tuple[str, ...]] = {
         "MulticastInlineDelegateProperty", "MulticastSparseDelegateProperty", "FieldPathProperty",
     )
 } | {
-    t: ("tag", "archive", "name_map", "soft_path_list")
+    t: ("tag", "archive", "name_map", "soft_path_list", "summary")
     for t in ("SoftObjectProperty", "SoftClassProperty")
 } | {
     t: ("tag", "archive", "name_map", "export_map", "summary", "depth")
@@ -632,6 +635,13 @@ def parse_property_value(
         # Special case: ByteProperty with enum backing needs name_map (reads FName)
         if tag.type == "ByteProperty" and tag.enum_type is not None:
             return handler(tag, archive, name_map)
+        dev_notes = False
+        if summary is not None and (getattr(summary, "package_flags", 0) & PKG_FilterEditorOnly) == 0:
+            # FText Base appends DevNotes when FortniteMainBranch >= AddDevNotesToFText=260
+            # and the package was not filtered for editor-only data (TextHistory.cpp:917).
+            from uasset_read.kismet.ufunction_reader import FORTNITE_GUID, get_kismet_custom_version
+
+            dev_notes = get_kismet_custom_version(summary, FORTNITE_GUID) >= 260
         values = {
             "tag": tag,
             "archive": archive,
@@ -640,6 +650,7 @@ def parse_property_value(
             "summary": summary,
             "depth": depth,
             "soft_path_list": getattr(summary, "_soft_object_path_list", None) if summary is not None else None,
+            "dev_notes": dev_notes,
         }
         return handler(*(values[n] for n in _PROPERTY_ARGS[tag.type]))
     except (_struct.error, OSError, ValueError, AttributeError, KeyError, ParseError) as e:

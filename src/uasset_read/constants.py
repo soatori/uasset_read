@@ -177,6 +177,7 @@ MAX_PROPERTY_TYPE_NODES = 50  # Max nodes in _read_property_type_name
 # ============================================================================
 
 PROP_EXT_SERIALIZE_CONTROL = 0x02  # SerializeControl bit in property extensions
+PROP_EXT_HAS_EXTERNAL_OBJECTS = 0x04  # EPropertyTagExtension::HasExternalsObjects (PropertyTag.cpp:44-53)
 
 # ============================================================================
 # UE5 version constants (EUnrealEngineObjectUE5Version)
@@ -188,6 +189,7 @@ UE5_OPTIONAL_RESOURCES = 1003
 UE5_NAMES_REFERENCED_FROM_EXPORT_DATA = 1001
 UE5_PAYLOAD_TOC = 1002
 UE5_LARGE_WORLD_COORDINATES = 1004
+UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES = 1007  # Replace FName asset path with FTopLevelAssetPath
 UE5_ADD_SOFTOBJECTPATH_LIST = 1008
 UE5_DATA_RESOURCES = 1009
 UE5_SCRIPT_SERIALIZATION_OFFSET = 1010
