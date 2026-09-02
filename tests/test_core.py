@@ -373,6 +373,23 @@ def test_property_bag_normalization_is_bounded_lossless():
         assert bag["Data"]["value"]["length"] == 2
         json.dumps(bag)
 
+    def test_lwc_box_size_52_and_double_read():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types import _LWC_TYPE_MAP, parse_struct_property
+        assert _LWC_TYPE_MAP["Box"] == (28, 52)
+        payload = struct.pack("<ddddddi", 1, 2, 3, 4, 5, 6, 1)  # Min 3xd + Max 3xd + IsValid i32 = 52
+        assert len(payload) == 52
+        tag = PropertyTag(name="B", type="StructProperty", size=52)
+        tag.struct_type = "Box"
+        arc = ByteArchive(payload)
+        out = parse_struct_property(tag, arc, ["None"], [], None)
+        assert out.struct_type == "Box"
+        assert out.fields["Min"]["X"] == 1.0 and out.fields["Max"]["Z"] == 6.0
+        # IsValid is a 4-byte UBOOL (Archive.h); float Box branch names the field bIsValid.
+        assert out.fields["bIsValid"] is True
+
     _run_cases(
         [
             ("property.test_empty_list_returns_empty_dict", test_empty_list_returns_empty_dict),
@@ -380,6 +397,7 @@ def test_property_bag_normalization_is_bounded_lossless():
             ("property.test_known_property_preserves_value", test_known_property_preserves_value),
             ("property.test_struct_property_normalizes", test_struct_property_normalizes),
             ("property.test_bytes_value_serializes", test_bytes_value_serializes),
+            ("property.lwc_box_size_52_and_double_read", test_lwc_box_size_52_and_double_read),
         ]
     )
 

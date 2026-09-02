@@ -128,7 +128,7 @@ _LWC_TYPE_MAP: Dict[str, Tuple[int, int]] = {
     "Quat": (16, 32),  # FQuat4f → FQuat4d
     "Plane": (16, 32),  # FPlane4f → FPlane4d
     "Sphere": (16, 32),  # FSphere3f → FSphere3d
-    "Box": (28, 56),  # 2 * FVector + bool (float → double)
+    "Box": (28, 52),  # 2 * FVector + 4-byte IsValid bool (Box.h: double = 24+24+4)
     "BoxSphereBounds": (28, 56),  # 3 * FVector + float (float → double)
     "Matrix": (64, 128),  # 4 * FPlane (float → double)
     "TwoVectors": (24, 48),  # 2 * FVector (float → double)
@@ -763,8 +763,11 @@ def _try_fast_path_struct(
         )
 
     if struct_type == "Box":
-        min_x, min_y, min_z = archive.read_f32(), archive.read_f32(), archive.read_f32()
-        max_x, max_y, max_z = archive.read_f32(), archive.read_f32(), archive.read_f32()
+        # Box.h operator<<: Min + Max + IsValid (bool as 4-byte UBOOL, Archive.h).
+        # LWC double variant is 52 bytes; select precision by tag.size like Vector/Rotator.
+        reader = archive.read_f64 if tag.size == 52 else archive.read_f32
+        min_x, min_y, min_z = reader(), reader(), reader()
+        max_x, max_y, max_z = reader(), reader(), reader()
         b_valid = archive.read_i32() != 0
         return StructValue(
             struct_type="Box",
