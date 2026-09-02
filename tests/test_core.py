@@ -26,6 +26,7 @@ PACKAGE_SAMPLE = SAMPLES / "ABP_RifleAnimLayers.uasset"
 DATA_SAMPLE = SAMPLES / "ALS_FootstepDataTable.uasset"
 SCHEMA = ROOT / "docs/designs/contract/package_document_v2.schema.json"
 EXAMPLE = ROOT / "docs/designs/contract/package_document_v2.example.json"
+SRC = ROOT / "src"
 
 
 @lru_cache(maxsize=None)
@@ -207,7 +208,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         from uasset_read.serializers.package_summary import _read_tail_offsets
         data = struct.pack("<iqii", 0, 0, 0, 10_000_000)
         with pytest.raises(ParseError, match="ChunkIDs"):
-            _read_tail_offsets(ByteArchive(data))
+            _read_tail_offsets(ByteArchive(data), 522)  # array-mode ChunkIDs at UE4 >= 326
 
     def sources_reject_negative_size():
         with pytest.raises(ValueError, match="negative"):
@@ -409,11 +410,80 @@ def test_package_document_preserves_every_export_and_role():
         ids2 = [o.id for o in doc2.objects]
         assert ids1 == ids2
 
+    def test_unversioned_bool_one_byte_enum_fname():
+        from types import SimpleNamespace
+
+        from uasset_read.constants import FIXED_UNVERSIONED_SIZES
+        from uasset_read.parsers.property_parser import _fixed_unversioned_size
+        assert FIXED_UNVERSIONED_SIZES["BoolProperty"] == 1
+        # Enum with byte inner must report FName width 8, not the inner's 1
+        assert _fixed_unversioned_size(SimpleNamespace(type="EnumProperty", inner_type="ByteProperty")) == 8
+        assert _fixed_unversioned_size(SimpleNamespace(type="EnumProperty", inner_type=None)) == 8
+
+    def test_compressed_chunks_skipped_as_16_bytes():
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.serializers.package_summary import _read_compression_and_source
+        data = struct.pack("<ii", 0, 1) + struct.pack("<iiii", 40, 8, 48, 8) + struct.pack("<i", 0x11223344)
+        arc = ByteArchive(data)
+        flags, source = _read_compression_and_source(arc)
+        assert source == 0x11223344  # wrong 12-byte skip desyncs PackageSource
+
+    def test_table_rows_skip_tagged_stream_not_size_prefix():
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.v2.package.legacy import _read_table_rows
+        # A None-terminator tagged property tag is exactly its 8-byte name FName
+        # (read_property_tag early-returns at UE_NONE_SENTINEL). Two empty rows:
+        # count | rowName FName | None tag | rowName FName | None tag
+        data = (struct.pack("<i", 2)
+                + struct.pack("<ii", 1, 0) + struct.pack("<ii", 0, 0)
+                + struct.pack("<ii", 2, 0) + struct.pack("<ii", 0, 0))
+        arc = ByteArchive(data)
+        diags: list = []
+        result = _read_table_rows(arc, serial_end=len(data), name_map=["None", "A", "B"],
+                                  object_id="export:1", diagnostics=diags)
+        assert result["row_names"] == ["A", "B"] and result["complete"] is True
+        assert not any(d.code == "TABLE_ROWS_TRUNCATED" for d in diags)
+
+    def test_summary_gate_modes_are_versioned():
+        from uasset_read.serializers.package_summary import summary_gate_modes
+        assert summary_gate_modes(214) == {"engine_versions": "legacy", "compatible": False,
+                                           "world_tile": False, "chunk_ids": "none"}
+        assert summary_gate_modes(278) == {"engine_versions": "legacy", "compatible": False,
+                                           "world_tile": True, "chunk_ids": "single"}
+        assert summary_gate_modes(326) == {"engine_versions": "legacy", "compatible": False,
+                                           "world_tile": True, "chunk_ids": "array"}
+        assert summary_gate_modes(443) == {"engine_versions": "full", "compatible": True,
+                                           "world_tile": True, "chunk_ids": "array"}
+
+    def test_import_package_name_not_gated_by_filter_editor_only():
+        src = (SRC / "uasset_read/serializers/object_resources.py").read_text(encoding="utf-8")
+        assert "and not is_filter_editor_only" not in src.split("def build_imports_list")[0]
+
+    def test_asset_registry_dependency_gate_uses_521():
+        from uasset_read import constants
+        assert constants.UE4_ASSETREGISTRY_DEPENDENCYFLAGS == 521
+        src = (SRC / "uasset_read/parsers/asset_registry_parser.py").read_text(encoding="utf-8")
+        assert "UE4_ASSETREGISTRY_DEPENDENCYFLAGS" in src
+        assert "file_version_ue4 >= 510" not in src
+
     _run_cases(
         [
             ("document.test_all_exports_present", test_all_exports_present),
             ("document.test_ids_are_export_prefix", test_ids_are_export_prefix),
             ("document.test_stable_id_across_calls", test_stable_id_across_calls),
+            ("version.test_asset_registry_dependency_gate_uses_521", test_asset_registry_dependency_gate_uses_521),
+            ("property.test_unversioned_bool_one_byte_enum_fname", test_unversioned_bool_one_byte_enum_fname),
+            ("summary.test_compressed_chunks_skipped_as_16_bytes", test_compressed_chunks_skipped_as_16_bytes),
+            (
+                "summary.test_import_package_name_not_gated_by_filter_editor_only",
+                test_import_package_name_not_gated_by_filter_editor_only,
+            ),
+            ("summary.test_summary_gate_modes_are_versioned", test_summary_gate_modes_are_versioned),
+            ("table.test_table_rows_skip_tagged_stream_not_size_prefix", test_table_rows_skip_tagged_stream_not_size_prefix),
         ]
     )
 

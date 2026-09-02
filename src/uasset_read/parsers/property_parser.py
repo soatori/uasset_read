@@ -1511,8 +1511,9 @@ def _estimate_unversioned_variable_size(prop_type: Any, archive: FArchive, remai
 def _fixed_unversioned_size(prop_type: Any) -> int:
     type_name = getattr(prop_type, "type", prop_type)
     if type_name == "EnumProperty":
-        inner = getattr(prop_type, "inner_type", None)
-        return _fixed_unversioned_size(inner) if inner is not None else 8
+        # EnumProperty.cpp / UnversionedPropertySerialization.cpp: unversioned enum
+        # values serialize as FName (index+number), regardless of the byte-property underlying.
+        return 8
     return FIXED_UNVERSIONED_SIZES.get(type_name, 0)
 
 

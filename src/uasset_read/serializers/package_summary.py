@@ -52,6 +52,11 @@ from uasset_read.constants import (
     UE4_ADDED_PACKAGE_OWNER,
     UE4_NON_OUTER_PACKAGE_IMPORT,
     UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS,
+    UE4_WORLD_LEVEL_INFO,
+    UE4_ADDED_CHUNKID_TO_ASSETDATA_AND_UPACKAGE,
+    UE4_CHANGED_CHUNKID_TO_BE_AN_ARRAY_OF_CHUNKIDS,
+    UE4_ENGINE_VERSION_OBJECT,
+    UE4_ADDED_COMPATIBLE_WITH_ENGINE_VERSION,
 )
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
@@ -222,6 +227,18 @@ def _read_generations(archive: FArchive, budget: "_ResourceBudgetType | None" = 
         gen_name_count = archive.read_i32()
         generations.append(GenerationInfo(export_count=gen_export_count, name_count=gen_name_count))
     return generations
+
+
+def summary_gate_modes(file_version_ue4: int) -> dict:
+    """Version-gated summary layout decisions (PackageFileSummary.cpp:397-505)."""
+    return {
+        "engine_versions": "full" if file_version_ue4 >= UE4_ENGINE_VERSION_OBJECT else "legacy",
+        "compatible": file_version_ue4 >= UE4_ADDED_COMPATIBLE_WITH_ENGINE_VERSION,
+        "world_tile": file_version_ue4 >= UE4_WORLD_LEVEL_INFO,
+        "chunk_ids": "array" if file_version_ue4 >= UE4_CHANGED_CHUNKID_TO_BE_AN_ARRAY_OF_CHUNKIDS
+        else "single" if file_version_ue4 >= UE4_ADDED_CHUNKID_TO_ASSETDATA_AND_UPACKAGE
+        else "none",
+    }
 
 
 def _read_engine_version(archive: FArchive) -> "EngineVersion":
@@ -577,11 +594,12 @@ def _read_compression_and_source(
         compressed_chunks_count,
         MAX_COMPRESSED_CHUNKS,
         "compressed_chunks",
-        12,
+        16,
         budget,
     )
     for _ in range(compressed_chunks_count):
-        archive.read(12)
+        # FCompressedChunk = 4 * int32 = 16 bytes (Linker.cpp operator<<)
+        archive.read(16)
 
     package_source = archive.read_u32("PackageSource")
     return compression_flags, package_source
@@ -599,26 +617,35 @@ def _read_additional_packages(archive: FArchive, legacy_file_version: int) -> No
         archive.read_i32("NumTextureAllocations")
 
 
-def _read_tail_offsets(archive: FArchive) -> dict:
-    """Read AssetRegistry, BulkData, WorldTile, ChunkIDs."""
+def _read_tail_offsets(archive: FArchive, file_version_ue4: int) -> dict:
+    """Read AssetRegistry, BulkData, WorldTile (>=224), ChunkIDs (>=278/326)."""
     asset_registry_data_offset = archive.read_i32("AssetRegistryDataOffset")
     if asset_registry_data_offset > 0:
         archive.validate_offset(asset_registry_data_offset, "AssetRegistryDataOffset")
 
     bulk_data_start_offset = archive.read_i64("BulkDataStartOffset")
 
-    world_tile_info_data_offset = archive.read_i32("WorldTileInfoDataOffset")
-    if world_tile_info_data_offset > 0:
-        archive.validate_offset(world_tile_info_data_offset, "WorldTileInfoDataOffset")
+    gates = summary_gate_modes(file_version_ue4)
+
+    world_tile_info_data_offset = 0
+    if gates["world_tile"]:
+        world_tile_info_data_offset = archive.read_i32("WorldTileInfoDataOffset")
+        if world_tile_info_data_offset > 0:
+            archive.validate_offset(world_tile_info_data_offset, "WorldTileInfoDataOffset")
 
     chunk_ids = []
-    chunk_ids_count = archive.read_i32("ChunkIDsCount")
-    if chunk_ids_count < 0:
-        raise ParseError(f"Negative chunk ids count: {chunk_ids_count}")
-    if not archive.check_remaining(chunk_ids_count * 4, "ChunkIDs"):
-        raise ParseError(f"ChunkIDs count {chunk_ids_count} exceeds remaining file bytes")
-    for _ in range(chunk_ids_count):
-        chunk_ids.append(archive.read_i32())
+    if gates["chunk_ids"] == "array":
+        chunk_ids_count = archive.read_i32("ChunkIDsCount")
+        if chunk_ids_count < 0:
+            raise ParseError(f"Negative chunk ids count: {chunk_ids_count}")
+        if not archive.check_remaining(chunk_ids_count * 4, "ChunkIDs"):
+            raise ParseError(f"ChunkIDs count {chunk_ids_count} exceeds remaining file bytes")
+        for _ in range(chunk_ids_count):
+            chunk_ids.append(archive.read_i32())
+    elif gates["chunk_ids"] == "single":
+        # PackageFileSummary.cpp:493-503: one int32 ChunkID; negative == empty array.
+        chunk_id = archive.read_i32("ChunkID")
+        chunk_ids = [chunk_id] if chunk_id >= 0 else []
 
     return {
         "asset_registry_data_offset": asset_registry_data_offset,
@@ -726,9 +753,18 @@ def read_package_summary(
     )
 
     # Step 17-19: Generations + EngineVersions
+    gates = summary_gate_modes(file_version_ue4)
     generations = _read_generations(archive, budget)
-    saved_by_engine_version = _read_engine_version(archive)
-    compatible_with_engine_version = _read_engine_version(archive)
+    if gates["engine_versions"] == "full":
+        saved_by_engine_version = _read_engine_version(archive)
+    else:
+        archive.read_i32()  # legacy: single changelist int32 (PackageFileSummary.cpp:411-416)
+        saved_by_engine_version = None
+    if gates["compatible"]:
+        compatible_with_engine_version = _read_engine_version(archive)
+    else:
+        # UE load path copies SavedByEngineVersion when the field is absent (:427-438).
+        compatible_with_engine_version = saved_by_engine_version
 
     # Step 20-22: Compression + PackageSource
     compression_flags, package_source = _read_compression_and_source(archive, budget)
@@ -737,7 +773,7 @@ def read_package_summary(
     _read_additional_packages(archive, legacy_file_version)
 
     # Step 24-27: AssetRegistry/BulkData/WorldTile/ChunkIDs
-    tail = _read_tail_offsets(archive)
+    tail = _read_tail_offsets(archive, file_version_ue4)
 
     # Step 28-31: PreloadDeps / NamesReferenced / PayloadToc / DataResource
     late = _read_late_versioned_fields(archive, file_version_ue4, file_version_ue5)
@@ -779,8 +815,8 @@ def read_package_summary(
         import_type_hierarchies_offset=import_type_hierarchies_offset,
         persistent_guid=persistent_guid,
         generations=generations,
-        saved_by_engine_version=saved_by_engine_version,
-        compatible_with_engine_version=compatible_with_engine_version,
+        saved_by_engine_version=saved_by_engine_version or EngineVersion(),
+        compatible_with_engine_version=compatible_with_engine_version or EngineVersion(),
         compression_flags=compression_flags,
         package_source=package_source,
         asset_registry_data_offset=tail["asset_registry_data_offset"],
