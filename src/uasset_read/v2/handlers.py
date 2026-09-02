@@ -690,9 +690,7 @@ _BONE_NAME_RE = re.compile(
 
 def _guess_bone_names(name_map: list[str]) -> list[dict[str, Any]]:
     """Heuristic NameMap-regex name guess — never a decoded skeleton hierarchy (#630)."""
-    return [
-        {"name": name, "index": i} for i, name in enumerate(name_map) if _BONE_NAME_RE.match(name)
-    ]
+    return [{"name": name, "index": i} for i, name in enumerate(name_map) if _BONE_NAME_RE.match(name)]
 
 
 def _decoded_bone_names(prop: Any) -> list[dict[str, Any]]:
@@ -839,13 +837,14 @@ class MeshHandler:
                 lod: dict[str, Any] = {"index": i}
                 fields = item.get("fields") if isinstance(item, dict) else None
                 if isinstance(fields, dict):
-                    for sub_key, out_key in (("BuildSettings", "build_settings"), ("ReductionSettings", "reduction_settings")):
+                    for sub_key, out_key in (
+                        ("BuildSettings", "build_settings"),
+                        ("ReductionSettings", "reduction_settings"),
+                    ):
                         sub = fields.get(sub_key)
                         if isinstance(sub, dict) and isinstance(sub.get("fields"), dict):
                             lod[out_key] = {
-                                k: v
-                                for k, v in sub["fields"].items()
-                                if isinstance(v, (bool, int, float, str))
+                                k: v for k, v in sub["fields"].items() if isinstance(v, (bool, int, float, str))
                             }
                 lods.append(lod)
             result["lods"] = lods
@@ -932,9 +931,7 @@ class BlueprintFamilyHandler:
             if graphs:
                 fg_ids = _function_graph_ids(obj.properties)
                 self._finalize_graph_kinds(graphs, fg_ids)
-                truncated = any(
-                    g["truncated"]["nodes"] or g["truncated"]["pins"] for g in graphs
-                )
+                truncated = any(g["truncated"]["nodes"] or g["truncated"]["pins"] for g in graphs)
                 result["graphs"] = graphs
                 result["truncated_graphs"] = truncated
                 result["declaration"] = _extract_declaration(
@@ -1054,12 +1051,7 @@ def _guid_hex(guid_fields: Any) -> str:
 
 
 def _extract_variables(obj: ObjectRecord) -> list[dict[str, Any]]:
-    """NewVariables (BPVariableDescription) names and GUIDs; VarType stays opaque.
-
-    VarType bodies are serialized member-wise (FEdGraphPinType, TStructOpsTypeTraits)
-    and are NOT decoded — type claims are therefore never made (#630). A
-    UE-source-verified VarType decode is a tracked follow-up.
-    """
+    """NewVariables (BPVariableDescription) with decoded VarType (FEdGraphPinType)."""
     props = obj.properties or {}
     raw = props.get("NewVariables")
     if not isinstance(raw, dict) or not isinstance(raw.get("value"), list):
@@ -1071,21 +1063,38 @@ def _extract_variables(obj: ObjectRecord) -> list[dict[str, Any]]:
         fields = desc.get("fields", {})
         if not isinstance(fields, dict):
             continue
+        # VarType is now decoded by binary_or_native_handlers (struct_binary_decoded)
+        vt_raw = fields.get("VarType")
+        vt_info: dict[str, Any] | None = None
+        if isinstance(vt_raw, dict):
+            vt_fields = vt_raw.get("fields") if vt_raw.get("kind") == "struct_binary_decoded" else None
+            if isinstance(vt_fields, dict):
+                container = {0: None, 1: "array", 2: "set", 3: "map"}.get(
+                    vt_fields.get("container_type", -1)
+                )
+                vt_info = {
+                    "pin_category": vt_fields.get("pin_category", ""),
+                    "pin_subcategory": vt_fields.get("pin_subcategory", ""),
+                }
+                if container:
+                    vt_info["container"] = container
+                if vt_fields.get("is_reference"):
+                    vt_info["is_reference"] = True
+                if vt_fields.get("is_const"):
+                    vt_info["is_const"] = True
         out.append(
             {
                 "name": fields.get("VarName"),
                 "guid": _guid_hex(fields.get("VarGuid", {}).get("fields"))
                 if isinstance(fields.get("VarGuid"), dict)
                 else "",
-                "type": "opaque",
+                **({"type": vt_info} if vt_info else {}),
             }
         )
     return out
 
 
-_BLUEPRINT_FAMILY = frozenset(
-    {"Blueprint", "AnimBlueprint", "BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}
-)
+_BLUEPRINT_FAMILY = frozenset({"Blueprint", "AnimBlueprint", "BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"})
 
 
 def _pair_key(name: str) -> str:
@@ -1093,9 +1102,7 @@ def _pair_key(name: str) -> str:
     return name[:-2] if name.endswith("_C") else name
 
 
-def _family_root_key(
-    record: ObjectRecord | None, all_objects: list[ObjectRecord]
-) -> str | None:
+def _family_root_key(record: ObjectRecord | None, all_objects: list[ObjectRecord]) -> str | None:
     """Pair key of the Blueprint-family root of record's outer chain."""
     by_id = {o.id: o for o in all_objects}
     cur = record
@@ -1111,9 +1118,7 @@ def _family_root_key(
     return None
 
 
-def _extract_components(
-    obj: ObjectRecord, all_objects: list[ObjectRecord], package_data: Any
-) -> list[dict[str, Any]]:
+def _extract_components(obj: ObjectRecord, all_objects: list[ObjectRecord], package_data: Any) -> list[dict[str, Any]]:
     """SCS component tree from SCS_Node exports (UE: SimpleConstructionScript.cpp)."""
     scope = _family_root_key(obj, all_objects)
     if scope is None:
@@ -1121,9 +1126,7 @@ def _extract_components(
     nodes = [
         o
         for o in all_objects
-        if o.class_name == "SCS_Node"
-        and o.properties
-        and _family_root_key(o, all_objects) == scope
+        if o.class_name == "SCS_Node" and o.properties and _family_root_key(o, all_objects) == scope
     ]
     export_map = package_data[0] if package_data else None
     out: list[dict[str, Any]] = []
@@ -1144,9 +1147,7 @@ def _extract_components(
         this_idx = node.table_index
         for other in nodes:
             children = (other.properties or {}).get("ChildNodes", {}).get("value")
-            if isinstance(children, list) and any(
-                isinstance(c, int) and c > 0 and c - 1 == this_idx for c in children
-            ):
+            if isinstance(children, list) and any(isinstance(c, int) and c > 0 and c - 1 == this_idx for c in children):
                 parent = other.id
                 break
         out.append({"id": node.id, "name": name, "type": ctype, "parent": parent})
@@ -1155,13 +1156,9 @@ def _extract_components(
 
 
 register_handler(
-    BlueprintFamilyHandler(
-        ("AnimBlueprint", "AnimBlueprintGeneratedClass"), "anim_blueprint", "anim_blueprint"
-    )
+    BlueprintFamilyHandler(("AnimBlueprint", "AnimBlueprintGeneratedClass"), "anim_blueprint", "anim_blueprint")
 )
-register_handler(
-    BlueprintFamilyHandler(("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint")
-)
+register_handler(BlueprintFamilyHandler(("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint"))
 
 
 class NiagaraHandler:
@@ -1259,7 +1256,9 @@ class PhysicsAssetHandler:
             coverage.append(CoverageEntry(feature="physics_asset.bodies", status="present"))
         else:
             coverage.append(
-                CoverageEntry(feature="physics_asset.bodies", status="missing", detail="SkeletalBodySetups not in property bag")
+                CoverageEntry(
+                    feature="physics_asset.bodies", status="missing", detail="SkeletalBodySetups not in property bag"
+                )
             )
 
         constraints = _array_value(props, "ConstraintSetup")
@@ -1268,7 +1267,9 @@ class PhysicsAssetHandler:
             coverage.append(CoverageEntry(feature="physics_asset.constraints", status="present"))
         else:
             coverage.append(
-                CoverageEntry(feature="physics_asset.constraints", status="missing", detail="ConstraintSetup not in property bag")
+                CoverageEntry(
+                    feature="physics_asset.constraints", status="missing", detail="ConstraintSetup not in property bag"
+                )
             )
 
         # Instanced body/constraint exports live in the same package; their
@@ -1421,7 +1422,9 @@ class AnimBlendSpaceHandler:
             coverage.append(CoverageEntry(feature="anim_blend_space.axes", status="present"))
         else:
             coverage.append(
-                CoverageEntry(feature="anim_blend_space.axes", status="missing", detail="BlendParameters not in property bag")
+                CoverageEntry(
+                    feature="anim_blend_space.axes", status="missing", detail="BlendParameters not in property bag"
+                )
             )
 
         samples = _array_value(props, "SampleData")
@@ -1561,9 +1564,7 @@ class AnimLayerInterfaceHandler:
                 entries.append(fn)
             result["function_count"] = len(functions)
             result["functions"] = entries[:100]
-            obj.coverage.append(
-                CoverageEntry(feature="anim_layer_interface.functions", status="present")
-            )
+            obj.coverage.append(CoverageEntry(feature="anim_layer_interface.functions", status="present"))
         else:
             obj.coverage.append(
                 CoverageEntry(
@@ -1642,7 +1643,11 @@ class MaterialFunctionHandler:
 
         if expression_count:
             coverage.append(
-                CoverageEntry(feature="material_function.expressions", status="present", detail=f"{expression_count} expression exports")
+                CoverageEntry(
+                    feature="material_function.expressions",
+                    status="present",
+                    detail=f"{expression_count} expression exports",
+                )
             )
         else:
             coverage.append(
@@ -1692,7 +1697,11 @@ class MaterialParameterCollectionHandler:
             coverage.append(CoverageEntry(feature="material_parameter_collection.scalars", status="present"))
         else:
             coverage.append(
-                CoverageEntry(feature="material_parameter_collection.scalars", status="missing", detail="ScalarParameters not in property bag")
+                CoverageEntry(
+                    feature="material_parameter_collection.scalars",
+                    status="missing",
+                    detail="ScalarParameters not in property bag",
+                )
             )
 
         vectors = _array_value(props, "VectorParameters")
@@ -1702,7 +1711,11 @@ class MaterialParameterCollectionHandler:
             coverage.append(CoverageEntry(feature="material_parameter_collection.vectors", status="present"))
         else:
             coverage.append(
-                CoverageEntry(feature="material_parameter_collection.vectors", status="missing", detail="VectorParameters not in property bag")
+                CoverageEntry(
+                    feature="material_parameter_collection.vectors",
+                    status="missing",
+                    detail="VectorParameters not in property bag",
+                )
             )
 
         obj.coverage.extend(coverage)

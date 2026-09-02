@@ -21,7 +21,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = Path(__file__).parent / "samples"
 MANIFEST = SAMPLES / "manifest.json"
-SCHEMA = json.loads((ROOT / "docs" / "designs" / "contract" / "package_document_v2.schema.json").read_text(encoding="utf-8"))
+SCHEMA = json.loads(
+    (ROOT / "docs" / "designs" / "contract" / "package_document_v2.schema.json").read_text(encoding="utf-8")
+)
 
 _MANIFEST_DATA = json.loads(MANIFEST.read_text(encoding="utf-8"))
 MANIFEST_SAMPLES = _MANIFEST_DATA["samples"]
@@ -139,8 +141,7 @@ def _graph_owner_id(doc) -> str | None:
     asset export (verified on ABP_RifleAnimLayers and ALS_AnimBP). Returns the
     first family-class export reachable from any EdGraph export's outer.
     """
-    family = {"Blueprint", "AnimBlueprint", "BlueprintGeneratedClass",
-              "AnimBlueprintGeneratedClass"}
+    family = {"Blueprint", "AnimBlueprint", "BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}
     by_id = {o.id: o for o in doc.objects}
     for o in doc.objects:
         if (o.class_name or "").endswith("Graph") or (o.class_name or "") == "EdGraph":
@@ -191,7 +192,9 @@ def test_manifest_matches_every_real_sample():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert manifest["version"] == 2
     expected_files = {entry["name"] for entry in manifest["samples"]}
-    actual_files = {path.name for path in SAMPLES.iterdir() if path.suffix in {".uasset", ".umap", ".utoc", ".ucas", ".pak"}}
+    actual_files = {
+        path.name for path in SAMPLES.iterdir() if path.suffix in {".uasset", ".umap", ".utoc", ".ucas", ".pak"}
+    }
     assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 52
     assert actual_files == expected_files
     allowed = expected_files | {
@@ -445,9 +448,7 @@ def test_v2_path_emits_no_handler_warnings(capfd, caplog):
     captured = capfd.readouterr()
     assert captured.err == "", f"v2 parse leaked stderr: {captured.err[:200]}"
     warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
-    assert warnings == [], (
-        f"v2 parse emitted warning logs: {[r.getMessage()[:120] for r in warnings]}"
-    )
+    assert warnings == [], f"v2 parse emitted warning logs: {[r.getMessage()[:120] for r in warnings]}"
 
 
 def test_object_depth_parses_only_requested_export():

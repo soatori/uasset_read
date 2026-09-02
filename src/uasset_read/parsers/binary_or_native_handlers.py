@@ -353,6 +353,79 @@ def _decode_soft_object_path_index(
     }
 
 
+def _decode_ed_graph_pin_type(
+    raw: bytes, size: int, name_map: list[str]
+) -> Optional[Dict[str, Any]]:
+    """Decode FEdGraphPinType from raw binary.
+
+    Binary layout (UE5, 69 bytes):
+        PinCategory (FName: 8) + PinSubCategory (FName: 8) +
+        PinSubCategoryObject (int32: 4) + ContainerType (uint8: 1) +
+        bIsReference (uint32: 4) + bIsWeakPointer (uint32: 4) +
+        MemberParent (int32: 4) + MemberName (FName: 8) +
+        MemberGuid (bytes: 16) + bIsConst (uint32: 4) +
+        bIsUObjectWrapper (uint32: 4) + bSerializeAsSinglePrecisionFloat (uint32: 4)
+    Total: 69 bytes.
+    """
+    if size < 69 or len(raw) < 69:
+        return None
+    try:
+        off = 0
+        # PinCategory / PinSubCategory: FName = u32 index + u32 number
+        cat_idx = struct.unpack_from("<I", raw, off)[0]; off += 4
+        cat_num = struct.unpack_from("<I", raw, off)[0]; off += 4
+        sub_idx = struct.unpack_from("<I", raw, off)[0]; off += 4
+        sub_num = struct.unpack_from("<I", raw, off)[0]; off += 4
+        # PinSubCategoryObject: int32 FPackageIndex
+        pco = struct.unpack_from("<i", raw, off)[0]; off += 4
+        # ContainerType: uint8
+        ct = raw[off]; off += 1
+        # bIsReference / bIsWeakPointer: uint32 (FArchive bool)
+        is_ref = struct.unpack_from("<I", raw, off)[0]; off += 4
+        is_wp = struct.unpack_from("<I", raw, off)[0]; off += 4
+        # FSimpleMemberReference: MemberParent (int32) + MemberName (FName:8) + MemberGuid (16)
+        mp = struct.unpack_from("<i", raw, off)[0]; off += 4
+        mn_idx = struct.unpack_from("<I", raw, off)[0]; off += 4
+        mn_num = struct.unpack_from("<I", raw, off)[0]; off += 4
+        guid = raw[off:off + 16]; off += 16
+        # Tail bools: uint32 each
+        is_const = struct.unpack_from("<I", raw, off)[0]; off += 4
+        is_uobj = struct.unpack_from("<I", raw, off)[0]; off += 4
+        is_float = struct.unpack_from("<I", raw, off)[0]; off += 4
+    except (struct.error, IndexError):
+        return None
+
+    def _fname(idx: int, num: int) -> str:
+        base = name_map[idx] if 0 <= idx < len(name_map) else f"None_{idx}"
+        return f"{base}_{num}" if num > 0 else base
+
+    pin_category = _fname(cat_idx, cat_num)
+    pin_subcategory = _fname(sub_idx, sub_num)
+    member_name = _fname(mn_idx, mn_num)
+
+    fields: Dict[str, Any] = {
+        "pin_category": pin_category,
+        "pin_subcategory": pin_subcategory,
+        "pin_subcategory_object": pco,
+        "container_type": ct,
+        "is_reference": bool(is_ref),
+        "is_weak_pointer": bool(is_wp),
+        "member_parent": mp,
+        "member_name": member_name,
+        "member_guid": guid.hex(),
+        "is_const": bool(is_const),
+        "is_uobject_wrapper": bool(is_uobj),
+        "b_serialize_as_single_precision_float": bool(is_float),
+    }
+
+    return {
+        "kind": "struct_binary_decoded",
+        "struct_type": "EdGraphPinType",
+        "size": size,
+        "fields": fields,
+    }
+
+
 # struct_type -> (set of valid byte sizes, decoder function) dispatch dictionary
 _STRUCT_DECODERS: Dict[str, tuple] = {
     "Vector": ((12, 24), _decode_vector),
@@ -429,6 +502,13 @@ def _parse_struct_binary(
                 "size": size,
                 "fields": fields,
             }
+
+    # EdGraphPinType — FEdGraphPinType serialized member-wise, resolved here with name_map
+    if struct_type == "EdGraphPinType":
+        decoded = _decode_ed_graph_pin_type(raw, size, name_map)
+        if decoded is not None:
+            return decoded
+        # Fall through to raw bytes if decode fails
 
     # Unknown struct type or size mismatch -- return raw bytes for downstream to preserve
     return {

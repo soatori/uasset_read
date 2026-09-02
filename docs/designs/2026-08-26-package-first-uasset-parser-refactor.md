@@ -496,7 +496,7 @@ class AssetHandler(Protocol):
 View 决定字段用途，Depth 决定解析成本：
 
 | 参数 | 含义 |
-|---|---|
+| --- | --- |
 | `view=semantic` | 默认；对象身份、关系、业务摘要、coverage 和必要诊断 |
 | `view=raw` | Header/tables、flags、offsets、完整属性树和未知字段描述符 |
 | `view=debug` | raw 加读取分支、offset evidence、恢复信息和解析统计 |
@@ -596,7 +596,7 @@ payload 提取使用单独 API/tool（当前恒返回 `PAYLOAD_EXTRACTION_DEFERR
 首批工具保持小而稳定：
 
 | Tool | 返回 |
-|---|---|
+| --- | --- |
 | `inspect_package` | source/package/summary/diagnostic 摘要 |
 | `list_objects` | 分页对象身份、class、roles、status |
 | `get_object` | 单对象属性与可选 semantic |
@@ -859,7 +859,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 ## Risks and Controls
 
 | 风险 | 控制 |
-|---|---|
+| --- | --- |
 | 把 UE5 都当 Zen | 独立 layout detector + 真实 container metadata |
 | 一次性重写导致样本能力回退 | 原地纵向迁移，按 phase 保留旧 reader 作为对照 |
 | v2 输出无限膨胀 | view/depth/selection/pagination/max_bytes |

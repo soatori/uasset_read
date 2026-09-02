@@ -69,7 +69,9 @@ def test_combat_character_variables_names_and_guids():
     assert "Max HP" in names
     assert len(bp.semantic["variables"]) == 29
     for v in bp.semantic["variables"]:
-        assert v["type"] == "opaque"
+        # VarType is now decoded as FEdGraphPinType
+        assert isinstance(v["type"], dict)
+        assert "pin_category" in v["type"]
         assert len(v["guid"]) == 32
         assert all(ch in "0123456789abcdef" for ch in v["guid"])
     feature_names = [c.feature for c in bp.coverage]

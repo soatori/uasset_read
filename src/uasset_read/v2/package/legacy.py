@@ -416,9 +416,7 @@ class LegacyPackageReader:
                 if name.startswith("Default__"):
                     cls_id = _package_index_to_id(exp.class_index)
                     if cls_id is not None and cls_id.startswith("export:"):
-                        relations.append(
-                            Relation(kind="default_object_of", from_id=f"export:{i}", to_id=cls_id)
-                        )
+                        relations.append(Relation(kind="default_object_of", from_id=f"export:{i}", to_id=cls_id))
 
             asset_by_outer_name: dict[tuple[str, str], int] = {}
             for i, exp in enumerate(export_map):
@@ -480,9 +478,7 @@ class LegacyPackageReader:
             asset_ids = tuple(obj.id for obj in objects if ROLES_ASSET in obj.roles)
 
             # 14. Build PackageInfo
-            package_info = _build_package_info_from_summary(
-                summary, name_map, source_path=str(self._source._path)
-            )
+            package_info = _build_package_info_from_summary(summary, name_map, source_path=str(self._source._path))
 
             # 15. Build Summary
             summary_obj = Summary(
@@ -762,9 +758,7 @@ class LegacyPackageReader:
         """Build a minimal PackageDocument when parsing fails early."""
         package_info = PackageInfo(name="", layout="legacy")
         if summary:
-            package_info = _build_package_info_from_summary(
-                summary, [], source_path=str(self._source._path)
-            )
+            package_info = _build_package_info_from_summary(summary, [], source_path=str(self._source._path))
 
         return PackageDocument(
             source=_build_source_info(str(self._source._path)),
@@ -787,9 +781,7 @@ _BLUEPRINT_FAMILY_CLASSES = frozenset(
 )
 
 
-def _resolve_graph_owner(
-    export_idx: int, export_map: list[ObjectExport], objects: list[ObjectRecord]
-) -> str | None:
+def _resolve_graph_owner(export_idx: int, export_map: list[ObjectExport], objects: list[ObjectRecord]) -> str | None:
     """Walk a graph export's outer chain to its Blueprint-family owner.
 
     Graph exports' outer is the UBlueprint asset object (verified on the
@@ -993,7 +985,9 @@ def _read_table_rows(
 # trailing key->(FName,FString) metadata map is not parsed here.
 # Corroborated (not proof): UAssetAPI StringTableExport.Read,
 # CUE4Parse FStringTable ctor.
-_FORTNITE_MB_GUID = "86181d60844f64acded316aad6c7ea0d"  # FGuid(0x601D1886,0xAC644F84,0xAA16D3DE,0x0DEAC7D6), little-endian bytes
+_FORTNITE_MB_GUID = (
+    "86181d60844f64acded316aad6c7ea0d"  # FGuid(0x601D1886,0xAC644F84,0xAA16D3DE,0x0DEAC7D6), little-endian bytes
+)
 _FORTNITE_ADD_DEV_NOTES = 260  # FFortniteMainBranchObjectVersion::AddDevNotesToFText
 
 

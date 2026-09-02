@@ -38,7 +38,7 @@ status: target
 ## 3. v1 域 → v2 handler 覆盖对照（诚实清单）
 
 | v1 domain 包 | v1 注册类（节选） | v2 handler 现状 | 差距 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `user_defined` | UserDefinedEnum/Struct | `UserDefinedEnumHandler`、`UserDefinedStructHandler` | 基本对齐（v2 从属性袋重建） |
 | `data_table` / `curve_table` | DataTable / CurveTable | `DataTableHandler`（三类合一，`handlers.py:256-301`） | CurveTable 真实 fixture 缺（#626） |
 | `texture` | 6 个 Texture* 类（`texture/__init__.py:9-16`） | `TextureHandler`+`TexturePayloadHandler`：仅 Texture2D/TextureCube | RenderTarget/Array/Volume 未覆盖；payload 仅 ImportedSize 摘要 |

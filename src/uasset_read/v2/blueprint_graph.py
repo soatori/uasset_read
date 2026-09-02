@@ -179,16 +179,12 @@ def _graph_to_dict(graph: Any, export_idx: int, class_name: str) -> dict[str, An
     pin_truncated = False
 
     # Top-level nodes
-    pin_count, node_truncated, pin_truncated = _convert_nodes(
-        graph, nodes, pin_count, MAX_NODES_PER_GRAPH_OUTPUT
-    )
+    pin_count, node_truncated, pin_truncated = _convert_nodes(graph, nodes, pin_count, MAX_NODES_PER_GRAPH_OUTPUT)
     # Subgraph nodes (flattened into the same list)
     for sub in graph.subgraphs:
         if node_truncated:
             break
-        sub_pin_count, sub_node_trunc, sub_pin_trunc = _convert_nodes(
-            sub, nodes, pin_count, MAX_NODES_PER_GRAPH_OUTPUT
-        )
+        sub_pin_count, sub_node_trunc, sub_pin_trunc = _convert_nodes(sub, nodes, pin_count, MAX_NODES_PER_GRAPH_OUTPUT)
         pin_count = sub_pin_count
         if sub_node_trunc:
             node_truncated = True

@@ -944,15 +944,27 @@ def test_handler_registry_supports_enriches_and_isolates():
         handler = BlueprintFamilyHandler(
             ("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint"
         )
+        # Phase 4.5: graphs arrive via extras dict in package_data
+        dummy_graph = {
+            "id": "export:0",
+            "name": "EventGraph",
+            "kind": "event_graph",
+            "node_count": 0,
+            "pin_link_count": 0,
+            "nodes": [],
+            "truncated": {"nodes": False, "pins": False},
+            "subgraphs_flattened": 0,
+        }
+        extras = {bp.id: {"graphs": [dummy_graph]}}
         saved = list(_HANDLERS)
         try:
             _HANDLERS[:] = [handler]
             semantic, _cov, _diags = run_handlers(
-                bp, VersionContext(depth="decode"), [bp, node], None
+                bp, VersionContext(depth="decode"), [bp, node], (None, [], extras)
             )
         finally:
             _HANDLERS[:] = saved
-        assert "graph" in semantic
+        assert "graphs" in semantic
         assert bp.status.semantic == "complete"
 
     def test_undeclared_handler_tier_defaults_to_summary():
@@ -2067,7 +2079,8 @@ def test_test_suite_structure_gate():
 
     root = Path(__file__).parent
     test_files = sorted(p.name for p in root.glob("test_*.py"))
-    assert test_files == ["test_core.py", "test_samples.py"]
+    expected = ["test_blueprint_decode.py", "test_blueprint_graph.py", "test_core.py", "test_samples.py"]
+    assert test_files == expected
     subdirs = {p.name for p in root.iterdir() if p.is_dir() and p.name != "__pycache__"}
     assert subdirs == {"samples"}
     tree = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
