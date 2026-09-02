@@ -213,6 +213,7 @@ UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 485
 UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 507
 UE4_TemplateIndex_IN_COOKED_EXPORTS = 508
 UE4_64BIT_EXPORTMAP_SERIALSIZES = 511
+UE4_ASSETREGISTRY_DEPENDENCYFLAGS = 521  # VER_UE4_ASSETREGISTRY_DEPENDENCYFLAGS (project frozen numbering; peers use 521)
 
 # ============================================================================
 # Blueprint metadata keys (UE editor internal fields)

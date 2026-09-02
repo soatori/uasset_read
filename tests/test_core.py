@@ -26,6 +26,7 @@ PACKAGE_SAMPLE = SAMPLES / "ABP_RifleAnimLayers.uasset"
 DATA_SAMPLE = SAMPLES / "ALS_FootstepDataTable.uasset"
 SCHEMA = ROOT / "docs/designs/contract/package_document_v2.schema.json"
 EXAMPLE = ROOT / "docs/designs/contract/package_document_v2.example.json"
+SRC = ROOT / "src"
 
 
 @lru_cache(maxsize=None)
@@ -409,11 +410,19 @@ def test_package_document_preserves_every_export_and_role():
         ids2 = [o.id for o in doc2.objects]
         assert ids1 == ids2
 
+    def test_asset_registry_dependency_gate_uses_521():
+        from uasset_read import constants
+        assert constants.UE4_ASSETREGISTRY_DEPENDENCYFLAGS == 521
+        src = (SRC / "uasset_read/parsers/asset_registry_parser.py").read_text(encoding="utf-8")
+        assert "UE4_ASSETREGISTRY_DEPENDENCYFLAGS" in src
+        assert "file_version_ue4 >= 510" not in src
+
     _run_cases(
         [
             ("document.test_all_exports_present", test_all_exports_present),
             ("document.test_ids_are_export_prefix", test_ids_are_export_prefix),
             ("document.test_stable_id_across_calls", test_stable_id_across_calls),
+            ("version.test_asset_registry_dependency_gate_uses_521", test_asset_registry_dependency_gate_uses_521),
         ]
     )
 
