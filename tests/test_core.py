@@ -1397,6 +1397,47 @@ def test_handler_registry_supports_enriches_and_isolates():
         t3 = FScriptText.from_archive(_KismetLike(ste), [])
         assert t3.TableIdString == "MyTable" and t3.KeyString == "Key42"
 
+    def test_ex_assert_u8_and_container_counts():
+        """K3/K4: EX_Assert flag is uint8; set/map/array consts carry int32 counts."""
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.kismet.expressions.containers import EX_SetSet
+        from uasset_read.kismet.expressions.special import EX_Assert
+
+        class _WidthProbe:  # forwards the width-sensitive reads, stubs expression dispatch
+            def __init__(self, data):
+                self._arc = ByteArchive(data)
+
+            def read_u8(self):
+                return self._arc.read_u8()
+
+            def read_u16(self):
+                return self._arc.read_u16()
+
+            def read_i32(self):
+                return self._arc.read_i32()
+
+            def read_bool(self):
+                return self._arc.read_u32() != 0
+
+            def read_expression(self):
+                return None
+
+            def read_expression_array(self, _end_token):
+                return []
+
+            def tell(self):
+                return self._arc.tell()
+
+        probe = _WidthProbe(struct.pack("<HB", 42, 1))  # line + uint8 debug flag
+        node = EX_Assert.from_archive(probe, [])
+        assert node.LineNumber == 42 and node.DebugMode is True
+        assert probe.tell() == 3  # old 4-byte read_bool would land at 6
+        probe2 = _WidthProbe(struct.pack("<i", 7))  # the int32 element count
+        node2 = EX_SetSet.from_archive(probe2, [])
+        assert node2.Num == 7 and probe2.tell() == 4
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -1438,6 +1479,7 @@ def test_handler_registry_supports_enriches_and_isolates():
                 test_native_fields_delegate_type_name,
             ),
             ("handler.test_ex_text_const_operand_layouts", test_ex_text_const_operand_layouts),
+            ("handler.test_ex_assert_u8_and_container_counts", test_ex_assert_u8_and_container_counts),
         ]
     )
 
