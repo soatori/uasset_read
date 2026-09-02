@@ -108,6 +108,18 @@ CAPABILITIES = (
         {"kind": "niagara", "niagara_type": "NiagaraNodeStaticSwitch"},
         "partial",
     ),
+    (
+        "ALSCommunity_Mannequin_PhysicsAsset.uasset",
+        "PhysicsAsset",
+        {"kind": "physics_asset", "body_count": 19, "constraint_count": 18},
+        "partial",  # summary tier: collision table/shapes not decoded (#619/#638)
+    ),
+    (
+        "Lyra_PM_Concrete.uasset",
+        "PhysicalMaterial",
+        {"kind": "physical_material", "surface_type": "EPhysicalSurface::SurfaceType2"},
+        "partial",  # float defaults omitted by the editor; SurfaceType is real data
+    ),
 )
 
 
@@ -329,6 +341,27 @@ def test_real_sample_proves_claimed_capability(
     elif class_name == "SoundWave":
         handler_features = [c for c in obj.coverage if c.feature == "handler.SoundHandler"]
         assert len(handler_features) == 1, f"{sample}:{class_name}"
+    elif class_name == "PhysicsAsset":
+        # Instanced bodies are real package exports; raw CollisionDisableTable
+        # trailer stays a disclosed gap at the parse layer too (#638).
+        assert len(obj.semantic["bodies"]) == obj.semantic["body_count"] == 19, f"{sample}:{class_name}"
+        features = {c.feature: c.status for c in obj.coverage}
+        assert features["physics_asset.bodies"] == "present", f"{sample}:{class_name}"
+        assert features["physics_asset.collision_disable_table"] == "missing", f"{sample}:{class_name}"
+        assert any(
+            d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" for d in doc.diagnostics
+        ), f"{sample}:{class_name} must disclose the undecoded raw trailer"
+    elif class_name == "PhysicalMaterial":
+        # Editor defaulted the four floats out of the tag stream: "missing"
+        # coverage is correct UE behavior, not a parser failure.
+        features = {c.feature: c.status for c in obj.coverage}
+        for key in ("friction", "static_friction", "restitution", "density"):
+            assert features[f"physical_material.{key}"] == "missing", f"{sample}:{class_name}"
+            assert f"physical_material.{key}" not in obj.semantic, f"{sample}:{class_name}"
+        assert not any(
+            d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id != "export:0"
+            for d in doc.diagnostics
+        ), f"{sample}:{class_name} has no raw trailer by design (export:0 MetaData excluded)"
 
 
 @pytest.mark.parametrize("sample", [entry["name"] for entry in MANIFEST_SAMPLES])
