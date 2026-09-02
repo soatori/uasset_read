@@ -610,6 +610,18 @@ def test_package_document_preserves_every_export_and_role():
         assert "UE4_ASSETREGISTRY_DEPENDENCYFLAGS" in src
         assert "file_version_ue4 >= 510" not in src
 
+    def test_material_enum_tables_match_engine_types():
+        from uasset_read.constants import BLEND_MODE_MAP, SHADING_MODEL_MAP
+        assert BLEND_MODE_MAP == {
+            0: "Opaque", 1: "Masked", 2: "Translucent", 3: "Additive", 4: "Modulate",
+            5: "AlphaComposite", 6: "AlphaHoldout", 7: "TranslucentColoredTransmittance",
+        }
+        assert SHADING_MODEL_MAP == {
+            0: "Unlit", 1: "DefaultLit", 2: "Subsurface", 3: "PreintegratedSkin",
+            4: "ClearCoat", 5: "SubsurfaceProfile", 6: "TwoSidedFoliage",
+            8: "Cloth", 10: "SingleLayerWater", 11: "ThinTranslucent",
+        }
+
     _run_cases(
         [
             ("document.test_all_exports_present", test_all_exports_present),
@@ -624,6 +636,7 @@ def test_package_document_preserves_every_export_and_role():
             ),
             ("summary.test_summary_gate_modes_are_versioned", test_summary_gate_modes_are_versioned),
             ("table.test_table_rows_skip_tagged_stream_not_size_prefix", test_table_rows_skip_tagged_stream_not_size_prefix),
+            ("table.test_material_enum_tables_match_engine_types", test_material_enum_tables_match_engine_types),
         ]
     )
 
@@ -1251,6 +1264,10 @@ def test_handler_registry_supports_enriches_and_isolates():
             data = s.encode("utf-8") + b"\x00"
             return struct.pack("<i", len(data)) + data
 
+        def cstring(s: str) -> bytes:
+            """Null-terminated ANSI string (no length prefix) — matches read_cstring."""
+            return s.encode("utf-8") + b"\x00"
+
         def read_table(blob: bytes, dev_notes: bool):
             diags = []
             archive = ByteArchive(blob)
@@ -1258,8 +1275,8 @@ def test_handler_registry_supports_enriches_and_isolates():
             result = _read_string_table(archive, "export:0", diags, dev_notes)
             return result, diags
 
-        # UE4-era layout: key + value only.
-        blob = fstring("MyNS") + struct.pack("<i", 2) + fstring("K1") + fstring("Hello") + fstring("K2") + fstring("World")
+        # UE4-era layout: namespace (FString) + count + key (cstring) + value (FString).
+        blob = fstring("MyNS") + struct.pack("<i", 2) + cstring("K1") + fstring("Hello") + cstring("K2") + fstring("World")
         result, diags = read_table(blob, dev_notes=False)
         assert result["namespace"] == "MyNS"
         assert result["entry_count"] == 2
@@ -1268,7 +1285,7 @@ def test_handler_registry_supports_enriches_and_isolates():
 
         # DevNotes variant (StringTableCore.cpp writes a third string per
         # entry for editor-saved packages with the AddDevNotesToFText version).
-        blob_dev = fstring("NS") + struct.pack("<i", 1) + fstring("A") + fstring("V") + fstring("notes")
+        blob_dev = fstring("NS") + struct.pack("<i", 1) + cstring("A") + fstring("V") + fstring("notes")
         result, diags = read_table(blob_dev, dev_notes=True)
         assert result["entries"] == [{"key": "A", "value": "V"}]
         assert result["complete"] and not diags
@@ -1280,7 +1297,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert [d.code for d in diags] == ["TABLE_ENTRY_COUNT_INVALID"]
 
         # Truncated entries: bounded failure with diagnostic, never silent.
-        blob = fstring("NS") + struct.pack("<i", 5) + fstring("K") + fstring("V")
+        blob = fstring("NS") + struct.pack("<i", 5) + cstring("K") + fstring("V")
         result, diags = read_table(blob, dev_notes=False)
         assert not result["complete"]
         assert [d.code for d in diags] == ["STRING_TABLE_TRUNCATED"]

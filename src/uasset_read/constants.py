@@ -458,7 +458,8 @@ BLEND_MODE_MAP: dict[int, str] = {
     3: "Additive",
     4: "Modulate",
     5: "AlphaComposite",
-    8: "TranslucentColoredTransmittance",
+    6: "AlphaHoldout",
+    7: "TranslucentColoredTransmittance",
 }
 
 SHADING_MODEL_MAP: dict[int, str] = {
@@ -466,10 +467,12 @@ SHADING_MODEL_MAP: dict[int, str] = {
     1: "DefaultLit",
     2: "Subsurface",
     3: "PreintegratedSkin",
-    4: "SubsurfaceProfile",
-    5: "ClearCoatTopCoat",
-    6: "ThinTranslucent",
-    8: "SingleLayerWater",
+    4: "ClearCoat",
+    5: "SubsurfaceProfile",
+    6: "TwoSidedFoliage",
+    8: "Cloth",
+    10: "SingleLayerWater",
+    11: "ThinTranslucent",
 }
 
 MATERIAL_USAGE_FLAG_NAMES: tuple[str, ...] = (
