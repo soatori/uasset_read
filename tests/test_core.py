@@ -1504,6 +1504,14 @@ def test_handler_registry_supports_enriches_and_isolates():
         _handle_move_mode(arc2, tag2, names, [], [], None, raw2)
         assert raw2["MoveMode"] == "Copy"
 
+    def test_no_invented_k2node_tails():
+        """G4: K2Node Serialize() implementations add no binary tails past Pins."""
+        src = (SRC / "uasset_read/serializers/graph_node.py").read_text(encoding="utf-8")
+        head = src.split("# 5 Node type readers")[1].split("dispatch handlers")[0]
+        assert 'archive.read_bool("K2Node_CallFunction.bDefaultsToPure")' not in head
+        assert "legacy fallback (bool at pos" not in head
+        assert "read_k2node_message(" not in (SRC / "uasset_read/serializers/graph_node.py").read_text(encoding="utf-8")
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -1549,6 +1557,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("handler.test_fstring_negative_one_consumes_two_bytes", test_fstring_negative_one_consumes_two_bytes),
             ("handler.test_map_pin_terminal_reads_trailing_bools", test_map_pin_terminal_reads_trailing_bools),
             ("handler.test_byte_enum_node_tag_decodes_fname", test_byte_enum_node_tag_decodes_fname),
+            ("handler.test_no_invented_k2node_tails", test_no_invented_k2node_tails),
         ]
     )
 

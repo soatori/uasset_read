@@ -80,6 +80,7 @@ def read_k2node_call_function(
     export_map: List[ObjectExport],
     linker: Optional["PackageLinker"] = None,
     function_reference: Optional[FMemberReference] = None,
+    b_defaults_to_pure: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """Read K2Node_CallFunction specific fields, return dict (as node_data).
 
@@ -87,12 +88,15 @@ def read_k2node_call_function(
     otherwise read FMemberReference from the archive's current position.
 
     Reference: UE C++ FK2Node_CallFunction::Serialize() implementation.
+
+    b_defaults_to_pure is a UPROPERTY uint32 bitfield reaching the tagged layer
+    (K2Node_CallFunction.cpp Serialize = Super + fixup only); it is never a
+    binary tail after Pins — absent-tag nodes expose None.
     """
     # D-11: PropertyTag layer already correctly parsed FunctionReference, use it preferentially
     if function_reference is None:
         function_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
 
-    b_defaults_to_pure = archive.read_bool("K2Node_CallFunction.bDefaultsToPure")
     return {
         "function_reference": function_reference,
         "b_defaults_to_pure": b_defaults_to_pure,
@@ -131,18 +135,11 @@ def read_k2node_event(
         event_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
 
     # b_override_function uses PropertyTag value preferentially, no blind read
-    # Only consider fallback when PropertyTag does not provide it, and fallback must be protected by verification
     if b_override_function is None:
-        # Legacy fallback: only read when confirmed there are remaining bytes
-        # Mark source as "legacy_fallback" for diagnostic tracing
-        try:
-            b_override_function = archive.read_bool()
-            logger.debug(
-                "K2Node_Event b_override_function read from legacy fallback (bool at pos %d)", archive.tell() - 4
-            )
-        except (struct.error, OSError, ValueError) as e:
-            logger.debug("K2Node_Event b_override_function fallback failed: %s, defaulting to False", e)
-            b_override_function = False
+        # K2Node_Event.cpp has no binary tail for this (tagged UPROPERTY only); do not
+        # blind-read past Pins — report as not provided instead of garbage.
+        logger.debug("K2Node_Event b_override_function absent from tagged layer")
+        b_override_function = False
 
     return {
         "event_reference": event_reference,
@@ -221,20 +218,12 @@ def read_k2node_enhanced_input(
     """
     raw_properties = raw_properties or {}
 
-    # InputAction from PropertyTag (already parsed in read_ue_graph_node)
+    # InputAction from PropertyTag (already parsed in read_ue_graph_node).
+    # K2Node_EnhancedInputAction.h:49-50 — InputAction is an ObjectProperty UPROPERTY
+    # reaching the tagged layer; there is no FString binary tail to read.
     input_action_path = raw_properties.get("InputAction") or ""
     input_action_short_name = raw_properties.get("InputActionShortName") or ""
     input_action_package_index = raw_properties.get("InputActionPackageIndex", 0)
-
-    # If PropertyTag does not provide it, try reading from archive
-    if not input_action_path:
-        try:
-            input_action_path = archive.read_fstring()
-            # Extract short name from path
-            if input_action_path:
-                input_action_short_name = input_action_path.split(".")[-1].split("'")[0]
-        except (struct.error, OSError, ValueError):
-            input_action_path = ""
 
     # AdvancedPinDisplay from PropertyTag
     advanced_pin_display_raw = raw_properties.get("AdvancedPinDisplay", 0)
@@ -281,38 +270,6 @@ def read_k2node_functionentry(
     }
 
 
-def read_k2node_message(
-    archive: FArchive,
-    name_map: List[str],
-) -> Dict[str, Any]:
-    """Read K2Node_Message specific fields."""
-    result = {}
-
-    try:
-        message_name_idx = archive.read_i32()
-        if 0 <= message_name_idx < len(name_map):
-            result["message_name"] = name_map[message_name_idx]
-        else:
-            result["message_name"] = f"Message_{message_name_idx}"
-    except (struct.error, OSError, ValueError) as e:
-        logger.debug("K2Node_Message read failed: %s", e)
-        result["message_name"] = "Unknown"
-
-    return result
-
-
-def read_k2node_call_delegate(archive: FArchive, name_map: List[str]) -> Dict[str, Any]:
-    """Read K2Node_CallDelegate fields."""
-    result = {}
-    try:
-        delegate_idx = archive.read_i32()
-        if 0 <= delegate_idx < len(name_map):
-            result["delegate_name"] = name_map[delegate_idx]
-    except (struct.error, OSError, ValueError) as e:
-        logger.debug("K2Node_CallDelegate read failed: %s", e)
-    return result
-
-
 # ============================================================================
 # dispatch handlers -- unified signature (ctx: Dict[str, Any]) -> Dict[str, Any]
 # ctx contains: archive, name_map, summary, export_map, import_map, linker,
@@ -329,6 +286,7 @@ def _handle_call_function(ctx: Dict[str, Any]) -> Dict[str, Any]:
         ctx["export_map"],
         ctx["linker"],
         function_reference=ctx.get("node_refs", {}).get("function_reference"),
+        b_defaults_to_pure=(ctx.get("raw_properties") or {}).get("bDefaultsToPureFunc"),
     )
 
 
@@ -431,8 +389,6 @@ _NODE_TYPE_HANDLERS: Dict[str, Any] = {
     "EdGraphNode_Comment": _handle_comment,
     "K2Node_EnhancedInputAction": _handle_enhanced_input,
     "K2Node_FunctionEntry": _handle_function_entry,
-    "K2Node_Message": lambda ctx: read_k2node_message(ctx["archive"], ctx["name_map"]),
-    "K2Node_CallDelegate": lambda ctx: read_k2node_call_delegate(ctx["archive"], ctx["name_map"]),
     "K2Node_CallArrayFunction": _handle_raw_prop_copies({"FunctionReference": "function_reference"}),
     "K2Node_CallParentFunction": _handle_raw_prop_copies({"FunctionReference": "function_reference"}),
     "K2Node_FunctionResult": _handle_raw_prop_copies({"FunctionReference": "function_reference"}),
@@ -845,6 +801,7 @@ _NODE_TAG_HANDLERS: Dict[str, Any] = {
     "CommentDepth": _handle_i32_to_raw,
     "ExtraFlags": _handle_i32_to_raw,
     "AdvancedPinDisplay": _handle_advanced_pin_display,
+    "bDefaultsToPureFunc": _handle_bool_to_raw,
     "bOverrideFunction": _handle_override_function,
     "bInternalEvent": _handle_internal_event,
     "bIsEditable": _handle_bool_to_raw,
