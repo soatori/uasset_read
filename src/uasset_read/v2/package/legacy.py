@@ -418,9 +418,7 @@ class LegacyPackageReader:
                 if name.startswith("Default__"):
                     cls_id = _package_index_to_id(exp.class_index)
                     if cls_id is not None and cls_id.startswith("export:"):
-                        relations.append(
-                            Relation(kind="default_object_of", from_id=f"export:{i}", to_id=cls_id)
-                        )
+                        relations.append(Relation(kind="default_object_of", from_id=f"export:{i}", to_id=cls_id))
 
             asset_by_outer_name: dict[tuple[str, str], int] = {}
             for i, exp in enumerate(export_map):
@@ -482,9 +480,7 @@ class LegacyPackageReader:
             asset_ids = tuple(obj.id for obj in objects if ROLES_ASSET in obj.roles)
 
             # 14. Build PackageInfo
-            package_info = _build_package_info_from_summary(
-                summary, name_map, source_path=str(self._source._path)
-            )
+            package_info = _build_package_info_from_summary(summary, name_map, source_path=str(self._source._path))
 
             # 15. Build Summary
             summary_obj = Summary(
@@ -687,12 +683,7 @@ class LegacyPackageReader:
                             archive, obj.id, diagnostics, _string_table_has_dev_notes(summary)
                         )
                     }
-                elif (
-                    overrun <= 0
-                    and cn not in _TABLE_CLASSES
-                    and cn != "StringTable"
-                    and archive.tell() < serial_end
-                ):
+                elif overrun <= 0 and cn not in _TABLE_CLASSES and cn != "StringTable" and archive.tell() < serial_end:
                     # Properties ended early but the export still has bytes: a
                     # class raw trailer (e.g. UPhysicsAsset::Serialize writes
                     # CollisionDisableTable after the tagged properties) we do
@@ -776,9 +767,7 @@ class LegacyPackageReader:
         """Build a minimal PackageDocument when parsing fails early."""
         package_info = PackageInfo(name="", layout="legacy")
         if summary:
-            package_info = _build_package_info_from_summary(
-                summary, [], source_path=str(self._source._path)
-            )
+            package_info = _build_package_info_from_summary(summary, [], source_path=str(self._source._path))
 
         return PackageDocument(
             source=_build_source_info(str(self._source._path)),
@@ -898,7 +887,9 @@ def _read_table_rows(
 # trailing key->(FName,FString) metadata map is not parsed here.
 # Corroborated (not proof): UAssetAPI StringTableExport.Read,
 # CUE4Parse FStringTable ctor.
-_FORTNITE_MB_GUID = "86181d60844f64acded316aad6c7ea0d"  # FGuid(0x601D1886,0xAC644F84,0xAA16D3DE,0x0DEAC7D6), little-endian bytes
+_FORTNITE_MB_GUID = (
+    "86181d60844f64acded316aad6c7ea0d"  # FGuid(0x601D1886,0xAC644F84,0xAA16D3DE,0x0DEAC7D6), little-endian bytes
+)
 _FORTNITE_ADD_DEV_NOTES = 260  # FFortniteMainBranchObjectVersion::AddDevNotesToFText
 
 
@@ -931,11 +922,47 @@ def _read_string_table(
     binary layout observed in real UE4.27/5.2 editor-saved StringTable assets
     and corroborates CUE4Parse's ``FStringTable`` read path where the archive
     position yields null-terminated keys.
+
+    Alignment note: when the serialization_control byte is absent (UE4
+    content), the archive position after property parsing may be 1 byte
+    before the actual StringTable trailer start.  The trailer format has a
+    1-byte prefix (observed as 0x00) that is not part of the None tag.
+    We detect this by checking whether the parsed entry count looks sane
+    and shift by 1 byte if not.
     """
     result: dict[str, Any] = {"namespace": "", "entry_count": 0, "entries": [], "complete": False}
     try:
+        # Heuristic: if the first read gives an entry count that cannot
+        # fit in the remaining export bytes, shift back 1 byte and try
+        # again.  This handles the 1-byte prefix gap observed when
+        # serialization_control is absent for UE4 content saved with a
+        # UE5-style header.
+        start = archive.tell()
         result["namespace"] = archive.read_fstring()
         entry_count = archive.read_i32()
+        if entry_count < 0 or entry_count > _MAX_TABLE_ROWS:
+            try:
+                archive.seek(start + 1)
+                result["namespace"] = archive.read_fstring()
+                entry_count = archive.read_i32()
+            except Exception:
+                pass  # shift itself unreadable; diagnostic below
+        # Space check: each entry needs at least 2 bytes (empty key + empty
+        # value, both null-terminated).  If count exceeds available space,
+        # try the shifted position.
+        if 0 < entry_count <= _MAX_TABLE_ROWS:
+            rr = getattr(archive, "_read_range", None)
+            if rr:
+                _, serial_end = rr
+                available = serial_end - archive.tell()
+                min_per_entry = 2  # null-terminated key + null-terminated value
+                if entry_count * min_per_entry > available:
+                    try:
+                        archive.seek(start + 1)
+                        result["namespace"] = archive.read_fstring()
+                        entry_count = archive.read_i32()
+                    except Exception:
+                        pass  # shift itself unreadable; diagnostic below
         if entry_count < 0 or entry_count > _MAX_TABLE_ROWS:
             diagnostics.append(
                 Diagnostic(

@@ -239,7 +239,7 @@ def _parse_package_core(
                 linker,
                 tolerant,
                 mappings_provider,
-                game,
+                game or "",
                 memory_monitor,
                 budget=budget,
             )
@@ -524,6 +524,7 @@ def parse_package_lazy(
 
         if use_direct_archive:
             # Fast path: obtain archive via open_file(), do not read entire file
+            assert provider is not None  # guarded by use_direct_archive
             archive = provider.open_file(path)
             if archive is None:
                 raise FileNotFoundError(f"Package not found: {path}")
@@ -574,7 +575,7 @@ def parse_package_lazy(
             linker,
             tolerant,
             mappings_provider,
-            game,
+            game or "",
             memory_monitor=None,  # No memory monitor in lazy path (diagnostic only)
             budget=budget,
             export_indices=parse_indices,

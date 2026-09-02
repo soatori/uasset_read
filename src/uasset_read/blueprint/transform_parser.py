@@ -99,9 +99,11 @@ def extract_component_transforms(
             z = format_transform_value(fields.get("Z", 0.0), "location")
             transforms["relative_location"] = VectorValue(x=x, y=y, z=z)
         elif prop_name == "RelativeRotation":
-            roll = format_transform_value(fields.get("Roll", fields.get("X", 0.0)), "rotation")
-            pitch = format_transform_value(fields.get("Pitch", fields.get("Y", 0.0)), "rotation")
-            yaw = format_transform_value(fields.get("Yaw", fields.get("Z", 0.0)), "rotation")
+            # Raw 12/24-byte fallback carries Rotator fields on disk in Pitch,Yaw,Roll order
+            # (Rotator.h operator<<); map positional X/Y/Z to Pitch/Yaw/Roll, not Roll/Pitch/Yaw.
+            roll = format_transform_value(fields.get("Roll", fields.get("Z", 0.0)), "rotation")
+            pitch = format_transform_value(fields.get("Pitch", fields.get("X", 0.0)), "rotation")
+            yaw = format_transform_value(fields.get("Yaw", fields.get("Y", 0.0)), "rotation")
             transforms["relative_rotation"] = RotatorValue(roll=roll, pitch=pitch, yaw=yaw)
         elif prop_name == "RelativeScale3D":
             x = format_transform_value(fields.get("X", 0.0), "scale")
