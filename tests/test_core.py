@@ -430,6 +430,10 @@ def test_package_document_preserves_every_export_and_role():
         flags, source = _read_compression_and_source(arc)
         assert source == 0x11223344  # wrong 12-byte skip desyncs PackageSource
 
+    def test_import_package_name_not_gated_by_filter_editor_only():
+        src = (SRC / "uasset_read/serializers/object_resources.py").read_text(encoding="utf-8")
+        assert "and not is_filter_editor_only" not in src.split("def build_imports_list")[0]
+
     def test_asset_registry_dependency_gate_uses_521():
         from uasset_read import constants
         assert constants.UE4_ASSETREGISTRY_DEPENDENCYFLAGS == 521
@@ -445,6 +449,10 @@ def test_package_document_preserves_every_export_and_role():
             ("version.test_asset_registry_dependency_gate_uses_521", test_asset_registry_dependency_gate_uses_521),
             ("property.test_unversioned_bool_one_byte_enum_fname", test_unversioned_bool_one_byte_enum_fname),
             ("summary.test_compressed_chunks_skipped_as_16_bytes", test_compressed_chunks_skipped_as_16_bytes),
+            (
+                "summary.test_import_package_name_not_gated_by_filter_editor_only",
+                test_import_package_name_not_gated_by_filter_editor_only,
+            ),
         ]
     )
 
