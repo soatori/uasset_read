@@ -32,6 +32,7 @@ from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
     MAX_ARRAY_COUNT,
     UE5_LARGE_WORLD_COORDINATES,
+    UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES,
     MAX_SAFE_COUNT,
     UE_NONE_SENTINEL,
 )
@@ -515,11 +516,12 @@ def parse_soft_object_property(
     archive: FArchive,
     name_map: List[str],
     soft_object_path_list: Optional[List[Dict]] = None,
+    summary: Optional[Any] = None,
 ) -> SoftObjectPathValue:
     """Parse SoftObjectProperty (FSoftObjectPath).
 
     When soft_object_path_list exists (UE5.7+), read int32 index.
-    Otherwise read FString pair (legacy format).
+    Otherwise read the inline FSoftObjectPath layout (FName-based).
     """
     if soft_object_path_list is not None and len(soft_object_path_list) > 0:
         # UE5.7+ index format
@@ -541,9 +543,21 @@ def parse_soft_object_property(
                 error=f"SoftObjectPath index {index} out of bounds (list size {len(soft_object_path_list)})",
             )
     else:
-        # Legacy FString format
-        asset_path = archive.read_fstring()
+        # No summary table (UE5 < 1008): FSoftObjectPath inline. A two-FString layout
+        # never existed in UE (SoftObjectPath.cpp SerializePathWithoutFixup). UE5 >= 1007:
+        # FTopLevelAssetPath = PackageName FName + AssetName FName, then subpath FString.
+        # Older: one FName + subpath FString. The pre-4.19 single-FString form is outside
+        # this project's supported window; such a package hits the tolerant skip, not a
+        # fabricated decode.
+        ue5 = getattr(summary, "file_version_ue5", 0) if summary is not None else 0
+        package_name = ""
+        if ue5 >= UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES:
+            package_name = archive.read_name(name_map)
+        asset_path = archive.read_name(name_map)
         sub_path = archive.read_fstring()
+        if package_name:
+            # FTopLevelAssetPath renders as "PackageName.AssetPath" in FSoftObjectPath
+            asset_path = f"{package_name}.{asset_path}"
         return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
 
 
@@ -566,9 +580,10 @@ def parse_soft_class_property(
     archive: FArchive,
     name_map: List[str] = None,
     soft_object_path_list: Optional[List[Dict]] = None,
+    summary: Optional[Any] = None,
 ) -> SoftObjectPathValue:
     """Parse SoftClassProperty -- same parsing as SoftObjectProperty."""
-    return parse_soft_object_property(tag, archive, name_map or [], soft_object_path_list)
+    return parse_soft_object_property(tag, archive, name_map or [], soft_object_path_list, summary)
 
 
 def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjectPathValue:

@@ -459,6 +459,30 @@ def test_property_bag_normalization_is_bounded_lossless():
         assert out[0].fields["HP"] == 111 and out[1].fields["HP"] == 222
         assert arc.tell() == len(data)
 
+    def test_soft_object_path_inline_is_fname_based():
+        import struct
+        from types import SimpleNamespace
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types import parse_soft_object_property
+        names = ["None", "Game/Foo/Bar", "Bar", "SubPath"]
+        # UE5 < 1007 legacy inline: FName(index+number) + FString (SerializePathWithoutFixup)
+        body = struct.pack("<ii", 2, 0) + struct.pack("<i", len("SubPath") + 1) + b"SubPath\x00"
+        arc = ByteArchive(body)
+        summary = SimpleNamespace(file_version_ue5=500, _soft_object_path_list=None, package_flags=0, custom_versions=[])
+        val = parse_soft_object_property(
+            PropertyTag(name="S", type="SoftObjectProperty", size=len(body)), arc, names, None, summary
+        )
+        assert val.asset_path == "Bar" and val.sub_path == "SubPath"
+        # UE5 >= 1007: FTopLevelAssetPath = PackageName FName + AssetName FName, then subpath FString
+        body2 = struct.pack("<iiii", 1, 0, 2, 0) + struct.pack("<i", 1) + b"\x00"
+        arc2 = ByteArchive(body2)
+        summary2 = SimpleNamespace(file_version_ue5=1007, _soft_object_path_list=None, package_flags=0, custom_versions=[])
+        val2 = parse_soft_object_property(
+            PropertyTag(name="S", type="SoftObjectProperty", size=len(body2)), arc2, names, None, summary2
+        )
+        assert val2.asset_path == "Game/Foo/Bar.Bar"
+
     _run_cases(
         [
             ("property.test_empty_list_returns_empty_dict", test_empty_list_returns_empty_dict),
@@ -470,6 +494,7 @@ def test_property_bag_normalization_is_bounded_lossless():
             ("property.tag_extension_external_objects", test_property_tag_extension_external_objects),
             ("property.array_of_bools_inline_bytes", test_array_of_bools_consumes_one_byte_per_element),
             ("property.legacy_struct_array_single_inner_tag", test_legacy_struct_array_reads_single_inner_tag),
+            ("property.soft_object_path_inline_fname_based", test_soft_object_path_inline_is_fname_based),
         ]
     )
 

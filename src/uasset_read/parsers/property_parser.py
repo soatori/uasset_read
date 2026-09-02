@@ -212,7 +212,7 @@ _PROPERTY_ARGS: dict[str, tuple[str, ...]] = {
         "MulticastInlineDelegateProperty", "MulticastSparseDelegateProperty", "FieldPathProperty",
     )
 } | {
-    t: ("tag", "archive", "name_map", "soft_path_list")
+    t: ("tag", "archive", "name_map", "soft_path_list", "summary")
     for t in ("SoftObjectProperty", "SoftClassProperty")
 } | {
     t: ("tag", "archive", "name_map", "export_map", "summary", "depth")
