@@ -68,6 +68,7 @@ from uasset_read.kismet.expressions.control_flow import (
 # Assignments
 from uasset_read.kismet.expressions.assignments import (
     EX_Let,
+    EX_LetBase,
     EX_LetBool,
     EX_LetDelegate,
     EX_LetMulticastDelegate,

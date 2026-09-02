@@ -939,6 +939,11 @@ class BlueprintFamilyHandler:
                 )
                 result["variables"] = _extract_variables(obj)
                 result["components"] = _extract_components(obj, all_objects, package_data)
+                
+                # Build state_machines list for AnimBlueprint family
+                if self._kind == "anim_blueprint":
+                    result["state_machines"] = self._extract_state_machines(graphs)
+                
                 detail = f"{len(graphs)} graphs, {sum(g['node_count'] for g in graphs)} nodes"
                 if truncated:
                     detail += " (truncated)"
@@ -949,6 +954,14 @@ class BlueprintFamilyHandler:
                         detail=detail,
                     )
                 )
+                if result.get("state_machines"):
+                    obj.coverage.append(
+                        CoverageEntry(
+                            feature=f"{self._feature}.state_machines",
+                            status="present",
+                            detail=f"{len(result['state_machines'])} state machines",
+                        )
+                    )
                 if result["variables"]:
                     obj.coverage.append(
                         CoverageEntry(
@@ -963,6 +976,26 @@ class BlueprintFamilyHandler:
                             feature=f"{self._feature}.components",
                             status="present",
                             detail=f"{len(result['components'])} components",
+                        )
+                    )
+                # --- Kismet bytecode decompilation results ---
+                kismet = entry.get("kismet", []) if isinstance(entry, dict) else []
+                if kismet:
+                    result["functions"] = [
+                        {
+                            "function_name": fn.get("function_name"),
+                            "signature": fn.get("signature"),
+                            "cpp_code": fn.get("cpp_code", ""),
+                            "bytecode_status": fn.get("bytecode_status", "unknown"),
+                            "translation_status": fn.get("translation_status", "not_applicable"),
+                        }
+                        for fn in kismet
+                    ]
+                    obj.coverage.append(
+                        CoverageEntry(
+                            feature=f"{self._feature}.kismet",
+                            status="present",
+                            detail=f"{len(kismet)} functions",
                         )
                     )
             else:
@@ -980,7 +1013,8 @@ class BlueprintFamilyHandler:
         """Set per-graph kind from name / FunctionGraphs membership.
 
         Deterministic derivation: EventGraph/UserConstructionScript by name,
-        graphs listed in FunctionGraphs -> "function", else "unknown".
+        graphs listed in FunctionGraphs -> "function", graphs containing
+        "State" in the name -> "state_machine", else "unknown".
         """
         for graph in graphs:
             if graph["name"] == "EventGraph":
@@ -989,8 +1023,30 @@ class BlueprintFamilyHandler:
                 graph["kind"] = "construction_script"
             elif graph["id"] in fg_ids:
                 graph["kind"] = "function"
+            elif "State" in graph["name"]:
+                graph["kind"] = "state_machine"
             else:
                 graph["kind"] = "unknown"
+
+    @staticmethod
+    def _extract_state_machines(graphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Extract state machine summary from graphs.
+
+        State machines are identified by graph kind == "state_machine".
+        Only graphs with more than 1 node are considered state machines
+        (a single node is not a meaningful state machine).
+        Each entry contains: name, kind, state_count, node_count.
+        """
+        state_machines: list[dict[str, Any]] = []
+        for graph in graphs:
+            if graph.get("kind") == "state_machine" and graph.get("node_count", 0) > 1:
+                state_machines.append({
+                    "name": graph["name"],
+                    "kind": "state_machine",
+                    "state_count": graph.get("node_count", 0),
+                    "node_count": graph.get("node_count", 0),
+                })
+        return state_machines
 
     def capability(self, result: dict[str, Any]) -> str:
         # Truncated decode output must not claim "complete" (#629, bounded by

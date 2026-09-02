@@ -904,6 +904,46 @@ def _attach_blueprint_graph_extras(
                         names.append(imp.object_name)
             entry["interfaces"] = names
 
+    # --- Kismet bytecode decompile for Function/UFunction exports ---
+    try:
+        from ...pipeline.post_process import _extract_kismet_decompiled
+
+        kismet_results = _extract_kismet_decompiled(
+            str(archive._path) if hasattr(archive, "_path") else "",
+            archive,
+            summary,
+            name_map,
+            import_map,
+            export_map,
+            tolerant=True,
+            linker=None,
+        )
+        if kismet_results:
+            # Key by export id so the handler can look them up
+            kismet_by_export: dict[str, list[dict]] = {}
+            for kr in kismet_results:
+                # Derive the export index from the function_name by scanning
+                # the export map for matching Function/UFunction entries
+                for exp_idx, exp in enumerate(export_map):
+                    if exp.object_name == kr.function_name:
+                        owner = _resolve_graph_owner(exp_idx, export_map, objects)
+                        if owner is not None:
+                            kismet_by_export.setdefault(owner, []).append(kr.to_dict())
+                        break
+            for owner_id, funcs in kismet_by_export.items():
+                entry = extras.setdefault(owner_id, {})
+                entry["kismet"] = funcs
+    except Exception as exc:
+        diagnostics.append(
+            Diagnostic(
+                severity="warning",
+                code="KISMET_DECOMPILE_FAILED",
+                message=f"Kismet decompile pass failed: {exc}",
+                stage="semantic.kismet",
+                recoverable=True,
+            )
+        )
+
 
 def _read_table_rows(
     archive: PackageArchive,

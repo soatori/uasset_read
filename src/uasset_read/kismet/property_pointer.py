@@ -89,6 +89,23 @@ class FKismetPropertyPointer:
             ),
         )
 
+    def to_dict(self) -> dict:
+        """JSON-serializable dict for this property pointer."""
+        d: dict = {"bNew": self.bNew}
+        if self.path:
+            if self.path.path:
+                d["segments"] = [
+                    {
+                        "name_index": seg.name_index,
+                        "number": seg.number,
+                        "base_name": seg.base_name,
+                    }
+                    for seg in self.path.path
+                ]
+            if self.path.resolved_owner is not None:
+                d["resolved_owner"] = self.path.resolved_owner.index
+        return d
+
     def __str__(self) -> str:
         """Return string representation of the property path."""
         if self.path and self.path.path:
