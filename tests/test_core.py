@@ -1871,6 +1871,19 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert "legacy fallback (bool at pos" not in head
         assert "read_k2node_message(" not in (SRC / "uasset_read/serializers/graph_node.py").read_text(encoding="utf-8")
 
+    def test_guid_display_is_36_chars():
+        """O1: FGuid display uses format_guid_bytes (8-4-4-4-12 = 36 chars)."""
+        import struct
+        from uasset_read.constants import format_guid_bytes
+        a, b, c, d = 0x01020304, 0x05060708, 0x090A0B0C, 0x0D0E0F10
+        s = format_guid_bytes(struct.pack("<IIII", a, b, c, d))
+        assert len(s) == 36 and s.count("-") == 4
+        # No invented 00000000 tail in handlers or user_defined
+        h_src = (SRC / "uasset_read/v2/handlers.py").read_text(encoding="utf-8")
+        u_src = (SRC / "uasset_read/parsers/asset_types/user_defined.py").read_text(encoding="utf-8")
+        assert "00000000" not in h_src
+        assert "00000000" not in u_src
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),

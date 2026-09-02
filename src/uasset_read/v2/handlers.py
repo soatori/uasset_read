@@ -8,8 +8,10 @@ name and invoked lazily when depth >= asset.
 from __future__ import annotations
 
 import re
+import struct
 from typing import Any, Protocol
 
+from ..constants import format_guid_bytes
 from .diagnostics import Diagnostic
 from .object_model import ObjectRecord, CoverageEntry
 from .version import VersionContext
@@ -69,8 +71,8 @@ def _capability_tier(handler: AssetHandler, result: dict[str, Any]) -> str:
     result. Undeclared handlers default to "summary": an undeclared handler
     must not claim that a type was fully decoded (#629).
     """
-    cap = getattr(handler, "capability", "summary")
-    return cap(result) if callable(cap) else str(cap)
+    cap: str | Any = getattr(handler, "capability", "summary")
+    return str(cap(result)) if callable(cap) else str(cap)
 
 
 def run_handlers(
@@ -311,7 +313,7 @@ class UserDefinedStructHandler:
             f = gv["fields"]
             if all(k in f for k in ("A", "B", "C", "D")):
                 a, b, c, d = (f.get("A", 0), f.get("B", 0), f.get("C", 0), f.get("D", 0))
-                guid = f"{a:08X}-{b:04X}-{c:04X}-{(d >> 16) & 0xFFFF:04X}-{d & 0xFFFF:04X}00000000"
+                guid = format_guid_bytes(struct.pack("<IIII", a, b, c, d))
 
         result: dict[str, Any] = {
             "kind": "user_defined_struct",
