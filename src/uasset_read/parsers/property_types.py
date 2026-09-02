@@ -1325,74 +1325,44 @@ def parse_enum_property(
     return make_enum_value(enum_type, enum_value_name)
 
 
-def _read_ftext_base(archive: FArchive) -> tuple[str, str, str]:
+def _read_ftext_base(archive: FArchive, dev_notes: bool = False) -> tuple[str, str, str]:
     """Read Base FText: namespace + key + source_string."""
     namespace = archive.read_fstring()
     key = archive.read_fstring()
     source_string = archive.read_fstring()
+    if dev_notes:
+        # TextHistory.cpp:915-937 — editor-saved UE5 assets append a fourth (often empty)
+        # DevNotes FString after SourceString (FortniteMainBranch >= AddDevNotesToFText=260,
+        # !FilterEditorOnly). Without consuming it the value stream is misaligned.
+        archive.read_fstring()
     return namespace, key, source_string
 
 
-def _read_ftext_args(archive: FArchive) -> None:
-    """Read and discard FText argument dictionary (only consumes bytes)."""
-    count = read_validated_count_tolerant(archive, MAX_SAFE_COUNT, "FText args")
-    for _ in range(count):
-        archive.read_fstring()  # key
-        archive.read_fstring()  # value
-
-
-def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
+def parse_text_property(tag: PropertyTag, archive: FArchive, dev_notes: bool = False) -> TextValue:
     """Parse TextProperty (ADVP-05).
 
     UE FText serialization format:
       - flags: i32 (4 bytes)
-      - history_type: u8 (1 byte) -- FTextHistory type identifier
+      - history_type: u8 (1 byte) -- ETextHistoryType identifier
       - body: varies based on history_type
         - history_type == 0 (Base): namespace + key + source_string
-        - history_type == 1 (NamedFormat): namespace + key + args
-        - history_type == 2 (OrderedFormat): namespace + key + source_string + args
-        - history_type == 3 (ArgumentFormat): namespace + key + source_string + args
-        - history_type == 4-9 (AsNumber/AsPercent/AsCurrency/Date/Time/DateTime): namespace + key + source_string + value
-        - history_type == 10 (Transform): namespace + key + source_string + transform_type
+          (+ DevNotes FString when dev_notes is set, TextHistory.cpp:915-937)
+        - history_type 1-10 are NOT decoded: their UE layouts (TextHistory.cpp)
+          differ from the old flat 3-FString reads, and a wrong decode silently
+          produced wrong values; consume nothing and report the type honestly.
     """
     _flags = archive.read_i32()  # FText flags (unused)
     history_type = archive.read_u8()  # FTextHistory type
+    history_note = history_type
 
     if history_type == 0:  # Base
-        namespace, key, source_string = _read_ftext_base(archive)
-    elif history_type == 1:  # NamedFormat
-        namespace = archive.read_fstring()
-        key = archive.read_fstring()
-        _read_ftext_args(archive)
-        source_string = ""
-    elif history_type == 2:  # OrderedFormat
-        namespace, key, source_string = _read_ftext_base(archive)
-        _read_ftext_args(archive)
-    elif history_type == 3:  # ArgumentFormat
-        namespace, key, source_string = _read_ftext_base(archive)
-        _read_ftext_args(archive)
-    elif history_type == 4:  # AsNumber
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # target_number
-    elif history_type == 5:  # AsPercent
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # target_value
-    elif history_type == 6:  # AsCurrency
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # currency_code
-        archive.read_fstring()  # target_amount
-    elif history_type == 7:  # DateString
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # date
-    elif history_type == 8:  # TimeString
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # time
-    elif history_type == 9:  # DateTimeString
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # datetime
-    elif history_type == 10:  # Transform
-        namespace, key, source_string = _read_ftext_base(archive)
-        archive.read_fstring()  # transform_type
+        namespace, key, source_string = _read_ftext_base(archive, dev_notes=dev_notes)
+    elif 1 <= history_type <= 10:
+        # UE layouts here differ from the old flat decode (TextHistory.cpp: nested FText +
+        # typed FFormatArgumentData args / generated histories without the 3-string prefix).
+        # Decoding them incorrectly silently produced wrong values; the value stream is
+        # bounded by tag.size, so consume nothing and report the history type honestly.
+        namespace = key = source_string = ""
     else:
         # Unknown history type: skip remaining data
         remaining = tag.size - 5  # 5 = flags(4) + history_type(1)
@@ -1402,7 +1372,12 @@ def parse_text_property(tag: PropertyTag, archive: FArchive) -> TextValue:
         key = ""
         source_string = ""
 
-    return TextValue(namespace=namespace or "", key=key or "", source_string=source_string or "")
+    return TextValue(
+        namespace=namespace or "",
+        key=key or "",
+        source_string=source_string or "",
+        history_type=history_note,
+    )
 
 
 def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str]) -> DelegateValue:

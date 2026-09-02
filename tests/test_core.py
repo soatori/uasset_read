@@ -483,6 +483,30 @@ def test_property_bag_normalization_is_bounded_lossless():
         )
         assert val2.asset_path == "Game/Foo/Bar.Bar"
 
+    def test_ftext_history_demoted_and_base_reads_dev_notes():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types import parse_text_property
+
+        def ft_body(hist, strings=(), extra=b""):
+            tail = extra
+            for s in strings:
+                tail += struct.pack("<i", len(s) + 1) + s.encode("utf-8") + b"\x00"
+            return struct.pack("<iB", 0, hist) + tail
+
+        # Base + DevNotes (gate on): 4 strings; value is the third.
+        body = ft_body(0, ("ns", "key", "Hello", "notes"), )
+        arc = ByteArchive(body)
+        v = parse_text_property(PropertyTag(name="T", type="TextProperty", size=len(body)), arc, dev_notes=True)
+        assert v.source_string == "Hello" and arc.tell() == len(body)
+        # NamedFormat (1): nested FText (flags+hist+its own 4 strings) + args — demoted, not misparsed
+        nested = struct.pack("<iB", 0, 0) + struct.pack("<i", 1) + b"\x00"
+        body1 = struct.pack("<iB", 0, 1) + nested + struct.pack("<i", 0)
+        arc1 = ByteArchive(body1)
+        v1 = parse_text_property(PropertyTag(name="T", type="TextProperty", size=len(body1)), arc1, dev_notes=False)
+        assert v1.source_string == "" and getattr(v1, "history_type", None) == 1
+
     _run_cases(
         [
             ("property.test_empty_list_returns_empty_dict", test_empty_list_returns_empty_dict),
@@ -495,6 +519,7 @@ def test_property_bag_normalization_is_bounded_lossless():
             ("property.array_of_bools_inline_bytes", test_array_of_bools_consumes_one_byte_per_element),
             ("property.legacy_struct_array_single_inner_tag", test_legacy_struct_array_reads_single_inner_tag),
             ("property.soft_object_path_inline_fname_based", test_soft_object_path_inline_is_fname_based),
+            ("property.ftext_base_dev_notes_and_demotion", test_ftext_history_demoted_and_base_reads_dev_notes),
         ]
     )
 

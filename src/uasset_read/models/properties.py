@@ -128,6 +128,7 @@ class TextValue:
     namespace: str = ""
     key: str = ""
     source_string: str = ""
+    history_type: int | None = None  # ETextHistoryType seen; None when not decoded
     property_type: str = "TextProperty"
 
 
