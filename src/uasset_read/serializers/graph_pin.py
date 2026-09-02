@@ -20,6 +20,7 @@ from uasset_read.constants import (
     MAX_FTEXT_CONSUMPTION,
 )
 from uasset_read.exceptions import ParseError
+from uasset_read.kismet.ufunction_reader import RELEASE_GUID, get_kismet_custom_version
 from uasset_read.serializers.object_resources import PackageIndex
 from uasset_read.models.core import UEdGraphPin, FEdGraphPinType
 
@@ -93,6 +94,16 @@ def read_ed_graph_pin_type(
                     pin_type.map_key_terminal_sub_category_object_name = _rcn(pkg_idx, import_map, export_map, linker)
             except (KeyError, IndexError, AttributeError):
                 pin_type.map_key_terminal_sub_category_object_name = None
+
+        # FEdGraphTerminalType tail — EdGraphNode.cpp operator<<: two unconditional
+        # 4-byte bools, then bTerminalIsUObjectWrapper gated on
+        # FReleaseObjectVersion >= PinTypeIncludesUObjectWrapperFlag (=31).
+        pin_type.map_key_terminal_is_const = archive.read_bool("Terminal.bIsConst")
+        pin_type.map_key_terminal_is_weak_pointer = archive.read_bool("Terminal.bIsWeakPointer")
+        if summary is not None and get_kismet_custom_version(summary, RELEASE_GUID) >= 31:
+            pin_type.map_key_terminal_is_uobject_wrapper = archive.read_bool("Terminal.bIsUObjectWrapper")
+        else:
+            pin_type.map_key_terminal_is_uobject_wrapper = False
 
     # bIsReference / bIsWeakPointer (UE5 FArchive bool = uint32, 4B)
     pin_type.is_reference = archive.read_bool("PinType.bIsReference")

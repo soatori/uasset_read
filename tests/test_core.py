@@ -1450,6 +1450,38 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert arc.tell() == 6  # consumed the 2-byte UTF-16 NUL, not skipped it
         assert read_ftext_fstring(arc) == "abc"
 
+    def test_map_pin_terminal_reads_trailing_bools():
+        """G1: FEdGraphTerminalType reads const/weak/gated-wrapper bools (EdGraphNode.cpp)."""
+        import struct
+
+        from types import SimpleNamespace
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.kismet.ufunction_reader import RELEASE_GUID
+        from uasset_read.serializers.graph_pin import read_ed_graph_pin_type
+
+        fname = struct.pack("<ii", 0, 0)  # "None"
+        data = (
+            fname + fname + struct.pack("<i", 0) + struct.pack("<B", 3)  # cat, sub, obj, container=Map
+            + fname + fname + struct.pack("<i", 0)  # terminal cat, sub, object ref
+            + struct.pack("<iii", 1, 0, 1)  # terminal const, weak, uobject-wrapper (gated)
+            + struct.pack("<i", 0) * 2 + fname + struct.pack("<i", 0) + bytes(16)  # bIsReference/bIsWeak + member ref
+            + struct.pack("<i", 0) * 3  # trailing is_const / wrapper / single-precision bools
+        )
+        arc = ByteArchive(data)
+        summary = SimpleNamespace(
+            package_flags=0,
+            file_version_ue4=522,
+            file_version_ue5=1018,
+            custom_versions=[SimpleNamespace(guid=RELEASE_GUID, version=31)],
+        )
+        pt = read_ed_graph_pin_type(arc, ["None"], summary, [], [], None)
+        assert pt.container_type == 3
+        assert pt.map_key_terminal_is_const is True
+        assert pt.map_key_terminal_is_weak_pointer is False
+        assert pt.map_key_terminal_is_uobject_wrapper is True
+        assert pt.is_reference is False  # reads the 4-byte value AFTER the tail: desync guard
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -1493,6 +1525,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("handler.test_ex_text_const_operand_layouts", test_ex_text_const_operand_layouts),
             ("handler.test_ex_assert_u8_and_container_counts", test_ex_assert_u8_and_container_counts),
             ("handler.test_fstring_negative_one_consumes_two_bytes", test_fstring_negative_one_consumes_two_bytes),
+            ("handler.test_map_pin_terminal_reads_trailing_bools", test_map_pin_terminal_reads_trailing_bools),
         ]
     )
 

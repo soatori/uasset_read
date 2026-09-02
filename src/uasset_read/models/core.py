@@ -48,6 +48,10 @@ class FEdGraphPinType:
     map_key_terminal_sub_category: str = ""
     map_key_terminal_sub_category_object: Optional[int] = None  # FPackageIndex (int32)
     map_key_terminal_sub_category_object_name: Optional[str] = None
+    # FEdGraphTerminalType trailing bools (EdGraphNode.cpp operator<<)
+    map_key_terminal_is_const: bool = False
+    map_key_terminal_is_weak_pointer: bool = False
+    map_key_terminal_is_uobject_wrapper: bool = False
 
 
 @dataclass
