@@ -577,11 +577,12 @@ def _read_compression_and_source(
         compressed_chunks_count,
         MAX_COMPRESSED_CHUNKS,
         "compressed_chunks",
-        12,
+        16,
         budget,
     )
     for _ in range(compressed_chunks_count):
-        archive.read(12)
+        # FCompressedChunk = 4 * int32 = 16 bytes (Linker.cpp operator<<)
+        archive.read(16)
 
     package_source = archive.read_u32("PackageSource")
     return compression_flags, package_source

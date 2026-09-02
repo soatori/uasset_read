@@ -420,6 +420,16 @@ def test_package_document_preserves_every_export_and_role():
         assert _fixed_unversioned_size(SimpleNamespace(type="EnumProperty", inner_type="ByteProperty")) == 8
         assert _fixed_unversioned_size(SimpleNamespace(type="EnumProperty", inner_type=None)) == 8
 
+    def test_compressed_chunks_skipped_as_16_bytes():
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.serializers.package_summary import _read_compression_and_source
+        data = struct.pack("<ii", 0, 1) + struct.pack("<iiii", 40, 8, 48, 8) + struct.pack("<i", 0x11223344)
+        arc = ByteArchive(data)
+        flags, source = _read_compression_and_source(arc)
+        assert source == 0x11223344  # wrong 12-byte skip desyncs PackageSource
+
     def test_asset_registry_dependency_gate_uses_521():
         from uasset_read import constants
         assert constants.UE4_ASSETREGISTRY_DEPENDENCYFLAGS == 521
@@ -434,6 +444,7 @@ def test_package_document_preserves_every_export_and_role():
             ("document.test_stable_id_across_calls", test_stable_id_across_calls),
             ("version.test_asset_registry_dependency_gate_uses_521", test_asset_registry_dependency_gate_uses_521),
             ("property.test_unversioned_bool_one_byte_enum_fname", test_unversioned_bool_one_byte_enum_fname),
+            ("summary.test_compressed_chunks_skipped_as_16_bytes", test_compressed_chunks_skipped_as_16_bytes),
         ]
     )
 
