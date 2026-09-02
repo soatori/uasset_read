@@ -112,9 +112,7 @@ class FArchive:
                 f"Read of {size} bytes at position {pos} is below export read range start {start}"
             )
         if pos + size > end:
-            raise ExportBoundsExceeded(
-                f"Read of {size} bytes at position {pos} exceeds export read range end {end}"
-            )
+            raise ExportBoundsExceeded(f"Read of {size} bytes at position {pos} exceeds export read range end {end}")
 
     def read(self, size: int) -> bytes:
         """Base read method — does not swap raw bytes."""
@@ -173,9 +171,7 @@ class FArchive:
         if self._read_range is not None:
             start, end = self._read_range
             if offset < start or offset > end:
-                raise ExportBoundsExceeded(
-                    f"Offset {offset} outside export read range [{start}, {end}] at {context}"
-                )
+                raise ExportBoundsExceeded(f"Offset {offset} outside export read range [{start}, {end}] at {context}")
         if offset > self._file_size:
             self._record_diagnostic(
                 module="archive",

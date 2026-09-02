@@ -195,38 +195,65 @@ def _get_parse_functions():
 # Positional args parse_property_value passes each handler, keyed by property
 # type; covers exactly the keys of _TYPE_HANDLER_MAP.  "soft_path_list"
 # resolves to summary._soft_object_path_list (UE5.7+ soft object path table).
-_PROPERTY_ARGS: dict[str, tuple[str, ...]] = {
-    t: ("tag", "archive")
-    for t in (
-        "BoolProperty", "IntProperty", "Int64Property", "Int16Property", "Int8Property",
-        "ByteProperty", "UInt16Property", "UInt32Property", "UInt64Property", "FloatProperty",
-        "DoubleProperty", "StrProperty", "ObjectProperty", "Utf8StrProperty",
-        "WeakObjectProperty", "LazyObjectProperty", "ClassProperty", "AssetObjectProperty",
-        "AssetClassProperty", "InterfaceProperty", "VerseStringProperty", "VerseClassProperty",
-        "VerseFunctionProperty", "VerseDynamicProperty", "AnsiStrProperty", "GuidProperty",
-        "VerseCellProperty", "VerseValueProperty",
-    )
-} | {
-    "TextProperty": ("tag", "archive", "dev_notes"),
-} | {
-    t: ("tag", "archive", "name_map")
-    for t in (
-        "NameProperty", "DelegateProperty", "MulticastDelegateProperty",
-        "MulticastInlineDelegateProperty", "MulticastSparseDelegateProperty", "FieldPathProperty",
-    )
-} | {
-    t: ("tag", "archive", "name_map", "soft_path_list", "summary")
-    for t in ("SoftObjectProperty", "SoftClassProperty")
-} | {
-    t: ("tag", "archive", "name_map", "export_map", "summary", "depth")
-    for t in ("ArrayProperty", "StructProperty")
-} | {
-    t: ("tag", "archive", "name_map", "export_map", "summary")
-    for t in ("MapProperty", "SetProperty", "OptionalProperty")
-} | {
-    t: ("tag", "archive", "name_map", "summary")
-    for t in ("EnumProperty",)
-}
+_PROPERTY_ARGS: dict[str, tuple[str, ...]] = (
+    {
+        t: ("tag", "archive")
+        for t in (
+            "BoolProperty",
+            "IntProperty",
+            "Int64Property",
+            "Int16Property",
+            "Int8Property",
+            "ByteProperty",
+            "UInt16Property",
+            "UInt32Property",
+            "UInt64Property",
+            "FloatProperty",
+            "DoubleProperty",
+            "StrProperty",
+            "ObjectProperty",
+            "Utf8StrProperty",
+            "WeakObjectProperty",
+            "LazyObjectProperty",
+            "ClassProperty",
+            "AssetObjectProperty",
+            "AssetClassProperty",
+            "InterfaceProperty",
+            "VerseStringProperty",
+            "VerseClassProperty",
+            "VerseFunctionProperty",
+            "VerseDynamicProperty",
+            "AnsiStrProperty",
+            "GuidProperty",
+            "VerseCellProperty",
+            "VerseValueProperty",
+        )
+    }
+    | {
+        "TextProperty": ("tag", "archive", "dev_notes"),
+    }
+    | {
+        t: ("tag", "archive", "name_map")
+        for t in (
+            "NameProperty",
+            "DelegateProperty",
+            "MulticastDelegateProperty",
+            "MulticastInlineDelegateProperty",
+            "MulticastSparseDelegateProperty",
+            "FieldPathProperty",
+        )
+    }
+    | {
+        t: ("tag", "archive", "name_map", "soft_path_list", "summary")
+        for t in ("SoftObjectProperty", "SoftClassProperty")
+    }
+    | {t: ("tag", "archive", "name_map", "export_map", "summary", "depth") for t in ("ArrayProperty", "StructProperty")}
+    | {
+        t: ("tag", "archive", "name_map", "export_map", "summary")
+        for t in ("MapProperty", "SetProperty", "OptionalProperty")
+    }
+    | {t: ("tag", "archive", "name_map", "summary") for t in ("EnumProperty",)}
+)
 
 
 def _skip_type_tree_nodes(
