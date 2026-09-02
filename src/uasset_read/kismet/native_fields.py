@@ -418,7 +418,7 @@ def _read_single_field(
         "DelegateProperty",
         "MulticastDelegateProperty",
         "MulticastSparseDelegateProperty",
-        "InlineMulticastDelegateProperty",
+        "MulticastInlineDelegateProperty",
     ):
         _read_single_ref_tail(archive, context, decl)
     elif type_name == "FieldPathProperty":
@@ -552,7 +552,7 @@ _SCALAR_CPP_TYPES: dict[str, str] = {
     "DelegateProperty": "FScriptDelegate",
     "MulticastDelegateProperty": "FMulticastScriptDelegate",
     "MulticastSparseDelegateProperty": "FMulticastScriptDelegate",
-    "InlineMulticastDelegateProperty": "FMulticastScriptDelegate",
+    "MulticastInlineDelegateProperty": "FMulticastScriptDelegate",
     "FieldPathProperty": "FProperty*",
 }
 
@@ -637,7 +637,7 @@ def native_field_cpp_type(field: NativeFieldDeclaration) -> str:
         return "FScriptDelegate"
 
     # Multicast delegates use resolved signature
-    if type_name in ("MulticastDelegateProperty", "MulticastSparseDelegateProperty", "InlineMulticastDelegateProperty"):
+    if type_name in ("MulticastDelegateProperty", "MulticastSparseDelegateProperty", "MulticastInlineDelegateProperty"):
         sig_name = field.reference_names[0] if field.reference_names else None
         if sig_name:
             return f"FMulticastScriptDelegate /* {sig_name} */"

@@ -1555,6 +1555,172 @@ def test_handler_registry_supports_enriches_and_isolates():
         expr_cov = [c for c in bare_fn.coverage if c.feature == "material_function.expressions"]
         assert expr_cov and expr_cov[0].status == "missing"
 
+    def test_native_fields_delegate_type_name():
+        """K5: FField class name is MulticastInlineDelegateProperty (UnrealType.h)."""
+        src = (SRC / "uasset_read/kismet/native_fields.py").read_text(encoding="utf-8")
+        assert "InlineMulticastDelegateProperty" not in src
+        assert src.count("MulticastInlineDelegateProperty") >= 3
+
+    def test_ex_text_const_operand_layouts():
+        """K1/K2: UE5 literal-type numbering; operands are nested string expressions."""
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.kismet.expressions.string_consts import FScriptText
+        from uasset_read.kismet.tokens import EBlueprintTextLiteralType as T
+
+        assert T.LocalizedTextWithNotes == 2 and T.InvariantText == 3
+        assert T.LiteralString == 4 and T.StringTableEntry == 5
+
+        class _KismetLike:  # duck-typed operand reader over bounded bytes
+            def __init__(self, data):
+                self._arc = ByteArchive(data)
+
+            def read_u8(self):
+                return self._arc.read_u8()
+
+            def read_i32(self):
+                return self._arc.read_i32()
+
+            def xfer_ansi_string(self):
+                out = bytearray()
+                while (b := self._arc.read(1)) != b"\x00":
+                    out += b
+                return out.decode("utf-8")
+
+            def xfer_unicode_string(self):
+                out = bytearray()
+                while (pair := self._arc.read(2)) != b"\x00\x00":
+                    out += pair
+                return out.decode("utf-16-le")
+
+        def ansi(s):
+            return bytes([0x1F]) + s.encode("utf-8") + b"\x00"
+
+        data = bytes([1]) + ansi("Hello") + ansi("5A1B") + ansi("NS")  # source,key,namespace
+        text = FScriptText.from_archive(_KismetLike(data), [])
+        assert text.SourceString == "Hello" and text.KeyString == "5A1B" and text.Namespace == "NS"
+        uni = bytes([1]) + bytes([0x34]) + "Héy".encode("utf-16-le") + b"\x00\x00" + ansi("K") + ansi("N")
+        assert FScriptText.from_archive(_KismetLike(uni), []).SourceString == "Héy"
+        ste = bytes([5]) + struct.pack("<i", -3) + ansi("MyTable") + ansi("Key42")
+        t3 = FScriptText.from_archive(_KismetLike(ste), [])
+        assert t3.TableIdString == "MyTable" and t3.KeyString == "Key42"
+
+    def test_ex_assert_u8_and_container_counts():
+        """K3/K4: EX_Assert flag is uint8; set/map/array consts carry int32 counts."""
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.kismet.expressions.containers import EX_SetSet
+        from uasset_read.kismet.expressions.special import EX_Assert
+
+        class _WidthProbe:  # forwards the width-sensitive reads, stubs expression dispatch
+            def __init__(self, data):
+                self._arc = ByteArchive(data)
+
+            def read_u8(self):
+                return self._arc.read_u8()
+
+            def read_u16(self):
+                return self._arc.read_u16()
+
+            def read_i32(self):
+                return self._arc.read_i32()
+
+            def read_bool(self):
+                return self._arc.read_u32() != 0
+
+            def read_expression(self):
+                return None
+
+            def read_expression_array(self, _end_token):
+                return []
+
+            def tell(self):
+                return self._arc.tell()
+
+        probe = _WidthProbe(struct.pack("<HB", 42, 1))  # line + uint8 debug flag
+        node = EX_Assert.from_archive(probe, [])
+        assert node.LineNumber == 42 and node.DebugMode is True
+        assert probe.tell() == 3  # old 4-byte read_bool would land at 6
+        probe2 = _WidthProbe(struct.pack("<i", 7))  # the int32 element count
+        node2 = EX_SetSet.from_archive(probe2, [])
+        assert node2.Num == 7 and probe2.tell() == 4
+
+    def test_fstring_negative_one_consumes_two_bytes():
+        """G3: negative FString length always reads abs(len)*2 UTF-16 bytes (String.cpp.inl)."""
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.serializers.graph_helpers import read_ftext_fstring
+
+        arc = ByteArchive(struct.pack("<i", -1) + b"\x00\x00" + struct.pack("<i", 3) + b"abc\x00")
+        assert read_ftext_fstring(arc) == ""
+        assert arc.tell() == 6  # consumed the 2-byte UTF-16 NUL, not skipped it
+        assert read_ftext_fstring(arc) == "abc"
+
+    def test_map_pin_terminal_reads_trailing_bools():
+        """G1: FEdGraphTerminalType reads const/weak/gated-wrapper bools (EdGraphNode.cpp)."""
+        import struct
+
+        from types import SimpleNamespace
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.kismet.ufunction_reader import RELEASE_GUID
+        from uasset_read.serializers.graph_pin import read_ed_graph_pin_type
+
+        fname = struct.pack("<ii", 0, 0)  # "None"
+        data = (
+            fname + fname + struct.pack("<i", 0) + struct.pack("<B", 3)  # cat, sub, obj, container=Map
+            + fname + fname + struct.pack("<i", 0)  # terminal cat, sub, object ref
+            + struct.pack("<iii", 1, 0, 1)  # terminal const, weak, uobject-wrapper (gated)
+            + struct.pack("<i", 0) * 2 + fname + struct.pack("<i", 0) + bytes(16)  # bIsReference/bIsWeak + member ref
+            + struct.pack("<i", 0) * 3  # trailing is_const / wrapper / single-precision bools
+        )
+        arc = ByteArchive(data)
+        summary = SimpleNamespace(
+            package_flags=0,
+            file_version_ue4=522,
+            file_version_ue5=1018,
+            custom_versions=[SimpleNamespace(guid=RELEASE_GUID, version=31)],
+        )
+        pt = read_ed_graph_pin_type(arc, ["None"], summary, [], [], None)
+        assert pt.container_type == 3
+        assert pt.map_key_terminal_is_const is True
+        assert pt.map_key_terminal_is_weak_pointer is False
+        assert pt.map_key_terminal_is_uobject_wrapper is True
+        assert pt.is_reference is False  # reads the 4-byte value AFTER the tail: desync guard
+
+    def test_byte_enum_node_tag_decodes_fname():
+        """G5: UENUM-backed byte tags carry the enum-entry FName (PropertyByte.cpp SerializeItem)."""
+        import struct
+
+        from types import SimpleNamespace
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.serializers.graph_node import _handle_advanced_pin_display, _handle_move_mode
+
+        names = ["None", "Hidden", "Copy"]
+        payload = struct.pack("<ii", 1, 0)  # FName pointing at name "Hidden", number 0
+        arc = ByteArchive(payload)
+        tag = SimpleNamespace(name="AdvancedPinDisplay", size=8, value_end_offset=8)
+        raw: dict = {}
+        _handle_advanced_pin_display(arc, tag, names, [], [], None, raw)
+        assert raw["AdvancedPinDisplayFormatted"] == "Hidden"
+        arc2 = ByteArchive(struct.pack("<ii", 2, 0))
+        raw2: dict = {}
+        tag2 = SimpleNamespace(name="MoveMode", size=8, value_end_offset=8)
+        _handle_move_mode(arc2, tag2, names, [], [], None, raw2)
+        assert raw2["MoveMode"] == "Copy"
+
+    def test_no_invented_k2node_tails():
+        """G4: K2Node Serialize() implementations add no binary tails past Pins."""
+        src = (SRC / "uasset_read/serializers/graph_node.py").read_text(encoding="utf-8")
+        head = src.split("# 5 Node type readers")[1].split("dispatch handlers")[0]
+        assert 'archive.read_bool("K2Node_CallFunction.bDefaultsToPure")' not in head
+        assert "legacy fallback (bool at pos" not in head
+        assert "read_k2node_message(" not in (SRC / "uasset_read/serializers/graph_node.py").read_text(encoding="utf-8")
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -1591,6 +1757,16 @@ def test_handler_registry_supports_enriches_and_isolates():
                 "handler.test_material_family_handlers_summary_tier_synthetic",
                 test_material_family_handlers_summary_tier_synthetic,
             ),
+            (
+                "handler.test_native_fields_delegate_type_name",
+                test_native_fields_delegate_type_name,
+            ),
+            ("handler.test_ex_text_const_operand_layouts", test_ex_text_const_operand_layouts),
+            ("handler.test_ex_assert_u8_and_container_counts", test_ex_assert_u8_and_container_counts),
+            ("handler.test_fstring_negative_one_consumes_two_bytes", test_fstring_negative_one_consumes_two_bytes),
+            ("handler.test_map_pin_terminal_reads_trailing_bools", test_map_pin_terminal_reads_trailing_bools),
+            ("handler.test_byte_enum_node_tag_decodes_fname", test_byte_enum_node_tag_decodes_fname),
+            ("handler.test_no_invented_k2node_tails", test_no_invented_k2node_tails),
         ]
     )
 

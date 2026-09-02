@@ -182,7 +182,7 @@ class EScriptInstrumentationType(IntEnum):
 
 class EBlueprintTextLiteralType(IntEnum):
     """
-    Blueprint text literal type.
+    Blueprint text literal type — EEExprToken Script.h:334-349 (UE5 numbering).
 
     Used during EX_TextConst deserialization to determine text source.
     """
@@ -191,12 +191,14 @@ class EBlueprintTextLiteralType(IntEnum):
     Empty = 0
     # Text is localized — contains source, key, namespace strings
     LocalizedText = 1
+    # Text is localized with dev notes — contains source, key, namespace, devnotes
+    LocalizedTextWithNotes = 2
     # Text is culture invariant — contains one string
-    InvariantText = 2
+    InvariantText = 3
     # Text is a literal FString — contains one string
-    LiteralString = 3
+    LiteralString = 4
     # Text is from a string table — contains object pointer + table ID + key
-    StringTableEntry = 4
+    StringTableEntry = 5
 
 
 class EAutoRtfmStopTransactMode(IntEnum):
