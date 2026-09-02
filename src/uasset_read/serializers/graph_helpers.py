@@ -136,30 +136,23 @@ def _read_fstring_safe(archive: FArchive, max_length: int = MAX_SAFE_COUNT) -> s
 
     References UE C++ FArchive& operator<<(FString&) implementation.
 
-    FString serialization format (UE C++ Archive.h L209-230):
+    FString serialization format (UE C++ String.cpp.inl:1810-1904):
     - length == 0: empty string (no data region)
-    - length == -1: empty string special marker (UE internal optimization, no data region)
     - length > 0: ANSI string, read length bytes
-    - length < -1: UTF-16 string, read (-length * 2) bytes
+    - length < 0: UTF-16 string, read (-length * 2) bytes; -1 is a 2-byte NUL, never "no data"
 
     Fixes length == -1 boundary condition (common in SubPin PinToolTip).
     """
     length = archive.read_i32()
-    if length == 0 or length == -1:
-        # length=-1 is UE empty string marker, no data read
+    if length == 0:
         return ""
     if abs(length) > max_length:
         # Abnormal length, fall back to empty string
         if archive.tell() >= 4:
             archive.seek(archive.tell() - 4)
         return ""
-    if length < -1:
-        utf16_len = -length * 2
-        if utf16_len > max_length * 2:
-            if archive.tell() >= 4:
-                archive.seek(archive.tell() - 4)
-            return ""
-        data = archive.read(utf16_len)
+    if length < 0:
+        data = archive.read(-length * 2)
         return data.decode("utf-16-le", errors="replace").rstrip("\x00")
     data = archive.read(length)
     return data.decode("utf-8", errors="replace").rstrip("\x00")
@@ -173,13 +166,18 @@ def read_ftext_fstring(archive: FArchive) -> str:
     This avoids "read partial body but continue forward" silent misalignment.
     """
     length = archive.read_i32()
-    if length == 0 or length == -1:
+    if length == 0:
         return ""
-    if abs(length) > MAX_SAFE_COUNT:
-        raise ParseError(f"Invalid FText FString length: {length}")
-    if length < -1:
-        data = archive.read(-length * 2)
+    if length < 0:
+        # String.cpp.inl:1810-1904: negative length reads abs(len)*2 UTF-16 bytes;
+        # -1 is a 2-byte NUL, never "no data". (archive.py read_fstring already follows UE.)
+        utf16_len = -length * 2
+        if utf16_len > MAX_SAFE_COUNT * 2:
+            raise ParseError(f"Invalid FText FString length: {length}")
+        data = archive.read(utf16_len)
         return data.decode("utf-16-le", errors="replace").rstrip("\x00")
+    if length > MAX_SAFE_COUNT:
+        raise ParseError(f"Invalid FText FString length: {length}")
     data = archive.read(length)
     return data.decode("utf-8", errors="replace").rstrip("\x00")
 

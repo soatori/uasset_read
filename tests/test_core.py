@@ -1438,6 +1438,18 @@ def test_handler_registry_supports_enriches_and_isolates():
         node2 = EX_SetSet.from_archive(probe2, [])
         assert node2.Num == 7 and probe2.tell() == 4
 
+    def test_fstring_negative_one_consumes_two_bytes():
+        """G3: negative FString length always reads abs(len)*2 UTF-16 bytes (String.cpp.inl)."""
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.serializers.graph_helpers import read_ftext_fstring
+
+        arc = ByteArchive(struct.pack("<i", -1) + b"\x00\x00" + struct.pack("<i", 3) + b"abc\x00")
+        assert read_ftext_fstring(arc) == ""
+        assert arc.tell() == 6  # consumed the 2-byte UTF-16 NUL, not skipped it
+        assert read_ftext_fstring(arc) == "abc"
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -1480,6 +1492,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             ),
             ("handler.test_ex_text_const_operand_layouts", test_ex_text_const_operand_layouts),
             ("handler.test_ex_assert_u8_and_container_counts", test_ex_assert_u8_and_container_counts),
+            ("handler.test_fstring_negative_one_consumes_two_bytes", test_fstring_negative_one_consumes_two_bytes),
         ]
     )
 
