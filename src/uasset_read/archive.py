@@ -852,7 +852,8 @@ class FArchive:
         if 0 <= index < len(name_map):
             base_name = name_map[index]
             if number > 0:
-                result = f"{base_name}_{number}"
+                # NAME_INTERNAL_TO_EXTERNAL: on-disk Number is internal; display is Number-1 (LinkerLoad.h).
+                result = f"{base_name}_{number - 1}"
             else:
                 result = base_name
         else:

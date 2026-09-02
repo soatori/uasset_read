@@ -296,6 +296,16 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         assert sd and sd[0].object_id == "export:0"
         assert arc._current_object_id == ""  # context must not leak past the table
 
+    def test_fname_display_uses_external_number():
+        import struct
+        from uasset_read.archive import ByteArchive
+
+        arc = ByteArchive(struct.pack("<ii", 0, 3))
+        name = arc.read_name(["None", "Test"], key="t")
+        assert name == "None_2"  # on-disk internal 3 -> display external 2 (LinkerLoad.h NAME_INTERNAL_TO_EXTERNAL)
+        arc2 = ByteArchive(struct.pack("<ii", 0, 0))
+        assert arc2.read_name(["None", "Test"], key="t") == "None"
+
     _run_cases(
         [
             ("core.reader_out_of_range", core_contract),
@@ -328,6 +338,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
             ("recovery.fstring_null_truncation_recorded", fstring_internal_null_truncation_is_recorded),
             ("recovery.fname_shift_recorded", fname_shift_recovery_is_recorded),
             ("recovery.export_map_attribution", export_map_recoveries_are_attributed_to_their_slot),
+            ("fname.display_external_number", test_fname_display_uses_external_number),
         ]
     )
 
@@ -1339,7 +1350,6 @@ def test_handler_registry_supports_enriches_and_isolates():
             return struct.pack("<i", len(data)) + data
 
         def cstring(s: str) -> bytes:
-            """Null-terminated ANSI string (no length prefix) — matches read_cstring."""
             return s.encode("utf-8") + b"\x00"
 
         def read_table(blob: bytes, dev_notes: bool):
@@ -1349,7 +1359,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             result = _read_string_table(archive, "export:0", diags, dev_notes)
             return result, diags
 
-        # UE4-era layout: namespace (FString) + count + key (cstring) + value (FString).
+        # UE layout: namespace (FString) + count + key (cstring) + value (FString).
         blob = (
             fstring("MyNS") + struct.pack("<i", 2) + cstring("K1") + fstring("Hello") + cstring("K2") + fstring("World")
         )
