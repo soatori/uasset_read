@@ -729,6 +729,9 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 4. Material/Niagara graph summary。
 5. Blueprint/AnimBlueprint/Kismet/C++ 扩展迁移。
 
+    - Phase 4.5：graph/node/pin 解码 + declaration（parent_class/interfaces/functions）+ SCS components + NewVariables names 已迁移到 v2 `BlueprintFamilyHandler` decode 分支。fixture 测试覆盖 StackOBot/BP_CombatCharacter/ABP_RifleAnimLayers/ALS_AnimBP。
+    - 未迁移：VarType 类型解码、Kismet 反编译、C++ skeleton、parent-asset 解析（属 D1 deferred）。
+
 退出条件：每个 handler 至少有一个真实样本、一个缺失/partial 样本和明确 coverage；handler 失败不影响同包其他对象。
 
 ### Phase 5：Zen 与 Container Streaming
