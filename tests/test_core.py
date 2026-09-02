@@ -550,6 +550,19 @@ def test_property_bag_normalization_is_bounded_lossless():
         out = _decode_color(bytes([10, 20, 30, 40]), 4)
         assert out == {"R": 30, "G": 20, "B": 10, "A": 40}
 
+    def test_unversioned_header_fragments_ue_format():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.parsers.property_parser import _try_read_unversioned_header
+
+        # One fragment: SkipNum=0, HasZeroes=1, IsLast=1, ValueNum=3 ->
+        # packed = (3<<9) | 0x100 | 0x80 = 0x0780
+        # then global zero mask (3 bits -> single u8: bits 0,2 set -> 0b101)
+        data = struct.pack("<HBB", 0x0780, 0b101, 0)  # trailing byte pads property_end
+        arc = ByteArchive(data)
+        selected = _try_read_unversioned_header(arc, property_end=4, property_count=3)
+        assert selected == [(0, True), (1, False), (2, True)]
+
     _run_cases(
         [
             ("property.test_empty_list_returns_empty_dict", test_empty_list_returns_empty_dict),
@@ -564,6 +577,7 @@ def test_property_bag_normalization_is_bounded_lossless():
             ("property.soft_object_path_inline_fname_based", test_soft_object_path_inline_is_fname_based),
             ("property.ftext_base_dev_notes_and_demotion", test_ftext_history_demoted_and_base_reads_dev_notes),
             ("property.fcolor_bgra_decode", test_fcolor_bgra_decode),
+            ("property.unversioned_header_fragments_ue_format", test_unversioned_header_fragments_ue_format),
         ]
     )
 
