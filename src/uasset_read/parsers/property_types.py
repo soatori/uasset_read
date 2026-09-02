@@ -627,6 +627,13 @@ def parse_array_property(
 
     inner_type = getattr(tag, "inner_type", None) or _get_inner_type(tag.type)
 
+    if inner_type == "BoolProperty":
+        # PropertyBool.cpp SerializeItem: bool container elements serialize as inline
+        # 1-byte values, NOT via the property-level tag BoolTrue bit.
+        for _ in range(count):
+            elements.append(archive.read_u8() != 0)
+        return elements
+
     # For StructProperty array elements, UE uses complete PropertyTag serialization
     # For other types, serialized natively by type (each element size determined by type)
     inner_type_struct = getattr(tag, "inner_type_struct", None) if inner_type == "StructProperty" else None
@@ -1268,6 +1275,9 @@ def parse_set_property(
     # Skip elements to remove (serialized by element_type)
     parse_property_value = _get_parse_property_value()
     for _ in range(num_elements_to_remove):
+        if element_type == "BoolProperty":
+            archive.read_u8()  # inline 1-byte bool (PropertyBool.cpp)
+            continue
         dummy_tag = PropertyTag(name="RemovedElement", type=element_type, size=0)
         parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
 
@@ -1276,6 +1286,10 @@ def parse_set_property(
     elements: List[Any] = []
 
     for _ in range(num_elements):
+        if element_type == "BoolProperty":
+            # PropertyBool.cpp: set elements are inline 1-byte values, not tag BoolTrue.
+            elements.append(archive.read_u8() != 0)
+            continue
         dummy_tag = PropertyTag(name="Element", type=element_type, size=0)
         element = parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
         elements.append(element)
@@ -1609,6 +1623,9 @@ def _dispatch_key_parse(
     tag: Optional[PropertyTag] = None,
 ) -> Any:
     """Key type dispatch parsing (D-02b)."""
+    if key_type == "BoolProperty":
+        # PropertyBool.cpp: bool map keys are inline 1-byte values, not tag BoolTrue.
+        return archive.read_u8() != 0
     basic_types = [
         "IntProperty",
         "Int64Property",
@@ -1616,7 +1633,6 @@ def _dispatch_key_parse(
         "DoubleProperty",
         "StrProperty",
         "NameProperty",
-        "BoolProperty",
         "ByteProperty",
         "UInt16Property",
         "UInt32Property",
@@ -1654,6 +1670,9 @@ def _dispatch_value_parse(
     tag: Optional[PropertyTag] = None,
 ) -> Any:
     """Value type dispatch parsing."""
+    if value_type == "BoolProperty":
+        # PropertyBool.cpp: bool map values are inline 1-byte values, not tag BoolTrue.
+        return archive.read_u8() != 0
     if value_type == "StructProperty":
         # Propagate struct type from tag so parse_struct_property can identify
         # the concrete struct rather than falling back to UnknownStruct.

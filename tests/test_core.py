@@ -417,6 +417,19 @@ def test_property_bag_normalization_is_bounded_lossless():
         arc2._file_version_ue4 = 522
         assert read_property_tag(arc2, names).value_start_offset == 29
 
+    def test_array_of_bools_consumes_one_byte_per_element():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types import parse_array_property
+        data = struct.pack("<i", 3) + bytes([1, 0, 1]) + b"X"
+        arc = ByteArchive(data)
+        tag = PropertyTag(name="A", type="ArrayProperty", size=len(data))
+        tag.inner_type = "BoolProperty"
+        out = parse_array_property(tag, arc, ["None"], [], None)
+        assert out == [True, False, True]
+        assert arc.tell() == 4 + 3
+
     _run_cases(
         [
             ("property.test_empty_list_returns_empty_dict", test_empty_list_returns_empty_dict),
@@ -426,6 +439,7 @@ def test_property_bag_normalization_is_bounded_lossless():
             ("property.test_bytes_value_serializes", test_bytes_value_serializes),
             ("property.lwc_box_size_52_and_double_read", test_lwc_box_size_52_and_double_read),
             ("property.tag_extension_external_objects", test_property_tag_extension_external_objects),
+            ("property.array_of_bools_inline_bytes", test_array_of_bools_consumes_one_byte_per_element),
         ]
     )
 
