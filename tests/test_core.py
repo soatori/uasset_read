@@ -390,6 +390,33 @@ def test_property_bag_normalization_is_bounded_lossless():
         # IsValid is a 4-byte UBOOL (Archive.h); float Box branch names the field bIsValid.
         assert out.fields["bIsValid"] is True
 
+    def test_property_tag_extension_external_objects():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.constants import PROP_EXT_HAS_EXTERNAL_OBJECTS
+        from uasset_read.serializers.property_tags import read_property_tag
+        assert PROP_EXT_HAS_EXTERNAL_OBJECTS == 0x04
+        # Legacy header (routes via archive._file_version_ue5 < 1012):
+        # name FName + type FName + size i32 + array_index i32 + HasPropertyGuid u8=0 + ext u8 [+ payload]
+        names = ["None", "IntProperty"]
+
+        def legacy_tag(ext: bytes):
+            # Name uses index 1; index 0 would hit the "None" sentinel early-return.
+            return struct.pack("<ii", 1, 0) + struct.pack("<ii", 1, 0) + struct.pack("<ii", 4, 0) + b"\x00" + ext
+
+        arc = ByteArchive(legacy_tag(b"\x04\x07") + struct.pack("<i", 99))
+        arc._file_version_ue5 = 1011  # legacy routing (<1012) with the extension block on (>=1011)
+        arc._file_version_ue4 = 522
+        tag = read_property_tag(arc, names)
+        assert tag.value_start_offset == 27  # 8+8+4+4+1 header + 1 ext + 1 external-object slot
+        assert tag.flags == 0x04
+        assert arc.read_i32() == 99  # value stream starts right after the consumed slot
+        # and the 0x02|0x04 combined case: two control bytes + one external byte
+        arc2 = ByteArchive(legacy_tag(b"\x06\x00\x00\x07") + struct.pack("<i", 99))
+        arc2._file_version_ue5 = 1011
+        arc2._file_version_ue4 = 522
+        assert read_property_tag(arc2, names).value_start_offset == 29
+
     _run_cases(
         [
             ("property.test_empty_list_returns_empty_dict", test_empty_list_returns_empty_dict),
@@ -398,6 +425,7 @@ def test_property_bag_normalization_is_bounded_lossless():
             ("property.test_struct_property_normalizes", test_struct_property_normalizes),
             ("property.test_bytes_value_serializes", test_bytes_value_serializes),
             ("property.lwc_box_size_52_and_double_read", test_lwc_box_size_52_and_double_read),
+            ("property.tag_extension_external_objects", test_property_tag_extension_external_objects),
         ]
     )
 

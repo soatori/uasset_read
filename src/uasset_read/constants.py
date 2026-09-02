@@ -177,6 +177,7 @@ MAX_PROPERTY_TYPE_NODES = 50  # Max nodes in _read_property_type_name
 # ============================================================================
 
 PROP_EXT_SERIALIZE_CONTROL = 0x02  # SerializeControl bit in property extensions
+PROP_EXT_HAS_EXTERNAL_OBJECTS = 0x04  # EPropertyTagExtension::HasExternalsObjects (PropertyTag.cpp:44-53)
 
 # ============================================================================
 # UE5 version constants (EUnrealEngineObjectUE5Version)

@@ -39,6 +39,7 @@ class PropertyTag:
     bool_val: int = 0  # BoolProperty value (BoolTrue flag)
     override_operation: int | None = None  # EOverriddenPropertyOperation (u8)
     experimental_overridable_logic: int | None = None  # bExperimentalOverridableLogic (u8)
+    external_objects_byte: int | None = None  # HasExternalsObjects extension slot (u8)
     serialize_type: str = "Property"  # Property / Skipped / BinaryOrNative
     type_name: PropertyTypeName | None = None  # Recursive FPropertyTypeName
     tag_data: Any | None = None  # PropertyType from mapping system
