@@ -1373,9 +1373,9 @@ def test_handler_registry_supports_enriches_and_isolates():
             result = _read_string_table(archive, "export:0", diags, dev_notes)
             return result, diags
 
-        # UE layout: namespace (FString) + count + key (cstring) + value (FString).
+        # UE layout: namespace (FString) + count + key (FString) + value (FString).
         blob = (
-            fstring("MyNS") + struct.pack("<i", 2) + cstring("K1") + fstring("Hello") + cstring("K2") + fstring("World")
+            fstring("MyNS") + struct.pack("<i", 2) + fstring("K1") + fstring("Hello") + fstring("K2") + fstring("World")
         )
         result, diags = read_table(blob, dev_notes=False)
         assert result["namespace"] == "MyNS"
@@ -1385,7 +1385,7 @@ def test_handler_registry_supports_enriches_and_isolates():
 
         # DevNotes variant (StringTableCore.cpp writes a third string per
         # entry for editor-saved packages with the AddDevNotesToFText version).
-        blob_dev = fstring("NS") + struct.pack("<i", 1) + cstring("A") + fstring("V") + fstring("notes")
+        blob_dev = fstring("NS") + struct.pack("<i", 1) + fstring("A") + fstring("V") + fstring("notes")
         result, diags = read_table(blob_dev, dev_notes=True)
         assert result["entries"] == [{"key": "A", "value": "V"}]
         assert result["complete"] and not diags

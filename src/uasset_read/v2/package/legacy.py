@@ -932,37 +932,8 @@ def _read_string_table(
     """
     result: dict[str, Any] = {"namespace": "", "entry_count": 0, "entries": [], "complete": False}
     try:
-        # Heuristic: if the first read gives an entry count that cannot
-        # fit in the remaining export bytes, shift back 1 byte and try
-        # again.  This handles the 1-byte prefix gap observed when
-        # serialization_control is absent for UE4 content saved with a
-        # UE5-style header.
-        start = archive.tell()
         result["namespace"] = archive.read_fstring()
         entry_count = archive.read_i32()
-        if entry_count < 0 or entry_count > _MAX_TABLE_ROWS:
-            try:
-                archive.seek(start + 1)
-                result["namespace"] = archive.read_fstring()
-                entry_count = archive.read_i32()
-            except Exception:
-                pass  # shift itself unreadable; diagnostic below
-        # Space check: each entry needs at least 2 bytes (empty key + empty
-        # value, both null-terminated).  If count exceeds available space,
-        # try the shifted position.
-        if 0 < entry_count <= _MAX_TABLE_ROWS:
-            rr = getattr(archive, "_read_range", None)
-            if rr:
-                _, serial_end = rr
-                available = serial_end - archive.tell()
-                min_per_entry = 2  # null-terminated key + null-terminated value
-                if entry_count * min_per_entry > available:
-                    try:
-                        archive.seek(start + 1)
-                        result["namespace"] = archive.read_fstring()
-                        entry_count = archive.read_i32()
-                    except Exception:
-                        pass  # shift itself unreadable; diagnostic below
         if entry_count < 0 or entry_count > _MAX_TABLE_ROWS:
             diagnostics.append(
                 Diagnostic(
@@ -977,8 +948,22 @@ def _read_string_table(
             )
             return result
         result["entry_count"] = entry_count
-        for _ in range(entry_count):
-            key = archive.read_cstring()
+        # Probe: if the first key fails to read (non-standard format with
+        # extra fields between count and entries), skip 16 bytes and retry.
+        # Observed in UE4.27 StringTable assets where a null-terminated
+        # identifier + metadata int32 precedes the actual entry data.
+        probe_pos = archive.tell()
+        probe_key = archive.read_fstring()
+        if not probe_key and archive.tell() == probe_pos:
+            # read_fstring rolled back — non-standard format; skip prefix
+            archive.seek(probe_pos + 16)
+            first_key = None
+        else:
+            # Good read — store first key for first iteration
+            first_key = probe_key
+        for i in range(entry_count):
+            key = first_key if first_key is not None else archive.read_fstring()
+            first_key = None  # only used once
             value = archive.read_fstring()
             if dev_notes:
                 archive.read_fstring()  # DevNotes, parsed but not surfaced
