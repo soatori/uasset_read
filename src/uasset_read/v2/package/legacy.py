@@ -687,6 +687,36 @@ class LegacyPackageReader:
                             archive, obj.id, diagnostics, _string_table_has_dev_notes(summary)
                         )
                     }
+                elif (
+                    overrun <= 0
+                    and cn not in _TABLE_CLASSES
+                    and cn != "StringTable"
+                    and archive.tell() < serial_end
+                ):
+                    # Properties ended early but the export still has bytes: a
+                    # class raw trailer (e.g. UPhysicsAsset::Serialize writes
+                    # CollisionDisableTable after the tagged properties) we do
+                    # not decode yet. Preserve them and say so — never silently
+                    # skip and claim coverage (#638). Exports may also carry a
+                    # short all-zero alignment pad at their end; that is not a
+                    # trailer worth reporting.
+                    remaining = serial_end - archive.tell()
+                    padded = remaining <= 16 and not any(archive.read(remaining))
+                    if not padded:
+                        diagnostics.append(
+                            Diagnostic(
+                                severity="warning",
+                                code="EXPORT_TRAILING_BYTES_UNCONSUMED",
+                                message=(
+                                    f"Export {i} ({obj.name}) leaves {remaining} undecoded "
+                                    f"bytes after the tagged properties (class {cn})"
+                                ),
+                                stage="objects.export",
+                                object_id=obj.id,
+                                effect="semantic_loss",
+                                recoverable=True,
+                            )
+                        )
                 if overrun > 0:
                     obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
                     diagnostics.append(
@@ -859,10 +889,12 @@ def _read_table_rows(
 # Engine/Source/Runtime/Engine/Private/Internationalization/StringTable.cpp
 # UStringTable::Serialize (Super::Serialize then StringTable->Serialize(Ar)).
 # Layout: FString Namespace, int32 NumEntries, then NumEntries x
-# (FString Key, FString SourceString[, FString DevNotes]). DevNotes is
-# written only when the package's FFortniteMainBranchObjectVersion is
-# >= AddDevNotesToFText (260) and editor-only data is not filtered —
-# trigger evaluated per package in _string_table_has_dev_notes. The
+# (FString Key, FString SourceString[, FString DevNotes]). On save the
+# editor writes DevNotes when not cooking and editor-only data is not
+# filtered (StringTableCore.cpp, no version check at write time); on
+# load they are read only when FFortniteMainBranchObjectVersion >=
+# AddDevNotesToFText (260) and editor-only data is not filtered — that
+# read gate is evaluated per package in _string_table_has_dev_notes. The
 # trailing key->(FName,FString) metadata map is not parsed here.
 # Corroborated (not proof): UAssetAPI StringTableExport.Read,
 # CUE4Parse FStringTable ctor.
