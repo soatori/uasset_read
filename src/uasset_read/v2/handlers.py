@@ -14,6 +14,18 @@ from .diagnostics import Diagnostic
 from .object_model import ObjectRecord, CoverageEntry
 from .version import VersionContext
 
+_SLUG_RE = re.compile(r"[^A-Za-z0-9_.-]+")
+
+
+def _ascii_slug(name: str) -> str:
+    """ASCII slug preserving case; invalid runs collapse to '_'"""
+    slug = _SLUG_RE.sub("_", name or "").strip("_")
+    if not slug:
+        return "unnamed"
+    if not slug[0].isalpha():
+        slug = "x" + slug
+    return slug
+
 
 class AssetHandler(Protocol):
     """Domain handler that enriches an object with semantic data.
@@ -884,6 +896,169 @@ register_handler(SkeletonHandler())
 register_handler(MeshHandler())
 
 
+def _extract_baked_state_machines(obj: ObjectRecord) -> list[dict[str, Any]]:
+    """Extract baked state machines from AnimBlueprintGeneratedClass properties.
+
+    Parses the BakedStateMachines tagged property into a list of state machine dicts.
+    Each machine contains its name, initial state, states, and inter-state transitions.
+    States carry exit transitions and evidence (node indices, notify indices).
+    """
+    props = obj.properties or {}
+    raw = props.get("BakedStateMachines")
+    if raw is None:
+        return []
+
+    # Unwrap tagged value envelope
+    if isinstance(raw, dict) and raw.get("kind") == "value":
+        raw = raw.get("value")
+    if not isinstance(raw, list):
+        return []
+
+    machines: list[dict[str, Any]] = []
+    machine_slug_counts: dict[str, int] = {}
+
+    for m in raw:
+        fields = m.get("fields") if isinstance(m, dict) else None
+        if not isinstance(fields, dict):
+            continue
+
+        name = fields.get("MachineName", "")
+        initial = fields.get("InitialState", 0)
+
+        # Machine ID with deduplication
+        sm_slug = _ascii_slug(name)
+        seen = machine_slug_counts.get(sm_slug, 0)
+        machine_slug_counts[sm_slug] = seen + 1
+        if seen:
+            sm_slug = f"{sm_slug}_{seen}"
+        sm_id = f"animblueprint://state_machine/{sm_slug}"
+
+        # States
+        states_raw = fields.get("States")
+        states_val = states_raw.get("value") if isinstance(states_raw, dict) else states_raw
+        states: list[dict[str, Any]] = []
+        if isinstance(states_val, list):
+            for s in states_val:
+                sf = s.get("fields") if isinstance(s, dict) else None
+                if not isinstance(sf, dict):
+                    continue
+                state_name = sf.get("StateName", "")
+                state_slug = _ascii_slug(state_name)
+                sid = f"animblueprint://state_machine/{sm_slug}/state/{state_slug}"
+
+                state: dict[str, Any] = {
+                    "id": sid,
+                    "name": state_name,
+                    "state_root_node_index": sf.get("StateRootNodeIndex", -1),
+                }
+                if sf.get("bIsAConduit"):
+                    state["is_conduit"] = True
+                if sf.get("bAlwaysResetOnEntry"):
+                    state["always_reset_on_entry"] = True
+
+                player = sf.get("PlayerNodeIndices")
+                player_val = player.get("value") if isinstance(player, dict) else player
+                if isinstance(player_val, list):
+                    state["player_node_indices"] = [i for i in player_val if isinstance(i, int)]
+
+                layer = sf.get("LayerNodeIndices")
+                layer_val = layer.get("value") if isinstance(layer, dict) else layer
+                if isinstance(layer_val, list):
+                    state["layer_node_indices"] = [i for i in layer_val if isinstance(i, int)]
+
+                # Exit transitions
+                trans_raw = sf.get("Transitions")
+                trans_val = trans_raw.get("value") if isinstance(trans_raw, dict) else trans_raw
+                exit_trans: list[dict[str, Any]] = []
+                if isinstance(trans_val, list):
+                    for t in trans_val:
+                        tf = t.get("fields") if isinstance(t, dict) else None
+                        if not isinstance(tf, dict):
+                            continue
+                        td: dict[str, Any] = {}
+                        ti = tf.get("TransitionIndex", -1)
+                        if ti >= 0:
+                            td["transition_index"] = ti
+                        rt = tf.get("AutomaticRuleTriggerTime", 0.0)
+                        if isinstance(rt, (int, float)) and rt != 0.0:
+                            td["automatic_rule_trigger_time"] = float(rt)
+                        if td:
+                            td["evidence"] = {
+                                "can_take_delegate_index": tf.get("CanTakeDelegateIndex", -1),
+                                "custom_result_node_index": tf.get("CustomResultNodeIndex", -1),
+                                "b_desired_transition_return_value": tf.get("bDesiredTransitionReturnValue", True),
+                                "b_automatic_remaining_time_rule": tf.get("bAutomaticRemainingTimeRule", False),
+                                "b_only_evaluate_when_active": tf.get("bOnlyEvaluateWhenActive", False),
+                            }
+                            exit_trans.append(td)
+                if exit_trans:
+                    state["exit_transitions"] = exit_trans
+
+                # Evidence
+                state["evidence"] = {
+                    "state_root_node_index": sf.get("StateRootNodeIndex", -1),
+                    "entry_rule_node_index": sf.get("EntryRuleNodeIndex", -1),
+                    "start_notify": sf.get("StartNotify", -1),
+                    "end_notify": sf.get("EndNotify", -1),
+                    "fully_blended_notify": sf.get("FullyBlendedNotify", -1),
+                }
+                states.append(state)
+
+        # Inter-state transitions
+        trans_raw = fields.get("Transitions")
+        trans_val = trans_raw.get("value") if isinstance(trans_raw, dict) else trans_raw
+        transitions: list[dict[str, Any]] = []
+        if isinstance(trans_val, list):
+            for t in trans_val:
+                tf = t.get("fields") if isinstance(t, dict) else None
+                if not isinstance(tf, dict):
+                    continue
+                prev = tf.get("PreviousState", -1)
+                nxt = tf.get("NextState", -1)
+                if prev < 0 or nxt < 0:
+                    continue
+                td: dict[str, Any] = {
+                    "previous_state": prev,
+                    "next_state": nxt,
+                }
+                cd = tf.get("CrossfadeDuration", 0.0)
+                if isinstance(cd, (int, float)) and cd != 0.0:
+                    td["crossfade_duration"] = float(cd)
+                bm = tf.get("BlendMode")
+                if bm is not None:
+                    td["blend_mode"] = str(bm)
+                lt = tf.get("LogicType")
+                if lt is not None:
+                    td["logic_type"] = str(lt)
+                evidence: dict[str, Any] = {}
+                mr = tf.get("MinTimeBeforeReentry", 0.0)
+                if isinstance(mr, (int, float)) and mr != 0.0:
+                    evidence["min_time_before_reentry"] = float(mr)
+                sn = tf.get("StartNotify", -1)
+                if isinstance(sn, int) and sn >= 0:
+                    evidence["start_notify"] = sn
+                en = tf.get("EndNotify", -1)
+                if isinstance(en, int) and en >= 0:
+                    evidence["end_notify"] = en
+                it = tf.get("InterruptNotify", -1)
+                if isinstance(it, int) and it >= 0:
+                    evidence["interrupt_notify"] = it
+                if evidence:
+                    td["evidence"] = evidence
+                transitions.append(td)
+
+        sm: dict[str, Any] = {
+            "id": sm_id,
+            "name": name,
+            "initial_state_index": initial,
+            "states": states,
+            "transitions": transitions,
+        }
+        machines.append(sm)
+
+    return machines
+
+
 class BlueprintFamilyHandler:
     """Enrich Blueprint-family objects (Blueprint or AnimBlueprint variants).
 
@@ -994,6 +1169,27 @@ class BlueprintFamilyHandler:
                         detail="no graph objects found",
                     )
                 )
+
+            # --- Baked state machines (AnimBlueprint only) ---
+            if self._kind == "anim_blueprint":
+                baked_sm = _extract_baked_state_machines(obj)
+                if baked_sm:
+                    result["state_machines"] = baked_sm
+                    coverage.append(
+                        CoverageEntry(
+                            feature=f"{self._feature}.state_machines",
+                            status="present",
+                            detail=f"{len(baked_sm)} state machines",
+                        )
+                    )
+                else:
+                    coverage.append(
+                        CoverageEntry(
+                            feature=f"{self._feature}.state_machines",
+                            status="missing",
+                            detail="BakedStateMachines not in property bag (parse failure or absent)",
+                        )
+                    )
 
             obj.coverage.extend(coverage)
             return result
