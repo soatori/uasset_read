@@ -354,7 +354,7 @@ CPF_ExposeOnSpawn = 0x0001000000000000
 # =====================================================================# ============================================================================
 
 FIXED_UNVERSIONED_SIZES: dict[str, int] = {
-    "BoolProperty": 4,
+    "BoolProperty": 1,  # PropertyBool.cpp SerializeItem: unversioned bool is one uint8
     "IntProperty": 4,
     "UInt32Property": 4,
     "FloatProperty": 4,

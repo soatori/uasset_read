@@ -410,6 +410,16 @@ def test_package_document_preserves_every_export_and_role():
         ids2 = [o.id for o in doc2.objects]
         assert ids1 == ids2
 
+    def test_unversioned_bool_one_byte_enum_fname():
+        from types import SimpleNamespace
+
+        from uasset_read.constants import FIXED_UNVERSIONED_SIZES
+        from uasset_read.parsers.property_parser import _fixed_unversioned_size
+        assert FIXED_UNVERSIONED_SIZES["BoolProperty"] == 1
+        # Enum with byte inner must report FName width 8, not the inner's 1
+        assert _fixed_unversioned_size(SimpleNamespace(type="EnumProperty", inner_type="ByteProperty")) == 8
+        assert _fixed_unversioned_size(SimpleNamespace(type="EnumProperty", inner_type=None)) == 8
+
     def test_asset_registry_dependency_gate_uses_521():
         from uasset_read import constants
         assert constants.UE4_ASSETREGISTRY_DEPENDENCYFLAGS == 521
@@ -423,6 +433,7 @@ def test_package_document_preserves_every_export_and_role():
             ("document.test_ids_are_export_prefix", test_ids_are_export_prefix),
             ("document.test_stable_id_across_calls", test_stable_id_across_calls),
             ("version.test_asset_registry_dependency_gate_uses_521", test_asset_registry_dependency_gate_uses_521),
+            ("property.test_unversioned_bool_one_byte_enum_fname", test_unversioned_bool_one_byte_enum_fname),
         ]
     )
 
