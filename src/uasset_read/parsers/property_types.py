@@ -637,13 +637,17 @@ def parse_array_property(
     # For StructProperty array elements, UE uses complete PropertyTag serialization
     # For other types, serialized natively by type (each element size determined by type)
     inner_type_struct = getattr(tag, "inner_type_struct", None) if inner_type == "StructProperty" else None
+    legacy_inner_tag = None
+    if inner_type == "StructProperty" and inner_type_struct is None:
+        # PropertyArray.cpp: legacy struct arrays serialize ONE inner FPropertyTag
+        # after the count; each element is then the struct's tagged-field stream
+        # (None-terminated), NOT a per-element tag (the old per-element read
+        # flattened multi-field elements).
+        legacy_inner_tag = read_property_tag(archive, name_map)
     for i in range(count):
-        if inner_type == "StructProperty" and inner_type_struct is None:
-            # Legacy format (UE5 < 1012): parent ArrayProperty tag only stores
-            # inner_type name, not the nested struct type.  Each element in the
-            # archive carries its own PropertyTag with the correct struct_type.
-            # Read it from the archive so parse_struct_property gets the real name.
-            inner_tag = read_property_tag(archive, name_map)
+        if legacy_inner_tag is not None:
+            inner_tag = PropertyTag(name=f"{tag.name}[{i}]", type=legacy_inner_tag.type, size=0)
+            inner_tag.struct_type = getattr(legacy_inner_tag, "struct_type", None)
         else:
             # Create inner tag, size=0 means the parse function decides how many bytes to read
             inner_tag = PropertyTag(

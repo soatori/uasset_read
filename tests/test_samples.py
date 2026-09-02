@@ -54,7 +54,7 @@ CAPABILITIES = (
         "complete",
     ),
     ("ALS_Concrete_Step_01_SoundWave.uasset", "SoundWave", {"kind": "sound", "sound_type": "SoundWave"}, "complete"),
-    ("ALS_Mannequin_Skeleton.uasset", "Skeleton", {"kind": "skeleton"}, "complete"),
+    ("ALS_Mannequin_Skeleton.uasset", "Skeleton", {"kind": "skeleton"}, "partial"),
     (
         "StarterContent_SM_Chair.uasset",
         "StaticMesh",
@@ -271,11 +271,14 @@ def test_real_sample_proves_claimed_capability(
         assert obj.semantic["row_count"] >= 0
     elif class_name == "Skeleton":
         assert obj.semantic["bone_count"] == len(obj.semantic["bones"]) > 0
-        # ALS_Mannequin_Skeleton carries real BoneTree property data; decoded
-        # names must win over the NameMap regex name-guess (#630).
-        assert obj.semantic["bone_source"] == "bone_tree"
+        # ALS_Mannequin_Skeleton's BoneTree is a UE4-era struct array: ONE inner
+        # FPropertyTag then per-element tagged streams (PropertyArray.cpp). Its
+        # FBoneNode element streams carry only the retargeting mode; the actual
+        # bone names live outside the property region (native payload), so the
+        # NameMap regex guess is the honest source and stays summary-tier (#630).
+        assert obj.semantic["bone_source"] == "name_guess"
         names = {b["name"] for b in obj.semantic["bones"]}
-        assert "UpperArm_L" in names, "BoneTree names missing — regex fallback used?"
+        assert "spine_01" in names and "clavicle_l" in names
     elif class_name == "StaticMesh":
         assert obj.semantic["lod_count"] == len(obj.semantic["lods"])
     elif class_name in {"BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}:

@@ -430,6 +430,35 @@ def test_property_bag_normalization_is_bounded_lossless():
         assert out == [True, False, True]
         assert arc.tell() == 4 + 3
 
+    def test_legacy_struct_array_reads_single_inner_tag():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types import parse_array_property
+        # The inner struct is one of the tagged-fallback structs so a size-0 inner
+        # tag parses as a tagged-field stream instead of returning opaque (a plain
+        # fast-path name like "Vector" cannot exercise the tagged element loop).
+        names = ["None", "StructProperty", "IntProperty", "BlendSample", "HP"]
+
+        def legacy_tag(name_i, type_i, size, extra=b""):
+            # name + type FNames, size + array_index int32s, [extras], HasPropertyGuid=0
+            return struct.pack("<ii", name_i, 0) + struct.pack("<ii", type_i, 0) + struct.pack("<ii", size, 0) + extra + b"\x00"
+
+        inner = legacy_tag(4, 1, 0, struct.pack("<ii", 3, 0) + bytes(16))  # StructProperty/BlendSample + StructGuid
+        field = legacy_tag(4, 2, 4) + struct.pack("<i", 111) + struct.pack("<ii", 0, 0)  # HP=111 then None tag
+        field2 = legacy_tag(4, 2, 4) + struct.pack("<i", 222) + struct.pack("<ii", 0, 0)
+        data = struct.pack("<i", 2) + inner + field + field2
+        arc = ByteArchive(data)
+        arc._file_version_ue5 = 500  # legacy routing (<1012); no extension byte in tags
+        arc._file_version_ue4 = 522
+        tag = PropertyTag(name="A", type="ArrayProperty", size=len(data))
+        tag.inner_type = "StructProperty"
+        tag.inner_type_struct = None
+        out = parse_array_property(tag, arc, names, [], None, 0)
+        assert len(out) == 2
+        assert out[0].fields["HP"] == 111 and out[1].fields["HP"] == 222
+        assert arc.tell() == len(data)
+
     _run_cases(
         [
             ("property.test_empty_list_returns_empty_dict", test_empty_list_returns_empty_dict),
@@ -440,6 +469,7 @@ def test_property_bag_normalization_is_bounded_lossless():
             ("property.lwc_box_size_52_and_double_read", test_lwc_box_size_52_and_double_read),
             ("property.tag_extension_external_objects", test_property_tag_extension_external_objects),
             ("property.array_of_bools_inline_bytes", test_array_of_bools_consumes_one_byte_per_element),
+            ("property.legacy_struct_array_single_inner_tag", test_legacy_struct_array_reads_single_inner_tag),
         ]
     )
 
