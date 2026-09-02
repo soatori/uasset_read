@@ -1352,6 +1352,51 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert "InlineMulticastDelegateProperty" not in src
         assert src.count("MulticastInlineDelegateProperty") >= 3
 
+    def test_ex_text_const_operand_layouts():
+        """K1/K2: UE5 literal-type numbering; operands are nested string expressions."""
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.kismet.expressions.string_consts import FScriptText
+        from uasset_read.kismet.tokens import EBlueprintTextLiteralType as T
+
+        assert T.LocalizedTextWithNotes == 2 and T.InvariantText == 3
+        assert T.LiteralString == 4 and T.StringTableEntry == 5
+
+        class _KismetLike:  # duck-typed operand reader over bounded bytes
+            def __init__(self, data):
+                self._arc = ByteArchive(data)
+
+            def read_u8(self):
+                return self._arc.read_u8()
+
+            def read_i32(self):
+                return self._arc.read_i32()
+
+            def xfer_ansi_string(self):
+                out = bytearray()
+                while (b := self._arc.read(1)) != b"\x00":
+                    out += b
+                return out.decode("utf-8")
+
+            def xfer_unicode_string(self):
+                out = bytearray()
+                while (pair := self._arc.read(2)) != b"\x00\x00":
+                    out += pair
+                return out.decode("utf-16-le")
+
+        def ansi(s):
+            return bytes([0x1F]) + s.encode("utf-8") + b"\x00"
+
+        data = bytes([1]) + ansi("Hello") + ansi("5A1B") + ansi("NS")  # source,key,namespace
+        text = FScriptText.from_archive(_KismetLike(data), [])
+        assert text.SourceString == "Hello" and text.KeyString == "5A1B" and text.Namespace == "NS"
+        uni = bytes([1]) + bytes([0x34]) + "Héy".encode("utf-16-le") + b"\x00\x00" + ansi("K") + ansi("N")
+        assert FScriptText.from_archive(_KismetLike(uni), []).SourceString == "Héy"
+        ste = bytes([5]) + struct.pack("<i", -3) + ansi("MyTable") + ansi("Key42")
+        t3 = FScriptText.from_archive(_KismetLike(ste), [])
+        assert t3.TableIdString == "MyTable" and t3.KeyString == "Key42"
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -1392,6 +1437,7 @@ def test_handler_registry_supports_enriches_and_isolates():
                 "handler.test_native_fields_delegate_type_name",
                 test_native_fields_delegate_type_name,
             ),
+            ("handler.test_ex_text_const_operand_layouts", test_ex_text_const_operand_layouts),
         ]
     )
 
