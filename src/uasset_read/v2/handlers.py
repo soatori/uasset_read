@@ -941,16 +941,33 @@ class BlueprintFamilyHandler:
                     obj, entry, graphs, fg_ids, package_data[0] if package_data else None
                 )
                 result["variables"] = _extract_variables(obj)
+                result["components"] = _extract_components(obj, all_objects, package_data)
                 detail = f"{len(graphs)} graphs, {sum(g['node_count'] for g in graphs)} nodes"
                 if truncated:
                     detail += " (truncated)"
                 obj.coverage.append(
                     CoverageEntry(
                         feature=f"{self._feature}.graph",
-                        status="truncated" if truncated else "present",
+                        status="partial" if truncated else "present",
                         detail=detail,
                     )
                 )
+                if result["variables"]:
+                    obj.coverage.append(
+                        CoverageEntry(
+                            feature=f"{self._feature}.variables",
+                            status="present",
+                            detail=f"{len(result['variables'])} variables",
+                        )
+                    )
+                if result["components"]:
+                    obj.coverage.append(
+                        CoverageEntry(
+                            feature=f"{self._feature}.components",
+                            status="present",
+                            detail=f"{len(result['components'])} components",
+                        )
+                    )
             else:
                 obj.coverage.append(
                     CoverageEntry(
@@ -1063,6 +1080,77 @@ def _extract_variables(obj: ObjectRecord) -> list[dict[str, Any]]:
                 "type": "opaque",
             }
         )
+    return out
+
+
+_BLUEPRINT_FAMILY = frozenset(
+    {"Blueprint", "AnimBlueprint", "BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}
+)
+
+
+def _pair_key(name: str) -> str:
+    """Key joining a Blueprint asset export with its GeneratedClass export."""
+    return name[:-2] if name.endswith("_C") else name
+
+
+def _family_root_key(
+    record: ObjectRecord | None, all_objects: list[ObjectRecord]
+) -> str | None:
+    """Pair key of the Blueprint-family root of record's outer chain."""
+    by_id = {o.id: o for o in all_objects}
+    cur = record
+    for _ in range(8):
+        if cur is None:
+            return None
+        if (cur.class_name or "") in _BLUEPRINT_FAMILY:
+            return _pair_key(cur.name)
+        outer = cur.outer_ref
+        if outer is None or outer.table != "export":
+            return None
+        cur = by_id.get(f"export:{outer.index}")
+    return None
+
+
+def _extract_components(
+    obj: ObjectRecord, all_objects: list[ObjectRecord], package_data: Any
+) -> list[dict[str, Any]]:
+    """SCS component tree from SCS_Node exports (UE: SimpleConstructionScript.cpp)."""
+    scope = _family_root_key(obj, all_objects)
+    if scope is None:
+        return []
+    nodes = [
+        o
+        for o in all_objects
+        if o.class_name == "SCS_Node"
+        and o.properties
+        and _family_root_key(o, all_objects) == scope
+    ]
+    export_map = package_data[0] if package_data else None
+    out: list[dict[str, Any]] = []
+    for node in nodes:
+        props = node.properties or {}
+        comp = props.get("ComponentTemplate", {}).get("value")
+        cclass = props.get("ComponentClass", {}).get("value")
+        name = ""
+        if isinstance(comp, dict):
+            name = comp.get("object_name") or comp.get("name") or node.name
+        elif isinstance(comp, int) and comp > 0 and export_map is not None:
+            target = export_map[comp - 1] if comp - 1 < len(export_map) else None
+            name = getattr(target, "object_name", None) or node.name
+        else:
+            name = node.name
+        ctype = cclass.get("object_name", "") if isinstance(cclass, dict) else ""
+        parent: str | None = None
+        this_idx = node.table_index
+        for other in nodes:
+            children = (other.properties or {}).get("ChildNodes", {}).get("value")
+            if isinstance(children, list) and any(
+                isinstance(c, int) and c > 0 and c - 1 == this_idx for c in children
+            ):
+                parent = other.id
+                break
+        out.append({"id": node.id, "name": name, "type": ctype, "parent": parent})
+    out.sort(key=lambda c: c["id"])
     return out
 
 

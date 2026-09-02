@@ -22,6 +22,7 @@ def _decode(sample: str, object_ids: tuple[str, ...]):
 def test_stackobot_blueprint_asset_export_gets_real_graphs():
     dec = _decode("StackOBot_BP_Drone.uasset", ("export:0",))
     bp = next(o for o in dec.objects if o.id == "export:0")
+    assert bp.semantic is not None
     assert bp.status.semantic == "complete", bp.status
     graphs = {g["name"]: g for g in bp.semantic["graphs"]}
     assert set(graphs) == {"EventGraph", "UserConstructionScript"}
@@ -40,6 +41,53 @@ def test_stackobot_blueprint_asset_export_gets_real_graphs():
 def test_stackobot_generated_class_export_stays_summary_partial():
     dec = _decode("StackOBot_BP_Drone.uasset", ("export:1",))
     bpgc = next(o for o in dec.objects if o.id == "export:1")
+    assert bpgc.semantic is not None
     assert bpgc.status.semantic == "partial"
     assert "graphs" not in bpgc.semantic
     assert bpgc.semantic["kind"] == "blueprint"
+
+
+def test_combat_character_declaration_and_function_kinds():
+    dec = _decode("BP_CombatCharacter.uasset", ("export:1",))
+    bp = next(o for o in dec.objects if o.id == "export:1")
+    assert bp.semantic is not None
+    decl = bp.semantic["declaration"]
+    assert decl["parent_class"] == "Character"
+    fns = {f["name"]: f["id"] for f in decl["functions"]}
+    assert "Aim" in fns
+    assert "Move" in fns
+    by_name = {g["name"]: g for g in bp.semantic["graphs"]}
+    assert by_name["Aim"]["kind"] == "function"
+    assert by_name["Move"]["kind"] == "function"
+
+
+def test_combat_character_variables_names_and_guids():
+    dec = _decode("BP_CombatCharacter.uasset", ("export:1",))
+    bp = next(o for o in dec.objects if o.id == "export:1")
+    assert bp.semantic is not None
+    names = [v["name"] for v in bp.semantic["variables"]]
+    assert "Max HP" in names
+    assert len(bp.semantic["variables"]) == 29
+    for v in bp.semantic["variables"]:
+        assert v["type"] == "opaque"
+        assert len(v["guid"]) == 32
+        assert all(ch in "0123456789abcdef" for ch in v["guid"])
+    feature_names = [c.feature for c in bp.coverage]
+    assert "blueprint.variables" in feature_names
+
+
+def test_combat_character_components_tree():
+    # Full-package decode: SCS_Node properties are parsed only when the parse
+    # set covers their exports (object_ids narrowing would skip them).
+    dec = parse_package_document(SAMPLES / "BP_CombatCharacter.uasset", depth="decode")
+    bp = next(o for o in dec.objects if o.id == "export:1")
+    assert bp.semantic is not None
+    comps = {c["name"]: c for c in bp.semantic["components"]}
+    assert "Life Bar_GEN_VARIABLE" in comps
+    assert comps["Life Bar_GEN_VARIABLE"]["type"] == "WidgetComponent"
+    assert comps["Camera_GEN_VARIABLE"]["type"] == "CameraComponent"
+    # one of the components nests under another (ChildNodes linkage)
+    parents = [c["parent"] for c in bp.semantic["components"] if c["parent"] is not None]
+    assert parents, "expected at least one child component"
+    ids = {c["id"] for c in bp.semantic["components"]}
+    assert all(p in ids for p in parents)
