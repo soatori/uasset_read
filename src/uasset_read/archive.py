@@ -506,6 +506,27 @@ class FArchive:
         """Read 64-bit double (supports byte swapping)."""
         return self._read_swapped("d", 8, "f64", key)
 
+    def read_cstring(self, key: str = "") -> str:
+        """Read null-terminated ANSI string (no length prefix).
+
+        Reads bytes until a null terminator or max length is reached.
+        Used for FTextKey in StringTable packages where keys are serialized
+        as raw null-terminated strings, not length-prefixed FStrings.
+        """
+        start = self.tell()
+        chunks: list[bytes] = []
+        total = 0
+        while total < MAX_FSTRING_LENGTH:
+            b = self.read(1)
+            if not b or b == b"\x00":
+                break
+            chunks.append(b)
+            total += 1
+        result = b"".join(chunks).decode("utf-8", errors="replace")
+        if key:
+            self._record_hex_view(key, "cstring", result, start, self.tell())
+        return result
+
     def _is_likely_alignment_padding(self, data_start_pos: int, byte_count: int) -> bool:
         """Determine whether all-zero data is alignment padding rather than real corruption (#369).
 
@@ -837,7 +858,8 @@ class FArchive:
         if 0 <= index < len(name_map):
             base_name = name_map[index]
             if number > 0:
-                result = f"{base_name}_{number}"
+                # NAME_INTERNAL_TO_EXTERNAL: on-disk Number is internal; display is Number-1 (LinkerLoad.h).
+                result = f"{base_name}_{number - 1}"
             else:
                 result = base_name
         else:

@@ -5,10 +5,13 @@ from __future__ import annotations
 from typing import Any
 
 _REPLICATION_CONDITIONS = {
-    0: "always",
+    0: "none",
     1: "initial_only",
-    2: "initial_or_ongoing",
-    3: "owner_only",
+    2: "owner_only",
+    3: "skip_owner",
+    4: "replay_only",
+    5: "temporal",
+    7: "initial_or_owner",
 }
 
 _PRIMITIVES = {

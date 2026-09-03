@@ -56,7 +56,7 @@ CAPABILITIES = (
         "complete",
     ),
     ("ALS_Concrete_Step_01_SoundWave.uasset", "SoundWave", {"kind": "sound", "sound_type": "SoundWave"}, "complete"),
-    ("ALS_Mannequin_Skeleton.uasset", "Skeleton", {"kind": "skeleton"}, "complete"),
+    ("ALS_Mannequin_Skeleton.uasset", "Skeleton", {"kind": "skeleton"}, "partial"),
     (
         "StarterContent_SM_Chair.uasset",
         "StaticMesh",
@@ -109,6 +109,18 @@ CAPABILITIES = (
         "NiagaraNodeStaticSwitch",
         {"kind": "niagara", "niagara_type": "NiagaraNodeStaticSwitch"},
         "partial",
+    ),
+    (
+        "ALSCommunity_Mannequin_PhysicsAsset.uasset",
+        "PhysicsAsset",
+        {"kind": "physics_asset", "body_count": 19, "constraint_count": 18},
+        "partial",  # summary tier: collision table/shapes not decoded (#619/#638)
+    ),
+    (
+        "Lyra_PM_Concrete.uasset",
+        "PhysicalMaterial",
+        {"kind": "physical_material", "surface_type": "EPhysicalSurface::SurfaceType2"},
+        "partial",  # float defaults omitted by the editor; SurfaceType is real data
     ),
 )
 
@@ -300,11 +312,14 @@ def test_real_sample_proves_claimed_capability(
         assert obj.semantic["row_count"] >= 0
     elif class_name == "Skeleton":
         assert obj.semantic["bone_count"] == len(obj.semantic["bones"]) > 0
-        # ALS_Mannequin_Skeleton carries real BoneTree property data; decoded
-        # names must win over the NameMap regex name-guess (#630).
-        assert obj.semantic["bone_source"] == "bone_tree"
+        # ALS_Mannequin_Skeleton's BoneTree is a UE4-era struct array: ONE inner
+        # FPropertyTag then per-element tagged streams (PropertyArray.cpp). Its
+        # FBoneNode element streams carry only the retargeting mode; the actual
+        # bone names live outside the property region (native payload), so the
+        # NameMap regex guess is the honest source and stays summary-tier (#630).
+        assert obj.semantic["bone_source"] == "name_guess"
         names = {b["name"] for b in obj.semantic["bones"]}
-        assert "UpperArm_L" in names, "BoneTree names missing — regex fallback used?"
+        assert "spine_01" in names and "clavicle_l" in names
     elif class_name == "StaticMesh":
         assert obj.semantic["lod_count"] == len(obj.semantic["lods"])
     elif class_name in {"BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}:
@@ -353,6 +368,26 @@ def test_real_sample_proves_claimed_capability(
     elif class_name == "SoundWave":
         handler_features = [c for c in obj.coverage if c.feature == "handler.SoundHandler"]
         assert len(handler_features) == 1, f"{sample}:{class_name}"
+    elif class_name == "PhysicsAsset":
+        # Instanced bodies are real package exports; raw CollisionDisableTable
+        # trailer stays a disclosed gap at the parse layer too (#638).
+        assert len(obj.semantic["bodies"]) == obj.semantic["body_count"] == 19, f"{sample}:{class_name}"
+        features = {c.feature: c.status for c in obj.coverage}
+        assert features["physics_asset.bodies"] == "present", f"{sample}:{class_name}"
+        assert features["physics_asset.collision_disable_table"] == "missing", f"{sample}:{class_name}"
+        assert any(d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" for d in doc.diagnostics), (
+            f"{sample}:{class_name} must disclose the undecoded raw trailer"
+        )
+    elif class_name == "PhysicalMaterial":
+        # Editor defaulted the four floats out of the tag stream: "missing"
+        # coverage is correct UE behavior, not a parser failure.
+        features = {c.feature: c.status for c in obj.coverage}
+        for key in ("friction", "static_friction", "restitution", "density"):
+            assert features[f"physical_material.{key}"] == "missing", f"{sample}:{class_name}"
+            assert f"physical_material.{key}" not in obj.semantic, f"{sample}:{class_name}"
+        assert not any(
+            d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id != "export:0" for d in doc.diagnostics
+        ), f"{sample}:{class_name} has no raw trailer by design (export:0 MetaData excluded)"
 
 
 @pytest.mark.parametrize("sample", [entry["name"] for entry in MANIFEST_SAMPLES])
@@ -693,6 +728,17 @@ def test_version_context_is_frozen_and_summary_derived():
     with pytest.raises(dataclasses.FrozenInstanceError):
         ctx.file_version_ue5 = 0
 
+    # UE5 floor is 1000 (ObjectVersion.h INITIAL_VERSION / FPackageFileVersion::ToValue)
+    from uasset_read.versioning import VersionContainer
+    from uasset_read.v2.version import VersionContext
+
+    assert VersionContainer(file_version_ue5=0).is_ue5 is False
+    assert VersionContainer(file_version_ue5=999).is_ue5 is False
+    assert VersionContainer(file_version_ue5=1000).is_ue5 is True
+    assert VersionContainer().is_ue5 is False  # default must not claim UE5
+    assert VersionContext(file_version_ue5=522).is_ue5 is False
+    assert VersionContext(file_version_ue5=1000).is_ue5 is True
+
 
 def test_blueprint_fixtures_carry_generated_and_cdo_relations():
     """Output Gate: blueprint packages expose generated-class and CDO edges."""
@@ -721,3 +767,15 @@ def test_blueprint_fixtures_carry_generated_and_cdo_relations():
         actual = {(r.kind, r.from_id, r.to_id) for r in doc.relations}
         for edge in edges:
             assert edge in actual, f"{sample}: missing {edge}"
+
+
+def test_blueprint_graph_decodes_without_parse_errors():
+    """G2 regression (2026-09-02 ue-source audit): editor FText Base carries gated DevNotes."""
+    from uasset_read.pipeline.core import parse_uasset
+
+    result = parse_uasset(str(SAMPLES / "BP_CombatCharacter.uasset"), force_full_parse=True)
+    graphs = getattr(result, "graphs", None) or []
+    nodes = [n for g in graphs for n in (getattr(g, "nodes", None) or [])]
+    bad = [n for n in nodes if isinstance(getattr(n, "node_data", None), dict) and n.node_data.get("_parse_error")]
+    assert len(nodes) == 370, f"expected 370 graph nodes across 4 graphs, got {len(nodes)}"
+    assert not bad, f"{len(bad)}/{len(nodes)} graph nodes failed to parse"

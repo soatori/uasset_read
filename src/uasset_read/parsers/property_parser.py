@@ -21,6 +21,7 @@ from uasset_read.exceptions import ParseError, ErrorContext
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
     PKG_UnversionedProperties,
+    PKG_FilterEditorOnly,
     UE5_PROPERTY_TAG_EXTENSION,
     FIXED_UNVERSIONED_SIZES,
     UE_NONE_SENTINEL,
@@ -194,36 +195,65 @@ def _get_parse_functions():
 # Positional args parse_property_value passes each handler, keyed by property
 # type; covers exactly the keys of _TYPE_HANDLER_MAP.  "soft_path_list"
 # resolves to summary._soft_object_path_list (UE5.7+ soft object path table).
-_PROPERTY_ARGS: dict[str, tuple[str, ...]] = {
-    t: ("tag", "archive")
-    for t in (
-        "BoolProperty", "IntProperty", "Int64Property", "Int16Property", "Int8Property",
-        "ByteProperty", "UInt16Property", "UInt32Property", "UInt64Property", "FloatProperty",
-        "DoubleProperty", "StrProperty", "ObjectProperty", "TextProperty", "Utf8StrProperty",
-        "WeakObjectProperty", "LazyObjectProperty", "ClassProperty", "AssetObjectProperty",
-        "AssetClassProperty", "InterfaceProperty", "VerseStringProperty", "VerseClassProperty",
-        "VerseFunctionProperty", "VerseDynamicProperty", "AnsiStrProperty", "GuidProperty",
-        "VerseCellProperty", "VerseValueProperty",
-    )
-} | {
-    t: ("tag", "archive", "name_map")
-    for t in (
-        "NameProperty", "DelegateProperty", "MulticastDelegateProperty",
-        "MulticastInlineDelegateProperty", "MulticastSparseDelegateProperty", "FieldPathProperty",
-    )
-} | {
-    t: ("tag", "archive", "name_map", "soft_path_list")
-    for t in ("SoftObjectProperty", "SoftClassProperty")
-} | {
-    t: ("tag", "archive", "name_map", "export_map", "summary", "depth")
-    for t in ("ArrayProperty", "StructProperty")
-} | {
-    t: ("tag", "archive", "name_map", "export_map", "summary")
-    for t in ("MapProperty", "SetProperty", "OptionalProperty")
-} | {
-    t: ("tag", "archive", "name_map", "summary")
-    for t in ("EnumProperty",)
-}
+_PROPERTY_ARGS: dict[str, tuple[str, ...]] = (
+    {
+        t: ("tag", "archive")
+        for t in (
+            "BoolProperty",
+            "IntProperty",
+            "Int64Property",
+            "Int16Property",
+            "Int8Property",
+            "ByteProperty",
+            "UInt16Property",
+            "UInt32Property",
+            "UInt64Property",
+            "FloatProperty",
+            "DoubleProperty",
+            "StrProperty",
+            "ObjectProperty",
+            "Utf8StrProperty",
+            "WeakObjectProperty",
+            "LazyObjectProperty",
+            "ClassProperty",
+            "AssetObjectProperty",
+            "AssetClassProperty",
+            "InterfaceProperty",
+            "VerseStringProperty",
+            "VerseClassProperty",
+            "VerseFunctionProperty",
+            "VerseDynamicProperty",
+            "AnsiStrProperty",
+            "GuidProperty",
+            "VerseCellProperty",
+            "VerseValueProperty",
+        )
+    }
+    | {
+        "TextProperty": ("tag", "archive", "dev_notes"),
+    }
+    | {
+        t: ("tag", "archive", "name_map")
+        for t in (
+            "NameProperty",
+            "DelegateProperty",
+            "MulticastDelegateProperty",
+            "MulticastInlineDelegateProperty",
+            "MulticastSparseDelegateProperty",
+            "FieldPathProperty",
+        )
+    }
+    | {
+        t: ("tag", "archive", "name_map", "soft_path_list", "summary")
+        for t in ("SoftObjectProperty", "SoftClassProperty")
+    }
+    | {t: ("tag", "archive", "name_map", "export_map", "summary", "depth") for t in ("ArrayProperty", "StructProperty")}
+    | {
+        t: ("tag", "archive", "name_map", "export_map", "summary")
+        for t in ("MapProperty", "SetProperty", "OptionalProperty")
+    }
+    | {t: ("tag", "archive", "name_map", "summary") for t in ("EnumProperty",)}
+)
 
 
 def _skip_type_tree_nodes(
@@ -632,6 +662,13 @@ def parse_property_value(
         # Special case: ByteProperty with enum backing needs name_map (reads FName)
         if tag.type == "ByteProperty" and tag.enum_type is not None:
             return handler(tag, archive, name_map)
+        dev_notes = False
+        if summary is not None and (getattr(summary, "package_flags", 0) & PKG_FilterEditorOnly) == 0:
+            # FText Base appends DevNotes when FortniteMainBranch >= AddDevNotesToFText=260
+            # and the package was not filtered for editor-only data (TextHistory.cpp:917).
+            from uasset_read.kismet.ufunction_reader import FORTNITE_GUID, get_kismet_custom_version
+
+            dev_notes = get_kismet_custom_version(summary, FORTNITE_GUID) >= 260
         values = {
             "tag": tag,
             "archive": archive,
@@ -640,6 +677,7 @@ def parse_property_value(
             "summary": summary,
             "depth": depth,
             "soft_path_list": getattr(summary, "_soft_object_path_list", None) if summary is not None else None,
+            "dev_notes": dev_notes,
         }
         return handler(*(values[n] for n in _PROPERTY_ARGS[tag.type]))
     except (_struct.error, OSError, ValueError, AttributeError, KeyError, ParseError) as e:
@@ -1245,9 +1283,7 @@ def _resolve_mapping_struct_name(
         try:
             from uasset_read.serializers.object_resources import resolve_class_name
 
-            resolved = resolve_class_name(export.class_index, import_map, export_map)
-            if resolved is not None:
-                return resolved
+            return resolve_class_name(export.class_index, import_map, export_map) or export.object_name
         except (KeyError, AttributeError, IndexError) as e:
             logger.debug("Failed to resolve mapping struct name: %s", e)
     return export.object_name
@@ -1350,25 +1386,35 @@ def _try_read_unversioned_header(
     property_end: int,
     property_count: int,
 ) -> Optional[list[tuple[int, bool]]]:
-    """Try UE FUnversionedHeader fragments; return None for legacy fixture streams."""
+    """Try UE FUnversionedHeader fragments; return None for legacy fixture streams.
+
+    UE source: UnversionedPropertySerialization.cpp FUnversionedHeader::Load.
+    Fragment u16 layout: SkipNum=bits 0-6, bHasAnyZeroes=bit 7,
+    bIsLast=bit 8, ValueNum=bits 9+.  Loop runs until bIsLast.
+    Zero mask is one global compact bit array sized by total masked values.
+    """
     start = archive.tell()
     fragments: list[tuple[int, bool, int]] = []
     try:
         cursor = 0
         total_values = 0
+        total_masked = 0
         while archive.tell() + 2 <= property_end:
             packed = archive.read_u16()
-            skip_num = packed & 0x7F
-            has_any_zeroes = bool(packed & 0x80)
-            value_num = (packed >> 8) & 0xFF
-            if value_num == 0:
-                break
+            skip_num = packed & 0x007F
+            has_any_zeroes = bool(packed & 0x0080)
+            is_last = bool(packed & 0x0100)
+            value_num = packed >> 9
             cursor += skip_num
             if cursor + value_num > property_count:
                 raise ParseError("unversioned fragment exceeds mapping property count")
             fragments.append((cursor, has_any_zeroes, value_num))
             cursor += value_num
             total_values += value_num
+            if has_any_zeroes:
+                total_masked += value_num
+            if is_last:
+                break
             if len(fragments) > property_count:
                 raise ParseError("too many unversioned fragments")
         else:
@@ -1376,26 +1422,29 @@ def _try_read_unversioned_header(
         if not fragments or total_values == 0:
             raise ParseError("no unversioned values")
 
+        # One global compact bit array for all masked fragments
+        # (UnversionedPropertySerialization.cpp LoadZeroMaskData:
+        # u8 if <=8 bits, u16 if <=16, else u32 words).
         zero_bits: list[bool] = []
-        for _cursor, has_any_zeroes, value_num in fragments:
-            if not has_any_zeroes:
-                zero_bits.extend([False] * value_num)
-                continue
-            word_count = (value_num + 31) // 32
-            bits: list[bool] = []
-            for _ in range(word_count):
-                word = archive.read_u32()
-                bits.extend(bool(word & (1 << bit)) for bit in range(32))
-            zero_bits.extend(bits[:value_num])
+        if total_masked > 0:
+            words: list[int] = []
+            if total_masked <= 8:
+                words = [archive.read_u8()]
+            elif total_masked <= 16:
+                words = [archive.read_u16()]
+            else:
+                words = [archive.read_u32() for _ in range((total_masked + 31) // 32)]
+            for word in words:
+                zero_bits.extend(bool(word & (1 << bit)) for bit in range(32))
 
         selected: list[tuple[int, bool]] = []
         bit_offset = 0
-        for cursor, _has_any_zeroes, value_num in fragments:
+        for frag_cursor, has_any_zeroes, value_num in fragments:
             for local_index in range(value_num):
-                selected.append((cursor + local_index, zero_bits[bit_offset + local_index]))
-            bit_offset += value_num
-        if archive.tell() >= property_end and not all(is_zero for _index, is_zero in selected):
-            raise ParseError("unversioned header consumes entire property payload")
+                is_zero = zero_bits[bit_offset + local_index] if has_any_zeroes else False
+                selected.append((frag_cursor + local_index, is_zero))
+            if has_any_zeroes:
+                bit_offset += value_num
         return selected
     except (_struct.error, ParseError, ValueError) as e:
         logger.debug("Unversioned header parse failed, falling back to legacy: %s", e)
@@ -1513,8 +1562,9 @@ def _estimate_unversioned_variable_size(prop_type: Any, archive: FArchive, remai
 def _fixed_unversioned_size(prop_type: Any) -> int:
     type_name = getattr(prop_type, "type", prop_type)
     if type_name == "EnumProperty":
-        inner = getattr(prop_type, "inner_type", None)
-        return _fixed_unversioned_size(inner) if inner is not None else 8
+        # EnumProperty.cpp / UnversionedPropertySerialization.cpp: unversioned enum
+        # values serialize as FName (index+number), regardless of the byte-property underlying.
+        return 8
     return FIXED_UNVERSIONED_SIZES.get(type_name, 0)
 
 

@@ -22,6 +22,7 @@ from uasset_read.constants import (
     PROP_TAG_BOOL_TRUE,
     PROP_TAG_SKIPPED_SERIALIZE,
     PROP_EXT_SERIALIZE_CONTROL,
+    PROP_EXT_HAS_EXTERNAL_OBJECTS,
     MAX_PROPERTY_TYPE_NODES,
     UE_NONE_SENTINEL,
 )
@@ -242,6 +243,10 @@ def read_property_tag(
         if property_extensions & PROP_EXT_SERIALIZE_CONTROL:
             tag.override_operation = archive.read_u8()
             tag.experimental_overridable_logic = archive.read_u8()
+        if property_extensions & PROP_EXT_HAS_EXTERNAL_OBJECTS:
+            # PropertyTag.cpp SerializePropertyExtensions: HasExternalsObjects appends
+            # one uint8 external-object slot in the same tag.
+            tag.external_objects_byte = archive.read_u8()
 
     if tag.flags & PROP_TAG_BOOL_TRUE:
         tag.bool_val = 1
@@ -366,6 +371,10 @@ def _read_property_tag_legacy(
         if property_extensions & PROP_EXT_SERIALIZE_CONTROL:
             tag.override_operation = archive.read_u8()
             tag.experimental_overridable_logic = archive.read_u8()
+        if property_extensions & PROP_EXT_HAS_EXTERNAL_OBJECTS:
+            # PropertyTag.cpp SerializePropertyExtensions: HasExternalsObjects appends
+            # one uint8 external-object slot in the same tag.
+            tag.external_objects_byte = archive.read_u8()
 
     # Legacy format has no Flags byte (except extensions) -> serialize_type is always "Property"
     tag.serialize_type = "Property"

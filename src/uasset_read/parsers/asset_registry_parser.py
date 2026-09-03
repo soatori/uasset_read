@@ -22,6 +22,7 @@ import struct
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from uasset_read.constants import UE4_ASSETREGISTRY_DEPENDENCYFLAGS
 from uasset_read.exceptions import ParseError
 
 
@@ -110,12 +111,12 @@ def read_asset_registry_data(
     result = AssetRegistryData()
 
     try:
-        # VER_UE4_ASSETREGISTRY_DEPENDENCYFLAGS = 510
-        # Read DependencyDataOffset when not Cooked and version >= 510
-        # UE writes this as int64 (see SavePackageUtilities.cpp:1684, IAssetRegistry.h:1366)
+        # VER_UE4_ASSETREGISTRY_DEPENDENCYFLAGS = 521 (project frozen numbering)
+        # UE reads DependencyDataOffset when not cooked and version >= 521
+        # (PackageReader.cpp: operator<< guards on that version; SavePackageUtilities writes int64).
         # Some assets (e.g. editor assets saved in pre-dependency format) do not include this field;
         # detect format differences by validating the offset value reasonableness
-        if not is_cooked and file_version_ue4 >= 510:
+        if not is_cooked and file_version_ue4 >= UE4_ASSETREGISTRY_DEPENDENCYFLAGS:
             pos_before = archive.tell()
             dep_offset_64 = archive.read_i64()
             # Reasonableness check: offset should be -1 (INDEX_NONE), 0, or not exceed file size

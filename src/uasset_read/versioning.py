@@ -25,7 +25,7 @@ class VersionContainer:
     """Unified version query entry point, built from PackageFileSummary."""
 
     custom_versions: list[Any] = field(default_factory=list)
-    file_version_ue5: int = UE5_VERSION_MIN
+    file_version_ue5: int = 0
     file_version_ue4: int = 0
 
     @property

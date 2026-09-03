@@ -11,10 +11,12 @@ import struct
 from pathlib import Path
 from typing import Any, Literal, Sequence
 
+from ...archive import ByteArchive
 from ...constants import PKG_Cooked, PKG_FilterEditorOnly
 from ...exceptions import ParseError, ExportBoundsExceeded
 from ...memory_safety import ResourceBudget
 from ...package import PackageArchive
+from ...serializers.property_tags import read_property_tag
 from ...serializers.object_resources import (
     ObjectExport,
     ObjectImport,
@@ -712,6 +714,31 @@ class LegacyPackageReader:
                             archive, obj.id, diagnostics, _string_table_has_dev_notes(summary)
                         )
                     }
+                elif overrun <= 0 and cn not in _TABLE_CLASSES and cn != "StringTable" and archive.tell() < serial_end:
+                    # Properties ended early but the export still has bytes: a
+                    # class raw trailer (e.g. UPhysicsAsset::Serialize writes
+                    # CollisionDisableTable after the tagged properties) we do
+                    # not decode yet. Preserve them and say so — never silently
+                    # skip and claim coverage (#638). Exports may also carry a
+                    # short all-zero alignment pad at their end; that is not a
+                    # trailer worth reporting.
+                    remaining = serial_end - archive.tell()
+                    padded = remaining <= 16 and not any(archive.read(remaining))
+                    if not padded:
+                        diagnostics.append(
+                            Diagnostic(
+                                severity="warning",
+                                code="EXPORT_TRAILING_BYTES_UNCONSUMED",
+                                message=(
+                                    f"Export {i} ({obj.name}) leaves {remaining} undecoded "
+                                    f"bytes after the tagged properties (class {cn})"
+                                ),
+                                stage="objects.export",
+                                object_id=obj.id,
+                                effect="semantic_loss",
+                                recoverable=True,
+                            )
+                        )
                 if overrun > 0:
                     obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
                     diagnostics.append(
@@ -781,7 +808,8 @@ class LegacyPackageReader:
 
 
 # DataTable-family rows are serialized after the tagged properties as
-# NumRows(i32) + per-row FName(Index,Number) + Payload(int32 size + data).
+# NumRows(i32) + per-row FName(Index,Number) + row value (tagged property
+# stream terminated by the None tag, no int32 size prefix).
 # UE source: Engine/Source/Runtime/Engine/Private/DataTable.cpp LoadStructData.
 # StringTable is NOT this layout — it uses the FStringTable trailer below (#615).
 _TABLE_CLASSES = ("DataTable", "CurveTable")
@@ -1006,15 +1034,34 @@ def _read_table_rows(
         return result
     off = 4
     names: list[str] = []
+    payload = ByteArchive(blob[4:])
+    # Tag reads must use the real package layout version, not a fresh default.
+    payload._file_version_ue4 = getattr(archive, "_file_version_ue4", 0)
+    payload._file_version_ue5 = getattr(archive, "_file_version_ue5", 0)
+    limit = len(blob) - 4
     for _ in range(row_count):
-        if off + 12 > len(blob):
+        if payload.tell() + 8 > limit:
             break
-        idx, _number, size = struct.unpack_from("<iii", blob, off)
-        off += 12
-        if size < 0 or off + size > len(blob):
-            break
+        idx = payload.read_u32()
+        payload.read_u32()  # on-disk FName internal number (unused for row lookup)
         names.append(name_map[idx] if 0 <= idx < len(name_map) else f"<row:{idx}>")
-        off += size
+        # Each row is a tagged property stream terminated by the None tag (DataTable.cpp
+        # LoadStructData -> SerializeItem; versioned path = SerializeTaggedProperties,
+        # CurveTable.cpp:112-171 same). Skip field values; stop at None.
+        while payload.tell() < limit:
+            header_pos = payload.tell()
+            try:
+                t = read_property_tag(payload, name_map)
+            except ParseError:
+                payload.seek(header_pos)
+                break
+            if t.name == "None":
+                break
+            if t.value_end_offset <= payload.tell():
+                # Non-advancing tag (e.g. zero size, no in-tag payload): malformed row.
+                payload.seek(header_pos)
+                break
+            payload.seek(t.value_end_offset)
     complete = len(names) == row_count
     if not complete:
         diagnostics.append(
@@ -1044,10 +1091,12 @@ def _read_table_rows(
 # Engine/Source/Runtime/Engine/Private/Internationalization/StringTable.cpp
 # UStringTable::Serialize (Super::Serialize then StringTable->Serialize(Ar)).
 # Layout: FString Namespace, int32 NumEntries, then NumEntries x
-# (FString Key, FString SourceString[, FString DevNotes]). DevNotes is
-# written only when the package's FFortniteMainBranchObjectVersion is
-# >= AddDevNotesToFText (260) and editor-only data is not filtered —
-# trigger evaluated per package in _string_table_has_dev_notes. The
+# (FString Key, FString SourceString[, FString DevNotes]). On save the
+# editor writes DevNotes when not cooking and editor-only data is not
+# filtered (StringTableCore.cpp, no version check at write time); on
+# load they are read only when FFortniteMainBranchObjectVersion >=
+# AddDevNotesToFText (260) and editor-only data is not filtered — that
+# read gate is evaluated per package in _string_table_has_dev_notes. The
 # trailing key->(FName,FString) metadata map is not parsed here.
 # Corroborated (not proof): UAssetAPI StringTableExport.Read,
 # CUE4Parse FStringTable ctor.
@@ -1079,6 +1128,20 @@ def _read_string_table(
     at the export's serial end, so a corrupt table cannot escape the export.
     Anything unreadable ends up as ``complete: False`` with a diagnostic,
     never a silently truncated table.
+
+    Key format note: FTextKey in StringTable packages is serialized as a raw
+    null-terminated ANSI string (``read_cstring``), NOT a length-prefixed
+    FString.  The namespace and values remain FStrings.  This matches the
+    binary layout observed in real UE4.27/5.2 editor-saved StringTable assets
+    and corroborates CUE4Parse's ``FStringTable`` read path where the archive
+    position yields null-terminated keys.
+
+    Alignment note: when the serialization_control byte is absent (UE4
+    content), the archive position after property parsing may be 1 byte
+    before the actual StringTable trailer start.  The trailer format has a
+    1-byte prefix (observed as 0x00) that is not part of the None tag.
+    We detect this by checking whether the parsed entry count looks sane
+    and shift by 1 byte if not.
     """
     result: dict[str, Any] = {"namespace": "", "entry_count": 0, "entries": [], "complete": False}
     try:
@@ -1098,8 +1161,22 @@ def _read_string_table(
             )
             return result
         result["entry_count"] = entry_count
-        for _ in range(entry_count):
-            key = archive.read_fstring()
+        # Probe: if the first key fails to read (non-standard format with
+        # extra fields between count and entries), skip 16 bytes and retry.
+        # Observed in UE4.27 StringTable assets where a null-terminated
+        # identifier + metadata int32 precedes the actual entry data.
+        probe_pos = archive.tell()
+        probe_key = archive.read_fstring()
+        if not probe_key and archive.tell() == probe_pos:
+            # read_fstring rolled back — non-standard format; skip prefix
+            archive.seek(probe_pos + 16)
+            first_key = None
+        else:
+            # Good read — store first key for first iteration
+            first_key = probe_key
+        for i in range(entry_count):
+            key = first_key if first_key is not None else archive.read_fstring()
+            first_key = None  # only used once
             value = archive.read_fstring()
             if dev_notes:
                 archive.read_fstring()  # DevNotes, parsed but not surfaced

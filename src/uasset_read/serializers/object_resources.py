@@ -20,7 +20,6 @@ from uasset_read.archive import FArchive
 from uasset_read.serializers.package_summary import PackageFileSummary
 from uasset_read.constants import (
     PKG_UnversionedProperties,
-    PKG_FilterEditorOnly,
     MAX_IMPORT_COUNT,
     MAX_EXPORT_COUNT,
     UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID,
@@ -133,8 +132,6 @@ def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
 
     archive.seek(summary.import_offset)
 
-    is_filter_editor_only = (summary.package_flags & PKG_FilterEditorOnly) != 0
-
     # UE4 version used for version gating (high value for UE5 assets)
     file_version = summary.file_version_ue4
 
@@ -145,10 +142,11 @@ def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
         outer_index = PackageIndex(archive.read_i32(f"Import[{i}].OuterIndex"))
         object_name = archive.read_name(name_map, f"Import[{i}].ObjectName")
 
-        # PackageName: VER_UE4_NON_OUTER_PACKAGE_IMPORT && !FilterEditorOnly
-        # UE5 WITH_EDITORONLY_DATA: only present when file_version >= 519 and not filter-editor-only
+        # PackageName: present for every import when UEVer >= VER_UE4_NON_OUTER_PACKAGE_IMPORT
+        # (ObjectResource.cpp load path). FilterEditorOnly changes the saved VALUE only,
+        # never whether the 8-byte FName exists.
         package_name: Optional[str] = None
-        if file_version >= UE4_NON_OUTER_PACKAGE_IMPORT and not is_filter_editor_only:
+        if file_version >= UE4_NON_OUTER_PACKAGE_IMPORT:
             package_name = archive.read_name(name_map, f"Import[{i}].PackageName")
 
         # bImportOptional: UE5 >= 1003 (OPTIONAL_RESOURCES)

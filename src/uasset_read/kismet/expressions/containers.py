@@ -38,6 +38,7 @@ EX_EndArray = make_simple_expression(EExprToken.EX_EndArray)
 @dataclass
 class EX_SetMap(KismetExpression):
     MapProperty: KismetExpression = None
+    Num: int = 0
     Elements: list[KismetExpression] = None
 
     @property
@@ -47,8 +48,9 @@ class EX_SetMap(KismetExpression):
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetMap:
         prop = archive.read_expression()
+        num = archive.read_i32()  # ScriptSerialization.inl:531-534: int32 element count
         elements = archive.read_expression_array(EExprToken.EX_EndMap)
-        return cls(MapProperty=prop, Elements=elements)
+        return cls(MapProperty=prop, Num=num, Elements=elements)
 
 
 # Data-free expression: returns Token only
@@ -58,6 +60,7 @@ EX_EndMap = make_simple_expression(EExprToken.EX_EndMap)
 @dataclass
 class EX_SetSet(KismetExpression):
     SetProperty: KismetExpression = None
+    Num: int = 0
     Elements: list[KismetExpression] = None
 
     @property
@@ -67,8 +70,9 @@ class EX_SetSet(KismetExpression):
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetSet:
         prop = archive.read_expression()
+        num = archive.read_i32()  # ScriptSerialization.inl:526-529: int32 element count
         elements = archive.read_expression_array(EExprToken.EX_EndSet)
-        return cls(SetProperty=prop, Elements=elements)
+        return cls(SetProperty=prop, Num=num, Elements=elements)
 
 
 # Data-free expression: returns Token only
@@ -78,6 +82,7 @@ EX_EndSet = make_simple_expression(EExprToken.EX_EndSet)
 @dataclass
 class EX_ArrayConst(KismetExpression):
     InnerProperty: FKismetPropertyPointer = None
+    Num: int = 0
     Elements: list[KismetExpression] = None
 
     @property
@@ -89,8 +94,9 @@ class EX_ArrayConst(KismetExpression):
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
         prop = FKismetPropertyPointer.from_archive(archive, name_map)
+        num = archive.read_i32()  # ScriptSerialization.inl:536-541: int32 element count
         elements = archive.read_expression_array(EExprToken.EX_EndArrayConst)
-        return cls(InnerProperty=prop, Elements=elements)
+        return cls(InnerProperty=prop, Num=num, Elements=elements)
 
 
 # Data-free expression: returns Token only
@@ -131,6 +137,7 @@ EX_EndMapConst = make_simple_expression(EExprToken.EX_EndMapConst)
 @dataclass
 class EX_SetConst(KismetExpression):
     InnerProperty: FKismetPropertyPointer = None
+    Num: int = 0
     Elements: list[KismetExpression] = None
 
     @property
@@ -142,8 +149,9 @@ class EX_SetConst(KismetExpression):
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
         prop = FKismetPropertyPointer.from_archive(archive, name_map)
+        num = archive.read_i32()  # ScriptSerialization.inl:543-548: int32 element count
         elements = archive.read_expression_array(EExprToken.EX_EndSetConst)
-        return cls(InnerProperty=prop, Elements=elements)
+        return cls(InnerProperty=prop, Num=num, Elements=elements)
 
 
 # Data-free expression: returns Token only

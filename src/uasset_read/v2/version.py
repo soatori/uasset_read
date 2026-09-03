@@ -50,7 +50,8 @@ class VersionContext:
 
     @property
     def is_ue5(self) -> bool:
-        return self.file_version_ue5 >= 522
+        # ObjectVersion.h: UE5 range starts at INITIAL_VERSION=1000, not at 522 (UE4 AUTOMATIC_VERSION top).
+        return self.file_version_ue5 >= 1000
 
     @property
     def version_string(self) -> str:

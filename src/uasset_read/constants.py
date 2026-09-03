@@ -25,7 +25,7 @@ PACKAGE_FILE_TAG_SWAPPED = 0xC1832A9E  # Swapped byte order magic tag
 # Version constants
 # ============================================================================
 
-UE5_VERSION_MIN = 0  # UE5 version minimum
+UE5_VERSION_MIN = 1000  # FPackageFileVersion::ToValue(): UE5 starts at ObjectVersion.h INITIAL_VERSION=1000
 UE5_LEGACY_VERSION = -9  # Fixed LegacyFileVersion for UE5.6+ files
 # -8: FileVersionUE5 field added, -7: texture allocation info removed, -6: custom version serialization optimization
 UE5_LEGACY_VERSIONS = frozenset({-6, -7, -8, UE5_LEGACY_VERSION})  # Supported UE5 LegacyFileVersion
@@ -177,6 +177,7 @@ MAX_PROPERTY_TYPE_NODES = 50  # Max nodes in _read_property_type_name
 # ============================================================================
 
 PROP_EXT_SERIALIZE_CONTROL = 0x02  # SerializeControl bit in property extensions
+PROP_EXT_HAS_EXTERNAL_OBJECTS = 0x04  # EPropertyTagExtension::HasExternalsObjects (PropertyTag.cpp:44-53)
 
 # ============================================================================
 # UE5 version constants (EUnrealEngineObjectUE5Version)
@@ -188,6 +189,7 @@ UE5_OPTIONAL_RESOURCES = 1003
 UE5_NAMES_REFERENCED_FROM_EXPORT_DATA = 1001
 UE5_PAYLOAD_TOC = 1002
 UE5_LARGE_WORLD_COORDINATES = 1004
+UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES = 1007  # Replace FName asset path with FTopLevelAssetPath
 UE5_ADD_SOFTOBJECTPATH_LIST = 1008
 UE5_DATA_RESOURCES = 1009
 UE5_SCRIPT_SERIALIZATION_OFFSET = 1010
@@ -213,6 +215,14 @@ UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT = 485
 UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS = 507
 UE4_TemplateIndex_IN_COOKED_EXPORTS = 508
 UE4_64BIT_EXPORTMAP_SERIALSIZES = 511
+UE4_ASSETREGISTRY_DEPENDENCYFLAGS = (
+    521  # VER_UE4_ASSETREGISTRY_DEPENDENCYFLAGS (project frozen numbering; peers use 521)
+)
+UE4_WORLD_LEVEL_INFO = 224
+UE4_ADDED_CHUNKID_TO_ASSETDATA_AND_UPACKAGE = 278
+UE4_CHANGED_CHUNKID_TO_BE_AN_ARRAY_OF_CHUNKIDS = 326
+UE4_ENGINE_VERSION_OBJECT = 335
+UE4_ADDED_COMPATIBLE_WITH_ENGINE_VERSION = 443
 
 # ============================================================================
 # Blueprint metadata keys (UE editor internal fields)
@@ -353,7 +363,7 @@ CPF_ExposeOnSpawn = 0x0001000000000000
 # =====================================================================# ============================================================================
 
 FIXED_UNVERSIONED_SIZES: dict[str, int] = {
-    "BoolProperty": 4,
+    "BoolProperty": 1,  # PropertyBool.cpp SerializeItem: unversioned bool is one uint8
     "IntProperty": 4,
     "UInt32Property": 4,
     "FloatProperty": 4,
@@ -450,7 +460,8 @@ BLEND_MODE_MAP: dict[int, str] = {
     3: "Additive",
     4: "Modulate",
     5: "AlphaComposite",
-    8: "TranslucentColoredTransmittance",
+    6: "AlphaHoldout",
+    7: "TranslucentColoredTransmittance",
 }
 
 SHADING_MODEL_MAP: dict[int, str] = {
@@ -458,10 +469,12 @@ SHADING_MODEL_MAP: dict[int, str] = {
     1: "DefaultLit",
     2: "Subsurface",
     3: "PreintegratedSkin",
-    4: "SubsurfaceProfile",
-    5: "ClearCoatTopCoat",
-    6: "ThinTranslucent",
-    8: "SingleLayerWater",
+    4: "ClearCoat",
+    5: "SubsurfaceProfile",
+    6: "TwoSidedFoliage",
+    8: "Cloth",
+    10: "SingleLayerWater",
+    11: "ThinTranslucent",
 }
 
 MATERIAL_USAGE_FLAG_NAMES: tuple[str, ...] = (

@@ -70,7 +70,8 @@ class EX_Assert(KismetExpression):
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Assert:
         line = archive.read_u16()
-        debug = archive.read_bool()
+        # ScriptSerialization.inl:597-603 — debug flag is uint8 (XFER(uint8)), NOT a 4-byte UBOOL.
+        debug = archive.read_u8() != 0
         expr = archive.read_expression()
         return cls(LineNumber=line, DebugMode=debug, AssertExpression=expr)
 

@@ -20,7 +20,10 @@ UStruct exports have:
 from __future__ import annotations
 
 import logging
+import struct
 from typing import Any, Dict, List, Optional
+
+from ...constants import format_guid_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +162,7 @@ def extract_user_defined_struct(export: Any, name_map: List[str]) -> Optional[Di
                     c = fields.get("C", 0)
                     d = fields.get("D", 0)
                     # Format as standard GUID string: A-B-C-D (8-4-4-4-12)
-                    guid = f"{a:08X}-{b:04X}-{c:04X}-{(d >> 16) & 0xFFFF:04X}-{d & 0xFFFF:04X}00000000"
+                    guid = format_guid_bytes(struct.pack("<IIII", a, b, c, d))
                 else:
                     guid = str(prop_value)
             else:
@@ -170,7 +173,7 @@ def extract_user_defined_struct(export: Any, name_map: List[str]) -> Optional[Di
                     b = pv_fields.get("B", 0)
                     c = pv_fields.get("C", 0)
                     d = pv_fields.get("D", 0)
-                    guid = f"{a:08X}-{b:04X}-{c:04X}-{(d >> 16) & 0xFFFF:04X}-{d & 0xFFFF:04X}00000000"
+                    guid = format_guid_bytes(struct.pack("<IIII", a, b, c, d))
                 elif prop_value is not None:
                     guid = str(prop_value)
 

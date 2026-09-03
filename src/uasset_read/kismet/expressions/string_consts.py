@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
+from uasset_read.exceptions import ParseError
 from uasset_read.kismet.expressions.base import KismetExpression, KismetExpressionT
 from uasset_read.kismet.tokens import EBlueprintTextLiteralType, EExprToken
 
@@ -49,39 +50,56 @@ class FScriptText:
     SourceString: Optional[str] = None
     KeyString: Optional[str] = None
     Namespace: Optional[str] = None
+    DevNotes: Optional[str] = None
     StringTableAsset: Optional[str] = None
     TableIdString: Optional[str] = None
+
+    @staticmethod
+    def _read_string_operand(archive) -> str:
+        """Each text operand is [EX_StringConst|EX_UnicodeStringConst][string] (ScriptSerialization.inl)."""
+        token = archive.read_u8()
+        if token == EExprToken.EX_StringConst:
+            return archive.xfer_ansi_string()
+        if token == EExprToken.EX_UnicodeStringConst:
+            return archive.xfer_unicode_string()
+        raise ParseError(f"FScriptText: unexpected string operand token {token:#x}")
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> FScriptText:
         lit_type = EBlueprintTextLiteralType(archive.read_u8())
         if lit_type == EBlueprintTextLiteralType.Empty:
             return cls(TextLiteralType=lit_type)
-        elif lit_type == EBlueprintTextLiteralType.LocalizedText:
-            namespace = archive.xfer_ansi_string()
-            key = archive.xfer_ansi_string()
-            source = archive.xfer_ansi_string()
+        if lit_type in (
+            EBlueprintTextLiteralType.LocalizedText,
+            EBlueprintTextLiteralType.LocalizedTextWithNotes,
+        ):
+            # Script.h: disk order is source, key, namespace (+ devnotes variant).
+            source = cls._read_string_operand(archive)
+            key = cls._read_string_operand(archive)
+            namespace = cls._read_string_operand(archive)
+            notes = (
+                cls._read_string_operand(archive)
+                if lit_type == EBlueprintTextLiteralType.LocalizedTextWithNotes
+                else None
+            )
             return cls(
                 TextLiteralType=lit_type,
-                Namespace=namespace,
-                KeyString=key,
                 SourceString=source,
+                KeyString=key,
+                Namespace=namespace,
+                DevNotes=notes,
             )
-        elif lit_type == EBlueprintTextLiteralType.Invariant:
-            key = archive.xfer_ansi_string()
-            source = archive.xfer_ansi_string()
-            return cls(TextLiteralType=lit_type, KeyString=key, SourceString=source)
-        elif lit_type == EBlueprintTextLiteralType.CultureInvariant:
-            source = archive.xfer_ansi_string()
-            return cls(TextLiteralType=lit_type, SourceString=source)
-        elif lit_type == EBlueprintTextLiteralType.StringTableEntry:
-            asset = archive.xfer_ansi_string()
-            table_id = archive.xfer_ansi_string()
-            return cls(
-                TextLiteralType=lit_type,
-                StringTableAsset=asset,
-                TableIdString=table_id,
-            )
+        if lit_type in (
+            EBlueprintTextLiteralType.InvariantText,
+            EBlueprintTextLiteralType.LiteralString,
+        ):
+            # One string operand (ScriptSerialization.inl EX_TextConst).
+            return cls(TextLiteralType=lit_type, SourceString=cls._read_string_operand(archive))
+        if lit_type == EBlueprintTextLiteralType.StringTableEntry:
+            archive.read_i32()  # object pointer, unused on disk (4 bytes)
+            table_id = cls._read_string_operand(archive)
+            key = cls._read_string_operand(archive)
+            return cls(TextLiteralType=lit_type, TableIdString=table_id, KeyString=key)
         return cls(TextLiteralType=lit_type)
 
 
@@ -108,6 +126,7 @@ class EX_TextConst(KismetExpression):
                 "SourceString": self.Text.SourceString,
                 "KeyString": self.Text.KeyString,
                 "Namespace": self.Text.Namespace,
+                "DevNotes": self.Text.DevNotes,
             }
         return d
 

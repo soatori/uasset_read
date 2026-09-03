@@ -26,6 +26,7 @@ PACKAGE_SAMPLE = SAMPLES / "ABP_RifleAnimLayers.uasset"
 DATA_SAMPLE = SAMPLES / "ALS_FootstepDataTable.uasset"
 SCHEMA = ROOT / "docs/designs/contract/package_document_v2.schema.json"
 EXAMPLE = ROOT / "docs/designs/contract/package_document_v2.example.json"
+SRC = ROOT / "src"
 
 
 @lru_cache(maxsize=None)
@@ -209,7 +210,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
 
         data = struct.pack("<iqii", 0, 0, 0, 10_000_000)
         with pytest.raises(ParseError, match="ChunkIDs"):
-            _read_tail_offsets(ByteArchive(data))
+            _read_tail_offsets(ByteArchive(data), 522)  # array-mode ChunkIDs at UE4 >= 326
 
     def sources_reject_negative_size():
         with pytest.raises(ValueError, match="negative"):
@@ -295,6 +296,16 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         assert sd and sd[0].object_id == "export:0"
         assert arc._current_object_id == ""  # context must not leak past the table
 
+    def test_fname_display_uses_external_number():
+        import struct
+        from uasset_read.archive import ByteArchive
+
+        arc = ByteArchive(struct.pack("<ii", 0, 3))
+        name = arc.read_name(["None", "Test"], key="t")
+        assert name == "None_2"  # on-disk internal 3 -> display external 2 (LinkerLoad.h NAME_INTERNAL_TO_EXTERNAL)
+        arc2 = ByteArchive(struct.pack("<ii", 0, 0))
+        assert arc2.read_name(["None", "Test"], key="t") == "None"
+
     _run_cases(
         [
             ("core.reader_out_of_range", core_contract),
@@ -327,6 +338,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
             ("recovery.fstring_null_truncation_recorded", fstring_internal_null_truncation_is_recorded),
             ("recovery.fname_shift_recorded", fname_shift_recovery_is_recorded),
             ("recovery.export_map_attribution", export_map_recoveries_are_attributed_to_their_slot),
+            ("fname.display_external_number", test_fname_display_uses_external_number),
         ]
     )
 
@@ -380,6 +392,177 @@ def test_property_bag_normalization_is_bounded_lossless():
         assert bag["Data"]["value"]["length"] == 2
         json.dumps(bag)
 
+    def test_lwc_box_size_52_and_double_read():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types import _LWC_TYPE_MAP, parse_struct_property
+
+        assert _LWC_TYPE_MAP["Box"] == (28, 52)
+        payload = struct.pack("<ddddddi", 1, 2, 3, 4, 5, 6, 1)  # Min 3xd + Max 3xd + IsValid i32 = 52
+        assert len(payload) == 52
+        tag = PropertyTag(name="B", type="StructProperty", size=52)
+        tag.struct_type = "Box"
+        arc = ByteArchive(payload)
+        out = parse_struct_property(tag, arc, ["None"], [], None)
+        assert out.struct_type == "Box"
+        assert out.fields["Min"]["X"] == 1.0 and out.fields["Max"]["Z"] == 6.0
+        # IsValid is a 4-byte UBOOL (Archive.h); float Box branch names the field bIsValid.
+        assert out.fields["bIsValid"] is True
+
+    def test_property_tag_extension_external_objects():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.constants import PROP_EXT_HAS_EXTERNAL_OBJECTS
+        from uasset_read.serializers.property_tags import read_property_tag
+
+        assert PROP_EXT_HAS_EXTERNAL_OBJECTS == 0x04
+        # Legacy header (routes via archive._file_version_ue5 < 1012):
+        # name FName + type FName + size i32 + array_index i32 + HasPropertyGuid u8=0 + ext u8 [+ payload]
+        names = ["None", "IntProperty"]
+
+        def legacy_tag(ext: bytes):
+            # Name uses index 1; index 0 would hit the "None" sentinel early-return.
+            return struct.pack("<ii", 1, 0) + struct.pack("<ii", 1, 0) + struct.pack("<ii", 4, 0) + b"\x00" + ext
+
+        arc = ByteArchive(legacy_tag(b"\x04\x07") + struct.pack("<i", 99))
+        arc._file_version_ue5 = 1011  # legacy routing (<1012) with the extension block on (>=1011)
+        arc._file_version_ue4 = 522
+        tag = read_property_tag(arc, names)
+        assert tag.value_start_offset == 27  # 8+8+4+4+1 header + 1 ext + 1 external-object slot
+        assert tag.flags == 0x04
+        assert arc.read_i32() == 99  # value stream starts right after the consumed slot
+        # and the 0x02|0x04 combined case: two control bytes + one external byte
+        arc2 = ByteArchive(legacy_tag(b"\x06\x00\x00\x07") + struct.pack("<i", 99))
+        arc2._file_version_ue5 = 1011
+        arc2._file_version_ue4 = 522
+        assert read_property_tag(arc2, names).value_start_offset == 29
+
+    def test_array_of_bools_consumes_one_byte_per_element():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types import parse_array_property
+
+        data = struct.pack("<i", 3) + bytes([1, 0, 1]) + b"X"
+        arc = ByteArchive(data)
+        tag = PropertyTag(name="A", type="ArrayProperty", size=len(data))
+        tag.inner_type = "BoolProperty"
+        out = parse_array_property(tag, arc, ["None"], [], None)
+        assert out == [True, False, True]
+        assert arc.tell() == 4 + 3
+
+    def test_legacy_struct_array_reads_single_inner_tag():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types import parse_array_property
+
+        # The inner struct is one of the tagged-fallback structs so a size-0 inner
+        # tag parses as a tagged-field stream instead of returning opaque (a plain
+        # fast-path name like "Vector" cannot exercise the tagged element loop).
+        names = ["None", "StructProperty", "IntProperty", "BlendSample", "HP"]
+
+        def legacy_tag(name_i, type_i, size, extra=b""):
+            # name + type FNames, size + array_index int32s, [extras], HasPropertyGuid=0
+            return (
+                struct.pack("<ii", name_i, 0)
+                + struct.pack("<ii", type_i, 0)
+                + struct.pack("<ii", size, 0)
+                + extra
+                + b"\x00"
+            )
+
+        inner = legacy_tag(4, 1, 0, struct.pack("<ii", 3, 0) + bytes(16))  # StructProperty/BlendSample + StructGuid
+        field = legacy_tag(4, 2, 4) + struct.pack("<i", 111) + struct.pack("<ii", 0, 0)  # HP=111 then None tag
+        field2 = legacy_tag(4, 2, 4) + struct.pack("<i", 222) + struct.pack("<ii", 0, 0)
+        data = struct.pack("<i", 2) + inner + field + field2
+        arc = ByteArchive(data)
+        arc._file_version_ue5 = 500  # legacy routing (<1012); no extension byte in tags
+        arc._file_version_ue4 = 522
+        tag = PropertyTag(name="A", type="ArrayProperty", size=len(data))
+        tag.inner_type = "StructProperty"
+        tag.inner_type_struct = None
+        out = parse_array_property(tag, arc, names, [], None, 0)
+        assert len(out) == 2
+        assert out[0].fields["HP"] == 111 and out[1].fields["HP"] == 222
+        assert arc.tell() == len(data)
+
+    def test_soft_object_path_inline_is_fname_based():
+        import struct
+        from types import SimpleNamespace
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types import parse_soft_object_property
+
+        names = ["None", "Game/Foo/Bar", "Bar", "SubPath"]
+        # UE5 < 1007 legacy inline: FName(index+number) + FString (SerializePathWithoutFixup)
+        body = struct.pack("<ii", 2, 0) + struct.pack("<i", len("SubPath") + 1) + b"SubPath\x00"
+        arc = ByteArchive(body)
+        summary = SimpleNamespace(
+            file_version_ue5=500, _soft_object_path_list=None, package_flags=0, custom_versions=[]
+        )
+        val = parse_soft_object_property(
+            PropertyTag(name="S", type="SoftObjectProperty", size=len(body)), arc, names, None, summary
+        )
+        assert val.asset_path == "Bar" and val.sub_path == "SubPath"
+        # UE5 >= 1007: FTopLevelAssetPath = PackageName FName + AssetName FName, then subpath FString
+        body2 = struct.pack("<iiii", 1, 0, 2, 0) + struct.pack("<i", 1) + b"\x00"
+        arc2 = ByteArchive(body2)
+        summary2 = SimpleNamespace(
+            file_version_ue5=1007, _soft_object_path_list=None, package_flags=0, custom_versions=[]
+        )
+        val2 = parse_soft_object_property(
+            PropertyTag(name="S", type="SoftObjectProperty", size=len(body2)), arc2, names, None, summary2
+        )
+        assert val2.asset_path == "Game/Foo/Bar.Bar"
+
+    def test_ftext_history_demoted_and_base_reads_dev_notes():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers.property_types import parse_text_property
+
+        def ft_body(hist, strings=(), extra=b""):
+            tail = extra
+            for s in strings:
+                tail += struct.pack("<i", len(s) + 1) + s.encode("utf-8") + b"\x00"
+            return struct.pack("<iB", 0, hist) + tail
+
+        # Base + DevNotes (gate on): 4 strings; value is the third.
+        body = ft_body(
+            0,
+            ("ns", "key", "Hello", "notes"),
+        )
+        arc = ByteArchive(body)
+        v = parse_text_property(PropertyTag(name="T", type="TextProperty", size=len(body)), arc, dev_notes=True)
+        assert v.source_string == "Hello" and arc.tell() == len(body)
+        # NamedFormat (1): nested FText (flags+hist+its own 4 strings) + args — demoted, not misparsed
+        nested = struct.pack("<iB", 0, 0) + struct.pack("<i", 1) + b"\x00"
+        body1 = struct.pack("<iB", 0, 1) + nested + struct.pack("<i", 0)
+        arc1 = ByteArchive(body1)
+        v1 = parse_text_property(PropertyTag(name="T", type="TextProperty", size=len(body1)), arc1, dev_notes=False)
+        assert v1.source_string == "" and getattr(v1, "history_type", None) == 1
+
+    def test_fcolor_bgra_decode():
+        from uasset_read.parsers.binary_or_native_handlers import _decode_color
+
+        out = _decode_color(bytes([10, 20, 30, 40]), 4)
+        assert out == {"R": 30, "G": 20, "B": 10, "A": 40}
+
+    def test_unversioned_header_fragments_ue_format():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.parsers.property_parser import _try_read_unversioned_header
+
+        # One fragment: SkipNum=0, HasZeroes=1, IsLast=1, ValueNum=3 ->
+        # packed = (3<<9) | 0x100 | 0x80 = 0x0780
+        # then global zero mask (3 bits -> single u8: bits 0,2 set -> 0b101)
+        data = struct.pack("<HBB", 0x0780, 0b101, 0)  # trailing byte pads property_end
+        arc = ByteArchive(data)
+        selected = _try_read_unversioned_header(arc, property_end=4, property_count=3)
+        assert selected == [(0, True), (1, False), (2, True)]
+
     _run_cases(
         [
             ("property.test_empty_list_returns_empty_dict", test_empty_list_returns_empty_dict),
@@ -387,6 +570,14 @@ def test_property_bag_normalization_is_bounded_lossless():
             ("property.test_known_property_preserves_value", test_known_property_preserves_value),
             ("property.test_struct_property_normalizes", test_struct_property_normalizes),
             ("property.test_bytes_value_serializes", test_bytes_value_serializes),
+            ("property.lwc_box_size_52_and_double_read", test_lwc_box_size_52_and_double_read),
+            ("property.tag_extension_external_objects", test_property_tag_extension_external_objects),
+            ("property.array_of_bools_inline_bytes", test_array_of_bools_consumes_one_byte_per_element),
+            ("property.legacy_struct_array_single_inner_tag", test_legacy_struct_array_reads_single_inner_tag),
+            ("property.soft_object_path_inline_fname_based", test_soft_object_path_inline_is_fname_based),
+            ("property.ftext_base_dev_notes_and_demotion", test_ftext_history_demoted_and_base_reads_dev_notes),
+            ("property.fcolor_bgra_decode", test_fcolor_bgra_decode),
+            ("property.unversioned_header_fragments_ue_format", test_unversioned_header_fragments_ue_format),
         ]
     )
 
@@ -416,11 +607,136 @@ def test_package_document_preserves_every_export_and_role():
         ids2 = [o.id for o in doc2.objects]
         assert ids1 == ids2
 
+    def test_unversioned_bool_one_byte_enum_fname():
+        from types import SimpleNamespace
+
+        from uasset_read.constants import FIXED_UNVERSIONED_SIZES
+        from uasset_read.parsers.property_parser import _fixed_unversioned_size
+
+        assert FIXED_UNVERSIONED_SIZES["BoolProperty"] == 1
+        # Enum with byte inner must report FName width 8, not the inner's 1
+        assert _fixed_unversioned_size(SimpleNamespace(type="EnumProperty", inner_type="ByteProperty")) == 8
+        assert _fixed_unversioned_size(SimpleNamespace(type="EnumProperty", inner_type=None)) == 8
+
+    def test_compressed_chunks_skipped_as_16_bytes():
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.serializers.package_summary import _read_compression_and_source
+
+        data = struct.pack("<ii", 0, 1) + struct.pack("<iiii", 40, 8, 48, 8) + struct.pack("<i", 0x11223344)
+        arc = ByteArchive(data)
+        flags, source = _read_compression_and_source(arc)
+        assert source == 0x11223344  # wrong 12-byte skip desyncs PackageSource
+
+    def test_table_rows_skip_tagged_stream_not_size_prefix():
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.v2.package.legacy import _read_table_rows
+
+        # A None-terminator tagged property tag is exactly its 8-byte name FName
+        # (read_property_tag early-returns at UE_NONE_SENTINEL). Two empty rows:
+        # count | rowName FName | None tag | rowName FName | None tag
+        data = (
+            struct.pack("<i", 2)
+            + struct.pack("<ii", 1, 0)
+            + struct.pack("<ii", 0, 0)
+            + struct.pack("<ii", 2, 0)
+            + struct.pack("<ii", 0, 0)
+        )
+        arc = ByteArchive(data)
+        diags: list = []
+        result = _read_table_rows(
+            arc, serial_end=len(data), name_map=["None", "A", "B"], object_id="export:1", diagnostics=diags
+        )
+        assert result["row_names"] == ["A", "B"] and result["complete"] is True
+        assert not any(d.code == "TABLE_ROWS_TRUNCATED" for d in diags)
+
+    def test_summary_gate_modes_are_versioned():
+        from uasset_read.serializers.package_summary import summary_gate_modes
+
+        assert summary_gate_modes(214) == {
+            "engine_versions": "legacy",
+            "compatible": False,
+            "world_tile": False,
+            "chunk_ids": "none",
+        }
+        assert summary_gate_modes(278) == {
+            "engine_versions": "legacy",
+            "compatible": False,
+            "world_tile": True,
+            "chunk_ids": "single",
+        }
+        assert summary_gate_modes(326) == {
+            "engine_versions": "legacy",
+            "compatible": False,
+            "world_tile": True,
+            "chunk_ids": "array",
+        }
+        assert summary_gate_modes(443) == {
+            "engine_versions": "full",
+            "compatible": True,
+            "world_tile": True,
+            "chunk_ids": "array",
+        }
+
+    def test_import_package_name_not_gated_by_filter_editor_only():
+        src = (SRC / "uasset_read/serializers/object_resources.py").read_text(encoding="utf-8")
+        assert "and not is_filter_editor_only" not in src.split("def build_imports_list")[0]
+
+    def test_asset_registry_dependency_gate_uses_521():
+        from uasset_read import constants
+
+        assert constants.UE4_ASSETREGISTRY_DEPENDENCYFLAGS == 521
+        src = (SRC / "uasset_read/parsers/asset_registry_parser.py").read_text(encoding="utf-8")
+        assert "UE4_ASSETREGISTRY_DEPENDENCYFLAGS" in src
+        assert "file_version_ue4 >= 510" not in src
+
+    def test_material_enum_tables_match_engine_types():
+        from uasset_read.constants import BLEND_MODE_MAP, SHADING_MODEL_MAP
+
+        assert BLEND_MODE_MAP == {
+            0: "Opaque",
+            1: "Masked",
+            2: "Translucent",
+            3: "Additive",
+            4: "Modulate",
+            5: "AlphaComposite",
+            6: "AlphaHoldout",
+            7: "TranslucentColoredTransmittance",
+        }
+        assert SHADING_MODEL_MAP == {
+            0: "Unlit",
+            1: "DefaultLit",
+            2: "Subsurface",
+            3: "PreintegratedSkin",
+            4: "ClearCoat",
+            5: "SubsurfaceProfile",
+            6: "TwoSidedFoliage",
+            8: "Cloth",
+            10: "SingleLayerWater",
+            11: "ThinTranslucent",
+        }
+
     _run_cases(
         [
             ("document.test_all_exports_present", test_all_exports_present),
             ("document.test_ids_are_export_prefix", test_ids_are_export_prefix),
             ("document.test_stable_id_across_calls", test_stable_id_across_calls),
+            ("version.test_asset_registry_dependency_gate_uses_521", test_asset_registry_dependency_gate_uses_521),
+            ("property.test_unversioned_bool_one_byte_enum_fname", test_unversioned_bool_one_byte_enum_fname),
+            ("summary.test_compressed_chunks_skipped_as_16_bytes", test_compressed_chunks_skipped_as_16_bytes),
+            (
+                "summary.test_import_package_name_not_gated_by_filter_editor_only",
+                test_import_package_name_not_gated_by_filter_editor_only,
+            ),
+            ("summary.test_summary_gate_modes_are_versioned", test_summary_gate_modes_are_versioned),
+            (
+                "table.test_table_rows_skip_tagged_stream_not_size_prefix",
+                test_table_rows_skip_tagged_stream_not_size_prefix,
+            ),
+            ("table.test_material_enum_tables_match_engine_types", test_material_enum_tables_match_engine_types),
         ]
     )
 
@@ -1059,6 +1375,9 @@ def test_handler_registry_supports_enriches_and_isolates():
             data = s.encode("utf-8") + b"\x00"
             return struct.pack("<i", len(data)) + data
 
+        def cstring(s: str) -> bytes:
+            return s.encode("utf-8") + b"\x00"
+
         def read_table(blob: bytes, dev_notes: bool):
             diags = []
             archive = ByteArchive(blob)
@@ -1066,7 +1385,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             result = _read_string_table(archive, "export:0", diags, dev_notes)
             return result, diags
 
-        # UE4-era layout: key + value only.
+        # UE layout: namespace (FString) + count + key (FString) + value (FString).
         blob = (
             fstring("MyNS") + struct.pack("<i", 2) + fstring("K1") + fstring("Hello") + fstring("K2") + fstring("World")
         )
@@ -1090,7 +1409,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert [d.code for d in diags] == ["TABLE_ENTRY_COUNT_INVALID"]
 
         # Truncated entries: bounded failure with diagnostic, never silent.
-        blob = fstring("NS") + struct.pack("<i", 5) + fstring("K") + fstring("V")
+        blob = fstring("NS") + struct.pack("<i", 5) + cstring("K") + fstring("V")
         result, diags = read_table(blob, dev_notes=False)
         assert not result["complete"]
         assert [d.code for d in diags] == ["STRING_TABLE_TRUNCATED"]
@@ -1390,6 +1709,193 @@ def test_handler_registry_supports_enriches_and_isolates():
         expr_cov = [c for c in bare_fn.coverage if c.feature == "material_function.expressions"]
         assert expr_cov and expr_cov[0].status == "missing"
 
+    def test_native_fields_delegate_type_name():
+        """K5: FField class name is MulticastInlineDelegateProperty (UnrealType.h)."""
+        src = (SRC / "uasset_read/kismet/native_fields.py").read_text(encoding="utf-8")
+        assert "InlineMulticastDelegateProperty" not in src
+        assert src.count("MulticastInlineDelegateProperty") >= 3
+
+    def test_ex_text_const_operand_layouts():
+        """K1/K2: UE5 literal-type numbering; operands are nested string expressions."""
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.kismet.expressions.string_consts import FScriptText
+        from uasset_read.kismet.tokens import EBlueprintTextLiteralType as T
+
+        assert T.LocalizedTextWithNotes == 2 and T.InvariantText == 3
+        assert T.LiteralString == 4 and T.StringTableEntry == 5
+
+        class _KismetLike:  # duck-typed operand reader over bounded bytes
+            def __init__(self, data):
+                self._arc = ByteArchive(data)
+
+            def read_u8(self):
+                return self._arc.read_u8()
+
+            def read_i32(self):
+                return self._arc.read_i32()
+
+            def xfer_ansi_string(self):
+                out = bytearray()
+                while (b := self._arc.read(1)) != b"\x00":
+                    out += b
+                return out.decode("utf-8")
+
+            def xfer_unicode_string(self):
+                out = bytearray()
+                while (pair := self._arc.read(2)) != b"\x00\x00":
+                    out += pair
+                return out.decode("utf-16-le")
+
+        def ansi(s):
+            return bytes([0x1F]) + s.encode("utf-8") + b"\x00"
+
+        data = bytes([1]) + ansi("Hello") + ansi("5A1B") + ansi("NS")  # source,key,namespace
+        text = FScriptText.from_archive(_KismetLike(data), [])
+        assert text.SourceString == "Hello" and text.KeyString == "5A1B" and text.Namespace == "NS"
+        uni = bytes([1]) + bytes([0x34]) + "Héy".encode("utf-16-le") + b"\x00\x00" + ansi("K") + ansi("N")
+        assert FScriptText.from_archive(_KismetLike(uni), []).SourceString == "Héy"
+        ste = bytes([5]) + struct.pack("<i", -3) + ansi("MyTable") + ansi("Key42")
+        t3 = FScriptText.from_archive(_KismetLike(ste), [])
+        assert t3.TableIdString == "MyTable" and t3.KeyString == "Key42"
+
+    def test_ex_assert_u8_and_container_counts():
+        """K3/K4: EX_Assert flag is uint8; set/map/array consts carry int32 counts."""
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.kismet.expressions.containers import EX_SetSet
+        from uasset_read.kismet.expressions.special import EX_Assert
+
+        class _WidthProbe:  # forwards the width-sensitive reads, stubs expression dispatch
+            def __init__(self, data):
+                self._arc = ByteArchive(data)
+
+            def read_u8(self):
+                return self._arc.read_u8()
+
+            def read_u16(self):
+                return self._arc.read_u16()
+
+            def read_i32(self):
+                return self._arc.read_i32()
+
+            def read_bool(self):
+                return self._arc.read_u32() != 0
+
+            def read_expression(self):
+                return None
+
+            def read_expression_array(self, _end_token):
+                return []
+
+            def tell(self):
+                return self._arc.tell()
+
+        probe = _WidthProbe(struct.pack("<HB", 42, 1))  # line + uint8 debug flag
+        node = EX_Assert.from_archive(probe, [])
+        assert node.LineNumber == 42 and node.DebugMode is True
+        assert probe.tell() == 3  # old 4-byte read_bool would land at 6
+        probe2 = _WidthProbe(struct.pack("<i", 7))  # the int32 element count
+        node2 = EX_SetSet.from_archive(probe2, [])
+        assert node2.Num == 7 and probe2.tell() == 4
+
+    def test_fstring_negative_one_consumes_two_bytes():
+        """G3: negative FString length always reads abs(len)*2 UTF-16 bytes (String.cpp.inl)."""
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.serializers.graph_helpers import read_ftext_fstring
+
+        arc = ByteArchive(struct.pack("<i", -1) + b"\x00\x00" + struct.pack("<i", 3) + b"abc\x00")
+        assert read_ftext_fstring(arc) == ""
+        assert arc.tell() == 6  # consumed the 2-byte UTF-16 NUL, not skipped it
+        assert read_ftext_fstring(arc) == "abc"
+
+    def test_map_pin_terminal_reads_trailing_bools():
+        """G1: FEdGraphTerminalType reads const/weak/gated-wrapper bools (EdGraphNode.cpp)."""
+        import struct
+
+        from types import SimpleNamespace
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.kismet.ufunction_reader import RELEASE_GUID
+        from uasset_read.serializers.graph_pin import read_ed_graph_pin_type
+
+        fname = struct.pack("<ii", 0, 0)  # "None"
+        data = (
+            fname
+            + fname
+            + struct.pack("<i", 0)
+            + struct.pack("<B", 3)  # cat, sub, obj, container=Map
+            + fname
+            + fname
+            + struct.pack("<i", 0)  # terminal cat, sub, object ref
+            + struct.pack("<iii", 1, 0, 1)  # terminal const, weak, uobject-wrapper (gated)
+            + struct.pack("<i", 0) * 2
+            + fname
+            + struct.pack("<i", 0)
+            + bytes(16)  # bIsReference/bIsWeak + member ref
+            + struct.pack("<i", 0) * 3  # trailing is_const / wrapper / single-precision bools
+        )
+        arc = ByteArchive(data)
+        summary = SimpleNamespace(
+            package_flags=0,
+            file_version_ue4=522,
+            file_version_ue5=1018,
+            custom_versions=[SimpleNamespace(guid=RELEASE_GUID, version=31)],
+        )
+        pt = read_ed_graph_pin_type(arc, ["None"], summary, [], [], None)
+        assert pt.container_type == 3
+        assert pt.map_key_terminal_is_const is True
+        assert pt.map_key_terminal_is_weak_pointer is False
+        assert pt.map_key_terminal_is_uobject_wrapper is True
+        assert pt.is_reference is False  # reads the 4-byte value AFTER the tail: desync guard
+
+    def test_byte_enum_node_tag_decodes_fname():
+        """G5: UENUM-backed byte tags carry the enum-entry FName (PropertyByte.cpp SerializeItem)."""
+        import struct
+
+        from types import SimpleNamespace
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.serializers.graph_node import _handle_advanced_pin_display, _handle_move_mode
+
+        names = ["None", "Hidden", "Copy"]
+        payload = struct.pack("<ii", 1, 0)  # FName pointing at name "Hidden", number 0
+        arc = ByteArchive(payload)
+        tag = SimpleNamespace(name="AdvancedPinDisplay", size=8, value_end_offset=8)
+        raw: dict = {}
+        _handle_advanced_pin_display(arc, tag, names, [], [], None, raw)
+        assert raw["AdvancedPinDisplayFormatted"] == "Hidden"
+        arc2 = ByteArchive(struct.pack("<ii", 2, 0))
+        raw2: dict = {}
+        tag2 = SimpleNamespace(name="MoveMode", size=8, value_end_offset=8)
+        _handle_move_mode(arc2, tag2, names, [], [], None, raw2)
+        assert raw2["MoveMode"] == "Copy"
+
+    def test_no_invented_k2node_tails():
+        """G4: K2Node Serialize() implementations add no binary tails past Pins."""
+        src = (SRC / "uasset_read/serializers/graph_node.py").read_text(encoding="utf-8")
+        head = src.split("# 5 Node type readers")[1].split("dispatch handlers")[0]
+        assert 'archive.read_bool("K2Node_CallFunction.bDefaultsToPure")' not in head
+        assert "legacy fallback (bool at pos" not in head
+        assert "read_k2node_message(" not in (SRC / "uasset_read/serializers/graph_node.py").read_text(encoding="utf-8")
+
+    def test_guid_display_is_36_chars():
+        """O1: FGuid display uses format_guid_bytes (8-4-4-4-12 = 36 chars)."""
+        import struct
+        from uasset_read.constants import format_guid_bytes
+        a, b, c, d = 0x01020304, 0x05060708, 0x090A0B0C, 0x0D0E0F10
+        s = format_guid_bytes(struct.pack("<IIII", a, b, c, d))
+        assert len(s) == 36 and s.count("-") == 4
+        # No invented 00000000 tail in handlers or user_defined
+        h_src = (SRC / "uasset_read/v2/handlers.py").read_text(encoding="utf-8")
+        u_src = (SRC / "uasset_read/parsers/asset_types/user_defined.py").read_text(encoding="utf-8")
+        assert "00000000" not in h_src
+        assert "00000000" not in u_src
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -1435,6 +1941,16 @@ def test_handler_registry_supports_enriches_and_isolates():
                 "handler.test_material_family_handlers_summary_tier_synthetic",
                 test_material_family_handlers_summary_tier_synthetic,
             ),
+            (
+                "handler.test_native_fields_delegate_type_name",
+                test_native_fields_delegate_type_name,
+            ),
+            ("handler.test_ex_text_const_operand_layouts", test_ex_text_const_operand_layouts),
+            ("handler.test_ex_assert_u8_and_container_counts", test_ex_assert_u8_and_container_counts),
+            ("handler.test_fstring_negative_one_consumes_two_bytes", test_fstring_negative_one_consumes_two_bytes),
+            ("handler.test_map_pin_terminal_reads_trailing_bools", test_map_pin_terminal_reads_trailing_bools),
+            ("handler.test_byte_enum_node_tag_decodes_fname", test_byte_enum_node_tag_decodes_fname),
+            ("handler.test_no_invented_k2node_tails", test_no_invented_k2node_tails),
         ]
     )
 

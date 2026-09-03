@@ -20,6 +20,7 @@ from uasset_read.constants import (
     MAX_FTEXT_CONSUMPTION,
 )
 from uasset_read.exceptions import ParseError
+from uasset_read.kismet.ufunction_reader import RELEASE_GUID, get_kismet_custom_version
 from uasset_read.serializers.object_resources import PackageIndex
 from uasset_read.models.core import UEdGraphPin, FEdGraphPinType
 
@@ -29,6 +30,7 @@ from uasset_read.serializers.graph_helpers import (
     _get_thread_local,
     _read_fstring_safe,
     _read_ftext_value,
+    ftext_dev_notes_enabled,
     validate_pin_reference_at,
 )
 
@@ -92,6 +94,16 @@ def read_ed_graph_pin_type(
                     pin_type.map_key_terminal_sub_category_object_name = _rcn(pkg_idx, import_map, export_map, linker)
             except (KeyError, IndexError, AttributeError):
                 pin_type.map_key_terminal_sub_category_object_name = None
+
+        # FEdGraphTerminalType tail — EdGraphNode.cpp operator<<: two unconditional
+        # 4-byte bools, then bTerminalIsUObjectWrapper gated on
+        # FReleaseObjectVersion >= PinTypeIncludesUObjectWrapperFlag (=31).
+        pin_type.map_key_terminal_is_const = archive.read_bool("Terminal.bIsConst")
+        pin_type.map_key_terminal_is_weak_pointer = archive.read_bool("Terminal.bIsWeakPointer")
+        if summary is not None and get_kismet_custom_version(summary, RELEASE_GUID) >= 31:
+            pin_type.map_key_terminal_is_uobject_wrapper = archive.read_bool("Terminal.bIsUObjectWrapper")
+        else:
+            pin_type.map_key_terminal_is_uobject_wrapper = False
 
     # bIsReference / bIsWeakPointer (UE5 FArchive bool = uint32, 4B)
     pin_type.is_reference = archive.read_bool("PinType.bIsReference")
@@ -476,11 +488,12 @@ def _read_pin_fstring_field(
 def _read_pin_ftext_field(
     archive: FArchive,
     field_name: str,
+    dev_notes: bool = False,
 ) -> tuple:
     """Read Pin FText field (PinFriendlyName / DefaultTextValue)."""
     _start = archive.tell()
     try:
-        value, flags, history_type, _ = _read_ftext_value(archive, tolerant=True)
+        value, flags, history_type, _ = _read_ftext_value(archive, tolerant=True, dev_notes=dev_notes)
         consumed = archive.tell() - _start
         if consumed > MAX_FTEXT_CONSUMPTION:
             logger.debug(
@@ -601,8 +614,9 @@ def read_ue_graph_pin(
     # 3. PinName
     pin_name = archive.read_name(name_map)
 
-    # 4. PinFriendlyName (FText)
-    pin_friendly_name, _ = _read_pin_ftext_field(archive, "PinFriendlyName")
+    # 4. PinFriendlyName (FText) — DevNotes gated per package custom version
+    dev_notes = ftext_dev_notes_enabled(summary)
+    pin_friendly_name, _ = _read_pin_ftext_field(archive, "PinFriendlyName", dev_notes=dev_notes)
 
     # 5. SourceIndex (UE5 always present)
     source_index = archive.read_i32("Pin.SourceIndex")
@@ -624,7 +638,7 @@ def read_ue_graph_pin(
     default_object = archive.read_i32("Pin.DefaultObject")
 
     # 12. DefaultTextValue (FText)
-    default_text_value, _ = _read_pin_ftext_field(archive, "DefaultTextValue")
+    default_text_value, _ = _read_pin_ftext_field(archive, "DefaultTextValue", dev_notes=dev_notes)
 
     # 13. LinkedTo array
     linked_to = _read_pin_ref_array(

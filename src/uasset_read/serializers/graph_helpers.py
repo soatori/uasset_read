@@ -22,9 +22,11 @@ if TYPE_CHECKING:
 
 from uasset_read.constants import (
     MAX_SAFE_COUNT,
+    PKG_FilterEditorOnly,
     format_guid_bytes,
 )
 from uasset_read.exceptions import ParseError
+from uasset_read.kismet.ufunction_reader import FORTNITE_GUID, get_kismet_custom_version
 from uasset_read.serializers.object_resources import (
     resolve_class_name,
     resolve_class_name_with_linker,
@@ -136,30 +138,23 @@ def _read_fstring_safe(archive: FArchive, max_length: int = MAX_SAFE_COUNT) -> s
 
     References UE C++ FArchive& operator<<(FString&) implementation.
 
-    FString serialization format (UE C++ Archive.h L209-230):
+    FString serialization format (UE C++ String.cpp.inl:1810-1904):
     - length == 0: empty string (no data region)
-    - length == -1: empty string special marker (UE internal optimization, no data region)
     - length > 0: ANSI string, read length bytes
-    - length < -1: UTF-16 string, read (-length * 2) bytes
+    - length < 0: UTF-16 string, read (-length * 2) bytes; -1 is a 2-byte NUL, never "no data"
 
     Fixes length == -1 boundary condition (common in SubPin PinToolTip).
     """
     length = archive.read_i32()
-    if length == 0 or length == -1:
-        # length=-1 is UE empty string marker, no data read
+    if length == 0:
         return ""
     if abs(length) > max_length:
         # Abnormal length, fall back to empty string
         if archive.tell() >= 4:
             archive.seek(archive.tell() - 4)
         return ""
-    if length < -1:
-        utf16_len = -length * 2
-        if utf16_len > max_length * 2:
-            if archive.tell() >= 4:
-                archive.seek(archive.tell() - 4)
-            return ""
-        data = archive.read(utf16_len)
+    if length < 0:
+        data = archive.read(-length * 2)
         return data.decode("utf-16-le", errors="replace").rstrip("\x00")
     data = archive.read(length)
     return data.decode("utf-8", errors="replace").rstrip("\x00")
@@ -173,27 +168,40 @@ def read_ftext_fstring(archive: FArchive) -> str:
     This avoids "read partial body but continue forward" silent misalignment.
     """
     length = archive.read_i32()
-    if length == 0 or length == -1:
+    if length == 0:
         return ""
-    if abs(length) > MAX_SAFE_COUNT:
-        raise ParseError(f"Invalid FText FString length: {length}")
-    if length < -1:
-        data = archive.read(-length * 2)
+    if length < 0:
+        # String.cpp.inl:1810-1904: negative length reads abs(len)*2 UTF-16 bytes;
+        # -1 is a 2-byte NUL, never "no data". (archive.py read_fstring already follows UE.)
+        utf16_len = -length * 2
+        if utf16_len > MAX_SAFE_COUNT * 2:
+            raise ParseError(f"Invalid FText FString length: {length}")
+        data = archive.read(utf16_len)
         return data.decode("utf-16-le", errors="replace").rstrip("\x00")
+    if length > MAX_SAFE_COUNT:
+        raise ParseError(f"Invalid FText FString length: {length}")
     data = archive.read(length)
     return data.decode("utf-8", errors="replace").rstrip("\x00")
+
+
+def ftext_dev_notes_enabled(summary) -> bool:
+    """TextHistory.cpp:915-937 — editor UE5 FText Base appends a gated DevNotes FString."""
+    if summary is None or (summary.package_flags & PKG_FilterEditorOnly):
+        return False
+    return get_kismet_custom_version(summary, FORTNITE_GUID) >= 260  # AddDevNotesToFText
 
 
 def _read_ftext_value(
     archive: FArchive,
     tolerant: bool = True,
+    dev_notes: bool = False,
 ) -> tuple[str, int, int, int]:
     """Read complete FText, returns (value, flags, history_type, consumed)."""
     start_pos = archive.tell()
     flags = archive.read_i32()
     history_type_raw = archive.read_u8()
     history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
-    value, _ = read_ftext_with_history(archive, history_type, tolerant=tolerant)
+    value, _ = read_ftext_with_history(archive, history_type, tolerant=tolerant, dev_notes=dev_notes)
     return value, flags, history_type, archive.tell() - start_pos
 
 
@@ -201,12 +209,14 @@ def read_ftext_with_history(
     archive: FArchive,
     history_type: int,
     tolerant: bool = True,
+    dev_notes: bool = False,
 ) -> tuple[str, int]:
     """Read FText, returns (value, consumed_bytes).
 
     history_type (ETextHistoryType, signed int8):
     - -1 (0xFF): None (no history) - bHasCultureInvariantString (bool=4 bytes) + optional FString
     - 0: Base - Namespace (FString) + Key (FString) + SourceString (FString)
+      [+ DevNotes (FString) when dev_notes is gated]
     - 1: NamedFormat - FormatText (recursive FText) + Arguments (TArray<FFormatArgumentData>)
     - 2+: other generated types (not parsed in tolerant mode)
 
@@ -230,8 +240,11 @@ def read_ftext_with_history(
         _namespace = read_ftext_fstring(archive)
         _key = read_ftext_fstring(archive)
         value = read_ftext_fstring(archive)
+        if dev_notes:
+            # TextHistory.cpp:915-937: the gated 4th DevNotes FString follows SourceString.
+            read_ftext_fstring(archive)
     elif history_type == 1:
-        format_text, _, _, _ = _read_ftext_value(archive, tolerant=tolerant)
+        format_text, _, _, _ = _read_ftext_value(archive, tolerant=tolerant, dev_notes=dev_notes)
         arg_count = archive.read_i32()
         if arg_count < 0 or arg_count > MAX_SAFE_COUNT:
             # Design decision: from raise ParseError to warning+skip,
@@ -252,7 +265,7 @@ def read_ftext_with_history(
             elif arg_type == 3:
                 arg_value = str(archive.read_f64())
             elif arg_type == 4:
-                arg_value, _, _, _ = _read_ftext_value(archive, tolerant=tolerant)
+                arg_value, _, _, _ = _read_ftext_value(archive, tolerant=tolerant, dev_notes=dev_notes)
             elif arg_type == 5:
                 arg_value = str(archive.read_u8())
             else:
