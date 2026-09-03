@@ -719,6 +719,30 @@ def test_package_document_preserves_every_export_and_role():
             11: "ThinTranslucent",
         }
 
+    def test_mcdelegate_pin_category_is_multicast():
+        from uasset_read.semantic.blueprint.types import TypeTable
+
+        table = TypeTable()
+        ref = table.type_ref_for(category="mcdelegate", subcategory_object_name="FMyEvent")
+        entry = table.entries[ref["$type"]]
+        assert entry["kind"] == "delegate" and entry.get("multicast") is True
+        ref2 = table.type_ref_for(category="delegate", subcategory_object_name="FMyEvent")
+        entry2 = table.entries[ref2["$type"]]
+        assert "multicast" not in entry2
+
+    def test_replication_condition_names_match_core_net_types():
+        from uasset_read.semantic.blueprint.variables import _REPLICATION_CONDITIONS
+
+        assert _REPLICATION_CONDITIONS == {
+            0: "none",
+            1: "initial_only",
+            2: "owner_only",
+            3: "skip_owner",
+            4: "replay_only",
+            5: "temporal",
+            7: "initial_or_owner",
+        }
+
     _run_cases(
         [
             ("document.test_all_exports_present", test_all_exports_present),
@@ -737,6 +761,11 @@ def test_package_document_preserves_every_export_and_role():
                 test_table_rows_skip_tagged_stream_not_size_prefix,
             ),
             ("table.test_material_enum_tables_match_engine_types", test_material_enum_tables_match_engine_types),
+            ("document.test_mcdelegate_pin_category", test_mcdelegate_pin_category_is_multicast),
+            (
+                "document.test_replication_condition_names",
+                test_replication_condition_names_match_core_net_types,
+            ),
         ]
     )
 
@@ -1875,6 +1904,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         """O1: FGuid display uses format_guid_bytes (8-4-4-4-12 = 36 chars)."""
         import struct
         from uasset_read.constants import format_guid_bytes
+
         a, b, c, d = 0x01020304, 0x05060708, 0x090A0B0C, 0x0D0E0F10
         s = format_guid_bytes(struct.pack("<IIII", a, b, c, d))
         assert len(s) == 36 and s.count("-") == 4

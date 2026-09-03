@@ -130,9 +130,11 @@ class TypeTable:
             return self._intern({"kind": "struct", "path": name or subcategory or "unnamed"})
         if category == "enum":
             return self._intern({"kind": "enum", "path": name or subcategory or "unnamed"})
-        if category == "delegate":
+        if category in ("delegate", "mcdelegate"):
+            # EdGraphSchema_K2.cpp: multicast-ness lives in PinCategory (PC_MCDelegate),
+            # the signature is routed via PinSubCategoryMemberReference.
             entry = {"kind": "delegate", "signature": name or subcategory or "unnamed"}
-            if subcategory == "mcdelegate":
+            if category == "mcdelegate":
                 entry["multicast"] = True
             return self._intern(entry)
         if category == "interface":
