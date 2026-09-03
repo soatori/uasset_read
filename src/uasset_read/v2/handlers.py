@@ -1065,7 +1065,9 @@ class BlueprintFamilyHandler:
     """Enrich Blueprint-family objects (Blueprint or AnimBlueprint variants).
 
     At depth="asset": light summary only (kind, name, class).
-    At depth="decode": full graph data (nodes, edges) for explicitly selected objects.
+    At depth="decode": real graphs arrive via extras (reader-side pass).
+    Only the owning asset export carries them; GeneratedClass exports
+    keep the summary and stay "partial" (#629 tier contract).
     """
 
     def __init__(self, classes: tuple[str, ...], kind: str, feature: str):
@@ -1090,115 +1092,308 @@ class BlueprintFamilyHandler:
             "blueprint_type": cn,
             "name": obj.name,
         }
-        coverage: list[CoverageEntry] = []
 
-        # At depth="asset": light summary only, no heavy graph arrays
         if context.depth == "asset":
-            coverage.append(
+            obj.coverage.append(
                 CoverageEntry(
                     feature=f"{self._feature}.summary",
                     status="present",
                     detail="light summary at depth=asset",
                 )
             )
-            obj.coverage.extend(coverage)
             return result
 
-        # At depth="decode": full graph data
+        # depth == "decode": real graphs arrive via extras (reader-side pass).
+        # Only the owning asset export carries them; GeneratedClass exports
+        # keep the summary and stay "partial" (#629 tier contract).
         if context.depth == "decode":
-            # Find related graph objects (EdGraph, K2Node_*)
-            graph_nodes: list[dict[str, Any]] = []
-            graph_edges: list[dict[str, Any]] = []
+            extras = package_data[2] if package_data else {}
+            entry = extras.get(obj.id, {}) if isinstance(extras, dict) else {}
+            graphs = entry.get("graphs", []) if isinstance(entry, dict) else []
+            if graphs:
+                fg_ids = _function_graph_ids(obj.properties)
+                self._finalize_graph_kinds(graphs, fg_ids)
+                truncated = any(g["truncated"]["nodes"] or g["truncated"]["pins"] for g in graphs)
+                result["graphs"] = graphs
+                result["truncated_graphs"] = truncated
+                result["declaration"] = _extract_declaration(
+                    obj, entry, graphs, fg_ids, package_data[0] if package_data else None
+                )
+                result["variables"] = _extract_variables(obj)
+                result["components"] = _extract_components(obj, all_objects, package_data)
 
-            for other in all_objects:
-                other_class = other.class_name or ""
-                if other_class == "EdGraph":
-                    # EdGraph is a container for graph nodes
-                    graph_nodes.append(
-                        {
-                            "id": other.id,
-                            "type": "EdGraph",
-                            "name": other.name,
-                        }
-                    )
-                elif other_class.startswith("K2Node_"):
-                    # K2Node_* are graph nodes
-                    node: dict[str, Any] = {
-                        "id": other.id,
-                        "type": other_class,
-                        "name": other.name,
-                    }
-                    # Extract parent reference if available
-                    if other.properties and "ParentNode" in other.properties:
-                        parent_prop = other.properties["ParentNode"]
-                        if isinstance(parent_prop, dict) and "value" in parent_prop:
-                            node["parent_node"] = parent_prop["value"]
-                    graph_nodes.append(node)
+                # Build state_machines list for AnimBlueprint family
+                if self._kind == "anim_blueprint":
+                    result["state_machines"] = self._extract_state_machines(graphs)
 
-            # Build edges from parent references
-            node_ids = {n["id"] for n in graph_nodes}
-            for node_info in graph_nodes:
-                if "parent_node" in node_info:
-                    parent_id = node_info["parent_node"]
-                    if parent_id in node_ids:
-                        graph_edges.append(
-                            {
-                                "from_node": parent_id,
-                                "to_node": node_info["id"],
-                                "kind": "parent",
-                            }
-                        )
-
-            if graph_nodes:
-                result["graph"] = {
-                    "nodes": graph_nodes,
-                    "edges": graph_edges,
-                    "node_count": len(graph_nodes),
-                    "edge_count": len(graph_edges),
-                }
-                coverage.append(
+                detail = f"{len(graphs)} graphs, {sum(g['node_count'] for g in graphs)} nodes"
+                if truncated:
+                    detail += " (truncated)"
+                obj.coverage.append(
                     CoverageEntry(
                         feature=f"{self._feature}.graph",
-                        status="present",
-                        detail=f"{len(graph_nodes)} nodes, {len(graph_edges)} edges",
+                        status="partial" if truncated else "present",
+                        detail=detail,
                     )
                 )
-            else:
-                coverage.append(
-                    CoverageEntry(
-                        feature=f"{self._feature}.graph",
-                        status="missing",
-                        detail="no graph objects found",
-                    )
-                )
-
-            # --- Baked state machines (AnimBlueprint only) ---
-            if self._kind == "anim_blueprint":
-                baked_sm = _extract_baked_state_machines(obj)
-                if baked_sm:
-                    result["state_machines"] = baked_sm
-                    coverage.append(
+                if result.get("state_machines"):
+                    obj.coverage.append(
                         CoverageEntry(
                             feature=f"{self._feature}.state_machines",
                             status="present",
-                            detail=f"{len(baked_sm)} state machines",
+                            detail=f"{len(result['state_machines'])} state machines",
                         )
                     )
-                else:
-                    coverage.append(
+                if result["variables"]:
+                    obj.coverage.append(
                         CoverageEntry(
-                            feature=f"{self._feature}.state_machines",
-                            status="missing",
-                            detail="BakedStateMachines not in property bag (parse failure or absent)",
+                            feature=f"{self._feature}.variables",
+                            status="present",
+                            detail=f"{len(result['variables'])} variables",
                         )
                     )
+                if result["components"]:
+                    obj.coverage.append(
+                        CoverageEntry(
+                            feature=f"{self._feature}.components",
+                            status="present",
+                            detail=f"{len(result['components'])} components",
+                        )
+                    )
+                # --- Kismet bytecode decompilation results ---
+                kismet = entry.get("kismet", []) if isinstance(entry, dict) else []
+                if kismet:
+                    result["functions"] = [
+                        {
+                            "function_name": fn.get("function_name"),
+                            "signature": fn.get("signature"),
+                            "cpp_code": fn.get("cpp_code", ""),
+                            "bytecode_status": fn.get("bytecode_status", "unknown"),
+                            "translation_status": fn.get("translation_status", "not_applicable"),
+                        }
+                        for fn in kismet
+                    ]
+                    obj.coverage.append(
+                        CoverageEntry(
+                            feature=f"{self._feature}.kismet",
+                            status="present",
+                            detail=f"{len(kismet)} functions",
+                        )
+                    )
+            else:
+                obj.coverage.append(
+                    CoverageEntry(
+                        feature=f"{self._feature}.graph",
+                        status="missing",
+                        detail="no graphs owned by this export",
+                    )
+                )
 
-            obj.coverage.extend(coverage)
             return result
 
+    @staticmethod
+    def _finalize_graph_kinds(graphs: list[dict[str, Any]], fg_ids: set[str]) -> None:
+        """Set per-graph kind from name / FunctionGraphs membership.
+
+        Deterministic derivation: EventGraph/UserConstructionScript by name,
+        graphs listed in FunctionGraphs -> "function", graphs containing
+        "State" in the name -> "state_machine", else "unknown".
+        """
+        for graph in graphs:
+            if graph["name"] == "EventGraph":
+                graph["kind"] = "event_graph"
+            elif graph["name"] == "UserConstructionScript":
+                graph["kind"] = "construction_script"
+            elif graph["id"] in fg_ids:
+                graph["kind"] = "function"
+            elif "State" in graph["name"]:
+                graph["kind"] = "state_machine"
+            else:
+                graph["kind"] = "unknown"
+
+    @staticmethod
+    def _extract_state_machines(graphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Extract state machine summary from graphs.
+
+        State machines are identified by graph kind == "state_machine".
+        state_count = number of nodes that represent distinct states
+        (nodes carrying at least one subgraph reference);
+        node_count = total node count in the graph.
+        """
+        state_machines: list[dict[str, Any]] = []
+        for graph in graphs:
+            if graph.get("kind") == "state_machine" and graph.get("node_count", 0) > 1:
+                nodes = graph.get("nodes", [])
+                states = sum(1 for n in nodes if n.get("subgraph_references"))
+                state_machines.append(
+                    {
+                        "name": graph["name"],
+                        "kind": "state_machine",
+                        "state_count": states if states else graph.get("node_count", 0),
+                        "node_count": graph.get("node_count", 0),
+                    }
+                )
+        return state_machines
+
     def capability(self, result: dict[str, Any]) -> str:
-        # Light summary at depth=asset; only decoded graph data counts (#629).
-        return "decoded" if "graph" in result else "summary"
+        # Truncated decode output must not claim "complete" (#629, bounded by
+        # default); summary echoes stay summary tier.
+        if result.get("graphs") and not result.get("truncated_graphs"):
+            return "decoded"
+        return "summary"
+
+
+def _function_graph_ids(properties: dict[str, Any] | None) -> set[str]:
+    """Export ids of the FunctionGraphs property (positive refs = export idx + 1)."""
+    fg = properties.get("FunctionGraphs", {}).get("value") if properties else None
+    ids: set[str] = set()
+    if isinstance(fg, list):
+        for ref in fg:
+            if isinstance(ref, int) and ref > 0:
+                ids.add(f"export:{ref - 1}")
+    return ids
+
+
+def _extract_declaration(
+    obj: ObjectRecord,
+    entry: dict[str, Any],
+    graphs: list[dict[str, Any]],
+    fg_ids: set[str],
+    export_map: Any,
+) -> dict[str, Any]:
+    """parent_class / interfaces / functions for the owning asset export."""
+    props = obj.properties or {}
+    parent = None
+    parent_value = props.get("ParentClass")
+    if isinstance(parent_value, dict):
+        value = parent_value.get("value")
+        if isinstance(value, dict):
+            parent = value.get("object_name")
+        elif isinstance(value, int) and value > 0 and export_map is not None:
+            entry_obj = export_map[value - 1] if value - 1 < len(export_map) else None
+            if entry_obj is not None:
+                parent = getattr(entry_obj, "object_name", None)
+    functions: list[dict[str, Any]] = []
+    graph_by_id = {g["id"]: g for g in graphs}
+    for oid in sorted(fg_ids):
+        graph = graph_by_id.get(oid)
+        if graph is not None and graph.get("name"):
+            functions.append({"id": oid, "name": graph["name"]})
+    return {
+        "parent_class": parent,
+        "interfaces": entry.get("interfaces", []),
+        "functions": functions,
+    }
+
+
+def _guid_hex(guid_fields: Any) -> str:
+    """Serialize a decoded Guid struct fields dict (A/B/C/D int32) to 32 hex."""
+    if not isinstance(guid_fields, dict):
+        return ""
+    return "".join(f"{int(guid_fields.get(k, 0)) & 0xFFFFFFFF:08x}" for k in ("A", "B", "C", "D"))
+
+
+def _extract_variables(obj: ObjectRecord) -> list[dict[str, Any]]:
+    """NewVariables (BPVariableDescription) with decoded VarType (FEdGraphPinType)."""
+    props = obj.properties or {}
+    raw = props.get("NewVariables")
+    if not isinstance(raw, dict) or not isinstance(raw.get("value"), list):
+        return []
+    out: list[dict[str, Any]] = []
+    for desc in raw["value"]:
+        if not isinstance(desc, dict):
+            continue
+        fields = desc.get("fields", {})
+        if not isinstance(fields, dict):
+            continue
+        # VarType is now decoded by binary_or_native_handlers (struct_binary_decoded)
+        vt_raw = fields.get("VarType")
+        vt_info: dict[str, Any] | None = None
+        if isinstance(vt_raw, dict):
+            vt_fields = vt_raw.get("fields") if vt_raw.get("kind") == "struct_binary_decoded" else None
+            if isinstance(vt_fields, dict):
+                container = {0: None, 1: "array", 2: "set", 3: "map"}.get(vt_fields.get("container_type", -1))
+                vt_info = {
+                    "pin_category": vt_fields.get("pin_category", ""),
+                    "pin_subcategory": vt_fields.get("pin_subcategory", ""),
+                }
+                if container:
+                    vt_info["container"] = container
+                if vt_fields.get("is_reference"):
+                    vt_info["is_reference"] = True
+                if vt_fields.get("is_const"):
+                    vt_info["is_const"] = True
+        out.append(
+            {
+                "name": fields.get("VarName"),
+                "guid": _guid_hex(fields.get("VarGuid", {}).get("fields"))
+                if isinstance(fields.get("VarGuid"), dict)
+                else "",
+                **({"type": vt_info} if vt_info else {}),
+            }
+        )
+    return out
+
+
+_BLUEPRINT_FAMILY = frozenset({"Blueprint", "AnimBlueprint", "BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"})
+
+
+def _pair_key(name: str) -> str:
+    """Key joining a Blueprint asset export with its GeneratedClass export."""
+    return name[:-2] if name.endswith("_C") else name
+
+
+def _family_root_key(record: ObjectRecord | None, all_objects: list[ObjectRecord]) -> str | None:
+    """Pair key of the Blueprint-family root of record's outer chain."""
+    by_id = {o.id: o for o in all_objects}
+    cur = record
+    for _ in range(8):
+        if cur is None:
+            return None
+        if (cur.class_name or "") in _BLUEPRINT_FAMILY:
+            return _pair_key(cur.name)
+        outer = cur.outer_ref
+        if outer is None or outer.table != "export":
+            return None
+        cur = by_id.get(f"export:{outer.index}")
+    return None
+
+
+def _extract_components(obj: ObjectRecord, all_objects: list[ObjectRecord], package_data: Any) -> list[dict[str, Any]]:
+    """SCS component tree from SCS_Node exports (UE: SimpleConstructionScript.cpp)."""
+    scope = _family_root_key(obj, all_objects)
+    if scope is None:
+        return []
+    nodes = [
+        o
+        for o in all_objects
+        if o.class_name == "SCS_Node" and o.properties and _family_root_key(o, all_objects) == scope
+    ]
+    export_map = package_data[0] if package_data else None
+    out: list[dict[str, Any]] = []
+    for node in nodes:
+        props = node.properties or {}
+        comp = props.get("ComponentTemplate", {}).get("value")
+        cclass = props.get("ComponentClass", {}).get("value")
+        name = ""
+        if isinstance(comp, dict):
+            name = comp.get("object_name") or comp.get("name") or node.name
+        elif isinstance(comp, int) and comp > 0 and export_map is not None:
+            target = export_map[comp - 1] if comp - 1 < len(export_map) else None
+            name = getattr(target, "object_name", None) or node.name
+        else:
+            name = node.name
+        ctype = cclass.get("object_name", "") if isinstance(cclass, dict) else ""
+        parent: str | None = None
+        this_idx = node.table_index
+        for other in nodes:
+            children = (other.properties or {}).get("ChildNodes", {}).get("value")
+            if isinstance(children, list) and any(isinstance(c, int) and c > 0 and c - 1 == this_idx for c in children):
+                parent = other.id
+                break
+        out.append({"id": node.id, "name": name, "type": ctype, "parent": parent})
+    out.sort(key=lambda c: c["id"])
+    return out
 
 
 register_handler(

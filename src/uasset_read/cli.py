@@ -22,7 +22,7 @@ from uasset_read.constants import (
 _logger = logging.getLogger(__name__)
 
 
-def _sanitize_error_message(message: str) -> str:
+def _sanitize_error_message(message: object) -> str:
     """清理异常消息中的内部路径，防止信息泄露。
 
     将绝对路径替换为 basename，保留异常类型和关键信息。
@@ -231,7 +231,9 @@ def _write_output(output_str: str, output_path: str | None) -> None:
             sys.exit(EXIT_ARGUMENT_ERROR)
     else:
         try:
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            stdout = sys.stdout
+            if hasattr(stdout, "reconfigure"):
+                stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
         except (AttributeError, OSError):
             pass
         print(output_str)

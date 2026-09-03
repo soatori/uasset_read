@@ -17,7 +17,7 @@ status: target
 ## 2. 三种必查 peer 的场景
 
 | 场景 | 动作 | 注释形式 |
-|---|---|---|
+| --- | --- | --- |
 | 实现先行（fixture 缺失）且 peer 覆盖该布局 | 逐字段比对 peer 解析器 | `Corroborated (not proof): CUE4Parse X, UAssetAPI Y`（先例 legacy.py:845） |
 | 实现先行且 peer 零覆盖 | 不做猜测，照常实现 | docstring 注明 `No peer parser covers this type`（先例 AnimLayerInterfaceHandler） |
 | 跨时代风险字段（新增/重命名属性、版本门控、枚举序） | 比对 peer 的版本枚举副本与分支处理 | 结论记入审查报告而非仅注释 |
@@ -35,7 +35,7 @@ status: target
 ## 4. external/ 清单（pin 提交，2026-09-02 核对）
 
 | Peer | 语言/焦点 | 对本项目有用的覆盖域 |
-|---|---|---|
+| --- | --- | --- |
 | CUE4Parse | C# / 全引擎资产，游戏文件 | 资产类导出、Zen/IoStore、.usmap 兼容参考、版本枚举副本 |
 | UAssetAPI | C# / loose 包 | 编辑器自保存包、StringTableExport、export 表细节 |
 | UAssetGUI | C# UI | 委托 UAssetAPI，无独立解析 |

@@ -302,16 +302,17 @@ def _resolve_knot_chain(
         - success=False: chain broken or cycle detected
     """
     visited: Set[str] = set()
-    current_pin_guid = pin_guid
+    current_pin_guid: str = pin_guid
 
     for _ in range(max_depth):
+        assert isinstance(current_pin_guid, str)  # narrowed each iteration
         if current_pin_guid in visited:
             return (current_pin_guid, False)  # cycle detected
 
         visited.add(current_pin_guid)
 
         # Get target node
-        target_node_guid, _ = pin_lookup.get(current_pin_guid, (None, None))
+        target_node_guid, _ = pin_lookup.get(current_pin_guid, ("", ""))
         if not target_node_guid:
             return (current_pin_guid, False)  # Pin does not exist
 
@@ -327,12 +328,13 @@ def _resolve_knot_chain(
         for pin in target_node.pins:
             if pin.pin_name == "InputPin" and pin.direction == 0:  # Input
                 if source_edges_by_to_pin and _normalize_pin_id(pin.pin_id) in source_edges_by_to_pin:
-                    current_pin_guid = source_edges_by_to_pin[_normalize_pin_id(pin.pin_id)][0]["from_pin_id"]
+                    current_pin_guid = str(source_edges_by_to_pin[_normalize_pin_id(pin.pin_id)][0]["from_pin_id"])
                     break
                 # InputPin's linked_to_raw is the previous pin (data source)
                 for linked_ref in pin.linked_to_raw or []:
                     next_pin_guid = _pin_ref_guid(linked_ref)
-                    current_pin_guid = next_pin_guid
+                    if next_pin_guid is not None:
+                        current_pin_guid = next_pin_guid
                     break
                 break
 
@@ -392,6 +394,8 @@ def _trace_data_source(
     sources: List[Dict] = []
     for linked_ref in linked_refs:
         target_pin_guid = _pin_ref_guid(linked_ref)
+        if target_pin_guid is None:
+            continue
 
         # Knot traversal
         terminal_pin_guid, success = _resolve_knot_chain(
@@ -402,7 +406,7 @@ def _trace_data_source(
             continue
 
         # Get terminal node
-        terminal_node_guid, terminal_pin_name = pin_lookup.get(terminal_pin_guid, (None, None))
+        terminal_node_guid, terminal_pin_name = pin_lookup.get(terminal_pin_guid, ("", ""))
         if not terminal_node_guid:
             sources.append({"source_type": "pin_not_found", "pin_guid": terminal_pin_guid})
             continue
@@ -591,7 +595,7 @@ def _trace_execution_from_event(
 
         visited.add(current_guid)
 
-        node_info = {
+        node_info: Dict[str, Any] = {
             "node_guid": current_guid,
             "node_type": current_node.class_name,
         }
@@ -1364,7 +1368,7 @@ def build_function_graphs(
             annotated_nodes: List[Dict] = []
             for node_info in execution_flows:
                 # Get original node object
-                original_node = node_lookup.get(node_info.get("node_guid"))
+                original_node = node_lookup.get(node_info.get("node_guid", ""))
 
                 if original_node:
                     annotation = _annotate_node_with_data_flow(

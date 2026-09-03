@@ -115,22 +115,29 @@ def _validate_jump_targets(expressions: list[KismetExpression]) -> None:
     Checks EX_Jump, EX_JumpIfNot, EX_PushExecutionFlow, EX_SwitchValue, and
     EX_AutoRtfmTransact targets.
     """
-    from uasset_read.kismet.tokens import EExprToken as _EExprToken
+    from uasset_read.kismet.expressions.control_flow import (
+        EX_Jump,
+        EX_JumpIfNot,
+        EX_PushExecutionFlow,
+        EX_Skip,
+    )
+    from uasset_read.kismet.expressions.rtfm import EX_AutoRtfmTransact
+    from uasset_read.kismet.expressions.special import EX_SwitchValue
 
     top_level_indices = {expr.StatementIndex for expr in expressions}
 
     for expr in expressions:
         targets: list[int] = []
 
-        if expr.Token in (_EExprToken.EX_Jump, _EExprToken.EX_JumpIfNot, _EExprToken.EX_Skip):
+        if isinstance(expr, (EX_Jump, EX_JumpIfNot, EX_Skip)):
             targets.append(expr.CodeOffset)
-        elif expr.Token == _EExprToken.EX_PushExecutionFlow:
+        elif isinstance(expr, EX_PushExecutionFlow):
             targets.append(expr.PushingAddress)
-        elif expr.Token == _EExprToken.EX_SwitchValue:
+        elif isinstance(expr, EX_SwitchValue):
             targets.append(expr.EndGotoOffset)
             for case in expr.Cases or []:
                 targets.append(case.NextOffset)
-        elif expr.Token == _EExprToken.EX_AutoRtfmTransact:
+        elif isinstance(expr, EX_AutoRtfmTransact):
             targets.append(expr.CodeOffset)
 
         for target in targets:

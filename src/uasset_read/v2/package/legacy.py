@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Literal, Sequence
 
 from ...archive import ByteArchive
-from ...constants import PKG_FilterEditorOnly
+from ...constants import PKG_Cooked, PKG_FilterEditorOnly
 from ...exceptions import ParseError, ExportBoundsExceeded
 from ...memory_safety import ResourceBudget
 from ...package import PackageArchive
@@ -148,7 +148,20 @@ def _validate_relation_targets(
     diagnostics: list[Diagnostic] = []
     for rel in relations:
         table, _, raw_idx = rel.to_id.partition(":")
-        idx = int(raw_idx)
+        try:
+            idx = int(raw_idx)
+        except ValueError:
+            diagnostics.append(
+                Diagnostic(
+                    severity="warning",
+                    code="RELATION_TARGET_INVALID",
+                    message=f"{rel.kind} target {rel.to_id} from {rel.from_id} has unparseable index",
+                    stage="package.relations",
+                    object_id=rel.from_id,
+                    recoverable=True,
+                )
+            )
+            continue
         limit = export_count if table == "export" else import_count
         if table not in ("export", "import") or idx >= limit:
             diagnostics.append(
@@ -505,6 +518,24 @@ class LegacyPackageReader:
                     mappings=mappings_provider,
                 )
 
+            # 16b. Blueprint deep-decode graph pass at depth="decode".
+            # Editor saves do not export pins — they live in each node export's
+            # serial region after the property stream. The shared
+            # serializers/graph* readers decode them; results travel to the
+            # handlers through extras under the owning export id.
+            if depth == "decode" and not (summary.package_flags & PKG_Cooked):
+                _attach_blueprint_graph_extras(
+                    archive=archive,
+                    summary=summary,
+                    name_map=name_map,
+                    import_map=import_map,
+                    export_map=export_map,
+                    objects=objects,
+                    extras=extras,
+                    diagnostics=diagnostics,
+                    object_ids=object_ids,
+                )
+
             # 17. Run asset handlers at depth >= asset
             if depth in ("asset", "decode"):
                 context = build_version_context_from_summary(
@@ -784,6 +815,188 @@ class LegacyPackageReader:
 _TABLE_CLASSES = ("DataTable", "CurveTable")
 _MAX_TABLE_BLOB = 64 * 1024 * 1024  # bounded read; larger tables report partial
 _MAX_TABLE_ROWS = 100000  # garbage row counts are rejected, not trusted
+
+
+_BLUEPRINT_FAMILY_CLASSES = frozenset(
+    {"Blueprint", "AnimBlueprint", "BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}
+)
+
+
+def _resolve_graph_owner(export_idx: int, export_map: list[ObjectExport], objects: list[ObjectRecord]) -> str | None:
+    """Walk a graph export's outer chain to its Blueprint-family owner.
+
+    Graph exports' outer is the UBlueprint asset object (verified on the
+    tracked fixtures: StackOBot EventGraph export:4 outer=export:0,
+    ABP_RifleAnimLayers EventGraph export:3 outer=export:1). Walks the raw
+    ``outer_index`` chain (FPackageIndex: positive = export index + 1,
+    negative = import) at most 8 hops — a chain cannot cycle in a valid
+    package. Returns None when no family export is on the chain.
+    """
+    by_index = {o.table_index: o for o in objects}
+    idx = export_idx
+    for _ in range(8):
+        rec = by_index.get(idx)
+        if rec is None:
+            return None
+        if (rec.class_name or "") in _BLUEPRINT_FAMILY_CLASSES:
+            return rec.id
+        if idx >= len(export_map):
+            return None
+        outer = export_map[idx].outer_index
+        value = outer.index if outer is not None else 0
+        if value > 0:  # export ref (1-based)
+            idx = value - 1
+        else:
+            return None  # import or null outer cannot own a package graph
+    return None
+
+
+def _attach_blueprint_graph_extras(
+    archive,
+    summary,
+    name_map,
+    import_map,
+    export_map,
+    objects,
+    extras,
+    diagnostics,
+    *,
+    object_ids: Sequence[str] | None,
+) -> None:
+    """Parse all graphs at decode depth and route them to owning exports.
+
+    Runs only when the caller's object selection reaches a Blueprint-family
+    export (decode of e.g. a single Texture must not pay for the package's
+    graphs). One bad graph never aborts the pass: the conversion module emits
+    a graph dict with parse_errors instead, and this helper drops it with a
+    diagnostic (the export id stays addressable).
+    """
+    from ...v2.blueprint_graph import read_blueprint_graphs
+
+    family = {o.id for o in objects if (o.class_name or "") in _BLUEPRINT_FAMILY_CLASSES}
+    if not family:
+        return
+    if object_ids is not None and not family.intersection(object_ids):
+        return
+    graphs = read_blueprint_graphs(archive, summary, name_map, import_map, export_map)
+    owners: dict[str, list[dict]] = {}
+    for graph in graphs:
+        if graph.get("parse_errors"):
+            diagnostics.append(
+                Diagnostic(
+                    severity="warning",
+                    code="BLUEPRINT_GRAPH_PARSE_FAILED",
+                    message=f"graph export {graph['id']}: {graph['parse_errors'][0]}",
+                    stage="semantic.blueprint",
+                    object_id=graph["id"],
+                    recoverable=True,
+                )
+            )
+            continue
+        try:
+            export_idx = int(graph["id"].split(":")[1])
+        except (ValueError, IndexError):
+            diagnostics.append(
+                Diagnostic(
+                    severity="warning",
+                    code="BLUEPRINT_GRAPH_ID_INVALID",
+                    message=f"graph export {graph['id']} has unparseable export index",
+                    stage="semantic.blueprint",
+                    object_id=graph["id"],
+                    recoverable=True,
+                )
+            )
+            continue
+        owner = _resolve_graph_owner(export_idx, export_map, objects)
+        if owner is None:
+            diagnostics.append(
+                Diagnostic(
+                    severity="warning",
+                    code="BLUEPRINT_GRAPH_OWNER_UNRESOLVED",
+                    message=f"graph export {graph['id']} has no Blueprint-family owner",
+                    stage="semantic.blueprint",
+                    object_id=graph["id"],
+                    recoverable=True,
+                )
+            )
+            continue
+        owners.setdefault(owner, []).append(graph)
+    total_unresolved = sum(g.get("unresolved_links", 0) for grouped in owners.values() for g in grouped)
+    if total_unresolved:
+        diagnostics.append(
+            Diagnostic(
+                severity="warning",
+                code="BLUEPRINT_EXTERNAL_PIN_LINK",
+                message=(
+                    f"{total_unresolved} pin link(s) did not resolve to a parsed pin "
+                    f"(cross-package links are not decoded)"
+                ),
+                stage="semantic.blueprint",
+                recoverable=True,
+            )
+        )
+    for grouped in owners.values():
+        for graph in grouped:
+            graph.pop("unresolved_links", None)
+    for owner_id, owner_graphs in owners.items():
+        entry = extras.setdefault(owner_id, {})
+        entry["graphs"] = owner_graphs
+        # Interfaces: BPInterfaceDescription.Interface is a struct-nested
+        # negative FPackageIndex (ObjectResource.h convention) that the
+        # property normalizer does not resolve — resolve it here against the
+        # import map. Class name for display: import.object_name.
+        obj = next((o for o in objects if o.id == owner_id), None)
+        if obj is not None and obj.properties:
+            ifaces = obj.properties.get("ImplementedInterfaces") or obj.properties.get("Interfaces")
+            raw = ifaces.get("value") if isinstance(ifaces, dict) else None
+            names: list[str] = []
+            if isinstance(raw, list):
+                for desc in raw:
+                    ref = desc.get("fields", {}).get("Interface") if isinstance(desc, dict) else None
+                    if isinstance(ref, int) and ref < 0:
+                        imp = import_map[-ref - 1]
+                        names.append(imp.object_name)
+            entry["interfaces"] = names
+
+    # --- Kismet bytecode decompile for Function/UFunction exports ---
+    try:
+        from ...pipeline.post_process import _extract_kismet_decompiled
+
+        kismet_results = _extract_kismet_decompiled(
+            str(archive._path) if hasattr(archive, "_path") else "",
+            archive,
+            summary,
+            name_map,
+            import_map,
+            export_map,
+            tolerant=True,
+            linker=None,
+        )
+        if kismet_results:
+            # Key by export id so the handler can look them up
+            kismet_by_export: dict[str, list[dict]] = {}
+            for kr in kismet_results:
+                # Derive the export index from the function_name by scanning
+                # the export map for matching Function/UFunction entries
+                for exp_idx, exp in enumerate(export_map):
+                    if exp.object_name == kr.function_name:
+                        owner = _resolve_graph_owner(exp_idx, export_map, objects)
+                        if owner is not None:
+                            kismet_by_export.setdefault(owner, []).append(kr.to_dict())
+                        break
+            for owner_id, funcs in kismet_by_export.items():
+                entry = extras.setdefault(owner_id, {})
+                entry["kismet"] = funcs
+    except Exception as exc:
+        diagnostics.append(
+            Diagnostic(
+                severity="warning",
+                code="KISMET_DECOMPILE_FAILED",
+                message=f"Kismet decompile pass failed: {exc}",
+                stage="semantic.kismet",
+                recoverable=True,
+            )
+        )
 
 
 def _read_table_rows(

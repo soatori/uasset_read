@@ -77,7 +77,7 @@ class FKismetArchive(FArchive):
             self._expression_depth += 1
             try:
                 if hasattr(expr_class, "from_archive"):
-                    expr = expr_class.from_archive(self, self._name_map)
+                    expr = expr_class.from_archive(self, self._name_map)  # type: ignore[reportAttributeAccessIssue]
                 else:
                     expr = expr_class()
             finally:
@@ -158,6 +158,7 @@ class FKismetArchive(FArchive):
 
         # Resolve path segments to FFieldPathSegment objects
         resolved_path: list[FFieldPathSegment] = []
+        assert self._name_map is not None  # always set in __init__
         for name_idx, name_num in path_segments:
             if 0 <= name_idx < len(self._name_map):
                 base_name = self._name_map[name_idx]
@@ -198,6 +199,7 @@ class FKismetArchive(FArchive):
         number = self.read_u32()
 
         # Resolve base name
+        assert self._name_map is not None  # always set in __init__
         if 0 <= name_index < len(self._name_map):
             base_name = self._name_map[name_index]
         else:

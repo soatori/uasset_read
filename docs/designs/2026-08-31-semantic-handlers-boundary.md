@@ -38,14 +38,14 @@ status: target
 ## 3. v1 域 → v2 handler 覆盖对照（诚实清单）
 
 | v1 domain 包 | v1 注册类（节选） | v2 handler 现状 | 差距 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `user_defined` | UserDefinedEnum/Struct | `UserDefinedEnumHandler`、`UserDefinedStructHandler` | 基本对齐（v2 从属性袋重建） |
 | `data_table` / `curve_table` | DataTable / CurveTable | `DataTableHandler`（三类合一，`handlers.py:256-301`） | CurveTable 真实 fixture 缺（#626） |
 | `texture` | 6 个 Texture* 类（`texture/__init__.py:9-16`） | `TextureHandler`+`TexturePayloadHandler`：仅 Texture2D/TextureCube | RenderTarget/Array/Volume 未覆盖；payload 仅 ImportedSize 摘要 |
 | `sound` | SoundCue/Wave 等 | `SoundHandler`：SoundWave/SoundCue/SoundAttenuation | 扩展声音类（SoundMix/Class/Submix 等 v1 `_TYPE_MAP` 有项）未覆盖 |
 | `material` | Material/MaterialInstance/MaterialInstanceConstant（3 处调用） | `MaterialHandler`、`MaterialInstanceHandler` | 对齐面窄，v1 更深字段未比对（Gate A parity 范畴） |
 | `skeleton` / `mesh` | Skeleton / Static+SkeletalMesh | `SkeletonHandler`、`MeshHandler` | v2 骨名来自 name_map 正则（`handlers.py:574-578`），是简化实现 |
-| `blueprint` / `anim_blueprint` | Blueprint/GeneratedClass 族 4 类 | `BlueprintFamilyHandler`（asset 浅 summary；decode 粗节点/边） | **大头未迁移**：graph 深度、Kismet 反编译、C++ skeleton 全在 v1 `graph/`+`kismet/`，属 Phase 4.5 deferred（不被 #623-#627 阻塞） |
+| `blueprint` / `anim_blueprint` | Blueprint/GeneratedClass 族 4 类 | `BlueprintFamilyHandler`（asset 浅 summary；decode 深度：graph/node/pin 解码 + declaration + SCS components + NewVariables names） | **已迁移（Phase 4.5）**：fixture 测试 `tests/test_blueprint_decode.py` 覆盖 StackOBot/BP_CombatCharacter/ABP_RifleAnimLayers/ALS_AnimBP。未迁移：VarType 类型解码、Kismet 反编译、C++ skeleton、parent-asset 解析（属 D1 deferred） |
 | `niagara` | NiagaraSystem/Emitter/Script（`niagara/__init__.py:8`） | `NiagaraHandler` 覆盖 14 个 script/node 类，**不含 NiagaraSystem/NiagaraEmitter** | 两个顶层类未覆盖 |
 | `anim` | AnimSequence/ Montage 族 | 无 | 未迁移 |
 | `movie` | LevelSequence 族 | 无 | 未迁移 |

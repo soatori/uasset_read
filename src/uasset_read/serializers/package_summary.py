@@ -62,11 +62,8 @@ from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 from uasset_read.constants import MIN_UASSET_SIZE
 
-# Optional ResourceBudget (lazy import to avoid circular dependencies)
-try:
-    from uasset_read.memory_safety import ResourceBudget as _ResourceBudgetType
-except ImportError:
-    _ResourceBudgetType = None  # type: ignore[assignment,misc]
+# ResourceBudget type is available via TYPE_CHECKING import above.
+# At runtime, functions accept None or any ResourceBudget instance — no eager import needed.
 
 
 def read_validated_count_strict(
@@ -217,7 +214,7 @@ def _read_custom_versions_guids(archive: FArchive) -> list:
     return custom_versions
 
 
-def _read_generations(archive: FArchive, budget: "_ResourceBudgetType | None" = None) -> list:
+def _read_generations(archive: FArchive, budget: "ResourceBudget | None" = None) -> list:
     """Read Generations table."""
     generations_count = archive.read_i32("GenerationsCount")
     read_validated_count_strict(generations_count, MAX_GENERATIONS, "generations", 8, budget)
@@ -318,7 +315,7 @@ def _validate_file_size(archive: FArchive) -> None:
         )
 
 
-def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, bytes, int, list]:
+def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, int, bytes, int, list]:
     """Read magic number, version, SavedHash, CustomVersions.
 
     Returns (tag, legacy_file_version, file_version_ue4, file_version_ue5,
@@ -503,7 +500,7 @@ def _read_post_import_optional_fields(
 def _read_secondary_offset_fields(
     archive: FArchive,
     file_version_ue4: int,
-    budget: "_ResourceBudgetType | None" = None,
+    budget: "ResourceBudget | None" = None,
 ) -> dict:
     """Read DependsOffset, SoftPackageReferences, SearchableNames, ThumbnailTable."""
     depends_offset = archive.read_i32("DependsOffset")
@@ -584,7 +581,7 @@ def _read_guids(
 
 def _read_compression_and_source(
     archive: FArchive,
-    budget: "_ResourceBudgetType | None" = None,
+    budget: "ResourceBudget | None" = None,
 ) -> tuple[int, int]:
     """Read CompressionFlags, CompressedChunks, PackageSource."""
     compression_flags = archive.read_u32("CompressionFlags")
@@ -694,7 +691,7 @@ def _read_late_versioned_fields(
 
 def read_package_summary(
     archive: FArchive,
-    budget: "_ResourceBudgetType | None" = None,
+    budget: "ResourceBudget | None" = None,
 ) -> PackageFileSummary:
     """Read PackageFileSummary header (UE4 and UE5)."""
     _validate_file_size(archive)
@@ -942,7 +939,7 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]
 def read_depends_map(
     archive: FArchive,
     summary: PackageFileSummary,
-    budget: "_ResourceBudgetType | None" = None,
+    budget: "ResourceBudget | None" = None,
     warnings: "List[str] | None" = None,
 ) -> List[List[int]]:
     """Read DependsMap (dependency table).
@@ -975,6 +972,7 @@ def read_depends_map(
     skipped_entries = 0
     invalid_indices = 0
     truncated_table = False
+    stopped_at: int = -1
 
     for i in range(summary.export_count):
         # Read dependency list for each export
@@ -993,6 +991,7 @@ def read_depends_map(
             depends_map.append([])
             skipped_entries += 1
             truncated_table = True
+            stopped_at = i
             break
         if budget is not None and dep_count > 0:
             budget.reserve(dep_count * 4, f"DependsMap[{i}]")
@@ -1035,7 +1034,7 @@ def read_depends_map(
                 f"DependsMap: {skipped_entries}/{summary.export_count} entries not parsed due to invalid dependency count"
             )
         if truncated_table:
-            warnings.append(f"DependsMap: stopped at entry {i}; subsequent entries were not parsed")
+            warnings.append(f"DependsMap: stopped at entry {stopped_at}; subsequent entries were not parsed")
         if invalid_indices > 0:
             warnings.append(
                 f"DependsMap: {invalid_indices} PackageIndex value(s) reference non-existent imports/exports"

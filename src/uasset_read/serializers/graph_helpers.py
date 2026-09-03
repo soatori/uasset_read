@@ -55,7 +55,7 @@ def _read_guid(archive: FArchive, uppercase: bool = True) -> str:
 def _get_thread_local():
     """Return per-thread isolated diagnostic state, avoiding global mutable race."""
     if not hasattr(_thread_local, "linkedto_failure_seen"):
-        _thread_local.linkedto_failure_seen: set[tuple[int, str, str]] = set()
+        _thread_local.linkedto_failure_seen = set()
     return _thread_local
 
 
@@ -312,7 +312,7 @@ def validate_pin_reference_at(
     archive: FArchive,
     pos: int,
     export_map: List[ObjectExport],
-    import_map: List[ObjectImport] = None,
+    import_map: Optional[List[ObjectImport]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Validate PinReference structure at given position.
 

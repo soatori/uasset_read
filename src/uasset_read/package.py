@@ -101,9 +101,8 @@ class PackageArchive(FArchive):
         return self._file_size
 
     def get_mmap_info(self) -> Dict:
-        main_info = {}
-        if hasattr(self._main_archive, "get_mmap_info"):
-            main_info = self._main_archive.get_mmap_info()
+        getter = getattr(self._main_archive, "get_mmap_info", None)
+        main_info = getter() if getter is not None else {}
         return {"used": bool(main_info.get("used")), "warning": main_info.get("warning")}
 
 

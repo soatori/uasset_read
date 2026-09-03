@@ -43,7 +43,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **v2 JSON contract** — `uasset_read.package` format with view/depth/selection/pagination/byte-budget
 - **Agent tools** — `inspect_package`, `list_objects`, `get_object`, `list_dependencies`, `get_diagnostics`, `extract_payload`
 - **Projection** — semantic/raw/debug views, depth filtering, max_bytes enforcement
-- **Handlers** — DataTable, UserDefinedEnum, UserDefinedStruct, Texture2D, TextureCube, SoundWave, Skeleton, StaticMesh, Material, Niagara, Blueprint/AnimBlueprint (decode depth)
+- **Handlers** — DataTable, UserDefinedEnum, UserDefinedStruct, Texture2D, TextureCube, SoundWave, Skeleton, StaticMesh, Material, Niagara, Blueprint/AnimBlueprint (decode depth: graph/node/pin decode + declaration + SCS components + NewVariables names on editor-saved fixtures; VarType typing and Kismet decompilation not implemented)
 - **SchemaProvider** — interface for unversioned property schema lookup
 
 **Deferred:** Unversioned properties (#623), sidecar payloads (#627), Zen/IoStore (#624), Pak (#625), CurveTable (#626), StringTable (#615), Anim extras (#618), Physics (#619)

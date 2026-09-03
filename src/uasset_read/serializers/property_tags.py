@@ -208,7 +208,7 @@ def read_property_tag(
         else None
     )
     if struct_mapping is not None:
-        if hasattr(mapping_container, "property_by_name"):
+        if mapping_container is not None and hasattr(mapping_container, "property_by_name"):
             prop_info = mapping_container.property_by_name(struct_name, tag.name)
         else:
             prop_info = struct_mapping.property_by_name(tag.name)

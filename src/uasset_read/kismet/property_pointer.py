@@ -56,7 +56,7 @@ class FKismetPropertyPointer:
         # FPropertyProxyArchive, which writes an FFieldPath directly. The
         # archive transfer owns both the physical and logical cursor contract.
         if hasattr(archive, "xfer_field_pointer"):
-            return cls(bNew=True, path=archive.xfer_field_pointer())
+            return cls(bNew=True, path=archive.xfer_field_pointer())  # type: ignore[reportAttributeAccessIssue]
 
         # Preserve the legacy generic-archive contract for callers outside the
         # persistent Script loader.
@@ -88,6 +88,23 @@ class FKismetPropertyPointer:
                 resolved_owner=old_index,
             ),
         )
+
+    def to_dict(self) -> dict:
+        """JSON-serializable dict for this property pointer."""
+        d: dict = {"bNew": self.bNew}
+        if self.path:
+            if self.path.path:
+                d["segments"] = [
+                    {
+                        "name_index": seg.name_index,
+                        "number": seg.number,
+                        "base_name": seg.base_name,
+                    }
+                    for seg in self.path.path
+                ]
+            if self.path.resolved_owner is not None:
+                d["resolved_owner"] = self.path.resolved_owner.index
+        return d
 
     def __str__(self) -> str:
         """Return string representation of the property path."""

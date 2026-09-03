@@ -522,7 +522,7 @@ def parse_package_lazy(
         if game:
             result.metadata["game"] = game
 
-        if use_direct_archive:
+        if use_direct_archive and provider is not None:
             # Fast path: obtain archive via open_file(), do not read entire file
             assert provider is not None  # guarded by use_direct_archive
             archive = provider.open_file(path)
