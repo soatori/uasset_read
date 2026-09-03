@@ -73,7 +73,8 @@ def _parse_material_input(
 ) -> Optional[Dict[str, Any]]:
     """Parse material input BinaryOrNative data.
 
-    FMaterialInput format:
+    FMaterialInput format (MaterialShared.cpp:449-467):
+    - Expression: FPackageIndex int32 (leading)
     - OutputIndex: int32
     - InputName: FName
     - Mask: int32
@@ -81,12 +82,17 @@ def _parse_material_input(
     - MaskG: int32
     - MaskB: int32
     - MaskA: int32
+    Then subclass tail:
+    - UseConstant: uint8
+    - Constant: varies by subclass (Scalar=float, Vector=3 floats, etc.)
     """
-    if tag.size < 32:  # 4 (OutputIndex) + 8 (FName) + 4 (Mask) + 4*4 (RGBA)
+    # Minimum: Expression(4) + OutputIndex(4) + InputName(8) + Mask(4) + RGBA(16) = 36
+    if tag.size < 36:
         return None
 
     start_pos = archive.tell()
     try:
+        expression_index = archive.read_i32()
         output_index = archive.read_i32()
         input_name = archive.read_name(name_map)
         mask = archive.read_i32()
@@ -95,10 +101,11 @@ def _parse_material_input(
         mask_b = archive.read_i32()
         mask_a = archive.read_i32()
 
-        return {
+        result: Dict[str, Any] = {
             "kind": "material_input",
             "type": tag.type,
             "size": tag.size,
+            "expression_index": expression_index,
             "output_index": output_index,
             "input_name": input_name,
             "mask": mask,
@@ -107,6 +114,25 @@ def _parse_material_input(
             "mask_b": mask_b,
             "mask_a": mask_a,
         }
+
+        # Subclass tail: UseConstant (uint8) + Constant (variant-dependent)
+        remaining = tag.size - (archive.tell() - start_pos)
+        if remaining >= 1:
+            use_constant = archive.read_u8() != 0
+            result["use_constant"] = use_constant
+            remaining -= 1
+            # Constant width depends on subclass
+            if remaining >= 4:
+                if tag.type == "FScalarMaterialInput":
+                    result["constant"] = archive.read_f32()
+                elif tag.type == "FVectorMaterialInput":
+                    result["constant"] = [archive.read_f32() for _ in range(3)]
+                elif tag.type == "FVector2MaterialInput":
+                    result["constant"] = [archive.read_f32() for _ in range(2)]
+                elif tag.type == "FColorMaterialInput":
+                    result["constant"] = _decode_color(archive.read(4), 4)
+
+        return result
     except (struct.error, OSError, ValueError) as e:
         archive.seek(start_pos)
         logger.debug("MaterialInput parse failed: %s", e)

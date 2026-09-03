@@ -563,6 +563,39 @@ def test_property_bag_normalization_is_bounded_lossless():
         selected = _try_read_unversioned_header(arc, property_end=4, property_count=3)
         assert selected == [(0, True), (1, False), (2, True)]
 
+    def test_scalar_material_input_full_layout():
+        import struct
+        from types import SimpleNamespace
+        from uasset_read.archive import ByteArchive
+        from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
+
+        # Expression(4) + OutputIndex(4) + InputName(8) + Mask(4) + RGBA(16) + UseConstant(1) + Constant(f32=4) = 41
+        # Pad to 44 to align. Expression=101, InputName=index 7 ("X"), UseConstant=1, Constant=0.5f
+        # Expression(4)+OutputIndex(4)+InputName(8)+Mask(4)+RGBA(16)+UseConstant(1)+Constant(4) = 41
+        payload = struct.pack(
+            "<i i ii i i i i i B f",
+            101,
+            0,
+            7,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            1,
+            0.5,
+        )
+        assert len(payload) == 41
+        tag = SimpleNamespace(name="M", type="FScalarMaterialInput", size=41)
+        out = BINARY_OR_NATIVE_HANDLERS["FScalarMaterialInput"](
+            tag, ByteArchive(payload), ["None"] * 8 + ["X"], [], None
+        )
+        assert out is not None
+        assert out["expression_index"] == 101
+        assert out["use_constant"] is True
+        assert out["constant"] == 0.5
+
     _run_cases(
         [
             ("property.test_empty_list_returns_empty_dict", test_empty_list_returns_empty_dict),
@@ -578,6 +611,7 @@ def test_property_bag_normalization_is_bounded_lossless():
             ("property.ftext_base_dev_notes_and_demotion", test_ftext_history_demoted_and_base_reads_dev_notes),
             ("property.fcolor_bgra_decode", test_fcolor_bgra_decode),
             ("property.unversioned_header_fragments_ue_format", test_unversioned_header_fragments_ue_format),
+            ("property.scalar_material_input_full_layout", test_scalar_material_input_full_layout),
         ]
     )
 
