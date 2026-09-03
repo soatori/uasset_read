@@ -155,7 +155,8 @@ def _read_fstring_safe(archive: FArchive, max_length: int = MAX_SAFE_COUNT) -> s
         return ""
     if length < 0:
         data = archive.read(-length * 2)
-        return data.decode("utf-16-le", errors="replace").rstrip("\x00")
+        encoding = "utf-16-be" if archive.is_byte_swapping else "utf-16-le"
+        return data.decode(encoding, errors="replace").rstrip("\x00")
     data = archive.read(length)
     return data.decode("utf-8", errors="replace").rstrip("\x00")
 
@@ -177,7 +178,8 @@ def read_ftext_fstring(archive: FArchive) -> str:
         if utf16_len > MAX_SAFE_COUNT * 2:
             raise ParseError(f"Invalid FText FString length: {length}")
         data = archive.read(utf16_len)
-        return data.decode("utf-16-le", errors="replace").rstrip("\x00")
+        encoding = "utf-16-be" if archive.is_byte_swapping else "utf-16-le"
+        return data.decode(encoding, errors="replace").rstrip("\x00")
     if length > MAX_SAFE_COUNT:
         raise ParseError(f"Invalid FText FString length: {length}")
     data = archive.read(length)

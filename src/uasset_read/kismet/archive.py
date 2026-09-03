@@ -237,4 +237,5 @@ class FKismetArchive(FArchive):
             if pair == b"\x00\x00":
                 break
             parts.append(pair)
-        return b"".join(parts).decode("utf-16-le", errors="replace")
+        encoding = "utf-16-be" if self.is_byte_swapping else "utf-16-le"
+        return b"".join(parts).decode(encoding, errors="replace")

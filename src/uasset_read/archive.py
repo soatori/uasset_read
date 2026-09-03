@@ -603,11 +603,11 @@ class FArchive:
                     f"but only {self._file_size - pos_before - 4} remain"
                 )
             data = self.read(utf16_len)
-            # UE serializes UTF-16 in platform-native byte order (LE on PC),
-            # without BOM. Using 'utf-16' without explicit byte order causes
-            # Python to default to big-endian when no BOM is present, breaking
-            # surrogate pair decoding. Use 'utf-16-le' explicitly.
-            result = data.decode("utf-16-le", errors="replace").rstrip("\x00")
+            # UE serializes UTF-16 in platform-native byte order.
+            # On swapped archives (e.g. PC reading a cooked BE package),
+            # the payload is big-endian; otherwise little-endian.
+            encoding = "utf-16-be" if self._byte_swapping else "utf-16-le"
+            result = data.decode(encoding, errors="replace").rstrip("\x00")
             # UTF-16 null terminator (\x00\x00) is legal — rstrip handles it.
             # Internal single nulls between valid chars are unusual but not fatal.
             # All-null detection: if result is empty after rstrip, the data was all nulls.
