@@ -10,11 +10,14 @@ UE source reference:
 
 UEnum exports have:
 - Names: TArray<FNamePair> (enum value names)
-- CppType: FString (underlying C++ type)
+- DisplayNameMap: TMap<FName, FText> (editor display names)
+- UniqueNameIndex: int32
+- EnumDescription: FText
 
 UStruct exports have:
 - Properties (tagged properties list)
 - StructFlags: uint32
+- Guid: FGuid (4 x uint32)
 """
 
 from __future__ import annotations
@@ -73,10 +76,10 @@ def extract_user_defined_enum(export: Any, name_map: List[str]) -> Optional[Dict
                             if key_idx >= 0:
                                 display_names_map[key_idx] = str(value) if value else ""
 
-        # CppType: FString - underlying C++ type
-        elif prop_name == "CppType" and prop_type == "StrProperty":
-            if prop_value is not None:
-                cpp_type = str(prop_value)
+        # CppType: never present in tagged property serialization (Enum.cpp:212-269)
+        # — CppType is a plain FString, not a UPROPERTY. Skip silently.
+        elif prop_name == "CppType":
+            pass
 
     # Build enum entries from the name table
     # UserDefinedEnum values are stored in the name table with the pattern:

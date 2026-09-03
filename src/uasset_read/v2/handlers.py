@@ -238,15 +238,9 @@ class UserDefinedEnumHandler:
                 continue
             entries.append({"name": short, "display_name": display_names.get(short, short)})
 
-        cpp_type = ""
-        ct = (obj.properties or {}).get("CppType")
-        if isinstance(ct, dict):
-            cpp_type = str(ct.get("value") or "")
-
         result: dict[str, Any] = {
             "kind": "user_defined_enum",
             "enum_name": obj.name,
-            "cpp_type": cpp_type,
             "entries": entries,
         }
 
@@ -528,18 +522,10 @@ class TexturePayloadHandler:
             return None
 
         fields = imported_size.get("fields", {})
-        # ImportedSize may have a nested struct with size fields,
-        # or it may be a struct_binary_decoded with explicit size info.
-        # Extract whatever size info is available.
-        total_size = 0
-        if fields:
-            # Direct fields on the struct (e.g. SizeX, SizeY, or a single Size)
-            size_val = fields.get("Size") or fields.get("total_size") or fields.get("BulkDataSize")
-            if isinstance(size_val, (int, float)):
-                try:
-                    total_size = int(size_val)
-                except (ValueError, TypeError):
-                    total_size = 0
+        # ImportedSize is FIntPoint with members X and Y (Texture2D.h:74-75).
+        # X*Y are pixel dimensions, not a byte size — expose them as metadata.
+        width = fields.get("X", 0)
+        height = fields.get("Y", 0)
 
         # If the struct_type hints at size (e.g. "5_16"), try to extract
         struct_type = imported_size.get("struct_type", "")
@@ -547,15 +533,17 @@ class TexturePayloadHandler:
         payload: dict[str, Any] = {
             "kind": "texture_mip",
             "source_region": "main",
-            "logical_size": total_size,
+            "width": width if isinstance(width, int) else 0,
+            "height": height if isinstance(height, int) else 0,
         }
         if struct_type:
             payload["struct_type"] = struct_type
 
+        has_dimensions = payload["width"] > 0 and payload["height"] > 0
         coverage_entry = CoverageEntry(
             feature="texture.payload",
-            status="present" if total_size else "partial",
-            detail=f"ImportedSize struct_type={struct_type}" if struct_type else "",
+            status="present" if has_dimensions else "partial",
+            detail=f"ImportedSize {payload['width']}x{payload['height']}" if has_dimensions else "",
         )
         obj.coverage.append(coverage_entry)
 

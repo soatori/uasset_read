@@ -359,7 +359,7 @@ def test_real_sample_proves_claimed_capability(
                 payload = result["payload"]
                 assert payload["kind"] == "texture_mip"
                 assert payload["source_region"] == "main"
-                assert isinstance(payload["logical_size"], int)
+                assert isinstance(payload["width"], int) and isinstance(payload["height"], int)
                 # Payload must never contain raw bytes
                 assert "raw_bytes" not in payload
             payload_features = [c for c in obj.coverage if c.feature == "texture.payload"]
