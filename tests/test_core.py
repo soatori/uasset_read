@@ -29,8 +29,11 @@ EXAMPLE = ROOT / "docs/designs/contract/package_document_v2.example.json"
 SRC = ROOT / "src"
 
 
+from typing import Literal
+
+
 @lru_cache(maxsize=None)
-def _document(sample: str = str(PACKAGE_SAMPLE), depth: str = "package"):
+def _document(sample: str = str(PACKAGE_SAMPLE), depth: Literal["package", "object", "asset", "decode"] = "package"):
     from uasset_read.v2.api import parse_package_document
 
     return parse_package_document(sample, depth=depth)
@@ -1960,6 +1963,28 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert "00000000" not in h_src
         assert "00000000" not in u_src
 
+    def test_anim_node_table_matches_ue_sweep():
+        """S3: every key in _ANIM_NODE_KIND_MAP has a matching UE Engine/Source header."""
+        from uasset_read.semantic.anim_blueprint.nodes import _ANIM_NODE_KIND_MAP as M
+
+        assert M["AnimNode_TwistCorrectiveNode"] == "twist_corrective"
+        assert M["AnimNode_LayeredBoneBlend"] == "layered_blend"
+        assert M["AnimStateConduitNode"] == "conduit"
+        for dead in (
+            "AnimNode_TwistBone",
+            "AnimNode_LayeredBlendPerBone",
+            "AnimNode_Conduit",
+            "AnimNode_BlendListByFloat",
+            "AnimNode_Scale",
+            "AnimNode_Pose",
+            "AnimNode_MultiBlendSpace",
+            "AnimNode_SubInstance",
+            "AnimNode_PowerIK",
+            "AnimNode_OrientationConstraint",
+            "AnimNode_WheelHandler",
+        ):
+            assert dead not in M, f"dead key {dead!r} should be removed"
+
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -2015,6 +2040,8 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("handler.test_map_pin_terminal_reads_trailing_bools", test_map_pin_terminal_reads_trailing_bools),
             ("handler.test_byte_enum_node_tag_decodes_fname", test_byte_enum_node_tag_decodes_fname),
             ("handler.test_no_invented_k2node_tails", test_no_invented_k2node_tails),
+            ("handler.test_anim_node_table_matches_ue_sweep", test_anim_node_table_matches_ue_sweep),
+            ("handler.test_guid_display_is_36_chars", test_guid_display_is_36_chars),
         ]
     )
 
