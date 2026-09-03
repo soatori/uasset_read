@@ -4,7 +4,7 @@
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
-> 📦 **v0.5.5** — Zero runtime dependencies · Python 3.10+ · 200 source files · 70+ UE class types
+> 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 200 source files · 70+ UE class types
 
 > **Refactor status:** v2 package-first architecture: default CLI/API output is `PackageDocument v2` (legacy packages; tagged properties parsed within export bounds; sample-backed handlers incl. lightweight Niagara kind coverage (semantic status partial until domain fields land), no Semantic 1.x handler dependency). Payload descriptors are reserved for cooked containers: Legacy v2 emits no top-level payloads and `extract_payload` is a stable deferred interface (`PAYLOAD_EXTRACTION_DEFERRED`, reads nothing) until redistributable `.uexp/.ubulk/.utoc/.ucas` samples exist (#621). Default `semantic` view excludes raw offsets/property trees; they are opt-in via `raw`/`debug` views. Zen/IoStore, unversioned-with-usmap, and external-container (ubulk/ucas) extraction remain deferred (see `docs/designs/README.md`); Semantic 1.x JSON is opt-in via `--legacy-json`.
 
@@ -46,7 +46,9 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **Handlers** — DataTable, UserDefinedEnum, UserDefinedStruct, Texture2D, TextureCube, SoundWave, Skeleton, StaticMesh, Material, Niagara, Blueprint/AnimBlueprint (decode depth: graph/node/pin decode + declaration + SCS components + NewVariables names on editor-saved fixtures; VarType typing and Kismet decompilation not implemented)
 - **SchemaProvider** — interface for unversioned property schema lookup
 
-**Deferred:** Unversioned properties (#623), sidecar payloads (#627), Zen/IoStore (#624), Pak (#625), CurveTable (#626), StringTable (#615), Anim extras (#618), Physics (#619)
+**Deferred:** Unversioned properties (#623), sidecar payloads (#627), Zen/IoStore (#624), Pak (#625), CurveTable (#626), Anim extras (#618), Physics (#619)
+
+**UE source-audit fixes (v0.6.0-dev):** 35 binary-format mismatches resolved against UE 5.8-dev C++ source — FString UTF-16 byte-swap, FColor B/G/R/A order, FRotator Pitch/Yaw/Roll, FName external number, unversioned header fragment decode, ELifetimeCondition table, mcdelegate PinCategory, FGuid display, dead CppType reads, ImportedSize X/Y, material input variants, anim node table verified against Engine/Source headers. StringTable (#615) partially fixed (FString keys + trailer). 102/102 tests passing.
 
 ```python
 from uasset_read.v2.api import parse_package_document

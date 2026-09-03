@@ -1,12 +1,12 @@
 """
 uasset_read - Unreal Engine .uasset file parser
 
-Version 0.5.5
+Version 0.6.0-dev
 
 Public API is controlled via __all__.
 """
 
-__version__ = "0.5.5"
+__version__ = "0.6.0-dev"
 
 # ============================================================================
 # Stable Public API (direct imports)
