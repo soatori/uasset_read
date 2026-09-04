@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 > 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 200 source files · 70+ UE class types
 
-> **Refactor status:** v2 package-first architecture: default CLI/API output is `PackageDocument v2` (legacy packages; tagged properties parsed within export bounds; sample-backed handlers incl. lightweight Niagara kind coverage (semantic status partial until domain fields land), no Semantic 1.x handler dependency). Payload descriptors are reserved for cooked containers: Legacy v2 emits no top-level payloads and `extract_payload` is a stable deferred interface (`PAYLOAD_EXTRACTION_DEFERRED`, reads nothing) until redistributable `.uexp/.ubulk/.utoc/.ucas` samples exist (#621). Default `semantic` view excludes raw offsets/property trees; they are opt-in via `raw`/`debug` views. Zen/IoStore, unversioned-with-usmap, and external-container (ubulk/ucas) extraction remain deferred (see `docs/designs/README.md`); Semantic 1.x JSON is opt-in via `--legacy-json`.
+> **Refactor status:** v2 package-first architecture: default CLI/API output is `PackageDocument v2` (legacy packages; tagged properties parsed within export bounds; sample-backed handlers incl. lightweight Niagara kind coverage (semantic status partial until domain fields land), no Semantic 1.x handler dependency). Payload descriptors are reserved for cooked containers: Legacy v2 emits no top-level payloads and `extract_payload` is a stable deferred interface (`PAYLOAD_EXTRACTION_DEFERRED`, reads nothing) until redistributable `.uexp/.ubulk/.utoc/.ucas` samples exist (#621). Default `semantic` view excludes raw offsets/property trees; they are opt-in via `raw`/`debug` views. Zen/IoStore, unversioned-with-usmap, and external-container (ubulk/ucas) extraction remain deferred (see `docs/designs/README.md`); Semantic 1.x JSON is no longer available — the v1 pipeline was removed.
 
 ## Why uasset_read?
 
@@ -34,7 +34,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 ### v2 Architecture (package-first)
 
-> Default output is PackageDocument v2: `python -m uasset_read file.uasset` or `parse_package_document()`. Legacy Semantic 1.x JSON is opt-in via `--legacy-json`. See `tests/samples/manifest.json` for tracked fixtures.
+> Default output is PackageDocument v2: `python -m uasset_read file.uasset` or `parse_package_document()`. The v1 pipeline (Semantic 1.x JSON, `--legacy-json`, `--markdown`, `--batch`, `--diff`, `--list-formats`) was removed; those flags are rejected as unsupported. See `tests/samples/manifest.json` for tracked fixtures.
 
 - **PackageDocument** — one document per .uasset, all exports as first-class objects
 - **LegacyPackageReader** — direct binary reader, no v1 pipeline dependency
@@ -46,8 +46,6 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **Handlers** — DataTable, UserDefinedEnum, UserDefinedStruct, Texture2D, TextureCube, SoundWave, Skeleton, StaticMesh, Material, Niagara, Blueprint/AnimBlueprint (decode depth: graph/node/pin decode + declaration + SCS components + NewVariables names on editor-saved fixtures; VarType typing and Kismet decompilation not implemented)
 - **SchemaProvider** — interface for unversioned property schema lookup
 
-**Deferred:** Unversioned properties (#623), sidecar payloads (#627), Zen/IoStore (#624), Pak (#625), CurveTable (#626), Anim extras (#618), Physics (#619)
-
 **UE source-audit fixes (v0.6.0-dev):** 35 binary-format mismatches resolved against UE 5.8-dev C++ source — FString UTF-16 byte-swap, FColor B/G/R/A order, FRotator Pitch/Yaw/Roll, FName external number, unversioned header fragment decode, ELifetimeCondition table, mcdelegate PinCategory, FGuid display, dead CppType reads, ImportedSize X/Y, material input variants, anim node table verified against Engine/Source headers. StringTable (#615) partially fixed (FString keys + trailer). 102/102 tests passing.
 
 ```python
@@ -57,7 +55,6 @@ print(doc.to_dict())  # PackageDocument v2 JSON
 
 # Or use CLI
 # python -m uasset_read file.uasset
-# python -m uasset_read --legacy-json file.uasset  # legacy Semantic 1.x JSON
 ```
 
 ### Core Parsing (v0.5.5 — current stable)
@@ -96,13 +93,10 @@ print(doc.to_dict())  # PackageDocument v2 JSON
 ### Output Formats
 
 - **JSON** — structured output via semantic pipeline, optimized for C++ translation reference
-- **Markdown** — formatted documentation with tables and embedded Mermaid flowcharts
 
 ### Current v0.5.5 Architecture
 
 - **Renderer system** — Markdown renderer; JSON output routed through semantic pipeline (`semantic/`)
-- **Core API** — `parse_single()`, `parse_batch()`, `diff_single()`, `list_formats()` for simplified programmatic access
-- **CLI delegation** — lightweight CLI delegates to `core.py`
 
 ## Installation
 
@@ -123,11 +117,12 @@ python -m uasset_read path/to/file.uasset --output output.json   # Save to file
 
 # Output modes
 python -m uasset_read path/to/file.uasset --json         # JSON output (default)
-python -m uasset_read path/to/file.uasset --markdown     # Markdown + Mermaid
-python -m uasset_read path/to/file.uasset --list-formats # List available formats
 
-# Batch export (input directory + output directory)
-python -m uasset_read path/to/input/dir/ --batch --batch-dir path/to/output/dir/
+# Depth control
+python -m uasset_read path/to/file.uasset --depth package   # Headers only
+python -m uasset_read path/to/file.uasset --depth object    # With properties
+python -m uasset_read path/to/file.uasset --depth asset     # Semantic view (default)
+python -m uasset_read path/to/file.uasset --depth decode     # Full decode
 
 # Strictness
 python -m uasset_read path/to/file.uasset                # Continue on recoverable errors (default)
@@ -137,9 +132,6 @@ python -m uasset_read path/to/file.uasset --strict       # Stop on warnings
 python -m uasset_read path/to/file.uasset --verbose      # Enable verbose logging
 python -m uasset_read path/to/file.uasset --hex-view     # Enable HexView binary inspection
 python -m uasset_read path/to/file.uasset --full-parse   # Force full parse for large blueprints
-
-# Diff comparison
-python -m uasset_read path/to/file1.uasset --diff path/to/file2.uasset  # Compare two files
 
 # Advanced options
 python -m uasset_read path/to/file.uasset --schema        # Include field semantic annotations
@@ -173,31 +165,30 @@ python -m uasset_read path/to/file.uasset --json
 
 ## Core API
 
-Simplified high-level API for programmatic use — **recommended entry point**:
+The v2 package-document API is the only parse entry point (v1 pipeline was removed):
 
 ```python
-from uasset_read import LogConfig, parse_single, parse_batch, diff_single, list_formats
+from uasset_read import parse_package_document, LogConfig
 
-# Parse a single file (returns formatted string)
-json_str = parse_single("path/to/file.uasset", format="json")
-text = parse_single("path/to/file.uasset", format="markdown")
+# Parse a .uasset file → PackageDocument v2
+doc = parse_package_document("path/to/file.uasset")
 
-# Batch parse a directory
-results = parse_batch("path/to/directory", format="json")
-
-# Compare two .uasset files
-diff_output = diff_single("file1.uasset", "file2.uasset", format="json")
-
-# List available output formats
-formats = list_formats()
-
-# Python APIs do not create file logs unless LogConfig is explicit.
-log_config = LogConfig(level="debug", dir="./log", run_id="analysis-job")
-json_str = parse_single(
+# With options
+doc = parse_package_document(
     "path/to/file.uasset",
-    format="json",
-    log_config=log_config,
+    tolerant=True,
+    depth="asset",       # package | object | asset | decode
+    mappings_path="path/to.usmap",
+    game="SomeGame",
 )
+
+# JSON serialization
+import json
+print(json.dumps(doc.to_dict(), indent=2))
+
+# CLI usage
+# python -m uasset_read file.uasset
+# python -m uasset_read file.uasset --depth decode
 ```
 
 ### Module-level API
@@ -206,18 +197,14 @@ Import directly from submodules for deeper access:
 
 ```python
 from uasset_read import (
-    parse_single, parse_batch, diff_single, list_formats,
-    parse_package, parse_uasset_with_linker,
-    ParseResult, ParseError, FArchive,
+    parse_package_document,
+    ParseConfig, LogConfig,
+    ParseError, FArchive,
 )
 
-# Submodule imports for extended API
-from uasset_read.models import UEdGraph, UEdGraphNode, UEdGraphPin, BlueprintMetadata
-from uasset_read.blueprint import extract_blueprint_variables, extract_blueprint_metadata
-from uasset_read.graph import build_execution_flow_entries, build_data_flows
-from uasset_read.link import PackageLinker, UObjectInstance
-from uasset_read.semantic import build_semantic_ir, render_semantic_json
-from uasset_read.renderers import MarkdownRenderer
+from uasset_read.v2.document import PackageDocument
+from uasset_read.v2.projection import project_document
+from uasset_read.v2.handlers import run_handlers
 ```
 
 Full API list: see `src/uasset_read/__init__.py` and `wiki/07-Dev-Guide/Public-API.md`.
@@ -247,7 +234,7 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | Constants | `constants.py` | Version numbers, property type thresholds, CPF/PropertyTag flags |
 | Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
 | Config | `config.py` | `ParseConfig`, `LogConfig` dataclasses |
-| Core API | `core/` | `parse_single()`, `parse_batch()`, `diff_single()`, `list_formats()` |
+| Core API | `core/` | removed with the v1 pipeline - use `parse_package_document()` from `v2/api.py` |
 | Package Mgmt | `package.py` | `PackageBundle`, `PackageProvider` (filesystem) |
 | CLI | `cli.py` | argparse entry point, delegates to `core.py` API |
 | Versioning | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |

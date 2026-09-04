@@ -1032,7 +1032,6 @@ def _read_table_rows(
             )
         )
         return result
-    off = 4
     names: list[str] = []
     payload = ByteArchive(blob[4:])
     # Tag reads must use the real package layout version, not a fresh default.
@@ -1174,7 +1173,7 @@ def _read_string_table(
         else:
             # Good read — store first key for first iteration
             first_key = probe_key
-        for i in range(entry_count):
+        for _ in range(entry_count):
             key = first_key if first_key is not None else archive.read_fstring()
             first_key = None  # only used once
             value = archive.read_fstring()
