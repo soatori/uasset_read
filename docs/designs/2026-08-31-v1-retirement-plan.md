@@ -33,13 +33,13 @@ CLI 证据：默认走 v2 的判定在 `cli.py:420`（`if not args.legacy_json a
 ### 2.1 v1 专属（退役对象）
 
 | v1 模块 | 规模/入口证据 | v2 替代 | 状态 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `core/__init__.py` 中 `_parse_and_render`/`parse_single`/`parse_batch`/`diff_single` | `core/__init__.py:145-227,74,251,466` | `v2/api.py:16 parse_package_document` + `v2/projection.py` | 替代（batch/diff 见 deferred） |
 | `pipeline/`（`core.py:394` parse_uasset_with_linker、`stages.py`、`post_process.py`、`config.py`） | 共约 1800 行 | `v2/package/legacy.py:293 LegacyPackageReader.read` | 替代 |
 | `ir_builder.py`（`build_package_ir:740`，2082 行） | v1 PackageIR 构建 | `legacy.py:169-215 _build_object_record_direct` → `v2/object_model.ObjectRecord` | 替代 |
 | `models/ir.py`（PackageIR/ExportIR） | v1 IR 模型 | `v2/document.py:44 PackageDocument` + `v2/object_model.py` | 替代 |
 | `semantic/` 整包（builder/projection/validator/render/canonical/coverage/diagnostics/references + 14 个 domain 包，18 处 `register_extension` 调用） | `semantic/__init__.py:12-31`；`semantic/builder.py:226` | `v2/handlers.py` Protocol + `run_handlers`；投影 `v2/projection.py` | 部分替代，见 D2 §3 域映射 |
-| `renderers/markdown_renderer.py`（渲染 PackageIR，`renderers/markdown_renderer.py:114`） | `--markdown` | **无 v2 替代** | **deferred**：markdown 需基于 PackageDocument 重做或宣布放弃（产品决策，非 fixture 阻塞） |
+| `renderers/markdown_renderer.py`（渲染 PackageIR，已随 v1 删除） | `--markdown` | 无 v2 替代 | **wontfix**（产品决策已下，见 §5）：旧版输出格式不重建，v2 只投影 `PackageDocument` JSON |
 | `link/`（PackageLinker、parent asset 解析、`normalize_world_partition_path`，被 `ir_builder.py:1094,1514` 使用） | `--include-parent-assets` | **无 v2 替代**（v2 不做跨包加载） | **deferred**：依赖 loose sidecar/容器 fixture（#627） |
 | `graph/` + `kismet/` + `blueprint/`（约 30+ 文件，深度图/字节码/C++ skeleton） | 由 `semantic/{blueprint,anim_blueprint}` 与 `ir_builder.py:909,1293` 驱动 | v2 仅 `BlueprintFamilyHandler` 浅 summary + decode 级节点/边粗提取（`handlers.py:696-822`） | **deferred**：Blueprint v2 深解码属权威设计 Phase 4.5，不被 #623-#627 阻塞，属实现排期 |
 | `versioning.py VersionContainer`（`versioning.py:24`；消费者 `link/linker.py`、`models/result.py`、`parsers/property_types.py`、`pipeline/stages.py`） | v1 版本容器 | `v2/version.py VersionContext`（G1 契约） | 替代（property_types/stages 属 v1 侧，随之退役） |
@@ -83,5 +83,21 @@ v2 直接复用、删除 v1 时必须保留或收编：`serializers/{package_sum
 
 - 不删除、不移动任何源码文件；不改 CLI 行为。
 - 不承诺 #623-#627 的 fixture 获取时间。
-- 不把 markdown/batch/diff/parent-assets 宣布为"已放弃"——它们标记 deferred，等待单独产品决策。
+- markdown 已宣布放弃（旧版输出格式族整体废弃，见 §5）；batch/diff/parent-assets 仍标记 deferred，等待各自产品决策。
 - 不引入新抽象层（如"退役 adapter 框架"）；映射表即契约。
+
+## 5. 决策记录：旧版输出格式整体废弃（2026-09-05）
+
+决策：**输出旧版格式的能力永久放弃，不在 v2 重建。** 本决策取代 §4 中"等待单独产品决策"对 markdown 的表述，并落实 #643 已提交的 wontfix 判定。
+
+| 能力 | 载体 | 判定 | 理由 |
+| ------ | ------ | ------ | ------ |
+| Semantic 1.x JSON | `semantic/` 全目录、`--legacy-json` | **wontfix** | v2 `uasset_read.package` schema 已完全取代旧格式 |
+| Markdown 渲染 | `renderers/markdown_renderer.py`、`--markdown` | **wontfix** | 属于被废弃的旧版输出格式；v2 唯一输出是 PackageDocument JSON |
+| 格式注册表 | `core.list_formats`、`--list-formats` | **wontfix** | 只剩一种格式，注册表无对象可列 |
+
+仍为 deferred（不是输出格式，属工作流/解析能力，各自等产品决策）：`--batch`（reader 级批量）、`--diff`（schema 化对比）、parent-assets（`link/` 已留基础设施，依赖 #627）。
+
+落地事实（`git ls-files` 核实，非文档推断）：`semantic/`、`renderers/`、`schemas/`、`core/`、`pipeline/`、`ir_builder.py`、`batch_worker.py`、`blueprint/`、`bulk/` 在 `src/uasset_read/` 下均无 tracked 文件——即上述 wontfix 能力的代码已不存在，本决策只关闭"重建"预期，不产生删除工作。
+
+CLI 契约：这五个 flag 由 `cli.py` 的 `retired` 集合显式拒绝（`parser.error`，退出码 2），`README.md` 第 37 行按此描述。维持显式拒绝而非静默忽略，是本决策唯一需要长期保留的兼容行为。

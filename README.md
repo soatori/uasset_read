@@ -57,7 +57,7 @@ print(doc.to_dict())  # PackageDocument v2 JSON
 # python -m uasset_read file.uasset
 ```
 
-### Core Parsing (v0.5.5 — current stable)
+### Core Parsing
 
 - **PackageFileSummary** — file header parsing
 - **NameMap** — name table extraction
@@ -92,11 +92,9 @@ print(doc.to_dict())  # PackageDocument v2 JSON
 
 ### Output Formats
 
-- **JSON** — structured output via semantic pipeline, optimized for C++ translation reference
+- **PackageDocument v2 JSON** — one document per package covering every export, projected to a bounded page by `--depth` / `--limit` / `--max-bytes`. The Python API, CLI and Agent tools all project from this same document.
 
-### Current v0.5.5 Architecture
-
-- **Renderer system** — Markdown renderer; JSON output routed through semantic pipeline (`semantic/`)
+Markdown output and Semantic 1.x JSON went away with the v1 pipeline and are **wontfix** (issue #643): the v2 schema replaces the old format, and with one format there is nothing for a format registry to list.
 
 ## Installation
 
@@ -112,11 +110,8 @@ Zero runtime dependencies, requires Python 3.10+.
 ### CLI
 
 ```bash
-python -m uasset_read path/to/file.uasset              # JSON output to stdout
+python -m uasset_read path/to/file.uasset              # PackageDocument v2 JSON to stdout
 python -m uasset_read path/to/file.uasset --output output.json   # Save to file
-
-# Output modes
-python -m uasset_read path/to/file.uasset --json         # JSON output (default)
 
 # Depth control
 python -m uasset_read path/to/file.uasset --depth package   # Headers only
@@ -128,15 +123,14 @@ python -m uasset_read path/to/file.uasset --depth decode     # Full decode
 python -m uasset_read path/to/file.uasset                # Continue on recoverable errors (default)
 python -m uasset_read path/to/file.uasset --strict       # Stop on warnings
 
-# Debug
-python -m uasset_read path/to/file.uasset --verbose      # Enable verbose logging
-python -m uasset_read path/to/file.uasset --hex-view     # Enable HexView binary inspection
-python -m uasset_read path/to/file.uasset --full-parse   # Force full parse for large blueprints
+# Result budgeting (applies at any depth)
+python -m uasset_read path/to/file.uasset --depth decode --limit 20         # Cap objects returned
+python -m uasset_read path/to/file.uasset --depth decode --max-bytes 4096   # Cap the serialized response
 
 # Advanced options
-python -m uasset_read path/to/file.uasset --schema        # Include field semantic annotations
-python -m uasset_read path/to/file.uasset --mappings path/to/usmap  # Load type mappings
-python -m uasset_read path/to/file.uasset --output-level debug   # Output verbosity level
+python -m uasset_read path/to/file.uasset --mappings path/to/usmap  # Load .usmap/.jmap type mappings
+python -m uasset_read path/to/file.uasset --game NAME               # Enable game-specific property readers
+python -m uasset_read path/to/file.uasset --list-package-files      # List the package files discovered
 ```
 
 ### Logging Parameters
@@ -156,12 +150,6 @@ The current implementation intends one run-scoped log family per CLI invocation.
 Logging is part of the v2 refactor because nested API configuration can currently
 replace handlers. The target library will emit structured diagnostics by default
 and create file logs only when the application explicitly requests them.
-
-Or via module:
-
-```bash
-python -m uasset_read path/to/file.uasset --json
-```
 
 ## Core API
 
@@ -211,19 +199,16 @@ Full API list: see `src/uasset_read/__init__.py` and `wiki/07-Dev-Guide/Public-A
 
 ## Architecture
 
-The following diagram documents the current v0.5.5 implementation, not the v2 target. The target data flow and migration gates are defined in the [package-first refactor report](docs/designs/2026-08-26-package-first-uasset-parser-refactor.md).
+Data flow is the v2 package-first pipeline defined in the [canonical refactor design](docs/designs/2026-08-26-package-first-uasset-parser-refactor.md):
 
-FArchive pipeline pattern mirroring UE's internal structure:
+```text
+.uasset → archive → v2/package (Legacy container reader; Zen deferred, #624)
+              → parsers (tagged properties; unversioned gated on #623)
+              → v2/object_model + v2/handlers → PackageDocument
+              → v2/projection → JSON / CLI / Agent tools (same document)
+```
 
-```
-.uasset → FArchive → Serializers → Parsers → Linker → IR Builder → Renderers → Output
-                ↓
-          GraphParser
-          BlueprintParser
-          DependencyGraphBuilder
-          PackageLinker
-          KismetDecompiler
-```
+Shared readers behind that document: `link/` (PackageLinker two-phase object graph), `graph/` (UEdGraph/Node/Pin), `kismet/` (bytecode → C++ pseudocode, reached through `v2/package/legacy.py`; retirement open in #642), `serializers/` and `models/`.
 
 ### Module Structure (`src/uasset_read/`)
 
@@ -234,30 +219,22 @@ FArchive pipeline pattern mirroring UE's internal structure:
 | Constants | `constants.py` | Version numbers, property type thresholds, CPF/PropertyTag flags |
 | Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
 | Config | `config.py` | `ParseConfig`, `LogConfig` dataclasses |
-| Core API | `core/` | removed with the v1 pipeline - use `parse_package_document()` from `v2/api.py` |
 | Package Mgmt | `package.py` | `PackageBundle`, `PackageProvider` (filesystem) |
-| CLI | `cli.py` | argparse entry point, delegates to `core.py` API |
+| CLI | `cli.py` | argparse entry point; emits the v2 document page, or the retired-flag error |
 | Versioning | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
 | Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
 | Memory Safety | `memory_safety.py` | Central memory policy, RSS measurement, parser checkpoints |
 | Bounded Events | `bounded_events.py` | Bounded event buffer for diagnostics |
-| Batch Worker | `batch_worker.py` | Subprocess-isolated per-asset batch worker |
 | Project Logging | `project_logging.py` | Structured logging with rotation |
-| Semantic | `semantic/` | Semantic IR builder, projection, validator, renderer for JSON output |
-| Schemas | `schemas/` | JSON Schema definitions for semantic output |
-| **Pipeline** | `pipeline/` | Parsing pipeline orchestration: stages, memory, error handling |
-| **IR** | `ir_builder.py` | Package-level intermediate representation builder |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult, Status, Diagnostics |
 | **Parsers** | `parsers/` | 36 property type parsers + dispatcher + custom property registry + AssetRegistry parser + class serialization strategy |
 | ├ Asset Types | `parsers/asset_types/` | 22 asset type parser files + opaque stubs covering 70+ UE class types |
-| **Blueprint** | `blueprint/` | Variable/Transform/Component/Metadata extraction |
 | **Graph** | `graph/` | Execution/data flow tracing, chain builder, graph_utils |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback, UFunction script reader |
 | ├ Expressions | `kismet/expressions/` | 15 expression types (assignments, control flow, function calls, literals, casts, delegates, etc.) |
 | **Linker** | `link/` | PackageLinker two-phase object graph reconstruction, UObjectInstance |
-| **Bulk Data** | `bulk/` | BulkData header parsing, flag definitions |
-| **Renderers** | `renderers/` | Markdown renderer (JSON output via semantic pipeline) |
+| **v2 Document** | `v2/` | `api.py` entry point, `document.py` PackageDocument, `object_model.py`, `properties.py`, `handlers.py`, `package/legacy.py` reader, `projection.py` paging/budget, `agent_tools.py`, `blueprint_graph.py`, `diagnostics.py` |
 
 ## Testing
 
@@ -288,7 +265,7 @@ When Unreal Editor 5.8 is released, use the official Experimental Unreal MCP ser
 | **Asset pipeline automation** | Batch-parse thousands of `.uasset` files → extract metadata → build searchable index |
 | **Technical debt analysis** | Trace execution flows → identify deeply nested logic → find dead code |
 
-## Current v0.5.5 Limitations
+## Current Limitations
 
 - **Only unbaked/editor-saved assets**: Cooked assets have stripped graph data
 - **Limited bytecode decompilation**: Kismet EExprToken→AST→C++ implemented for known token types
