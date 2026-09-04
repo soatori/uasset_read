@@ -38,6 +38,17 @@ The authoritative target is `docs/designs/2026-08-26-package-first-uasset-parser
 - Stable ids use table kind and index. Display names and GUIDs are not guaranteed unique.
 - Truncation and unsupported capabilities must be explicit and resumable.
 
+## Peer corroboration constraints
+
+Operational sub-rules for "UE source reference required" above. Full scheme: `docs/designs/2026-09-02-peer-corroboration-usage-scheme.md`. Tracked inventory (pin commits, licenses, verified coverage): `docs/reference/external-peer-inventory.md`.
+
+- **Named peers only** — write `Corroborated (not proof): <Peer> <symbol>`. The bare plural `corroborated by peers` is banned and rejected by the CI `peer-evidence-hygiene` step.
+- **Independence counts** — a consensus claim needs at least two independent implementations. UAssetGUI delegates to UAssetAPI, so the pair counts as one implementation.
+- **Zero coverage is stated, not guessed** — when no peer decodes a type, record `No peer parser decodes this type` and keep the capability tier honest instead of inferring a layout.
+- **Corroboration is never a support claim** — a `Corroborated` comment may only appear in summary-tier or implementation-ahead code. Version and asset-support claims still require UE source evidence, a real fixture, and structural assertions (Test Organization below).
+- **Evidence must be tracked** — peer facts belong in the inventory, per-field conclusions in a committed design or review document. `temp/` is untracked and CI-blocked, so it cannot be the only carrier of a claim.
+- **License red lines** — peers with no LICENSE file, or a NON-AI license, may not be transcribed into this repository or used to generate committed code. Use an independently licensed peer for the same corroboration.
+
 ## Test Organization
 
 - Phase 0 deletes and replaces the legacy Python test suite in one atomic change; do not maintain parallel old/new suites.

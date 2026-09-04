@@ -124,9 +124,61 @@ jobs:
         run: |
           pyright src/uasset_read
 
+  # peer 佐证措辞门禁（方案 §3 规则 1/4）：只扫 src/ ——文档里必然要引用被禁的字符串本身。
+  peer-evidence-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check peer corroboration wording
+        run: |
+          python - <<'PY'
+          import pathlib, re, sys
+
+          banned = re.compile(r"corroborated by peers", re.I)
+          marker = re.compile(r"Corroborated \(not proof\)\s*:", re.I)
+          inventory = pathlib.Path("docs/reference/external-peer-inventory.md")
+          if not inventory.exists():
+              print("::error::peer inventory missing")
+              sys.exit(1)
+          ROW = re.compile(
+              r"^\| ([A-Za-z0-9._+-]+) \| [^|]* \| `([0-9a-f]{7,})` \|",
+              re.M,
+          )
+          raw = inventory.read_text(encoding="utf-8")
+          rows = ROW.findall(raw)
+          peers = sorted({name for name, commit in rows if commit})
+          # 边界匹配：子串匹配会让 TotallyFakePeer 命中表头误收的 "Peer"。
+          peer_re = [
+              re.compile(rf"(?<![A-Za-z0-9]){re.escape(p)}(?![A-Za-z0-9])")
+              for p in peers
+          ]
+          failed = 0
+          for path in sorted(pathlib.Path("src").rglob("*.py")):
+              text = path.read_text(encoding="utf-8")
+              for hit in banned.finditer(text):
+                  line = text[: hit.start()].count("\n") + 1
+                  print(f"::error::{path}:{line}: banned wording; "
+                        f"name each peer with its symbol")
+                  failed = 1
+              for hit in marker.finditer(text):
+                  window = text[hit.end() : hit.end() + 160]
+                  if not any(r.search(window) for r in peer_re):
+                      line = text[: hit.start()].count("\n") + 1
+                      print(f"::error::{path}:{line}: marker names no "
+                            f"peer from the inventory")
+                      failed = 1
+          sys.exit(failed)
+          PY
+
   pytest-smoke:
     runs-on: ubuntu-latest
-    needs: [ruff-check, pyright-check]
+    needs: [ruff-check, pyright-check, peer-evidence-hygiene]
     # non-blocking smoke evidence; blocking gate is local Windows + 3.14
     steps:
       - uses: actions/checkout@v4
