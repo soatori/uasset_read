@@ -27,9 +27,9 @@ if TYPE_CHECKING:
 class FKismetSwitchCase:
     """Switch case struct for EX_SwitchValue."""
 
-    CaseIndexValueTerm: KismetExpression = None
+    CaseIndexValueTerm: KismetExpression | None = None
     NextOffset: int = 0
-    CaseTerm: KismetExpression = None
+    CaseTerm: KismetExpression | None = None
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> FKismetSwitchCase:
@@ -43,7 +43,7 @@ class FKismetSwitchCase:
 class EX_Return(KismetExpression):
     """Return from function — reads return expression."""
 
-    ReturnExpression: KismetExpression = None
+    ReturnExpression: KismetExpression | None = None
 
     @property
     def Token(self) -> EExprToken:
@@ -61,7 +61,7 @@ class EX_Assert(KismetExpression):
 
     LineNumber: int = 0
     DebugMode: bool = False
-    AssertExpression: KismetExpression = None
+    AssertExpression: KismetExpression | None = None
 
     @property
     def Token(self) -> EExprToken:
@@ -96,9 +96,9 @@ class EX_SwitchValue(KismetExpression):
     """Switch expression — evaluates index, matches cases, falls through to default."""
 
     EndGotoOffset: int = 0
-    IndexTerm: KismetExpression = None
-    Cases: list[FKismetSwitchCase] = None
-    DefaultTerm: KismetExpression = None
+    IndexTerm: KismetExpression | None = None
+    Cases: list[FKismetSwitchCase] | None = None
+    DefaultTerm: KismetExpression | None = None
 
     @property
     def Token(self) -> EExprToken:
@@ -152,7 +152,7 @@ EX_WireTracepoint = make_simple_expression(EExprToken.EX_WireTracepoint)
 class EX_FieldPathConst(KismetExpression):
     """FProperty constant — wraps a field path expression."""
 
-    Value: KismetExpression = None
+    Value: KismetExpression | None = None
 
     @property
     def Token(self) -> EExprToken:
@@ -195,4 +195,4 @@ class EX_NameConst(KismetExpressionT):
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_NameConst:
         fname_ref = archive.xfer_fname()
-        return cls(Value=fname_ref.base_name, NameRef=fname_ref)
+        return cls(Value=fname_ref.base_name or "", NameRef=fname_ref)

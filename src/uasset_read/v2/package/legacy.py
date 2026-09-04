@@ -1056,8 +1056,9 @@ def _read_table_rows(
                 break
             if t.name == "None":
                 break
-            if t.value_end_offset <= payload.tell():
-                # Non-advancing tag (e.g. zero size, no in-tag payload): malformed row.
+            if t.value_end_offset is None or t.value_end_offset <= payload.tell():
+                # Non-advancing or size-less tag: malformed row. Stop rather than seek()
+                # on None, which would raise out of a recoverable parse path.
                 payload.seek(header_pos)
                 break
             payload.seek(t.value_end_offset)

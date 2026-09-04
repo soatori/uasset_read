@@ -16,7 +16,7 @@ class EX_SetArray(KismetExpression):
 
     AssigningProperty: Optional[KismetExpression] = None
     ArrayInnerProp: Optional[FKismetPropertyPointer] = None
-    Elements: list[KismetExpression] = None
+    Elements: list[KismetExpression] | None = None
 
     @property
     def Token(self) -> EExprToken:
@@ -37,9 +37,9 @@ EX_EndArray = make_simple_expression(EExprToken.EX_EndArray)
 
 @dataclass
 class EX_SetMap(KismetExpression):
-    MapProperty: KismetExpression = None
+    MapProperty: KismetExpression | None = None
     Num: int = 0
-    Elements: list[KismetExpression] = None
+    Elements: list[KismetExpression] | None = None
 
     @property
     def Token(self) -> EExprToken:
@@ -59,9 +59,9 @@ EX_EndMap = make_simple_expression(EExprToken.EX_EndMap)
 
 @dataclass
 class EX_SetSet(KismetExpression):
-    SetProperty: KismetExpression = None
+    SetProperty: KismetExpression | None = None
     Num: int = 0
-    Elements: list[KismetExpression] = None
+    Elements: list[KismetExpression] | None = None
 
     @property
     def Token(self) -> EExprToken:
@@ -81,9 +81,9 @@ EX_EndSet = make_simple_expression(EExprToken.EX_EndSet)
 
 @dataclass
 class EX_ArrayConst(KismetExpression):
-    InnerProperty: FKismetPropertyPointer = None
+    InnerProperty: FKismetPropertyPointer | None = None
     Num: int = 0
-    Elements: list[KismetExpression] = None
+    Elements: list[KismetExpression] | None = None
 
     @property
     def Token(self) -> EExprToken:
@@ -105,10 +105,10 @@ EX_EndArrayConst = make_simple_expression(EExprToken.EX_EndArrayConst)
 
 @dataclass
 class EX_MapConst(KismetExpression):
-    KeyProperty: FKismetPropertyPointer = None
-    ValueProperty: FKismetPropertyPointer = None
+    KeyProperty: FKismetPropertyPointer | None = None
+    ValueProperty: FKismetPropertyPointer | None = None
     Num: int = 0
-    Elements: list[KismetExpression] = None
+    Elements: list[KismetExpression] | None = None
 
     @property
     def Token(self) -> EExprToken:
@@ -136,9 +136,9 @@ EX_EndMapConst = make_simple_expression(EExprToken.EX_EndMapConst)
 
 @dataclass
 class EX_SetConst(KismetExpression):
-    InnerProperty: FKismetPropertyPointer = None
+    InnerProperty: FKismetPropertyPointer | None = None
     Num: int = 0
-    Elements: list[KismetExpression] = None
+    Elements: list[KismetExpression] | None = None
 
     @property
     def Token(self) -> EExprToken:
@@ -160,8 +160,8 @@ EX_EndSetConst = make_simple_expression(EExprToken.EX_EndSetConst)
 
 @dataclass
 class EX_ArrayGetByRef(KismetExpression):
-    ArrayVariable: KismetExpression = None
-    ArrayIndex: KismetExpression = None
+    ArrayVariable: KismetExpression | None = None
+    ArrayIndex: KismetExpression | None = None
 
     @property
     def Token(self) -> EExprToken:

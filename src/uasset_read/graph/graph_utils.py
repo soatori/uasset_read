@@ -302,7 +302,10 @@ def _iter_normalized_edges(
         """Resolve a LinkedTo pin within its declared owning node when unambiguous."""
         if not isinstance(ref, dict) or not pin_id:
             return None
-        owner = export_name_lookup.get(ref.get("owning_node"))
+        owner_key = ref.get("owning_node")
+        if not isinstance(owner_key, str):
+            return None
+        owner = export_name_lookup.get(owner_key)
         if owner is None:
             return None
 
@@ -367,6 +370,7 @@ def _iter_normalized_edges(
                     other_pin_id,
                     pin.direction,
                 )
+                other_node: UEdGraphNode | None = None
                 if owner_qualified is not None:
                     other_node, other_pin = owner_qualified
                     other_node_guid = other_node.node_guid
@@ -376,7 +380,10 @@ def _iter_normalized_edges(
                     other_node_guid = ""
                     other_pin_name = ""
 
-                if other_pin_id in pin_lookup and other_pin is not None:
+                # other_node was only bound on one of the two paths above, so the emit
+                # block could in principle read it unset; the extra test is a no-op on
+                # every path that used to reach _emit and simply makes that explicit.
+                if other_pin_id in pin_lookup and other_pin is not None and other_node is not None:
                     if owner_qualified is None:
                         other_node_guid, other_pin_name = pin_lookup[other_pin_id]
                         other_node = node_lookup[other_node_guid]
@@ -415,6 +422,8 @@ def _iter_normalized_edges(
                 if pin.direction != 0 or not isinstance(ref, dict):
                     continue
                 owning_node_name = ref.get("owning_node")
+                if not isinstance(owning_node_name, str):
+                    continue
                 source_node = export_name_lookup.get(owning_node_name)
                 if not source_node:
                     continue

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class EX_VariableBase(KismetExpression):
     """Abstract base for variable expressions."""
 
-    Variable: FKismetPropertyPointer = None
+    Variable: FKismetPropertyPointer | None = None
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_VariableBase:

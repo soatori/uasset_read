@@ -24,7 +24,7 @@ class EX_AutoRtfmTransact(KismetExpression):
 
     Id: int = 0
     CodeOffset: int = 0
-    Parameters: list[KismetExpression] = None
+    Parameters: list[KismetExpression] | None = None
 
     @property
     def Token(self):
@@ -60,7 +60,7 @@ class EX_AutoRtfmStopTransact(KismetExpression):
 class EX_AutoRtfmAbortIfNot(KismetExpression):
     """AutoRTFM: evaluate bool condition, abort transaction on false."""
 
-    BoolExpression: KismetExpression = None
+    BoolExpression: KismetExpression | None = None
 
     @property
     def Token(self):

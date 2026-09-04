@@ -82,7 +82,7 @@ class EX_BindDelegate(KismetExpression):
         d = archive.read_expression()
         obj = archive.read_expression()
         return cls(
-            FunctionName=fname_ref.base_name,
+            FunctionName=fname_ref.base_name or "",
             FunctionNameRef=fname_ref,
             Delegate=d,
             ObjectTerm=obj,
@@ -134,7 +134,7 @@ class EX_InstanceDelegate(KismetExpression):
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_InstanceDelegate:
         fname_ref = archive.xfer_fname()
-        return cls(FunctionName=fname_ref.base_name, FunctionNameRef=fname_ref)
+        return cls(FunctionName=fname_ref.base_name or "", FunctionNameRef=fname_ref)
 
     def to_dict(self) -> dict:
         result = super().to_dict()

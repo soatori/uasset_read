@@ -12,10 +12,10 @@ if TYPE_CHECKING:
 
 @dataclass
 class EX_Context(KismetExpression):
-    ObjectExpression: KismetExpression = None
+    ObjectExpression: KismetExpression | None = None
     Offset: int = 0
-    RValuePointer: FKismetPropertyPointer = None
-    ContextExpression: KismetExpression = None
+    RValuePointer: FKismetPropertyPointer | None = None
+    ContextExpression: KismetExpression | None = None
 
     @property
     def Token(self) -> EExprToken:
@@ -39,7 +39,7 @@ EX_ClassContext = make_token_subclass(EX_Context, EExprToken.EX_ClassContext)
 
 @dataclass
 class EX_InterfaceContext(KismetExpression):
-    InterfaceValue: KismetExpression = None
+    InterfaceValue: KismetExpression | None = None
 
     @property
     def Token(self) -> EExprToken:
@@ -53,8 +53,8 @@ class EX_InterfaceContext(KismetExpression):
 
 @dataclass
 class EX_StructMemberContext(KismetExpression):
-    Property: FKismetPropertyPointer = None
-    StructExpression: KismetExpression = None
+    Property: FKismetPropertyPointer | None = None
+    StructExpression: KismetExpression | None = None
 
     @property
     def Token(self) -> EExprToken:

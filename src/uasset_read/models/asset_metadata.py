@@ -13,7 +13,8 @@ _RAW_PAYLOAD_KEYS = frozenset({"raw_bytes", "raw_data"})
 def _sanitize(value: Any) -> Any:
     if isinstance(value, bytes):
         return _DROP
-    if dataclasses.is_dataclass(value):
+    # is_dataclass() is also true for dataclass *types*, and asdict() raises on a class.
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
         value = dataclasses.asdict(value)
     if isinstance(value, dict):
         cleaned: dict[Any, Any] = {}

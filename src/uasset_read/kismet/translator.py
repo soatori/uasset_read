@@ -627,14 +627,13 @@ class KismetTranslator:
             val = str(expr.Value).replace("\r\n", "\\n").replace("\n", "\\n").replace('"', '\\"')
             return f'"{val}"'
         if isinstance(expr, EX_TextConst):
-            if hasattr(expr, "Value") and expr.Value:
-                inner = expr.Value
-                if hasattr(inner, "SourceString") and inner.SourceString:
-                    val = str(inner.SourceString).replace("\r\n", "\\n").replace("\n", "\\n").replace('"', '\\"')
-                    return f'FText("{val}")'
-                if hasattr(inner, "Text"):
-                    val = str(inner.Text).replace("\r\n", "\\n").replace("\n", "\\n").replace('"', '\\"')
-                    return f'FText("{val}")'
+            # The member is Text: FScriptText. The old "Value" guard never matched, and
+            # FScriptText has no .Text either, so the inner fallback was dead too: every
+            # FText constant collapsed to FText("") and lost the source string.
+            script_text = expr.Text
+            if script_text is not None and script_text.SourceString:
+                val = str(script_text.SourceString).replace("\r\n", "\\n").replace("\n", "\\n").replace('"', '\\"')
+                return f'FText("{val}")'
             return 'FText("")'
         # --- Object / Name ---
         if isinstance(expr, EX_ObjectConst):
@@ -650,7 +649,9 @@ class KismetTranslator:
             val = str(expr.Value) if expr.Value else ""
             return f'FName("{val}")'
         if isinstance(expr, EX_SoftObjectConst):
-            inner = self.line_cpp(expr.Value) if hasattr(expr, "Value") and expr.Value else '""'
+            # Member is SoftObject, not Value; the old guard was always False, so this
+            # always emitted FSoftObjectPath("").
+            inner = self.line_cpp(expr.SoftObject) if expr.SoftObject else '""'
             return f"FSoftObjectPath({inner})"
         # --- Vector / Rotation / Transform ---
         # These expressions inherit from KismetExpression (not KismetExpressionT),
@@ -793,8 +794,9 @@ class KismetTranslator:
             )
             return f"goto {var};"
         if isinstance(expr, EX_Skip):
-            offset = expr.CodeOffset if hasattr(expr, "CodeOffset") else expr.Value
-            return f"goto Label_{offset};"
+            # EX_Skip extends EX_Jump, so CodeOffset always exists; it has no Value
+            # member, making the old else-branch an AttributeError waiting to happen.
+            return f"goto Label_{expr.CodeOffset};"
         if isinstance(expr, EX_SkipOffsetConst):
             offset = expr.Value if hasattr(expr, "Value") else 0
             return f"goto Label_{offset};"
@@ -804,7 +806,8 @@ class KismetTranslator:
                     return "}"
             return "return;"
         if isinstance(expr, EX_PopExecutionFlowIfNot):
-            cond = self.line_cpp(expr.BooleanExpression) if hasattr(expr, "BooleanExpression") else "?"
+            bool_expr = expr.BooleanExpression
+            cond = self.line_cpp(bool_expr) if bool_expr is not None else "?"
             return f"if (!{cond}) return;"
         return None
 
@@ -824,7 +827,8 @@ class KismetTranslator:
         )
 
         if isinstance(expr, EX_Cast):
-            target = self.line_cpp(expr.Target) if hasattr(expr, "Target") else "?"
+            cast_target = expr.Target
+            target = self.line_cpp(cast_target) if cast_target is not None else "?"
             from uasset_read.kismet.tokens import ECastToken
 
             conversion = getattr(expr, "ConversionType", None)
@@ -1003,11 +1007,10 @@ class KismetTranslator:
                 return f"{resolved_class}::{resolved_func}({', '.join(params_list)})"
             return f"Function_{stack_node}({', '.join(params_list)})"
         if isinstance(expr, (EX_VirtualFunction, EX_LocalVirtualFunction)):
-            func_name = (
-                expr.VirtualFunctionName.Text
-                if hasattr(expr, "VirtualFunctionName") and hasattr(expr.VirtualFunctionName, "Text")
-                else str(getattr(expr, "VirtualFunctionName", "?"))
-            )
+            virtual_name = getattr(expr, "VirtualFunctionName", "?")
+            # VirtualFunctionName is a plain str today; getattr keeps the FText-shaped
+            # fallback without asserting a .Text member the declared type does not have.
+            func_name = str(getattr(virtual_name, "Text", virtual_name))
             params_list = []
             if hasattr(expr, "Parameters") and expr.Parameters:
                 for param in expr.Parameters:
@@ -1098,9 +1101,7 @@ class KismetTranslator:
         from uasset_read.kismet.expressions import EX_StructConst, EX_BitFieldConst, EX_PropertyConst
 
         if isinstance(expr, EX_StructConst):
-            struct_name = (
-                str(expr.Struct.Name) if hasattr(expr, "Struct") and hasattr(expr.Struct, "Name") else "Struct"
-            )
+            struct_name = str(getattr(expr.Struct, "Name", "Struct"))
             values = [v for prop in (expr.Properties or []) if (v := self.line_cpp(prop))]
             return f"F{struct_name}{{{', '.join(values)}}}"
         if isinstance(expr, EX_BitFieldConst):
@@ -1138,7 +1139,7 @@ class KismetTranslator:
         if isinstance(expr, EX_BindDelegate):
             delegate = self.line_cpp(expr.Delegate) if hasattr(expr, "Delegate") and expr.Delegate else "?"
             obj = self.line_cpp(expr.ObjectTerm) if hasattr(expr, "ObjectTerm") and expr.ObjectTerm else "?"
-            fn = expr.FunctionName.Text if hasattr(expr, "FunctionName") and hasattr(expr.FunctionName, "Text") else "?"
+            fn = str(getattr(expr.FunctionName, "Text", "?"))
             return f'{delegate}->BindUFunction({obj}, FName("{fn}"))'
         if isinstance(expr, EX_RemoveMulticastDelegate):
             delegate = self.line_cpp(expr.Delegate) if hasattr(expr, "Delegate") and expr.Delegate else "?"
@@ -1175,20 +1176,25 @@ class KismetTranslator:
         )
 
         if isinstance(expr, EX_SwitchValue):
-            idx = self.line_cpp(expr.IndexTerm) if hasattr(expr, "IndexTerm") and expr.IndexTerm else "?"
-            if hasattr(expr, "Cases") and len(expr.Cases) == 2:
-                case0 = self.line_cpp(expr.Cases[0].CaseTerm)
-                case1 = self.line_cpp(expr.Cases[1].CaseTerm)
+            idx_term = expr.IndexTerm
+            idx = self.line_cpp(idx_term) if idx_term else "?"
+            # Cases is Optional now that the field annotation matches its None default;
+            # binding once keeps a None from reaching len()/iteration.
+            cases = expr.Cases or []
+            if len(cases) == 2:
+                case0_term, case1_term = cases[0].CaseTerm, cases[1].CaseTerm
+                case0 = self.line_cpp(case0_term) if case0_term is not None else "?"
+                case1 = self.line_cpp(case1_term) if case1_term is not None else "?"
                 return f"{idx} ? {case1} : {case0}"
             lines = [f"switch ({idx}) {{"]
-            if hasattr(expr, "Cases"):
-                for case_item in expr.Cases:
-                    case_idx = (
-                        self.line_cpp(case_item.CaseIndexValueTerm) if hasattr(case_item, "CaseIndexValueTerm") else "?"
-                    )
-                    case_val = self.line_cpp(case_item.CaseTerm)
-                    lines.append(f"  case {case_idx}: return {case_val}; break;")
-            default = self.line_cpp(expr.DefaultTerm) if hasattr(expr, "DefaultTerm") and expr.DefaultTerm else "?"
+            for case_item in cases:
+                index_term = case_item.CaseIndexValueTerm
+                case_idx = self.line_cpp(index_term) if index_term is not None else "?"
+                case_term = case_item.CaseTerm
+                case_val = self.line_cpp(case_term) if case_term is not None else "?"
+                lines.append(f"  case {case_idx}: return {case_val}; break;")
+            default_term = expr.DefaultTerm
+            default = self.line_cpp(default_term) if default_term else "?"
             lines.append(f"  default: return {default};")
             lines.append("}")
             return "\n".join(lines)

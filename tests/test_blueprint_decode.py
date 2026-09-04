@@ -154,3 +154,31 @@ def test_als_animbp_state_machines():
     sm_cov = next(c for c in abp.coverage if c.feature == "anim_blueprint.state_machines")
     assert sm_cov.status == "present"
     assert len(state_machines) == 17, f"expected 17 state machines, got {len(state_machines)}"
+
+
+def test_translator_emits_text_and_soft_object_constants():
+    """EX_TextConst stores `Text`, EX_SoftObjectConst stores `SoftObject`.
+
+    The translator probed a non-existent `.Value` behind a hasattr guard, so neither
+    branch ever matched and every constant degraded to an empty FText/FSoftObjectPath.
+    """
+    from uasset_read.kismet.expressions import EX_NameConst, EX_SoftObjectConst, EX_TextConst
+    from uasset_read.kismet.expressions.string_consts import FScriptText
+    from uasset_read.kismet.tokens import EBlueprintTextLiteralType
+    from uasset_read.kismet.translator import KismetTranslator
+
+    translate = KismetTranslator()
+    text = EX_TextConst(
+        Text=FScriptText(
+            TextLiteralType=EBlueprintTextLiteralType.LiteralString,
+            SourceString="Damage Taken",
+        )
+    )
+    assert translate.line_cpp(text) == 'FText("Damage Taken")'
+
+    soft = EX_SoftObjectConst(SoftObject=EX_NameConst(Value="Actor"))
+    assert translate.line_cpp(soft) == 'FSoftObjectPath(FName("Actor"))'
+
+    # The None default degrades to the empty forms instead of raising.
+    assert translate.line_cpp(EX_TextConst()) == 'FText("")'
+    assert translate.line_cpp(EX_SoftObjectConst()) == 'FSoftObjectPath("")'

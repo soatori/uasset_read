@@ -107,7 +107,7 @@ class FScriptText:
 class EX_TextConst(KismetExpression):
     """FText constant expression (EX_TextConst, 0x29)."""
 
-    Text: FScriptText = None  # type: ignore[assignment]
+    Text: FScriptText | None = None  # type: ignore[assignment]
 
     @property
     def Token(self):
@@ -135,7 +135,7 @@ class EX_TextConst(KismetExpression):
 class EX_SoftObjectConst(KismetExpression):
     """Soft object constant expression (EX_SoftObjectConst, 0x67)."""
 
-    SoftObject: KismetExpression = None  # type: ignore[assignment]
+    SoftObject: KismetExpression | None = None  # type: ignore[assignment]
 
     @property
     def Token(self):

@@ -367,15 +367,19 @@ class FunctionBodyBuilder:
             stmt_idx = getattr(expr, "StatementIndex", None)
             if stmt_idx is not None:
                 offset_to_index[stmt_idx] = idx
-            # Also track CodeOffset attributes for jump targets
-            if hasattr(expr, "CodeOffset"):
-                offset_to_index[expr.CodeOffset] = idx
+            # Also track CodeOffset attributes for jump targets. getattr + an explicit
+            # None test replaces hasattr: a present-but-None CodeOffset used to be
+            # stored under a None key and then counted as a real jump target.
+            code_offset = getattr(expr, "CodeOffset", None)
+            if code_offset is not None:
+                offset_to_index[code_offset] = idx
 
         # Collect pending labels (offsets that are jump targets)
         jump_targets: set[int] = set()
         for expr in expressions:
-            if hasattr(expr, "CodeOffset"):
-                jump_targets.add(expr.CodeOffset)
+            code_offset = getattr(expr, "CodeOffset", None)
+            if code_offset is not None:
+                jump_targets.add(code_offset)
 
         # Translate each expression
         lines: list[str] = []

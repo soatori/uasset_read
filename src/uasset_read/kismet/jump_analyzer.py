@@ -273,7 +273,7 @@ class JumpAnalyzer:
             return None
 
         jump_if_not = self._expressions[jump_if_not_idx]
-        condition = jump_if_not.BooleanExpression
+        condition = getattr(jump_if_not, "BooleanExpression", None)
 
         # Search for PopExecutionFlow after JumpIfNot
         pop_idx = None
