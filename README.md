@@ -260,9 +260,9 @@ When Unreal Editor 5.8 is released, use the official Experimental Unreal MCP ser
 | ---------- | ---------------------- |
 | **Programmatic blueprint analysis** | Parse blueprint data → extract structure → automate inspections |
 | **Blueprint → C++ migration** | Extract class structure, variables, functions → generate C++ skeleton |
-| **Dependency auditing** | Build import/export graphs → detect circular references → find orphaned assets |
-| **Mod development** | Read blueprint variables from `.pak` files → understand mod behavior without source |
-| **Asset pipeline automation** | Batch-parse thousands of `.uasset` files → extract metadata → build searchable index |
+| **Dependency auditing** | *planned* — v2 lists imports/exports per package (`list_dependencies`); cross-package cycle and orphan detection are not implemented |
+| **Mod development** | *planned* — reading assets from `.pak` is deferred to #625; today you must extract the `.uasset` first |
+| **Asset pipeline automation** | *planned* — v1 `--batch` was removed with the v1 pipeline; parse files one at a time via `parse_package_document()` until batch driving is rebuilt (#643) |
 | **Technical debt analysis** | Trace execution flows → identify deeply nested logic → find dead code |
 
 ## Current Limitations
