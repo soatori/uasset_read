@@ -28,11 +28,11 @@
     }
   ],
   "validationOutput": [
-    "flow_builder.py clean - no blocking errors reported by pyright (file-scoped check only). NOT a project-wide claim: python -m pyright src/uasset_read reports 54 pre-existing errors and 3 warnings across kismet/expressions, kismet/translator.py, graph/graph_utils.py, models/asset_metadata.py and v2/package/legacy.py, all outside this acceptance and still open."
+    "flow_builder.py clean - no blocking errors reported by pyright (file-scoped check only). At the time of this acceptance a project-wide run was red (54 pre-existing errors + 3 warnings) across kismet/expressions, kismet/translator.py, graph/graph_utils.py, models/asset_metadata.py and v2/package/legacy.py. Follow-up update: those 54 are now cleared to 0 errors (widened Optional field annotations to match their None defaults, plus real None guards in translator/graph_utils/body_builder/asset_metadata/legacy), and two translator branches that had been silently dead were repaired."
   ],
   "residualRisks": [
     "assert isinstance(current_pin_guid, str) at loop top is stripped by python -O; safe because the assertion guards type narrowing for Pyright, not runtime correctness (the value is always str from pin_lookup keys)",
-    "acceptance is file-scoped only. Project-wide Pyright is red (54 pre-existing errors) and CI does not run Pyright, so type regressions outside flow_builder.py are not caught by any gate."
+    "Resolved: the missing type gate that let 54 project-wide errors accumulate is closed - ci.yml now runs a blocking pyright-check job and pytest-smoke depends on it. Remaining risk is only that neither ruff nor pyright is version-pinned, so a tool upgrade can newly redden CI."
   ],
   "noStagedFiles": true,
   "diffSummary": "Fixed 19 Pyright blocking errors in flow_builder.py: (1) pin_lookup.get default changed from (None, None) to ('', '') to match Tuple[str, str] type; (2) assert isinstance for current_pin_guid type narrowing in _resolve_knot_chain loop; (3) str() cast on Dict[str, Any] lookup result; (4) None guards for _pin_ref_guid results; (5) node_info annotated as Dict[str, Any] for mixed-type values; (6) node_info.get('node_guid', '') default for dict key safety.",

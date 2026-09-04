@@ -70,6 +70,9 @@ memory/
 # Orca local data
 .orca/
 
+# Pi local data (task logs)
+.pi/
+
 # OpenCode local data
 .opencode/
 
