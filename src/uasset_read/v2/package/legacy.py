@@ -960,9 +960,9 @@ def _attach_blueprint_graph_extras(
 
     # --- Kismet bytecode decompile for Function/UFunction exports ---
     try:
-        from ...pipeline.post_process import _extract_kismet_decompiled
+        from ...kismet.decompile_bridge import extract_kismet_decompiled
 
-        kismet_results = _extract_kismet_decompiled(
+        kismet_results = extract_kismet_decompiled(
             str(archive._path) if hasattr(archive, "_path") else "",
             archive,
             summary,

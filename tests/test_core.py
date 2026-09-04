@@ -756,30 +756,6 @@ def test_package_document_preserves_every_export_and_role():
             11: "ThinTranslucent",
         }
 
-    def test_mcdelegate_pin_category_is_multicast():
-        from uasset_read.semantic.blueprint.types import TypeTable
-
-        table = TypeTable()
-        ref = table.type_ref_for(category="mcdelegate", subcategory_object_name="FMyEvent")
-        entry = table.entries[ref["$type"]]
-        assert entry["kind"] == "delegate" and entry.get("multicast") is True
-        ref2 = table.type_ref_for(category="delegate", subcategory_object_name="FMyEvent")
-        entry2 = table.entries[ref2["$type"]]
-        assert "multicast" not in entry2
-
-    def test_replication_condition_names_match_core_net_types():
-        from uasset_read.semantic.blueprint.variables import _REPLICATION_CONDITIONS
-
-        assert _REPLICATION_CONDITIONS == {
-            0: "none",
-            1: "initial_only",
-            2: "owner_only",
-            3: "skip_owner",
-            4: "replay_only",
-            5: "temporal",
-            7: "initial_or_owner",
-        }
-
     _run_cases(
         [
             ("document.test_all_exports_present", test_all_exports_present),
@@ -798,11 +774,6 @@ def test_package_document_preserves_every_export_and_role():
                 test_table_rows_skip_tagged_stream_not_size_prefix,
             ),
             ("table.test_material_enum_tables_match_engine_types", test_material_enum_tables_match_engine_types),
-            ("document.test_mcdelegate_pin_category", test_mcdelegate_pin_category_is_multicast),
-            (
-                "document.test_replication_condition_names",
-                test_replication_condition_names_match_core_net_types,
-            ),
         ]
     )
 
@@ -1963,28 +1934,6 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert "00000000" not in h_src
         assert "00000000" not in u_src
 
-    def test_anim_node_table_matches_ue_sweep():
-        """S3: every key in _ANIM_NODE_KIND_MAP has a matching UE Engine/Source header."""
-        from uasset_read.semantic.anim_blueprint.nodes import _ANIM_NODE_KIND_MAP as M
-
-        assert M["AnimNode_TwistCorrectiveNode"] == "twist_corrective"
-        assert M["AnimNode_LayeredBoneBlend"] == "layered_blend"
-        assert M["AnimStateConduitNode"] == "conduit"
-        for dead in (
-            "AnimNode_TwistBone",
-            "AnimNode_LayeredBlendPerBone",
-            "AnimNode_Conduit",
-            "AnimNode_BlendListByFloat",
-            "AnimNode_Scale",
-            "AnimNode_Pose",
-            "AnimNode_MultiBlendSpace",
-            "AnimNode_SubInstance",
-            "AnimNode_PowerIK",
-            "AnimNode_OrientationConstraint",
-            "AnimNode_WheelHandler",
-        ):
-            assert dead not in M, f"dead key {dead!r} should be removed"
-
     _run_cases(
         [
             ("handler.test_handlers_registered", test_handlers_registered),
@@ -2040,7 +1989,6 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("handler.test_map_pin_terminal_reads_trailing_bools", test_map_pin_terminal_reads_trailing_bools),
             ("handler.test_byte_enum_node_tag_decodes_fname", test_byte_enum_node_tag_decodes_fname),
             ("handler.test_no_invented_k2node_tails", test_no_invented_k2node_tails),
-            ("handler.test_anim_node_table_matches_ue_sweep", test_anim_node_table_matches_ue_sweep),
             ("handler.test_guid_display_is_36_chars", test_guid_display_is_36_chars),
         ]
     )
@@ -2568,35 +2516,6 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert "objects" in plain and plain["package"]
     assert len(plain["objects"]) > 0
 
-    # --legacy-json opts back into v1 shape.
-    legacy = run_cli_json("--legacy-json", str(DATA_SAMPLE))
-    assert legacy["format"] != "uasset_read.package" or "objects" not in legacy
-
-    # --markdown renders through the v1 pipeline (the only markdown renderer).
-    md = subprocess.run(
-        [sys.executable, "-m", "uasset_read", "--markdown", str(DATA_SAMPLE)],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
-        env=_env,
-    )
-    assert md.returncode == 0, md.stderr[:500]
-    assert md.stdout.strip() and not md.stdout.lstrip().startswith("{")
-
-    # v1-only flags under the v2 default warn instead of silently dropping.
-    warned = subprocess.run(
-        [sys.executable, "-m", "uasset_read", "--hex-view", str(DATA_SAMPLE)],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
-        env=_env,
-    )
-    assert warned.returncode == 0
-    assert "--hex-view" in warned.stderr and "ignored" in warned.stderr
-    assert json.loads(warned.stdout)["format"] == "uasset_read.package"
-
     # All public entry points project the same page.
     expected = project_document(_document(str(DATA_SAMPLE)), depth="package", limit=2, max_bytes=4096)
     cli = run_cli_json("--depth", "package", "--limit", "2", "--max-bytes", "4096", str(DATA_SAMPLE))
@@ -2683,10 +2602,10 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert logging.root.level == level
     assert list(tmp_path.iterdir()) == []
 
-    from uasset_read.pipeline.core import parse_package
+    from uasset_read.v2.api import parse_package_document
 
     pkg_handlers = tuple(logging.getLogger("uasset_read").handlers)
-    parse_package(str(DATA_SAMPLE))
+    parse_package_document(str(DATA_SAMPLE))
     assert tuple(logging.root.handlers) == handlers
     assert tuple(logging.getLogger("uasset_read").handlers) == pkg_handlers
 

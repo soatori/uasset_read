@@ -532,21 +532,6 @@ def test_zero_asset_role_fixture_is_manifested():
     assert entry["b_is_asset_count"] == 0
 
 
-def test_v2_api_does_not_call_v1_pipeline(monkeypatch):
-    import uasset_read.pipeline.core as old_core
-
-    def forbidden(*args, **kwargs):
-        raise AssertionError("v1 pipeline called")
-
-    monkeypatch.setattr(old_core, "parse_uasset_with_linker", forbidden)
-    # Re-import to get a fresh module-level reference
-    from uasset_read.v2.api import parse_package_document
-
-    result = parse_package_document(str(SAMPLES / "ABP_RifleAnimLayers.uasset"), depth="package")
-    assert result.package.layout == "legacy"
-    assert result.summary.total_exports == len(result.objects)
-
-
 def test_niagara_fixture_enriched_at_summary_tier():
     """Every Niagara-class object is enriched, but the summary tier stays partial (#629).
 
@@ -770,12 +755,16 @@ def test_blueprint_fixtures_carry_generated_and_cdo_relations():
 
 
 def test_blueprint_graph_decodes_without_parse_errors():
-    """G2 regression (2026-09-02 ue-source audit): editor FText Base carries gated DevNotes."""
-    from uasset_read.pipeline.core import parse_uasset
+    """G2 regression (2026-09-02 ue-source audit): editor FText Base carries gated DevNotes.
 
-    result = parse_uasset(str(SAMPLES / "BP_CombatCharacter.uasset"), force_full_parse=True)
-    graphs = getattr(result, "graphs", None) or []
-    nodes = [n for g in graphs for n in (getattr(g, "nodes", None) or [])]
-    bad = [n for n in nodes if isinstance(getattr(n, "node_data", None), dict) and n.node_data.get("_parse_error")]
-    assert len(nodes) == 370, f"expected 370 graph nodes across 4 graphs, got {len(nodes)}"
-    assert not bad, f"{len(bad)}/{len(nodes)} graph nodes failed to parse"
+    v2 decode contract: BP_CombatCharacter exposes all 4 graphs (370 nodes)
+    on the owning export and emits no graph-failure diagnostics.
+    """
+    from uasset_read.v2.api import parse_package_document
+
+    doc = parse_package_document(str(SAMPLES / "BP_CombatCharacter.uasset"), depth="decode")
+    graphs = [g for o in doc.objects for g in (o.semantic or {}).get("graphs") or []]
+    nodes = [n for g in graphs for n in g["nodes"]]
+    assert len(graphs) == 4 and len(nodes) == 370, f"got {len(graphs)} graphs / {len(nodes)} nodes"
+    assert not [g for g in graphs if g.get("parse_errors")], "graph-level parse errors"
+    assert not [d for d in doc.diagnostics if d.code.startswith("BLUEPRINT_GRAPH")], "graph diagnostics"
