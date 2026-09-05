@@ -912,6 +912,30 @@ git commit -m "refactor: retire v2 micro-cruft, empty v1 directories, and test-o
 
 ---
 
+## Wave 2 + Final Verification (integrator, 2026-09-05, at `16bd4054`)
+
+Tail commits: `6cd2d8ee` (dead subgraph recursion + orphaned `ResourceLimits` + 20 leftover dirs), `60a82df1` (14 handler-registry snapshot/restore blocks → one helper), `57659ef7` (README), `16bd4054` (this record).
+
+Independently re-measured by the integrator, not taken from the child report:
+
+| Check | Result |
+|---|---|
+| `python -m pytest -q` | 110 passed |
+| `python -m ruff check src tests` | All checks passed |
+| `python -m pyright src/uasset_read` | **0 errors, 0 warnings** (was 0/3; the psutil import is gone) |
+| Output neutrality | **51/51** real samples byte-identical at `--depth package` vs pre-wave `c8b72909`, and **8/8** largest at `--depth decode` (sha256 of stdout, base compared from a separate detached worktree) |
+| Namespace ghosts | `importlib.util.find_spec` resolves **none** of the 9 deleted module paths; `find src -type d -empty` = 0 |
+| Public surface | `uasset_read.__all__` 10 → **5**: `FArchive`, `LogConfig`, `ParseError`, `__version__`, `parse_package_document` |
+| `src/` volume | 116 → **100** `.py` files, 34,754 → **28,010** physical lines (**-6,744 / -19.4%**) |
+
+**Interpretation of the namespace-ghost row: this was dev-tree hygiene, not repository state.** git cannot track empty directories, so a fresh clone or CI checkout never contained the ghosts — they existed only in this working tree, because gitignored `__pycache__` (`.gitignore:10`) kept `src/uasset_read/graph/` alive as a directory after `git rm` removed its 6 modules. The original audit line "18 empty directories remain" was therefore overstated as repo debt and is retracted here as such. The durable value of the probe is diagnostic: run `find_spec` after deleting a package so a stale local tree cannot mask a half-finished removal.
+
+**Methodology correction, applies to every future cut in this repo:** a symbol's "zero callers" count **must include tests as consumers**. That single omission invalidated 4 of Task 10's 5 micro-cuts (`version_string` asserted at `test_samples.py:712`, `MappingInfo` at `:709`, `sub_slice` 4 assertions, `source_size` 2) — and it is the same error family as wave 1's positional-`None` arity miss. Before deleting anything, grep `src` **and** `tests` for the symbol, then run the probes rather than trusting the audit table.
+
+**Deferred by decision, not by oversight:** `Source` Protocol kept (removing it trades an abstraction for a concrete-class union in a hot constructor to save ~6 lines); module-level `_ReaderBase` impossible (the structure gate bans top-level classes in `test_core.py`) and the two stubs' shared methods are byte-identical `ByteArchive` forwarding, so the base costs what it saves; `mappings._BytesReader` and `_sanitize_error_message` are rewrites with path-leak/offset risk and need a test-first plan; whole-`kismet/` retirement (incl. the now-unconstructed `function_resolver.py`) is issue #642; the 5 inert `--log-*` flags need a product call; `wiki/07-Dev-Guide/Public-API.md` needs `openwiki code --update` to drop the 5 removed names.
+
+---
+
 ## Self-Review Record
 
 **1. Spec coverage.** A1 graph → Task 1. A2 link → Task 3. A3 models/ir → Task 4. A4 kismet/semantic → Task 2. A5 project_logging → Task 8. A6 constants → Task 9. A7 `graph/parser` helper relocation → Task 1 Step 2. A8 asset_registry_parser → Task 7. A9 blueprint/transforms → Task 4. A10 asset_types table → Task 6. A11 strategy merge → Task 3 (deleted outright, so no merge needed — its sole consumer was `link/`). A12 serializers dead functions → Task 5. A13 memory_safety/debug/package/mappings/cli/`__main__` → Task 9. A14 v2 yagni → Task 10. A15 exceptions/config keys → Task 9. A16 struct-decoder duplication → **not covered**: the `property_types`↔`binary_or_native_handlers` overlap needs a behaviour-preserving rewrite with per-decoder tests, and the parsers-core lane itself flagged the BinaryOrNative path's liveness as unverified. Split it into its own plan after re-verifying which samples exercise it. A17 FString reader pair → Task 5 Step 3 covers the `graph_helpers` half; the `_read_fstring_safe`/`read_ftext_fstring` merge is in the same family and was deliberately left out of Step 3 because the two differ in error semantics (raise vs sentinel) — treat it with A16. A18 tag-reader wrappers → Task 5 Step 3. A19 tests → Task 10 Steps 3–4.
