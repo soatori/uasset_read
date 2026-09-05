@@ -275,12 +275,13 @@ def _collect_pin_links(graph: Any) -> list[dict[str, Any]]:
 
 
 def _collect_all_nodes(graphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Recursively collect all node dicts from graphs, including subgraphs."""
-    result: list[dict[str, Any]] = []
-    for g in graphs:
-        result.extend(g.get("nodes", []))
-        result.extend(_collect_all_nodes(g.get("subgraphs", [])))
-    return result
+    """Collect every node dict from the emitted graphs.
+
+    The emitter inlines subgraph nodes into their owning graph's ``nodes`` list
+    (see ``_graph_to_dict``), so an emitted graph dict carries no ``subgraphs``
+    key and a recursive walk here would be dead weight.
+    """
+    return [n for g in graphs for n in g.get("nodes", [])]
 
 
 def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:

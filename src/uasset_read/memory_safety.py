@@ -2,7 +2,6 @@ from __future__ import annotations
 
 """Central resource budget for parser read/decompress checkpoints."""
 
-from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -44,18 +43,6 @@ class ResourceBudget:
                 current_rss_mb=self._total_decompressed / 1024 / 1024,
                 limit_mb=self.max_total_decompressed_bytes / 1024 / 1024,
             )
-
-
-@dataclass(frozen=True)
-class ResourceLimits:
-    """RSS and elapsed-time limits for one asset.
-
-    Kept per the plan's bounded-read guard even though its only consumer
-    (`MemoryPolicy`) was deleted as unreachable in the same pass.
-    """
-
-    rss_limit_mb: float
-    timeout_seconds: float
 
 
 class MemoryLimitExceeded(MemoryError):
