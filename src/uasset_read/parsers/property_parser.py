@@ -1251,7 +1251,7 @@ def parse_properties_from_export(
             export_map=export_map,
             import_map=import_map,
             summary=summary,
-                    )
+        )
 
     return properties
 

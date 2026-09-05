@@ -46,7 +46,7 @@ PYTHONPATH=src python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --
 | --- | --- |
 | `v2/agent_tools.py` (196L) + its test at `test_core.py:2487` | Reachable only from tests, but `docs/designs/2026-08-31-agent-doc-cache-contract.md` reserves the six-tool contract. Deleting it is a product decision (#621 follow-up), not a cleanup. |
 | `v2/payloads.py` (15L) | README:9 advertises it as the stable deferred interface (`PAYLOAD_EXTRACTION_DEFERRED`). |
-| Whole `kismet/` package retirement (7,458L) | Deprecated in docs but **live**: `v2/package/legacy.py:963` imports `decompile_bridge` at runtime. Tracked in #642. |
+| Whole `kismet/` package retirement | **Decided and closed elsewhere — not open debt.** #642 was resolved 2026-09-05 as *permanent internalization* (`docs/designs/2026-08-31-v1-retirement-plan.md` §6, implemented `686836a0`): keep the package, add no v2-native decompilation projection. Acceptance verified by measurement: the only edge from outside is `v2/package/legacy.py:963` → `decompile_bridge`, GUIDs moved to `versioning.py`, and 6/51 samples really emit `cpp_code` at decode depth (`ALS_AnimBP` = 9 functions / 11.2 MB), so deleting it would change output. Post-`function_resolver` cut it stands at 29 files / 6,678 lines. |
 | Renaming package `uasset_read/v2/`, flattening directories, renaming `package_document_v2.schema.json` | Import-path and doc-link churn; the marker inventory in `temp/v2-migration-audit.md` records it for a separate design decision. |
 | Moving/archiving the 9,387 lines in `docs/plans/` + `docs/superpowers/plans/` | Repo owns that process (design-status index in `docs/designs/README.md`). |
 
@@ -96,9 +96,9 @@ Lanes A → B → C → D merged with no conflicts except a clean auto-merge in 
 
 | Item | State | Decision needed |
 | --- | --- | --- |
-| `kismet/function_resolver.py` (188L) | now constructed nowhere: stripping `linker` from `KismetTranslator` left `_func_resolver` permanently `None`; its 5 guards are inert, kept type-clean to avoid cascading into `line_cpp` | fold into the whole-`kismet/` retirement decision, or delete with a `line_cpp` behaviour test first |
+| `kismet/function_resolver.py` (185L) | constructed nowhere: `translator.py:20` imported it under `TYPE_CHECKING` and `:481` hard-assigned `_func_resolver = None`, so all 5 call-site guards were permanently False. Verified zero consumers in `src` **and** `tests` (no test fakes the resolver). | **DONE** — deleted with its 4 dead branch collapses; see Wave 3 |
 | `models/memory_safety.ResourceLimits` | orphaned by lane D's own commit (its sole consumer `MemoryPolicy` is gone) | keep as bounded-read vocabulary, or delete in Task 10 |
-| 5 inert CLI flags `--log-level`, `--log-cleanup`, `--log-max-bytes`, `--log-backup-count`, `--log-format` | parsed into `LogConfig`, read by nobody; already inert before this wave | retire into the `cli.py:255-261` retired-flag error, or re-wire them to a real CLI logging path |
+| 5 inert CLI flags `--log-level`, `--log-cleanup`, `--log-max-bytes`, `--log-backup-count`, `--log-format` | parsed into `LogConfig`, read by nobody; already inert before this wave. Measured sibling fact: `--log-dir`, `--log-keep-latest` and `--log-max-total-mb` **are** live — the only consumer is the `--clean-logs` path (`cli.py:210-221`), proven by `--clean-logs --log-keep-latest 3` → "Would delete 17 log file(s)". No parse writes a log file today. | **Retire the 5; do not re-wire** (revised from "or re-wire"). Re-wiring means re-adding process-global logging configuration, which AGENTS.md forbids for library code, solely to house one `_logger.debug()` at `cli.py:231`; `cli.py:255-261` already renders an explicit retired-flag message for exactly this case. Needs CHANGELOG + `wiki/06-Output/CLI.md`. Two adjacent defects found while measuring: `log_context` has **no code consumer left** (wave 1 removed its last one with `link/`; only `README.md:228` still documents it), and `config.py:26-28` advertises `LogConfig(level="info")` as though it enabled logging. |
 | `wiki/07-Dev-Guide/Public-API.md` | lists 5 now-deleted public names; `wiki/` is a gitignored nested repo | run `openwiki code --update` after Task 10 |
 
 ---
@@ -933,6 +933,17 @@ Independently re-measured by the integrator, not taken from the child report:
 **Methodology correction, applies to every future cut in this repo:** a symbol's "zero callers" count **must include tests as consumers**. That single omission invalidated 4 of Task 10's 5 micro-cuts (`version_string` asserted at `test_samples.py:712`, `MappingInfo` at `:709`, `sub_slice` 4 assertions, `source_size` 2) — and it is the same error family as wave 1's positional-`None` arity miss. Before deleting anything, grep `src` **and** `tests` for the symbol, then run the probes rather than trusting the audit table.
 
 **Deferred by decision, not by oversight:** `Source` Protocol kept (removing it trades an abstraction for a concrete-class union in a hot constructor to save ~6 lines); module-level `_ReaderBase` impossible (the structure gate bans top-level classes in `test_core.py`) and the two stubs' shared methods are byte-identical `ByteArchive` forwarding, so the base costs what it saves; `mappings._BytesReader` and `_sanitize_error_message` are rewrites with path-leak/offset risk and need a test-first plan; whole-`kismet/` retirement (incl. the now-unconstructed `function_resolver.py`) is issue #642; the 5 inert `--log-*` flags need a product call; `wiki/07-Dev-Guide/Public-API.md` needs `openwiki code --update` to drop the 5 removed names.
+
+## Wave 3 — kismet internalization follow-up (#642 follow-through)
+
+Opened as "retire the whole `kismet/` package" and **reclassified after measurement**: #642 is CLOSED, §6 decided permanent internalization, and its acceptance criteria all verify. So this wave did not retire the package; it made the tree consistent with that decision and removed the one true zombie inside it.
+
+- Deleted `kismet/function_resolver.py` (185L — earlier "188L" was my miscount) plus, in `translator.py`, its `TYPE_CHECKING` import, the `_func_resolver` field, `_resolve_stack_node`, and 4 permanently-False branch groups: `EX_CallMath` fallbacks, `EX_LocalFinalFunction` (`this->` / `Class::fn`), the virtual-function `Class::` prefix, and the multicast `resolved_func` shortcut.
+- `decompile_bridge.py`: dropped the dead `_func_resolver` statistics block but **kept** `function_ref_stats` — it is permanently `{}` yet still a key in `KismetDecompiledResult.to_dict()`, so removing it would change decode output. Rewrote the module banner and `translator.py`'s comment that still said "deprecated" / "retired with #642", both contradicting §6.
+- Proof it was dead, not just unused-looking: zero references in `src` **and** `tests`, including a check that no test fakes `_func_resolver`.
+- Behavior: **57/57 captured runs byte-identical** vs the pre-edit tree (51 samples at `--depth package` + the 6 samples that emit `cpp_code` at `--depth decode`), and the collapse is exercised by real data (`Function_` ×950 in `ALS_AnimBP`, `Call_` ×15 in `StackOBot_GI_StackOBot`) — identity on live paths, not on unreached code.
+- Gates at this commit: 110 passed · ruff clean · pyright 0 errors 0 warnings.
+- Volume: `kismet/` 30 → 29 files, 6,898 → 6,678 lines; `src/` 99 files / 27,702 lines.
 
 ---
 

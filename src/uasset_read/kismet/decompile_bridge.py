@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-"""Deprecated v1-derived Kismet decompile bridge, retained only for v2 decode depth.
+"""Kismet decompile bridge, reached only from v2 decode depth.
 
 Copied verbatim from ``uasset_read.pipeline.post_process`` (v1 pipeline, deleted in
 the v0.6.0 refactor) so ``uasset_read.v2.package.legacy`` can keep decompiling
-Kismet bytecode without the v1 pipeline package. The underlying
-``uasset_read.kismet`` package is itself deprecated; this bridge is a thin
-retention shim, not a supported public API.
+Kismet bytecode without the v1 pipeline package. Per the #642 decision
+(``docs/designs/2026-08-31-v1-retirement-plan.md`` §6) this bridge and the
+``uasset_read.kismet`` package behind it are permanent v2 internals, not
+deprecated leftovers: no public API is promised, and failures degrade to a
+``KISMET_DECOMPILE_FAILED`` diagnostic instead of aborting the document.
 """
 
 import logging
@@ -198,13 +200,10 @@ def extract_kismet_decompiled(
             except (ImportError, AttributeError, TypeError, ValueError):
                 structured_rate = None
 
-            # Extract function reference resolution statistics
+            # function_ref_stats stays permanently empty: single-package decoding has
+            # no cross-package function reference resolver (#642). The key remains in
+            # KismetDecompiledResult.to_dict() because it is part of the v2 decode output.
             func_ref_stats: dict = {}
-            if builder._translator._func_resolver is not None:
-                func_ref_stats = builder._translator._func_resolver.get_statistics()
-                unresolved_report = builder._translator._func_resolver.get_unresolved_report()
-                if unresolved_report:
-                    warnings.append(unresolved_report)
 
             # Use native fields to derive structured signature data
             native_params: list[dict[str, object]] = []

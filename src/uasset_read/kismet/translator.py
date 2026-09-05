@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from uasset_read.kismet.expressions.base import KismetExpression
-    from uasset_read.kismet.function_resolver import FunctionRefResolver
     from uasset_read.kismet.jump_analyzer import JumpAnalyzer
 
 # ===========================================================================
@@ -475,10 +474,6 @@ class KismetTranslator:
         self,
         expressions: list["KismetExpression"] | None = None,
     ):
-        # Single-package resolution never supplies a linker, so the function
-        # reference resolver stays None and every guarded branch below is
-        # inert; the resolver is retired with the kismet decision (#642).
-        self._func_resolver: FunctionRefResolver | None = None
         self._jump_analyzer: "JumpAnalyzer | None" = None
         self._structured_indices: set[int] = set()
         if expressions is not None:
@@ -984,24 +979,11 @@ class KismetTranslator:
                     if p_str:
                         params_list.append(p_str)
             stack_node = getattr(expr, "StackNode", 0)
-            resolved_class, resolved_func = self._resolve_stack_node(stack_node)
             if isinstance(expr, EX_CallMath):
-                cn = resolved_class or (f"Function_{stack_node}" if isinstance(stack_node, int) else str(stack_node))
-                fn = resolved_func or f"Call_{stack_node}"
-                return MathFunctionCleaner.clean(cn, fn, params_list)
+                cn = f"Function_{stack_node}" if isinstance(stack_node, int) else str(stack_node)
+                return MathFunctionCleaner.clean(cn, f"Call_{stack_node}", params_list)
             if isinstance(expr, EX_LocalFinalFunction):
-                if resolved_class is not None and resolved_func is not None:
-                    is_local = (
-                        self._func_resolver.is_local_function(stack_node)
-                        if self._func_resolver and isinstance(stack_node, int)
-                        else False
-                    )
-                    if is_local:
-                        return f"this->{resolved_func}({', '.join(params_list)})"
-                    return f"{resolved_class}::{resolved_func}({', '.join(params_list)})"
                 return f"LocalFunction_{stack_node}({', '.join(params_list)})"
-            if resolved_class is not None and resolved_func is not None:
-                return f"{resolved_class}::{resolved_func}({', '.join(params_list)})"
             return f"Function_{stack_node}({', '.join(params_list)})"
         if isinstance(expr, (EX_VirtualFunction, EX_LocalVirtualFunction)):
             virtual_name = getattr(expr, "VirtualFunctionName", "?")
@@ -1014,11 +996,7 @@ class KismetTranslator:
                     p_str = self.line_cpp(param)
                     if p_str:
                         params_list.append(p_str)
-            class_name = None
-            if self._func_resolver and func_name and func_name != "?":
-                class_name = self._func_resolver.resolve_virtual_function_class(func_name)
-            prefix = f"{class_name}::" if class_name else ""
-            return f"{prefix}{func_name}({', '.join(params_list)})"
+            return f"{func_name}({', '.join(params_list)})"
         if isinstance(expr, EX_CallMulticastDelegate):
             params_list = []
             if hasattr(expr, "Parameters") and expr.Parameters:
@@ -1027,10 +1005,6 @@ class KismetTranslator:
                     if p_str:
                         params_list.append(p_str)
             delegate = self.line_cpp(expr.Delegate) if hasattr(expr, "Delegate") and expr.Delegate else "?"
-            stack_node = getattr(expr, "StackNode", 0)
-            _, resolved_func = self._resolve_stack_node(stack_node)
-            if resolved_func is not None:
-                return f"{delegate}->{resolved_func}({', '.join(params_list)})"
             return f"{delegate}->Broadcast({', '.join(params_list)})"
         if isinstance(expr, EX_InstanceDelegate):
             fn = getattr(expr, "FunctionName", "?")
@@ -1211,14 +1185,6 @@ class KismetTranslator:
     # -----------------------------------------------------------------------
     # Internal helpers
     # -----------------------------------------------------------------------
-
-    def _resolve_stack_node(self, stack_node: int) -> tuple[str | None, str | None]:
-        """Resolve StackNode via FunctionRefResolver to (class_name, func_name)."""
-        if self._func_resolver and isinstance(stack_node, int) and stack_node != 0:
-            result = self._func_resolver.resolve(stack_node)
-            if result is not None:
-                return result
-        return None, None
 
     def _extract_map_pairs(self, elements: list) -> list[str]:
         """Extract "key: val" string pairs from alternating key-value element list."""
