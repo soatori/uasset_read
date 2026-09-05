@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport
 
-from uasset_read.models.ir import AnimSequenceIR
+from uasset_read.models.ir_anim import AnimSequenceIR
 from uasset_read.parsers.asset_types.anim_common import (
     ensure_custom_data,
     parse_anim_notifies,
