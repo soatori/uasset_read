@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport
 
-from uasset_read.models.ir import (
+from uasset_read.models.ir_anim import (
     AnimBlueprintIR,
     BakedStateMachineIR,
     BakedStateIR,

@@ -8,7 +8,7 @@ Extracted from anim_blueprint.py / anim_montage.py / anim_sequence.py duplicate 
 
 from typing import Any
 
-from uasset_read.models.ir import AnimNotifyIR
+from uasset_read.models.ir_anim import AnimNotifyIR
 from uasset_read.parsers.asset_types.property_extractor import (
     extract_object_ref,
     parse_dict_list,
