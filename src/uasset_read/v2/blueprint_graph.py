@@ -140,7 +140,6 @@ def read_blueprint_graphs(
                 export,
                 class_name,
                 export_idx + 1,  # 1-based index
-                None,  # linker not needed for single-package resolution
             )
             graphs.append(_graph_to_dict(graph, export_idx, class_name))
         except Exception as exc:  # one bad graph must not kill the decode pass

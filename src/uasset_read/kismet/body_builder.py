@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.kismet.expressions.base import KismetExpression
-    from uasset_read.link.linker import PackageLinker
 
 
 # Statements that already end with ';' internally or shouldn't get one added.
@@ -333,11 +332,10 @@ class FunctionBodyBuilder:
         cpp = builder.to_function_body(expressions, func_name="MyFunction")
     """
 
-    def __init__(self, linker: "PackageLinker | None" = None) -> None:
+    def __init__(self) -> None:
         from uasset_read.kismet.translator import KismetTranslator
 
-        self._linker = linker
-        self._translator = KismetTranslator(linker=linker)
+        self._translator = KismetTranslator()
 
     def to_function_body(
         self,
@@ -359,7 +357,7 @@ class FunctionBodyBuilder:
 
         # Create translator with JumpAnalyzer for structured detection
         jump_analyzer = JumpAnalyzer(expressions)
-        translator = KismetTranslator(linker=self._linker, expressions=expressions)
+        translator = KismetTranslator(expressions=expressions)
 
         # Build StatementIndex → expression index map for label generation
         offset_to_index: dict[int, int] = {}

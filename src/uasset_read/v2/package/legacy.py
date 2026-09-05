@@ -970,7 +970,6 @@ def _attach_blueprint_graph_extras(
             import_map,
             export_map,
             tolerant=True,
-            linker=None,
         )
         if kismet_results:
             # Key by export id so the handler can look them up

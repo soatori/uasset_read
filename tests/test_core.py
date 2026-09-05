@@ -1883,7 +1883,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             file_version_ue5=1018,
             custom_versions=[SimpleNamespace(guid=RELEASE_GUID, version=31)],
         )
-        pt = read_ed_graph_pin_type(arc, ["None"], summary, [], [], None)
+        pt = read_ed_graph_pin_type(arc, ["None"], summary, [], [])
         assert pt.container_type == 3
         assert pt.map_key_terminal_is_const is True
         assert pt.map_key_terminal_is_weak_pointer is False
@@ -1904,12 +1904,12 @@ def test_handler_registry_supports_enriches_and_isolates():
         arc = ByteArchive(payload)
         tag = SimpleNamespace(name="AdvancedPinDisplay", size=8, value_end_offset=8)
         raw: dict = {}
-        _handle_advanced_pin_display(arc, tag, names, [], [], None, raw)
+        _handle_advanced_pin_display(arc, tag, names, [], [], raw)
         assert raw["AdvancedPinDisplayFormatted"] == "Hidden"
         arc2 = ByteArchive(struct.pack("<ii", 2, 0))
         raw2: dict = {}
         tag2 = SimpleNamespace(name="MoveMode", size=8, value_end_offset=8)
-        _handle_move_mode(arc2, tag2, names, [], [], None, raw2)
+        _handle_move_mode(arc2, tag2, names, [], [], raw2)
         assert raw2["MoveMode"] == "Copy"
 
     def test_no_invented_k2node_tails():

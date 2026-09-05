@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, List, Optional, Any
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
-    from uasset_read.link.linker import PackageLinker
     from uasset_read.serializers.object_resources import ObjectImport
     from uasset_read.serializers.package_summary import PackageFileSummary
 
@@ -456,7 +455,6 @@ def _try_asset_type_handler(
     export_map: Optional[List[Any]] = None,
     import_map: Optional[List[Any]] = None,
     summary: Optional["PackageFileSummary"] = None,
-    linker: Optional["PackageLinker"] = None,
 ) -> None:
     """Try to extract raw binary data using a registered ClassHandler.
 
@@ -488,11 +486,9 @@ def _try_asset_type_handler(
         setattr(export, "package_export_map", export_map)
         setattr(export, "package_import_map", import_map or [])
 
-    # Store summary and linker for handlers that need version info or full resolution
+    # Store summary for handlers that need version info
     if summary is not None:
         setattr(export, "package_summary", summary)
-    if linker is not None:
-        setattr(export, "package_linker", linker)
 
     saved_pos = archive.tell()
     try:
@@ -826,28 +822,17 @@ def _handle_unversioned_properties(
 def _resolve_object_property(
     tag: PropertyTag,
     value: Any,
-    linker: Optional[Any],
     import_map: Optional[List[ObjectImport]],
     export_map: List[Any],
     name_map: List[str],
 ) -> Optional[Any]:
-    """ObjectProperty enhancement: prefer linker resolution, fall back to import_map resolution.
+    """ObjectProperty enhancement: resolve the index against import_map.
 
     Return the resolved reference dictionary, or None if no replacement needed.
     """
     if tag.type != "ObjectProperty" or not isinstance(value, int):
         return None
-    if linker is not None:
-        pkg_idx = PackageIndex(value)
-        inst = linker.resolve_package_index(pkg_idx)
-        if inst is not None:
-            return {
-                "type": "import" if inst.is_import else "export",
-                "object_name": inst.object_name,
-                "object_class": inst.object_class,
-                "full_name": inst.get_full_name(),
-            }
-    elif import_map is not None:
+    if import_map is not None:
         from uasset_read.serializers.object_resources import resolve_package_index_to_reference
 
         pkg_idx = PackageIndex(value)
@@ -931,7 +916,6 @@ def _read_property_loop(
     name_map: List[str],
     export_map: List[Any],
     import_map: Optional[List[ObjectImport]],
-    linker: Optional[Any],
     mappings: Optional[Any],
     property_end: int,
     tolerant: bool,
@@ -1120,8 +1104,8 @@ def _read_property_loop(
 
             properties.append(PropertyValue(name=tag.name, type=tag.type, value=value, array_index=tag.array_index))
 
-            # ObjectProperty enhancement: prefer linker resolution, fall back to import_map resolution
-            resolved = _resolve_object_property(tag, value, linker, import_map, export_map, name_map)
+            # ObjectProperty enhancement: resolve the index against import_map
+            resolved = _resolve_object_property(tag, value, import_map, export_map, name_map)
             if resolved is not None:
                 properties[-1].value = resolved
 
@@ -1155,7 +1139,6 @@ def parse_properties_from_export(
     name_map: List[str],
     export_map: List[Any],
     import_map: Optional[List[ObjectImport]] = None,
-    linker: Optional[Any] = None,
     mappings: Optional[Any] = None,
     game: Optional[str] = None,
     tolerant: bool = True,
@@ -1175,8 +1158,7 @@ def parse_properties_from_export(
         summary: PackageFileSummary instance (version info)
         name_map: name table
         export_map: export table
-        import_map: import table (needed for ObjectProperty parsing, used when linker is not provided)
-        linker: PackageLinker instance (optional, preferred for ObjectProperty parsing)
+        import_map: import table (needed for ObjectProperty parsing)
 
     Returns:
         List[PropertyValue] property value list
@@ -1253,7 +1235,6 @@ def parse_properties_from_export(
             name_map,
             export_map,
             import_map,
-            linker,
             mappings,
             property_end,
             tolerant,
@@ -1270,8 +1251,7 @@ def parse_properties_from_export(
             export_map=export_map,
             import_map=import_map,
             summary=summary,
-            linker=linker,
-        )
+                    )
 
     return properties
 

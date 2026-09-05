@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.package_summary import PackageFileSummary
     from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
-    from uasset_read.link.linker import PackageLinker
 
 from uasset_read.constants import (
     MAX_PINS_PER_NODE,
@@ -46,13 +45,12 @@ def read_fmember_reference(
     name_map: List[str],
     import_map: List[ObjectImport],
     export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"] = None,
 ) -> FMemberReference:
     """Read FMemberReference (MemberReference.h L74-95)."""
     member_parent_index = archive.read_i32("MemberRef.MemberParent")
     member_parent: Optional[str] = None
     if member_parent_index != 0:
-        member_parent = _rcn(PackageIndex(member_parent_index), import_map, export_map, linker)
+        member_parent = _rcn(PackageIndex(member_parent_index), import_map, export_map)
 
     _member_scope = archive.read_fstring("MemberRef.MemberScope")  # noqa: F841 - protocol read
     member_name = archive.read_name(name_map, "MemberRef.MemberName")
@@ -78,7 +76,6 @@ def read_k2node_call_function(
     name_map: List[str],
     import_map: List[ObjectImport],
     export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"] = None,
     function_reference: Optional[FMemberReference] = None,
     b_defaults_to_pure: Optional[bool] = None,
 ) -> Dict[str, Any]:
@@ -95,7 +92,7 @@ def read_k2node_call_function(
     """
     # D-11: PropertyTag layer already correctly parsed FunctionReference, use it preferentially
     if function_reference is None:
-        function_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
+        function_reference = read_fmember_reference(archive, name_map, import_map, export_map)
 
     return {
         "function_reference": function_reference,
@@ -108,7 +105,6 @@ def read_k2node_event(
     name_map: List[str],
     import_map: List[ObjectImport],
     export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"] = None,
     event_reference: Optional[FMemberReference] = None,
     b_override_function: Optional[bool] = None,
     b_internal_event: Optional[bool] = None,
@@ -132,7 +128,7 @@ def read_k2node_event(
     """
     # D-11: PropertyTag layer already correctly parsed EventReference, use it preferentially
     if event_reference is None:
-        event_reference = read_fmember_reference(archive, name_map, import_map, export_map, linker)
+        event_reference = read_fmember_reference(archive, name_map, import_map, export_map)
 
     # b_override_function uses PropertyTag value preferentially, no blind read
     if b_override_function is None:
@@ -243,7 +239,6 @@ def read_k2node_functionentry(
     name_map: List[str],
     import_map: List[ObjectImport],
     export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"] = None,
     function_reference: Optional[FMemberReference] = None,
     raw_properties: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -272,7 +267,7 @@ def read_k2node_functionentry(
 
 # ============================================================================
 # dispatch handlers -- unified signature (ctx: Dict[str, Any]) -> Dict[str, Any]
-# ctx contains: archive, name_map, summary, export_map, import_map, linker,
+# ctx contains: archive, name_map, summary, export_map, import_map,
 #               node_refs, raw_properties, class_name, node_export, base_node
 # ============================================================================
 
@@ -284,7 +279,6 @@ def _handle_call_function(ctx: Dict[str, Any]) -> Dict[str, Any]:
         ctx["name_map"],
         ctx["import_map"],
         ctx["export_map"],
-        ctx["linker"],
         function_reference=ctx.get("node_refs", {}).get("function_reference"),
         b_defaults_to_pure=(ctx.get("raw_properties") or {}).get("bDefaultsToPureFunc"),
     )
@@ -298,7 +292,6 @@ def _handle_event(ctx: Dict[str, Any]) -> Dict[str, Any]:
         ctx["name_map"],
         ctx["import_map"],
         ctx["export_map"],
-        ctx["linker"],
         event_reference=refs.get("event_reference"),
         b_override_function=refs.get("b_override_function"),
         b_internal_event=refs.get("b_internal_event"),
@@ -344,7 +337,6 @@ def _handle_function_entry(ctx: Dict[str, Any]) -> Dict[str, Any]:
         ctx["name_map"],
         ctx["import_map"],
         ctx["export_map"],
-        ctx["linker"],
         function_reference=fr,
         raw_properties=ctx.get("raw_properties"),
     )
@@ -358,7 +350,6 @@ def _handle_full_context(ctx: Dict[str, Any]) -> Dict[str, Any]:
         ctx["summary"],
         ctx["export_map"],
         ctx["import_map"],
-        ctx["linker"],
         ctx["class_name"],
         ctx.get("raw_properties"),
     )
@@ -421,7 +412,6 @@ def _read_anim_graph_node(
     summary: PackageFileSummary,
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
-    linker: Optional["PackageLinker"],
     class_name: str,
     raw_properties: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -446,23 +436,14 @@ def _read_anim_graph_node(
         if pkg_idx and isinstance(pkg_idx, int) and pkg_idx != 0:
             # Resolve PackageIndex to object reference
             try:
-                if linker is not None:
-                    obj_ref = linker.resolve_package_index(PackageIndex(pkg_idx))
-                    if obj_ref is not None:
-                        subgraph_refs[key] = {
-                            "package_index": pkg_idx,
-                            "object_name": getattr(obj_ref, "object_name", ""),
-                            "class_name": getattr(obj_ref, "class_name", ""),
-                        }
-                else:
-                    # No linker, try resolving from export_map
-                    if pkg_idx > 0 and pkg_idx <= len(export_map):
-                        obj_export = export_map[pkg_idx - 1]
-                        subgraph_refs[key] = {
-                            "package_index": pkg_idx,
-                            "object_name": obj_export.object_name,
-                            "class_name": _gac(obj_export, import_map, export_map, linker) or "",
-                        }
+                # No linker on the single-package path: resolve from export_map
+                if pkg_idx > 0 and pkg_idx <= len(export_map):
+                    obj_export = export_map[pkg_idx - 1]
+                    subgraph_refs[key] = {
+                        "package_index": pkg_idx,
+                        "object_name": obj_export.object_name,
+                        "class_name": _gac(obj_export, import_map, export_map) or "",
+                    }
             except (KeyError, IndexError, AttributeError):
                 subgraph_refs[key] = {"package_index": pkg_idx, "error": "resolve_failed"}
 
@@ -495,7 +476,6 @@ def create_node_from_archive(
     node_export: ObjectExport,
     base_node: UEdGraphNode,
     raw_properties: Optional[Dict[str, Any]] = None,
-    linker: Optional["PackageLinker"] = None,
     node_refs: Optional[Dict[str, Any]] = None,
 ) -> UEdGraphNode:
     """Dispatch to the corresponding node read function based on class_name (D-07/D-08 factory pattern).
@@ -516,7 +496,6 @@ def create_node_from_archive(
         "summary": summary,
         "export_map": export_map,
         "import_map": import_map,
-        "linker": linker,
         "node_refs": node_refs,
         "raw_properties": raw_properties,
         "class_name": class_name,
@@ -549,7 +528,6 @@ def _read_member_reference_from_tags(
     name_map: List[str],
     import_map: List[ObjectImport],
     export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"] = None,
 ) -> FMemberReference:
     """Read FMemberReference structure from PropertyTag (shared by FunctionReference/EventReference)."""
     value_end = tag.value_end_offset or (archive.tell() + tag.size)
@@ -600,7 +578,7 @@ def _read_member_reference_from_tags(
             m_self = bool(inner_value)
 
     return FMemberReference(
-        member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map, linker) if mp_idx != 0 else None,
+        member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map) if mp_idx != 0 else None,
         member_name=m_name,
         member_guid=m_guid,
         b_self_context=m_self,
@@ -612,17 +590,17 @@ def _read_member_reference_from_tags(
 # ============================================================================
 
 
-def _handle_node_pos_x(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_node_pos_x(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle NodePosX tag."""
     return {"node_pos_x": _read_tag_i32(archive, tag)}
 
 
-def _handle_node_pos_y(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_node_pos_y(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle NodePosY tag."""
     return {"node_pos_y": _read_tag_i32(archive, tag)}
 
 
-def _handle_node_guid(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_node_guid(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle NodeGuid tag."""
     if tag.size > 0:
         try:
@@ -648,7 +626,7 @@ def _handle_node_guid(archive, tag, name_map, import_map, export_map, linker, ra
     return {}
 
 
-def _handle_node_comment(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_node_comment(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle NodeComment tag."""
     if tag.size > 0:
         val = archive.read_fstring()
@@ -658,11 +636,11 @@ def _handle_node_comment(archive, tag, name_map, import_map, export_map, linker,
     return {}
 
 
-def _handle_input_action(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_input_action(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle InputAction tag."""
     if tag.size > 0:
         pkg_idx = archive.read_i32()
-        input_action_path = _rcn(PackageIndex(pkg_idx), import_map, export_map, linker) if pkg_idx != 0 else ""
+        input_action_path = _rcn(PackageIndex(pkg_idx), import_map, export_map) if pkg_idx != 0 else ""
         raw_properties[tag.name] = input_action_path
         raw_properties["InputActionShortName"] = (
             input_action_path.split(".")[-1].split("'")[0] if input_action_path else ""
@@ -673,7 +651,7 @@ def _handle_input_action(archive, tag, name_map, import_map, export_map, linker,
     return {}
 
 
-def _handle_comment_color(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_comment_color(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle CommentColor tag (RGBA four-component float)."""
     if tag.size >= 16:
         raw_properties[tag.name] = (
@@ -687,14 +665,14 @@ def _handle_comment_color(archive, tag, name_map, import_map, export_map, linker
     return {}
 
 
-def _handle_i32_to_raw(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_i32_to_raw(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle I32 type tags (NodeWidth, NodeHeight, FontSize, CommentDepth, ExtraFlags)."""
     if tag.size > 0:
         raw_properties[tag.name] = _read_tag_i32(archive, tag)
     return {}
 
 
-def _handle_bool_to_raw(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_bool_to_raw(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle boolean type tags (bCommentBubbleVisible_InDetailsPanel, bIsEditable)."""
     raw_properties[tag.name] = _read_tag_bool(archive, tag)
     return {}
@@ -711,7 +689,7 @@ def _read_byte_enum_tag_name(archive, tag, name_map):
     return enum_name
 
 
-def _handle_advanced_pin_display(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_advanced_pin_display(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle AdvancedPinDisplay tag — byte-enum payload is the enum FName
     (EdGraphNode.h ENodeAdvancedPins: NoPins=0, Shown=1, Hidden=2)."""
     enum_name = _read_byte_enum_tag_name(archive, tag, name_map)
@@ -723,28 +701,28 @@ def _handle_advanced_pin_display(archive, tag, name_map, import_map, export_map,
     return {}
 
 
-def _handle_override_function(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_override_function(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle bOverrideFunction tag (writes to both updates and raw_properties)."""
     val = _read_tag_bool(archive, tag)
     raw_properties[tag.name] = val
     return {"b_override_function": val}
 
 
-def _handle_internal_event(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_internal_event(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle bInternalEvent tag (writes to both updates and raw_properties)."""
     val = _read_tag_bool(archive, tag)
     raw_properties[tag.name] = val
     return {"b_internal_event": val}
 
 
-def _handle_custom_function_name(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_custom_function_name(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle CustomFunctionName tag (FName, writes to both updates and raw_properties)."""
     val = _read_tag_fname(archive, tag, name_map)
     raw_properties[tag.name] = val
     return {"custom_function_name": val}
 
 
-def _handle_function_flags(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_function_flags(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle FunctionFlags tag (writes to both updates and raw_properties)."""
     if tag.size > 0:
         val = _read_tag_i32(archive, tag)
@@ -753,13 +731,13 @@ def _handle_function_flags(archive, tag, name_map, import_map, export_map, linke
     return {}
 
 
-def _handle_fname_to_raw(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_fname_to_raw(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle FName type tag (CustomGeneratedFunctionName)."""
     raw_properties[tag.name] = _read_tag_fname(archive, tag, name_map)
     return {}
 
 
-def _handle_package_index(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_package_index(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle PackageIndex type tags (EditorStateMachineGraph, BoundGraph)."""
     if tag.size > 0:
         pkg_idx = archive.read_i32()
@@ -770,7 +748,7 @@ def _handle_package_index(archive, tag, name_map, import_map, export_map, linker
     return {}
 
 
-def _handle_move_mode(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_move_mode(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle MoveMode tag — byte-enum payload is the enum-entry FName
     (comment-node TEnumAsByte<ECommentBoxMode>, PropertyByte.cpp SerializeItem)."""
     enum_name = _read_byte_enum_tag_name(archive, tag, name_map)
@@ -778,7 +756,7 @@ def _handle_move_mode(archive, tag, name_map, import_map, export_map, linker, ra
     return {}
 
 
-def _handle_node_details(archive, tag, name_map, import_map, export_map, linker, raw_properties):
+def _handle_node_details(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle NodeDetails tag (FText): value is discarded, only the tag span is consumed."""
     if tag.size > 0:
         archive.seek(tag.value_end_offset)
@@ -821,13 +799,12 @@ def _read_node_property_tag(
     name_map: List[str],
     import_map: List[ObjectImport],
     export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"],
     raw_properties: Dict[str, Any],
 ) -> dict:
     """Read a single node PropertyTag and update local variables. Return named properties to update."""
     handler = _NODE_TAG_HANDLERS.get(tag.name)
     if handler:
-        return handler(archive, tag, name_map, import_map, export_map, linker, raw_properties)
+        return handler(archive, tag, name_map, import_map, export_map, raw_properties)
 
     # Unmatched tags: skip bytes when data present to avoid offset misalignment
     if tag.size > 0:
@@ -844,7 +821,6 @@ def _read_node_pins(
     summary: PackageFileSummary,
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
-    linker: Optional["PackageLinker"],
     node_export: ObjectExport,
     node_name: str,
     node_guid: str,
@@ -896,7 +872,6 @@ def _read_node_pins(
                 summary,
                 export_map,
                 import_map,
-                linker,
                 header_owning_node=header_owning,
                 header_pin_id=header_pin_id,
             )
@@ -914,7 +889,6 @@ def _read_node_script_serial(
     node_export: ObjectExport,
     import_map: List[ObjectImport],
     export_map: List[ObjectExport],
-    linker: Optional["PackageLinker"],
     node_name: str,
 ) -> Dict[str, Any]:
     """Read script_serial PropertyTags of a node into one dict of parsed fields."""
@@ -980,16 +954,16 @@ def _read_node_script_serial(
             result["function_reference"] = read_tag_value_bounded(
                 archive,
                 tag,
-                lambda: _read_member_reference_from_tags(archive, tag, name_map, import_map, export_map, linker),  # noqa: B023 - tag bound at call time
+                lambda: _read_member_reference_from_tags(archive, tag, name_map, import_map, export_map),  # noqa: B023 - tag bound at call time
             )
         elif tag.name == "EventReference" and tag.size > 0:
             result["event_reference"] = read_tag_value_bounded(
                 archive,
                 tag,
-                lambda: _read_member_reference_from_tags(archive, tag, name_map, import_map, export_map, linker),  # noqa: B023 - tag bound at call time
+                lambda: _read_member_reference_from_tags(archive, tag, name_map, import_map, export_map),  # noqa: B023 - tag bound at call time
             )
         else:
-            result.update(_read_node_property_tag(archive, tag, name_map, import_map, export_map, linker, result["raw_properties"]))
+            result.update(_read_node_property_tag(archive, tag, name_map, import_map, export_map, result["raw_properties"]))
 
     return result
 
@@ -1001,14 +975,13 @@ def read_ue_graph_node(
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
     node_export: ObjectExport,
-    linker: Optional["PackageLinker"] = None,
 ) -> UEdGraphNode:
     """Read UEdGraphNode base class fields (including script_serial PropertyTag parsing)."""
     archive.seek(node_export.serial_offset)
 
     node_name = node_export.object_name
     # Parse tagged properties in script_serial
-    serial = _read_node_script_serial(archive, name_map, summary, node_export, import_map, export_map, linker, node_name)
+    serial = _read_node_script_serial(archive, name_map, summary, node_export, import_map, export_map, node_name)
     raw_properties = serial["raw_properties"]
 
     # Read Pins array
@@ -1018,13 +991,12 @@ def read_ue_graph_node(
         summary,
         export_map,
         import_map,
-        linker,
         node_export,
         node_name,
         serial["node_guid"],
     )
 
-    class_name = _rcn(node_export.class_index, import_map, export_map, linker) or ""
+    class_name = _rcn(node_export.class_index, import_map, export_map) or ""
 
     base_node = UEdGraphNode(
         node_guid=serial["node_guid"],
@@ -1045,7 +1017,6 @@ def read_ue_graph_node(
         node_export,
         base_node,
         raw_properties=raw_properties if raw_properties else None,
-        linker=linker,
-        # serial keys match node_refs names (references + K2Node_Event fields)
+                # serial keys match node_refs names (references + K2Node_Event fields)
         node_refs=serial,
     )

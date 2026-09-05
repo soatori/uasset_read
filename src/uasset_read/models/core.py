@@ -20,10 +20,7 @@ Per D-10: Python 3.10+ strict type hints.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Any, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from uasset_read.link.object_instance import UObjectInstance
+from typing import Optional, List, Any
 
 
 @dataclass
@@ -34,7 +31,7 @@ class FEdGraphPinType:
     pin_subcategory: str = ""
     pin_subcategory_object: Optional[int] = None  # FPackageIndex (int32)
     pin_subcategory_object_name: Optional[str] = None
-    pin_subcategory_object_ref: Optional["UObjectInstance"] = None
+    pin_subcategory_object_ref: Optional[Any] = None
     container_type: int = 0
     is_map_key: bool = False
     is_map_value: bool = False
@@ -70,18 +67,18 @@ class UEdGraphPin:
     default_value: Optional[str] = None
     auto_default_value: Optional[str] = None
     default_object: Optional[int] = None
-    default_object_ref: Optional["UObjectInstance"] = None  # D-04: linker-resolved object reference
+    default_object_ref: Optional[Any] = None  # D-04: reserved for object-reference resolution (unused on the single-package path)
     default_text_value: Optional[str] = None
     # PIN-04: Link references — raw dict (backward compat)
     linked_to_raw: List[dict] = field(default_factory=list)
     sub_pins: List[dict] = field(default_factory=list)
     parent_pin: Optional[dict] = None
     ref_pass_through: Optional[dict] = None
-    # PIN-04+: Link references — resolved UObjectInstance (added for linker mode)
-    linked_to_objects: List[Optional["UObjectInstance"]] = field(default_factory=list)
-    sub_pins_objects: List[Optional["UObjectInstance"]] = field(default_factory=list)
-    parent_pin_object: Optional["UObjectInstance"] = None
-    ref_pass_through_object: Optional["UObjectInstance"] = None
+    # PIN-04+: Link references — resolved object references
+    linked_to_objects: List[Optional[Any]] = field(default_factory=list)
+    sub_pins_objects: List[Optional[Any]] = field(default_factory=list)
+    parent_pin_object: Optional[Any] = None
+    ref_pass_through_object: Optional[Any] = None
     # PIN-05: Display attributes
     hidden: bool = False
     not_connectable: bool = False

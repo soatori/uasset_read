@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.package_summary import PackageFileSummary
     from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
-    from uasset_read.link.linker import PackageLinker
 
 from uasset_read.constants import (
     MAX_LINKEDTO_PER_PIN,
@@ -48,7 +47,6 @@ def read_ed_graph_pin_type(
     summary: Optional[PackageFileSummary] = None,
     import_map: Optional[List[ObjectImport]] = None,
     export_map: Optional[List[ObjectExport]] = None,
-    linker: Optional["PackageLinker"] = None,
 ) -> FEdGraphPinType:
     """Parse FEdGraphPinType (UE5.7 specific — custom serialization path)."""
     pin_type = FEdGraphPinType()
@@ -62,14 +60,8 @@ def read_ed_graph_pin_type(
     if pin_type.pin_subcategory_object:
         pkg_idx = PackageIndex(pin_type.pin_subcategory_object)
         try:
-            if linker is not None:
-                pin_type.pin_subcategory_object_ref = linker.resolve_package_index(pkg_idx)
-                if pin_type.pin_subcategory_object_ref is not None:
-                    pin_type.pin_subcategory_object_name = getattr(
-                        pin_type.pin_subcategory_object_ref, "object_name", None
-                    )
-            elif import_map is not None and export_map is not None:
-                pin_type.pin_subcategory_object_name = _rcn(pkg_idx, import_map, export_map, linker)
+            if import_map is not None and export_map is not None:
+                pin_type.pin_subcategory_object_name = _rcn(pkg_idx, import_map, export_map)
         except (KeyError, IndexError, AttributeError):
             pin_type.pin_subcategory_object_ref = None
             pin_type.pin_subcategory_object_name = None
@@ -86,12 +78,8 @@ def read_ed_graph_pin_type(
         if terminal_sub_category_object:
             pkg_idx = PackageIndex(terminal_sub_category_object)
             try:
-                if linker is not None:
-                    ref = linker.resolve_package_index(pkg_idx)
-                    if ref is not None:
-                        pin_type.map_key_terminal_sub_category_object_name = getattr(ref, "object_name", None)
-                elif import_map is not None and export_map is not None:
-                    pin_type.map_key_terminal_sub_category_object_name = _rcn(pkg_idx, import_map, export_map, linker)
+                if import_map is not None and export_map is not None:
+                    pin_type.map_key_terminal_sub_category_object_name = _rcn(pkg_idx, import_map, export_map)
             except (KeyError, IndexError, AttributeError):
                 pin_type.map_key_terminal_sub_category_object_name = None
 
@@ -136,7 +124,6 @@ def read_pin_reference(
     name_map: List[str],
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
-    linker: Optional["PackageLinker"] = None,
 ) -> Optional[dict]:
     """Read a single Pin reference (FBlueprintEditorUtils::FPinReference)."""
     b_null_ptr = archive.read_i32("PinRef.BNullPtr")
@@ -166,13 +153,6 @@ def read_pin_reference(
         "pin_guid": pin_guid,
     }
 
-    # If linker available, resolve owning_node_index to object reference
-    if linker is not None and owning_node_index != 0:
-        pkg_idx = PackageIndex(owning_node_index)
-        if not pkg_idx.is_null:
-            obj_ref = linker.resolve_package_index(pkg_idx)
-            result["owning_node_object"] = obj_ref
-
     return result
 
 
@@ -181,7 +161,6 @@ def read_pin_array(
     name_map: List[str],
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
-    linker: Optional["PackageLinker"] = None,
 ) -> List[dict]:
     """Read Pin reference array (SerializePinArray format).
 
@@ -222,7 +201,7 @@ def read_pin_array(
         if ref_validation is None or not ref_validation["valid"]:
             reason = ref_validation["reason"] if ref_validation else "not enough bytes"
             raise ParseError(f"Invalid pin reference at pos {ref_pos}: {reason}")
-        pin_ref = read_pin_reference(archive, name_map, export_map, import_map, linker)
+        pin_ref = read_pin_reference(archive, name_map, export_map, import_map)
         if pin_ref is not None:
             pins.append(pin_ref)
     return pins
@@ -525,7 +504,6 @@ def _read_pin_ref_array(
     name_map: List[str],
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
-    linker: Optional["PackageLinker"],
     field: str,
     recover_on_fail: bool,
     pin_name: str = "",
@@ -537,7 +515,7 @@ def _read_pin_ref_array(
     """
     start = archive.tell()
     try:
-        refs = read_pin_array(archive, name_map, export_map, import_map, linker)
+        refs = read_pin_array(archive, name_map, export_map, import_map)
         logger.debug("%s: %d refs at pos %d", field, len(refs), start)
         return refs
     except (struct.error, OSError, ValueError) as e:
@@ -584,7 +562,6 @@ def read_ue_graph_pin(
     summary: PackageFileSummary,
     export_map: List[ObjectExport],
     import_map: List[ObjectImport],
-    linker: Optional["PackageLinker"] = None,
     header_owning_node: Optional[int] = None,
     header_pin_id: Optional[str] = None,
 ) -> UEdGraphPin:
@@ -628,7 +605,7 @@ def read_ue_graph_pin(
     direction = archive.read_u8("Pin.Direction")
 
     # 8. PinType
-    pin_type = read_ed_graph_pin_type(archive, name_map, summary, import_map, export_map, linker)
+    pin_type = read_ed_graph_pin_type(archive, name_map, summary, import_map, export_map)
 
     # 9-10. DefaultValue strings (tolerant)
     default_value = _read_pin_fstring_field(archive, "DefaultValue")
@@ -642,17 +619,17 @@ def read_ue_graph_pin(
 
     # 13. LinkedTo array
     linked_to = _read_pin_ref_array(
-        archive, name_map, export_map, import_map, linker, "LinkedTo", recover_on_fail=True, pin_name=pin_name
+        archive, name_map, export_map, import_map, "LinkedTo", recover_on_fail=True, pin_name=pin_name
     )
 
     # 14. SubPins array
-    sub_pins = _read_pin_ref_array(archive, name_map, export_map, import_map, linker, "SubPins", recover_on_fail=False)
+    sub_pins = _read_pin_ref_array(archive, name_map, export_map, import_map, "SubPins", recover_on_fail=False)
 
     # 15. ParentPin — reuse read_pin_reference() (UE5: null → 4B, non-null → 24B)
-    parent_pin = read_pin_reference(archive, name_map, export_map, import_map, linker)
+    parent_pin = read_pin_reference(archive, name_map, export_map, import_map)
 
     # 16. ReferencePassThroughConnection — reuse read_pin_reference()
-    ref_pass_through = read_pin_reference(archive, name_map, export_map, import_map, linker)
+    ref_pass_through = read_pin_reference(archive, name_map, export_map, import_map)
 
     # 17. PersistentGuid (EditorOnly)
     try:
@@ -664,11 +641,6 @@ def read_ue_graph_pin(
     hidden, not_connectable, advanced_view, orphaned_pin = _read_pin_bitfield(archive)
 
     default_object_ref = None
-    if linker is not None and default_object not in (None, 0):
-        try:
-            default_object_ref = linker.resolve_package_index(PackageIndex(default_object))
-        except (KeyError, IndexError, AttributeError):
-            default_object_ref = None
 
     # Extract object references from raw dicts
     linked_to_objects = [pin.get("owning_node_object") for pin in linked_to]
