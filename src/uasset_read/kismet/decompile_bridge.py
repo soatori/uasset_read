@@ -11,10 +11,9 @@ retention shim, not a supported public API.
 
 import logging
 import struct
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
-    from uasset_read.link.linker import PackageLinker
     from uasset_read.archive import FArchive
 
 from uasset_read.exceptions import ParseError
@@ -30,7 +29,6 @@ def extract_kismet_decompiled(
     import_map,
     export_map,
     tolerant: bool = True,
-    linker: Optional["PackageLinker"] = None,
 ) -> List:
     """Extract and decompile Kismet bytecode from Blueprint UStruct exports.
 
@@ -183,7 +181,7 @@ def extract_kismet_decompiled(
             # Build C++ pseudocode from the parsed expressions
             from uasset_read.kismet.body_builder import FunctionBodyBuilder
 
-            builder = FunctionBodyBuilder(linker=linker)
+            builder = FunctionBodyBuilder()
             cpp_code = builder.to_function_body(
                 expressions,
                 func_name=export.object_name,

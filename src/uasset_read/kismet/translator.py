@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     from uasset_read.kismet.expressions.base import KismetExpression
     from uasset_read.kismet.function_resolver import FunctionRefResolver
     from uasset_read.kismet.jump_analyzer import JumpAnalyzer
-    from uasset_read.link.linker import PackageLinker
 
 # ===========================================================================
 # MathFunctionCleaner — beautify Kismet library calls (Decision D-04, D-05)
@@ -474,14 +473,12 @@ class KismetTranslator:
 
     def __init__(
         self,
-        linker: "PackageLinker | None" = None,
         expressions: list["KismetExpression"] | None = None,
     ):
+        # Single-package resolution never supplies a linker, so the function
+        # reference resolver stays None and every guarded branch below is
+        # inert; the resolver is retired with the kismet decision (#642).
         self._func_resolver: FunctionRefResolver | None = None
-        if linker is not None:
-            from uasset_read.kismet.function_resolver import FunctionRefResolver
-
-            self._func_resolver = FunctionRefResolver(linker)
         self._jump_analyzer: "JumpAnalyzer | None" = None
         self._structured_indices: set[int] = set()
         if expressions is not None:

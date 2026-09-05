@@ -8,10 +8,8 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import Optional, List, Dict, Any, Tuple, TYPE_CHECKING
+from typing import Optional, List, Dict, Any
 
-if TYPE_CHECKING:
-    from uasset_read.link.linker import PackageLinker
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -165,35 +163,6 @@ def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
             )
         )
     return import_map
-
-
-def build_imports_list(import_map: List[ObjectImport]) -> List[Dict]:
-    """Build imports dependency list (deduplicated, order preserved)."""
-    seen = set()
-    imports = []
-    for imp in import_map:
-        key = (imp.class_name, imp.class_package, imp.object_name)
-        if key not in seen:
-            seen.add(key)
-            imports.append({"class": imp.class_name, "package": imp.class_package, "object": imp.object_name})
-    return imports
-
-
-def read_soft_object_paths(archive: FArchive, summary: PackageFileSummary, name_map: List[str]) -> List[Dict]:
-    """Read SoftObjectPaths array (UE5.7 specific)."""
-    if summary.soft_object_paths_count <= 0 or summary.soft_object_paths_offset <= 0:
-        return []
-
-    archive.seek(summary.soft_object_paths_offset)
-    soft_refs = []
-    for i in range(summary.soft_object_paths_count):
-        # UE5 >= 1007 format: double FName
-        package_name = archive.read_name(name_map, f"SoftObjectPaths[{i}].PackageName")
-        asset_name = archive.read_name(name_map, f"SoftObjectPaths[{i}].AssetName")
-        asset_path = f"{package_name}.{asset_name}" if asset_name else package_name
-        sub_path = archive.read_fstring(f"SoftObjectPaths[{i}].SubPath")
-        soft_refs.append({"asset_path": asset_path, "sub_path": sub_path})
-    return soft_refs
 
 
 def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: List[str]) -> List[ObjectExport]:
@@ -426,12 +395,6 @@ def resolve_class_name(
     return None
 
 
-def detect_blueprint(export: ObjectExport, import_map: List[ObjectImport], export_map: List[ObjectExport]) -> bool:
-    """Detect whether export is a Blueprint asset."""
-    class_name = get_asset_class(export, import_map, export_map)
-    return class_name is not None and "Blueprint" in class_name
-
-
 def detect_blueprint_generated_class(
     export: ObjectExport, import_map: List[ObjectImport], export_map: List[ObjectExport]
 ) -> bool:
@@ -445,55 +408,6 @@ def detect_blueprint_generated_class(
         if 0 <= idx < len(import_map):
             return "BlueprintGeneratedClass" in import_map[idx].object_name
     return False
-
-
-def resolve_class_name_with_linker(
-    class_index: PackageIndex,
-    linker: "PackageLinker",
-) -> Optional[str]:
-    """Resolve class name from PackageIndex (via linker)."""
-    if class_index.is_null:
-        return None
-    inst = linker.resolve_package_index(class_index)
-    return inst.object_name if inst else None
-
-
-def get_asset_class_with_linker(
-    export: ObjectExport,
-    linker: "PackageLinker",
-) -> Optional[str]:
-    """Identify asset type from export entry (via linker)."""
-    inst = linker.resolve_package_index(export.class_index)
-    return inst.object_name if inst else None
-
-
-def detect_blueprint_with_linker(
-    export: ObjectExport,
-    linker: "PackageLinker",
-) -> bool:
-    """Detect whether export is a Blueprint asset (via linker)."""
-    cls = get_asset_class_with_linker(export, linker)
-    return cls is not None and "Blueprint" in cls
-
-
-def resolve_parent_class_with_linker(
-    super_index: PackageIndex,
-    linker: "PackageLinker",
-) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Resolve ParentClass FPackageIndex to object name (via linker).
-
-    Returns:
-        Tuple of (resolved_name, warning_if_any)
-        - (class_name, None) on success
-        - (None, warning_string) on failure
-    """
-    if super_index.is_null:
-        return None, None
-    inst = linker.resolve_package_index(super_index)
-    if inst is not None:
-        return inst.object_name, None
-    return None, f"Parent resolution failed for index {super_index.index}"
 
 
 def find_main_blueprint_generated_class(
@@ -517,48 +431,10 @@ def find_main_blueprint_generated_class(
     return None
 
 
-def resolve_parent_class(
-    super_index: PackageIndex, import_map: List[ObjectImport], export_map: List[ObjectExport]
-) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Resolve ParentClass FPackageIndex to object name (BLUE-02).
-
-    Per D-09: only direct parent (no inheritance chain).
-    Per D-10: resolve to ImportMap/ExportMap object name.
-    Per D-11: return raw index + warning on resolution failure.
-
-    Returns:
-        Tuple of (resolved_name, warning_if_any)
-        - (class_name, None) on success
-        - (None, warning_string) on failure
-    """
-    if super_index.is_null:
-        return None, None
-
-    if super_index.is_import:
-        import_idx = super_index.to_import_index()
-        if 0 <= import_idx < len(import_map):
-            return import_map[import_idx].object_name, None
-        else:
-            return None, f"Parent import index out of range: {super_index.index}"
-
-    elif super_index.is_export:
-        export_idx = super_index.to_export_index()
-        if 0 <= export_idx < len(export_map):
-            return export_map[export_idx].object_name, None
-        else:
-            return None, f"Parent export index out of range: {super_index.index}"
-
-    return None, f"Unknown parent index type: {super_index.index}"
-
-
 def resolve_package_index_to_reference(
     pkg_idx: PackageIndex, import_map: List[ObjectImport], export_map: List[ObjectExport], name_map: List[str]
 ) -> Optional[Dict[str, Any]]:
-    """Resolve PackageIndex to reference dict using raw maps (no linker).
-
-    This function provides a fallback when linker is not available.
-    It resolves PackageIndex to a reference dict with object metadata.
+    """Resolve PackageIndex to a reference dict with object metadata from the raw maps.
 
     Args:
         pkg_idx: PackageIndex to resolve
@@ -591,9 +467,9 @@ def resolve_package_index_to_reference(
         idx = pkg_idx.to_export_index()
         if 0 <= idx < len(export_map):
             exp = export_map[idx]
-            # Resolve class_name using get_asset_class (no linker available)
+            # Resolve class_name from the import/export maps
             class_name = get_asset_class(exp, import_map, export_map)
-            # Resolve outer_name from export_map (no linker available)
+            # Resolve outer_name from export_map
             outer_name = None
             if exp.outer_index.is_export and exp.outer_index.to_export_index() < len(export_map):
                 outer_exp = export_map[exp.outer_index.to_export_index()]

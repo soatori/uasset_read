@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.package_summary import PackageFileSummary
     from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
-    from uasset_read.link.linker import PackageLinker
 
 from uasset_read.constants import MAX_NODES_PER_GRAPH, MAX_SUBGRAPHS
 from uasset_read.exceptions import ParseError
@@ -87,7 +86,6 @@ def read_ue_graph(
     graph_export: ObjectExport,
     graph_class: str,
     graph_export_idx: int = 0,
-    linker: Optional["PackageLinker"] = None,
     _parsed_indices: Optional[set] = None,
 ) -> UEdGraph:
     """Read UEdGraph container (EdGraph.cpp).
@@ -124,7 +122,7 @@ def read_ue_graph(
     nodes: List[UEdGraphNode] = []
 
     def read_node(node_export: ObjectExport, node_idx: int) -> UEdGraphNode:
-        node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export, linker)
+        node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export)
         node._export_index = node_idx  # tag for dedup
         return node
 
@@ -147,7 +145,7 @@ def read_ue_graph(
     if graph_export_idx > 0:
         for node_export in export_map:
             if node_export.outer_index.index == graph_export_idx:
-                node_class = _gac(node_export, import_map, export_map, linker)
+                node_class = _gac(node_export, import_map, export_map)
                 if node_class and (
                     node_class.startswith("K2Node") or node_class.startswith("EdGraphNode") or "Node" in node_class
                 ):
@@ -200,7 +198,7 @@ def read_ue_graph(
         if pkg_idx <= 0 or pkg_idx > len(export_map) or pkg_idx in _parsed_indices:
             return None
         subgraph_export = export_map[pkg_idx - 1]
-        subgraph_class = _gac(subgraph_export, import_map, export_map, linker) or ""
+        subgraph_class = _gac(subgraph_export, import_map, export_map) or ""
         if not (subgraph_class.endswith("Graph") or subgraph_class == "EdGraph" or subgraph_class == "UberEdGraph"):
             return None
         return read_ue_graph(
@@ -212,7 +210,6 @@ def read_ue_graph(
             subgraph_export,
             subgraph_class,
             pkg_idx,
-            linker,
             _parsed_indices=_parsed_indices,
         )
 

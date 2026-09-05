@@ -12,16 +12,13 @@ Enhanced features:
 from __future__ import annotations
 
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from uasset_read.link.linker import PackageLinker
+from typing import Any
 
 
 class FunctionRefResolver:
     """Resolves StackNode to class name + function name via PackageLinker."""
 
-    def __init__(self, linker: "PackageLinker") -> None:
+    def __init__(self, linker: Any) -> None:
         self._linker = linker
         self._cache: dict[int, tuple[str, str]] = {}
         # Virtual function name → class name cache (for EX_VirtualFunction class name resolution)

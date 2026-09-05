@@ -29,9 +29,7 @@ from uasset_read.exceptions import ParseError
 from uasset_read.kismet.ufunction_reader import FORTNITE_GUID, get_kismet_custom_version
 from uasset_read.serializers.object_resources import (
     resolve_class_name,
-    resolve_class_name_with_linker,
     get_asset_class,
-    get_asset_class_with_linker,
 )
 from uasset_read.serializers.property_tags import read_tag_value_bounded
 
@@ -59,14 +57,14 @@ def _get_thread_local():
     return _thread_local
 
 
-def _rcn(idx, im, em, lk):
-    """Resolve class name - linker version if available."""
-    return resolve_class_name_with_linker(idx, lk) if lk else resolve_class_name(idx, im, em)
+def _rcn(idx, im, em):
+    """Resolve class name from the raw import/export maps."""
+    return resolve_class_name(idx, im, em)
 
 
-def _gac(exp, im, em, lk):
-    """Get asset class - linker version if available."""
-    return get_asset_class_with_linker(exp, lk) if lk else get_asset_class(exp, im, em)
+def _gac(exp, im, em):
+    """Get asset class from the raw import/export maps."""
+    return get_asset_class(exp, im, em)
 
 
 # ============================================================================

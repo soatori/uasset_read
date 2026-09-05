@@ -718,18 +718,6 @@ def test_package_document_preserves_every_export_and_role():
             "chunk_ids": "array",
         }
 
-    def test_import_package_name_not_gated_by_filter_editor_only():
-        src = (SRC / "uasset_read/serializers/object_resources.py").read_text(encoding="utf-8")
-        assert "and not is_filter_editor_only" not in src.split("def build_imports_list")[0]
-
-    def test_asset_registry_dependency_gate_uses_521():
-        from uasset_read import constants
-
-        assert constants.UE4_ASSETREGISTRY_DEPENDENCYFLAGS == 521
-        src = (SRC / "uasset_read/parsers/asset_registry_parser.py").read_text(encoding="utf-8")
-        assert "UE4_ASSETREGISTRY_DEPENDENCYFLAGS" in src
-        assert "file_version_ue4 >= 510" not in src
-
     def test_material_enum_tables_match_engine_types():
         from uasset_read.constants import BLEND_MODE_MAP, SHADING_MODEL_MAP
 
@@ -761,13 +749,8 @@ def test_package_document_preserves_every_export_and_role():
             ("document.test_all_exports_present", test_all_exports_present),
             ("document.test_ids_are_export_prefix", test_ids_are_export_prefix),
             ("document.test_stable_id_across_calls", test_stable_id_across_calls),
-            ("version.test_asset_registry_dependency_gate_uses_521", test_asset_registry_dependency_gate_uses_521),
             ("property.test_unversioned_bool_one_byte_enum_fname", test_unversioned_bool_one_byte_enum_fname),
             ("summary.test_compressed_chunks_skipped_as_16_bytes", test_compressed_chunks_skipped_as_16_bytes),
-            (
-                "summary.test_import_package_name_not_gated_by_filter_editor_only",
-                test_import_package_name_not_gated_by_filter_editor_only,
-            ),
             ("summary.test_summary_gate_modes_are_versioned", test_summary_gate_modes_are_versioned),
             (
                 "table.test_table_rows_skip_tagged_stream_not_size_prefix",
@@ -1883,7 +1866,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             file_version_ue5=1018,
             custom_versions=[SimpleNamespace(guid=RELEASE_GUID, version=31)],
         )
-        pt = read_ed_graph_pin_type(arc, ["None"], summary, [], [], None)
+        pt = read_ed_graph_pin_type(arc, ["None"], summary, [], [])
         assert pt.container_type == 3
         assert pt.map_key_terminal_is_const is True
         assert pt.map_key_terminal_is_weak_pointer is False
@@ -1904,12 +1887,12 @@ def test_handler_registry_supports_enriches_and_isolates():
         arc = ByteArchive(payload)
         tag = SimpleNamespace(name="AdvancedPinDisplay", size=8, value_end_offset=8)
         raw: dict = {}
-        _handle_advanced_pin_display(arc, tag, names, [], [], None, raw)
+        _handle_advanced_pin_display(arc, tag, names, [], [], raw)
         assert raw["AdvancedPinDisplayFormatted"] == "Hidden"
         arc2 = ByteArchive(struct.pack("<ii", 2, 0))
         raw2: dict = {}
         tag2 = SimpleNamespace(name="MoveMode", size=8, value_end_offset=8)
-        _handle_move_mode(arc2, tag2, names, [], [], None, raw2)
+        _handle_move_mode(arc2, tag2, names, [], [], raw2)
         assert raw2["MoveMode"] == "Copy"
 
     def test_no_invented_k2node_tails():

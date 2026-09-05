@@ -828,48 +828,6 @@ def read_package_summary(
     )
 
 
-def validate_export_data_range(
-    archive: FArchive,
-    summary: PackageFileSummary,
-) -> None:
-    """Validate the export table region against file bounds.
-
-    Validates that the export table region fits the file; per-export serial
-    ranges are enforced at parse time via `_read_range` in `LegacyPackageReader`.
-
-    Args:
-        archive: File archive reader
-        summary: Package file summary
-
-    Note: This function only logs diagnostics, does not raise exceptions (fault-tolerant).
-    """
-
-    file_size = archive.total_size()
-    if file_size <= 0 or summary.export_count <= 0:
-        return
-
-    # Export table space check
-    # Each export table entry ~100+ bytes (FObjectExport structure)
-    export_table_min_entry_size = 72  # Minimum FObjectExport size
-    export_table_end = summary.export_offset + summary.export_count * export_table_min_entry_size
-    if export_table_end > file_size:
-        archive._diagnostics.append(
-            OffsetRangeDiagnostic(
-                kind="truncated_file",
-                module="package_summary",
-                field="export_table",
-                current_pos=summary.export_offset,
-                target_offset=export_table_end,
-                file_size=file_size,
-                source="validate_export_data_range",
-                error=(
-                    f"Export table region [0x{summary.export_offset:X}, 0x{export_table_end:X}] "
-                    f"exceeds file size 0x{file_size:X}, file may be truncated in export table region"
-                ),
-            )
-        )
-
-
 def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]:
     """Read name table.
 
@@ -1041,31 +999,6 @@ def read_depends_map(
             )
 
     return depends_map
-
-
-def read_soft_package_references(
-    archive: FArchive,
-    summary: PackageFileSummary,
-    name_map: List[str],
-) -> List[str]:
-    """Read SoftPackageReferences (soft package reference table).
-
-    UE format: TArray<FName> — package path name list.
-    Only present when file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP (516).
-
-    Returns:
-        Package path name list (resolved from FName index to strings)
-    """
-    if summary.soft_package_references_count <= 0 or summary.soft_package_references_offset <= 0:
-        return []
-
-    archive.seek(summary.soft_package_references_offset)
-
-    refs: List[str] = []
-    for i in range(summary.soft_package_references_count):
-        refs.append(archive.read_name(name_map, f"SoftPackageReferences[{i}]"))
-
-    return refs
 
 
 def read_preload_dependencies(archive: FArchive, summary: PackageFileSummary) -> List[int]:
