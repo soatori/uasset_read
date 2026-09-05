@@ -1,5 +1,9 @@
 # Blueprint v2 Deep Decode Implementation Plan
 
+status: historical
+
+> **状态：已完成（2026-09-05），保留为阶段记录。** Phase 4.5 已落地：图/node/pin 解码、declaration（parent_class/interfaces/functions）、SCS components、NewVariables names 均在 v2 `BlueprintFamilyHandler` 的 decode 分支；入口 `v2/blueprint_graph.py`，验收 `tests/test_blueprint_graph.py` 与 `tests/test_blueprint_decode.py`（StackOBot / BP_CombatCharacter / ABP_RifleAnimLayers / ALS_AnimBP 四个 tracked fixture）。**未迁**：VarType 类型解码、Kismet 反编译、C++ skeleton、parent-asset 解析——按 `docs/designs/2026-08-31-v1-retirement-plan.md` 归 deferred，不属本计划遗留。另：本计划前提中的 v1 文件（`graph/`、`semantic/`、`pipeline/`）与 v1 管线已在 Phase 6（#621）删除，`serializers/graph*.py` 作为 v2 reader 层复用保留。下方步骤复选框**未回填，不作为现状依据**；现状以 `src/` + `tests/` 为准。依 `docs/designs/2026-08-31-doc-status-marking-spec.md`，historical 文档可原地保留。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Migrate the blueprint graph/node/pin, function, component, and variable decode capability from the v1 pipeline into a v2 `BlueprintFamilyHandler` decode branch, producing `objects[].semantic` with real graph data at `depth=decode` (issue #621 Phase 4.5).
@@ -9,6 +13,7 @@
 **Tech Stack:** Python 3.10+ (gate: Windows + Python 3.14.7), pytest, ruff, stdlib only.
 
 **Spec:**
+
 - Authoritative target: `docs/designs/2026-08-26-package-first-uasset-parser-refactor.md` (issue #621 body is a copy; the file in `docs/designs/` wins)
 - Boundary docs: `docs/designs/2026-08-31-semantic-handlers-boundary.md` (D2), `docs/designs/2026-08-31-v1-retirement-plan.md` (D1), `docs/designs/2026-08-31-v2-contract-stability.md` (S1), `docs/designs/2026-08-31-projection-layering.md` (G4)
 - Issue tracker: #621 (umbrella), #629 (capability tier), #630 (decoded-claims rules)
@@ -42,7 +47,7 @@ Facts the plan relies on — re-verify with one probe command in Task 1 before w
 ## File Map
 
 | File | Change |
-|---|---|
+| --- | --- |
 | `docs/plans/2026-09-02-blueprint-v2-deep-decode.md` | Create (this plan; Task 0 commits it) |
 | `src/uasset_read/v2/blueprint_graph.py` | Create: decode-pass graph extraction + UEdGraph → plain-dict conversion + caps |
 | `src/uasset_read/v2/package/legacy.py` | Modify: decode-depth extras step for blueprint-family packages |
@@ -109,6 +114,7 @@ The Blueprint/AnimBlueprint **asset export** (the export whose outer chain owns 
 ```
 
 Rules:
+
 - `graphs[].kind` derives deterministically: name `EventGraph` → `event_graph`; name `UserConstructionScript` → `construction_script`; export id listed in `declaration.functions[].id` → `function`; otherwise `unknown`.
 - `direction`: `EGPD_Input == 0` → `"input"`, `EGPD_Output == 1` → `"output"`, else `"unknown"` (UE enum `EEdGraphPinDirection` in `Engine/Source/Runtime/Engine/Public/EdGraph/EdGraphTypes.h`).
 - `category` is the decoded `FEdGraphPinType.pin_category` string (empty string is emitted as `""` when unset).
@@ -130,10 +136,12 @@ git commit -m "docs: blueprint v2 deep decode plan (#621 Phase 4.5)"
 ## Task 1: `v2/blueprint_graph.py` — graph extraction and conversion module
 
 **Files:**
+
 - Create: `src/uasset_read/v2/blueprint_graph.py`
 - Test: `tests/test_blueprint_graph.py`
 
 **Interfaces:**
+
 - Consumes: `LegacyPackageReader` decode state (Task 2 wires it); unit tests drive it directly with the fixture-opening helper below.
 - Produces:
   - `read_blueprint_graphs(archive, summary, name_map, import_map, export_map, *, max_graphs: int = 512) -> list[dict]` — parses every graph-class export and returns JSON-safe graph dicts (shape below). `max_graphs` caps the number of graphs processed; on cap engagement the returned `package_truncated` list entry is appended (see shape).
@@ -524,12 +532,14 @@ git commit -m "feat: v2 blueprint graph decode-pass module (#621 Phase 4.5)"
 ## Task 2: Decode-pass extras wiring + handler graphs output (replaces the coarse branch)
 
 **Files:**
+
 - Modify: `src/uasset_read/v2/package/legacy.py` (extras step ~line 517; per-export property loop ~line 648)
 - Modify: `src/uasset_read/v2/handlers.py` (BlueprintFamilyHandler decode branch lines 927-995; capability line 997)
 - Modify: `tests/test_samples.py` (decode-branch block ~lines 283-299)
 - Test: `tests/test_blueprint_decode.py`
 
 **Interfaces:**
+
 - Consumes: Task 1's `read_blueprint_graphs`; existing extras channel `extras: dict[str, dict]` with per-object-id keys.
 - Produces: extras entries `extras[<graph-owning export id>] = {"graphs": [...]}` (graphs whose outer chain resolves to that export); handler `semantic["graphs"]`; the coarse `semantic["graph"]` key is deleted.
 
@@ -925,10 +935,12 @@ git commit -m "feat: real blueprint graph decode at v2 depth=decode (#621 Phase 
 ## Task 3: Declaration — parent class, interfaces, functions
 
 **Files:**
+
 - Modify: `src/uasset_read/v2/handlers.py` (decode branch — add `declaration` construction)
 - Test: `tests/test_blueprint_decode.py`
 
 **Interfaces:**
+
 - Consumes: `obj.properties` of the graph-owning export (already parsed at decode depth), extras from Task 2.
 - Produces: `semantic["declaration"] = {"parent_class": str | None, "interfaces": [str, ...], "functions": [{"id": str, "name": str}, ...]}` on the owning export only; `graphs[].kind == "function"` for graphs whose export id appears in `functions`.
 
@@ -1055,10 +1067,12 @@ git commit -m "feat: blueprint declaration (parent/interfaces/functions) at deco
 ## Task 4: Components — SCS_Node tree with template names
 
 **Files:**
+
 - Modify: `src/uasset_read/v2/handlers.py`
 - Test: `tests/test_blueprint_decode.py`
 
 **Interfaces:**
+
 - Consumes: `all_objects` (records of SCS_Node/SimpleConstructionScript exports with parsed properties at decode), `obj.properties`.
 - Produces: `semantic["components"] = [{"id": str, "name": str, "type": str, "parent": str | None}, ...]` on the owning export.
 
@@ -1206,10 +1220,12 @@ git commit -m "feat: blueprint SCS component tree at decode depth (#621 Phase 4.
 ## Task 5: Variables — NewVariables names and GUIDs
 
 **Files:**
+
 - Modify: `src/uasset_read/v2/handlers.py`
 - Test: `tests/test_blueprint_decode.py`
 
 **Interfaces:**
+
 - Consumes: owning export `obj.properties["NewVariables"]` (array of `BPVariableDescription` structs; members `VarName`/`VarGuid` already decoded by the property parser).
 - Produces: `semantic["variables"] = [{"name": str, "guid": str, "type": "opaque"}, ...]`; `type` is `"opaque"` because the `VarType` member body (FEdGraphPinType, 69 opaque bytes in these UE4.27 fixtures) is not decoded — decoding it requires a UE-source-verified layout (FEdGraphPinType has TStructOpsTypeTraits-based member serialization; follow-up, not this plan). Honest-by-construction: type claims are never made.
 
@@ -1306,11 +1322,13 @@ git commit -m "feat: blueprint NewVariables names/guids at decode depth (#621 Ph
 ## Task 6: Bounds honesty on the large carrier (ALS_AnimBP) + matrix rows
 
 **Files:**
+
 - Modify: `src/uasset_read/v2/blueprint_graph.py` (caps already present — this task proves them)
 - Modify: `tests/test_blueprint_decode.py`, `tests/test_samples.py`
 - Test: `tests/test_blueprint_decode.py` (new tests), `tests/test_samples.py` (matrix rows unchanged but decode branch must run on ALS too)
 
 **Interfaces:**
+
 - Consumes: everything from Tasks 1-5.
 - Produces: evidence that (a) the largest tracked package decodes with bounded output and honest status, (b) the decode branch of the sample matrix runs for the AnimBlueprint asset row of ALS, (c) no diagnostic floods.
 
@@ -1346,6 +1364,7 @@ Expected: FAIL — currently `export:274` has no `graphs` key (coarse scan was p
 - [ ] **Step 3: Fix whatever the run reveals**
 
 Likely fixes, each only when the failing assertion shows it:
+
 - If `semantic` stays `partial`: check `capability()` — with pins decoded and no truncation it must return `"decoded"`. If some graph reports `truncated` (node/pin caps), raise the module constants above ALS's real maxima (`MAX_GRAPHS_PER_PACKAGE`/`MAX_NODES_PER_GRAPH_OUTPUT`/`MAX_PINS_PER_NODE_OUTPUT`) — ALS must pass without cap engagement so the honesty contract stays meaningful.
 - If `EXPORT_PROPERTY_BOUNDS_EXCEEDED` appears: the extras graph pass must run after the property loop restored the full read range, and node reads are bounded by the shared readers — verify the pass runs with the archive at full range (Task 2 wiring).
 - Slow runs are fine (no wall-clock gates); a single decode of ALS at ~10-20 s is within the suite's existing ALS budget.
@@ -1371,6 +1390,7 @@ git commit -m "test: ALS decode bounds and matrix rows for blueprint v2 decode (
 ## Task 7: Capability claims, status sync, and docs
 
 **Files:**
+
 - Modify: `docs/designs/2026-08-31-semantic-handlers-boundary.md` (D2 §3 blueprint row)
 - Modify: `docs/designs/2026-08-26-package-first-uasset-parser-refactor.md` (Phase 4.5 status line)
 - Modify: `README.md` (v2 capability wording)

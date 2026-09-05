@@ -82,6 +82,8 @@ tests/*
 !tests/conftest.py
 !tests/README.md
 !tests/test_*.py
+# Size ratchet baseline read by tests/test_size_baseline.py and CI package-smoke
+!tests/size-baseline.json
 !tests/samples/
 
 # AI agent reports (local only)

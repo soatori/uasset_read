@@ -2612,7 +2612,13 @@ def test_test_suite_structure_gate():
 
     root = Path(__file__).parent
     test_files = sorted(p.name for p in root.glob("test_*.py"))
-    expected = ["test_blueprint_decode.py", "test_blueprint_graph.py", "test_core.py", "test_samples.py"]
+    expected = [
+        "test_blueprint_decode.py",
+        "test_blueprint_graph.py",
+        "test_core.py",
+        "test_samples.py",
+        "test_size_baseline.py",
+    ]
     assert test_files == expected
     subdirs = {p.name for p in root.iterdir() if p.is_dir() and p.name != "__pycache__"}
     assert subdirs == {"samples"}

@@ -87,6 +87,26 @@ jobs:
           cd "$(mktemp -d)"
           python -c "import uasset_read"
 
+      - name: Check wheel size against baseline
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+
+          raw = pathlib.Path("tests/size-baseline.json").read_text("utf-8")
+          limit = json.loads(raw)["wheel_bytes"]["max_bytes"]
+          wheels = sorted(pathlib.Path("dist").glob("*.whl"))
+          if not wheels:
+              print("::error::no wheel found under dist/")
+              sys.exit(1)
+          size = max(w.stat().st_size for w in wheels)
+          report = "wheel=%d baseline=%d" % (size, limit)
+          if size > limit:
+              print("::error::over wheel size baseline: " + report)
+              print("::error::raise wheel_bytes.max_bytes to accept")
+              sys.exit(1)
+          print("wheel size ok: " + report)
+          PY
+
   ruff-check:
     runs-on: ubuntu-latest
     steps:

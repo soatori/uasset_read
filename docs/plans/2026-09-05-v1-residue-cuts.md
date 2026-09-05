@@ -1,5 +1,9 @@
 # v1 Residue Cuts Implementation Plan
 
+status: historical
+
+> **状态：已完成（2026-09-05），保留为阶段记录。** 10 个任务分 4 条 lane 合入：lane A（Tasks 1,2,3,5,7，`29491e5e`）、lane B（Task 4，`bc328e5b`）、lane C（Task 6，`649d7511`）、lane D（Tasks 8,9，`43c3ce97`），Task 10 为测试收敛（`60a82df1`、`6cd2d8ee`）。两波验证：wave-1 −6,732 行 / 16 文件，wave-2 −6,744 行，51/51 真实样例输出字节一致（`ab381338`、`e1d40b97`）。**未做且仍为待办**：A16 `property_types` ↔ `binary_or_native_handlers` 结构解码重复（需逐 decoder 行为保持重写，并先重新核对哪些样例真的走到 BinaryOrNative 路径）、A17 的 `_read_fstring_safe`/`read_ftext_fstring` 合并（两者错误语义不同：raise vs sentinel）——计划本身已声明留给独立计划。下方步骤复选框**未回填，不作为现状依据**；现状以 `src/` + `tests/` 为准。依 `docs/designs/2026-08-31-doc-status-marking-spec.md`，historical 文档可原地保留。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Delete the v1 pipeline residue that the package-first (v2) migration left unreachable at runtime, without changing any v2 output.
