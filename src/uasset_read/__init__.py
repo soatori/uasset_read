@@ -14,7 +14,7 @@ __version__ = "0.6.0-dev"
 # Stable Public API (direct imports)
 # ============================================================================
 
-from .config import ParseConfig, LogConfig
+from .config import LogConfig
 from .v2.api import parse_package_document
 from .exceptions import ParseError
 from .archive import FArchive
@@ -22,7 +22,6 @@ from .archive import FArchive
 __all__ = [
     "__version__",
     # Configuration
-    "ParseConfig",
     "LogConfig",
     # v2 package-first API
     "parse_package_document",

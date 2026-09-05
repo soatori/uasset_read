@@ -115,7 +115,7 @@ class PackageBundle:
     container: str = "filesystem"
     files: Dict[str, str] = field(default_factory=dict)
     payloads: Dict[str, bytes] = field(default_factory=dict)
-    provider: Optional["PackageProvider"] = None
+    provider: Optional["FileSystemPackageProvider"] = None
 
     @property
     def package_files(self) -> Dict[str, str]:
@@ -146,17 +146,6 @@ class FileSystemPackageProvider:
 
     def __init__(self, root: str | os.PathLike[str] | None = None):
         self.root = Path(root).resolve() if root is not None else None
-        self._list_files_cache: list[str] | None = None
-        self._cache_mtime: float | None = None  # Directory modification time when cached
-
-    def _get_root_mtime(self) -> float:
-        """Get the modification time of the root directory."""
-        if self.root is None or not self.root.exists():
-            return 0.0
-        try:
-            return self.root.stat().st_mtime
-        except (OSError, OverflowError):
-            return 0.0
 
     @staticmethod
     def _assert_within_root(path: Path, root: Path | None) -> Path:
@@ -169,40 +158,6 @@ class FileSystemPackageProvider:
         except ValueError:
             raise PermissionError(f"Path '{path}' resolves outside root '{root}': {resolved}")
         return resolved
-
-    def list_files(self) -> list[str]:
-        current_mtime = self._get_root_mtime()
-        # Check if cache is valid: exists and modification time unchanged
-        if self._list_files_cache is not None and self._cache_mtime == current_mtime:
-            return self._list_files_cache
-        if self.root is None or self.root.is_file():
-            return []
-        result = [
-            str(path)
-            for path in self.root.rglob("*")
-            if path.is_file() and path.suffix.lower() in (*PACKAGE_EXTENSIONS, *PACKAGE_PAYLOAD_EXTENSIONS)
-        ]
-        self._list_files_cache = result
-        self._cache_mtime = current_mtime
-        return result
-
-    def read_file(self, path: str) -> Optional[bytes]:
-        p = Path(path)
-        if self.root is not None:
-            p = self._assert_within_root(p, self.root)
-        if not p.is_file():
-            return None
-        with p.open("rb") as f:
-            return f.read()
-
-    def open_file(self, path: str) -> Optional[ArchiveLike]:
-        """Open file and return FArchive (supports mmap for large files)."""
-        p = Path(path)
-        if self.root is not None:
-            p = self._assert_within_root(p, self.root)
-        if not p.is_file():
-            return None
-        return FArchive(str(p))
 
     def open_package_bundle(
         self, path: str, tolerant: bool = False, budget: ResourceBudget | None = None
@@ -240,14 +195,9 @@ class FileSystemPackageProvider:
         )
 
 
-# Type-name alias kept for pipeline annotations; the ABC it came from had a
-# single implementation whose generic base paths never executed.
-PackageProvider = FileSystemPackageProvider
-
-
 def open_package_bundle(
     path: str,
-    provider: Optional[PackageProvider] = None,
+    provider: Optional["FileSystemPackageProvider"] = None,
     tolerant: bool = False,
     budget: ResourceBudget | None = None,
 ) -> PackageBundle:

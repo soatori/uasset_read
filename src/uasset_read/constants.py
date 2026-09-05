@@ -89,51 +89,6 @@ PKG_UnversionedProperties = 0x00002000  # Uses unversioned property serializatio
 PKG_FilterEditorOnly = 0x80000000  # Package has editor-only data filtered out
 
 
-def decode_package_flags(flags: int) -> list[str]:
-    """Decode PackageFlags bitmask into a list of human-readable flag names.
-
-    Returns a list of set flag bit names, with unknown bits marked as 'Unknown_<hex>'.
-    """
-    result = []
-    known_flags = [
-        (0x00000001, "PKG_NewlyCreated"),
-        (0x00000002, "PKG_ClientOptional"),
-        (0x00000004, "PKG_ServerSideOnly"),
-        (0x00000010, "PKG_CompiledIn"),
-        (0x00000020, "PKG_ForDiffing"),
-        (0x00000040, "PKG_EditorOnly"),
-        (0x00000080, "PKG_Developer"),
-        (0x00000100, "PKG_UncookedOnly"),
-        (PKG_Cooked, "PKG_Cooked"),
-        (0x00000400, "PKG_ContainsNoAsset"),
-        (0x00000800, "PKG_NotExternallyReferenceable"),
-        (0x00001000, "PKG_AccessSpecifierEpicInternal"),
-        (PKG_UnversionedProperties, "PKG_UnversionedProperties"),
-        (0x00004000, "PKG_ContainsMapData"),
-        (0x00008000, "PKG_IsSaving"),
-        (0x00010000, "PKG_Compiling"),
-        (0x00020000, "PKG_ContainsMap"),
-        (0x00040000, "PKG_RequiresLocalizationGather"),
-        (0x00080000, "PKG_LoadUncooked"),
-        (0x00100000, "PKG_PlayInEditor"),
-        (0x00200000, "PKG_ContainsScript"),
-        (0x00400000, "PKG_DisallowExport"),
-        (0x08000000, "PKG_CookGenerated"),
-        (0x10000000, "PKG_DynamicImports"),
-        (0x20000000, "PKG_RuntimeGenerated"),
-        (0x40000000, "PKG_ReloadingForCooker"),
-        (PKG_FilterEditorOnly, "PKG_FilterEditorOnly"),
-    ]
-    remaining = flags
-    for flag_value, flag_name in known_flags:
-        if flag_value != 0 and (flags & flag_value) == flag_value:
-            result.append(flag_name)
-            remaining &= ~flag_value
-    if remaining:
-        result.append(f"Unknown_{remaining:#010x}")
-    return result if result else ["PKG_None"]
-
-
 # ============================================================================
 # Blueprint graph parsing safety constants
 # ============================================================================
@@ -143,28 +98,6 @@ MAX_NODES_PER_GRAPH = 5000  # Maximum nodes per graph
 MAX_SUBGRAPHS = 1000  # Maximum subgraphs per graph (corrupted asset defense)
 MAX_LINKEDTO_PER_PIN = 100  # Maximum connections per pin
 MAX_FTEXT_CONSUMPTION = 10_240  # 10 KB — FText parsing safety net maximum byte consumption
-
-# ============================================================================
-# Lightweight tolerant parse threshold
-# ============================================================================
-
-LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD = 300  # Enable lightweight tolerant parse when export_count exceeds this value
-
-# Special threshold for large asset files like ControlRig
-# These files naturally have large export counts (RigVM nodes, RigHierarchy elements, etc.),
-# and the default 300 threshold would falsely trigger lightweight parsing, causing blueprint data loss
-# Reference: UE ControlRig.cpp / RigVM related modules
-CONTROL_RIG_LARGE_FILE_THRESHOLD = 50000  # Lightweight parse threshold for ControlRig class files
-
-# Known large file class name substrings — use high threshold when export class name contains any of these substrings
-CONTROL_RIG_LARGE_FILE_CLASSES = frozenset(
-    {
-        "ControlRig",
-        "RigHierarchy",
-        "RigVM",
-        "RigUnit",
-    }
-)
 
 # ============================================================================
 # FPropertyTypeName type node read limit
@@ -223,26 +156,6 @@ UE4_ADDED_CHUNKID_TO_ASSETDATA_AND_UPACKAGE = 278
 UE4_CHANGED_CHUNKID_TO_BE_AN_ARRAY_OF_CHUNKIDS = 326
 UE4_ENGINE_VERSION_OBJECT = 335
 UE4_ADDED_COMPATIBLE_WITH_ENGINE_VERSION = 443
-
-# ============================================================================
-# Blueprint metadata keys (UE editor internal fields)
-# ============================================================================
-
-BLUEPRINT_METADATA_KEYS = frozenset(
-    {
-        "BlueprintSystemVersion",
-        "GeneratedClass",
-        "SimpleConstructionScript",
-        "bCanEverTick",
-        "bCanEverRender",
-        "bStartWithTickEnabled",
-        "bReplicates",
-        "NetUpdateFrequency",
-        "MinNetUpdateFrequency",
-        "NetPriority",
-    }
-)
-
 # ============================================================================
 # Control flow node set (used in blueprint graph parsing)
 # ============================================================================
@@ -379,14 +292,6 @@ FIXED_UNVERSIONED_SIZES: dict[str, int] = {
     "NameProperty": 8,
     "GuidProperty": 16,
 }
-
-# ============================================================================
-# EPinContainerType integer → string mapping
-# ============================================================================
-
-CONTAINER_TYPE_MAP: dict[int, str] = {0: "None", 1: "Array", 2: "Set", 3: "Map"}
-CONTAINER_TYPE_PREFIX: dict[int, str] = {1: "TArray", 2: "TSet", 3: "TMap"}
-
 # ============================================================================
 # UE PropertyTag sentinel value
 # ============================================================================
@@ -444,15 +349,6 @@ UE5_LARGE_PROPERTY_MAX_REASONABLE = 500 * 1024 * 1024  # 500 MB — UE5 large pr
 # Reference: Engine/Source/Runtime/Engine/Public/Materials/Material.h
 # ============================================================================
 
-MATERIAL_DOMAIN_MAP: dict[int, str] = {
-    0: "Surface",
-    1: "DeferredDecal",
-    2: "LightFunction",
-    3: "Volume",
-    4: "PostProcess",
-    5: "UserInterface",
-}
-
 BLEND_MODE_MAP: dict[int, str] = {
     0: "Opaque",
     1: "Masked",
@@ -476,276 +372,6 @@ SHADING_MODEL_MAP: dict[int, str] = {
     10: "SingleLayerWater",
     11: "ThinTranslucent",
 }
-
-MATERIAL_USAGE_FLAG_NAMES: tuple[str, ...] = (
-    "bUsedWithSkeletalMesh",
-    "bUsedWithClothing",
-    "bUsedWithStatic",
-    "bUsedWithLandscape",
-    "bUsedWithNanite",
-    "bUsedWithUI",
-    "bUsedWithParticles",
-    "bUsedWithSplineMeshes",
-    "bUsedWithInstancedStaticMeshes",
-    "bUsedWithGeometryCollection",
-    "bUsedWithWaterSurface",
-    "bUsedWithHairStrands",
-)
-
-# Expression type classification table
-# Maps expression class name patterns to semantic types
-_EXPRESSION_TYPE_PATTERNS: tuple[tuple[tuple[str, ...], str], ...] = (
-    (
-        (
-            "MaterialExpressionConstant",
-            "MaterialExpressionConstant2Vector",
-            "MaterialExpressionConstant3Vector",
-            "MaterialExpressionConstant4Vector",
-        ),
-        "constant",
-    ),
-    (
-        (
-            "MaterialExpressionScalarParameter",
-            "MaterialExpressionVectorParameter",
-            "MaterialExpressionTextureSampleParameter",
-            "MaterialExpressionTextureObjectParameter",
-            "MaterialExpressionDoubleVectorParameter",
-            "MaterialExpressionChannelMaskParameter",
-            "MaterialExpressionStaticBoolParameter",
-            "MaterialExpressionStaticSwitchParameter",
-            "MaterialExpressionStaticComponentMaskParameter",
-            "MaterialExpressionFontSampleParameter",
-            "MaterialExpressionCurveAtlasRowParameter",
-            "MaterialExpressionTextureCollectionParameter",
-            "MaterialExpressionRuntimeVirtualTextureSampleParameter",
-        ),
-        "parameter",
-    ),
-    (
-        (
-            "MaterialExpressionAdd",
-            "MaterialExpressionSubtract",
-            "MaterialExpressionMultiply",
-            "MaterialExpressionDivide",
-            "MaterialExpressionPower",
-            "MaterialExpressionLinearInterpolate",
-            "MaterialExpressionClamp",
-            "MaterialExpressionSaturate",
-            "MaterialExpressionAbs",
-            "MaterialExpressionSine",
-            "MaterialExpressionCosine",
-            "MaterialExpressionFloor",
-            "MaterialExpressionCeil",
-            "MaterialExpressionFrac",
-            "MaterialExpressionRound",
-            "MaterialExpressionSquareRoot",
-            "MaterialExpressionExponential",
-            "MaterialExpressionExponential2",
-            "MaterialExpressionModulo",
-            "MaterialExpressionCrossProduct",
-            "MaterialExpressionDotProduct",
-            "MaterialExpressionLength",
-            "MaterialExpressionNormalize",
-            "MaterialExpressionOneMinus",
-            "MaterialExpressionSign",
-            "MaterialExpressionDesaturation",
-            "MaterialExpressionIf",
-            "MaterialExpressionIfThenElse",
-            "MaterialExpressionInverseLinearInterpolate",
-            "MaterialExpressionSmoothStep",
-            "MaterialExpressionStep",
-            "MaterialExpressionFmod",
-            "MaterialExpressionLogarithm",
-            "MaterialExpressionLogarithm2",
-            "MaterialExpressionLogarithm10",
-            "MaterialExpressionArcsine",
-            "MaterialExpressionArcsineFast",
-            "MaterialExpressionArccosine",
-            "MaterialExpressionArccosineFast",
-            "MaterialExpressionArctangent",
-            "MaterialExpressionArctangentFast",
-            "MaterialExpressionArctangent2",
-            "MaterialExpressionArctangent2Fast",
-            "MaterialExpressionBumpOffset",
-            "MaterialExpressionBlend",
-            "MaterialExpressionComponentMask",
-            "MaterialExpressionAppendVector",
-            "MaterialExpressionConstantBiasScale",
-            "MaterialExpressionDistance",
-            "MaterialExpressionFresnel",
-            "MaterialExpressionNoise",
-            "MaterialExpressionPanner",
-            "MaterialExpressionRotator",
-            "MaterialExpressionSphereMask",
-            "MaterialExpressionSphericalParticleOpacity",
-            "MaterialExpressionDeriveNormalZ",
-            "MaterialExpressionDDX",
-            "MaterialExpressionDDY",
-            "MaterialExpressionMax",
-            "MaterialExpressionMin",
-            "MaterialExpressionTransform",
-            "MaterialExpressionTransformPosition",
-            "MaterialExpressionConvert",
-            "MaterialExpressionHsvToRgb",
-            "MaterialExpressionRgbToHsv",
-            "MaterialExpressionSpeedTree",
-            "MaterialExpressionBlendMaterialAttributes",
-            "MaterialExpressionBreakMaterialAttributes",
-            "MaterialExpressionGetMaterialAttributes",
-            "MaterialExpressionSetMaterialAttributes",
-            "MaterialExpressionMakeMaterialAttributes",
-            "MaterialExpressionMaterialAttributeLayers",
-            "MaterialExpressionLayerStack",
-            "MaterialExpressionSwitch",
-            "MaterialExpressionStaticSwitch",
-            "MaterialExpressionPreviousFrameSwitch",
-            "MaterialExpressionFeatureLevelSwitch",
-            "MaterialExpressionQualitySwitch",
-            "MaterialExpressionShaderStageSwitch",
-            "MaterialExpressionShadingPathSwitch",
-            "MaterialExpressionDataDrivenShaderPlatformInfoSwitch",
-            "MaterialExpressionPathTracingQualitySwitch",
-            "MaterialExpressionRayTracingQualitySwitch",
-            "MaterialExpressionReflectionCapturePassSwitch",
-            "MaterialExpressionShadowReplace",
-            "MaterialExpressionNaniteReplace",
-            "MaterialExpressionVirtualTextureFeatureSwitch",
-            "MaterialExpressionRequiredSamplersSwitch",
-            "MaterialExpressionDistanceFieldsRenderingSwitch",
-            "MaterialExpressionGIReplace",
-            "MaterialExpressionLightmassReplace",
-            "MaterialExpressionBindlessSwitch",
-            "MaterialExpressionMeshPaintTextureReplace",
-            "MaterialExpressionSobol",
-            "MaterialExpressionTemporalSobol",
-        ),
-        "operator",
-    ),
-    (
-        (
-            "MaterialExpressionTextureSample",
-            "MaterialExpressionTextureObject",
-            "MaterialExpressionTextureProperty",
-            "MaterialExpressionSparseVolumeTextureSample",
-            "MaterialExpressionSparseVolumeTextureObject",
-            "MaterialExpressionRuntimeVirtualTextureSample",
-            "MaterialExpressionRuntimeVirtualTextureReplace",
-            "MaterialExpressionVirtualTextureFeatureSwitch",
-            "MaterialExpressionDBufferTexture",
-            "MaterialExpressionSceneTexture",
-            "MaterialExpressionUserSceneTexture",
-            "MaterialExpressionSceneColor",
-            "MaterialExpressionSceneDepth",
-            "MaterialExpressionSceneDepthWithoutWater",
-            "MaterialExpressionSceneTexelSize",
-            "MaterialExpressionScreenPosition",
-            "MaterialExpressionTextureCollection",
-            "MaterialExpressionTextureCollectionParameter",
-        ),
-        "texture_sample",
-    ),
-    (
-        (
-            "MaterialExpressionTextureCoordinate",
-            "MaterialExpressionVertexColor",
-            "MaterialExpressionCameraPositionWS",
-            "MaterialExpressionCameraVectorWS",
-            "MaterialExpressionObjectOrientation",
-            "MaterialExpressionObjectPositionWS",
-            "MaterialExpressionObjectBounds",
-            "MaterialExpressionObjectLocalBounds",
-            "MaterialExpressionObjectRadius",
-            "MaterialExpressionLocalPosition",
-            "MaterialExpressionWorldPosition",
-            "MaterialExpressionViewProperty",
-            "MaterialExpressionViewSize",
-            "MaterialExpressionPixelNormalWS",
-            "MaterialExpressionVertexNormalWS",
-            "MaterialExpressionVertexTangentWS",
-            "MaterialExpressionTangent",
-            "MaterialExpressionTangentOutput",
-            "MaterialExpressionTime",
-            "MaterialExpressionDeltaTime",
-            "MaterialExpressionEyeAdaptation",
-            "MaterialExpressionEyeAdaptationInverse",
-            "MaterialExpressionDistanceCullFade",
-            "MaterialExpressionDistanceToNearestSurface",
-            "MaterialExpressionDistanceFieldGradient",
-            "MaterialExpressionDistanceFieldApproxAO",
-            "MaterialExpressionFogColor",
-            "MaterialExpressionAtmosphericFogColor",
-            "MaterialExpressionAtmosphericLightColor",
-            "MaterialExpressionAtmosphericLightVector",
-            "MaterialExpressionMainDirectionalLight",
-            "MaterialExpressionLightVector",
-            "MaterialExpressionPixelDepth",
-            "MaterialExpressionPreSkinnedNormal",
-            "MaterialExpressionPreSkinnedPosition",
-            "MaterialExpressionPreSkinnedLocalBounds",
-            "MaterialExpressionTwoSidedSign",
-            "MaterialExpressionIsOrthographic",
-            "MaterialExpressionIsFirstPerson",
-            "MaterialExpressionPerInstanceCustomData",
-            "MaterialExpressionPerInstanceFadeAmount",
-            "MaterialExpressionPerInstanceRandom",
-            "MaterialExpressionBounds",
-            "MaterialExpressionSkyAtmosphereLightDirection",
-            "MaterialExpressionSkyAtmosphereLightIlluminance",
-            "MaterialExpressionSkyAtmosphereViewLuminance",
-            "MaterialExpressionSkyLightEnvMapSample",
-            "MaterialExpressionPostVolumeUserFlagTest",
-            "MaterialExpressionParticleColor",
-            "MaterialExpressionParticleDirection",
-            "MaterialExpressionParticleMacroUV",
-            "MaterialExpressionParticleMotionBlurFade",
-            "MaterialExpressionParticlePositionWS",
-            "MaterialExpressionParticleRadius",
-            "MaterialExpressionParticleRandom",
-            "MaterialExpressionParticleRelativeTime",
-            "MaterialExpressionParticleSize",
-            "MaterialExpressionParticleSpeed",
-            "MaterialExpressionParticleSpriteRotation",
-            "MaterialExpressionParticleSubUV",
-            "MaterialExpressionFirstPersonOutput",
-            "MaterialExpressionVolumetricAdvancedMaterialInput",
-            "MaterialExpressionLightmapUVs",
-            "MaterialExpressionMeshPaintTextureCoordinateIndex",
-            "MaterialExpressionRecordTextureStreamingInfo",
-            "MaterialExpressionTemporalResponsivenessOutput",
-        ),
-        "input",
-    ),
-    (("MaterialExpressionComment",), "comment"),
-    (("MaterialExpressionFunctionInput", "MaterialExpressionFunctionOutput"), "function_io"),
-    (
-        (
-            "MaterialExpressionReroute",
-            "MaterialExpressionNamedReroute",
-            "MaterialExpressionNamedRerouteUsage",
-            "MaterialExpressionRerouteBase",
-            "MaterialExpressionPinBase",
-        ),
-        "reroute",
-    ),
-)
-
-
-def classify_expression_type(class_name: str) -> str:
-    """Classify a MaterialExpression class name into a semantic type.
-
-    Returns one of: "constant", "parameter", "operator", "texture_sample",
-    "input", "comment", "function_io", "reroute", "unknown".
-    Returns "unknown" for empty or unrecognized names.
-    """
-    if not class_name:
-        return "unknown"
-    for patterns, expr_type in _EXPRESSION_TYPE_PATTERNS:
-        for pattern in patterns:
-            if class_name == pattern:
-                return expr_type
-    return "unknown"
-
 
 def get_max_reasonable(property_type: str, engine_version: int) -> int:
     """Return reasonable size cap based on property type and engine version.

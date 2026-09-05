@@ -1,59 +1,15 @@
-"""解析配置 dataclass — ParseConfig / LogConfig。
+"""CLI 配置 dataclass — LogConfig。
 
-将 parse_package() 和 core API 中散落的配置参数提取为结构化对象，
-减少函数参数数量，提升可读性和可组合性。
+将命令行中散落的日志相关参数提取为结构化对象，减少函数参数数量。
+`ParseConfig` 已随 v1 解析管线删除：v2 的 `parse_package_document()`
+直接接受关键字参数，不再需要单独的管线配置对象。
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional, Sequence
+from dataclasses import dataclass
+from typing import Optional
 
-if TYPE_CHECKING:
-    from uasset_read.memory_safety import MemoryPolicy
-
-
-@dataclass
-class ParseConfig:
-    """解析管线配置。
-
-    包含影响解析行为的所有参数（不含文件路径、provider 等运行时输入）。
-
-    典型用法::
-
-        from uasset_read.config import ParseConfig
-
-        cfg = ParseConfig(tolerant=False, game="Fortnite")
-        result = parse_package("file.uasset", config=cfg)
-    """
-
-    # --- 容错 / 调试 ---
-    tolerant: bool = True
-    """是否启用容错模式（默认开启）。"""
-    force_full_parse: bool = False
-    """强制完整解析大蓝图（忽略轻量模式阈值）。"""
-    hex_view: bool = False
-    """启用 HexView 字节偏移追踪。"""
-
-    # --- 资产关系 ---
-    include_parent_assets: bool = False
-    """是否解析父资产。"""
-    asset_roots: Optional[Sequence[str]] = field(default=None)
-    """资产根目录列表，用于查找父资产。"""
-
-    # --- 类型映射 / 游戏适配 ---
-    mappings_path: Optional[str] = None
-    """.usmap/.jmap 类型映射文件路径。"""
-    game: Optional[str] = None
-    """游戏标识，启用游戏特定属性解析。"""
-
-    # --- 轻量模式 ---
-    lightweight_threshold: Optional[int] = None
-    """轻量模式触发阈值（export 数量），None 使用默认值。"""
-
-    # --- 内存策略 ---
-    memory_policy: Optional["MemoryPolicy"] = None
-    """可选内存策略，控制 RSS 限制和隔离行为。"""
 
 @dataclass
 class LogConfig:
@@ -87,7 +43,7 @@ class LogConfig:
     cleanup: bool = False
     """是否在启动时清理旧日志。"""
     auto_cleanup: bool = False
-    """是否在日志会话结束后自动清理旧日志。"""
+    """历史字段：日志会话机制已删除，当前无人读取。"""
     max_bytes: int = 10_000_000
     """单个日志文件最大大小（字节），默认 10MB。"""
     backup_count: int = 5
