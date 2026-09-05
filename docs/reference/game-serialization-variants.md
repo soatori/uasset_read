@@ -48,5 +48,5 @@ uasset_read 依赖文件头中的 CustomVersions 驱动版本判断，不包含�
 
 - CUE4Parse EGame 定义：`external/CUE4Parse/CUE4Parse/UE4/Versions/EGame.cs`
 - CUE4Parse PAK 魔数：`external/CUE4Parse/CUE4Parse/UE4/Pak/Objects/FPakInfo.cs`
-- 当前实现：`src/uasset_read/pak/game_versions.py`
+- 当前实现：本仓库尚未实现 EGame / PAK 变体识别。自定义版本（FCustomVersion）与版本上下文的基础设施在 `src/uasset_read/versioning.py`；它不做游戏专有序列化分支。
 - UE 源码：`Engine/Source/Runtime/Core/Private/UObject/DevObjectVersion.cpp`

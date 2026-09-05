@@ -21,11 +21,11 @@ class LogConfig:
     把它们交给 `cleanup_project_logs()`。其余字段目前仅作为参数载体保留，
     对应的 CLI 旗标是否退役由单独的产品决定。
 
-    典型用法::
+    典型用法（只有 `dir` / `keep_latest` / `max_total_bytes` 会被读取）::
 
         from uasset_read.config import LogConfig
 
-        log = LogConfig(level="info", dir="./my_logs")
+        cfg = LogConfig(dir="./my_logs", keep_latest=20)
     """
 
     level: Optional[str] = None
@@ -33,7 +33,7 @@ class LogConfig:
     dir: Optional[str] = None
     """日志输出目录，None 使用默认 ./log。"""
     enabled: bool = True
-    """是否启用文件日志。"""
+    """历史字段：当前无代码根据它写日志文件（`--clean-logs` 也不读它）。"""
     run_id: Optional[str] = None
     """日志运行 ID，子进程可复用父进程的 ID。"""
     keep_latest: Optional[int] = None

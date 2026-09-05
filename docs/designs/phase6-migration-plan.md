@@ -1,8 +1,8 @@
 # Phase 6: 删除旧路径 — 迁移计划
 
-status: target
+status: historical
 
-> **状态：未开始。需要 Phase 5 完成 + 调用方迁移后执行。**
+> **状态：已完成（2026-09-05），保留为阶段记录。** Phase 6 在 #621（`ae8027e1`）执行：`semantic/`、`ir_builder.py`、`models/ir.py`、`renderers/`、`core/`、`pipeline/` 均已从 `src/` 消失。下方“不删除（保留为可选）”表的实际结果与计划不同：`kismet/` 按 #642 永久内部化保留（设 29 文件 / 6,678 行，见 `2026-08-31-v1-retirement-plan.md` §6），`graph/` 与 `blueprint/` 已经删除，`pak/`、`iostore/`、`cpp_gen/` 今天不存在，Pak/IoStore 读取仍为 deferred（#624 / #625）。迁移清单的复选框未回填，不作为现状依据；现状以 `src/` + `tests/` 为准。依 `2026-08-31-doc-status-marking-spec.md`，historical 文档可原地保留。
 
 ## 前置条件
 

@@ -945,6 +945,26 @@ Opened as "retire the whole `kismet/` package" and **reclassified after measurem
 - Gates at this commit: 110 passed · ruff clean · pyright 0 errors 0 warnings.
 - Volume: `kismet/` 30 → 29 files, 6,898 → 6,678 lines; `src/` 99 files / 27,702 lines.
 
+### 文档收尾（同日，#5）
+
+机检手段：把“current guidance”文档（`README.md` + `docs/reference/*.md`）里所有 `src/uasset_read/...` 路径与 `uasset_read.x.y`  dotted 模块名全部对树验证，并递归校验 `docs/**/*.md` 的相对链接。
+
+**已修正的错误现状断言**（`docs/designs/**` 属历史/target，按 AGENTS.md 不重写正文）：
+
+- `docs/reference/agent-dev-reference.md` 「按任务定位」4 行指向已不存在的 `core/`、`pipeline/`、`semantic/`、`blueprint/`、`graph/`、`pak/`、`iostore/` → 改为存在的入口，并明写 Pak/IoStore 未实现（#624/#625），因为 `v2/source.py:25` 的 `kind` 只是预留字面量、无读取代码。
+- `docs/reference/game-serialization-variants.md:51` “当前实现：`src/uasset_read/pak/game_versions.py`” → 该文件与 `game_versions`/`GameVersion` 符号在全库 0 处；改为如实说明本仓库未实现 EGame/PAK 变体识别，自定义版本基础设施在 `versioning.py`。
+- `config.py` 的 `典型用法` 示例 `LogConfig(level="info", ...)` 暗示设 level 就会写日志 → 改为只展示被真正读取的三个字段，并把 `enabled` 的 docstring 从“是否启用文件日志”改为其真实含义（无人读取）。
+- `models/diagnostics.py:29` 的 `module` 词表仍列 `linker`（`link/` 已删）→ 删除该词。
+- `docs/designs/phase6-migration-plan.md` 写 `status: target` 且“状态：未开始”，但它计划删除的 `semantic/`、`ir_builder.py`、`models/ir.py`、`renderers/`、`core/`、`pipeline/` 均已不在树里 → 改 `status: historical` + banner 记录实际结果（含与计划不同之处：`graph/`、`blueprint/` 已删，`kismet/` 按 #642 保留）。`docs/designs/2026-08-31-v1-retirement-plan.md` **故意不动**：它的 §5（`--batch` / `--diff` / parent-assets）仍约束未来工作，标成 historical 会谎称“不再指导决策”。
+- 修复 `docs/formats/` 下 14 个相对链接（`assets/level.md` 缺 `../` 前缀、`import-export-tables.md` 指向不存在的 `file-header.md`、`linkerload-loading.md` 的 `../` 深度与子目录错位）；复检后 `docs/` + `README.md` 破损链接 = 0。仅改导航，未动任何格式事实。
+
+**两条自我推翻（原先列在待办里，现在撤回）**：
+
+1. **`openwiki code --update` 不该跑。** 根目录无 `.openwikiignore`，而 AGENTS.md 规定：“OpenWiki repository generation is enabled only when a root `.openwikiignore` exists. Until then, maintain the existing Markdown and Wiki directly.” 所以我之前那条建议违反仓库自己的前提条件。
+2. **“docs/plans/ + docs/superpowers/ 共 9,387 行已完成计划待归档” 不成立。** tracked `docs/plans/` 只有 5 文件 / 4,668 行；`docs/superpowers/` 被 `.gitignore:98` 完全忽略（tracked = 0），那个数字来于未跟踪的本地产物。而且 `docs/designs/2026-08-31-doc-status-marking-spec.md` 第 24 行明确 historical 文档**可原地保留** → 不移动（移动反而会打断 4 处 tracked 之间的互链）。
+
+**未做**：`wiki/` 里的旗标与公共 API 描述（`.gitignore:103` 忽略、且它是独立嵌套仓库）→ 需在 wiki 侧另行处理；`log_context` 已无代码消费者，但它是存在的公共辅助函数，属代码决定而非文档修正，保留待决。
+
 ---
 
 ## Self-Review Record

@@ -26,7 +26,7 @@ class OffsetRangeDiagnostic:
     severity: DiagnosticSeverity = DiagnosticSeverity.WARNING
     asset_path: str = ""
     asset_type: str = ""
-    module: str = ""  # linker|property|graph|pin|kismet|pak|iostore
+    module: str = ""  # property|graph|pin|kismet|pak|iostore
     object_name: str = ""
     export_index: int | None = None
     import_index: int | None = None

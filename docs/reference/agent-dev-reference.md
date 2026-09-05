@@ -36,13 +36,13 @@
 
 | 任务 | 入口 |
 | --- | --- |
-| 当前解析管线 | `src/uasset_read/core/__init__.py`, `src/uasset_read/pipeline/` |
-| 当前 Semantic JSON | `src/uasset_read/semantic/`, [`semantic-json.md`](../formats/uasset/semantic-json.md) |
+| 当前解析管线（v2 package document） | `src/uasset_read/__init__.py`（`parse_package_document`）, `src/uasset_read/v2/api.py`, `src/uasset_read/v2/document.py`, `src/uasset_read/v2/package/legacy.py` |
+| 当前 Semantic JSON | `src/uasset_read/v2/handlers.py`, `src/uasset_read/parsers/asset_types/`, [`semantic-json.md`](../formats/uasset/semantic-json.md) |
 | Package/sidecar/provider | `src/uasset_read/package.py` |
 | 版本上下文 | `src/uasset_read/versioning.py`, `src/uasset_read/serializers/package_summary.py` |
 | 属性解析 | `src/uasset_read/serializers/property_tags.py`, `src/uasset_read/parsers/` |
-| Blueprint/Kismet | `src/uasset_read/blueprint/`, `src/uasset_read/graph/`, `src/uasset_read/kismet/` |
-| Pak/IoStore | `src/uasset_read/pak/`, `src/uasset_read/iostore/` |
+| Blueprint/Kismet | `src/uasset_read/kismet/`（#642 永久内部化：v2 实现细节，不承诺公共 API）, `src/uasset_read/v2/blueprint_graph.py`, `src/uasset_read/serializers/graph*.py` |
+| Pak / IoStore 读取 | **未实现**（deferred：Zen/IoStore #624，`.pak` #625）。`src/uasset_read/v2/source.py:25` 仅预留 `kind` 取值字面量，无读取代码 |
 | 日志 | `src/uasset_read/project_logging.py` |
 | 重构验收条件 | 最新目标架构的 `Acceptance Gates` |
 
