@@ -4,7 +4,7 @@
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
-> 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 200 source files · 70+ UE class types
+> 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 100 source files · 70 registered UE class handlers
 
 > **Refactor status:** v2 package-first architecture: default CLI/API output is `PackageDocument v2` (legacy packages; tagged properties parsed within export bounds; sample-backed handlers incl. lightweight Niagara kind coverage (semantic status partial until domain fields land), no Semantic 1.x handler dependency). Payload descriptors are reserved for cooked containers: Legacy v2 emits no top-level payloads and `extract_payload` is a stable deferred interface (`PAYLOAD_EXTRACTION_DEFERRED`, reads nothing) until redistributable `.uexp/.ubulk/.utoc/.ucas` samples exist (#621). Default `semantic` view excludes raw offsets/property trees; they are opt-in via `raw`/`debug` views. Zen/IoStore, unversioned-with-usmap, and external-container (ubulk/ucas) extraction remain deferred (see `docs/designs/README.md`); Semantic 1.x JSON is no longer available — the v1 pipeline was removed.
 
@@ -24,10 +24,10 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 | -------- | ------- |
-| Version | 0.5.5 (stable) / 0.6.0-dev (v2 default) |
+| Version | v0.5.4.45 (last released) / 0.6.0-dev (v2 default) |
 | Source | Python parser for Unreal Engine .uasset files |
-| Modules | 200 source files across 15 subpackages |
-| v2 Tests | test_core (≤10 functions) + manifest-driven test_samples (99 collected total, no skips/xfail) |
+| Modules | 100 source files across 8 subpackages |
+| v2 Tests | test_core (exactly 10 functions, structure-gated) + manifest-driven test_samples (110 collected total, no skips/xfail) |
 | Tracked samples | 48 legacy fixtures with manifest validation |
 
 ## Features
@@ -186,7 +186,7 @@ Import directly from submodules for deeper access:
 ```python
 from uasset_read import (
     parse_package_document,
-    ParseConfig, LogConfig,
+    LogConfig,
     ParseError, FArchive,
 )
 
@@ -208,7 +208,7 @@ Data flow is the v2 package-first pipeline defined in the [canonical refactor de
               → v2/projection → JSON / CLI / Agent tools (same document)
 ```
 
-Shared readers behind that document: `link/` (PackageLinker two-phase object graph), `graph/` (UEdGraph/Node/Pin), `kismet/` (bytecode → C++ pseudocode, reached through `v2/package/legacy.py`; retirement open in #642), `serializers/` and `models/`.
+Shared readers behind that document: `kismet/` (bytecode → C++ pseudocode, reached through `v2/package/legacy.py`; retirement open in #642), `serializers/` and `models/`.
 
 ### Module Structure (`src/uasset_read/`)
 
@@ -218,22 +218,20 @@ Shared readers behind that document: `link/` (PackageLinker two-phase object gra
 | FArchive | `archive.py` | Binary reader with byte swapping, mmap |
 | Constants | `constants.py` | Version numbers, property type thresholds, CPF/PropertyTag flags |
 | Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
-| Config | `config.py` | `ParseConfig`, `LogConfig` dataclasses |
-| Package Mgmt | `package.py` | `PackageBundle`, `PackageProvider` (filesystem) |
+| Config | `config.py` | `LogConfig` dataclass |
+| Package Mgmt | `package.py` | `PackageBundle`, `FileSystemPackageProvider`, `PackageArchive`, `open_package_bundle` |
 | CLI | `cli.py` | argparse entry point; emits the v2 document page, or the retired-flag error |
-| Versioning | `versioning.py` | `VersionContainer`, `build_version_container`, `EUEVersion` |
+| Versioning | `versioning.py` | `VersionContainer`, `build_version_container` |
 | Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
-| Memory Safety | `memory_safety.py` | Central memory policy, RSS measurement, parser checkpoints |
+| Memory Safety | `memory_safety.py` | `ResourceBudget` read/decompress checkpoints, `MemoryLimitExceeded` |
 | Bounded Events | `bounded_events.py` | Bounded event buffer for diagnostics |
-| Project Logging | `project_logging.py` | Structured logging with rotation |
+| Project Logging | `project_logging.py` | `log_context` scoping and `--clean-logs` retention (the library never configures process-global logging) |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
-| **Data Models** | `models/` | UEdGraph/Node/Pin, Properties, Transforms, ParseResult, Status, Diagnostics |
-| **Parsers** | `parsers/` | 36 property type parsers + dispatcher + custom property registry + AssetRegistry parser + class serialization strategy |
-| ├ Asset Types | `parsers/asset_types/` | 22 asset type parser files + opaque stubs covering 70+ UE class types |
-| **Graph** | `graph/` | Execution/data flow tracing, chain builder, graph_utils |
+| **Data Models** | `models/` | UEdGraph/Node/Pin, FEdGraphPinType, FMemberReference, PropertyTag/PropertyValue, Anim IR, structured diagnostics, property fallback |
+| **Parsers** | `parsers/` | 28 tagged-property parse functions + dispatcher, custom property registry, class handler registry, BinaryOrNative handlers |
+| ├ Asset Types | `parsers/asset_types/` | 18 asset type parser files + opaque stubs; 70 registered class handlers |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback, UFunction script reader |
 | ├ Expressions | `kismet/expressions/` | 15 expression types (assignments, control flow, function calls, literals, casts, delegates, etc.) |
-| **Linker** | `link/` | PackageLinker two-phase object graph reconstruction, UObjectInstance |
 | **v2 Document** | `v2/` | `api.py` entry point, `document.py` PackageDocument, `object_model.py`, `properties.py`, `handlers.py`, `package/legacy.py` reader, `projection.py` paging/budget, `agent_tools.py`, `blueprint_graph.py`, `diagnostics.py` |
 
 ## Testing

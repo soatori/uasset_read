@@ -95,7 +95,7 @@ Lanes A → B → C → D merged with no conflicts except a clean auto-merge in 
 **Open decisions created by wave 1 (not deletions — they need a call):**
 
 | Item | State | Decision needed |
-|---|---|---|
+| --- | --- | --- |
 | `kismet/function_resolver.py` (188L) | now constructed nowhere: stripping `linker` from `KismetTranslator` left `_func_resolver` permanently `None`; its 5 guards are inert, kept type-clean to avoid cascading into `line_cpp` | fold into the whole-`kismet/` retirement decision, or delete with a `line_cpp` behaviour test first |
 | `models/memory_safety.ResourceLimits` | orphaned by lane D's own commit (its sole consumer `MemoryPolicy` is gone) | keep as bounded-read vocabulary, or delete in Task 10 |
 | 5 inert CLI flags `--log-level`, `--log-cleanup`, `--log-max-bytes`, `--log-backup-count`, `--log-format` | parsed into `LogConfig`, read by nobody; already inert before this wave | retire into the `cli.py:255-261` retired-flag error, or re-wire them to a real CLI logging path |
