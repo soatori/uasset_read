@@ -11,6 +11,7 @@ All handlers directly implement the ``ClassHandler`` protocol.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import struct
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
@@ -28,65 +29,28 @@ from uasset_read.parsers.asset_types.property_metadata import build_property_met
 
 logger = logging.getLogger(__name__)
 
-
-# Import dedicated parse functions (non-stub modules only)
-from uasset_read.parsers.asset_types.material_instance import parse_material_instance
-
 # Opaque stub factory (replaces 40 deleted stub files)
 from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
 
-# Modules whose handler is the generic opaque partial-metadata stub
-_OPAQUE_STUBS = frozenset(
-    {
-        "anim_blend_space",
-        "anim_bone_compression",
-        "anim_composite",
-        "anim_curve_compression",
-        "anim_data_model",
-        "anim_layer_interface",
-        "behavior_tree",
-        "blackboard_data",
-        "cloth_asset",
-        "curve_float",
-        "curve_linear_color",
-        "curve_vector",
-        "data_asset",
-        "dialogue_voice",
-        "dialogue_wave",
-        "foliage_type",
-        "groom_asset",
-        "landscape",
-        "landscape_grass_type",
-        "landscape_layer_info",
-        "level",
-        "media_player",
-        "media_source",
-        "media_texture",
-        "particle_system",
-        "physical_material",
-        "physics_asset",
-        "pose_asset",
-        "primary_data_asset",
-        "skeletal_mesh_lod_settings",
-        "sound_attenuation",
-        "sound_class",
-        "sound_concurrency",
-        "sound_mix",
-        "sound_submix",
-        "sparse_volume_texture",
-        "string_table",
-        "subsurface_profile",
-        "texture2d_array",
-        "texture_render_target",
-        "volume_texture",
-        "widget_blueprint",
-        "world",
-    }
+# Dedicated asset-type parsers. Imported statically: the registration table below
+# names them directly, so a missing parser is an ImportError at import time rather
+# than a silently skipped handler.
+from uasset_read.parsers.asset_types.anim_blueprint import AnimBlueprintHandler
+from uasset_read.parsers.asset_types.anim_montage import AnimMontageHandler
+from uasset_read.parsers.asset_types.anim_sequence import AnimSequenceHandler
+from uasset_read.parsers.asset_types.curve_table import parse_curve_table
+from uasset_read.parsers.asset_types.data_table import parse_data_table
+from uasset_read.parsers.asset_types.level_sequence import parse_level_sequence
+from uasset_read.parsers.asset_types.movie_scene import MovieSceneHandler
+from uasset_read.parsers.asset_types.movie_scene_control_rig import (
+    MovieSceneControlRigParameterSectionHandler,
+    MovieSceneControlRigParameterTrackHandler,
 )
-
-# Import handler classes (for reflection registration)
 from uasset_read.parsers.asset_types.niagara_node import NiagaraNodeHandler
 from uasset_read.parsers.asset_types.niagara_projection import NIAGARA_HANDLERS
+from uasset_read.parsers.asset_types.skeleton import parse_skeleton
+from uasset_read.parsers.asset_types.sound_wave import parse_sound_wave
+from uasset_read.parsers.asset_types.user_defined import parse_user_defined
 
 __all__ = [
     "parse_material_instance",
@@ -94,6 +58,13 @@ __all__ = [
     "NiagaraNodeHandler",
     "PropertyMetadataHandler",
 ]
+
+
+def parse_material_instance(
+    archive: "FArchive", name_map: list, export: "ObjectExport"
+) -> dict:
+    """Parse MaterialInstanceConstant export — delegates to IR builder pipeline."""
+    return {"asset_type": "MaterialInstance", "material_type": "MaterialInstance"}
 
 
 class AssetTypeHandler(ClassHandler):
@@ -108,6 +79,9 @@ class AssetTypeHandler(ClassHandler):
         self._class_names = set(class_names)
         self._parse_func = parse_func
         self._handler_name = handler_name
+        # 向后兼容：如果 parse_func 接受第三个参数（export），则传递。
+        # Resolved once at construction; parse() is on the per-export hot path.
+        self._takes_export = len(inspect.signature(parse_func).parameters) >= 3
 
     def can_handle(self, class_name: str) -> bool:
         return class_name in self._class_names
@@ -124,12 +98,7 @@ class AssetTypeHandler(ClassHandler):
     ) -> HandlerResult:
         try:
             name_map = context if isinstance(context, list) else []
-            # 向后兼容：如果 parse_func 接受第三个参数（export），则传递
-            import inspect
-
-            sig = inspect.signature(self._parse_func)
-            params = list(sig.parameters.keys())
-            if len(params) >= 3:
+            if self._takes_export:
                 data = self._parse_func(archive, name_map, export)
             else:
                 data = self._parse_func(archive, name_map)
@@ -183,11 +152,90 @@ class PropertyMetadataHandler(ClassHandler):
         )
 
 
+# Class names -> dedicated parser, in registration order (the registry resolves the
+# first match, so this order is the dispatch priority). A `None` parser means the
+# generic opaque partial-metadata stub: 43 of these 55 classes have no custom
+# Serialize layout implemented yet and are reported as `partial_metadata`.
+_ASSET_TYPE_HANDLERS: tuple[tuple[tuple[str, ...], Callable[..., Any] | type[ClassHandler] | None, str], ...] = (
+    (("AnimSequence",), AnimSequenceHandler, "AnimSequenceHandler"),
+    (("AnimBlueprintGeneratedClass",), AnimBlueprintHandler, "AnimBlueprintHandler"),
+    (("AnimMontage",), AnimMontageHandler, "AnimMontageHandler"),
+    (("SoundWave",), parse_sound_wave, "SoundWaveHandler"),
+    (("SoundAttenuation",), None, "SoundAttenuationHandler"),
+    (("AnimationDataModel",), None, "AnimDataModelHandler"),
+    (("DataTable",), parse_data_table, "DataTableHandler"),
+    (("CurveTable",), parse_curve_table, "CurveTableHandler"),
+    (("Skeleton",), parse_skeleton, "SkeletonHandler"),
+    (("StringTable",), None, "StringTableHandler"),
+    (("PoseAsset",), None, "PoseAssetHandler"),
+    (("AnimBoneCompressionSettings",), None, "AnimBoneCompressionHandler"),
+    (("AnimCurveCompressionCodec",), None, "AnimCurveCompressionHandler"),
+    (("SubsurfaceProfile",), None, "SubsurfaceProfileHandler"),
+    (("FoliageType",), None, "FoliageTypeHandler"),
+    (("SkeletalMeshLODSettings",), None, "SkeletalMeshLODSettingsHandler"),
+    (("MovieScene",), MovieSceneHandler, "MovieSceneHandler"),
+    (
+        ("MovieSceneControlRigParameterTrack",),
+        MovieSceneControlRigParameterTrackHandler,
+        "MovieSceneControlRigParameterTrackHandler",
+    ),
+    (
+        ("MovieSceneControlRigParameterSection",),
+        MovieSceneControlRigParameterSectionHandler,
+        "MovieSceneControlRigParameterSectionHandler",
+    ),
+    (("CurveFloat",), None, "CurveFloatHandler"),
+    (("AnimComposite",), None, "AnimCompositeHandler"),
+    (
+        ("AnimBlendSpace", "AnimBlendSpace1D", "AimOffsetBlendSpace", "AimOffsetBlendSpace1D"),
+        None,
+        "AnimBlendSpaceHandler",
+    ),
+    (("SoundConcurrency",), None, "SoundConcurrencyHandler"),
+    (("DialogueWave",), None, "DialogueWaveHandler"),
+    (("DialogueVoice",), None, "DialogueVoiceHandler"),
+    (("CurveLinearColor",), None, "CurveLinearColorHandler"),
+    (("CurveVector",), None, "CurveVectorHandler"),
+    (("TextureRenderTarget2D", "TextureRenderTargetCube"), None, "TextureRenderTargetHandler"),
+    (("PhysicsAsset",), None, "PhysicsAssetHandler"),
+    (("PhysicalMaterial",), None, "PhysicalMaterialHandler"),
+    (("AnimLayerInterface",), None, "AnimLayerInterfaceHandler"),
+    (("SoundMix",), None, "SoundMixHandler"),
+    (("SoundClass",), None, "SoundClassHandler"),
+    (("SoundSubmix",), None, "SoundSubmixHandler"),
+    (("BehaviorTree",), None, "BehaviorTreeHandler"),
+    (("BlackboardData",), None, "BlackboardDataHandler"),
+    (("DataAsset",), None, "DataAssetHandler"),
+    (("PrimaryDataAsset",), None, "PrimaryDataAssetHandler"),
+    (("Landscape",), None, "LandscapeHandler"),
+    (("LandscapeGrassType",), None, "LandscapeGrassTypeHandler"),
+    (("LandscapeLayerInfoObject",), None, "LandscapeLayerInfoHandler"),
+    (("World",), None, "WorldHandler"),
+    (("Level",), None, "LevelHandler"),
+    (("ParticleSystem",), None, "ParticleSystemHandler"),
+    (("WidgetBlueprintGeneratedClass", "WidgetBlueprint"), None, "WidgetBlueprintHandler"),
+    (("Texture2DArray",), None, "Texture2DArrayHandler"),
+    (("VolumeTexture",), None, "VolumeTextureHandler"),
+    (("MediaPlayer",), None, "MediaPlayerHandler"),
+    (("MediaTexture",), None, "MediaTextureHandler"),
+    (("MediaSource",), None, "MediaSourceHandler"),
+    (("ClothAsset",), None, "ClothAssetHandler"),
+    (("GroomAsset",), None, "GroomAssetHandler"),
+    (("SparseVolumeTexture",), None, "SparseVolumeTextureHandler"),
+    (("LevelSequence",), parse_level_sequence, "LevelSequenceHandler"),
+    (
+        ("UserDefinedEnum", "UserDefinedStruct"),
+        parse_user_defined,
+        "UserDefinedHandler",
+    ),
+)
+
+
 def register_asset_type_handlers() -> None:
     """Register asset type parsers to ClassHandlerRegistry."""
     registry = get_class_registry()
 
-    handlers = [
+    handlers: List[ClassHandler] = [
         PropertyMetadataHandler("CubeBuilder"),
         PropertyMetadataHandler("StaticMesh"),
         PropertyMetadataHandler("SkeletalMesh"),
@@ -208,145 +256,25 @@ def register_asset_type_handlers() -> None:
         NiagaraNodeHandler(),
     ]
 
-    # Optional parsers (register if import succeeds)
-    _optional = [
-        ("anim_sequence", "AnimSequenceHandler", ["AnimSequence"], "AnimSequenceHandler"),
-        ("anim_blueprint", "AnimBlueprintHandler", ["AnimBlueprintGeneratedClass"], "AnimBlueprintHandler"),
-        ("anim_montage", "AnimMontageHandler", ["AnimMontage"], "AnimMontageHandler"),
-        ("sound_wave", "parse_sound_wave", ["SoundWave"], "SoundWaveHandler"),
-        ("sound_attenuation", "parse_sound_attenuation", ["SoundAttenuation"], "SoundAttenuationHandler"),
-        ("anim_data_model", "parse_anim_data_model", ["AnimationDataModel"], "AnimDataModelHandler"),
-        ("data_table", "parse_data_table", ["DataTable"], "DataTableHandler"),
-        ("curve_table", "parse_curve_table", ["CurveTable"], "CurveTableHandler"),
-        ("skeleton", "parse_skeleton", ["Skeleton"], "SkeletonHandler"),
-        ("string_table", "parse_string_table", ["StringTable"], "StringTableHandler"),
-        ("pose_asset", "parse_pose_asset", ["PoseAsset"], "PoseAssetHandler"),
-        (
-            "anim_bone_compression",
-            "parse_anim_bone_compression_settings",
-            ["AnimBoneCompressionSettings"],
-            "AnimBoneCompressionHandler",
-        ),
-        (
-            "anim_curve_compression",
-            "parse_anim_curve_compression_codec",
-            ["AnimCurveCompressionCodec"],
-            "AnimCurveCompressionHandler",
-        ),
-        ("subsurface_profile", "parse_subsurface_profile", ["SubsurfaceProfile"], "SubsurfaceProfileHandler"),
-        ("foliage_type", "parse_foliage_type", ["FoliageType"], "FoliageTypeHandler"),
-        (
-            "skeletal_mesh_lod_settings",
-            "parse_skeletal_mesh_lod_settings",
-            ["SkeletalMeshLODSettings"],
-            "SkeletalMeshLODSettingsHandler",
-        ),
-        ("movie_scene", "MovieSceneHandler", ["MovieScene"], "MovieSceneHandler"),
-        (
-            "movie_scene_control_rig",
-            "MovieSceneControlRigParameterTrackHandler",
-            ["MovieSceneControlRigParameterTrack"],
-            "MovieSceneControlRigParameterTrackHandler",
-        ),
-        (
-            "movie_scene_control_rig",
-            "MovieSceneControlRigParameterSectionHandler",
-            ["MovieSceneControlRigParameterSection"],
-            "MovieSceneControlRigParameterSectionHandler",
-        ),
-        # New types from #557
-        ("curve_float", "parse_curve_float", ["CurveFloat"], "CurveFloatHandler"),
-        ("anim_composite", "parse_anim_composite", ["AnimComposite"], "AnimCompositeHandler"),
-        (
-            "anim_blend_space",
-            "parse_anim_blend_space",
-            ["AnimBlendSpace", "AnimBlendSpace1D", "AimOffsetBlendSpace", "AimOffsetBlendSpace1D"],
-            "AnimBlendSpaceHandler",
-        ),
-        ("sound_concurrency", "parse_sound_concurrency", ["SoundConcurrency"], "SoundConcurrencyHandler"),
-        ("dialogue_wave", "parse_dialogue_wave", ["DialogueWave"], "DialogueWaveHandler"),
-        ("dialogue_voice", "parse_dialogue_voice", ["DialogueVoice"], "DialogueVoiceHandler"),
-        ("curve_linear_color", "parse_curve_linear_color", ["CurveLinearColor"], "CurveLinearColorHandler"),
-        ("curve_vector", "parse_curve_vector", ["CurveVector"], "CurveVectorHandler"),
-        (
-            "texture_render_target",
-            "parse_texture_render_target",
-            ["TextureRenderTarget2D", "TextureRenderTargetCube"],
-            "TextureRenderTargetHandler",
-        ),
-        # Batch 2: new types
-        ("physics_asset", "parse_physics_asset", ["PhysicsAsset"], "PhysicsAssetHandler"),
-        ("physical_material", "parse_physical_material", ["PhysicalMaterial"], "PhysicalMaterialHandler"),
-        ("anim_layer_interface", "parse_anim_layer_interface", ["AnimLayerInterface"], "AnimLayerInterfaceHandler"),
-        ("sound_mix", "parse_sound_mix", ["SoundMix"], "SoundMixHandler"),
-        ("sound_class", "parse_sound_class", ["SoundClass"], "SoundClassHandler"),
-        ("sound_submix", "parse_sound_submix", ["SoundSubmix"], "SoundSubmixHandler"),
-        ("behavior_tree", "parse_behavior_tree", ["BehaviorTree"], "BehaviorTreeHandler"),
-        ("blackboard_data", "parse_blackboard_data", ["BlackboardData"], "BlackboardDataHandler"),
-        ("data_asset", "parse_data_asset", ["DataAsset"], "DataAssetHandler"),
-        ("primary_data_asset", "parse_primary_data_asset", ["PrimaryDataAsset"], "PrimaryDataAssetHandler"),
-        ("landscape", "parse_landscape", ["Landscape"], "LandscapeHandler"),
-        ("landscape_grass_type", "parse_landscape_grass_type", ["LandscapeGrassType"], "LandscapeGrassTypeHandler"),
-        (
-            "landscape_layer_info",
-            "parse_landscape_layer_info",
-            ["LandscapeLayerInfoObject"],
-            "LandscapeLayerInfoHandler",
-        ),
-        ("world", "parse_world", ["World"], "WorldHandler"),
-        ("level", "parse_level", ["Level"], "LevelHandler"),
-        ("particle_system", "parse_particle_system", ["ParticleSystem"], "ParticleSystemHandler"),
-        (
-            "widget_blueprint",
-            "parse_widget_blueprint",
-            ["WidgetBlueprintGeneratedClass", "WidgetBlueprint"],
-            "WidgetBlueprintHandler",
-        ),
-        ("texture2d_array", "parse_texture2d_array", ["Texture2DArray"], "Texture2DArrayHandler"),
-        ("volume_texture", "parse_volume_texture", ["VolumeTexture"], "VolumeTextureHandler"),
-        ("media_player", "parse_media_player", ["MediaPlayer"], "MediaPlayerHandler"),
-        ("media_texture", "parse_media_texture", ["MediaTexture"], "MediaTextureHandler"),
-        ("media_source", "parse_media_source", ["MediaSource"], "MediaSourceHandler"),
-        ("cloth_asset", "parse_cloth_asset", ["ClothAsset"], "ClothAssetHandler"),
-        ("groom_asset", "parse_groom_asset", ["GroomAsset"], "GroomAssetHandler"),
-        ("sparse_volume_texture", "parse_sparse_volume_texture", ["SparseVolumeTexture"], "SparseVolumeTextureHandler"),
-        ("level_sequence", "parse_level_sequence", ["LevelSequence"], "LevelSequenceHandler"),
-        ("user_defined", "parse_user_defined", ["UserDefinedEnum", "UserDefinedStruct"], "UserDefinedHandler"),
-    ]
-    for module, func_name, class_names, handler_name in _optional:
-        try:
-            # Check if this is an opaque stub (module deleted, use inline factory)
-            if module in _OPAQUE_STUBS:
-                parse_func = make_opaque_stub()
-                handlers.append(
-                    AssetTypeHandler(
-                        class_names=class_names,
-                        parse_func=parse_func,
-                        handler_name=handler_name,
-                    ),
-                )
-                continue
-
-            mod = __import__(
-                f"uasset_read.parsers.asset_types.{module}",
-                fromlist=[func_name],
+    for class_names, parse_func, handler_name in _ASSET_TYPE_HANDLERS:
+        if parse_func is None:
+            handlers.append(
+                AssetTypeHandler(
+                    class_names=list(class_names),
+                    parse_func=make_opaque_stub(),
+                    handler_name=handler_name,
+                ),
             )
-            parse_func = getattr(mod, func_name)
-            # Check if it is a class that implements ClassHandler directly
-            if isinstance(parse_func, type) and issubclass(parse_func, ClassHandler):
-                # Class directly implements ClassHandler protocol
-                handler_instance = parse_func()
-                handlers.append(handler_instance)
-            else:
-                handlers.append(
-                    AssetTypeHandler(
-                        class_names=class_names,
-                        parse_func=parse_func,
-                        handler_name=handler_name,
-                    ),
-                )
-        except ImportError as e:
-            logger.debug("Skip asset type handler %s: %s", handler_name, e)
+        elif isinstance(parse_func, type) and issubclass(parse_func, ClassHandler):
+            handlers.append(parse_func())
+        else:
+            handlers.append(
+                AssetTypeHandler(
+                    class_names=list(class_names),
+                    parse_func=parse_func,
+                    handler_name=handler_name,
+                ),
+            )
 
     for handler in handlers:
         registry.register(handler)
