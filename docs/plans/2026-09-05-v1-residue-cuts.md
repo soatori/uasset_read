@@ -63,7 +63,7 @@ The 10 tasks are one refactor chain, but they split into four **file-disjoint** 
 - `test_class_handlers_kwarg_defaults_true_for_v1` (:1264) pins `parse_properties_from_export(run_class_handlers=True)` — Task 3 strips `linker` from that signature but must not touch `run_class_handlers`.
 
 | Lane | Tasks | Owned paths (exclusive; touch nothing else) |
-|---|---|---|
+| --- | --- | --- |
 | **A** | 1, 2, 3, 5, 7 | `src/uasset_read/graph/`, `src/uasset_read/link/`, `kismet/semantic.py`, `parsers/class_serialization_strategy.py`, `parsers/asset_registry_parser.py`, `parsers/property_parser.py`, `parsers/asset_types/niagara_node.py`, all of `serializers/`, `models/core.py`, `models/diagnostics.py`, `models/object.py`, `v2/blueprint_graph.py`, `v2/package/legacy.py`, `constants.py` (`UE4_ASSETREGISTRY_DEPENDENCYFLAGS` only), `tests/test_core.py` (the two nested defs + their `_run_cases` entries) |
 | **B** | 4 | `models/ir.py`, `models/blueprint.py`, `models/transforms.py`, `models/__init__.py`, `parsers/asset_types/anim_blueprint.py`, `anim_common.py`, `anim_montage.py`, `anim_sequence.py` |
 | **C** | 6 | `parsers/asset_types/__init__.py`, `parsers/asset_types/material_instance.py`, `parsers/class_handler.py` — no `tests/` edits at all; correctness is proven by the Step 5 handler-name golden diff |
@@ -638,55 +638,62 @@ grep -rn "configure_project_logging\|shutdown_project_logging\|ProjectLogSession
 
 Expected: the first grep returns `cli.py:14` (`cleanup_project_logs`), `__init__.py:19`, and `link/linker.py:11` **only if Task 3 has not landed**. The second grep's only hits should be `__init__.py`'s re-export block and `config.py`'s `to_configure_kwargs`. Anything else is a live consumer — keep that symbol and note it.
 
+**Verified at `c8b72909` (lane D escalation, 2026-09-05):** `main()` never configures logging. `grep -rn "configure_project_logging|project_logging_session|scoped_project_logging|shutdown_project_logging" src tests` hits only `project_logging.py` self-references, the `config.py:97` docstring, and the `__init__.py` re-export block; `basicConfig|dictConfig|fileConfig` has **zero** hits in `src`. So the process-global logging machinery is already unreachable from every entry point, and the AGENTS.md invariant holds only accidentally. This task is therefore **delete-only** — see Step 3.
+
+`config.to_configure_kwargs` (`config.py:96`) has exactly one consumer: `project_logging.py:289` inside `scoped_project_logging`. Deleting that function makes the method dead in the same commit, so it goes too (`effective_enabled` at `config.py:100` is local to it).
+
 - [ ] **Step 2: Reduce the module**
 
 Keep `log_context` (≈10 lines: a `contextvars`-free `LoggerAdapter`-based scope, or the existing body if it is already that small) and `cleanup_project_logs` (≈60 lines: it globs the log dir). Delete `configure_project_logging`, `shutdown_project_logging`, `ProjectLogSession`, `_DisabledLogSession`, `project_logging_session`, `scoped_project_logging`, `JSONFormatter`, `_LogContextFilter`, `configure_worker_stream_logging`, `new_log_run_id`, `current_log_run_id` and the module-level globals they used.
 
-- [ ] **Step 3: Give the CLI its logging setup directly**
+- [ ] **Step 3: Do NOT add CLI logging setup (delete-only)**
 
-In `cli.py`, replace the `LogConfig.to_configure_kwargs()` path with a stdlib call, and document the one behaviour readers depend on (log file location). Use `logging.config.dictConfig` — stdlib, no new dependency:
+The original draft of this step told the reader to add `_configure_cli_logging(verbose, logfile)` with `logging.config.dictConfig` and call it from `main()`. That premise was **wrong**: there is no `-v/--verbose` flag and no `--logfile` flag in `cli.py` (verified: `grep -rn "verbose|logfile" src/uasset_read/cli.py` → no hits), and `main()` has no logging call to replace. Adding the function would create new CLI surface, change stderr, and install root-logger handlers — i.e. it would add behavior and a new abstraction, which this plan's Global Constraints forbid and which would break the `test_cli_python_agent_share_default_projection_and_logging_inert` assertions that `logging.root.handlers` and `logging.root.level` do not move.
 
-```python
-import logging.config
+So: delete the machinery, keep `log_context` and `cleanup_project_logs` with unchanged signatures, and change nothing in `cli.py` for this task. Do not add `dictConfig`.
 
-def _configure_cli_logging(verbose: int, logfile: Path | None) -> None:
-    level = "WARNING" if verbose == 0 else "INFO" if verbose == 1 else "DEBUG"
-    handlers: dict[str, dict] = {"console": {"class": "logging.StreamHandler", "level": level}}
-    if logfile is not None:
-        handlers["file"] = {"class": "logging.FileHandler", "filename": str(logfile),
-                            "mode": "a", "level": "DEBUG"}
-    logging.config.dictConfig({
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {"brief": {"format": "%(levelname)s %(name)s: %(message)s"}},
-        "handlers": {k: {**v, "formatter": "brief"} for k, v in handlers.items()},
-        "root": {"handlers": list(handlers), "level": "WARNING"},
-        "loggers": {"uasset_read": {"handlers": list(handlers), "level": level, "propagate": False}},
-    })
-```
+The 5 `--log-*` flags that reach only the deleted machinery (`--log-level`, `--log-cleanup`, `--log-max-bytes`, `--log-backup-count`, `--log-format`) stay **inert and unpoked**: retiring shipped flags is a product decision (Out Of Scope), not a cleanup. Note them in the commit message body as a known dead surface.
 
-Call it from `main()` where `configure_project_logging` was called, and delete `LogConfig.to_configure_kwargs`. If `--clean-logs` was the only reason `LogConfig` existed beyond `-v`, keep the dataclass fields the CLI reads and drop the rest.
+Because `configure_project_logging` is gone, also delete `config.to_configure_kwargs` (`config.py:96-…`) — its sole consumer was `scoped_project_logging`.
 
 - [ ] **Step 4: Verify behaviour is unchanged for the two CLI paths**
 
 ```bash
 python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package > temp/after-task8-cli.json
 python -c "import json;a=json.load(open('temp/baseline-cli.json',encoding='utf-8'));b=json.load(open('temp/after-task8-cli.json',encoding='utf-8'));assert a==b;print('identical')"
-python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset -v --depth package 2>&1 | tail -3
+TMP=$(mktemp -d) && for i in 1 2 3; do : > "$TMP/uasset_read_2026090$i_run1.log"; done
+ls "$TMP" | sort > temp/clean-before.txt
+python -m uasset_read --clean-logs --log-dir "$TMP" --log-keep-latest 1 >/dev/null 2>&1; ls "$TMP" | sort > temp/clean-after.txt
+diff temp/clean-before.txt temp/clean-after.txt >/dev/null && echo "CLEAN-LOGS NO-OP (suspicious: cleanup did not run)" || echo "cleanup ran; surviving:"; ls "$TMP"
 python -m pytest -q && python -m ruff check src/uasset_read tests && python -m pyright src/uasset_read
 python -c "import uasset_read; print(sorted(uasset_read.__all__))"
 ```
 
-Expected: `identical`; verbose run prints INFO lines to stderr; `110 passed`; ruff clean; pyright 0 errors; `__all__` = the 6 remaining public names (10 minus the 4 logging exports). **Also update `wiki/07-Dev-Guide/Public-API.md`? No — wiki is a submodule and out of scope; instead record the `__all__` shrink in the commit message so the doc owner can follow it up.**
+Expected: `identical`; `110 passed`; ruff clean; pyright 0 errors; `__all__` = the **6** remaining public names (10 minus `ProjectLogSession`, `configure_project_logging`, `project_logging_session`, `shutdown_project_logging`). Also confirm `logging.root.handlers` is untouched by an import — `test_cli_python_agent_share_default_projection_and_logging_inert` asserts this, so if it passes you are fine.
+
+Prove the `_configured_log_path` "active family" guard deletion is a no-op, not just plausible: that global is always `None` on the shipping path because nothing configures logging, so the skip branch can never fire; the `--clean-logs` before/after run above is the empirical check that the surviving-file set is unchanged by your edit (run it once before the edit, once after).
+
+**Do not touch `wiki/`** to fix the public-API table: `wiki/` is gitignored (`.gitignore:103`) and is a separate nested repo (`git ls-files wiki` → 0 files), so it cannot appear in a commit here. OpenWiki regenerates it from source; record the `__all__` shrink in the commit message instead.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add -A src/uasset_read tests
-git commit -m "refactor: restore the no-process-global-logging invariant; CLI configures logging via stdlib dictConfig
+git commit -m "refactor: delete the unreachable process-global logging machinery (delete-only)
 
-Drops configure_project_logging/shutdown_project_logging/ProjectLogSession/
-project_logging_session from uasset_read.__all__ (10 -> 6 public names)."
+Nothing in src/ or tests/ configured logging: main() had no logging call, and
+basicConfig/dictConfig/fileConfig had zero occurrences in src. The AGENTS.md
+no-process-global-logging invariant therefore held only accidentally.
+
+Drops configure_project_logging, shutdown_project_logging, ProjectLogSession,
+project_logging_session, scoped_project_logging, JSONFormatter,
+_LogContextFilter, configure_worker_stream_logging, new_log_run_id,
+current_log_run_id and config.to_configure_kwargs; keeps log_context and
+cleanup_project_logs. Public surface uasset_read.__all__ shrinks 10 -> 6, so
+the OpenWiki public-API table needs regeneration (wiki/ is a gitignored nested
+repo and is not patched here). --log-level/--log-cleanup/--log-max-bytes/
+--log-backup-count/--log-format remain accepted but inert: flag retirement is a
+separate product decision."
 ```
 
 ---
@@ -695,7 +702,8 @@ project_logging_session from uasset_read.__all__ (10 -> 6 public names)."
 
 **Files:**
 
-- Modify: `src/uasset_read/constants.py` — delete `decode_package_flags:92-123` plus all 13 names measured as unreferenced outside `constants.py`: `UE5_LEGACY_VERSION`, `LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD:151`, `CONTROL_RIG_LARGE_FILE_THRESHOLD:152`, `CONTROL_RIG_LARGE_FILE_CLASSES:153`, `BLUEPRINT_METADATA_KEYS`, `CONTAINER_TYPE_MAP`, `CONTAINER_TYPE_PREFIX`, `MAX_REASONABLE_CAP`, `UE5_LARGE_PROPERTY_TYPES`, `UE5_LARGE_PROPERTY_MAX_REASONABLE`, `MATERIAL_DOMAIN_MAP:447`, `MATERIAL_USAGE_FLAG_NAMES`, `_EXPRESSION_TYPE_PATTERNS:497-733` — and with them their only consumers `classify_expression_type:734-766`, `BLEND_MODE_MAP`, `SHADING_MODEL_MAP` (Step 1 re-checks all of them; the line numbers are from `f2fa0f61` and may have shifted)
+- Modify: `src/uasset_read/constants.py` — delete `decode_package_flags:92-123` plus all 13 names measured as unreferenced outside `constants.py`: `UE5_LEGACY_VERSION`, `LIGHTWEIGHT_TOLERANT_PARSE_THRESHOLD:151`, `CONTROL_RIG_LARGE_FILE_THRESHOLD:152`, `CONTROL_RIG_LARGE_FILE_CLASSES:153`, `BLUEPRINT_METADATA_KEYS`, `CONTAINER_TYPE_MAP`, `CONTAINER_TYPE_PREFIX`, `MAX_REASONABLE_CAP`, `UE5_LARGE_PROPERTY_TYPES`, `UE5_LARGE_PROPERTY_MAX_REASONABLE`, `MATERIAL_DOMAIN_MAP:447`, `MATERIAL_USAGE_FLAG_NAMES`, `_EXPRESSION_TYPE_PATTERNS:497-733` — and with them their only consumer `classify_expression_type:734-766` (Step 1 re-checks all of them; the line numbers are from `f2fa0f61` and may have shifted)
+  - **Do NOT delete `BLEND_MODE_MAP` or `SHADING_MODEL_MAP`** (corrected at `c8b72909`): contrary to the first draft, they are asserted by the live nested test `test_material_enum_tables_match_engine_types` (`tests/test_core.py:735`), which pins the engine's real enum numbering. That test is a deliberate contract check, not residue. `UE4_ASSETREGISTRY_DEPENDENCYFLAGS` is likewise not yours — Task 7 (same lane A) owns it.
 - Modify: `src/uasset_read/memory_safety.py` — delete `MemoryMonitor:134-192`, `MemoryStats:73-91`, `get_memory_stats:193-214`, `should_isolate:19-32`, `_get_process_rss_mb`, `MemoryPolicy:92-133`; **keep** `ResourceBudget:33-72`, `ResourceLimits`, `MemoryLimitExceeded`
 - Modify: `src/uasset_read/debug.py` — delete `format_hex_view:32-80`; keep `HexViewEntry`
 - Modify: `src/uasset_read/package.py` — delete the `PackageProvider` alias, `open_file`, `read_file`, `list_files`, `_get_root_mtime` (`:152-206,245`)
