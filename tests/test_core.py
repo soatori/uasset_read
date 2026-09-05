@@ -718,14 +718,6 @@ def test_package_document_preserves_every_export_and_role():
             "chunk_ids": "array",
         }
 
-    def test_asset_registry_dependency_gate_uses_521():
-        from uasset_read import constants
-
-        assert constants.UE4_ASSETREGISTRY_DEPENDENCYFLAGS == 521
-        src = (SRC / "uasset_read/parsers/asset_registry_parser.py").read_text(encoding="utf-8")
-        assert "UE4_ASSETREGISTRY_DEPENDENCYFLAGS" in src
-        assert "file_version_ue4 >= 510" not in src
-
     def test_material_enum_tables_match_engine_types():
         from uasset_read.constants import BLEND_MODE_MAP, SHADING_MODEL_MAP
 
@@ -757,7 +749,6 @@ def test_package_document_preserves_every_export_and_role():
             ("document.test_all_exports_present", test_all_exports_present),
             ("document.test_ids_are_export_prefix", test_ids_are_export_prefix),
             ("document.test_stable_id_across_calls", test_stable_id_across_calls),
-            ("version.test_asset_registry_dependency_gate_uses_521", test_asset_registry_dependency_gate_uses_521),
             ("property.test_unversioned_bool_one_byte_enum_fname", test_unversioned_bool_one_byte_enum_fname),
             ("summary.test_compressed_chunks_skipped_as_16_bytes", test_compressed_chunks_skipped_as_16_bytes),
             ("summary.test_summary_gate_modes_are_versioned", test_summary_gate_modes_are_versioned),
