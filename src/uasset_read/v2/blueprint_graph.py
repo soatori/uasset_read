@@ -16,6 +16,7 @@ UEdGraphPin::Serialize in Engine/Source/Runtime/Engine/Classes/EdGraph/EdGraph*.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -23,12 +24,59 @@ if TYPE_CHECKING:
     from uasset_read.serializers.object_resources import ObjectExport
     from uasset_read.serializers.package_summary import PackageFileSummary
 
+logger = logging.getLogger(__name__)
+
 # Hard caps on converted output. Values chosen so the largest tracked package
 # (ALS_AnimBP: 275 graphs, ~2,700 node exports) passes without cap engagement
 # while runaway editor graphs stay bounded (canonical design: bounded by default).
 MAX_GRAPHS_PER_PACKAGE = 512
 MAX_NODES_PER_GRAPH_OUTPUT = 512
 MAX_PINS_PER_NODE_OUTPUT = 64
+
+
+def _validate_graph_export_offset(export, archive_size: int) -> bool:
+    """Validate whether a graph export's serialization offset is within valid range.
+
+    When serial_offset is 0 and serial_size > 0, the offset is abnormal (non-Default__ export).
+    When serial_offset + serial_size exceeds archive boundary, data is truncated.
+    """
+    serial_offset = getattr(export, "serial_offset", 0)
+    serial_size = getattr(export, "serial_size", 0)
+
+    if serial_size == 0:
+        return True  # empty export, skip check
+
+    # Check for negative values
+    if serial_offset < 0 or serial_size < 0:
+        logger.warning(
+            "Graph export '%s' offset abnormal: offset=%d, size=%d",
+            export.object_name,
+            serial_offset,
+            serial_size,
+        )
+        return False
+
+    # Offset should not be 0 (unless it is a special Default__ export)
+    if serial_offset == 0 and not str(getattr(export, "object_name", "")).startswith("Default__"):
+        logger.warning(
+            "Graph export '%s' serial_offset=0 and serial_size=%d, offset abnormal",
+            export.object_name,
+            serial_size,
+        )
+        return False
+
+    # Check if exceeding archive boundary
+    if archive_size > 0 and serial_offset + serial_size > archive_size:
+        logger.warning(
+            "Graph export '%s' offset out of bounds: offset=%d + size=%d > archive_size=%d",
+            export.object_name,
+            serial_offset,
+            serial_size,
+            archive_size,
+        )
+        return False
+
+    return True
 
 
 def _is_graph_class(class_name: str | None) -> bool:
@@ -61,7 +109,6 @@ def read_blueprint_graphs(
     package (decode pass restores the full read range before calling).
     """
     from uasset_read.serializers.graph import read_ue_graph
-    from uasset_read.graph.parser import _validate_graph_export_offset
     from uasset_read.serializers.object_resources import get_asset_class
 
     archive_size = 0
