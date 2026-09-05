@@ -14,29 +14,17 @@ __version__ = "0.6.0-dev"
 # Stable Public API (direct imports)
 # ============================================================================
 
-from .config import ParseConfig, LogConfig
+from .config import LogConfig
 from .v2.api import parse_package_document
-from .project_logging import (
-    ProjectLogSession,
-    configure_project_logging,
-    project_logging_session,
-    shutdown_project_logging,
-)
 from .exceptions import ParseError
 from .archive import FArchive
 
 __all__ = [
     "__version__",
     # Configuration
-    "ParseConfig",
     "LogConfig",
     # v2 package-first API
     "parse_package_document",
-    # Logging
-    "configure_project_logging",
-    "ProjectLogSession",
-    "project_logging_session",
-    "shutdown_project_logging",
     # Exceptions
     "ParseError",
     # Binary reader
