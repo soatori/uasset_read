@@ -52,6 +52,28 @@ python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package >
 
 ---
 
+## Execution Lanes (parallel dispatch)
+
+The 10 tasks are one refactor chain, but they split into four **file-disjoint** writer lanes plus a serial tail. Verified facts that make this safe:
+
+- The v1 subsystems being deleted have **zero test coverage**: `grep -rn "uasset_read\.graph|flow_builder|macro_expander|chain_builder|graph_utils|extract_blueprint_graphs|_validate_graph_export_offset|uasset_read\.link|PackageLinker|class_serialization_strategy|kismet\.semantic|models\.ir|models\.blueprint|models\.transforms|project_logging|configure_logging|decode_package_flags|_EXPRESSION_TYPE_PATTERNS|classify_expression_type|MATERIAL_DOMAIN_MAP|LIGHTWEIGHT_TOLERANT|CONTROL_RIG_LARGE|ResourceBudget|hex_view|MAX_REASONABLE_CAP" tests/` → no hits. Lanes A/B/D therefore make **no** `test_core.py` edits.
+- `tests/` is exactly 4 files, `test_core.py` exactly 10 top-level mega-tests, no classes; suite runtime ~45s. The `test_v2_*.py` files named in early drafts no longer exist.
+- Only two nested `test_*` defs constrain deletions, and they are **adjacent** (`test_import_package_name_not_gated_by_filter_editor_only` :721 reads `object_resources.py` text; `test_asset_registry_dependency_gate_uses_521` :725 reads `asset_registry_parser.py` text). Tasks 5 and 7 must therefore share a lane, or two agents rewrite the same `_run_cases` region.
+- `constants.UE4_ASSETREGISTRY_DEPENDENCYFLAGS` has exactly two consumers (the parser and that nested test) → it leaves in Task 7, lane A only.
+- `test_class_handlers_kwarg_defaults_true_for_v1` (:1264) pins `parse_properties_from_export(run_class_handlers=True)` — Task 3 strips `linker` from that signature but must not touch `run_class_handlers`.
+
+| Lane | Tasks | Owned paths (exclusive; touch nothing else) |
+|---|---|---|
+| **A** | 1, 2, 3, 5, 7 | `src/uasset_read/graph/`, `src/uasset_read/link/`, `kismet/semantic.py`, `parsers/class_serialization_strategy.py`, `parsers/asset_registry_parser.py`, `parsers/property_parser.py`, `parsers/asset_types/niagara_node.py`, all of `serializers/`, `models/core.py`, `models/diagnostics.py`, `models/object.py`, `v2/blueprint_graph.py`, `v2/package/legacy.py`, `constants.py` (`UE4_ASSETREGISTRY_DEPENDENCYFLAGS` only), `tests/test_core.py` (the two nested defs + their `_run_cases` entries) |
+| **B** | 4 | `models/ir.py`, `models/blueprint.py`, `models/transforms.py`, `models/__init__.py`, `parsers/asset_types/anim_blueprint.py`, `anim_common.py`, `anim_montage.py`, `anim_sequence.py` |
+| **C** | 6 | `parsers/asset_types/__init__.py`, `parsers/asset_types/material_instance.py`, `parsers/class_handler.py` — no `tests/` edits at all; correctness is proven by the Step 5 handler-name golden diff |
+| **D** | 8, 9 | `project_logging.py`, `cli.py`, `config.py`, `__main__.py`, `exceptions.py`, `src/uasset_read/__init__.py`, `constants.py` (the 13 dead names, ≥1,000 lines from lane A's single hunk), `memory_safety.py`, `debug.py`, `package.py`, `mappings.py` |
+| tail | 10 | `v2/*`, `README.md`, `wiki/`, the 18 empty directories, test duplication convergence — runs alone, after A–D merge |
+
+Merge order **A → B → C → D**, full suite after each merge. Lane A is the largest but is internally sequential (Task 1 must precede 2 and 3, which precede 5 and 7).
+
+---
+
 ### Task 1: Delete the v1 graph-analysis package
 
 **Files:**
@@ -193,8 +215,8 @@ git commit -m "refactor: delete kismet/semantic.py, the last v1 graph-enrichment
 
 - Delete: `src/uasset_read/link/__init__.py` (10L), `linker.py` (462L), `object_instance.py` (127L)
 - Delete: `src/uasset_read/parsers/class_serialization_strategy.py` (178L) — its only importer is `link/linker.py:282`
-- Modify (remove `linker` parameters, `*_with_linker` variants and the dead `TYPE_CHECKING` imports): `serializers/graph_node.py` (12 mentions), `parsers/property_parser.py` (6), `serializers/graph_pin.py` (5), `serializers/object_resources.py` (4), `kismet/body_builder.py` (4), `kismet/decompile_bridge.py` (2), `kismet/function_resolver.py` (2), `kismet/translator.py` (1), `serializers/graph.py` (1), `v2/package/legacy.py` (1: `linker=None` at :973), `models/core.py` (comment only)
-- Test: `tests/test_core.py` nested `_run_cases` entries that pass `linker=` (remove only those kwargs/entries; keep all 10 top-level functions)
+- Modify (remove `linker` parameters, `*_with_linker` variants and the dead `TYPE_CHECKING` imports) — verified list, `grep -rl linker src/uasset_read --include="*.py" | grep -v "^src/uasset_read/\(graph\|link\)/"` returns exactly these 16: `serializers/graph_node.py`, `serializers/graph_helpers.py`, `serializers/graph_pin.py`, `serializers/graph.py`, `serializers/object_resources.py`, `parsers/property_parser.py`, `parsers/asset_types/niagara_node.py`, `kismet/body_builder.py`, `kismet/decompile_bridge.py`, `kismet/function_resolver.py`, `kismet/translator.py`, `models/core.py` (comment only), `models/diagnostics.py`, `v2/blueprint_graph.py` (one `None,  # linker not needed` positional slot at :96), `v2/package/legacy.py` (`linker=None` at :973), plus the deleted `parsers/class_serialization_strategy.py`
+- Test: **none required** — verified `grep -rn "linker\|PackageLinker\|uasset_read.link\|class_serialization_strategy" tests/` returns zero hits. If the suite goes red after this task, that is tree drift: stop and report it rather than editing tests.
 
 **Interfaces:**
 
@@ -226,7 +248,7 @@ git rm -r src/uasset_read/link src/uasset_read/parsers/class_serialization_strat
 
 - [ ] **Step 3: Strip the plumbing, file by file**
 
-In each file listed under **Files:** delete the `linker` parameter from the signature, delete the `if linker is not None:` branch and keep the linker-free branch, delete `*_with_linker` function definitions, and delete the now-empty `from uasset_read.link.linker import PackageLinker` line inside `if TYPE_CHECKING:` blocks. Do not reformat anything else. Work through the files in this order so each edit leaves the tree importable: `serializers/object_resources.py` → `serializers/graph.py` → `serializers/graph_pin.py` → `serializers/graph_node.py` → `parsers/property_parser.py` → `kismet/function_resolver.py` → `kismet/translator.py` → `kismet/body_builder.py` → `kismet/decompile_bridge.py` → `v2/package/legacy.py`.
+In each file listed under **Files:** delete the `linker` parameter from the signature, delete the `if linker is not None:` branch and keep the linker-free branch, delete `*_with_linker` function definitions, and delete the now-empty `from uasset_read.link.linker import PackageLinker` line inside `if TYPE_CHECKING:` blocks. In `v2/blueprint_graph.py:96` delete the `None,  # linker not needed for single-package resolution` positional argument and the matching parameter in the callee (do not leave a bare `None` hole). Do not reformat anything else. Work through the files in this order so each edit leaves the tree importable: `serializers/object_resources.py` → `serializers/graph.py` → `serializers/graph_pin.py` → `serializers/graph_node.py` → `serializers/graph_helpers.py` → `parsers/property_parser.py` → `parsers/asset_types/niagara_node.py` → `models/diagnostics.py` → `models/core.py` → `kismet/function_resolver.py` → `kismet/translator.py` → `kismet/body_builder.py` → `kismet/decompile_bridge.py` → `v2/blueprint_graph.py` → `v2/package/legacy.py`.
 
 After each file, run the import smoke so a missed call site surfaces immediately:
 
@@ -550,7 +572,8 @@ git commit -m "refactor: express asset-type registration as data; drop the dynam
 
 - Delete: `src/uasset_read/parsers/asset_registry_parser.py` (201L)
 - Modify: `tests/test_core.py` — delete the test at `:729` (`test_asset_registry_dependency_gate_uses_521`) which reads that file's **source text**; delete its nested `_run_cases` entry only, never a top-level function
-- Modify: any other `_run_cases` entry that asserts on the deleted file's text (`grep -n "asset_registry_parser" tests/test_core.py`)
+- Modify: `tests/test_core.py` — delete the nested def `test_asset_registry_dependency_gate_uses_521` (starts :725, inside the top-level `test_package_document_preserves_every_export_and_role`); it does `(SRC / "uasset_read/parsers/asset_registry_parser.py").read_text()`, so it fails the moment the parser goes. Also delete its `entry` in the `_run_cases([...])` list at the end of that top-level function, and the top-level import list entry if the name appears there.
+- Modify: `src/uasset_read/constants.py:218` — delete `UE4_ASSETREGISTRY_DEPENDENCYFLAGS`. Verified consumers are only `asset_registry_parser.py:25,119` and the nested test, so all three leave in this one commit. **This lane owns that constant** — Task 9 must not touch it.
 
 **Interfaces:**
 
@@ -569,6 +592,8 @@ Expected: only `tests/test_core.py:729` (the source-text assertion) plus `docs/`
 - [ ] **Step 2: Delete module + the source-text test body**
 
 Keep the enclosing top-level `test_*` function (structure gate). Remove only the nested `_run_cases` case that reads `asset_registry_parser.py`.
+
+Note on the neighbouring nested tests, which constrain other lanes: `test_import_package_name_not_gated_by_filter_editor_only:721` reads `serializers/object_resources.py` source text and splits on `"def build_imports_list"` — so that function must keep existing until Task 5 lands; `test_class_handlers_kwarg_defaults_true_for_v1:1264` asserts `parse_properties_from_export` keeps `run_class_handlers` defaulting to `True` — Task 3 must strip `linker` from that signature but must not touch `run_class_handlers`.
 
 - [ ] **Step 3: Verify**
 
