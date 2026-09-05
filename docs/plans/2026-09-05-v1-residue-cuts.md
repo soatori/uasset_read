@@ -108,7 +108,7 @@ Lanes A → B → C → D merged with no conflicts except a clean auto-merge in 
 Step 1's premise check killed **4 of its 5 micro-cuts** — the "zero callers" measurements had not counted tests as consumers:
 
 | Cut claimed | Reality at `ab381338` | Action |
-|---|---|---|
+| --- | --- | --- |
 | `version_string` zero callers | asserted live by `tests/test_samples.py:712` (`ctx.version_string.startswith("5.0")`) inside the version-contract test | **kept** |
 | `MappingInfo` "set, never read" | read by `tests/test_samples.py:709` (`ctx.mappings.path == "x.usmap"`) | **kept** |
 | `sub_slice` tests-only | 4 assertions on it (`test_core.py:59,127,134,137`) — dead in `src/`, live in tests | **kept**, needs a separate dead-but-tested decision |
@@ -919,7 +919,7 @@ Tail commits: `6cd2d8ee` (dead subgraph recursion + orphaned `ResourceLimits` + 
 Independently re-measured by the integrator, not taken from the child report:
 
 | Check | Result |
-|---|---|
+| --- | --- |
 | `python -m pytest -q` | 110 passed |
 | `python -m ruff check src tests` | All checks passed |
 | `python -m pyright src/uasset_read` | **0 errors, 0 warnings** (was 0/3; the psutil import is gone) |
