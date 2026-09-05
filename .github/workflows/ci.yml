@@ -24,6 +24,9 @@ jobs:
 
           # 对于 PR，只检查相对于 master 分支的新增文件
           # 对于直接 push 到 master，检查所有文件
+          # git 默认把非 ASCII 路径转义成带前导引号的形式，会让下面的 ^ 锚点
+          # 失配，禁用目录里的中文名文件就静默过关了。
+          git config core.quotePath false
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             FILES=$(git diff --diff-filter=A --name-only origin/master...HEAD)
           else
