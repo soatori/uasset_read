@@ -64,7 +64,7 @@ The 10 tasks are one refactor chain, but they split into four **file-disjoint** 
 
 | Lane | Tasks | Owned paths (exclusive; touch nothing else) |
 | --- | --- | --- |
-| **A** | 1, 2, 3, 5, 7 | `src/uasset_read/graph/`, `src/uasset_read/link/`, `kismet/semantic.py`, `parsers/class_serialization_strategy.py`, `parsers/asset_registry_parser.py`, `parsers/property_parser.py`, `parsers/asset_types/niagara_node.py`, all of `serializers/`, `models/core.py`, `models/diagnostics.py`, `models/object.py`, `v2/blueprint_graph.py`, `v2/package/legacy.py`, `constants.py` (`UE4_ASSETREGISTRY_DEPENDENCYFLAGS` only), `tests/test_core.py` (the two nested defs + their `_run_cases` entries) |
+| **A** | 1, 2, 3, 5, 7 | `src/uasset_read/graph/`, `src/uasset_read/link/`, `kismet/semantic.py` **and `kismet/{decompile_bridge,body_builder,translator,function_resolver}.py`** — the latter four are Task 3's `linker=`/`TYPE_CHECKING` plumbing (each does `from uasset_read.link.linker import PackageLinker`, so deleting `link/` without them leaves pyright unresolved imports; verified no other lane owns any `kismet/` path), `parsers/class_serialization_strategy.py`, `parsers/asset_registry_parser.py`, `parsers/property_parser.py`, `parsers/asset_types/niagara_node.py`, all of `serializers/`, `models/core.py`, `models/diagnostics.py`, `models/object.py`, `v2/blueprint_graph.py`, `v2/package/legacy.py`, `constants.py` (`UE4_ASSETREGISTRY_DEPENDENCYFLAGS` only), `tests/test_core.py` (the two nested defs + their `_run_cases` entries) |
 | **B** | 4 | `models/ir.py`, `models/blueprint.py`, `models/transforms.py`, `models/__init__.py`, `parsers/asset_types/anim_blueprint.py`, `anim_common.py`, `anim_montage.py`, `anim_sequence.py` |
 | **C** | 6 | `parsers/asset_types/__init__.py`, `parsers/asset_types/material_instance.py`, `parsers/class_handler.py` — no `tests/` edits at all; correctness is proven by the Step 5 handler-name golden diff |
 | **D** | 8, 9 | `project_logging.py`, `cli.py`, `config.py`, `__main__.py`, `exceptions.py`, `src/uasset_read/__init__.py`, `constants.py` (the 13 dead names, ≥1,000 lines from lane A's single hunk), `memory_safety.py`, `debug.py`, `package.py`, `mappings.py` |
@@ -156,6 +156,8 @@ PY
 
 Expected: `110 passed`, ruff clean, pyright 0 errors, output identical. `test_blueprint_graph.py` exercises the relocated validator through `read_blueprint_graphs`, so it is the real proof.
 
+**Known gate exception (measured on lane A at `c8b72909`):** the pyright gate cannot be 0-errors at the end of Task 1. `kismet/semantic.py` holds dead lazy imports into `uasset_read.graph`, so deleting the package leaves 8 unresolved-import errors until Task 2 deletes that file. Either land Task 2 **before** Task 1 (preferred: `semantic.py` has no importers, so removing it first leaves no dangling reference and every commit is green), or keep the two commits adjacent and treat the pair as the atomic unit — never cherry-pick Task 1 alone onto a branch that CI tests. The pair's combined end state must still show `110 passed` + pyright 0.
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -174,7 +176,7 @@ git commit -m "refactor: delete the v1 graph-analysis package, relocate its one 
 
 **Interfaces:**
 
-- Consumes: Task 1 (so `uasset_read.graph` is already absent).
+- Consumes: Task 1 (so `uasset_read.graph` is already absent). **Ordering is not actually load-bearing in that direction**: `semantic.py` has zero importers, so running Task 2 *first* is strictly better — it removes the only dangling reference to `graph/` before the package disappears, and then both commits pass the pyright gate individually. If Task 1 landed first, this task is what turns pyright green again (see Task 1 Step 4's gate exception).
 - Produces: nothing new. `enrich_decompiled_functions` and its helpers had zero callers.
 
 - [ ] **Step 1: Prove it is dead**
