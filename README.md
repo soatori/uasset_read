@@ -24,7 +24,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 | Metric | Value |
 | -------- | ------- |
-| Version | v0.5.4.45 (last released) / 0.6.0-dev (v2 default) |
+| Version | v0.5.4.45 (last tagged) / 0.6.0-dev (v2 default) |
 | Source | Python parser for Unreal Engine .uasset files |
 | Modules | 100 source files across 8 subpackages |
 | v2 Tests | test_core (exactly 10 functions, structure-gated) + manifest-driven test_samples (110 collected total, no skips/xfail) |

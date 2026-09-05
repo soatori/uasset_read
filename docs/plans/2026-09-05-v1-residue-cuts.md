@@ -103,6 +103,28 @@ Lanes A → B → C → D merged with no conflicts except a clean auto-merge in 
 
 ---
 
+## Task 10 Outcome (executed after the merges)
+
+Step 1's premise check killed **4 of its 5 micro-cuts** — the "zero callers" measurements had not counted tests as consumers:
+
+| Cut claimed | Reality at `ab381338` | Action |
+|---|---|---|
+| `version_string` zero callers | asserted live by `tests/test_samples.py:712` (`ctx.version_string.startswith("5.0")`) inside the version-contract test | **kept** |
+| `MappingInfo` "set, never read" | read by `tests/test_samples.py:709` (`ctx.mappings.path == "x.usmap"`) | **kept** |
+| `sub_slice` tests-only | 4 assertions on it (`test_core.py:59,127,134,137`) — dead in `src/`, live in tests | **kept**, needs a separate dead-but-tested decision |
+| `source_size` tests-only | 2 assertions (`:105,128`) | **kept**, same |
+| `_collect_all_nodes` recursion | no emitter writes a `subgraphs` dict key (`_graph_to_dict` inlines subgraph nodes) | **deleted** — flat comprehension |
+
+`Source` Protocol was also kept: it has exactly one annotation consumer (`SliceReader.__init__`), so removing it swaps one abstraction for a concrete-class union in a hot constructor for ~6 lines — worse, not smaller.
+
+Steps 4 and 5 (test duplication) were **skipped on measurement**, see the commit note on `60a82df1`: a module-level `_ReaderBase` is impossible (the structure gate bans top-level classes), the two stubs' shared methods are byte-identical `ByteArchive` forwarding that the base would cost as many lines as it saves, and `_StubArchive`'s ignore-the-offset semantics would become offset arithmetic that reads differently at 0 vs 1. Step 3 landed across **14** sites (the plan said 11) using one helper with two forms.
+
+README fixes went past the two the plan listed: `ParseConfig` appeared in the copy-pasteable **Module-level API example** (it could no longer be imported), plus `PackageProvider` (real name `FileSystemPackageProvider`), `EUEVersion` (does not exist in `src/`), the memory-policy/RSS/rotation descriptions of modules wave 1 emptied, and the counts (100 files / 8 subpackages / 110 tests, previously "200 / 15 / 99"). `0.5.5` was a dev line, never tagged — only a local gitignored wheel in `dist/` — so the version row now states `v0.5.4.45 (last tagged)`.
+
+**Verification beyond the plan's Step 6:** every one of the **51** sample `.uasset` files (not 8) produced byte-identical `--depth package` output before (`c8b72909`) and after the whole reduction, and the 8 largest were byte-identical at `--depth decode`; the wheel builds and imports outside the checkout with `__all__` = 5.
+
+---
+
 ### Task 1: Delete the v1 graph-analysis package
 
 **Files:**
