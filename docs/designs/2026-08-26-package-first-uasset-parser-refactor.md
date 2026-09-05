@@ -2,7 +2,9 @@
 
 status: target
 
-> **文档状态：目标架构基线（2026-08-26）。Legacy 主路径已实现**（`PackageDocument v2` 输出全部 exports；tagged properties 在 export 边界内解析并恢复 Source/ImportedSize 等值；CLI/Python API/Agent 共用 v2 投影；v2 语义不再依赖 Semantic 1.x handler；decode 不产出顶层 payload（伪造 descriptor/ref 已撤回，`payloads[]` 恒为空））。**payload 字节提取已撤回为 deferred（`PAYLOAD_EXTRACTION_DEFERRED`）。2026-09-02 顺序调整：实现不再等待 #623–#627 fixture，按 UE 源码偏移证据先行推进（CUE4Parse/UAssetAPI 只作阅读参考与佐证），reader/handler 用有界合成字节测试覆盖；样本改为回填项，各 Phase 退出条件与真实 fixture 支持声明不变。Zen/IoStore、USMAP/unversioned、外部容器 payload 提取、深层语义与 Semantic 1.x 删除仍是目标。**
+> **文档状态：目标架构基线（2026-08-26）。Legacy 主路径已实现**（`PackageDocument v2` 输出全部 exports；tagged properties 在 export 边界内解析并恢复 Source/ImportedSize 等值；CLI/Python API/Agent 共用 v2 投影；v2 语义不再依赖 Semantic 1.x handler；decode 不产出顶层 payload（伪造 descriptor/ref 已撤回，`payloads[]` 恒为空））。**payload 字节提取已撤回为 deferred（`PAYLOAD_EXTRACTION_DEFERRED`）。2026-09-02 顺序调整：实现不再等待 #623–#627 fixture，按 UE 源码偏移证据先行推进（CUE4Parse/UAssetAPI 只作阅读参考与佐证），reader/handler 用有界合成字节测试覆盖；样本改为回填项，各 Phase 退出条件与真实 fixture 支持声明不变。**
+>
+> **2026-09-05 后续状态更新（已实现，非目标）**：Semantic JSON 1.x 输出路径已删除（`--legacy-json` 等旧 CLI flag 进入 retired 集合，唯一顶层 format 为 `uasset_read.package`）；Blueprint VarType（`FEdGraphPinType`）类型解码与 Kismet 反编译已迁移到 v2 object model（`BlueprintFamilyHandler` decode 分支 + `kismet.decompile_bridge`，由 `tests/test_blueprint_decode.py` 覆盖）。**仍未完成：Zen/IoStore、USMAP/unversioned 的 SchemaProvider 完整路径、外部容器 payload 提取、其余深层语义、Blueprint C++ skeleton 与 parent-asset 解析（D1 deferred）。**
 >
 > 本文是当前项目唯一权威的重构目标。源码与测试仍是“当前已经实现什么”的唯一依据；本文只定义“接下来要实现什么”。旧版输出、Semantic JSON 1.x 和单资产设计文档均为历史资料，不得继续作为新功能的目标架构。
 
@@ -579,7 +581,7 @@ payload 提取使用单独 API/tool（当前恒返回 `PAYLOAD_EXTRACTION_DEFERR
 - `objects[].semantic.kind` 使用 discriminator 选择可选领域定义。
 - 领域 schema 不能重新定义 package 公共字段。
 - Schema 版本只在不兼容公共契约变化时升级。
-- 当前 Semantic JSON 1.x 在迁移期仅作为 legacy output adapter；新功能不再新增 1.x 顶层 format。
+- Semantic JSON 1.x 已删除，不再是任何投影的 output adapter；`uasset_read.package` 是唯一顶层 format，新功能不再新增 1.x 顶层 format。
 
 ## Multi-Asset Rules
 
@@ -730,7 +732,8 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 5. Blueprint/AnimBlueprint/Kismet/C++ 扩展迁移。
 
     - Phase 4.5：graph/node/pin 解码 + declaration（parent_class/interfaces/functions）+ SCS components + NewVariables names 已迁移到 v2 `BlueprintFamilyHandler` decode 分支。fixture 测试覆盖 StackOBot/BP_CombatCharacter/ABP_RifleAnimLayers/ALS_AnimBP。
-    - 未迁移：VarType 类型解码、Kismet 反编译、C++ skeleton、parent-asset 解析（属 D1 deferred）。
+    - 已迁移（2026-09-05 核对源码与测试）：VarType（`FEdGraphPinType`）类型解码、Kismet 反编译（`blueprint.kismet` coverage）。
+    - 未迁移：C++ skeleton、parent-asset 解析（属 D1 deferred）。
 
 退出条件：每个 handler 至少有一个真实样本、一个缺失/partial 样本和明确 coverage；handler 失败不影响同包其他对象。
 
@@ -848,9 +851,9 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 
 ### Migration Completion Gate
 
-- 旧 Semantic 1.x 不再是默认 JSON。
+- 旧 Semantic 1.x 不再是默认 JSON。（已满足：1.x 输出路径已删除。）
 - 所有公开文档只把旧契约描述为 legacy/current historical。
-- Blueprint/Kismet 扩展在 v2 object model 上运行，或明确保留为未迁移可选能力。
+- Blueprint/Kismet 扩展在 v2 object model 上运行，或明确保留为未迁移可选能力。（已满足：graph/node/pin、declaration、SCS、VarType、Kismet 反编译均在 v2 运行；C++ skeleton 与 parent-asset 明确为未迁移 deferred。）
 - 旧 builder/projection/promotion 路径已删除，而不是永久并行。
 - 发行包、源码树和文档树的体积基线已记录并进入 CI/发布检查。
 - 根目录独立 Python 入口已删除，公开命令统一为 `python -m uasset_read`。

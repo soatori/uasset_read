@@ -1,3 +1,5 @@
+> **status:** historical — Generated 2026-06-10 against v0.5.0. References deleted code paths (`core.py`, `exporter/`). Useful for background context but not current-state evidence.
+
 # UE 反射系统对比分析报告
 
 > 生成时间：2026-06-10  

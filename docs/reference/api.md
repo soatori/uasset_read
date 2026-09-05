@@ -1,3 +1,5 @@
+> **status:** historical — Documents the v0.5.x API surface. The legacy pipeline (`parse_uasset`, `parse_uasset_with_linker`, `--legacy-json`) has been retired in v2. See `src/uasset_read/cli.py` and `src/uasset_read/package.py` for the current API.
+
 # API 快速参考
 
 ## 核心入口

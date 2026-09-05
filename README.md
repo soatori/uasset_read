@@ -43,7 +43,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **v2 JSON contract** — `uasset_read.package` format with view/depth/selection/pagination/byte-budget
 - **Agent tools** — `inspect_package`, `list_objects`, `get_object`, `list_dependencies`, `get_diagnostics`, `extract_payload`
 - **Projection** — semantic/raw/debug views, depth filtering, max_bytes enforcement
-- **Handlers** — DataTable, UserDefinedEnum, UserDefinedStruct, Texture2D, TextureCube, SoundWave, Skeleton, StaticMesh, Material, Niagara, Blueprint/AnimBlueprint (decode depth: graph/node/pin decode + declaration + SCS components + NewVariables names on editor-saved fixtures; VarType typing and Kismet decompilation not implemented)
+- **Handlers** — DataTable, UserDefinedEnum, UserDefinedStruct, Texture2D, TextureCube, SoundWave, Skeleton, StaticMesh, Material, Niagara, Blueprint/AnimBlueprint (decode depth: graph/node/pin decode + declaration + SCS components + NewVariables names with VarType (`FEdGraphPinType`) typing + Kismet decompilation on editor-saved fixtures; C++ skeleton and parent-asset resolution not implemented)
 - **SchemaProvider** — interface for unversioned property schema lookup
 
 **UE source-audit fixes (v0.6.0-dev):** 35 binary-format mismatches resolved against UE 5.8-dev C++ source — FString UTF-16 byte-swap, FColor B/G/R/A order, FRotator Pitch/Yaw/Roll, FName external number, unversioned header fragment decode, ELifetimeCondition table, mcdelegate PinCategory, FGuid display, dead CppType reads, ImportedSize X/Y, material input variants, anim node table verified against Engine/Source headers. StringTable (#615) partially fixed (FString keys + trailer). 102/102 tests passing.

@@ -1,3 +1,5 @@
+> **status:** historical — Written 2026-06-04, predates the handler registry, semantic handlers, and v2. The strategies described here have been superseded by the current handler architecture.
+
 # uasset_read 特殊或未知 uasset 资产处理策略调研报告
 
 日期：2026-06-04

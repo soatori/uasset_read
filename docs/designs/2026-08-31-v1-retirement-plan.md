@@ -4,9 +4,10 @@ status: target
 
 > **文档状态：target**（退役决策与门禁；文中"现状"段落为基线 `bd3309a7` 的 current 事实，引用 `file:line`）。
 > 关联：`docs/designs/2026-08-26-package-first-uasset-parser-refactor.md`（Phase 6 删除旧路径）；Issue #621；本文与 `2026-08-31-semantic-handlers-boundary.md`（D2）、`2026-08-31-version-context-field-contract.md`（G1）配套。
-> **本轮不删任何代码**，只冻结退役契约。
+> **2026-09-05 执行记录**：本文冻结的退役契约已执行——Phase 6（#621，`ae8027e1`）删除 v1 管线，`--legacy-json` 现为 explicit unsupported 报错退出（非静默降级），`semantic/`、`renderers/`、`pipeline/`、`ir_builder.py`、`core/`、`link/` 已从 `src/` 消失。因此 §1、§2、§4 中描述双轨并存与"本轮不删代码"的段落均为 **historical 快照**，不再反映现状；§3 门禁与 §5/§6 决策记录仍为指导性内容，不得归为 historical。
+> **唯一未闭合门禁：Gate C “文档同步”项**——wiki 仍把 Semantic 1.x / v1 API 当作 current 输出描述（见 `wiki/Home.md`、`wiki/07-Dev-Guide/Public-API.md`、`wiki/06-Output/*`），与本仓 `README.md` 不一致。
 
-## 1. 双轨现状（current）
+## 1. 双轨现状（historical：基线 `bd3309a7` 快照，双轨已由 Phase 6 终结）
 
 两条独立管线并存，CLI 在入口分流：
 
@@ -79,7 +80,7 @@ v2 直接复用、删除 v1 时必须保留或收编：`serializers/{package_sum
 
 移除前核对 `docs/reference/agent-dev-reference.md` 与 wiki：Agent 工具链已全走 v2（基线 `v2/agent_tools.py` 无 v1 import，核实）；如发现下游解析 `--legacy-json` 文本的工具，先迁移。
 
-## 4. 本轮不做的事
+## 4. 本文写作时点不做的事（historical；当前执行结果见文首 2026-09-05 记录）
 
 - 不删除、不移动任何源码文件；不改 CLI 行为。
 - 不承诺 #623-#627 的 fixture 获取时间。

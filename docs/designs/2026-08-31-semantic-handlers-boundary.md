@@ -4,8 +4,9 @@ status: target
 
 > **文档状态：current + target**（§1 为基线 `bd3309a7` current 事实，引用 `file:line`；§2-§4 为边界决策与收敛路径 target）。
 > 关联：权威设计 `2026-08-26-package-first-uasset-parser-refactor.md`（Asset Handlers、Phase 4/6）；退役门禁见 `2026-08-31-v1-retirement-plan.md`（D1）；版本事实契约见 `2026-08-31-version-context-field-contract.md`（G1）。
+> **2026-09-05 执行记录**：§1 描述的双注册表与 §2.2 的 `semantic/` 包均为 **historical 快照**——`semantic/` 已随 D1 Gate B 在 Phase 6（#621）删除，§4 阶段 0–2 已完成。仍有效的是 §2.1（领域语义只进 v2 handler）、§2.3（禁止桥接）、§2.4（类名字符串匹配，不预建索引）与 §4 阶段 3（第四个消费方出现时再提升 `package_data`）；§3 对照表仅作迁移历史参考。
 
-## 1. 现状：两套互不相干的注册机制（源码追认）
+## 1. 现状：两套互不相干的注册机制（historical 快照：基线 `bd3309a7` 源码追认）
 
 ### 1.1 v1 侧：`semantic/extensions.py` 类名注册表
 
