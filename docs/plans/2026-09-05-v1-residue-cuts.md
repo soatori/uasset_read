@@ -23,7 +23,7 @@ python -m pytest -q                      # expect: 110 passed
 python -m ruff check src/uasset_read tests   # expect: All checks passed!
 python -m pyright src/uasset_read        # expect: 0 errors (psutil warnings are expected; psutil is not installed)
 python -c "import uasset_read; print(sorted(uasset_read.__all__))"   # expect: 10 public names
-python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package > temp/baseline-cli.json   # smoke artefact
+PYTHONPATH=src python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package > temp/baseline-cli.json   # smoke artefact
 ```
 
 `src/` = 116 files / 34,754 physical lines / 22,527 logic lines (`git ls-files src` = 117 including `py.typed`). Target net after Task 10: about **-5,600 to -6,300 lines**, 14 files removed, 0 new dependencies, v2 output byte-identical.
@@ -66,11 +66,40 @@ The 10 tasks are one refactor chain, but they split into four **file-disjoint** 
 | --- | --- | --- |
 | **A** | 1, 2, 3, 5, 7 | `src/uasset_read/graph/`, `src/uasset_read/link/`, `kismet/semantic.py` **and `kismet/{decompile_bridge,body_builder,translator,function_resolver}.py`** — the latter four are Task 3's `linker=`/`TYPE_CHECKING` plumbing (each does `from uasset_read.link.linker import PackageLinker`, so deleting `link/` without them leaves pyright unresolved imports; verified no other lane owns any `kismet/` path), `parsers/class_serialization_strategy.py`, `parsers/asset_registry_parser.py`, `parsers/property_parser.py`, `parsers/asset_types/niagara_node.py`, all of `serializers/`, `models/core.py`, `models/diagnostics.py`, `models/object.py`, `v2/blueprint_graph.py`, `v2/package/legacy.py`, `constants.py` (`UE4_ASSETREGISTRY_DEPENDENCYFLAGS` only), `tests/test_core.py` (the two nested defs + their `_run_cases` entries) |
 | **B** | 4 | `models/ir.py`, `models/blueprint.py`, `models/transforms.py`, `models/__init__.py`, `parsers/asset_types/anim_blueprint.py`, `anim_common.py`, `anim_montage.py`, `anim_sequence.py` |
-| **C** | 6 | `parsers/asset_types/__init__.py`, `parsers/asset_types/material_instance.py`, `parsers/class_handler.py` — no `tests/` edits at all; correctness is proven by the Step 5 handler-name golden diff |
+| **C** | 6 | `parsers/asset_types/__init__.py`, `parsers/asset_types/material_instance.py` — no `tests/` edits at all; correctness is proven by the Step 5 handler-name golden diff. **`parsers/class_handler.py` does not exist** (earlier draft error): `AssetTypeHandler` and its `inspect.signature` probe are defined in `asset_types/__init__.py` itself, so Step 4 lands there. |
 | **D** | 8, 9 | `project_logging.py`, `cli.py`, `config.py`, `__main__.py`, `exceptions.py`, `src/uasset_read/__init__.py`, `constants.py` (the 13 dead names, ≥1,000 lines from lane A's single hunk), `memory_safety.py`, `debug.py`, `package.py`, `mappings.py` |
 | tail | 10 | `v2/*`, `README.md`, `wiki/`, the 18 empty directories, test duplication convergence — runs alone, after A–D merge |
 
 Merge order **A → B → C → D**, full suite after each merge. Lane A is the largest but is internally sequential (Task 1 must precede 2 and 3, which precede 5 and 7).
+
+---
+
+## Wave 1 Outcome (executed 2026-09-05, merged at `43c3ce97`)
+
+Lanes A → B → C → D merged with no conflicts except a clean auto-merge in `constants.py` (lane A's 521-constant hunk and lane D's 11-name hunk are far apart). Gate state after **each** merge: `110 passed`, `ruff` All checks passed, `pyright` **0 errors / 0 warnings** (the 3 psutil warnings disappeared with the memory monitor), `--depth package` output byte-identical to the pre-wave baseline.
+
+- `src/`: 116 → **100** `.py` files, 34,754 → **28,022** physical lines (**-6,732**, better than the -5,600..-6,300 estimate).
+- 16 files deleted: `graph/`×6, `link/`×3, `kismet/semantic.py`, `parsers/class_serialization_strategy.py`, `parsers/asset_registry_parser.py`, `models/{ir,blueprint,transforms}.py`, `parsers/asset_types/material_instance.py`.
+- `parse_package_document` / CLI / JSON output unchanged; `uasset_read.__all__` 10 → **5**.
+- Independent parity re-check for Task 6: handler count identical at base and merged (70 handlers / 70 names), `find_handler()` resolution preserved.
+
+**Accepted deviations (the plan was wrong in 4 places, lanes were right):**
+
+1. **Task 5 Step 3 not executed.** `read_ftext_with_history` (77L, 2 callers), `_read_pin_fstring_field` (3 callers) and `_read_pin_ftext_field` (2 callers) are *not* single-use wrappers; inlining would have added ~150 lines and forked three safety mechanisms across call sites. Step 2's 6 genuinely zero-caller functions (-137L) landed.
+2. **Task 9 Step 3 (`mappings._BytesReader` → `struct.unpack_from`) and the `_sanitize_error_message` → `os.path.basename` swap not executed.** Both are behaviour-preserving *rewrites*, not deletions: `_BytesReader` is a bounds-checked cursor threaded through 20 call sites in 5 parsers, and the sanitizer strips absolute Windows/UNC/POSIX paths embedded in error prose at 3 stderr sites with zero test coverage — `basename` cannot do that, so the swap risks path leakage. They belong to the A16/A17 rewrite plan.
+3. **Task 3 needed 3 test edits the plan predicted would not exist**, because `tests/test_core.py:1886/1907/1912` passed the dead `linker` argument **positionally as a bare `None`**. Generalizable: grepping tests for a parameter *name* under-detects arity coupling — for any future "no test impact" claim, also check positional `None`/literal arguments at call sites.
+4. **Task 6 uses one interleaved 55-row table, not the plan's two-block append shape**, because `ClassHandlerRegistry` is order-sensitive (`find_handler()` returns the first match) and reordering rows would silently change dispatch priority. Keep the interleaved shape in any follow-up.
+
+**New finding, raises Task 10's empty-directory step from cosmetic to correctness:** the 18 empty directories under `src/uasset_read/` are still *importable as implicit namespace packages* — after merging lane A, `importlib.import_module("uasset_read.graph")` succeeded even though every `graph/*.py` was deleted. `git rm` removes tracked files, not the physical directory, so a deleted subsystem keeps resolving as an empty namespace package until the directory itself goes. Task 10 must remove them and then re-run the import probe above for all 16 deleted module paths.
+
+**Open decisions created by wave 1 (not deletions — they need a call):**
+
+| Item | State | Decision needed |
+|---|---|---|
+| `kismet/function_resolver.py` (188L) | now constructed nowhere: stripping `linker` from `KismetTranslator` left `_func_resolver` permanently `None`; its 5 guards are inert, kept type-clean to avoid cascading into `line_cpp` | fold into the whole-`kismet/` retirement decision, or delete with a `line_cpp` behaviour test first |
+| `models/memory_safety.ResourceLimits` | orphaned by lane D's own commit (its sole consumer `MemoryPolicy` is gone) | keep as bounded-read vocabulary, or delete in Task 10 |
+| 5 inert CLI flags `--log-level`, `--log-cleanup`, `--log-max-bytes`, `--log-backup-count`, `--log-format` | parsed into `LogConfig`, read by nobody; already inert before this wave | retire into the `cli.py:255-261` retired-flag error, or re-wire them to a real CLI logging path |
+| `wiki/07-Dev-Guide/Public-API.md` | lists 5 now-deleted public names; `wiki/` is a gitignored nested repo | run `openwiki code --update` after Task 10 |
 
 ---
 
@@ -144,7 +173,7 @@ git rm -r src/uasset_read/graph
 python -m pytest -q
 python -m ruff check src/uasset_read tests
 python -m pyright src/uasset_read
-python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package > temp/after-task1-cli.json
+PYTHONPATH=src python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package > temp/after-task1-cli.json
 python - <<'PY'
 import json
 a=json.load(open('temp/baseline-cli.json',encoding='utf-8'))
@@ -270,7 +299,7 @@ Expected: `CLEAN` apart from prose comments. Then:
 
 ```bash
 python -m pytest -q && python -m ruff check src/uasset_read tests && python -m pyright src/uasset_read
-python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package > temp/after-task3-cli.json
+PYTHONPATH=src python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package > temp/after-task3-cli.json
 python -c "import json;a=json.load(open('temp/baseline-cli.json',encoding='utf-8'));b=json.load(open('temp/after-task3-cli.json',encoding='utf-8'));assert a==b;print('identical')"
 ```
 
@@ -333,7 +362,7 @@ git rm src/uasset_read/models/ir.py src/uasset_read/models/blueprint.py src/uass
 python -m pytest -q && python -m ruff check src/uasset_read tests && python -m pyright src/uasset_read
 ```
 
-Expected: `110 passed`, ruff clean, pyright 0 errors. Anim semantics still come through: `python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth full > temp/after-task4.json && python -c "import json;d=json.load(open('temp/after-task4.json',encoding='utf-8'));print(sum(1 for o in d['objects'] if o.get('role','').startswith('Anim')) or 'see diff')"`, then diff against `temp/baseline-cli.json` at `--depth package` (must be identical; the `full` file is for eyeballing anim data still present).
+Expected: `110 passed`, ruff clean, pyright 0 errors. Anim semantics still come through: `PYTHONPATH=src python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth decode > temp/after-task4.json && python -c "import json;d=json.load(open('temp/after-task4.json',encoding='utf-8'));print(sum(1 for o in d['objects'] if o.get('role','').startswith('Anim')) or 'see diff')"`, then diff against `temp/baseline-cli.json` at `--depth package` (must be identical; the `decode` file is for eyeballing anim data still present).
 
 - [ ] **Step 5: Commit**
 
@@ -380,7 +409,7 @@ Delete the whole `def` block including its docstring. Do not replace them with `
 
 ```bash
 python -m pytest -q && python -m ruff check src/uasset_read tests && python -m pyright src/uasset_read
-python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package > temp/after-task5-cli.json
+PYTHONPATH=src python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package > temp/after-task5-cli.json
 python -c "import json;a=json.load(open('temp/baseline-cli.json',encoding='utf-8'));b=json.load(open('temp/after-task5-cli.json',encoding='utf-8'));assert a==b;print('identical')"
 ```
 
@@ -425,6 +454,8 @@ PY
 ```
 
 Expected: one line per registered handler (56+ names, including the 43 `*Handler` stubs). Keep `temp/handlers-before.txt` — Step 5 compares against it. `ClassHandlerRegistry` stores handlers in `self._handlers` (`class_registry.py:80`), confirmed by introspection: `vars(get_class_registry())` → `['_handlers', '_cache']`.
+
+**Do not call `register_asset_type_handlers()` and then `get_class_registry()` in the same snippet** (lane C finding): `get_class_registry()` bootstraps registration itself, so the explicit call double-registers and yields 140 handler objects / 70 names. Use `get_class_registry()` alone; the true production count is **70 handlers / 70 unique names** (verified identical at `c8b72909` and after the merge).
 
 - [ ] **Step 2: Replace the stub rows with data**
 
@@ -661,17 +692,19 @@ Because `configure_project_logging` is gone, also delete `config.to_configure_kw
 - [ ] **Step 4: Verify behaviour is unchanged for the two CLI paths**
 
 ```bash
-python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package > temp/after-task8-cli.json
+PYTHONPATH=src python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package > temp/after-task8-cli.json
 python -c "import json;a=json.load(open('temp/baseline-cli.json',encoding='utf-8'));b=json.load(open('temp/after-task8-cli.json',encoding='utf-8'));assert a==b;print('identical')"
 TMP=$(mktemp -d) && for i in 1 2 3; do : > "$TMP/uasset_read_2026090$i_run1.log"; done
 ls "$TMP" | sort > temp/clean-before.txt
-python -m uasset_read --clean-logs --log-dir "$TMP" --log-keep-latest 1 >/dev/null 2>&1; ls "$TMP" | sort > temp/clean-after.txt
+PYTHONPATH=src python -m uasset_read --clean-logs --log-dir "$TMP" --log-keep-latest 1 >/dev/null 2>&1; ls "$TMP" | sort > temp/clean-after.txt
 diff temp/clean-before.txt temp/clean-after.txt >/dev/null && echo "CLEAN-LOGS NO-OP (suspicious: cleanup did not run)" || echo "cleanup ran; surviving:"; ls "$TMP"
 python -m pytest -q && python -m ruff check src/uasset_read tests && python -m pyright src/uasset_read
 python -c "import uasset_read; print(sorted(uasset_read.__all__))"
 ```
 
 Expected: `identical`; `110 passed`; ruff clean; pyright 0 errors; `__all__` = the **6** remaining public names (10 minus `ProjectLogSession`, `configure_project_logging`, `project_logging_session`, `shutdown_project_logging`). Also confirm `logging.root.handlers` is untouched by an import — `test_cli_python_agent_share_default_projection_and_logging_inert` asserts this, so if it passes you are fine.
+
+**Measured after the merge: `__all__` is actually 5, not 6** — `ParseConfig` disappears in Task 9 (same lane D), leaving `FArchive`, `LogConfig`, `ParseError`, `__version__`, `parse_package_document`. Both tasks are in lane D, so the pair's end state is what matters; the 10 → 6 shrink stated here is the Task 8 intermediate only.
 
 Prove the `_configured_log_path` "active family" guard deletion is a no-op, not just plausible: that global is always `None` on the shipping path because nothing configures logging, so the skip branch can never fire; the `--clean-logs` before/after run above is the empirical check that the surviving-file set is unchanged by your edit (run it once before the edit, once after).
 
@@ -747,9 +780,9 @@ Its reads are `u8/u16/u32/i32/read(n)`. At each call site use `struct.unpack_fro
 
 ```bash
 python -m pytest -q && python -m ruff check src/uasset_read tests && python -m pyright src/uasset_read
-python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package > temp/after-task9-cli.json
+PYTHONPATH=src python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package > temp/after-task9-cli.json
 python -c "import json;a=json.load(open('temp/baseline-cli.json',encoding='utf-8'));b=json.load(open('temp/after-task9-cli.json',encoding='utf-8'));assert a==b;print('identical')"
-python -m uasset_read tests/samples/ALS_AnimBP.uasset --depth package > /dev/null && echo big-sample-ok
+PYTHONPATH=src python -m uasset_read tests/samples/ALS_AnimBP.uasset --depth package > /dev/null && echo big-sample-ok
 python -c "import uasset_read; print(len(uasset_read.__all__))"
 ```
 
@@ -835,7 +868,7 @@ python -m pytest -q
 python -m ruff check src/uasset_read tests
 python -m pyright src/uasset_read
 python -m pytest tests/test_core.py::test_test_suite_structure_gate -q
-python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package > temp/final-cli.json
+PYTHONPATH=src python -m uasset_read tests/samples/ABP_RifleAnimLayers.uasset --depth package > temp/final-cli.json
 python -c "import json;a=json.load(open('temp/baseline-cli.json',encoding='utf-8'));b=json.load(open('temp/final-cli.json',encoding='utf-8'));assert a==b;print('v2 output identical end-to-end')"
 python -m pip install build && python -m build && cd "$(mktemp -d)" && pip install e:/Develop/uasset_read/dist/*.whl && python -c "import uasset_read;print('import outside checkout ok')"
 git ls-files src | wc -l
