@@ -320,15 +320,8 @@ def project_document(
                     raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({_encoded()} bytes)")
                 return result
             if len(result["objects"]) == 0:
-                # Nothing fit. A budget that cannot even hold the bare
-                # envelope (no objects, no truncation metadata) is a hard
-                # error; otherwise return an explicit retry contract: no
-                # cursor, page-relative dropped count, BUDGET_EXHAUSTED diag.
-                skeleton = {k: v for k, v in result.items() if k not in ("truncation", "next_offset")}
-                skeleton["diagnostics"] = [d for d in skeleton["diagnostics"] if d.get("code") != "TRUNCATED"]
-                minimal = len(json.dumps(skeleton, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-                if minimal > max_bytes:
-                    raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({minimal} bytes)")
+                # Nothing fit: return the complete retry contract only if
+                # its diagnostics and truncation metadata fit the budget.
                 result.pop("next_offset", None)
                 result["truncation"] = {
                     "reason": "max_bytes",
@@ -343,6 +336,14 @@ def project_document(
                     "stage": "projection",
                     "recoverable": True,
                 })
+                # The byte count includes its own digits, so stabilize it
+                # after all metadata has been added before checking the cap.
+                actual = _encoded()
+                while result["truncation"]["actual"] != actual:
+                    result["truncation"]["actual"] = actual
+                    actual = _encoded()
+                if actual > max_bytes:
+                    raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({actual} bytes)")
                 return result
             objects_dropped = page_total - len(result["objects"])
             actual = _encoded()

@@ -9,7 +9,7 @@ CUE4Parse 对 150+ 游戏有专门的序列化变体处理，uasset_read 目前�
 ### PAK 层变体（~20 个游戏，占 13%）
 
 | 变体类型 | 游戏示例 | 影响 |
-|----------|----------|------|
+| ---------- | ---------- | ------ |
 | 自定义魔数 | GameForPeace、CrystalOfAtlan、KartRiderDrift | PAK 文件头解析 |
 | 自定义字段顺序 | ArenaBreakoutInfinite | PAK 版本检测 |
 | XOR/位运算混淆 | 部分中国游戏 | 数据解密 |
@@ -17,7 +17,7 @@ CUE4Parse 对 150+ 游戏有专门的序列化变体处理，uasset_read 目前�
 ### 资产序列化层变体（~30 个游戏，占 20%）
 
 | 变体类型 | 游戏示例 | 影响 |
-|----------|----------|------|
+| ---------- | ---------- | ------ |
 | 自定义字段跳过/插入 | WorldofJadeDynasty、StateOfDecay2、DaysGone | AActor/UScriptSet/UEnum 序列化 |
 | 自定义结构体类型 | GTATheTrilogyDefinitiveEdition、MarvelRivals、Borderlands4 | 参数类型/蓝图指令 |
 | 自定义序列化逻辑 | WutheringWaves、DeltaForce、PlayerUnknownsBattlegrounds | 蓝图指令/FNameEntry |

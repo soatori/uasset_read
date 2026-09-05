@@ -2179,11 +2179,16 @@ def test_projection_byte_budget_and_fields_filter():
     def all_objects_dropped_yields_no_cursor():
         empty = project_document(doc, limit=0)
         envelope = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-        page = project_document(doc, limit=100, max_bytes=envelope + 1)
+        budget = envelope + 500
+        page = project_document(doc, limit=100, max_bytes=budget)
         assert page["objects"] == []
         assert "next_offset" not in page, "all-dropped page must not hand out a cursor"
         assert page["truncation"]["objects_dropped"] == 10
         assert any(d["code"] == "BUDGET_EXHAUSTED" for d in page["diagnostics"])
+        actual = len(json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        assert page["truncation"]["actual"] == actual <= budget
+        with pytest.raises(ValueError, match="too small for minimal envelope"):
+            project_document(doc, limit=100, max_bytes=envelope + 1)
 
     def every_object_returned_exactly_once_under_budget():
         empty = project_document(doc, limit=0)
@@ -2202,7 +2207,7 @@ def test_projection_byte_budget_and_fields_filter():
     def dropped_count_is_page_relative():
         empty = project_document(doc, limit=0)
         envelope = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-        page = project_document(doc, offset=5, limit=100, max_bytes=envelope + 1)
+        page = project_document(doc, offset=5, limit=100, max_bytes=envelope + 500)
         assert page["truncation"]["objects_dropped"] == 5
 
     def limit_and_budget_compose_page_relative():
