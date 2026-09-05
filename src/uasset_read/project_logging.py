@@ -1,76 +1,28 @@
+"""Log-file cleanup and the `log_context` scope helper.
+
+Library code does not configure logging. Nothing in `src/` calls
+`logging.config.dictConfig`, `fileConfig` or `basicConfig`; the package-document
+(v2) path returns structured diagnostics instead. The process-global logging
+configuration machinery (`configure_project_logging`, `shutdown_project_logging`,
+`ProjectLogSession`, `project_logging_session`, `scoped_project_logging`,
+`configure_worker_stream_logging`, `JSONFormatter`, `_LogContextFilter`,
+`log_event`) was deleted as unreachable: its only callers disappeared with the
+v1 pipeline, and no live import site remained.
+
+What survives has exactly two consumers:
+
+* `cleanup_project_logs` — the CLI's `--clean-logs` path (`cli.py`).
+* `log_context` — scopes `asset`/`stage` onto records for callers that opt in.
+"""
+
 from __future__ import annotations
 
-import logging
-import os
-import sys
-import threading
-import inspect
-import time as _time
-from functools import wraps
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field
-from datetime import datetime
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any
-from uuid import uuid4
-import json as _json
 
-_LOGGER_NAME = "uasset_read"
-_HANDLER_MARKER = "_uasset_read_project_log_handler"
-_WORKER_HANDLER_MARKER = "_uasset_read_worker_log_handler"
-_state_lock = threading.Lock()
-_scope_lock = threading.Lock()
-_configured_log_path: Path | None = None
-_configured_run_id: str | None = None
-_configured_signature: tuple | None = None
-_disabled_by_request = False
-_original_level: int | None = None
-_original_propagate: bool | None = None
 _log_asset: ContextVar[str] = ContextVar("uasset_read_log_asset", default="-")
 _log_stage: ContextVar[str] = ContextVar("uasset_read_log_stage", default="-")
-
-
-class _LogContextFilter(logging.Filter):
-    def __init__(self, run_id: str) -> None:
-        super().__init__()
-        self.run_id = run_id
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        record.run_id = self.run_id
-        record.process_id = record.process
-        record.asset = _log_asset.get()
-        record.stage = _log_stage.get()
-        return True
-
-
-class JSONFormatter(logging.Formatter):
-    """Format log records as single-line JSON objects.
-
-    Output format::
-
-        {"ts":"2026-08-21T10:00:00","level":"INFO","run":"abc123",
-         "pid":1234,"asset":"BP_Player","stage":"link",
-         "logger":"uasset_read","msg":"event=parse_start"}
-    """
-
-    def format(self, record: logging.LogRecord) -> str:
-        log_entry = {
-            "ts": self.formatTime(record, self.datefmt),
-            "level": record.levelname,
-            "run": getattr(record, "run_id", "-"),
-            "pid": getattr(record, "process_id", record.process),
-            "asset": getattr(record, "asset", "-"),
-            "stage": getattr(record, "stage", "-"),
-            "logger": record.name,
-            "msg": record.getMessage(),
-        }
-        if record.exc_info and record.exc_info[0] is not None:
-            log_entry["exc"] = self.formatException(record.exc_info)
-        return _json.dumps(log_entry, ensure_ascii=False, default=str)
-
-
 
 
 @contextmanager
@@ -85,378 +37,8 @@ def log_context(*, asset: str | None = None, stage: str | None = None):
         _log_asset.reset(asset_token)
 
 
-def log_event(
-    logger: logging.Logger,
-    level: int,
-    event: str,
-    **fields: Any,
-) -> None:
-    """Emit a structured log event with key-value fields.
-
-    Fields are appended to the message as ``key=value`` pairs, sorted
-    alphabetically.  The ``event`` keyword is always first.
-
-    Example::
-
-        log_event(logger, logging.INFO, "parse_start",
-                  asset="BP_Player", stage="link")
-
-    Emits::
-
-        2026-08-21 10:00:00 [INFO] [run=abc123 pid=1234 asset=BP_Player stage=link]
-        uasset_read: event=parse_start
-    """
-    if not fields:
-        logger.log(level, "event=%s", event)
-        return
-    sorted_fields = sorted(fields.items())
-    field_str = " ".join(f"{k}={v}" for k, v in sorted_fields)
-    logger.log(level, "event=%s %s", event, field_str)
-
-
 def _default_project_root() -> Path:
     return Path(__file__).resolve().parents[2]
-
-
-def new_log_run_id() -> str:
-    return uuid4().hex[:12]
-
-
-def _build_log_path(log_dir: Path, run_id: str) -> Path:
-    log_dir.mkdir(parents=True, exist_ok=True)
-    safe_run_id = "".join(char if char.isalnum() or char in "-_" else "_" for char in run_id)
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-    return log_dir / f"uasset_read-{timestamp}-pid{os.getpid()}-{safe_run_id}.log"
-
-
-def _coerce_level(level: str | int | None) -> int:
-    if level is None:
-        return logging.DEBUG
-    if isinstance(level, int):
-        return level
-    normalized = level.upper()
-    if normalized == "OFF":
-        return logging.CRITICAL + 1
-    value = logging.getLevelName(normalized)
-    if isinstance(value, int):
-        return value
-    raise ValueError(f"Unknown log level: {level}")
-
-
-def _remove_project_handlers(package_logger: logging.Logger) -> None:
-    for handler in list(package_logger.handlers):
-        if getattr(handler, _HANDLER_MARKER, False):
-            package_logger.removeHandler(handler)
-            handler.close()
-
-
-def _shutdown_locked(package_logger: logging.Logger) -> None:
-    global _configured_log_path
-    global _configured_run_id
-    global _configured_signature
-    global _original_level
-    global _original_propagate
-
-    for handler in list(package_logger.handlers):
-        if not getattr(handler, _HANDLER_MARKER, False):
-            continue
-        handler.flush()
-    _remove_project_handlers(package_logger)
-    if _original_level is not None:
-        package_logger.setLevel(_original_level)
-    if _original_propagate is not None:
-        package_logger.propagate = _original_propagate
-    _configured_log_path = None
-    _configured_run_id = None
-    _configured_signature = None
-    _original_level = None
-    _original_propagate = None
-
-
-def shutdown_project_logging() -> None:
-    """Flush and remove handlers owned by the current project log session."""
-    with _state_lock:
-        _shutdown_locked(logging.getLogger(_LOGGER_NAME))
-
-
-@dataclass
-class ProjectLogSession:
-    """A scoped owner for one project log file."""
-
-    log_path: Path
-    run_id: str
-    cleanup_on_close: bool = False
-    keep_latest: int | None = None
-    max_total_bytes: int | None = None
-    _started_at: float = field(default_factory=_time.monotonic)
-    _owns_scope_lock: bool = False
-    _closed: bool = False
-
-    def __enter__(self) -> "ProjectLogSession":
-        return self
-
-    def __exit__(self, exc_type, exc, traceback) -> None:
-        self.close()
-
-    def close(self) -> None:
-        if not self._closed:
-            try:
-                duration_ms = (_time.monotonic() - self._started_at) * 1000
-                logging.getLogger(_LOGGER_NAME).info(
-                    "session_end run_id=%s duration_ms=%.1f",
-                    self.run_id,
-                    duration_ms,
-                )
-                shutdown_project_logging()
-                self._closed = True
-                if self.cleanup_on_close:
-                    cleanup_project_logs(
-                        log_dir=self.log_path.parent,
-                        keep_latest=self.keep_latest,
-                        max_total_bytes=self.max_total_bytes,
-                        dry_run=False,
-                    )
-            finally:
-                if self._owns_scope_lock:
-                    self._owns_scope_lock = False
-                    _scope_lock.release()
-
-
-class _DisabledLogSession:
-    """无操作日志会话 — 日志禁用时的占位实现。"""
-
-    _owns_scope_lock: bool = False
-    _closed: bool = False
-
-    def __enter__(self) -> "_DisabledLogSession":
-        return self
-
-    def __exit__(self, exc_type, exc, traceback) -> None:
-        self.close()
-
-    def close(self) -> None:
-        if not self._closed:
-            self._closed = True
-            if self._owns_scope_lock:
-                self._owns_scope_lock = False
-                _scope_lock.release()
-
-
-def project_logging_session(**kwargs) -> ProjectLogSession | _DisabledLogSession:
-    """Configure and return a scoped project logging session."""
-    if not _scope_lock.acquire(blocking=False):
-        raise RuntimeError("A project logging session is already active")
-    cleanup_on_close = bool(kwargs.pop("cleanup_on_close", False))
-    keep_latest = kwargs.get("keep_latest")
-    max_total_bytes = kwargs.get("max_total_bytes")
-    try:
-        log_path = configure_project_logging(**kwargs)
-    except BaseException:
-        _scope_lock.release()
-        raise
-    if log_path is None or _configured_run_id is None:
-        session = _DisabledLogSession()
-        session._owns_scope_lock = True
-        return session
-    logging.getLogger(_LOGGER_NAME).info("session_start run_id=%s", _configured_run_id)
-    return ProjectLogSession(
-        log_path=log_path,
-        run_id=_configured_run_id,
-        cleanup_on_close=cleanup_on_close,
-        keep_latest=keep_latest,
-        max_total_bytes=max_total_bytes,
-        _owns_scope_lock=True,
-    )
-
-
-def current_log_run_id() -> str | None:
-    return _configured_run_id
-
-
-def scoped_project_logging(func):
-    """Scope an explicit ``log_config`` argument to one public API call."""
-    signature = inspect.signature(func)
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        bound = signature.bind_partial(*args, **kwargs)
-        config = bound.arguments.get("log_config")
-        if config is None:
-            return func(*args, **kwargs)
-        bound.arguments["log_config"] = None
-        path_value = bound.arguments.get("file_path") or bound.arguments.get("path") or bound.arguments.get("input_dir")
-        asset = Path(path_value).name if path_value else "-"
-        with project_logging_session(**config.to_configure_kwargs()):
-            stage = "batch" if func.__name__ == "parse_batch" else "parse"
-            with log_context(asset=asset, stage=stage):
-                started_at = _time.monotonic()
-                status = "success"
-                logging.getLogger(_LOGGER_NAME).info("asset_start")
-                try:
-                    return func(*bound.args, **bound.kwargs)
-                except BaseException:
-                    status = "error"
-                    raise
-                finally:
-                    duration_ms = (_time.monotonic() - started_at) * 1000
-                    logging.getLogger(_LOGGER_NAME).info(
-                        "asset_end status=%s duration_ms=%.1f",
-                        status,
-                        duration_ms,
-                    )
-
-    return wrapper
-
-
-def configure_worker_stream_logging(
-    *,
-    stream=None,
-    level: str | int | None = "DEBUG",
-    run_id: str,
-    asset: str,
-) -> logging.Handler:
-    """Send worker diagnostics to the parent-owned stderr pipe."""
-    package_logger = logging.getLogger(_LOGGER_NAME)
-    for existing in list(package_logger.handlers):
-        if getattr(existing, _WORKER_HANDLER_MARKER, False):
-            package_logger.removeHandler(existing)
-            existing.close()
-    handler = logging.StreamHandler(stream or sys.stderr)
-    setattr(handler, _WORKER_HANDLER_MARKER, True)
-    handler.setLevel(_coerce_level(level))
-    handler.setFormatter(
-        logging.Formatter(
-            fmt=(
-                f"%(asctime)s [%(levelname)s] [run={run_id} pid={os.getpid()} "
-                f"asset={asset} stage=worker] %(name)s: %(message)s"
-            ),
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-    )
-    package_logger.setLevel(logging.DEBUG)
-    package_logger.propagate = False
-    package_logger.addHandler(handler)
-    return handler
-
-
-def configure_project_logging(
-    project_root: str | Path | None = None,
-    *,
-    enabled: bool = True,
-    level: str | int | None = "DEBUG",
-    log_dir: str | Path | None = None,
-    run_id: str | None = None,
-    max_bytes: int = 10_000_000,
-    backup_count: int = 5,
-    keep_latest: int | None = None,
-    max_total_bytes: int | None = None,
-    cleanup: bool = False,
-    cleanup_on_close: bool = False,
-    format: str = "text",
-) -> Path | None:
-    """Configure a per-process file logger under <project>/log/."""
-    global _configured_log_path
-    global _configured_run_id
-    global _configured_signature
-    global _disabled_by_request
-    global _original_level
-    global _original_propagate
-
-    with _state_lock:
-        package_logger = logging.getLogger(_LOGGER_NAME)
-        if not enabled or (isinstance(level, str) and level.lower() == "off"):
-            _shutdown_locked(package_logger)
-            _disabled_by_request = True
-            return None
-
-        default_request = (
-            project_root is None
-            and level == "DEBUG"
-            and log_dir is None
-            and run_id is None
-            and max_bytes == 10_000_000
-            and backup_count == 5
-            and keep_latest is None
-            and max_total_bytes is None
-            and cleanup is False
-            and cleanup_on_close is False
-            and format == "text"
-        )
-        if _disabled_by_request and default_request:
-            return None
-        _disabled_by_request = False
-
-        root = Path(project_root) if project_root is not None else _default_project_root()
-        root = root.resolve()
-        resolved_log_dir = Path(log_dir).resolve() if log_dir is not None else root / "log"
-        log_level = _coerce_level(level)
-        signature = (
-            root,
-            resolved_log_dir,
-            log_level,
-            run_id,
-            max_bytes,
-            backup_count,
-            keep_latest,
-            max_total_bytes,
-            cleanup,
-            cleanup_on_close,
-            format,
-        )
-        if _configured_log_path is not None and signature == _configured_signature:
-            return _configured_log_path
-        if _configured_log_path is not None:
-            _remove_project_handlers(package_logger)
-
-        if cleanup:
-            cleanup_project_logs(
-                project_root=root,
-                log_dir=resolved_log_dir,
-                keep_latest=keep_latest,
-                max_total_bytes=max_total_bytes,
-                dry_run=False,
-            )
-        active_run_id = run_id or new_log_run_id()
-        log_path = _build_log_path(resolved_log_dir, active_run_id)
-
-        if _original_level is None:
-            _original_level = package_logger.level
-            _original_propagate = package_logger.propagate
-        package_logger.setLevel(min(logging.DEBUG, log_level))
-        package_logger.propagate = True
-
-        handler = RotatingFileHandler(
-            log_path,
-            maxBytes=max_bytes,
-            backupCount=backup_count,
-            encoding="utf-8",
-        )
-        setattr(handler, _HANDLER_MARKER, True)
-        handler.setLevel(log_level)
-        handler.addFilter(_LogContextFilter(active_run_id))
-        if format == "json":
-            handler.setFormatter(JSONFormatter(datefmt="%Y-%m-%dT%H:%M:%S"))
-        else:
-            handler.setFormatter(
-                logging.Formatter(
-                    fmt=(
-                        "%(asctime)s [%(levelname)s] "
-                        "[run=%(run_id)s pid=%(process_id)s asset=%(asset)s stage=%(stage)s] "
-                        "%(name)s: %(message)s"
-                    ),
-                    datefmt="%Y-%m-%d %H:%M:%S",
-                )
-            )
-
-        package_logger.addHandler(handler)
-
-        _configured_log_path = log_path
-        _configured_run_id = active_run_id
-        _configured_signature = signature
-        package_logger.info("Project logging initialized: %s", log_path)
-        for existing_handler in package_logger.handlers:
-            existing_handler.flush()
-        return log_path
 
 
 def cleanup_project_logs(
@@ -496,16 +78,13 @@ def cleanup_project_logs(
         key=lambda base: max(path.stat().st_mtime for path in families[base]),
         reverse=True,
     )
-    active_family = family_base(_configured_log_path) if _configured_log_path else None
     selected_families: set[Path] = set()
 
     if keep_latest is not None:
         if keep_latest < 0:
             raise ValueError("keep_latest must be >= 0")
         effective_keep_latest = max(1, keep_latest)
-        selected_families.update(
-            family for family in ordered_families[effective_keep_latest:] if family != active_family
-        )
+        selected_families.update(family for family in ordered_families[effective_keep_latest:])
 
     if max_total_bytes is not None:
         if max_total_bytes < 0:
@@ -516,7 +95,7 @@ def cleanup_project_logs(
         for family in reversed(ordered_families):
             if remaining_total <= max_total_bytes:
                 break
-            if family in selected_families or family in {active_family, newest_family}:
+            if family in selected_families or family == newest_family:
                 continue
             selected_families.add(family)
             remaining_total -= sum(path.stat().st_size for path in families[family])

@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional, Sequence
 
 if TYPE_CHECKING:
@@ -59,15 +59,17 @@ class ParseConfig:
 class LogConfig:
     """日志配置。
 
-    包含文件日志相关的所有参数，用于 parse_single / parse_batch / diff_single
-    等 core API。
+    由 CLI（`cli._log_config_from_args`）从 `--log-*` 参数构造。日志文件
+    本身的写出配置已随 v1 管线一并移除：库代码不再配置进程级日志，
+    只有 `--clean-logs` 路径会读取 `keep_latest` / `max_total_bytes` 并
+    把它们交给 `cleanup_project_logs()`。其余字段目前仅作为参数载体保留，
+    对应的 CLI 旗标是否退役由单独的产品决定。
 
     典型用法::
 
         from uasset_read.config import LogConfig
 
         log = LogConfig(level="info", dir="./my_logs")
-        output = parse_single("file.uasset", log_config=log)
     """
 
     level: Optional[str] = None
@@ -92,24 +94,3 @@ class LogConfig:
     """保留的备份日志文件数量，默认 5。"""
     format: str = "text"
     """日志输出格式：'text'（默认）或 'json'。"""
-
-    def to_configure_kwargs(self) -> dict:
-        """转换为 configure_project_logging() 的关键字参数。"""
-        effective_enabled = self.enabled and self.level != "off"
-        d = asdict(self)
-        d.pop("enabled", None)
-        d.pop("auto_cleanup", None)
-        # Rename fields that differ
-        if d.get("dir"):
-            d["log_dir"] = d.pop("dir")
-        else:
-            d.pop("dir", None)
-        d["enabled"] = effective_enabled
-        if self.cleanup:
-            d["cleanup"] = True
-        if self.auto_cleanup:
-            d["cleanup_on_close"] = True
-        if self.format == "text":
-            d.pop("format", None)
-        # Remove None values to avoid overwriting caller's explicit None
-        return {k: v for k, v in d.items() if v is not None}
