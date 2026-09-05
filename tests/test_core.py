@@ -2162,13 +2162,22 @@ def test_projection_byte_budget_and_fields_filter():
 
     doc = _document(depth="asset")
 
+    def _size(page: dict) -> int:
+        return len(json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+    def partial_page_budget() -> int:
+        """Halfway between a 1-object and a 2-object page.
+
+        Derived from the sample instead of a hand-tuned slack constant: a fixed
+        extra went stale the moment dependency package paths got longer (#645).
+        """
+        one = _size(project_document(doc, limit=1))
+        two = _size(project_document(doc, limit=2))
+        assert one < two, "the second object must cost bytes for this budget to mean anything"
+        return one + (two - one) // 2
+
     def test_max_bytes_is_enforced_and_continuable():
-        empty = project_document(doc, limit=0)
-        envelope_size = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-        # must fit at least one object, else the page all-drops (24000 covers
-        # export:0's dense relations, target_path strings, and its bounded
-        # properties_summary)
-        budget = envelope_size + 24000
+        budget = partial_page_budget()
         page = project_document(doc, limit=100, max_bytes=budget)
         encoded = json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         assert len(encoded) <= budget
@@ -2191,12 +2200,11 @@ def test_projection_byte_budget_and_fields_filter():
             project_document(doc, limit=100, max_bytes=envelope + 1)
 
     def every_object_returned_exactly_once_under_budget():
-        empty = project_document(doc, limit=0)
-        envelope_size = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        budget = partial_page_budget()
         seen = []
         offset = 0
         while True:
-            page = project_document(doc, offset=offset, limit=100, max_bytes=envelope_size + 24000)
+            page = project_document(doc, offset=offset, limit=100, max_bytes=budget)
             seen += [o["id"] for o in page["objects"]]
             if "next_offset" not in page:
                 break
@@ -2228,9 +2236,7 @@ def test_projection_byte_budget_and_fields_filter():
 
     def test_truncated_page_rescopes_relations_and_dependencies():
         """Popping objects for max_bytes must re-scope relations and dependencies."""
-        empty = project_document(doc, limit=0)
-        envelope_size = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-        budget = envelope_size + 24000  # fits 1-2 of 10 objects: a genuine partial page, not an all-drop
+        budget = partial_page_budget()  # a genuine partial page, not an all-drop
         page = project_document(doc, limit=100, max_bytes=budget)
         page_ids = {o["id"] for o in page["objects"]}
         assert len(page_ids) > 0, "page must keep at least one object for the re-scope checks to mean anything"
@@ -2656,6 +2662,62 @@ def test_agent_tool_queries_distinguish_budget_and_reject_negative_paging():
     assert inspect_package(str(PACKAGE_SAMPLE), limit=0)["objects"] == []
 
 
+def test_import_dependency_package_is_the_outer_owner_not_the_class_package():
+    """#645: Dependency.package_name is the package an import belongs to.
+
+    FObjectImport.ClassPackage names the package holding the object's *class*.
+    The owning package is PackageName when set, otherwise it is found by
+    walking the outer chain (ObjectResource.h:457-460; the terminal entry of a
+    null outer is the UPackage, so its ObjectName is the package path,
+    LinkerLoad.cpp:2402).
+    """
+    from uasset_read.serializers.object_resources import ObjectImport, PackageIndex
+    from uasset_read.v2.agent_tools import list_dependencies
+    from uasset_read.v2.package.legacy import resolve_import_dependencies
+    from uasset_read.v2.projection import project_document
+
+    CUE = "Footstep_Cue"
+    OWNER = "/ALSV4_CPP/AdvancedLocomotionV4/Audio/Footsteps/Footstep_Cue"
+    MAT = "/ALSV4_CPP/AdvancedLocomotionV4/CharacterAssets/MannequinSkeleton/Materials/M_DecalFootprint"
+
+    doc = _document(str(DATA_SAMPLE))
+    cue = next(d for d in doc.dependencies if d.object_name == CUE and d.class_name == "SoundCue")
+    assert cue.package_name == OWNER, "ClassPackage (/Script/Engine) must not stand in for the owner"
+    mat = next(d for d in doc.dependencies if d.object_name == "M_DecalFootprint" and d.class_name == "Material")
+    assert mat.package_name == MAT and mat.class_name == "Material"
+
+    # Same fact at every public boundary.
+    agent = next(d for d in list_dependencies(str(DATA_SAMPLE))["dependencies"] if d["object_name"] == CUE)
+    assert agent["package_name"] == OWNER
+    rel = next(r for r in project_document(doc, depth="package")["relations"] if r["to"] == f"import:{cue.index}")
+    assert rel["target_path"] == f"{OWNER}.{CUE}"
+
+    def row(cls, outer, name, pkg=None):
+        return ObjectImport(
+            class_package="/Script/Engine",
+            class_name=cls,
+            outer_index=PackageIndex(outer),
+            object_name=name,
+            package_name=pkg,
+        )
+
+    cases = {
+        "explicit PackageName wins": ([row("SoundCue", 0, CUE, "/Real/Path")], ["/Real/Path"]),
+        "ancestor PackageName wins": ([row("SoundCue", -2, "A"), row("Package", 0, "B", "/Explicit")], ["/Explicit", "/Explicit"]),
+        "null-outer Package row is its own package": ([row("Package", 0, OWNER)], [OWNER]),
+        "cycle": ([row("SoundCue", -2, "A"), row("Package", -1, "B")], ["", ""]),
+        "outer out of range": ([row("SoundCue", -9, "A")], [""]),
+        "outer is an export": ([row("SoundCue", 3, "A")], [""]),
+        "null outer is not a Package": ([row("SoundCue", 0, "A")], [""]),
+    }
+    for label, (rows, owners) in cases.items():
+        deps, diags = resolve_import_dependencies(rows)
+        assert [d.package_name for d in deps] == owners, label
+        assert [d.object_name for d in deps] == [r.object_name for r in rows], label
+        unresolved = {d.object_id for d in diags}
+        assert unresolved == {f"import:{i}" for i, o in enumerate(owners) if not o}, label
+
+
 def test_test_suite_structure_gate():
     import ast
 
@@ -2673,7 +2735,7 @@ def test_test_suite_structure_gate():
     assert subdirs == {"samples"}
     tree = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
     funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
-    assert len(funcs) == 11
+    assert len(funcs) == 12
     assert not any(isinstance(n, ast.ClassDef) for n in tree.body)
     # The design bans decorators on test functions; cache helpers like
     # _document legitimately carry @lru_cache, so the check is scoped to

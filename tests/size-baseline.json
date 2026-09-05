@@ -1,12 +1,12 @@
 {
-  "_note": "Ratchet ceilings for tests/test_size_baseline.py and the CI package-smoke wheel check. Numbers are the measured tree size on 2026-09-05 (src_python/tests_python re-measured the same day for the #644 agent-query contracts). Raise a ceiling only as a deliberate, reviewable diff when growth is intended; tighten them after a deletion wave. wheel_bytes carries zip-to-zip slack, the line ceilings need none.",
+  "_note": "Ratchet ceilings for tests/test_size_baseline.py and the CI package-smoke wheel check. Numbers are the measured tree size on 2026-09-05, re-measured the same day for #644 (agent query contracts) and #645 (import owning package). Raise a ceiling only as a deliberate, reviewable diff when growth is intended; tighten them after a deletion wave. wheel_bytes carries zip-to-zip slack, the line ceilings need none.",
   "src_python": {
     "min_files": 95,
-    "max_lines": 27723
+    "max_lines": 27821
   },
   "tests_python": {
     "min_files": 4,
-    "max_lines": 3780
+    "max_lines": 3842
   },
   "docs_markdown": {
     "min_files": 150,
