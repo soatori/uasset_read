@@ -38,7 +38,7 @@ LinkerLoad 是 .uasset 文件加载的核心类，负责将磁盘上的包文件
 
 **源码位置:** Runtime/CoreUObject/Private/UObject/LinkerLoad.cpp
 
-**交叉引用:** 文件头详细字段见 [package-summary.md](../package-summary.md)
+**交叉引用:** 文件头详细字段见 [package-summary.md](package-summary.md)
 
 ---
 
@@ -81,7 +81,7 @@ LinkerLoad 是 .uasset 文件加载的核心类，负责将磁盘上的包文件
 
 **源码位置:** Runtime/CoreUObject/Private/UObject/LinkerLoad.cpp
 
-**交叉引用:** Import/Export 表结构见 [import-export-tables.md](../import-export-tables.md)
+**交叉引用:** Import/Export 表结构见 [import-export-tables.md](import-export-tables.md)
 
 ---
 
@@ -110,7 +110,7 @@ LinkerLoad 是 .uasset 文件加载的核心类，负责将磁盘上的包文件
 
 **源码位置:** Runtime/CoreUObject/Private/UObject/LinkerLoad.cpp
 
-**交叉引用:** 属性序列化机制见 [serialization/property-tag.md](property-tag.md)
+**交叉引用:** 属性序列化机制见 [serialization/property-tag.md](serialization/property-tag.md)
 
 ---
 
@@ -142,7 +142,7 @@ LinkerLoad 是 .uasset 文件加载的核心类，负责将磁盘上的包文件
 
 **源码位置:** Runtime/CoreUObject/Private/UObject/LinkerLoad.cpp
 
-**交叉引用:** BulkData 加载机制见 [serialization/bulkdata.md](bulkdata.md)
+**交叉引用:** BulkData 加载机制见 [serialization/bulkdata.md](serialization/bulkdata.md)
 
 ---
 
@@ -215,4 +215,4 @@ if (Version >= EUnrealEngineObjectUE5Version::PAYLOAD_TOC) {
 }
 ```
 
-详见 [serialization/version-compatibility.md](version-compatibility.md) 版本兼容机制。
+详见 [serialization/version-compatibility.md](serialization/version-compatibility.md) 版本兼容机制。

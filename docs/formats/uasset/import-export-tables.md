@@ -4,7 +4,7 @@
 
 Import 表存储本包引用的外部对象（其他包中的对象），Export 表存储本包导出的对象（可以被其他包引用）。FPackageIndex 是引用的统一表示：正数指向 Export，负数指向 Import，0 表示空引用。
 
-ImportCount/ImportOffset 和 ExportCount/ExportOffset 在 PackageFileSummary 中记录。详见 [file-header.md](file-header.md) 中 FPackageFileSummary 的 Import/Export 表字段。
+ImportCount/ImportOffset 和 ExportCount/ExportOffset 在 PackageFileSummary 中记录。详见 [file-header.md](file-structure.md) 中 FPackageFileSummary 的 Import/Export 表字段。
 
 ## Import 表 (FObjectImport)
 

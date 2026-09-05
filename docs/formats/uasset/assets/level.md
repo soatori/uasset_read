@@ -100,12 +100,12 @@ UE5 External Actors 模式下，Actor 通过 Import 表引用外部 .uasset 文�
 
 | 文档 | 内容 | 关卡引用 |
 |------|------|----------|
-| [file-structure.md](file-structure.md) | 文件整体结构 | .umap 遵循标准格式 |
-| [package-summary.md](package-summary.md) | FPackageFileSummary | PKG_ContainsMap 标志说明 |
-| [import-export-tables.md](import-export-tables.md) | Import/Export 表 | Actor 层次通过 Export 表追踪 |
-| [serialization/linker-load.md](serialization/linker-load.md) | LinkerLoad 序列化 | Actor 子对象加载机制 |
-| [serialization/property-tag.md](serialization/property-tag.md) | PropertyTag 序列化 | Actor 属性标签结构 |
-| [serialization/bulkdata.md](serialization/bulkdata.md) | BulkData 存储 | 预计算数据存储位置 |
+| [file-structure.md](../file-structure.md) | 文件整体结构 | .umap 遵循标准格式 |
+| [package-summary.md](../package-summary.md) | FPackageFileSummary | PKG_ContainsMap 标志说明 |
+| [import-export-tables.md](../import-export-tables.md) | Import/Export 表 | Actor 层次通过 Export 表追踪 |
+| [serialization/linker-load.md](../serialization/linker-load.md) | LinkerLoad 序列化 | Actor 子对象加载机制 |
+| [serialization/property-tag.md](../serialization/property-tag.md) | PropertyTag 序列化 | Actor 属性标签结构 |
+| [serialization/bulkdata.md](../serialization/bulkdata.md) | BulkData 存储 | 预计算数据存储位置 |
 
 ### 资产引用
 
@@ -121,8 +121,8 @@ UE5 External Actors 模式下，Actor 通过 Import 表引用外部 .uasset 文�
 
 | 文档 | 内容 | 关卡引用 |
 |------|------|----------|
-| [cooked/cooked-vs-uncooked.md](cooked/cooked-vs-uncooked.md) | Cooked 格式差异 | 关卡 Cooked 差异说明 |
-| [cooked/iostore.md](cooked/iostore.md) | IoStore 格式 | External Asset 存储机制 |
+| [cooked/cooked-vs-uncooked.md](../cooked/cooked-vs-uncooked.md) | Cooked 格式差异 | 关卡 Cooked 差异说明 |
+| [cooked/iostore.md](../cooked/iostore.md) | IoStore 格式 | External Asset 存储机制 |
 
 ## 源码引用
 
