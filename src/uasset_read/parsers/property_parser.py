@@ -662,9 +662,9 @@ def parse_property_value(
         if summary is not None and (getattr(summary, "package_flags", 0) & PKG_FilterEditorOnly) == 0:
             # FText Base appends DevNotes when FortniteMainBranch >= AddDevNotesToFText=260
             # and the package was not filtered for editor-only data (TextHistory.cpp:917).
-            from uasset_read.kismet.ufunction_reader import FORTNITE_GUID, get_kismet_custom_version
+            from uasset_read.versioning import FORTNITE_GUID, get_custom_version
 
-            dev_notes = get_kismet_custom_version(summary, FORTNITE_GUID) >= 260
+            dev_notes = get_custom_version(summary, FORTNITE_GUID) >= 260
         values = {
             "tag": tag,
             "archive": archive,

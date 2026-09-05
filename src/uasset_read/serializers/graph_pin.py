@@ -19,7 +19,7 @@ from uasset_read.constants import (
     MAX_FTEXT_CONSUMPTION,
 )
 from uasset_read.exceptions import ParseError
-from uasset_read.kismet.ufunction_reader import RELEASE_GUID, get_kismet_custom_version
+from uasset_read.versioning import RELEASE_GUID, get_custom_version
 from uasset_read.serializers.object_resources import PackageIndex
 from uasset_read.models.core import UEdGraphPin, FEdGraphPinType
 
@@ -88,7 +88,7 @@ def read_ed_graph_pin_type(
         # FReleaseObjectVersion >= PinTypeIncludesUObjectWrapperFlag (=31).
         pin_type.map_key_terminal_is_const = archive.read_bool("Terminal.bIsConst")
         pin_type.map_key_terminal_is_weak_pointer = archive.read_bool("Terminal.bIsWeakPointer")
-        if summary is not None and get_kismet_custom_version(summary, RELEASE_GUID) >= 31:
+        if summary is not None and get_custom_version(summary, RELEASE_GUID) >= 31:
             pin_type.map_key_terminal_is_uobject_wrapper = archive.read_bool("Terminal.bIsUObjectWrapper")
         else:
             pin_type.map_key_terminal_is_uobject_wrapper = False

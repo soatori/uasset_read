@@ -73,14 +73,14 @@ def parse_bytecode_stream(
     archive.bytecode_buffer_size = bytecode_buffer_size
     if summary is not None:
         archive.summary = summary
-        from uasset_read.kismet.ufunction_reader import (
+        from uasset_read.versioning import (
             FORTNITE_GUID,
             RELEASE_GUID,
-            get_kismet_custom_version,
+            get_custom_version,
         )
 
-        archive.fortnite_version = get_kismet_custom_version(summary, FORTNITE_GUID)
-        archive.release_version = get_kismet_custom_version(summary, RELEASE_GUID)
+        archive.fortnite_version = get_custom_version(summary, FORTNITE_GUID)
+        archive.release_version = get_custom_version(summary, RELEASE_GUID)
     expressions: list[KismetExpression] = []
 
     while archive.tell() < len(bytecode_bytes):

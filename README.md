@@ -208,7 +208,7 @@ Data flow is the v2 package-first pipeline defined in the [canonical refactor de
               → v2/projection → JSON / CLI / Agent tools (same document)
 ```
 
-Shared readers behind that document: `kismet/` (bytecode → C++ pseudocode, reached through `v2/package/legacy.py`; retirement open in #642), `serializers/` and `models/`.
+Shared readers behind that document: `kismet/` (bytecode → C++ pseudocode, reached through `v2/package/legacy.py`; an internal v2 implementation detail with no promised API — see #642), `serializers/` and `models/`.
 
 ### Module Structure (`src/uasset_read/`)
 

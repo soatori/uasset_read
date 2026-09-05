@@ -24,6 +24,12 @@ from uasset_read.serializers.object_resources import (
 )
 from uasset_read.serializers.package_summary import PackageFileSummary
 from uasset_read.serializers.property_tags import read_property_tag
+from uasset_read.versioning import (
+    CORE_GUID,
+    FRAMEWORK_GUID,
+    RELEASE_GUID,
+    get_custom_version,
+)
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -31,14 +37,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Serialized GUID constants for custom-version lookup
-# ---------------------------------------------------------------------------
-
-FRAMEWORK_GUID = "3f74fccf8044b043df14919373201d17"
-CORE_GUID = "3cc15e37fb48e406f08400b57e712a26"
-FORTNITE_GUID = "86181d60844f64acded316aad6c7ea0d"
-RELEASE_GUID = "22d5549cbe4f26a846072194d082b461"
-
 # UE5 version threshold for serialization-control byte
 UE5_SERIALIZATION_CONTROL_VERSION = 1011
 
@@ -98,26 +96,6 @@ class FunctionScriptReadResult:
     serialized_script_size: int = 0
     native_fields: list[NativeFieldDeclaration] = field(default_factory=list)
     failure: FunctionScriptFailure | None = None
-
-
-# ---------------------------------------------------------------------------
-# Custom version lookup
-# ---------------------------------------------------------------------------
-
-
-def get_kismet_custom_version(
-    summary: PackageFileSummary,
-    serialized_guid: str,
-) -> int:
-    """Look up a custom version by serialized GUID.
-
-    Returns the version number if found, or -1 if the GUID is not present
-    in the summary's custom version table.
-    """
-    for cv in getattr(summary, "custom_versions", ()):
-        if cv.guid == serialized_guid:
-            return cv.version
-    return -1
 
 
 # ---------------------------------------------------------------------------
@@ -314,8 +292,8 @@ def _read_ustruct_prefix_and_script(
     Returns FunctionScriptReadResult with status "extracted", "no_script", or "failed".
     """
     # Look up custom versions
-    framework_version = get_kismet_custom_version(summary, FRAMEWORK_GUID)
-    core_version = get_kismet_custom_version(summary, CORE_GUID)
+    framework_version = get_custom_version(summary, FRAMEWORK_GUID)
+    core_version = get_custom_version(summary, CORE_GUID)
 
     # Check remaining capacity
     remaining_bytes = window.total_size() - window.tell()
@@ -361,7 +339,7 @@ def _read_ustruct_prefix_and_script(
         # 3a. Read native field declarations when count > 0
         native_fields: list[NativeFieldDeclaration] = []
         if native_property_count > 0:
-            release_version = get_kismet_custom_version(summary, RELEASE_GUID)
+            release_version = get_custom_version(summary, RELEASE_GUID)
             ctx = NativeFieldContext(
                 name_map=name_map or [],
                 import_map=import_map or [],

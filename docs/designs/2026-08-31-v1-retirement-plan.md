@@ -101,3 +101,26 @@ v2 直接复用、删除 v1 时必须保留或收编：`serializers/{package_sum
 落地事实（`git ls-files` 核实，非文档推断）：`semantic/`、`renderers/`、`schemas/`、`core/`、`pipeline/`、`ir_builder.py`、`batch_worker.py`、`blueprint/`、`bulk/` 在 `src/uasset_read/` 下均无 tracked 文件——即上述 wontfix 能力的代码已不存在，本决策只关闭"重建"预期，不产生删除工作。
 
 CLI 契约：这五个 flag 由 `cli.py` 的 `retired` 集合显式拒绝（`parser.error`，退出码 2），`README.md` 第 37 行按此描述。维持显式拒绝而非静默忽略，是本决策唯一需要长期保留的兼容行为。
+
+## 6. 决策记录：Kismet 包永久内部化（#642，2026-09-05）
+
+决策：**永久内部化**，不删除 `kismet/`、不新增 v2 原生反编译投影。`kismet/` 由"已废弃待退休"改为"v2 实现细节，不承诺公共 API"。
+
+理由：
+
+1. v2 对 kismet 的唯一入口是 `v2/package/legacy.py:963`，且失败已在 `legacy.py:994` 降级为 `KISMET_DECOMPILE_FAILED` 诊断——即 kismet 对 decode 层是**可选依赖**，能力现已存在且能优雅失败。替代方案要求给 `PackageDocument` 增加 decompiled 字段，属仓库级输出契约变更（AGENTS.md：需独立评审设计），换来的是"把已有能力重写一遍"。
+2. 内部化的第一步恰好就是原 issue 的验收条件本身：解除 `parsers/`、`serializers/` 对 `kismet/` 的反向依赖。
+3. 内部化是中性状态，不阻塞将来真要做原生投影。
+4. 代价如实记录：内部化 ≠ 代码变少。`kismet/` 仍是 31 文件 / 7448 行，将长期留在仓库；本决策买到的是标记与事实一致、依赖方向正确。
+
+已落地：
+
+- `FRAMEWORK_GUID`/`CORE_GUID`/`FORTNITE_GUID`/`RELEASE_GUID` 与查表函数从 `kismet/ufunction_reader.py`（原 :37-40、:108）迁至 `versioning.py`——该模块文档字符串本就是 "FCustomVersion system"，属正确归属；函数更名 `get_custom_version`，因为它读的是包 summary，不是 Kismet 数据。
+- 5 处调用点改指：`parsers/property_parser.py`、`serializers/graph_helpers.py`、`serializers/graph_pin.py`、`kismet/bytecode_extractor.py`、`kismet/ufunction_reader.py`。
+- `kismet/__init__.py` 的 DEPRECATED 段改写为 INTERNAL，并写明唯一受支持契约是 `PackageDocument`。
+- 核实结果（AST import 扫描，非文本 grep）：`src/uasset_read/` 下除 kismet 自身外，唯一指向 kismet 的边是 `v2/package/legacy.py:963` 的 `...kismet.decompile_bridge`，方向正确；`parsers/`、`serializers/` 已无任何 kismet 引用。
+
+对原 issue 正文的两处修正：
+
+- 共享常量除 `FORTNITE_GUID`、`get_kismet_custom_version` 外还有 **`RELEASE_GUID`**（`serializers/graph_pin.py` 使用），原清单漏计一个符号。
+- **退休扫描必须走 AST/import 图**：v2 入口是相对导入 `from ...kismet.decompile_bridge`，`grep "from uasset_read.kismet"` 扫不到，靠文本搜索会得出"v2 不依赖 kismet"的错误结论（本轮实测踩过）。

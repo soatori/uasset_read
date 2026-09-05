@@ -26,7 +26,7 @@ from uasset_read.constants import (
     format_guid_bytes,
 )
 from uasset_read.exceptions import ParseError
-from uasset_read.kismet.ufunction_reader import FORTNITE_GUID, get_kismet_custom_version
+from uasset_read.versioning import FORTNITE_GUID, get_custom_version
 from uasset_read.serializers.object_resources import (
     resolve_class_name,
     get_asset_class,
@@ -188,7 +188,7 @@ def ftext_dev_notes_enabled(summary) -> bool:
     """TextHistory.cpp:915-937 — editor UE5 FText Base appends a gated DevNotes FString."""
     if summary is None or (summary.package_flags & PKG_FilterEditorOnly):
         return False
-    return get_kismet_custom_version(summary, FORTNITE_GUID) >= 260  # AddDevNotesToFText
+    return get_custom_version(summary, FORTNITE_GUID) >= 260  # AddDevNotesToFText
 
 
 def _read_ftext_value(
