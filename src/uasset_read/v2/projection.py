@@ -43,7 +43,15 @@ def paginate(
 
     If limit is None, all items are returned.
     Returns (items, next_offset_or_None, truncation_info).
+
+    Negative ``offset``/``limit`` are rejected here rather than per caller:
+    Python slicing happily accepts them (#644), and ``offset=-1`` silently
+    returned the last page with a cursor that walked backwards. Zero is legal.
     """
+    if offset < 0:
+        raise ValueError("offset must be non-negative")
+    if limit is not None and limit < 0:
+        raise ValueError("limit must be non-negative")
     total = len(items)
     page = items[offset:]
     truncated = False
@@ -134,6 +142,8 @@ def project_document(
     (valid names: "relations", "dependencies"); excluded sections are dropped
     from the response before ``max_bytes`` accounting, so their bytes go to
     the object page instead. Default None keeps both (unchanged behavior).
+    ``offset``/``limit`` are validated by ``paginate`` (#644), the single
+    guard every paging caller routes through.
     ``response_extras`` entries are merged with ``dict.update()`` (same-named
     projection keys are overwritten by the extras) before ``max_bytes``
     trimming runs, so extras count against the byte budget like any envelope key.
@@ -147,10 +157,6 @@ def project_document(
         unknown = set(sections) - _VALID_SECTIONS
         if unknown:
             raise ValueError(f"Invalid sections: {sorted(unknown)}. Expected from {_VALID_SECTIONS}")
-    if offset < 0:
-        raise ValueError("offset must be non-negative")
-    if limit is not None and limit < 0:
-        raise ValueError("limit must be non-negative")
     if max_bytes is not None and max_bytes < 0:
         raise ValueError("max_bytes must be non-negative")
     if _DEPTH_ORDER[depth] > _DEPTH_ORDER[doc.depth]:

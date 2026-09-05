@@ -2607,6 +2607,55 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert not {"data", "data_b64", "sha256"} & pb_tool.keys()
 
 
+def test_agent_tool_queries_distinguish_budget_and_reject_negative_paging():
+    """#644: budget exhaustion must not read as a missing object, and every
+    paging entry point must reject negative offset/limit while keeping the
+    legal zero values. Triggered through the public agent tools only."""
+    from uasset_read.v2.agent_tools import (
+        get_diagnostics,
+        get_object,
+        inspect_package,
+        list_dependencies,
+        list_objects,
+    )
+
+    def encoded(value: object) -> int:
+        return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+    # export:0 exists on this fixture, proven by the unbounded fetch.
+    assert get_object(str(DATA_SAMPLE), "export:0")["id"] == "export:0"
+
+    # Same id, too little budget: a retry contract, never OBJECT_NOT_FOUND.
+    squeezed = get_object(str(DATA_SAMPLE), "export:0", max_bytes=1000)
+    assert squeezed["code"] == "BUDGET_EXHAUSTED"
+    assert squeezed["stage"] == "agent.get_object"
+    assert squeezed["recoverable"] is True
+    assert squeezed["min_bytes"] > 1000
+    assert encoded(squeezed) <= 1000, "the failure contract must obey the budget it reports"
+    # The advertised budget is enough on retry, so the contract is actionable.
+    assert get_object(str(DATA_SAMPLE), "export:0", max_bytes=squeezed["min_bytes"])["id"] == "export:0"
+
+    # A genuinely absent object keeps its own code, even under the same budget.
+    missing = get_object(str(DATA_SAMPLE), "export:999999", max_bytes=1000)
+    assert missing["code"] == "OBJECT_NOT_FOUND"
+
+    for tool, args in (
+        (list_dependencies, ("offset", "limit")),
+        (get_diagnostics, ("offset", "limit")),
+        (list_objects, ("offset", "limit")),
+        (inspect_package, ("limit",)),
+    ):
+        for name in args:
+            with pytest.raises(ValueError, match="non-negative"):
+                tool(str(PACKAGE_SAMPLE), **{name: -1})
+
+    # Zero stays legal: an empty page is a page, not a bad argument.
+    assert list_dependencies(str(PACKAGE_SAMPLE), offset=0, limit=0)["dependencies"] == []
+    assert get_diagnostics(str(PACKAGE_SAMPLE), offset=0, limit=0)["diagnostics"] == []
+    assert list_objects(str(PACKAGE_SAMPLE), offset=0, limit=0)["objects"] == []
+    assert inspect_package(str(PACKAGE_SAMPLE), limit=0)["objects"] == []
+
+
 def test_test_suite_structure_gate():
     import ast
 
@@ -2624,7 +2673,7 @@ def test_test_suite_structure_gate():
     assert subdirs == {"samples"}
     tree = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
     funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
-    assert len(funcs) == 10
+    assert len(funcs) == 11
     assert not any(isinstance(n, ast.ClassDef) for n in tree.body)
     # The design bans decorators on test functions; cache helpers like
     # _document legitimately carry @lru_cache, so the check is scoped to
