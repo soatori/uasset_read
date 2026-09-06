@@ -3098,6 +3098,35 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     assert cross == main_tail + uexp_head, f"cross-boundary splice failed: {cross!r}"
 
 
+def test_resolve_parent_assets_returns_relations():
+    """resolve_parent_assets must return parent class relations."""
+    from uasset_read.parent_resolver import resolve_parent_assets
+    from uasset_read.models.document import PackageDocument
+    from pathlib import Path
+
+    # Minimal document with a Blueprint that has a parent
+    doc = PackageDocument(
+        source={
+            "kind": "legacy",
+            "name": "test.uasset",
+            "size": 0,
+        },
+        package=None,
+        objects=[],
+        relations=[],
+        dependencies=[],
+        diagnostics=[],
+        summary={},
+        payloads=[],
+        depth="package",
+    )
+
+    # No parent files on disk → should return empty relations + diagnostic
+    relations = resolve_parent_assets(doc, root=Path("/nonexistent"), max_depth=1)
+    assert isinstance(relations, list)
+    assert len(relations) == 0
+
+
 def test_test_suite_structure_gate():
     import ast
 
@@ -3117,7 +3146,7 @@ def test_test_suite_structure_gate():
     assert subdirs == {"samples"}
     tree = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
     funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
-    assert len(funcs) == 13
+    assert len(funcs) == 14
     assert not any(isinstance(n, ast.ClassDef) for n in tree.body)
     # The design bans decorators on test functions; cache helpers like
     # _document legitimately carry @lru_cache, so the check is scoped to
