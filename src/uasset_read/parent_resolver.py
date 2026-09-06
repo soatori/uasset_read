@@ -96,7 +96,7 @@ def _find_parent_package(class_name: str, root: Path, max_depth: int) -> Path | 
     2. BlueprintGeneratedClass suffix: {class_name}.BlueprintGeneratedClass.uasset
     3. Recursive search under root (bounded by max_depth)
     """
-    # Try exact match
+    # Try exact match first (cheapest)
     exact = root / f"{class_name}.uasset"
     if exact.exists():
         return exact
@@ -106,16 +106,14 @@ def _find_parent_package(class_name: str, root: Path, max_depth: int) -> Path | 
     if bgc.exists():
         return bgc
 
-    # Bounded recursive search (controlled by max_depth)
+    # Bounded recursive search — single rglob with pattern matching
     for depth in range(1, max_depth + 1):
-        for path in root.rglob(f"{class_name}.uasset"):
-            # Check depth relative to root
-            rel = path.relative_to(root)
-            if len(rel.parts) <= depth + 1:
-                return path
-        for path in root.rglob(f"{class_name}*.uasset"):
-            rel = path.relative_to(root)
-            if len(rel.parts) <= depth + 1:
-                return path
+        for path in root.rglob("*.uasset"):
+            # Check if filename matches class_name (exact or BGC)
+            stem = path.stem
+            if stem == class_name or stem.endswith(f".{class_name}"):
+                rel = path.relative_to(root)
+                if len(rel.parts) <= depth + 1:
+                    return path
 
     return None
