@@ -287,7 +287,6 @@ def extract_payload(
 
             # Determine which file to read serial data from
             serial_data = b""
-            serial_source = "main"
             try:
                 if serial_offset >= total_header_size and total_header_size > 0:
                     # Data is in uexp sidecar
@@ -371,7 +370,11 @@ def extract_payload(
         if fallback_size == 0:
             # No serial region info — use entire sidecar as last resort
             sidecar_path = sidecar_paths.get(source_region)
-            fallback_size = sidecar_path.stat().st_size if sidecar_path else 0
+            if sidecar_path is not None:
+                try:
+                    fallback_size = sidecar_path.stat().st_size
+                except OSError:
+                    fallback_size = 0
 
         descriptor = PayloadDescriptor(
             id=payload_id,
