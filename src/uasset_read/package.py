@@ -152,6 +152,29 @@ class PackageBundle:
     files: Dict[str, str] = field(default_factory=dict)
     provider: Optional["FileSystemPackageProvider"] = None
 
+    @property
+    def main_path_obj(self) -> Path:
+        """Return main_path as a Path object."""
+        return Path(self.main_path)
+
+    @property
+    def uexp_path(self) -> Optional[Path]:
+        """Return .uexp sidecar path if it exists, else None."""
+        path = self.files.get(".uexp")
+        return Path(path) if path is not None else None
+
+    @property
+    def ubulk_path(self) -> Optional[Path]:
+        """Return .ubulk sidecar path if it exists, else None."""
+        path = self.files.get(".ubulk")
+        return Path(path) if path is not None else None
+
+    @property
+    def uptnl_path(self) -> Optional[Path]:
+        """Return .uptnl sidecar path if it exists, else None."""
+        path = self.files.get(".uptnl")
+        return Path(path) if path is not None else None
+
     def open_archive(self, tolerant: bool = False) -> PackageArchive:
         main_ext = ".umap" if self.package_kind == "map" else ".uasset"
         main = self._open_archive_for(main_ext, tolerant)

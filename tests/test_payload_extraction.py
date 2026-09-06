@@ -106,3 +106,29 @@ def test_payload_extraction_is_dataclass():
     assert extraction.data == b"test"
     assert extraction.extracted is True
     assert extraction.error is None
+
+
+def test_sidecar_discovery():
+    """Test that PackageBundle provides sidecar path properties."""
+    from uasset_read.package import open_package_bundle
+
+    fixture_dir = Path(__file__).parent / "samples"
+    main_path = fixture_dir / "T_ParserBulk.uasset"
+
+    if not main_path.exists():
+        pytest.skip("T_ParserBulk.uasset fixture not found")
+
+    bundle = open_package_bundle(str(main_path))
+
+    # T_ParserBulk has .uexp and .ubulk sidecars
+    assert bundle.uexp_path is not None
+    assert bundle.uexp_path.exists()
+    assert bundle.uexp_path.suffix == ".uexp"
+
+    assert bundle.ubulk_path is not None
+    assert bundle.ubulk_path.exists()
+    assert bundle.ubulk_path.suffix == ".ubulk"
+
+    # main_path_obj should be a Path
+    assert isinstance(bundle.main_path_obj, Path)
+    assert bundle.main_path_obj == Path(bundle.main_path)
