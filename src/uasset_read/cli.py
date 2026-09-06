@@ -146,6 +146,36 @@ def create_parser():
         "--log-format", choices=["text", "json"], default="text", help="Log output format: text (default) or json"
     )
 
+    # Batch mode
+    parser.add_argument(
+        "--batch",
+        nargs="?",
+        const=".",
+        default=None,
+        metavar="DIR",
+        help="Batch parse: process all .uasset files in DIR (default: current directory)",
+    )
+    parser.add_argument(
+        "--batch-format",
+        choices=["jsonl", "json"],
+        default="jsonl",
+        help="Batch output format: jsonl (one JSON per line, default) or json (array)",
+    )
+
+    # Parent-assets (deferred)
+    parser.add_argument(
+        "--include-parent-assets",
+        action="store_true",
+        default=False,
+        help="[deferred] Include parent asset resolution (blocked by #627)",
+    )
+    parser.add_argument(
+        "--asset-root",
+        metavar="DIR",
+        default=None,
+        help="[deferred] Root directory for parent asset search",
+    )
+
     # Utility flags
     parser.add_argument(
         "--clean-logs",
@@ -207,6 +237,81 @@ def _log_config_from_args(args) -> LogConfig:
     )
 
 
+def _handle_batch(args) -> None:
+    """Handle batch mode: parse all .uasset files in a directory."""
+    from uasset_read.package import parse_package_document
+    from uasset_read.projection import project_document
+
+    batch_dir = Path(args.batch)
+    if not batch_dir.is_dir():
+        print(f"Error: Not a directory: {args.batch}", file=sys.stderr)
+        sys.exit(EXIT_ARGUMENT_ERROR)
+
+    # Collect all .uasset files
+    uasset_files = sorted(batch_dir.rglob("*.uasset"))
+    if not uasset_files:
+        print(f"Error: No .uasset files found in {args.batch}", file=sys.stderr)
+        sys.exit(EXIT_FILE_NOT_FOUND)
+
+    tolerant = not args.strict
+    results = []
+    errors = []
+    total = len(uasset_files)
+
+    for i, file_path in enumerate(uasset_files, 1):
+        print(f"[{i}/{total}] {file_path.name}", file=sys.stderr)
+        try:
+            doc = parse_package_document(
+                str(file_path),
+                tolerant=tolerant,
+                mappings_path=args.mappings,
+                game=args.game,
+                depth=args.depth,
+            )
+            projected = project_document(
+                doc,
+                depth=args.depth,
+                limit=args.limit,
+                max_bytes=args.max_bytes,
+            )
+            # Add source file info
+            projected["_source_file"] = str(file_path)
+            results.append(projected)
+        except Exception as e:
+            _logger.debug("Batch parse error for %s: %s", file_path, e, exc_info=True)
+            error_entry = {
+                "_source_file": str(file_path),
+                "_error": True,
+                "_error_message": _sanitize_error_message(e),
+            }
+            errors.append(error_entry)
+            results.append(error_entry)
+
+    # Output
+    output = {
+        "format": "uasset_read.batch",
+        "format_version": "1.0",
+        "total": total,
+        "succeeded": total - len(errors),
+        "failed": len(errors),
+        "results": results,
+    }
+    if errors:
+        output["errors"] = errors
+
+    if args.batch_format == "jsonl":
+        # JSONL: one JSON per line
+        lines = []
+        for r in results:
+            lines.append(json.dumps(r, ensure_ascii=False, separators=(",", ":")))
+        output_str = "\n".join(lines)
+    else:
+        # JSON array
+        output_str = json.dumps(output, ensure_ascii=False, indent=2)
+
+    _write_output(output_str, args.output)
+
+
 def _handle_clean_logs(args) -> None:
     config = _log_config_from_args(args)
     planned = cleanup_project_logs(
@@ -254,7 +359,7 @@ def main():
 
     # v1 pipeline removal: retired flags get an explicit unsupported message
     # instead of argparse's generic unrecognized-argument error (Gate B).
-    retired = {"--legacy-json", "--markdown", "--list-formats", "--diff", "--batch"}
+    retired = {"--legacy-json", "--markdown", "--list-formats", "--diff"}
     hit = next((flag for flag in sys.argv if flag in retired), None)
     if hit is not None:
         parser.error(
@@ -270,6 +375,19 @@ def main():
 
     if args.clean_logs:
         _handle_clean_logs(args)
+
+    # --include-parent-assets stub (deferred, blocked by #627)
+    if args.include_parent_assets:
+        print(
+            "Warning: --include-parent-assets is deferred (blocked by #627: missing fixtures).\n"
+            "This flag is recognized but not yet implemented.",
+            file=sys.stderr,
+        )
+
+    # --batch mode
+    if args.batch is not None:
+        _handle_batch(args)
+        sys.exit(EXIT_SUCCESS)
 
     # Validate positional arg
     if args.file is None:
@@ -293,8 +411,8 @@ def main():
 
     # PackageDocument v2 (the only parse path).
     try:
-        from uasset_read.v2.api import parse_package_document
-        from uasset_read.v2.projection import project_document
+        from uasset_read.package import parse_package_document
+        from uasset_read.projection import project_document
 
         doc = parse_package_document(
             str(file_path),
