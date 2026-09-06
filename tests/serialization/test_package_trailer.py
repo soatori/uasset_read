@@ -23,3 +23,17 @@ def test_payload_toc_version():
 
 def test_data_resources_version():
     assert UE5_DATA_RESOURCES == 1009
+
+
+def test_package_document_has_trailer_field():
+    from uasset_read.models.document import PackageDocument
+    doc = PackageDocument(source=None, package=None)
+    assert hasattr(doc, 'package_trailer')
+    assert doc.package_trailer is None
+
+
+def test_package_document_has_data_resource_field():
+    from uasset_read.models.document import PackageDocument
+    doc = PackageDocument(source=None, package=None)
+    assert hasattr(doc, 'data_resource_map')
+    assert doc.data_resource_map is None

@@ -53,3 +53,5 @@ class PackageDocument:
     summary: Summary = field(default_factory=Summary)
     payloads: list[PayloadDescriptor] = field(default_factory=list)
     depth: str = "asset"
+    package_trailer: object | None = None
+    data_resource_map: list | None = None
