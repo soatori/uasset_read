@@ -345,6 +345,151 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         arc2 = ByteArchive(struct.pack("<ii", 0, 0))
         assert arc2.read_name(["None", "Test"], key="t") == "None"
 
+    def _synthetic_toc(**overrides):
+        """Build a byte-exact v8 ``.utoc`` so the fail-closed paths are reachable.
+
+        Field order and widths follow FIoStoreTocHeader (IoStore.h) and the array order of
+        FIoStoreTocResourceView::Read (IoStore.cpp:1274-1420).
+        """
+        import struct
+        import tempfile
+        from pathlib import Path
+
+        fields = {
+            "version": 8,
+            "entry_count": 1,
+            "block_count": 1,
+            "method_count": 1,
+            "method_len": 32,
+            "block_size": 65536,
+            "dir_index": b"",
+            "flags": 0,
+            "perfect_seeds": 0,
+            "no_perfect": 0,
+            "header_size": 144,
+            "meta_size": None,
+        }
+        fields.update(overrides)
+        meta_size = fields["meta_size"] or (24 if fields["version"] >= 8 else 33)
+        header = bytearray(b"-==--==--==--==-" + bytes(128))
+        struct.pack_into(
+            "<BBH" + "I" * 9,
+            header,
+            16,
+            fields["version"],
+            0,
+            0,
+            fields["header_size"],
+            fields["entry_count"],
+            fields["block_count"],
+            12,
+            fields["method_count"],
+            fields["method_len"],
+            fields["block_size"],
+            len(fields["dir_index"]),
+            1,
+        )
+        struct.pack_into("<B", header, 80, fields["flags"])
+        struct.pack_into("<I", header, 84, fields["perfect_seeds"])
+        struct.pack_into("<Q", header, 88, 1 << 26)
+        struct.pack_into("<I", header, 96, fields["no_perfect"])
+        body = bytearray()
+        body += bytes(12 * fields["entry_count"])
+        body += bytes(10 * fields["entry_count"])
+        body += bytes(4 * fields["perfect_seeds"])
+        body += bytes(4 * fields["no_perfect"])
+        body += bytes(12 * fields["block_count"])
+        names = b"Oodle\x00" + bytes(max(0, fields["method_len"] - 6))
+        body += names[: fields["method_count"] * fields["method_len"]]
+        body += fields["dir_index"]
+        body += bytes(meta_size * fields["entry_count"])
+        tmp = tempfile.TemporaryDirectory()
+        path = Path(tmp.name) / "probe.utoc"
+        path.write_bytes(bytes(header) + bytes(body))
+        return path, tmp
+
+    def test_iostore_rejects_non_toc_input():
+        from uasset_read.iostore import IoStoreTocError, read_toc
+
+        path, tmp = _synthetic_toc()
+        try:
+            with pytest.raises(IoStoreTocError, match="smaller than a TOC header"):
+                (path.with_name("short.utoc")).write_bytes(path.read_bytes()[:100])
+                read_toc(path.with_name("short.utoc"))
+            wrong = path.with_name("wrong_magic.utoc")
+            wrong.write_bytes(b"X" * 16 + path.read_bytes()[16:])
+            with pytest.raises(IoStoreTocError, match="not an IoStore TOC"):
+                read_toc(wrong)
+        finally:
+            tmp.cleanup()
+
+    def test_iostore_rejects_unsupported_shapes():
+        from uasset_read.iostore import IoStoreTocError, read_toc
+
+        checks = [
+            ({"version": 9}, "unsupported TOC version"),
+            ({"header_size": 143}, "header size"),
+            ({"flags": 0x04}, "signed container"),
+            ({"flags": 0x02}, "encrypted container"),
+            ({"method_len": 0}, "implausible method/entry table"),
+        ]
+        for overrides, message in checks:
+            path, tmp = _synthetic_toc(**overrides)
+            try:
+                with pytest.raises(IoStoreTocError, match=message):
+                    read_toc(path)
+            finally:
+                tmp.cleanup()
+
+        # Counts that claim more than the file holds must be caught, whether the body is
+        # truncated or only the header lies about the entry count.
+        import struct
+
+        path, tmp = _synthetic_toc(entry_count=3, block_count=3)
+        try:
+            full = path.read_bytes()
+            lying = bytearray(full)
+            struct.pack_into("<I", lying, 24, 4000)  # TocEntryCount
+            path.write_bytes(bytes(lying))
+            with pytest.raises(IoStoreTocError, match="TOC layout needs"):
+                read_toc(path)
+            path.write_bytes(full[:-4])
+            with pytest.raises(IoStoreTocError, match="TOC layout needs"):
+                read_toc(path)
+            path.write_bytes(full)
+            assert read_toc(path).entry_count == 3
+        finally:
+            tmp.cleanup()
+
+    def test_iostore_parses_supported_layouts(tmp_path=None):
+        from uasset_read.iostore import read_toc
+
+        # v8 with 24-byte FIoHash metas, and v7 with 33-byte legacy metas.
+        for version, entry_count in ((8, 3), (7, 2)):
+            path, tmp = _synthetic_toc(version=version, entry_count=entry_count, block_count=entry_count)
+            try:
+                toc = read_toc(path)
+            finally:
+                tmp.cleanup()
+            assert toc.version == version and toc.entry_count == entry_count
+            assert len(toc.chunks) == entry_count and len(toc.blocks) == entry_count
+            assert toc.compression_methods == ("None", "Oodle")  # index 0 is implicit NAME_None
+            assert toc.data_path is None and toc.files == ()
+
+    def test_iostore_rejects_directory_index_escape():
+        from uasset_read.iostore import IoStoreTocError, read_toc
+
+        import struct
+
+        # MountPoint + a string-table count that runs past the buffer.
+        bad = struct.pack("<i", 4) + b"mnt/" + struct.pack("<iii", 0, 0, 99999)
+        path, tmp = _synthetic_toc(flags=0x08, dir_index=bad)
+        try:
+            with pytest.raises(IoStoreTocError):
+                read_toc(path)
+        finally:
+            tmp.cleanup()
+
     _run_cases(
         [
             ("core.reader_out_of_range", core_contract),
@@ -379,6 +524,10 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
             ("recovery.fname_shift_recorded", fname_shift_recovery_is_recorded),
             ("recovery.export_map_attribution", export_map_recoveries_are_attributed_to_their_slot),
             ("fname.display_external_number", test_fname_display_uses_external_number),
+            ("iostore.rejects_non_toc_input", test_iostore_rejects_non_toc_input),
+            ("iostore.rejects_unsupported_shapes", test_iostore_rejects_unsupported_shapes),
+            ("iostore.parses_supported_layouts", test_iostore_parses_supported_layouts),
+            ("iostore.rejects_directory_index_escape", test_iostore_rejects_directory_index_escape),
         ]
     )
 
@@ -727,7 +876,7 @@ def test_package_document_preserves_every_export_and_role():
         assert result["row_names"] == ["A", "B"] and result["complete"] is True
         assert not any(d.code == "TABLE_ROWS_TRUNCATED" for d in diags)
 
-    def test_curve_table_mode_byte_is_consumed(self):
+    def test_curve_table_mode_byte_is_consumed():
         """UCurveTable inserts ECurveTableMode between the count and the rows.
 
         Without it the first row name lands one byte early and every row name after
@@ -740,9 +889,7 @@ def test_package_document_preserves_every_export_and_role():
         from uasset_read.parsers.legacy_reader import _read_table_rows
 
         data = (
-            struct.pack("<iB", 1, 1)
-            + struct.pack("<ii", 1, 0)
-            + struct.pack("<ii", 0, 0)  # None tag
+            struct.pack("<iB", 1, 1) + struct.pack("<ii", 1, 0) + struct.pack("<ii", 0, 0)  # None tag
         )
         diags: list = []
         result = _read_table_rows(
@@ -756,7 +903,7 @@ def test_package_document_preserves_every_export_and_role():
         assert result["curve_table_mode"] == "SimpleCurves"
         assert result["row_names"] == ["RowA"] and result["complete"] is True
 
-    def test_table_payload_residue_is_disclosed_not_complete(self):
+    def test_table_payload_residue_is_disclosed_not_complete():
         """Undecoded bytes after the last row must downgrade coverage, never claim rows."""
         import struct
 
@@ -775,7 +922,7 @@ def test_package_document_preserves_every_export_and_role():
         assert result["complete"] is False
         assert any(d.code == "TABLE_PAYLOAD_RESIDUE" for d in diags)
 
-    def test_fname_instance_number_renders_in_row_name(self):
+    def test_fname_instance_number_renders_in_row_name():
         """Row names are FNames: Number 2 displays as ``Base_1`` (NAME_INTERNAL_TO_EXTERNAL)."""
         import struct
 
@@ -866,6 +1013,12 @@ def test_package_document_preserves_every_export_and_role():
                 test_table_rows_skip_tagged_stream_not_size_prefix,
             ),
             ("table.test_material_enum_tables_match_engine_types", test_material_enum_tables_match_engine_types),
+            ("table.test_curve_table_mode_byte_is_consumed", test_curve_table_mode_byte_is_consumed),
+            (
+                "table.test_table_payload_residue_is_disclosed_not_complete",
+                test_table_payload_residue_is_disclosed_not_complete,
+            ),
+            ("table.test_fname_instance_number_renders_in_row_name", test_fname_instance_number_renders_in_row_name),
         ]
     )
 

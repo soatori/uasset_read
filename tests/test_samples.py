@@ -294,8 +294,9 @@ def test_manifest_matches_every_real_sample():
         assert _sha256(path) == entry["sha256"], entry["name"]
         # A declared sidecar must exist, and an existing sidecar must be declared (#627).
         sides = {side["name"]: side for side in entry["sidecars"]}
-        assert set(sides) == {path.with_suffix(ext).name for ext in (".uexp", ".ubulk", ".uptnl")
-                              if path.with_suffix(ext).exists()}, entry["name"]
+        assert set(sides) == {
+            path.with_suffix(ext).name for ext in (".uexp", ".ubulk", ".uptnl") if path.with_suffix(ext).exists()
+        }, entry["name"]
         for name, side in sides.items():
             side_path = SAMPLES / name
             assert side_path.exists(), f"{entry['name']}: missing sidecar {name}"
@@ -880,3 +881,133 @@ def test_blueprint_graph_decodes_without_parse_errors():
     assert len(graphs) == 4 and len(nodes) == 370, f"got {len(graphs)} graphs / {len(nodes)} nodes"
     assert not [g for g in graphs if g.get("parse_errors")], "graph-level parse errors"
     assert not [d for d in doc.diagnostics if d.code.startswith("BLUEPRINT_GRAPH")], "graph diagnostics"
+
+
+# --------------------------------------------------------------------------- #
+# Container fixtures (#624/#625): index reading only, never package parsing.
+# --------------------------------------------------------------------------- #
+
+CONTAINERS = SAMPLES / "containers"
+
+
+def test_iostore_toc_fixture_headers_match_ue_struct_fields():
+    """Both committed .utoc files must parse to the FIoStoreTocHeader values on disk."""
+    from uasset_read.iostore import IoStoreTocError, read_toc
+
+    primary = read_toc(CONTAINERS / "MyProject-Windows.utoc")
+    assert primary.version == 8 and primary.header_size == 144
+    assert primary.entry_count == 2221 == len(primary.chunks)
+    assert primary.compression_block_count == 6694 == len(primary.blocks)
+    assert primary.compression_block_size == 65536
+    assert primary.compression_methods == ("None", "Oodle")
+    assert primary.container_flags == 0x09  # Compressed | Indexed (IoDispatcher.h:435-444)
+    assert not primary.encrypted and not primary.signed
+    assert primary.encryption_key_guid == "0" * 32  # unencrypted: #624 requires no private key
+    assert primary.directory_index_size == 35658
+    assert primary.mount_point == "../../../"
+    assert primary.data_path and Path(primary.data_path).name == "MyProject-Windows.ucas"
+
+    # The secondary container is the committed .utoc/.ucas pair: one chunk, no index.
+    secondary = read_toc(CONTAINERS / "global.utoc")
+    assert secondary.version == 8
+    assert secondary.entry_count == 1
+    assert secondary.chunks[0].type_name == "ScriptObjects"
+    assert secondary.compression_block_count == 49 == len(secondary.blocks)
+    assert secondary.directory_index_size == 0 and secondary.files == ()
+
+    with pytest.raises(IoStoreTocError):
+        read_toc(CONTAINERS / "global.ucas")  # a data archive is not a TOC
+
+
+def test_iostore_directory_index_lists_real_packages():
+    """#624 verification: package names must be listable from the directory index.
+
+    File names come from ``FIoDirectoryIndexResource`` and bind to their ExportBundle
+    chunk through ``FIoFileIndexEntry.UserData`` (IoDirectoryIndex.cpp:407-442), which is
+    what makes a container package *locatable* rather than merely present.
+    """
+    from uasset_read.iostore import read_toc
+
+    toc = read_toc(CONTAINERS / "MyProject-Windows.utoc")
+    packages = [f.path for f in toc.package_files()]
+    assert len(packages) == 575, "one ExportBundle chunk per cooked package"
+    assert len(packages) == len(set(packages))
+    assert len([p for p in packages if p.endswith((".uasset", ".umap"))]) >= 5
+
+    # Chunk offsets/lengths are the *logical* range, so on a compressed container they are
+    # not bounded by the .ucas. The block table is the physical mapping and must be.
+    ucas = Path(toc.data_path) if toc.data_path else None
+    if ucas and ucas.exists():
+        assert sum(b.compressed_size for b in toc.blocks) <= ucas.stat().st_size
+        last = max(toc.blocks, key=lambda b: b.offset + b.compressed_size)
+        assert last.offset + last.compressed_size <= ucas.stat().st_size
+        assert any(c.length > 0 and c.compressed for c in toc.chunks)
+    for chunk in toc.chunks:
+        assert chunk.chunk_id[11] == chunk.type_id
+
+    # The three families #624 asks for are individually locatable. Class identity needs
+    # the package body (Phase 5), so this is a name-level assertion, not a type claim.
+    by_family = {
+        "Blueprint": "MyProject/Content/Test/TestBlueprint.uasset",
+        "DataTable": "MyProject/Content/Test/TestDataTable.uasset",
+        "Material": "MyProject/Content/LevelPrototyping/Materials/M_PrototypeGrid.uasset",
+    }
+    for family, expected in by_family.items():
+        assert any(p.endswith(expected) for p in packages), f"{family} package not listed: {expected}"
+        located = next(f for f in toc.package_files() if f.path.endswith(expected))
+        chunk = toc.chunks[located.chunk_index]
+        assert chunk.type_name == "ExportBundleData"
+        assert chunk.length > 0
+
+
+def test_iostore_toc_read_does_not_load_the_container():
+    """A TOC read must never copy the .ucas into memory (#624 implementation acceptance).
+
+    The 247 MB data archive is local-only (gitignored, ``committed: false``); when it is
+    absent this asserts the TOC still parses, which is what CI sees.
+    """
+    import tracemalloc
+
+    from uasset_read.iostore import read_toc
+
+    toc_path = CONTAINERS / "MyProject-Windows.utoc"
+    tracemalloc.start()
+    try:
+        toc = read_toc(toc_path)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert peak < 32 * 1024 * 1024, f"TOC read peaked at {peak} bytes with {toc.entry_count} entries"
+    assert toc.compression_block_count == len(toc.blocks)
+
+
+@pytest.mark.parametrize(
+    "sample_entry",
+    [
+        s for s in _MANIFEST_DATA["samples"]
+        if any(sc["name"].endswith(".uexp") for sc in s.get("sidecars", []))
+        and s.get("file_version_ue5", 0) >= 1018
+    ],
+    ids=[
+        s["name"] for s in _MANIFEST_DATA["samples"]
+        if any(sc["name"].endswith(".uexp") for sc in s.get("sidecars", []))
+        and s.get("file_version_ue5", 0) >= 1018
+    ],
+)
+def test_missing_sidecar_diagnostic(sample_entry):
+    """A split package without its .uexp emits PACKAGE_SIDECAR_MISSING."""
+    import shutil
+    import tempfile
+
+    from uasset_read.package import parse_package_document
+
+    main_path = SAMPLES / sample_entry["name"]
+    with tempfile.TemporaryDirectory() as tmp:
+        dst = Path(tmp) / main_path.name
+        shutil.copy2(main_path, dst)
+        # Do NOT copy the .uexp — simulate missing sidecar.
+        doc = parse_package_document(dst, depth="package")
+        codes = [d.code for d in doc.diagnostics]
+        assert "PACKAGE_SIDECAR_MISSING" in codes, (
+            f"expected PACKAGE_SIDECAR_MISSING for {sample_entry['name']}, got: {codes}"
+        )

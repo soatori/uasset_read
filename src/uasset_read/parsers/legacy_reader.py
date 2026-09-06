@@ -510,6 +510,31 @@ class LegacyPackageReader:
             # Truncation is reported once by read_export_map's archive-level
             # EXPORT_TABLE_TRUNCATED diagnostic, merged in step 12 below.
 
+            # 5a. Missing-sidecar diagnostic.
+            # UE's split writer (FilePackageWriterUtil.cpp:164-176) moves every
+            # export body into .uexp at Summary.TotalHeaderSize (SavePackage2.cpp:3767).
+            # When size(.uasset) == TotalHeaderSize but no .uexp is spliced in,
+            # the export serial ranges address bytes outside the archive.  Report
+            # that once as its own diagnostic rather than letting each export fail
+            # with a bounds error.
+            if not archive.has_uexp and archive.main_size == summary.total_header_size and export_map:
+                max_end = max((e.serial_offset + e.serial_size for e in export_map), default=0)
+                if max_end > archive.total_size():
+                    diagnostics.append(
+                        Diagnostic(
+                            severity="error",
+                            code="PACKAGE_SIDECAR_MISSING",
+                            message=(
+                                f"main file is header-only ({archive.main_size} bytes) "
+                                f"but no .uexp was found; exports referencing offsets "
+                                f">= {summary.total_header_size} cannot be read"
+                            ),
+                            stage="package.bundle",
+                            effect="data_loss",
+                            recoverable=True,
+                        )
+                    )
+
             # 6. Read depends map
             depends_map = read_depends_map(archive, summary, budget)
 
@@ -977,6 +1002,7 @@ def _skip_optional_object_guid(archive: PackageArchive, serial_end: int) -> int:
     if flag and serial_end - archive.tell() >= 16:
         archive.read(16)
     return archive.tell()
+
 
 _MAX_TABLE_BLOB = 64 * 1024 * 1024  # bounded read; larger tables report partial
 _MAX_TABLE_ROWS = 100000  # garbage row counts are rejected, not trusted

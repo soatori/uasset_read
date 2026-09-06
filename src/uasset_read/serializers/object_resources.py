@@ -114,6 +114,7 @@ class ObjectExport:
     def has_script_serialization(self) -> bool:
         """Whether script serialization block exists."""
         return self.script_serialization_end_offset > self.script_serialization_start_offset
+
     properties: List[Any] = field(default_factory=list)
     transforms: Dict[str, Any] = field(default_factory=dict)
     guid: str = ""  # 16 bytes GUID (exists when version < 1005)
