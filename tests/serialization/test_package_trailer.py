@@ -3,6 +3,7 @@ import pytest
 from uasset_read.constants import (
     PACKAGE_TRAILER_HEADER_TAG,
     PACKAGE_TRAILER_FOOTER_TAG,
+    PACKAGE_FILE_TAG,
     UE5_PAYLOAD_TOC,
     UE5_DATA_RESOURCES,
 )
