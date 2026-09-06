@@ -231,7 +231,7 @@ def parse_package_document(
     Reads the binary format directly using LegacyPackageReader.
     """
     from .archive import FileSource
-    from .v2.package.legacy import LegacyPackageReader
+    from .parsers.legacy_reader import LegacyPackageReader
 
     source = FileSource(file_path)
     try:
