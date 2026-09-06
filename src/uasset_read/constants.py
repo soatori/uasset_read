@@ -21,6 +21,10 @@ EXIT_ARGUMENT_ERROR = 3
 PACKAGE_FILE_TAG = 0x9E2A83C1  # Correct byte order magic tag
 PACKAGE_FILE_TAG_SWAPPED = 0xC1832A9E  # Swapped byte order magic tag
 
+# PackageTrailer tags (UE5)
+PACKAGE_TRAILER_HEADER_TAG = 0xD1C43B2E80A5F697
+PACKAGE_TRAILER_FOOTER_TAG = 0x29BFCA045138DE76
+
 # ============================================================================
 # Version constants
 # ============================================================================
