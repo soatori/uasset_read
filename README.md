@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 > 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 94 source files · 70 registered UE class handlers
 
-> **Refactor status:** v2 package-first architecture: default CLI/API output is `PackageDocument v2` (legacy packages; tagged properties parsed within export bounds; sample-backed handlers incl. lightweight Niagara kind coverage (semantic status partial until domain fields land), no Semantic 1.x handler dependency). Payload descriptors are reserved for cooked containers: Legacy v2 emits no top-level payloads and `extract_payload` is a stable deferred interface (`PAYLOAD_EXTRACTION_DEFERRED`, reads nothing) until redistributable `.uexp/.ubulk/.utoc/.ucas` samples exist (#621). Default `semantic` view excludes raw offsets/property trees; they are opt-in via `raw`/`debug` views. Zen/IoStore, unversioned-with-usmap, and external-container (ubulk/ucas) extraction remain deferred (see `docs/designs/README.md`); Semantic 1.x JSON is no longer available — the v1 pipeline was removed.
+> **Refactor status:** v2 package-first architecture: default CLI/API output is `PackageDocument v2` (legacy packages; tagged properties parsed within export bounds; sample-backed handlers incl. lightweight Niagara kind coverage (semantic status partial until domain fields land), no Semantic 1.x handler dependency). Payload extraction from cooked sidecar files is now implemented: `extract_payload` reads actual bytes from `.uexp/.ubulk` files using BulkData header mapping. Default `semantic` view excludes raw offsets/property trees; they are opt-in via `raw`/`debug` views. Zen/IoStore and unversioned-with-usmap remain deferred (see `docs/designs/README.md`); Semantic 1.x JSON is no longer available — the v1 pipeline was removed.
 
 ## Why uasset_read?
 
@@ -85,7 +85,7 @@ print(project_document(doc))  # PackageDocument JSON dict
 ### File Format Support
 
 - **Dedicated asset type parsers** — 70 registrations covering 61 distinct UE class names (`asset_types/__init__.py`), 13 bound to real extractors (DataTable, CurveTable, LevelSequence, MovieScene*, Skeleton, SoundWave, AnimSequence, AnimMontage, AnimBlueprintGeneratedClass, UserDefinedEnum, UserDefinedStruct); the remaining 48 are metadata/property-metadata stubs. 21 semantic AssetHandler classes in `handlers_impl.py` provide deeper coverage for selected class families.
-- **Bulk Data** — BulkData header parsing
+- **Payload extraction** — cooked payload extraction from sidecar files (.uexp/.ubulk) with sidecar discovery and BulkData header mapping
 - **Game version support** — Game-specific serialization constants
 - **Binary/native handlers** — binary or native property serialization support
 
@@ -267,7 +267,7 @@ When Unreal Editor 5.8 is released, use the official Experimental Unreal MCP ser
 
 - **Only unbaked/editor-saved assets**: Cooked assets have stripped graph data
 - **Limited bytecode decompilation**: Kismet EExprToken→AST→C++ implemented for known token types
-- **No resource export**: Binary data too large; metadata only
+- **Limited binary data export**: Large payloads (textures, audio) require sidecar files; `extract_payload` reads from `.uexp/.ubulk` when available
 - **Read-only**: Parsing only, no modification
 - **UE source reference required**: No official .uasset format documentation
 

@@ -1,5 +1,13 @@
 # Issue #627 — Loose Sidecar Fixture Origin (.uexp / .ubulk)
 
+## Status (2026-09-07)
+
+✅ **IMPLEMENTED**: Basic payload extraction from sidecar files is now working.
+- Sidecar discovery in `PackageBundle` (`.uexp_path`, `.ubulk_path`, `.uptnl_path` properties)
+- `BulkDataHeader` parsing from `parsers/bulk_data.py`
+- `extract_payload` agent tool returns actual bytes from sidecar files
+- Integration test with `T_ParserBulk` fixture verified
+
 Every number below was read back from the files on disk. Nothing is asserted from a filename.
 
 ## Source
@@ -57,10 +65,10 @@ on it. Do not treat it as a spec claim until it is traced.
   property stream is read across the boundary. Proof on this fixture: `DT_ParserWeapon` and
   `TestDataTable` decode their row blocks (`EmptyWeaponA/EmptyWeaponB`, `Test.Tag/Test.Tag.2`)
   from data that exists only in `.uexp`.
-- `.ubulk` is **discovered and hash-pinned but not yet mapped**: `doc.payloads == []` and
-  `extract_payload` returns `PAYLOAD_EXTRACTION_DEFERRED`. Per-export bulk descriptors still need
-  the `FTexture2DResource`/`FByteBulkData` mapping against this file; that is the remaining work
-  item of #627, not a fixture gap.
+- `.ubulk` is **discovered and mapped**: `extract_payload` reads actual bytes from sidecar files
+  using BulkData header parsing. The `extract_bulk_data_descriptors` function scans export serial
+  regions for BulkData headers and creates `PayloadDescriptor` objects with correct offset/size
+  information. Integration tests verify extraction from `T_ParserBulk.uexp`.
 
 ## Verification / gate
 
@@ -69,7 +77,7 @@ on it. Do not treat it as a spec claim until it is traced.
   an on-disk sidecar is undeclared, or if any hash/size drifts.
 - Missing-sidecar acceptance: a main file whose `SerialOffset`s resolve past
   `TotalHeaderSize` with no `.uexp` present must not silently truncate — it must report a
-  structured diagnostic and degrade `status.parse`. That check is tracked in #627 and is not yet
+  structured diagnostic and degrade `status.parse`. That check is tracked in #627 and is now
   satisfied by the reader.
 
 ## Related
