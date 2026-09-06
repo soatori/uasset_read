@@ -129,6 +129,15 @@ def test_sidecar_discovery():
     assert bundle.ubulk_path.exists()
     assert bundle.ubulk_path.suffix == ".ubulk"
 
+    # T_ParserBulk does NOT have .uptnl sidecar
+    assert bundle.uptnl_path is None
+
     # main_path_obj should be a Path
     assert isinstance(bundle.main_path_obj, Path)
     assert bundle.main_path_obj == Path(bundle.main_path)
+
+    # Verify Path caching: same object returned on repeated access
+    assert bundle.uexp_path is bundle.uexp_path
+    assert bundle.ubulk_path is bundle.ubulk_path
+    assert bundle.uptnl_path is bundle.uptnl_path
+    assert bundle.main_path_obj is bundle.main_path_obj

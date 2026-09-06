@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 from typing import Dict, Literal, Optional
 import logging
@@ -152,26 +153,26 @@ class PackageBundle:
     files: Dict[str, str] = field(default_factory=dict)
     provider: Optional["FileSystemPackageProvider"] = None
 
-    @property
+    @cached_property
     def main_path_obj(self) -> Path:
-        """Return main_path as a Path object."""
+        """Return main_path as a Path object (cached)."""
         return Path(self.main_path)
 
-    @property
+    @cached_property
     def uexp_path(self) -> Optional[Path]:
-        """Return .uexp sidecar path if it exists, else None."""
+        """Return .uexp sidecar path if it exists, else None (cached)."""
         path = self.files.get(".uexp")
         return Path(path) if path is not None else None
 
-    @property
+    @cached_property
     def ubulk_path(self) -> Optional[Path]:
-        """Return .ubulk sidecar path if it exists, else None."""
+        """Return .ubulk sidecar path if it exists, else None (cached)."""
         path = self.files.get(".ubulk")
         return Path(path) if path is not None else None
 
-    @property
+    @cached_property
     def uptnl_path(self) -> Optional[Path]:
-        """Return .uptnl sidecar path if it exists, else None."""
+        """Return .uptnl sidecar path if it exists, else None (cached)."""
         path = self.files.get(".uptnl")
         return Path(path) if path is not None else None
 
