@@ -61,8 +61,8 @@ def extract_payload_bytes(
 ) -> PayloadExtraction:
     """Extract payload bytes from a cooked package.
 
-    Currently returns PAYLOAD_EXTRACTION_DEFERRED for all attempts.
-    Real extraction will follow when BulkData mapping is implemented.
+    Reads actual bytes from the appropriate file (main or sidecar) based on
+    the descriptor's source_region and offset fields.
 
     Args:
         descriptor: Payload descriptor from the package.
@@ -72,11 +72,46 @@ def extract_payload_bytes(
     Returns:
         PayloadExtraction with data or error.
     """
-    # For now, return deferred for all extraction attempts
-    # Real implementation will follow in Task 4
-    return PayloadExtraction(
-        descriptor=descriptor,
-        data=b"",
-        extracted=False,
-        error=PAYLOAD_EXTRACTION_DEFERRED,
-    )
+    sidecar_paths = sidecar_paths or {}
+
+    # Determine which file to read from
+    if descriptor.source_region == "main":
+        file_path = main_path
+    elif descriptor.source_region in sidecar_paths:
+        file_path = sidecar_paths[descriptor.source_region]
+    else:
+        # No sidecar available, return deferred
+        return PayloadExtraction(
+            descriptor=descriptor,
+            data=b"",
+            extracted=False,
+            error=PAYLOAD_EXTRACTION_DEFERRED,
+        )
+
+    # Read the payload bytes
+    try:
+        with open(file_path, "rb") as f:
+            f.seek(descriptor.offset)
+            data = f.read(descriptor.stored_size)
+
+        if len(data) < descriptor.stored_size:
+            return PayloadExtraction(
+                descriptor=descriptor,
+                data=data,
+                extracted=False,
+                error=f"Short read: expected {descriptor.stored_size} bytes, got {len(data)}",
+            )
+
+        return PayloadExtraction(
+            descriptor=descriptor,
+            data=data,
+            extracted=True,
+            error=None,
+        )
+    except Exception as e:
+        return PayloadExtraction(
+            descriptor=descriptor,
+            data=b"",
+            extracted=False,
+            error=f"Read failed: {e}",
+        )

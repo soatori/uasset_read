@@ -52,8 +52,8 @@ def test_payload_descriptor_optional_fields():
     assert descriptor.hash == "abc123"
 
 
-def test_extract_payload_deferred():
-    """Test that extract_payload returns DEFERRED when no sidecar exists."""
+def test_extract_payload_main_read_failure():
+    """Test that extract_payload returns error when main file doesn't exist."""
     descriptor = PayloadDescriptor(
         id="payload:(export:0)",
         owner="export:0",
@@ -66,12 +66,12 @@ def test_extract_payload_deferred():
 
     result = extract_payload_bytes(descriptor, main_path=Path("nonexistent.uasset"))
     assert result.extracted is False
-    assert result.error == PAYLOAD_EXTRACTION_DEFERRED
+    assert "Read failed" in result.error
     assert result.data == b""
 
 
-def test_extract_payload_with_sidecar_paths():
-    """Test that extract_payload still returns DEFERRED even with sidecar paths."""
+def test_extract_payload_with_missing_sidecar():
+    """Test that extract_payload returns error when sidecar file doesn't exist."""
     descriptor = PayloadDescriptor(
         id="payload:(export:0)",
         owner="export:0",
@@ -88,7 +88,8 @@ def test_extract_payload_with_sidecar_paths():
         main_path=Path("nonexistent.uasset"),
         sidecar_paths=sidecar_paths,
     )
-    assert result.error == PAYLOAD_EXTRACTION_DEFERRED
+    assert result.extracted is False
+    assert "Read failed" in result.error
 
 
 def test_payload_extraction_is_dataclass():
@@ -106,6 +107,123 @@ def test_payload_extraction_is_dataclass():
     assert extraction.data == b"test"
     assert extraction.extracted is True
     assert extraction.error is None
+
+
+def test_extract_payload_from_uexp():
+    """Test extracting payload from .uexp sidecar."""
+    fixture_dir = Path(__file__).parent / "samples"
+    main_path = fixture_dir / "T_ParserBulk.uasset"
+    uexp_path = fixture_dir / "T_ParserBulk.uexp"
+
+    if not main_path.exists():
+        pytest.skip("T_ParserBulk.uasset fixture not found")
+
+    # T_ParserBulk.uexp is 22308 bytes
+    descriptor = PayloadDescriptor(
+        id="payload:(export:0)",
+        owner="export:0",
+        kind="bulk_data",
+        source_region="uexp",
+        offset=0,
+        stored_size=22308,
+        status="available",
+    )
+
+    result = extract_payload_bytes(
+        descriptor,
+        main_path=main_path,
+        sidecar_paths={"uexp": uexp_path},
+    )
+
+    assert result.extracted is True
+    assert result.error is None
+    assert len(result.data) == 22308
+    assert result.descriptor is descriptor
+
+
+def test_extract_payload_from_uexp_with_offset():
+    """Test extracting payload from .uexp with offset."""
+    fixture_dir = Path(__file__).parent / "samples"
+    main_path = fixture_dir / "T_ParserBulk.uasset"
+    uexp_path = fixture_dir / "T_ParserBulk.uexp"
+
+    if not main_path.exists():
+        pytest.skip("T_ParserBulk.uasset fixture not found")
+
+    # Read first 100 bytes from offset 100
+    descriptor = PayloadDescriptor(
+        id="payload:(export:0)",
+        owner="export:0",
+        kind="bulk_data",
+        source_region="uexp",
+        offset=100,
+        stored_size=100,
+        status="available",
+    )
+
+    result = extract_payload_bytes(
+        descriptor,
+        main_path=main_path,
+        sidecar_paths={"uexp": uexp_path},
+    )
+
+    assert result.extracted is True
+    assert result.error is None
+    assert len(result.data) == 100
+
+
+def test_extract_payload_short_read():
+    """Test extraction when stored_size exceeds file size."""
+    fixture_dir = Path(__file__).parent / "samples"
+    main_path = fixture_dir / "T_ParserBulk.uasset"
+    uexp_path = fixture_dir / "T_ParserBulk.uexp"
+
+    if not main_path.exists():
+        pytest.skip("T_ParserBulk.uasset fixture not found")
+
+    # Request more bytes than available
+    descriptor = PayloadDescriptor(
+        id="payload:(export:0)",
+        owner="export:0",
+        kind="bulk_data",
+        source_region="uexp",
+        offset=0,
+        stored_size=100000,  # uexp is only 22308 bytes
+        status="available",
+    )
+
+    result = extract_payload_bytes(
+        descriptor,
+        main_path=main_path,
+        sidecar_paths={"uexp": uexp_path},
+    )
+
+    assert result.extracted is False
+    assert "Short read" in result.error
+    assert len(result.data) == 22308  # Got what was available
+
+
+def test_extract_payload_missing_sidecar_returns_deferred():
+    """Test that missing sidecar returns DEFERRED."""
+    descriptor = PayloadDescriptor(
+        id="payload:(export:0)",
+        owner="export:0",
+        kind="bulk_data",
+        source_region="ubulk",
+        offset=0,
+        stored_size=1024,
+        status="available",
+    )
+
+    # No sidecar_paths provided
+    result = extract_payload_bytes(
+        descriptor,
+        main_path=Path("nonexistent.uasset"),
+    )
+
+    assert result.extracted is False
+    assert result.error == PAYLOAD_EXTRACTION_DEFERRED
+    assert result.data == b""
 
 
 def test_sidecar_discovery():
