@@ -10,7 +10,8 @@ zero emitters exist and this dataclass is a contract-sync placeholder.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from pathlib import Path
+from typing import Literal, Optional
 
 
 @dataclass(frozen=True)
@@ -51,3 +52,31 @@ PAYLOAD_EXTRACTION_DEFERRED_MESSAGE = (
     "Payload extraction is deferred: real payloads require "
     "per-export BulkData mapping from cooked fixtures (issue #627)"
 )
+
+
+def extract_payload_bytes(
+    descriptor: PayloadDescriptor,
+    main_path: Path,
+    sidecar_paths: Optional[dict[str, Path]] = None,
+) -> PayloadExtraction:
+    """Extract payload bytes from a cooked package.
+
+    Currently returns PAYLOAD_EXTRACTION_DEFERRED for all attempts.
+    Real extraction will follow when BulkData mapping is implemented.
+
+    Args:
+        descriptor: Payload descriptor from the package.
+        main_path: Path to the main .uasset file.
+        sidecar_paths: Optional dict mapping region names to sidecar file paths.
+
+    Returns:
+        PayloadExtraction with data or error.
+    """
+    # For now, return deferred for all extraction attempts
+    # Real implementation will follow in Task 4
+    return PayloadExtraction(
+        descriptor=descriptor,
+        data=b"",
+        extracted=False,
+        error=PAYLOAD_EXTRACTION_DEFERRED,
+    )
