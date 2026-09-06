@@ -64,3 +64,65 @@ def read_lookup_table_entry(archive: BinaryIO, version: int) -> FLookupTableEntr
         filter_flags=filter_flags,
         access_mode=access_mode,
     )
+
+
+@dataclass
+class FPackageTrailerHeader:
+    """PackageTrailer header structure."""
+
+    tag: int  # uint64, should be PACKAGE_TRAILER_HEADER_TAG
+    version: int  # uint32, EPackageTrailerVersion
+    header_length: int  # uint32
+    payloads_data_length: int  # uint64
+    num_payloads: int  # int32
+
+
+@dataclass
+class FPackageTrailer:
+    """Complete PackageTrailer structure."""
+
+    header: FPackageTrailerHeader
+    lookup_table: list[FLookupTableEntry]
+
+
+def read_package_trailer(archive: BinaryIO, payload_toc_offset: int) -> FPackageTrailer:
+    """Read FPackageTrailer from the archive.
+
+    Args:
+        archive: Seekable binary stream positioned at payload_toc_offset.
+        payload_toc_offset: Offset where the trailer starts (for validation).
+
+    Returns:
+        Parsed FPackageTrailer with header and lookup table.
+    """
+    # Read header fields
+    tag_bytes = archive.read(8)
+    if len(tag_bytes) < 8:
+        raise ValueError("Short read for PackageTrailer tag")
+    tag = struct.unpack('<Q', tag_bytes)[0]
+    if tag != PACKAGE_TRAILER_HEADER_TAG:
+        raise ValueError(
+            f"Invalid PackageTrailer tag: 0x{tag:016X}, "
+            f"expected 0x{PACKAGE_TRAILER_HEADER_TAG:016X}"
+        )
+
+    version = struct.unpack('<I', archive.read(4))[0]
+    header_length = struct.unpack('<I', archive.read(4))[0]
+    payloads_data_length = struct.unpack('<Q', archive.read(8))[0]
+    num_payloads = struct.unpack('<i', archive.read(4))[0]
+
+    header = FPackageTrailerHeader(
+        tag=tag,
+        version=version,
+        header_length=header_length,
+        payloads_data_length=payloads_data_length,
+        num_payloads=num_payloads,
+    )
+
+    # Read lookup table entries
+    lookup_table = []
+    for _ in range(num_payloads):
+        entry = read_lookup_table_entry(archive, version=version)
+        lookup_table.append(entry)
+
+    return FPackageTrailer(header=header, lookup_table=lookup_table)

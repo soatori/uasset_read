@@ -86,3 +86,62 @@ def test_read_lookup_table_entry_v2():
     assert entry.flags == 0x0001
     assert entry.filter_flags == 0x0002
     assert entry.access_mode == 1
+
+
+# --- FPackageTrailer tests ---
+
+
+def test_read_package_trailer_header():
+    """Parse FPackageTrailer header with 2 entries."""
+    from uasset_read.serializers.package_trailer import read_package_trailer
+
+    # Build trailer: Header(28 bytes static) + 2 entries(49 bytes each v2)
+    trailer_data = bytearray()
+
+    # FHeader
+    trailer_data += struct.pack('<Q', 0xD1C43B2E80A5F697)  # Tag
+    trailer_data += struct.pack('<I', 2)  # Version (PAYLOAD_FLAGS)
+    trailer_data += struct.pack('<I', 28 + 2 * 49)  # HeaderLength
+    trailer_data += struct.pack('<Q', 4096)  # PayloadsDataLength
+    trailer_data += struct.pack('<i', 2)  # NumPayloads
+
+    # Entry 1 (49 bytes v2)
+    trailer_data += b'\x01' * 20  # Identifier
+    trailer_data += struct.pack('<q', 0)  # OffsetInFile
+    trailer_data += struct.pack('<Q', 1024)  # CompressedSize
+    trailer_data += struct.pack('<Q', 2048)  # RawSize
+    trailer_data += struct.pack('<H', 0)  # Flags
+    trailer_data += struct.pack('<H', 0)  # FilterFlags
+    trailer_data += struct.pack('<B', 0)  # AccessMode
+
+    # Entry 2 (49 bytes v2)
+    trailer_data += b'\x02' * 20  # Identifier
+    trailer_data += struct.pack('<q', 1024)  # OffsetInFile
+    trailer_data += struct.pack('<Q', 512)  # CompressedSize
+    trailer_data += struct.pack('<Q', 1024)  # RawSize
+    trailer_data += struct.pack('<H', 0)  # Flags
+    trailer_data += struct.pack('<H', 0)  # FilterFlags
+    trailer_data += struct.pack('<B', 0)  # AccessMode
+
+    archive = ByteArchive(bytes(trailer_data))
+    trailer = read_package_trailer(archive, payload_toc_offset=0)
+
+    assert trailer.header.tag == 0xD1C43B2E80A5F697
+    assert trailer.header.version == 2
+    assert trailer.header.num_payloads == 2
+    assert trailer.header.payloads_data_length == 4096
+    assert len(trailer.lookup_table) == 2
+    assert trailer.lookup_table[0].compressed_size == 1024
+    assert trailer.lookup_table[1].offset_in_file == 1024
+
+
+def test_read_package_trailer_invalid_tag():
+    """Reject trailer with wrong header tag."""
+    from uasset_read.serializers.package_trailer import read_package_trailer
+
+    trailer_data = struct.pack('<Q', 0xDEADBEEF)  # Wrong tag
+    trailer_data += b'\x00' * 20  # padding
+
+    archive = ByteArchive(trailer_data)
+    with pytest.raises(ValueError, match="Invalid PackageTrailer tag"):
+        read_package_trailer(archive, payload_toc_offset=0)
