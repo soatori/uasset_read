@@ -498,3 +498,160 @@ def test_extract_bulk_data_from_real_uexp():
     for desc in descriptors:
         assert desc.size_on_disk > 0
         assert desc.element_count > 0
+
+
+def test_end_to_end_payload_extraction():
+    """End-to-end test: parse T_ParserBulk.uasset and extract texture mip data.
+
+    Verifies the full pipeline:
+    1. Parse package to discover exports and sidecar files
+    2. Find a Texture2D export
+    3. Extract payload using the agent tool
+    4. Verify extracted data is valid and non-empty
+    """
+    import base64
+
+    from uasset_read.agent_tools import extract_payload
+    from uasset_read.package import open_package_bundle, parse_package_document
+
+    fixture_dir = Path(__file__).parent / "samples"
+    main_path = fixture_dir / "T_ParserBulk.uasset"
+
+    if not main_path.exists():
+        pytest.skip("T_ParserBulk.uasset fixture not found")
+
+    # Step 1: Parse the package to discover structure
+    doc = parse_package_document(str(main_path), depth="package")
+    assert doc is not None, "PackageDocument should not be None"
+    assert len(doc.objects) > 0, "Package should have at least one export"
+
+    # Step 2: Find the Texture2D export
+    texture_export_index = None
+    for i, obj in enumerate(doc.objects):
+        if obj.class_name == "Texture2D":
+            texture_export_index = i
+            break
+
+    if texture_export_index is None:
+        pytest.skip("No Texture2D export found in T_ParserBulk.uasset")
+
+    # Verify export has serial region
+    export = doc.objects[texture_export_index]
+    assert export.serial_region is not None, "Texture2D export should have a serial region"
+    assert export.serial_region.size > 0, "Serial region should have non-zero size"
+    assert export.serial_region.offset >= 0, "Serial region offset should be non-negative"
+
+    # Step 3: Discover sidecar files
+    bundle = open_package_bundle(str(main_path))
+    assert bundle.uexp_path is not None, "T_ParserBulk should have a .uexp sidecar"
+    assert bundle.uexp_path.exists(), ".uexp sidecar file should exist"
+    assert bundle.ubulk_path is not None, "T_ParserBulk should have a .ubulk sidecar"
+    assert bundle.ubulk_path.exists(), ".ubulk sidecar file should exist"
+
+    # Step 4: Extract payload using the agent tool
+    payload_id = f"payload:(export:{texture_export_index})"
+    result = extract_payload(
+        file_path=str(main_path),
+        payload_id=payload_id,
+        export_index=texture_export_index,
+    )
+
+    # Verify extraction succeeded
+    assert "error" not in result or result.get("code") != PAYLOAD_EXTRACTION_DEFERRED, (
+        f"Extraction should not be deferred: {result}"
+    )
+    assert "data" in result, f"Result should contain 'data' key: {result}"
+    assert "size" in result, f"Result should contain 'size' key: {result}"
+    assert result["size"] > 0, f"Extracted size should be positive: {result['size']}"
+    assert result["source_region"] in ("uexp", "ubulk", "main"), (
+        f"Source region should be valid: {result.get('source_region')}"
+    )
+
+    # Step 5: Verify extracted data is valid base64 and non-empty
+    decoded_data = base64.b64decode(result["data"])
+    assert len(decoded_data) == result["size"], (
+        f"Decoded data length ({len(decoded_data)}) should match size ({result['size']})"
+    )
+    assert len(decoded_data) > 0, "Decoded data should be non-empty"
+
+    # Verify the payload_id in result matches what we requested
+    assert result["id"] == payload_id, (
+        f"Result payload_id should match request: {result.get('id')} != {payload_id}"
+    )
+
+
+def test_end_to_end_payload_extraction_auto_index():
+    """End-to-end test: extract payload without specifying export_index.
+
+    Verifies the agent tool can derive export_index from payload_id format.
+    """
+    import base64
+
+    from uasset_read.agent_tools import extract_payload
+
+    fixture_dir = Path(__file__).parent / "samples"
+    main_path = fixture_dir / "T_ParserBulk.uasset"
+
+    if not main_path.exists():
+        pytest.skip("T_ParserBulk.uasset fixture not found")
+
+    # Extract without export_index - should derive from payload_id
+    result = extract_payload(
+        file_path=str(main_path),
+        payload_id="payload:(export:0)",
+    )
+
+    # Should succeed
+    assert "error" not in result or result.get("code") != PAYLOAD_EXTRACTION_DEFERRED
+    assert "data" in result
+    assert result["size"] > 0
+
+    # Verify data is valid
+    decoded_data = base64.b64decode(result["data"])
+    assert len(decoded_data) == result["size"]
+
+
+def test_end_to_end_payload_extraction_direct_api():
+    """End-to-end test using the low-level extract_payload_bytes API.
+
+    Verifies the core extraction function works with real sidecar files.
+    """
+    from uasset_read.models.payloads import PayloadDescriptor, extract_payload_bytes
+    from uasset_read.package import open_package_bundle, parse_package_document
+
+    fixture_dir = Path(__file__).parent / "samples"
+    main_path = fixture_dir / "T_ParserBulk.uasset"
+
+    if not main_path.exists():
+        pytest.skip("T_ParserBulk.uasset fixture not found")
+
+    # Discover sidecars
+    bundle = open_package_bundle(str(main_path))
+    assert bundle.uexp_path is not None
+
+    # Parse to get serial region info
+    doc = parse_package_document(str(main_path), depth="package")
+    assert len(doc.objects) > 0
+
+    # Create a descriptor for the uexp region
+    descriptor = PayloadDescriptor(
+        id="payload:(export:0)",
+        owner="export:0",
+        kind="bulk_data",
+        source_region="uexp",
+        offset=0,
+        stored_size=bundle.uexp_path.stat().st_size,
+        status="available",
+    )
+
+    # Extract using the direct API
+    result = extract_payload_bytes(
+        descriptor,
+        main_path=main_path,
+        sidecar_paths={"uexp": bundle.uexp_path},
+    )
+
+    assert result.extracted is True, f"Extraction should succeed: {result.error}"
+    assert result.error is None, f"Should have no error: {result.error}"
+    assert len(result.data) == 22308, f"Should extract all uexp bytes: {len(result.data)}"
+    assert result.descriptor is descriptor
