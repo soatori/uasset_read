@@ -1,10 +1,20 @@
 """Real-sample contract home: every fixture-touching check lives here.
 
-The 54-fixture matrix is manifest-driven and uncapped by design; shared
+The 64-fixture matrix is manifest-driven and uncapped by design; shared
 parse results are cached per sample so each fixture is parsed once per
 depth. Case bodies folded from the former ``tests/contract/`` layer are
 kept verbatim with the case/sample name in the failure message.
+
+Container fixtures (.pak/.utoc/.ucas) are registered under ``containers``
+instead of ``samples`` because they are not PackageDocuments; they get
+their own integrity gate below.
+
+This file deliberately feeds duck-typed stub archives/exports to internal helpers, so the
+strict-object rules are off here; ``src/uasset_read`` remains the pyright gate (ci.yml).
 """
+
+# pyright: reportArgumentType=false, reportAttributeAccessIssue=false
+# pyright: reportOptionalSubscript=false, reportOptionalMemberAccess=false, reportOperatorIssue=false
 
 from __future__ import annotations
 
@@ -36,6 +46,59 @@ GOLDEN_FILES = _MANIFEST_DATA["golden_files"]
 # (mesh, blueprint summary, niagara) stay "partial" (#629).
 CAPABILITIES = (
     ("ALS_FootstepDataTable.uasset", "DataTable", {"kind": "data_table"}, "complete"),
+    # Row blocks are pinned by name, not just by count: the #626 UE 5.8 fixtures proved
+    # the row anchor was 4 bytes early, and a count-only assertion cannot see that.
+    (
+        "FirstPerson_DT_WeaponList.uasset",
+        "DataTable",
+        {
+            "kind": "data_table",
+            "row_count": 3,
+            "row_names": ["GrenadeLauncher", "Pistol", "Rifle"],
+        },
+        "complete",
+    ),
+    (
+        "TestSimpleCurveTable.uasset",
+        "CurveTable",
+        {
+            "kind": "curve_table",
+            "curve_table_mode": "SimpleCurves",
+            "row_count": 2,
+            "row_names": ["RowA", "RowB"],
+        },
+        "complete",
+    ),
+    (
+        "TestRichCurveTable.uasset",
+        "CurveTable",
+        {
+            "kind": "curve_table",
+            "curve_table_mode": "RichCurves",
+            "row_count": 2,
+            "row_names": ["RowA", "RowB"],
+        },
+        "complete",
+    ),
+    (
+        "testrCurveTable.uasset",
+        "CurveTable",
+        {
+            "kind": "curve_table",
+            "curve_table_mode": "SimpleCurves",
+            # Repeated base names are FName instances, so the on-disk Number must
+            # render into the row name (Curve, Curve_1, Curve_2).
+            "row_count": 3,
+            "row_names": ["Curve", "Curve_0", "Curve_1"],
+        },
+        "complete",
+    ),
+    (
+        "DT_ParserWeapon.uasset",
+        "DataTable",
+        {"kind": "data_table", "row_count": 2, "row_names": ["EmptyWeaponA", "EmptyWeaponB"]},
+        "complete",
+    ),
     (
         "Lyra_Enum_PanelType.uasset",
         "UserDefinedEnum",
@@ -198,25 +261,30 @@ def _raw_depends_map(sample: str):
         archive.close()
 
 
+PACKAGE_SUFFIXES = {".uasset", ".umap", ".uexp", ".ubulk", ".uptnl"}
+ORIGIN_DOCS = {
+    "ORIGIN-issue-516-plugin-mount.md",
+    "ORIGIN-issue-521-niagara.md",
+    "ORIGIN-issue-522-cube-builder.md",
+    "ORIGIN-issue-615-618-619-samples.md",
+    "ORIGIN-issue-624-iostore.md",
+    "ORIGIN-issue-625-pak.md",
+    "ORIGIN-issue-626-curve-table.md",
+    "ORIGIN-issue-627-sidecar.md",
+}
+
+
 def test_manifest_matches_every_real_sample():
     """The retained real-sample corpus must match its review-controlled manifest exactly."""
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     assert manifest["version"] == 2
     expected_files = {entry["name"] for entry in manifest["samples"]}
-    actual_files = {
-        path.name for path in SAMPLES.iterdir() if path.suffix in {".uasset", ".umap", ".utoc", ".ucas", ".pak"}
-    }
-    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 54
+    for entry in manifest["samples"]:
+        expected_files |= {side["name"] for side in entry["sidecars"]}
+    actual_files = {path.name for path in SAMPLES.iterdir() if path.suffix in PACKAGE_SUFFIXES}
+    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 64
     assert actual_files == expected_files
-    allowed = expected_files | {
-        "manifest.json",
-        "README.md",
-        "golden",
-        "ORIGIN-issue-516-plugin-mount.md",
-        "ORIGIN-issue-521-niagara.md",
-        "ORIGIN-issue-522-cube-builder.md",
-        "ORIGIN-issue-615-618-619-samples.md",
-    }
+    allowed = expected_files | {"manifest.json", "README.md", "golden", "containers"} | ORIGIN_DOCS
     extra = {path.name for path in SAMPLES.iterdir()} - allowed
     assert not extra, f"Unexpected files in samples/: {extra}"
     for entry in manifest["samples"]:
@@ -224,6 +292,15 @@ def test_manifest_matches_every_real_sample():
         assert path.exists(), f"Missing sample: {entry['name']}"
         assert path.stat().st_size == entry["size_bytes"], entry["name"]
         assert _sha256(path) == entry["sha256"], entry["name"]
+        # A declared sidecar must exist, and an existing sidecar must be declared (#627).
+        sides = {side["name"]: side for side in entry["sidecars"]}
+        assert set(sides) == {path.with_suffix(ext).name for ext in (".uexp", ".ubulk", ".uptnl")
+                              if path.with_suffix(ext).exists()}, entry["name"]
+        for name, side in sides.items():
+            side_path = SAMPLES / name
+            assert side_path.exists(), f"{entry['name']}: missing sidecar {name}"
+            assert side_path.stat().st_size == side["size_bytes"], name
+            assert _sha256(side_path) == side["sha256"], name
     # Golden reference tables are manifest-tracked artifacts too (issue #633).
     golden_entries = manifest["golden_files"]
     golden_on_disk = {path.name for path in (SAMPLES / "golden").glob("*.golden.json")}
@@ -233,6 +310,35 @@ def test_manifest_matches_every_real_sample():
         path = SAMPLES / "golden" / entry["name"]
         assert path.stat().st_size == entry["size_bytes"], entry["name"]
         assert _sha256(path) == entry["sha256"], entry["name"]
+
+
+def test_container_fixtures_match_manifest():
+    """Container fixtures get their own integrity gate (#624/#625).
+
+    ``committed: false`` marks a fixture too large for git (GitHub rejects >100 MB).
+    Such a file is still hash-checked when this machine has it, so local Phase 5
+    evidence cannot silently drift; it is never claimed as CI coverage.
+    """
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    containers = manifest["containers"]
+    assert {entry["name"] for entry in containers} == {
+        path.name for path in (SAMPLES / "containers").iterdir() if path.suffix in {".pak", ".utoc", ".ucas"}
+    }
+    for entry in containers:
+        assert entry["container_kind"] in {"pak", "iostore_toc", "iostore_data"}, entry["name"]
+        assert entry["issue"] in {624, 625}, entry["name"]
+        path = SAMPLES / "containers" / entry["name"]
+        if entry["committed"]:
+            assert path.exists(), f"missing committed container: {entry['name']}"
+        elif not path.exists():
+            assert entry["local_only_reason"], entry["name"]
+            continue
+        assert path.stat().st_size == entry["size_bytes"], entry["name"]
+        assert _sha256(path) == entry["sha256"], entry["name"]
+    # A .utoc must always be paired with its .ucas of the same base name.
+    utoc_bases = {entry["name"][: -len(".utoc")] for entry in containers if entry["container_kind"] == "iostore_toc"}
+    ucas_bases = {entry["name"][: -len(".ucas")] for entry in containers if entry["container_kind"] == "iostore_data"}
+    assert utoc_bases == ucas_bases, "every IoStore TOC needs its data archive"
 
 
 def _golden_mapped_ids(raws, export_count: int, import_count: int) -> list[str]:
@@ -308,7 +414,15 @@ def test_real_sample_proves_claimed_capability(
     assert {key: obj.semantic[key] for key in expected} == expected, f"{sample}:{class_name}"
 
     if class_name == "DataTable":
-        assert obj.semantic["row_count"] >= 0
+        assert obj.semantic["row_count"] == len(obj.semantic["row_names"]) > 0, f"{sample}:{class_name}"
+    elif class_name == "CurveTable":
+        sem = obj.semantic
+        assert sem["row_count"] == len(sem["row_names"]) > 0, f"{sample}:{class_name}"
+        assert sem["curve_table_mode"] in ("SimpleCurves", "RichCurves"), f"{sample}:{class_name}"
+        # complete coverage requires the row block to have been exhausted: residue
+        # would mean an anchor or row-walk drift, which the reader discloses instead.
+        table_cov = next(c for c in obj.coverage if c.feature == "handler.DataTableHandler")
+        assert table_cov.status == "present", f"{sample}:{class_name} table payload not fully decoded"
     elif class_name == "Skeleton":
         assert obj.semantic["bone_count"] == len(obj.semantic["bones"]) > 0
         # ALS_Mannequin_Skeleton's BoneTree is a UE4-era struct array: ONE inner

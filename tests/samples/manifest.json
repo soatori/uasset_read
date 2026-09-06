@@ -703,37 +703,251 @@
       "has_multiple_b_is_asset": false,
       "export_count": 4,
       "b_is_asset_count": 1
+    },
+    {
+      "name": "testCurveBase.uasset",
+      "sha256": "0f99372dafcff15a6e49cb964d92a3e3ca59906e6a9c78fbae3fe22eb2db6069",
+      "size_bytes": 4757,
+      "engine_layout": "legacy",
+      "legacy_file_version": -9,
+      "file_version_ue4": 522,
+      "file_version_ue5": 1018,
+      "sidecars": [],
+      "asset_type_hint": "CurveFloat",
+      "has_multiple_b_is_asset": false,
+      "export_count": 2,
+      "b_is_asset_count": 1,
+      "asset_class": "CurveFloat",
+      "diagnostics": []
+    },
+    {
+      "name": "testrCurveTable.uasset",
+      "sha256": "4d8581b9f4a05026edd2a9ab021b1bbd0a5d5b85bbd86a2812e3bac7c8c576f7",
+      "size_bytes": 2669,
+      "engine_layout": "legacy",
+      "legacy_file_version": -9,
+      "file_version_ue4": 522,
+      "file_version_ue5": 1018,
+      "sidecars": [],
+      "asset_type_hint": "CurveTable",
+      "has_multiple_b_is_asset": false,
+      "export_count": 2,
+      "b_is_asset_count": 1,
+      "asset_class": "CurveTable",
+      "diagnostics": []
+    },
+    {
+      "name": "TestRichCurveTable.uasset",
+      "sha256": "be08b1b889ed9f421cc4f1f3a9f4bd70d4a7b1b14d0813361472340675ebe64f",
+      "size_bytes": 2746,
+      "engine_layout": "legacy",
+      "legacy_file_version": -9,
+      "file_version_ue4": 522,
+      "file_version_ue5": 1018,
+      "sidecars": [],
+      "asset_type_hint": "CurveTable",
+      "has_multiple_b_is_asset": false,
+      "export_count": 2,
+      "b_is_asset_count": 1,
+      "asset_class": "CurveTable",
+      "diagnostics": []
+    },
+    {
+      "name": "TestSimpleCurveTable.uasset",
+      "sha256": "2d98adad5f156e26d7efabaf6954755ae564a5e88954ec9980a123a3c6e29f20",
+      "size_bytes": 2796,
+      "engine_layout": "legacy",
+      "legacy_file_version": -9,
+      "file_version_ue4": 522,
+      "file_version_ue5": 1018,
+      "sidecars": [],
+      "asset_type_hint": "CurveTable",
+      "has_multiple_b_is_asset": false,
+      "export_count": 2,
+      "b_is_asset_count": 1,
+      "asset_class": "CurveTable",
+      "diagnostics": []
+    },
+    {
+      "name": "DT_ParserWeapon.uasset",
+      "sha256": "d3fae6faed554ca98d2d02c517669272ef39df770ab13e7baacd8a093f880c36",
+      "size_bytes": 1066,
+      "engine_layout": "legacy",
+      "legacy_file_version": -9,
+      "file_version_ue4": 522,
+      "file_version_ue5": 1018,
+      "sidecars": [
+        {
+          "name": "DT_ParserWeapon.uexp",
+          "sha256": "57b6a2e0e2688ac4ee18c000b745a06c844f699959dac7e427951793ae2d1f4c",
+          "size_bytes": 230
+        }
+      ],
+      "asset_type_hint": "DataTable",
+      "has_multiple_b_is_asset": false,
+      "export_count": 1,
+      "b_is_asset_count": 1,
+      "asset_class": "DataTable",
+      "diagnostics": []
+    },
+    {
+      "name": "T_ParserBulk.uasset",
+      "sha256": "4f518bc6fbcd20308a8a8927296f461fa03cb37cb35ec14220078be74f74f847",
+      "size_bytes": 1487,
+      "engine_layout": "legacy",
+      "legacy_file_version": -9,
+      "file_version_ue4": 522,
+      "file_version_ue5": 1018,
+      "sidecars": [
+        {
+          "name": "T_ParserBulk.uexp",
+          "sha256": "f3408c6168a9f6ff0934eda13026d7d9ed65345a7661afda43d82e2eae7c95bd",
+          "size_bytes": 22308
+        },
+        {
+          "name": "T_ParserBulk.ubulk",
+          "sha256": "750386e56a90b3d3073fabb34ba525054b6beda7c6ef1376abac3b4cc200e96c",
+          "size_bytes": 5570560
+        }
+      ],
+      "asset_type_hint": "Texture",
+      "has_multiple_b_is_asset": false,
+      "export_count": 1,
+      "b_is_asset_count": 1,
+      "asset_class": "Texture2D",
+      "diagnostics": [
+        "EXPORT_TRAILING_BYTES_UNCONSUMED"
+      ]
+    },
+    {
+      "name": "TestBlueprint.uasset",
+      "sha256": "70806823d99cd8c07ff972794042f513dd6cb7b99b951faba3081897424770d6",
+      "size_bytes": 3565,
+      "engine_layout": "legacy",
+      "legacy_file_version": -9,
+      "file_version_ue4": 522,
+      "file_version_ue5": 1018,
+      "sidecars": [
+        {
+          "name": "TestBlueprint.uexp",
+          "sha256": "dda43e54fb72c0d7bc525ce4cb235782a2030d02649fa002fd67163b113bee76",
+          "size_bytes": 1894
+        }
+      ],
+      "asset_type_hint": "Blueprint",
+      "has_multiple_b_is_asset": false,
+      "export_count": 7,
+      "b_is_asset_count": 1,
+      "asset_class": "BlueprintGeneratedClass",
+      "diagnostics": [
+        "EXPORT_TRAILING_BYTES_UNCONSUMED",
+        "EXPORT_TRAILING_BYTES_UNCONSUMED",
+        "EXPORT_TRAILING_BYTES_UNCONSUMED",
+        "fstring_all_null"
+      ]
+    },
+    {
+      "name": "TestDataRow.uasset",
+      "sha256": "35ab689138b67e42a2358ba3a65db0debf315f5a370c55348b3c5f3174aae82c",
+      "size_bytes": 981,
+      "engine_layout": "legacy",
+      "legacy_file_version": -9,
+      "file_version_ue4": 522,
+      "file_version_ue5": 1018,
+      "sidecars": [
+        {
+          "name": "TestDataRow.uexp",
+          "sha256": "2cfd726ca5ae49d0e4b047ac46d46c476b1ca197d1680df271296363dc18e50e",
+          "size_bytes": 359
+        }
+      ],
+      "asset_type_hint": "UserDefined",
+      "has_multiple_b_is_asset": false,
+      "export_count": 1,
+      "b_is_asset_count": 1,
+      "asset_class": "UserDefinedStruct",
+      "diagnostics": [
+        "EXPORT_TRAILING_BYTES_UNCONSUMED"
+      ]
+    },
+    {
+      "name": "TestDataTable.uasset",
+      "sha256": "18f243bef71eab64976fc51de2bcabab35e7c70cad5d5b7334d1322439815a86",
+      "size_bytes": 1046,
+      "engine_layout": "legacy",
+      "legacy_file_version": -9,
+      "file_version_ue4": 522,
+      "file_version_ue5": 1018,
+      "sidecars": [
+        {
+          "name": "TestDataTable.uexp",
+          "sha256": "ac0621233b8417ea692e177634fee91c102b4479b263ce985280e898cdae7d6d",
+          "size_bytes": 206
+        }
+      ],
+      "asset_type_hint": "DataTable",
+      "has_multiple_b_is_asset": false,
+      "export_count": 1,
+      "b_is_asset_count": 1,
+      "asset_class": "DataTable",
+      "diagnostics": []
+    },
+    {
+      "name": "TestMaterial.uasset",
+      "sha256": "0d949b49fedd9f2dc78f66bac03145c0b50ddddee8400394406a02b2b59cdebd",
+      "size_bytes": 2803,
+      "engine_layout": "legacy",
+      "legacy_file_version": -9,
+      "file_version_ue4": 522,
+      "file_version_ue5": 1018,
+      "sidecars": [
+        {
+          "name": "TestMaterial.uexp",
+          "sha256": "0a8b81380608c5fe354c650f020e69069d822377c5029921c5b06929342dca88",
+          "size_bytes": 124909
+        }
+      ],
+      "asset_type_hint": "Material",
+      "has_multiple_b_is_asset": false,
+      "export_count": 1,
+      "b_is_asset_count": 1,
+      "asset_class": "Material",
+      "diagnostics": [
+        "EXPORT_TRAILING_BYTES_UNCONSUMED"
+      ]
     }
   ],
   "summary": {
-    "total_samples": 54,
+    "total_samples": 64,
     "layout_distribution": {
-      "legacy": 54
+      "legacy": 64
     },
     "asset_type_distribution": {
       "AnimBlueprint": 2,
       "unknown": 25,
       "SoundWave": 1,
-      "DataTable": 3,
+      "DataTable": 5,
       "Skeleton": 1,
+      "PhysicsAsset": 1,
       "MaterialInstance": 1,
       "SoundAttenuation": 1,
       "PoseAsset": 1,
+      "BlendSpace": 1,
       "World": 1,
       "AnimConfig": 2,
       "SubsurfaceProfile": 1,
-      "Material": 2,
-      "UserDefined": 2,
-      "LevelSequence": 1,
-      "Texture": 1,
-      "Niagara": 1,
-      "Blueprint": 4,
-      "PhysicsAsset": 1,
-      "BlendSpace": 1,
       "StringTable": 1,
-      "PhysicalMaterial": 1
+      "Material": 3,
+      "UserDefined": 3,
+      "PhysicalMaterial": 1,
+      "LevelSequence": 1,
+      "Texture": 2,
+      "Niagara": 1,
+      "Blueprint": 5,
+      "CurveFloat": 1,
+      "CurveTable": 3
     },
-    "samples_with_sidecars": 0,
+    "samples_with_sidecars": 6,
     "samples_with_multiple_b_is_asset": [
       "ABP_RifleAnimLayers.uasset",
       "ALS_AnimBP.uasset",
@@ -751,9 +965,9 @@
       "MyProject_UE58_TestBlueprint.uasset"
     ],
     "samples_with_parse_errors": [],
-    "fixture_gap_count": 6,
+    "fixture_gap_count": 3,
     "fixture_gaps_total": 7,
-    "fixture_gaps_note": "one of the seven entries (no_b_is_asset_package) is status=covered"
+    "fixture_gaps_note": "curve_table, sidecar_files, pak_container and iostore_container are now registered; zen_package (a readable Zen package body) and unversioned_properties remain open"
   },
   "fixture_gaps": {
     "zen_package": {
@@ -766,8 +980,8 @@
       "recommended_samples": "Blueprint, Material, DataTable (diverse types)"
     },
     "iostore_container": {
-      "status": "missing",
-      "description": "No IoStore (.utoc/.ucas) container samples.",
+      "status": "available",
+      "description": "Two UE 5.8 IoStore containers: MyProject-Windows (.utoc 222,772 B / 2,221 entries, Oodle, directory index; .ucas 259,193,536 B kept out of git) and the committed global.utoc/global.ucas pair.",
       "needed_for": "Phase 5 — IoStore container parsing (target design, see docs/designs/)",
       "acquisition": "Request legitimate redistributable real samples with version info from the user: an IoStore .utoc/.ucas pair (UE5.3+) plus a few contained .uasset files for cross-validation.",
       "verification": "After copying, verify:\n- .utoc file starts with IoStore TOC magic bytes\n- the IoStore TOC header parses\n- Package names can be listed from directory index",
@@ -775,8 +989,8 @@
       "recommended_samples": "1 .utoc + 1 .ucas pair with 5+ packages inside"
     },
     "sidecar_files": {
-      "status": "missing",
-      "description": "No samples have .uexp, .ubulk, or .uptnl sidecar files. All payload data is inline.",
+      "status": "available",
+      "description": "6 cooked MyProject UE 5.8 /Game/ParserFixtures packages with real .uexp companions (main file size == TotalHeaderSize) plus T_ParserBulk.uasset/.uexp/.ubulk (5,570,560 B bulk data) for the .ubulk path.",
       "needed_for": "Phase 1 (bounded reader for sidecar regions), Phase 4 (payload descriptors)",
       "acquisition": "Request legitimate redistributable real samples with version info from the user: cooked .uasset files with their matching .uexp/.ubulk/.uptnl sidecars.",
       "verification": "After copying, verify:\n- .uexp file exists next to .uasset with same base name\n- PackageArchive correctly spans main + .uexp\n- Payload descriptors reference correct source_region",
@@ -793,8 +1007,8 @@
       "recommended_samples": "1 cooked Blueprint with unversioned properties + matching .usmap"
     },
     "pak_container": {
-      "status": "missing",
-      "description": "No .pak container samples available. Existing pak/ code reads index only.",
+      "status": "available",
+      "description": "MyProject-Windows.pak (11,450,886 B), the pak written next to the cooked IoStore containers by the same build.",
       "needed_for": "Phase 5 (Container Streaming)",
       "acquisition": "Request legitimate redistributable real samples with version info from the user: a .pak file (with partitions) plus a few .uasset files for cross-validation.",
       "verification": "After copying, verify:\n- PakReader can parse the index\n- Individual .uasset files can be extracted\n- Extracted files parse correctly with PackageDocument",
@@ -811,8 +1025,8 @@
       "recommended_samples": "1 PackageMetaData-only .uasset"
     },
     "curve_table": {
-      "status": "missing",
-      "description": "No CurveTable fixture. Name and binary import-table scans over the tracked corpus and all local UE sample projects found zero standalone UCurveTable main assets; matching third-party test assets exist only as license-blocked commercial dumps.",
+      "status": "available",
+      "description": "4 editor-saved MyProject UE 5.8 fixtures: TestSimpleCurveTable (SimpleCurve), TestRichCurveTable (RichCurve), testrCurveTable (RichCurve rows) and testCurveBase (CurveFloat, registered as the negative control: it is not a CurveTable).",
       "needed_for": "Phase 4.1 CurveTable AssetHandler (#626)",
       "acquisition": "Generate a CurveTable in a project we own (>= 2 rows, >= 2 keys, SimpleCurve or RichCurve) or obtain a redistributable one; record UE version, creation steps, row names, mode, and deterministic expected values.",
       "verification": "After copying, verify:\n- main export class is CurveTable\n- row/key values match the recorded expected values\n- manifest hash check passes",
@@ -847,6 +1061,54 @@
       "generator": "UAssetAPI",
       "generator_version": "2.0.0",
       "generator_commit": "5c22374"
+    }
+  ],
+  "containers": [
+    {
+      "name": "MyProject-Windows.pak",
+      "container_kind": "pak",
+      "sha256": "1c5e7bb264810f197480d124434acaf56af8452c48df583708c25c14a019b478",
+      "size_bytes": 11450886,
+      "committed": true,
+      "issue": 625,
+      "note": "UE 5.8 Windows cooked build pak (IoStore companion container wrapper)."
+    },
+    {
+      "name": "MyProject-Windows.utoc",
+      "container_kind": "iostore_toc",
+      "sha256": "46f0ab59102ead46bbd5f647b94414f1d57e72df265b0c17c20b24250a79162a",
+      "size_bytes": 222772,
+      "committed": true,
+      "issue": 624,
+      "note": "IoStore TOC v8: 2221 entries, 6694 compressed blocks, Oodle method, directory index."
+    },
+    {
+      "name": "MyProject-Windows.ucas",
+      "container_kind": "iostore_data",
+      "sha256": "723302e856eea40c0591936fd03e3c8a6f9ab6dd29d1e6a37726a35ab804787c",
+      "size_bytes": 259193536,
+      "committed": false,
+      "issue": 624,
+      "note": "IoStore data archive for the package-rich container.",
+      "local_only_reason": "259,193,536 bytes exceeds GitHub's 100 MB hard file limit. Pinned by sha256 and kept out of git; Phase 5 chunk-range tests use it only when it is present locally."
+    },
+    {
+      "name": "global.utoc",
+      "container_kind": "iostore_toc",
+      "sha256": "97d7856030734fdff11bc4cddd2619c9142a693f0d37adc2ac3c59f4a4a9df3c",
+      "size_bytes": 782,
+      "committed": true,
+      "issue": 624,
+      "note": "Secondary container TOC v8: 1 ScriptObjects chunk, no directory index, no compression."
+    },
+    {
+      "name": "global.ucas",
+      "container_kind": "iostore_data",
+      "sha256": "989837d42550dcccf3b7332c033f6de6ae4af256778011d9c04ecc71d8782fe8",
+      "size_bytes": 3209824,
+      "committed": true,
+      "issue": 624,
+      "note": "Matching data archive for global.utoc (committed pair)."
     }
   ]
 }

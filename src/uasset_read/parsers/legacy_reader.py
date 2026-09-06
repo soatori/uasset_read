@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Literal, Sequence
 
 from ..archive import ByteArchive, SourceInfo
-from ..constants import PKG_Cooked, PKG_FilterEditorOnly
+from ..constants import PKG_Cooked, PKG_FilterEditorOnly, PKG_UnversionedProperties
 from ..exceptions import ParseError, ExportBoundsExceeded
 from ..memory_safety import ResourceBudget
 from ..package import PackageArchive
@@ -24,6 +24,7 @@ from ..serializers.object_resources import (
     read_export_map,
     read_import_map,
     resolve_class_name,
+    script_property_region,
 )
 from ..serializers.package_summary import (
     PackageFileSummary,
@@ -791,14 +792,17 @@ class LegacyPackageReader:
                 obj.properties = {}
                 continue
 
-            serial_end = export_map[i].serial_offset + export_map[i].serial_size
-            prev_range = archive.set_read_range((export_map[i].serial_offset, serial_end))
+            exp = export_map[i]
+            serial_end = exp.serial_offset + exp.serial_size
+            script_start, script_end, script_known = script_property_region(exp)
+            prop_range_end = script_end if script_known else serial_end
+            prev_range = archive.set_read_range((script_start, prop_range_end))
             archive._current_object_id = obj.id
             try:
                 # Absolute-offset parser over the full archive, bounded by
                 # _read_range enforced inside PackageArchive.read/validate_offset.
                 raw_props = parse_properties_from_export(
-                    export=export_map[i],
+                    export=exp,
                     archive=archive,
                     summary=summary,
                     name_map=name_map,
@@ -810,12 +814,33 @@ class LegacyPackageReader:
                     # v2 has no v1 class-handler dispatch at any depth.
                     run_class_handlers=False,
                 )
-                overrun = archive.tell() - serial_end
+                overrun = archive.tell() - prop_range_end
                 obj.properties = normalize_property_bag(raw_props)
                 cn = obj.class_name or ""
+                uses_unversioned = bool(getattr(summary, "package_flags", 0) & PKG_UnversionedProperties)
+                # The export map pins the tagged stream; trust it over however far the
+                # walk happened to get, then step over the GUID field that follows it so
+                # the class-native payload is read at its real start.
+                payload_start = archive.tell()
+                if overrun <= 0 and not uses_unversioned:
+                    # The optional-Guid field follows the tagged stream for every versioned
+                    # save, so it is stepped over even when the export map records no script
+                    # region (UE 5.3 and earlier).
+                    if script_known:
+                        archive.set_read_range((script_end, serial_end))
+                        archive.seek(script_end)
+                    payload_start = _skip_optional_object_guid(archive, serial_end)
+                    archive.set_read_range((payload_start, serial_end))
                 if overrun <= 0 and cn in _TABLE_CLASSES:
                     extras[obj.id] = {
-                        "table_rows": _read_table_rows(archive, serial_end, name_map, obj.id, diagnostics)
+                        "table_rows": _read_table_rows(
+                            archive,
+                            serial_end,
+                            name_map,
+                            obj.id,
+                            diagnostics,
+                            curve_table=cn == "CurveTable",
+                        )
                     }
                 elif overrun <= 0 and cn == "StringTable":
                     extras[obj.id] = {
@@ -827,7 +852,7 @@ class LegacyPackageReader:
                     # Properties ended early but the export still has bytes: a
                     # class raw trailer (e.g. UPhysicsAsset::Serialize writes
                     # CollisionDisableTable after the tagged properties) we do
-                    # not decode yet. Preserve them and say so — never silently
+                    # not decode yet. Preserve them and say so -- never silently
                     # skip and claim coverage (#638). Exports may also carry a
                     # short all-zero alignment pad at their end; that is not a
                     # trailer worth reporting.
@@ -922,6 +947,37 @@ class LegacyPackageReader:
 # UE source: Engine/Source/Runtime/Engine/Private/DataTable.cpp LoadStructData.
 # StringTable is NOT this layout — it uses the FStringTable trailer below (#615).
 _TABLE_CLASSES = ("DataTable", "CurveTable")
+
+# ECurveTableMode (Engine/Source/Runtime/Engine/Classes/Engine/CurveTable.h).
+_CURVE_TABLE_MODES = {0: "Empty", 1: "SimpleCurves", 2: "RichCurves"}
+
+
+def _skip_optional_object_guid(archive: PackageArchive, serial_end: int) -> int:
+    """Step over the optional ``Guid`` field UE writes after the tagged properties.
+
+    ``UObject::Serialize`` calls ``FLazyObjectPtr::PossiblySerializeObjectGuid`` after
+    ``MarkScriptSerializationEnd`` (``Obj.cpp:1886`` vs ``:2113``). That enters an optional
+    structured-archive field through ``FBinaryArchiveFormatter::TryEnterField``, which writes
+    its condition as an archive bool -- 4 bytes -- and only then the 16-byte
+    ``FUniqueObjectGuid`` when set (``LazyObjectPtr.cpp:116-133``,
+    ``Formatters/BinaryArchiveFormatter.h:113-121``).
+
+    Class-native payloads start after it, so reading a DataTable/CurveTable row block at the
+    script-region end lands 4 bytes early. Returns the payload start.
+    """
+    pos = archive.tell()
+    if serial_end - pos < 4:
+        return pos
+    flag = archive.read_i32("Export.ObjectGuid.present")
+    if flag > 1:
+        # An archive bool is 0 or 1. Anything else means we are not on the field
+        # boundary, so refuse to consume it rather than shift the payload by 4 bytes.
+        archive.seek(pos)
+        return pos
+    if flag and serial_end - archive.tell() >= 16:
+        archive.read(16)
+    return archive.tell()
+
 _MAX_TABLE_BLOB = 64 * 1024 * 1024  # bounded read; larger tables report partial
 _MAX_TABLE_ROWS = 100000  # garbage row counts are rejected, not trusted
 
@@ -1113,6 +1169,8 @@ def _read_table_rows(
     name_map: list[str],
     object_id: str,
     diagnostics: list[Diagnostic],
+    *,
+    curve_table: bool = False,
 ) -> dict[str, Any]:
     """Parse NumRows + row names from the bounded payload after properties.
 
@@ -1120,8 +1178,21 @@ def _read_table_rows(
     is the export's serial end, so the slice read can never escape the
     export.  Anything that does not fit is reported as ``complete: False``
     with a diagnostic, never silently truncated.
+
+    ``curve_table`` selects the UCurveTable row block, which inserts the
+    ``ECurveTableMode`` byte between the row count and the rows
+    (``CurveTable.cpp:112-123`` save branch at ``:202-235``):
+    ``int32 NumRows``, ``uint8 CurveTableMode``, then per row ``FName`` +
+    ``FSimpleCurve``/``FRichCurve`` tagged stream. DataTable has no mode byte
+    (``DataTable.cpp`` ``SaveRowData``).
     """
-    result: dict[str, Any] = {"row_count": 0, "row_names": [], "complete": False}
+    result: dict[str, Any] = {
+        "row_count": 0,
+        "row_names": [],
+        "curve_table_mode": None,
+        "row_bytes_consumed": 0,
+        "complete": False,
+    }
     remaining = serial_end - archive.tell()
     if remaining < 4:
         return result
@@ -1140,18 +1211,32 @@ def _read_table_rows(
             )
         )
         return result
+    header = 4
+    if curve_table:
+        if len(blob) < 5:
+            return result
+        mode_raw = blob[4]
+        result["curve_table_mode"] = _CURVE_TABLE_MODES.get(mode_raw, f"Unknown({mode_raw})")
+        header = 5
     names: list[str] = []
-    payload = ByteArchive(blob[4:])
+    payload = ByteArchive(blob[header:])
     # Tag reads must use the real package layout version, not a fresh default.
     payload._file_version_ue4 = getattr(archive, "_file_version_ue4", 0)
     payload._file_version_ue5 = getattr(archive, "_file_version_ue5", 0)
-    limit = len(blob) - 4
+    limit = len(blob) - header
     for _ in range(row_count):
         if payload.tell() + 8 > limit:
             break
-        idx = payload.read_u32()
-        payload.read_u32()  # on-disk FName internal number (unused for row lookup)
-        names.append(name_map[idx] if 0 <= idx < len(name_map) else f"<row:{idx}>")
+        idx, number = struct.unpack_from("<II", blob, header + payload.tell())
+        payload.seek(payload.tell() + 8)
+        if not 0 <= idx < len(name_map):
+            names.append(f"<row:{idx}>")
+        elif number > 0:
+            # NAME_INTERNAL_TO_EXTERNAL: the on-disk Number is internal, so the
+            # display instance is Number-1 (LinkerLoad.h, same rule as FArchive.read_name).
+            names.append(f"{name_map[idx]}_{number - 1}")
+        else:
+            names.append(name_map[idx])
         # Each row is a tagged property stream terminated by the None tag (DataTable.cpp
         # LoadStructData -> SerializeItem; versioned path = SerializeTaggedProperties,
         # CurveTable.cpp:112-171 same). Skip field values; stop at None.
@@ -1171,6 +1256,27 @@ def _read_table_rows(
                 break
             payload.seek(t.value_end_offset)
     complete = len(names) == row_count
+    # The row block is the whole payload: NumRows followed by exactly that many
+    # (FName + tagged row stream) records, each ending on its own None tag. Bytes
+    # left over mean the anchor or a row walk drifted, which is never reportable
+    # as decoded rows.
+    residue = limit - payload.tell()
+    if complete and residue:
+        complete = False
+        diagnostics.append(
+            Diagnostic(
+                severity="warning",
+                code="TABLE_PAYLOAD_RESIDUE",
+                message=(
+                    f"{object_id}: {residue} undecoded byte(s) after {row_count} row(s) in the "
+                    f"table payload ({limit} bytes); row data not marked complete"
+                ),
+                stage="payload.table",
+                object_id=object_id,
+                effect="semantic_loss",
+                recoverable=True,
+            )
+        )
     if not complete:
         diagnostics.append(
             Diagnostic(
@@ -1188,6 +1294,7 @@ def _read_table_rows(
         )
     result["row_count"] = len(names)
     result["row_names"] = names
+    result["row_bytes_consumed"] = payload.tell()
     result["complete"] = complete
     return result
 

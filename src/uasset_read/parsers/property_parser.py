@@ -26,7 +26,7 @@ from uasset_read.constants import (
     UE_NONE_SENTINEL,
 )
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
-from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+from uasset_read.serializers.object_resources import ObjectExport, PackageIndex, script_property_region
 
 logger = logging.getLogger(__name__)
 
@@ -1168,10 +1168,12 @@ def parse_properties_from_export(
     if game is not None:
         setattr(summary, "_game", game)
 
-    # UE default: always start property parsing from SerialOffset
-    # ScriptSerializationStartOffset only used in special editor scenarios
-    # (property bag placeholder or class mismatch) -- see LinkerLoad.cpp:4793
-    property_start = export.serial_offset
+    # The tagged-property region is recorded per export from UE 5.4 on
+    # (script_property_region); before that version the field does not exist, so
+    # SerialOffset is all we have. Class-native bytes can precede the stream
+    # (UAssetImportData's FAssetImportInfo JSON), which is why SerialOffset alone
+    # is not a safe start once the offsets are available.
+    property_start, property_end, _authoritative = script_property_region(export)
 
     archive.seek(property_start)
 
@@ -1208,9 +1210,10 @@ def parse_properties_from_export(
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
         _handle_serialization_control(archive, summary, export)
 
-    # Calculate property data boundary
-    # UE default: use SerialSize as property boundary
-    property_end = export.serial_offset + export.serial_size
+    # When the export records no script region the legacy boundary applies: the whole
+    # serial block is the property stream (pre-5.4 packages, unversioned properties).
+    if not _authoritative:
+        property_end = export.serial_offset + export.serial_size
 
     # Unversioned property handling (including opaque fallback)
     unversioned_result = _handle_unversioned_properties(

@@ -1,12 +1,12 @@
 {
-  "_note": "Ratchet ceilings for tests/test_size_baseline.py and the CI package-smoke wheel check. Numbers are the measured tree size on 2026-09-05, re-measured the same day for #644 (agent query contracts) and #645 (import owning package), and re-measured 2026-09-06 for the #621 sidecar/contract cleanup (src shrank: _make_package_archive and PackageBundle.payloads deleted; tests grew: PayloadDescriptor<->schema gate added). Raise a ceiling only as a deliberate, reviewable diff when growth is intended; tighten them after a deletion wave. wheel_bytes carries zip-to-zip slack, the line ceilings need none.",
+  "_note": "Ratchet ceilings for tests/test_size_baseline.py and the CI package-smoke wheel check. Numbers are the measured tree size on 2026-09-05, re-measured the same day for #644 (agent query contracts) and #645 (import owning package), re-measured 2026-09-06 for the #621 sidecar/contract cleanup (src shrank: _make_package_archive and PackageBundle.payloads deleted; tests grew: PayloadDescriptor<->schema gate added), and re-measured again 2026-09-06 for the #624-#627 fixture registration plus the UE5 export-body fix (src grew: script_property_region, optional-Guid step, CurveTable row block; tests grew: container integrity gate, 5 real-fixture row assertions, 3 synthetic row-block checks). Raise a ceiling only as a deliberate, reviewable diff when growth is intended; tighten them after a deletion wave. wheel_bytes carries zip-to-zip slack, the line ceilings need none.",
   "src_python": {
     "min_files": 94,
-    "max_lines": 28024
+    "max_lines": 28185
   },
   "tests_python": {
     "min_files": 5,
-    "max_lines": 3995
+    "max_lines": 4179
   },
   "docs_markdown": {
     "min_files": 148,

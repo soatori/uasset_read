@@ -330,6 +330,11 @@ class DataTableHandler:
     Row data comes from the bounded table payload slice the legacy reader
     extracts right after the tagged properties. StringTable assets use a
     different trailer layout and are handled by StringTableHandler (#615).
+
+    CurveTable gets its own ``kind`` because its row block is not a DataTable
+    row-struct array: ``UCurveTable::Serialize`` writes the row count, an
+    ``ECurveTableMode`` byte and then one tagged ``FSimpleCurve``/``FRichCurve``
+    per row (CurveTable.cpp:102-171), so the two assets never share a contract.
     """
 
     capability = "decoded"  # row struct/count read from real property + payload data
@@ -346,7 +351,11 @@ class DataTableHandler:
         package_data: Any,
     ) -> dict[str, Any] | None:
         cn = obj.class_name or ""
-        result: dict[str, Any] = {"kind": "data_table", "table_type": cn}
+        is_curve = cn == "CurveTable"
+        result: dict[str, Any] = {
+            "kind": "curve_table" if is_curve else "data_table",
+            "table_type": cn,
+        }
         props = obj.properties or {}
 
         row_struct_name = props.get("RowStructName")
@@ -366,6 +375,8 @@ class DataTableHandler:
             result["row_count"] = rows["row_count"]
             if rows.get("row_names"):
                 result["row_names"] = rows["row_names"][:100]
+            if is_curve:
+                result["curve_table_mode"] = rows.get("curve_table_mode")
             status = "present" if rows["complete"] else "partial"
         else:
             result["row_count"] = 0
@@ -971,7 +982,7 @@ def _extract_baked_state_machines(obj: ObjectRecord) -> list[dict[str, Any]]:
                             td["transition_index"] = ti
                         rt = tf.get("AutomaticRuleTriggerTime", 0.0)
                         if isinstance(rt, (int, float)) and rt != 0.0:
-                            td["automatic_rule_trigger_time"] = float(rt)
+                            td["automatic_rule_trigger_time"] = _as_float(rt)
                         if td:
                             td["evidence"] = {
                                 "can_take_delegate_index": tf.get("CanTakeDelegateIndex", -1),
@@ -1013,7 +1024,7 @@ def _extract_baked_state_machines(obj: ObjectRecord) -> list[dict[str, Any]]:
                 }
                 cd = tf.get("CrossfadeDuration", 0.0)
                 if isinstance(cd, (int, float)) and cd != 0.0:
-                    td["crossfade_duration"] = float(cd)
+                    td["crossfade_duration"] = _as_float(cd)
                 bm = tf.get("BlendMode")
                 if bm is not None:
                     td["blend_mode"] = str(bm)
@@ -1023,7 +1034,7 @@ def _extract_baked_state_machines(obj: ObjectRecord) -> list[dict[str, Any]]:
                 evidence: dict[str, Any] = {}
                 mr = tf.get("MinTimeBeforeReentry", 0.0)
                 if isinstance(mr, (int, float)) and mr != 0.0:
-                    evidence["min_time_before_reentry"] = float(mr)
+                    evidence["min_time_before_reentry"] = _as_float(mr)
                 sn = tf.get("StartNotify", -1)
                 if isinstance(sn, int) and sn >= 0:
                     evidence["start_notify"] = sn
@@ -1274,11 +1285,27 @@ def _extract_declaration(
     }
 
 
+def _as_float(value: Any) -> float:
+    """Coerce a decoded numeric field without ever raising out of a handler."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _as_int(value: Any) -> int:
+    """Coerce a decoded numeric field without ever raising out of a handler."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _guid_hex(guid_fields: Any) -> str:
     """Serialize a decoded Guid struct fields dict (A/B/C/D int32) to 32 hex."""
     if not isinstance(guid_fields, dict):
         return ""
-    return "".join(f"{int(guid_fields.get(k, 0)) & 0xFFFFFFFF:08x}" for k in ("A", "B", "C", "D"))
+    return "".join(f"{_as_int(guid_fields.get(k, 0)) & 0xFFFFFFFF:08x}" for k in ("A", "B", "C", "D"))
 
 
 def _extract_variables(obj: ObjectRecord) -> list[dict[str, Any]]:

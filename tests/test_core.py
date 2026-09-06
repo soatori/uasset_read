@@ -4,7 +4,13 @@ Exactly ten top-level ``test_*`` functions (design: test-organization
 constraints). Fixture-sample contracts live in ``test_samples.py``. Case
 bodies folded from the former ``tests/contract/`` layer are kept verbatim;
 the case name appears in the failure message.
+
+Like ``test_samples.py`` this file feeds duck-typed stub archives/summaries to internal
+helpers, so the strict-object rules are off; ``src/uasset_read`` is the pyright gate (ci.yml).
 """
+
+# pyright: reportArgumentType=false, reportAttributeAccessIssue=false
+# pyright: reportOptionalSubscript=false, reportOptionalMemberAccess=false, reportOperatorIssue=false
 
 from __future__ import annotations
 
@@ -720,6 +726,78 @@ def test_package_document_preserves_every_export_and_role():
         )
         assert result["row_names"] == ["A", "B"] and result["complete"] is True
         assert not any(d.code == "TABLE_ROWS_TRUNCATED" for d in diags)
+
+    def test_curve_table_mode_byte_is_consumed(self):
+        """UCurveTable inserts ECurveTableMode between the count and the rows.
+
+        Without it the first row name lands one byte early and every row name after
+        it is garbage -- the #626 real-failure this path now matches
+        (CurveTable.cpp:112-123, save branch at :202-235).
+        """
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.parsers.legacy_reader import _read_table_rows
+
+        data = (
+            struct.pack("<iB", 1, 1)
+            + struct.pack("<ii", 1, 0)
+            + struct.pack("<ii", 0, 0)  # None tag
+        )
+        diags: list = []
+        result = _read_table_rows(
+            ByteArchive(data),
+            serial_end=len(data),
+            name_map=["None", "RowA"],
+            object_id="export:1",
+            diagnostics=diags,
+            curve_table=True,
+        )
+        assert result["curve_table_mode"] == "SimpleCurves"
+        assert result["row_names"] == ["RowA"] and result["complete"] is True
+
+    def test_table_payload_residue_is_disclosed_not_complete(self):
+        """Undecoded bytes after the last row must downgrade coverage, never claim rows."""
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.parsers.legacy_reader import _read_table_rows
+
+        data = struct.pack("<i", 1) + struct.pack("<ii", 1, 0) + struct.pack("<ii", 0, 0) + b"\x7f\x7f"
+        diags: list = []
+        result = _read_table_rows(
+            ByteArchive(data),
+            serial_end=len(data),
+            name_map=["None", "RowA"],
+            object_id="export:1",
+            diagnostics=diags,
+        )
+        assert result["complete"] is False
+        assert any(d.code == "TABLE_PAYLOAD_RESIDUE" for d in diags)
+
+    def test_fname_instance_number_renders_in_row_name(self):
+        """Row names are FNames: Number 2 displays as ``Base_1`` (NAME_INTERNAL_TO_EXTERNAL)."""
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.parsers.legacy_reader import _read_table_rows
+
+        data = (
+            struct.pack("<i", 2)
+            + struct.pack("<ii", 1, 1)
+            + struct.pack("<ii", 0, 0)
+            + struct.pack("<ii", 1, 2)
+            + struct.pack("<ii", 0, 0)
+        )
+        result = _read_table_rows(
+            ByteArchive(data),
+            serial_end=len(data),
+            name_map=["None", "Curve"],
+            object_id="export:1",
+            diagnostics=[],
+        )
+        assert result["row_names"] == ["Curve_0", "Curve_1"]
+        assert result["complete"] is True
 
     def test_summary_gate_modes_are_versioned():
         from uasset_read.serializers.package_summary import summary_gate_modes

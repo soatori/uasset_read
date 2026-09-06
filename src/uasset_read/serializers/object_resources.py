@@ -114,10 +114,42 @@ class ObjectExport:
     def has_script_serialization(self) -> bool:
         """Whether script serialization block exists."""
         return self.script_serialization_end_offset > self.script_serialization_start_offset
-
     properties: List[Any] = field(default_factory=list)
     transforms: Dict[str, Any] = field(default_factory=dict)
     guid: str = ""  # 16 bytes GUID (exists when version < 1005)
+
+
+def script_property_region(export: ObjectExport) -> tuple[int, int, bool]:
+    """Absolute ``[start, end)`` of an export's tagged-property stream.
+
+    UE 5.4+ (``EUnrealEngineObjectUE5Version::SCRIPT_SERIALIZATION_OFFSET`` = 1010) stores
+    both offsets **relative to** ``Export.SerialOffset``
+    (``LinkerLoad.cpp:7146``/``:7175`` ``RelativeSerialOffset = Tell() - Export.SerialOffset``;
+    written by ``FLinkerSave::MarkScriptSerializationStart/End``, ``LinkerSave.cpp:253-268``,
+    which bracket ``UObject::SerializeScriptProperties`` -> ``Obj.cpp:2042``/``:2113``).
+    The marked region starts at the root ``SerializationControlExtensions`` byte, which
+    ``UStruct::SerializeVersionedTaggedProperties`` writes inside the bracket
+    (``Class.cpp:1596``), and ends after the ``NAME_None`` tag.
+
+    A class may write native bytes *before* the stream, so ``SerialOffset`` alone is not a
+    safe property start: ``UAssetImportData`` is the live case -- its ``FAssetImportInfo``
+    JSON ``FString`` precedes the stream (verified on the #626 CurveTable fixtures, where
+    the recorded prelude is exactly the 181-byte JSON body).
+
+    Returns ``(start, end, authoritative)``. ``authoritative`` is False -- and the caller
+    must keep the legacy ``SerialOffset`` behaviour -- when the package predates the field
+    or the recorded region does not fit inside the export.
+    """
+    serial_start = export.serial_offset
+    serial_end = export.serial_offset + export.serial_size
+    start = serial_start + export.script_serialization_start_offset
+    end = serial_start + export.script_serialization_end_offset
+    known = serial_start <= start <= end <= serial_end and (
+        export.script_serialization_start_offset != 0 or export.script_serialization_end_offset != 0
+    )
+    if known:
+        return start, end, True
+    return serial_start, serial_end, False
 
 
 def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: List[str]) -> List[ObjectImport]:
