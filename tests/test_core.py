@@ -3128,6 +3128,60 @@ def test_resolve_parent_assets_returns_relations():
     assert isinstance(diagnostics, list)
 
 
+def test_resolve_parent_assets_respects_max_depth():
+    """Resolution must stop at max_depth."""
+    from uasset_read.parent_resolver import resolve_parent_assets
+    from uasset_read.models.document import PackageDocument
+    from pathlib import Path
+
+    doc = PackageDocument(
+        source={
+            "kind": "legacy",
+            "name": "test.uasset",
+            "size": 0,
+        },
+        package=None,
+        objects=[],
+        relations=[],
+        dependencies=[],
+        diagnostics=[],
+        summary={},
+        payloads=[],
+        depth="package",
+    )
+
+    # max_depth=0 should not search
+    relations, diagnostics = resolve_parent_assets(doc, root=Path("/nonexistent"), max_depth=0)
+    assert relations == []
+
+
+def test_resolve_parent_handles_circular_reference():
+    """Circular parent references must not cause infinite recursion."""
+    from uasset_read.parent_resolver import resolve_parent_assets
+    from uasset_read.models.document import PackageDocument
+    from pathlib import Path
+
+    doc = PackageDocument(
+        source={
+            "kind": "legacy",
+            "name": "test.uasset",
+            "size": 0,
+        },
+        package=None,
+        objects=[],
+        relations=[],
+        dependencies=[],
+        diagnostics=[],
+        summary={},
+        payloads=[],
+        depth="package",
+    )
+
+    # No files on disk → no circular reference possible
+    relations, diagnostics = resolve_parent_assets(doc, root=Path("/nonexistent"), max_depth=5)
+    assert isinstance(relations, list)
+
+
 def test_api_resolve_parents_parameter():
     """parse_package_document must accept resolve_parents parameter."""
     from uasset_read.package import parse_package_document
@@ -3141,7 +3195,9 @@ def test_api_resolve_parents_parameter():
     doc1 = parse_package_document(str(fixture), depth="package")
     # With resolution
     doc2 = parse_package_document(
-        str(fixture), depth="package", resolve_parents=True,
+        str(fixture),
+        depth="package",
+        resolve_parents=True,
         parent_root=str(fixture.parent),
     )
     # Both should return valid documents
@@ -3173,7 +3229,7 @@ def test_test_suite_structure_gate():
     assert subdirs == {"samples", "serialization"}
     tree = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
     funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
-    assert len(funcs) == 15
+    assert len(funcs) == 17
     assert not any(isinstance(n, ast.ClassDef) for n in tree.body)
     # The design bans decorators on test functions; cache helpers like
     # _document legitimately carry @lru_cache, so the check is scoped to
