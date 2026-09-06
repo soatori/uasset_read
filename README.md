@@ -34,7 +34,7 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 ### v2 Architecture (package-first)
 
-> Default output is PackageDocument v2: `python -m uasset_read file.uasset` or `parse_package_document()`. The v1 pipeline (Semantic 1.x JSON, `--legacy-json`, `--markdown`, `--batch`, `--diff`, `--list-formats`) was removed; those flags are rejected as unsupported. See `tests/samples/manifest.json` for tracked fixtures.
+> Default output is PackageDocument v2: `python -m uasset_read file.uasset` or `parse_package_document()`. The v1 pipeline (Semantic 1.x JSON, `--legacy-json`, `--markdown`, `--diff`, `--list-formats`) was removed; those flags are rejected as unsupported. Batch mode is available via `--batch`. See `tests/samples/manifest.json` for tracked fixtures.
 
 - **PackageDocument** — one document per .uasset, all exports as first-class objects
 - **LegacyPackageReader** — direct binary reader, no v1 pipeline dependency
@@ -50,10 +50,10 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 
 ```python
 from uasset_read import parse_package_document
-from uasset_read.v2.projection import project_document
+from uasset_read.projection import project_document
 
 doc = parse_package_document("file.uasset")
-print(project_document(doc))  # uasset_read.package 2.0 JSON dict
+print(project_document(doc))  # PackageDocument JSON dict
 
 # Or use CLI
 # python -m uasset_read file.uasset
@@ -174,7 +174,7 @@ doc = parse_package_document(
 
 # JSON serialization
 import json
-from uasset_read.v2.projection import project_document
+from uasset_read.projection import project_document
 print(json.dumps(project_document(doc), indent=2))
 
 # CLI usage
@@ -193,9 +193,9 @@ from uasset_read import (
     ParseError, FArchive,
 )
 
-from uasset_read.v2.document import PackageDocument
-from uasset_read.v2.projection import project_document
-from uasset_read.v2.handlers import run_handlers
+from uasset_read.models.document import PackageDocument
+from uasset_read.projection import project_document
+from uasset_read.parsers.asset_types.handlers_impl import run_handlers
 ```
 
 Full API list: see `src/uasset_read/__init__.py` and `wiki/07-Dev-Guide/Public-API.md`.
@@ -205,13 +205,13 @@ Full API list: see `src/uasset_read/__init__.py` and `wiki/07-Dev-Guide/Public-A
 Data flow is the v2 package-first pipeline defined in the [canonical refactor design](docs/designs/2026-08-26-package-first-uasset-parser-refactor.md):
 
 ```text
-.uasset → archive → v2/package (Legacy container reader; Zen deferred, #624)
+.uasset → archive → parsers/legacy_reader (Legacy container reader; Zen deferred, #624)
               → parsers (tagged properties; unversioned gated on #623)
-              → v2/object_model + v2/handlers → PackageDocument
-              → v2/projection → JSON / CLI / Agent tools (same document)
+              → models/object_model + parsers/asset_types/handlers → PackageDocument
+              → projection → JSON / CLI / Agent tools (same document)
 ```
 
-Shared readers behind that document: `kismet/` (bytecode → C++ pseudocode, reached through `v2/package/legacy.py`; an internal v2 implementation detail with no promised API — see #642), `serializers/` and `models/`.
+Shared readers behind that document: `kismet/` (bytecode → C++ pseudocode, reached through `parsers/legacy_reader.py`), `serializers/` and `models/`.
 
 ### Module Structure (`src/uasset_read/`)
 
@@ -263,7 +263,7 @@ When Unreal Editor 5.8 is released, use the official Experimental Unreal MCP ser
 | **Blueprint → C++ migration** | Extract class structure, variables, functions → generate C++ skeleton |
 | **Dependency auditing** | *planned* — v2 lists imports/exports per package (`list_dependencies`); cross-package cycle and orphan detection are not implemented |
 | **Mod development** | *planned* — reading assets from `.pak` is deferred to #625; today you must extract the `.uasset` first |
-| **Asset pipeline automation** | *planned* — v1 `--batch` was removed with the v1 pipeline; parse files one at a time via `parse_package_document()` until batch driving is rebuilt (#643) |
+| **Asset pipeline automation** | Use `--batch DIR` to parse all `.uasset` files in a directory; outputs JSONL (one JSON per line) or JSON array with `--batch-format json` |
 | **Technical debt analysis** | Trace execution flows → identify deeply nested logic → find dead code |
 
 ## Current Limitations
