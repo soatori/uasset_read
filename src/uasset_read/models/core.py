@@ -8,7 +8,7 @@ objects, etc.).
 
 The former presentation/IR layer (`models/ir.py` — GraphIR / NodeIR / PinIR — plus the
 IR Builder and the renderer system) was removed together with the v1 pipeline; v2
-consumes these serialization models directly from `src/uasset_read/v2/`. Animation IR
+consumes these serialization models directly from `src/uasset_read/models/`. Animation IR
 is the one surviving IR-style layer and lives in `models/ir_anim.py`.
 
 Per D-01: Keep UE source naming.

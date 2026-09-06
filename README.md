@@ -133,21 +133,22 @@ python -m uasset_read path/to/file.uasset --list-package-files      # List the p
 
 ### Logging Parameters
 
+The v2 library never configures process-global logging, and the CLI no longer writes per-run log files (file logging was removed with the v1 pipeline). The `--log-*` flags below are retained as configuration carriers; only `--log-dir` and the retention flags (`--log-keep-latest`, `--log-max-total-mb`) currently have an observable effect — they scope the `--clean-logs` deletion plan for logs left over from older releases.
+
 | Parameter | Default | Description |
 | ----------- | --------- | ------------- |
 | `--log-level` | debug | File log level: debug, info, warning, error, off |
 | `--log-dir` | ./log | Log output directory |
 | `--log-max-bytes` | 10000000 | Max size per log file (bytes) |
 | `--log-backup-count` | 5 | Number of backup log files to keep |
-| `--log-cleanup` / `--no-log-cleanup` | enabled | Enable or disable cleanup after the CLI run |
+| `--log-cleanup` / `--no-log-cleanup` | enabled | Retention switch for the `--clean-logs` plan |
 | `--log-keep-latest` | 20 | Number of latest complete runs to keep |
 | `--log-max-total-mb` | 500 | Total log storage limit (MB) |
 | `--clean-logs` | false | Plan cleanup only, do not delete |
 
-The current implementation intends one run-scoped log family per CLI invocation.
-Logging is part of the v2 refactor because nested API configuration can currently
-replace handlers. The target library will emit structured diagnostics by default
-and create file logs only when the application explicitly requests them.
+`--clean-logs` is always dry-run: it prints which files a cleanup would remove
+and exits without deleting anything. Parser failures surface as structured
+diagnostics inside the `PackageDocument` (`diagnostics[]`), not as log output.
 
 ## Core API
 

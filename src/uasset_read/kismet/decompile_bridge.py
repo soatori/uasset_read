@@ -3,7 +3,7 @@ from __future__ import annotations
 """Kismet decompile bridge, reached only from v2 decode depth.
 
 Copied verbatim from ``uasset_read.pipeline.post_process`` (v1 pipeline, deleted in
-the v0.6.0 refactor) so ``uasset_read.v2.package.legacy`` can keep decompiling
+the v0.6.0 refactor) so ``uasset_read.parsers.legacy_reader`` can keep decompiling
 Kismet bytecode without the v1 pipeline package. Per the #642 decision
 (``docs/designs/2026-08-31-v1-retirement-plan.md`` §6) this bridge and the
 ``uasset_read.kismet`` package behind it are permanent v2 internals, not

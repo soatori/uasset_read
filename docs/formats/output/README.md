@@ -7,7 +7,7 @@
 三个入口（CLI 默认、Python API、Agent tool）共用同一 package-first `PackageDocument`，唯一顶层 format 为 `uasset_read.package`，`format_version: 2.0`：
 
 - [Package-first UAsset parser refactor](../../designs/2026-08-26-package-first-uasset-parser-refactor.md)
-- 实现：`src/uasset_read/v2/`（`projection.py` 决定顶层字段与 view/depth，`document.py` 定义 `PackageDocument`，`object_model.py` 定义 `ObjectRecord`/`ObjectStatus`）
+- 实现：`projection.py` 决定顶层字段与 view/depth，`models/document.py` 定义 `PackageDocument`，`models/object_model.py` 定义 `ObjectRecord`/`ObjectStatus`，`parsers/legacy_reader.py` 为 Legacy reader
 - 每个 export 都保留在 `objects[]` 中，不存在单 primary export 选择。
 
 ## 已删除
