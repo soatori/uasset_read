@@ -66,7 +66,6 @@ def _parse_track_classes(value: Any) -> list[str]:
 class MovieSceneHandler(ClassHandler):
     """UMovieScene Asset type handler"""
 
-
     def can_handle(self, class_name: str) -> bool:
         return class_name == "MovieScene"
 

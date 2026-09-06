@@ -280,15 +280,9 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
             create_before_create_deps = 0
             if file_version >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:
                 first_export_dependency = archive.read_i32(f"Export[{export_idx}].FirstExportDependency")
-                ser_before_ser_deps = archive.read_i32(
-                    f"Export[{export_idx}].SerializationBeforeSerializationDeps"
-                )
-                create_before_ser_deps = archive.read_i32(
-                    f"Export[{export_idx}].CreateBeforeSerializationDeps"
-                )
-                ser_before_create_deps = archive.read_i32(
-                    f"Export[{export_idx}].SerializationBeforeCreateDeps"
-                )
+                ser_before_ser_deps = archive.read_i32(f"Export[{export_idx}].SerializationBeforeSerializationDeps")
+                create_before_ser_deps = archive.read_i32(f"Export[{export_idx}].CreateBeforeSerializationDeps")
+                ser_before_create_deps = archive.read_i32(f"Export[{export_idx}].SerializationBeforeCreateDeps")
                 create_before_create_deps = archive.read_i32(f"Export[{export_idx}].CreateBeforeCreateDeps")
 
             # ScriptSerialization offsets (UE5 >= 1010, only for versioned properties)

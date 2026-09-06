@@ -394,9 +394,7 @@ _NODE_TYPE_HANDLERS: Dict[str, Any] = {
             "ResolvedWildcardType": "resolved_wildcard_type",
         }
     ),
-    "K2Node_GetDataTableRow": _handle_raw_prop_copies(
-        {"DataTable": "data_table", "RowStructName": "row_struct_name"}
-    ),
+    "K2Node_GetDataTableRow": _handle_raw_prop_copies({"DataTable": "data_table", "RowStructName": "row_struct_name"}),
     "K2Node_LoadAsset": _handle_raw_prop_copies({"AssetType": "asset_type"}),
     "K2Node_SpawnActorFromClass": _handle_raw_prop_copies({"Class": "spawn_class"}),
 }
@@ -963,7 +961,9 @@ def _read_node_script_serial(
                 lambda: _read_member_reference_from_tags(archive, tag, name_map, import_map, export_map),  # noqa: B023 - tag bound at call time
             )
         else:
-            result.update(_read_node_property_tag(archive, tag, name_map, import_map, export_map, result["raw_properties"]))
+            result.update(
+                _read_node_property_tag(archive, tag, name_map, import_map, export_map, result["raw_properties"])
+            )
 
     return result
 
@@ -1017,6 +1017,6 @@ def read_ue_graph_node(
         node_export,
         base_node,
         raw_properties=raw_properties if raw_properties else None,
-                # serial keys match node_refs names (references + K2Node_Event fields)
+        # serial keys match node_refs names (references + K2Node_Event fields)
         node_refs=serial,
     )

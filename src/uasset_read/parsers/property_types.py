@@ -930,8 +930,8 @@ def _try_fast_path_struct(
             0 < vc < 50
             and 0 <= tc <= vc
             and traits_ver in (0, 1, 2, 3, 4, 5)
-            and start + 4 + vc * _channel_value_size + tc * 4
-            + (_channel_value_size if bhd else 0) <= start + tag.size + 16
+            and start + 4 + vc * _channel_value_size + tc * 4 + (_channel_value_size if bhd else 0)
+            <= start + tag.size + 16
         ):
             try:
                 values = [read_value() for _ in range(vc)]
@@ -1125,7 +1125,7 @@ def parse_struct_property(
 
     # Fast-path for simple structs (FScriptStruct.cs L174-178)
     # These structs have no PropertyTags loop — just raw float reads.
-    fast_result = _try_fast_path_struct(struct_type or '', tag, archive, name_map)
+    fast_result = _try_fast_path_struct(struct_type or "", tag, archive, name_map)
     if fast_result is not None:
         return fast_result
 
@@ -1394,7 +1394,9 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[
 # ============================================================================
 
 
-def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive, name_map: Optional[List[str]] = None) -> list:
+def parse_multicast_delegate_property(
+    tag: PropertyTag, archive: FArchive, name_map: Optional[List[str]] = None
+) -> list:
     """Parse MulticastDelegateProperty.
 
     UE FMulticastScriptDelegate::SerializeItem serializes function name with FName

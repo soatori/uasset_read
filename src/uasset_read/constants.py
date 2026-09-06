@@ -370,6 +370,7 @@ SHADING_MODEL_MAP: dict[int, str] = {
     11: "ThinTranslucent",
 }
 
+
 def get_max_reasonable(property_type: str, engine_version: int) -> int:
     """Return reasonable size cap based on property type and engine version.
 

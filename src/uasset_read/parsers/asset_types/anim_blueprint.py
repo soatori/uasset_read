@@ -46,7 +46,6 @@ def _extract_int_array(data: Any, key: str) -> list[int]:
 class AnimBlueprintHandler(ClassHandler):
     """AnimBlueprint Asset type handler"""
 
-
     def can_handle(self, class_name: str) -> bool:
         return class_name == "AnimBlueprintGeneratedClass"
 

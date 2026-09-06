@@ -56,4 +56,5 @@ class ParseError(UAssetError):
 
 class ExportBoundsExceeded(ParseError):
     """Raised when a read or seek would exceed the current export bound."""
+
     pass

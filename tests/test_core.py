@@ -2457,12 +2457,10 @@ def test_schema_contract_statics():
         required = set(spec["required"])
         for name, field in fields.items():
             optional_in_model = (
-                field.default is not dataclasses.MISSING
-                or field.default_factory is not dataclasses.MISSING
+                field.default is not dataclasses.MISSING or field.default_factory is not dataclasses.MISSING
             )
             assert optional_in_model == (name not in required), (
-                f"{name}: schema-required={name in required} but "
-                f"model-optional={optional_in_model}"
+                f"{name}: schema-required={name in required} but model-optional={optional_in_model}"
             )
 
         hints = typing.get_type_hints(PayloadDescriptor)
@@ -2813,9 +2811,7 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     bundle = open_package_bundle(str(sample))
     arc = bundle.open_archive(tolerant=True)
     try:
-        doc = LegacyPackageReader(tolerant=True).read(
-            archive=arc, main_path=str(sample)
-        )
+        doc = LegacyPackageReader(tolerant=True).read(archive=arc, main_path=str(sample))
     finally:
         lr.read_package_summary = lr_real_fn  # type: ignore[assignment]
 
@@ -2836,9 +2832,7 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     bundle0 = open_package_bundle(str(sample))
     arc0 = bundle0.open_archive(tolerant=True)
     try:
-        doc0 = LegacyPackageReader(tolerant=True).read(
-            archive=arc0, main_path=str(sample)
-        )
+        doc0 = LegacyPackageReader(tolerant=True).read(archive=arc0, main_path=str(sample))
     finally:
         lr.read_package_summary = lr_real_fn  # type: ignore[assignment]
 
@@ -2857,9 +2851,7 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     bundle_ok = open_package_bundle(str(sample))
     arc_ok = bundle_ok.open_archive(tolerant=True)
     try:
-        doc_ok = LegacyPackageReader(tolerant=True).read(
-            archive=arc_ok, main_path=str(sample)
-        )
+        doc_ok = LegacyPackageReader(tolerant=True).read(archive=arc_ok, main_path=str(sample))
     finally:
         lr.read_package_summary = lr_real_fn  # type: ignore[assignment]
 

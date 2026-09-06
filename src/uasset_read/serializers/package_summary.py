@@ -232,8 +232,10 @@ def summary_gate_modes(file_version_ue4: int) -> dict:
         "engine_versions": "full" if file_version_ue4 >= UE4_ENGINE_VERSION_OBJECT else "legacy",
         "compatible": file_version_ue4 >= UE4_ADDED_COMPATIBLE_WITH_ENGINE_VERSION,
         "world_tile": file_version_ue4 >= UE4_WORLD_LEVEL_INFO,
-        "chunk_ids": "array" if file_version_ue4 >= UE4_CHANGED_CHUNKID_TO_BE_AN_ARRAY_OF_CHUNKIDS
-        else "single" if file_version_ue4 >= UE4_ADDED_CHUNKID_TO_ASSETDATA_AND_UPACKAGE
+        "chunk_ids": "array"
+        if file_version_ue4 >= UE4_CHANGED_CHUNKID_TO_BE_AN_ARRAY_OF_CHUNKIDS
+        else "single"
+        if file_version_ue4 >= UE4_ADDED_CHUNKID_TO_ASSETDATA_AND_UPACKAGE
         else "none",
     }
 
@@ -1016,9 +1018,7 @@ def read_preload_dependencies(archive: FArchive, summary: PackageFileSummary) ->
     archive.seek(summary.preload_dependency_offset)
 
     if not archive.check_remaining(summary.preload_dependency_count * 4, "PreloadDependencies"):
-        raise ParseError(
-            f"PreloadDependencies count {summary.preload_dependency_count} exceeds remaining file bytes"
-        )
+        raise ParseError(f"PreloadDependencies count {summary.preload_dependency_count} exceeds remaining file bytes")
 
     dependencies: List[int] = []
     for i in range(summary.preload_dependency_count):

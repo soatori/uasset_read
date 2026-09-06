@@ -55,7 +55,6 @@ def _as_list(value: Any) -> list:
 class MovieSceneControlRigParameterTrackHandler(ClassHandler):
     """MovieSceneControlRigParameterTrack Asset type handler"""
 
-
     def can_handle(self, class_name: str) -> bool:
         return class_name == "MovieSceneControlRigParameterTrack"
 
@@ -138,7 +137,6 @@ class MovieSceneControlRigParameterTrackHandler(ClassHandler):
 
 class MovieSceneControlRigParameterSectionHandler(ClassHandler):
     """MovieSceneControlRigParameterSection Asset type handler"""
-
 
     # Parameter array property name -> parameter_counts key mapping
     _PARAM_ARRAY_FIELDS: list[tuple[str, str]] = [

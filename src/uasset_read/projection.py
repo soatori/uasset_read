@@ -77,6 +77,7 @@ def fit_list_response(response: dict, max_bytes: int, *, list_key: str, total_ke
     "returned", total_key}. Raises ValueError when max_bytes cannot hold even
     the empty-list envelope.
     """
+
     def _size() -> int:
         return len(json.dumps(response, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
@@ -160,9 +161,7 @@ def project_document(
     if max_bytes is not None and max_bytes < 0:
         raise ValueError("max_bytes must be non-negative")
     if _DEPTH_ORDER[depth] > _DEPTH_ORDER[doc.depth]:
-        raise ValueError(
-            f"cannot project at depth {depth!r}: document was parsed at depth {doc.depth!r}"
-        )
+        raise ValueError(f"cannot project at depth {depth!r}: document was parsed at depth {doc.depth!r}")
 
     def _emit(o: ObjectRecord) -> dict[str, Any]:
         """Serialize one object, stripping fields the projection depth can't back."""
@@ -243,9 +242,7 @@ def project_document(
         "depth": depth,
         "source": {"kind": doc.source.kind, "name": doc.source.name, "size": doc.source.size},
         "package": _package_to_dict(doc, view=view),
-        "objects": page
-        if (fields and page and isinstance(page[0], dict))
-        else [_emit(o) for o in page],
+        "objects": page if (fields and page and isinstance(page[0], dict)) else [_emit(o) for o in page],
         "relations": relations,
         "dependencies": filtered_dependencies,
         # Payloads stay deferred; per-export BulkData mapping requires
@@ -324,7 +321,9 @@ def project_document(
                 result.pop("next_offset", None)
                 result["truncation"]["actual"] = _encoded()
                 if _encoded() > max_bytes:
-                    raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({_encoded()} bytes)")
+                    raise ValueError(
+                        f"Output budget {max_bytes} bytes too small for minimal envelope ({_encoded()} bytes)"
+                    )
                 return result
             if len(result["objects"]) == 0:
                 # Nothing fit: return the complete retry contract only if
@@ -336,13 +335,15 @@ def project_document(
                     "actual": _encoded(),
                     "objects_dropped": page_total,
                 }
-                result["diagnostics"].append({
-                    "severity": "warning",
-                    "code": "BUDGET_EXHAUSTED",
-                    "message": f"Budget {max_bytes} fits 0 of {page_total} page objects; retry offset {offset} with a larger max_bytes",
-                    "stage": "projection",
-                    "recoverable": True,
-                })
+                result["diagnostics"].append(
+                    {
+                        "severity": "warning",
+                        "code": "BUDGET_EXHAUSTED",
+                        "message": f"Budget {max_bytes} fits 0 of {page_total} page objects; retry offset {offset} with a larger max_bytes",
+                        "stage": "projection",
+                        "recoverable": True,
+                    }
+                )
                 # The byte count includes its own digits, so stabilize it
                 # after all metadata has been added before checking the cap.
                 actual = _encoded()

@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 class AnimSequenceHandler(ClassHandler):
     """AnimSequence Asset type handler"""
 
-
     def can_handle(self, class_name: str) -> bool:
         return class_name == "AnimSequence"
 
