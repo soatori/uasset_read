@@ -896,10 +896,15 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 
 当前实现的重要入口：
 
-- `src/uasset_read/core/__init__.py`
-- `src/uasset_read/semantic/builder.py`
-- `src/uasset_read/semantic/models.py`
-- `src/uasset_read/semantic/render.py`
+- `src/uasset_read/v2/api.py` — `parse_package_document`
+- `src/uasset_read/v2/document.py` — `PackageDocument`
+- `src/uasset_read/v2/object_model.py` — `ObjectRecord` / `ObjectStatus`
+- `src/uasset_read/v2/projection.py` — 顶层 `format` / `format_version` 与 view/depth 投影
+- `src/uasset_read/v2/handlers.py` — handler registry 与语义 handler（`NewVariables` VarType 解码）
+- `src/uasset_read/v2/package/legacy.py` — Legacy reader，含 Kismet 反编译桥接
+- `src/uasset_read/kismet/decompile_bridge.py` — `extract_kismet_decompiled`
+- `src/uasset_read/v2/agent_tools.py` — Agent tool 面
+- `src/uasset_read/cli.py` — CLI 与 retired flag 集合
 - `src/uasset_read/package.py`
 - `src/uasset_read/versioning.py`
 - `src/uasset_read/project_logging.py`

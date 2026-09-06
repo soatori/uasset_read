@@ -123,6 +123,13 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         with pytest.raises(IndexError):
             FileSource(f).read_at(0, 10)
 
+    def test_file_close_without_handle():
+        # __init__ can fail before _fh is ever assigned (missing path -> stat()
+        # raises), so close()/__del__ must tolerate the attribute being absent
+        # entirely instead of printing "Exception ignored while calling
+        # deallocator" after the real error.
+        FileSource.__new__(FileSource).close()
+
     def test_basic_read():
         sr = SliceReader(MemorySource(b"0123456789"), 2, 5)
         assert sr.source_size == 5
@@ -342,6 +349,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
             ("MemorySource.test_describe", test_describe),
             ("FileSource.test_read", test_file_read),
             ("FileSource.test_read_out_of_range", test_file_read_out_of_range),
+            ("FileSource.test_close_without_handle", test_file_close_without_handle),
             ("SliceReader.test_basic_read", test_basic_read),
             ("SliceReader.test_seek", test_seek),
             ("SliceReader.test_seek_out_of_range", test_seek_out_of_range),

@@ -5,7 +5,7 @@ status: target
 > **文档状态：target**（退役决策与门禁；文中"现状"段落为基线 `bd3309a7` 的 current 事实，引用 `file:line`）。
 > 关联：`docs/designs/2026-08-26-package-first-uasset-parser-refactor.md`（Phase 6 删除旧路径）；Issue #621；本文与 `2026-08-31-semantic-handlers-boundary.md`（D2）、`2026-08-31-version-context-field-contract.md`（G1）配套。
 > **2026-09-05 执行记录**：本文冻结的退役契约已执行——Phase 6（#621，`ae8027e1`）删除 v1 管线，`--legacy-json` 现为 explicit unsupported 报错退出（非静默降级），`semantic/`、`renderers/`、`pipeline/`、`ir_builder.py`、`core/`、`link/` 已从 `src/` 消失。因此 §1、§2、§4 中描述双轨并存与"本轮不删代码"的段落均为 **historical 快照**，不再反映现状；§3 门禁与 §5/§6 决策记录仍为指导性内容，不得归为 historical。
-> **唯一未闭合门禁：Gate C “文档同步”项**——wiki 仍把 Semantic 1.x / v1 API 当作 current 输出描述（见 `wiki/Home.md`、`wiki/07-Dev-Guide/Public-API.md`、`wiki/06-Output/*`），与本仓 `README.md` 不一致。
+> **Gate C “文档同步”项：2026-09-05 已在工作树完成，尚未推送。** wiki（独立仓库 `uasset_read.wiki`）已全部重写为 v2：Home/Sidebar 与 01-07 各目录页中的 Semantic 1.x、`run.py`、`parse_single`、renderer 系统、`--markdown`/`--legacy-json` 等均已降级为 historical/retired，PAK/IoStore/raw-file/C++ skeleton 降级为 target，VarType 与 Kismet 明确标为 current。**在 wiki 仓库提交并推送之前，本项不得视为已关闭。**
 
 ## 1. 双轨现状（historical：基线 `bd3309a7` 快照，双轨已由 Phase 6 终结）
 

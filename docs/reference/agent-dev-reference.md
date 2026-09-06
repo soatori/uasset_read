@@ -12,7 +12,7 @@
 | 已归档仓库级方案 | [`docs/designs/archive/README.md`](../designs/archive/README.md)，仅用于历史追溯 |
 | 当前用户能力 | [`README.md`](../../README.md)，随后核对源码与测试 |
 | UE 格式事实 | [`docs/formats/uasset/Index.md`](../formats/uasset/Index.md) 和 UE 源码 |
-| 当前 v0.5.5 API | [`wiki/07-Dev-Guide/Public-API.md`](../../wiki/07-Dev-Guide/Public-API.md) |
+| 当前公共 API（v2） | [`src/uasset_read/__init__.py`](../../src/uasset_read/__init__.py)（`__all__`）与 `src/uasset_read/v2/api.py`（`parse_package_document`） |
 
 ## 判断顺序
 
@@ -37,7 +37,7 @@
 | 任务 | 入口 |
 | --- | --- |
 | 当前解析管线（v2 package document） | `src/uasset_read/__init__.py`（`parse_package_document`）, `src/uasset_read/v2/api.py`, `src/uasset_read/v2/document.py`, `src/uasset_read/v2/package/legacy.py` |
-| 当前 Semantic JSON | `src/uasset_read/v2/handlers.py`, `src/uasset_read/parsers/asset_types/`, [`semantic-json.md`](../formats/uasset/semantic-json.md) |
+| 当前 v2 语义 handler | `src/uasset_read/v2/handlers.py`, `src/uasset_read/parsers/asset_types/`；1.x 格式页 [`semantic-json.md`](../formats/uasset/semantic-json.md) 仅供 historical 参考 |
 | Package/sidecar/provider | `src/uasset_read/package.py` |
 | 版本上下文 | `src/uasset_read/versioning.py`, `src/uasset_read/serializers/package_summary.py` |
 | 属性解析 | `src/uasset_read/serializers/property_tags.py`, `src/uasset_read/parsers/` |

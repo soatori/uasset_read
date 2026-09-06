@@ -16,7 +16,7 @@ These sit beside the canonical target on purpose. Each carries its own `status:`
 
 | ID | Document | `status:` | Still binds |
 | --- | --- | --- | --- |
-| D1 | [`2026-08-31-v1-retirement-plan.md`](2026-08-31-v1-retirement-plan.md) | target | Gates in §3 and the §5/§6 decisions. §1/§2/§4 are pre-Phase-6 snapshots. **Gate C doc-sync item is still open** (wiki presents v1 as current). |
+| D1 | [`2026-08-31-v1-retirement-plan.md`](2026-08-31-v1-retirement-plan.md) | target | Gates in §3 and the §5/§6 decisions. §1/§2/§4 are pre-Phase-6 snapshots. **Gate C doc-sync rewritten to v2 in the wiki working tree (2026-09-05); closes on wiki commit+push.** |
 | D2 | [`2026-08-31-semantic-handlers-boundary.md`](2026-08-31-semantic-handlers-boundary.md) | current + target | §2.1/§2.3/§2.4 and stage 3. §1 and the `semantic/` half of §2 describe a deleted package. |
 | G1 | [`2026-08-31-version-context-field-contract.md`](2026-08-31-version-context-field-contract.md) | target | VersionContext field contract. |
 | G2 | [`2026-08-31-agent-doc-cache-contract.md`](2026-08-31-agent-doc-cache-contract.md) | target | Deferred: shared-`PackageDocument` cache contract. |

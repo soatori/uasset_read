@@ -35,7 +35,7 @@ def infer_bytecode_confidence(
 ) -> str:
     """Classify the confidence of a public function body.
 
-    Keep this shared by direct Kismet serialization and PackageIR projection so
+    Keep this shared by direct Kismet serialization and the v2 decompile output so
     callers cannot receive conflicting provenance for the same function body.
     """
     if logic_source == "graph_topology":

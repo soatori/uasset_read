@@ -1,6 +1,6 @@
 # Semantic JSON Format
 
-> **Status: current v0.5.5 legacy contract, not the v2 target.** This page documents the checked-in Semantic JSON 1.x pipeline. New architecture work must follow the [package-first refactor design](../../designs/2026-08-26-package-first-uasset-parser-refactor.md), which replaces the single-primary-asset envelope with a package document containing all objects. Do not add new top-level domain formats here.
+> **Status: historical (superseded), not current.** The Semantic JSON 1.x pipeline described here has been removed from `src/` together with the v1 pipeline (Phase 6); `--legacy-json` and the other retired flags now error out. This page is kept only as a record of the old wire format. Current output is the package-first `uasset_read.package` `format_version: 2.0` document — see the [package-first refactor design](../../designs/2026-08-26-package-first-uasset-parser-refactor.md) and the [output entry](../output/README.md). Do not add new top-level domain formats here.
 
 Common JSON contract for `uasset_read` semantic output. Domain schemas compose via `allOf`/`$ref` with this schema.
 
@@ -80,7 +80,7 @@ All semantic JSON documents share this structure:
 ### Top-Level Fields
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `format` | `const` | Yes | Always `"uasset_read.asset_semantic"` |
 | `format_version` | `const` | Yes | Always `"1.0"` |
 | `mode` | `string` | Yes | `"standard"` or `"debug"` |
@@ -98,7 +98,7 @@ All semantic JSON documents share this structure:
 The `asset` object contains identity metadata:
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `package` | `string` | Yes | Package path (e.g., `/Game/Blueprints/BP_Foo`) |
 | `name` | `string` | Yes | Object name (e.g., `BP_Foo`) |
 | `generated_class` | `string` | No | UE class name when `asset_type` is `"unknown"` |
@@ -115,7 +115,7 @@ The `status` object has two independent dimensions:
 ### Status Matrix
 
 | parse | representation | Meaning |
-|-------|----------------|---------|
+| ------- | ---------------- | --------- |
 | `complete` | `full` | Fully parsed, full semantic content |
 | `complete` | `partial` | Fully parsed but some content unavailable |
 | `partial` | `partial` | Partially parsed with partial content |
@@ -145,7 +145,7 @@ Array of import/export reference entries:
 ```
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `index` | `integer` | Yes | Import/export table index |
 | `kind` | `"import"` or `"export"` | Yes | Reference type |
 | `class_name` | `string` | Yes | UE class name |
@@ -170,7 +170,7 @@ Reports semantic coverage (scopes expected vs. available):
 ```
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `scopes_expected` | `integer` | Yes | Total number of semantic scopes expected |
 | `scopes_available` | `integer` | Yes | Number of scopes with available content |
 | `scopes_unavailable` | `array[string]` | No | Names of unavailable scopes |
@@ -193,7 +193,7 @@ Array of deduplicated diagnostic messages:
 ```
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `severity` | `"error"`, `"warning"`, `"info"` | Yes | Diagnostic severity |
 | `code` | `string` | Yes | Unique diagnostic code |
 | `message` | `string` | Yes | Human-readable message |
@@ -225,7 +225,7 @@ Debug-only evidence entries. Stripped in standard mode:
 UE class names are mapped to normalized type strings:
 
 | UE Class | Normalized Type |
-|----------|-----------------|
+| ---------- | ----------------- |
 | `Material` | `material` |
 | `MaterialInstance` | `material` |
 | `MaterialInstanceConstant` | `material` |
@@ -250,6 +250,7 @@ UE class names are mapped to normalized type strings:
 ### Unknown Types
 
 Unknown UE classes emit:
+
 - `asset_type: "unknown"`
 - `asset.generated_class` with the original UE class name
 - `evidence` entry with `key: "asset_class"` and the raw class name
@@ -324,6 +325,7 @@ Output is byte-identical across processes and `PYTHONHASHSEED` values:
 ### Canonical Key Order
 
 Top-level keys are ordered:
+
 1. `format`
 2. `format_version`
 3. `mode`

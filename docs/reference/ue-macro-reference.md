@@ -74,6 +74,7 @@
 ```
 
 **核心特征**：
+
 - 宏在**编译期展开**（inline expansion），运行时不存在宏实例
 - 未烘焙（Unbaked）资产保留 `MacroGraphReference`，解析器可据此展开
 - 已烘焙（Cooked）资产中宏已被内联，所有节点直接存在于图中
@@ -82,7 +83,7 @@
 ### 1.2 宏 vs 函数
 
 | 对比项 | 宏（Macro） | 函数（Function） |
-|--------|------------|-----------------|
+| -------- | ------------ | ----------------- |
 | **图类型** | `GT_Macro` | `GT_Function` |
 | **执行入口** | Tunnel 节点（可多个入口） | K2Node_FunctionEntry（单一入口） |
 | **返回机制** | Tunnel 节点（可多个出口） | K2Node_FunctionResult（单一/无返回） |
@@ -109,7 +110,7 @@
 ### 1.3 宏 vs 折叠图
 
 | 对比项 | 宏（Macro） | 折叠图（Collapsed Graph / Composite） |
-|--------|------------|-------------------------------------|
+| -------- | ------------ | ------------------------------------- |
 | **节点类** | `UK2Node_MacroInstance` | `UK2Node_Composite` |
 | **复用性** | 可被多个蓝图引用 | 仅在当前图内有效 |
 | **存储位置** | 可在 MacroLibrary 蓝图中 | 存储在当前 UEdGraph 的 Nodes 数组中 |
@@ -176,7 +177,7 @@ public:
 **序列化字段**（在 .uasset 中）：
 
 | 字段名 | 类型 | 说明 |
-|--------|------|------|
+| -------- | ------ | ------ |
 | `MacroGraph` | ObjectReference | 图的直接引用（旧格式，VER_UE4_K2NODE_REFERENCEGUIDS 之前） |
 | `GraphBlueprint` | ObjectReference | 宏所在蓝图 |
 | `GraphGuid` | Guid (16 bytes) | 图的唯一标识，用于循环检测和跨版本兼容 |
@@ -211,6 +212,7 @@ EGraphType Type = Graph->GetSchema()->GetGraphType(Graph);
 ### 2.3 UK2Node_MacroInstance
 
 **文件**：
+
 - 头文件：`Engine/Source/Editor/BlueprintGraph/Classes/K2Node_MacroInstance.h`
 - 实现：`Engine/Source/Editor/BlueprintGraph/Private/K2Node_MacroInstance.cpp`
 
@@ -270,7 +272,7 @@ public:
 **关键属性详解**：
 
 | 属性 | 类型 | 说明 |
-|------|------|------|
+| ------ | ------ | ------ |
 | `MacroGraphReference` | FGraphReference | 宏图的完整引用信息 |
 | `ResolvedWildcardType` | FEdGraphPinType | 通配符引脚解析后的实际类型 |
 | `bReconstructNode` | bool | 标记节点是否需要重建（引脚变化后） |
@@ -424,11 +426,13 @@ FGraphReference:
 ```
 
 **PackageIndex 解析**：
+
 - 正值 → 指向本地 ExportTable 中的导出
 - 负值 → 指向 ImportTable 中的导入（通常是外部蓝图引用）
 - 零值 → 空引用
 
 **解析器注意事项**：
+
 ```python
 def read_macro_graph_reference(archive, reader):
     # 1. 读取蓝图引用
@@ -823,6 +827,7 @@ if (Pin->SubPins.Num() > 0)
 ```
 
 **解析器注意事项**：
+
 - 展开后的图中可能出现 `K2Node_MakeArray`、`K2Node_EnumLiteral` 等中间节点
 - 这些节点是编译器插入的，不是用户原始放置的
 - 解析器应能识别这些中间节点并标记其来源
@@ -849,6 +854,7 @@ ResolvedWildcardType = LinkedPinType;
 ```
 
 **行为**：
+
 - 第一个连接的具体类型**统一**应用到所有 Wildcard 引脚
 - 简单快速，但不支持混合类型
 
@@ -910,6 +916,7 @@ static void InferLinkedPinsImpl(UEdGraphPin* Pin, const FEdGraphPinType& Type,
 ```
 
 **传播规则**：
+
 1. 类型从**已知**引脚向**未知**（Wildcard）引脚传播
 2. 传播方向跟随引脚连接（`LinkedTo`）
 3. 使用 `ProcessedPins` 集合防止循环传播
@@ -925,7 +932,7 @@ static void InferLinkedPinsImpl(UEdGraphPin* Pin, const FEdGraphPinType& Type,
 UE 引擎提供以下内置宏，存储在名为 `StandardMacros` 的蓝图中：
 
 | 宏名 | 图标 | 入口引脚 | 出口引脚 | 说明 |
-|------|------|----------|----------|------|
+| ------ | ------ | ---------- | ---------- | ------ |
 | `ForLoop` | Loop | Entry (exec), LastIndex (int) | Loop Body (exec), Completed (exec), Loop Counter (int) | 标准 For 循环 |
 | `ForLoopWithBreak` | Loop | 同上 + Break (exec) | 同上 | 可中断 For 循环 |
 | `WhileLoop` | Loop | Entry (exec), Condition (bool) | Loop Body (exec), Completed (exec) | While 循环 |
@@ -1005,6 +1012,7 @@ bool UK2Node_MacroInstance::CanPasteHere(const UEdGraph* TargetGraph) const
 ```
 
 **约束规则**：
+
 1. 宏库蓝图（`BPTYPE_MacroLibrary`）可被其他蓝图引用
 2. 普通蓝图中的宏只能被同一蓝图使用
 3. 含 Latent 动作的宏**不可**放入函数图
@@ -1017,7 +1025,7 @@ bool UK2Node_MacroInstance::CanPasteHere(const UEdGraph* TargetGraph) const
 ### 8.1 当前状态
 
 | 模块 | 文件 | 状态 | 说明 |
-|------|------|------|------|
+| ------ | ------ | ------ | ------ |
 | 节点读取 | `serializers/graph.py` `read_k2node_macro_instance()` | 🟡 部分 | 读取宏引用属性但不递归解析宏图 |
 | 常量定义 | `constants.py` `CONTROL_FLOW_NODES` | 🔴 终止 | `K2Node_MacroInstance` 被标记为控制流终止节点 |
 | 执行链追踪 | `graph/flow_builder.py` | 🔴 终止 | 遇到 MacroInstance 标记 `stopped_at` 后停止 |
@@ -1056,7 +1064,10 @@ bool UK2Node_MacroInstance::CanPasteHere(const UEdGraph* TargetGraph) const
                               └─ 目标: 展开宏 → 穿透执行链
 ```
 
+> **注：上图调用链名称（`parse_single` / `parse_uasset_with_linker` / `build_execution_flows` / `stopped_at`）属已删除的 v1 pipeline，在当前 `src/` 中均不存在。** 当前 v2 仅在 `src/uasset_read/serializers/graph_node.py`（节点名于 `constants.py` 注册）识别 MacroInstance 节点，**不做宏展开**；入口为 `parse_package_document(path, depth="decode")`。
+
 **建议采用延迟展开策略**：
+
 1. 解析阶段只读取宏引用属性
 2. 在执行链构建阶段按需展开
 3. 避免不必要的递归解析
@@ -1441,7 +1452,7 @@ STANDARD_MACROS = {
 ### 9.1 核心文件
 
 | 文件路径 | 说明 |
-|----------|------|
+| ---------- | ------ |
 | `Engine/Source/Editor/BlueprintGraph/Classes/K2Node_MacroInstance.h` | 宏实例类定义 |
 | `Engine/Source/Editor/BlueprintGraph/Private/K2Node_MacroInstance.cpp` | 宏实例实现（引脚分配、通配符推断等） |
 | `Engine/Source/Editor/BlueprintGraph/Classes/K2Node_Tunnel.h` | Tunnel 节点类定义 |
@@ -1454,7 +1465,7 @@ STANDARD_MACROS = {
 ### 9.2 关键函数
 
 | 文件 | 行号 | 函数 | 说明 |
-|------|------|------|------|
+| ------ | ------ | ------ | ------ |
 | `K2Node_MacroInstance.cpp` | 40-44 | 构造函数 | 初始化 bReconstructNode |
 | `K2Node_MacroInstance.cpp` | 46-54 | `Serialize()` | 旧格式兼容（VER_UE4_K2NODE_REFERENCEGUIDS） |
 | `K2Node_MacroInstance.cpp` | 109-152 | `AllocateDefaultPins()` | 从 Tunnel 引脚创建实例引脚 |
@@ -1471,7 +1482,7 @@ STANDARD_MACROS = {
 ### 9.3 相关类型
 
 | 类型 | 文件 | 说明 |
-|------|------|------|
+| ------ | ------ | ------ |
 | `UK2Node_Composite` | `BlueprintGraph/Classes/K2Node_Composite.h` | 折叠图节点 |
 | `UK2Node_Knot` | `BlueprintGraph/Classes/K2Node_Knot.h` | 重路由节点 |
 | `UK2Node_MakeArray` | `BlueprintGraph/Classes/K2Node_MakeArray.h` | 数组构建节点（编译器插入） |

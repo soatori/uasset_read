@@ -44,14 +44,16 @@ Whether you're auditing blueprint dependencies, extracting class skeletons for C
 - **Agent tools** — `inspect_package`, `list_objects`, `get_object`, `list_dependencies`, `get_diagnostics`, `extract_payload`
 - **Projection** — semantic/raw/debug views, depth filtering, max_bytes enforcement
 - **Handlers** — DataTable, UserDefinedEnum, UserDefinedStruct, Texture2D, TextureCube, SoundWave, Skeleton, StaticMesh, Material, Niagara, Blueprint/AnimBlueprint (decode depth: graph/node/pin decode + declaration + SCS components + NewVariables names with VarType (`FEdGraphPinType`) typing + Kismet decompilation on editor-saved fixtures; C++ skeleton and parent-asset resolution not implemented)
-- **SchemaProvider** — interface for unversioned property schema lookup
+- **Unversioned properties** — not implemented. Only a partial mapping-driven (`.usmap`) path exists in `parsers/property_parser.py`; there is no `SchemaProvider` in `src/` (target — see the canonical design)
 
-**UE source-audit fixes (v0.6.0-dev):** 35 binary-format mismatches resolved against UE 5.8-dev C++ source — FString UTF-16 byte-swap, FColor B/G/R/A order, FRotator Pitch/Yaw/Roll, FName external number, unversioned header fragment decode, ELifetimeCondition table, mcdelegate PinCategory, FGuid display, dead CppType reads, ImportedSize X/Y, material input variants, anim node table verified against Engine/Source headers. StringTable (#615) partially fixed (FString keys + trailer). 102/102 tests passing.
+**UE source-audit fixes (v0.6.0-dev):** 35 binary-format mismatches resolved against UE 5.8-dev C++ source — FString UTF-16 byte-swap, FColor B/G/R/A order, FRotator Pitch/Yaw/Roll, FName external number, unversioned header fragment decode, ELifetimeCondition table, mcdelegate PinCategory, FGuid display, dead CppType reads, ImportedSize X/Y, material input variants, anim node table verified against Engine/Source headers. StringTable (#615) partially fixed (FString keys + trailer). 113/113 tests passing.
 
 ```python
-from uasset_read.v2.api import parse_package_document
+from uasset_read import parse_package_document
+from uasset_read.v2.projection import project_document
+
 doc = parse_package_document("file.uasset")
-print(doc.to_dict())  # PackageDocument v2 JSON
+print(project_document(doc))  # uasset_read.package 2.0 JSON dict
 
 # Or use CLI
 # python -m uasset_read file.uasset
@@ -172,7 +174,8 @@ doc = parse_package_document(
 
 # JSON serialization
 import json
-print(json.dumps(doc.to_dict(), indent=2))
+from uasset_read.v2.projection import project_document
+print(json.dumps(project_document(doc), indent=2))
 
 # CLI usage
 # python -m uasset_read file.uasset

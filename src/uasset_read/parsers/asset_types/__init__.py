@@ -60,10 +60,8 @@ __all__ = [
 ]
 
 
-def parse_material_instance(
-    archive: "FArchive", name_map: list, export: "ObjectExport"
-) -> dict:
-    """Parse MaterialInstanceConstant export — delegates to IR builder pipeline."""
+def parse_material_instance(archive: "FArchive", name_map: list, export: "ObjectExport") -> dict:
+    """Parse MaterialInstanceConstant export — metadata placeholder only, no decode."""
     return {"asset_type": "MaterialInstance", "material_type": "MaterialInstance"}
 
 

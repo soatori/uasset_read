@@ -3,15 +3,13 @@ Serialization models — UE Blueprint pins, nodes, graph containers, member refe
 
 The classes defined here are direct mappings of the UE binary format (serialization
 models), used by the serializers layer to construct instances when reading data from
-the archive. They form a clear layer separation from the presentation models in
-ir.py (GraphIR / NodeIR / PinIR):
+the archive. They preserve UE native types (int direction, nested FEdGraphPinType
+objects, etc.).
 
-- core.py classes: serialization layer, preserving UE native types (int direction,
-  FEdGraphPinType nested objects, etc.)
-- ir.py classes: presentation layer, simplified representation for renderers
-  (str direction, str type, etc.)
-
-The IR Builder is responsible for converting serialization models to presentation models.
+The former presentation/IR layer (`models/ir.py` — GraphIR / NodeIR / PinIR — plus the
+IR Builder and the renderer system) was removed together with the v1 pipeline; v2
+consumes these serialization models directly from `src/uasset_read/v2/`. Animation IR
+is the one surviving IR-style layer and lives in `models/ir_anim.py`.
 
 Per D-01: Keep UE source naming.
 Per D-10: Python 3.10+ strict type hints.
@@ -67,7 +65,9 @@ class UEdGraphPin:
     default_value: Optional[str] = None
     auto_default_value: Optional[str] = None
     default_object: Optional[int] = None
-    default_object_ref: Optional[Any] = None  # D-04: reserved for object-reference resolution (unused on the single-package path)
+    default_object_ref: Optional[Any] = (
+        None  # D-04: reserved for object-reference resolution (unused on the single-package path)
+    )
     default_text_value: Optional[str] = None
     # PIN-04: Link references — raw dict (backward compat)
     linked_to_raw: List[dict] = field(default_factory=list)

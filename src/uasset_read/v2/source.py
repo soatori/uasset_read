@@ -54,7 +54,13 @@ class FileSource:
         return data
 
     def close(self) -> None:
-        self._fh.close()
+        # __del__ delegates here. __init__ can fail before _fh is ever assigned
+        # (stat() raises on a missing path, open() raises OSError), so the
+        # attribute may not exist at all — guard it or every failed open prints
+        # "Exception ignored while calling deallocator" noise after the real error.
+        fh = getattr(self, "_fh", None)
+        if fh is not None:
+            fh.close()
 
     def __del__(self) -> None:
         self.close()

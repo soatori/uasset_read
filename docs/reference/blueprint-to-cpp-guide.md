@@ -6,7 +6,7 @@
 ## 核心结论
 
 | 问题 | 答案 |
-|------|------|
+| ------ | ------ |
 | 蓝图能否直接转换为可编译的 C++ 类？ | 不能 — 缺少函数实现体 |
 | 蓝图能否生成 C++ 代码框架？ | 可以 — 约 50% 工作量可自动生成 |
 | JSON 输出能否作为 C++ 参考？ | 可以 — 提供完整结构和配置信息 |
@@ -14,7 +14,7 @@
 ## 参考价值矩阵
 
 | 蓝图数据 | 对应 C++ | 参考价值 |
-|----------|----------|----------|
+| ---------- | ---------- | ---------- |
 | `parent_class` | 基类继承 (`: public ACharacter`) | 100% |
 | `variables[]` | `UPROPERTY` 成员声明 | 100% |
 | `export_map[].properties[].value` | 构造函数中的属性赋值 | 100% |
@@ -27,7 +27,7 @@
 ## 可行性评分
 
 | 项目 | 可行性 | 评分 |
-|------|--------|------|
+| ------ | -------- | ------ |
 | 类定义 | 可自动生成 | 90% |
 | 成员变量 | 可自动生成 | 85% |
 | 函数声明 | 可自动生成 | 80% |
@@ -128,30 +128,36 @@ void AMYCharacter::DoJumpStart()
 ## 推荐方案
 
 ### 方案 A: 保持蓝图（推荐大多数场景）
+
 - 适用：快速原型、功能简单、团队不熟悉 C++
 - 工作量：0
 - 优点：快速迭代、可视化编辑
 
 ### 方案 B: 部分自动化（有 C++ 经验的团队）
+
 1. 从蓝图提取框架（自动）→ 类定义/变量/函数声明/组件配置 ~100%
 2. 手动补充函数实现体（手动）→ ~100%
 3. 创建 InputAction 等外部引用（手动）→ ~100%
+
 - 总自动化率：~50%
 
 ### 方案 C: 完全手写（性能敏感场景）
+
 - 手动查看蓝图逻辑 → 手动编写 C++ → 手动测试优化
 - 优点：代码质量最高、性能最优
 - 缺点：工作量最大
 
 ## 与 cpp_gen 模块的关系
 
-本项目已内置 `cpp_gen/` 模块，支持从蓝图自动生成 C++ 骨架：
+> **状态：目标，未实现。** `src/uasset_read/cpp_gen/` 不存在于当前 `src/`，`parse_single` 与渲染器系统已随 v1 pipeline 删除。下表是删除前的模块划分，保留作为未来 C++ skeleton 设计的参考，不得当作现有能力宣称。
+
+历史 `cpp_gen/` 模块划分（删除前）：
 
 | 模块 | 功能 |
-|------|------|
+| ------ | ------ |
 | `cpp_gen/cpp_type_mapper.py` | UE 属性类型 → C++ 类型映射 |
 | `cpp_gen/cpp_uproperty_mapper.py` | CPF 标志 → UPROPERTY 修饰符映射 |
 | `cpp_gen/cpp_default_value_formatter.py` | UE 默认值 → C++ 字面量 |
 | `cpp_gen/cpp_constructor_ir_builder.py` | 从 BlueprintVariable 构建构造函数 IR |
 
-> 使用方式：`parse_single(path, format="cpp_skeleton")`，通过渲染器系统输出。
+> 历史使用方式（已失效）：`parse_single(path, format="cpp_skeleton")`，通过渲染器系统输出。当前 v2 入口为 `parse_package_document(path, depth="decode")`，蓝图变量（含 VarType）与 Kismet 反编译结果位于对应 `ObjectRecord` 的 `semantic`/`coverage`；C++ skeleton 与 parent-asset 解析仍未实现。
