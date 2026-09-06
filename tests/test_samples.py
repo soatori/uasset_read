@@ -984,14 +984,14 @@ def test_iostore_toc_read_does_not_load_the_container():
 @pytest.mark.parametrize(
     "sample_entry",
     [
-        s for s in _MANIFEST_DATA["samples"]
-        if any(sc["name"].endswith(".uexp") for sc in s.get("sidecars", []))
-        and s.get("file_version_ue5", 0) >= 1018
+        s
+        for s in _MANIFEST_DATA["samples"]
+        if any(sc["name"].endswith(".uexp") for sc in s.get("sidecars", [])) and s.get("file_version_ue5", 0) >= 1018
     ],
     ids=[
-        s["name"] for s in _MANIFEST_DATA["samples"]
-        if any(sc["name"].endswith(".uexp") for sc in s.get("sidecars", []))
-        and s.get("file_version_ue5", 0) >= 1018
+        s["name"]
+        for s in _MANIFEST_DATA["samples"]
+        if any(sc["name"].endswith(".uexp") for sc in s.get("sidecars", [])) and s.get("file_version_ue5", 0) >= 1018
     ],
 )
 def test_missing_sidecar_diagnostic(sample_entry):
