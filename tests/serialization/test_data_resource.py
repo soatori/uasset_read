@@ -1,7 +1,5 @@
 """Tests for DataResource table parsing."""
 import struct
-import pytest
-from io import BytesIO
 
 
 def test_read_data_resource_table():
