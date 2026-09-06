@@ -4,7 +4,7 @@
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
-> 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 100 source files · 70 registered UE class handlers
+> 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 94 source files · 70 registered UE class handlers
 
 > **Refactor status:** v2 package-first architecture: default CLI/API output is `PackageDocument v2` (legacy packages; tagged properties parsed within export bounds; sample-backed handlers incl. lightweight Niagara kind coverage (semantic status partial until domain fields land), no Semantic 1.x handler dependency). Payload descriptors are reserved for cooked containers: Legacy v2 emits no top-level payloads and `extract_payload` is a stable deferred interface (`PAYLOAD_EXTRACTION_DEFERRED`, reads nothing) until redistributable `.uexp/.ubulk/.utoc/.ucas` samples exist (#621). Default `semantic` view excludes raw offsets/property trees; they are opt-in via `raw`/`debug` views. Zen/IoStore, unversioned-with-usmap, and external-container (ubulk/ucas) extraction remain deferred (see `docs/designs/README.md`); Semantic 1.x JSON is no longer available — the v1 pipeline was removed.
 
@@ -26,9 +26,9 @@ Whether you're auditing blueprint dependencies, building tooling for game develo
 | -------- | ------- |
 | Version | v0.5.4.45 (last tagged) / 0.6.0-dev (v2 default) |
 | Source | Python parser for Unreal Engine .uasset files |
-| Modules | 100 source files across 8 subpackages |
-| v2 Tests | test_core (exactly 10 functions, structure-gated) + manifest-driven test_samples (110 collected total, no skips/xfail) |
-| Tracked samples | 48 legacy fixtures with manifest validation |
+| Modules | 94 source files across 8 subpackages |
+| v2 Tests | test_core (exactly 13 functions, structure-gated) + manifest-driven test_samples (118 collected total, no skips/xfail) |
+| Tracked samples | 54 legacy fixtures with manifest validation |
 
 ## Features
 
@@ -46,7 +46,7 @@ Whether you're auditing blueprint dependencies, building tooling for game develo
 - **Handlers** — DataTable, UserDefinedEnum, UserDefinedStruct, Texture2D, TextureCube, SoundWave, Skeleton, StaticMesh, Material, Niagara, Blueprint/AnimBlueprint (decode depth: graph/node/pin decode + declaration + SCS components + NewVariables names with VarType (`FEdGraphPinType`) typing + Kismet decompilation on editor-saved fixtures; C++ skeleton and parent-asset resolution not implemented)
 - **Unversioned properties** — not implemented. Only a partial mapping-driven (`.usmap`) path exists in `parsers/property_parser.py`; there is no `SchemaProvider` in `src/` (target — see the canonical design)
 
-**UE source-audit fixes (v0.6.0-dev):** 35 binary-format mismatches resolved against UE 5.8-dev C++ source — FString UTF-16 byte-swap, FColor B/G/R/A order, FRotator Pitch/Yaw/Roll, FName external number, unversioned header fragment decode, ELifetimeCondition table, mcdelegate PinCategory, FGuid display, dead CppType reads, ImportedSize X/Y, material input variants, anim node table verified against Engine/Source headers. StringTable (#615) partially fixed (FString keys + trailer). 113/113 tests passing.
+**UE source-audit fixes (v0.6.0-dev):** 35 binary-format mismatches resolved against UE 5.8-dev C++ source — FString UTF-16 byte-swap, FColor B/G/R/A order, FRotator Pitch/Yaw/Roll, FName external number, unversioned header fragment decode, ELifetimeCondition table, mcdelegate PinCategory, FGuid display, dead CppType reads, ImportedSize X/Y, material input variants, anim node table verified against Engine/Source headers. StringTable (#615) partially fixed (FString keys + trailer). 118/118 tests passing.
 
 ```python
 from uasset_read import parse_package_document
@@ -84,7 +84,7 @@ print(project_document(doc))  # PackageDocument JSON dict
 
 ### File Format Support
 
-- **Dedicated asset type parsers** — 47 registered UE class names across 21 handlers; 5 bind real extractors (DataTable/CurveTable, LevelSequence, Skeleton, SoundWave), the rest are metadata/semantic stubs with generic UObject/property fallback paths.
+- **Dedicated asset type parsers** — 70 registrations covering 61 distinct UE class names (`asset_types/__init__.py`), 13 bound to real extractors (DataTable, CurveTable, LevelSequence, MovieScene*, Skeleton, SoundWave, AnimSequence, AnimMontage, AnimBlueprintGeneratedClass, UserDefinedEnum, UserDefinedStruct); the remaining 48 are metadata/property-metadata stubs. 21 semantic AssetHandler classes in `handlers_impl.py` provide deeper coverage for selected class families.
 - **Bulk Data** — BulkData header parsing
 - **Game version support** — Game-specific serialization constants
 - **Binary/native handlers** — binary or native property serialization support

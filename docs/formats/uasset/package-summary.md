@@ -13,21 +13,21 @@ FPackageFileSummary 是 .uasset 文件的"目录"，位于文件开头。它包�
 ### 版本与元信息
 
 | 字段名 | 类型 | 用途 | 版本条件 |
-|--------|------|------|----------|
+| -------- | ------ | ------ | ---------- |
 | Tag | int32 | 魔数验证，应为 PACKAGE_FILE_TAG (0x9E2A83C1) | 固定 |
 | LegacyFileVersion | int32 | 序列化格式标识：-8 表示 UE5，-9 表示 UE5.6+ 新格式 | 固定（序列化用，非结构体成员） |
 | LegacyUE3Version | int32 | 遗留 UE3 版本号，固定写入 864 | LegacyFileVersion != -4 |
 | FileVersionUE4 | int32 | UE4 文件版本号（EUnrealEngineObjectUE4Version） | 固定 |
 | FileVersionUE5 | int32 | UE5 文件版本号（EUnrealEngineObjectUE5Version），初始值 1000 | LegacyFileVersion <= -8 |
 | FileVersionLicenseeUE | int32 | 许可方自定义版本号 | 固定 |
-| SavedHash | FIoHash (20 bytes) | 保存时的包哈希值（SHA-1），用于 IoStore/IAS 验证 | UE5 >= PACKAGE_SAVED_HASH (1017)；旧版写 FGuid (16 bytes) |
+| SavedHash | FIoHash (20 bytes) | 保存时的包哈希值（SHA-1），用于 IoStore/IAS 验证 | UE5 >= PACKAGE_SAVED_HASH (1016)；旧版写 FGuid (16 bytes) |
 | TotalHeaderSize | int32 | 文件头总大小（包含 Summary 和各表），供 LinkerLoad 确定读取范围 | UE5 >= PACKAGE_SAVED_HASH 时在 SavedHash 之后；否则在 CustomVersion 之后 |
 | CustomVersionContainer | FCustomVersionContainer | 自定义版本容器，格式取决于 LegacyFileVersion | LegacyFileVersion <= -2 |
 
 ### 包标识与标志
 
 | 字段名 | 类型 | 用途 | 版本条件 |
-|--------|------|------|----------|
+| -------- | ------ | ------ | ---------- |
 | PackageName | FString | 包名称（int32 Length + UTF-8 字节） | 固定 |
 | PackageFlags | uint32 | 包标志位（如 PKG_FilterEditorOnly、PKG_Cooked） | 固定 |
 | bUnversioned | bool | 是否为无版本标记的包（仅用于 full cooks 分发） | 固定（结构体成员，非序列化字段） |
@@ -35,7 +35,7 @@ FPackageFileSummary 是 .uasset 文件的"目录"，位于文件开头。它包�
 ### 名称表
 
 | 字段名 | 类型 | 用途 | 版本条件 |
-|--------|------|------|----------|
+| -------- | ------ | ------ | ---------- |
 | NameCount | int32 | 名称表条目数量 | 固定 |
 | NameOffset | int32 | 名称表在文件中的偏移 | 固定 |
 | NamesReferencedFromExportDataCount | int32 | 从导出数据引用的名称数量（排序在名称表前端） | UE5 >= NAMES_REFERENCED_FROM_EXPORT_DATA (1001) |
@@ -50,7 +50,7 @@ FPackageFileSummary 是 .uasset 文件的"目录"，位于文件开头。它包�
 ### 本地化与文本
 
 | 字段名 | 类型 | 用途 | 版本条件 |
-|--------|------|------|----------|
+| -------- | ------ | ------ | ---------- |
 | LocalizationId | FString | 本地化 ID（仅非 FilterEditorOnly 模式） | UE4 >= VER_UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID |
 | GatherableTextDataCount | int32 | 可收集文本数据条目数量 | UE4 >= VER_UE4_SERIALIZE_TEXT_IN_PACKAGES (517) |
 | GatherableTextDataOffset | int32 | 可收集文本数据在文件中的偏移 | UE4 >= VER_UE4_SERIALIZE_TEXT_IN_PACKAGES (517) |
@@ -58,7 +58,7 @@ FPackageFileSummary 是 .uasset 文件的"目录"，位于文件开头。它包�
 ### Import / Export 表
 
 | 字段名 | 类型 | 用途 | 版本条件 |
-|--------|------|------|----------|
+| -------- | ------ | ------ | ---------- |
 | ExportCount | int32 | 导出表条目数量 | 固定 |
 | ExportOffset | int32 | 导出表在文件中的偏移 | 固定 |
 | ImportCount | int32 | 导入表条目数量 | 固定 |
@@ -67,7 +67,7 @@ FPackageFileSummary 是 .uasset 文件的"目录"，位于文件开头。它包�
 ### Cell 导入/导出（Verse）
 
 | 字段名 | 类型 | 用途 | 版本条件 |
-|--------|------|------|----------|
+| -------- | ------ | ------ | ---------- |
 | CellExportCount | int32 | Cell 导出数量 | UE5 >= VERSE_CELLS (1015) |
 | CellExportOffset | int32 | Cell 导出表偏移 | UE5 >= VERSE_CELLS (1015) |
 | CellImportCount | int32 | Cell 导入数量 | UE5 >= VERSE_CELLS (1015) |
@@ -76,7 +76,7 @@ FPackageFileSummary 是 .uasset 文件的"目录"，位于文件开头。它包�
 ### 元数据与依赖
 
 | 字段名 | 类型 | 用途 | 版本条件 |
-|--------|------|------|----------|
+| -------- | ------ | ------ | ---------- |
 | MetaDataOffset | int32 | 元数据在文件中的偏移 | UE5 >= METADATA_SERIALIZATION_OFFSET (1014) |
 | DependsOffset | int32 | 依赖映射表在文件中的偏移 | 固定 |
 | SoftPackageReferencesCount | int32 | 软包引用数量 | UE4 >= VER_UE4_ADD_STRING_ASSET_REFERENCES_MAP (516) |
@@ -94,8 +94,8 @@ FPackageFileSummary 是 .uasset 文件的"目录"，位于文件开头。它包�
 ### GUID 与版本信息
 
 | 字段名 | 类型 | 用途 | 版本条件 |
-|--------|------|------|----------|
-| LegacyGuid | FGuid (16 bytes) | 旧版包 GUID（PACKAGE_SAVED_HASH 之前使用） | UE5 < PACKAGE_SAVED_HASH (1017) |
+| -------- | ------ | ------ | ---------- |
+| LegacyGuid | FGuid (16 bytes) | 旧版包 GUID（PACKAGE_SAVED_HASH 之前使用） | UE5 < PACKAGE_SAVED_HASH (1016) |
 | PersistentGuid | FGuid | 当前包的持久标识（仅非 FilterEditorOnly 模式） | WITH_EDITORONLY_DATA 且 UE4 >= VER_UE4_ADDED_PACKAGE_OWNER (519) |
 | OwnerPersistentGuid | FGuid | 包所有者持久标识（已废弃，仅特定版本范围存在） | WITH_EDITORONLY_DATA 且 VER_UE4_ADDED_PACKAGE_OWNER <= UE4 < VER_UE4_NON_OUTER_PACKAGE_IMPORT |
 | Generations | TArray<FGenerationInfo> | 版本世代信息（编辑器保存历史），每个元素为 (int32 ExportCount, int32 NameCount) | 固定 |
@@ -105,7 +105,7 @@ FPackageFileSummary 是 .uasset 文件的"目录"，位于文件开头。它包�
 ### 压缩与源信息
 
 | 字段名 | 类型 | 用途 | 版本条件 |
-|--------|------|------|----------|
+| -------- | ------ | ------ | ---------- |
 | CompressionFlags | uint32 | 压缩标志（Zlib、Gzip 等） | 固定 |
 | CompressedChunks | TArray<FCompressedChunk> | 压缩块信息，每个元素为 (int32 UncompressedOffset, int32 UncompressedSize, int32 CompressedOffset, int32 CompressedSize) | 固定序列化（通常 Count=0，非零则拒绝加载） |
 | PackageSource | uint32 | 包来源标识（区分 Epic/被许可方/Modder） | 固定 |
@@ -114,7 +114,7 @@ FPackageFileSummary 是 .uasset 文件的"目录"，位于文件开头。它包�
 ### 数据区偏移
 
 | 字段名 | 类型 | 用途 | 版本条件 |
-|--------|------|------|----------|
+| -------- | ------ | ------ | ---------- |
 | AssetRegistryDataOffset | int32 | 资产注册数据偏移 | 固定 |
 | BulkDataStartOffset | int64 | BulkData 数据区起始位置 | 固定 |
 | WorldTileInfoDataOffset | int32 | World Tile Info 数据偏移 | UE4 >= VER_UE4_WORLD_LEVEL_INFO |
@@ -137,7 +137,7 @@ FPackageFileSummary 是 .uasset 文件的"目录"，位于文件开头。它包�
 ### UE5 版本枚举（EUnrealEngineObjectUE5Version）
 
 | 枚举值 | 整数值 | 新增字段 |
-|--------|--------|----------|
+| -------- | -------- | ---------- |
 | INITIAL_VERSION | 1000 | — |
 | NAMES_REFERENCED_FROM_EXPORT_DATA | 1001 | NamesReferencedFromExportDataCount |
 | PAYLOAD_TOC | 1002 | PayloadTocOffset |
@@ -170,7 +170,7 @@ FPackageFileSummary 是 .uasset 文件的"目录"，位于文件开头。它包�
 序列化中 Tag 之后的 int32 为 LegacyFileVersion，标识文件格式世代：
 
 | LegacyFileVersion | 含义 |
-|-------------------|------|
+| ------------------- | ------ |
 | -2 | 枚举格式自定义版本 |
 | -3 ~ -5 | GUID 格式自定义版本 |
 | -6 | 优化的自定义版本序列化 |

@@ -107,9 +107,10 @@ parse_single
 
 The current entry point is `parse_package_document()` → `LegacyPackageReader` →
 `PackageDocument`. Source tree: 94 Python files, ~28k lines. 21 registered
-handlers (47 UE class names, 5 with real extractors). Zero runtime dependencies.
+handlers (61 distinct UE class names, 13 with real extractors). Zero runtime dependencies.
 
 Key retained capabilities from v1:
+
 - `FArchive` binary reader with boundary checks.
 - `PackageFileSummary`, NameMap, ImportMap, ExportMap reading.
 - `.uexp` sidecar concatenation (guarded by `main_size == TotalHeaderSize`).
@@ -144,7 +145,7 @@ Key retained capabilities from v1:
 
 #### Logging
 
-Public API uses scoped logging internally but may call `configure_project_logging()` which replaces handlers and creates new run IDs.
+Public API uses scoped logging internally but may call `configure_project_logging()` (retired — see `project_logging.py:4-8`) which replaces handlers and creates new run IDs.
 
 #### Agent & size
 
