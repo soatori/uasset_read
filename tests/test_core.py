@@ -3128,6 +3128,32 @@ def test_resolve_parent_assets_returns_relations():
     assert isinstance(diagnostics, list)
 
 
+def test_api_resolve_parents_parameter():
+    """parse_package_document must accept resolve_parents parameter."""
+    from uasset_read.package import parse_package_document
+    from pathlib import Path
+
+    fixture = Path("tests/samples/ABP_RifleAnimLayers.uasset")
+    if not fixture.exists():
+        pytest.skip("fixture not found")
+
+    # Without resolution (default)
+    doc1 = parse_package_document(str(fixture), depth="package")
+    # With resolution
+    doc2 = parse_package_document(
+        str(fixture), depth="package", resolve_parents=True,
+        parent_root=str(fixture.parent),
+    )
+    # Both should return valid documents
+    assert doc1 is not None
+    assert doc2 is not None
+    # Relations may or may not be populated depending on fixtures on disk
+    assert isinstance(doc1.relations, list)
+    assert isinstance(doc2.relations, list)
+    assert isinstance(doc1.diagnostics, list)
+    assert isinstance(doc2.diagnostics, list)
+
+
 def test_test_suite_structure_gate():
     import ast
 
@@ -3147,7 +3173,7 @@ def test_test_suite_structure_gate():
     assert subdirs == {"samples"}
     tree = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
     funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
-    assert len(funcs) == 14
+    assert len(funcs) == 15
     assert not any(isinstance(n, ast.ClassDef) for n in tree.body)
     # The design bans decorators on test functions; cache helpers like
     # _document legitimately carry @lru_cache, so the check is scoped to

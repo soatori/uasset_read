@@ -162,18 +162,18 @@ def create_parser():
         help="Batch output format: jsonl (one JSON per line, default) or json (array)",
     )
 
-    # Parent-assets (deferred)
+    # Parent-assets
     parser.add_argument(
         "--include-parent-assets",
         action="store_true",
         default=False,
-        help="[deferred] Include parent asset resolution (blocked by #627)",
+        help="Include parent asset resolution",
     )
     parser.add_argument(
         "--asset-root",
         metavar="DIR",
         default=None,
-        help="[deferred] Root directory for parent asset search",
+        help="Root directory for parent asset search",
     )
 
     # Utility flags
@@ -267,6 +267,8 @@ def _handle_batch(args) -> None:
                 mappings_path=args.mappings,
                 game=args.game,
                 depth=args.depth,
+                resolve_parents=args.include_parent_assets,
+                parent_root=args.asset_root,
             )
             projected = project_document(
                 doc,
@@ -376,14 +378,6 @@ def main():
     if args.clean_logs:
         _handle_clean_logs(args)
 
-    # --include-parent-assets stub (deferred, blocked by #627)
-    if args.include_parent_assets:
-        print(
-            "Warning: --include-parent-assets is deferred (blocked by #627: missing fixtures).\n"
-            "This flag is recognized but not yet implemented.",
-            file=sys.stderr,
-        )
-
     # --batch mode
     if args.batch is not None:
         _handle_batch(args)
@@ -420,6 +414,8 @@ def main():
             mappings_path=args.mappings,
             game=args.game,
             depth=args.depth,
+            resolve_parents=args.include_parent_assets,
+            parent_root=args.asset_root,
         )
         projected = project_document(
             doc,

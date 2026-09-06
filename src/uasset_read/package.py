@@ -275,6 +275,8 @@ def parse_package_document(
     game: str | None = None,
     depth: Literal["package", "object", "asset", "decode"] = "asset",
     object_ids: list[str] | None = None,
+    resolve_parents: bool = False,
+    parent_root: str | None = None,
 ) -> PackageDocument:
     """Parse a .uasset/.umap and return a PackageDocument.
 
@@ -298,6 +300,17 @@ def parse_package_document(
             archive=archive,
             main_path=bundle.main_path,
         )
+        
+        # Resolve parent assets if requested
+        if resolve_parents and parent_root:
+            from .parent_resolver import resolve_parent_assets
+            
+            root_path = Path(parent_root)
+            if root_path.is_dir():
+                extra_relations, diagnostics = resolve_parent_assets(doc, root_path)
+                doc.relations.extend(extra_relations)
+                doc.diagnostics.extend(diagnostics)
+        
         return doc
     finally:
         archive.close()
