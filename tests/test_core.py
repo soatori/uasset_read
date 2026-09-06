@@ -3170,7 +3170,7 @@ def test_test_suite_structure_gate():
     ]
     assert test_files == expected
     subdirs = {p.name for p in root.iterdir() if p.is_dir() and p.name != "__pycache__"}
-    assert subdirs == {"samples"}
+    assert subdirs == {"samples", "serialization"}
     tree = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
     funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
     assert len(funcs) == 15

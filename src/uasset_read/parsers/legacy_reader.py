@@ -484,6 +484,29 @@ class LegacyPackageReader:
             # the UE5.3+ FPropertyTypeName path (mirrors v1 behavior).
             archive.set_property_version_gates(summary.file_version_ue4, summary.file_version_ue5)
 
+            # 1b. Parse PackageTrailer (UE5, after summary validation)
+            package_trailer = None
+            if (hasattr(summary, 'payload_toc_offset')
+                    and summary.payload_toc_offset > 0
+                    and getattr(summary, 'file_version_ue5', 0) >= 1002):
+                try:
+                    from uasset_read.serializers.package_trailer import read_package_trailer
+                    archive.seek(summary.payload_toc_offset)
+                    package_trailer = read_package_trailer(
+                        archive, summary.payload_toc_offset
+                    )
+                except Exception as e:
+                    diagnostics.append(
+                        Diagnostic(
+                            severity="warning",
+                            code="PACKAGE_TRAILER_PARSE_FAILED",
+                            message=f"PackageTrailer parse failed: {e}",
+                            stage="package.trailer",
+                            recoverable=True,
+                        )
+                    )
+                    package_trailer = None
+
             # 2. Validate name table
             if summary.name_count <= 0:
                 diagnostics.append(
@@ -724,6 +747,7 @@ class LegacyPackageReader:
                 diagnostics=diagnostics,
                 summary=summary_obj,
                 depth=depth,
+                package_trailer=package_trailer,
             )
 
         except ParseError as e:

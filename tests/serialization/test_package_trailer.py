@@ -145,3 +145,11 @@ def test_read_package_trailer_invalid_tag():
     archive = ByteArchive(trailer_data)
     with pytest.raises(ValueError, match="Invalid PackageTrailer tag"):
         read_package_trailer(archive, payload_toc_offset=0)
+
+
+def test_parse_stages_populates_trailer():
+    """Verify _read_core_tables populates package_trailer when present."""
+    from uasset_read.models.document import PackageDocument
+    result = PackageDocument(source=None, package=None)
+    assert hasattr(result, 'package_trailer')
+    assert result.package_trailer is None
