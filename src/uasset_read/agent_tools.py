@@ -264,38 +264,76 @@ def extract_payload(
             }
             return fit_list_response(response, max_bytes, list_key="available_ids")
 
-    # Determine source region based on available sidecars
-    # For now, use a heuristic: if uexp exists, prefer it
-    source_region: str
-    if "uexp" in sidecar_paths:
-        source_region = "uexp"
-    elif "ubulk" in sidecar_paths:
-        source_region = "ubulk"
-    else:
-        source_region = "main"
+    # Parse the package to get export serial data for BulkData extraction
+    from .parsers.bulk_data import extract_bulk_data_descriptors
 
-    # Get the sidecar file size for stored_size
-    # Task 6 will add proper BulkData mapping; for now use file size
-    sidecar_path = sidecar_paths.get(source_region)
-    if sidecar_path is not None:
-        try:
-            stored_size = sidecar_path.stat().st_size
-        except OSError:
-            stored_size = 0
-    else:
-        stored_size = 0
+    try:
+        doc = parse_package_document(str(main_path), depth="package")
+    except Exception:
+        doc = None
 
-    # Create a placeholder descriptor
-    # Task 6 will add proper BulkData descriptor extraction
-    descriptor = PayloadDescriptor(
-        id=payload_id,
-        owner=f"export:{export_index}",
-        kind="bulk_data",
-        source_region=source_region,  # type: ignore[arg-type]
-        offset=0,
-        stored_size=stored_size,
-        status="available",
-    )
+    # Try to extract BulkData descriptors from the export
+    descriptor: PayloadDescriptor | None = None
+    if doc is not None and export_index < len(doc.objects):
+        export = doc.objects[export_index]
+        if export.serial_region is not None and export.serial_region.size > 0:
+            try:
+                with open(main_path, "rb") as f:
+                    f.seek(export.serial_region.offset)
+                    serial_data = f.read(export.serial_region.size)
+
+                bulk_headers = extract_bulk_data_descriptors(
+                    serial_data,
+                    base_offset=export.serial_region.offset,
+                    export_index=export_index,
+                )
+
+                if bulk_headers:
+                    # Use the first (last in serial data) BulkData header
+                    header = bulk_headers[0]
+
+                    # Determine source region from header flags
+                    from .parsers.bulk_data import BULKDATA_CompressedZlib, BULKDATA_CompressedOodle
+                    if header.flags & (BULKDATA_CompressedZlib | BULKDATA_CompressedOodle):
+                        source_region = "ubulk"
+                    elif "uexp" in sidecar_paths:
+                        source_region = "uexp"
+                    elif "ubulk" in sidecar_paths:
+                        source_region = "ubulk"
+                    else:
+                        source_region = "main"
+
+                    descriptor = PayloadDescriptor(
+                        id=payload_id,
+                        owner=f"export:{export_index}",
+                        kind="bulk_data",
+                        source_region=source_region,  # type: ignore[arg-type]
+                        offset=header.offset,
+                        stored_size=header.size_on_disk,
+                        status="available",
+                        logical_size=header.element_count,
+                        compression=header.compression_type,
+                    )
+            except Exception:
+                pass
+
+    # Fallback: create a basic descriptor if BulkData extraction failed
+    if descriptor is None:
+        # Determine source region based on available sidecars
+        source_region = "uexp" if "uexp" in sidecar_paths else "ubulk" if "ubulk" in sidecar_paths else "main"
+
+        sidecar_path = sidecar_paths.get(source_region)
+        stored_size = sidecar_path.stat().st_size if sidecar_path else 0
+
+        descriptor = PayloadDescriptor(
+            id=payload_id,
+            owner=f"export:{export_index}",
+            kind="bulk_data",
+            source_region=source_region,  # type: ignore[arg-type]
+            offset=0,
+            stored_size=stored_size,
+            status="available",
+        )
 
     # Extract payload bytes
     result = extract_payload_bytes(

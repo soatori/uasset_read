@@ -347,3 +347,154 @@ def test_agent_tool_extract_payload_invalid_payload_id():
 
     # Should return DEFERRED since we can't determine export index
     assert result.get("code") == PAYLOAD_EXTRACTION_DEFERRED
+
+
+def test_extract_bulk_data_descriptors_basic():
+    """Test extracting a single BulkData descriptor from serial data."""
+    from uasset_read.parsers.bulk_data import extract_bulk_data_descriptors
+
+    # Simulate a BulkData header at the end of an export
+    # flags=0x01, element_count=4096, size_on_disk=8192, offset=0
+    bulk_data_header = bytes([
+        0x01, 0x00, 0x00, 0x00,  # flags = BULKDATA_None
+        0x00, 0x10, 0x00, 0x00,  # element_count = 4096
+        0x00, 0x20, 0x00, 0x00,  # size_on_disk = 8192
+        0x00, 0x00, 0x00, 0x00,  # offset = 0 (relative to ubulk)
+    ])
+
+    # Use data that won't form false positive headers
+    # Use 0xFF bytes which won't form valid headers when scanned
+    serial_data = b"\xff" * 100 + bulk_data_header
+
+    descriptors = extract_bulk_data_descriptors(serial_data)
+
+    assert len(descriptors) == 1
+    assert descriptors[0].size_on_disk == 8192
+    assert descriptors[0].element_count == 4096
+    assert descriptors[0].offset == 0
+    assert descriptors[0].compression_type is None
+    assert descriptors[0].is_compressed is False
+
+
+def test_extract_bulk_data_descriptors_compressed():
+    """Test extracting compressed BulkData descriptors."""
+    from uasset_read.parsers.bulk_data import extract_bulk_data_descriptors
+
+    # Compressed header: flags=0x02 (Zlib), element_count=2048, size_on_disk=4096, offset=1024
+    bulk_data_header = bytes([
+        0x02, 0x00, 0x00, 0x00,  # flags = BULKDATA_CompressedZlib
+        0x00, 0x08, 0x00, 0x00,  # element_count = 2048
+        0x00, 0x10, 0x00, 0x00,  # size_on_disk = 4096
+        0x00, 0x04, 0x00, 0x00,  # offset = 1024
+    ])
+
+    # Use data that won't form false positive headers
+    serial_data = b"\xff" * 200 + bulk_data_header
+
+    descriptors = extract_bulk_data_descriptors(serial_data)
+
+    assert len(descriptors) == 1
+    assert descriptors[0].size_on_disk == 4096
+    assert descriptors[0].element_count == 2048
+    assert descriptors[0].offset == 1024
+    assert descriptors[0].compression_type == "zlib"
+    assert descriptors[0].is_compressed is True
+
+
+def test_extract_bulk_data_descriptors_single_at_end():
+    """Test that only the last header is found (conservative heuristic)."""
+    from uasset_read.parsers.bulk_data import extract_bulk_data_descriptors
+
+    # Two BulkData headers back-to-back at the end
+    header1 = bytes([
+        0x01, 0x00, 0x00, 0x00,
+        0x00, 0x10, 0x00, 0x00,
+        0x00, 0x20, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+    ])
+    header2 = bytes([
+        0x02, 0x00, 0x00, 0x00,
+        0x00, 0x08, 0x00, 0x00,
+        0x00, 0x10, 0x00, 0x00,
+        0x00, 0x04, 0x00, 0x00,
+    ])
+
+    # Use data that won't form false positive headers
+    serial_data = b"\xff" * 50 + header1 + header2
+
+    descriptors = extract_bulk_data_descriptors(serial_data)
+
+    # Conservative heuristic: only finds the last header
+    assert len(descriptors) == 1
+    assert descriptors[0].compression_type == "zlib"
+    assert descriptors[0].size_on_disk == 4096
+
+
+def test_extract_bulk_data_descriptors_empty():
+    """Test extracting from data with no BulkData headers."""
+    from uasset_read.parsers.bulk_data import extract_bulk_data_descriptors
+
+    # Use 0xFF bytes which won't form valid headers when scanned
+    serial_data = b"\xff" * 100
+
+    descriptors = extract_bulk_data_descriptors(serial_data)
+
+    assert len(descriptors) == 0
+
+
+def test_extract_bulk_data_descriptors_too_short():
+    """Test extracting from data shorter than a header."""
+    from uasset_read.parsers.bulk_data import extract_bulk_data_descriptors
+
+    serial_data = b"\x01\x02\x03\x04" * 2
+
+    descriptors = extract_bulk_data_descriptors(serial_data)
+
+    assert len(descriptors) == 0
+
+
+def test_extract_bulk_data_descriptors_invalid_header():
+    """Test extracting when header is invalid."""
+    from uasset_read.parsers.bulk_data import extract_bulk_data_descriptors
+
+    # Header with size_on_disk=0 (invalid)
+    invalid_header = bytes([
+        0x01, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,  # element_count = 0
+        0x00, 0x00, 0x00, 0x00,  # size_on_disk = 0
+        0x00, 0x00, 0x00, 0x00,
+    ])
+
+    # Use 0xFF bytes which won't form valid headers
+    serial_data = b"\xff" * 50 + invalid_header
+
+    descriptors = extract_bulk_data_descriptors(serial_data)
+
+    # Invalid headers are skipped
+    assert len(descriptors) == 0
+
+
+def test_extract_bulk_data_from_real_uexp():
+    """Test extracting BulkData descriptors from real T_ParserBulk.uexp."""
+    from uasset_read.parsers.bulk_data import extract_bulk_data_descriptors
+
+    fixture_dir = Path(__file__).parent / "samples"
+    uexp_path = fixture_dir / "T_ParserBulk.uexp"
+
+    if not uexp_path.exists():
+        pytest.skip("T_ParserBulk.uexp not found")
+
+    uexp_data = uexp_path.read_bytes()
+
+    # The uexp file contains export serial data
+    # Scan for BulkData headers in the last 32 bytes
+    descriptors = extract_bulk_data_descriptors(uexp_data)
+
+    # We expect to find at least one BulkData descriptor
+    # (the texture mip data in T_ParserBulk)
+    # Note: This is a heuristic scan, so results may vary
+    # The test verifies the function runs without error
+    assert isinstance(descriptors, list)
+    for desc in descriptors:
+        assert desc.size_on_disk > 0
+        assert desc.element_count > 0

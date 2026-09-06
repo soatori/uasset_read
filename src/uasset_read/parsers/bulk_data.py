@@ -78,3 +78,45 @@ def parse_bulk_data_header(data: bytes) -> BulkDataHeader:
         offset=offset,
         compression_type=compression_type,
     )
+
+
+def extract_bulk_data_descriptors(
+    serial_data: bytes,
+    base_offset: int = 0,
+    export_index: int = 0,
+) -> list[BulkDataHeader]:
+    """Extract BulkData descriptors from export serial data.
+
+    Scans for BulkData headers at the end of export serial regions.
+    This is a heuristic based on UE's save format where BulkData
+    descriptors appear after tagged properties.
+
+    Args:
+        serial_data: Raw bytes of the export serial region.
+        base_offset: Starting offset of this region in the package.
+        export_index: Index of the export (for header IDs).
+
+    Returns:
+        List of BulkDataHeader objects found.
+    """
+    descriptors: list[BulkDataHeader] = []
+
+    if len(serial_data) < 16:
+        return descriptors
+
+    # Look for BulkData headers at the very end of the serial data
+    # A BulkData header is 16 bytes: flags, element_count, size_on_disk, offset
+    # BulkData descriptors appear at the end of export serial regions, after
+    # all tagged properties. We only check the last 16 bytes for a single header.
+    try:
+        header = parse_bulk_data_header(serial_data[-16:])
+
+        # Validate the header looks reasonable
+        if header.size_on_disk > 0 and header.element_count > 0:
+            # Additional validation: flags should be within known range
+            if header.flags <= 0x1FFF:
+                descriptors.append(header)
+    except (ValueError, struct.error):
+        pass
+
+    return descriptors
