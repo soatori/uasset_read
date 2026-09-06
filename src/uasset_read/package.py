@@ -210,3 +210,37 @@ def open_package_bundle(
 
 def _normalize_ext(extension: str) -> str:
     return extension if extension.startswith(".") else f".{extension}"
+
+
+# ============================================================================
+# v2 PackageDocument API (package-first refactor)
+# ============================================================================
+
+
+def parse_package_document(
+    file_path: str | Path,
+    *,
+    tolerant: bool = True,
+    mappings_path: str | None = None,
+    game: str | None = None,
+    depth: str = "asset",
+    object_ids: list[str] | None = None,
+) -> "PackageDocument":
+    """Parse a .uasset/.umap and return a PackageDocument.
+
+    Reads the binary format directly using LegacyPackageReader.
+    """
+    from .archive import FileSource
+    from .v2.package.legacy import LegacyPackageReader
+
+    source = FileSource(file_path)
+    try:
+        reader = LegacyPackageReader(
+            source,
+            tolerant=tolerant,
+            mappings_path=mappings_path,
+            game=game,
+        )
+        return reader.read(depth=depth, object_ids=object_ids)
+    finally:
+        source.close()
