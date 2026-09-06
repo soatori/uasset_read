@@ -3122,9 +3122,10 @@ def test_resolve_parent_assets_returns_relations():
     )
 
     # No parent files on disk → should return empty relations + diagnostic
-    relations = resolve_parent_assets(doc, root=Path("/nonexistent"), max_depth=1)
+    relations, diagnostics = resolve_parent_assets(doc, root=Path("/nonexistent"), max_depth=1)
     assert isinstance(relations, list)
     assert len(relations) == 0
+    assert isinstance(diagnostics, list)
 
 
 def test_test_suite_structure_gate():

@@ -20,7 +20,7 @@ def resolve_parent_assets(
     doc: PackageDocument,
     root: Path,
     max_depth: int = 2,
-) -> list[dict]:
+) -> tuple[list[dict], list[Diagnostic]]:
     """Resolve parent class/interface assets across packages.
 
     Args:
@@ -29,7 +29,7 @@ def resolve_parent_assets(
         max_depth: Maximum recursion depth for cross-package resolution.
 
     Returns:
-        List of relation dicts to add to doc.relations.
+        Tuple of (relations, diagnostics) to add to doc.relations and doc.diagnostics.
     """
     from uasset_read.models.diagnostics import Diagnostic
 
@@ -47,7 +47,7 @@ def resolve_parent_assets(
             continue
 
         # Try to locate the parent package on disk
-        parent_path = _find_parent_package(parent_ref, root)
+        parent_path = _find_parent_package(parent_ref, root, max_depth)
         if parent_path is None:
             diagnostics.append(
                 Diagnostic(
@@ -84,16 +84,16 @@ def resolve_parent_assets(
                 )
             )
 
-    return relations
+    return relations, diagnostics
 
 
-def _find_parent_package(class_name: str, root: Path) -> Path | None:
+def _find_parent_package(class_name: str, root: Path, max_depth: int) -> Path | None:
     """Find a .uasset file on disk that might contain class_name.
 
     Searches by:
     1. Exact class name match: {class_name}.uasset
     2. BlueprintGeneratedClass suffix: {class_name}.BlueprintGeneratedClass.uasset
-    3. Recursive search under root (bounded)
+    3. Recursive search under root (bounded by max_depth)
     """
     # Try exact match
     exact = root / f"{class_name}.uasset"
@@ -105,8 +105,8 @@ def _find_parent_package(class_name: str, root: Path) -> Path | None:
     if bgc.exists():
         return bgc
 
-    # Bounded recursive search (max 3 levels deep)
-    for depth in range(1, 4):
+    # Bounded recursive search (controlled by max_depth)
+    for depth in range(1, max_depth + 1):
         for path in root.rglob(f"{class_name}.uasset"):
             # Check depth relative to root
             rel = path.relative_to(root)
