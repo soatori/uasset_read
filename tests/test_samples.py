@@ -1,6 +1,6 @@
 """Real-sample contract home: every fixture-touching check lives here.
 
-The 52-fixture matrix is manifest-driven and uncapped by design; shared
+The 54-fixture matrix is manifest-driven and uncapped by design; shared
 parse results are cached per sample so each fixture is parsed once per
 depth. Case bodies folded from the former ``tests/contract/`` layer are
 kept verbatim with the case/sample name in the failure message.
@@ -127,21 +127,21 @@ CAPABILITIES = (
 
 @lru_cache(maxsize=None)
 def _asset_document(sample: str):
-    from uasset_read.v2.api import parse_package_document
+    from uasset_read.package import parse_package_document
 
     return parse_package_document(SAMPLES / sample, depth="asset")
 
 
 @lru_cache(maxsize=None)
 def _object_document(sample: str):
-    from uasset_read.v2.api import parse_package_document
+    from uasset_read.package import parse_package_document
 
     return parse_package_document(SAMPLES / sample, depth="object")
 
 
 @lru_cache(maxsize=None)
 def _decode_document(sample: str, object_ids: tuple[str, ...]):
-    from uasset_read.v2.api import parse_package_document
+    from uasset_read.package import parse_package_document
 
     return parse_package_document(SAMPLES / sample, depth="decode", object_ids=list(object_ids))
 
@@ -186,8 +186,8 @@ def _raw_depends_map(sample: str):
         read_name_table,
         read_package_summary,
     )
-    from uasset_read.v2.package.legacy import _make_package_archive
-    from uasset_read.v2.source import FileSource
+    from uasset_read.parsers.legacy_reader import _make_package_archive
+    from uasset_read.archive import FileSource
 
     archive = _make_package_archive(FileSource(SAMPLES / sample), tolerant=True)
     try:
@@ -207,7 +207,7 @@ def test_manifest_matches_every_real_sample():
     actual_files = {
         path.name for path in SAMPLES.iterdir() if path.suffix in {".uasset", ".umap", ".utoc", ".ucas", ".pak"}
     }
-    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 52
+    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 54
     assert actual_files == expected_files
     allowed = expected_files | {
         "manifest.json",
@@ -346,8 +346,8 @@ def test_real_sample_proves_claimed_capability(
         for feature in ("texture.kind", "texture.texture_type", "texture.srgb", "texture.compression_settings"):
             assert feature in feature_names, f"{sample}:{class_name} missing coverage {feature}"
         twin = copy.deepcopy(obj)
-        from uasset_read.v2.handlers import TexturePayloadHandler
-        from uasset_read.v2.version import VersionContext
+        from uasset_read.parsers.asset_types.handlers_impl import TexturePayloadHandler
+        from uasset_read.versioning import VersionContext
 
         result = TexturePayloadHandler().enrich(twin, VersionContext(), doc.objects, None)
         if class_name == "TextureCube":
@@ -442,7 +442,7 @@ def test_every_real_sample_forms_a_valid_package_document(sample: str):
         f"{sample}: unexpected diagnostics {[d.code for d in bounds + failed + oob]}"
     )
 
-    from uasset_read.v2.projection import project_document
+    from uasset_read.projection import project_document
 
     # Schema validation runs for every fixture. The shipped schema must accept
     # all legitimate projection values; mismatches are contract bugs, not
@@ -476,7 +476,7 @@ def test_v2_path_emits_no_handler_warnings(capfd, caplog):
     # logs on the v2 parse path".
     import logging
 
-    from uasset_read.v2.api import parse_package_document
+    from uasset_read.package import parse_package_document
 
     with caplog.at_level(logging.WARNING):
         parse_package_document(SAMPLES / "NM_BPSystemEvent.uasset", depth="object")
@@ -487,7 +487,7 @@ def test_v2_path_emits_no_handler_warnings(capfd, caplog):
 
 
 def test_object_depth_parses_only_requested_export():
-    from uasset_read.v2.api import parse_package_document
+    from uasset_read.package import parse_package_document
 
     doc = parse_package_document(str(SAMPLES / "ABP_RifleAnimLayers.uasset"), depth="object", object_ids=["export:1"])
     parsed = [obj.id for obj in doc.objects if obj.properties is not None]
@@ -496,7 +496,7 @@ def test_object_depth_parses_only_requested_export():
 
 
 def test_package_depth_has_no_properties():
-    from uasset_read.v2.api import parse_package_document
+    from uasset_read.package import parse_package_document
 
     doc = parse_package_document(str(SAMPLES / "ABP_RifleAnimLayers.uasset"), depth="package")
     for obj in doc.objects:
@@ -505,7 +505,7 @@ def test_package_depth_has_no_properties():
 
 def test_large_sample_all_exports():
     """ALS_AnimBP — 3395 exports, 2 asset roles (shares the matrix parse via cache)."""
-    from uasset_read.v2.projection import project_document
+    from uasset_read.projection import project_document
 
     doc = _object_document("ALS_AnimBP.uasset")
     assert len(doc.objects) == 3395
@@ -538,7 +538,7 @@ def test_niagara_fixture_enriched_at_summary_tier():
     The fixture also contains EdGraphNode_Comment and MetaData exports that no
     handler covers; those are intentionally not asserted here.
     """
-    from uasset_read.v2.handlers import NiagaraHandler
+    from uasset_read.parsers.asset_types.handlers_impl import NiagaraHandler
 
     doc = _asset_document("NM_BPSystemEvent.uasset")
     covered = [o for o in doc.objects if o.class_name in NiagaraHandler._NIAGARA_CLASSES]
@@ -567,7 +567,7 @@ def _synthetic_export(**kwargs):
 
 def test_preload_relations_use_ue_ranges_and_sign_semantics():
     """Per-export preload ranges index the flat summary array; sign maps like FPackageIndex."""
-    from uasset_read.v2.package.legacy import _build_preload_relations
+    from uasset_read.parsers.legacy_reader import _build_preload_relations
 
     exports = [
         _synthetic_export(
@@ -597,8 +597,8 @@ def test_preload_relations_use_ue_ranges_and_sign_semantics():
 
 def test_relation_targets_out_of_range_are_dropped_with_diagnostic():
     """A relation whose target exceeds the table size is corrupt data, not an edge."""
-    from uasset_read.v2.object_model import Relation
-    from uasset_read.v2.package.legacy import _validate_relation_targets
+    from uasset_read.models.object_model import Relation
+    from uasset_read.parsers.legacy_reader import _validate_relation_targets
 
     relations = [
         Relation(kind="outer_of", from_id="export:0", to_id="export:1"),
@@ -651,7 +651,7 @@ def test_depends_map_validates_package_index_sign_per_ue_convention():
 
 def test_preload_relations_report_invalid_ranges_without_crashing():
     """Out-of-range preload spans produce a structured diagnostic and are skipped."""
-    from uasset_read.v2.package.legacy import _build_preload_relations
+    from uasset_read.parsers.legacy_reader import _build_preload_relations
 
     exports = [
         _synthetic_export(
@@ -676,9 +676,9 @@ def test_version_context_is_frozen_and_summary_derived():
     import dataclasses
 
     from uasset_read.serializers.package_summary import read_package_summary
-    from uasset_read.v2.package.legacy import _make_package_archive
-    from uasset_read.v2.source import FileSource
-    from uasset_read.v2.version import (
+    from uasset_read.parsers.legacy_reader import _make_package_archive
+    from uasset_read.archive import FileSource
+    from uasset_read.versioning import (
         MappingInfo,
         build_version_context_from_summary,
     )
@@ -715,7 +715,7 @@ def test_version_context_is_frozen_and_summary_derived():
 
     # UE5 floor is 1000 (ObjectVersion.h INITIAL_VERSION / FPackageFileVersion::ToValue)
     from uasset_read.versioning import VersionContainer
-    from uasset_read.v2.version import VersionContext
+    from uasset_read.versioning import VersionContext
 
     assert VersionContainer(file_version_ue5=0).is_ue5 is False
     assert VersionContainer(file_version_ue5=999).is_ue5 is False
@@ -727,7 +727,7 @@ def test_version_context_is_frozen_and_summary_derived():
 
 def test_blueprint_fixtures_carry_generated_and_cdo_relations():
     """Output Gate: blueprint packages expose generated-class and CDO edges."""
-    from uasset_read.v2.api import parse_package_document
+    from uasset_read.package import parse_package_document
 
     expected = {
         "FirstPerson_BP_FirstPersonCharacter.uasset": {
@@ -760,7 +760,7 @@ def test_blueprint_graph_decodes_without_parse_errors():
     v2 decode contract: BP_CombatCharacter exposes all 4 graphs (370 nodes)
     on the owning export and emits no graph-failure diagnostics.
     """
-    from uasset_read.v2.api import parse_package_document
+    from uasset_read.package import parse_package_document
 
     doc = parse_package_document(str(SAMPLES / "BP_CombatCharacter.uasset"), depth="decode")
     graphs = [g for o in doc.objects for g in (o.semantic or {}).get("graphs") or []]

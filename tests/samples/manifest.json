@@ -677,12 +677,38 @@
       "has_multiple_b_is_asset": false,
       "export_count": 6,
       "b_is_asset_count": 0
+    },
+    {
+      "name": "MyProject_UE58_TestBlueprint.uasset",
+      "sha256": "d501e4706083461e0635b9f003848c0d2b51723bc9aab20a5d989fc51a81ad31",
+      "size_bytes": 50003,
+      "engine_layout": "legacy",
+      "file_version_ue4": 522,
+      "file_version_ue5": 1018,
+      "sidecars": [],
+      "asset_type_hint": "Blueprint",
+      "has_multiple_b_is_asset": true,
+      "export_count": 24,
+      "b_is_asset_count": 2
+    },
+    {
+      "name": "MyProject_UE58_TestMaterial.uasset",
+      "sha256": "72ccff18781e1a35e716b2855097c224e5cb0f4945ff8315c0c42a5f8e63c655",
+      "size_bytes": 12410,
+      "engine_layout": "legacy",
+      "file_version_ue4": 522,
+      "file_version_ue5": 1018,
+      "sidecars": [],
+      "asset_type_hint": "Material",
+      "has_multiple_b_is_asset": false,
+      "export_count": 4,
+      "b_is_asset_count": 1
     }
   ],
   "summary": {
-    "total_samples": 52,
+    "total_samples": 54,
     "layout_distribution": {
-      "legacy": 52
+      "legacy": 54
     },
     "asset_type_distribution": {
       "AnimBlueprint": 2,
@@ -696,12 +722,12 @@
       "World": 1,
       "AnimConfig": 2,
       "SubsurfaceProfile": 1,
-      "Material": 1,
+      "Material": 2,
       "UserDefined": 2,
       "LevelSequence": 1,
       "Texture": 1,
       "Niagara": 1,
-      "Blueprint": 3,
+      "Blueprint": 4,
       "PhysicsAsset": 1,
       "BlendSpace": 1,
       "StringTable": 1,
@@ -721,7 +747,8 @@
       "StackOBot_GI_StackOBot.uasset",
       "BP_CombatCharacter.uasset",
       "BP_CombatEnemy.uasset",
-      "LevelDesign_ABP_Manny.uasset"
+      "LevelDesign_ABP_Manny.uasset",
+      "MyProject_UE58_TestBlueprint.uasset"
     ],
     "samples_with_parse_errors": [],
     "fixture_gap_count": 6,
@@ -731,7 +758,7 @@
   "fixture_gaps": {
     "zen_package": {
       "status": "missing",
-      "description": "No Zen package (.uasset with FZenPackageSummary) samples. All 52 samples use legacy FPackageFileSummary layout.",
+      "description": "No Zen package (.uasset with FZenPackageSummary) samples. All 54 samples use legacy FPackageFileSummary layout.",
       "needed_for": "Phase 5 (Zen & Container Streaming) — ZenPackageReader implementation",
       "acquisition": "Request legitimate redistributable real samples with version info from the user: 3-5 Zen-layout .uasset files (file_version_ue5 >= 522, hash-based table layout) that may be committed to the repository.",
       "verification": "After copying, verify:\n- struct.unpack_from('<i', data, 4)[0] >= 0 (not legacy negative version)\n- struct.unpack_from('<i', data, 12)[0] >= 522 (UE5.1+)\n- parse_package_document() produces valid PackageDocument",

@@ -9,7 +9,7 @@ from functools import lru_cache
 
 from pathlib import Path
 
-from uasset_read.v2.api import parse_package_document
+from uasset_read.package import parse_package_document
 
 SAMPLES = Path(__file__).parent / "samples"
 

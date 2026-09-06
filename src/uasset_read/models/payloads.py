@@ -29,3 +29,11 @@ class PayloadExtraction:
     data: bytes
     extracted: bool = True
     error: str | None = None
+
+
+PAYLOAD_EXTRACTION_DEFERRED = "PAYLOAD_EXTRACTION_DEFERRED"
+
+PAYLOAD_EXTRACTION_DEFERRED_MESSAGE = (
+    "Payload extraction is deferred: real payloads require "
+    ".uexp/.ubulk/.utoc/.ucas container support (issue #621)"
+)

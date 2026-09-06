@@ -13,11 +13,11 @@ SAMPLES = Path(__file__).parent / "samples"
 
 def _graphs_for(sample: str) -> list[dict]:
     """Open a fixture the way v2's decode pass does and return plain graph dicts."""
-    from uasset_read.v2.source import FileSource
-    from uasset_read.v2.package.legacy import _make_package_archive
+    from uasset_read.archive import FileSource
+    from uasset_read.parsers.legacy_reader import _make_package_archive
     from uasset_read.serializers.package_summary import read_package_summary, read_name_table
     from uasset_read.serializers.object_resources import read_export_map, read_import_map
-    from uasset_read.v2.blueprint_graph import read_blueprint_graphs
+    from uasset_read.serializers.blueprint_graph import read_blueprint_graphs
 
     src = FileSource(SAMPLES / sample)
     try:

@@ -35,7 +35,7 @@ from typing import Literal
 
 @lru_cache(maxsize=None)
 def _document(sample: str = str(PACKAGE_SAMPLE), depth: Literal["package", "object", "asset", "decode"] = "package"):
-    from uasset_read.v2.api import parse_package_document
+    from uasset_read.package import parse_package_document
 
     return parse_package_document(sample, depth=depth)
 
@@ -59,7 +59,7 @@ def _isolated_handlers(*handlers):
     than as silent coupling. With no arguments the registry is only snapshotted,
     for cases that append or register handlers inside the block.
     """
-    import uasset_read.v2.handlers as H
+    import uasset_read.parsers.asset_types.handlers_impl as H
 
     saved = list(H._HANDLERS)
     if handlers:
@@ -73,7 +73,7 @@ def _isolated_handlers(*handlers):
 def test_reader_boundaries_reject_malformed_access(tmp_path):
     """A bounded reader must never escape its declared source region."""
     from uasset_read.package import PackageArchive
-    from uasset_read.v2.source import FileSource, MemorySource, SliceReader
+    from uasset_read.archive import FileSource, MemorySource, SliceReader
 
     def core_contract():
         source = MemorySource(b"0123456789")
@@ -381,7 +381,7 @@ def test_property_bag_normalization_is_bounded_lossless():
     """normalize_property_bag must bound, describe, and never embed raw bytes."""
     from uasset_read.models.fallback import FallbackReason, PropertyFallback
     from uasset_read.models.properties import PropertyValue, StructValue
-    from uasset_read.v2.properties import normalize_property_bag
+    from uasset_read.parsers.properties_v2 import normalize_property_bag
 
     def test_empty_list_returns_empty_dict():
         assert normalize_property_bag([]) == {}
@@ -667,7 +667,7 @@ def test_package_document_preserves_every_export_and_role():
             assert idx == obj.table_index
 
     def test_stable_id_across_calls():
-        from uasset_read.v2.api import parse_package_document
+        from uasset_read.package import parse_package_document
 
         doc1 = parse_package_document(str(PACKAGE_SAMPLE))
         doc2 = parse_package_document(str(PACKAGE_SAMPLE))
@@ -701,7 +701,7 @@ def test_package_document_preserves_every_export_and_role():
         import struct
 
         from uasset_read.archive import ByteArchive
-        from uasset_read.v2.package.legacy import _read_table_rows
+        from uasset_read.parsers.legacy_reader import _read_table_rows
 
         # A None-terminator tagged property tag is exactly its 8-byte name FName
         # (read_property_tag early-returns at UE_NONE_SENTINEL). Two empty rows:
@@ -800,7 +800,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
     """A malformed export must produce an attributable diagnostic without deleting siblings."""
     import uasset_read.parsers.property_parser as pp
     from uasset_read.exceptions import ParseError
-    from uasset_read.v2.api import parse_package_document
+    from uasset_read.package import parse_package_document
 
     real = pp.parse_properties_from_export
     calls = {"n": 0}
@@ -854,8 +854,8 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
             assert diag.stage == "properties.tagged"
 
     def test_later_success_does_not_mask_earlier_failure():
-        from uasset_read.v2 import handlers as H
-        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        import uasset_read.parsers.asset_types.handlers_impl as H
+        from uasset_read.models.object_model import ObjectRecord, ObjectStatus
 
         class Boom:
             def supports(self, obj, ctx):
@@ -887,8 +887,8 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         assert any(d.code == "HANDLER_FAILURE" for d in diags)
 
     def test_clean_success_still_marks_complete():
-        from uasset_read.v2 import handlers as H
-        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        import uasset_read.parsers.asset_types.handlers_impl as H
+        from uasset_read.models.object_model import ObjectRecord, ObjectStatus
 
         class Ok:
             capability = "decoded"
@@ -911,8 +911,8 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         assert obj.status.semantic == "complete"
 
     def test_matched_handler_returning_none_is_not_complete():
-        from uasset_read.v2 import handlers as H
-        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
+        import uasset_read.parsers.asset_types.handlers_impl as H
+        from uasset_read.models.object_model import ObjectRecord, ObjectStatus
 
         class Decliner:
             def supports(self, obj, ctx):
@@ -935,7 +935,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
     def test_parse_past_serial_end_is_flagged_not_silent():
         import uasset_read.parsers.property_parser as pp
-        from uasset_read.v2.api import parse_package_document
+        from uasset_read.package import parse_package_document
 
         def fake_overrun(**kwargs):
             export = kwargs["export"]
@@ -1013,8 +1013,8 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
     def test_silent_recovery_downgrades_object_and_reaches_document():
         from uasset_read.models.diagnostics import StructuredDiagnostic
-        from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
-        from uasset_read.v2.package.legacy import _merge_archive_recoveries
+        from uasset_read.models.object_model import ObjectRecord, ObjectStatus
+        from uasset_read.parsers.legacy_reader import _merge_archive_recoveries
 
         class _RecoveringArchive:
             """Plain bounded fake — no MagicMock for UE structures."""
@@ -1114,7 +1114,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
 def test_handler_registry_supports_enriches_and_isolates():
     """Every registered handler must accept its class, reject others, and isolate failures."""
-    from uasset_read.v2.handlers import (
+    from uasset_read.parsers.asset_types.handlers_impl import (
         AnimBlendSpaceHandler,
         AnimCompositeHandler,
         AnimLayerInterfaceHandler,
@@ -1134,8 +1134,8 @@ def test_handler_registry_supports_enriches_and_isolates():
         UserDefinedStructHandler,
         get_handlers,
     )
-    from uasset_read.v2.object_model import ObjectRecord, ObjectStatus
-    from uasset_read.v2.version import VersionContext
+    from uasset_read.models.object_model import ObjectRecord, ObjectStatus
+    from uasset_read.versioning import VersionContext
 
     def record(class_name):
         return ObjectRecord(id="export:0", table_index=0, name="X", class_name=class_name, status=ObjectStatus())
@@ -1205,7 +1205,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert TextureHandler().enrich(obj, VersionContext(), [], None) is None
 
     def test_handler_exception_doesnt_crash():
-        from uasset_read.v2.handlers import register_handler, run_handlers
+        from uasset_read.parsers.asset_types.handlers_impl import register_handler, run_handlers
 
         class BadHandler:
             def supports(self, obj, context):
@@ -1223,9 +1223,9 @@ def test_handler_registry_supports_enriches_and_isolates():
             assert any(d.stage == "semantic.handler" for d in diags)
 
     def test_handler_exception_becomes_object_diagnostic():
-        import uasset_read.v2.handlers as handlers
-        from uasset_read.v2.api import parse_package_document
-        from uasset_read.v2.version import VersionContext
+        import uasset_read.parsers.asset_types.handlers_impl as handlers
+        from uasset_read.package import parse_package_document
+        from uasset_read.versioning import VersionContext
 
         class RaisingHandler:
             def supports(self, obj, context):
@@ -1247,7 +1247,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             assert handler_diags[0].object_id == sample_doc.objects[0].id
 
     def test_niagara_handler_supports_all_declared_classes():
-        from uasset_read.v2.handlers import NiagaraHandler
+        from uasset_read.parsers.asset_types.handlers_impl import NiagaraHandler
 
         handler = NiagaraHandler()
         assert len(handler._NIAGARA_CLASSES) == 13
@@ -1265,14 +1265,14 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_summary_tier_handlers_never_claim_complete():
         """Niagara/Mesh/Blueprint-summary results are partial with coverage (#629)."""
-        from uasset_read.v2.handlers import (
+        from uasset_read.parsers.asset_types.handlers_impl import (
             _HANDLERS,
             BlueprintFamilyHandler,
             MeshHandler,
             NiagaraHandler,
             run_handlers,
         )
-        from uasset_read.v2.version import VersionContext
+        from uasset_read.versioning import VersionContext
 
         cases = [
             ("NiagaraScript", NiagaraHandler()),
@@ -1293,8 +1293,8 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_decode_tier_blueprint_graph_marks_complete():
         """Only decoded-tier output (Blueprint graph at depth=decode) yields complete (#629)."""
-        from uasset_read.v2.handlers import BlueprintFamilyHandler, run_handlers
-        from uasset_read.v2.version import VersionContext
+        from uasset_read.parsers.asset_types.handlers_impl import BlueprintFamilyHandler, run_handlers
+        from uasset_read.versioning import VersionContext
 
         bp = record("Blueprint")
         node = record("K2Node_CallFunction")
@@ -1318,8 +1318,8 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert bp.status.semantic == "complete"
 
     def test_undeclared_handler_tier_defaults_to_summary():
-        from uasset_read.v2.handlers import run_handlers
-        from uasset_read.v2.version import VersionContext
+        from uasset_read.parsers.asset_types.handlers_impl import run_handlers
+        from uasset_read.versioning import VersionContext
 
         class Echo:
             def supports(self, obj, ctx):
@@ -1335,8 +1335,8 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_skeleton_name_guess_is_marked_heuristic():
         """NameMap-regex bones are marked bone_source=name_guess and never complete (#630)."""
-        from uasset_read.v2.handlers import SkeletonHandler, run_handlers
-        from uasset_read.v2.version import VersionContext
+        from uasset_read.parsers.asset_types.handlers_impl import SkeletonHandler, run_handlers
+        from uasset_read.versioning import VersionContext
 
         obj = record("Skeleton")
         name_map = ["None", "SomeWidget", "root", "pelvis", "spine_01"]
@@ -1352,8 +1352,8 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_skeleton_bone_tree_wins_over_name_guess():
         """Decoded BoneTree names take precedence over the regex path (#630)."""
-        from uasset_read.v2.handlers import SkeletonHandler, run_handlers
-        from uasset_read.v2.version import VersionContext
+        from uasset_read.parsers.asset_types.handlers_impl import SkeletonHandler, run_handlers
+        from uasset_read.versioning import VersionContext
 
         obj = record("Skeleton")
         obj.properties = {
@@ -1381,7 +1381,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         import struct
 
         from uasset_read.archive import ByteArchive
-        from uasset_read.v2.package.legacy import _read_string_table
+        from uasset_read.parsers.legacy_reader import _read_string_table
 
         def fstring(s: str) -> bytes:
             data = s.encode("utf-8") + b"\x00"
@@ -1428,12 +1428,12 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_string_table_handler_is_summary_and_not_table():
         """#615: StringTable uses StringTableHandler and never claims complete."""
-        from uasset_read.v2.handlers import (
+        from uasset_read.parsers.asset_types.handlers_impl import (
             DataTableHandler,
             StringTableHandler,
             run_handlers,
         )
-        from uasset_read.v2.version import VersionContext
+        from uasset_read.versioning import VersionContext
 
         assert not DataTableHandler().supports(record("StringTable"), VersionContext())
         assert DataTableHandler().supports(record("DataTable"), VersionContext())
@@ -1458,8 +1458,8 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert obj.status.semantic == "partial", "StringTable must not claim semantic=complete (#615)"
 
     def test_string_table_handler_missing_trailer_reports_coverage():
-        from uasset_read.v2.handlers import StringTableHandler
-        from uasset_read.v2.version import VersionContext
+        from uasset_read.parsers.asset_types.handlers_impl import StringTableHandler
+        from uasset_read.versioning import VersionContext
 
         obj = record("StringTable")
         result = StringTableHandler().enrich(obj, VersionContext(), [], (None, [], {}))
@@ -1469,12 +1469,12 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_physics_handlers_summary_tier_synthetic():
         """#619: physics handlers read real fields but never claim complete."""
-        from uasset_read.v2.handlers import (
+        from uasset_read.parsers.asset_types.handlers_impl import (
             PhysicsAssetHandler,
             PhysicalMaterialHandler,
             run_handlers,
         )
-        from uasset_read.v2.version import VersionContext
+        from uasset_read.versioning import VersionContext
 
         pa = record("PhysicsAsset")
         pa.properties = {
@@ -1516,13 +1516,13 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_anim_handlers_summary_tier_synthetic():
         """#618: blend space axes/samples, composite track, ALI missing-function state."""
-        from uasset_read.v2.handlers import (
+        from uasset_read.parsers.asset_types.handlers_impl import (
             AnimBlendSpaceHandler,
             AnimCompositeHandler,
             AnimLayerInterfaceHandler,
             run_handlers,
         )
-        from uasset_read.v2.version import VersionContext
+        from uasset_read.versioning import VersionContext
 
         bs = record("BlendSpace")
         bs.properties = {
@@ -1625,12 +1625,12 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_material_family_handlers_summary_tier_synthetic():
         """#620: function I/O from expression exports; MPC scalar/vector params."""
-        from uasset_read.v2.handlers import (
+        from uasset_read.parsers.asset_types.handlers_impl import (
             MaterialFunctionHandler,
             MaterialParameterCollectionHandler,
             run_handlers,
         )
-        from uasset_read.v2.version import VersionContext
+        from uasset_read.versioning import VersionContext
 
         fn = record("MaterialFunction")
         inp = record("MaterialExpressionFunctionInput")
@@ -1884,7 +1884,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         s = format_guid_bytes(struct.pack("<IIII", a, b, c, d))
         assert len(s) == 36 and s.count("-") == 4
         # No invented 00000000 tail in handlers or user_defined
-        h_src = (SRC / "uasset_read/v2/handlers.py").read_text(encoding="utf-8")
+        h_src = (SRC / "uasset_read/parsers/asset_types/handlers_impl.py").read_text(encoding="utf-8")
         u_src = (SRC / "uasset_read/parsers/asset_types/user_defined.py").read_text(encoding="utf-8")
         assert "00000000" not in h_src
         assert "00000000" not in u_src
@@ -1951,7 +1951,7 @@ def test_handler_registry_supports_enriches_and_isolates():
 
 def test_projection_views_depths_pagination_table():
     """View shape, pagination, and selection contracts on one synthetic-parse document."""
-    from uasset_read.v2.projection import paginate, project_document, select_objects
+    from uasset_read.projection import paginate, project_document, select_objects
 
     doc = _document(depth="asset")
 
@@ -2026,7 +2026,7 @@ def test_projection_views_depths_pagination_table():
     def dependencies_carry_package_name():
         # #632: the model carries package_name from the import map; no
         # projection path may drop it.
-        from uasset_read.v2.projection import dependency_to_dict
+        from uasset_read.projection import dependency_to_dict
 
         page = project_document(doc, limit=100)
         assert page["dependencies"], "fixture must expose page-reachable imports"
@@ -2166,7 +2166,7 @@ def test_projection_views_depths_pagination_table():
 
 def test_projection_byte_budget_and_fields_filter():
     """The encoded page must respect max_bytes and re-scope relations/diagnostics."""
-    from uasset_read.v2.projection import project_document
+    from uasset_read.projection import project_document
 
     doc = _document(depth="asset")
 
@@ -2450,7 +2450,7 @@ def test_schema_contract_statics():
 
 def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, monkeypatch):
     """CLI (default v2), Python API, and agent tools must agree; parsing must be side-effect free."""
-    from uasset_read.v2.agent_tools import (
+    from uasset_read.agent_tools import (
         extract_payload,
         get_diagnostics,
         get_object,
@@ -2458,7 +2458,7 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
         list_dependencies,
         list_objects,
     )
-    from uasset_read.v2.projection import project_document
+    from uasset_read.projection import project_document
 
     _env = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
 
@@ -2568,7 +2568,7 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert logging.root.level == level
     assert list(tmp_path.iterdir()) == []
 
-    from uasset_read.v2.api import parse_package_document
+    from uasset_read.package import parse_package_document
 
     pkg_handlers = tuple(logging.getLogger("uasset_read").handlers)
     parse_package_document(str(DATA_SAMPLE))
@@ -2578,7 +2578,7 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     old_level = logging.root.level
     try:
         logging.root.setLevel(logging.WARNING)
-        from uasset_read.v2.api import parse_package_document
+        from uasset_read.package import parse_package_document
 
         parse_package_document(str(DATA_SAMPLE))
     finally:
@@ -2604,7 +2604,7 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert budget_doc["truncation"]["reason"] == "max_bytes"
 
     # --- Payload extraction is fully deferred (merged from test_samples) ---
-    from uasset_read.v2.api import parse_package_document
+    from uasset_read.package import parse_package_document
 
     decode_doc = parse_package_document(
         str(SAMPLES / "FirstPerson_T_GridChecker_A.uasset"),
@@ -2625,7 +2625,7 @@ def test_agent_tool_queries_distinguish_budget_and_reject_negative_paging():
     """#644: budget exhaustion must not read as a missing object, and every
     paging entry point must reject negative offset/limit while keeping the
     legal zero values. Triggered through the public agent tools only."""
-    from uasset_read.v2.agent_tools import (
+    from uasset_read.agent_tools import (
         get_diagnostics,
         get_object,
         inspect_package,
@@ -2680,9 +2680,9 @@ def test_import_dependency_package_is_the_outer_owner_not_the_class_package():
     LinkerLoad.cpp:2402).
     """
     from uasset_read.serializers.object_resources import ObjectImport, PackageIndex
-    from uasset_read.v2.agent_tools import list_dependencies
-    from uasset_read.v2.package.legacy import resolve_import_dependencies
-    from uasset_read.v2.projection import project_document
+    from uasset_read.agent_tools import list_dependencies
+    from uasset_read.parsers.legacy_reader import resolve_import_dependencies
+    from uasset_read.projection import project_document
 
     CUE = "Footstep_Cue"
     OWNER = "/ALSV4_CPP/AdvancedLocomotionV4/Audio/Footsteps/Footstep_Cue"

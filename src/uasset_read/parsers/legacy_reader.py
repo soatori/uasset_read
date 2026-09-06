@@ -714,7 +714,7 @@ class LegacyPackageReader:
             # Lazy import mirrors v1 (pipeline/core.py, pipeline/stages.py):
             # the mappings module and its optional codecs must not become a
             # core-import dependency.
-            from ...mappings import TypeMappingsProvider
+            from ..mappings import TypeMappingsProvider
 
             return TypeMappingsProvider.from_file(self._mappings_path, budget=budget)
         except Exception as exc:
@@ -756,8 +756,8 @@ class LegacyPackageReader:
         Caught property-parse errors (bounded exception set) on one export do
         not prevent parsing of others; unexpected exception types propagate.
         """
-        from ...parsers.property_parser import parse_properties_from_export
-        from ..properties_v2 import normalize_property_bag
+        from .property_parser import parse_properties_from_export
+        from .properties_v2 import normalize_property_bag
 
         # Determine which exports to parse
         target_indices: set[int] | None = None
@@ -1057,7 +1057,7 @@ def _attach_blueprint_graph_extras(
 
     # --- Kismet bytecode decompile for Function/UFunction exports ---
     try:
-        from ...kismet.decompile_bridge import extract_kismet_decompiled
+        from ..kismet.decompile_bridge import extract_kismet_decompiled
 
         kismet_results = extract_kismet_decompiled(
             str(archive._path) if hasattr(archive, "_path") else "",

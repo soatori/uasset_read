@@ -34,7 +34,7 @@ serialization order).
 
 ## Known limitation: preload spans are empty
 
-All 52 corpus fixtures are editor-saved (uncooked) packages; UE only writes the
+All 54 corpus fixtures are editor-saved (uncooked) packages; UE only writes the
 summary preload dependency table for cooked packages, so every fixture
 legitimately has zero preload entries. The golden files and the drift test
 still pin this fact against an independent parser, but the preload span
