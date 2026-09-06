@@ -110,6 +110,8 @@ def read_package_trailer(archive: BinaryIO, payload_toc_offset: int) -> FPackage
     header_length = struct.unpack('<I', archive.read(4))[0]
     payloads_data_length = struct.unpack('<Q', archive.read(8))[0]
     num_payloads = struct.unpack('<i', archive.read(4))[0]
+    if num_payloads < 0:
+        raise ValueError(f"Invalid num_payloads: {num_payloads}")
 
     header = FPackageTrailerHeader(
         tag=tag,
