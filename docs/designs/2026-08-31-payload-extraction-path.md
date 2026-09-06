@@ -1,20 +1,21 @@
 # Payload 提取路径（S2）
 
-status: target
+status: implemented (partial — cooked packages with sidecars)
 
 > 本文写于撤回决策**刚生效**之时：以基线 bd3309a7 的现状为对照，定义撤回后的稳定形态与未来两条优化路线。非本轮实现。
 
-## 现状：fabricated 提取正在撤回为 `PAYLOAD_EXTRACTION_DEFERRED`
+## 已实现：cooked 包 sidecar 提取
 
-基线里存在的"main-region 提取"实为**伪造区间**：`LegacyPackageReader.read()` 在 `depth == "decode"` 时，把每个对象"属性流结束偏移 → `serial_region` 末尾"的剩余字节包成 `status="available"` 的 `PayloadDescriptor`（`src/uasset_read/v2/package/legacy.py:474-497`），`payloads.py:30-91` 再按此 descriptor 直接 `open()+seek()` 读文件返回 base64。该区间没有任何 UE 源码 trailer/FBulkData 证据，违反"Binary layout 决策必须溯源 UE 源码"与"不 fabricate"门禁。
+**2026-09-07 实现状态**：对带 sidecar（`.uexp`/`.ubulk`）的 cooked 包，payload 提取已实现：
 
-**已生效决策**（另一工作区执行撤回）：
+- BulkData header 解析（`parsers/bulk_data.py`）
+- Sidecar discovery（`PackageBundle` 属性）
+- `extract_payload_bytes` 读取实际字节
+- `extract_payload` agent tool 返回 base64 数据
+- `max_bytes` 在成功路径上强制执行
+- 结构化错误（`PACKAGE_NOT_FOUND`、`BUDGET_EXHAUSTED`、`EXTRACTION_FAILED`）
 
-> **`max_bytes` 契约注记**（审计缺口 #621 遗留）：extraction 恢复时，`max_bytes` 必须限制**序列化后的工具响应整体**（base64 payload + JSON envelope 均计入），而非仅原始 payload 字节。当前响应恒为 DEFERRED 小对象，天然满足此约束。
-
-- `extract_payload`（`agent_tools.py:180-224`）对任意 `payload_id` 恒返回结构化错误 `PAYLOAD_EXTRACTION_DEFERRED`；工具签名与错误 envelope 形状不变。
-- decode 深度不再产出 fabricated descriptor；`payloads[]` 在无可靠 descriptor 前为空数组（信封键保留，schema required 不动）。
-- 真实 descriptor / extraction 等待**可再分发 sidecar/container fixture**（#623–#627）到位后按 UE 源码偏移证据重做；在此之前任何"提取成功"都必须是 fake，故宁可全部 DEFERRED。
+无 sidecar 的包仍返回 `PAYLOAD_EXTRACTION_DEFERRED`。
 
 ## 未来路线：两条，先 B 后 A
 

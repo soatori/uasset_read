@@ -13,6 +13,7 @@ Design doc reference:
 from __future__ import annotations
 
 import json
+import struct
 from typing import Any, Literal
 
 from .package import parse_package_document
@@ -277,61 +278,108 @@ def extract_payload(
     if doc is not None and export_index < len(doc.objects):
         export = doc.objects[export_index]
         if export.serial_region is not None and export.serial_region.size > 0:
+            # For cooked packages, serial data may be in the uexp sidecar.
+            # serial_region.offset is absolute in the combined stream.
+            # If offset >= total_header_size, data is in the uexp sidecar.
+            total_header_size = doc.package.total_header_size
+            serial_offset = export.serial_region.offset
+            serial_size = export.serial_region.size
+
+            # Determine which file to read serial data from
+            serial_data = b""
+            serial_source = "main"
             try:
-                with open(main_path, "rb") as f:
-                    f.seek(export.serial_region.offset)
-                    serial_data = f.read(export.serial_region.size)
+                if serial_offset >= total_header_size and total_header_size > 0:
+                    # Data is in uexp sidecar
+                    uexp_path = sidecar_paths.get("uexp")
+                    if uexp_path is not None:
+                        with open(uexp_path, "rb") as f:
+                            f.seek(serial_offset - total_header_size)
+                            serial_data = f.read(serial_size)
+                        serial_source = "uexp"
+                else:
+                    # Data is in main file
+                    with open(main_path, "rb") as f:
+                        f.seek(serial_offset)
+                        serial_data = f.read(serial_size)
 
-                bulk_headers = extract_bulk_data_descriptors(
-                    serial_data,
-                    base_offset=export.serial_region.offset,
-                    export_index=export_index,
-                )
+                if len(serial_data) < serial_size:
+                    serial_data = b""  # Short read, skip BulkData extraction
+            except (OSError, ValueError) as e:
+                # Include diagnostic but don't fail — fallback will handle
+                serial_data = b""
 
-                if bulk_headers:
-                    # Use the first (last in serial data) BulkData header
-                    header = bulk_headers[0]
-
-                    # Determine source region from header flags
-                    from .parsers.bulk_data import BULKDATA_CompressedZlib, BULKDATA_CompressedOodle
-                    if header.flags & (BULKDATA_CompressedZlib | BULKDATA_CompressedOodle):
-                        source_region = "ubulk"
-                    elif "uexp" in sidecar_paths:
-                        source_region = "uexp"
-                    elif "ubulk" in sidecar_paths:
-                        source_region = "ubulk"
-                    else:
-                        source_region = "main"
-
-                    descriptor = PayloadDescriptor(
-                        id=payload_id,
-                        owner=f"export:{export_index}",
-                        kind="bulk_data",
-                        source_region=source_region,  # type: ignore[arg-type]
-                        offset=header.offset,
-                        stored_size=header.size_on_disk,
-                        status="available",
-                        logical_size=header.element_count,
-                        compression=header.compression_type,
+            # Try BulkData extraction if we have serial data
+            if serial_data:
+                try:
+                    bulk_headers = extract_bulk_data_descriptors(
+                        serial_data,
+                        base_offset=serial_offset,
+                        export_index=export_index,
                     )
-            except Exception:
-                pass
+
+                    if bulk_headers:
+                        # Use the first (last in serial data) BulkData header
+                        header = bulk_headers[0]
+
+                        # Determine source region from header flags
+                        from .parsers.bulk_data import BULKDATA_CompressedZlib, BULKDATA_CompressedOodle
+                        if header.flags & (BULKDATA_CompressedZlib | BULKDATA_CompressedOodle):
+                            source_region = "ubulk"
+                        elif "uexp" in sidecar_paths:
+                            source_region = "uexp"
+                        elif "ubulk" in sidecar_paths:
+                            source_region = "ubulk"
+                        else:
+                            source_region = "main"
+
+                        descriptor = PayloadDescriptor(
+                            id=payload_id,
+                            owner=f"export:{export_index}",
+                            kind="bulk_data",
+                            source_region=source_region,  # type: ignore[arg-type]
+                            offset=header.offset,
+                            stored_size=header.size_on_disk,
+                            status="available",
+                            logical_size=header.element_count,
+                            compression=header.compression_type,
+                        )
+                except (ValueError, struct.error) as e:
+                    # BulkData parsing failed — fallback will handle
+                    pass
 
     # Fallback: create a basic descriptor if BulkData extraction failed
     if descriptor is None:
         # Determine source region based on available sidecars
         source_region = "uexp" if "uexp" in sidecar_paths else "ubulk" if "ubulk" in sidecar_paths else "main"
 
-        sidecar_path = sidecar_paths.get(source_region)
-        stored_size = sidecar_path.stat().st_size if sidecar_path else 0
+        # For the fallback, we need to bound the read to the export's region.
+        # Use serial_region if available, otherwise use the entire sidecar.
+        fallback_offset = 0
+        fallback_size = 0
+        if doc is not None and export_index < len(doc.objects):
+            export = doc.objects[export_index]
+            if export.serial_region is not None:
+                total_header_size = doc.package.total_header_size
+                # If serial data is in a sidecar, adjust offset
+                if export.serial_region.offset >= total_header_size and total_header_size > 0:
+                    fallback_offset = export.serial_region.offset - total_header_size
+                else:
+                    fallback_offset = 0  # main file case
+                fallback_size = export.serial_region.size
+
+        if fallback_size == 0:
+            # No serial region info — use entire sidecar as last resort
+            sidecar_path = sidecar_paths.get(source_region)
+            fallback_size = sidecar_path.stat().st_size if sidecar_path else 0
 
         descriptor = PayloadDescriptor(
             id=payload_id,
             owner=f"export:{export_index}",
             kind="bulk_data",
             source_region=source_region,  # type: ignore[arg-type]
-            offset=0,
-            stored_size=stored_size,
+            offset=fallback_offset,
+            stored_size=fallback_size,
             status="available",
         )
 
@@ -359,7 +407,7 @@ def extract_payload(
 
     # Encode as base64 for JSON serialization
     encoded_data = base64.b64encode(result.data).decode("ascii")
-    return {
+    response_payload = {
         "id": payload_id,
         "payload_id": result.descriptor.id,
         "data": encoded_data,
@@ -367,3 +415,13 @@ def extract_payload(
         "source_region": result.descriptor.source_region,
         "offset": result.descriptor.offset,
     }
+
+    # Enforce max_bytes on success path
+    response_size = len(json.dumps(response_payload, ensure_ascii=False).encode("utf-8"))
+    if response_size > max_bytes:
+        raise ValueError(
+            f"Response budget {max_bytes} bytes too small for payload response "
+            f"({response_size} bytes)"
+        )
+
+    return response_payload

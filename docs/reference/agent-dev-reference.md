@@ -25,10 +25,10 @@
 ## 当前与目标边界
 
 - 三个入口（CLI 默认、Python API、Agent tool）的输出均为 PackageDocument v2，唯一顶层 format 为 `uasset_read.package`；legacy Semantic 1.x JSON 与 v1 pipeline 已删除，`--legacy-json`/`--markdown`/`--diff`/`--list-formats` 作为 retired flag 直接报错退出（见 `cli.py` retired 集合与 Issue #643）。`--batch` 仍然有效（`cli.py:151` 解析，`:387` 分派）。
-- `extract_payload` 恒返回 `code="PAYLOAD_EXTRACTION_DEFERRED"`、`available_ids=[]`，不读文件（已生效决策，见 `docs/designs/2026-08-31-payload-extraction-path.md`）。真实提取（可提取字节、分页续读 `next_offset`）为 historical 承诺，blocked on Phase 5 containers 与 #623–#627 fixture。
+- `extract_payload` 对带 sidecar（`.uexp`/`.ubulk`）的 cooked 包执行真实字节提取（BulkData header 解析 + 结构化错误）。无 sidecar 的包返回 `PAYLOAD_EXTRACTION_DEFERRED`（见 `docs/designs/2026-08-31-payload-extraction-path.md`）。
 - 默认 `semantic` 视图不携带 `serial_region`/`properties`（归 `raw`/`debug`）；depth >= object 时 semantic 携带紧凑的 `properties_summary`（names + 标量，容器仅保留长度，无 raw 字节，#636）。`project_document(sections=...)` 可省略 `relations`/`dependencies` 顶层节（省略时 schema 不要求该键，#631）；依赖条目携带 `package_name`（#632）。
 - 正式测试契约层为 `tests/test_core.py`（核心单元 + 结构门禁）与 `tests/test_samples.py`（manifest 驱动的真实样本），加上 `test_size_baseline.py`（体积门禁）。无 `tests/contract/` 目录。
-- 当前 v2 使用 package-first `PackageDocument`（legacy + tagged properties + sample-backed handlers 已实现；Zen/IoStore、unversioned、payload extraction 仍 deferred，见 docs/designs/README.md），输出所有 objects。
+- 当前 v2 使用 package-first `PackageDocument`（legacy + tagged properties + sample-backed handlers 已实现；Zen/IoStore、unversioned 仍 deferred，payload extraction 已实现，见 docs/designs/README.md），输出所有 objects。
 - 当前 Pak/IoStore、日志和 Agent 能力不得按目标设计提前宣称完成。
 - 旧领域 Semantic 文档可用于理解 v0.5.5，但不得继续扩展为新的顶层 format。
 

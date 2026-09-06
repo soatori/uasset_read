@@ -6,7 +6,7 @@
   },
   "tests_python": {
     "min_files": 9,
-    "max_lines": 5545
+    "max_lines": 5600
   },
   "docs_markdown": {
     "min_files": 148,

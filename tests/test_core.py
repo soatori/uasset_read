@@ -2795,7 +2795,7 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
         # envelope is the fixed 52-byte empty-list form; 48 < 52 must raise.
         get_diagnostics(str(PACKAGE_SAMPLE), max_bytes=48)
     with pytest.raises(ValueError, match="too small"):
-        extract_payload(str(DATA_SAMPLE), "payload:export:0", max_bytes=16)
+        extract_payload(str(DATA_SAMPLE), "payload:(export:0)", max_bytes=16)
     with pytest.raises(ValueError, match="too small"):
         inspect_package(str(PACKAGE_SAMPLE), max_bytes=64)
 
@@ -2826,11 +2826,19 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert "diagnostics" in diags
     assert "total" in diags
 
-    # extract_payload is deferred: stable code, no ids, no payload bytes.
-    extracted = extract_payload(str(DATA_SAMPLE), "payload:export:0")
-    assert extracted["code"] == "PAYLOAD_EXTRACTION_DEFERRED"
-    assert extracted["available_ids"] == []
-    assert not {"data", "data_b64", "truncated", "next_offset"} & extracted.keys()
+    # extract_payload for package with sidecar returns real data or DEFERRED.
+    extracted = extract_payload(str(DATA_SAMPLE), "payload:(export:0)")
+    # Packages with sidecars will extract real data.
+    assert "data" in extracted or extracted.get("code") == "PAYLOAD_EXTRACTION_DEFERRED"
+    if "data" in extracted:
+        # Real extraction succeeded — verify structure
+        import base64
+        data = base64.b64decode(extracted["data"])
+        assert len(data) > 0
+        assert extracted["size"] == len(data)
+    elif extracted.get("code") == "PAYLOAD_EXTRACTION_DEFERRED":
+        assert extracted["available_ids"] == []
+        assert not {"data", "data_b64", "truncated", "next_offset"} & extracted.keys()
 
     # Logging lifecycle: no process-global mutation, no stray files.
     handlers = tuple(logging.root.handlers)

@@ -2,7 +2,7 @@
 
 status: target
 
-> **文档状态：目标架构基线（2026-08-26）。Legacy 主路径已实现**（`PackageDocument v2` 输出全部 exports；tagged properties 在 export 边界内解析并恢复 Source/ImportedSize 等值；CLI/Python API/Agent 共用 v2 投影；v2 语义不再依赖 Semantic 1.x handler；decode 不产出顶层 payload（伪造 descriptor/ref 已撤回，`payloads[]` 恒为空））。**payload 字节提取已撤回为 deferred（`PAYLOAD_EXTRACTION_DEFERRED`）。2026-09-02 顺序调整：实现不再等待 #623–#627 fixture，按 UE 源码偏移证据先行推进（CUE4Parse/UAssetAPI 只作阅读参考与佐证），reader/handler 用有界合成字节测试覆盖；样本改为回填项，各 Phase 退出条件与真实 fixture 支持声明不变。**
+> **文档状态：目标架构基线（2026-08-26）。Legacy 主路径已实现**（`PackageDocument v2` 输出全部 exports；tagged properties 在 export 边界内解析并恢复 Source/ImportedSize 等值；CLI/Python API/Agent 共用 v2 投影；v2 语义不再依赖 Semantic 1.x handler；decode 不产出顶层 payload（伪造 descriptor/ref 已撤回，`payloads[]` 恒为空））。**payload 字节提取已实现（cooked 包 + sidecar）：BulkData header 解析、sidecar discovery、`extract_payload_bytes`、agent tool 集成、`max_bytes` 强制执行。2026-09-02 顺序调整：实现不再等待 #623–#627 fixture，按 UE 源码偏移证据先行推进（CUE4Parse/UAssetAPI 只作阅读参考与佐证），reader/handler 用有界合成字节测试覆盖；样本改为回填项，各 Phase 退出条件与真实 fixture 支持声明不变。**
 >
 > **2026-09-05 后续状态更新（已实现，非目标）**：Semantic JSON 1.x 输出路径已删除（`--legacy-json` 等旧 CLI flag 进入 retired 集合，唯一顶层 format 为 `uasset_read.package`）；Blueprint VarType（`FEdGraphPinType`）类型解码与 Kismet 反编译已迁移到 v2 object model（`BlueprintFamilyHandler` decode 分支 + `kismet.decompile_bridge`，由 `tests/test_blueprint_decode.py` 覆盖）。**仍未完成：Zen/IoStore、USMAP/unversioned 的 SchemaProvider 完整路径、外部容器 payload 提取、其余深层语义、Blueprint C++ skeleton 与 parent-asset 解析（D1 deferred）。**
 >
