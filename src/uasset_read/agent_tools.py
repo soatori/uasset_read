@@ -187,11 +187,10 @@ def extract_payload(
     max_bytes: int = _MAX_BYTES_EXTRACT_PAYLOAD,
     offset: int = 0,
 ) -> dict[str, Any]:
-    """Tool: extract_payload — deferred; never opens or reads the file.
+    """Tool: extract_payload — deferred; per-export BulkData mapping needs cooked fixtures.
 
-    Real extraction requires .uexp/.ubulk/.utoc/.ucas container support
-    (issue #621).  Legacy emits no payload descriptors, so the response
-    is always the stable deferred error shape.
+    Real extraction requires per-export BulkData offsets from cooked
+    fixtures (#627).  The stable deferred error shape is returned.
     """
     from .models.payloads import PAYLOAD_EXTRACTION_DEFERRED, PAYLOAD_EXTRACTION_DEFERRED_MESSAGE
 

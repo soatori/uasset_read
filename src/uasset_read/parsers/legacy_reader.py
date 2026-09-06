@@ -429,7 +429,7 @@ class LegacyPackageReader:
 
     def __init__(
         self,
-        source: FileSource,
+        source: FileSource | None,
         *,
         tolerant: bool = True,
         mappings_path: str | None = None,
@@ -439,18 +439,42 @@ class LegacyPackageReader:
         self._tolerant = tolerant
         self._mappings_path = mappings_path
         self._game = game
+        # _main_path is set by read() from either source._path or the
+        # explicit main_path argument (bundle path).  Populated before
+        # any code that needs the file path for SourceInfo/PackageInfo.
+        self._main_path: str = ""
 
     def read(
         self,
         *,
         depth: Literal["package", "object", "asset", "decode"] = "package",
         object_ids: Sequence[str] | None = None,
+        archive: PackageArchive | None = None,
+        main_path: str | None = None,
     ) -> PackageDocument:
         """Read the package and return a PackageDocument.
 
         At depth="package", only the package structure is read (no object properties).
+
+        When *archive* is provided (bundle path), it is used directly
+        instead of building one from *source*.  *main_path* is required
+        in that case so SourceInfo/PackageInfo carry the file path.
         """
-        archive = _make_package_archive(self._source, self._tolerant)
+        # Resolve the main file path: explicit main_path wins, then
+        # source.path (public accessor), fall back to empty string.
+        if main_path is not None:
+            self._main_path = main_path
+        elif self._source is not None and hasattr(self._source, "path"):
+            self._main_path = str(self._source.path)
+        elif self._source is not None and hasattr(self._source, "_path"):
+            self._main_path = str(self._source._path)
+
+        own_archive = archive is None
+        if archive is None:
+            src = self._source
+            if src is None:
+                raise ValueError("LegacyPackageReader.read() requires either source or archive")
+            archive = _make_package_archive(src, self._tolerant)
         diagnostics: list[Diagnostic] = []
 
         try:
@@ -461,6 +485,39 @@ class LegacyPackageReader:
 
             # 1. Read summary
             summary = read_package_summary(archive, budget)
+
+            # 1a. .uexp address-space guard.
+            # UE source (independent reviewer verdict, 2026-09-08):
+            #   FilePackageWriterUtil.cpp:164-212 — the cook writer splits ONE
+            #   combined buffer at Summary.TotalHeaderSize into .uasset + .uexp
+            #   and rebases FFileRegion.Offset -= HeaderSize.
+            #   SavePackage2.cpp:3762-3775 — Export.SerialOffset +=
+            #   Linker.Summary.TotalHeaderSize (so SerialOffset indexes the
+            #   combined stream, and .uexp content begins at TotalHeaderSize).
+            #   AsyncLoading.cpp:605-611,894-918 — the engine's own split-file
+            #   trigger is .uasset file size == Summary.TotalHeaderSize.
+            # Concatenate .uexp ONLY when main_size == TotalHeaderSize AND a
+            # .uexp exists; otherwise the spliced address space is wrong and
+            # every SerialOffset silently misresolves.
+            if archive._uexp_archive is not None and summary.total_header_size > 0:
+                if archive._main_size != summary.total_header_size:
+                    archive._uexp_archive.close()
+                    archive._uexp_archive = None
+                    archive._uexp_size = 0
+                    archive._file_size = archive._main_size
+                    diagnostics.append(
+                        Diagnostic(
+                            severity="warning",
+                            code="UEXP_SPLIT_GUARD_FAILED",
+                            message=(
+                                f"main file size {archive._main_size} != "
+                                f"Summary.TotalHeaderSize {summary.total_header_size}; "
+                                f".uexp not concatenated — SerialOffset would misresolve"
+                            ),
+                            stage="package.uexp_guard",
+                            recoverable=True,
+                        )
+                    )
 
             # Property tag format is version-gated; set the gates the same
             # way pipeline/stages.py does so UE5.0-5.2 tags don't fall into
@@ -590,7 +647,7 @@ class LegacyPackageReader:
             asset_ids = tuple(obj.id for obj in objects if ROLES_ASSET in obj.roles)
 
             # 14. Build PackageInfo
-            package_info = _build_package_info_from_summary(summary, name_map, source_path=str(self._source._path))
+            package_info = _build_package_info_from_summary(summary, name_map, source_path=self._main_path)
 
             # 15. Build Summary
             summary_obj = Summary(
@@ -663,17 +720,16 @@ class LegacyPackageReader:
                             )
                         )
 
-            # 17b. Payloads stay deferred: real descriptors require
-            # .uexp/.ubulk/.utoc/.ucas container support, so nothing is
-            # emitted (the projection keeps an empty payloads list for
-            # schema compatibility).
+            # 17b. Payload descriptors are populated by the caller
+            # (parse_package_document) after read() returns, using the
+            # bundle's discovered sidecar files.
 
             # 17c. Merge FArchive structured recoveries (header maps +
             # property parsing) once every read has had its object context.
             _merge_archive_recoveries(archive, objects, diagnostics)
 
             # 18. Build SourceInfo
-            source_info = _build_source_info(str(self._source._path))
+            source_info = _build_source_info(self._main_path)
 
             return PackageDocument(
                 source=source_info,
@@ -698,7 +754,8 @@ class LegacyPackageReader:
             )
             return self._build_minimal_document(None, diagnostics)
         finally:
-            archive.close()
+            if own_archive:
+                archive.close()
 
     def _load_mappings(self, budget: ResourceBudget, diagnostics: list[Diagnostic]) -> Any | None:
         """Build the mappings provider once per document (mirrors v1 _init_parse_env).
@@ -895,10 +952,10 @@ class LegacyPackageReader:
         """Build a minimal PackageDocument when parsing fails early."""
         package_info = PackageInfo(name="", layout="legacy")
         if summary:
-            package_info = _build_package_info_from_summary(summary, [], source_path=str(self._source._path))
+            package_info = _build_package_info_from_summary(summary, [], source_path=self._main_path)
 
         return PackageDocument(
-            source=_build_source_info(str(self._source._path)),
+            source=_build_source_info(self._main_path),
             package=package_info,
             diagnostics=diagnostics,
         )

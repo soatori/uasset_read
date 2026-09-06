@@ -248,7 +248,8 @@ def project_document(
         else [_emit(o) for o in page],
         "relations": relations,
         "dependencies": filtered_dependencies,
-        # Payloads stay deferred (issue #621); the key is schema-required.
+        # Payloads stay deferred; per-export BulkData mapping requires
+        # cooked fixtures (#627).  The key is schema-required.
         "payloads": [],
         "diagnostics": [d.to_dict() for d in page_diagnostics],
         "summary": {

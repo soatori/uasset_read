@@ -1068,6 +1068,11 @@ class FileSource:
         except OSError as e:
             raise IOError(f"Failed to open {self._path}: {e}") from e
 
+    @property
+    def path(self) -> Path:
+        """Public accessor for the file path."""
+        return self._path
+
     def size(self) -> int:
         return self._size
 

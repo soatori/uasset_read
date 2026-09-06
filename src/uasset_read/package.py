@@ -1,14 +1,17 @@
 """Package bundle and provider helpers."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Literal, Optional
 import logging
 import os
 
 from uasset_read.archive import FArchive, ArchiveLike, ByteArchive
 from uasset_read.exceptions import ParseError
 from uasset_read.memory_safety import ResourceBudget
+from uasset_read.models.document import PackageDocument
 
 logger = logging.getLogger(__name__)
 
@@ -212,35 +215,38 @@ def _normalize_ext(extension: str) -> str:
     return extension if extension.startswith(".") else f".{extension}"
 
 
-# ============================================================================
-# v2 PackageDocument API (package-first refactor)
-# ============================================================================
-
-
 def parse_package_document(
     file_path: str | Path,
     *,
     tolerant: bool = True,
     mappings_path: str | None = None,
     game: str | None = None,
-    depth: str = "asset",
+    depth: Literal["package", "object", "asset", "decode"] = "asset",
     object_ids: list[str] | None = None,
-) -> "PackageDocument":
+) -> PackageDocument:
     """Parse a .uasset/.umap and return a PackageDocument.
 
     Reads the binary format directly using LegacyPackageReader.
+    Discovers sidecar files (.uexp, .ubulk, .uptnl) via PackageBundle
+    so that the reader receives an archive spanning main + .uexp.
     """
-    from .archive import FileSource
     from .parsers.legacy_reader import LegacyPackageReader
 
-    source = FileSource(file_path)
+    bundle = open_package_bundle(str(file_path), tolerant=tolerant)
+    archive = bundle.open_archive(tolerant=tolerant)
     try:
         reader = LegacyPackageReader(
-            source,
+            source=None,  # type: ignore[arg-type]  # archive-only path; source unused
             tolerant=tolerant,
             mappings_path=mappings_path,
             game=game,
         )
-        return reader.read(depth=depth, object_ids=object_ids)
+        doc = reader.read(
+            depth=depth,
+            object_ids=object_ids,
+            archive=archive,
+            main_path=bundle.main_path,
+        )
+        return doc
     finally:
-        source.close()
+        archive.close()

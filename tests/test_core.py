@@ -2726,6 +2726,81 @@ def test_import_dependency_package_is_the_outer_owner_not_the_class_package():
         assert unresolved == {f"import:{i}" for i, o in enumerate(owners) if not o}, label
 
 
+def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
+    """UE source guard: .uexp concatenated only when main_size == TotalHeaderSize.
+
+    UE basis:
+      FilePackageWriterUtil.cpp:164-212 — cook writer splits ONE combined
+        buffer at Summary.TotalHeaderSize into .uasset + .uexp.
+      SavePackage2.cpp:3762-3775 — Export.SerialOffset +=
+        Linker.Summary.TotalHeaderSize (SerialOffset indexes combined stream).
+      AsyncLoading.cpp:605-611,894-918 — engine split-file trigger is
+        .uasset file size == Summary.TotalHeaderSize.
+
+    Refusal path: main_size != TotalHeaderSize -> .uexp disconnected,
+    UEXP_SPLIT_GUARD_FAILED diagnostic emitted, parse continues safely.
+    Happy path: main_size == TotalHeaderSize -> .uexp connected.
+    """
+    import shutil
+    import uasset_read.parsers.legacy_reader as lr
+    from uasset_read.package import open_package_bundle, parse_package_document
+    from uasset_read.serializers.package_summary import read_package_summary
+
+    # --- setup: copy a real sample + create a dummy .uexp ---
+    sample = tmp_path / "Test.uasset"
+    shutil.copy2(PACKAGE_SAMPLE, sample)
+    uexp = tmp_path / "Test.uexp"
+    uexp.write_bytes(b"\x00" * 256)
+
+    main_size = sample.stat().st_size
+    real_read_summary = read_package_summary
+
+    # --- Refusal path: main_size != TotalHeaderSize ---
+    def patched_read_summary_wrong(archive, budget):
+        summary = real_read_summary(archive, budget)
+        summary.total_header_size = main_size - 1
+        return summary
+
+    lr_real_fn = lr.read_package_summary
+    lr.read_package_summary = patched_read_summary_wrong  # type: ignore[assignment]
+    try:
+        doc = parse_package_document(str(sample))
+    finally:
+        lr.read_package_summary = lr_real_fn  # type: ignore[assignment]
+
+    guard_diags = [d for d in doc.diagnostics if d.code == "UEXP_SPLIT_GUARD_FAILED"]
+    assert len(guard_diags) == 1
+    assert "TotalHeaderSize" in guard_diags[0].message
+    assert "not concatenated" in guard_diags[0].message
+    # Parse still succeeded (main file is self-contained)
+    assert len(doc.objects) > 0
+
+    # --- Happy path: main_size == TotalHeaderSize ---
+    def patched_read_summary_ok(archive, budget):
+        summary = real_read_summary(archive, budget)
+        summary.total_header_size = main_size
+        return summary
+
+    lr.read_package_summary = patched_read_summary_ok  # type: ignore[assignment]
+    try:
+        doc_ok = parse_package_document(str(sample))
+    finally:
+        lr.read_package_summary = lr_real_fn  # type: ignore[assignment]
+
+    guard_ok = [d for d in doc_ok.diagnostics if d.code == "UEXP_SPLIT_GUARD_FAILED"]
+    assert not guard_ok, "guard must not fire when main_size == TotalHeaderSize"
+    assert len(doc_ok.objects) > 0
+
+    # --- Bundle routing: open_package_bundle discovers sidecars ---
+    bundle = open_package_bundle(str(sample))
+    assert ".uexp" in bundle.files
+    archive = bundle.open_archive()
+    try:
+        assert archive.total_size() == main_size + 256  # main + .uexp
+    finally:
+        archive.close()
+
+
 def test_test_suite_structure_gate():
     import ast
 
@@ -2743,7 +2818,7 @@ def test_test_suite_structure_gate():
     assert subdirs == {"samples"}
     tree = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
     funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
-    assert len(funcs) == 12
+    assert len(funcs) == 13
     assert not any(isinstance(n, ast.ClassDef) for n in tree.body)
     # The design bans decorators on test functions; cache helpers like
     # _document legitimately carry @lru_cache, so the check is scoped to
