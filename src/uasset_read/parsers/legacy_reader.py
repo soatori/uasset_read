@@ -507,6 +507,28 @@ class LegacyPackageReader:
                     )
                     package_trailer = None
 
+            # 1c. Parse DataResource table (UE5.1+, after trailer)
+            data_resource_map = None
+            if (hasattr(summary, 'data_resource_offset')
+                    and summary.data_resource_offset > 0
+                    and getattr(summary, 'file_version_ue5', 0) >= 1009):
+                try:
+                    from uasset_read.serializers.data_resource import read_data_resource_table
+                    data_resource_map = read_data_resource_table(
+                        archive, summary.data_resource_offset
+                    )
+                except Exception as e:
+                    diagnostics.append(
+                        Diagnostic(
+                            severity="warning",
+                            code="DATA_RESOURCE_PARSE_FAILED",
+                            message=f"DataResource parse failed: {e}",
+                            stage="package.data_resource",
+                            recoverable=True,
+                        )
+                    )
+                    data_resource_map = None
+
             # 2. Validate name table
             if summary.name_count <= 0:
                 diagnostics.append(
@@ -748,6 +770,7 @@ class LegacyPackageReader:
                 summary=summary_obj,
                 depth=depth,
                 package_trailer=package_trailer,
+                data_resource_map=data_resource_map,
             )
 
         except ParseError as e:
