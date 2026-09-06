@@ -1,6 +1,6 @@
 # uasset_read
 
-> **Python parser for Unreal Engine .uasset files** — read blueprints, extract variables, decompile Kismet bytecode, and generate C++ skeletons — all without the UE editor.
+> **Python parser for Unreal Engine .uasset files** — read blueprints, extract variables, decompile Kismet bytecode, and inspect asset structures — all without the UE editor.
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
@@ -18,7 +18,7 @@ Unreal Engine blueprints are stored as binary `.uasset` files — unreadable wit
 - **Component properties** — transforms, materials, mesh references
 - **Dependency graphs** — import/export relationships, soft object paths
 
-Whether you're auditing blueprint dependencies, extracting class skeletons for C++ migration, or building tooling for game development, uasset_read gives you structured access to blueprint data at the file level.
+Whether you're auditing blueprint dependencies, building tooling for game development, or extracting structured asset data, uasset_read gives you structured access to blueprint data at the file level.
 
 ## Status
 
@@ -80,14 +80,11 @@ print(project_document(doc))  # PackageDocument JSON dict
 ### Advanced Features
 
 - **Kismet bytecode decompiler** — EExprToken → AST → C++ pseudo-code with structured control flow
-- **PackageLinker** — two-phase object graph reconstruction
 - **Dependency analysis** — ImportMap + SoftObjectPaths dependency graph
-- **Circular dependency detection** — mutual reference detection
-- **IR (Intermediate Representation)** — package-level IR builder for decoupled rendering pipeline
 
 ### File Format Support
 
-- **Dedicated asset type parsers** — StaticMesh, SkeletalMesh, Texture2D, Material, MaterialInstanceConstant, TextureCube, AnimSequence, AnimBlueprint, AnimMontage, AnimBoneCompression, AnimCurveCompression, AnimationDataModel, SoundWave, SoundCue, SoundAttenuation, DataTable, CurveTable, StringTable, Skeleton, PoseAsset, LevelSequence, MovieScene, MovieSceneControlRig, FoliageType, SkeletalMeshLODSettings, SubsurfaceProfile, OpaqueStub, PropertyExtractor; broader asset categories use generic UObject/property fallback paths.
+- **Dedicated asset type parsers** — 47 registered UE class names across 21 handlers; 5 bind real extractors (DataTable/CurveTable, LevelSequence, Skeleton, SoundWave), the rest are metadata/semantic stubs with generic UObject/property fallback paths.
 - **Bulk Data** — BulkData header parsing
 - **Game version support** — Game-specific serialization constants
 - **Binary/native handlers** — binary or native property serialization support
@@ -101,11 +98,10 @@ Markdown output and Semantic 1.x JSON went away with the v1 pipeline and are **w
 ## Installation
 
 ```bash
-git clone https://github.com/soatori/uasset_read.git
-cd uasset_read
+pip install -e .
 ```
 
-Zero runtime dependencies, requires Python 3.10+.
+This is required for `python -m uasset_read` to resolve the package entry point. Zero runtime dependencies, requires Python 3.10+.
 
 ## Usage
 
@@ -260,8 +256,8 @@ When Unreal Editor 5.8 is released, use the official Experimental Unreal MCP ser
 | Scenario | How uasset_read helps |
 | ---------- | ---------------------- |
 | **Programmatic blueprint analysis** | Parse blueprint data → extract structure → automate inspections |
-| **Blueprint → C++ migration** | Extract class structure, variables, functions → generate C++ skeleton |
-| **Dependency auditing** | *planned* — v2 lists imports/exports per package (`list_dependencies`); cross-package cycle and orphan detection are not implemented |
+| **Blueprint → C++ migration** | *planned* — extract class structure, variables, functions; C++ skeleton generation is not yet implemented |
+| **Dependency auditing** | v2 lists imports/exports per package (`list_dependencies`); cross-package cycle and orphan detection are *planned* |
 | **Mod development** | *planned* — reading assets from `.pak` is deferred to #625; today you must extract the `.uasset` first |
 | **Asset pipeline automation** | Use `--batch DIR` to parse all `.uasset` files in a directory; outputs JSONL (one JSON per line) or JSON array with `--batch-format json` |
 | **Technical debt analysis** | Trace execution flows → identify deeply nested logic → find dead code |

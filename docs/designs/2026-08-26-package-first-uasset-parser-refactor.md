@@ -81,9 +81,14 @@ status: target
 
 OpenWiki 是生成式二级资料，不是格式规范。尤其不得采用 `topics/infrastructure/zen-storage.md` 中无法在当前 UE 源码定位的 `.zen/.zen.idx/.zen.meta` 容器、`FZenHandle`、`ZenStorage::LoadAsset*`、固定缓存参数或性能数字。
 
-## Current State
+## Current State (as of v0.6.0-dev, updated 2026-09-06)
 
-### 当前主流程
+> **Historical context:** the pipeline described below was the v1 architecture.
+> It was deleted in Phase 6 of the refactor. The sections below are kept
+> for historical reference; the current implementation follows this document's
+> target architecture.
+
+### v1 main pipeline (deleted in Phase 6)
 
 ```text
 parse_single
@@ -98,69 +103,53 @@ parse_single
 
 `PackageIR` 保留多个 exports，但 `build_semantic_ir()` 会调用 `_select_primary_export()` 选择单个顶层 `b_is_asset` 或包名匹配对象。多个候选时返回 `None`，最终输出 `unknown/opaque`。领域 extractor 的 `content` 随后被 renderer 提升到顶层。该结构无法在一个文档中同时表达 Blueprint、GeneratedClass、CDO、LevelSequence Director 和其他对象。
 
-### 已有可复用能力
+### v2 current architecture
 
-- `FArchive` 风格二进制读取与边界检查。
-- 经典 `PackageFileSummary`、NameMap、ImportMap、ExportMap 读取。
-- `.uexp` sidecar 拼接和 `.ubulk/.uptnl` 文件发现。
-- Tagged Property、多种 Struct/Container/Text/Delegate 值解析。
-- PackageLinker 和对象引用解析基础。
-- Blueprint graph、Pin、Kismet 和 C++ skeleton 扩展能力。
-- tolerant 模式、offset diagnostics、coverage/evidence 概念。
-- Pak/IoStore 结构和读取代码基础。
-- 真实样本与较大规模测试集。
+The current entry point is `parse_package_document()` → `LegacyPackageReader` →
+`PackageDocument`. Source tree: 94 Python files, ~28k lines. 21 registered
+handlers (47 UE class names, 5 with real extractors). Zero runtime dependencies.
 
-这些代码应通过适配迁移，而不是因架构变化被整体删除。
+Key retained capabilities from v1:
+- `FArchive` binary reader with boundary checks.
+- `PackageFileSummary`, NameMap, ImportMap, ExportMap reading.
+- `.uexp` sidecar concatenation (guarded by `main_size == TotalHeaderSize`).
+- Tagged Property parsing for Struct/Container/Text/Delegate values.
+- Blueprint graph, Pin, Kismet bytecode decompilation.
+- Tolerant mode, offset diagnostics, coverage/evidence.
 
-### 关键结构问题
+### Known structural issues (motivating this refactor)
 
-#### 单主资产模型
+#### Single primary asset model
 
-- 多个 `b_is_asset` 导出无法表示。
-- “未找到唯一主资产”被错误提升为整个包解析失败。
-- Blueprint、GeneratedClass、CDO 之间的关系被压缩成单个 `asset` 字段。
-- package 成功、object 成功、semantic 完整度被混在一个 status 中。
+- Multiple `bIsAsset` exports not representable.
+- "No unique primary asset" incorrectly promoted to whole-package failure.
+- Blueprint/GeneratedClass/CDO relationships collapsed into single `asset` field.
+- Package/object/semantic completeness mixed in one status.
 
-#### 输出模型
+#### Output model
 
-- 领域类型拥有不同顶层 format，Schema 数量随资产类型线性增长。
-- 领域内容提升到顶层，容易发生公共字段碰撞。
-- `standard/debug` 同时承担内容选择、调试证据和体积控制，语义过载。
-- references 是扁平列表，不能准确表达对象间关系。
-- diagnostics 公共模型只有 `severity/code/message`，缺少阶段、对象、偏移和恢复效果。
-- 默认 API 返回格式化字符串，CLI、Agent 和 Python 调用无法复用同一个结构对象。
+- Domain types own different top-level formats; Schema count grows linearly with asset type.
+- `standard/debug` overloads content selection, debug evidence, and size control.
+- References are flat lists, cannot express inter-object relationships accurately.
+- Diagnostics model only has `severity/code/message`, missing stage/object/offset/effect.
 
-#### Source 与 Archive
+#### Source & Archive
 
-- `PackageArchive` 只把主文件和 `.uexp` 组合成一个地址空间；`.ubulk/.uptnl` 尚未成为统一 payload region。
-- Pak/IoStore 上层仍倾向先取得完整 bytes，再喂给经典 reader，不是真正的按范围读取。
-- 当前主 pipeline 固定读取经典 `PackageFileSummary`，没有独立 Zen package reader。
-- 容器、压缩、加密、sidecar 和 package layout 的职责边界不够清晰。
+- `PackageArchive` combines main + `.uexp` into one address space; `.ubulk/.uptnl` not yet a unified payload region.
+- No independent Zen package reader; legacy `PackageFileSummary` only.
 
 #### Version Context
 
-当前 `VersionContainer` 主要包含 UE4/UE5 文件版本与 CustomVersion，未统一承载：
-
-- `file_version_licensee`
-- 目标平台与字节序
-- cooked/editor-only 状态
-- package layout（legacy/zen）
-- game profile 与特性开关
-- schema/mapping 来源
-
-这些信息分散后，属性和资产解析器容易重新引入硬编码版本判断。
+`VersionContainer` does not carry `file_version_licensee`, target platform, cooked/editor state, package layout, game profile, or schema/mapping source.
 
 #### Logging
 
-当前公共 API 外层使用 scoped logging，内部又可能调用 `configure_project_logging()`。配置签名变化时会替换 handler 并创建新的 run id，导致一次解析产生多个日志文件或 run id 不一致。日志关闭时仍可能通过 Python logging fallback/propagation 输出。根因是解析函数同时承担诊断生成和进程级日志配置。
+Public API uses scoped logging internally but may call `configure_project_logging()` which replaces handlers and creates new run IDs.
 
-#### Agent 与体积
+#### Agent & size
 
-- 目前没有稳定的 Agent/MCP tool contract，只有字符串型 CLI/Python API。
-- 全包 JSON 对大图、属性树和 payload 不可控，缺少分页、字段选择和对象查询。
-- 当前快照约有 200 个 Python 源文件、约 4.6 万行源码；Blueprint/Kismet/Graph/CPP 相关代码占据显著体积。
-- 工作目录体积主要来自 `external/`、索引、Agent 缓存和 Wiki，不应混入发行包或核心依赖。
-- 历史设计文档长期并列，旧目标比新目标更容易被全文检索命中。
+- No stable Agent/MCP tool contract; only string-typed CLI/Python API.
+- Full-package JSON uncontrolled for large graphs/properties/payloads.
 
 ## Design Principles
 
@@ -792,9 +781,9 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - 不提交墙钟耗时阈值。性能门禁只使用确定性的 bytes、count、range、pagination 和 resource budget。
 - 测试代码只放在 `tests/`；根目录和 `scripts/` 不增加独立验证程序。一次性调查使用命令行或未跟踪的 `temp/` 输出。
 - 标准库 AST 门禁要求：
-  - `tests/` 根目录的正式 Python 测试文件集合由 `tests/test_core.py::test_test_suite_structure_gate` 锁定，当前为四个：`test_core.py`（核心单元与结构门禁）、`test_samples.py`（manifest 驱动的真实样本）、`test_blueprint_decode.py`、`test_blueprint_graph.py`。新增第五个文件必须同时修改该门禁并说明为何不能归入现有文件；唯一允许的永久子目录仍为 `tests/samples/`。
+  - `tests/` 根目录的正式 Python 测试文件集合由 `tests/test_core.py::test_test_suite_structure_gate` 锁定，当前为五个：`test_core.py`（核心单元与结构门禁）、`test_samples.py`（manifest 驱动的真实样本）、`test_blueprint_decode.py`、`test_blueprint_graph.py`、`test_size_baseline.py`（体积门禁）。新增第六个文件必须同时修改该门禁并说明为何不能归入现有文件；唯一允许的永久子目录仍为 `tests/samples/`。
   - `test_core.py` 只能使用顶层 `test_*` 函数；拒绝测试类、参数化 decorator、动态 `test_*` 赋值，从而使 AST 数量等于 pytest 收集项。
-  - 核心测试收集项不得超过 10；样本参数项不设上限。
+  - 核心测试收集项由 `test_test_suite_structure_gate` 以 `len(funcs) == N` 锁定（当前 N=13）；raising N 需作为 deliberate, reviewable diff；样本参数项不设上限。
 - pytest cache、`__pycache__`、日志、golden 调试转储和本机路径不得进入版本控制。
 
 ### 必须存在的回归
