@@ -3106,6 +3106,7 @@ def test_test_suite_structure_gate():
     expected = [
         "test_blueprint_decode.py",
         "test_blueprint_graph.py",
+        "test_bulk_data_parser.py",
         "test_core.py",
         "test_samples.py",
         "test_size_baseline.py",
