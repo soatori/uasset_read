@@ -179,6 +179,110 @@ def _validate_relation_targets(
     return kept, diagnostics
 
 
+# NAME_None reaches us as the literal table entry "None" (index 0), and as
+# Python None when the version gate skipped the field entirely.
+_NAME_NONE = frozenset({None, "", "None"})
+
+
+def _import_owner(
+    import_map: Sequence[ObjectImport],
+    start: int,
+    resolved: dict[int, tuple[str, str]],
+) -> tuple[str, str]:
+    """Resolve the package import ``start`` belongs to, as (package, reason).
+
+    Empty package always comes with a reason. Every node stepped over on the way
+    inherits that same answer, so caching them keeps the whole table linear;
+    ``MAX_IMPORT_COUNT`` is 1,000,000, and re-walking each chain from its own
+    start would turn a crafted outer list into quadratic work. ``seen`` makes a
+    cyclic chain terminate without needing a depth cap.
+    """
+    chain: list[int] = []
+    seen: set[int] = {start}
+    cur_i = start
+    while True:
+        cached = resolved.get(cur_i)
+        if cached is not None:
+            answer = cached
+            break
+        chain.append(cur_i)
+        cur = import_map[cur_i]
+        owner = cur.package_name
+        if isinstance(owner, str) and owner not in _NAME_NONE:
+            answer = (owner, "")
+            break
+        outer = cur.outer_index.index
+        if outer == 0:
+            # Null OuterIndex marks the top-level UPackage itself; its
+            # ObjectName is the package path (see resolve_import_dependencies).
+            if cur.class_name != "Package":
+                answer = ("", "outer chain ends on a non-Package entry")
+            elif cur.object_name in _NAME_NONE:
+                answer = ("", "Package entry carries no name")
+            else:
+                answer = (cur.object_name, "")
+            break
+        if outer > 0:
+            answer = ("", "outer references an export")
+            break
+        idx = -outer - 1
+        if not 0 <= idx < len(import_map):
+            answer = ("", f"outer import index {idx} is out of range")
+            break
+        if idx in seen:
+            answer = ("", "outer chain cycles")
+            break
+        seen.add(idx)
+        cur_i = idx
+    for node in chain:
+        resolved[node] = answer
+    return answer
+
+
+def resolve_import_dependencies(
+    import_map: Sequence[ObjectImport],
+) -> tuple[list[Dependency], list[Diagnostic]]:
+    """Build the import dependency set keyed on each import's *owning* package.
+
+    ``FObjectImport.ClassPackage`` is the package holding the object's class, so
+    reading it as the owner made every engine-classed asset claim
+    ``/Script/Engine`` (#645). UE separates the two facts: the owner is
+    ``PackageName`` when set, otherwise the outer chain is followed "until a set
+    PackageName is found or until OuterIndex is null" (ObjectResource.h:457-460)
+    and that terminal entry, a null-outer ``Package`` resource, carries the
+    package path in its ``ObjectName`` (ObjectResource.h:199-203,
+    LinkerLoad.cpp:2402).
+
+    Unresolvable owners stay empty with a diagnostic; a path is never guessed.
+    """
+    dependencies: list[Dependency] = []
+    diagnostics: list[Diagnostic] = []
+    resolved: dict[int, tuple[str, str]] = {}
+    for i, imp in enumerate(import_map):
+        owner, reason = _import_owner(import_map, i, resolved)
+        dependencies.append(
+            Dependency(
+                index=i,
+                class_name=imp.class_name,
+                object_name=imp.object_name,
+                package_name=owner,
+            )
+        )
+        if not owner:
+            diagnostics.append(
+                Diagnostic(
+                    severity="warning",
+                    code="IMPORT_PACKAGE_UNRESOLVED",
+                    message=f"Import {i} ({imp.class_name} {imp.object_name}) has no owning package: {reason}",
+                    stage="package.import_map",
+                    object_id=f"import:{i}",
+                    effect="semantic_loss",
+                    recoverable=True,
+                )
+            )
+    return dependencies, diagnostics
+
+
 def _build_object_record_direct(
     export: ObjectExport,
     index: int,
@@ -475,16 +579,10 @@ class LegacyPackageReader:
             )
             diagnostics.extend(target_diags)
 
-            # 11. Build dependencies from import map
-            dependencies = [
-                Dependency(
-                    index=i,
-                    class_name=imp.class_name,
-                    object_name=imp.object_name,
-                    package_name=imp.class_package,
-                )
-                for i, imp in enumerate(import_map)
-            ]
+            # 11. Build dependencies from import map. The owning package comes
+            # from PackageName/outer chain, never from ClassPackage (#645).
+            dependencies, import_package_diags = resolve_import_dependencies(import_map)
+            diagnostics.extend(import_package_diags)
 
             # 12. FArchive structured recoveries are merged in step 17c, after
             # property parsing has attributed them to their objects.

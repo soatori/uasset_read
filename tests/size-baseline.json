@@ -1,12 +1,12 @@
 {
-  "_note": "Ratchet ceilings for tests/test_size_baseline.py and the CI package-smoke wheel check. Baseline measured 2026-09-05. Raise a ceiling only as a deliberate, reviewable diff when growth is intended; tighten them after a deletion wave. wheel_bytes carries zip-to-zip slack, the line ceilings need none. 2026-09-05 wave: docs/plans/ (5 completed plans) and 4 superseded reference/release-note files were removed, so docs_markdown lost files and ~6.4k lines — floor lowered to the measured 148 and ceiling tightened to 45000. src_python and tests_python rose by 5 and 8 lines for the FileSource.__del__ regression guard and its subtest plus corrected docstrings.",
+  "_note": "Ratchet ceilings for tests/test_size_baseline.py and the CI package-smoke wheel check. Numbers are the measured tree size on 2026-09-05, re-measured the same day for #644 (agent query contracts) and #645 (import owning package). Raise a ceiling only as a deliberate, reviewable diff when growth is intended; tighten them after a deletion wave. wheel_bytes carries zip-to-zip slack, the line ceilings need none.",
   "src_python": {
     "min_files": 95,
-    "max_lines": 27708
+    "max_lines": 27826
   },
   "tests_python": {
     "min_files": 4,
-    "max_lines": 3739
+    "max_lines": 3850
   },
   "docs_markdown": {
     "min_files": 148,

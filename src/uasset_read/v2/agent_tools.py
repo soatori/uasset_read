@@ -12,6 +12,7 @@ Design doc reference:
 
 from __future__ import annotations
 
+import json
 from typing import Any, Literal
 
 from .api import parse_package_document
@@ -80,25 +81,38 @@ def get_object(
     """Tool: get_object — single object properties and optional semantic.
 
     Returns full object detail including serial region and diagnostics.
+
+    Existence is decided on the parsed document before the byte budget is
+    applied (#644): the old order trimmed the whole envelope first and then
+    read the resulting empty page as a missing object.
     """
     doc = parse_package_document(file_path)
 
-    projected = project_document(
-        doc,
-        object_ids=[object_id],
-        view="raw",
-        max_bytes=max_bytes,
-    )
-    if projected["objects"]:
-        return projected["objects"][0]
-    # Stable structured-diagnostic shape (cf. extract_payload's deferred code):
-    # consumers branch on code/stage/recoverable, not on message text.
+    if not any(o.id == object_id for o in doc.objects):
+        # Stable structured-diagnostic shape (cf. extract_payload's deferred code):
+        # consumers branch on code/stage/recoverable, not on message text.
+        return {
+            "error": f"Object '{object_id}' not found",
+            "code": "OBJECT_NOT_FOUND",
+            "stage": "agent.get_object",
+            "recoverable": True,
+            "available_ids": [o.id for o in doc.objects[:20]],
+        }
+
+    full = project_document(doc, object_ids=[object_id], view="raw")
+    # The whole response is what the budget has to cover; the object alone is
+    # never returned over cap, and 'too small' is never dressed up as 'missing'.
+    size = len(json.dumps(full, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    if size <= max_bytes:
+        return full["objects"][0]
     return {
-        "error": f"Object '{object_id}' not found",
-        "code": "OBJECT_NOT_FOUND",
+        "error": f"Object '{object_id}' exists but needs {size} bytes, over the {max_bytes}-byte budget",
+        "code": "BUDGET_EXHAUSTED",
         "stage": "agent.get_object",
         "recoverable": True,
-        "available_ids": [o.id for o in doc.objects[:20]],
+        "object_id": object_id,
+        "max_bytes": max_bytes,
+        "min_bytes": size,
     }
 
 
