@@ -15,7 +15,7 @@ __version__ = "0.6.0-dev"
 # ============================================================================
 
 from .config import LogConfig
-from .v2.api import parse_package_document
+from .package import parse_package_document
 from .exceptions import ParseError
 from .archive import FArchive
 
@@ -23,7 +23,7 @@ __all__ = [
     "__version__",
     # Configuration
     "LogConfig",
-    # v2 package-first API
+    # package-first API
     "parse_package_document",
     # Exceptions
     "ParseError",
