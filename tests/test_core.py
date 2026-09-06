@@ -3109,6 +3109,8 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
 def test_resolve_parent_assets_returns_relations():
     """resolve_parent_assets must return parent class relations."""
     from uasset_read.parent_resolver import resolve_parent_assets
+    from uasset_read.models.object_model import Relation
+    from uasset_read.models.diagnostics import Diagnostic
     from uasset_read.models.document import PackageDocument
     from pathlib import Path
 
@@ -3134,6 +3136,18 @@ def test_resolve_parent_assets_returns_relations():
     assert isinstance(relations, list)
     assert len(relations) == 0
     assert isinstance(diagnostics, list)
+    # Verify return type annotation uses Relation by inspecting the function's annotations
+    import typing
+    hints = typing.get_type_hints(
+        resolve_parent_assets,
+        globalns={
+            'Relation': Relation,
+            'Diagnostic': Diagnostic,
+            'PackageDocument': PackageDocument,
+            'Path': Path,
+        }
+    )
+    assert hints['return'] == tuple[list[Relation], list[Diagnostic]]
 
 
 def test_resolve_parent_assets_respects_max_depth():

@@ -20,7 +20,7 @@ def resolve_parent_assets(
     doc: PackageDocument,
     root: Path,
     max_depth: int = 2,
-) -> tuple[list[dict], list[Diagnostic]]:
+) -> tuple[list[Relation], list[Diagnostic]]:
     """Resolve parent class/interface assets across packages.
 
     Args:
@@ -32,6 +32,7 @@ def resolve_parent_assets(
         Tuple of (relations, diagnostics) to add to doc.relations and doc.diagnostics.
     """
     from uasset_read.models.diagnostics import Diagnostic
+    from uasset_read.models.object_model import Relation
 
     relations = []
     diagnostics = []
@@ -67,12 +68,12 @@ def resolve_parent_assets(
                 str(parent_path), depth="package", tolerant=True
             )
             relations.append(
-                {
-                    "kind": "parent_class",
-                    "source": obj.id,
-                    "target": parent_ref,
-                    "target_package": str(parent_path),
-                }
+                Relation(
+                    kind="parent_class",
+                    from_id=obj.id,
+                    to_id=parent_ref,
+                    target_package=str(parent_path),
+                )
             )
         except Exception as e:
             diagnostics.append(
