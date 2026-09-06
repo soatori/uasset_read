@@ -499,7 +499,7 @@ class LegacyPackageReader:
             # Concatenate .uexp ONLY when main_size == TotalHeaderSize AND a
             # .uexp exists; otherwise the spliced address space is wrong and
             # every SerialOffset silently misresolves.
-            if archive._uexp_archive is not None and summary.total_header_size > 0:
+            if archive._uexp_archive is not None:
                 if archive._main_size != summary.total_header_size:
                     archive._uexp_archive.close()
                     archive._uexp_archive = None

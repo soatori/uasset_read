@@ -130,7 +130,11 @@ class PackageBundle:
     def open_archive(self, tolerant: bool = False) -> PackageArchive:
         main_ext = ".umap" if self.package_kind == "map" else ".uasset"
         main = self._open_archive_for(main_ext, tolerant)
-        uexp = self._open_archive_for(".uexp", tolerant) if ".uexp" in self.package_files else None
+        try:
+            uexp = self._open_archive_for(".uexp", tolerant) if ".uexp" in self.package_files else None
+        except Exception:
+            main.close()
+            raise
         return PackageArchive(main, uexp, tolerant=tolerant)
 
     def _open_archive_for(self, extension: str, tolerant: bool) -> ArchiveLike:
@@ -141,6 +145,7 @@ class PackageBundle:
         if path is None:
             raise ParseError(f"Package sidecar not found: {extension}")
         return FArchive(path, tolerant=tolerant)
+
 
 class FileSystemPackageProvider:
     """Filesystem package provider: discovers and opens .uasset/.umap bundles."""
@@ -236,7 +241,7 @@ def parse_package_document(
     archive = bundle.open_archive(tolerant=tolerant)
     try:
         reader = LegacyPackageReader(
-            source=None,  # type: ignore[arg-type]  # archive-only path; source unused
+            source=None,
             tolerant=tolerant,
             mappings_path=mappings_path,
             game=game,

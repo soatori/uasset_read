@@ -2711,7 +2711,10 @@ def test_import_dependency_package_is_the_outer_owner_not_the_class_package():
 
     cases = {
         "explicit PackageName wins": ([row("SoundCue", 0, CUE, "/Real/Path")], ["/Real/Path"]),
-        "ancestor PackageName wins": ([row("SoundCue", -2, "A"), row("Package", 0, "B", "/Explicit")], ["/Explicit", "/Explicit"]),
+        "ancestor PackageName wins": (
+            [row("SoundCue", -2, "A"), row("Package", 0, "B", "/Explicit")],
+            ["/Explicit", "/Explicit"],
+        ),
         "null-outer Package row is its own package": ([row("Package", 0, OWNER)], [OWNER]),
         "cycle": ([row("SoundCue", -2, "A"), row("Package", -1, "B")], ["", ""]),
         "outer out of range": ([row("SoundCue", -9, "A")], [""]),
@@ -2729,76 +2732,103 @@ def test_import_dependency_package_is_the_outer_owner_not_the_class_package():
 def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     """UE source guard: .uexp concatenated only when main_size == TotalHeaderSize.
 
-    UE basis:
-      FilePackageWriterUtil.cpp:164-212 — cook writer splits ONE combined
-        buffer at Summary.TotalHeaderSize into .uasset + .uexp.
-      SavePackage2.cpp:3762-3775 — Export.SerialOffset +=
-        Linker.Summary.TotalHeaderSize (SerialOffset indexes combined stream).
-      AsyncLoading.cpp:605-611,894-918 — engine split-file trigger is
-        .uasset file size == Summary.TotalHeaderSize.
-
-    Refusal path: main_size != TotalHeaderSize -> .uexp disconnected,
-    UEXP_SPLIT_GUARD_FAILED diagnostic emitted, parse continues safely.
-    Happy path: main_size == TotalHeaderSize -> .uexp connected.
+    Proves the splice works by:
+    - refusal path: asserts arc._uexp_archive is None and total_size()==main_size
+    - acceptance path: asserts arc._uexp_archive is not None and cross-boundary read
+    - total_header_size==0 refusal: proves the fail-open fix (1a)
     """
     import shutil
     import uasset_read.parsers.legacy_reader as lr
-    from uasset_read.package import open_package_bundle, parse_package_document
+    from uasset_read.package import open_package_bundle
+    from uasset_read.parsers.legacy_reader import LegacyPackageReader
     from uasset_read.serializers.package_summary import read_package_summary
 
-    # --- setup: copy a real sample + create a dummy .uexp ---
+    # --- setup: copy a real sample + create a dummy .uexp with a marker ---
     sample = tmp_path / "Test.uasset"
     shutil.copy2(PACKAGE_SAMPLE, sample)
-    uexp = tmp_path / "Test.uexp"
-    uexp.write_bytes(b"\x00" * 256)
+    # .uexp with a recognizable tail: last 2 bytes are "AB"
+    eexp_data = b"\x00" * 254 + b"AB"
+    (tmp_path / "Test.uexp").write_bytes(eexp_data)
 
     main_size = sample.stat().st_size
+    # record the last 2 bytes of the main file for cross-boundary assertion
+    main_tail = (tmp_path / "Test.uasset").read_bytes()[-2:]
+    # first 2 bytes of .uexp (zeros, since data starts with 254 zero bytes)
+    uexp_head = eexp_data[:2]
+
     real_read_summary = read_package_summary
-
-    # --- Refusal path: main_size != TotalHeaderSize ---
-    def patched_read_summary_wrong(archive, budget):
-        summary = real_read_summary(archive, budget)
-        summary.total_header_size = main_size - 1
-        return summary
-
     lr_real_fn = lr.read_package_summary
-    lr.read_package_summary = patched_read_summary_wrong  # type: ignore[assignment]
+
+    # === Refusal path: main_size != TotalHeaderSize ===
+    def patched_wrong(archive, budget):
+        s = real_read_summary(archive, budget)
+        s.total_header_size = main_size - 1
+        return s
+
+    lr.read_package_summary = patched_wrong  # type: ignore[assignment]
+    bundle = open_package_bundle(str(sample))
+    arc = bundle.open_archive(tolerant=True)
     try:
-        doc = parse_package_document(str(sample))
+        doc = LegacyPackageReader(None, tolerant=True).read(
+            archive=arc, main_path=str(sample)
+        )
     finally:
         lr.read_package_summary = lr_real_fn  # type: ignore[assignment]
 
     guard_diags = [d for d in doc.diagnostics if d.code == "UEXP_SPLIT_GUARD_FAILED"]
     assert len(guard_diags) == 1
-    assert "TotalHeaderSize" in guard_diags[0].message
-    assert "not concatenated" in guard_diags[0].message
-    # Parse still succeeded (main file is self-contained)
     assert len(doc.objects) > 0
+    # Prove the address space actually contracted
+    assert arc._uexp_archive is None, ".uexp must be disconnected on refusal"
+    assert arc.total_size() == main_size, "total_size must equal main only"
 
-    # --- Happy path: main_size == TotalHeaderSize ---
-    def patched_read_summary_ok(archive, budget):
-        summary = real_read_summary(archive, budget)
-        summary.total_header_size = main_size
-        return summary
+    # === Refusal path: total_header_size == 0 (fail-open fix, 1a) ===
+    def patched_zero(archive, budget):
+        s = real_read_summary(archive, budget)
+        s.total_header_size = 0
+        return s
 
-    lr.read_package_summary = patched_read_summary_ok  # type: ignore[assignment]
+    lr.read_package_summary = patched_zero  # type: ignore[assignment]
+    bundle0 = open_package_bundle(str(sample))
+    arc0 = bundle0.open_archive(tolerant=True)
     try:
-        doc_ok = parse_package_document(str(sample))
+        doc0 = LegacyPackageReader(None, tolerant=True).read(
+            archive=arc0, main_path=str(sample)
+        )
+    finally:
+        lr.read_package_summary = lr_real_fn  # type: ignore[assignment]
+
+    guard0 = [d for d in doc0.diagnostics if d.code == "UEXP_SPLIT_GUARD_FAILED"]
+    assert len(guard0) == 1, "total_header_size==0 must refuse, not skip"
+    assert arc0._uexp_archive is None, ".uexp must be disconnected when THS==0"
+    assert arc0.total_size() == main_size
+
+    # === Acceptance path: main_size == TotalHeaderSize ===
+    def patched_ok(archive, budget):
+        s = real_read_summary(archive, budget)
+        s.total_header_size = main_size
+        return s
+
+    lr.read_package_summary = patched_ok  # type: ignore[assignment]
+    bundle_ok = open_package_bundle(str(sample))
+    arc_ok = bundle_ok.open_archive(tolerant=True)
+    try:
+        doc_ok = LegacyPackageReader(None, tolerant=True).read(
+            archive=arc_ok, main_path=str(sample)
+        )
     finally:
         lr.read_package_summary = lr_real_fn  # type: ignore[assignment]
 
     guard_ok = [d for d in doc_ok.diagnostics if d.code == "UEXP_SPLIT_GUARD_FAILED"]
     assert not guard_ok, "guard must not fire when main_size == TotalHeaderSize"
     assert len(doc_ok.objects) > 0
-
-    # --- Bundle routing: open_package_bundle discovers sidecars ---
-    bundle = open_package_bundle(str(sample))
-    assert ".uexp" in bundle.files
-    archive = bundle.open_archive()
-    try:
-        assert archive.total_size() == main_size + 256  # main + .uexp
-    finally:
-        archive.close()
+    # Prove .uexp is connected
+    assert arc_ok._uexp_archive is not None, ".uexp must be connected on acceptance"
+    assert arc_ok.total_size() == main_size + len(eexp_data), "total_size must span both files"
+    # Cross-boundary read: last 2 of main + first 2 of .uexp
+    arc_ok.seek(main_size - 2)
+    cross = arc_ok.read(4)
+    assert cross == main_tail + uexp_head, f"cross-boundary splice failed: {cross!r}"
 
 
 def test_test_suite_structure_gate():
