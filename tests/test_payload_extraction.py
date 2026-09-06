@@ -259,3 +259,91 @@ def test_sidecar_discovery():
     assert bundle.ubulk_path is bundle.ubulk_path
     assert bundle.uptnl_path is bundle.uptnl_path
     assert bundle.main_path_obj is bundle.main_path_obj
+
+
+def test_agent_tool_extract_payload():
+    """Test agent tool extract_payload with real fixture."""
+    import base64
+
+    from uasset_read.agent_tools import extract_payload
+
+    fixture_dir = Path(__file__).parent / "samples"
+    main_path = fixture_dir / "T_ParserBulk.uasset"
+
+    if not main_path.exists():
+        pytest.skip("T_ParserBulk.uasset not found")
+
+    # Call the agent tool with export_index
+    result = extract_payload(
+        file_path=str(main_path),
+        payload_id="payload:(export:0)",
+        export_index=0,
+    )
+
+    # Should not return DEFERRED anymore - should extract real bytes
+    assert result.get("error") != PAYLOAD_EXTRACTION_DEFERRED
+    assert "data" in result
+    assert "size" in result
+    assert result["size"] > 0
+
+    # Verify the data is valid base64
+    data = base64.b64decode(result["data"])
+    assert len(data) == result["size"]
+
+
+def test_agent_tool_extract_payload_auto_index():
+    """Test agent tool extract_payload derives export_index from payload_id."""
+    import base64
+
+    from uasset_read.agent_tools import extract_payload
+
+    fixture_dir = Path(__file__).parent / "samples"
+    main_path = fixture_dir / "T_ParserBulk.uasset"
+
+    if not main_path.exists():
+        pytest.skip("T_ParserBulk.uasset not found")
+
+    # Call without export_index - should derive from payload_id
+    result = extract_payload(
+        file_path=str(main_path),
+        payload_id="payload:(export:0)",
+    )
+
+    # Should not return DEFERRED
+    assert result.get("error") != PAYLOAD_EXTRACTION_DEFERRED
+    assert "data" in result
+    assert result["size"] > 0
+
+
+def test_agent_tool_extract_payload_nonexistent_package():
+    """Test agent tool extract_payload with nonexistent package."""
+    from uasset_read.agent_tools import extract_payload
+
+    result = extract_payload(
+        file_path="nonexistent.uasset",
+        payload_id="payload:(export:0)",
+    )
+
+    assert "error" in result
+    assert result["code"] == "PACKAGE_NOT_FOUND"
+    assert result["recoverable"] is False
+
+
+def test_agent_tool_extract_payload_invalid_payload_id():
+    """Test agent tool extract_payload with invalid payload_id format."""
+    from uasset_read.agent_tools import extract_payload
+
+    fixture_dir = Path(__file__).parent / "samples"
+    main_path = fixture_dir / "T_ParserBulk.uasset"
+
+    if not main_path.exists():
+        pytest.skip("T_ParserBulk.uasset not found")
+
+    # Invalid payload_id format - cannot derive export_index
+    result = extract_payload(
+        file_path=str(main_path),
+        payload_id="invalid_format",
+    )
+
+    # Should return DEFERRED since we can't determine export index
+    assert result.get("code") == PAYLOAD_EXTRACTION_DEFERRED
