@@ -11,7 +11,7 @@ import struct
 from pathlib import Path
 from typing import Any, Literal, Sequence
 
-from ..archive import ByteArchive, FileSource, SliceReader, SourceInfo
+from ..archive import ByteArchive, SourceInfo
 from ..constants import PKG_Cooked, PKG_FilterEditorOnly
 from ..exceptions import ParseError, ExportBoundsExceeded
 from ..memory_safety import ResourceBudget
@@ -47,26 +47,6 @@ from ..models.object_model import (
     ROLES_GENERATED_CLASS,
 )
 from ..versioning import MappingInfo, build_version_context_from_summary
-
-
-def _make_package_archive(source: FileSource, tolerant: bool = False) -> PackageArchive:
-    """Create a PackageArchive backed by a FileSource via SliceReader.
-
-    Uses _init_archive_attrs (designed for non-file-backed archives) to
-    initialize all FArchive attributes without opening a real file.
-    """
-    reader = SliceReader(source, 0, source.size())
-
-    archive = object.__new__(PackageArchive)
-    archive._init_archive_attrs(str(source._path), tolerant, hex_view=False)
-    archive._main_archive = reader
-    archive._uexp_archive = None
-    archive._main_size = source.size()
-    archive._uexp_size = 0
-    archive._file_size = source.size()
-    archive._pos = 0
-
-    return archive
 
 
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:
@@ -429,19 +409,16 @@ class LegacyPackageReader:
 
     def __init__(
         self,
-        source: FileSource | None,
         *,
         tolerant: bool = True,
         mappings_path: str | None = None,
         game: str | None = None,
     ) -> None:
-        self._source = source
         self._tolerant = tolerant
         self._mappings_path = mappings_path
         self._game = game
-        # _main_path is set by read() from either source._path or the
-        # explicit main_path argument (bundle path).  Populated before
-        # any code that needs the file path for SourceInfo/PackageInfo.
+        # Resolved from the required read(main_path=...) argument; every
+        # consumer needs the path for SourceInfo/PackageInfo.
         self._main_path: str = ""
 
     def read(
@@ -449,32 +426,18 @@ class LegacyPackageReader:
         *,
         depth: Literal["package", "object", "asset", "decode"] = "package",
         object_ids: Sequence[str] | None = None,
-        archive: PackageArchive | None = None,
-        main_path: str | None = None,
+        archive: PackageArchive,
+        main_path: str,
     ) -> PackageDocument:
         """Read the package and return a PackageDocument.
 
         At depth="package", only the package structure is read (no object properties).
 
-        When *archive* is provided (bundle path), it is used directly
-        instead of building one from *source*.  *main_path* is required
-        in that case so SourceInfo/PackageInfo carry the file path.
+        The caller owns *archive* and is responsible for closing it; this reader
+        never closes an archive it did not open. *main_path* supplies the file
+        path carried by SourceInfo/PackageInfo.
         """
-        # Resolve the main file path: explicit main_path wins, then
-        # source.path (public accessor), fall back to empty string.
-        if main_path is not None:
-            self._main_path = main_path
-        elif self._source is not None and hasattr(self._source, "path"):
-            self._main_path = str(self._source.path)
-        elif self._source is not None and hasattr(self._source, "_path"):
-            self._main_path = str(self._source._path)
-
-        own_archive = archive is None
-        if archive is None:
-            src = self._source
-            if src is None:
-                raise ValueError("LegacyPackageReader.read() requires either source or archive")
-            archive = _make_package_archive(src, self._tolerant)
+        self._main_path = main_path
         diagnostics: list[Diagnostic] = []
 
         try:
@@ -499,31 +462,26 @@ class LegacyPackageReader:
             # Concatenate .uexp ONLY when main_size == TotalHeaderSize AND a
             # .uexp exists; otherwise the spliced address space is wrong and
             # every SerialOffset silently misresolves.
-            if archive._uexp_archive is not None:
-                if archive._main_size != summary.total_header_size:
-                    archive._uexp_archive.close()
-                    archive._uexp_archive = None
-                    archive._uexp_size = 0
-                    archive._file_size = archive._main_size
-                    diagnostics.append(
-                        Diagnostic(
-                            severity="warning",
-                            code="UEXP_SPLIT_GUARD_FAILED",
-                            message=(
-                                f"main file size {archive._main_size} != "
-                                f"Summary.TotalHeaderSize {summary.total_header_size}; "
-                                f".uexp not concatenated — SerialOffset would misresolve"
-                            ),
-                            stage="package.uexp_guard",
-                            recoverable=True,
-                        )
+            if archive.has_uexp and archive.main_size != summary.total_header_size:
+                archive.reject_uexp_region()
+                diagnostics.append(
+                    Diagnostic(
+                        severity="warning",
+                        code="UEXP_SPLIT_GUARD_FAILED",
+                        message=(
+                            f"main file size {archive.main_size} != "
+                            f"Summary.TotalHeaderSize {summary.total_header_size}; "
+                            f".uexp not concatenated — SerialOffset would misresolve"
+                        ),
+                        stage="package.uexp_guard",
+                        recoverable=True,
                     )
+                )
 
             # Property tag format is version-gated; set the gates the same
             # way pipeline/stages.py does so UE5.0-5.2 tags don't fall into
             # the UE5.3+ FPropertyTypeName path (mirrors v1 behavior).
-            archive._file_version_ue4 = summary.file_version_ue4
-            archive._file_version_ue5 = summary.file_version_ue5
+            archive.set_property_version_gates(summary.file_version_ue4, summary.file_version_ue5)
 
             # 2. Validate name table
             if summary.name_count <= 0:
@@ -753,9 +711,6 @@ class LegacyPackageReader:
                 )
             )
             return self._build_minimal_document(None, diagnostics)
-        finally:
-            if own_archive:
-                archive.close()
 
     def _load_mappings(self, budget: ResourceBudget, diagnostics: list[Diagnostic]) -> Any | None:
         """Build the mappings provider once per document (mirrors v1 _init_parse_env).

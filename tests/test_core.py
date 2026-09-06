@@ -2435,6 +2435,49 @@ def test_schema_contract_statics():
         for name, value in expected.items():
             assert getattr(K, name) == value, f"{name} drifted: {getattr(K, name)} != {value}"
 
+    def payload_descriptor_model_matches_schema():
+        """#621: PayloadDescriptor has zero emitters today, so nothing but this gate
+        stops it drifting back out of sync with the contract it claims to mirror
+        (the old kind Literal['ubulk','uexp',...] was exactly such a drift)."""
+        import dataclasses
+        import typing
+
+        from uasset_read.models.payloads import PayloadDescriptor
+
+        spec = schema["$defs"]["PayloadDescriptor"]
+        assert spec["additionalProperties"] is False
+
+        fields = {f.name: f for f in dataclasses.fields(PayloadDescriptor)}
+        assert set(spec["properties"]) == set(fields), (
+            f"PayloadDescriptor drifted from $defs.PayloadDescriptor: "
+            f"model-only={sorted(set(fields) - set(spec['properties']))} "
+            f"schema-only={sorted(set(spec['properties']) - set(fields))}"
+        )
+
+        required = set(spec["required"])
+        for name, field in fields.items():
+            optional_in_model = (
+                field.default is not dataclasses.MISSING
+                or field.default_factory is not dataclasses.MISSING
+            )
+            assert optional_in_model == (name not in required), (
+                f"{name}: schema-required={name in required} but "
+                f"model-optional={optional_in_model}"
+            )
+
+        hints = typing.get_type_hints(PayloadDescriptor)
+        for name, prop in spec["properties"].items():
+            ann = hints[name]
+            args = typing.get_args(ann)
+            if typing.get_origin(ann) is typing.Literal:
+                assert set(args) == set(prop["enum"]), f"{name} enum drifted: {sorted(args)} != {prop['enum']}"
+            else:
+                schema_types = prop["type"] if isinstance(prop["type"], list) else [prop["type"]]
+                model_nullable = type(None) in args
+                assert model_nullable == ("null" in schema_types), (
+                    f"{name} nullability mismatch: model={ann} schema={schema_types}"
+                )
+
     _run_cases(
         [
             ("schema.test_example_validates_against_schema", test_example_validates_against_schema),
@@ -2444,6 +2487,7 @@ def test_schema_contract_statics():
                 "schema.ue4_version_constants_are_pinned_to_peer_numbering",
                 ue4_version_constants_are_pinned_to_peer_numbering,
             ),
+            ("schema.payload_descriptor_model_matches_schema", payload_descriptor_model_matches_schema),
         ]
     )
 
@@ -2769,7 +2813,7 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     bundle = open_package_bundle(str(sample))
     arc = bundle.open_archive(tolerant=True)
     try:
-        doc = LegacyPackageReader(None, tolerant=True).read(
+        doc = LegacyPackageReader(tolerant=True).read(
             archive=arc, main_path=str(sample)
         )
     finally:
@@ -2792,7 +2836,7 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     bundle0 = open_package_bundle(str(sample))
     arc0 = bundle0.open_archive(tolerant=True)
     try:
-        doc0 = LegacyPackageReader(None, tolerant=True).read(
+        doc0 = LegacyPackageReader(tolerant=True).read(
             archive=arc0, main_path=str(sample)
         )
     finally:
@@ -2813,7 +2857,7 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     bundle_ok = open_package_bundle(str(sample))
     arc_ok = bundle_ok.open_archive(tolerant=True)
     try:
-        doc_ok = LegacyPackageReader(None, tolerant=True).read(
+        doc_ok = LegacyPackageReader(tolerant=True).read(
             archive=arc_ok, main_path=str(sample)
         )
     finally:

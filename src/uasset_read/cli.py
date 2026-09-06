@@ -327,7 +327,7 @@ def _handle_clean_logs(args) -> None:
 
 
 def _handle_list_package_files(file_path: str, tolerant: bool) -> None:
-    """列出发现的 package 文件。"""
+    """List the discovered package files (main + present sidecars)."""
     from uasset_read.package import open_package_bundle
 
     try:
@@ -344,7 +344,7 @@ def _handle_list_package_files(file_path: str, tolerant: bool) -> None:
             {
                 "package_kind": bundle.package_kind,
                 "container": bundle.container,
-                "files": bundle.package_files,
+                "files": bundle.files,
             },
             indent=2,
             ensure_ascii=False,

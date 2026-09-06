@@ -186,10 +186,9 @@ def _raw_depends_map(sample: str):
         read_name_table,
         read_package_summary,
     )
-    from uasset_read.parsers.legacy_reader import _make_package_archive
-    from uasset_read.archive import FileSource
+    from uasset_read.package import open_package_bundle
 
-    archive = _make_package_archive(FileSource(SAMPLES / sample), tolerant=True)
+    archive = open_package_bundle(str(SAMPLES / sample)).open_archive(tolerant=True)
     try:
         summary = read_package_summary(archive)
         name_map = read_name_table(archive, summary)
@@ -676,14 +675,13 @@ def test_version_context_is_frozen_and_summary_derived():
     import dataclasses
 
     from uasset_read.serializers.package_summary import read_package_summary
-    from uasset_read.parsers.legacy_reader import _make_package_archive
-    from uasset_read.archive import FileSource
+    from uasset_read.package import open_package_bundle
     from uasset_read.versioning import (
         MappingInfo,
         build_version_context_from_summary,
     )
 
-    archive = _make_package_archive(FileSource(SAMPLES / "ABP_RifleAnimLayers.uasset"), tolerant=True)
+    archive = open_package_bundle(str(SAMPLES / "ABP_RifleAnimLayers.uasset")).open_archive(tolerant=True)
     try:
         summary = read_package_summary(archive)
     finally:

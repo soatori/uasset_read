@@ -8,7 +8,7 @@ from typing import Dict, Literal, Optional
 import logging
 import os
 
-from uasset_read.archive import FArchive, ArchiveLike, ByteArchive
+from uasset_read.archive import FArchive, ArchiveLike
 from uasset_read.exceptions import ParseError
 from uasset_read.memory_safety import ResourceBudget
 from uasset_read.models.document import PackageDocument
@@ -34,14 +34,14 @@ class PackageArchive(FArchive):
         self._uexp_archive = uexp_archive
         try:
             self._main_size = main_archive.total_size()
-            self._uexp_size = uexp_archive.total_size() if uexp_archive else 0
+            uexp_size = uexp_archive.total_size() if uexp_archive else 0
         except Exception:
             # Close all opened archives on initialization failure (#464)
             if uexp_archive is not None:
                 uexp_archive.close()
             main_archive.close()
             raise
-        self._file_size = self._main_size + self._uexp_size
+        self._file_size = self._main_size + uexp_size
         self._pos = 0
 
     def read(self, size: int) -> bytes:
@@ -103,6 +103,39 @@ class PackageArchive(FArchive):
     def total_size(self) -> int:
         return self._file_size
 
+    @property
+    def main_size(self) -> int:
+        """Byte length of the main (.uasset/.umap) segment."""
+        return self._main_size
+
+    @property
+    def has_uexp(self) -> bool:
+        """Whether a .uexp segment is currently spliced into the address space."""
+        return self._uexp_archive is not None
+
+    def reject_uexp_region(self) -> None:
+        """Detach the .uexp segment and shrink the address space to the main file.
+
+        Call this when the UE split-file invariant does not hold, so that an
+        export ``SerialOffset`` cannot silently resolve into the wrong bytes.
+        Idempotent; safe to call when no .uexp is present.
+
+        UE basis: ``SavePackage2.cpp:3767`` rebases ``Export.SerialOffset +=
+        Summary.TotalHeaderSize`` and ``FilePackageWriterUtil.cpp:164-176``
+        writes .uexp from that offset, so the splice is only address-correct when
+        the main file is exactly ``TotalHeaderSize`` bytes long
+        (``AsyncLoading.cpp:605-611`` uses the same condition to auto-detect).
+        """
+        if self._uexp_archive is not None:
+            self._uexp_archive.close()
+            self._uexp_archive = None
+        self._file_size = self._main_size
+
+    def set_property_version_gates(self, ue4: int, ue5: int) -> None:
+        """Publish the file versions that gate FProperty tag decoding downstream."""
+        self._file_version_ue4 = ue4
+        self._file_version_ue5 = ue5
+
     def get_mmap_info(self) -> Dict:
         getter = getattr(self._main_archive, "get_mmap_info", None)
         main_info = getter() if getter is not None else {}
@@ -111,27 +144,19 @@ class PackageArchive(FArchive):
 
 @dataclass
 class PackageBundle:
-    """A discovered package plus sidecar payloads."""
+    """A discovered package plus its sidecar files."""
 
     main_path: str
     package_kind: str
     container: str = "filesystem"
     files: Dict[str, str] = field(default_factory=dict)
-    payloads: Dict[str, bytes] = field(default_factory=dict)
     provider: Optional["FileSystemPackageProvider"] = None
-
-    @property
-    def package_files(self) -> Dict[str, str]:
-        out = dict(self.files)
-        for ext in self.payloads:
-            out.setdefault(ext, f"<{self.container}:{Path(self.main_path).with_suffix(ext).name}>")
-        return out
 
     def open_archive(self, tolerant: bool = False) -> PackageArchive:
         main_ext = ".umap" if self.package_kind == "map" else ".uasset"
         main = self._open_archive_for(main_ext, tolerant)
         try:
-            uexp = self._open_archive_for(".uexp", tolerant) if ".uexp" in self.package_files else None
+            uexp = self._open_archive_for(".uexp", tolerant) if ".uexp" in self.files else None
         except Exception:
             main.close()
             raise
@@ -139,8 +164,6 @@ class PackageBundle:
 
     def _open_archive_for(self, extension: str, tolerant: bool) -> ArchiveLike:
         extension = _normalize_ext(extension)
-        if extension in self.payloads:
-            return ByteArchive(self.payloads[extension], tolerant=tolerant, name=self.package_files[extension])
         path = self.files.get(extension)
         if path is None:
             raise ParseError(f"Package sidecar not found: {extension}")
@@ -241,7 +264,6 @@ def parse_package_document(
     archive = bundle.open_archive(tolerant=tolerant)
     try:
         reader = LegacyPackageReader(
-            source=None,
             tolerant=tolerant,
             mappings_path=mappings_path,
             game=game,

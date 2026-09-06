@@ -320,8 +320,8 @@
         },
         "offset": { "type": "integer", "minimum": 0 },
         "stored_size": { "type": "integer", "minimum": 0 },
-        "logical_size": { "type": "integer", "minimum": 0 },
-        "compression": { "type": "string" },
+        "logical_size": { "type": ["integer", "null"], "minimum": 0 },
+        "compression": { "type": ["string", "null"] },
         "status": {
           "type": "string",
           "enum": ["available", "external", "missing", "unsupported"]

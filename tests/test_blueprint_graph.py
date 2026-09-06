@@ -13,15 +13,13 @@ SAMPLES = Path(__file__).parent / "samples"
 
 def _graphs_for(sample: str) -> list[dict]:
     """Open a fixture the way v2's decode pass does and return plain graph dicts."""
-    from uasset_read.archive import FileSource
-    from uasset_read.parsers.legacy_reader import _make_package_archive
+    from uasset_read.package import open_package_bundle
     from uasset_read.serializers.package_summary import read_package_summary, read_name_table
     from uasset_read.serializers.object_resources import read_export_map, read_import_map
     from uasset_read.serializers.blueprint_graph import read_blueprint_graphs
 
-    src = FileSource(SAMPLES / sample)
+    archive = open_package_bundle(str(SAMPLES / sample)).open_archive(tolerant=True)
     try:
-        archive = _make_package_archive(src, tolerant=True)
         summary = read_package_summary(archive)
         name_map = read_name_table(archive, summary)
         archive.set_name_map(name_map)
@@ -29,7 +27,7 @@ def _graphs_for(sample: str) -> list[dict]:
         export_map = read_export_map(archive, summary, name_map)
         return read_blueprint_graphs(archive, summary, name_map, import_map, export_map)
     finally:
-        src.close()
+        archive.close()
 
 
 def test_stackobot_graphs_convert_with_pins_and_links():
