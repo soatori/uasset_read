@@ -143,7 +143,6 @@ class PackageBundle:
     package_kind: str
     container: str = "filesystem"
     files: Dict[str, str] = field(default_factory=dict)
-    provider: Optional["FileSystemPackageProvider"] = None
 
     @cached_property
     def uexp_path(self) -> Optional[Path]:
@@ -233,21 +232,12 @@ class FileSystemPackageProvider:
             package_kind=package_kind,
             container=self.container,
             files=files,
-            provider=self,
         )
 
 
-def open_package_bundle(
-    path: str,
-    provider: Optional["FileSystemPackageProvider"] = None,
-    tolerant: bool = False,
-    budget: ResourceBudget | None = None,
-) -> PackageBundle:
-    """Discover a package bundle from a filesystem path or provider path."""
-
-    if provider is not None:
-        return provider.open_package_bundle(path, tolerant=tolerant, budget=budget)
-    return FileSystemPackageProvider().open_package_bundle(path, tolerant=tolerant, budget=budget)
+def open_package_bundle(path: str, tolerant: bool = False) -> PackageBundle:
+    """Discover a package bundle from a filesystem path."""
+    return FileSystemPackageProvider().open_package_bundle(path, tolerant=tolerant)
 
 
 def _normalize_ext(extension: str) -> str:
