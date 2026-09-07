@@ -25,9 +25,7 @@ class EX_StructConst(KismetExpression):
     StructSize: int = 0
     Properties: list[KismetExpression] = field(default_factory=list)
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_StructConst
+    Token = EExprToken.EX_StructConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_StructConst:
@@ -48,9 +46,7 @@ class EX_StructConst(KismetExpression):
 class EX_EndStructConst(KismetExpression):
     """End of UStruct constant (EX_EndStructConst, 0x30)."""
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_EndStructConst
+    Token = EExprToken.EX_EndStructConst
 
 
 @dataclass
@@ -59,9 +55,7 @@ class EX_PropertyConst(KismetExpression):
 
     Property: Optional[FKismetPropertyPointer] = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_PropertyConst
+    Token = EExprToken.EX_PropertyConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_PropertyConst:
@@ -83,9 +77,7 @@ class EX_BitFieldConst(KismetExpression):
     InnerProperty: Optional[FKismetPropertyPointer] = None
     ConstValue: int = 0
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_BitFieldConst
+    Token = EExprToken.EX_BitFieldConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_BitFieldConst:

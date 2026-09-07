@@ -27,9 +27,7 @@ class EX_Jump(KismetExpression):
 
     CodeOffset: int = 0
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_Jump
+    Token = EExprToken.EX_Jump
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Jump:
@@ -48,9 +46,7 @@ class EX_JumpIfNot(EX_Jump):
 
     BooleanExpression: KismetExpression | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_JumpIfNot
+    Token = EExprToken.EX_JumpIfNot
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_JumpIfNot:
@@ -70,9 +66,7 @@ class EX_Skip(EX_Jump):
 
     SkipExpression: KismetExpression | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_Skip
+    Token = EExprToken.EX_Skip
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Skip:
@@ -92,9 +86,7 @@ class EX_ComputedJump(KismetExpression):
 
     CodeOffsetExpression: KismetExpression | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_ComputedJump
+    Token = EExprToken.EX_ComputedJump
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ComputedJump:
@@ -113,9 +105,7 @@ class EX_PushExecutionFlow(KismetExpression):
 
     PushingAddress: int = 0
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_PushExecutionFlow
+    Token = EExprToken.EX_PushExecutionFlow
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_PushExecutionFlow:
@@ -138,9 +128,7 @@ class EX_PopExecutionFlowIfNot(KismetExpression):
 
     BooleanExpression: KismetExpression | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_PopExecutionFlowIfNot
+    Token = EExprToken.EX_PopExecutionFlowIfNot
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_PopExecutionFlowIfNot:
@@ -161,9 +149,7 @@ EX_EndOfScript = make_simple_expression(EExprToken.EX_EndOfScript)
 class EX_SkipOffsetConst(KismetExpressionT):
     """Skip offset constant."""
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_SkipOffsetConst
+    Token = EExprToken.EX_SkipOffsetConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SkipOffsetConst:

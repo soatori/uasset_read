@@ -45,9 +45,7 @@ class EX_Let(KismetExpression):
     Variable: KismetExpression | None = None
     Assignment: KismetExpression | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_Let
+    Token = EExprToken.EX_Let
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Let:
@@ -81,9 +79,7 @@ class EX_LetValueOnPersistentFrame(KismetExpression):
     DestinationProperty: FKismetPropertyPointer | None = None
     AssignmentExpression: KismetExpression | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_LetValueOnPersistentFrame
+    Token = EExprToken.EX_LetValueOnPersistentFrame
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_LetValueOnPersistentFrame:

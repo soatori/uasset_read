@@ -18,9 +18,7 @@ class EX_SetArray(KismetExpression):
     ArrayInnerProp: Optional[FKismetPropertyPointer] = None
     Elements: list[KismetExpression] | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_SetArray
+    Token = EExprToken.EX_SetArray
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetArray:
@@ -41,9 +39,7 @@ class EX_SetMap(KismetExpression):
     Num: int = 0
     Elements: list[KismetExpression] | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_SetMap
+    Token = EExprToken.EX_SetMap
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetMap:
@@ -63,9 +59,7 @@ class EX_SetSet(KismetExpression):
     Num: int = 0
     Elements: list[KismetExpression] | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_SetSet
+    Token = EExprToken.EX_SetSet
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetSet:
@@ -85,9 +79,7 @@ class EX_ArrayConst(KismetExpression):
     Num: int = 0
     Elements: list[KismetExpression] | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_ArrayConst
+    Token = EExprToken.EX_ArrayConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ArrayConst:
@@ -110,9 +102,7 @@ class EX_MapConst(KismetExpression):
     Num: int = 0
     Elements: list[KismetExpression] | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_MapConst
+    Token = EExprToken.EX_MapConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_MapConst:
@@ -140,9 +130,7 @@ class EX_SetConst(KismetExpression):
     Num: int = 0
     Elements: list[KismetExpression] | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_SetConst
+    Token = EExprToken.EX_SetConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetConst:
@@ -163,9 +151,7 @@ class EX_ArrayGetByRef(KismetExpression):
     ArrayVariable: KismetExpression | None = None
     ArrayIndex: KismetExpression | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_ArrayGetByRef
+    Token = EExprToken.EX_ArrayGetByRef
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ArrayGetByRef:

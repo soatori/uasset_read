@@ -26,9 +26,7 @@ class EX_AutoRtfmTransact(KismetExpression):
     CodeOffset: int = 0
     Parameters: list[KismetExpression] | None = None
 
-    @property
-    def Token(self):
-        return EExprToken.EX_AutoRtfmTransact
+    Token = EExprToken.EX_AutoRtfmTransact
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_AutoRtfmTransact:
@@ -45,9 +43,7 @@ class EX_AutoRtfmStopTransact(KismetExpression):
     Id: int = 0
     Mode: EAutoRtfmStopTransactMode = EAutoRtfmStopTransactMode.Commit
 
-    @property
-    def Token(self):
-        return EExprToken.EX_AutoRtfmStopTransact
+    Token = EExprToken.EX_AutoRtfmStopTransact
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_AutoRtfmStopTransact:
@@ -62,9 +58,7 @@ class EX_AutoRtfmAbortIfNot(KismetExpression):
 
     BoolExpression: KismetExpression | None = None
 
-    @property
-    def Token(self):
-        return EExprToken.EX_AutoRtfmAbortIfNot
+    Token = EExprToken.EX_AutoRtfmAbortIfNot
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_AutoRtfmAbortIfNot:

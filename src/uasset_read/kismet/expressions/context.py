@@ -17,9 +17,7 @@ class EX_Context(KismetExpression):
     RValuePointer: FKismetPropertyPointer | None = None
     ContextExpression: KismetExpression | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_Context
+    Token = EExprToken.EX_Context
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Context:
@@ -41,9 +39,7 @@ EX_ClassContext = make_token_subclass(EX_Context, EExprToken.EX_ClassContext)
 class EX_InterfaceContext(KismetExpression):
     InterfaceValue: KismetExpression | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_InterfaceContext
+    Token = EExprToken.EX_InterfaceContext
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_InterfaceContext:
@@ -56,9 +52,7 @@ class EX_StructMemberContext(KismetExpression):
     Property: FKismetPropertyPointer | None = None
     StructExpression: KismetExpression | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_StructMemberContext
+    Token = EExprToken.EX_StructMemberContext
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_StructMemberContext:

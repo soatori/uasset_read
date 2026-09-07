@@ -157,6 +157,17 @@ _LWC_FLOAT_TYPE_TO_BASE: Dict[str, str] = {
     "Vector2f": "Vector2D",
 }
 
+# Pure f32/f64 structs on the fast path: name -> field keys, serialization order.
+# double-size = 8 * len(keys); any other tag.size reads as f32 (current behavior).
+_FLAT_FLOAT_STRUCTS: Dict[str, Tuple[str, ...]] = {
+    "Vector": ("X", "Y", "Z"),
+    "Rotator": ("Pitch", "Yaw", "Roll"),
+    "Vector2D": ("X", "Y"),
+    "Vector4": ("X", "Y", "Z", "W"),
+    "Quat": ("X", "Y", "Z", "W"),
+    "Plane": ("X", "Y", "Z", "W"),
+}
+
 
 def get_struct_size(
     struct_type: str,
@@ -662,24 +673,10 @@ def _try_fast_path_struct(
     name_map: List[str],
 ) -> Optional[StructValue]:
     """Try fast-path parsing for simple structs (no PropertyTag loop). Returns None if no match."""
-    if struct_type == "Vector":
-        reader = archive.read_f64 if tag.size == 24 else archive.read_f32
-        return StructValue(struct_type="Vector", fields={"X": reader(), "Y": reader(), "Z": reader()})
-
-    if struct_type == "Rotator":
-        reader = archive.read_f64 if tag.size == 24 else archive.read_f32
-        return StructValue(struct_type="Rotator", fields={"Pitch": reader(), "Yaw": reader(), "Roll": reader()})
-
-    if struct_type == "Vector2D":
-        reader = archive.read_f64 if tag.size == 16 else archive.read_f32
-        return StructValue(struct_type="Vector2D", fields={"X": reader(), "Y": reader()})
-
-    if struct_type == "Vector4":
-        if tag.size == 32:
-            x, y, z, w = archive.read_f64(), archive.read_f64(), archive.read_f64(), archive.read_f64()
-        else:
-            x, y, z, w = archive.read_f32(), archive.read_f32(), archive.read_f32(), archive.read_f32()
-        return StructValue(struct_type="Vector4", fields={"X": x, "Y": y, "Z": z, "W": w})
+    keys = _FLAT_FLOAT_STRUCTS.get(struct_type)
+    if keys:
+        reader = archive.read_f64 if tag.size == 8 * len(keys) else archive.read_f32
+        return StructValue(struct_type=struct_type, fields={k: reader() for k in keys})
 
     if struct_type == "LinearColor":
         return StructValue(
@@ -700,30 +697,6 @@ def _try_fast_path_struct(
                 "G": archive.read_u8(),
                 "R": archive.read_u8(),
                 "A": archive.read_u8(),
-            },
-        )
-
-    if struct_type == "Quat":
-        reader = archive.read_f64 if tag.size == 32 else archive.read_f32
-        return StructValue(
-            struct_type="Quat",
-            fields={
-                "X": reader(),
-                "Y": reader(),
-                "Z": reader(),
-                "W": reader(),
-            },
-        )
-
-    if struct_type == "Plane":
-        reader = archive.read_f64 if tag.size == 32 else archive.read_f32
-        return StructValue(
-            struct_type="Plane",
-            fields={
-                "X": reader(),
-                "Y": reader(),
-                "Z": reader(),
-                "W": reader(),
             },
         )
 

@@ -25,9 +25,7 @@ class EX_AddMulticastDelegate(KismetExpression):
     Delegate: Optional[KismetExpression] = None
     DelegateToAdd: Optional[KismetExpression] = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_AddMulticastDelegate
+    Token = EExprToken.EX_AddMulticastDelegate
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_AddMulticastDelegate:
@@ -48,9 +46,7 @@ class EX_ClearMulticastDelegate(KismetExpression):
 
     DelegateToClear: Optional[KismetExpression] = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_ClearMulticastDelegate
+    Token = EExprToken.EX_ClearMulticastDelegate
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ClearMulticastDelegate:
@@ -72,9 +68,7 @@ class EX_BindDelegate(KismetExpression):
     Delegate: Optional[KismetExpression] = None
     ObjectTerm: Optional[KismetExpression] = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_BindDelegate
+    Token = EExprToken.EX_BindDelegate
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_BindDelegate:
@@ -103,9 +97,7 @@ class EX_RemoveMulticastDelegate(KismetExpression):
     Delegate: Optional[KismetExpression] = None
     DelegateToRemove: Optional[KismetExpression] = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_RemoveMulticastDelegate
+    Token = EExprToken.EX_RemoveMulticastDelegate
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_RemoveMulticastDelegate:
@@ -127,9 +119,7 @@ class EX_InstanceDelegate(KismetExpression):
     FunctionName: str = ""
     FunctionNameRef: FNameRef | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_InstanceDelegate
+    Token = EExprToken.EX_InstanceDelegate
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_InstanceDelegate:

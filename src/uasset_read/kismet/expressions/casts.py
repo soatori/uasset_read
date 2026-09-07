@@ -39,9 +39,7 @@ class EX_Cast(KismetExpression):
     ConversionType: ECastToken = ECastToken.CST_ObjectToInterface
     Target: Optional[KismetExpression] = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_Cast
+    Token = EExprToken.EX_Cast
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Cast:

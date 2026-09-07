@@ -6,9 +6,9 @@ KismetExpressionT subclass, and the class factories used to define
 token-only expression classes.
 """
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 from uasset_read.kismet.tokens import EExprToken
 
@@ -18,19 +18,14 @@ class KismetExpression(ABC):
     Kismet bytecode expression abstract base class.
 
     All EX_* instruction parse results inherit from this class.
-    Subclasses must implement the Token property and define a from_archive classmethod.
+    Subclasses must define a Token class attribute and a from_archive classmethod.
     """
 
     StatementIndex: int
+    Token: ClassVar[EExprToken]
 
     def __init__(self, statement_index: int = 0) -> None:
         self.StatementIndex = statement_index
-
-    @property
-    @abstractmethod
-    def Token(self) -> EExprToken:
-        """Return the EExprToken value corresponding to this expression."""
-        ...
 
     def to_dict(self) -> dict:
         """Serialize to dictionary format (for JSON output)."""
@@ -73,9 +68,7 @@ def make_simple_expression(token: EExprToken):
 
     @dataclass
     class _SimpleExpr(KismetExpression):
-        @property
-        def Token(self) -> EExprToken:
-            return token
+        Token = token
 
     _SimpleExpr.__name__ = token.name
     _SimpleExpr.__qualname__ = token.name
@@ -94,9 +87,7 @@ def make_value_expression(token: EExprToken, read_func_name: str):
 
     @dataclass
     class _ValueExpr(KismetExpressionT):
-        @property
-        def Token(self) -> EExprToken:
-            return token
+        Token = token
 
         @classmethod
         def from_archive(cls, archive, name_map):
@@ -117,9 +108,7 @@ def make_token_subclass(base: type, token: EExprToken):
 
     @dataclass
     class _TokenExpr(base):  # type: ignore[misc,valid-type]
-        @property
-        def Token(self) -> EExprToken:
-            return token
+        Token = token
 
     _TokenExpr.__name__ = token.name
     _TokenExpr.__qualname__ = token.name

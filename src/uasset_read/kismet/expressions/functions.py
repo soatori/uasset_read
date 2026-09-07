@@ -30,9 +30,7 @@ class EX_FinalFunction(KismetExpression):
     StackNode: int = 0
     Parameters: list[KismetExpression] = field(default_factory=list)
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_FinalFunction
+    Token = EExprToken.EX_FinalFunction
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_FinalFunction:
@@ -60,9 +58,7 @@ class EX_VirtualFunction(KismetExpression):
     VirtualFunctionNameRef: FNameRef | None = None
     Parameters: list[KismetExpression] = field(default_factory=list)
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_VirtualFunction
+    Token = EExprToken.EX_VirtualFunction
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_VirtualFunction:
@@ -97,9 +93,7 @@ class EX_CallMulticastDelegate(KismetExpression):
     Delegate: Optional[KismetExpression] = None
     Parameters: list[KismetExpression] = field(default_factory=list)
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_CallMulticastDelegate
+    Token = EExprToken.EX_CallMulticastDelegate
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_CallMulticastDelegate:

@@ -18,9 +18,7 @@ if TYPE_CHECKING:
 class EX_StringConst(KismetExpressionT):
     """String constant expression (EX_StringConst, 0x1F)."""
 
-    @property
-    def Token(self):
-        return EExprToken.EX_StringConst
+    Token = EExprToken.EX_StringConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_StringConst:
@@ -32,9 +30,7 @@ class EX_StringConst(KismetExpressionT):
 class EX_UnicodeStringConst(KismetExpressionT):
     """Unicode string constant expression (EX_UnicodeStringConst, 0x34)."""
 
-    @property
-    def Token(self):
-        return EExprToken.EX_UnicodeStringConst
+    Token = EExprToken.EX_UnicodeStringConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_UnicodeStringConst:
@@ -109,9 +105,7 @@ class EX_TextConst(KismetExpression):
 
     Text: FScriptText | None = None  # type: ignore[assignment]
 
-    @property
-    def Token(self):
-        return EExprToken.EX_TextConst
+    Token = EExprToken.EX_TextConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_TextConst:
@@ -137,9 +131,7 @@ class EX_SoftObjectConst(KismetExpression):
 
     SoftObject: KismetExpression | None = None  # type: ignore[assignment]
 
-    @property
-    def Token(self):
-        return EExprToken.EX_SoftObjectConst
+    Token = EExprToken.EX_SoftObjectConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SoftObjectConst:

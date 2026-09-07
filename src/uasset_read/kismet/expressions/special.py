@@ -45,9 +45,7 @@ class EX_Return(KismetExpression):
 
     ReturnExpression: KismetExpression | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_Return
+    Token = EExprToken.EX_Return
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Return:
@@ -63,9 +61,7 @@ class EX_Assert(KismetExpression):
     DebugMode: bool = False
     AssertExpression: KismetExpression | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_Assert
+    Token = EExprToken.EX_Assert
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Assert:
@@ -82,9 +78,7 @@ class EX_NothingInt32(KismetExpressionT):
 
     Value: int = 0
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_NothingInt32
+    Token = EExprToken.EX_NothingInt32
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_NothingInt32:
@@ -100,9 +94,7 @@ class EX_SwitchValue(KismetExpression):
     Cases: list[FKismetSwitchCase] | None = None
     DefaultTerm: KismetExpression | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_SwitchValue
+    Token = EExprToken.EX_SwitchValue
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SwitchValue:
@@ -125,9 +117,7 @@ class EX_InstrumentationEvent(KismetExpression):
     EventName: Optional[str] = None
     EventNameRef: Optional[FNameRef] = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_InstrumentationEvent
+    Token = EExprToken.EX_InstrumentationEvent
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_InstrumentationEvent:
@@ -154,9 +144,7 @@ class EX_FieldPathConst(KismetExpression):
 
     Value: KismetExpression | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_FieldPathConst
+    Token = EExprToken.EX_FieldPathConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_FieldPathConst:
@@ -171,9 +159,7 @@ class EX_ObjectConst(KismetExpressionT):
     Value: int = 0
     ObjectRef: PackageIndex | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_ObjectConst
+    Token = EExprToken.EX_ObjectConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ObjectConst:
@@ -188,9 +174,7 @@ class EX_NameConst(KismetExpressionT):
     Value: str = ""
     NameRef: FNameRef | None = None
 
-    @property
-    def Token(self) -> EExprToken:
-        return EExprToken.EX_NameConst
+    Token = EExprToken.EX_NameConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_NameConst:

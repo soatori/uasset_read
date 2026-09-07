@@ -13,6 +13,32 @@ Provides:
 import logging
 from typing import TYPE_CHECKING, Any
 
+from uasset_read.kismet.expressions import (
+    EX_AddMulticastDelegate, EX_ArrayConst, EX_ArrayGetByRef, EX_Assert,
+    EX_AutoRtfmAbortIfNot, EX_AutoRtfmStopTransact, EX_AutoRtfmTransact,
+    EX_BindDelegate, EX_BitFieldConst, EX_Breakpoint, EX_ByteConst, EX_CallMath,
+    EX_CallMulticastDelegate, EX_Cast, EX_ClassContext, EX_ClassSparseDataVariable,
+    EX_ClearMulticastDelegate, EX_ComputedJump, EX_Context, EX_Context_FailSilent,
+    EX_CrossInterfaceCast, EX_DefaultVariable, EX_DeprecatedOp4A, EX_DoubleConst,
+    EX_DynamicCast, EX_EndArray, EX_EndArrayConst, EX_EndFunctionParms, EX_EndMap,
+    EX_EndMapConst, EX_EndOfScript, EX_EndParmValue, EX_EndSet, EX_EndSetConst,
+    EX_EndStructConst, EX_False, EX_FieldPathConst, EX_FinalFunction, EX_FloatConst,
+    EX_InstanceDelegate, EX_InstanceVariable, EX_InstrumentationEvent, EX_Int64Const,
+    EX_IntConst, EX_IntConstByte, EX_IntOne, EX_IntZero, EX_InterfaceContext,
+    EX_InterfaceToObjCast, EX_Jump, EX_JumpIfNot, EX_Let, EX_LetBase, EX_LetBool,
+    EX_LetDelegate, EX_LetMulticastDelegate, EX_LetObj, EX_LetValueOnPersistentFrame,
+    EX_LetWeakObjPtr, EX_LocalFinalFunction, EX_LocalOutVariable, EX_LocalVariable,
+    EX_LocalVirtualFunction, EX_MapConst, EX_MetaCast, EX_NameConst, EX_NoInterface,
+    EX_NoObject, EX_Nothing, EX_NothingInt32, EX_ObjToInterfaceCast, EX_ObjectConst,
+    EX_PopExecutionFlow, EX_PopExecutionFlowIfNot, EX_PropertyConst,
+    EX_PushExecutionFlow, EX_RemoveMulticastDelegate, EX_Return, EX_RotationConst,
+    EX_Self, EX_SetArray, EX_SetConst, EX_SetMap, EX_SetSet, EX_Skip,
+    EX_SkipOffsetConst, EX_SoftObjectConst, EX_StringConst, EX_StructConst,
+    EX_StructMemberContext, EX_SwitchValue, EX_TextConst, EX_Tracepoint,
+    EX_TransformConst, EX_True, EX_UInt64Const, EX_UnicodeStringConst,
+    EX_Vector3fConst, EX_VectorConst, EX_VirtualFunction, EX_WireTracepoint,
+)
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -528,13 +554,6 @@ class KismetTranslator:
         _index: int | None,
     ) -> str | None:
         """Variable references: Local / Instance / Default / LocalOut / SparseData."""
-        from uasset_read.kismet.expressions import (
-            EX_LocalVariable,
-            EX_InstanceVariable,
-            EX_DefaultVariable,
-            EX_LocalOutVariable,
-            EX_ClassSparseDataVariable,
-        )
 
         if isinstance(
             expr,
@@ -561,29 +580,6 @@ class KismetTranslator:
         _index: int | None,
     ) -> str | None:
         """Literals: Int / Float / Byte / Bool / String / Object / Name / Vector."""
-        from uasset_read.kismet.expressions import (
-            EX_IntConst,
-            EX_FloatConst,
-            EX_ByteConst,
-            EX_IntConstByte,
-            EX_Int64Const,
-            EX_UInt64Const,
-            EX_DoubleConst,
-            EX_IntZero,
-            EX_IntOne,
-            EX_True,
-            EX_False,
-            EX_StringConst,
-            EX_UnicodeStringConst,
-            EX_TextConst,
-            EX_SoftObjectConst,
-            EX_VectorConst,
-            EX_RotationConst,
-            EX_TransformConst,
-            EX_Vector3fConst,
-            EX_ObjectConst,
-            EX_NameConst,
-        )
 
         # --- Integer literals ---
         if isinstance(expr, EX_IntConst):
@@ -670,27 +666,6 @@ class KismetTranslator:
         _index: int | None,
     ) -> str | None:
         """Special keywords: Self / Nothing / EndOfScript / RTFM."""
-        from uasset_read.kismet.expressions import (
-            EX_Self,
-            EX_NoObject,
-            EX_NoInterface,
-            EX_Nothing,
-            EX_NothingInt32,
-            EX_EndOfScript,
-            EX_EndFunctionParms,
-            EX_EndParmValue,
-            EX_EndArray,
-            EX_EndArrayConst,
-            EX_EndMap,
-            EX_EndMapConst,
-            EX_EndSet,
-            EX_EndSetConst,
-            EX_EndStructConst,
-            EX_PushExecutionFlow,
-            EX_AutoRtfmTransact,
-            EX_AutoRtfmStopTransact,
-            EX_AutoRtfmAbortIfNot,
-        )
 
         if isinstance(expr, EX_Self):
             return "this"
@@ -730,7 +705,6 @@ class KismetTranslator:
         _index: int | None,
     ) -> str | None:
         """EX_Return."""
-        from uasset_read.kismet.expressions import EX_Return, EX_Nothing, EX_NothingInt32
 
         if isinstance(expr, EX_Return):
             ret_expr = expr.ReturnExpression if hasattr(expr, "ReturnExpression") else getattr(expr, "Value", None)
@@ -747,15 +721,6 @@ class KismetTranslator:
         index: int | None,
     ) -> str | None:
         """Jump / execution flow control: JumpIfNot / Jump / ComputedJump / Skip / Pop."""
-        from uasset_read.kismet.expressions import (
-            EX_Jump,
-            EX_JumpIfNot,
-            EX_Skip,
-            EX_ComputedJump,
-            EX_SkipOffsetConst,
-            EX_PopExecutionFlow,
-            EX_PopExecutionFlowIfNot,
-        )
 
         if isinstance(expr, EX_JumpIfNot):
             cond = (
@@ -809,14 +774,6 @@ class KismetTranslator:
         _index: int | None,
     ) -> str | None:
         """Type conversion: Cast / MetaCast / DynamicCast, etc."""
-        from uasset_read.kismet.expressions import (
-            EX_Cast,
-            EX_MetaCast,
-            EX_DynamicCast,
-            EX_ObjToInterfaceCast,
-            EX_CrossInterfaceCast,
-            EX_InterfaceToObjCast,
-        )
 
         if isinstance(expr, EX_Cast):
             cast_target = expr.Target
@@ -862,13 +819,6 @@ class KismetTranslator:
         _index: int | None,
     ) -> str | None:
         """Context expressions: Context / ClassContext / InterfaceContext / StructMemberContext."""
-        from uasset_read.kismet.expressions import (
-            EX_Context,
-            EX_Context_FailSilent,
-            EX_ClassContext,
-            EX_InterfaceContext,
-            EX_StructMemberContext,
-        )
 
         if isinstance(expr, (EX_Context, EX_Context_FailSilent)):
             obj = (
@@ -918,16 +868,6 @@ class KismetTranslator:
         _index: int | None,
     ) -> str | None:
         """Assignment: Let / LetBool / LetObj / LetValueOnPersistentFrame, etc."""
-        from uasset_read.kismet.expressions import (
-            EX_Let,
-            EX_LetBase,
-            EX_LetBool,
-            EX_LetDelegate,
-            EX_LetObj,
-            EX_LetWeakObjPtr,
-            EX_LetMulticastDelegate,
-            EX_LetValueOnPersistentFrame,
-        )
 
         if isinstance(
             expr,
@@ -961,15 +901,6 @@ class KismetTranslator:
         _index: int | None,
     ) -> str | None:
         """Function calls: FinalFunction / CallMath / VirtualFunction / CallMulticastDelegate."""
-        from uasset_read.kismet.expressions import (
-            EX_FinalFunction,
-            EX_CallMath,
-            EX_LocalFinalFunction,
-            EX_VirtualFunction,
-            EX_LocalVirtualFunction,
-            EX_CallMulticastDelegate,
-            EX_InstanceDelegate,
-        )
 
         if isinstance(expr, (EX_FinalFunction, EX_CallMath)):
             params_list = []
@@ -1017,15 +948,6 @@ class KismetTranslator:
         _index: int | None,
     ) -> str | None:
         """Containers: SetArray / ArrayConst / SetMap / MapConst / SetSet / SetConst / ArrayGetByRef."""
-        from uasset_read.kismet.expressions import (
-            EX_SetArray,
-            EX_ArrayConst,
-            EX_SetMap,
-            EX_MapConst,
-            EX_SetSet,
-            EX_SetConst,
-            EX_ArrayGetByRef,
-        )
 
         if isinstance(expr, EX_SetArray):
             var = (
@@ -1069,7 +991,6 @@ class KismetTranslator:
         _index: int | None,
     ) -> str | None:
         """Struct constants / bit fields / property constants."""
-        from uasset_read.kismet.expressions import EX_StructConst, EX_BitFieldConst, EX_PropertyConst
 
         if isinstance(expr, EX_StructConst):
             struct_name = str(getattr(expr.Struct, "Name", "Struct"))
@@ -1087,14 +1008,6 @@ class KismetTranslator:
         _index: int | None,
     ) -> str | None:
         """Delegate operations: Add / Clear / Bind / Remove multicast delegate."""
-        from uasset_read.kismet.expressions import (
-            EX_AddMulticastDelegate,
-            EX_ClearMulticastDelegate,
-            EX_BindDelegate,
-            EX_RemoveMulticastDelegate,
-            EX_Context,
-            EX_Context_FailSilent,
-        )
 
         if isinstance(expr, EX_AddMulticastDelegate):
             delegate = self.line_cpp(expr.Delegate) if hasattr(expr, "Delegate") and expr.Delegate else "?"
@@ -1135,16 +1048,6 @@ class KismetTranslator:
         _index: int | None,
     ) -> str | None:
         """SwitchValue / Assert / Deprecated / Breakpoint / FieldPath."""
-        from uasset_read.kismet.expressions import (
-            EX_SwitchValue,
-            EX_Assert,
-            EX_DeprecatedOp4A,
-            EX_Breakpoint,
-            EX_Tracepoint,
-            EX_WireTracepoint,
-            EX_InstrumentationEvent,
-            EX_FieldPathConst,
-        )
 
         if isinstance(expr, EX_SwitchValue):
             idx_term = expr.IndexTerm

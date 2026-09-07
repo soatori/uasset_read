@@ -34,9 +34,7 @@ class EX_VectorConst(KismetExpression):
     Y: float = 0.0
     Z: float = 0.0
 
-    @property
-    def Token(self):
-        return EExprToken.EX_VectorConst
+    Token = EExprToken.EX_VectorConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_VectorConst:
@@ -67,9 +65,7 @@ class EX_RotationConst(KismetExpression):
     Yaw: float = 0.0
     Roll: float = 0.0
 
-    @property
-    def Token(self):
-        return EExprToken.EX_RotationConst
+    Token = EExprToken.EX_RotationConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_RotationConst:
@@ -109,9 +105,7 @@ class EX_TransformConst(KismetExpression):
     SY: float = 1.0
     SZ: float = 1.0
 
-    @property
-    def Token(self):
-        return EExprToken.EX_TransformConst
+    Token = EExprToken.EX_TransformConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_TransformConst:
@@ -151,9 +145,7 @@ class EX_Vector3fConst(KismetExpression):
     Y: float = 0.0
     Z: float = 0.0
 
-    @property
-    def Token(self):
-        return EExprToken.EX_Vector3fConst
+    Token = EExprToken.EX_Vector3fConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Vector3fConst:
