@@ -44,36 +44,25 @@ class OffsetRangeDiagnostic:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-compatible dict. None-valued fields are omitted."""
-        d: dict[str, Any] = {
-            "kind": self.kind,
-            "severity": self.severity.value,
-        }
-        # String fields: output when non-empty
-        for str_field in (
-            "asset_path",
-            "asset_type",
-            "module",
-            "object_name",
-            "field",
-            "source",
-            "error",
-            "fallback_result",
-        ):
-            val = getattr(self, str_field)
-            if val:
-                d[str_field] = val
-        # Integer fields: always output (including 0)
-        for int_field in ("current_pos", "target_offset", "read_size", "file_size"):
-            d[int_field] = getattr(self, int_field)
-        # Optional integer fields: output when not None
-        for opt_field in ("export_index", "import_index", "range_start", "range_end"):
-            val = getattr(self, opt_field)
-            if val is not None:
-                d[opt_field] = val
-        # Boolean fields: output when True
-        if self.fallback_used:
-            d["fallback_used"] = True
-        return d
+        d = asdict(self)
+        d["severity"] = self.severity.value
+        result: dict[str, Any] = {}
+        for key, val in d.items():
+            if key == "severity":
+                result[key] = val
+                continue
+            # Integer fields: always output (including 0)
+            if key in ("current_pos", "target_offset", "read_size", "file_size"):
+                result[key] = val
+                continue
+            if val is None:
+                continue
+            if isinstance(val, str) and val == "":
+                continue
+            if isinstance(val, bool) and not val:
+                continue
+            result[key] = val
+        return result
 
     def is_structural(self) -> bool:
         """Check if this is a structural diagnostic (affects status)."""
@@ -128,20 +117,6 @@ class Diagnostic:
     recoverable: bool = True
 
     def to_dict(self) -> dict[str, Any]:
-        d: dict[str, Any] = {
-            "severity": self.severity,
-            "code": self.code,
-            "message": self.message,
-            "stage": self.stage,
-        }
-        if self.object_id is not None:
-            d["object_id"] = self.object_id
-        if self.offset is not None:
-            d["offset"] = self.offset
-        if self.size is not None:
-            d["size"] = self.size
-        if self.effect is not None:
-            d["effect"] = self.effect
-        if not self.recoverable:
-            d["recoverable"] = False
-        return d
+        d = asdict(self)
+        # recoverable is always included (False is explicit, True is default)
+        return {k: v for k, v in d.items() if v is not None and (k == "recoverable" or (not isinstance(v, bool) or v))}

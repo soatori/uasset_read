@@ -6,7 +6,7 @@ Goal: allow unknown property/struct/export to retain diagnostic structured infor
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from enum import Enum
 from typing import Optional, Dict, Any, TYPE_CHECKING
 
@@ -72,17 +72,12 @@ class StructFallback:
     def kind(self) -> str:
         return "struct_fallback"
 
-    def to_dict(self) -> Dict[str, Any]:
-        d: Dict[str, Any] = {
-            "kind": self.kind,
-            "struct_type": self.struct_type,
-            "size": self.size,
-            "reason": self.reason,
-            "fields": self.fields,
-        }
+    def to_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        d["kind"] = self.kind
         if self.raw_bytes:
-            raw = self.raw_bytes[:256]
-            d["raw_data"] = raw.hex()
+            d["raw_data"] = self.raw_bytes[:256].hex()
             if len(self.raw_bytes) > 256:
                 d["raw_data_truncated"] = True
+        del d["raw_bytes"]
         return d

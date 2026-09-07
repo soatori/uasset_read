@@ -4,7 +4,7 @@ Kismet Decompilation Result — Single function decompilation result.
 Data model for Kismet bytecode decompilation output.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import Any
 
 
@@ -91,44 +91,15 @@ class KismetDecompiledResult:
         _validate_status_pair(self.bytecode_status, self.translation_status)
 
     def to_dict(self) -> dict:
-        """
-        JSON-serializable dict.
-
-        expressions field is serialized via each expression's to_dict() if available,
-        else falls back to str() representation.
-        """
-        d = {
-            "function_name": self.function_name,
-            "signature": self.signature,
-            "local_variables": self.local_variables,
-            "cpp_code": self.cpp_code,
-            "bytecode_source": self.bytecode_source,
-            "bytecode_status": self.bytecode_status,
-            "translation_status": self.translation_status,
-            "parameters": self.parameters,
-            "return_type": self.return_type,
-            "native_signature": self.native_signature,
-            "bytecode_confidence": infer_bytecode_confidence(
-                bytecode_status=self.bytecode_status,
-                logic_source=self.logic_source,
-            ),
-            "warnings": self.warnings,
-            "fallback_reasons": self.fallback_reasons,
-            "semantic_calls": self.semantic_calls,
-            "logic_source": self.logic_source,
-            "function_ref_stats": self.function_ref_stats,
-            "structured_rate": self.structured_rate,
-            "expressions": [e.to_dict() if hasattr(e, "to_dict") else str(e) for e in self.expressions],
-        }
-        if self.error_code is not None:
-            d["error_code"] = self.error_code
-        if self.error_message is not None:
-            d["error_message"] = self.error_message
-        if self.error_context is not None:
-            d["error_context"] = self.error_context
-        if self.script_metrics is not None:
-            d["script_metrics"] = self.script_metrics
-        return d
+        d = asdict(self)
+        d["bytecode_confidence"] = infer_bytecode_confidence(
+            bytecode_status=self.bytecode_status,
+            logic_source=self.logic_source,
+        )
+        d["expressions"] = [
+            e.to_dict() if hasattr(e, "to_dict") else str(e) for e in self.expressions
+        ]
+        return {k: v for k, v in d.items() if v is not None}
 
 
 __all__ = ["KismetDecompiledResult", "infer_bytecode_confidence", "ALLOWED_STATUS_PAIRS"]
