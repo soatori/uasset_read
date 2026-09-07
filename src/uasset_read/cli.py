@@ -290,7 +290,7 @@ def _handle_batch(args) -> None:
 def _handle_clean_logs(args) -> None:
     planned = cleanup_project_logs(
         log_dir=args.log_dir,
-        keep_latest=args.log_keep_latest or 20,
+        keep_latest=args.log_keep_latest if args.log_keep_latest is not None else 20,
         max_total_bytes=(
             args.log_max_total_mb * 1_000_000
             if args.log_max_total_mb is not None
