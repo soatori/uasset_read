@@ -10,7 +10,6 @@ import re
 import sys
 from pathlib import Path
 
-from uasset_read.config import LogConfig
 from uasset_read.project_logging import cleanup_project_logs
 from uasset_read.constants import (
     EXIT_SUCCESS,
@@ -211,31 +210,6 @@ def _write_output(output_str: str, output_path: str | None) -> None:
         print(output_str)
 
 
-def _log_max_total_bytes_from_args(args) -> int | None:
-    if args.log_max_total_mb is None:
-        return None
-    return args.log_max_total_mb * 1_000_000
-
-
-def _log_config_from_args(args) -> LogConfig:
-    level = args.log_level or "debug"
-    keep_latest = args.log_keep_latest if args.log_keep_latest is not None else 20
-    max_total_bytes = _log_max_total_bytes_from_args(args)
-    if max_total_bytes is None:
-        max_total_bytes = 500 * 1024 * 1024
-    return LogConfig(
-        level=level,
-        dir=args.log_dir,
-        enabled=level != "off",
-        keep_latest=keep_latest,
-        max_total_bytes=max_total_bytes,
-        auto_cleanup=args.log_cleanup,
-        max_bytes=args.log_max_bytes,
-        backup_count=args.log_backup_count,
-        format=args.log_format,
-    )
-
-
 def _handle_batch(args) -> None:
     """Handle batch mode: parse all .uasset files in a directory."""
     from uasset_read.package import parse_package_document
@@ -314,11 +288,14 @@ def _handle_batch(args) -> None:
 
 
 def _handle_clean_logs(args) -> None:
-    config = _log_config_from_args(args)
     planned = cleanup_project_logs(
         log_dir=args.log_dir,
-        keep_latest=config.keep_latest,
-        max_total_bytes=config.max_total_bytes,
+        keep_latest=args.log_keep_latest or 20,
+        max_total_bytes=(
+            args.log_max_total_mb * 1_000_000
+            if args.log_max_total_mb is not None
+            else 500 * 1024 * 1024
+        ),
         dry_run=True,
     )
     print(f"Would delete {len(planned)} log file(s)")

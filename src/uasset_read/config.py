@@ -15,10 +15,9 @@ from typing import Optional
 class LogConfig:
     """日志配置。
 
-    由 CLI（`cli._log_config_from_args`）从 `--log-*` 参数构造。日志文件
-    本身的写出配置已随 v1 管线一并移除：库代码不再配置进程级日志，
-    只有 `--clean-logs` 路径会读取 `keep_latest` / `max_total_bytes` 并
-    把它们交给 `cleanup_project_logs()`。
+    由 CLI 的 `--clean-logs` 路径使用：日志文件本身的写出配置已随 v1
+    管线一并移除，库代码不再配置进程级日志，只有 `keep_latest` /
+    `max_total_bytes` 会被读取并交给 `cleanup_project_logs()`。
 
     典型用法（只有 `dir` / `keep_latest` / `max_total_bytes` 会被读取）::
 
