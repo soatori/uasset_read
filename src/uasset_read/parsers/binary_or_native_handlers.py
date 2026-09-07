@@ -246,51 +246,48 @@ def _parse_expression_input(
 # ============================================================================
 
 
+def _decode_nd(raw: bytes, size: int, keys: tuple[str, ...]) -> dict[str, Any]:
+    """Decode an N-component float/double vector from raw bytes.
+
+    Args:
+        raw: Raw bytes.
+        size: Byte count (must match len(keys) * 4 or len(keys) * 8).
+        keys: Field names, e.g. ("X", "Y", "Z").
+    """
+    n = len(keys)
+    fmt = f"<{'d' * n}" if size == n * 8 else f"<{'f' * n}"
+    values = struct.unpack(fmt, raw[:size])
+    return dict(zip(keys, values))
+
+
 def _decode_vector(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Vector / Vector3f / Vector3d (12 or 24 bytes)."""
-
-    fmt = "<ddd" if size == 24 else "<fff"
-    x, y, z = struct.unpack(fmt, raw[:size])
-    return {"X": x, "Y": y, "Z": z}
+    return _decode_nd(raw, size, ("X", "Y", "Z"))
 
 
 def _decode_rotator(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Rotator / Rotator3f / Rotator3d (12 or 24 bytes)."""
-
-    fmt = "<ddd" if size == 24 else "<fff"
-    pitch, yaw, roll = struct.unpack(fmt, raw[:size])
-    return {"Pitch": pitch, "Yaw": yaw, "Roll": roll}
+    return _decode_nd(raw, size, ("Pitch", "Yaw", "Roll"))
 
 
 def _decode_vector2d(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Vector2D / Vector2f / Vector2d (8 or 16 bytes)."""
-
-    fmt = "<dd" if size == 16 else "<ff"
-    x, y = struct.unpack(fmt, raw[:size])
-    return {"X": x, "Y": y}
+    return _decode_nd(raw, size, ("X", "Y"))
 
 
 def _decode_vector4(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Vector4 / Vector4f / Vector4d (16 or 32 bytes)."""
-
-    fmt = "<dddd" if size == 32 else "<ffff"
-    x, y, z, w = struct.unpack(fmt, raw[:size])
-    return {"X": x, "Y": y, "Z": z, "W": w}
+    return _decode_nd(raw, size, ("X", "Y", "Z", "W"))
 
 
 def _decode_quat(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Quat / Quat4f / Quat4d (16 or 32 bytes)."""
-
-    fmt = "<dddd" if size == 32 else "<ffff"
-    x, y, z, w = struct.unpack(fmt, raw[:size])
-    return {"X": x, "Y": y, "Z": z, "W": w}
+    return _decode_nd(raw, size, ("X", "Y", "Z", "W"))
 
 
 def _decode_linear_color(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode LinearColor (16 bytes, 4 float RGBA)."""
-
-    r, g, b, a = struct.unpack("<ffff", raw[:16])
-    return {"R": r, "G": g, "B": b, "A": a}
+    return _decode_nd(raw, size, ("R", "G", "B", "A"))
 
 
 def _decode_color(raw: bytes, size: int) -> Dict[str, Any]:
@@ -323,31 +320,21 @@ def _decode_int_vector(raw: bytes, size: int) -> Dict[str, Any]:
 
 def _decode_two_vectors(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode TwoVectors (24 or 48 bytes, two sets of three-component vectors)."""
-
-    fmt = "<ddd" if size == 48 else "<fff"
     elem_size = size // 2
-    v1 = struct.unpack(fmt, raw[:elem_size])
-    v2 = struct.unpack(fmt, raw[elem_size:size])
-    return {
-        "V1": {"X": v1[0], "Y": v1[1], "Z": v1[2]},
-        "V2": {"X": v2[0], "Y": v2[1], "Z": v2[2]},
-    }
+    v1 = _decode_nd(raw[:elem_size], elem_size, ("X", "Y", "Z"))
+    v2 = _decode_nd(raw[elem_size:size], elem_size, ("X", "Y", "Z"))
+    return {"V1": v1, "V2": v2}
 
 
 def _decode_plane(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Plane / Plane4f / Plane4d (16 or 32 bytes)."""
-
-    fmt = "<dddd" if size == 32 else "<ffff"
-    x, y, z, w = struct.unpack(fmt, raw[:size])
-    return {"X": x, "Y": y, "Z": z, "W": w}
+    return _decode_nd(raw, size, ("X", "Y", "Z", "W"))
 
 
 def _decode_sphere(raw: bytes, size: int) -> Dict[str, Any]:
     """Decode Sphere / Sphere3f / Sphere3d (16 or 32 bytes, center + radius)."""
-
-    fmt = "<dddd" if size == 32 else "<ffff"
-    x, y, z, w = struct.unpack(fmt, raw[:size])
-    return {"Center": {"X": x, "Y": y, "Z": z}, "Radius": w}
+    vals = _decode_nd(raw, size, ("X", "Y", "Z", "W"))
+    return {"Center": {"X": vals["X"], "Y": vals["Y"], "Z": vals["Z"]}, "Radius": vals["W"]}
 
 
 def _decode_soft_object_path_index(
