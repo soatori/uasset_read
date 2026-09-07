@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 from uasset_read.models.properties import PropertyTag, PropertyValue
 from uasset_read.models.fallback import PropertyFallback, FallbackReason
-from uasset_read.exceptions import ParseError, ErrorContext
+from uasset_read.exceptions import ParseError
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
     PKG_UnversionedProperties,
@@ -901,15 +901,7 @@ def _read_property_loop(
     while True:
         # D-08/D-09: Property loop limit check
         if property_count >= MAX_PROPERTY_COUNT:
-            raise ParseError(
-                f"Property count exceeds maximum ({MAX_PROPERTY_COUNT})",
-                context=ErrorContext(
-                    offset=archive.tell(),
-                    phase="properties",
-                    operation="property_count_check",
-                    context_name=str(export.object_name),
-                ),
-            )
+            raise ParseError(f"Property count exceeds maximum ({MAX_PROPERTY_COUNT})")
         property_count += 1
 
         tag = None
@@ -1042,13 +1034,7 @@ def _read_property_loop(
             remaining = property_end - archive.tell()
             if tag.size > remaining:
                 raise ParseError(
-                    f"Property tag size {tag.size} exceeds remaining data {remaining} for '{tag.name}'",
-                    context=ErrorContext(
-                        offset=archive.tell(),
-                        phase="properties",
-                        operation="property_tag_size_check",
-                        context_name=str(tag.name),
-                    ),
+                    f"Property tag size {tag.size} exceeds remaining data {remaining} for '{tag.name}'"
                 )
 
             # Dispatch to type-specific parser

@@ -24,7 +24,7 @@ from uasset_read.models.properties import (
     DelegateValue,
     SoftObjectPathValue,
 )
-from uasset_read.exceptions import ParseError, ErrorContext
+from uasset_read.exceptions import ParseError
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
     MAX_ARRAY_COUNT,
@@ -430,15 +430,7 @@ def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[L
     # ByteProperty with enum backing: read FName (8 bytes) per
     if type_name == "ByteProperty" and tag.enum_type is not None:
         if name_map is None:
-            raise ParseError(
-                "ByteProperty with enum backing requires name_map",
-                context=ErrorContext(
-                    offset=archive.tell(),
-                    phase="properties",
-                    operation="parse_int_property",
-                    context_name=tag.name,
-                ),
-            )
+            raise ParseError("ByteProperty with enum backing requires name_map")
         enum_value_name = archive.read_name(name_map)
         return make_enum_value(tag.enum_type, enum_value_name)
 
@@ -599,15 +591,7 @@ def parse_array_property(
     MAX_DEPTH = 10
 
     if depth > MAX_DEPTH:
-        raise ParseError(
-            f"ArrayProperty nesting depth {depth} exceeds maximum {MAX_DEPTH}",
-            context=ErrorContext(
-                offset=archive.tell(),
-                phase="properties",
-                operation="parse_array_property",
-                context_name=tag.name,
-            ),
-        )
+        raise ParseError(f"ArrayProperty nesting depth {depth} exceeds maximum {MAX_DEPTH}")
 
     if tag.size < 4:
         # #345: tag.size < 4 is usually an empty array or RigVM DebugWatch property
@@ -1004,15 +988,7 @@ def parse_struct_property(
     MAX_DEPTH = 5
 
     if depth > MAX_DEPTH:
-        raise ParseError(
-            f"StructProperty nesting depth {depth} exceeds maximum {MAX_DEPTH}",
-            context=ErrorContext(
-                offset=archive.tell(),
-                phase="properties",
-                operation="parse_struct_property",
-                context_name=tag.name,
-            ),
-        )
+        raise ParseError(f"StructProperty nesting depth {depth} exceeds maximum {MAX_DEPTH}")
 
     struct_type = _extract_struct_type_from_tag(tag)
     declared_struct_type = struct_type
@@ -1144,13 +1120,7 @@ def parse_struct_property(
             ):
                 raise ParseError(
                     f"Tagged struct '{declared_struct_type}' field '{inner_tag.name}' "
-                    f"size {inner_tag.size} exceeds struct boundary",
-                    context=ErrorContext(
-                        offset=archive.tell(),
-                        phase="properties",
-                        operation="parse_struct_property",
-                        context_name=tag.name,
-                    ),
+                    f"size {inner_tag.size} exceeds struct boundary"
                 )
 
             field_value = read_tag_value_bounded(
