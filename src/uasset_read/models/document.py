@@ -7,7 +7,7 @@ as first-class objects.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from .diagnostics import Diagnostic
 from .object_model import (
@@ -17,6 +17,10 @@ from .object_model import (
 )
 from ..archive import SourceInfo
 from .payloads import PayloadDescriptor
+
+if TYPE_CHECKING:
+    from ..serializers.package_trailer import FPackageTrailer
+    from ..serializers.data_resource import FObjectDataResource
 
 
 @dataclass(frozen=True)
@@ -53,5 +57,5 @@ class PackageDocument:
     summary: Summary = field(default_factory=Summary)
     payloads: list[PayloadDescriptor] = field(default_factory=list)
     depth: str = "asset"
-    package_trailer: object | None = None
-    data_resource_map: list | None = None
+    package_trailer: FPackageTrailer | None = None
+    data_resource_map: list[FObjectDataResource] | None = None

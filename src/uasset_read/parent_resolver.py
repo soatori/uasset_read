@@ -11,7 +11,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from uasset_read.models.diagnostics import Diagnostic
     from uasset_read.models.document import PackageDocument
+    from uasset_read.models.object_model import Relation
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +66,9 @@ def resolve_parent_assets(
         try:
             from uasset_read.package import parse_package_document
 
-            parent_doc = parse_package_document(
-                str(parent_path), depth="package", tolerant=True
-            )
+            # Parse to validate the parent package is readable (result unused;
+            # the relation records the path, not the parent's contents).
+            parse_package_document(str(parent_path), depth="package", tolerant=True)
             relations.append(
                 Relation(
                     kind="parent_class",

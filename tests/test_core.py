@@ -2794,8 +2794,11 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
         # Healthy samples carry 0 diagnostics, so get_diagnostics' minimal
         # envelope is the fixed 52-byte empty-list form; 48 < 52 must raise.
         get_diagnostics(str(PACKAGE_SAMPLE), max_bytes=48)
-    with pytest.raises(ValueError, match="too small"):
-        extract_payload(str(DATA_SAMPLE), "payload:(export:0)", max_bytes=16)
+    # extract_payload now returns structured error instead of raising on budget exceeded
+    result = extract_payload(str(DATA_SAMPLE), "payload:(export:0)", max_bytes=16)
+    assert isinstance(result, dict)
+    assert result.get("code") == "BUDGET_EXHAUSTED"
+    assert result.get("recoverable") is True
     with pytest.raises(ValueError, match="too small"):
         inspect_package(str(PACKAGE_SAMPLE), max_bytes=64)
 
@@ -2833,6 +2836,7 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     if "data" in extracted:
         # Real extraction succeeded — verify structure
         import base64
+
         data = base64.b64decode(extracted["data"])
         assert len(data) > 0
         assert extracted["size"] == len(data)
@@ -3138,16 +3142,17 @@ def test_resolve_parent_assets_returns_relations():
     assert isinstance(diagnostics, list)
     # Verify return type annotation uses Relation by inspecting the function's annotations
     import typing
+
     hints = typing.get_type_hints(
         resolve_parent_assets,
         globalns={
-            'Relation': Relation,
-            'Diagnostic': Diagnostic,
-            'PackageDocument': PackageDocument,
-            'Path': Path,
-        }
+            "Relation": Relation,
+            "Diagnostic": Diagnostic,
+            "PackageDocument": PackageDocument,
+            "Path": Path,
+        },
     )
-    assert hints['return'] == tuple[list[Relation], list[Diagnostic]]
+    assert hints["return"] == tuple[list[Relation], list[Diagnostic]]
 
 
 def test_resolve_parent_assets_respects_max_depth():

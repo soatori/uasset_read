@@ -486,16 +486,20 @@ class LegacyPackageReader:
 
             # 1b. Parse PackageTrailer (UE5, after summary validation)
             package_trailer = None
-            if (hasattr(summary, 'payload_toc_offset')
-                    and summary.payload_toc_offset > 0
-                    and getattr(summary, 'file_version_ue5', 0) >= 1002):
+            if (
+                hasattr(summary, "payload_toc_offset")
+                and summary.payload_toc_offset > 0
+                and getattr(summary, "file_version_ue5", 0) >= 1002
+            ):
                 try:
                     from uasset_read.serializers.package_trailer import read_package_trailer
+
                     archive.seek(summary.payload_toc_offset)
                     package_trailer = read_package_trailer(
-                        archive, summary.payload_toc_offset
+                        archive,
+                        summary.payload_toc_offset,  # type: ignore[arg-type]
                     )
-                except Exception as e:
+                except (struct.error, ValueError, OverflowError, OSError) as e:
                     diagnostics.append(
                         Diagnostic(
                             severity="warning",
@@ -509,15 +513,19 @@ class LegacyPackageReader:
 
             # 1c. Parse DataResource table (UE5.1+, after trailer)
             data_resource_map = None
-            if (hasattr(summary, 'data_resource_offset')
-                    and summary.data_resource_offset > 0
-                    and getattr(summary, 'file_version_ue5', 0) >= 1009):
+            if (
+                hasattr(summary, "data_resource_offset")
+                and summary.data_resource_offset > 0
+                and getattr(summary, "file_version_ue5", 0) >= 1009
+            ):
                 try:
                     from uasset_read.serializers.data_resource import read_data_resource_table
+
                     data_resource_map = read_data_resource_table(
-                        archive, summary.data_resource_offset
+                        archive,
+                        summary.data_resource_offset,  # type: ignore[arg-type]
                     )
-                except Exception as e:
+                except (struct.error, ValueError, OverflowError, OSError) as e:
                     diagnostics.append(
                         Diagnostic(
                             severity="warning",

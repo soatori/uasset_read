@@ -249,9 +249,13 @@ def extract_payload(
     if export_index is None:
         # Try to parse from payload_id format: "payload:(export:N)" or "payload:(import:N)"
         import re
+
         match = re.search(r"\((export|import):(\d+)\)", payload_id)
         if match:
-            export_index = int(match.group(2))
+            try:
+                export_index = int(match.group(2))
+            except ValueError:
+                export_index = None
         else:
             # Cannot determine export index, return deferred
             response: dict[str, Any] = {
@@ -264,6 +268,19 @@ def extract_payload(
                 "total": 0,
             }
             return fit_list_response(response, max_bytes, list_key="available_ids")
+
+    if export_index is None:
+        # Still no valid export index after parsing attempt
+        response = {
+            "id": payload_id,
+            "error": PAYLOAD_EXTRACTION_DEFERRED_MESSAGE,
+            "code": PAYLOAD_EXTRACTION_DEFERRED,
+            "available_ids": [],
+            "offset": 0,
+            "returned": 0,
+            "total": 0,
+        }
+        return fit_list_response(response, max_bytes, list_key="available_ids")
 
     # Parse the package to get export serial data for BulkData extraction
     from .parsers.bulk_data import extract_bulk_data_descriptors
@@ -287,7 +304,6 @@ def extract_payload(
 
             # Determine which file to read serial data from
             serial_data = b""
-            serial_source = "main"
             try:
                 if serial_offset >= total_header_size and total_header_size > 0:
                     # Data is in uexp sidecar
@@ -296,7 +312,6 @@ def extract_payload(
                         with open(uexp_path, "rb") as f:
                             f.seek(serial_offset - total_header_size)
                             serial_data = f.read(serial_size)
-                        serial_source = "uexp"
                 else:
                     # Data is in main file
                     with open(main_path, "rb") as f:
@@ -305,7 +320,7 @@ def extract_payload(
 
                 if len(serial_data) < serial_size:
                     serial_data = b""  # Short read, skip BulkData extraction
-            except (OSError, ValueError) as e:
+            except (OSError, ValueError):
                 # Include diagnostic but don't fail — fallback will handle
                 serial_data = b""
 
@@ -324,6 +339,7 @@ def extract_payload(
 
                         # Determine source region from header flags
                         from .parsers.bulk_data import BULKDATA_CompressedZlib, BULKDATA_CompressedOodle
+
                         if header.flags & (BULKDATA_CompressedZlib | BULKDATA_CompressedOodle):
                             source_region = "ubulk"
                         elif "uexp" in sidecar_paths:
@@ -344,7 +360,7 @@ def extract_payload(
                             logical_size=header.element_count,
                             compression=header.compression_type,
                         )
-                except (ValueError, struct.error) as e:
+                except (ValueError, struct.error):
                     # BulkData parsing failed — fallback will handle
                     pass
 
@@ -371,7 +387,11 @@ def extract_payload(
         if fallback_size == 0:
             # No serial region info — use entire sidecar as last resort
             sidecar_path = sidecar_paths.get(source_region)
-            fallback_size = sidecar_path.stat().st_size if sidecar_path else 0
+            if sidecar_path is not None:
+                try:
+                    fallback_size = sidecar_path.stat().st_size
+                except OSError:
+                    fallback_size = 0
 
         descriptor = PayloadDescriptor(
             id=payload_id,
@@ -419,9 +439,14 @@ def extract_payload(
     # Enforce max_bytes on success path
     response_size = len(json.dumps(response_payload, ensure_ascii=False).encode("utf-8"))
     if response_size > max_bytes:
-        raise ValueError(
-            f"Response budget {max_bytes} bytes too small for payload response "
-            f"({response_size} bytes)"
-        )
+        return {
+            "error": f"Payload response ({response_size} bytes) exceeds budget ({max_bytes} bytes)",
+            "code": "BUDGET_EXHAUSTED",
+            "stage": "agent.extract_payload",
+            "recoverable": True,
+            "object_id": payload_id,
+            "max_bytes": max_bytes,
+            "min_bytes": response_size,
+        }
 
     return response_payload
