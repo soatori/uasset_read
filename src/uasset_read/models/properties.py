@@ -42,7 +42,6 @@ class PropertyTag:
     external_objects_byte: int | None = None  # HasExternalsObjects extension slot (u8)
     serialize_type: str = "Property"  # Property / Skipped / BinaryOrNative
     type_name: PropertyTypeName | None = None  # Recursive FPropertyTypeName
-    tag_data: Any | None = None  # PropertyType from mapping system
     enum_type: str | None = None  # ByteProperty/EnumProperty enum type (extracted from FPropertyTypeName)
     type_parts: list[tuple[str, int]] = field(default_factory=list)  # Complete FPropertyTypeName nodes
     struct_type: str | None = None  # StructProperty struct type name

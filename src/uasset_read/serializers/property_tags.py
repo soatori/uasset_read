@@ -213,7 +213,6 @@ def read_property_tag(
         else:
             prop_info = struct_mapping.property_by_name(tag.name)
         if prop_info is not None:
-            tag.tag_data = prop_info.mapping_type
             _apply_property_type_to_tag(tag, prop_info.mapping_type)
     tag.size = archive.read_i32()
     # Pass property type for dynamic threshold (StructProperty passes struct_type)

@@ -418,21 +418,6 @@ def resolve_class_name(
     return None
 
 
-def detect_blueprint_generated_class(
-    export: ObjectExport, import_map: List[ObjectImport], export_map: List[ObjectExport]
-) -> bool:
-    """Detect whether export is a BlueprintGeneratedClass.
-
-    Checks import.object_name rather than class_name,
-    because BPGC's import.class_name is "Class" and object_name is "BlueprintGeneratedClass".
-    """
-    if export.class_index.is_import:
-        idx = export.class_index.to_import_index()
-        if 0 <= idx < len(import_map):
-            return "BlueprintGeneratedClass" in import_map[idx].object_name
-    return False
-
-
 def resolve_package_index_to_reference(
     pkg_idx: PackageIndex, import_map: List[ObjectImport], export_map: List[ObjectExport], name_map: List[str]
 ) -> Optional[Dict[str, Any]]:

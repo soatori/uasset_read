@@ -1275,7 +1275,6 @@ def _parse_unversioned_properties_from_mapping(
             name=info.name,
             type=info.mapping_type.type,
             size=_unversioned_property_size(info.mapping_type, archive, remaining, is_last),
-            tag_data=info.mapping_type,
         )
         _apply_mapping_type_to_tag(tag, info.mapping_type)
         if is_zero:
