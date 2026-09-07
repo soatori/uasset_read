@@ -1,4 +1,4 @@
-"""Log-file cleanup and the `log_context` scope helper.
+"""Log-file cleanup helpers.
 
 Library code does not configure logging. Nothing in `src/` calls
 `logging.config.dictConfig`, `fileConfig` or `basicConfig`; the package-document
@@ -6,35 +6,16 @@ Library code does not configure logging. Nothing in `src/` calls
 configuration machinery (`configure_project_logging`, `shutdown_project_logging`,
 `ProjectLogSession`, `project_logging_session`, `scoped_project_logging`,
 `configure_worker_stream_logging`, `JSONFormatter`, `_LogContextFilter`,
-`log_event`) was deleted as unreachable: its only callers disappeared with the
-v1 pipeline, and no live import site remained.
+`log_event`, `log_context`) was deleted as unreachable: its only callers
+disappeared with the v1 pipeline, and no live import site remained.
 
-What survives has exactly two consumers:
-
-* `cleanup_project_logs` — the CLI's `--clean-logs` path (`cli.py`).
-* `log_context` — scopes `asset`/`stage` onto records for callers that opt in.
+The one surviving consumer is `cleanup_project_logs` — the CLI's
+`--clean-logs` path (`cli.py`).
 """
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from contextvars import ContextVar
 from pathlib import Path
-
-_log_asset: ContextVar[str] = ContextVar("uasset_read_log_asset", default="-")
-_log_stage: ContextVar[str] = ContextVar("uasset_read_log_stage", default="-")
-
-
-@contextmanager
-def log_context(*, asset: str | None = None, stage: str | None = None):
-    """Attach asset and stage fields to records emitted in this context."""
-    asset_token = _log_asset.set(asset or _log_asset.get())
-    stage_token = _log_stage.set(stage or _log_stage.get())
-    try:
-        yield
-    finally:
-        _log_stage.reset(stage_token)
-        _log_asset.reset(asset_token)
 
 
 def _default_project_root() -> Path:

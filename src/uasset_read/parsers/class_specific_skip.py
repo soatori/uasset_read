@@ -9,11 +9,6 @@ this module provides type identification and safe skip logic.
 import logging
 from typing import TYPE_CHECKING, Optional
 
-from uasset_read.parsers.class_registry import (
-    FallbackPolicy,
-    get_class_registry,
-)
-
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport
@@ -29,24 +24,17 @@ SKIP_CLASS_PREFIXES = (
     "GeomModifier_",
     "BrushBuilder",
     # P0: Animation -- migrated to opaque whitelist (#166)
-    # "AnimationDataModel",
     # P1: Niagara
     "NiagaraMeshRendererProperties",
     "NiagaraNodeParameterMapGet",
     "NiagaraNode",
     "NiagaraSystem",
     # P1: MovieScene -- moved to opaque whitelist (#164)
-    # "MovieScene",
-    # "MovieSceneSceneCaptureParams",
     # P2: MetaSound -- moved to opaque whitelist (#165)
-    # "MetasoundEditorGraph",
-    # "MetasoundEditorGraphInputObjectArray",
-    # "MetasoundEditorGraphMemberDefaultObjectArray",
     # P2: K2Node
     # K2Node_FunctionEntry removed from skip list (#286):
     # Generic tagged property parser can handle it. K2Node_FunctionEntry specific fields
     # are serialized via PropertyTag, no skip needed. Skipping would mark legitimate assets as partial.
-    # "K2Node_FunctionEntry",
     "K2Node_FormatText",
     # P2: Material
     # MaterialExpressionDynamicParameter removed from skip list (#136 extension):
@@ -54,7 +42,6 @@ SKIP_CLASS_PREFIXES = (
     # MaterialExpression removed from skip list (#136):
     # Generic tagged property parser can handle most MaterialExpression subclasses.
     # Subclasses that fail to parse are handled by generic fallback (opaque/partial).
-    # "MaterialExpression",
     # P3: Other
     "SkySphereMesh",
     "AggGeom_",
@@ -83,9 +70,8 @@ def should_skip_export_for_tolerant_parsing(
     """Determine whether tolerant skip should be used for an export (no property parsing attempted).
 
     Check order:
-    1. class handler registry has a handler with fallback_policy == SKIP
-    2. Whether export.object_name starts with SKIP_CLASS_PREFIXES
-    3. Whether class_name starts with SKIP_CLASS_PREFIXES
+    1. Whether export.object_name starts with SKIP_CLASS_PREFIXES
+    2. Whether class_name starts with SKIP_CLASS_PREFIXES
 
     Args:
         export: ObjectExport instance
@@ -94,14 +80,6 @@ def should_skip_export_for_tolerant_parsing(
     Returns:
         True if property parsing should be skipped, keeping only export metadata
     """
-    # Check 1: registry handler fallback policy
-    if class_name is not None:
-        registry = get_class_registry()
-        handler = registry.find_handler(class_name)
-        if handler is not None and handler.fallback_policy == FallbackPolicy.SKIP:
-            return True
-
-    # Check 2-4: original skip list (as fallback policy)
     # #521: check allowlist first — exact classes with verified tagged properties bypass prefix skip
     object_name = str(export.object_name)
     if class_name != "CubeBuilder" and object_name.startswith(SKIP_CLASS_PREFIXES):

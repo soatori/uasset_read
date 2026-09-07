@@ -11,13 +11,11 @@ Reference: CUE4Parse ObjectTypeRegistry pattern:
 Handler interface:
 - can_handle(class_name) -> bool
 - parse(export, archive, context) -> HandlerResult
-- fallback_policy -> FallbackPolicy
 """
 
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import Enum
 from typing import Optional, Any, List, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -25,13 +23,6 @@ if TYPE_CHECKING:
     from uasset_read.serializers.object_resources import ObjectExport
 
 logger = logging.getLogger(__name__)
-
-
-class FallbackPolicy(str, Enum):
-    """Fallback strategy when a handler cannot process the class."""
-
-    GENERIC_UOBJECT = "generic_uobject"
-    SKIP = "skip"
 
 
 @dataclass
@@ -56,11 +47,6 @@ class ClassHandler(ABC):
     def handler_name(self) -> str:
         """Handler name (used for logging and diagnostics)."""
         ...
-
-    @property
-    def fallback_policy(self) -> FallbackPolicy:
-        """Fallback strategy when handler parsing fails."""
-        return FallbackPolicy.GENERIC_UOBJECT
 
     @abstractmethod
     def parse(

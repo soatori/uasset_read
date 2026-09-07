@@ -5,6 +5,8 @@ Contains all version numbers, property type thresholds, and boundary constants.
 Extracted from uasset_read.py (per D-11).
 """
 
+import uuid
+
 # ============================================================================
 # CLI Exit Codes
 # ============================================================================
@@ -157,55 +159,6 @@ UE4_ADDED_CHUNKID_TO_ASSETDATA_AND_UPACKAGE = 278
 UE4_CHANGED_CHUNKID_TO_BE_AN_ARRAY_OF_CHUNKIDS = 326
 UE4_ENGINE_VERSION_OBJECT = 335
 UE4_ADDED_COMPATIBLE_WITH_ENGINE_VERSION = 443
-# ============================================================================
-# Control flow node set (used in blueprint graph parsing)
-# ============================================================================
-
-CONTROL_FLOW_NODES = frozenset(
-    {
-        "K2Node_IfThenElse",
-        "K2Node_Switch",
-        "K2Node_SwitchString",
-        "K2Node_SwitchEnum",
-        "K2Node_SwitchInteger",
-        "K2Node_MacroInstance",
-        # Loop macros
-        "K2Node_ForLoop",
-        "K2Node_WhileLoop",
-        "K2Node_DoOnce",
-        # Multi-gate
-        "K2Node_Sequence",
-        "K2Node_MultiGate",
-        # Selection
-        "K2Node_Select",
-        "K2Node_ExecutionSequence",
-    }
-)
-
-# ============================================================================
-# Start event type set
-# ============================================================================
-
-START_EVENT_TYPES = frozenset(
-    {
-        "K2Node_Event",
-        "K2Node_EnhancedInputAction",
-        "K2Node_VariableSet",
-        "K2Node_CustomEvent",
-        "K2Node_FunctionEntry",  # Function graph execution flow start point
-    }
-)
-
-# ============================================================================
-# Data flow boundary node set
-# ============================================================================
-
-DATA_BOUNDARY_NODES = frozenset(
-    {
-        "K2Node_FunctionEntry",  # Function parameter output as data flow start point
-        "K2Node_VariableSet",  # Local variable definition (boundary)
-    }
-)
 
 # ============================================================================
 # EnhancedInput TriggerEvent pin mapping
@@ -217,62 +170,6 @@ ETRIGGER_EVENT_PIN_MAP = {
     "Completed": "Completed",
     "Exited": "Exited",
 }
-
-# ============================================================================
-# Branch type mapping
-# ============================================================================
-
-BRANCH_TYPE_MAP = {
-    "K2Node_IfThenElse": "if_then_else",
-    "K2Node_Switch": "switch",
-    "K2Node_SwitchString": "switch_string",
-    "K2Node_SwitchEnum": "switch_enum",
-    "K2Node_SwitchInteger": "switch_integer",
-    "K2Node_MacroInstance": "macro_instance",
-    "K2Node_ForLoop": "for_loop",
-    "K2Node_WhileLoop": "while_loop",
-    "K2Node_DoOnce": "do_once",
-    "K2Node_Sequence": "sequence",
-    "K2Node_ExecutionSequence": "execution_sequence",
-    "K2Node_MultiGate": "multi_gate",
-    "K2Node_Select": "select",
-}
-
-# ============================================================================
-# Graph type mapping
-# ============================================================================
-
-GRAPH_TYPE_MAP = {
-    "EdGraph": "event",
-    "UberEdGraph": "uber",
-}
-
-# ============================================================================
-# EPropertyFlags — CPF_* property flag constants (externally used subset)
-# Aligned with UE5 ObjectMacros.h EPropertyFlags enum (64-bit)
-# Source: Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectMacros.h
-# ============================================================================
-
-CPF_Edit = 0x0000000000000001
-CPF_BlueprintVisible = 0x0000000000000004
-CPF_BlueprintReadOnly = 0x0000000000000010
-CPF_Net = 0x0000000000000020
-CPF_Transient = 0x0000000000002000
-CPF_Config = 0x0000000000004000
-CPF_EditConst = 0x0000000000020000
-CPF_InstancedReference = 0x0000000000080000
-CPF_DuplicateTransient = 0x0000000000200000
-CPF_SaveGame = 0x0000000001000000
-CPF_NoClear = 0x0000000002000000
-CPF_BlueprintAssignable = 0x0000000010000000
-CPF_Deprecated = 0x0000000020000000
-CPF_RepNotify = 0x0000000100000000
-CPF_Interp = 0x0000000200000000
-CPF_AdvancedDisplay = 0x0000040000000000
-CPF_Protected = 0x0000080000000000
-CPF_BlueprintCallable = 0x0000100000000000
-CPF_NonPIEDuplicateTransient = 0x0000800000000000
-CPF_ExposeOnSpawn = 0x0001000000000000
 
 # =====================================================================# ============================================================================
 
@@ -317,13 +214,7 @@ def format_guid_bytes(data: bytes, uppercase: bool = True) -> str:
             f"GUID requires exactly 16 bytes, got {type(data).__name__} of length "
             f"{len(data) if isinstance(data, (bytes, bytearray)) else 'N/A'}"
         )
-    text = (
-        f"{data[0]:02x}{data[1]:02x}{data[2]:02x}{data[3]:02x}-"
-        f"{data[4]:02x}{data[5]:02x}-"
-        f"{data[6]:02x}{data[7]:02x}-"
-        f"{data[8]:02x}{data[9]:02x}-"
-        f"{data[10]:02x}{data[11]:02x}{data[12]:02x}{data[13]:02x}{data[14]:02x}{data[15]:02x}"
-    )
+    text = str(uuid.UUID(bytes=bytes(data[:16])))
     return text.upper() if uppercase else text
 
 

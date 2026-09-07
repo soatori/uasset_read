@@ -16,18 +16,6 @@ from ...models.diagnostics import Diagnostic
 from ...models.object_model import ObjectRecord, CoverageEntry
 from ...versioning import VersionContext
 
-_SLUG_RE = re.compile(r"[^A-Za-z0-9_.-]+")
-
-
-def _ascii_slug(name: str) -> str:
-    """ASCII slug preserving case; invalid runs collapse to '_'"""
-    slug = _SLUG_RE.sub("_", name or "").strip("_")
-    if not slug:
-        return "unnamed"
-    if not slug[0].isalpha():
-        slug = "x" + slug
-    return slug
-
 
 class AssetHandler(Protocol):
     """Domain handler that enriches an object with semantic data.
@@ -48,6 +36,15 @@ class AssetHandler(Protocol):
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None: ...
+
+
+class _SupportsClasses:
+    """Mixin: matches export class names listed in `classes`."""
+
+    classes: tuple[str, ...] = ()
+
+    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+        return (obj.class_name or "") in self.classes
 
 
 # Global handler registry
@@ -194,13 +191,12 @@ def _flatten_text(val: Any) -> str | None:
     return _flatten_text(val.get("value"))
 
 
-class UserDefinedEnumHandler:
+class UserDefinedEnumHandler(_SupportsClasses):
     """Enrich UserDefinedEnum objects."""
 
     capability = "decoded"  # real enum entries decoded from the name table
 
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        return (obj.class_name or "") == "UserDefinedEnum"
+    classes = ("UserDefinedEnum",)
 
     def enrich(
         self,
@@ -254,13 +250,12 @@ class UserDefinedEnumHandler:
         return result if entries else None
 
 
-class UserDefinedStructHandler:
+class UserDefinedStructHandler(_SupportsClasses):
     """Enrich UserDefinedStruct objects."""
 
     capability = "decoded"  # only returns output when real fields were extracted
 
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        return (obj.class_name or "") == "UserDefinedStruct"
+    classes = ("UserDefinedStruct",)
 
     _INTERNAL_PROPS = (
         "None",
@@ -324,7 +319,7 @@ class UserDefinedStructHandler:
         return result if fields else None
 
 
-class DataTableHandler:
+class DataTableHandler(_SupportsClasses):
     """Enrich DataTable/CurveTable objects.
 
     Row data comes from the bounded table payload slice the legacy reader
@@ -339,9 +334,7 @@ class DataTableHandler:
 
     capability = "decoded"  # row struct/count read from real property + payload data
 
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        cn = obj.class_name or ""
-        return cn in ("DataTable", "CurveTable")
+    classes = ("DataTable", "CurveTable")
 
     def enrich(
         self,
@@ -386,7 +379,7 @@ class DataTableHandler:
         return result
 
 
-class StringTableHandler:
+class StringTableHandler(_SupportsClasses):
     """Enrich StringTable objects from the bounded FStringTable trailer slice.
 
     Trailer layout per UE source: Runtime/Core/Private/Internationalization/
@@ -404,8 +397,7 @@ class StringTableHandler:
 
     capability = "summary"
 
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        return (obj.class_name or "") == "StringTable"
+    classes = ("StringTable",)
 
     def enrich(
         self,
@@ -561,12 +553,10 @@ class TexturePayloadHandler:
         return {"payload": payload}
 
 
-class SoundHandler:
+class SoundHandler(_SupportsClasses):
     """Enrich SoundWave/SoundCue/SoundAttenuation objects."""
 
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        cn = obj.class_name or ""
-        return cn in ("SoundWave", "SoundCue", "SoundAttenuation")
+    classes = ("SoundWave", "SoundCue", "SoundAttenuation")
 
     def enrich(
         self,
@@ -617,13 +607,12 @@ register_handler(TexturePayloadHandler())
 register_handler(SoundHandler())
 
 
-class MaterialHandler:
+class MaterialHandler(_SupportsClasses):
     """Enrich Material objects with shader/material property summary."""
 
     capability = "decoded"  # returns output only when real properties were read
 
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        return (obj.class_name or "") == "Material"
+    classes = ("Material",)
 
     def enrich(
         self,
@@ -735,7 +724,7 @@ def _decoded_bone_names(prop: Any) -> list[dict[str, Any]]:
     return names
 
 
-class SkeletonHandler:
+class SkeletonHandler(_SupportsClasses):
     """Enrich Skeleton objects with bone hierarchy summary.
 
     Real bone names decoded from the BoneTree/ReferenceSkeleton properties
@@ -743,8 +732,7 @@ class SkeletonHandler:
     ``bone_source="name_guess"`` and stays summary-tier (#630).
     """
 
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        return (obj.class_name or "") == "Skeleton"
+    classes = ("Skeleton",)
 
     def capability(self, result: dict[str, Any]) -> str:
         # A name guess or an empty fallback is a summary; only decoded property
@@ -897,167 +885,6 @@ register_handler(SkeletonHandler())
 register_handler(MeshHandler())
 
 
-def _extract_baked_state_machines(obj: ObjectRecord) -> list[dict[str, Any]]:
-    """Extract baked state machines from AnimBlueprintGeneratedClass properties.
-
-    Parses the BakedStateMachines tagged property into a list of state machine dicts.
-    Each machine contains its name, initial state, states, and inter-state transitions.
-    States carry exit transitions and evidence (node indices, notify indices).
-    """
-    props = obj.properties or {}
-    raw = props.get("BakedStateMachines")
-    if raw is None:
-        return []
-
-    # Unwrap tagged value envelope
-    if isinstance(raw, dict) and raw.get("kind") == "value":
-        raw = raw.get("value")
-    if not isinstance(raw, list):
-        return []
-
-    machines: list[dict[str, Any]] = []
-    machine_slug_counts: dict[str, int] = {}
-
-    for m in raw:
-        fields = m.get("fields") if isinstance(m, dict) else None
-        if not isinstance(fields, dict):
-            continue
-
-        name = fields.get("MachineName", "")
-        initial = fields.get("InitialState", 0)
-
-        # Machine ID with deduplication
-        sm_slug = _ascii_slug(name)
-        seen = machine_slug_counts.get(sm_slug, 0)
-        machine_slug_counts[sm_slug] = seen + 1
-        if seen:
-            sm_slug = f"{sm_slug}_{seen}"
-        sm_id = f"animblueprint://state_machine/{sm_slug}"
-
-        # States
-        states_raw = fields.get("States")
-        states_val = states_raw.get("value") if isinstance(states_raw, dict) else states_raw
-        states: list[dict[str, Any]] = []
-        if isinstance(states_val, list):
-            for s in states_val:
-                sf = s.get("fields") if isinstance(s, dict) else None
-                if not isinstance(sf, dict):
-                    continue
-                state_name = sf.get("StateName", "")
-                state_slug = _ascii_slug(state_name)
-                sid = f"animblueprint://state_machine/{sm_slug}/state/{state_slug}"
-
-                state: dict[str, Any] = {
-                    "id": sid,
-                    "name": state_name,
-                    "state_root_node_index": sf.get("StateRootNodeIndex", -1),
-                }
-                if sf.get("bIsAConduit"):
-                    state["is_conduit"] = True
-                if sf.get("bAlwaysResetOnEntry"):
-                    state["always_reset_on_entry"] = True
-
-                player = sf.get("PlayerNodeIndices")
-                player_val = player.get("value") if isinstance(player, dict) else player
-                if isinstance(player_val, list):
-                    state["player_node_indices"] = [i for i in player_val if isinstance(i, int)]
-
-                layer = sf.get("LayerNodeIndices")
-                layer_val = layer.get("value") if isinstance(layer, dict) else layer
-                if isinstance(layer_val, list):
-                    state["layer_node_indices"] = [i for i in layer_val if isinstance(i, int)]
-
-                # Exit transitions
-                trans_raw = sf.get("Transitions")
-                trans_val = trans_raw.get("value") if isinstance(trans_raw, dict) else trans_raw
-                exit_trans: list[dict[str, Any]] = []
-                if isinstance(trans_val, list):
-                    for t in trans_val:
-                        tf = t.get("fields") if isinstance(t, dict) else None
-                        if not isinstance(tf, dict):
-                            continue
-                        td: dict[str, Any] = {}
-                        ti = tf.get("TransitionIndex", -1)
-                        if ti >= 0:
-                            td["transition_index"] = ti
-                        rt = tf.get("AutomaticRuleTriggerTime", 0.0)
-                        if isinstance(rt, (int, float)) and rt != 0.0:
-                            td["automatic_rule_trigger_time"] = _as_float(rt)
-                        if td:
-                            td["evidence"] = {
-                                "can_take_delegate_index": tf.get("CanTakeDelegateIndex", -1),
-                                "custom_result_node_index": tf.get("CustomResultNodeIndex", -1),
-                                "b_desired_transition_return_value": tf.get("bDesiredTransitionReturnValue", True),
-                                "b_automatic_remaining_time_rule": tf.get("bAutomaticRemainingTimeRule", False),
-                                "b_only_evaluate_when_active": tf.get("bOnlyEvaluateWhenActive", False),
-                            }
-                            exit_trans.append(td)
-                if exit_trans:
-                    state["exit_transitions"] = exit_trans
-
-                # Evidence
-                state["evidence"] = {
-                    "state_root_node_index": sf.get("StateRootNodeIndex", -1),
-                    "entry_rule_node_index": sf.get("EntryRuleNodeIndex", -1),
-                    "start_notify": sf.get("StartNotify", -1),
-                    "end_notify": sf.get("EndNotify", -1),
-                    "fully_blended_notify": sf.get("FullyBlendedNotify", -1),
-                }
-                states.append(state)
-
-        # Inter-state transitions
-        trans_raw = fields.get("Transitions")
-        trans_val = trans_raw.get("value") if isinstance(trans_raw, dict) else trans_raw
-        transitions: list[dict[str, Any]] = []
-        if isinstance(trans_val, list):
-            for t in trans_val:
-                tf = t.get("fields") if isinstance(t, dict) else None
-                if not isinstance(tf, dict):
-                    continue
-                prev = tf.get("PreviousState", -1)
-                nxt = tf.get("NextState", -1)
-                if prev < 0 or nxt < 0:
-                    continue
-                td: dict[str, Any] = {
-                    "previous_state": prev,
-                    "next_state": nxt,
-                }
-                cd = tf.get("CrossfadeDuration", 0.0)
-                if isinstance(cd, (int, float)) and cd != 0.0:
-                    td["crossfade_duration"] = _as_float(cd)
-                bm = tf.get("BlendMode")
-                if bm is not None:
-                    td["blend_mode"] = str(bm)
-                lt = tf.get("LogicType")
-                if lt is not None:
-                    td["logic_type"] = str(lt)
-                evidence: dict[str, Any] = {}
-                mr = tf.get("MinTimeBeforeReentry", 0.0)
-                if isinstance(mr, (int, float)) and mr != 0.0:
-                    evidence["min_time_before_reentry"] = _as_float(mr)
-                sn = tf.get("StartNotify", -1)
-                if isinstance(sn, int) and sn >= 0:
-                    evidence["start_notify"] = sn
-                en = tf.get("EndNotify", -1)
-                if isinstance(en, int) and en >= 0:
-                    evidence["end_notify"] = en
-                it = tf.get("InterruptNotify", -1)
-                if isinstance(it, int) and it >= 0:
-                    evidence["interrupt_notify"] = it
-                if evidence:
-                    td["evidence"] = evidence
-                transitions.append(td)
-
-        sm: dict[str, Any] = {
-            "id": sm_id,
-            "name": name,
-            "initial_state_index": initial,
-            "states": states,
-            "transitions": transitions,
-        }
-        machines.append(sm)
-
-    return machines
 
 
 class BlueprintFamilyHandler:
@@ -1285,12 +1112,6 @@ def _extract_declaration(
     }
 
 
-def _as_float(value: Any) -> float:
-    """Coerce a decoded numeric field without ever raising out of a handler."""
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return 0.0
 
 
 def _as_int(value: Any) -> int:
@@ -1473,7 +1294,7 @@ register_handler(NiagaraHandler())
 # ── Physics family (#619) — summary tier until decoded fixtures exist ──
 
 
-class PhysicsAssetHandler:
+class PhysicsAssetHandler(_SupportsClasses):
     """Enrich PhysicsAsset objects with body/constraint summary (#619).
 
     Property names per UE source:
@@ -1492,8 +1313,7 @@ class PhysicsAssetHandler:
 
     capability = "summary"
 
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        return (obj.class_name or "") == "PhysicsAsset"
+    classes = ("PhysicsAsset",)
 
     def enrich(
         self,
@@ -1552,7 +1372,7 @@ class PhysicsAssetHandler:
         return result
 
 
-class PhysicalMaterialHandler:
+class PhysicalMaterialHandler(_SupportsClasses):
     """Enrich PhysicalMaterial objects with friction/restitution/density summary (#619).
 
     Property names per UE source:
@@ -1573,8 +1393,7 @@ class PhysicalMaterialHandler:
         ("Density", "density"),
     )
 
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        return (obj.class_name or "") == "PhysicalMaterial"
+    classes = ("PhysicalMaterial",)
 
     def enrich(
         self,
@@ -1715,7 +1534,7 @@ class AnimBlendSpaceHandler:
         return result
 
 
-class AnimCompositeHandler:
+class AnimCompositeHandler(_SupportsClasses):
     """Enrich AnimComposite objects with track/segment summary (#618).
 
     Property names per UE source:
@@ -1730,8 +1549,7 @@ class AnimCompositeHandler:
 
     capability = "summary"
 
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        return (obj.class_name or "") == "AnimComposite"
+    classes = ("AnimComposite",)
 
     def enrich(
         self,
@@ -1781,7 +1599,7 @@ class AnimCompositeHandler:
         return result
 
 
-class AnimLayerInterfaceHandler:
+class AnimLayerInterfaceHandler(_SupportsClasses):
     """Enrich AnimLayerInterface objects (#618).
 
     UE source: ``Engine/Source/Runtime/Engine/Classes/Animation/
@@ -1795,8 +1613,7 @@ class AnimLayerInterfaceHandler:
 
     capability = "summary"
 
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        return (obj.class_name or "") == "AnimLayerInterface"
+    classes = ("AnimLayerInterface",)
 
     def enrich(
         self,
@@ -1917,7 +1734,7 @@ class MaterialFunctionHandler:
         return result
 
 
-class MaterialParameterCollectionHandler:
+class MaterialParameterCollectionHandler(_SupportsClasses):
     """Enrich MaterialParameterCollection objects with scalar/vector parameter summary (#620).
 
     Property names per UE source:
@@ -1932,8 +1749,7 @@ class MaterialParameterCollectionHandler:
 
     capability = "summary"
 
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        return (obj.class_name or "") == "MaterialParameterCollection"
+    classes = ("MaterialParameterCollection",)
 
     def enrich(
         self,
