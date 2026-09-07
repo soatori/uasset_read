@@ -12,19 +12,8 @@ def resolve_name_from_index(
     index: int,
     fallback_prefix: str = "param",
 ) -> str:
-    """Unified name index resolution logic
-
-    Args:
-        name_map: name mapping table
-        index: index value
-        fallback_prefix: fallback prefix when index is out of bounds
-
-    Returns:
-        Resolved name string
-    """
-    if 0 <= index < len(name_map):
-        return name_map[index]
-    return f"{fallback_prefix}_{index}"
+    """Unified name index resolution logic."""
+    return name_map[index] if 0 <= index < len(name_map) else f"{fallback_prefix}_{index}"
 
 
 def read_validated_count_tolerant(
