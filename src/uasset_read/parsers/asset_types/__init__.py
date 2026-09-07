@@ -29,8 +29,8 @@ from uasset_read.parsers.asset_types.property_metadata import build_property_met
 
 logger = logging.getLogger(__name__)
 
-# Opaque stub factory (replaces 40 deleted stub files)
-from uasset_read.parsers.asset_types.opaque_stub import make_opaque_stub
+# Opaque partial-metadata handler (replaces 40 deleted stub files)
+from uasset_read.parsers.asset_types.opaque_stub import parse_opaque_stub
 
 # Dedicated asset-type parsers. Imported statically: the registration table below
 # names them directly, so a missing parser is an ImportError at import time rather
@@ -259,7 +259,7 @@ def register_asset_type_handlers() -> None:
             handlers.append(
                 AssetTypeHandler(
                     class_names=list(class_names),
-                    parse_func=make_opaque_stub(),
+                    parse_func=parse_opaque_stub,
                     handler_name=handler_name,
                 ),
             )

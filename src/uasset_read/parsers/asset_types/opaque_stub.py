@@ -1,31 +1,21 @@
-"""Opaque handler factory function -- eliminates duplicate partial metadata handler code.
+"""Opaque partial-metadata handler shared by all stub-registered asset types.
 
-All opaque handlers returning partial_metadata share the same logic:
-read up to 256 bytes of sample data at current position, return raw_offset + sample_size + parse_status.
-Use make_opaque_stub() to generate, avoiding one stub file per type.
+Every opaque handler returns partial_metadata with the same logic: read up to
+256 bytes of sample data at the current position, return raw_offset +
+sample_size + parse_status. One module function, referenced directly by the
+registration table — no factory, no per-handler closure.
 """
 
-from typing import Any, Callable
+from typing import Any
 
 
-def make_opaque_stub() -> Callable[[Any, list[str]], dict[str, Any]]:
-    """Create an opaque partial metadata handler.
-
-    The generated function reads up to 256 bytes of sample data at the current archive position,
-    returning a dictionary containing raw_offset, sample_size, and parse_status.
-
-    Returns:
-        Parse function with signature (archive, name_map) -> dict
-    """
-
-    def _parse(archive: Any, name_map: list[str]) -> dict[str, Any]:
-        start = archive.tell()
-        remaining = max(0, archive.total_size() - start)
-        sample = archive.read(min(remaining, 256))
-        return {
-            "raw_offset": start,
-            "sample_size": len(sample),
-            "parse_status": "partial_metadata",
-        }
-
-    return _parse
+def parse_opaque_stub(archive: Any, name_map: list[str]) -> dict[str, Any]:
+    """Read up to 256 sample bytes at the current position; report partial metadata."""
+    start = archive.tell()
+    remaining = max(0, archive.total_size() - start)
+    sample = archive.read(min(remaining, 256))
+    return {
+        "raw_offset": start,
+        "sample_size": len(sample),
+        "parse_status": "partial_metadata",
+    }
