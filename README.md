@@ -221,7 +221,7 @@ Shared readers behind that document: `kismet/` (bytecode → C++ pseudocode, rea
 | Config | `config.py` | `LogConfig` dataclass |
 | Package Mgmt | `package.py` | `PackageBundle`, `FileSystemPackageProvider`, `PackageArchive`, `open_package_bundle` |
 | CLI | `cli.py` | argparse entry point; emits the v2 document page, or the retired-flag error |
-| Versioning | `versioning.py` | `VersionContainer`, `build_version_container` |
+| Versioning | `versioning.py` | `VersionContext`, `build_version_context_from_summary` |
 | Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
 | Memory Safety | `memory_safety.py` | `ResourceBudget` read/decompress checkpoints, `MemoryLimitExceeded` |
 | Project Logging | `project_logging.py` | `--clean-logs` retention and per-run log files (the library never configures process-global logging) |
