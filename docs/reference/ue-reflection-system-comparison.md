@@ -104,7 +104,7 @@ enum EFunctionFlags : uint32 {
 
 #### EPropertyFlags（属性标志）
 
-项目已完整实现（见 `constants.py` 第 315-376 行），包含 50+ 个 CPF_* 常量。
+公开 CPF_* 表曾位于 `constants.py`（零消费者，已于 2026-09-07 死码清理移除）。现行生效的标志位为 `kismet/native_fields.py` 的私有 `_CPF_*` 常量。
 
 ### 1.4 FProperty 类型层次
 
@@ -190,11 +190,9 @@ UBlueprintGeneratedClass (生成类)
 | 复杂 | Struct, Text, Enum, Delegate, MulticastDelegate |
 | UE5/Verse | VerseString, VerseClass, VerseFunction, VerseDynamic, VerseCell, VerseValue, FieldPath |
 
-#### ✅ CPF_* 属性标志位（完整）
+#### ✅ CPF_* 属性标志位（公开表已移除，2026-09-07）
 
-**位置**：`constants.py` 第 315-376 行
-
-50+ 个 CPF_* 常量，包括：
+**曾位置**：`constants.py` 第 315-376 行（下表为移除前的公开表内容，保留作 UE 参考；现行实现为 `native_fields.py` 私有 `_CPF_*`）
 - 编辑标志：CPF_Edit, CPF_EditAnywhere, CPF_EditConst
 - 蓝图可见性：CPF_BlueprintVisible, CPF_BlueprintReadWrite, CPF_BlueprintReadOnly
 - 网络复制：CPF_Net, CPF_RepNotify, CPF_RepRetry
@@ -325,7 +323,7 @@ UBlueprintGeneratedClass (生成类)
 
 | 枚举 | 项目实现 | 覆盖率 |
 |---|---|---|
-| EPropertyFlags (CPF_*) | ✅ 完整 | 50+ 常量 |
+| EPropertyFlags (CPF_*) | ⚠️ 部分 | 私有 `_CPF_*`（native_fields）；公开表 2026-09-07 移除 |
 | EClassFlags (CLASS_*) | ❌ 缺失 | 0% |
 | EFunctionFlags (FUNC_*) | ❌ 缺失 | 0% |
 | EStructFlags | ❌ 缺失 | 0% |

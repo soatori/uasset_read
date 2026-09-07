@@ -171,7 +171,7 @@ ETRIGGER_EVENT_PIN_MAP = {
     "Exited": "Exited",
 }
 
-# =====================================================================# ============================================================================
+# =============================================================================
 
 FIXED_UNVERSIONED_SIZES: dict[str, int] = {
     "BoolProperty": 1,  # PropertyBool.cpp SerializeItem: unversioned bool is one uint8

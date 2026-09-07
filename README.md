@@ -204,7 +204,7 @@ Data flow is the v2 package-first pipeline defined in the [canonical refactor de
 ```text
 .uasset → archive → parsers/legacy_reader (Legacy container reader; Zen deferred, #624)
               → parsers (tagged properties; unversioned gated on #623)
-              → models/object_model + parsers/asset_types/handlers → PackageDocument
+              → models/object_model + parsers/asset_types/handlers_impl → PackageDocument
               → projection → JSON / CLI / Agent tools (same document)
 ```
 
@@ -216,7 +216,7 @@ Shared readers behind that document: `kismet/` (bytecode → C++ pseudocode, rea
 | -------- | ------ | ------------- |
 | **Core** | | |
 | FArchive | `archive.py` | Binary reader with byte swapping, mmap |
-| Constants | `constants.py` | Version numbers, property type thresholds, CPF/PropertyTag flags |
+| Constants | `constants.py` | Version numbers, property type thresholds, PropertyTag flags |
 | Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
 | Config | `config.py` | `LogConfig` dataclass |
 | Package Mgmt | `package.py` | `PackageBundle`, `FileSystemPackageProvider`, `PackageArchive`, `open_package_bundle` |
@@ -224,8 +224,7 @@ Shared readers behind that document: `kismet/` (bytecode → C++ pseudocode, rea
 | Versioning | `versioning.py` | `VersionContainer`, `build_version_container` |
 | Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
 | Memory Safety | `memory_safety.py` | `ResourceBudget` read/decompress checkpoints, `MemoryLimitExceeded` |
-| Bounded Events | `bounded_events.py` | Bounded event buffer for diagnostics |
-| Project Logging | `project_logging.py` | `log_context` scoping and `--clean-logs` retention (the library never configures process-global logging) |
+| Project Logging | `project_logging.py` | `--clean-logs` retention and per-run log files (the library never configures process-global logging) |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, FEdGraphPinType, FMemberReference, PropertyTag/PropertyValue, Anim IR, structured diagnostics, property fallback |
 | **Parsers** | `parsers/` | 28 tagged-property parse functions + dispatcher, custom property registry, class handler registry, BinaryOrNative handlers |

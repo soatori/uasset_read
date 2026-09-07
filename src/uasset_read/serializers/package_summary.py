@@ -623,7 +623,7 @@ def _read_tail_offsets(archive: FArchive, file_version_ue4: int) -> dict:
         chunk_ids_count = archive.read_i32()
         if chunk_ids_count < 0:
             raise ParseError(f"Negative chunk ids count: {chunk_ids_count}")
-        if not archive.check_remaining(chunk_ids_count * 4, "ChunkIDs"):
+        if not archive.check_remaining(chunk_ids_count * 4):
             raise ParseError(f"ChunkIDs count {chunk_ids_count} exceeds remaining file bytes")
         for _ in range(chunk_ids_count):
             chunk_ids.append(archive.read_i32())
@@ -1002,7 +1002,7 @@ def read_preload_dependencies(archive: FArchive, summary: PackageFileSummary) ->
 
     archive.seek(summary.preload_dependency_offset)
 
-    if not archive.check_remaining(summary.preload_dependency_count * 4, "PreloadDependencies"):
+    if not archive.check_remaining(summary.preload_dependency_count * 4):
         raise ParseError(f"PreloadDependencies count {summary.preload_dependency_count} exceeds remaining file bytes")
 
     dependencies: List[int] = []

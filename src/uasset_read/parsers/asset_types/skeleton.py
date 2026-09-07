@@ -79,7 +79,7 @@ def parse_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
 
         # Step 4: Parse Guid: FGuid (16 bytes)
         # Guid is serialized in UE4 >= VER_UE4_SKELETON_GUID_SERIALIZATION
-        if archive.check_remaining(FGUID_SIZE, "Skeleton.Guid"):
+        if archive.check_remaining(FGUID_SIZE):
             guid_bytes = archive.read_bytes(FGUID_SIZE)
             result["guid"] = _format_guid(guid_bytes)
 

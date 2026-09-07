@@ -238,14 +238,13 @@ class FArchive:
         """Return total file size."""
         return self._file_size
 
-    def check_remaining(self, expected_bytes: int, context: str = "") -> bool:
+    def check_remaining(self, expected_bytes: int) -> bool:
         """Check whether remaining bytes are sufficient.
 
         Used for truncation detection — verifies data integrity before critical reads.
 
         Args:
             expected_bytes: number of bytes needed
-            context: diagnostic context description
 
         Returns:
             True if sufficient bytes remain, False otherwise

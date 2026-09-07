@@ -1022,12 +1022,14 @@ bool UK2Node_MacroInstance::CanPasteHere(const UEdGraph* TargetGraph) const
 
 ## 8. 解析器实现指南
 
+> 状态注记(2026-09-07):本节描述 v1 图管线。`graph/flow_builder.py`、`chain_builder.py` 与 `CONTROL_FLOW_NODES` 常量均已随各自清理波移除,本表仅作历史参考;现行图解析见 `serializers/graph_node.py`。
+
 ### 8.1 当前状态
 
 | 模块 | 文件 | 状态 | 说明 |
 | ------ | ------ | ------ | ------ |
 | 节点读取 | `serializers/graph.py` `read_k2node_macro_instance()` | 🟡 部分 | 读取宏引用属性但不递归解析宏图 |
-| 常量定义 | `constants.py` `CONTROL_FLOW_NODES` | 🔴 终止 | `K2Node_MacroInstance` 被标记为控制流终止节点 |
+| 常量定义 | `constants.py` `CONTROL_FLOW_NODES`（已于 2026-09-07 死码清理移除） | 🔴 终止 | `K2Node_MacroInstance` 被标记为控制流终止节点 |
 | 执行链追踪 | `graph/flow_builder.py` | 🔴 终止 | 遇到 MacroInstance 标记 `stopped_at` 后停止 |
 | 链构建 | `graph/chain_builder.py` | 🔴 终止 | MacroInstance 后的节点不进入执行链 |
 | 数据流 | `graph/flow_builder.py` | 🟢 可用 | 引脚连接追踪不受 MacroInstance 影响 |
