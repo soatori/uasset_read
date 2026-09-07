@@ -50,6 +50,14 @@ from ..models.object_model import (
 from ..versioning import MappingInfo, build_version_context_from_summary
 
 
+def _diag(code: str, message: str, stage: str, *, object_id: str | None = None,
+          severity: str = "warning", effect: str | None = "semantic_loss",
+          offset: int | None = None, size: int | None = None) -> Diagnostic:
+    """Build a warning Diagnostic (most sites are identical in shape)."""
+    return Diagnostic(severity=severity, code=code, message=message, stage=stage,
+                      object_id=object_id, offset=offset, size=size, effect=effect)
+
+
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:
     """Convert a PackageIndex to an ObjectRef."""
     if pi.is_null:
@@ -95,16 +103,10 @@ def _build_preload_relations(
         start = exp.first_export_dependency
         end = start + total
         if end > len(preload_deps):
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="PRELOAD_DEPENDENCY_RANGE_INVALID",
-                    message=f"Export {i} preload span [{start},{end}) exceeds preload array size {len(preload_deps)}",
-                    stage="package.preload",
-                    object_id=f"export:{i}",
-                    recoverable=True,
-                )
-            )
+            diagnostics.append(_diag(
+                "PRELOAD_DEPENDENCY_RANGE_INVALID",
+                f"Export {i} preload span [{start},{end}) exceeds preload array size {len(preload_deps)}",
+                "package.preload", object_id=f"export:{i}", effect=None))
             continue
         for raw in preload_deps[start:end]:
             to_id = _package_index_to_id(PackageIndex(raw))
@@ -131,29 +133,17 @@ def _validate_relation_targets(
         try:
             idx = int(raw_idx)
         except ValueError:
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="RELATION_TARGET_INVALID",
-                    message=f"{rel.kind} target {rel.to_id} from {rel.from_id} has unparseable index",
-                    stage="package.relations",
-                    object_id=rel.from_id,
-                    recoverable=True,
-                )
-            )
+            diagnostics.append(_diag(
+                "RELATION_TARGET_INVALID",
+                f"{rel.kind} target {rel.to_id} from {rel.from_id} has unparseable index",
+                "package.relations", object_id=rel.from_id, effect=None))
             continue
         limit = export_count if table == "export" else import_count
         if table not in ("export", "import") or idx >= limit:
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="RELATION_TARGET_OUT_OF_RANGE",
-                    message=f"{rel.kind} target {rel.to_id} from {rel.from_id} exceeds {table} table size {limit}",
-                    stage="package.relations",
-                    object_id=rel.from_id,
-                    recoverable=True,
-                )
-            )
+            diagnostics.append(_diag(
+                "RELATION_TARGET_OUT_OF_RANGE",
+                f"{rel.kind} target {rel.to_id} from {rel.from_id} exceeds {table} table size {limit}",
+                "package.relations", object_id=rel.from_id, effect=None))
             continue
         kept.append(rel)
     return kept, diagnostics
@@ -249,17 +239,10 @@ def resolve_import_dependencies(
             )
         )
         if not owner:
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="IMPORT_PACKAGE_UNRESOLVED",
-                    message=f"Import {i} ({imp.class_name} {imp.object_name}) has no owning package: {reason}",
-                    stage="package.import_map",
-                    object_id=f"import:{i}",
-                    effect="semantic_loss",
-                    recoverable=True,
-                )
-            )
+            diagnostics.append(_diag(
+                "IMPORT_PACKAGE_UNRESOLVED",
+                f"Import {i} ({imp.class_name} {imp.object_name}) has no owning package: {reason}",
+                "package.import_map", object_id=f"import:{i}"))
     return dependencies, diagnostics
 
 
@@ -465,19 +448,14 @@ class LegacyPackageReader:
             # every SerialOffset silently misresolves.
             if archive.has_uexp and archive.main_size != summary.total_header_size:
                 archive.reject_uexp_region()
-                diagnostics.append(
-                    Diagnostic(
-                        severity="warning",
-                        code="UEXP_SPLIT_GUARD_FAILED",
-                        message=(
-                            f"main file size {archive.main_size} != "
-                            f"Summary.TotalHeaderSize {summary.total_header_size}; "
-                            f".uexp not concatenated — SerialOffset would misresolve"
-                        ),
-                        stage="package.uexp_guard",
-                        recoverable=True,
-                    )
-                )
+                diagnostics.append(_diag(
+                    "UEXP_SPLIT_GUARD_FAILED",
+                    (
+                        f"main file size {archive.main_size} != "
+                        f"Summary.TotalHeaderSize {summary.total_header_size}; "
+                        f".uexp not concatenated — SerialOffset would misresolve"
+                    ),
+                    "package.uexp_guard", effect=None))
 
             # Property tag format is version-gated; set the gates the same
             # way pipeline/stages.py does so UE5.0-5.2 tags don't fall into
@@ -500,15 +478,10 @@ class LegacyPackageReader:
                         summary.payload_toc_offset,  # type: ignore[arg-type]
                     )
                 except (struct.error, ValueError, OverflowError, OSError) as e:
-                    diagnostics.append(
-                        Diagnostic(
-                            severity="warning",
-                            code="PACKAGE_TRAILER_PARSE_FAILED",
-                            message=f"PackageTrailer parse failed: {e}",
-                            stage="package.trailer",
-                            recoverable=True,
-                        )
-                    )
+                    diagnostics.append(_diag(
+                        "PACKAGE_TRAILER_PARSE_FAILED",
+                        f"PackageTrailer parse failed: {e}",
+                        "package.trailer", effect=None))
                     package_trailer = None
 
             # 1c. Parse DataResource table (UE5.1+, after trailer)
@@ -526,15 +499,10 @@ class LegacyPackageReader:
                         summary.data_resource_offset,  # type: ignore[arg-type]
                     )
                 except (struct.error, ValueError, OverflowError, OSError) as e:
-                    diagnostics.append(
-                        Diagnostic(
-                            severity="warning",
-                            code="DATA_RESOURCE_PARSE_FAILED",
-                            message=f"DataResource parse failed: {e}",
-                            stage="package.data_resource",
-                            recoverable=True,
-                        )
-                    )
+                    diagnostics.append(_diag(
+                        "DATA_RESOURCE_PARSE_FAILED",
+                        f"DataResource parse failed: {e}",
+                        "package.data_resource", effect=None))
                     data_resource_map = None
 
             # 2. Validate name table
@@ -573,20 +541,14 @@ class LegacyPackageReader:
             if not archive.has_uexp and archive.main_size == summary.total_header_size and export_map:
                 max_end = max((e.serial_offset + e.serial_size for e in export_map), default=0)
                 if max_end > archive.total_size():
-                    diagnostics.append(
-                        Diagnostic(
-                            severity="error",
-                            code="PACKAGE_SIDECAR_MISSING",
-                            message=(
-                                f"main file is header-only ({archive.main_size} bytes) "
-                                f"but no .uexp was found; exports referencing offsets "
-                                f">= {summary.total_header_size} cannot be read"
-                            ),
-                            stage="package.bundle",
-                            effect="data_loss",
-                            recoverable=True,
-                        )
-                    )
+                    diagnostics.append(_diag(
+                        "PACKAGE_SIDECAR_MISSING",
+                        (
+                            f"main file is header-only ({archive.main_size} bytes) "
+                            f"but no .uexp was found; exports referencing offsets "
+                            f">= {summary.total_header_size} cannot be read"
+                        ),
+                        "package.bundle", severity="error", effect="data_loss"))
 
             # 6. Read depends map
             depends_map = read_depends_map(archive, summary, budget)
@@ -746,16 +708,10 @@ class LegacyPackageReader:
                         obj.coverage.extend(cov)
                         diagnostics.extend(handler_diags)
                     except Exception as exc:
-                        diagnostics.append(
-                            Diagnostic(
-                                severity="warning",
-                                code="HANDLER_FAILURE",
-                                message=f"Handler error for {obj.id}: {exc}",
-                                stage="semantic.handler",
-                                object_id=obj.id,
-                                recoverable=True,
-                            )
-                        )
+                        diagnostics.append(_diag(
+                            "HANDLER_FAILURE",
+                            f"Handler error for {obj.id}: {exc}",
+                            "semantic.handler", object_id=obj.id, effect=None))
 
             # 17b. Payload descriptors are populated by the caller
             # (parse_package_document) after read() returns, using the
@@ -782,15 +738,9 @@ class LegacyPackageReader:
             )
 
         except ParseError as e:
-            diagnostics.append(
-                Diagnostic(
-                    severity="error",
-                    code="PACKAGE_READ_FAILED",
-                    message=str(e),
-                    stage="package.read",
-                    recoverable=True,
-                )
-            )
+            diagnostics.append(_diag(
+                "PACKAGE_READ_FAILED", str(e), "package.read",
+                severity="error", effect=None))
             return self._build_minimal_document(None, diagnostics)
 
     def _load_mappings(self, budget: ResourceBudget, diagnostics: list[Diagnostic]) -> Any | None:
@@ -811,16 +761,10 @@ class LegacyPackageReader:
 
             return TypeMappingsProvider.from_file(self._mappings_path, budget=budget)
         except Exception as exc:
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="MAPPINGS_LOAD_FAILED",
-                    message=f"Failed to load mappings '{self._mappings_path}': {type(exc).__name__}: {exc}",
-                    stage="package.mappings",
-                    effect="semantic_loss",
-                    recoverable=True,
-                )
-            )
+            diagnostics.append(_diag(
+                "MAPPINGS_LOAD_FAILED",
+                f"Failed to load mappings '{self._mappings_path}': {type(exc).__name__}: {exc}",
+                "package.mappings"))
             return None
 
     def _parse_requested_object_properties(
@@ -939,65 +883,37 @@ class LegacyPackageReader:
                     remaining = serial_end - archive.tell()
                     padded = remaining <= 16 and not any(archive.read(remaining))
                     if not padded:
-                        diagnostics.append(
-                            Diagnostic(
-                                severity="warning",
-                                code="EXPORT_TRAILING_BYTES_UNCONSUMED",
-                                message=(
-                                    f"Export {i} ({obj.name}) leaves {remaining} undecoded "
-                                    f"bytes after the tagged properties (class {cn})"
-                                ),
-                                stage="objects.export",
-                                object_id=obj.id,
-                                effect="semantic_loss",
-                                recoverable=True,
-                            )
-                        )
+                        diagnostics.append(_diag(
+                            "EXPORT_TRAILING_BYTES_UNCONSUMED",
+                            (
+                                f"Export {i} ({obj.name}) leaves {remaining} undecoded "
+                                f"bytes after the tagged properties (class {cn})"
+                            ),
+                            "objects.export", object_id=obj.id))
                 if overrun > 0:
                     obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
-                    diagnostics.append(
-                        Diagnostic(
-                            severity="warning",
-                            code="EXPORT_PROPERTY_BOUNDS_EXCEEDED",
-                            message=(
-                                f"Export {i} ({obj.name}) property parse ran "
-                                f"{overrun} bytes past serial_end {serial_end}"
-                            ),
-                            stage="properties.tagged",
-                            object_id=obj.id,
-                            effect="semantic_loss",
-                            recoverable=True,
-                        )
-                    )
+                    diagnostics.append(_diag(
+                        "EXPORT_PROPERTY_BOUNDS_EXCEEDED",
+                        (
+                            f"Export {i} ({obj.name}) property parse ran "
+                            f"{overrun} bytes past serial_end {serial_end}"
+                        ),
+                        "properties.tagged", object_id=obj.id))
 
             except ExportBoundsExceeded as e:
                 obj.properties = {}
                 obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
-                diagnostics.append(
-                    Diagnostic(
-                        severity="warning",
-                        code="EXPORT_PROPERTY_BOUNDS_EXCEEDED",
-                        message=f"Export {i} ({obj.name}) read exceeded serial bound: {e}",
-                        stage="properties.tagged",
-                        object_id=obj.id,
-                        effect="semantic_loss",
-                        recoverable=True,
-                    )
-                )
+                diagnostics.append(_diag(
+                    "EXPORT_PROPERTY_BOUNDS_EXCEEDED",
+                    f"Export {i} ({obj.name}) read exceeded serial bound: {e}",
+                    "properties.tagged", object_id=obj.id))
             except (ParseError, EOFError, struct.error, ValueError, UnicodeError) as e:
                 obj.properties = {}
                 obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
-                diagnostics.append(
-                    Diagnostic(
-                        severity="warning",
-                        code="EXPORT_PROPERTY_PARSE_FAILED",
-                        message=f"Export {i} ({obj.name}) property parse failed: {type(e).__name__}: {e}",
-                        stage="properties.tagged",
-                        object_id=obj.id,
-                        effect="semantic_loss",
-                        recoverable=True,
-                    )
-                )
+                diagnostics.append(_diag(
+                    "EXPORT_PROPERTY_PARSE_FAILED",
+                    f"Export {i} ({obj.name}) property parse failed: {type(e).__name__}: {e}",
+                    "properties.tagged", object_id=obj.id))
             finally:
                 archive._current_object_id = ""
                 archive.set_read_range(prev_range)
@@ -1128,59 +1044,36 @@ def _attach_blueprint_graph_extras(
     owners: dict[str, list[dict]] = {}
     for graph in graphs:
         if graph.get("parse_errors"):
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="BLUEPRINT_GRAPH_PARSE_FAILED",
-                    message=f"graph export {graph['id']}: {graph['parse_errors'][0]}",
-                    stage="semantic.blueprint",
-                    object_id=graph["id"],
-                    recoverable=True,
-                )
-            )
+            diagnostics.append(_diag(
+                "BLUEPRINT_GRAPH_PARSE_FAILED",
+                f"graph export {graph['id']}: {graph['parse_errors'][0]}",
+                "semantic.blueprint", object_id=graph["id"], effect=None))
             continue
         try:
             export_idx = int(graph["id"].split(":")[1])
         except (ValueError, IndexError):
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="BLUEPRINT_GRAPH_ID_INVALID",
-                    message=f"graph export {graph['id']} has unparseable export index",
-                    stage="semantic.blueprint",
-                    object_id=graph["id"],
-                    recoverable=True,
-                )
-            )
+            diagnostics.append(_diag(
+                "BLUEPRINT_GRAPH_ID_INVALID",
+                f"graph export {graph['id']} has unparseable export index",
+                "semantic.blueprint", object_id=graph["id"], effect=None))
             continue
         owner = _resolve_graph_owner(export_idx, export_map, objects)
         if owner is None:
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="BLUEPRINT_GRAPH_OWNER_UNRESOLVED",
-                    message=f"graph export {graph['id']} has no Blueprint-family owner",
-                    stage="semantic.blueprint",
-                    object_id=graph["id"],
-                    recoverable=True,
-                )
-            )
+            diagnostics.append(_diag(
+                "BLUEPRINT_GRAPH_OWNER_UNRESOLVED",
+                f"graph export {graph['id']} has no Blueprint-family owner",
+                "semantic.blueprint", object_id=graph["id"], effect=None))
             continue
         owners.setdefault(owner, []).append(graph)
     total_unresolved = sum(g.get("unresolved_links", 0) for grouped in owners.values() for g in grouped)
     if total_unresolved:
-        diagnostics.append(
-            Diagnostic(
-                severity="warning",
-                code="BLUEPRINT_EXTERNAL_PIN_LINK",
-                message=(
-                    f"{total_unresolved} pin link(s) did not resolve to a parsed pin "
-                    f"(cross-package links are not decoded)"
-                ),
-                stage="semantic.blueprint",
-                recoverable=True,
-            )
-        )
+        diagnostics.append(_diag(
+            "BLUEPRINT_EXTERNAL_PIN_LINK",
+            (
+                f"{total_unresolved} pin link(s) did not resolve to a parsed pin "
+                f"(cross-package links are not decoded)"
+            ),
+            "semantic.blueprint", effect=None))
     for grouped in owners.values():
         for graph in grouped:
             graph.pop("unresolved_links", None)
@@ -1233,15 +1126,10 @@ def _attach_blueprint_graph_extras(
                 entry = extras.setdefault(owner_id, {})
                 entry["kismet"] = funcs
     except Exception as exc:
-        diagnostics.append(
-            Diagnostic(
-                severity="warning",
-                code="KISMET_DECOMPILE_FAILED",
-                message=f"Kismet decompile pass failed: {exc}",
-                stage="semantic.kismet",
-                recoverable=True,
-            )
-        )
+        diagnostics.append(_diag(
+            "KISMET_DECOMPILE_FAILED",
+            f"Kismet decompile pass failed: {exc}",
+            "semantic.kismet", effect=None))
 
 
 def _read_table_rows(
@@ -1280,17 +1168,9 @@ def _read_table_rows(
     blob = archive.read(min(remaining, _MAX_TABLE_BLOB))
     (row_count,) = struct.unpack_from("<i", blob, 0)
     if row_count < 0 or row_count > _MAX_TABLE_ROWS:
-        diagnostics.append(
-            Diagnostic(
-                severity="warning",
-                code="TABLE_ROW_COUNT_INVALID",
-                message=f"{object_id}: table row count {row_count} outside sane range",
-                stage="payload.table",
-                object_id=object_id,
-                effect="semantic_loss",
-                recoverable=True,
-            )
-        )
+        diagnostics.append(_diag("TABLE_ROW_COUNT_INVALID",
+                                 f"{object_id}: table row count {row_count} outside sane range",
+                                 "payload.table", object_id=object_id))
         return result
     header = 4
     if curve_table:
@@ -1344,35 +1224,21 @@ def _read_table_rows(
     residue = limit - payload.tell()
     if complete and residue:
         complete = False
-        diagnostics.append(
-            Diagnostic(
-                severity="warning",
-                code="TABLE_PAYLOAD_RESIDUE",
-                message=(
-                    f"{object_id}: {residue} undecoded byte(s) after {row_count} row(s) in the "
-                    f"table payload ({limit} bytes); row data not marked complete"
-                ),
-                stage="payload.table",
-                object_id=object_id,
-                effect="semantic_loss",
-                recoverable=True,
-            )
-        )
+        diagnostics.append(_diag(
+            "TABLE_PAYLOAD_RESIDUE",
+            (
+                f"{object_id}: {residue} undecoded byte(s) after {row_count} row(s) in the "
+                f"table payload ({limit} bytes); row data not marked complete"
+            ),
+            "payload.table", object_id=object_id))
     if not complete:
-        diagnostics.append(
-            Diagnostic(
-                severity="warning",
-                code="TABLE_ROWS_TRUNCATED",
-                message=(
-                    f"{object_id}: parsed {len(names)}/{row_count} rows within the "
-                    f"export payload ({min(remaining, _MAX_TABLE_BLOB)} bytes sliced)"
-                ),
-                stage="payload.table",
-                object_id=object_id,
-                effect="semantic_loss",
-                recoverable=True,
-            )
-        )
+        diagnostics.append(_diag(
+            "TABLE_ROWS_TRUNCATED",
+            (
+                f"{object_id}: parsed {len(names)}/{row_count} rows within the "
+                f"export payload ({min(remaining, _MAX_TABLE_BLOB)} bytes sliced)"
+            ),
+            "payload.table", object_id=object_id))
     result["row_count"] = len(names)
     result["row_names"] = names
     result["row_bytes_consumed"] = payload.tell()
@@ -1444,17 +1310,10 @@ def _read_string_table(
         result["namespace"] = archive.read_fstring()
         entry_count = archive.read_i32()
         if entry_count < 0 or entry_count > _MAX_TABLE_ROWS:
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="TABLE_ENTRY_COUNT_INVALID",
-                    message=f"{object_id}: string table entry count {entry_count} outside sane range",
-                    stage="payload.string_table",
-                    object_id=object_id,
-                    effect="semantic_loss",
-                    recoverable=True,
-                )
-            )
+            diagnostics.append(_diag(
+                "TABLE_ENTRY_COUNT_INVALID",
+                f"{object_id}: string table entry count {entry_count} outside sane range",
+                "payload.string_table", object_id=object_id))
             return result
         result["entry_count"] = entry_count
         # Probe: if the first key fails to read (non-standard format with
@@ -1479,18 +1338,11 @@ def _read_string_table(
             result["entries"].append({"key": key, "value": value})
         result["complete"] = True
     except (ExportBoundsExceeded, ParseError, EOFError, struct.error, ValueError, UnicodeError) as e:
-        diagnostics.append(
-            Diagnostic(
-                severity="warning",
-                code="STRING_TABLE_TRUNCATED",
-                message=(
-                    f"{object_id}: string table trailer unreadable after "
-                    f"{len(result['entries'])}/{result['entry_count']} entries: {type(e).__name__}: {e}"
-                ),
-                stage="payload.string_table",
-                object_id=object_id,
-                effect="semantic_loss",
-                recoverable=True,
-            )
-        )
+        diagnostics.append(_diag(
+            "STRING_TABLE_TRUNCATED",
+            (
+                f"{object_id}: string table trailer unreadable after "
+                f"{len(result['entries'])}/{result['entry_count']} entries: {type(e).__name__}: {e}"
+            ),
+            "payload.string_table", object_id=object_id))
     return result
