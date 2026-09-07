@@ -8,7 +8,6 @@ Equivalent migration of uasset_read.py lines 5289-6004.
 import logging
 import struct
 from typing import TYPE_CHECKING, List, Dict, Any, Optional, Tuple
-import re
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +24,6 @@ from uasset_read.models.properties import (
     DelegateValue,
     SoftObjectPathValue,
 )
-from uasset_read.models.core import FEdGraphPinType
 from uasset_read.exceptions import ParseError, ErrorContext
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
@@ -1631,125 +1629,3 @@ def _dispatch_value_parse(
     dummy_tag = PropertyTag(name="Value", type=value_type, size=0)
     parse_property_value = _get_parse_property_value()
     return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
-
-
-# ============================================================================
-# Default value parsing (equivalent migration of uasset_read.py section 4650-4704)
-# ============================================================================
-
-
-def parse_default_value(value_str: str, var_type: FEdGraphPinType) -> Any:
-    """
-    Parse DefaultValue string to Python native types (BLUE-03).
-
-    Per D-13: parse to int, float, bool, str.
-    Per D-14: fall back to raw string on parse failure.
-    Per D-15: basic types only -- no arrays, vectors, or objects.
-    Per D-16: Vector types kept as string "(X=...,Y=...,Z=...)".
-    """
-    if not value_str:
-        return None
-
-    # Check vector format, keep as string
-    if value_str.startswith("(") and value_str.endswith(")"):
-        return value_str
-
-    # Use PinCategory for type detection
-    category = var_type.pin_category.lower()
-
-    # Boolean parsing
-    if category in ("bool", "boolean"):
-        if value_str.lower() in ("true", "1"):
-            return True
-        elif value_str.lower() in ("false", "0"):
-            return False
-        return value_str
-
-    # Integer parsing
-    if category in ("int", "integer"):
-        if re.match(r"^-?\d+$", value_str):
-            return int(value_str)
-        return value_str
-
-    # Float/real number parsing
-    if category in ("float", "real", "double"):
-        if re.match(r"^-?\d+\.?\d*$", value_str):
-            return float(value_str)
-        return value_str
-
-    # String/Name: keep as-is
-    if category in ("string", "name", "text"):
-        return value_str
-
-    # Unknown category: fall back to raw string
-    return value_str
-
-
-# ============================================================================
-# Variable type formatting (equivalent migration of uasset_read.py section 4829-4907)
-# ============================================================================
-
-
-def format_variable_type(pin_type: FEdGraphPinType, name_map: Optional[List[str]] = None) -> str:
-    """
-    Format FEdGraphPinType into a complete type string (per D-04).
-
-    Handles: basic types, container types (TArray/TSet/TMap), reference types, const types.
-    """
-    # Container type prefix
-    container_prefix = ""
-    container_type = getattr(pin_type, "container_type", 0)
-    if container_type == 1:  # Array
-        container_prefix = "TArray<"
-    elif container_type == 2:  # Set
-        container_prefix = "TSet<"
-    elif container_type == 3:  # Map
-        container_prefix = "TMap<"
-
-    # Base type from PinCategory
-    category = pin_type.pin_category.lower()
-    sub_category = getattr(pin_type, "pin_subcategory", "") or getattr(pin_type, "pin_sub_category", "") or ""
-    sub_category = sub_category.lower()
-
-    # Type mapping
-    type_str = ""
-    if category in ("bool", "boolean"):
-        type_str = "bool"
-    elif category in ("int", "integer"):
-        type_str = "int"
-    elif category in ("float", "real", "double"):
-        type_str = "float"
-    elif category in ("string", "str"):
-        type_str = "FString"
-    elif category in ("name",):
-        type_str = "FName"
-    elif category in ("text",):
-        type_str = "FText"
-    elif category in ("object", "class", "interface"):
-        pin_subcategory_object = getattr(pin_type, "pin_subcategory_object", 0)
-        if pin_subcategory_object != 0 and name_map:
-            if sub_category and sub_category != "none":
-                type_str = sub_category
-            else:
-                type_str = "UObject"
-        else:
-            type_str = "UObject"
-        is_weak = getattr(pin_type, "is_weak_pointer", False)
-        if not is_weak:
-            type_str += "*"
-    elif sub_category and sub_category != "none":
-        type_str = sub_category
-        if category in ("object", "class") or "object" in category:
-            type_str += "*"
-    else:
-        type_str = category
-
-    # Container suffix
-    container_suffix = ">" if container_prefix else ""
-
-    # Const prefix (backward compat: is_const may not exist)
-    const_prefix = ""
-    if getattr(pin_type, "is_const", False):
-        const_prefix = "const "
-
-    return f"{const_prefix}{container_prefix}{type_str}{container_suffix}"

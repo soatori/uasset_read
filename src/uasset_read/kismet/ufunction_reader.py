@@ -319,7 +319,7 @@ def _read_ustruct_prefix_and_script(
                     export,
                     export_index,
                 )
-            for i in range(children_count):
+            for _ in range(children_count):
                 window.read_i32()
         else:
             # Legacy: single pointer

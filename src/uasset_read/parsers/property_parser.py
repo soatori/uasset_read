@@ -1027,12 +1027,9 @@ def _read_property_loop(
                     PropertyValue(
                         name=tag.name,
                         type=tag.type,
-                        value=PropertyFallback(
-                            name=tag.name,
-                            type=tag.type,
-                            size=tag.size,
-                            raw_bytes=b"",
-                            reason=FallbackReason.SIZE_EXCEEDED,
+                        value=PropertyFallback.from_tag(
+                            tag,
+                            FallbackReason.SIZE_EXCEEDED,
                             error_message=f"Size {tag.size} exceeds remaining bytes",
                         ),
                         array_index=tag.array_index,
@@ -1066,13 +1063,9 @@ def _read_property_loop(
 
             # If parsing returns None (old path or handler explicitly returns None), convert to PropertyFallback
             if value is None:
-                value = PropertyFallback(
-                    name=tag.name,
-                    type=tag.type,
-                    size=tag.size,
-                    raw_bytes=b"",
-                    reason=FallbackReason.UNSUPPORTED_TYPE,
-                    array_index=tag.array_index,
+                value = PropertyFallback.from_tag(
+                    tag,
+                    FallbackReason.UNSUPPORTED_TYPE,
                     error_message="Parser returned None (unsupported or missing handler)",
                 )
 

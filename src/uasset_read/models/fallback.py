@@ -8,10 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
 from enum import Enum
-from typing import Optional, Dict, Any, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from uasset_read.exceptions import ErrorContext
+from typing import Optional, Dict, Any
 
 
 class FallbackReason(str, Enum):
@@ -40,18 +37,14 @@ class PropertyFallback(PropertyValue):
         raw_bytes: bytes = b"",
         reason: FallbackReason = FallbackReason.UNSUPPORTED_TYPE,
         array_index: int = 0,
-        tag_data: Optional[Dict[str, Any]] = None,
         error_message: Optional[str] = None,
-        error_context: Optional["ErrorContext"] = None,
         value: Any = None,
     ):
         super().__init__(name=name, type=type, value=value, array_index=array_index)
         self.size = size
         self.raw_bytes = raw_bytes
         self.reason = reason
-        self.tag_data = tag_data
         self.error_message = error_message
-        self.error_context = error_context
 
     @property
     def kind(self) -> str:
@@ -59,12 +52,11 @@ class PropertyFallback(PropertyValue):
 
     @classmethod
     def from_tag(cls, tag, reason: "FallbackReason", *, error_message: str = "", raw_bytes: bytes = b"") -> "PropertyFallback":
-        """Build a fallback from a property tag (shared name/type/size/array_index/tag_data plumbing)."""
+        """Build a fallback from a property tag (shared name/type/size/array_index plumbing)."""
         return cls(
             name=tag.name, type=tag.type, size=tag.size, raw_bytes=raw_bytes,
             reason=reason,
             array_index=getattr(tag, "array_index", 0),
-            tag_data=getattr(tag, "tag_data", None),
             error_message=error_message or None,
         )
 

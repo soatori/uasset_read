@@ -1006,7 +1006,7 @@ def read_preload_dependencies(archive: FArchive, summary: PackageFileSummary) ->
         raise ParseError(f"PreloadDependencies count {summary.preload_dependency_count} exceeds remaining file bytes")
 
     dependencies: List[int] = []
-    for i in range(summary.preload_dependency_count):
+    for _ in range(summary.preload_dependency_count):
         dependencies.append(archive.read_i32())
 
     return dependencies

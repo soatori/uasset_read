@@ -381,7 +381,7 @@ def _read_reference_skeleton(
     # Read BoneInfo array
     names: List[str] = []
     parents: List[int] = []
-    for i in range(bone_count):
+    for _ in range(bone_count):
         # FName: Index (int32) + Number (int32)
         name_index = archive.read_i32()
         name_number = archive.read_i32()

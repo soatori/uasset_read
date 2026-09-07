@@ -66,7 +66,6 @@ class FArchive:
         self._tolerant: bool = tolerant
         self._mmap: Optional[mmap.mmap] = None
         self._use_mmap: bool = False
-        self._mmap_warning: Optional[str] = None
         self._logger = logging.getLogger(__name__)
         self._name_map: Optional[list] = None  # optional name table cache
         self._name_warnings_seen: set[int] = set()  # read_name out-of-range index dedup (#411, #481)
@@ -85,8 +84,7 @@ class FArchive:
                 try:
                     self._mmap = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
                     self._use_mmap = True
-                except (OSError, ValueError, PermissionError, MemoryError) as e:
-                    self._mmap_warning = f"mmap failed ({type(e).__name__}): {e}"
+                except (OSError, ValueError, PermissionError, MemoryError):
                     self._use_mmap = False
         except BaseException:
             self.close()
@@ -868,10 +866,6 @@ class SliceReader:
         if offset < 0 or offset + length > self._length:
             raise IndexError(f"sub_slice({offset}, {length}) out of range [0, {self._length})")
         return SliceReader(self._source, self._base + offset, length)
-
-    @property
-    def source_size(self) -> int:
-        return self._length
 
     def total_size(self) -> int:
         return self._length

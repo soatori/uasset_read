@@ -48,21 +48,6 @@ SKIP_CLASS_PREFIXES = (
 )
 
 
-# Exact class names to skip (no prefix matching)
-# These classes use fully custom serialization formats, cannot be handled by generic parser
-#
-def should_skip_export_class_prefix(class_name: str) -> bool:
-    """Determine whether class name matches SKIP_CLASS_PREFIXES prefix.
-
-    Args:
-        class_name: UE class name
-
-    Returns:
-        True if class name starts with any SKIP_CLASS_PREFIXES prefix
-    """
-    return class_name.startswith(SKIP_CLASS_PREFIXES)
-
-
 def should_skip_export_for_tolerant_parsing(
     export: "ObjectExport",
     class_name: Optional[str] = None,

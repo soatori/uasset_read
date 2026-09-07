@@ -51,11 +51,10 @@ from ..versioning import MappingInfo, build_version_context_from_summary
 
 
 def _diag(code: str, message: str, stage: str, *, object_id: str | None = None,
-          severity: str = "warning", effect: str | None = "semantic_loss",
-          offset: int | None = None, size: int | None = None) -> Diagnostic:
+          severity: str = "warning", effect: str | None = "semantic_loss") -> Diagnostic:
     """Build a warning Diagnostic (most sites are identical in shape)."""
     return Diagnostic(severity=severity, code=code, message=message, stage=stage,
-                      object_id=object_id, offset=offset, size=size, effect=effect)
+                      object_id=object_id, effect=effect)
 
 
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:

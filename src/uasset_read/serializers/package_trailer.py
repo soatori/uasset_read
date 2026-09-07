@@ -9,10 +9,7 @@ import struct
 from dataclasses import dataclass
 from typing import BinaryIO
 
-from uasset_read.constants import (
-    PACKAGE_TRAILER_HEADER_TAG,
-    PACKAGE_TRAILER_FOOTER_TAG,
-)
+from uasset_read.constants import PACKAGE_TRAILER_HEADER_TAG
 
 
 @dataclass

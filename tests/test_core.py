@@ -138,7 +138,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
 
     def test_basic_read():
         sr = SliceReader(MemorySource(b"0123456789"), 2, 5)
-        assert sr.source_size == 5
+        assert sr.total_size() == 5
         assert sr.read(3) == b"234"
         assert sr.tell() == 3
         assert sr.remaining() == 2
@@ -161,7 +161,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
 
     def test_sub_slice():
         sub = SliceReader(MemorySource(b"0123456789"), 0, 10).sub_slice(2, 4)
-        assert sub.source_size == 4
+        assert sub.total_size() == 4
         assert sub.read(4) == b"2345"
 
     def test_sub_slice_out_of_range():

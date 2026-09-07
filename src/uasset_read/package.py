@@ -146,11 +146,6 @@ class PackageBundle:
     provider: Optional["FileSystemPackageProvider"] = None
 
     @cached_property
-    def main_path_obj(self) -> Path:
-        """Return main_path as a Path object (cached)."""
-        return Path(self.main_path)
-
-    @cached_property
     def uexp_path(self) -> Optional[Path]:
         """Return .uexp sidecar path if it exists, else None (cached)."""
         path = self.files.get(".uexp")

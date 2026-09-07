@@ -167,7 +167,7 @@ def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
     file_version = summary.file_version_ue4
 
     import_map: List[ObjectImport] = []
-    for i in range(summary.import_count):
+    for _ in range(summary.import_count):
         class_package = archive.read_name(name_map)
         class_name = archive.read_name(name_map)
         outer_index = PackageIndex(archive.read_i32())
@@ -431,27 +431,6 @@ def detect_blueprint_generated_class(
         if 0 <= idx < len(import_map):
             return "BlueprintGeneratedClass" in import_map[idx].object_name
     return False
-
-
-def find_main_blueprint_generated_class(
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
-    asset_name: str,
-) -> Optional[ObjectExport]:
-    """
-    Find the main BlueprintGeneratedClass export (equivalent migration from uasset_read.py section 3063-3092).
-
-    Uses object_name matching + serial_size maximum principle.
-    The main BPGC's object_name is typically asset_name + "_C".
-    """
-    candidates = []
-    for export in export_map:
-        if detect_blueprint_generated_class(export, import_map, export_map):
-            if export.object_name and export.object_name.startswith(asset_name):
-                candidates.append(export)
-    if candidates:
-        return max(candidates, key=lambda e: e.serial_size)
-    return None
 
 
 def resolve_package_index_to_reference(

@@ -228,15 +228,10 @@ def test_sidecar_discovery():
     # T_ParserBulk does NOT have .uptnl sidecar
     assert bundle.uptnl_path is None
 
-    # main_path_obj should be a Path
-    assert isinstance(bundle.main_path_obj, Path)
-    assert bundle.main_path_obj == Path(bundle.main_path)
-
     # Verify Path caching: same object returned on repeated access
     assert bundle.uexp_path is bundle.uexp_path
     assert bundle.ubulk_path is bundle.ubulk_path
     assert bundle.uptnl_path is bundle.uptnl_path
-    assert bundle.main_path_obj is bundle.main_path_obj
 
 
 def test_agent_tool_extract_payload():
@@ -271,8 +266,6 @@ def test_agent_tool_extract_payload():
 
 def test_agent_tool_extract_payload_auto_index():
     """Test agent tool extract_payload derives export_index from payload_id."""
-    import base64
-
     from uasset_read.agent_tools import extract_payload
 
     fixture_dir = Path(__file__).parent / "samples"

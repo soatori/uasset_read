@@ -6,7 +6,7 @@ import struct
 
 import pytest
 
-from uasset_read.parsers.bulk_data import BulkDataHeader, parse_bulk_data_header
+from uasset_read.parsers.bulk_data import parse_bulk_data_header
 
 
 def test_bulk_data_header_basic():
