@@ -210,7 +210,6 @@ def extract_payload(
 
     from .models.payloads import (
         PAYLOAD_EXTRACTION_DEFERRED,
-        PAYLOAD_EXTRACTION_DEFERRED_MESSAGE,
         PayloadDescriptor,
         extract_payload_bytes,
     )
@@ -260,7 +259,7 @@ def extract_payload(
             # Cannot determine export index, return deferred
             response: dict[str, Any] = {
                 "id": payload_id,
-                "error": PAYLOAD_EXTRACTION_DEFERRED_MESSAGE,
+                "error": "Payload extraction is deferred: real payloads require per-export BulkData mapping from cooked fixtures (issue #627)",
                 "code": PAYLOAD_EXTRACTION_DEFERRED,
                 "available_ids": [],
                 "offset": 0,
@@ -273,7 +272,7 @@ def extract_payload(
         # Still no valid export index after parsing attempt
         response = {
             "id": payload_id,
-            "error": PAYLOAD_EXTRACTION_DEFERRED_MESSAGE,
+            "error": "Payload extraction is deferred: real payloads require per-export BulkData mapping from cooked fixtures (issue #627)",
             "code": PAYLOAD_EXTRACTION_DEFERRED,
             "available_ids": [],
             "offset": 0,
@@ -404,18 +403,18 @@ def extract_payload(
         )
 
     # Extract payload bytes
-    result = extract_payload_bytes(
+    data, error = extract_payload_bytes(
         descriptor,
         main_path=main_path,
         sidecar_paths=sidecar_paths,
     )
 
-    if not result.extracted:
+    if error is not None:
         # Return structured error
         response = {
             "id": payload_id,
-            "error": result.error,
-            "code": PAYLOAD_EXTRACTION_DEFERRED if result.error == PAYLOAD_EXTRACTION_DEFERRED else "EXTRACTION_FAILED",
+            "error": error,
+            "code": PAYLOAD_EXTRACTION_DEFERRED if error == PAYLOAD_EXTRACTION_DEFERRED else "EXTRACTION_FAILED",
             "stage": "agent.extract_payload",
             "recoverable": True,
             "available_ids": [],
@@ -426,14 +425,14 @@ def extract_payload(
         return fit_list_response(response, max_bytes, list_key="available_ids")
 
     # Encode as base64 for JSON serialization
-    encoded_data = base64.b64encode(result.data).decode("ascii")
+    encoded_data = base64.b64encode(data).decode("ascii")
     response_payload = {
         "id": payload_id,
-        "payload_id": result.descriptor.id,
+        "payload_id": descriptor.id,
         "data": encoded_data,
-        "size": len(result.data),
-        "source_region": result.descriptor.source_region,
-        "offset": result.descriptor.offset,
+        "size": len(data),
+        "source_region": descriptor.source_region,
+        "offset": descriptor.offset,
     }
 
     # Enforce max_bytes on success path

@@ -9,7 +9,6 @@ import pytest
 from uasset_read.models.payloads import (
     PAYLOAD_EXTRACTION_DEFERRED,
     PayloadDescriptor,
-    PayloadExtraction,
     extract_payload_bytes,
 )
 
@@ -64,10 +63,10 @@ def test_extract_payload_main_read_failure():
         status="available",
     )
 
-    result = extract_payload_bytes(descriptor, main_path=Path("nonexistent.uasset"))
-    assert result.extracted is False
-    assert "Read failed" in result.error
-    assert result.data == b""
+    data, error = extract_payload_bytes(descriptor, main_path=Path("nonexistent.uasset"))
+    assert error is not None
+    assert "Read failed" in error
+    assert data == b""
 
 
 def test_extract_payload_with_missing_sidecar():
@@ -83,30 +82,13 @@ def test_extract_payload_with_missing_sidecar():
     )
 
     sidecar_paths = {"uexp": Path("nonexistent.uexp")}
-    result = extract_payload_bytes(
+    data, error = extract_payload_bytes(
         descriptor,
         main_path=Path("nonexistent.uasset"),
         sidecar_paths=sidecar_paths,
     )
-    assert result.extracted is False
-    assert "Read failed" in result.error
-
-
-def test_payload_extraction_is_dataclass():
-    """Test that PayloadExtraction is a proper dataclass."""
-    descriptor = PayloadDescriptor(
-        id="payload:(export:0)",
-        owner="export:0",
-        kind="other",
-        source_region="main",
-        offset=0,
-        stored_size=0,
-        status="missing",
-    )
-    extraction = PayloadExtraction(descriptor=descriptor, data=b"test", extracted=True)
-    assert extraction.data == b"test"
-    assert extraction.extracted is True
-    assert extraction.error is None
+    assert error is not None
+    assert "Read failed" in error
 
 
 def test_extract_payload_from_uexp():
@@ -129,16 +111,14 @@ def test_extract_payload_from_uexp():
         status="available",
     )
 
-    result = extract_payload_bytes(
+    data, error = extract_payload_bytes(
         descriptor,
         main_path=main_path,
         sidecar_paths={"uexp": uexp_path},
     )
 
-    assert result.extracted is True
-    assert result.error is None
-    assert len(result.data) == 22308
-    assert result.descriptor is descriptor
+    assert error is None
+    assert len(data) == 22308
 
 
 def test_extract_payload_from_uexp_with_offset():
@@ -161,15 +141,14 @@ def test_extract_payload_from_uexp_with_offset():
         status="available",
     )
 
-    result = extract_payload_bytes(
+    data, error = extract_payload_bytes(
         descriptor,
         main_path=main_path,
         sidecar_paths={"uexp": uexp_path},
     )
 
-    assert result.extracted is True
-    assert result.error is None
-    assert len(result.data) == 100
+    assert error is None
+    assert len(data) == 100
 
 
 def test_extract_payload_short_read():
@@ -192,15 +171,15 @@ def test_extract_payload_short_read():
         status="available",
     )
 
-    result = extract_payload_bytes(
+    data, error = extract_payload_bytes(
         descriptor,
         main_path=main_path,
         sidecar_paths={"uexp": uexp_path},
     )
 
-    assert result.extracted is False
-    assert "Short read" in result.error
-    assert len(result.data) == 22308  # Got what was available
+    assert error is not None
+    assert "Short read" in error
+    assert len(data) == 22308  # Got what was available
 
 
 def test_extract_payload_missing_sidecar_returns_deferred():
@@ -216,14 +195,13 @@ def test_extract_payload_missing_sidecar_returns_deferred():
     )
 
     # No sidecar_paths provided
-    result = extract_payload_bytes(
+    data, error = extract_payload_bytes(
         descriptor,
         main_path=Path("nonexistent.uasset"),
     )
 
-    assert result.extracted is False
-    assert result.error == PAYLOAD_EXTRACTION_DEFERRED
-    assert result.data == b""
+    assert error == PAYLOAD_EXTRACTION_DEFERRED
+    assert data == b""
 
 
 def test_sidecar_discovery():
@@ -373,7 +351,6 @@ def test_extract_bulk_data_descriptors_basic():
     assert descriptors[0].element_count == 4096
     assert descriptors[0].offset == 0
     assert descriptors[0].compression_type is None
-    assert descriptors[0].is_compressed is False
 
 
 def test_extract_bulk_data_descriptors_compressed():
@@ -398,7 +375,6 @@ def test_extract_bulk_data_descriptors_compressed():
     assert descriptors[0].element_count == 2048
     assert descriptors[0].offset == 1024
     assert descriptors[0].compression_type == "zlib"
-    assert descriptors[0].is_compressed is True
 
 
 def test_extract_bulk_data_descriptors_single_at_end():
@@ -645,13 +621,11 @@ def test_end_to_end_payload_extraction_direct_api():
     )
 
     # Extract using the direct API
-    result = extract_payload_bytes(
+    data, error = extract_payload_bytes(
         descriptor,
         main_path=main_path,
         sidecar_paths={"uexp": bundle.uexp_path},
     )
 
-    assert result.extracted is True, f"Extraction should succeed: {result.error}"
-    assert result.error is None, f"Should have no error: {result.error}"
-    assert len(result.data) == 22308, f"Should extract all uexp bytes: {len(result.data)}"
-    assert result.descriptor is descriptor
+    assert error is None, f"Should have no error: {error}"
+    assert len(data) == 22308, f"Should extract all uexp bytes: {len(data)}"

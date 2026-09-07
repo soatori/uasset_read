@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
-    from uasset_read.versioning import VersionContainer
 
 from uasset_read.models.properties import (
     PropertyTag,
@@ -161,18 +160,18 @@ _LWC_FLOAT_TYPE_TO_BASE: Dict[str, str] = {
 
 def get_struct_size(
     struct_type: str,
-    version_container: Optional["VersionContainer"] = None,
+    file_version_ue5: int = 0,
 ) -> Optional[int]:
     """Return expected byte size for fixed-layout structs (version-aware).
 
     For LWC (Large World Coordinates) types:
-    - If version_container indicates UE5 LWC (file_version_ue5 >= 1004), return double precision size
+    - If file_version_ue5 >= 1004 (UE5 LWC), return double precision size
     - Otherwise return single precision size
     - If struct_type is an explicit double variant (e.g. "Vector3d"), always return double precision size
 
     Args:
         struct_type: struct type name (e.g. "Vector", "Vector3d")
-        version_container: version container (optional)
+        file_version_ue5: UE5 file version number (0 for unknown)
 
     Returns:
         expected byte size, None for unknown types
@@ -192,9 +191,8 @@ def get_struct_size(
     # LWC-aware base type: determine by version
     if struct_type in _LWC_TYPE_MAP:
         float_size, double_size = _LWC_TYPE_MAP[struct_type]
-        if version_container is not None and version_container.is_ue5:
-            if version_container.file_version_ue5 >= UE5_LARGE_WORLD_COORDINATES:
-                return double_size
+        if file_version_ue5 >= 1000 and file_version_ue5 >= UE5_LARGE_WORLD_COORDINATES:
+            return double_size
         return float_size
 
     # Non-LWC type: direct table lookup
@@ -396,28 +394,6 @@ def _get_read_tag_value_bounded():
     from uasset_read.serializers.property_tags import read_tag_value_bounded
 
     return read_tag_value_bounded
-
-
-def _build_version_container_from_summary(summary: Any) -> Optional["VersionContainer"]:
-    """Build VersionContainer from summary (lazy, to avoid circular imports)."""
-    if summary is None:
-        return None
-    # Already cached, return directly
-    cached = getattr(summary, "_version_container", None)
-    if cached is not None:
-        return cached
-    try:
-        from uasset_read.versioning import build_version_container
-
-        vc = build_version_container(summary)
-        # Cache to summary to avoid rebuilding
-        try:
-            summary._version_container = vc
-        except AttributeError as e:
-            logger.debug("Failed to cache version_container: %s", e)
-        return vc
-    except (AttributeError, TypeError, ValueError, KeyError):
-        return None
 
 
 # ============================================================================
@@ -1073,8 +1049,8 @@ def parse_struct_property(
     # Fast-path pre-check: validate tag.size matches expected layout.
     # Use get_struct_size for version-aware size validation (supporting LWC double precision).
     # For LWC types, accept both float and double sizes (fast-path selects precision based on tag.size).
-    version_container = _build_version_container_from_summary(summary)
-    expected_size = get_struct_size(struct_type, version_container)
+    _file_version_ue5 = getattr(summary, "file_version_ue5", 0) if summary else 0
+    expected_size = get_struct_size(struct_type, file_version_ue5=_file_version_ue5)
     if expected_size is not None and tag.size != expected_size:
         # Tagged fallback structs: size mismatch is expected behavior (tagged format vs compact format),
         # Silently skip fast-path, go straight to tagged parsing, no warning generated.

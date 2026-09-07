@@ -54,7 +54,6 @@ def test_bulk_data_header_oodle_compression():
 
     assert header.flags == flags
     assert header.compression_type == "oodle"
-    assert header.is_compressed is True
 
 
 def test_bulk_data_header_too_short():
@@ -63,22 +62,3 @@ def test_bulk_data_header_too_short():
         parse_bulk_data_header(b"\x00" * 10)
 
 
-def test_bulk_data_header_is_compressed_false():
-    """Test is_compressed property returns False when no compression flags."""
-    header = BulkDataHeader(
-        flags=0x00, element_count=1, size_on_disk=1, offset=0
-    )
-    assert header.is_compressed is False
-
-
-def test_bulk_data_header_is_memory_mapped():
-    """Test is_memory_mapped property."""
-    header = BulkDataHeader(
-        flags=0x08, element_count=1, size_on_disk=1, offset=0
-    )
-    assert header.is_memory_mapped is True
-
-    header2 = BulkDataHeader(
-        flags=0x00, element_count=1, size_on_disk=1, offset=0
-    )
-    assert header2.is_memory_mapped is False

@@ -36,29 +36,14 @@ class PayloadDescriptor:
     hash: str | None = None
 
 
-@dataclass
-class PayloadExtraction:
-    """Result of payload extraction."""
-
-    descriptor: PayloadDescriptor
-    data: bytes
-    extracted: bool = True
-    error: str | None = None
-
-
 PAYLOAD_EXTRACTION_DEFERRED = "PAYLOAD_EXTRACTION_DEFERRED"
-
-PAYLOAD_EXTRACTION_DEFERRED_MESSAGE = (
-    "Payload extraction is deferred: real payloads require "
-    "per-export BulkData mapping from cooked fixtures (issue #627)"
-)
 
 
 def extract_payload_bytes(
     descriptor: PayloadDescriptor,
     main_path: Path,
     sidecar_paths: Optional[dict[str, Path]] = None,
-) -> PayloadExtraction:
+) -> tuple[bytes, str | None]:
     """Extract payload bytes from a cooked package.
 
     Reads actual bytes from the appropriate file (main or sidecar) based on
@@ -70,7 +55,7 @@ def extract_payload_bytes(
         sidecar_paths: Optional dict mapping region names to sidecar file paths.
 
     Returns:
-        PayloadExtraction with data or error.
+        (data, error) tuple. data is the extracted bytes; error is None on success.
     """
     sidecar_paths = sidecar_paths or {}
 
@@ -81,12 +66,7 @@ def extract_payload_bytes(
         file_path = sidecar_paths[descriptor.source_region]
     else:
         # No sidecar available, return deferred
-        return PayloadExtraction(
-            descriptor=descriptor,
-            data=b"",
-            extracted=False,
-            error=PAYLOAD_EXTRACTION_DEFERRED,
-        )
+        return (b"", PAYLOAD_EXTRACTION_DEFERRED)
 
     # Read the payload bytes
     try:
@@ -95,23 +75,11 @@ def extract_payload_bytes(
             data = f.read(descriptor.stored_size)
 
         if len(data) < descriptor.stored_size:
-            return PayloadExtraction(
-                descriptor=descriptor,
-                data=data,
-                extracted=False,
-                error=f"Short read: expected {descriptor.stored_size} bytes, got {len(data)}",
+            return (
+                data,
+                f"Short read: expected {descriptor.stored_size} bytes, got {len(data)}",
             )
 
-        return PayloadExtraction(
-            descriptor=descriptor,
-            data=data,
-            extracted=True,
-            error=None,
-        )
+        return (data, None)
     except Exception as e:
-        return PayloadExtraction(
-            descriptor=descriptor,
-            data=b"",
-            extracted=False,
-            error=f"Read failed: {e}",
-        )
+        return (b"", f"Read failed: {e}")

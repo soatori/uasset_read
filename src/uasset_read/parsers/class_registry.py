@@ -98,19 +98,10 @@ class ClassHandlerRegistry:
         self._cache[class_name] = None
         return None
 
-    def reset_cache(self) -> None:
-        """Clear the class_name -> handler lookup cache.
-
-        Intended for batch parsing scenarios; called from the finally block
-        of parse_package to prevent the _cache dict from growing unboundedly.
-        Note: does not clear the registered handlers.
-        """
-        self._cache.clear()
 
 
 # Global default registry instance
 _default_registry: Optional[ClassHandlerRegistry] = None
-_bootstrap_done: bool = False
 
 
 def _bootstrap_handlers() -> None:
@@ -120,10 +111,6 @@ def _bootstrap_handlers() -> None:
     circular-import issues while keeping registration deterministic.
     Called exactly once on the first ``get_class_registry()`` invocation.
     """
-    global _bootstrap_done
-    if _bootstrap_done:
-        return
-    _bootstrap_done = True
     try:
         from uasset_read.parsers.asset_types import register_asset_type_handlers
 

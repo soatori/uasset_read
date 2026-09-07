@@ -38,14 +38,6 @@ class BulkDataHeader:
     offset: int
     compression_type: Optional[str] = None
 
-    @property
-    def is_compressed(self) -> bool:
-        return bool(self.flags & (BULKDATA_CompressedZlib | BULKDATA_CompressedOodle))
-
-    @property
-    def is_memory_mapped(self) -> bool:
-        return bool(self.flags & BULKDATA_MemoryMapped)
-
 
 def parse_bulk_data_header(data: bytes) -> BulkDataHeader:
     """Parse a BulkData header from raw bytes.
