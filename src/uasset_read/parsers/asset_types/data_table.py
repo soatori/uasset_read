@@ -42,7 +42,7 @@ def parse_data_table(
 
     try:
         # NumRows: int32 — DataTable.cpp: LoadStructData start
-        row_count = archive.read_i32("NumRows")
+        row_count = archive.read_i32()
         if row_count < 0:
             result["parse_status"] = "partial"
             result["error"] = f"Invalid row count: {row_count}"
@@ -57,8 +57,8 @@ def parse_data_table(
 
         for i in range(row_count):
             # FName: Index (int32) + Number (int32)
-            name_index = archive.read_i32(f"Row[{i}].FName.Index")
-            name_number = archive.read_i32(f"Row[{i}].FName.Number")
+            name_index = archive.read_i32()
+            name_number = archive.read_i32()
 
             # Parse name
             if 0 <= name_index < len(name_map):
@@ -67,7 +67,7 @@ def parse_data_table(
                 row_name = f"<invalid_index_{name_index}>"
 
             # RowPayload: size (int32) + data (bytes)
-            payload_size = archive.read_i32(f"Row[{i}].Payload.Size")
+            payload_size = archive.read_i32()
             if payload_size < 0:
                 result["parse_status"] = "partial"
                 result["error"] = f"Invalid payload size at row {i}: {payload_size}"

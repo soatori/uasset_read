@@ -183,7 +183,7 @@ class PackageFileSummary:
 
 def _read_custom_versions(archive: FArchive) -> list:
     """Read CustomVersions table (Optimized format, UE5 / UE4 LegacyFileVersion < -5)."""
-    custom_versions_count = archive.read_u32("CustomVersionsCount")
+    custom_versions_count = archive.read_u32()
     if custom_versions_count > MAX_CUSTOM_VERSIONS:
         raise ParseError("Custom versions count exceeds maximum")
     custom_versions = []
@@ -200,7 +200,7 @@ def _read_custom_versions_guids(archive: FArchive) -> list:
     Each record: FGuid (16 bytes) + int32 Version + FString FriendlyName
     Reference: UE CustomVersion.cpp FGuidCustomVersion_DEPRECATED
     """
-    custom_versions_count = archive.read_u32("CustomVersionsCount")
+    custom_versions_count = archive.read_u32()
     if custom_versions_count > MAX_CUSTOM_VERSIONS:
         raise ParseError("Custom versions count exceeds maximum")
     custom_versions = []
@@ -208,14 +208,14 @@ def _read_custom_versions_guids(archive: FArchive) -> list:
         guid_bytes = archive.read(16)
         version = archive.read_i32()
         # FriendlyName: FString (i32 length + chars), included in UE4 GUID format
-        archive.read_fstring("FriendlyName")
+        archive.read_fstring()
         custom_versions.append(CustomVersion(guid=guid_bytes.hex(), version=version))
     return custom_versions
 
 
 def _read_generations(archive: FArchive, budget: "ResourceBudget | None" = None) -> list:
     """Read Generations table."""
-    generations_count = archive.read_i32("GenerationsCount")
+    generations_count = archive.read_i32()
     read_validated_count_strict(generations_count, MAX_GENERATIONS, "generations", 8, budget)
     generations = []
     for _ in range(generations_count):
@@ -252,16 +252,16 @@ def _read_engine_version(archive: FArchive) -> "EngineVersion":
 
 def _read_cell_counts(archive: FArchive) -> tuple:
     """Read Verse Cell count and offset (UE5.7+)."""
-    cell_export_count = archive.read_i32("CellExportCount")
+    cell_export_count = archive.read_i32()
     if cell_export_count < 0:
         raise ParseError(f"Negative cell export count: {cell_export_count}")
-    cell_export_offset = archive.read_i32("CellExportOffset")
+    cell_export_offset = archive.read_i32()
     if cell_export_offset > 0:
         archive.validate_offset(cell_export_offset, "CellExportOffset")
-    cell_import_count = archive.read_i32("CellImportCount")
+    cell_import_count = archive.read_i32()
     if cell_import_count < 0:
         raise ParseError(f"Negative cell import count: {cell_import_count}")
-    cell_import_offset = archive.read_i32("CellImportOffset")
+    cell_import_offset = archive.read_i32()
     if cell_import_offset > 0:
         archive.validate_offset(cell_import_offset, "CellImportOffset")
     return cell_export_count, cell_export_offset, cell_import_count, cell_import_offset
@@ -269,7 +269,7 @@ def _read_cell_counts(archive: FArchive) -> tuple:
 
 def _read_payload_toc_offset(archive: FArchive) -> int:
     """Read PayloadTocOffset and validate reasonableness."""
-    payload_toc_offset = archive.read_i64("PayloadTocOffset")
+    payload_toc_offset = archive.read_i64()
     if payload_toc_offset < 0:
         logger.debug("PayloadTocOffset is negative: %d, setting to 0", payload_toc_offset)
         payload_toc_offset = 0
@@ -310,14 +310,14 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, int, b
            saved_hash, total_header_size, custom_versions)。
     """
     # Magic number
-    tag = archive.read_u32("Tag")
+    tag = archive.read_u32()
     if tag == PACKAGE_FILE_TAG_SWAPPED:
         archive.set_byte_swapping(True)
         tag = PACKAGE_FILE_TAG
     elif tag != PACKAGE_FILE_TAG:
         raise VersionError(f"Invalid package tag: {hex(tag)}")
 
-    legacy_file_version = archive.read_i32("LegacyFileVersion")
+    legacy_file_version = archive.read_i32()
     if legacy_file_version not in SUPPORTED_LEGACY_VERSIONS:
         supported_versions = ", ".join(str(v) for v in sorted(SUPPORTED_LEGACY_VERSIONS))
         raise VersionError(
@@ -328,25 +328,25 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, int, b
 
     # LegacyUE3Version: exists because legacy_file_version != -4
     if legacy_file_version != -4:
-        _legacy_ue3_version = archive.read_i32("LegacyUE3Version")  # noqa: F841 - protocol read
-    file_version_ue4 = archive.read_i32("FileVersionUE4")
+        _legacy_ue3_version = archive.read_i32()  # noqa: F841 - protocol read
+    file_version_ue4 = archive.read_i32()
 
     # FileVersionUE5: only present when legacy_file_version <= -8
     if legacy_file_version <= -8:
-        file_version_ue5 = archive.read_i32("FileVersionUE5")
+        file_version_ue5 = archive.read_i32()
     else:
         file_version_ue5 = 0
 
     if legacy_file_version <= -8 and file_version_ue5 < UE5_VERSION_MIN:
         raise VersionError(f"Unsupported UE5 version: {file_version_ue5}")
 
-    file_version_licensee = archive.read_i32("FileVersionLicensee")
+    file_version_licensee = archive.read_i32()
 
     # SavedHash + TotalHeaderSize BEFORE CustomVersions (UE5 >= PACKAGE_SAVED_HASH)
     # Older versions: no SavedHash, TotalHeaderSize comes AFTER CustomVersions
     if file_version_ue5 >= UE5_PACKAGE_SAVED_HASH:
         saved_hash = archive.read(20)
-        total_header_size = archive.read_i32("TotalHeaderSize")
+        total_header_size = archive.read_i32()
         custom_versions = _read_custom_versions(archive)
     else:
         saved_hash = b""
@@ -356,7 +356,7 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, int, b
             custom_versions = _read_custom_versions_guids(archive)
         else:
             custom_versions = _read_custom_versions(archive)
-        total_header_size = archive.read_i32("TotalHeaderSize")
+        total_header_size = archive.read_i32()
 
     return (
         tag,
@@ -372,36 +372,36 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, int, b
 
 def _read_package_identity(archive: FArchive) -> tuple[str, int]:
     """Read PackageName and PackageFlags."""
-    package_name = archive.read_fstring("PackageName")
+    package_name = archive.read_fstring()
     if package_name == UE_NONE_SENTINEL:
         package_name = ""
-    package_flags = archive.read_u32("PackageFlags")
+    package_flags = archive.read_u32()
     return package_name, package_flags
 
 
 def _read_name_table_offsets(archive: FArchive) -> tuple[int, int]:
     """Read NameCount and NameOffset."""
-    name_count = archive.read_i32("NameCount")
+    name_count = archive.read_i32()
     if name_count < 0:
         raise ParseError(f"Negative name count: {name_count}")
     if name_count > MAX_NAME_COUNT:
         raise ParseError("Name count exceeds maximum")
-    name_offset = archive.read_i32("NameOffset")
+    name_offset = archive.read_i32()
     archive.validate_offset(name_offset, "NameOffset")
     return name_count, name_offset
 
 
 def _read_export_import_offsets(archive: FArchive) -> tuple[int, int, int, int]:
     """Read Export/Import table count and offset."""
-    export_count = archive.read_i32("ExportCount")
+    export_count = archive.read_i32()
     if export_count < 0:
         raise ParseError(f"Negative export count: {export_count}")
     if export_count > MAX_EXPORT_COUNT:
         raise ParseError("Export count exceeds maximum")
-    export_offset = archive.read_i32("ExportOffset")
+    export_offset = archive.read_i32()
     archive.validate_offset(export_offset, "ExportOffset")
 
-    import_count = archive.read_i32("ImportCount")
+    import_count = archive.read_i32()
     if import_count < 0:
         raise ParseError(f"Negative import count: {import_count}")
     if import_count > MAX_IMPORT_COUNT:
@@ -411,7 +411,7 @@ def _read_export_import_offsets(archive: FArchive) -> tuple[int, int, int, int]:
             f"Total object count ({export_count} + {import_count} = "
             f"{export_count + import_count}) exceeds maximum {MAX_TOTAL_OBJECT_COUNT}"
         )
-    import_offset = archive.read_i32("ImportOffset")
+    import_offset = archive.read_i32()
     archive.validate_offset(import_offset, "ImportOffset")
 
     return export_count, export_offset, import_count, import_offset
@@ -428,22 +428,22 @@ def _read_pre_export_optional_fields(
     soft_object_paths_count = 0
     soft_object_paths_offset = 0
     if file_version_ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
-        soft_object_paths_count = archive.read_i32("SoftObjectPathsCount")
-        soft_object_paths_offset = archive.read_i32("SoftObjectPathsOffset")
+        soft_object_paths_count = archive.read_i32()
+        soft_object_paths_offset = archive.read_i32()
         if soft_object_paths_offset > 0:
             archive.validate_offset(soft_object_paths_offset, "SoftObjectPathsOffset")
 
     # LocalizationId (non FilterEditorOnly, UE4 >= 516)
     localization_id = ""
     if not has_filter_editor_only and file_version_ue4 >= UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID:
-        localization_id = archive.read_fstring("LocalizationId")
+        localization_id = archive.read_fstring()
 
     # GatherableTextData（UE4 >= 513）
     gatherable_text_data_count = 0
     gatherable_text_data_offset = 0
     if file_version_ue4 >= UE4_SERIALIZE_TEXT_IN_PACKAGES:
-        gatherable_text_data_count = archive.read_i32("GatherableTextDataCount")
-        gatherable_text_data_offset = archive.read_i32("GatherableTextDataOffset")
+        gatherable_text_data_count = archive.read_i32()
+        gatherable_text_data_offset = archive.read_i32()
         if gatherable_text_data_offset > 0:
             archive.validate_offset(gatherable_text_data_offset, "GatherableTextDataOffset")
 
@@ -472,7 +472,7 @@ def _read_post_import_optional_fields(
     # MetaDataOffset (UE5 >= meta version)
     metadata_offset = 0
     if file_version_ue5 >= UE5_METADATA_SERIALIZATION_OFFSET:
-        metadata_offset = archive.read_i32("MetadataOffset")
+        metadata_offset = archive.read_i32()
         if metadata_offset > 0:
             archive.validate_offset(metadata_offset, "MetadataOffset")
 
@@ -491,12 +491,12 @@ def _read_secondary_offset_fields(
     budget: "ResourceBudget | None" = None,
 ) -> dict:
     """Read DependsOffset, SoftPackageReferences, SearchableNames, ThumbnailTable."""
-    depends_offset = archive.read_i32("DependsOffset")
+    depends_offset = archive.read_i32()
 
     soft_package_references_count = 0
     soft_package_references_offset = 0
     if file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP:
-        soft_package_references_count = archive.read_i32("SoftPackageReferencesCount")
+        soft_package_references_count = archive.read_i32()
         read_validated_count_strict(
             soft_package_references_count,
             MAX_SOFT_PACKAGE_REFS,
@@ -504,13 +504,13 @@ def _read_secondary_offset_fields(
             4,
             budget,
         )
-        soft_package_references_offset = archive.read_i32("SoftPackageReferencesOffset")
+        soft_package_references_offset = archive.read_i32()
 
     searchable_names_offset = 0
     if file_version_ue4 >= UE4_ADDED_SEARCHABLE_NAMES:
-        searchable_names_offset = archive.read_i32("SearchableNamesOffset")
+        searchable_names_offset = archive.read_i32()
 
-    thumbnail_table_offset = archive.read_i32("ThumbnailTableOffset")
+    thumbnail_table_offset = archive.read_i32()
     if thumbnail_table_offset > 0:
         archive.validate_offset(thumbnail_table_offset, "ThumbnailTableOffset")
 
@@ -526,10 +526,10 @@ def _read_secondary_offset_fields(
 def _read_import_type_hierarchies(archive: FArchive, file_version_ue5: int) -> tuple[int, int]:
     """Read ImportTypeHierarchies (UE5 >= 1015)."""
     if file_version_ue5 >= UE5_IMPORT_TYPE_HIERARCHIES:
-        count = archive.read_i32("ImportTypeHierarchiesCount")
+        count = archive.read_i32()
         if count < 0:
             raise ParseError(f"Negative import type hierarchies count: {count}")
-        offset = archive.read_i32("ImportTypeHierarchiesOffset")
+        offset = archive.read_i32()
         if offset > 0:
             archive.validate_offset(offset, "ImportTypeHierarchiesOffset")
         return count, offset
@@ -572,9 +572,9 @@ def _read_compression_and_source(
     budget: "ResourceBudget | None" = None,
 ) -> tuple[int, int]:
     """Read CompressionFlags, CompressedChunks, PackageSource."""
-    compression_flags = archive.read_u32("CompressionFlags")
+    compression_flags = archive.read_u32()
 
-    compressed_chunks_count = archive.read_i32("CompressedChunksCount")
+    compressed_chunks_count = archive.read_i32()
     read_validated_count_strict(
         compressed_chunks_count,
         MAX_COMPRESSED_CHUNKS,
@@ -586,41 +586,41 @@ def _read_compression_and_source(
         # FCompressedChunk = 4 * int32 = 16 bytes (Linker.cpp operator<<)
         archive.read(16)
 
-    package_source = archive.read_u32("PackageSource")
+    package_source = archive.read_u32()
     return compression_flags, package_source
 
 
 def _read_additional_packages(archive: FArchive, legacy_file_version: int) -> None:
     """Read AdditionalPackagesToCook and NumTextureAllocations (legacy -6)."""
-    additional_packages_count = archive.read_i32("AdditionalPackagesCount")
+    additional_packages_count = archive.read_i32()
     if additional_packages_count < 0:
         raise ParseError(f"Negative additional packages count: {additional_packages_count}")
     for _ in range(additional_packages_count):
         archive.read_fstring()
 
     if legacy_file_version > -7:
-        archive.read_i32("NumTextureAllocations")
+        archive.read_i32()
 
 
 def _read_tail_offsets(archive: FArchive, file_version_ue4: int) -> dict:
     """Read AssetRegistry, BulkData, WorldTile (>=224), ChunkIDs (>=278/326)."""
-    asset_registry_data_offset = archive.read_i32("AssetRegistryDataOffset")
+    asset_registry_data_offset = archive.read_i32()
     if asset_registry_data_offset > 0:
         archive.validate_offset(asset_registry_data_offset, "AssetRegistryDataOffset")
 
-    bulk_data_start_offset = archive.read_i64("BulkDataStartOffset")
+    bulk_data_start_offset = archive.read_i64()
 
     gates = summary_gate_modes(file_version_ue4)
 
     world_tile_info_data_offset = 0
     if gates["world_tile"]:
-        world_tile_info_data_offset = archive.read_i32("WorldTileInfoDataOffset")
+        world_tile_info_data_offset = archive.read_i32()
         if world_tile_info_data_offset > 0:
             archive.validate_offset(world_tile_info_data_offset, "WorldTileInfoDataOffset")
 
     chunk_ids = []
     if gates["chunk_ids"] == "array":
-        chunk_ids_count = archive.read_i32("ChunkIDsCount")
+        chunk_ids_count = archive.read_i32()
         if chunk_ids_count < 0:
             raise ParseError(f"Negative chunk ids count: {chunk_ids_count}")
         if not archive.check_remaining(chunk_ids_count * 4, "ChunkIDs"):
@@ -629,7 +629,7 @@ def _read_tail_offsets(archive: FArchive, file_version_ue4: int) -> dict:
             chunk_ids.append(archive.read_i32())
     elif gates["chunk_ids"] == "single":
         # PackageFileSummary.cpp:493-503: one int32 ChunkID; negative == empty array.
-        chunk_id = archive.read_i32("ChunkID")
+        chunk_id = archive.read_i32()
         chunk_ids = [chunk_id] if chunk_id >= 0 else []
 
     return {
@@ -649,14 +649,14 @@ def _read_late_versioned_fields(
     preload_dependency_count = -1
     preload_dependency_offset = 0
     if file_version_ue4 >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:
-        preload_dependency_count = archive.read_i32("PreloadDependencyCount")
-        preload_dependency_offset = archive.read_i32("PreloadDependencyOffset")
+        preload_dependency_count = archive.read_i32()
+        preload_dependency_offset = archive.read_i32()
         if preload_dependency_offset > 0:
             archive.validate_offset(preload_dependency_offset, "PreloadDependencyOffset")
 
     names_referenced_from_export_data_count = 0
     if file_version_ue5 >= UE5_NAMES_REFERENCED_FROM_EXPORT_DATA:
-        names_referenced_from_export_data_count = archive.read_i32("NamesReferencedFromExportDataCount")
+        names_referenced_from_export_data_count = archive.read_i32()
 
     payload_toc_offset = 0
     if file_version_ue5 >= UE5_PAYLOAD_TOC:
@@ -664,7 +664,7 @@ def _read_late_versioned_fields(
 
     data_resource_offset = 0
     if file_version_ue5 >= UE5_DATA_RESOURCES:
-        data_resource_offset = archive.read_i32("DataResourceOffset")
+        data_resource_offset = archive.read_i32()
         if data_resource_offset > 0:
             archive.validate_offset(data_resource_offset, "DataResourceOffset")
 
@@ -853,7 +853,7 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]
     name_map: List[str] = []
     for i in range(summary.name_count):
         try:
-            name = archive.read_fstring(f"NameTable[{i}].Name")
+            name = archive.read_fstring()
             name_map.append(name)
             # Name hash fields: only present when file_version_ue4 >= UE4_NAME_HASHES_SERIALIZED (803)
             # UE5 assets always have name hashes (4 bytes)
@@ -921,7 +921,7 @@ def read_depends_map(
 
     for i in range(summary.export_count):
         # Read dependency list for each export
-        dep_count = archive.read_i32(f"DependsMap[{i}].Count")
+        dep_count = archive.read_i32()
         if dep_count < 0 or dep_count > MAX_SAFE_COUNT:
             # Without a reliable count the entry's payload size is unknown;
             # continuing would reinterpret payload bytes as the next count.
@@ -942,7 +942,7 @@ def read_depends_map(
             budget.reserve(dep_count * 4, f"DependsMap[{i}]")
         deps = []
         for j in range(dep_count):
-            pkg_index = archive.read_i32(f"DependsMap[{i}][{j}]")
+            pkg_index = archive.read_i32()
             # Validate PackageIndex range (UE FPackageIndex: >0 export, <0 import):
             #   0 → null (valid)
             #   > 0 → export reference (1-based), valid if pkg_index <= export_count
@@ -1007,6 +1007,6 @@ def read_preload_dependencies(archive: FArchive, summary: PackageFileSummary) ->
 
     dependencies: List[int] = []
     for i in range(summary.preload_dependency_count):
-        dependencies.append(archive.read_i32(f"PreloadDependencies[{i}]"))
+        dependencies.append(archive.read_i32())
 
     return dependencies

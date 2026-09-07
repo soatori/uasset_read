@@ -364,10 +364,10 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         from uasset_read.archive import ByteArchive
 
         arc = ByteArchive(struct.pack("<ii", 0, 3))
-        name = arc.read_name(["None", "Test"], key="t")
+        name = arc.read_name(["None", "Test"])
         assert name == "None_2"  # on-disk internal 3 -> display external 2 (LinkerLoad.h NAME_INTERNAL_TO_EXTERNAL)
         arc2 = ByteArchive(struct.pack("<ii", 0, 0))
-        assert arc2.read_name(["None", "Test"], key="t") == "None"
+        assert arc2.read_name(["None", "Test"]) == "None"
 
     def _synthetic_toc(**overrides):
         """Build a byte-exact v8 ``.utoc`` so the fail-closed paths are reachable.

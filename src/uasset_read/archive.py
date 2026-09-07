@@ -289,42 +289,42 @@ class FArchive:
 
     # Type read methods
 
-    def _read_swapped(self, fmt_char: str, size: int, type_name: str, key: str = ""):
+    def _read_swapped(self, fmt_char: str, size: int):
         """General byte-order-aware read (internal helper)."""
         fmt = ">" if self._byte_swapping else "<"
         return struct.unpack(fmt + fmt_char, self.read(size))[0]
 
-    def read_u8(self, key: str = "") -> int:
+    def read_u8(self) -> int:
         """Read unsigned 8-bit integer (byte-order independent)."""
         data = self.read(1)
         return struct.unpack("<B", data)[0]
 
-    def read_i8(self, key: str = "") -> int:
+    def read_i8(self) -> int:
         """Read signed 8-bit integer (byte-order independent)."""
         data = self.read(1)
         return struct.unpack("<b", data)[0]  # 'b' = signed byte
 
-    def read_bytes(self, n: int, key: str = "") -> bytes:
+    def read_bytes(self, n: int) -> bytes:
         """Read raw bytes (no byte swapping)."""
         return self.read(n)
 
-    def read_i32(self, key: str = "") -> int:
+    def read_i32(self) -> int:
         """Read signed 32-bit integer (supports byte swapping)."""
-        return self._read_swapped("i", 4, "i32", key)
+        return self._read_swapped("i", 4)
 
-    def read_u16(self, key: str = "") -> int:
+    def read_u16(self) -> int:
         """Read unsigned 16-bit integer (supports byte swapping)."""
-        return self._read_swapped("H", 2, "u16", key)
+        return self._read_swapped("H", 2)
 
-    def read_i16(self, key: str = "") -> int:
+    def read_i16(self) -> int:
         """Read signed 16-bit integer (supports byte swapping)."""
-        return self._read_swapped("h", 2, "i16", key)
+        return self._read_swapped("h", 2)
 
-    def read_u32(self, key: str = "") -> int:
+    def read_u32(self) -> int:
         """Read unsigned 32-bit integer (supports byte swapping)."""
-        return self._read_swapped("I", 4, "u32", key)
+        return self._read_swapped("I", 4)
 
-    def read_bool(self, key: str = "") -> bool:
+    def read_bool(self) -> bool:
         """Read UE bool value (serialized as uint32, 4 bytes).
 
         Standard FArchive bool serialization format. In both UE4 and UE5,
@@ -333,23 +333,23 @@ class FArchive:
         """
         return self.read_u32() != 0
 
-    def read_i64(self, key: str = "") -> int:
+    def read_i64(self) -> int:
         """Read signed 64-bit integer (supports byte swapping)."""
-        return self._read_swapped("q", 8, "i64", key)
+        return self._read_swapped("q", 8)
 
-    def read_u64(self, key: str = "") -> int:
+    def read_u64(self) -> int:
         """Read unsigned 64-bit integer (supports byte swapping)."""
-        return self._read_swapped("Q", 8, "u64", key)
+        return self._read_swapped("Q", 8)
 
-    def read_f32(self, key: str = "") -> float:
+    def read_f32(self) -> float:
         """Read 32-bit float (supports byte swapping)."""
-        return self._read_swapped("f", 4, "f32", key)
+        return self._read_swapped("f", 4)
 
-    def read_f64(self, key: str = "") -> float:
+    def read_f64(self) -> float:
         """Read 64-bit double (supports byte swapping)."""
-        return self._read_swapped("d", 8, "f64", key)
+        return self._read_swapped("d", 8)
 
-    def read_cstring(self, key: str = "") -> str:
+    def read_cstring(self) -> str:
         """Read null-terminated ANSI string (no length prefix).
 
         Reads bytes until a null terminator or max length is reached.
@@ -384,7 +384,7 @@ class FArchive:
             return False
         return data_start_pos % 4 == 0
 
-    def read_fstring(self, key: str = "") -> str:
+    def read_fstring(self) -> str:
         """Read UE FString (length-prefixed, null-terminated).
 
         Adds boundary guard and pointer rollback. On failure, seeks back to entry
@@ -542,7 +542,7 @@ class FArchive:
         """
         self._name_map = name_map
 
-    def read_name(self, name_map: Optional[list] = None, key: str = "") -> str:
+    def read_name(self, name_map: Optional[list] = None) -> str:
         """Read FName (name table index + instance number).
 
         Recovery fires only on clearly-garbage high-bit indices

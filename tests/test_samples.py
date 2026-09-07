@@ -742,7 +742,7 @@ def test_depends_map_validates_package_index_sign_per_ue_convention():
         def seek(self, offset):
             self._pos = 0
 
-        def read_i32(self, context):
+        def read_i32(self):
             value = self._values[self._pos]
             self._pos += 1
             return value

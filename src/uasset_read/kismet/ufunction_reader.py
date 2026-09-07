@@ -174,7 +174,7 @@ def _read_native_payload_start(
     # GUID record. Persistent binary archives encode the presence flag as a
     # four-byte bool; a present GUID contributes another 16 bytes.
     window.seek(pos_after_tags)
-    has_object_guid = window.read_bool("HasObjectGuid")
+    has_object_guid = window.read_bool()
     if has_object_guid:
         window.read(16)
 
@@ -301,12 +301,12 @@ def _read_ustruct_prefix_and_script(
 
     try:
         # 1. SuperStruct
-        _super_struct = window.read_i32("SuperStruct")
+        _super_struct = window.read_i32()
 
         # 2. Children
         if framework_version >= FRAMEWORK_REMOVE_UFIELD_NEXT_VERSION:
             # Modern: count + pointers
-            children_count = window.read_i32("ChildrenCount")
+            children_count = window.read_i32()
             if children_count < 0:
                 return _make_invalid_script_size_failure(
                     f"Negative Children count: {children_count}",
@@ -320,15 +320,15 @@ def _read_ustruct_prefix_and_script(
                     export_index,
                 )
             for i in range(children_count):
-                window.read_i32(f"Child[{i}]")
+                window.read_i32()
         else:
             # Legacy: single pointer
-            _children_ptr = window.read_i32("ChildrenPtr")
+            _children_ptr = window.read_i32()
 
         # 3. NativePropertyCount (only when Core version >= 4)
         native_property_count = 0
         if core_version >= CORE_FPROPERTIES_VERSION:
-            native_property_count = window.read_i32("NativePropertyCount")
+            native_property_count = window.read_i32()
             if native_property_count < 0:
                 return _make_invalid_script_size_failure(
                     f"Negative NativePropertyCount: {native_property_count}",
@@ -354,10 +354,10 @@ def _read_ustruct_prefix_and_script(
             native_fields = read_native_fields(window, native_property_count, ctx)
 
         # 4. BytecodeBufferSize
-        bytecode_buffer_size = window.read_i32("BytecodeBufferSize")
+        bytecode_buffer_size = window.read_i32()
 
         # 5. SerializedScriptSize
-        serialized_script_size = window.read_i32("SerializedScriptSize")
+        serialized_script_size = window.read_i32()
 
         # Validate size pair
         validation = _validate_script_sizes(bytecode_buffer_size, serialized_script_size)

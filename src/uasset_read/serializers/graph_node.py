@@ -47,16 +47,16 @@ def read_fmember_reference(
     export_map: List[ObjectExport],
 ) -> FMemberReference:
     """Read FMemberReference (MemberReference.h L74-95)."""
-    member_parent_index = archive.read_i32("MemberRef.MemberParent")
+    member_parent_index = archive.read_i32()
     member_parent: Optional[str] = None
     if member_parent_index != 0:
         member_parent = _rcn(PackageIndex(member_parent_index), import_map, export_map)
 
-    _member_scope = archive.read_fstring("MemberRef.MemberScope")  # noqa: F841 - protocol read
-    member_name = archive.read_name(name_map, "MemberRef.MemberName")
+    _member_scope = archive.read_fstring()  # noqa: F841 - protocol read
+    member_name = archive.read_name(name_map)
     member_guid = _read_guid(archive, uppercase=False)
-    b_self_context = archive.read_bool("MemberRef.bSelfContext")
-    _b_was_deprecated = archive.read_bool("MemberRef.bWasDeprecated")
+    b_self_context = archive.read_bool()
+    _b_was_deprecated = archive.read_bool()
 
     return FMemberReference(
         member_parent=member_parent,

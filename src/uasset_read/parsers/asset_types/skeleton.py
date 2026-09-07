@@ -80,7 +80,7 @@ def parse_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
         # Step 4: Parse Guid: FGuid (16 bytes)
         # Guid is serialized in UE4 >= VER_UE4_SKELETON_GUID_SERIALIZATION
         if archive.check_remaining(FGUID_SIZE, "Skeleton.Guid"):
-            guid_bytes = archive.read_bytes(FGUID_SIZE, "Skeleton.Guid")
+            guid_bytes = archive.read_bytes(FGUID_SIZE)
             result["guid"] = _format_guid(guid_bytes)
 
     except (struct.error, OSError, ValueError, ParseError) as e:
@@ -369,7 +369,7 @@ def _read_reference_skeleton(
     ref_skeleton: Dict[str, Any] = {}
 
     # Read BoneInfo count (TArray count)
-    bone_count = archive.read_i32("RefSkel.BoneCount")
+    bone_count = archive.read_i32()
 
     if bone_count < 0 or bone_count > 10000:
         logger.debug(
@@ -383,14 +383,14 @@ def _read_reference_skeleton(
     parents: List[int] = []
     for i in range(bone_count):
         # FName: Index (int32) + Number (int32)
-        name_index = archive.read_i32(f"RefSkel.BoneInfo[{i}].Name.Index")
-        name_number = archive.read_i32(f"RefSkel.BoneInfo[{i}].Name.Number")
+        name_index = archive.read_i32()
+        name_number = archive.read_i32()
 
         # Resolve name
         bone_name = _resolve_fname(name_index, name_number, name_map)
 
         # ParentIndex: int32 (INDEX_NONE = -1 means root bone)
-        parent_index = archive.read_i32(f"RefSkel.BoneInfo[{i}].ParentIndex")
+        parent_index = archive.read_i32()
 
         names.append(bone_name)
         parents.append(parent_index)
@@ -400,7 +400,7 @@ def _read_reference_skeleton(
     ref_skeleton["bone_count"] = bone_count
 
     # Read BonePose array (TArray<FTransform>)
-    pose_count = archive.read_i32("RefSkel.PoseCount")
+    pose_count = archive.read_i32()
     if pose_count < 0 or pose_count > _MAX_SKELETON_COUNT:
         logger.debug(
             "ReferenceSkeleton: invalid PoseCount %d (bone_count=%d), truncating to 0",
@@ -428,7 +428,7 @@ def _read_reference_skeleton(
 
     # Read NameToIndexMap: TMap<FName, int32>
     # TMap serialized as count + entries, each entry = Key(FName) + Value(int32)
-    map_count = archive.read_i32("RefSkel.NameToIndexMap.Count")
+    map_count = archive.read_i32()
     if map_count < 0 or map_count > _MAX_SKELETON_COUNT:
         logger.debug(
             "ReferenceSkeleton: invalid NameToIndexMap.Count %d, skipping parse",
@@ -439,9 +439,9 @@ def _read_reference_skeleton(
         map_count = 0
     name_to_index: Dict[str, int] = {}
     for _ in range(map_count):
-        key_index = archive.read_i32("RefSkel.NameToIndexMap.Key.Index")
-        key_number = archive.read_i32("RefSkel.NameToIndexMap.Key.Number")
-        value = archive.read_i32("RefSkel.NameToIndexMap.Value")
+        key_index = archive.read_i32()
+        key_number = archive.read_i32()
+        value = archive.read_i32()
 
         key_name = _resolve_fname(key_index, key_number, name_map)
         name_to_index[key_name] = value
@@ -473,7 +473,7 @@ def _read_retarget_sources(
     sources: List[Dict[str, Any]] = []
     is_ue5 = getattr(archive, "_file_version_ue5", 0) > 0
 
-    num_sources = archive.read_i32("RetargetSources.Count")
+    num_sources = archive.read_i32()
     if num_sources < 0 or num_sources > 1000:
         logger.debug(
             "RetargetSources: invalid source count %d, skipping parse",
@@ -485,18 +485,18 @@ def _read_retarget_sources(
         source: Dict[str, Any] = {}
 
         # RetargetSourceName: FName
-        name_index = archive.read_i32(f"RetargetSources[{i}].Name.Index")
-        name_number = archive.read_i32(f"RetargetSources[{i}].Name.Number")
+        name_index = archive.read_i32()
+        name_number = archive.read_i32()
         source["name"] = _resolve_fname(name_index, name_number, name_map)
 
         # SerializeReferencePose:
         # 1. PoseName: FName
-        pose_name_index = archive.read_i32(f"RetargetSources[{i}].PoseName.Index")
-        pose_name_number = archive.read_i32(f"RetargetSources[{i}].PoseName.Number")
+        pose_name_index = archive.read_i32()
+        pose_name_number = archive.read_i32()
         source["pose_name"] = _resolve_fname(pose_name_index, pose_name_number, name_map)
 
         # 2. ReferencePose: TArray<FTransform>
-        pose_count = archive.read_i32(f"RetargetSources[{i}].PoseCount")
+        pose_count = archive.read_i32()
         if pose_count < 0 or pose_count > _MAX_SKELETON_COUNT:
             logger.debug(
                 "RetargetSources[%d]: invalid PoseCount %d, truncating to 0",
@@ -515,10 +515,10 @@ def _read_retarget_sources(
 
         # 3. SourceReferenceMesh: FSoftObjectPath (editor only)
         # FSoftObjectPath serialized as FTopLevelAssetPath: PackageName(FName) + AssetName(FName)
-        pkg_index = archive.read_i32(f"RetargetSources[{i}].SourceMesh.Pkg.Index")
-        pkg_number = archive.read_i32(f"RetargetSources[{i}].SourceMesh.Pkg.Number")
-        asset_index = archive.read_i32(f"RetargetSources[{i}].SourceMesh.Asset.Index")
-        asset_number = archive.read_i32(f"RetargetSources[{i}].SourceMesh.Asset.Number")
+        pkg_index = archive.read_i32()
+        pkg_number = archive.read_i32()
+        asset_index = archive.read_i32()
+        asset_number = archive.read_i32()
 
         pkg_name = _resolve_fname(pkg_index, pkg_number, name_map)
         asset_name = _resolve_fname(asset_index, asset_number, name_map)
@@ -553,25 +553,25 @@ def _read_ftransform(archive: Any, is_ue5: bool = True) -> Dict[str, Any]:
         is_ue5: True for UE5 layout (default), False for UE4 layout
     """
     # Rotation: FQuat4f (4 x f32 = 16 bytes) -- same for UE4/UE5
-    rx = archive.read_f32("Transform.Rotation.X")
-    ry = archive.read_f32("Transform.Rotation.Y")
-    rz = archive.read_f32("Transform.Rotation.Z")
-    rw = archive.read_f32("Transform.Rotation.W")
+    rx = archive.read_f32()
+    ry = archive.read_f32()
+    rz = archive.read_f32()
+    rw = archive.read_f32()
 
     # Translation: FVector (UE4: 3 x f32 = 12 bytes) or FVector3d (UE5: 3 x f64 = 24 bytes)
     if is_ue5:
-        tx = archive.read_f64("Transform.Translation.X")
-        ty = archive.read_f64("Transform.Translation.Y")
-        tz = archive.read_f64("Transform.Translation.Z")
+        tx = archive.read_f64()
+        ty = archive.read_f64()
+        tz = archive.read_f64()
     else:
-        tx = archive.read_f32("Transform.Translation.X")
-        ty = archive.read_f32("Transform.Translation.Y")
-        tz = archive.read_f32("Transform.Translation.Z")
+        tx = archive.read_f32()
+        ty = archive.read_f32()
+        tz = archive.read_f32()
 
     # Scale3D: FVector3f (3 x f32 = 12 bytes) -- same for UE4/UE5
-    sx = archive.read_f32("Transform.Scale.X")
-    sy = archive.read_f32("Transform.Scale.Y")
-    sz = archive.read_f32("Transform.Scale.Z")
+    sx = archive.read_f32()
+    sy = archive.read_f32()
+    sz = archive.read_f32()
 
     return {
         "translation": {"x": tx, "y": ty, "z": tz},

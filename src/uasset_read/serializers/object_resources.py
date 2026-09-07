@@ -168,22 +168,22 @@ def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
 
     import_map: List[ObjectImport] = []
     for i in range(summary.import_count):
-        class_package = archive.read_name(name_map, f"Import[{i}].ClassPackage")
-        class_name = archive.read_name(name_map, f"Import[{i}].ClassName")
-        outer_index = PackageIndex(archive.read_i32(f"Import[{i}].OuterIndex"))
-        object_name = archive.read_name(name_map, f"Import[{i}].ObjectName")
+        class_package = archive.read_name(name_map)
+        class_name = archive.read_name(name_map)
+        outer_index = PackageIndex(archive.read_i32())
+        object_name = archive.read_name(name_map)
 
         # PackageName: present for every import when UEVer >= VER_UE4_NON_OUTER_PACKAGE_IMPORT
         # (ObjectResource.cpp load path). FilterEditorOnly changes the saved VALUE only,
         # never whether the 8-byte FName exists.
         package_name: Optional[str] = None
         if file_version >= UE4_NON_OUTER_PACKAGE_IMPORT:
-            package_name = archive.read_name(name_map, f"Import[{i}].PackageName")
+            package_name = archive.read_name(name_map)
 
         # bImportOptional: UE5 >= 1003 (OPTIONAL_RESOURCES)
         b_import_optional = False
         if summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
-            b_import_optional = archive.read_bool(f"Import[{i}].bImportOptional")
+            b_import_optional = archive.read_bool()
 
         import_map.append(
             ObjectImport(
@@ -219,29 +219,29 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
         # Attribute any read recovery in this entry to its table slot.
         archive._current_object_id = f"export:{export_idx}"
         try:
-            class_index = PackageIndex(archive.read_i32(f"Export[{export_idx}].ClassIndex"))
-            super_index = PackageIndex(archive.read_i32(f"Export[{export_idx}].SuperIndex"))
+            class_index = PackageIndex(archive.read_i32())
+            super_index = PackageIndex(archive.read_i32())
 
             # TemplateIndex: VER_UE4_TemplateIndex_IN_COOKED_EXPORTS (508)
             template_index = PackageIndex(0)
             if file_version >= UE4_TemplateIndex_IN_COOKED_EXPORTS:
-                template_index = PackageIndex(archive.read_i32(f"Export[{export_idx}].TemplateIndex"))
+                template_index = PackageIndex(archive.read_i32())
 
-            outer_index = PackageIndex(archive.read_i32(f"Export[{export_idx}].OuterIndex"))
-            object_name = archive.read_name(name_map, f"Export[{export_idx}].ObjectName")
-            object_flags = archive.read_u32(f"Export[{export_idx}].ObjectFlags")
+            outer_index = PackageIndex(archive.read_i32())
+            object_name = archive.read_name(name_map)
+            object_flags = archive.read_u32()
 
             # SerialSize/Offset: i32 before VER_UE4_64BIT_EXPORTMAP_SERIALSIZES (511), i64 at/after
             if file_version < UE4_64BIT_EXPORTMAP_SERIALSIZES:
                 serial_size_offset = archive.tell()
-                serial_size = archive.read_i32(f"Export[{export_idx}].SerialSize")
+                serial_size = archive.read_i32()
                 serial_offset_offset = archive.tell()
-                serial_offset = archive.read_i32(f"Export[{export_idx}].SerialOffset")
+                serial_offset = archive.read_i32()
             else:
                 serial_size_offset = archive.tell()
-                serial_size = archive.read_i64(f"Export[{export_idx}].SerialSize")
+                serial_size = archive.read_i64()
                 serial_offset_offset = archive.tell()
-                serial_offset = archive.read_i64(f"Export[{export_idx}].SerialOffset")
+                serial_offset = archive.read_i64()
 
             # CR-05: validate serial_size/serial_offset non-negative
             # Tolerant: set to 0 and log warning on negative values, subsequent property parsing will be skipped due to size=0
@@ -269,9 +269,9 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
                 serial_size = 0
 
             # bool flags (always present)
-            b_forced_export = archive.read_bool(f"Export[{export_idx}].bForcedExport")
-            b_not_for_client = archive.read_bool(f"Export[{export_idx}].bNotForClient")
-            b_not_for_server = archive.read_bool(f"Export[{export_idx}].bNotForServer")
+            b_forced_export = archive.read_bool()
+            b_not_for_client = archive.read_bool()
+            b_not_for_server = archive.read_bool()
 
             # PackageGuid: removed in UE5 1005
             package_guid = ""
@@ -282,26 +282,24 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
             # bIsInheritedInstance: UE5 >= 1006
             b_is_inherited_instance = False
             if summary.file_version_ue5 >= UE5_TRACK_OBJECT_EXPORT_IS_INHERITED:
-                b_is_inherited_instance = archive.read_bool(f"Export[{export_idx}].bIsInheritedInstance")
+                b_is_inherited_instance = archive.read_bool()
 
-            package_flags = archive.read_u32(f"Export[{export_idx}].PackageFlags")
+            package_flags = archive.read_u32()
 
             # bNotAlwaysLoadedForEditorGame: VER_UE4_LOAD_FOR_EDITOR_GAME (365)
             b_not_always_loaded_for_editor_game = True
             if file_version >= UE4_LOAD_FOR_EDITOR_GAME:
-                b_not_always_loaded_for_editor_game = archive.read_bool(
-                    f"Export[{export_idx}].bNotAlwaysLoadedForEditorGame"
-                )
+                b_not_always_loaded_for_editor_game = archive.read_bool()
 
             # bIsAsset: VER_UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT (485; historical 4.x numbering)
             b_is_asset = False
             if file_version >= UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT:
-                b_is_asset = archive.read_bool(f"Export[{export_idx}].bIsAsset")
+                b_is_asset = archive.read_bool()
 
             # bGeneratePublicHash: UE5 >= 1003 (OPTIONAL_RESOURCES)
             b_generate_public_hash = False
             if summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
-                b_generate_public_hash = archive.read_bool(f"Export[{export_idx}].bGeneratePublicHash")
+                b_generate_public_hash = archive.read_bool()
 
             # Dependency arrays: VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS (507)
             # Span into summary PreloadDependencyValues:
@@ -312,21 +310,19 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
             ser_before_create_deps = 0
             create_before_create_deps = 0
             if file_version >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:
-                first_export_dependency = archive.read_i32(f"Export[{export_idx}].FirstExportDependency")
-                ser_before_ser_deps = archive.read_i32(f"Export[{export_idx}].SerializationBeforeSerializationDeps")
-                create_before_ser_deps = archive.read_i32(f"Export[{export_idx}].CreateBeforeSerializationDeps")
-                ser_before_create_deps = archive.read_i32(f"Export[{export_idx}].SerializationBeforeCreateDeps")
-                create_before_create_deps = archive.read_i32(f"Export[{export_idx}].CreateBeforeCreateDeps")
+                first_export_dependency = archive.read_i32()
+                ser_before_ser_deps = archive.read_i32()
+                create_before_ser_deps = archive.read_i32()
+                ser_before_create_deps = archive.read_i32()
+                create_before_create_deps = archive.read_i32()
 
             # ScriptSerialization offsets (UE5 >= 1010, only for versioned properties)
             script_serialization_start_offset = 0
             script_serialization_end_offset = 0
             uses_unversioned = (summary.package_flags & PKG_UnversionedProperties) != 0
             if not uses_unversioned and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
-                script_serialization_start_offset = archive.read_i64(
-                    f"Export[{export_idx}].ScriptSerializationStartOffset"
-                )
-                script_serialization_end_offset = archive.read_i64(f"Export[{export_idx}].ScriptSerializationEndOffset")
+                script_serialization_start_offset = archive.read_i64()
+                script_serialization_end_offset = archive.read_i64()
                 # CR-05: validate non-negative (Tolerant: set to 0 and log warning on negative values)
                 if script_serialization_start_offset < 0:
                     logger.debug(

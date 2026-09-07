@@ -1048,7 +1048,7 @@ def _skip_optional_object_guid(archive: PackageArchive, serial_end: int) -> int:
     pos = archive.tell()
     if serial_end - pos < 4:
         return pos
-    flag = archive.read_i32("Export.ObjectGuid.present")
+    flag = archive.read_i32()
     if flag > 1:
         # An archive bool is 0 or 1. Anything else means we are not on the field
         # boundary, so refuse to consume it rather than shift the payload by 4 bytes.

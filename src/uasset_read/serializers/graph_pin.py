@@ -52,11 +52,11 @@ def read_ed_graph_pin_type(
     pin_type = FEdGraphPinType()
 
     # PinCategory / PinSubCategory (UE5 always uses FName format)
-    pin_type.pin_category = archive.read_name(name_map, "PinType.PinCategory")
-    pin_type.pin_subcategory = archive.read_name(name_map, "PinType.PinSubCategory")
+    pin_type.pin_category = archive.read_name(name_map)
+    pin_type.pin_subcategory = archive.read_name(name_map)
 
     # PinSubCategoryObject (FPackageIndex)
-    pin_type.pin_subcategory_object = archive.read_i32("PinType.PinSubCategoryObject")
+    pin_type.pin_subcategory_object = archive.read_i32()
     if pin_type.pin_subcategory_object:
         pkg_idx = PackageIndex(pin_type.pin_subcategory_object)
         try:
@@ -67,13 +67,13 @@ def read_ed_graph_pin_type(
             pin_type.pin_subcategory_object_name = None
 
     # ContainerType (UE5 always uses modern uint8 format)
-    pin_type.container_type = archive.read_u8("PinType.ContainerType")
+    pin_type.container_type = archive.read_u8()
     if pin_type.container_type == 3:  # Map
         # Map key terminal type (FEdGraphTerminalType serialization)
         # Reference: UE EdGraphPin.cpp:218 — Ar << PinValueType
-        pin_type.map_key_terminal_category = archive.read_name(name_map, "PinType.TerminalCategory")
-        pin_type.map_key_terminal_sub_category = archive.read_name(name_map, "PinType.TerminalSubCategory")
-        terminal_sub_category_object = archive.read_i32("PinType.TerminalSubCategoryObject")
+        pin_type.map_key_terminal_category = archive.read_name(name_map)
+        pin_type.map_key_terminal_sub_category = archive.read_name(name_map)
+        terminal_sub_category_object = archive.read_i32()
         pin_type.map_key_terminal_sub_category_object = terminal_sub_category_object
         if terminal_sub_category_object:
             pkg_idx = PackageIndex(terminal_sub_category_object)
@@ -86,30 +86,30 @@ def read_ed_graph_pin_type(
         # FEdGraphTerminalType tail — EdGraphNode.cpp operator<<: two unconditional
         # 4-byte bools, then bTerminalIsUObjectWrapper gated on
         # FReleaseObjectVersion >= PinTypeIncludesUObjectWrapperFlag (=31).
-        pin_type.map_key_terminal_is_const = archive.read_bool("Terminal.bIsConst")
-        pin_type.map_key_terminal_is_weak_pointer = archive.read_bool("Terminal.bIsWeakPointer")
+        pin_type.map_key_terminal_is_const = archive.read_bool()
+        pin_type.map_key_terminal_is_weak_pointer = archive.read_bool()
         if summary is not None and get_custom_version(summary, RELEASE_GUID) >= 31:
-            pin_type.map_key_terminal_is_uobject_wrapper = archive.read_bool("Terminal.bIsUObjectWrapper")
+            pin_type.map_key_terminal_is_uobject_wrapper = archive.read_bool()
         else:
             pin_type.map_key_terminal_is_uobject_wrapper = False
 
     # bIsReference / bIsWeakPointer (UE5 FArchive bool = uint32, 4B)
-    pin_type.is_reference = archive.read_bool("PinType.bIsReference")
-    pin_type.is_weak_pointer = archive.read_bool("PinType.bIsWeakPointer")
+    pin_type.is_reference = archive.read_bool()
+    pin_type.is_weak_pointer = archive.read_bool()
 
     # FSimpleMemberReference (UE5 always present)
-    archive.read_i32("PinType.MemberParent")
-    archive.read_name(name_map, "PinType.MemberName")
-    archive.read_bytes(16, "PinType.MemberGuid")
+    archive.read_i32()
+    archive.read_name(name_map)
+    archive.read_bytes(16)
 
     # bIsConst (UE5 FArchive bool = uint32, 4B)
-    pin_type.is_const = archive.read_bool("PinType.bIsConst")
+    pin_type.is_const = archive.read_bool()
 
     # bIsUObjectWrapper (UE5 FArchive bool = uint32, 4B)
-    pin_type.is_uobject_wrapper = archive.read_bool("PinType.bIsUObjectWrapper")
+    pin_type.is_uobject_wrapper = archive.read_bool()
 
     # bSerializeAsSinglePrecisionFloat (UE5 FArchive bool = uint32, 4B)
-    pin_type.b_serialize_as_single_precision_float = archive.read_bool("PinType.bSerializeAsSinglePrecisionFloat")
+    pin_type.b_serialize_as_single_precision_float = archive.read_bool()
 
     return pin_type
 
@@ -126,11 +126,11 @@ def read_pin_reference(
     import_map: List[ObjectImport],
 ) -> Optional[dict]:
     """Read a single Pin reference (FBlueprintEditorUtils::FPinReference)."""
-    b_null_ptr = archive.read_i32("PinRef.BNullPtr")
+    b_null_ptr = archive.read_i32()
     if b_null_ptr != 0:
         return None  # null marker consumed 4 bytes only, no more reading
 
-    owning_node_index = archive.read_i32("PinRef.OwningNode")
+    owning_node_index = archive.read_i32()
     pin_guid_raw = _read_guid(archive)
 
     # Normalize to 32-char lowercase hex (remove dashes), matching pin_id format
@@ -167,7 +167,7 @@ def read_pin_array(
     Sliding recovery mechanism — when count is abnormal, scan nearby bytes for a valid i32 count,
     validate candidates before resuming parsing, to avoid losing entire pin arrays due to a single field misalignment.
     """
-    array_count = archive.read_i32("PinArray.Count")
+    array_count = archive.read_i32()
 
     if array_count < 0 or array_count > MAX_LINKEDTO_PER_PIN:
         # Sliding recovery: scan within ±8 bytes of current pointer for valid count
@@ -566,17 +566,17 @@ def read_ue_graph_pin(
     """
     # 1. OwningNode - D-12: If header provided, read and discard internal duplicate to advance position
     if header_owning_node is not None:
-        archive.read_i32("Pin.OwningNode.Duplicate")  # Discard internal duplicate
+        archive.read_i32()  # Discard internal duplicate
         owning_node_index = header_owning_node
     else:
-        owning_node_index = archive.read_i32("Pin.OwningNode")
+        owning_node_index = archive.read_i32()
 
     # 2. PinId (FGuid 16 bytes) - D-12: If header provided, read and discard internal duplicate
     if header_pin_id is not None:
-        archive.read_bytes(16, "Pin.PinId.Duplicate")  # Discard internal duplicate
+        archive.read_bytes(16)  # Discard internal duplicate
         pin_id = header_pin_id
     else:
-        pin_id_bytes = archive.read_bytes(16, "Pin.PinId")
+        pin_id_bytes = archive.read_bytes(16)
         pin_id = pin_id_bytes.hex()
 
     # 3. PinName
@@ -587,13 +587,13 @@ def read_ue_graph_pin(
     pin_friendly_name, _ = _read_pin_ftext_field(archive, "PinFriendlyName", dev_notes=dev_notes)
 
     # 5. SourceIndex (UE5 always present)
-    source_index = archive.read_i32("Pin.SourceIndex")
+    source_index = archive.read_i32()
 
     # 6. PinToolTip — FString (NOT FText!)
     pin_tooltip = _read_pin_fstring_field(archive, "PinToolTip", pin_name)
 
     # 7. Direction — u8 for both UE4 and UE5
-    direction = archive.read_u8("Pin.Direction")
+    direction = archive.read_u8()
 
     # 8. PinType
     pin_type = read_ed_graph_pin_type(archive, name_map, summary, import_map, export_map)
@@ -603,7 +603,7 @@ def read_ue_graph_pin(
     autogenerated_default_value = _read_pin_fstring_field(archive, "AutogeneratedDefaultValue")
 
     # 11. DefaultObject (FPackageIndex)
-    default_object = archive.read_i32("Pin.DefaultObject")
+    default_object = archive.read_i32()
 
     # 12. DefaultTextValue (FText)
     default_text_value, _ = _read_pin_ftext_field(archive, "DefaultTextValue", dev_notes=dev_notes)

@@ -63,7 +63,7 @@ def parse_curve_table(
     try:
         # 1. NumRows: int32
         #    Reference CurveTable.cpp:112-113 Ar << NumRows
-        num_rows = archive.read_i32("NumRows")
+        num_rows = archive.read_i32()
         if num_rows < 0:
             result["parse_status"] = "partial"
             result["error"] = f"Invalid row count: {num_rows}"
@@ -78,7 +78,7 @@ def parse_curve_table(
         # 2. CurveTableMode: uint8
         #    Reference CurveTable.cpp:122-123 Ar << CurveTableMode
         #    Old versions (bUpgradingCurveTable) lack this field, but current format always has it
-        mode_raw = archive.read_u8("CurveTableMode")
+        mode_raw = archive.read_u8()
         result["curve_table_mode_raw"] = mode_raw
         result["curve_table_mode"] = _MODE_NAMES.get(mode_raw, f"Unknown({mode_raw})")
 
@@ -88,8 +88,8 @@ def parse_curve_table(
 
         for row_idx in range(num_rows):
             # FName: Index (int32) + Number (int32)
-            name_index = archive.read_i32(f"Row[{row_idx}].FName.Index")
-            name_number = archive.read_i32(f"Row[{row_idx}].FName.Number")
+            name_index = archive.read_i32()
+            name_number = archive.read_i32()
 
             # Parse row name
             if 0 <= name_index < len(name_map):
@@ -142,17 +142,17 @@ def _walk_tagged_properties(archive: Any, row_idx: int, name_map: List[str]):
     FPropertyTag::Serialize
     """
     while True:
-        prop_name_index = archive.read_i32(f"Row[{row_idx}].Prop.Name.Index")
-        prop_name_number = archive.read_i32(f"Row[{row_idx}].Prop.Name.Number")
+        prop_name_index = archive.read_i32()
+        prop_name_number = archive.read_i32()
         if prop_name_index == 0 and prop_name_number == 0:
             return
 
-        type_name_index = archive.read_i32(f"Row[{row_idx}].Prop.Type.Index")
-        archive.read_i32(f"Row[{row_idx}].Prop.Type.Number")  # protocol read
+        type_name_index = archive.read_i32()
+        archive.read_i32()  # protocol read
         type_name = _resolve_name(type_name_index, name_map)
 
-        prop_size = archive.read_i32(f"Row[{row_idx}].Prop.Size")
-        archive.read_i32(f"Row[{row_idx}].Prop.ArrayIndex")  # protocol read
+        prop_size = archive.read_i32()
+        archive.read_i32()  # protocol read
 
         # EnumName FName (EnumProperty / ByteProperty)
         if type_name in ("EnumProperty", "ByteProperty"):

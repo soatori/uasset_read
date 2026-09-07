@@ -133,7 +133,7 @@ def parse_sound_wave(
     # === Custom Serialize data (after Super::Serialize / tagged properties) ===
     # SoundWave.cpp:1278-1302 — Flags uint32
     try:
-        flags = archive.read_u32("SoundWave.Flags")
+        flags = archive.read_u32()
     except (struct.error, OSError, ParseError) as e:
         logger.debug("SoundWave: failed to read Flags: %s", e)
         result["parse_status"] = "partial"

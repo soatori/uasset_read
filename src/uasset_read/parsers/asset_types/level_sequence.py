@@ -39,25 +39,25 @@ def parse_level_sequence(archive: Any, name_map: List[str]) -> Dict[str, Any]:
     try:
         # 1. MovieScene: int32 — opaque pointer to UMovieScene
         #    LevelSequence.cpp: ULevelSequence::Serialize serializes MovieScene pointer
-        result["movie_scene"] = archive.read_i32("LevelSequence.MovieScene")
+        result["movie_scene"] = archive.read_i32()
 
         # 2. MovieSceneSource: TSoftObjectPtr — asset source reference (serialized as int32 object index)
-        result["movie_scene_source"] = archive.read_i32("LevelSequence.MovieSceneSource")
+        result["movie_scene_source"] = archive.read_i32()
 
         # 3. MovieSceneLicense: FString — license string
-        result["movie_scene_license"] = archive.read_fstring("LevelSequence.MovieSceneLicense")
+        result["movie_scene_license"] = archive.read_fstring()
 
         # 4. DisplayRate: FFrameRate — display frame rate
-        display_rate_num = archive.read_i32("LevelSequence.DisplayRate.Numerator")
-        display_rate_den = archive.read_i32("LevelSequence.DisplayRate.Denominator")
+        display_rate_num = archive.read_i32()
+        display_rate_den = archive.read_i32()
         result["display_rate"] = {
             "numerator": display_rate_num,
             "denominator": display_rate_den,
         }
 
         # 5. TickResolution: FFrameRate — tick resolution
-        tick_resolution_num = archive.read_i32("LevelSequence.TickResolution.Numerator")
-        tick_resolution_den = archive.read_i32("LevelSequence.TickResolution.Denominator")
+        tick_resolution_num = archive.read_i32()
+        tick_resolution_den = archive.read_i32()
         result["tick_resolution"] = {
             "numerator": tick_resolution_num,
             "denominator": tick_resolution_den,
