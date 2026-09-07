@@ -6,9 +6,9 @@ KismetExpressionT subclass, and the class factories used to define
 token-only expression classes.
 """
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any
 
 from uasset_read.kismet.tokens import EExprToken
 
@@ -22,7 +22,12 @@ class KismetExpression(ABC):
     """
 
     StatementIndex: int
-    Token: ClassVar[EExprToken]
+
+    @property
+    @abstractmethod
+    def Token(self) -> EExprToken:
+        """Return the EExprToken value corresponding to this expression."""
+        ...
 
     def __init__(self, statement_index: int = 0) -> None:
         self.StatementIndex = statement_index

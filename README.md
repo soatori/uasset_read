@@ -4,7 +4,7 @@
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
-> 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 94 source files · 70 registered UE class handlers
+> 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 96 source files · 70 registered UE class handlers
 
 > **Refactor status:** v2 package-first architecture: default CLI/API output is `PackageDocument v2` (legacy packages; tagged properties parsed within export bounds; sample-backed handlers incl. lightweight Niagara kind coverage (semantic status partial until domain fields land), no Semantic 1.x handler dependency). Payload extraction from cooked sidecar files is now implemented: `extract_payload` reads actual bytes from `.uexp/.ubulk` files using BulkData header mapping. Default `semantic` view excludes raw offsets/property trees; they are opt-in via `raw`/`debug` views. Zen/IoStore and unversioned-with-usmap remain deferred (see `docs/designs/README.md`); Semantic 1.x JSON is no longer available — the v1 pipeline was removed.
 
@@ -26,7 +26,7 @@ Whether you're auditing blueprint dependencies, building tooling for game develo
 | -------- | ------- |
 | Version | v0.5.4.45 (last tagged) / 0.6.0-dev (v2 default) |
 | Source | Python parser for Unreal Engine .uasset files |
-| Modules | 94 source files across 8 subpackages |
+| Modules | 96 source files across 8 subpackages |
 | v2 Tests | test_core (exactly 13 functions, structure-gated) + manifest-driven test_samples (118 collected total, no skips/xfail) |
 | Tracked samples | 54 legacy fixtures with manifest validation |
 

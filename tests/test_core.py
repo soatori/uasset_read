@@ -2128,7 +2128,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         """G4: K2Node Serialize() implementations add no binary tails past Pins."""
         src = (SRC / "uasset_read/serializers/graph_node.py").read_text(encoding="utf-8")
         head = src.split("# 5 Node type readers")[1].split("dispatch handlers")[0]
-        assert 'archive.read_bool("K2Node_CallFunction.bDefaultsToPure")' not in head
+        assert "read_bool(" not in head
         assert "legacy fallback (bool at pos" not in head
         assert "read_k2node_message(" not in (SRC / "uasset_read/serializers/graph_node.py").read_text(encoding="utf-8")
 
