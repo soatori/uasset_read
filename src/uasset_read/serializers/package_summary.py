@@ -312,9 +312,11 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, int, b
     # Magic number
     tag = archive.read_u32()
     if tag == PACKAGE_FILE_TAG_SWAPPED:
-        archive.set_byte_swapping(True)
-        tag = PACKAGE_FILE_TAG
-    elif tag != PACKAGE_FILE_TAG:
+        raise VersionError(
+            "Byte-swapped (big-endian) package magic detected — big-endian packages "
+            "are not supported (no fixture evidence; UE writes little-endian)"
+        )
+    if tag != PACKAGE_FILE_TAG:
         raise VersionError(f"Invalid package tag: {hex(tag)}")
 
     legacy_file_version = archive.read_i32()
