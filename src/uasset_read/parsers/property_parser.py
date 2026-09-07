@@ -643,15 +643,7 @@ def parse_property_value(
 
         # All handlers do not match -- read raw bytes and return PropertyFallback
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
-        return PropertyFallback(
-            name=tag.name,
-            type=tag.type,
-            size=tag.size,
-            raw_bytes=raw_data,
-            reason=FallbackReason.UNSUPPORTED_TYPE,
-            array_index=getattr(tag, "array_index", 0),
-            tag_data=getattr(tag, "tag_data", None),
-        )
+        return PropertyFallback.from_tag(tag, FallbackReason.UNSUPPORTED_TYPE, raw_bytes=raw_data)
 
     try:
         # Dispatch based on handler signature
@@ -680,16 +672,7 @@ def parse_property_value(
         if not tolerant:
             raise
         logger.debug("Property handler failed for %s.%s: %s", tag.name, tag.type, e)
-        return PropertyFallback(
-            name=tag.name,
-            type=tag.type,
-            size=tag.size,
-            raw_bytes=b"",
-            reason=FallbackReason.PARSE_ERROR,
-            array_index=getattr(tag, "array_index", 0),
-            tag_data=getattr(tag, "tag_data", None),
-            error_message=str(e),
-        )
+        return PropertyFallback.from_tag(tag, FallbackReason.PARSE_ERROR, error_message=str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -730,15 +713,6 @@ def _handle_serialization_control(
             raw_value=serialization_control,
             fallback="skipped_subsequent_reads",
             message=f"Export '{getattr(export, 'object_name', '')}' SerializationControlExtensions unknown bits: 0x{unknown_bits:02X} (bits: {', '.join(bit_names)})",
-        )
-        # Record diagnostic info
-        archive._record_diagnostic(
-            module="property_parser",
-            field="serialization_control",
-            source="parse_properties_from_export",
-            target_offset=control_offset,
-            file_size=getattr(archive, "_file_size", 0),
-            error=f"SerializationControlExtensions unknown bits: 0x{unknown_bits:02X} ({', '.join(bit_names)})",
         )
         # Store in export transforms, for IR/JSON output
         if not hasattr(export, "transforms") or export.transforms is None:

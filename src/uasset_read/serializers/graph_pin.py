@@ -482,15 +482,6 @@ def _read_pin_ftext_field(
                 MAX_FTEXT_CONSUMPTION,
                 _start,
             )
-            archive._record_diagnostic(
-                module="graph_pin",
-                field="FTEXT-SAFETY",
-                source=field_name,
-                target_offset=_start,
-                read_size=consumed,
-                file_size=archive.total_size(),
-                error=f"FText consumed {consumed} bytes, exceeding limit {MAX_FTEXT_CONSUMPTION}",
-            )
             archive.seek(_start)  # Seek back to field start, not _start + 5
             value = None
         return value, True

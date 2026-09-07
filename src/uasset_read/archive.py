@@ -11,7 +11,7 @@ import os
 import struct
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Dict, BinaryIO, Any, Protocol, runtime_checkable
+from typing import Optional, BinaryIO, Any, Protocol, runtime_checkable
 
 from uasset_read.exceptions import ParseError, ExportBoundsExceeded
 from uasset_read.constants import (
@@ -19,11 +19,7 @@ from uasset_read.constants import (
     MAX_FSTRING_LENGTH,
     get_max_reasonable,
 )
-from uasset_read.models.diagnostics import (
-    OffsetRangeDiagnostic,
-    StructuredDiagnostic,
-)
-from uasset_read.bounded_events import BoundedEventBuffer
+from uasset_read.models.diagnostics import StructuredDiagnostic
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +53,7 @@ class FArchive:
     _file_version_ue4: int
     _file_version_ue5: int
 
-    def _init_archive_attrs(self, path: str, tolerant: bool = False, hex_view: bool = False):
+    def _init_archive_attrs(self, path: str, tolerant: bool = False):
         """Initialize common archive attributes without opening a file.
 
         Subclasses that do not read from a file (ByteArchive, FKismetArchive)
@@ -73,19 +69,13 @@ class FArchive:
         self._mmap_warning: Optional[str] = None
         self._logger = logging.getLogger(__name__)
         self._name_map: Optional[list] = None  # optional name table cache
-        self._diagnostics: BoundedEventBuffer = BoundedEventBuffer(max_entries=10000)  # offset diagnostics (bounded)
         self._name_warnings_seen: set[int] = set()  # read_name out-of-range index dedup (#411, #481)
-        self._hex_view_enabled: bool = hex_view
-        self._hex_view_entries: BoundedEventBuffer = BoundedEventBuffer(
-            max_entries=50000
-        )  # list[HexViewEntry], bounded
-        self._hex_view_context: str = ""  # current context prefix (e.g. "Summary.")
         self._structured_diagnostics: list[StructuredDiagnostic] = []  # stable-code diagnostics
         self._current_object_id: str = ""  # table slot a read is attributed to (e.g. "export:3")
         self._read_range: tuple[int, int] | None = None  # optional export-scoped (start, end) read range
 
-    def __init__(self, path: str, tolerant: bool = False, hex_view: bool = False):
-        self._init_archive_attrs(path, tolerant, hex_view)
+    def __init__(self, path: str, tolerant: bool = False):
+        self._init_archive_attrs(path, tolerant)
 
         try:
             self._file = open(path, "rb")
@@ -128,16 +118,6 @@ class FArchive:
         self._check_read_range(current_pos, size)
         remaining = self._file_size - current_pos
         if size > remaining:
-            # record diagnostic before raising (ensures finally block can collect)
-            self._record_diagnostic(
-                module="archive",
-                field="read",
-                source="read",
-                read_size=size,
-                current_pos=current_pos,
-                file_size=self._file_size,
-                error=f"Cannot read {size} bytes at position {current_pos}, only {remaining} bytes remaining",
-            )
             raise ParseError(f"Cannot read {size} bytes at position {current_pos}, only {remaining} bytes remaining")
         if self._use_mmap and self._mmap:
             data = self._mmap.read(size)
@@ -169,28 +149,12 @@ class FArchive:
     def validate_offset(self, offset: int, context: str = "") -> None:
         """Full offset validation — checks offset validity before seeking."""
         if offset < 0:
-            self._record_diagnostic(
-                module="archive",
-                field="seek",
-                source=context or "validate_offset",
-                target_offset=offset,
-                file_size=self._file_size,
-                error=f"Invalid offset {offset} (negative) at {context}",
-            )
             raise ParseError(f"Invalid offset {offset} (negative) at {context}")
         if self._read_range is not None:
             start, end = self._read_range
             if offset < start or offset > end:
                 raise ExportBoundsExceeded(f"Offset {offset} outside export read range [{start}, {end}] at {context}")
         if offset > self._file_size:
-            self._record_diagnostic(
-                module="archive",
-                field="seek",
-                source=context or "validate_offset",
-                target_offset=offset,
-                file_size=self._file_size,
-                error=f"Offset {offset} exceeds file size {self._file_size} at {context}",
-            )
             raise ParseError(f"Offset {offset} exceeds file size {self._file_size} at {context}")
 
     def validate_size(
@@ -211,29 +175,12 @@ class FArchive:
             tolerant = self._tolerant
         if size < 0:
             if tolerant:
-                self._record_diagnostic(
-                    module="archive",
-                    field="validate_size",
-                    source=context or "validate_size",
-                    target_offset=self.tell(),
-                    file_size=self._file_size,
-                    error=f"Size {size} (negative) at {context}",
-                )
                 return False
             raise ParseError(f"Invalid size {size} (negative) at {context}")
         current_pos = self.tell()
         remaining = self._file_size - current_pos
         if size > remaining:
             if tolerant:
-                self._record_diagnostic(
-                    module="archive",
-                    field="validate_size",
-                    source=context or "validate_size",
-                    target_offset=current_pos,
-                    file_size=self._file_size,
-                    read_size=size,
-                    error=f"Size {size} exceeds remaining {remaining} bytes at {context}",
-                )
                 return False
             raise ParseError(f"Size {size} exceeds remaining {remaining} bytes at {context}")
         # max_reasonable_cap: per-type ceiling (100 MB standard, 500 MB UE5 large types).
@@ -244,15 +191,6 @@ class FArchive:
         max_reasonable = get_max_reasonable(property_type or "", engine_version)
         if size > max_reasonable:
             if tolerant:
-                self._record_diagnostic(
-                    module="archive",
-                    field="validate_size",
-                    source=context or "validate_size",
-                    target_offset=current_pos,
-                    file_size=self._file_size,
-                    read_size=size,
-                    error=f"Size {size} exceeds max_reasonable {max_reasonable} at {context}",
-                )
                 return False
             raise ParseError(f"Size {size} exceeds max_reasonable {max_reasonable} at {context}")
         return True
@@ -310,32 +248,13 @@ class FArchive:
             context: diagnostic context description
 
         Returns:
-            True if sufficient bytes remain, False otherwise (diagnostic recorded in _diagnostics)
+            True if sufficient bytes remain, False otherwise
         """
         current = self.tell()
         remaining = self._file_size - current
         if remaining < expected_bytes:
-            self._diagnostics.append(
-                OffsetRangeDiagnostic(
-                    module="archive",
-                    field="check_remaining",
-                    current_pos=current,
-                    read_size=expected_bytes,
-                    file_size=self._file_size,
-                    source=context or "check_remaining",
-                    error=(f"need {expected_bytes} bytes, only {remaining} bytes remaining, file may be truncated"),
-                )
-            )
             return False
         return True
-
-    def get_mmap_info(self) -> Dict:
-        """Return mmap status information."""
-        return {"used": self._use_mmap, "warning": self._mmap_warning}
-
-    def _record_diagnostic(self, **kwargs) -> None:
-        """Record offset/range diagnostic (internal helper)."""
-        self._diagnostics.append(OffsetRangeDiagnostic(**kwargs))
 
     def _record_structured_diagnostic(
         self,
@@ -368,100 +287,26 @@ class FArchive:
         """Return collected structured diagnostics."""
         return list(self._structured_diagnostics)
 
-    def get_diagnostics(self) -> list[OffsetRangeDiagnostic]:
-        """Return collected offset diagnostics."""
-        return self._diagnostics.entries
-
-    @property
-    def diagnostics_dropped_count(self) -> int:
-        """Return the number of diagnostic entries dropped due to buffer limit."""
-        return self._diagnostics.dropped_count
-
-    # HexView support
-
-    def enable_hex_view(self, enabled: bool = True) -> None:
-        """Enable or disable hex_view recording."""
-        self._hex_view_enabled = enabled
-
-    def is_hex_view_enabled(self) -> bool:
-        """Return whether hex_view is enabled."""
-        return self._hex_view_enabled
-
-    def set_hex_view_context(self, context: str) -> None:
-        """Set current field context prefix (e.g. "Summary.", "NameTable[0].").
-
-        Args:
-            context: context prefix, automatically prepended to field names
-        """
-        self._hex_view_context = context
-
-    def _record_hex_view(self, key: str, type_name: str, value: Any, start: int, stop: int) -> None:
-        """Record a read operation to hex_view.
-
-        Only called when hex_view is enabled, to avoid performance overhead.
-        """
-        if not self._hex_view_enabled:
-            return
-        from uasset_read.debug import HexViewEntry
-
-        full_key = f"{self._hex_view_context}{key}" if self._hex_view_context else key
-        self._hex_view_entries.append(
-            HexViewEntry(
-                key=full_key,
-                type=type_name,
-                value=value,
-                start=start,
-                stop=stop,
-            )
-        )
-
-    def get_hex_view_entries(self) -> list:
-        """Return collected hex_view entries list."""
-        return list(self._hex_view_entries.entries)
-
-    @property
-    def hex_view_dropped_count(self) -> int:
-        """Return the number of HexView entries dropped due to buffer limit."""
-        return self._hex_view_entries.dropped_count
-
     # Type read methods
 
     def _read_swapped(self, fmt_char: str, size: int, type_name: str, key: str = ""):
         """General byte-order-aware read (internal helper)."""
-        start = self.tell()
         fmt = ">" if self._byte_swapping else "<"
-        value = struct.unpack(fmt + fmt_char, self.read(size))[0]
-        if key:
-            self._record_hex_view(key, type_name, value, start, start + size)
-        return value
+        return struct.unpack(fmt + fmt_char, self.read(size))[0]
 
     def read_u8(self, key: str = "") -> int:
         """Read unsigned 8-bit integer (byte-order independent)."""
-
-        start = self.tell()
         data = self.read(1)
-        value = struct.unpack("<B", data)[0]
-        if key:
-            self._record_hex_view(key, "u8", value, start, start + 1)
-        return value
+        return struct.unpack("<B", data)[0]
 
     def read_i8(self, key: str = "") -> int:
         """Read signed 8-bit integer (byte-order independent)."""
-
-        start = self.tell()
         data = self.read(1)
-        value = struct.unpack("<b", data)[0]  # 'b' = signed byte
-        if key:
-            self._record_hex_view(key, "i8", value, start, start + 1)
-        return value
+        return struct.unpack("<b", data)[0]  # 'b' = signed byte
 
     def read_bytes(self, n: int, key: str = "") -> bytes:
         """Read raw bytes (no byte swapping)."""
-        start = self.tell()
-        data = self.read(n)
-        if key:
-            self._record_hex_view(key, "bytes", data, start, start + n)
-        return data
+        return self.read(n)
 
     def read_i32(self, key: str = "") -> int:
         """Read signed 32-bit integer (supports byte swapping)."""
@@ -486,11 +331,7 @@ class FArchive:
         FArchive::operator<<(bool&) serializes as uint32 (4 bytes).
         This applies to most scenarios, including FText, ObjectExport, etc.
         """
-        start = self.tell()
-        value = self.read_u32() != 0
-        if key:
-            self._record_hex_view(key, "bool", value, start, start + 4)
-        return value
+        return self.read_u32() != 0
 
     def read_i64(self, key: str = "") -> int:
         """Read signed 64-bit integer (supports byte swapping)."""
@@ -515,7 +356,6 @@ class FArchive:
         Used for FTextKey in StringTable packages where keys are serialized
         as raw null-terminated strings, not length-prefixed FStrings.
         """
-        start = self.tell()
         chunks: list[bytes] = []
         total = 0
         while total < MAX_FSTRING_LENGTH:
@@ -524,10 +364,7 @@ class FArchive:
                 break
             chunks.append(b)
             total += 1
-        result = b"".join(chunks).decode("utf-8", errors="replace")
-        if key:
-            self._record_hex_view(key, "cstring", result, start, self.tell())
-        return result
+        return b"".join(chunks).decode("utf-8", errors="replace")
 
     def _is_likely_alignment_padding(self, data_start_pos: int, byte_count: int) -> bool:
         """Determine whether all-zero data is alignment padding rather than real corruption (#369).
@@ -548,7 +385,7 @@ class FArchive:
         return data_start_pos % 4 == 0
 
     def read_fstring(self, key: str = "") -> str:
-        """Read UE FString (length-prefixed string, null-terminated).
+        """Read UE FString (length-prefixed, null-terminated).
 
         Adds boundary guard and pointer rollback. On failure, seeks back to entry
         position to prevent offset misalignment cascading to subsequent fields.
@@ -556,252 +393,145 @@ class FArchive:
         pos_before = self.tell()
         length = self.read_i32()
         if length == 0:
-            if key:
-                self._record_hex_view(key, "fstring", "", pos_before, self.tell())
             return ""
+        utf16 = length < 0
+        byte_len = -length * 2 if utf16 else length
+        enc = "UTF-16" if utf16 else "UTF-8"
+        if byte_len > MAX_FSTRING_LENGTH:
+            self.seek(pos_before)
+            if self._tolerant:
+                self._record_structured_diagnostic(
+                    code="fstring_length_exceeds_limit",
+                    stage="read_fstring",
+                    offset=pos_before,
+                    raw_value=byte_len,
+                    fallback="used_empty_string",
+                    message=f"FString at pos {pos_before}: {enc} length {byte_len} exceeds maximum {MAX_FSTRING_LENGTH}",
+                )
+                return ""
+            raise ParseError(f"{enc} string at pos {pos_before}: length {byte_len} exceeds maximum {MAX_FSTRING_LENGTH}")
+        if pos_before + 4 + byte_len > self._file_size:
+            self.seek(pos_before)
+            if self._tolerant:
+                self._record_structured_diagnostic(
+                    code="fstring_out_of_range",
+                    stage="read_fstring",
+                    offset=pos_before,
+                    raw_value=byte_len,
+                    fallback="used_empty_string",
+                    message=f"FString at pos {pos_before}: {enc} expected {byte_len} bytes "
+                    f"but only {self._file_size - pos_before - 4} remain",
+                )
+                return ""
+            raise ParseError(
+                f"{enc} string at pos {pos_before}: expected {byte_len} bytes "
+                f"but only {self._file_size - pos_before - 4} remain"
+            )
+        data = self.read(byte_len)
+        # UE serializes UTF-16 in platform-native byte order.
+        # On swapped archives (e.g. PC reading a cooked BE package),
+        # the payload is big-endian; otherwise little-endian.
+        encoding = "utf-16-be" if (utf16 and self._byte_swapping) else "utf-16-le" if utf16 else "utf-8"
+        result = data.decode(encoding, errors="replace").rstrip("\x00")
+        # All-null detection: result empty after rstrip but length non-zero means the
+        # data was entirely null bytes. Known UE pattern (all-null FText
+        # namespaces/keys in valid assets) — return empty string in both modes and
+        # emit a diagnostic so callers can surface it if needed (#405).
+        if not result:
+            # UTF-16 alignment padding noise reduction: common alignment sizes +
+            # 4-byte aligned positions → debug instead of structured (#369)
+            if utf16 and self._is_likely_alignment_padding(pos_before + 4, len(data)):
+                self._logger.debug(
+                    "FString at pos %d: length=%d, encoding=UTF-16, "
+                    "all nulls (likely alignment padding), consumed=%d bytes",
+                    pos_before,
+                    -length,
+                    len(data),
+                )
+            else:
+                null_len = -length if utf16 else length
+                self._record_structured_diagnostic(
+                    code="fstring_all_null",
+                    stage="read_fstring",
+                    offset=pos_before,
+                    raw_value=null_len,
+                    fallback="used_empty_string",
+                    message=f"FString at pos {pos_before}: length={null_len}, encoding={enc}, all nulls",
+                )
+        # Internal null detection (UTF-8 only — null bytes mid-string are abnormal)
+        # Improved handling — truncate at first null rather than
+        # returning empty string, to preserve data and avoid position errors in Pin parsing
+        if not utf16 and "\x00" in result:
+            null_count = result.count("\x00")
+            first_null_idx = result.index("\x00")
+            preview = result[:80] if len(result) > 80 else result
 
-        if length < 0:
-            utf16_len = -length * 2
-            if utf16_len > MAX_FSTRING_LENGTH:
-                self._record_diagnostic(
-                    module="archive",
-                    field="fstring",
-                    source="read_fstring",
-                    target_offset=pos_before,
-                    file_size=self.total_size(),
-                    read_size=utf16_len,
-                    error=f"FString at pos {pos_before}: length {utf16_len} "
-                    f"exceeds MAX_FSTRING_LENGTH {MAX_FSTRING_LENGTH}",
+            if first_null_idx > 0:
+                # Has real content before first null — truncate and continue
+                truncated = result[:first_null_idx]
+                self._record_structured_diagnostic(
+                    code="fstring_truncated_at_null",
+                    stage="read_fstring",
+                    offset=pos_before,
+                    raw_value=null_count,
+                    fallback="truncated_at_first_null",
+                    message=f"FString at pos {pos_before}: length={length}, encoding=UTF-8, "
+                    f"truncated at null (null_at={first_null_idx}, nulls_total={null_count})",
                 )
-                self.seek(pos_before)
-                if self._tolerant:
-                    self._record_structured_diagnostic(
-                        code="fstring_length_exceeds_limit",
-                        stage="read_fstring",
-                        offset=pos_before,
-                        raw_value=utf16_len,
-                        fallback="used_empty_string",
-                        message=f"FString at pos {pos_before}: UTF-16 length {utf16_len} exceeds maximum {MAX_FSTRING_LENGTH}",
-                    )
-                    return ""
-                raise ParseError(
-                    f"UTF-16 string at pos {pos_before}: length {utf16_len} exceeds maximum {MAX_FSTRING_LENGTH}"
+                self._logger.debug(
+                    "FString hex detail: pos=%d, hex=%s, preview_orig=%r, truncated_value=%r",
+                    pos_before,
+                    data[:32].hex(),
+                    preview,
+                    truncated,
                 )
-            if pos_before + 4 + utf16_len > self._file_size:
-                self.seek(pos_before)
-                if self._tolerant:
-                    self._record_structured_diagnostic(
-                        code="fstring_out_of_range",
-                        stage="read_fstring",
-                        offset=pos_before,
-                        raw_value=utf16_len,
-                        fallback="used_empty_string",
-                        message=f"FString at pos {pos_before}: UTF-16 expected {utf16_len} bytes "
-                        f"but only {self._file_size - pos_before - 4} remain",
-                    )
-                    return ""
-                raise ParseError(
-                    f"UTF-16 string at pos {pos_before}: expected {utf16_len} bytes "
-                    f"but only {self._file_size - pos_before - 4} remain"
+                return truncated
+            # All nulls from start — likely file tail padding (zero-filled region).
+            # Return empty string in both modes with diagnostic (#405).
+            # Check if remaining file data is also mostly zeros (padding zone).
+            # If so, advance to file end to prevent offset cascade (#138).
+            # Alignment padding noise reduction: common alignment sizes + 4-byte aligned positions → debug (#369)
+            if self._is_likely_alignment_padding(pos_before + 4, len(data)):
+                self._logger.debug(
+                    "FString at pos %d: length=%d, encoding=UTF-8, "
+                    "all nulls (likely alignment padding), "
+                    "consumed=%d bytes, end_pos=%d",
+                    pos_before,
+                    length,
+                    len(data),
+                    self.tell(),
                 )
-            data = self.read(utf16_len)
-            # UE serializes UTF-16 in platform-native byte order.
-            # On swapped archives (e.g. PC reading a cooked BE package),
-            # the payload is big-endian; otherwise little-endian.
-            encoding = "utf-16-be" if self._byte_swapping else "utf-16-le"
-            result = data.decode(encoding, errors="replace").rstrip("\x00")
-            # UTF-16 null terminator (\x00\x00) is legal — rstrip handles it.
-            # Internal single nulls between valid chars are unusual but not fatal.
-            # All-null detection: if result is empty after rstrip, the data was all nulls.
-            # Known UE pattern — return empty string in both modes with diagnostic (#405).
-            if not result and length != 0:
-                self._record_diagnostic(
-                    module="archive",
-                    field="read_fstring",
-                    source="read_fstring",
-                    target_offset=pos_before,
-                    file_size=self._file_size,
-                    read_size=-length,
-                    error=f"FString at pos {pos_before}: length={-length}, encoding=UTF-16, all nulls (empty result)",
-                )
-                # Alignment padding noise reduction: common alignment sizes + 4-byte aligned positions → debug (#369)
-                if self._is_likely_alignment_padding(pos_before + 4, len(data)):
-                    self._logger.debug(
-                        "FString at pos %d: length=%d, encoding=UTF-16, "
-                        "all nulls (likely alignment padding), consumed=%d bytes",
-                        pos_before,
-                        -length,
-                        len(data),
-                    )
-                else:
-                    self._record_structured_diagnostic(
-                        code="fstring_all_null",
-                        stage="read_fstring",
-                        offset=pos_before,
-                        raw_value=-length,
-                        fallback="used_empty_string",
-                        message=f"FString at pos {pos_before}: length={-length}, encoding=UTF-16, all nulls",
-                    )
-        else:
-            if length > MAX_FSTRING_LENGTH:
-                self._record_diagnostic(
-                    module="archive",
-                    field="fstring",
-                    source="read_fstring",
-                    target_offset=pos_before,
-                    file_size=self.total_size(),
-                    read_size=length,
-                    error=f"FString at pos {pos_before}: length {length} "
-                    f"exceeds MAX_FSTRING_LENGTH {MAX_FSTRING_LENGTH}",
-                )
-                self.seek(pos_before)
-                if self._tolerant:
-                    self._record_structured_diagnostic(
-                        code="fstring_length_exceeds_limit",
-                        stage="read_fstring",
-                        offset=pos_before,
-                        raw_value=length,
-                        fallback="used_empty_string",
-                        message=f"FString at pos {pos_before}: UTF-8 length {length} exceeds maximum {MAX_FSTRING_LENGTH}",
-                    )
-                    return ""
-                raise ParseError(
-                    f"UTF-8 string at pos {pos_before}: length {length} exceeds maximum {MAX_FSTRING_LENGTH}"
-                )
-            if pos_before + 4 + length > self._file_size:
-                self.seek(pos_before)
-                if self._tolerant:
-                    self._record_structured_diagnostic(
-                        code="fstring_out_of_range",
-                        stage="read_fstring",
-                        offset=pos_before,
-                        raw_value=length,
-                        fallback="used_empty_string",
-                        message=f"FString at pos {pos_before}: UTF-8 expected {length} bytes "
-                        f"but only {self._file_size - pos_before - 4} remain",
-                    )
-                    return ""
-                raise ParseError(
-                    f"UTF-8 string at pos {pos_before}: expected {length} bytes "
-                    f"but only {self._file_size - pos_before - 4} remain"
-                )
-            data = self.read(length)
-            result = data.decode("utf-8", errors="replace").rstrip("\x00")
-
-            # All-null detection: if result is empty after rstrip but length was non-zero,
-            # the data was entirely null bytes.  This is a known UE pattern (all-null
-            # FText namespaces/keys in valid assets) — return empty string in both modes
-            # and emit a diagnostic so callers can surface it if needed (#405).
-            if not result and length != 0:
-                self._record_diagnostic(
-                    module="archive",
-                    field="read_fstring",
-                    source="read_fstring",
-                    target_offset=pos_before,
-                    file_size=self._file_size,
-                    read_size=length,
-                    error=f"FString at pos {pos_before}: length={length}, encoding=UTF-8, all nulls (empty result)",
-                )
+            else:
                 self._record_structured_diagnostic(
                     code="fstring_all_null",
                     stage="read_fstring",
                     offset=pos_before,
                     raw_value=length,
                     fallback="used_empty_string",
-                    message=f"FString at pos {pos_before}: length={length}, encoding=UTF-8, all nulls",
+                    message=f"FString at pos {pos_before}: length={length}, encoding=UTF-8, all nulls (completely corrupted)",
                 )
-
-            # Internal null detection (UTF-8 only — null bytes mid-string are abnormal)
-            # Improved handling — truncate at first null rather than
-            # returning empty string, to preserve data and avoid position errors in Pin parsing
-            if "\x00" in result:
-                null_count = result.count("\x00")
-                first_null_idx = result.index("\x00")
-                preview = result[:80] if len(result) > 80 else result
-
-                if first_null_idx > 0:
-                    # Has real content before first null — truncate and continue
-                    truncated = result[:first_null_idx]
-                    self._record_structured_diagnostic(
-                        code="fstring_truncated_at_null",
-                        stage="read_fstring",
-                        offset=pos_before,
-                        raw_value=null_count,
-                        fallback="truncated_at_first_null",
-                        message=f"FString at pos {pos_before}: length={length}, encoding=UTF-8, "
-                        f"truncated at null (null_at={first_null_idx}, nulls_total={null_count})",
-                    )
+            self._logger.debug("FString hex detail: pos=%d, hex=%s", pos_before, data[:32].hex())
+            # Padding zone detection: scan ahead up to 1KB for non-zero data
+            current_pos = self.tell()
+            remaining = self._file_size - current_pos
+            if remaining > 0:
+                scan_size = min(remaining, 1024)
+                scan_data = self.read(scan_size)
+                self.seek(current_pos)
+                non_zero = sum(1 for b in scan_data if b != 0)
+                # If less than 5% non-zero bytes → padding zone
+                if scan_size > 0 and non_zero / scan_size < 0.05:
                     self._logger.debug(
-                        "FString hex detail: pos=%d, hex=%s, preview_orig=%r, truncated_value=%r",
-                        pos_before,
-                        data[:32].hex(),
-                        preview,
-                        truncated,
+                        "FString padding zone detected at pos %d: "
+                        "%d/%d non-zero bytes in next %d bytes, seeking to file end",
+                        current_pos,
+                        non_zero,
+                        scan_size,
+                        scan_size,
                     )
-                    if key:
-                        self._record_hex_view(key, "fstring", truncated, pos_before, self.tell())
-                    return truncated
-                else:
-                    # All nulls from start — likely file tail padding (zero-filled region).
-                    # Return empty string in both modes with diagnostic (#405).
-                    self._record_diagnostic(
-                        module="archive",
-                        field="read_fstring",
-                        source="read_fstring",
-                        target_offset=pos_before,
-                        file_size=self._file_size,
-                        read_size=length,
-                        error=f"FString at pos {pos_before}: length={length}, "
-                        f"encoding=UTF-8, all nulls from start (empty result)",
-                    )
-                    # Check if remaining file data is also mostly zeros (padding zone).
-                    # If so, advance to file end to prevent offset cascade (#138).
-                    # Alignment padding noise reduction: common alignment sizes + 4-byte aligned positions → debug (#369)
-                    if self._is_likely_alignment_padding(pos_before + 4, len(data)):
-                        self._logger.debug(
-                            "FString at pos %d: length=%d, encoding=UTF-8, "
-                            "all nulls (likely alignment padding), "
-                            "consumed=%d bytes, end_pos=%d",
-                            pos_before,
-                            length,
-                            len(data),
-                            self.tell(),
-                        )
-                    else:
-                        self._record_structured_diagnostic(
-                            code="fstring_all_null",
-                            stage="read_fstring",
-                            offset=pos_before,
-                            raw_value=length,
-                            fallback="used_empty_string",
-                            message=f"FString at pos {pos_before}: length={length}, encoding=UTF-8, all nulls (completely corrupted)",
-                        )
-                    self._logger.debug("FString hex detail: pos=%d, hex=%s", pos_before, data[:32].hex())
-                    # Padding zone detection: scan ahead up to 1KB for non-zero data
-                    current_pos = self.tell()
-                    remaining = self._file_size - current_pos
-                    if remaining > 0:
-                        scan_size = min(remaining, 1024)
-                        scan_data = self.read(scan_size)
-                        self.seek(current_pos)
-                        non_zero = sum(1 for b in scan_data if b != 0)
-                        # If less than 5% non-zero bytes → padding zone
-                        if scan_size > 0 and non_zero / scan_size < 0.05:
-                            self._logger.debug(
-                                "FString padding zone detected at pos %d: "
-                                "%d/%d non-zero bytes in next %d bytes, seeking to file end",
-                                current_pos,
-                                non_zero,
-                                scan_size,
-                                scan_size,
-                            )
-                            self.seek(self._file_size)
-                    if key:
-                        self._record_hex_view(key, "fstring", "", pos_before, self.tell())
-                    return ""
+                    self.seek(self._file_size)
+            return ""
 
-        if key:
-            self._record_hex_view(key, "fstring", result, pos_before, self.tell())
         return result
 
     def set_name_map(self, name_map: list) -> None:
@@ -826,7 +556,6 @@ class FArchive:
 
         Args:
             name_map: name table list. If None, uses internally cached name table.
-            key: hex_view field name (optional)
 
         Returns:
             parsed name string
@@ -877,23 +606,12 @@ class FArchive:
                     fallback="used_default_name",
                     message=f"Name index {index} out of range [0, {len(name_map)}]",
                 )
-                # Add diagnostic record
-                self._record_diagnostic(
-                    module="archive",
-                    field="read_name",
-                    source="read_name",
-                    target_offset=self.tell() - 8,
-                    file_size=self._file_size,
-                    error=f"FName index {index} out of range (name_map len={len(name_map)})",
-                )
             # strict mode raises exception
             if not self._tolerant:
                 raise ParseError(
                     f"FName index {index} out of range (name_map len={len(name_map)}) at pos {self.tell() - 8}"
                 )
             result = "None"
-        if key:
-            self._record_hex_view(key, "fname", result, start, self.tell())
         return result
 
     def _try_recover_fname(self, original_pos: int, name_map: list) -> Optional[str]:
@@ -929,14 +647,6 @@ class FArchive:
                 if 0 <= test_index < len(name_map) and test_number < (1 << 24):
                     self._logger.debug(
                         "read_name: recovered at offset %d (adjust %+d), index=%d", try_pos, offset_adjust, test_index
-                    )
-                    self._record_diagnostic(
-                        module="archive",
-                        field="read_name",
-                        source="read_name_recovery",
-                        target_offset=original_pos,
-                        file_size=self._file_size,
-                        error=f"FName recovery: adjusted {offset_adjust} bytes to pos {try_pos}",
                     )
                     base_name = name_map[test_index]
                     if test_number > 0:
@@ -987,7 +697,7 @@ class ByteArchive(FArchive):
             tolerant: tolerance mode switch
             name: optional name/path (for diagnostic information)
         """
-        self._init_archive_attrs(name, tolerant, hex_view=False)
+        self._init_archive_attrs(name, tolerant)
         # ByteArchive-specific attributes
         self._buffer: memoryview | bytes = data
         self._file_size: int = len(data)
@@ -1001,15 +711,6 @@ class ByteArchive(FArchive):
         self._check_read_range(current_pos, size)
         remaining = self._file_size - current_pos
         if size > remaining:
-            self._record_diagnostic(
-                module="byte_archive",
-                field="read",
-                source="read",
-                read_size=size,
-                current_pos=current_pos,
-                file_size=self._file_size,
-                error=f"Cannot read {size} bytes at position {current_pos}, only {remaining} bytes remaining",
-            )
             raise ParseError(f"Cannot read {size} bytes at position {current_pos}, only {remaining} bytes remaining")
         data = bytes(self._buffer[current_pos : current_pos + size])
         self._pos = current_pos + size

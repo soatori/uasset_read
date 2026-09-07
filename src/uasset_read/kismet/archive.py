@@ -22,7 +22,7 @@ class FKismetArchive(FArchive):
     """Kismet bytecode reader. Wraps in-memory bytes as an FArchive-compatible stream."""
 
     def __init__(self, data: bytes, name: str, name_map: list[str], tolerant: bool = False):
-        self._init_archive_attrs(name, tolerant, hex_view=False)
+        self._init_archive_attrs(name, tolerant)
         self._file = io.BytesIO(data)
         self._file_size = len(data)
         self._name_map = name_map

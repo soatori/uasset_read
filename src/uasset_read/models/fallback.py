@@ -57,6 +57,17 @@ class PropertyFallback(PropertyValue):
     def kind(self) -> str:
         return "unknown_property"
 
+    @classmethod
+    def from_tag(cls, tag, reason: "FallbackReason", *, error_message: str = "", raw_bytes: bytes = b"") -> "PropertyFallback":
+        """Build a fallback from a property tag (shared name/type/size/array_index/tag_data plumbing)."""
+        return cls(
+            name=tag.name, type=tag.type, size=tag.size, raw_bytes=raw_bytes,
+            reason=reason,
+            array_index=getattr(tag, "array_index", 0),
+            tag_data=getattr(tag, "tag_data", None),
+            error_message=error_message or None,
+        )
+
 
 @dataclass
 class StructFallback:

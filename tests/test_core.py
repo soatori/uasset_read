@@ -299,6 +299,30 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         sd = [d for d in arc.get_structured_diagnostics() if d.code == "fstring_truncated_at_null"]
         assert sd and sd[0].offset == 0 and sd[0].fallback == "truncated_at_first_null"
 
+    def fstring_length_cap_recorded_both_encodings():
+        import struct
+        from uasset_read.archive import ByteArchive
+        from uasset_read.constants import MAX_FSTRING_LENGTH
+
+        for header in (MAX_FSTRING_LENGTH + 1, -(MAX_FSTRING_LENGTH + 1) // 2):  # UTF-8 / UTF-16 both over cap
+            arc = ByteArchive(struct.pack("<i", header) + b"ab", tolerant=True)
+            assert arc.read_fstring() == ""
+            sd = [d for d in arc.get_structured_diagnostics() if d.code == "fstring_length_exceeds_limit"]
+            assert sd and sd[0].offset == 0 and sd[0].fallback == "used_empty_string", header
+
+    def fstring_all_null_recorded_both_encodings():
+        import struct
+        from uasset_read.archive import ByteArchive
+
+        # UTF-8: 4 null bytes. UTF-16: 3 chars (6 bytes) — a padding-sized 4-byte
+        # UTF-16 run at an aligned position is #369 alignment padding (debug-only,
+        # no structured record), so pin the structured path with a non-alignment size.
+        for payload in (struct.pack("<i", 4) + b"\x00" * 4, struct.pack("<i", -3) + b"\x00" * 6):
+            arc = ByteArchive(payload, tolerant=True)
+            assert arc.read_fstring() == ""
+            codes = [d.code for d in arc.get_structured_diagnostics()]
+            assert "fstring_all_null" in codes, payload
+
     def fname_shift_recovery_is_recorded():
         import struct
         from uasset_read.archive import ByteArchive
@@ -521,6 +545,8 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
             ("preload.count_beyond_file_rejected", preload_count_beyond_file_rejected_immediately),
             ("recovery.fstring_overrun_recorded", tolerant_fstring_overrun_records_recovery_not_just_a_log),
             ("recovery.fstring_null_truncation_recorded", fstring_internal_null_truncation_is_recorded),
+            ("recovery.fstring_length_cap_recorded", fstring_length_cap_recorded_both_encodings),
+            ("recovery.fstring_all_null_recorded", fstring_all_null_recorded_both_encodings),
             ("recovery.fname_shift_recorded", fname_shift_recovery_is_recorded),
             ("recovery.export_map_attribution", export_map_recoveries_are_attributed_to_their_slot),
             ("fname.display_external_number", test_fname_display_uses_external_number),

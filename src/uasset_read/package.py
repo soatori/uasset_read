@@ -30,7 +30,7 @@ class PackageArchive(FArchive):
         uexp_archive: Optional[ArchiveLike] = None,
         tolerant: bool = False,
     ):
-        self._init_archive_attrs(getattr(main_archive, "_path", "<package>"), tolerant, hex_view=False)
+        self._init_archive_attrs(getattr(main_archive, "_path", "<package>"), tolerant)
         self._main_archive = main_archive
         self._uexp_archive = uexp_archive
         try:
@@ -91,9 +91,6 @@ class PackageArchive(FArchive):
         if self._uexp_archive is not None:
             self._uexp_archive.close()
         self._use_mmap = False
-        # Release diagnostic buffers to reclaim memory
-        self._diagnostics.clear()
-        self._hex_view_entries.clear()
 
     def set_byte_swapping(self, enabled: bool) -> None:
         self._byte_swapping = enabled
@@ -136,11 +133,6 @@ class PackageArchive(FArchive):
         """Publish the file versions that gate FProperty tag decoding downstream."""
         self._file_version_ue4 = ue4
         self._file_version_ue5 = ue5
-
-    def get_mmap_info(self) -> Dict:
-        getter = getattr(self._main_archive, "get_mmap_info", None)
-        main_info = getter() if getter is not None else {}
-        return {"used": bool(main_info.get("used")), "warning": main_info.get("warning")}
 
 
 @dataclass

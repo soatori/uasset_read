@@ -59,7 +59,6 @@ from uasset_read.constants import (
     UE4_ADDED_COMPATIBLE_WITH_ENGINE_VERSION,
 )
 from uasset_read.exceptions import VersionError, ParseError
-from uasset_read.models.diagnostics import OffsetRangeDiagnostic
 from uasset_read.constants import MIN_UASSET_SIZE
 
 # ResourceBudget type is available via TYPE_CHECKING import above.
@@ -298,19 +297,6 @@ def _validate_file_size(archive: FArchive) -> None:
     """Truncated file detection: raise error when file is too small."""
     file_size = archive.total_size()
     if file_size < MIN_UASSET_SIZE:
-        archive._diagnostics.append(
-            OffsetRangeDiagnostic(
-                kind="truncated_file",
-                module="package_summary",
-                field="file_size",
-                file_size=file_size,
-                source="read_package_summary",
-                error=(
-                    f"File size {file_size} bytes, smaller than minimum valid size {MIN_UASSET_SIZE} bytes, "
-                    f"file may be truncated or corrupted"
-                ),
-            )
-        )
         raise ParseError(
             f"File too small ({file_size} bytes), cannot parse as .uasset file. "
             f"Minimum valid size is {MIN_UASSET_SIZE} bytes, file may be truncated or corrupted"
@@ -699,7 +685,6 @@ def read_package_summary(
     _validate_file_size(archive)
 
     archive.seek(0)
-    archive.set_hex_view_context("Summary.")
 
     # Step 1-3: Version + SavedHash + CustomVersions
     (
