@@ -99,7 +99,7 @@ class KismetDecompiledResult:
         d["expressions"] = [
             e.to_dict() if hasattr(e, "to_dict") else str(e) for e in self.expressions
         ]
-        return {k: v for k, v in d.items() if v is not None}
+        return {k: v for k, v in d.items() if v is not None}  # None-valued keys are omitted by design; this domain is experimental and envelope-whitelisted downstream
 
 
 __all__ = ["KismetDecompiledResult", "infer_bytecode_confidence", "ALLOWED_STATUS_PAIRS"]
