@@ -121,7 +121,7 @@ def test_read_package_trailer_header():
     trailer_data += struct.pack("<B", 0)  # AccessMode
 
     archive = ByteArchive(bytes(trailer_data))
-    trailer = read_package_trailer(archive, payload_toc_offset=0)
+    trailer = read_package_trailer(archive)
 
     assert trailer.header.tag == 0xD1C43B2E80A5F697
     assert trailer.header.version == 2
@@ -141,7 +141,7 @@ def test_read_package_trailer_invalid_tag():
 
     archive = ByteArchive(trailer_data)
     with pytest.raises(ValueError, match="Invalid PackageTrailer tag"):
-        read_package_trailer(archive, payload_toc_offset=0)
+        read_package_trailer(archive)
 
 
 def test_parse_stages_populates_trailer():

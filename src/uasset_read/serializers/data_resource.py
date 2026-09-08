@@ -9,6 +9,11 @@ import struct
 from dataclasses import dataclass
 from typing import BinaryIO
 
+# Precompiled struct formats for row parsing
+_ROW_V2 = struct.Struct("<IBqqqqiI")  # Flags(u32) + CookedIndex(u8) + SerialOffset(i64) + Dup(i64) + Size(i64) + Raw(i64) + Outer(i32) + Legacy(u32)
+_ROW_V1 = struct.Struct("<IqqqqiI")  # same minus CookedIndex
+_HEADER = struct.Struct("<Ii")  # version(u32) + count(i32)
+
 
 @dataclass
 class FObjectDataResource:
@@ -36,37 +41,27 @@ def read_data_resource_table(archive: BinaryIO, offset: int) -> list[FObjectData
     archive.seek(offset)
 
     # Read version and count
-    version = struct.unpack('<I', archive.read(4))[0]
-    count = struct.unpack('<i', archive.read(4))[0]
+    version, count = _HEADER.unpack(archive.read(_HEADER.size))
 
     if count < 0 or count > 10000:  # sanity check
         raise ValueError(f"Invalid DataResource count: {count}")
 
+    row = _ROW_V2 if version >= 2 else _ROW_V1
+    raw = archive.read(count * row.size)
+    if len(raw) < count * row.size:
+        raise ValueError(f"Short read for DataResource table: got {len(raw)} bytes, expected {count * row.size}")
+
     resources = []
-    for _ in range(count):
-        flags = struct.unpack('<I', archive.read(4))[0]
-
-        # CookedIndex only present in version >= 2 (AddedCookedIndex)
-        cooked_index = 0
+    for fields in row.iter_unpack(raw):
         if version >= 2:
-            cooked_index = struct.unpack('<B', archive.read(1))[0]
-
-        serial_offset = struct.unpack('<q', archive.read(8))[0]
-        duplicate_serial_offset = struct.unpack('<q', archive.read(8))[0]
-        serial_size = struct.unpack('<q', archive.read(8))[0]
-        raw_size = struct.unpack('<q', archive.read(8))[0]
-        outer_index = struct.unpack('<i', archive.read(4))[0]
-        legacy_bulk_data_flags = struct.unpack('<I', archive.read(4))[0]
-
+            flags, cooked_index, serial_offset, dup, size, raw_size, outer, legacy = fields
+        else:
+            flags, serial_offset, dup, size, raw_size, outer, legacy = fields
+            cooked_index = 0
         resources.append(FObjectDataResource(
-            flags=flags,
-            cooked_index=cooked_index,
-            serial_offset=serial_offset,
-            duplicate_serial_offset=duplicate_serial_offset,
-            serial_size=serial_size,
-            raw_size=raw_size,
-            outer_index=outer_index,
-            legacy_bulk_data_flags=legacy_bulk_data_flags,
+            flags=flags, cooked_index=cooked_index, serial_offset=serial_offset,
+            duplicate_serial_offset=dup, serial_size=size, raw_size=raw_size,
+            outer_index=outer, legacy_bulk_data_flags=legacy,
         ))
 
     return resources

@@ -491,7 +491,6 @@ class LegacyPackageReader:
                     archive.seek(summary.payload_toc_offset)
                     package_trailer = read_package_trailer(
                         archive,
-                        summary.payload_toc_offset,  # type: ignore[arg-type]
                     )
                 except (struct.error, ValueError, OverflowError, OSError) as e:
                     diagnostics.append(

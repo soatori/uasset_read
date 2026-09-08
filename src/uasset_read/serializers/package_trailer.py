@@ -3,6 +3,7 @@
 Reads FPackageTrailer structure from PayloadTocOffset.
 Reference: Engine/Source/Runtime/CoreUObject/Private/UObject/PackageTrailer.cpp
 """
+
 from __future__ import annotations
 
 import struct
@@ -25,6 +26,13 @@ class FLookupTableEntry:
     access_mode: int = 0  # uint8, EPayloadAccessMode (v1+)
 
 
+# Precompiled struct formats
+_HEADER_FMT = struct.Struct("<QIIQi")  # tag(u64) + version(u32) + header_length(u32) + payloads_data_length(u64) + num_payloads(i32)
+_ENTRY_HEAD = struct.Struct("<20sQQQ")  # identifier(20) + offset(i64) + compressed(u64) + raw(u64)
+_ENTRY_TAIL_V2 = struct.Struct("<HHB")  # flags(u16) + filter_flags(u16) + access_mode(u8)
+_ENTRY_TAIL_V1 = struct.Struct("<B")  # access_mode(u8)
+
+
 def read_lookup_table_entry(archive: ArchiveLike, version: int) -> FLookupTableEntry:
     """Read one FLookupTableEntry from the archive.
 
@@ -33,24 +41,17 @@ def read_lookup_table_entry(archive: ArchiveLike, version: int) -> FLookupTableE
     - v1 (ACCESS_PER_PAYLOAD): 45 bytes (adds AccessMode)
     - v2 (PAYLOAD_FLAGS): 49 bytes (adds Flags + FilterFlags)
     """
-    identifier = archive.read(20)
-    if len(identifier) < 20:
-        raise ValueError(f"Short read for FIoHash: got {len(identifier)} bytes")
-
-    offset_in_file = struct.unpack('<q', archive.read(8))[0]
-    compressed_size = struct.unpack('<Q', archive.read(8))[0]
-    raw_size = struct.unpack('<Q', archive.read(8))[0]
+    head = _ENTRY_HEAD.unpack(archive.read(_ENTRY_HEAD.size))
+    identifier, offset_in_file, compressed_size, raw_size = head
 
     flags = 0
     filter_flags = 0
     access_mode = 0
 
     if version >= 2:  # PAYLOAD_FLAGS
-        flags = struct.unpack('<H', archive.read(2))[0]
-        filter_flags = struct.unpack('<H', archive.read(2))[0]
-
-    if version >= 1:  # ACCESS_PER_PAYLOAD
-        access_mode = struct.unpack('<B', archive.read(1))[0]
+        flags, filter_flags, access_mode = _ENTRY_TAIL_V2.unpack(archive.read(_ENTRY_TAIL_V2.size))
+    elif version >= 1:  # ACCESS_PER_PAYLOAD
+        (access_mode,) = _ENTRY_TAIL_V1.unpack(archive.read(_ENTRY_TAIL_V1.size))
 
     return FLookupTableEntry(
         identifier=identifier,
@@ -82,31 +83,21 @@ class FPackageTrailer:
     lookup_table: list[FLookupTableEntry]
 
 
-def read_package_trailer(archive: ArchiveLike, payload_toc_offset: int) -> FPackageTrailer:
+def read_package_trailer(archive: ArchiveLike) -> FPackageTrailer:
     """Read FPackageTrailer from the archive.
 
     Args:
-        archive: Seekable binary stream positioned at payload_toc_offset.
-        payload_toc_offset: Offset where the trailer starts (for validation).
+        archive: Seekable binary stream positioned at the trailer start.
 
     Returns:
         Parsed FPackageTrailer with header and lookup table.
     """
-    # Read header fields
-    tag_bytes = archive.read(8)
-    if len(tag_bytes) < 8:
-        raise ValueError("Short read for PackageTrailer tag")
-    tag = struct.unpack('<Q', tag_bytes)[0]
+    # Read tag first for early validation
+    tag = struct.unpack("<Q", archive.read(8))[0]
     if tag != PACKAGE_TRAILER_HEADER_TAG:
-        raise ValueError(
-            f"Invalid PackageTrailer tag: 0x{tag:016X}, "
-            f"expected 0x{PACKAGE_TRAILER_HEADER_TAG:016X}"
-        )
+        raise ValueError(f"Invalid PackageTrailer tag: 0x{tag:016X}, expected 0x{PACKAGE_TRAILER_HEADER_TAG:016X}")
 
-    version = struct.unpack('<I', archive.read(4))[0]
-    header_length = struct.unpack('<I', archive.read(4))[0]
-    payloads_data_length = struct.unpack('<Q', archive.read(8))[0]
-    num_payloads = struct.unpack('<i', archive.read(4))[0]
+    version, header_length, payloads_data_length, num_payloads = struct.unpack("<IIQi", archive.read(20))
     if num_payloads < 0:
         raise ValueError(f"Invalid num_payloads: {num_payloads}")
 
