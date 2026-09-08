@@ -22,11 +22,10 @@ from uasset_read.exceptions import ParseError
 from uasset_read.serializers.object_resources import PackageIndex
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.models.core import UEdGraphNode, UEdGraphPin, FMemberReference
+from uasset_read.serializers.object_resources import resolve_class_name
 
 from uasset_read.serializers.graph_helpers import (
     _read_guid,
-    _rcn,
-    _gac,
     _read_tag_bool,
     _read_tag_i32,
     _read_tag_fname,
@@ -51,7 +50,7 @@ def read_fmember_reference(
     member_parent_index = archive.read_i32()
     member_parent: str | None = None
     if member_parent_index != 0:
-        member_parent = _rcn(PackageIndex(member_parent_index), import_map, export_map)
+        member_parent = resolve_class_name(PackageIndex(member_parent_index), import_map, export_map)
 
     _member_scope = archive.read_fstring()  # noqa: F841 - protocol read
     member_name = archive.read_name(name_map)
@@ -441,7 +440,7 @@ def _read_anim_graph_node(
                     subgraph_refs[key] = {
                         "package_index": pkg_idx,
                         "object_name": obj_export.object_name,
-                        "class_name": _gac(obj_export, import_map, export_map) or "",
+                        "class_name": resolve_class_name(obj_export.class_index, import_map, export_map) or "",
                     }
             except (KeyError, IndexError, AttributeError):
                 subgraph_refs[key] = {"package_index": pkg_idx, "error": "resolve_failed"}
@@ -569,7 +568,7 @@ def _read_member_reference_from_tags(
             m_self = bool(inner_value)
 
     return FMemberReference(
-        member_parent=_rcn(PackageIndex(mp_idx), import_map, export_map) if mp_idx != 0 else None,
+        member_parent=resolve_class_name(PackageIndex(mp_idx), import_map, export_map) if mp_idx != 0 else None,
         member_name=m_name,
         member_guid=m_guid,
         b_self_context=m_self,
@@ -629,7 +628,7 @@ def _handle_input_action(archive, tag, name_map, import_map, export_map, raw_pro
     """Handle InputAction tag."""
     if tag.size > 0:
         pkg_idx = archive.read_i32()
-        input_action_path = _rcn(PackageIndex(pkg_idx), import_map, export_map) if pkg_idx != 0 else ""
+        input_action_path = resolve_class_name(PackageIndex(pkg_idx), import_map, export_map) if pkg_idx != 0 else ""
         raw_properties[tag.name] = input_action_path
         raw_properties["InputActionShortName"] = (
             input_action_path.split(".")[-1].split("'")[0] if input_action_path else ""
@@ -968,7 +967,7 @@ def read_ue_graph_node(
         serial["node_guid"],
     )
 
-    class_name = _rcn(node_export.class_index, import_map, export_map) or ""
+    class_name = resolve_class_name(node_export.class_index, import_map, export_map) or ""
 
     base_node = UEdGraphNode(
         node_guid=serial["node_guid"],

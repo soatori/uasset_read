@@ -27,10 +27,6 @@ from uasset_read.constants import (
 )
 from uasset_read.exceptions import ParseError
 from uasset_read.versioning import FORTNITE_GUID, get_custom_version
-from uasset_read.serializers.object_resources import (
-    resolve_class_name,
-    get_asset_class,
-)
 from uasset_read.serializers.property_tags import read_tag_value_bounded
 
 logger = logging.getLogger(__name__)
@@ -61,16 +57,6 @@ def _get_thread_local():
     if not hasattr(_thread_local, "linkedto_failure_seen"):
         _thread_local.linkedto_failure_seen = set()
     return _thread_local
-
-
-def _rcn(idx, im, em):
-    """Resolve class name from the raw import/export maps."""
-    return resolve_class_name(idx, im, em)
-
-
-def _gac(exp, im, em):
-    """Get asset class from the raw import/export maps."""
-    return get_asset_class(exp, im, em)
 
 
 # ============================================================================

@@ -22,12 +22,11 @@ from uasset_read.constants import (
 )
 from uasset_read.exceptions import ParseError
 from uasset_read.versioning import RELEASE_GUID, get_custom_version
-from uasset_read.serializers.object_resources import PackageIndex
+from uasset_read.serializers.object_resources import PackageIndex, resolve_class_name
 from uasset_read.models.core import UEdGraphPin, FEdGraphPinType
 
 from uasset_read.serializers.graph_helpers import (
     _read_guid,
-    _rcn,
     _get_thread_local,
     _read_fstring_safe,
     _read_ftext_value,
@@ -63,7 +62,7 @@ def read_ed_graph_pin_type(
         pkg_idx = PackageIndex(pin_type.pin_subcategory_object)
         try:
             if import_map is not None and export_map is not None:
-                pin_type.pin_subcategory_object_name = _rcn(pkg_idx, import_map, export_map)
+                pin_type.pin_subcategory_object_name = resolve_class_name(pkg_idx, import_map, export_map)
         except (KeyError, IndexError, AttributeError):
             pin_type.pin_subcategory_object_ref = None
             pin_type.pin_subcategory_object_name = None
@@ -81,7 +80,7 @@ def read_ed_graph_pin_type(
             pkg_idx = PackageIndex(terminal_sub_category_object)
             try:
                 if import_map is not None and export_map is not None:
-                    pin_type.map_key_terminal_sub_category_object_name = _rcn(pkg_idx, import_map, export_map)
+                    pin_type.map_key_terminal_sub_category_object_name = resolve_class_name(pkg_idx, import_map, export_map)
             except (KeyError, IndexError, AttributeError):
                 pin_type.map_key_terminal_sub_category_object_name = None
 

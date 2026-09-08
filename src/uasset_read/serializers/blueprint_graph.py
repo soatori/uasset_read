@@ -109,7 +109,7 @@ def read_blueprint_graphs(
     package (decode pass restores the full read range before calling).
     """
     from uasset_read.serializers.graph import read_ue_graph
-    from uasset_read.serializers.object_resources import get_asset_class
+    from uasset_read.serializers.object_resources import resolve_class_name
 
     archive_size = 0
     if archive is not None:
@@ -121,7 +121,7 @@ def read_blueprint_graphs(
     graphs: list[dict[str, Any]] = []
     processed = 0
     for export_idx, export in enumerate(export_map):
-        class_name = get_asset_class(export, import_map, export_map)
+        class_name = resolve_class_name(export.class_index, import_map, export_map)
         if not class_name or not _is_graph_class(class_name):
             continue
         if processed >= max_graphs:

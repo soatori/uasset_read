@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 from uasset_read.constants import MAX_NODES_PER_GRAPH, MAX_SUBGRAPHS
 from uasset_read.exceptions import ParseError
-from uasset_read.serializers.graph_helpers import _gac
+from uasset_read.serializers.object_resources import resolve_class_name
 from uasset_read.models.core import UEdGraph, UEdGraphNode
 
 logger = logging.getLogger(__name__)
@@ -145,7 +145,7 @@ def read_ue_graph(
     if graph_export_idx > 0:
         for node_export in export_map:
             if node_export.outer_index.index == graph_export_idx:
-                node_class = _gac(node_export, import_map, export_map)
+                node_class = resolve_class_name(node_export.class_index, import_map, export_map)
                 if node_class and (
                     node_class.startswith("K2Node") or node_class.startswith("EdGraphNode") or "Node" in node_class
                 ):
@@ -198,7 +198,7 @@ def read_ue_graph(
         if pkg_idx <= 0 or pkg_idx > len(export_map) or pkg_idx in _parsed_indices:
             return None
         subgraph_export = export_map[pkg_idx - 1]
-        subgraph_class = _gac(subgraph_export, import_map, export_map) or ""
+        subgraph_class = resolve_class_name(subgraph_export.class_index, import_map, export_map) or ""
         if not (subgraph_class.endswith("Graph") or subgraph_class == "EdGraph" or subgraph_class == "UberEdGraph"):
             return None
         return read_ue_graph(

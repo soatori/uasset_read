@@ -387,19 +387,6 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: li
     return export_map
 
 
-def get_asset_class(export: ObjectExport, import_map: list[ObjectImport], export_map: list[ObjectExport]) -> str | None:
-    """Identify asset type from export entry."""
-    if export.class_index.is_import:
-        import_idx = export.class_index.to_import_index()
-        if 0 <= import_idx < len(import_map):
-            return import_map[import_idx].object_name
-    elif export.class_index.is_export:
-        export_idx = export.class_index.to_export_index()
-        if 0 <= export_idx < len(export_map):
-            return export_map[export_idx].object_name
-    return None
-
-
 def resolve_class_name(
     class_index: PackageIndex, import_map: list[ObjectImport], export_map: list[ObjectExport]
 ) -> str | None:
@@ -452,7 +439,7 @@ def resolve_package_index_to_reference(
         if 0 <= idx < len(export_map):
             exp = export_map[idx]
             # Resolve class_name from the import/export maps
-            class_name = get_asset_class(exp, import_map, export_map)
+            class_name = resolve_class_name(exp.class_index, import_map, export_map)
             # Resolve outer_name from export_map
             outer_name = None
             if exp.outer_index.is_export and exp.outer_index.to_export_index() < len(export_map):
