@@ -1128,7 +1128,7 @@ def parse_struct_property(
                 ),
             )
             fields[inner_tag.name] = field_value
-    except (_StructError, ParseError, OSError, ValueError):
+    except (_StructError, ParseError, OSError, ValueError):  # noqa: no-boolean-in-except
         if declared_struct_type in _TAGGED_FALLBACK_STRUCTS:
             raise
         if struct_end is not None:
