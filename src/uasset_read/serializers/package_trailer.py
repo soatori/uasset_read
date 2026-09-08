@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass
-from typing import BinaryIO
+from uasset_read.archive import ArchiveLike
 
 from uasset_read.constants import PACKAGE_TRAILER_HEADER_TAG
 
@@ -25,7 +25,7 @@ class FLookupTableEntry:
     access_mode: int = 0  # uint8, EPayloadAccessMode (v1+)
 
 
-def read_lookup_table_entry(archive: BinaryIO, version: int) -> FLookupTableEntry:
+def read_lookup_table_entry(archive: ArchiveLike, version: int) -> FLookupTableEntry:
     """Read one FLookupTableEntry from the archive.
 
     Entry size depends on EPackageTrailerVersion:
@@ -82,7 +82,7 @@ class FPackageTrailer:
     lookup_table: list[FLookupTableEntry]
 
 
-def read_package_trailer(archive: BinaryIO, payload_toc_offset: int) -> FPackageTrailer:
+def read_package_trailer(archive: ArchiveLike, payload_toc_offset: int) -> FPackageTrailer:
     """Read FPackageTrailer from the archive.
 
     Args:

@@ -48,8 +48,8 @@ class Summary:
 class PackageDocument:
     """Unified package-level output. One per .uasset/.umap."""
 
-    source: SourceInfo
-    package: PackageInfo
+    source: SourceInfo | None = None
+    package: PackageInfo | None = None
     objects: list[ObjectRecord] = field(default_factory=list)
     relations: list[Relation] = field(default_factory=list)
     dependencies: list[Dependency] = field(default_factory=list)
