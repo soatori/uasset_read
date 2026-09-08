@@ -162,8 +162,8 @@ def test_translator_emits_text_and_soft_object_constants():
     The translator probed a non-existent `.Value` behind a hasattr guard, so neither
     branch ever matched and every constant degraded to an empty FText/FSoftObjectPath.
     """
-    from uasset_read.kismet.expressions import EX_NameConst, EX_SoftObjectConst, EX_TextConst
-    from uasset_read.kismet.expressions.string_consts import FScriptText
+    from uasset_read.kismet.expressions.special import EX_NameConst
+    from uasset_read.kismet.expressions.string_consts import EX_SoftObjectConst, EX_TextConst, FScriptText
     from uasset_read.kismet.tokens import EBlueprintTextLiteralType
     from uasset_read.kismet.translator import KismetTranslator
 

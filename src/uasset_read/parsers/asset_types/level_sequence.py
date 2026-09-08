@@ -12,10 +12,9 @@ Format reference:
 - Engine/Source/Runtime/LevelSequence/Private/LevelSequence.cpp
 """
 
+from uasset_read.parsers.errors import BINARY_PARSE_ERRORS
 import logging
-import struct
 from typing import Any
-from uasset_read.exceptions import ParseError
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +61,7 @@ def parse_level_sequence(archive: Any, name_map: list[str]) -> dict[str, Any]:
             "denominator": tick_resolution_den,
         }
 
-    except (struct.error, OSError, ValueError, ParseError) as e:
+    except BINARY_PARSE_ERRORS as e:
         logger.debug("LevelSequence handler parse failed: %s", e)
         result["parse_status"] = "failed"
         result["error"] = str(e)

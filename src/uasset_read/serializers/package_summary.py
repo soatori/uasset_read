@@ -10,8 +10,9 @@ and UE5_LEGACY_VERSIONS in uasset_read.constants.
 """
 
 import logging
-import struct
 from typing import TYPE_CHECKING
+
+from uasset_read.parsers.errors import BINARY_READ_ERRORS
 
 if TYPE_CHECKING:
     from uasset_read.memory_safety import ResourceBudget
@@ -342,7 +343,7 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, int, b
     # indicates UE5 format with SavedHash present.  The original condition used
     # file_version_ue5 >= UE5_PACKAGE_SAVED_HASH which fails for unversioned
     # packages where file_version_ue5 is literally 0.
-    is_unversioned_zero = (file_version_ue4 == 0 and file_version_ue5 == 0)
+    is_unversioned_zero = file_version_ue4 == 0 and file_version_ue5 == 0
     if file_version_ue5 >= UE5_PACKAGE_SAVED_HASH or (legacy_file_version <= -8 and is_unversioned_zero):
         saved_hash = archive.read(20)
         total_header_size = archive.read_i32()
@@ -714,6 +715,7 @@ def read_package_summary(
     # UE4 AUTOMATIC_VERSION ~ 522; UE5 AUTOMATIC_VERSION = IMPORT_TYPE_HIERARCHIES (1018).
     if file_version_ue4 == 0 and file_version_ue5 == 0 and file_version_licensee == 0:
         from uasset_read.constants import UE5_IMPORT_TYPE_HIERARCHIES
+
         file_version_ue4 = 522  # VER_UE4_AUTOMATIC_VERSION at UE5.4
         file_version_ue5 = UE5_IMPORT_TYPE_HIERARCHIES  # 1018 = AUTOMATIC_VERSION
 
@@ -877,7 +879,7 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> list[str]
 
             if summary.file_version_ue5 > 0 or summary.file_version_ue4 >= UE4_NAME_HASHES_SERIALIZED:
                 archive.read(4)
-        except (struct.error, OSError, ValueError) as e:
+        except BINARY_READ_ERRORS as e:
             logger.debug(
                 "read_name_table: failed to read name entry %d/%d: %s (read %d names so far)",
                 i,

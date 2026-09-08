@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uasset_read.parsers.errors import BINARY_READ_ERRORS
+
 """BinaryOrNative type handler registry.
 
 Provides parsing support for known BinaryOrNative types; falls back to raw bytes on failure.
@@ -59,7 +61,7 @@ def _parse_instanced_struct(
                 "script_struct_index": script_struct_index,
                 "struct_data": struct_data,
             }
-    except (struct.error, OSError, ValueError) as e:
+    except BINARY_READ_ERRORS as e:
         logger.debug("FInstancedStruct parse failed: %s", e)
         return None
 
@@ -134,7 +136,7 @@ def _parse_material_input(
                         result["constant"] = _decode_color(archive.read(4), 4)
 
             return result
-    except (struct.error, OSError, ValueError) as e:
+    except BINARY_READ_ERRORS as e:
         logger.debug("MaterialInput parse failed: %s", e)
         return None
 
@@ -180,7 +182,7 @@ def _parse_expression_output(
                     "mask_a": mask_a,
                 },
             }
-    except (struct.error, OSError, ValueError) as e:
+    except BINARY_READ_ERRORS as e:
         logger.debug("ExpressionOutput parse failed: %s", e)
         return None
 
@@ -234,7 +236,7 @@ def _parse_expression_input(
                     "mask_a": mask_a,
                 },
             }
-    except (struct.error, OSError, ValueError) as e:
+    except BINARY_READ_ERRORS as e:
         logger.debug("ExpressionInput parse failed: %s", e)
         return None
 
@@ -615,7 +617,7 @@ def _parse_niagara_variable(
 
             return result
 
-    except (struct.error, OSError, ValueError):
+    except BINARY_READ_ERRORS:
         return None
 
 

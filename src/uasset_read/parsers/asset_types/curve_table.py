@@ -13,7 +13,8 @@ Format reference:
 import logging
 import struct
 from typing import Any
-from uasset_read.exceptions import ParseError
+
+from uasset_read.parsers.errors import BINARY_PARSE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +120,7 @@ def parse_curve_table(
 
         result["rows"] = rows
 
-    except (struct.error, OSError, ValueError, ParseError) as e:
+    except BINARY_PARSE_ERRORS as e:
         result["parse_status"] = "failed"
         result["error"] = str(e)
 
@@ -228,7 +229,7 @@ def _read_rich_curve(archive: Any, row_idx: int, name_map: list[str]) -> dict[st
                 keys.extend(_parse_rich_keys(prop_data))
     except _InvalidPropSize as e:
         return {"type": "RichCurve", "keys": keys, "error": f"Invalid property size: {e.args[0]}"}
-    except (struct.error, OSError, ValueError, ParseError) as e:
+    except BINARY_PARSE_ERRORS as e:
         # Return partially parsed data on parse failure
         logger.warning("RichCurve parse failed: %s", e, exc_info=True)
     return {"type": "RichCurve", "keys": keys}
@@ -276,7 +277,7 @@ def _read_simple_curve(archive: Any, row_idx: int, name_map: list[str]) -> dict[
             "keys": keys,
             "error": f"Invalid property size: {e.args[0]}",
         }
-    except (struct.error, OSError, ValueError, ParseError) as e:
+    except BINARY_PARSE_ERRORS as e:
         # Return partially parsed data on parse failure
         logger.warning("SimpleCurve parse failed: %s", e, exc_info=True)
     return {"type": "SimpleCurve", "interp_mode": interp_mode, "keys": keys}

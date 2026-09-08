@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import List, Dict, Any
+from typing import Any
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -387,9 +387,7 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: li
     return export_map
 
 
-def get_asset_class(
-    export: ObjectExport, import_map: list[ObjectImport], export_map: list[ObjectExport]
-) -> str | None:
+def get_asset_class(export: ObjectExport, import_map: list[ObjectImport], export_map: list[ObjectExport]) -> str | None:
     """Identify asset type from export entry."""
     if export.class_index.is_import:
         import_idx = export.class_index.to_import_index()

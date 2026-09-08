@@ -9,6 +9,8 @@ import logging
 import struct
 from typing import TYPE_CHECKING, Any
 
+from uasset_read.parsers.errors import BINARY_READ_ERRORS
+
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.package_summary import PackageFileSummary
@@ -460,7 +462,7 @@ def _read_pin_fstring_field(
             )
             return ""
         return value
-    except (struct.error, OSError, ValueError):
+    except BINARY_READ_ERRORS:
         return ""
 
 
@@ -485,7 +487,7 @@ def _read_pin_ftext_field(
             archive.seek(_start)  # Seek back to field start, not _start + 5
             value = None
         return value, True
-    except (struct.error, OSError, ValueError):
+    except BINARY_READ_ERRORS:
         archive.seek(_start)  # On exception, also seek back to start position
         return None, False
 
@@ -509,7 +511,7 @@ def _read_pin_ref_array(
         refs = read_pin_array(archive, name_map, export_map, import_map)
         logger.debug("%s: %d refs at pos %d", field, len(refs), start)
         return refs
-    except (struct.error, OSError, ValueError) as e:
+    except BINARY_READ_ERRORS as e:
         if recover_on_fail:
             failure_key = (start, type(e).__name__, pin_name)
             tl = _get_thread_local()

@@ -24,6 +24,7 @@ from uasset_read.models.properties import (
     DelegateValue,
     SoftObjectPathValue,
 )
+from uasset_read.parsers.errors import BINARY_READ_ERRORS
 from uasset_read.exceptions import ParseError
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
@@ -1055,7 +1056,7 @@ def parse_struct_property(
                         raw_size=tag.size,
                         parse_status="success",
                     )
-            except (struct.error, OSError, ValueError):
+            except BINARY_READ_ERRORS:
                 pass  # Fall through to tagged loop
 
     # Unknown structs may still be tagged FStructFallback payloads. Try the
@@ -1075,7 +1076,6 @@ def parse_struct_property(
     _MAX_TAGGED_FALLBACK_BYTES = 4096
     tagged_byte_limit = struct_start + _MAX_TAGGED_FALLBACK_BYTES if struct_end is None else None
 
-    _StructError = struct.error
     try:
         while property_count < MAX_PROPERTY_COUNT:
             property_count += 1
@@ -1107,7 +1107,7 @@ def parse_struct_property(
                 ),
             )
             fields[inner_tag.name] = field_value
-    except (_StructError, ParseError, OSError, ValueError):  # noqa: ast-grep:no-boolean-in-except
+    except (struct.error, ParseError, OSError, ValueError):
         if declared_struct_type in _TAGGED_FALLBACK_STRUCTS:
             raise
         if struct_end is not None:
@@ -1396,7 +1396,7 @@ def parse_verse_value_property(tag: PropertyTag, archive: FArchive) -> dict:
     try:
         if tag.size > 1:
             value_data = archive.read_fstring()
-    except (struct.error, OSError, ValueError):
+    except BINARY_READ_ERRORS:
         archive.seek(start + 1)
     consumed = archive.tell() - start
     raw = archive.read_bytes(tag.size - consumed) if tag.size > consumed else b""

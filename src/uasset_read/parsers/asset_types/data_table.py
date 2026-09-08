@@ -9,9 +9,8 @@ Format reference:
 - Engine/Source/Runtime/Engine/Private/DataTable.cpp — UDataTable::Serialize / LoadStructData
 """
 
-import struct
+from uasset_read.parsers.errors import BINARY_PARSE_ERRORS
 from typing import Any
-from uasset_read.exceptions import ParseError
 
 # Safety limit: prevent garbage bytes from being interpreted as row count
 _MAX_ROWS = 100000
@@ -88,7 +87,7 @@ def parse_data_table(
 
         result["rows"] = rows
 
-    except (struct.error, OSError, ValueError, ParseError) as e:
+    except BINARY_PARSE_ERRORS as e:
         result["parse_status"] = "failed"
         result["error"] = str(e)
 

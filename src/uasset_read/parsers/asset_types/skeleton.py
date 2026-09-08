@@ -20,10 +20,10 @@ Format references:
 - Engine/Source/Runtime/Engine/Public/ReferenceSkeleton.h
 """
 
+from uasset_read.parsers.errors import BINARY_PARSE_ERRORS
 import logging
 import struct
 from typing import Any
-from uasset_read.exceptions import ParseError
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ def parse_skeleton(archive: Any, name_map: list[str]) -> dict[str, Any]:
             guid_bytes = archive.read_bytes(FGUID_SIZE)
             result["guid"] = _format_guid(guid_bytes)
 
-    except (struct.error, OSError, ValueError, ParseError) as e:
+    except BINARY_PARSE_ERRORS as e:
         logger.debug("skeleton handler parse failed: %s", e)
         # When class_index incorrectly points to Skeleton but actual data is another type
         # (e.g. SkeletalMesh), the handler failing to parse is expected behavior.
@@ -581,7 +581,6 @@ def _read_ftransform(archive: Any, is_ue5: bool = True) -> dict[str, Any]:
 
 def _format_guid(guid_bytes: bytes) -> str:
     """Format 16-byte FGuid as a string."""
-    import struct
 
     if len(guid_bytes) < 16:
         return ""
