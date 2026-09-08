@@ -32,6 +32,7 @@ from uasset_read.constants import (
     UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES,
     MAX_SAFE_COUNT,
     UE_NONE_SENTINEL,
+    format_guid_bytes,
 )
 from uasset_read.parsers.utils import make_enum_value, extract_inner_from_tag, read_validated_count_tolerant
 
@@ -1440,14 +1441,7 @@ def parse_guid_property(tag: PropertyTag, archive: FArchive) -> str:
     Returns GUID in standard hex string format, e.g. "A1B2C3D4-E5F6-..."
     """
     data = archive.read_bytes(16)
-    # Standard GUID format: 8-4-4-4-12 hex
-    return (
-        f"{data[0]:02x}{data[1]:02x}{data[2]:02x}{data[3]:02x}-"
-        f"{data[4]:02x}{data[5]:02x}-"
-        f"{data[6]:02x}{data[7]:02x}-"
-        f"{data[8]:02x}{data[9]:02x}-"
-        f"{data[10]:02x}{data[11]:02x}{data[12]:02x}{data[13]:02x}{data[14]:02x}{data[15]:02x}"
-    )
+    return format_guid_bytes(data, uppercase=False)
 
 
 # ============================================================================
