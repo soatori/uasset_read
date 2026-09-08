@@ -13,11 +13,6 @@ class PropertyTypeName:
     name: str
     children: list[PropertyTypeName] = field(default_factory=list)
 
-    def child(self, index: int) -> PropertyTypeName | None:
-        if 0 <= index < len(self.children):
-            return self.children[index]
-        return None
-
     def to_parts(self) -> list[tuple[str, int]]:
         parts: list[tuple[str, int]] = [(self.name, len(self.children))]
         for child in self.children:

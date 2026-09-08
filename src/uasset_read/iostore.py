@@ -61,14 +61,6 @@ FLAG_SIGNED = 1 << 2
 FLAG_INDEXED = 1 << 3
 FLAG_ON_DEMAND = 1 << 4
 
-_FLAG_NAMES = {
-    FLAG_COMPRESSED: "Compressed",
-    FLAG_ENCRYPTED: "Encrypted",
-    FLAG_SIGNED: "Signed",
-    FLAG_INDEXED: "Indexed",
-    FLAG_ON_DEMAND: "OnDemand",
-}
-
 META_COMPRESSED = 1 << 0  # FIoStoreTocEntryMetaFlags (IoStore.h:81-85)
 META_MEMORY_MAPPED = 1 << 1
 
@@ -118,10 +110,6 @@ class IoStoreChunk:
     @property
     def compressed(self) -> bool:
         return bool(self.meta_flags & META_COMPRESSED)
-
-    @property
-    def memory_mapped(self) -> bool:
-        return bool(self.meta_flags & META_MEMORY_MAPPED)
 
 
 @dataclass(frozen=True)
@@ -174,15 +162,6 @@ class IoStoreToc:
     data_path: str | None
 
     @property
-    def physical_bytes(self) -> int:
-        """Bytes the block table claims on disk."""
-        return sum(b.compressed_size for b in self.blocks)
-
-    @property
-    def flag_names(self) -> tuple[str, ...]:
-        return tuple(name for bit, name in _FLAG_NAMES.items() if self.container_flags & bit)
-
-    @property
     def encrypted(self) -> bool:
         return bool(self.container_flags & FLAG_ENCRYPTED)
 
@@ -197,9 +176,6 @@ class IoStoreToc:
     def package_chunks(self) -> tuple[IoStoreChunk, ...]:
         """ExportBundle chunks: one per cooked (Zen) package in the container."""
         return self.chunks_of_type("ExportBundleData")
-
-    def files_for(self, chunk_index: int) -> tuple[IoStoreFile, ...]:
-        return tuple(f for f in self.files if f.chunk_index == chunk_index)
 
     def package_files(self) -> tuple[IoStoreFile, ...]:
         """Directory-index names that address an ExportBundle chunk (i.e. packages)."""
