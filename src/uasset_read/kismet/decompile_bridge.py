@@ -27,7 +27,7 @@ def extract_kismet_decompiled(
     path: str,
     archive: "FArchive",
     summary,
-    name_map: List[str],
+    name_map: list[str],
     import_map,
     export_map,
     tolerant: bool = True,

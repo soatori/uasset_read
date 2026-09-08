@@ -7,8 +7,7 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import TYPE_CHECKING, List, Optional, Dict, Any
-
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.package_summary import PackageFileSummary
@@ -42,13 +41,13 @@ logger = logging.getLogger(__name__)
 
 def read_fmember_reference(
     archive: FArchive,
-    name_map: List[str],
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
+    name_map: list[str],
+    import_map: list[ObjectImport],
+    export_map: list[ObjectExport],
 ) -> FMemberReference:
     """Read FMemberReference (MemberReference.h L74-95)."""
     member_parent_index = archive.read_i32()
-    member_parent: Optional[str] = None
+    member_parent: str | None = None
     if member_parent_index != 0:
         member_parent = _rcn(PackageIndex(member_parent_index), import_map, export_map)
 
@@ -73,12 +72,12 @@ def read_fmember_reference(
 
 def read_k2node_call_function(
     archive: FArchive,
-    name_map: List[str],
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    function_reference: Optional[FMemberReference] = None,
-    b_defaults_to_pure: Optional[bool] = None,
-) -> Dict[str, Any]:
+    name_map: list[str],
+    import_map: list[ObjectImport],
+    export_map: list[ObjectExport],
+    function_reference: FMemberReference | None = None,
+    b_defaults_to_pure: bool | None = None,
+) -> dict[str, Any]:
     """Read K2Node_CallFunction specific fields, return dict (as node_data).
 
     If function_reference was already parsed at the PropertyTag layer (script_serial), use it directly;
@@ -102,15 +101,15 @@ def read_k2node_call_function(
 
 def read_k2node_event(
     archive: FArchive,
-    name_map: List[str],
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    event_reference: Optional[FMemberReference] = None,
-    b_override_function: Optional[bool] = None,
-    b_internal_event: Optional[bool] = None,
-    custom_function_name: Optional[str] = None,
-    function_flags: Optional[int] = None,
-) -> Dict[str, Any]:
+    name_map: list[str],
+    import_map: list[ObjectImport],
+    export_map: list[ObjectExport],
+    event_reference: FMemberReference | None = None,
+    b_override_function: bool | None = None,
+    b_internal_event: bool | None = None,
+    custom_function_name: str | None = None,
+    function_flags: int | None = None,
+) -> dict[str, Any]:
     """Read K2Node_Event specific fields, return dict (as node_data).
 
     If event_reference, b_override_function, etc. were already parsed at the PropertyTag layer
@@ -147,12 +146,12 @@ def read_k2node_event(
     }
 
 
-def read_k2node_knot(archive: FArchive) -> Dict[str, Any]:
+def read_k2node_knot(archive: FArchive) -> dict[str, Any]:
     """K2Node_Knot has no extra fields."""
     return {}
 
 
-def read_edgraph_node_comment(raw_properties: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def read_edgraph_node_comment(raw_properties: dict[str, Any] | None = None) -> dict[str, Any]:
     """Read EdGraphNode_Comment specific fields, return dict (as node_data).
 
     In UE5 samples, the comment node's color and size are in tagged properties.
@@ -169,7 +168,7 @@ def read_edgraph_node_comment(raw_properties: Optional[Dict[str, Any]] = None) -
     }
 
 
-def _build_trigger_events_from_pins(pins: List["UEdGraphPin"]) -> Dict[str, str]:
+def _build_trigger_events_from_pins(pins: list["UEdGraphPin"]) -> dict[str, str]:
     """Extract trigger_events mapping from EnhancedInputAction node pins.
 
     Iterates exec-direction output pins and maps pin names to
@@ -198,9 +197,9 @@ def _build_trigger_events_from_pins(pins: List["UEdGraphPin"]) -> Dict[str, str]
 
 def read_k2node_enhanced_input(
     archive: FArchive,
-    name_map: List[str],
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    name_map: list[str],
+    raw_properties: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Read K2Node_EnhancedInputAction specific fields, return dict (as node_data).
 
     Retrieves AdvancedPinDisplay, InputAction short name, etc. from the PropertyTag layer.
@@ -236,12 +235,12 @@ def read_k2node_enhanced_input(
 
 def read_k2node_functionentry(
     archive: FArchive,
-    name_map: List[str],
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    function_reference: Optional[FMemberReference] = None,
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    name_map: list[str],
+    import_map: list[ObjectImport],
+    export_map: list[ObjectExport],
+    function_reference: FMemberReference | None = None,
+    raw_properties: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Read K2Node_FunctionEntry specific fields, return dict (as node_data).
 
     Retrieves ExtraFlags, bIsEditable from the PropertyTag layer.
@@ -266,13 +265,13 @@ def read_k2node_functionentry(
 
 
 # ============================================================================
-# dispatch handlers -- unified signature (ctx: Dict[str, Any]) -> Dict[str, Any]
+# dispatch handlers -- unified signature (ctx: dict[str, Any]) -> dict[str, Any]
 # ctx contains: archive, name_map, summary, export_map, import_map,
 #               node_refs, raw_properties, class_name, node_export, base_node
 # ============================================================================
 
 
-def _handle_call_function(ctx: Dict[str, Any]) -> Dict[str, Any]:
+def _handle_call_function(ctx: dict[str, Any]) -> dict[str, Any]:
     """K2Node_CallFunction dispatch handler."""
     return read_k2node_call_function(
         ctx["archive"],
@@ -284,7 +283,7 @@ def _handle_call_function(ctx: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
-def _handle_event(ctx: Dict[str, Any]) -> Dict[str, Any]:
+def _handle_event(ctx: dict[str, Any]) -> dict[str, Any]:
     """K2Node_Event dispatch handler."""
     refs = ctx.get("node_refs") or {}
     return read_k2node_event(
@@ -300,7 +299,7 @@ def _handle_event(ctx: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
-def _handle_comment(ctx: Dict[str, Any]) -> Dict[str, Any]:
+def _handle_comment(ctx: dict[str, Any]) -> dict[str, Any]:
     """EdGraphNode_Comment dispatch handler, with attribute writeback."""
     node_data = read_edgraph_node_comment(ctx.get("raw_properties"))
     base_node = ctx["base_node"]
@@ -317,7 +316,7 @@ def _handle_comment(ctx: Dict[str, Any]) -> Dict[str, Any]:
     return node_data
 
 
-def _handle_enhanced_input(ctx: Dict[str, Any]) -> Dict[str, Any]:
+def _handle_enhanced_input(ctx: dict[str, Any]) -> dict[str, Any]:
     """K2Node_EnhancedInputAction dispatch handler, with trigger_events extraction."""
     node_data = read_k2node_enhanced_input(
         ctx["archive"],
@@ -329,7 +328,7 @@ def _handle_enhanced_input(ctx: Dict[str, Any]) -> Dict[str, Any]:
     return node_data
 
 
-def _handle_function_entry(ctx: Dict[str, Any]) -> Dict[str, Any]:
+def _handle_function_entry(ctx: dict[str, Any]) -> dict[str, Any]:
     """K2Node_FunctionEntry dispatch handler."""
     fr = ctx.get("node_refs", {}).get("function_reference")
     return read_k2node_functionentry(
@@ -342,7 +341,7 @@ def _handle_function_entry(ctx: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
-def _handle_full_context(ctx: Dict[str, Any]) -> Dict[str, Any]:
+def _handle_full_context(ctx: dict[str, Any]) -> dict[str, Any]:
     """AnimGraphNode type dispatch handler."""
     return _read_anim_graph_node(
         ctx["archive"],
@@ -355,16 +354,16 @@ def _handle_full_context(ctx: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
-def _handle_unknown_type(ctx: Dict[str, Any]) -> Dict[str, Any]:
+def _handle_unknown_type(ctx: dict[str, Any]) -> dict[str, Any]:
     """Fallback handler for unknown node types."""
     raw = ctx.get("raw_properties")
     return {"_raw_properties": raw} if raw else {}
 
 
-def _handle_raw_prop_copies(copy_spec: Dict[str, str]):
+def _handle_raw_prop_copies(copy_spec: dict[str, str]):
     """Dispatch handler factory: copy present script tags into node_data under new keys."""
 
-    def handler(ctx: Dict[str, Any]) -> Dict[str, Any]:
+    def handler(ctx: dict[str, Any]) -> dict[str, Any]:
         raw = ctx.get("raw_properties") or {}
         return {out_key: raw[tag] for tag, out_key in copy_spec.items() if raw.get(tag) is not None}
 
@@ -373,7 +372,7 @@ def _handle_raw_prop_copies(copy_spec: Dict[str, str]):
 
 # Node type -> handler mapping. Classes whose node_data is just a copy of
 # present script tags live in the {node_class: {tag: out_key}} table instead.
-_NODE_TYPE_HANDLERS: Dict[str, Any] = {
+_NODE_TYPE_HANDLERS: dict[str, Any] = {
     "K2Node_CallFunction": _handle_call_function,
     "K2Node_Event": _handle_event,
     "K2Node_Knot": lambda ctx: read_k2node_knot(ctx["archive"]),
@@ -406,13 +405,13 @@ _NODE_TYPE_HANDLERS: Dict[str, Any] = {
 
 def _read_anim_graph_node(
     archive: FArchive,
-    name_map: List[str],
+    name_map: list[str],
     summary: PackageFileSummary,
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
+    export_map: list[ObjectExport],
+    import_map: list[ObjectImport],
     class_name: str,
-    raw_properties: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    raw_properties: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Read AnimGraphNode type node data.
 
     Key properties:
@@ -420,7 +419,7 @@ def _read_anim_graph_node(
     - BoundGraph: state subgraph (UEdGraph)
     - Node: animation node runtime data (FAnimNode_StateMachine, etc.)
     """
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "node_type": class_name,
     }
 
@@ -467,14 +466,14 @@ def _read_anim_graph_node(
 
 def create_node_from_archive(
     archive: FArchive,
-    name_map: List[str],
+    name_map: list[str],
     summary: PackageFileSummary,
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
+    export_map: list[ObjectExport],
+    import_map: list[ObjectImport],
     node_export: ObjectExport,
     base_node: UEdGraphNode,
-    raw_properties: Optional[Dict[str, Any]] = None,
-    node_refs: Optional[Dict[str, Any]] = None,
+    raw_properties: dict[str, Any] | None = None,
+    node_refs: dict[str, Any] | None = None,
 ) -> UEdGraphNode:
     """Dispatch to the corresponding node read function based on class_name (D-07/D-08 factory pattern).
 
@@ -488,7 +487,7 @@ def create_node_from_archive(
         return base_node
 
     # Build unified context for all handlers to use as needed
-    ctx: Dict[str, Any] = {
+    ctx: dict[str, Any] = {
         "archive": archive,
         "name_map": name_map,
         "summary": summary,
@@ -523,9 +522,9 @@ def create_node_from_archive(
 def _read_member_reference_from_tags(
     archive: FArchive,
     tag,
-    name_map: List[str],
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
+    name_map: list[str],
+    import_map: list[ObjectImport],
+    export_map: list[ObjectExport],
 ) -> FMemberReference:
     """Read FMemberReference structure from PropertyTag (shared by FunctionReference/EventReference)."""
     value_end = tag.value_end_offset or (archive.tell() + tag.size)
@@ -755,7 +754,7 @@ def _handle_node_details(archive, tag, name_map, import_map, export_map, raw_pro
 
 
 # Tag name -> handler function dispatch dictionary
-_NODE_TAG_HANDLERS: Dict[str, Any] = {
+_NODE_TAG_HANDLERS: dict[str, Any] = {
     "NodePosX": _handle_node_pos_x,
     "NodePosY": _handle_node_pos_y,
     "NodeGuid": _handle_node_guid,
@@ -786,10 +785,10 @@ _NODE_TAG_HANDLERS: Dict[str, Any] = {
 def _read_node_property_tag(
     archive: FArchive,
     tag,
-    name_map: List[str],
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
-    raw_properties: Dict[str, Any],
+    name_map: list[str],
+    import_map: list[ObjectImport],
+    export_map: list[ObjectExport],
+    raw_properties: dict[str, Any],
 ) -> dict:
     """Read a single node PropertyTag and update local variables. Return named properties to update."""
     handler = _NODE_TAG_HANDLERS.get(tag.name)
@@ -807,14 +806,14 @@ def _read_node_property_tag(
 
 def _read_node_pins(
     archive: FArchive,
-    name_map: List[str],
+    name_map: list[str],
     summary: PackageFileSummary,
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
+    export_map: list[ObjectExport],
+    import_map: list[ObjectImport],
     node_export: ObjectExport,
     node_name: str,
     node_guid: str,
-) -> List[UEdGraphPin]:
+) -> list[UEdGraphPin]:
     """Read the Pins array of a node."""
     pins_offset = node_export.script_serialization_end_offset + 4  # Skip end marker
     archive.seek(node_export.serial_offset + pins_offset)
@@ -828,7 +827,7 @@ def _read_node_pins(
             f"pins_count {pins_count} exceeds MAX_PINS_PER_NODE {MAX_PINS_PER_NODE} at node {node_name}"
         )
 
-    pins: List[UEdGraphPin] = []
+    pins: list[UEdGraphPin] = []
     for _ in range(pins_count):
         b_null_ptr = archive.read_i32()
 
@@ -860,15 +859,15 @@ def _read_node_pins(
 
 def _read_node_script_serial(
     archive: FArchive,
-    name_map: List[str],
+    name_map: list[str],
     summary: PackageFileSummary,
     node_export: ObjectExport,
-    import_map: List[ObjectImport],
-    export_map: List[ObjectExport],
+    import_map: list[ObjectImport],
+    export_map: list[ObjectExport],
     node_name: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Read script_serial PropertyTags of a node into one dict of parsed fields."""
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "function_reference": None,
         "event_reference": None,
         "b_override_function": None,
@@ -948,10 +947,10 @@ def _read_node_script_serial(
 
 def read_ue_graph_node(
     archive: FArchive,
-    name_map: List[str],
+    name_map: list[str],
     summary: PackageFileSummary,
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
+    export_map: list[ObjectExport],
+    import_map: list[ObjectImport],
     node_export: ObjectExport,
 ) -> UEdGraphNode:
     """Read UEdGraphNode base class fields (including script_serial PropertyTag parsing)."""

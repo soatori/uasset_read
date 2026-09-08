@@ -7,8 +7,7 @@ and the UE5 version fields (e.g. PROPERTY_TAG_COMPLETE_TYPE_NAME).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, List, Tuple, Optional, Any, TypeVar
-
+from typing import TYPE_CHECKING, Callable, Any, TypeVar
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
 
@@ -49,7 +48,7 @@ _MAP_VALUE_STRUCT_TYPES: dict[str, dict[str, str]] = {
 
 def _read_property_type_name(
     archive: FArchive,
-    name_map: List[str],
+    name_map: list[str],
     file_version_ue5: int = PROPERTY_TAG_COMPLETE_TYPE_NAME,
 ) -> PropertyTypeName:
     """Read FPropertyTypeName preorder nodes and reconstruct the recursive tree.
@@ -68,7 +67,7 @@ def _read_property_type_name(
         return PropertyTypeName(simple_name)
 
     # UE 5.3+: full FPropertyTypeName preorder traversal tree
-    parts: List[Tuple[str, int]] = []
+    parts: list[tuple[str, int]] = []
     pending = 1
     while pending > 0 and len(parts) < MAX_PROPERTY_TYPE_NODES:
         node_name = archive.read_name(name_map)
@@ -76,10 +75,10 @@ def _read_property_type_name(
         parts.append((node_name, inner_count))
         pending = pending - 1 + max(inner_count, 0)
 
-    def build(index: int) -> Tuple[PropertyTypeName, int]:
+    def build(index: int) -> tuple[PropertyTypeName, int]:
         name, count = parts[index]
         index += 1
-        children: List[PropertyTypeName] = []
+        children: list[PropertyTypeName] = []
         for _ in range(max(count, 0)):
             if index >= len(parts):
                 break
@@ -158,10 +157,10 @@ def _apply_property_type_to_tag(tag: PropertyTag, prop_type: Any) -> None:
 
 def read_property_tag(
     archive: FArchive,
-    name_map: List[str],
+    name_map: list[str],
     tolerant: bool = False,
-    mappings: Optional[Any] = None,
-    struct_name: Optional[str] = None,
+    mappings: Any | None = None,
+    struct_name: str | None = None,
 ) -> PropertyTag:
     """Read PropertyTag structure from archive (UE5.7 specific).
 
@@ -262,12 +261,12 @@ def read_property_tag(
 
 def _read_property_tag_legacy(
     archive: "FArchive",
-    name_map: List[str],
+    name_map: list[str],
     tag: "PropertyTag",
     tolerant: bool = False,
     file_version_ue5: int = 0,
     file_version_ue4: int = 0,
-    struct_name: Optional[str] = None,
+    struct_name: str | None = None,
 ) -> "PropertyTag":
     """Read legacy format property tag for UE5 < 1012 (PROPERTY_TAG_COMPLETE_TYPE_NAME).
 

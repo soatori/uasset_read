@@ -7,8 +7,7 @@ Equivalent migration of uasset_read.py lines 6007-6220.
 
 import logging
 import struct as _struct
-from typing import TYPE_CHECKING, List, Optional, Any
-
+from typing import TYPE_CHECKING, Optional, Any
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectImport
@@ -258,7 +257,7 @@ _PROPERTY_ARGS: dict[str, tuple[str, ...]] = (
 def _skip_type_tree_nodes(
     archive,
     limit: int,
-    name_map: List[str],
+    name_map: list[str],
     map_len: int,
 ) -> bool:
     """Try to skip UE5.3+ FPropertyTypeName type tree, locating to the size field start position.
@@ -303,7 +302,7 @@ def _skip_type_tree_nodes(
 
 def _try_recover_property_tag(
     archive,
-    name_map: List[str],
+    name_map: list[str],
     *,
     max_scan: int = 64,
     property_end: int | None = None,
@@ -449,12 +448,12 @@ def _try_recover_property_tag(
 def _try_asset_type_handler(
     export: ObjectExport,
     archive: FArchive,
-    name_map: List[str],
+    name_map: list[str],
     class_name: str,
-    parsed_properties: Optional[List["PropertyValue"]] = None,
-    export_map: Optional[List[Any]] = None,
-    import_map: Optional[List[Any]] = None,
-    summary: Optional["PackageFileSummary"] = None,
+    parsed_properties: list["PropertyValue"] | None = None,
+    export_map: list[Any] | None = None,
+    import_map: list[Any] | None = None,
+    summary: "PackageFileSummary" | None = None,
 ) -> None:
     """Try to extract raw binary data using a registered ClassHandler.
 
@@ -546,9 +545,9 @@ def _try_asset_type_handler(
 def parse_property_value(
     tag: PropertyTag,
     archive: FArchive,
-    name_map: List[str],
-    export_map: List[Any],
-    summary: Optional[Any] = None,
+    name_map: list[str],
+    export_map: list[Any],
+    summary: Any | None = None,
     depth: int = 0,
     tolerant: bool = True,
 ) -> Any:
@@ -740,13 +739,13 @@ def _handle_unversioned_properties(
     export: ObjectExport,
     archive: "FArchive",
     summary: "PackageFileSummary",
-    name_map: List[str],
-    export_map: List[Any],
+    name_map: list[str],
+    export_map: list[Any],
     mappings: Any,
-    import_map: Optional[List[ObjectImport]],
+    import_map: list[ObjectImport] | None,
     property_end: int,
     tolerant: bool,
-) -> Optional[List[PropertyValue]]:
+) -> list[PropertyValue] | None:
     """Handle unversioned properties. Return parse result or None (need to fall back to normal parsing)."""
     uses_unversioned = bool(getattr(summary, "package_flags", 0) & PKG_UnversionedProperties)
     if not uses_unversioned:
@@ -796,10 +795,10 @@ def _handle_unversioned_properties(
 def _resolve_object_property(
     tag: PropertyTag,
     value: Any,
-    import_map: Optional[List[ObjectImport]],
-    export_map: List[Any],
-    name_map: List[str],
-) -> Optional[Any]:
+    import_map: list[ObjectImport] | None,
+    export_map: list[Any],
+    name_map: list[str],
+) -> Any | None:
     """ObjectProperty enhancement: resolve the index against import_map.
 
     Return the resolved reference dictionary, or None if no replacement needed.
@@ -818,10 +817,10 @@ def _resolve_object_property(
 
 def _handle_property_parse_error(
     e: ParseError,
-    tag: Optional[PropertyTag],
-    start_pos: Optional[int],
+    tag: PropertyTag | None,
+    start_pos: int | None,
     archive: "FArchive",
-    name_map: List[str],
+    name_map: list[str],
     property_end: int,
 ) -> PropertyValue:
     """Handle property parse error, return PropertyValue wrapped in PropertyFallback.
@@ -887,15 +886,15 @@ def _read_property_loop(
     export: ObjectExport,
     archive: "FArchive",
     summary: "PackageFileSummary",
-    name_map: List[str],
-    export_map: List[Any],
-    import_map: Optional[List[ObjectImport]],
-    mappings: Optional[Any],
+    name_map: list[str],
+    export_map: list[Any],
+    import_map: list[ObjectImport] | None,
+    mappings: Any | None,
     property_end: int,
     tolerant: bool,
-) -> List[PropertyValue]:
+) -> list[PropertyValue]:
     """Main property reading loop."""
-    properties: List[PropertyValue] = []
+    properties: list[PropertyValue] = []
     property_count = 0
 
     while True:
@@ -1089,14 +1088,14 @@ def parse_properties_from_export(
     export: ObjectExport,
     archive: FArchive,
     summary: "PackageFileSummary",
-    name_map: List[str],
-    export_map: List[Any],
-    import_map: Optional[List[ObjectImport]] = None,
-    mappings: Optional[Any] = None,
-    game: Optional[str] = None,
+    name_map: list[str],
+    export_map: list[Any],
+    import_map: list[ObjectImport] | None = None,
+    mappings: Any | None = None,
+    game: str | None = None,
     tolerant: bool = True,
     run_class_handlers: bool = True,
-) -> List[PropertyValue]:
+) -> list[PropertyValue]:
     """Read all properties from an export entry (PROP-01).
 
     Reference: Class.cpp SerializeVersionedTaggedProperties pattern:
@@ -1114,7 +1113,7 @@ def parse_properties_from_export(
         import_map: import table (needed for ObjectProperty parsing)
 
     Returns:
-        List[PropertyValue] property value list
+        list[PropertyValue] property value list
     """
     if mappings is not None:
         setattr(summary, "_mappings", mappings)
@@ -1213,7 +1212,7 @@ def parse_properties_from_export(
 
 
 def _resolve_mapping_struct_name(
-    export: ObjectExport, import_map: Optional[List[ObjectImport]], export_map: List[Any]
+    export: ObjectExport, import_map: list[ObjectImport] | None, export_map: list[Any]
 ) -> str:
     if import_map is not None:
         try:
@@ -1229,13 +1228,13 @@ def _parse_unversioned_properties_from_mapping(
     export: ObjectExport,
     archive: FArchive,
     summary: "PackageFileSummary",
-    name_map: List[str],
-    export_map: List[Any],
+    name_map: list[str],
+    export_map: list[Any],
     mappings: Any,
     struct_name: str,
     property_end: int,
     tolerant: bool = True,
-) -> List[PropertyValue]:
+) -> list[PropertyValue]:
     """Parse a simple mapping-driven unversioned property stream.
 
     This covers the common sequential field case and preserves unknown tail data
@@ -1251,7 +1250,7 @@ def _parse_unversioned_properties_from_mapping(
         if header is not None
         else [(info, False) for info in ordered_properties]
     )
-    out: List[PropertyValue] = []
+    out: list[PropertyValue] = []
     for position, (info, is_zero) in enumerate(selected_properties):
         if archive.tell() >= property_end and not is_zero:
             break

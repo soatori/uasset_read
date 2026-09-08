@@ -8,8 +8,7 @@ EX_RemoveMulticastDelegate, EX_InstanceDelegate.
 
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
-
+from typing import TYPE_CHECKING
 from uasset_read.kismet.expressions.base import KismetExpression
 from uasset_read.kismet.tokens import EExprToken
 from uasset_read.kismet.value_types import FNameRef
@@ -22,8 +21,8 @@ if TYPE_CHECKING:
 class EX_AddMulticastDelegate(KismetExpression):
     """Adds a delegate to a multicast delegate's targets (EX_AddMulticastDelegate, 0x5C)."""
 
-    Delegate: Optional[KismetExpression] = None
-    DelegateToAdd: Optional[KismetExpression] = None
+    Delegate: KismetExpression | None = None
+    DelegateToAdd: KismetExpression | None = None
 
     Token = EExprToken.EX_AddMulticastDelegate
 
@@ -44,7 +43,7 @@ class EX_AddMulticastDelegate(KismetExpression):
 class EX_ClearMulticastDelegate(KismetExpression):
     """Clears all delegates in a multicast target (EX_ClearMulticastDelegate, 0x5D)."""
 
-    DelegateToClear: Optional[KismetExpression] = None
+    DelegateToClear: KismetExpression | None = None
 
     Token = EExprToken.EX_ClearMulticastDelegate
 
@@ -65,8 +64,8 @@ class EX_BindDelegate(KismetExpression):
 
     FunctionName: str = ""
     FunctionNameRef: FNameRef | None = None
-    Delegate: Optional[KismetExpression] = None
-    ObjectTerm: Optional[KismetExpression] = None
+    Delegate: KismetExpression | None = None
+    ObjectTerm: KismetExpression | None = None
 
     Token = EExprToken.EX_BindDelegate
 
@@ -94,8 +93,8 @@ class EX_BindDelegate(KismetExpression):
 class EX_RemoveMulticastDelegate(KismetExpression):
     """Remove a delegate from a multicast delegate's targets (EX_RemoveMulticastDelegate, 0x62)."""
 
-    Delegate: Optional[KismetExpression] = None
-    DelegateToRemove: Optional[KismetExpression] = None
+    Delegate: KismetExpression | None = None
+    DelegateToRemove: KismetExpression | None = None
 
     Token = EExprToken.EX_RemoveMulticastDelegate
 

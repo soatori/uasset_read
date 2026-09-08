@@ -7,8 +7,7 @@ Contains EX_StructConst, EX_EndStructConst, EX_PropertyConst, EX_BitFieldConst.
 
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
-
+from typing import TYPE_CHECKING
 from uasset_read.kismet.expressions.base import KismetExpression
 from uasset_read.kismet.tokens import EExprToken
 
@@ -53,7 +52,7 @@ class EX_EndStructConst(KismetExpression):
 class EX_PropertyConst(KismetExpression):
     """FProperty constant (EX_PropertyConst, 0x33)."""
 
-    Property: Optional[FKismetPropertyPointer] = None
+    Property: FKismetPropertyPointer | None = None
 
     Token = EExprToken.EX_PropertyConst
 
@@ -74,7 +73,7 @@ class EX_PropertyConst(KismetExpression):
 class EX_BitFieldConst(KismetExpression):
     """Assign to a single bit, defined by an FProperty (EX_BitFieldConst, 0x11)."""
 
-    InnerProperty: Optional[FKismetPropertyPointer] = None
+    InnerProperty: FKismetPropertyPointer | None = None
     ConstValue: int = 0
 
     Token = EExprToken.EX_BitFieldConst

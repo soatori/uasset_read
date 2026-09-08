@@ -10,8 +10,7 @@ that use native serialization instead of property tag serialization.
 
 import logging
 import struct
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
-
+from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.models.properties import PropertyTag
@@ -19,16 +18,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # BinaryOrNative handler type signature
-BinaryOrNativeHandler = Callable[["PropertyTag", "FArchive", List[str], List[Any], Any], Optional[Dict[str, Any]]]
+BinaryOrNativeHandler = Callable[["PropertyTag", "FArchive", list[str], list[Any], Any], dict[str, Any] | None]
 
 
 def _parse_instanced_struct(
     tag: "PropertyTag",
     archive: "FArchive",
-    name_map: List[str],
-    export_map: List[Any],
+    name_map: list[str],
+    export_map: list[Any],
     summary: Any,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Parse FInstancedStruct BinaryOrNative data.
 
     FInstancedStruct format:
@@ -67,10 +66,10 @@ def _parse_instanced_struct(
 def _parse_material_input(
     tag: "PropertyTag",
     archive: "FArchive",
-    name_map: List[str],
-    export_map: List[Any],
+    name_map: list[str],
+    export_map: list[Any],
     summary: Any,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Parse material input BinaryOrNative data.
 
     FMaterialInput format (MaterialShared.cpp:449-467):
@@ -101,7 +100,7 @@ def _parse_material_input(
         mask_b = archive.read_i32()
         mask_a = archive.read_i32()
 
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "kind": "material_input",
             "type": tag.type,
             "size": tag.size,
@@ -142,10 +141,10 @@ def _parse_material_input(
 def _parse_expression_output(
     tag: "PropertyTag",
     archive: "FArchive",
-    name_map: List[str],
-    export_map: List[Any],
+    name_map: list[str],
+    export_map: list[Any],
     summary: Any,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Parse expression output BinaryOrNative data.
 
     FExpressionOutput format:
@@ -189,10 +188,10 @@ def _parse_expression_output(
 def _parse_expression_input(
     tag: "PropertyTag",
     archive: "FArchive",
-    name_map: List[str],
-    export_map: List[Any],
+    name_map: list[str],
+    export_map: list[Any],
     summary: Any,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Parse FExpressionInput binary data.
 
     FExpressionInput format (36 bytes):
@@ -260,65 +259,65 @@ def _decode_nd(raw: bytes, size: int, keys: tuple[str, ...]) -> dict[str, Any]:
     return dict(zip(keys, values))
 
 
-def _decode_vector(raw: bytes, size: int) -> Dict[str, Any]:
+def _decode_vector(raw: bytes, size: int) -> dict[str, Any]:
     """Decode Vector / Vector3f / Vector3d (12 or 24 bytes)."""
     return _decode_nd(raw, size, ("X", "Y", "Z"))
 
 
-def _decode_rotator(raw: bytes, size: int) -> Dict[str, Any]:
+def _decode_rotator(raw: bytes, size: int) -> dict[str, Any]:
     """Decode Rotator / Rotator3f / Rotator3d (12 or 24 bytes)."""
     return _decode_nd(raw, size, ("Pitch", "Yaw", "Roll"))
 
 
-def _decode_vector2d(raw: bytes, size: int) -> Dict[str, Any]:
+def _decode_vector2d(raw: bytes, size: int) -> dict[str, Any]:
     """Decode Vector2D / Vector2f / Vector2d (8 or 16 bytes)."""
     return _decode_nd(raw, size, ("X", "Y"))
 
 
-def _decode_vector4(raw: bytes, size: int) -> Dict[str, Any]:
+def _decode_vector4(raw: bytes, size: int) -> dict[str, Any]:
     """Decode Vector4 / Vector4f / Vector4d (16 or 32 bytes)."""
     return _decode_nd(raw, size, ("X", "Y", "Z", "W"))
 
 
-def _decode_quat(raw: bytes, size: int) -> Dict[str, Any]:
+def _decode_quat(raw: bytes, size: int) -> dict[str, Any]:
     """Decode Quat / Quat4f / Quat4d (16 or 32 bytes)."""
     return _decode_nd(raw, size, ("X", "Y", "Z", "W"))
 
 
-def _decode_linear_color(raw: bytes, size: int) -> Dict[str, Any]:
+def _decode_linear_color(raw: bytes, size: int) -> dict[str, Any]:
     """Decode LinearColor (16 bytes, 4 float RGBA)."""
     return _decode_nd(raw, size, ("R", "G", "B", "A"))
 
 
-def _decode_color(raw: bytes, size: int) -> Dict[str, Any]:
+def _decode_color(raw: bytes, size: int) -> dict[str, Any]:
     """Decode Color (4 bytes). FColor little-endian byte order is B,G,R,A (Color.h union)."""
 
     b, g, r, a = struct.unpack("<BBBB", raw[:4])
     return {"R": r, "G": g, "B": b, "A": a}
 
 
-def _decode_guid(raw: bytes, size: int) -> Dict[str, Any]:
+def _decode_guid(raw: bytes, size: int) -> dict[str, Any]:
     """Decode Guid (16 bytes, 4 uint32)."""
 
     a, b, c, d = struct.unpack("<IIII", raw[:16])
     return {"A": a, "B": b, "C": c, "D": d}
 
 
-def _decode_int_point(raw: bytes, size: int) -> Dict[str, Any]:
+def _decode_int_point(raw: bytes, size: int) -> dict[str, Any]:
     """Decode IntPoint (8 bytes, 2 int32)."""
 
     x, y = struct.unpack("<ii", raw[:8])
     return {"X": x, "Y": y}
 
 
-def _decode_int_vector(raw: bytes, size: int) -> Dict[str, Any]:
+def _decode_int_vector(raw: bytes, size: int) -> dict[str, Any]:
     """Decode IntVector / IntVector3 (12 bytes, 3 int32)."""
 
     x, y, z = struct.unpack("<iii", raw[:12])
     return {"X": x, "Y": y, "Z": z}
 
 
-def _decode_two_vectors(raw: bytes, size: int) -> Dict[str, Any]:
+def _decode_two_vectors(raw: bytes, size: int) -> dict[str, Any]:
     """Decode TwoVectors (24 or 48 bytes, two sets of three-component vectors)."""
     elem_size = size // 2
     v1 = _decode_nd(raw[:elem_size], elem_size, ("X", "Y", "Z"))
@@ -326,12 +325,12 @@ def _decode_two_vectors(raw: bytes, size: int) -> Dict[str, Any]:
     return {"V1": v1, "V2": v2}
 
 
-def _decode_plane(raw: bytes, size: int) -> Dict[str, Any]:
+def _decode_plane(raw: bytes, size: int) -> dict[str, Any]:
     """Decode Plane / Plane4f / Plane4d (16 or 32 bytes)."""
     return _decode_nd(raw, size, ("X", "Y", "Z", "W"))
 
 
-def _decode_sphere(raw: bytes, size: int) -> Dict[str, Any]:
+def _decode_sphere(raw: bytes, size: int) -> dict[str, Any]:
     """Decode Sphere / Sphere3f / Sphere3d (16 or 32 bytes, center + radius)."""
     vals = _decode_nd(raw, size, ("X", "Y", "Z", "W"))
     return {"Center": {"X": vals["X"], "Y": vals["Y"], "Z": vals["Z"]}, "Radius": vals["W"]}
@@ -340,7 +339,7 @@ def _decode_sphere(raw: bytes, size: int) -> Dict[str, Any]:
 def _decode_soft_object_path_index(
     raw: bytes,
     summary: Any,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Resolve a UE5 header-table FSoftObjectPath index without guessing."""
     soft_object_path_list = getattr(summary, "_soft_object_path_list", None)
     if len(raw) != 4 or not isinstance(soft_object_path_list, list) or not soft_object_path_list:
@@ -366,7 +365,7 @@ def _decode_soft_object_path_index(
     }
 
 
-def _decode_ed_graph_pin_type(raw: bytes, size: int, name_map: list[str]) -> Optional[Dict[str, Any]]:
+def _decode_ed_graph_pin_type(raw: bytes, size: int, name_map: list[str]) -> dict[str, Any] | None:
     """Decode FEdGraphPinType from raw binary.
 
     Binary layout (UE5):
@@ -440,7 +439,7 @@ def _decode_ed_graph_pin_type(raw: bytes, size: int, name_map: list[str]) -> Opt
         base = name_map[idx] if 0 <= idx < len(name_map) else f"None_{idx}"
         return f"{base}_{num}" if num > 0 else base
 
-    fields: Dict[str, Any] = {
+    fields: dict[str, Any] = {
         "pin_category": _fname(cat_idx, cat_num),
         "pin_subcategory": _fname(sub_idx, sub_num),
         "pin_subcategory_object": pco,
@@ -468,7 +467,7 @@ def _decode_ed_graph_pin_type(raw: bytes, size: int, name_map: list[str]) -> Opt
 
 
 # struct_type -> (set of valid byte sizes, decoder function) dispatch dictionary
-_STRUCT_DECODERS: Dict[str, tuple] = {
+_STRUCT_DECODERS: dict[str, tuple] = {
     "Vector": ((12, 24), _decode_vector),
     "Vector3f": ((12, 24), _decode_vector),
     "Vector3d": ((12, 24), _decode_vector),
@@ -504,10 +503,10 @@ _STRUCT_DECODERS: Dict[str, tuple] = {
 def _parse_struct_binary(
     tag: "PropertyTag",
     archive: "FArchive",
-    name_map: List[str],
-    export_map: List[Any],
+    name_map: list[str],
+    export_map: list[Any],
     summary: Any,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Parse StructProperty in BinaryOrNative format.
 
     When serialize_type is BinaryOrNative, struct data is stored as native binary
@@ -564,10 +563,10 @@ def _parse_struct_binary(
 def _parse_niagara_variable(
     tag: "PropertyTag",
     archive: "FArchive",
-    name_map: List[str],
-    export_map: List[Any],
+    name_map: list[str],
+    export_map: list[Any],
     summary: Any,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Parse FNiagaraVariable hybrid layout: raw FName + FNiagaraTypeDefinition + data blob.
 
     Source: NiagaraModule.cpp:1732/:1763 (custom Serialize).
@@ -599,7 +598,7 @@ def _parse_niagara_variable(
         if remaining > 0:
             data_blob = archive.read(remaining)
 
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "kind": "niagara_variable",
             "struct_type": "NiagaraVariable",
             "size": tag.size,
@@ -626,7 +625,7 @@ def _parse_niagara_variable(
 # Handler registry
 # ============================================================================
 
-BINARY_OR_NATIVE_HANDLERS: Dict[str, BinaryOrNativeHandler] = {
+BINARY_OR_NATIVE_HANDLERS: dict[str, BinaryOrNativeHandler] = {
     # Material-related
     "FMaterialInput": _parse_material_input,
     "FColorMaterialInput": _parse_material_input,

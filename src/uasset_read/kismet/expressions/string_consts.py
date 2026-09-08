@@ -4,8 +4,7 @@ from __future__ import annotations
 
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
-
+from typing import TYPE_CHECKING
 from uasset_read.exceptions import ParseError
 from uasset_read.kismet.expressions.base import KismetExpression, KismetExpressionT
 from uasset_read.kismet.tokens import EBlueprintTextLiteralType, EExprToken
@@ -43,12 +42,12 @@ class FScriptText:
     """FScriptText data for EX_TextConst."""
 
     TextLiteralType: EBlueprintTextLiteralType
-    SourceString: Optional[str] = None
-    KeyString: Optional[str] = None
-    Namespace: Optional[str] = None
-    DevNotes: Optional[str] = None
-    StringTableAsset: Optional[str] = None
-    TableIdString: Optional[str] = None
+    SourceString: str | None = None
+    KeyString: str | None = None
+    Namespace: str | None = None
+    DevNotes: str | None = None
+    StringTableAsset: str | None = None
+    TableIdString: str | None = None
 
     @staticmethod
     def _read_string_operand(archive) -> str:

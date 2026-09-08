@@ -42,7 +42,7 @@ PAYLOAD_EXTRACTION_DEFERRED = "PAYLOAD_EXTRACTION_DEFERRED"
 def extract_payload_bytes(
     descriptor: PayloadDescriptor,
     main_path: Path,
-    sidecar_paths: Optional[dict[str, Path]] = None,
+    sidecar_paths: dict[str, Path] | None = None,
 ) -> tuple[bytes, str | None]:
     """Extract payload bytes from a cooked package.
 

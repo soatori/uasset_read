@@ -8,8 +8,7 @@ as well as function parameter end markers (EX_EndFunctionParms / EX_EndParmValue
 
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
-
+from typing import TYPE_CHECKING
 from uasset_read.kismet.expressions.base import KismetExpression, make_simple_expression, make_token_subclass
 from uasset_read.kismet.tokens import EExprToken
 from uasset_read.kismet.value_types import FNameRef
@@ -90,7 +89,7 @@ class EX_CallMulticastDelegate(KismetExpression):
     """Multicast delegate call."""
 
     StackNode: int = 0
-    Delegate: Optional[KismetExpression] = None
+    Delegate: KismetExpression | None = None
     Parameters: list[KismetExpression] = field(default_factory=list)
 
     Token = EExprToken.EX_CallMulticastDelegate

@@ -18,8 +18,7 @@ from __future__ import annotations
 
 import logging
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, Optional
-
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport
@@ -77,7 +76,7 @@ class MovieSceneHandler(ClassHandler):
         self,
         export: "ObjectExport",
         archive: "FArchive",
-        context: Optional[Any] = None,
+        context: Any | None = None,
     ) -> HandlerResult:
         """Parse MovieScene export.
 

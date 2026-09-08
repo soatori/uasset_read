@@ -14,8 +14,7 @@ from __future__ import annotations
 import logging
 import struct
 import threading
-from typing import TYPE_CHECKING, List, Optional, Dict, Any
-
+from typing import TYPE_CHECKING, Dict, Any
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
@@ -110,7 +109,7 @@ def _read_tag_i32(archive: FArchive, tag) -> int:
     return read_tag_value_bounded(archive, tag, archive.read_i32)
 
 
-def _read_tag_fname(archive: FArchive, tag, name_map: List[str]) -> str:
+def _read_tag_fname(archive: FArchive, tag, name_map: list[str]) -> str:
     """Read FName value from PropertyTag and seek to value_end_offset.
 
     Standardizes FName property reading flow.
@@ -251,7 +250,7 @@ def read_ftext_with_history(
             # aligned with project tolerant mode, avoiding parse interruption from corrupt data
             logger.debug("FText NamedFormat arg_count=%d exceeds limit %d, skipping args", arg_count, MAX_SAFE_COUNT)
             arg_count = 0  # Skip subsequent argument reading
-        format_args: Dict[str, str] = {}
+        format_args: dict[str, str] = {}
         for _ in range(arg_count):
             arg_name = read_ftext_fstring(archive)
             arg_type = archive.read_u8()
@@ -311,9 +310,9 @@ def read_ftext(archive: FArchive, tolerant: bool = True) -> str:
 def validate_pin_reference_at(
     archive: FArchive,
     pos: int,
-    export_map: List[ObjectExport],
-    import_map: Optional[List[ObjectImport]] = None,
-) -> Optional[Dict[str, Any]]:
+    export_map: list[ObjectExport],
+    import_map: list[ObjectImport] | None = None,
+) -> dict[str, Any] | None:
     """Validate PinReference structure at given position.
 
     Does not move pointer; only checks if the position conforms to PinReference format:

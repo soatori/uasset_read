@@ -126,7 +126,7 @@ class PackageFileSummary:
     file_version_licensee: int = 0
     saved_hash: bytes = field(default_factory=lambda: b"")
     total_header_size: int = 0
-    custom_versions: List[CustomVersion] = field(default_factory=list)
+    custom_versions: list[CustomVersion] = field(default_factory=list)
     package_name: str = ""
     package_flags: int = 0
     name_count: int = 0
@@ -153,7 +153,7 @@ class PackageFileSummary:
     import_type_hierarchies_count: int = 0
     import_type_hierarchies_offset: int = 0
     persistent_guid: str = ""
-    generations: List[GenerationInfo] = field(default_factory=list)
+    generations: list[GenerationInfo] = field(default_factory=list)
     saved_by_engine_version: EngineVersion = field(default_factory=EngineVersion)
     compatible_with_engine_version: EngineVersion = field(default_factory=EngineVersion)
     compression_flags: int = 0
@@ -161,14 +161,14 @@ class PackageFileSummary:
     asset_registry_data_offset: int = 0
     bulk_data_start_offset: int = 0
     world_tile_info_data_offset: int = 0
-    chunk_ids: List[str] = field(default_factory=list)
+    chunk_ids: list[str] = field(default_factory=list)
     preload_dependency_count: int = 0
     preload_dependency_offset: int = 0
     names_referenced_from_export_data_count: int = 0
     payload_toc_offset: int = 0
     data_resource_offset: int = 0
-    depends_map: List[List[int]] = field(default_factory=list)
-    preload_dependencies: List[int] = field(default_factory=list)
+    depends_map: list[list[int]] = field(default_factory=list)
+    preload_dependencies: list[int] = field(default_factory=list)
 
 
 def _read_custom_versions(archive: FArchive) -> list:
@@ -807,7 +807,7 @@ def read_package_summary(
     )
 
 
-def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]:
+def read_name_table(archive: FArchive, summary: PackageFileSummary) -> list[str]:
     """Read name table.
 
     Each name entry format:
@@ -842,7 +842,7 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> List[str]
     except (OSError, OverflowError) as e:
         raise ParseError(f"seek({summary.name_offset}) failed, cannot read name table: {e}") from e
 
-    name_map: List[str] = []
+    name_map: list[str] = []
     for i in range(summary.name_count):
         try:
             name = archive.read_fstring()
@@ -877,8 +877,8 @@ def read_depends_map(
     archive: FArchive,
     summary: PackageFileSummary,
     budget: "ResourceBudget | None" = None,
-    warnings: "List[str] | None" = None,
-) -> List[List[int]]:
+    warnings: "list[str] | None" = None,
+) -> list[list[int]]:
     """Read DependsMap (dependency table).
 
     UE format: TArray<TArray<FPackageIndex>>
@@ -905,7 +905,7 @@ def read_depends_map(
 
     archive.seek(summary.depends_offset)
 
-    depends_map: List[List[int]] = []
+    depends_map: list[list[int]] = []
     skipped_entries = 0
     invalid_indices = 0
     truncated_table = False
@@ -980,7 +980,7 @@ def read_depends_map(
     return depends_map
 
 
-def read_preload_dependencies(archive: FArchive, summary: PackageFileSummary) -> List[int]:
+def read_preload_dependencies(archive: FArchive, summary: PackageFileSummary) -> list[int]:
     """Read PreloadDependencies (preload dependencies).
 
     UE format: TArray<FPackageIndex>
@@ -997,7 +997,7 @@ def read_preload_dependencies(archive: FArchive, summary: PackageFileSummary) ->
     if not archive.check_remaining(summary.preload_dependency_count * 4):
         raise ParseError(f"PreloadDependencies count {summary.preload_dependency_count} exceeds remaining file bytes")
 
-    dependencies: List[int] = []
+    dependencies: list[int] = []
     for _ in range(summary.preload_dependency_count):
         dependencies.append(archive.read_i32())
 

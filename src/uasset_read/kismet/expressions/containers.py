@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 from uasset_read.kismet.expressions.base import KismetExpression, make_simple_expression
 from uasset_read.kismet.tokens import EExprToken
 
@@ -14,8 +14,8 @@ if TYPE_CHECKING:
 class EX_SetArray(KismetExpression):
     """SetArray — version-dependent: with CHANGE_SETARRAY_BYTECODE has AssigningProperty."""
 
-    AssigningProperty: Optional[KismetExpression] = None
-    ArrayInnerProp: Optional[FKismetPropertyPointer] = None
+    AssigningProperty: KismetExpression | None = None
+    ArrayInnerProp: FKismetPropertyPointer | None = None
     Elements: list[KismetExpression] | None = None
 
     Token = EExprToken.EX_SetArray

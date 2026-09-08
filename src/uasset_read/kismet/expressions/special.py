@@ -8,8 +8,7 @@ Corresponding opcodes: EX_Return, EX_Assert, EX_SwitchValue, EX_InstrumentationE
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
-
+from typing import TYPE_CHECKING
 from uasset_read.kismet.expressions.base import (
     KismetExpression,
     KismetExpressionT,
@@ -114,8 +113,8 @@ class EX_InstrumentationEvent(KismetExpression):
     """Instrumentation event — reads event type and optional name."""
 
     EventType: EScriptInstrumentationType = EScriptInstrumentationType.None_
-    EventName: Optional[str] = None
-    EventNameRef: Optional[FNameRef] = None
+    EventName: str | None = None
+    EventNameRef: FNameRef | None = None
 
     Token = EExprToken.EX_InstrumentationEvent
 

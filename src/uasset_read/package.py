@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import Dict, Literal, Optional
+from typing import Literal
 import logging
 import os
 
@@ -27,7 +27,7 @@ class PackageArchive(FArchive):
     def __init__(
         self,
         main_archive: ArchiveLike,
-        uexp_archive: Optional[ArchiveLike] = None,
+        uexp_archive: ArchiveLike | None = None,
         tolerant: bool = False,
     ):
         self._init_archive_attrs(getattr(main_archive, "_path", "<package>"), tolerant)
@@ -142,22 +142,22 @@ class PackageBundle:
     main_path: str
     package_kind: str
     container: str = "filesystem"
-    files: Dict[str, str] = field(default_factory=dict)
+    files: dict[str, str] = field(default_factory=dict)
 
     @cached_property
-    def uexp_path(self) -> Optional[Path]:
+    def uexp_path(self) -> Path | None:
         """Return .uexp sidecar path if it exists, else None (cached)."""
         path = self.files.get(".uexp")
         return Path(path) if path is not None else None
 
     @cached_property
-    def ubulk_path(self) -> Optional[Path]:
+    def ubulk_path(self) -> Path | None:
         """Return .ubulk sidecar path if it exists, else None (cached)."""
         path = self.files.get(".ubulk")
         return Path(path) if path is not None else None
 
     @cached_property
-    def uptnl_path(self) -> Optional[Path]:
+    def uptnl_path(self) -> Path | None:
         """Return .uptnl sidecar path if it exists, else None (cached)."""
         path = self.files.get(".uptnl")
         return Path(path) if path is not None else None

@@ -7,8 +7,7 @@ Equivalent migration of uasset_read.py lines 5289-6004.
 
 import logging
 import struct
-from typing import TYPE_CHECKING, List, Dict, Any, Optional, Tuple
-
+from typing import TYPE_CHECKING, Dict, Any
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -114,7 +113,7 @@ _EXPECTED_STRUCT_SIZES: dict[str, int | None] = {
 # From UE5 UE5_LARGE_WORLD_COORDINATES(1004), math vector types use double precision.
 # _LWC_TYPE_MAP: base type name → (float_size, double_size)
 # When version_container's file_version_ue5 >= 1004, base types use double_size.
-_LWC_TYPE_MAP: Dict[str, Tuple[int, int]] = {
+_LWC_TYPE_MAP: dict[str, tuple[int, int]] = {
     "Vector": (12, 24),  # FVector3f → FVector3d
     "Rotator": (12, 24),  # FRotator3f → FRotator3d
     "Vector2D": (8, 16),  # FVector2f → FVector2d
@@ -131,7 +130,7 @@ _LWC_TYPE_MAP: Dict[str, Tuple[int, int]] = {
 
 # LWC double precision type name → corresponding base type name
 # e.g. "Vector3d" → "Vector", used for get_struct_size fallback lookup
-_LWC_DOUBLE_TYPE_TO_BASE: Dict[str, str] = {
+_LWC_DOUBLE_TYPE_TO_BASE: dict[str, str] = {
     "Vector3d": "Vector",
     "Vector4d": "Vector4",
     "Rotator3d": "Rotator",
@@ -141,7 +140,7 @@ _LWC_DOUBLE_TYPE_TO_BASE: Dict[str, str] = {
 }
 
 # LWC single precision type name → corresponding base type name
-_LWC_FLOAT_TYPE_TO_BASE: Dict[str, str] = {
+_LWC_FLOAT_TYPE_TO_BASE: dict[str, str] = {
     "Vector3f": "Vector",
     "Vector4f": "Vector4",
     "Rotator3f": "Rotator",
@@ -153,7 +152,7 @@ _LWC_FLOAT_TYPE_TO_BASE: Dict[str, str] = {
 
 # Pure f32/f64 structs on the fast path: name -> field keys, serialization order.
 # double-size = 8 * len(keys); any other tag.size reads as f32 (current behavior).
-_FLAT_FLOAT_STRUCTS: Dict[str, Tuple[str, ...]] = {
+_FLAT_FLOAT_STRUCTS: dict[str, tuple[str, ...]] = {
     "Vector": ("X", "Y", "Z"),
     "Rotator": ("Pitch", "Yaw", "Roll"),
     "Vector2D": ("X", "Y"),
@@ -166,7 +165,7 @@ _FLAT_FLOAT_STRUCTS: Dict[str, Tuple[str, ...]] = {
 def get_struct_size(
     struct_type: str,
     file_version_ue5: int = 0,
-) -> Optional[int]:
+) -> int | None:
     """Return expected byte size for fixed-layout structs (version-aware).
 
     For LWC (Large World Coordinates) types:
@@ -411,7 +410,7 @@ def parse_bool_property(tag: PropertyTag, archive: FArchive) -> bool:
     return bool(tag.bool_val)
 
 
-def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[List[str]] = None) -> Any:
+def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: list[str] | None = None) -> Any:
     """Parse IntProperty/Int64Property/Int16Property/Int8Property/ByteProperty (PROP-02).
 
     ByteProperty special handling:
@@ -471,7 +470,7 @@ def parse_str_property(tag: PropertyTag, archive: FArchive) -> str:
     return archive.read_fstring()
 
 
-def parse_name_property(tag: PropertyTag, archive: FArchive, name_map: List[str]) -> str:
+def parse_name_property(tag: PropertyTag, archive: FArchive, name_map: list[str]) -> str:
     """Parse NameProperty (PROP-06)."""
     return archive.read_name(name_map)
 
@@ -487,9 +486,9 @@ def parse_object_property(tag: PropertyTag, archive: FArchive) -> int:
 def parse_soft_object_property(
     tag: PropertyTag,
     archive: FArchive,
-    name_map: List[str],
-    soft_object_path_list: Optional[List[Dict]] = None,
-    summary: Optional[Any] = None,
+    name_map: list[str],
+    soft_object_path_list: list[Dict] | None = None,
+    summary: Any | None = None,
 ) -> SoftObjectPathValue:
     """Parse SoftObjectProperty (FSoftObjectPath).
 
@@ -551,9 +550,9 @@ def parse_lazy_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjec
 def parse_soft_class_property(
     tag: PropertyTag,
     archive: FArchive,
-    name_map: Optional[List[str]] = None,
-    soft_object_path_list: Optional[List[Dict]] = None,
-    summary: Optional[Any] = None,
+    name_map: list[str] | None = None,
+    soft_object_path_list: list[Dict] | None = None,
+    summary: Any | None = None,
 ) -> SoftObjectPathValue:
     """Parse SoftClassProperty -- same parsing as SoftObjectProperty."""
     return parse_soft_object_property(tag, archive, name_map or [], soft_object_path_list, summary)
@@ -572,11 +571,11 @@ def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> SoftObje
 def parse_array_property(
     tag: PropertyTag,
     archive: FArchive,
-    name_map: List[str],
-    export_map: List[Any],
-    summary: Optional[Any] = None,
+    name_map: list[str],
+    export_map: list[Any],
+    summary: Any | None = None,
     depth: int = 0,
-) -> List[Any]:
+) -> list[Any]:
     """Parse ArrayProperty (PROP-08, D-16).
 
     UE serialization format:
@@ -601,7 +600,7 @@ def parse_array_property(
         return []
 
     count = read_validated_count_tolerant(archive, MAX_ARRAY_COUNT, "array count")
-    elements: List[Any] = []
+    elements: list[Any] = []
     parse_property_value = _get_parse_property_value()
     read_property_tag = _get_read_property_tag()
 
@@ -648,8 +647,8 @@ def _try_fast_path_struct(
     struct_type: str,
     tag,
     archive: FArchive,
-    name_map: List[str],
-) -> Optional[StructValue]:
+    name_map: list[str],
+) -> StructValue | None:
     """Try fast-path parsing for simple structs (no PropertyTag loop). Returns None if no match."""
     keys = _FLAT_FLOAT_STRUCTS.get(struct_type)
     if keys:
@@ -866,7 +865,7 @@ def _try_fast_path_struct(
                 default_val = read_value() if bhd else None
                 # Seek to end of struct
                 archive.seek(start + tag.size)
-                fields: Dict[str, Any] = {
+                fields: dict[str, Any] = {
                     "Values": values,
                     "Times": times,
                     "keyframe_count": vc,
@@ -975,9 +974,9 @@ def _try_fast_path_struct(
 def parse_struct_property(
     tag: PropertyTag,
     archive: FArchive,
-    name_map: List[str],
-    export_map: List[Any],
-    summary: Optional[Any] = None,
+    name_map: list[str],
+    export_map: list[Any],
+    summary: Any | None = None,
     depth: int = 0,
 ) -> StructValue:
     """Parse StructProperty (ADVP-01)."""
@@ -1081,7 +1080,7 @@ def parse_struct_property(
 
     # Unknown structs may still be tagged FStructFallback payloads. Try the
     # standard inner PropertyTag loop first, then fall back to opaque bytes.
-    fields: Dict[str, Any] = {}
+    fields: dict[str, Any] = {}
     property_count = 0
 
     parse_property_value = _get_parse_property_value()
@@ -1128,7 +1127,7 @@ def parse_struct_property(
                 ),
             )
             fields[inner_tag.name] = field_value
-    except (_StructError, ParseError, OSError, ValueError):  # noqa: no-boolean-in-except
+    except (_StructError, ParseError, OSError, ValueError):  # noqa: ast-grep:no-boolean-in-except
         if declared_struct_type in _TAGGED_FALLBACK_STRUCTS:
             raise
         if struct_end is not None:
@@ -1154,7 +1153,7 @@ def parse_struct_property(
 
 
 def parse_map_property(
-    tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None
+    tag: PropertyTag, archive: FArchive, name_map: list[str], export_map: list[Any], summary: Any | None = None
 ) -> MapValue:
     """Parse MapProperty (ADVP-02).
 
@@ -1179,7 +1178,7 @@ def parse_map_property(
 
     # Read number of actual entries
     num_entries = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "MapProperty entry count")
-    entries: List[Dict[str, Any]] = []
+    entries: list[dict[str, Any]] = []
 
     for _ in range(num_entries):
         key = _dispatch_key_parse(key_type, archive, name_map, export_map, summary, tag=tag)
@@ -1190,7 +1189,7 @@ def parse_map_property(
 
 
 def parse_set_property(
-    tag: PropertyTag, archive: FArchive, name_map: List[str], export_map: List[Any], summary: Optional[Any] = None
+    tag: PropertyTag, archive: FArchive, name_map: list[str], export_map: list[Any], summary: Any | None = None
 ) -> SetValue:
     """Parse SetProperty (ADVP-03).
 
@@ -1216,7 +1215,7 @@ def parse_set_property(
 
     # Read number of actual elements
     num_elements = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "SetProperty element count")
-    elements: List[Any] = []
+    elements: list[Any] = []
 
     for _ in range(num_elements):
         if element_type == "BoolProperty":
@@ -1231,7 +1230,7 @@ def parse_set_property(
 
 
 def parse_enum_property(
-    tag: PropertyTag, archive: FArchive, name_map: List[str], summary: Optional[Any] = None
+    tag: PropertyTag, archive: FArchive, name_map: list[str], summary: Any | None = None
 ) -> EnumValue:
     """Parse EnumProperty (ADVP-04)."""
     enum_type = _extract_enum_type_from_tag(tag)
@@ -1295,7 +1294,7 @@ def parse_text_property(tag: PropertyTag, archive: FArchive, dev_notes: bool = F
     )
 
 
-def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[str]) -> DelegateValue:
+def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: list[str]) -> DelegateValue:
     """Parse DelegateProperty (ADVP-06)."""
     object_ref = archive.read_i32()
     function_name = archive.read_name(name_map)
@@ -1309,7 +1308,7 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: List[
 
 
 def parse_multicast_delegate_property(
-    tag: PropertyTag, archive: FArchive, name_map: Optional[List[str]] = None
+    tag: PropertyTag, archive: FArchive, name_map: list[str] | None = None
 ) -> list:
     """Parse MulticastDelegateProperty.
 
@@ -1339,7 +1338,7 @@ parse_multicast_sparse_delegate_property = parse_multicast_delegate_property
 parse_interface_property = parse_object_property
 
 
-def parse_field_path_property(tag: PropertyTag, archive: FArchive, name_map: Optional[List[str]] = None) -> dict:
+def parse_field_path_property(tag: PropertyTag, archive: FArchive, name_map: list[str] | None = None) -> dict:
     """Parse FieldPathProperty.
 
     UE FFieldPath::Serialize serializes the path as TArray<FName>
@@ -1355,9 +1354,9 @@ def parse_field_path_property(tag: PropertyTag, archive: FArchive, name_map: Opt
 def parse_optional_property(
     tag: PropertyTag,
     archive: FArchive,
-    name_map: Optional[List[str]] = None,
-    export_map: Optional[List[Any]] = None,
-    summary: Optional[Any] = None,
+    name_map: list[str] | None = None,
+    export_map: list[Any] | None = None,
+    summary: Any | None = None,
 ) -> dict:
     """Parse OptionalProperty."""
     has_value = archive.read_bool()
@@ -1482,7 +1481,7 @@ def _extract_struct_type_from_tag(tag: PropertyTag) -> str:
     return "UnknownStruct"
 
 
-def _extract_map_types_from_tag(tag: PropertyTag) -> Tuple[str, str]:
+def _extract_map_types_from_tag(tag: PropertyTag) -> tuple[str, str]:
     """Extract Map Key/Value types from PropertyTag (D-08)."""
     inner = extract_inner_from_tag(tag.type)
     if inner is not None:
@@ -1521,10 +1520,10 @@ def _extract_enum_type_from_tag(tag: PropertyTag) -> str:
 def _dispatch_key_parse(
     key_type: str,
     archive: FArchive,
-    name_map: List[str],
-    export_map: List[Any],
-    summary: Optional[Any] = None,
-    tag: Optional[PropertyTag] = None,
+    name_map: list[str],
+    export_map: list[Any],
+    summary: Any | None = None,
+    tag: PropertyTag | None = None,
 ) -> Any:
     """Key type dispatch parsing (D-02b)."""
     if key_type == "BoolProperty":
@@ -1568,10 +1567,10 @@ def _dispatch_key_parse(
 def _dispatch_value_parse(
     value_type: str,
     archive: FArchive,
-    name_map: List[str],
-    export_map: List[Any],
-    summary: Optional[Any] = None,
-    tag: Optional[PropertyTag] = None,
+    name_map: list[str],
+    export_map: list[Any],
+    summary: Any | None = None,
+    tag: PropertyTag | None = None,
 ) -> Any:
     """Value type dispatch parsing."""
     if value_type == "BoolProperty":

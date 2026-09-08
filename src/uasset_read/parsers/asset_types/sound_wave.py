@@ -66,7 +66,10 @@ def _as_int(value: Any) -> Optional[int]:
 
 
 def _as_float(value: Any) -> Optional[float]:
-    return float(value) if isinstance(value, (int, float)) else None
+    try:
+        return float(value) if isinstance(value, (int, float)) else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _as_flag(value: Any) -> Optional[bool]:
@@ -215,7 +218,10 @@ def build_sound_metadata(
 
     # Derived information
     if sample_rate is not None and duration is not None and duration > 0:
-        sound["estimated_frame_count"] = int(sample_rate * duration)
+        try:
+            sound["estimated_frame_count"] = int(sample_rate * duration)
+        except (TypeError, ValueError, OverflowError):
+            pass
 
     # Channel layout
     if num_channels is not None:

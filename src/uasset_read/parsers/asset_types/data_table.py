@@ -10,8 +10,7 @@ Format reference:
 """
 
 import struct
-from typing import Any, Dict, List
-
+from typing import Any
 from uasset_read.exceptions import ParseError
 
 # Safety limit: prevent garbage bytes from being interpreted as row count
@@ -20,8 +19,8 @@ _MAX_ROWS = 100000
 
 def parse_data_table(
     archive: Any,
-    name_map: List[str],
-) -> Dict[str, Any]:
+    name_map: list[str],
+) -> dict[str, Any]:
     """Parse DataTable asset metadata.
 
     archive is positioned at the start of the custom payload after tagged properties.
@@ -34,7 +33,7 @@ def parse_data_table(
     Returns:
         Parse result dictionary containing row_count, rows, etc.
     """
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "parse_status": "success",
         "row_count": 0,
         "rows": [],
@@ -53,7 +52,7 @@ def parse_data_table(
             return result
 
         result["row_count"] = row_count
-        rows: List[Dict[str, Any]] = []
+        rows: list[dict[str, Any]] = []
 
         for i in range(row_count):
             # FName: Index (int32) + Number (int32)

@@ -18,8 +18,7 @@ Per D-10: Python 3.10+ strict type hints.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Any
-
+from typing import Any
 
 @dataclass
 class FEdGraphPinType:
@@ -27,9 +26,9 @@ class FEdGraphPinType:
 
     pin_category: str = ""
     pin_subcategory: str = ""
-    pin_subcategory_object: Optional[int] = None  # FPackageIndex (int32)
-    pin_subcategory_object_name: Optional[str] = None
-    pin_subcategory_object_ref: Optional[Any] = None
+    pin_subcategory_object: int | None = None  # FPackageIndex (int32)
+    pin_subcategory_object_name: str | None = None
+    pin_subcategory_object_ref: Any | None = None
     container_type: int = 0
     is_map_key: bool = False
     is_map_value: bool = False
@@ -41,8 +40,8 @@ class FEdGraphPinType:
     # Map terminal type (when container_type == 3, key terminal info)
     map_key_terminal_category: str = ""
     map_key_terminal_sub_category: str = ""
-    map_key_terminal_sub_category_object: Optional[int] = None  # FPackageIndex (int32)
-    map_key_terminal_sub_category_object_name: Optional[str] = None
+    map_key_terminal_sub_category_object: int | None = None  # FPackageIndex (int32)
+    map_key_terminal_sub_category_object_name: str | None = None
     # FEdGraphTerminalType trailing bools (EdGraphNode.cpp operator<<)
     map_key_terminal_is_const: bool = False
     map_key_terminal_is_weak_pointer: bool = False
@@ -56,29 +55,29 @@ class UEdGraphPin:
     # PIN-01: Basic information
     pin_id: str
     pin_name: str
-    pin_friendly_name: Optional[str] = None
+    pin_friendly_name: str | None = None
     pin_tooltip: str = ""
     direction: int = 0
     # PIN-02: PinType
-    pin_type: Optional[FEdGraphPinType] = None
+    pin_type: FEdGraphPinType | None = None
     # PIN-03: Default values
-    default_value: Optional[str] = None
-    auto_default_value: Optional[str] = None
-    default_object: Optional[int] = None
-    default_object_ref: Optional[Any] = (
+    default_value: str | None = None
+    auto_default_value: str | None = None
+    default_object: int | None = None
+    default_object_ref: Any | None = (
         None  # D-04: reserved for object-reference resolution (unused on the single-package path)
     )
-    default_text_value: Optional[str] = None
+    default_text_value: str | None = None
     # PIN-04: Link references — raw dict (backward compat)
-    linked_to_raw: List[dict] = field(default_factory=list)
-    sub_pins: List[dict] = field(default_factory=list)
-    parent_pin: Optional[dict] = None
-    ref_pass_through: Optional[dict] = None
+    linked_to_raw: list[dict] = field(default_factory=list)
+    sub_pins: list[dict] = field(default_factory=list)
+    parent_pin: dict | None = None
+    ref_pass_through: dict | None = None
     # PIN-04+: Link references — resolved object references
-    linked_to_objects: List[Optional[Any]] = field(default_factory=list)
-    sub_pins_objects: List[Optional[Any]] = field(default_factory=list)
-    parent_pin_object: Optional[Any] = None
-    ref_pass_through_object: Optional[Any] = None
+    linked_to_objects: list[Any | None] = field(default_factory=list)
+    sub_pins_objects: list[Any | None] = field(default_factory=list)
+    parent_pin_object: Any | None = None
+    ref_pass_through_object: Any | None = None
     # PIN-05: Display attributes
     hidden: bool = False
     not_connectable: bool = False
@@ -86,8 +85,8 @@ class UEdGraphPin:
     orphaned_pin: bool = False
     # EditorOnly
     owning_node_index: int = 0
-    source_index: Optional[int] = None
-    persistent_guid: Optional[str] = None
+    source_index: int | None = None
+    persistent_guid: str | None = None
     # Legacy
     flags: int = 0
 
@@ -100,12 +99,12 @@ class UEdGraphNode:
     node_pos_x: int = 0
     node_pos_y: int = 0
     node_comment: str = ""
-    pins: List["UEdGraphPin"] = field(default_factory=list)
+    pins: list["UEdGraphPin"] = field(default_factory=list)
     class_name: str = ""
-    node_data: Optional[Any] = None
+    node_data: Any | None = None
     # Internal bookkeeping set during graph reading (1-based export index)
-    _export_index: Optional[int] = None
-    _export_object_name: Optional[str] = None
+    _export_index: int | None = None
+    _export_object_name: str | None = None
 
 
 @dataclass
@@ -114,18 +113,18 @@ class UEdGraph:
 
     graph_name: str
     graph_class: str
-    schema: Optional[str] = None
-    nodes: List["UEdGraphNode"] = field(default_factory=list)
-    graph_guid: Optional[str] = None
+    schema: str | None = None
+    nodes: list["UEdGraphNode"] = field(default_factory=list)
+    graph_guid: str | None = None
     b_editable: bool = True
-    subgraphs: List["UEdGraph"] = field(default_factory=list)
+    subgraphs: list["UEdGraph"] = field(default_factory=list)
 
 
 @dataclass
 class FMemberReference:
     """FMemberReference member reference structure."""
 
-    member_parent: Optional[str] = None
+    member_parent: str | None = None
     member_name: str = ""
-    member_guid: Optional[str] = None
+    member_guid: str | None = None
     b_self_context: bool = False

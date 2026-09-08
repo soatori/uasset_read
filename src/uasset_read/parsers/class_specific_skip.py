@@ -50,7 +50,7 @@ SKIP_CLASS_PREFIXES = (
 
 def should_skip_export_for_tolerant_parsing(
     export: "ObjectExport",
-    class_name: Optional[str] = None,
+    class_name: str | None = None,
 ) -> bool:
     """Determine whether tolerant skip should be used for an export (no property parsing attempted).
 

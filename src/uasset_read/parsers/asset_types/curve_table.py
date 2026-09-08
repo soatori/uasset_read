@@ -12,8 +12,7 @@ Format reference:
 
 import logging
 import struct
-from typing import Any, Dict, List
-
+from typing import Any
 from uasset_read.exceptions import ParseError
 
 logger = logging.getLogger(__name__)
@@ -36,8 +35,8 @@ _MAX_ROWS = 100000
 
 def parse_curve_table(
     archive: Any,
-    name_map: List[str],
-) -> Dict[str, Any]:
+    name_map: list[str],
+) -> dict[str, Any]:
     """Parse CurveTable asset metadata.
 
     CurveTable differs from DataTable; its Serialize layout is:
@@ -52,7 +51,7 @@ def parse_curve_table(
     Returns:
         Parse result dictionary, containing curve_table_mode, row_count, rows, etc.
     """
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "parse_status": "success",
         "curve_table_mode": "Empty",
         "curve_table_mode_raw": 0,
@@ -84,7 +83,7 @@ def parse_curve_table(
 
         # 3. Parse RowMap line by line
         #    Each row: FName (Index:int32 + Number:int32) + curve payload
-        rows: List[Dict[str, Any]] = []
+        rows: list[dict[str, Any]] = []
 
         for row_idx in range(num_rows):
             # FName: Index (int32) + Number (int32)
@@ -97,7 +96,7 @@ def parse_curve_table(
             else:
                 row_name = f"<invalid_index_{name_index}>"
 
-            row: Dict[str, Any] = {
+            row: dict[str, Any] = {
                 "name": row_name,
                 "name_index": name_index,
                 "name_number": name_number,
@@ -131,7 +130,7 @@ class _InvalidPropSize(Exception):
     """Tagged property size is out of bounds; aborts the property walk."""
 
 
-def _walk_tagged_properties(archive: Any, row_idx: int, name_map: List[str]):
+def _walk_tagged_properties(archive: Any, row_idx: int, name_map: list[str]):
     """Yield ``(prop_name, type_name, prop_data)`` for SerializeTaggedProperties.
 
     The FPropertyTag framing (name FName, type FName, size, array index,
@@ -179,7 +178,7 @@ def _walk_tagged_properties(archive: Any, row_idx: int, name_map: List[str]):
             yield _resolve_name(prop_name_index, name_map), type_name, archive.read(prop_size)
 
 
-def _parse_rich_keys(prop_data: bytes) -> List[Dict[str, float]]:
+def _parse_rich_keys(prop_data: bytes) -> list[dict[str, float]]:
     """Parse a TArray<FRichCurveKey> payload.
 
     FRichCurveKey layout (RichCurve.h:80-118): InterpMode/TangentMode/
@@ -187,7 +186,7 @@ def _parse_rich_keys(prop_data: bytes) -> List[Dict[str, float]]:
     Leave(Tangent,Weight) (8 x f32) = 27 bytes per key.
     """
     FRICH_CURVE_KEY_SIZE = 27
-    keys: List[Dict[str, float]] = []
+    keys: list[dict[str, float]] = []
     if len(prop_data) < 4:
         return keys
     arr_count = struct.unpack("<i", prop_data[:4])[0]
@@ -220,9 +219,9 @@ def _parse_rich_keys(prop_data: bytes) -> List[Dict[str, float]]:
     return keys
 
 
-def _read_rich_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[str, Any]:
+def _read_rich_curve(archive: Any, row_idx: int, name_map: list[str]) -> dict[str, Any]:
     """Parse FRichCurve tagged properties: the Keys array property holds the curve."""
-    keys: List[Dict[str, float]] = []
+    keys: list[dict[str, float]] = []
     try:
         for prop_name, type_name, prop_data in _walk_tagged_properties(archive, row_idx, name_map):
             if "ArrayProperty" in type_name and "Keys" in prop_name:
@@ -235,14 +234,14 @@ def _read_rich_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[st
     return {"type": "RichCurve", "keys": keys}
 
 
-def _parse_simple_keys(prop_data: bytes) -> List[Dict[str, float]]:
+def _parse_simple_keys(prop_data: bytes) -> list[dict[str, float]]:
     """Parse a TArray<FSimpleCurveKey> payload.
 
     FSimpleCurveKey uses custom serialization (SimpleCurve.cpp:10-18):
     Time(f32) + Value(f32) = 8 bytes per key.
     """
     SIMPLE_CURVE_KEY_SIZE = 8
-    keys: List[Dict[str, float]] = []
+    keys: list[dict[str, float]] = []
     if len(prop_data) < 4:
         return keys
     arr_count = struct.unpack("<i", prop_data[:4])[0]
@@ -255,14 +254,14 @@ def _parse_simple_keys(prop_data: bytes) -> List[Dict[str, float]]:
     return keys
 
 
-def _read_simple_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[str, Any]:
+def _read_simple_curve(archive: Any, row_idx: int, name_map: list[str]) -> dict[str, Any]:
     """Parse FSimpleCurve tagged properties (CurveTable.cpp:138-145).
 
     - InterpMode: EnumProperty tagged property (TEnumAsByte<ERichCurveInterpMode>)
     - Keys: ArrayProperty tagged property (TArray<FSimpleCurveKey>)
     """
     interp_mode: int = 0  # Default RCIM_Linear
-    keys: List[Dict[str, float]] = []
+    keys: list[dict[str, float]] = []
     try:
         for prop_name, type_name, prop_data in _walk_tagged_properties(archive, row_idx, name_map):
             if "EnumProperty" in type_name and "InterpMode" in prop_name:
@@ -283,7 +282,7 @@ def _read_simple_curve(archive: Any, row_idx: int, name_map: List[str]) -> Dict[
     return {"type": "SimpleCurve", "interp_mode": interp_mode, "keys": keys}
 
 
-def _resolve_name(name_index: int, name_map: List[str]) -> str:
+def _resolve_name(name_index: int, name_map: list[str]) -> str:
     """Parse name from name table."""
     from uasset_read.parsers.utils import resolve_name_from_index
 

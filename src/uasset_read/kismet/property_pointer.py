@@ -10,8 +10,7 @@ resolved owner (PackageIndex). FKismetPropertyPointer wraps FFieldPath.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, TYPE_CHECKING
-
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
 
@@ -36,7 +35,7 @@ class FFieldPath:
     """
 
     path: list[FFieldPathSegment] = field(default_factory=list)
-    resolved_owner: Optional[PackageIndex] = field(default=None)
+    resolved_owner: PackageIndex | None = field(default=None)
 
 
 @dataclass
@@ -47,7 +46,7 @@ class FKismetPropertyPointer:
     """
 
     bNew: bool = True
-    path: Optional[FFieldPath] = field(default=None)
+    path: FFieldPath | None = field(default=None)
 
     @classmethod
     def from_archive(cls, archive: FArchive, name_map: list[str]) -> FKismetPropertyPointer:

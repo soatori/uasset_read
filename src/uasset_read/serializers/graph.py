@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import TYPE_CHECKING, List, Optional
-
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.package_summary import PackageFileSummary
@@ -44,8 +43,8 @@ def _extract_graph_properties(
         node_indices: 1-based export index list of nodes
         graph_guid_str: hex string of GraphGuid (lowercase, no dash), "" if not found
     """
-    schema_name: Optional[str] = None
-    node_indices: List[int] = []
+    schema_name: str | None = None
+    node_indices: list[int] = []
     graph_guid: str = ""
 
     props = getattr(graph_export, "properties", None) or []
@@ -79,14 +78,14 @@ def _extract_graph_properties(
 
 def read_ue_graph(
     archive: FArchive,
-    name_map: List[str],
+    name_map: list[str],
     summary: PackageFileSummary,
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
+    export_map: list[ObjectExport],
+    import_map: list[ObjectImport],
     graph_export: ObjectExport,
     graph_class: str,
     graph_export_idx: int = 0,
-    _parsed_indices: Optional[set] = None,
+    _parsed_indices: set | None = None,
 ) -> UEdGraph:
     """Read UEdGraph container (EdGraph.cpp).
 
@@ -110,7 +109,7 @@ def read_ue_graph(
     schema_name, node_indices, graph_guid = _extract_graph_properties(graph_export)
 
     # Resolve Schema reference
-    schema: Optional[str] = schema_name
+    schema: str | None = schema_name
 
     # -- 2. Read each node's binary data by node_indices --
     if len(node_indices) > MAX_NODES_PER_GRAPH:
@@ -119,7 +118,7 @@ def read_ue_graph(
         )
         node_indices = node_indices[:MAX_NODES_PER_GRAPH]
 
-    nodes: List[UEdGraphNode] = []
+    nodes: list[UEdGraphNode] = []
 
     def read_node(node_export: ObjectExport, node_idx: int) -> UEdGraphNode:
         node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export)
@@ -172,7 +171,7 @@ def read_ue_graph(
     # -- 3. bEditable / SubGraphs -- from PropertyTag or fallback --
     # These fields may be WITH_EDITORONLY_DATA and absent from PropertyTag.
     b_editable = True  # default
-    subgraph_indices: List[int] = []
+    subgraph_indices: list[int] = []
 
     props = getattr(graph_export, "properties", None) or []
     for prop in props:
@@ -191,9 +190,9 @@ def read_ue_graph(
             subgraph_indices = [v for v in pvalue if isinstance(v, int) and v > 0]
 
     # 6. Parse subgraphs (merge SubGraphs array + AnimGraphNode nested subgraphs)
-    subgraphs: List[UEdGraph] = []
+    subgraphs: list[UEdGraph] = []
 
-    def parse_subgraph(pkg_idx: int) -> Optional[UEdGraph]:
+    def parse_subgraph(pkg_idx: int) -> UEdGraph | None:
         """Resolve one subgraph export reference; None when absent or not a graph."""
         if pkg_idx <= 0 or pkg_idx > len(export_map) or pkg_idx in _parsed_indices:
             return None

@@ -16,8 +16,7 @@ Handler interface:
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, Any, List, Dict, TYPE_CHECKING
-
+from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport
@@ -30,8 +29,8 @@ class HandlerResult:
     """Parse result from a class handler."""
 
     success: bool
-    data: Optional[Dict[str, Any]] = None
-    error_message: Optional[str] = None
+    data: dict[str, Any] | None = None
+    error_message: str | None = None
 
 
 class ClassHandler(ABC):
@@ -53,7 +52,7 @@ class ClassHandler(ABC):
         self,
         export: "ObjectExport",
         archive: "FArchive",
-        context: Optional[Any] = None,
+        context: Any | None = None,
     ) -> HandlerResult:
         """Parse property data from an export."""
         ...
@@ -63,15 +62,15 @@ class ClassHandlerRegistry:
     """Class handler registry."""
 
     def __init__(self) -> None:
-        self._handlers: List[ClassHandler] = []
-        self._cache: Dict[str, Optional[ClassHandler]] = {}
+        self._handlers: list[ClassHandler] = []
+        self._cache: dict[str, ClassHandler | None] = {}
 
     def register(self, handler: ClassHandler) -> None:
         """Register a class handler."""
         self._handlers.append(handler)
         self._cache.clear()
 
-    def find_handler(self, class_name: str) -> Optional[ClassHandler]:
+    def find_handler(self, class_name: str) -> ClassHandler | None:
         """Find a handler that can handle the given class_name."""
         if class_name in self._cache:
             return self._cache[class_name]
@@ -87,7 +86,7 @@ class ClassHandlerRegistry:
 
 
 # Global default registry instance
-_default_registry: Optional[ClassHandlerRegistry] = None
+_default_registry: ClassHandlerRegistry | None = None
 
 
 def _bootstrap_handlers() -> None:

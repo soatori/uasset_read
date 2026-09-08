@@ -22,8 +22,7 @@ Format references:
 
 import logging
 import struct
-from typing import Any, Dict, List
-
+from typing import Any, Dict
 from uasset_read.exceptions import ParseError
 
 logger = logging.getLogger(__name__)
@@ -35,7 +34,7 @@ _MAX_SKELETON_COUNT = 100000
 FGUID_SIZE = 16
 
 
-def parse_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
+def parse_skeleton(archive: Any, name_map: list[str]) -> dict[str, Any]:
     """Parse USkeleton asset custom serialization data.
 
     Called after property parsing completes; archive is positioned at export serial_offset.
@@ -52,13 +51,13 @@ def parse_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
     Returns:
         Parsed result dict containing reference_skeleton, retarget_sources, guid, etc.
     """
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "parse_status": "success",
     }
 
     # Collect truncation diagnostics: appended when sub-functions encounter invalid counts,
     # then used to upgrade parse_status at the end
-    _diagnostics: List[str] = []
+    _diagnostics: list[str] = []
 
     try:
         # Step 1: Skip tagged properties
@@ -116,7 +115,7 @@ def parse_skeleton(archive: Any, name_map: List[str]) -> Dict[str, Any]:
     return result
 
 
-def _skip_tagged_properties(archive: Any, name_map: List[str]) -> None:
+def _skip_tagged_properties(archive: Any, name_map: list[str]) -> None:
     """Skip tagged properties until Name=="None" terminator is encountered.
 
     PropertyTag serialization format (see UE FPropertyTag::Serialize):
@@ -233,7 +232,7 @@ def _skip_tagged_properties(archive: Any, name_map: List[str]) -> None:
 _MAX_EXAMPLES = 5
 
 
-def _validate_hierarchy(ref_skeleton: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _validate_hierarchy(ref_skeleton: dict[str, Any]) -> list[dict[str, Any]]:
     """Validate bone hierarchy structure legality.
 
     Checks:
@@ -255,10 +254,10 @@ def _validate_hierarchy(ref_skeleton: Dict[str, Any]) -> List[Dict[str, Any]]:
     if not parents or bone_count <= 0:
         return []
 
-    diagnostics: List[Dict[str, Any]] = []
+    diagnostics: list[dict[str, Any]] = []
 
     # 1. Check parent index range
-    invalid_examples: List[Dict[str, int]] = []
+    invalid_examples: list[dict[str, int]] = []
     invalid_count = 0
     for i, p in enumerate(parents):
         if p < -1 or p >= bone_count:
@@ -276,7 +275,7 @@ def _validate_hierarchy(ref_skeleton: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     # 2. Cycle detection (only when parent index range is valid, otherwise skip)
     if invalid_count == 0:
-        cycle_examples: List[Dict[str, Any]] = []
+        cycle_examples: list[dict[str, Any]] = []
         cycle_count = 0
         visited = [0] * bone_count  # 0=unvisited, 1=visiting, 2=done
 
@@ -347,9 +346,9 @@ def _validate_hierarchy(ref_skeleton: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def _read_reference_skeleton(
     archive: Any,
-    name_map: List[str],
-    _diagnostics: List[str] | None = None,
-) -> Dict[str, Any]:
+    name_map: list[str],
+    _diagnostics: list[str] | None = None,
+) -> dict[str, Any]:
     """Read FReferenceSkeleton custom serialization.
 
     FReferenceSkeleton serialization format (ReferenceSkeleton.cpp:941):
@@ -366,7 +365,7 @@ def _read_reference_skeleton(
     Returns:
         Dict containing names, parents, transforms
     """
-    ref_skeleton: Dict[str, Any] = {}
+    ref_skeleton: dict[str, Any] = {}
 
     # Read BoneInfo count (TArray count)
     bone_count = archive.read_i32()
@@ -379,8 +378,8 @@ def _read_reference_skeleton(
         return {"bone_count": bone_count, "error": "invalid bone count"}
 
     # Read BoneInfo array
-    names: List[str] = []
-    parents: List[int] = []
+    names: list[str] = []
+    parents: list[int] = []
     for _ in range(bone_count):
         # FName: Index (int32) + Number (int32)
         name_index = archive.read_i32()
@@ -417,7 +416,7 @@ def _read_reference_skeleton(
             bone_count,
         )
 
-    transforms: List[Dict[str, Any]] = []
+    transforms: list[dict[str, Any]] = []
     is_ue5 = getattr(archive, "_file_version_ue5", 0) > 0
     for _i in range(min(pose_count, bone_count)):
         transform = _read_ftransform(archive, is_ue5=is_ue5)
@@ -437,7 +436,7 @@ def _read_reference_skeleton(
         if _diagnostics is not None:
             _diagnostics.append(f"ReferenceSkeleton.NameToIndexMap.Count truncated: {map_count} -> 0")
         map_count = 0
-    name_to_index: Dict[str, int] = {}
+    name_to_index: dict[str, int] = {}
     for _ in range(map_count):
         key_index = archive.read_i32()
         key_number = archive.read_i32()
@@ -453,9 +452,9 @@ def _read_reference_skeleton(
 
 def _read_retarget_sources(
     archive: Any,
-    name_map: List[str],
-    _diagnostics: List[str] | None = None,
-) -> List[Dict[str, Any]]:
+    name_map: list[str],
+    _diagnostics: list[str] | None = None,
+) -> list[dict[str, Any]]:
     """Read RetargetSources: TMap<FName, FReferencePose>.
 
     Format (Skeleton.cpp:419-448):
@@ -470,7 +469,7 @@ def _read_retarget_sources(
     Returns:
         RetargetSource list
     """
-    sources: List[Dict[str, Any]] = []
+    sources: list[dict[str, Any]] = []
     is_ue5 = getattr(archive, "_file_version_ue5", 0) > 0
 
     num_sources = archive.read_i32()
@@ -482,7 +481,7 @@ def _read_retarget_sources(
         return sources
 
     for i in range(num_sources):
-        source: Dict[str, Any] = {}
+        source: dict[str, Any] = {}
 
         # RetargetSourceName: FName
         name_index = archive.read_i32()
@@ -506,7 +505,7 @@ def _read_retarget_sources(
             if _diagnostics is not None:
                 _diagnostics.append(f"RetargetSources[{i}].PoseCount truncated: {pose_count} -> 0")
             pose_count = 0
-        transforms: List[Dict[str, Any]] = []
+        transforms: list[dict[str, Any]] = []
         for _ in range(pose_count):
             transform = _read_ftransform(archive, is_ue5=is_ue5)
             transforms.append(transform)
@@ -532,7 +531,7 @@ def _read_retarget_sources(
     return sources
 
 
-def _read_ftransform(archive: Any, is_ue5: bool = True) -> Dict[str, Any]:
+def _read_ftransform(archive: Any, is_ue5: bool = True) -> dict[str, Any]:
     """Read FTransform, supporting UE4/UE5 different layouts.
 
     Serialization order (see TransformVectorized.h operator<<):
@@ -591,7 +590,7 @@ def _format_guid(guid_bytes: bytes) -> str:
     return f"{a:08X}-{b:08X}-{c:08X}-{d:08X}"
 
 
-def _resolve_fname(index: int, number: int, name_map: List[str]) -> str:
+def _resolve_fname(index: int, number: int, name_map: list[str]) -> str:
     """Resolve FName (index + number) to string."""
     if 0 <= index < len(name_map):
         base_name = name_map[index]

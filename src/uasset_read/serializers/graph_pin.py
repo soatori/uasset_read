@@ -7,8 +7,7 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import TYPE_CHECKING, List, Optional, Dict, Any
-
+from typing import TYPE_CHECKING, Dict, Any
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.package_summary import PackageFileSummary
@@ -43,10 +42,10 @@ logger = logging.getLogger(__name__)
 
 def read_ed_graph_pin_type(
     archive: FArchive,
-    name_map: List[str],
-    summary: Optional[PackageFileSummary] = None,
-    import_map: Optional[List[ObjectImport]] = None,
-    export_map: Optional[List[ObjectExport]] = None,
+    name_map: list[str],
+    summary: PackageFileSummary | None = None,
+    import_map: list[ObjectImport] | None = None,
+    export_map: list[ObjectExport] | None = None,
 ) -> FEdGraphPinType:
     """Parse FEdGraphPinType (UE5.7 specific — custom serialization path)."""
     pin_type = FEdGraphPinType()
@@ -121,10 +120,10 @@ def read_ed_graph_pin_type(
 
 def read_pin_reference(
     archive: FArchive,
-    name_map: List[str],
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
-) -> Optional[dict]:
+    name_map: list[str],
+    export_map: list[ObjectExport],
+    import_map: list[ObjectImport],
+) -> dict | None:
     """Read a single Pin reference (FBlueprintEditorUtils::FPinReference)."""
     b_null_ptr = archive.read_i32()
     if b_null_ptr != 0:
@@ -137,7 +136,7 @@ def read_pin_reference(
     pin_guid = pin_guid_raw.replace("-", "").lower() if pin_guid_raw else pin_guid_raw
 
     # Resolve owning node name
-    owning_node_name: Optional[str] = None
+    owning_node_name: str | None = None
     if owning_node_index > 0:
         node_idx = owning_node_index - 1
         if node_idx < len(export_map):
@@ -158,10 +157,10 @@ def read_pin_reference(
 
 def read_pin_array(
     archive: FArchive,
-    name_map: List[str],
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
-) -> List[dict]:
+    name_map: list[str],
+    export_map: list[ObjectExport],
+    import_map: list[ObjectImport],
+) -> list[dict]:
     """Read Pin reference array (SerializePinArray format).
 
     Sliding recovery mechanism — when count is abnormal, scan nearby bytes for a valid i32 count,
@@ -194,7 +193,7 @@ def read_pin_array(
                 raise ParseError(f"Invalid pin array count: {array_count} (negative)")
             raise ParseError(f"Pin array count {array_count} exceeds MAX_LINKEDTO_PER_PIN {MAX_LINKEDTO_PER_PIN}")
 
-    pins: List[dict] = []
+    pins: list[dict] = []
     for _ in range(array_count):
         ref_pos = archive.tell()
         ref_validation = validate_pin_reference_at(archive, ref_pos, export_map, import_map)
@@ -211,10 +210,10 @@ def _recover_pin_array_count(
     archive: FArchive,
     error_pos: int,
     bad_count: int,
-    export_map: List[ObjectExport],
-    import_map: Optional[List[ObjectImport]] = None,
+    export_map: list[ObjectExport],
+    import_map: list[ObjectImport] | None = None,
     scan_window: int = 16,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Sliding recovery enhanced validation (Phase 75: dynamic window).
 
     Scan error_pos +/- scan_window for a valid i32 count (0..20).
@@ -345,10 +344,10 @@ def _recover_pin_array_count(
 def _try_recover_to_subpins(
     archive: FArchive,
     error_pos: int,
-    export_map: List[ObjectExport],
-    import_map: Optional[List[ObjectImport]] = None,
+    export_map: list[ObjectExport],
+    import_map: list[ObjectImport] | None = None,
     max_scan: int = 256,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Recover to SubPins after LinkedTo failure.
 
     Scan strategy: search for a reasonable small integer (0..20) in the range
@@ -492,9 +491,9 @@ def _read_pin_ftext_field(
 
 def _read_pin_ref_array(
     archive: FArchive,
-    name_map: List[str],
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
+    name_map: list[str],
+    export_map: list[ObjectExport],
+    import_map: list[ObjectImport],
     field: str,
     recover_on_fail: bool,
     pin_name: str = "",
@@ -549,12 +548,12 @@ def _read_pin_bitfield(
 
 def read_ue_graph_pin(
     archive: FArchive,
-    name_map: List[str],
+    name_map: list[str],
     summary: PackageFileSummary,
-    export_map: List[ObjectExport],
-    import_map: List[ObjectImport],
-    header_owning_node: Optional[int] = None,
-    header_pin_id: Optional[str] = None,
+    export_map: list[ObjectExport],
+    import_map: list[ObjectImport],
+    header_owning_node: int | None = None,
+    header_pin_id: str | None = None,
 ) -> UEdGraphPin:
     """Read UEdGraphPin full serialization format (UE5.7 specific).
 

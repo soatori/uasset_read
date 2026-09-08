@@ -9,9 +9,6 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass
-from typing import Optional
-
-
 # BulkData flags from BulkData.h
 BULKDATA_None = 0x00
 BULKDATA_CompressedZlib = 0x02
@@ -36,7 +33,7 @@ class BulkDataHeader:
     element_count: int
     size_on_disk: int
     offset: int
-    compression_type: Optional[str] = None
+    compression_type: str | None = None
 
 
 def parse_bulk_data_header(data: bytes) -> BulkDataHeader:

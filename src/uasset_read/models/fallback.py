@@ -8,8 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
 from enum import Enum
-from typing import Optional, Dict, Any
-
+from typing import Any
 
 class FallbackReason(str, Enum):
     """Fallback reason."""
@@ -37,7 +36,7 @@ class PropertyFallback(PropertyValue):
         raw_bytes: bytes = b"",
         reason: FallbackReason = FallbackReason.UNSUPPORTED_TYPE,
         array_index: int = 0,
-        error_message: Optional[str] = None,
+        error_message: str | None = None,
         value: Any = None,
     ):
         super().__init__(name=name, type=type, value=value, array_index=array_index)
@@ -69,7 +68,7 @@ class StructFallback:
     size: int
     raw_bytes: bytes = b""
     reason: FallbackReason = FallbackReason.UNSUPPORTED_STRUCT
-    fields: Dict[str, Any] = field(default_factory=dict)
+    fields: dict[str, Any] = field(default_factory=dict)
 
     @property
     def kind(self) -> str:

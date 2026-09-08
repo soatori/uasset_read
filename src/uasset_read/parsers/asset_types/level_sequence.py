@@ -14,14 +14,13 @@ Format reference:
 
 import logging
 import struct
-from typing import Any, Dict, List
-
+from typing import Any
 from uasset_read.exceptions import ParseError
 
 logger = logging.getLogger(__name__)
 
 
-def parse_level_sequence(archive: Any, name_map: List[str]) -> Dict[str, Any]:
+def parse_level_sequence(archive: Any, name_map: list[str]) -> dict[str, Any]:
     """Parse ULevelSequence asset custom serialization data.
 
     Args:
@@ -32,7 +31,7 @@ def parse_level_sequence(archive: Any, name_map: List[str]) -> Dict[str, Any]:
         Parse result dictionary containing movie_scene, movie_scene_source,
         movie_scene_license, display_rate, tick_resolution and other fields
     """
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "parse_status": "success",
     }
 

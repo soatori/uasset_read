@@ -10,8 +10,7 @@ This module provides a registry mechanism allowing dynamic registration of custo
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Dict, Any, Optional, Tuple
-
+from typing import TYPE_CHECKING, Callable, Any
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.models.properties import PropertyTag
@@ -26,17 +25,17 @@ class CustomPropertyContext:
     type_id: int
     tag: PropertyTag
     archive: FArchive
-    name_map: Optional[list[str]] = None
-    mappings: Optional[Any] = None
-    game: Optional[str] = None
-    summary: Optional[Any] = None
+    name_map: list[str] | None = None
+    mappings: Any | None = None
+    game: str | None = None
+    summary: Any | None = None
 
 
 # Custom property handler registry: (game, type_id/property_name) -> handler
-CUSTOM_PROPERTY_HANDLERS: Dict[Tuple[Optional[str], Any], Callable[[CustomPropertyContext], Any]] = {}
+CUSTOM_PROPERTY_HANDLERS: dict[tuple[str | None, Any], Callable[[CustomPropertyContext], Any]] = {}
 
 
-def register_custom_property(type_id: int | str, game: Optional[str] = None):
+def register_custom_property(type_id: int | str, game: str | None = None):
     """Decorator: register a custom property handler.
 
     Args:
@@ -59,10 +58,10 @@ def handle_custom_property(
     type_id: int,
     tag: PropertyTag,
     archive: FArchive,
-    name_map: Optional[list[str]] = None,
-    mappings: Optional[Any] = None,
-    game: Optional[str] = None,
-    summary: Optional[Any] = None,
+    name_map: list[str] | None = None,
+    mappings: Any | None = None,
+    game: str | None = None,
+    summary: Any | None = None,
 ) -> Any | None:
     """Find and invoke a registered custom property handler.
 

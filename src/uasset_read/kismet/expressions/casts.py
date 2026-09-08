@@ -7,8 +7,7 @@ Contains type-cast related expressions (EX_Cast / EX_MetaCast / EX_DynamicCast, 
 
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
-
+from typing import TYPE_CHECKING
 from uasset_read.kismet.expressions.base import KismetExpression, make_token_subclass
 from uasset_read.kismet.tokens import EExprToken, ECastToken
 from uasset_read.serializers.object_resources import PackageIndex
@@ -23,7 +22,7 @@ class EX_CastBase(KismetExpression):
 
     ClassPtr: int = 0
     ClassPtrRef: PackageIndex | None = None
-    Target: Optional[KismetExpression] = None
+    Target: KismetExpression | None = None
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_CastBase:
@@ -37,7 +36,7 @@ class EX_Cast(KismetExpression):
     """General type cast operator -- reads a conversion type byte followed by the target expression."""
 
     ConversionType: ECastToken = ECastToken.CST_ObjectToInterface
-    Target: Optional[KismetExpression] = None
+    Target: KismetExpression | None = None
 
     Token = EExprToken.EX_Cast
 

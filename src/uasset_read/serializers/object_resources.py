@@ -8,8 +8,7 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import Optional, List, Dict, Any
-
+from typing import List, Dict, Any
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -71,7 +70,7 @@ class ObjectImport:
     class_name: str
     outer_index: PackageIndex
     object_name: str
-    package_name: Optional[str] = None
+    package_name: str | None = None
     b_import_optional: bool = False
 
 
@@ -115,8 +114,8 @@ class ObjectExport:
         """Whether script serialization block exists."""
         return self.script_serialization_end_offset > self.script_serialization_start_offset
 
-    properties: List[Any] = field(default_factory=list)
-    transforms: Dict[str, Any] = field(default_factory=dict)
+    properties: list[Any] = field(default_factory=list)
+    transforms: dict[str, Any] = field(default_factory=dict)
     guid: str = ""  # 16 bytes GUID (exists when version < 1005)
 
 
@@ -153,7 +152,7 @@ def script_property_region(export: ObjectExport) -> tuple[int, int, bool]:
     return serial_start, serial_end, False
 
 
-def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: List[str]) -> List[ObjectImport]:
+def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: list[str]) -> list[ObjectImport]:
     """Read import table."""
     # CR-05: validate import_count range
     if summary.import_count < 0:
@@ -166,7 +165,7 @@ def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
     # UE4 version used for version gating (high value for UE5 assets)
     file_version = summary.file_version_ue4
 
-    import_map: List[ObjectImport] = []
+    import_map: list[ObjectImport] = []
     for _ in range(summary.import_count):
         class_package = archive.read_name(name_map)
         class_name = archive.read_name(name_map)
@@ -176,7 +175,7 @@ def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
         # PackageName: present for every import when UEVer >= VER_UE4_NON_OUTER_PACKAGE_IMPORT
         # (ObjectResource.cpp load path). FilterEditorOnly changes the saved VALUE only,
         # never whether the 8-byte FName exists.
-        package_name: Optional[str] = None
+        package_name: str | None = None
         if file_version >= UE4_NON_OUTER_PACKAGE_IMPORT:
             package_name = archive.read_name(name_map)
 
@@ -198,7 +197,7 @@ def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
     return import_map
 
 
-def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: List[str]) -> List[ObjectExport]:
+def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: list[str]) -> list[ObjectExport]:
     """Read export table."""
     # CR-05: validate export_count range
     if summary.export_count < 0:
@@ -211,7 +210,7 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
     # UE4/UE5 version used for version gating
     file_version = summary.file_version_ue4
 
-    export_map: List[ObjectExport] = []
+    export_map: list[ObjectExport] = []
 
     for export_idx in range(summary.export_count):
         object_name = ""
@@ -389,8 +388,8 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: Li
 
 
 def get_asset_class(
-    export: ObjectExport, import_map: List[ObjectImport], export_map: List[ObjectExport]
-) -> Optional[str]:
+    export: ObjectExport, import_map: list[ObjectImport], export_map: list[ObjectExport]
+) -> str | None:
     """Identify asset type from export entry."""
     if export.class_index.is_import:
         import_idx = export.class_index.to_import_index()
@@ -404,8 +403,8 @@ def get_asset_class(
 
 
 def resolve_class_name(
-    class_index: PackageIndex, import_map: List[ObjectImport], export_map: List[ObjectExport]
-) -> Optional[str]:
+    class_index: PackageIndex, import_map: list[ObjectImport], export_map: list[ObjectExport]
+) -> str | None:
     """Resolve class name from PackageIndex."""
     if class_index.is_import:
         import_idx = class_index.to_import_index()
@@ -419,8 +418,8 @@ def resolve_class_name(
 
 
 def resolve_package_index_to_reference(
-    pkg_idx: PackageIndex, import_map: List[ObjectImport], export_map: List[ObjectExport], name_map: List[str]
-) -> Optional[Dict[str, Any]]:
+    pkg_idx: PackageIndex, import_map: list[ObjectImport], export_map: list[ObjectExport], name_map: list[str]
+) -> dict[str, Any] | None:
     """Resolve PackageIndex to a reference dict with object metadata from the raw maps.
 
     Args:

@@ -14,8 +14,7 @@ from __future__ import annotations
 import inspect
 import logging
 import struct
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
-
+from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport
@@ -70,8 +69,8 @@ class AssetTypeHandler(ClassHandler):
 
     def __init__(
         self,
-        class_names: List[str],
-        parse_func: Callable[..., Dict[str, Any]],
+        class_names: list[str],
+        parse_func: Callable[..., dict[str, Any]],
         handler_name: str,
     ) -> None:
         self._class_names = set(class_names)
@@ -92,7 +91,7 @@ class AssetTypeHandler(ClassHandler):
         self,
         export: "ObjectExport",
         archive: "FArchive",
-        context: Optional[Any] = None,
+        context: Any | None = None,
     ) -> HandlerResult:
         try:
             name_map = context if isinstance(context, list) else []
@@ -134,7 +133,7 @@ class PropertyMetadataHandler(ClassHandler):
         self,
         export: "ObjectExport",
         archive: "FArchive",
-        context: Optional[Any] = None,
+        context: Any | None = None,
     ) -> HandlerResult:
         tail_offset = archive.tell()
         serial_end = export.serial_offset + export.serial_size
@@ -235,7 +234,7 @@ def register_asset_type_handlers() -> None:
     """Register asset type parsers to ClassHandlerRegistry."""
     registry = get_class_registry()
 
-    handlers: List[ClassHandler] = [
+    handlers: list[ClassHandler] = [
         PropertyMetadataHandler("CubeBuilder"),
         PropertyMetadataHandler("StaticMesh"),
         PropertyMetadataHandler("SkeletalMesh"),

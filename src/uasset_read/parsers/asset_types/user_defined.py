@@ -24,14 +24,13 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import Any, Dict, List, Optional
-
+from typing import Any
 from ...constants import format_guid_bytes
 
 logger = logging.getLogger(__name__)
 
 
-def extract_user_defined_enum(export: Any, name_map: List[str]) -> Optional[Dict[str, Any]]:
+def extract_user_defined_enum(export: Any, name_map: list[str]) -> dict[str, Any] | None:
     """Extract semantic data from a UserDefinedEnum export.
 
     Args:
@@ -44,9 +43,9 @@ def extract_user_defined_enum(export: Any, name_map: List[str]) -> Optional[Dict
     """
     properties = getattr(export, "properties", None) or []
 
-    enum_entries: List[Dict[str, Any]] = []
+    enum_entries: list[dict[str, Any]] = []
     cpp_type = ""
-    display_names_map: Dict[int, str] = {}  # name_index -> display_name
+    display_names_map: dict[int, str] = {}  # name_index -> display_name
 
     for prop in properties:
         prop_name = getattr(prop, "name", "")
@@ -122,7 +121,7 @@ def extract_user_defined_enum(export: Any, name_map: List[str]) -> Optional[Dict
     }
 
 
-def extract_user_defined_struct(export: Any, name_map: List[str]) -> Optional[Dict[str, Any]]:
+def extract_user_defined_struct(export: Any, name_map: list[str]) -> dict[str, Any] | None:
     """Extract semantic data from a UserDefinedStruct export.
 
     Args:
@@ -137,7 +136,7 @@ def extract_user_defined_struct(export: Any, name_map: List[str]) -> Optional[Di
     if not properties:
         return None
 
-    struct_fields: List[Dict[str, Any]] = []
+    struct_fields: list[dict[str, Any]] = []
     struct_flags = 0
     guid = ""
 
@@ -188,7 +187,7 @@ def extract_user_defined_struct(export: Any, name_map: List[str]) -> Optional[Di
         elif (
             prop_name and prop_type and prop_name not in ("None", "ClassDefaultObject", "ClassCDO", "ClassGeneratedBy")
         ):
-            field_info: Dict[str, Any] = {
+            field_info: dict[str, Any] = {
                 "name": prop_name,
                 "type": prop_type,
             }
@@ -243,7 +242,7 @@ def extract_user_defined_struct(export: Any, name_map: List[str]) -> Optional[Di
     }
 
 
-def parse_user_defined(archive: Any, name_map: list[str], export: Any = None) -> Dict[str, Any]:
+def parse_user_defined(archive: Any, name_map: list[str], export: Any = None) -> dict[str, Any]:
     """Parse UserDefinedEnum or UserDefinedStruct export.
 
     This is the entry point for the asset type handler registration.
