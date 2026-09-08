@@ -26,7 +26,6 @@ class FEdGraphPinType:
     pin_subcategory: str = ""
     pin_subcategory_object: int | None = None  # FPackageIndex (int32)
     pin_subcategory_object_name: str | None = None
-    pin_subcategory_object_ref: Any | None = None
     container_type: int = 0
     is_map_key: bool = False
     is_map_value: bool = False
@@ -71,11 +70,6 @@ class UEdGraphPin:
     sub_pins: list[dict] = field(default_factory=list)
     parent_pin: dict | None = None
     ref_pass_through: dict | None = None
-    # PIN-04+: Link references — resolved object references
-    linked_to_objects: list[Any | None] = field(default_factory=list)
-    sub_pins_objects: list[Any | None] = field(default_factory=list)
-    parent_pin_object: Any | None = None
-    ref_pass_through_object: Any | None = None
     # PIN-05: Display attributes
     hidden: bool = False
     not_connectable: bool = False

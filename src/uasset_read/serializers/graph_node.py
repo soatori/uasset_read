@@ -559,7 +559,10 @@ def _read_member_reference_from_tags(
 
         inner_value = read_tag_value_bounded(archive, inner, _read_inner)
         if inner.name == "MemberParent":
-            mp_idx = int(inner_value) if inner_value else 0
+            try:
+                mp_idx = int(inner_value) if inner_value else 0
+            except (ValueError, TypeError):
+                mp_idx = 0
         elif inner.name == "MemberName":
             m_name = str(inner_value) if inner_value else ""
         elif inner.name == "MemberGuid":
@@ -578,16 +581,6 @@ def _read_member_reference_from_tags(
 # ============================================================================
 # node PropertyTag dispatch handlers
 # ============================================================================
-
-
-def _handle_node_pos_x(archive, tag, name_map, import_map, export_map, raw_properties):
-    """Handle NodePosX tag."""
-    return {"node_pos_x": _read_tag_i32(archive, tag)}
-
-
-def _handle_node_pos_y(archive, tag, name_map, import_map, export_map, raw_properties):
-    """Handle NodePosY tag."""
-    return {"node_pos_y": _read_tag_i32(archive, tag)}
 
 
 def _handle_node_guid(archive, tag, name_map, import_map, export_map, raw_properties):
@@ -651,19 +644,6 @@ def _handle_comment_color(archive, tag, name_map, import_map, export_map, raw_pr
     return {}
 
 
-def _handle_i32_to_raw(archive, tag, name_map, import_map, export_map, raw_properties):
-    """Handle I32 type tags (NodeWidth, NodeHeight, FontSize, CommentDepth, ExtraFlags)."""
-    if tag.size > 0:
-        raw_properties[tag.name] = _read_tag_i32(archive, tag)
-    return {}
-
-
-def _handle_bool_to_raw(archive, tag, name_map, import_map, export_map, raw_properties):
-    """Handle boolean type tags (bCommentBubbleVisible_InDetailsPanel, bIsEditable)."""
-    raw_properties[tag.name] = _read_tag_bool(archive, tag)
-    return {}
-
-
 def _read_byte_enum_tag_name(archive, tag, name_map):
     """FByteProperty with UENUM underlying serializes the enum-entry FName (PropertyByte.cpp
     SerializeItem); consume the full value span so the stream stays aligned regardless."""
@@ -684,42 +664,6 @@ def _handle_advanced_pin_display(archive, tag, name_map, import_map, export_map,
     raw_properties["AdvancedPinDisplayFormatted"] = enum_name or f"Unknown({enum_name!r})"
     if ordinal is not None:
         raw_properties["AdvancedPinDisplayRaw"] = ordinal
-    return {}
-
-
-def _handle_override_function(archive, tag, name_map, import_map, export_map, raw_properties):
-    """Handle bOverrideFunction tag (writes to both updates and raw_properties)."""
-    val = _read_tag_bool(archive, tag)
-    raw_properties[tag.name] = val
-    return {"b_override_function": val}
-
-
-def _handle_internal_event(archive, tag, name_map, import_map, export_map, raw_properties):
-    """Handle bInternalEvent tag (writes to both updates and raw_properties)."""
-    val = _read_tag_bool(archive, tag)
-    raw_properties[tag.name] = val
-    return {"b_internal_event": val}
-
-
-def _handle_custom_function_name(archive, tag, name_map, import_map, export_map, raw_properties):
-    """Handle CustomFunctionName tag (FName, writes to both updates and raw_properties)."""
-    val = _read_tag_fname(archive, tag, name_map)
-    raw_properties[tag.name] = val
-    return {"custom_function_name": val}
-
-
-def _handle_function_flags(archive, tag, name_map, import_map, export_map, raw_properties):
-    """Handle FunctionFlags tag (writes to both updates and raw_properties)."""
-    if tag.size > 0:
-        val = _read_tag_i32(archive, tag)
-        raw_properties[tag.name] = val
-        return {"function_flags": val}
-    return {}
-
-
-def _handle_fname_to_raw(archive, tag, name_map, import_map, export_map, raw_properties):
-    """Handle FName type tag (CustomGeneratedFunctionName)."""
-    raw_properties[tag.name] = _read_tag_fname(archive, tag, name_map)
     return {}
 
 
@@ -749,28 +693,33 @@ def _handle_node_details(archive, tag, name_map, import_map, export_map, raw_pro
     return {}
 
 
+# Tag name -> (reader_kind, out_key | None, skip_when_empty)
+# reader_kind: "i32", "bool", "fname"
+_NODE_SIMPLE_TAGS: dict[str, tuple[str, str | None, bool]] = {
+    "NodePosX": ("i32", "node_pos_x", False),
+    "NodePosY": ("i32", "node_pos_y", False),
+    "NodeWidth": ("i32", None, True),
+    "NodeHeight": ("i32", None, True),
+    "FontSize": ("i32", None, True),
+    "CommentDepth": ("i32", None, True),
+    "ExtraFlags": ("i32", None, True),
+    "bCommentBubbleVisible_InDetailsPanel": ("bool", None, False),
+    "bDefaultsToPureFunc": ("bool", None, False),
+    "bIsEditable": ("bool", None, False),
+    "bOverrideFunction": ("bool", "b_override_function", False),
+    "bInternalEvent": ("bool", "b_internal_event", False),
+    "CustomFunctionName": ("fname", "custom_function_name", False),
+    "CustomGeneratedFunctionName": ("fname", None, False),
+    "FunctionFlags": ("i32", "function_flags", True),
+}
+
 # Tag name -> handler function dispatch dictionary
 _NODE_TAG_HANDLERS: dict[str, Any] = {
-    "NodePosX": _handle_node_pos_x,
-    "NodePosY": _handle_node_pos_y,
     "NodeGuid": _handle_node_guid,
     "NodeComment": _handle_node_comment,
     "InputAction": _handle_input_action,
     "CommentColor": _handle_comment_color,
-    "NodeWidth": _handle_i32_to_raw,
-    "NodeHeight": _handle_i32_to_raw,
-    "FontSize": _handle_i32_to_raw,
-    "bCommentBubbleVisible_InDetailsPanel": _handle_bool_to_raw,
-    "CommentDepth": _handle_i32_to_raw,
-    "ExtraFlags": _handle_i32_to_raw,
     "AdvancedPinDisplay": _handle_advanced_pin_display,
-    "bDefaultsToPureFunc": _handle_bool_to_raw,
-    "bOverrideFunction": _handle_override_function,
-    "bInternalEvent": _handle_internal_event,
-    "bIsEditable": _handle_bool_to_raw,
-    "CustomFunctionName": _handle_custom_function_name,
-    "FunctionFlags": _handle_function_flags,
-    "CustomGeneratedFunctionName": _handle_fname_to_raw,
     "EditorStateMachineGraph": _handle_package_index,
     "BoundGraph": _handle_package_index,
     "MoveMode": _handle_move_mode,
@@ -787,6 +736,20 @@ def _read_node_property_tag(
     raw_properties: dict[str, Any],
 ) -> dict:
     """Read a single node PropertyTag and update local variables. Return named properties to update."""
+    # Fast path: table-driven dispatch for trivial tags
+    if tag.name in _NODE_SIMPLE_TAGS:
+        kind, out_key, skip_when_empty = _NODE_SIMPLE_TAGS[tag.name]
+        if skip_when_empty and tag.size <= 0:
+            return {}
+        if kind == "i32":
+            val = _read_tag_i32(archive, tag)
+        elif kind == "bool":
+            val = _read_tag_bool(archive, tag)
+        else:
+            val = _read_tag_fname(archive, tag, name_map)
+        raw_properties[tag.name] = val
+        return {} if out_key is None else {out_key: val}
+
     handler = _NODE_TAG_HANDLERS.get(tag.name)
     if handler:
         return handler(archive, tag, name_map, import_map, export_map, raw_properties)
