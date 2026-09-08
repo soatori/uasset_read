@@ -1096,6 +1096,7 @@ def parse_struct_property(
     _MAX_TAGGED_FALLBACK_BYTES = 4096
     tagged_byte_limit = struct_start + _MAX_TAGGED_FALLBACK_BYTES if struct_end is None else None
 
+    _StructError = struct.error
     try:
         while property_count < MAX_PROPERTY_COUNT:
             property_count += 1
@@ -1127,7 +1128,7 @@ def parse_struct_property(
                 ),
             )
             fields[inner_tag.name] = field_value
-    except (struct.error, ParseError, OSError, ValueError):
+    except (_StructError, ParseError, OSError, ValueError):
         if declared_struct_type in _TAGGED_FALLBACK_STRUCTS:
             raise
         if struct_end is not None:
