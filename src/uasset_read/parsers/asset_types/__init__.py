@@ -150,27 +150,67 @@ class PropertyMetadataHandler(ClassHandler):
         )
 
 
-# Class names -> dedicated parser, in registration order (the registry resolves the
-# first match, so this order is the dispatch priority). A `None` parser means the
-# generic opaque partial-metadata stub: 43 of these 55 classes have no custom
-# Serialize layout implemented yet and are reported as `partial_metadata`.
-_ASSET_TYPE_HANDLERS: tuple[tuple[tuple[str, ...], Callable[..., Any] | type[ClassHandler] | None, str], ...] = (
+# Opaque class names that use parse_opaque_stub — no custom Serialize layout yet.
+_OPAQUE_STUB_CLASS_NAMES: frozenset[str] = frozenset({
+    "SoundAttenuation",
+    "AnimationDataModel",
+    "StringTable",
+    "PoseAsset",
+    "AnimBoneCompressionSettings",
+    "AnimCurveCompressionCodec",
+    "SubsurfaceProfile",
+    "FoliageType",
+    "SkeletalMeshLODSettings",
+    "CurveFloat",
+    "AnimComposite",
+    "AnimBlendSpace",
+    "AnimBlendSpace1D",
+    "AimOffsetBlendSpace",
+    "AimOffsetBlendSpace1D",
+    "SoundConcurrency",
+    "DialogueWave",
+    "DialogueVoice",
+    "CurveLinearColor",
+    "CurveVector",
+    "TextureRenderTarget2D",
+    "TextureRenderTargetCube",
+    "PhysicsAsset",
+    "PhysicalMaterial",
+    "AnimLayerInterface",
+    "SoundMix",
+    "SoundClass",
+    "SoundSubmix",
+    "BehaviorTree",
+    "BlackboardData",
+    "DataAsset",
+    "PrimaryDataAsset",
+    "Landscape",
+    "LandscapeGrassType",
+    "LandscapeLayerInfoObject",
+    "World",
+    "Level",
+    "ParticleSystem",
+    "WidgetBlueprintGeneratedClass",
+    "WidgetBlueprint",
+    "Texture2DArray",
+    "VolumeTexture",
+    "MediaPlayer",
+    "MediaTexture",
+    "MediaSource",
+    "ClothAsset",
+    "GroomAsset",
+    "SparseVolumeTexture",
+})
+
+# Dedicated parsers only (opaque stubs are registered from _OPAQUE_STUB_CLASS_NAMES).
+_ASSET_TYPE_HANDLERS: tuple[tuple[tuple[str, ...], Callable[..., Any] | type[ClassHandler], str], ...] = (
     (("AnimSequence",), AnimSequenceHandler, "AnimSequenceHandler"),
     (("AnimBlueprintGeneratedClass",), AnimBlueprintHandler, "AnimBlueprintHandler"),
     (("AnimMontage",), AnimMontageHandler, "AnimMontageHandler"),
     (("SoundWave",), parse_sound_wave, "SoundWaveHandler"),
-    (("SoundAttenuation",), None, "SoundAttenuationHandler"),
-    (("AnimationDataModel",), None, "AnimDataModelHandler"),
     (("DataTable",), parse_data_table, "DataTableHandler"),
     (("CurveTable",), parse_curve_table, "CurveTableHandler"),
     (("Skeleton",), parse_skeleton, "SkeletonHandler"),
-    (("StringTable",), None, "StringTableHandler"),
-    (("PoseAsset",), None, "PoseAssetHandler"),
-    (("AnimBoneCompressionSettings",), None, "AnimBoneCompressionHandler"),
-    (("AnimCurveCompressionCodec",), None, "AnimCurveCompressionHandler"),
-    (("SubsurfaceProfile",), None, "SubsurfaceProfileHandler"),
-    (("FoliageType",), None, "FoliageTypeHandler"),
-    (("SkeletalMeshLODSettings",), None, "SkeletalMeshLODSettingsHandler"),
     (("MovieScene",), MovieSceneHandler, "MovieSceneHandler"),
     (
         ("MovieSceneControlRigParameterTrack",),
@@ -182,44 +222,6 @@ _ASSET_TYPE_HANDLERS: tuple[tuple[tuple[str, ...], Callable[..., Any] | type[Cla
         MovieSceneControlRigParameterSectionHandler,
         "MovieSceneControlRigParameterSectionHandler",
     ),
-    (("CurveFloat",), None, "CurveFloatHandler"),
-    (("AnimComposite",), None, "AnimCompositeHandler"),
-    (
-        ("AnimBlendSpace", "AnimBlendSpace1D", "AimOffsetBlendSpace", "AimOffsetBlendSpace1D"),
-        None,
-        "AnimBlendSpaceHandler",
-    ),
-    (("SoundConcurrency",), None, "SoundConcurrencyHandler"),
-    (("DialogueWave",), None, "DialogueWaveHandler"),
-    (("DialogueVoice",), None, "DialogueVoiceHandler"),
-    (("CurveLinearColor",), None, "CurveLinearColorHandler"),
-    (("CurveVector",), None, "CurveVectorHandler"),
-    (("TextureRenderTarget2D", "TextureRenderTargetCube"), None, "TextureRenderTargetHandler"),
-    (("PhysicsAsset",), None, "PhysicsAssetHandler"),
-    (("PhysicalMaterial",), None, "PhysicalMaterialHandler"),
-    (("AnimLayerInterface",), None, "AnimLayerInterfaceHandler"),
-    (("SoundMix",), None, "SoundMixHandler"),
-    (("SoundClass",), None, "SoundClassHandler"),
-    (("SoundSubmix",), None, "SoundSubmixHandler"),
-    (("BehaviorTree",), None, "BehaviorTreeHandler"),
-    (("BlackboardData",), None, "BlackboardDataHandler"),
-    (("DataAsset",), None, "DataAssetHandler"),
-    (("PrimaryDataAsset",), None, "PrimaryDataAssetHandler"),
-    (("Landscape",), None, "LandscapeHandler"),
-    (("LandscapeGrassType",), None, "LandscapeGrassTypeHandler"),
-    (("LandscapeLayerInfoObject",), None, "LandscapeLayerInfoHandler"),
-    (("World",), None, "WorldHandler"),
-    (("Level",), None, "LevelHandler"),
-    (("ParticleSystem",), None, "ParticleSystemHandler"),
-    (("WidgetBlueprintGeneratedClass", "WidgetBlueprint"), None, "WidgetBlueprintHandler"),
-    (("Texture2DArray",), None, "Texture2DArrayHandler"),
-    (("VolumeTexture",), None, "VolumeTextureHandler"),
-    (("MediaPlayer",), None, "MediaPlayerHandler"),
-    (("MediaTexture",), None, "MediaTextureHandler"),
-    (("MediaSource",), None, "MediaSourceHandler"),
-    (("ClothAsset",), None, "ClothAssetHandler"),
-    (("GroomAsset",), None, "GroomAssetHandler"),
-    (("SparseVolumeTexture",), None, "SparseVolumeTextureHandler"),
     (("LevelSequence",), parse_level_sequence, "LevelSequenceHandler"),
     (
         ("UserDefinedEnum", "UserDefinedStruct"),
@@ -254,16 +256,17 @@ def register_asset_type_handlers() -> None:
         NiagaraNodeHandler(),
     ]
 
+    for class_name in sorted(_OPAQUE_STUB_CLASS_NAMES):
+        handlers.append(
+            AssetTypeHandler(
+                class_names=[class_name],
+                parse_func=parse_opaque_stub,
+                handler_name=f"{class_name}Handler",
+            ),
+        )
+
     for class_names, parse_func, handler_name in _ASSET_TYPE_HANDLERS:
-        if parse_func is None:
-            handlers.append(
-                AssetTypeHandler(
-                    class_names=list(class_names),
-                    parse_func=parse_opaque_stub,
-                    handler_name=handler_name,
-                ),
-            )
-        elif isinstance(parse_func, type) and issubclass(parse_func, ClassHandler):
+        if isinstance(parse_func, type) and issubclass(parse_func, ClassHandler):
             handlers.append(parse_func())
         else:
             handlers.append(
