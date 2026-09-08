@@ -172,17 +172,7 @@ class KismetTranslator:
             from uasset_read.kismet.jump_analyzer import JumpAnalyzer
 
             self._jump_analyzer = JumpAnalyzer(expressions)
-            self._structured_indices = self._build_structured_indices(expressions)
-
-    def _build_structured_indices(self, expressions: list["KismetExpression"]) -> set[int]:
-        """Build index set of all expressions in structured control flow blocks.
-
-        Delegates to JumpAnalyzer.get_structured_indices(), covering while/for/if/switch patterns.
-        Expressions at these indices should be skipped or specially handled in linear translation.
-        """
-        if self._jump_analyzer is None:
-            return set()
-        return self._jump_analyzer.get_structured_indices()
+            self._structured_indices = self._jump_analyzer.get_structured_indices()
 
     def line_cpp(self, expr: KismetExpression, index: int | None = None) -> str:
         """Translate a single KismetExpression to C++ pseudocode.

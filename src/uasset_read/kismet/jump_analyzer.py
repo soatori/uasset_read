@@ -18,35 +18,12 @@ if TYPE_CHECKING:
     from uasset_read.kismet.expressions.base import KismetExpression
 
 
-# Assignment expression types, used to identify for-loop increment statements
-_ASSIGNMENT_TYPES: tuple[type, ...] = ()
-
-
-def _get_assignment_types() -> tuple[type, ...]:
-    """Lazy-load assignment type tuple to avoid circular imports."""
-    global _ASSIGNMENT_TYPES
-    if not _ASSIGNMENT_TYPES:
-        from uasset_read.kismet.expressions.assignments import (
-            EX_Let,
-            EX_LetBool,
-            EX_LetObj,
-            EX_LetWeakObjPtr,
-            EX_LetValueOnPersistentFrame,
-        )
-
-        _ASSIGNMENT_TYPES = (
-            EX_Let,
-            EX_LetBool,
-            EX_LetObj,
-            EX_LetWeakObjPtr,
-            EX_LetValueOnPersistentFrame,
-        )
-    return _ASSIGNMENT_TYPES
-
-
 def _is_assignment(expr: object) -> bool:
     """Check whether the expression is an assignment type."""
-    return isinstance(expr, _get_assignment_types())
+    from uasset_read.kismet.expressions.assignments import (
+        EX_Let, EX_LetBool, EX_LetObj, EX_LetWeakObjPtr, EX_LetValueOnPersistentFrame,
+    )
+    return isinstance(expr, (EX_Let, EX_LetBool, EX_LetObj, EX_LetWeakObjPtr, EX_LetValueOnPersistentFrame))
 
 
 class JumpAnalyzer:

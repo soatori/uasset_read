@@ -53,41 +53,8 @@ class FKismetPropertyPointer:
     def from_archive(cls, archive: FArchive, name_map: list[str]) -> FKismetPropertyPointer:
         """Deserialize FKismetPropertyPointer from FArchive."""
         # Persistent Kismet Script serialization routes FProperty* through
-        # FPropertyProxyArchive, which writes an FFieldPath directly. The
-        # archive transfer owns both the physical and logical cursor contract.
-        if hasattr(archive, "xfer_field_pointer"):
-            return cls(bNew=True, path=archive.xfer_field_pointer())  # type: ignore[reportAttributeAccessIssue]
-
-        # Preserve the legacy generic-archive contract for callers outside the
-        # persistent Script loader.
-        b_new = archive.read_bool()
-        if b_new:
-            count = archive.read_u32()
-            segments: list[FFieldPathSegment] = []
-            for _ in range(count):
-                name_index = archive.read_u32()
-                number = archive.read_u32()
-                if 0 <= name_index < len(name_map):
-                    base_name = name_map[name_index]
-                else:
-                    base_name = f"Unknown_{name_index}"
-                segments.append(
-                    FFieldPathSegment(
-                        name_index=name_index,
-                        number=number,
-                        base_name=base_name,
-                    )
-                )
-            return cls(bNew=True, path=FFieldPath(path=segments))
-
-        old_index = PackageIndex(archive.read_i32())
-        return cls(
-            bNew=False,
-            path=FFieldPath(
-                path=[],
-                resolved_owner=old_index,
-            ),
-        )
+        # FPropertyProxyArchive, which writes an FFieldPath directly.
+        return cls(bNew=True, path=archive.xfer_field_pointer())  # type: ignore[reportAttributeAccessIssue]
 
     def to_dict(self) -> dict:
         """JSON-serializable dict for this property pointer."""
