@@ -36,11 +36,6 @@ from uasset_read.constants import (
 from uasset_read.parsers.utils import make_enum_value, extract_inner_from_tag, read_validated_count_tolerant
 
 
-def _simple_read(archive, method_name):
-    """Dispatch a single archive read method by name."""
-    return getattr(archive, method_name)()
-
-
 # Expected byte sizes for fixed-layout structs (used for fast-path validation)
 _EXPECTED_STRUCT_SIZES: dict[str, int | None] = {
     "Vector": 12,
@@ -448,17 +443,17 @@ def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: Optional[L
 
 def parse_uint16_property(tag: PropertyTag, archive: FArchive) -> int:
     """Parse UInt16Property."""
-    return _simple_read(archive, "read_u16")
+    return archive.read_u16()
 
 
 def parse_uint32_property(tag: PropertyTag, archive: FArchive) -> int:
     """Parse UInt32Property."""
-    return _simple_read(archive, "read_u32")
+    return archive.read_u32()
 
 
 def parse_uint64_property(tag: PropertyTag, archive: FArchive) -> int:
     """Parse UInt64Property."""
-    return _simple_read(archive, "read_u64")
+    return archive.read_u64()
 
 
 def parse_float_property(tag: PropertyTag, archive: FArchive) -> float:
@@ -485,7 +480,7 @@ def parse_object_property(tag: PropertyTag, archive: FArchive) -> int:
 
     Canonical reader for all single-int32-reference property types.
     """
-    return _simple_read(archive, "read_i32")
+    return archive.read_i32()
 
 
 def parse_soft_object_property(
@@ -1436,7 +1431,7 @@ def parse_verse_value_property(tag: PropertyTag, archive: FArchive) -> dict:
 
 def parse_double_property(tag: PropertyTag, archive: FArchive) -> float:
     """Parse DoubleProperty (standalone parser)."""
-    return _simple_read(archive, "read_f64")
+    return archive.read_f64()
 
 
 def parse_guid_property(tag: PropertyTag, archive: FArchive) -> str:
