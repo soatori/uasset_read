@@ -16,7 +16,7 @@ Format reference:
 
 import logging
 import struct
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable
 
 from uasset_read.exceptions import ParseError
 from uasset_read.parsers.asset_types.property_extractor import build_properties_dict
@@ -61,25 +61,25 @@ _SOUND_GROUP_NAMES = {
 }
 
 
-def _as_int(value: Any) -> Optional[int]:
+def _as_int(value: Any) -> int | None:
     return value if isinstance(value, int) else None
 
 
-def _as_float(value: Any) -> Optional[float]:
+def _as_float(value: Any) -> float | None:
     try:
         return float(value) if isinstance(value, (int, float)) else None
     except (TypeError, ValueError):
         return None
 
 
-def _as_flag(value: Any) -> Optional[bool]:
+def _as_flag(value: Any) -> bool | None:
     """Coerce to bool; only True is projected (caller skips None)."""
     if value is None:
         return None
     return True if value else None
 
 
-def _as_enum(value: Any, enum_map: Dict[int, str]) -> Optional[str]:
+def _as_enum(value: Any, enum_map: dict[int, str]) -> str | None:
     if value is None:
         return None
     # EnumValue wrapper
@@ -115,9 +115,9 @@ _SOUND_FIELDS: tuple[tuple[str, str, Callable[[Any], Any]], ...] = (
 
 def parse_sound_wave(
     archive: Any,
-    name_map: List[str],
-    export: Optional[Any] = None,
-) -> Dict[str, Any]:
+    name_map: list[str],
+    export: Any | None = None,
+) -> dict[str, Any]:
     """Parse USoundWave asset custom serialization data.
 
     Args:
@@ -128,7 +128,7 @@ def parse_sound_wave(
     Returns:
         Parsed result dictionary with sound semantic metadata
     """
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "parse_status": "success",
         "format": "uasset_read.sound_flags_only",
     }
@@ -147,7 +147,7 @@ def parse_sound_wave(
     has_owner_loading_behavior = bool(flags & _HAS_OWNER_LOADING_BEHAVIOR_FLAG)
     loading_behavior_value = (flags >> _LOADING_BEHAVIOR_SHIFT) & _LOADING_BEHAVIOR_MASK
 
-    handler_data: Dict[str, Any] = {
+    handler_data: dict[str, Any] = {
         "flags": flags,
         "is_cooked": is_cooked,
         "has_owner_loading_behavior": has_owner_loading_behavior,
@@ -161,7 +161,7 @@ def parse_sound_wave(
     result.update(handler_data)
 
     # === Build sound semantic metadata (extracted from UPROPERTY properties) ===
-    properties: List[Any] = []
+    properties: list[Any] = []
     if export is not None:
         properties = getattr(export, "properties", [])
 
@@ -181,9 +181,9 @@ def parse_sound_wave(
 
 
 def build_sound_metadata(
-    handler_data: Dict[str, Any],
-    properties: List[Any],
-) -> Dict[str, Any]:
+    handler_data: dict[str, Any],
+    properties: list[Any],
+) -> dict[str, Any]:
     """Build sound semantic metadata from handler data and UPROPERTY properties.
 
     This is the core of sound_semantic format: ensures output always contains
@@ -196,7 +196,7 @@ def build_sound_metadata(
     Returns:
         Sound semantic metadata dictionary (guaranteed non-empty)
     """
-    sound: Dict[str, Any] = {}
+    sound: dict[str, Any] = {}
 
     # --- Extract semantic fields from UPROPERTY tagged properties ---
     values = build_properties_dict(list(properties))

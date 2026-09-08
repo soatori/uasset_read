@@ -11,6 +11,9 @@ that use native serialization instead of property tag serialization.
 import logging
 import struct
 from typing import TYPE_CHECKING, Any, Callable
+
+from uasset_read.parsers.parse_guard import safe_parse
+
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.models.properties import PropertyTag
@@ -37,28 +40,26 @@ def _parse_instanced_struct(
     if tag.size < 4:
         return None
 
-    start_pos = archive.tell()
     try:
-        # Read ScriptStruct reference
-        script_struct_index = archive.read_i32()
+        with safe_parse(archive):
+            # Read ScriptStruct reference
+            script_struct_index = archive.read_i32()
 
-        # Remaining data is struct content
-        remaining_size = tag.size - 4
-        if remaining_size > 0:
-            struct_data = archive.read(remaining_size)
-        else:
-            struct_data = b""
+            # Remaining data is struct content
+            remaining_size = tag.size - 4
+            if remaining_size > 0:
+                struct_data = archive.read(remaining_size)
+            else:
+                struct_data = b""
 
-        return {
-            "kind": "instanced_struct",
-            "type": tag.type,
-            "size": tag.size,
-            "script_struct_index": script_struct_index,
-            "struct_data": struct_data,
-        }
+            return {
+                "kind": "instanced_struct",
+                "type": tag.type,
+                "size": tag.size,
+                "script_struct_index": script_struct_index,
+                "struct_data": struct_data,
+            }
     except (struct.error, OSError, ValueError) as e:
-        # Parse failed, fall back to raw bytes
-        archive.seek(start_pos)
         logger.debug("FInstancedStruct parse failed: %s", e)
         return None
 
@@ -91,49 +92,49 @@ def _parse_material_input(
 
     start_pos = archive.tell()
     try:
-        expression_index = archive.read_i32()
-        output_index = archive.read_i32()
-        input_name = archive.read_name(name_map)
-        mask = archive.read_i32()
-        mask_r = archive.read_i32()
-        mask_g = archive.read_i32()
-        mask_b = archive.read_i32()
-        mask_a = archive.read_i32()
+        with safe_parse(archive):
+            expression_index = archive.read_i32()
+            output_index = archive.read_i32()
+            input_name = archive.read_name(name_map)
+            mask = archive.read_i32()
+            mask_r = archive.read_i32()
+            mask_g = archive.read_i32()
+            mask_b = archive.read_i32()
+            mask_a = archive.read_i32()
 
-        result: dict[str, Any] = {
-            "kind": "material_input",
-            "type": tag.type,
-            "size": tag.size,
-            "expression_index": expression_index,
-            "output_index": output_index,
-            "input_name": input_name,
-            "mask": mask,
-            "mask_r": mask_r,
-            "mask_g": mask_g,
-            "mask_b": mask_b,
-            "mask_a": mask_a,
-        }
+            result: dict[str, Any] = {
+                "kind": "material_input",
+                "type": tag.type,
+                "size": tag.size,
+                "expression_index": expression_index,
+                "output_index": output_index,
+                "input_name": input_name,
+                "mask": mask,
+                "mask_r": mask_r,
+                "mask_g": mask_g,
+                "mask_b": mask_b,
+                "mask_a": mask_a,
+            }
 
-        # Subclass tail: UseConstant (uint8) + Constant (variant-dependent)
-        remaining = tag.size - (archive.tell() - start_pos)
-        if remaining >= 1:
-            use_constant = archive.read_u8() != 0
-            result["use_constant"] = use_constant
-            remaining -= 1
-            # Constant width depends on subclass
-            if remaining >= 4:
-                if tag.type == "FScalarMaterialInput":
-                    result["constant"] = archive.read_f32()
-                elif tag.type == "FVectorMaterialInput":
-                    result["constant"] = [archive.read_f32() for _ in range(3)]
-                elif tag.type == "FVector2MaterialInput":
-                    result["constant"] = [archive.read_f32() for _ in range(2)]
-                elif tag.type == "FColorMaterialInput":
-                    result["constant"] = _decode_color(archive.read(4), 4)
+            # Subclass tail: UseConstant (uint8) + Constant (variant-dependent)
+            remaining = tag.size - (archive.tell() - start_pos)
+            if remaining >= 1:
+                use_constant = archive.read_u8() != 0
+                result["use_constant"] = use_constant
+                remaining -= 1
+                # Constant width depends on subclass
+                if remaining >= 4:
+                    if tag.type == "FScalarMaterialInput":
+                        result["constant"] = archive.read_f32()
+                    elif tag.type == "FVectorMaterialInput":
+                        result["constant"] = [archive.read_f32() for _ in range(3)]
+                    elif tag.type == "FVector2MaterialInput":
+                        result["constant"] = [archive.read_f32() for _ in range(2)]
+                    elif tag.type == "FColorMaterialInput":
+                        result["constant"] = _decode_color(archive.read(4), 4)
 
-        return result
+            return result
     except (struct.error, OSError, ValueError) as e:
-        archive.seek(start_pos)
         logger.debug("MaterialInput parse failed: %s", e)
         return None
 
@@ -158,29 +159,28 @@ def _parse_expression_output(
     if tag.size < 28:  # 8 (FName) + 4 (Mask) + 4*4 (RGBA)
         return None
 
-    start_pos = archive.tell()
     try:
-        output_name = archive.read_name(name_map)
-        mask = archive.read_i32()
-        mask_r = archive.read_i32()
-        mask_g = archive.read_i32()
-        mask_b = archive.read_i32()
-        mask_a = archive.read_i32()
+        with safe_parse(archive):
+            output_name = archive.read_name(name_map)
+            mask = archive.read_i32()
+            mask_r = archive.read_i32()
+            mask_g = archive.read_i32()
+            mask_b = archive.read_i32()
+            mask_a = archive.read_i32()
 
-        return {
-            "kind": "struct_property",
-            "struct_type": "FExpressionOutput",
-            "fields": {
-                "output_name": output_name,
-                "mask": mask,
-                "mask_r": mask_r,
-                "mask_g": mask_g,
-                "mask_b": mask_b,
-                "mask_a": mask_a,
-            },
-        }
+            return {
+                "kind": "struct_property",
+                "struct_type": "FExpressionOutput",
+                "fields": {
+                    "output_name": output_name,
+                    "mask": mask,
+                    "mask_r": mask_r,
+                    "mask_g": mask_g,
+                    "mask_b": mask_b,
+                    "mask_a": mask_a,
+                },
+            }
     except (struct.error, OSError, ValueError) as e:
-        archive.seek(start_pos)
         logger.debug("ExpressionOutput parse failed: %s", e)
         return None
 
@@ -209,33 +209,32 @@ def _parse_expression_input(
     if tag.size < 36:
         return None
 
-    start_pos = archive.tell()
     try:
-        expression_index = archive.read_i32()
-        output_index = archive.read_i32()
-        input_name = archive.read_name(name_map)
-        mask = archive.read_i32()
-        mask_r = archive.read_i32()
-        mask_g = archive.read_i32()
-        mask_b = archive.read_i32()
-        mask_a = archive.read_i32()
+        with safe_parse(archive):
+            expression_index = archive.read_i32()
+            output_index = archive.read_i32()
+            input_name = archive.read_name(name_map)
+            mask = archive.read_i32()
+            mask_r = archive.read_i32()
+            mask_g = archive.read_i32()
+            mask_b = archive.read_i32()
+            mask_a = archive.read_i32()
 
-        return {
-            "kind": "struct_property",
-            "struct_type": "FExpressionInput",
-            "fields": {
-                "expression_index": expression_index,
-                "output_index": output_index,
-                "input_name": input_name,
-                "mask": mask,
-                "mask_r": mask_r,
-                "mask_g": mask_g,
-                "mask_b": mask_b,
-                "mask_a": mask_a,
-            },
-        }
+            return {
+                "kind": "struct_property",
+                "struct_type": "FExpressionInput",
+                "fields": {
+                    "expression_index": expression_index,
+                    "output_index": output_index,
+                    "input_name": input_name,
+                    "mask": mask,
+                    "mask_r": mask_r,
+                    "mask_g": mask_g,
+                    "mask_b": mask_b,
+                    "mask_a": mask_a,
+                },
+            }
     except (struct.error, OSError, ValueError) as e:
-        archive.seek(start_pos)
         logger.debug("ExpressionInput parse failed: %s", e)
         return None
 
@@ -518,11 +517,10 @@ def _parse_struct_binary(
     if size <= 0:
         return None
 
-    start_pos = archive.tell()
     try:
-        raw = archive.read(size)
+        with safe_parse(archive):
+            raw = archive.read(size)
     except (struct.error, OSError):
-        archive.seek(start_pos)
         return None
 
     if struct_type == "SoftObjectPath":
@@ -583,41 +581,41 @@ def _parse_niagara_variable(
 
     start_pos = archive.tell()
     try:
-        # Field 1: Name (raw FName, no PropertyTag prefix)
-        name = archive.read_name(name_map)
+        with safe_parse(archive):
+            # Field 1: Name (raw FName, no PropertyTag prefix)
+            name = archive.read_name(name_map)
 
-        # FNiagaraTypeDefinition fields
-        underlying_type = archive.read_name(name_map)
-        class_index = archive.read_i32()
-        flags = archive.read_i32()
+            # FNiagaraTypeDefinition fields
+            underlying_type = archive.read_name(name_map)
+            class_index = archive.read_i32()
+            flags = archive.read_i32()
 
-        # Any remaining bytes are the typed data blob
-        consumed = archive.tell() - start_pos
-        remaining = tag.size - consumed
-        data_blob = b""
-        if remaining > 0:
-            data_blob = archive.read(remaining)
+            # Any remaining bytes are the typed data blob
+            consumed = archive.tell() - start_pos
+            remaining = tag.size - consumed
+            data_blob = b""
+            if remaining > 0:
+                data_blob = archive.read(remaining)
 
-        result: dict[str, Any] = {
-            "kind": "niagara_variable",
-            "struct_type": "NiagaraVariable",
-            "size": tag.size,
-            "fields": {
-                "Name": name,
-                "TypeDefinition": {
-                    "UnderlyingType": underlying_type,
-                    "Class": class_index,
-                    "Flags": flags,
+            result: dict[str, Any] = {
+                "kind": "niagara_variable",
+                "struct_type": "NiagaraVariable",
+                "size": tag.size,
+                "fields": {
+                    "Name": name,
+                    "TypeDefinition": {
+                        "UnderlyingType": underlying_type,
+                        "Class": class_index,
+                        "Flags": flags,
+                    },
                 },
-            },
-        }
-        if data_blob:
-            result["fields"]["DataBlob"] = data_blob.hex()
+            }
+            if data_blob:
+                result["fields"]["DataBlob"] = data_blob.hex()
 
-        return result
+            return result
 
     except (struct.error, OSError, ValueError):
-        archive.seek(start_pos)
         return None
 
 

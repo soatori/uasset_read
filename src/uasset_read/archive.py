@@ -11,7 +11,7 @@ import os
 import struct
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, BinaryIO, Any, Protocol, runtime_checkable
+from typing import BinaryIO, Any, Literal, Protocol, runtime_checkable
 
 from uasset_read.exceptions import ParseError, ExportBoundsExceeded
 from uasset_read.constants import (
@@ -19,7 +19,7 @@ from uasset_read.constants import (
     MAX_FSTRING_LENGTH,
     get_max_reasonable,
 )
-from uasset_read.models.diagnostics import StructuredDiagnostic
+from uasset_read.models.diagnostics import Diagnostic
 
 logger = logging.getLogger(__name__)
 
@@ -60,16 +60,16 @@ class FArchive:
         call this instead of super().__init__() to avoid the file-open step.
         """
         self._path = path
-        self._file: Optional[BinaryIO] = None
+        self._file: BinaryIO | None = None
         self._byte_swapping: bool = False
         self._file_size: int = 0
         self._tolerant: bool = tolerant
-        self._mmap: Optional[mmap.mmap] = None
+        self._mmap: mmap.mmap | None = None
         self._use_mmap: bool = False
         self._logger = logging.getLogger(__name__)
-        self._name_map: Optional[list] = None  # optional name table cache
+        self._name_map: list | None = None  # optional name table cache
         self._name_warnings_seen: set[int] = set()  # read_name out-of-range index dedup (#411, #481)
-        self._structured_diagnostics: list[StructuredDiagnostic] = []  # stable-code diagnostics
+        self._structured_diagnostics: list[Diagnostic] = []  # stable-code diagnostics
         self._current_object_id: str = ""  # table slot a read is attributed to (e.g. "export:3")
         self._read_range: tuple[int, int] | None = None  # optional export-scoped (start, end) read range
 
@@ -262,25 +262,31 @@ class FArchive:
         ue_version: str = "",
         fallback: str = "",
         message: str = "",
-        severity: str = "warning",
+        severity: Literal["info", "warning", "error", "critical"] = "warning",
     ) -> None:
         """Record a structured diagnostic with stable code."""
+        # Build enriched message from legacy fields
+        enriched = message
+        if raw_value is not None:
+            enriched += f" raw_value={raw_value}"
+        if ue_version:
+            enriched += f" ue_version={ue_version}"
+        if fallback:
+            enriched += f" fallback={fallback}"
+
         self._structured_diagnostics.append(
-            StructuredDiagnostic(
+            Diagnostic(
                 code=code,
                 severity=severity,
-                asset=self._path,
                 stage=stage,
                 object_id=self._current_object_id,
                 offset=offset,
-                raw_value=raw_value,
-                ue_version=ue_version,
+                message=enriched,
                 fallback=fallback,
-                message=message,
             )
         )
 
-    def get_structured_diagnostics(self) -> list[StructuredDiagnostic]:
+    def get_structured_diagnostics(self) -> list[Diagnostic]:
         """Return collected structured diagnostics."""
         return list(self._structured_diagnostics)
 
@@ -406,7 +412,9 @@ class FArchive:
                     message=f"FString at pos {pos_before}: {enc} length {byte_len} exceeds maximum {MAX_FSTRING_LENGTH}",
                 )
                 return ""
-            raise ParseError(f"{enc} string at pos {pos_before}: length {byte_len} exceeds maximum {MAX_FSTRING_LENGTH}")
+            raise ParseError(
+                f"{enc} string at pos {pos_before}: length {byte_len} exceeds maximum {MAX_FSTRING_LENGTH}"
+            )
         if pos_before + 4 + byte_len > self._file_size:
             self.seek(pos_before)
             if self._tolerant:
@@ -539,7 +547,7 @@ class FArchive:
         """
         self._name_map = name_map
 
-    def read_name(self, name_map: Optional[list] = None) -> str:
+    def read_name(self, name_map: list | None = None) -> str:
         """Read FName (name table index + instance number).
 
         Recovery fires only on clearly-garbage high-bit indices
@@ -611,7 +619,7 @@ class FArchive:
             result = "None"
         return result
 
-    def _try_recover_fname(self, original_pos: int, name_map: list) -> Optional[str]:
+    def _try_recover_fname(self, original_pos: int, name_map: list) -> str | None:
         """Attempt to recover FName reading from offset misalignment.
 
         When an abnormally large index value is detected, tries to find a valid

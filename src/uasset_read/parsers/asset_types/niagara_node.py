@@ -19,7 +19,7 @@ Source: EdGraphPin.cpp:1838-1948 (UEdGraphPin::Serialize).
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Optional, Set
+from typing import TYPE_CHECKING, Any, Set
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -48,8 +48,8 @@ _HANDLED_CLASSES: Set[str] = {
 
 
 def _decode_single_pin(
-    archive: "FArchive", name_map: list, export: Optional["ObjectExport"] = None
-) -> Optional[dict[str, Any]]:
+    archive: "FArchive", name_map: list, export: "ObjectExport" | None = None
+) -> dict[str, Any | None]:
     """Decode a single UEdGraphPin record.
 
     Source: EdGraphPin.cpp:1838-1948 (UEdGraphPin::Serialize).
@@ -171,7 +171,7 @@ def _decode_pins_from_tail(
     name_map: list,
     tail_offset: int,
     tail_size: int,
-    export: Optional["ObjectExport"] = None,
+    export: "ObjectExport" | None = None,
 ) -> list[dict[str, Any]]:
     """Decode pin records from a node's native tail bytes.
 
@@ -246,7 +246,7 @@ class NiagaraNodeHandler(ClassHandler):
         self,
         export: "ObjectExport",
         archive: "FArchive",
-        context: Optional[Any] = None,
+        context: Any | None = None,
     ) -> HandlerResult:
         try:
             properties_list = getattr(export, "properties", [])

@@ -12,7 +12,7 @@ Verified tagged properties (fixture NM_BPSystemEvent.uasset):
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -79,7 +79,7 @@ class NiagaraProjectionHandler(ClassHandler):
         class_name: str,
         projected_props: tuple[str, ...],
         name_key: str,
-        hook: Optional[Callable[["ObjectExport", dict[str, Any]], dict[str, Any]]] = None,
+        hook: Callable[["ObjectExport", dict[str, Any | None], dict[str, Any]]] = None,
     ) -> None:
         self._class_name = class_name
         self._projected_props = projected_props
@@ -97,7 +97,7 @@ class NiagaraProjectionHandler(ClassHandler):
         self,
         export: "ObjectExport",
         archive: "FArchive",
-        context: Optional[Any] = None,
+        context: Any | None = None,
     ) -> HandlerResult:
         try:
             properties_list = getattr(export, "properties", [])

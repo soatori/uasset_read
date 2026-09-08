@@ -294,7 +294,6 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
     # AnimSequence struct tagged fallback schemas
     "FrameRate": [
         ("Numerator", "IntProperty"),  # UE source: int32 Numerator (not float)
-        # Denominator is not serialized in some assets, handled naturally by tagged loop
     ],
     "AnimNotifyTrack": [
         ("TrackIndex", "Int64Property"),
@@ -302,11 +301,6 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
     ],
     # Editor structs
     "FEditorElement": [
-        ("DisplayName", "TextProperty"),
-        ("Value", "StrProperty"),
-        ("bIsDefault", "BoolProperty"),
-    ],
-    "EditorElement": [
         ("DisplayName", "TextProperty"),
         ("Value", "StrProperty"),
         ("bIsDefault", "BoolProperty"),
@@ -323,48 +317,23 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
         ("ParameterValue", "FloatProperty"),
         ("bOverride", "BoolProperty"),
     ],
-    "FScalarParameterValue": [
-        ("ParameterInfo", "StructProperty"),  # FMaterialParameterInfo
-        ("ParameterValue", "FloatProperty"),
-        ("bOverride", "BoolProperty"),
-    ],
     # Animation blend space struct tagged fallback schemas
     "BlendSample": [
-        ("SampleValue", "StructProperty"),  # FVector -- blend space sample point coordinates
-        ("Time", "FloatProperty"),  # float -- animation time value
-        ("RateScale", "IntProperty"),  # int32 -- playback rate scale
-        ("bIsValid", "BoolProperty"),  # bool -- whether sample point is valid
-    ],
-    "FBlendSample": [
-        ("SampleValue", "StructProperty"),  # FVector -- blend space sample point coordinates
-        ("Time", "FloatProperty"),  # float -- animation time value
-        ("RateScale", "IntProperty"),  # int32 -- playback rate scale
-        ("bIsValid", "BoolProperty"),  # bool -- whether sample point is valid
+        ("SampleValue", "StructProperty"),  # FVector
+        ("Time", "FloatProperty"),
+        ("RateScale", "IntProperty"),  # int32
+        ("bIsValid", "BoolProperty"),
     ],
     # Builder polygon struct (UE source: Engine/BrushBuilder.h)
     "BuilderPoly": [
-        ("VertexIndices", "ArrayProperty"),  # TArray<int32> -- vertex indices into UBrushBuilder::Vertices
-        ("Direction", "IntProperty"),  # int32 -- face normal direction (+1 or -1)
-        ("ItemName", "NameProperty"),  # FName -- surface label (e.g. "Top", "Side")
-        ("PolyFlags", "IntProperty"),  # int32 -- BSP polygon flags
-    ],
-    "FBuilderPoly": [
-        ("VertexIndices", "ArrayProperty"),  # TArray<int32> -- vertex indices into UBrushBuilder::Vertices
-        ("Direction", "IntProperty"),  # int32 -- face normal direction (+1 or -1)
-        ("ItemName", "NameProperty"),  # FName -- surface label (e.g. "Top", "Side")
-        ("PolyFlags", "IntProperty"),  # int32 -- BSP polygon flags
+        ("VertexIndices", "ArrayProperty"),
+        ("Direction", "IntProperty"),
+        ("ItemName", "NameProperty"),
+        ("PolyFlags", "IntProperty"),
     ],
     # StaticMesh section info tagged fallback schemas
     # UE source: Engine/Source/Runtime/Engine/Classes/Engine/StaticMesh.h:344
     "FMeshSectionInfo": [
-        ("MaterialIndex", "IntProperty"),  # int32, default 0
-        ("bEnableCollision", "BoolProperty"),  # bool, default true
-        ("bCastShadow", "BoolProperty"),  # bool, default true
-        ("bVisibleInRayTracing", "BoolProperty"),  # bool, default true
-        ("bAffectDistanceFieldLighting", "BoolProperty"),  # bool, default true
-        ("bForceOpaque", "BoolProperty"),  # bool, default false
-    ],
-    "MeshSectionInfo": [
         ("MaterialIndex", "IntProperty"),
         ("bEnableCollision", "BoolProperty"),
         ("bCastShadow", "BoolProperty"),
@@ -373,6 +342,20 @@ _TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
         ("bForceOpaque", "BoolProperty"),
     ],
 }
+
+
+def _register_schema_alias(schemas: dict, canonical: str, *aliases: str) -> None:
+    """Register alias names pointing to the same schema as *canonical*."""
+    for alias in aliases:
+        schemas[alias] = schemas[canonical]
+
+
+# F/non-F and variant aliases — single source of truth for duplicate struct names.
+_register_schema_alias(_TAGGED_FALLBACK_STRUCT_SCHEMAS, "FEditorElement", "EditorElement")
+_register_schema_alias(_TAGGED_FALLBACK_STRUCT_SCHEMAS, "ScalarParameterValue", "FScalarParameterValue")
+_register_schema_alias(_TAGGED_FALLBACK_STRUCT_SCHEMAS, "BlendSample", "FBlendSample")
+_register_schema_alias(_TAGGED_FALLBACK_STRUCT_SCHEMAS, "BuilderPoly", "FBuilderPoly")
+_register_schema_alias(_TAGGED_FALLBACK_STRUCT_SCHEMAS, "FMeshSectionInfo", "MeshSectionInfo")
 
 # ============================================================================
 # Lazy import helpers (avoid circular dependency with property_parser.py)

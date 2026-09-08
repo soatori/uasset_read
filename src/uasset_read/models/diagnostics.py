@@ -14,44 +14,45 @@ DIAGNOSTIC_CODE_INVALID_SERIAL_OFFSET = "invalid_serial_offset"
 
 
 @dataclass
-class StructuredDiagnostic:
-    """Structured diagnostic record with stable codes.
-
-    Each diagnostic carries asset context, read stage, offset, raw value,
-    UE version, and fallback action for auditability.
-    """
-
-    code: str
-    severity: str = "warning"  # "warning" | "error" | "info"
-    asset: str = ""
-    stage: str = ""
-    object_id: str = ""  # owning table slot (e.g. "export:3") when a read context is active
-    offset: int = 0
-    raw_value: Any = None
-    ue_version: str = ""
-    fallback: str = ""
-    message: str = ""
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to JSON-compatible dict."""
-        return asdict(self)
-
-
-@dataclass
 class Diagnostic:
     """Structured diagnostic for the PackageDocument."""
 
-    severity: Literal["info", "warning", "error", "critical"]
-    code: str
-    message: str
-    stage: str  # "package.summary", "properties.tagged", "objects.export", etc.
+    severity: Literal["info", "warning", "error", "critical"] = "warning"
+    code: str = ""
+    message: str = ""
+    stage: str = ""  # "package.summary", "properties.tagged", "objects.export", etc.
     object_id: str | None = None  # "export:3"
     offset: int | None = None
     size: int | None = None
     effect: Literal["semantic_loss", "data_loss", "parse_failure", "recovery"] | None = None
     recoverable: bool = True
+    fallback: str | None = None  # fallback action for structured diagnostics
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         # recoverable is always included (False is explicit, True is default)
         return {k: v for k, v in d.items() if v is not None and (k == "recoverable" or (not isinstance(v, bool) or v))}
+
+
+# Backward-compatible alias
+StructuredDiagnostic = Diagnostic
+
+
+def make_diagnostic(
+    code: str,
+    message: str,
+    stage: str,
+    *,
+    object_id: str | None = None,
+    severity: Literal["info", "warning", "error", "critical"] = "warning",
+    effect: Literal["semantic_loss", "data_loss", "parse_failure", "recovery"] | None = "semantic_loss",
+) -> Diagnostic:
+    """Build a Diagnostic with common defaults."""
+    return Diagnostic(
+        severity=severity,
+        code=code,
+        message=message,
+        stage=stage,
+        object_id=object_id,
+        effect=effect,
+    )

@@ -8,6 +8,7 @@ and the UE5 version fields (e.g. PROPERTY_TAG_COMPLETE_TYPE_NAME).
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, Any, TypeVar
+
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
 

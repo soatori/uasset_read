@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import struct
 from typing import TYPE_CHECKING, Any
+
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.package_summary import PackageFileSummary
@@ -29,6 +30,7 @@ from uasset_read.serializers.graph_helpers import (
     _read_tag_bool,
     _read_tag_i32,
     _read_tag_fname,
+    seek_to_tag_end,
 )
 from uasset_read.serializers.graph_pin import read_ue_graph_pin
 
@@ -609,8 +611,7 @@ def _handle_node_guid(archive, tag, name_map, import_map, export_map, raw_proper
                 archive.tell(),
             )
             val = "0" * 32
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
+        seek_to_tag_end(archive, tag)
         return {"node_guid": val}
     return {}
 
@@ -619,8 +620,7 @@ def _handle_node_comment(archive, tag, name_map, import_map, export_map, raw_pro
     """Handle NodeComment tag."""
     if tag.size > 0:
         val = archive.read_fstring()
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
+        seek_to_tag_end(archive, tag)
         return {"node_comment": val}
     return {}
 
@@ -635,8 +635,7 @@ def _handle_input_action(archive, tag, name_map, import_map, export_map, raw_pro
             input_action_path.split(".")[-1].split("'")[0] if input_action_path else ""
         )
         raw_properties["InputActionPackageIndex"] = pkg_idx
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
+        seek_to_tag_end(archive, tag)
     return {}
 
 
@@ -649,8 +648,7 @@ def _handle_comment_color(archive, tag, name_map, import_map, export_map, raw_pr
             archive.read_f32(),
             archive.read_f32(),
         )
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
+        seek_to_tag_end(archive, tag)
     return {}
 
 
@@ -732,8 +730,7 @@ def _handle_package_index(archive, tag, name_map, import_map, export_map, raw_pr
         pkg_idx = archive.read_i32()
         raw_properties[tag.name] = pkg_idx
         raw_properties[f"{tag.name}PackageIndex"] = pkg_idx
-        if archive.tell() < tag.value_end_offset:
-            archive.seek(tag.value_end_offset)
+        seek_to_tag_end(archive, tag)
     return {}
 
 
@@ -823,9 +820,7 @@ def _read_node_pins(
     if pins_count < 0:
         raise ParseError(f"Invalid pins_count {pins_count} (negative) at node {node_name}")
     if pins_count > MAX_PINS_PER_NODE:
-        raise ParseError(
-            f"pins_count {pins_count} exceeds MAX_PINS_PER_NODE {MAX_PINS_PER_NODE} at node {node_name}"
-        )
+        raise ParseError(f"pins_count {pins_count} exceeds MAX_PINS_PER_NODE {MAX_PINS_PER_NODE} at node {node_name}")
 
     pins: list[UEdGraphPin] = []
     for _ in range(pins_count):

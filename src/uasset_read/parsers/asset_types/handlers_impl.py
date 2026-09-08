@@ -12,7 +12,7 @@ import struct
 from typing import Any, Protocol
 
 from ...constants import format_guid_bytes
-from ...models.diagnostics import Diagnostic
+from ...models.diagnostics import Diagnostic, make_diagnostic
 from ...models.object_model import ObjectRecord, CoverageEntry
 from ...versioning import VersionContext
 
@@ -115,13 +115,11 @@ def run_handlers(
                 )
             )
             diagnostics.append(
-                Diagnostic(
-                    severity="warning",
+                make_diagnostic(
                     code="HANDLER_FAILURE",
                     message=f"{handler_name} failed for {obj.id}: {e}",
                     stage="semantic.handler",
                     object_id=obj.id,
-                    recoverable=True,
                 )
             )
 
@@ -885,8 +883,6 @@ register_handler(SkeletonHandler())
 register_handler(MeshHandler())
 
 
-
-
 class BlueprintFamilyHandler:
     """Enrich Blueprint-family objects (Blueprint or AnimBlueprint variants).
 
@@ -1110,8 +1106,6 @@ def _extract_declaration(
         "interfaces": entry.get("interfaces", []),
         "functions": functions,
     }
-
-
 
 
 def _as_int(value: Any) -> int:

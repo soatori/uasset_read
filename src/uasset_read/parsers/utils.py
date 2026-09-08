@@ -1,6 +1,6 @@
 """Shared utility functions for the parsers module"""
 
-from typing import Any, List, Optional
+from typing import Any
 import logging
 
 
@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 def resolve_name_from_index(
-    name_map: List[str],
+    name_map: list[str],
     index: int,
     fallback_prefix: str = "param",
 ) -> str:
@@ -82,7 +82,7 @@ def make_enum_value(enum_type: str, value_name: str) -> dict:
     }
 
 
-def extract_inner_from_tag(tag_type: str) -> Optional[str]:
+def extract_inner_from_tag(tag_type: str) -> str | None:
     """Extract content within parentheses from tag.type string
 
     Args:

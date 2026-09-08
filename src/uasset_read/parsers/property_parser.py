@@ -7,7 +7,10 @@ Equivalent migration of uasset_read.py lines 6007-6220.
 
 import logging
 import struct as _struct
-from typing import TYPE_CHECKING, Optional, Any
+from typing import TYPE_CHECKING, Any
+
+from uasset_read.parsers.errors import BINARY_READ_ERRORS, PROPERTY_ACCESS_ERRORS, REFERENCE_RESOLVE_ERRORS
+
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectImport
@@ -531,7 +534,7 @@ def _try_asset_type_handler(
                 class_name,
                 result.error_message,
             )
-    except (KeyError, TypeError, ValueError) as e:
+    except PROPERTY_ACCESS_ERRORS as e:
         logger.warning(
             "AssetTypeHandler failed for '%s' (%s): %s",
             export.object_name,
@@ -588,7 +591,7 @@ def parse_property_value(
                 if result is not None:
                     return result
                 # Handler returned None (unknown type/parse failed), continue falling back to raw_data
-            except (_struct.error, OSError, ValueError) as e:
+            except BINARY_READ_ERRORS as e:
                 logger.debug("BinaryOrNative handler failed for %s: %s", tag.type, e)
         # Also try by struct_type (with F-prefix fallback) for struct-specific handlers
         struct_type = getattr(tag, "struct_type", None)
@@ -601,7 +604,7 @@ def parse_property_value(
                     result = handler(tag, archive, name_map, export_map, summary)
                     if result is not None:
                         return result
-                except (_struct.error, OSError, ValueError) as e:
+                except BINARY_READ_ERRORS as e:
                     logger.debug("BinaryOrNative struct_type handler failed for %s: %s", struct_type, e)
 
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
@@ -629,7 +632,7 @@ def parse_property_value(
                     return handle_custom_property(
                         custom_id, tag, archive, name_map, mappings=mappings, game=game, summary=summary
                     )
-                except (_struct.error, OSError, ValueError) as e:
+                except BINARY_READ_ERRORS as e:
                     logger.debug("Custom property handler (0x%02X) failed for %s: %s", custom_id, tag.type, e)
         game_key = game.lower() if game else None
         if (game_key, tag.type) in CUSTOM_PROPERTY_HANDLERS or (None, tag.type) in CUSTOM_PROPERTY_HANDLERS:
@@ -637,7 +640,7 @@ def parse_property_value(
                 return handle_custom_property(
                     0xFF, tag, archive, name_map, mappings=mappings, game=game, summary=summary
                 )
-            except (_struct.error, OSError, ValueError) as e:
+            except BINARY_READ_ERRORS as e:
                 logger.debug("Game-specific custom property handler failed for %s (game=%s): %s", tag.type, game, e)
 
         # All handlers do not match -- read raw bytes and return PropertyFallback
@@ -922,7 +925,7 @@ def _read_property_loop(
                     from uasset_read.serializers.object_resources import resolve_class_name
 
                     struct_name = resolve_class_name(export.class_index, import_map, export_map)
-                except (KeyError, AttributeError, IndexError) as e:
+                except REFERENCE_RESOLVE_ERRORS as e:
                     logger.debug("Failed to resolve class name in property loop: %s, using fallback", e)
                     struct_name = export.object_name
             try:
@@ -1032,9 +1035,7 @@ def _read_property_loop(
             # Boundary check: PropertyTag.Size should not exceed remaining property data range
             remaining = property_end - archive.tell()
             if tag.size > remaining:
-                raise ParseError(
-                    f"Property tag size {tag.size} exceeds remaining data {remaining} for '{tag.name}'"
-                )
+                raise ParseError(f"Property tag size {tag.size} exceeds remaining data {remaining} for '{tag.name}'")
 
             # Dispatch to type-specific parser
             # lambda executes immediately inside read_tag_value_bounded, tag is bound at call time
@@ -1142,7 +1143,7 @@ def parse_properties_from_export(
             from uasset_read.serializers.object_resources import resolve_class_name
 
             skip_class_name = resolve_class_name(export.class_index, import_map, export_map)
-        except (KeyError, AttributeError, IndexError) as e:
+        except REFERENCE_RESOLVE_ERRORS as e:
             logger.debug("Failed to resolve class name for export: %s", e)
     if should_skip_export_for_tolerant_parsing(export, class_name=skip_class_name):
         logger.debug(
@@ -1151,7 +1152,7 @@ def parse_properties_from_export(
         )
         try:
             skip_export_payload(archive, export, summary)
-        except (_struct.error, OSError, ValueError) as e:
+        except BINARY_READ_ERRORS as e:
             logger.debug("Failed to skip export '%s' payload: %s", export.object_name, e)
         setattr(export, "parse_status", "skipped")
         setattr(export, "fallback_reason", "unsupported_type")
@@ -1219,7 +1220,7 @@ def _resolve_mapping_struct_name(
             from uasset_read.serializers.object_resources import resolve_class_name
 
             return resolve_class_name(export.class_index, import_map, export_map) or export.object_name
-        except (KeyError, AttributeError, IndexError) as e:
+        except REFERENCE_RESOLVE_ERRORS as e:
             logger.debug("Failed to resolve mapping struct name: %s", e)
     return export.object_name
 
@@ -1319,7 +1320,7 @@ def _try_read_unversioned_header(
     archive: FArchive,
     property_end: int,
     property_count: int,
-) -> Optional[list[tuple[int, bool]]]:
+) -> list[tuple[int, bool | None]]:
     """Try UE FUnversionedHeader fragments; return None for legacy fixture streams.
 
     UE source: UnversionedPropertySerialization.cpp FUnversionedHeader::Load.

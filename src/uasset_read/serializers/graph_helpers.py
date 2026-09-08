@@ -14,7 +14,8 @@ from __future__ import annotations
 import logging
 import struct
 import threading
-from typing import TYPE_CHECKING, Dict, Any
+from typing import TYPE_CHECKING, Any
+
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
@@ -40,6 +41,12 @@ _thread_local = threading.local()
 # ============================================================================
 # Core helpers
 # ============================================================================
+
+
+def seek_to_tag_end(archive: FArchive, tag) -> None:
+    """Seek past a property tag's value if the reader hasn't reached it yet."""
+    if tag.value_end_offset and archive.tell() < tag.value_end_offset:
+        archive.seek(tag.value_end_offset)
 
 
 def _read_guid(archive: FArchive, uppercase: bool = True) -> str:

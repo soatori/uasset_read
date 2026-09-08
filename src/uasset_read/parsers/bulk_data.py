@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass
+
 # BulkData flags from BulkData.h
 BULKDATA_None = 0x00
 BULKDATA_CompressedZlib = 0x02

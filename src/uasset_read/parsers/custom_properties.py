@@ -11,6 +11,7 @@ This module provides a registry mechanism allowing dynamic registration of custo
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Any
+
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.models.properties import PropertyTag

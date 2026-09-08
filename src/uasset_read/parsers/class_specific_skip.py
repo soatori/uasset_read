@@ -7,7 +7,7 @@ this module provides type identification and safe skip logic.
 """
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive

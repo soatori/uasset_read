@@ -10,6 +10,7 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 from typing import Any
 
+
 class FallbackReason(str, Enum):
     """Fallback reason."""
 
@@ -50,10 +51,15 @@ class PropertyFallback(PropertyValue):
         return "unknown_property"
 
     @classmethod
-    def from_tag(cls, tag, reason: "FallbackReason", *, error_message: str = "", raw_bytes: bytes = b"") -> "PropertyFallback":
+    def from_tag(
+        cls, tag, reason: "FallbackReason", *, error_message: str = "", raw_bytes: bytes = b""
+    ) -> "PropertyFallback":
         """Build a fallback from a property tag (shared name/type/size/array_index plumbing)."""
         return cls(
-            name=tag.name, type=tag.type, size=tag.size, raw_bytes=raw_bytes,
+            name=tag.name,
+            type=tag.type,
+            size=tag.size,
+            raw_bytes=raw_bytes,
             reason=reason,
             array_index=getattr(tag, "array_index", 0),
             error_message=error_message or None,

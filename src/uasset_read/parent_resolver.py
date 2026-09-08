@@ -33,7 +33,7 @@ def resolve_parent_assets(
     Returns:
         Tuple of (relations, diagnostics) to add to doc.relations and doc.diagnostics.
     """
-    from uasset_read.models.diagnostics import Diagnostic
+    from uasset_read.models.diagnostics import make_diagnostic
     from uasset_read.models.object_model import Relation
 
     relations = []
@@ -53,11 +53,11 @@ def resolve_parent_assets(
         parent_path = _find_parent_package(parent_ref, root, max_depth)
         if parent_path is None:
             diagnostics.append(
-                Diagnostic(
-                    severity="info",
+                make_diagnostic(
                     code="PARENT_NOT_FOUND",
                     message=f"Parent class package for '{parent_ref}' not found under {root}",
                     stage="parent_resolution",
+                    severity="info",
                 )
             )
             continue
@@ -79,8 +79,7 @@ def resolve_parent_assets(
             )
         except Exception as e:
             diagnostics.append(
-                Diagnostic(
-                    severity="warning",
+                make_diagnostic(
                     code="PARENT_PARSE_FAILED",
                     message=f"Failed to parse parent package '{parent_path}': {e}",
                     stage="parent_resolution",

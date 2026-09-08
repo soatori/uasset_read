@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import struct
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.package_summary import PackageFileSummary

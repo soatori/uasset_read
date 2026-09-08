@@ -22,7 +22,7 @@ Format references:
 
 import logging
 import struct
-from typing import Any, Dict
+from typing import Any
 from uasset_read.exceptions import ParseError
 
 logger = logging.getLogger(__name__)

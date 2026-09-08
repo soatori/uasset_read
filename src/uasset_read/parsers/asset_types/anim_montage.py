@@ -8,7 +8,7 @@ Parse UAnimMontage animation-specific data:
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -46,7 +46,7 @@ class AnimMontageHandler(ClassHandler):
         self,
         export: "ObjectExport",
         archive: "FArchive",
-        context: Optional[Any] = None,
+        context: Any | None = None,
     ) -> HandlerResult:
         """Parse AnimMontage export.
 

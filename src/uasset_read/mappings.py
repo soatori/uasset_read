@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Usmap/Jmap mapping reader and unified type model."""
 
 from dataclasses import dataclass, field
@@ -5,7 +7,7 @@ import gzip
 import json
 import os
 import struct
-from typing import Dict, Optional, Any
+from typing import Any
 
 from uasset_read.exceptions import ParseError
 from uasset_read.memory_safety import ResourceBudget
@@ -63,11 +65,11 @@ class PropertyType:
     """Property type description from mapping file."""
 
     type: str
-    struct_type: Optional[str] = None
-    inner_type: Optional["PropertyType"] = None
-    value_type: Optional["PropertyType"] = None
-    enum_name: Optional[str] = None
-    is_enum_as_byte: Optional[bool] = None
+    struct_type: str | None = None
+    inner_type: "PropertyType" | None = None
+    value_type: "PropertyType" | None = None
+    enum_name: str | None = None
+    is_enum_as_byte: bool | None = None
 
 
 @dataclass
@@ -85,11 +87,11 @@ class StructMapping:
     """Class/struct description from mapping file."""
 
     name: str
-    super_type: Optional[str] = None
-    properties: Dict[int, PropertyInfo] = field(default_factory=dict)
+    super_type: str | None = None
+    properties: dict[int, PropertyInfo] = field(default_factory=dict)
     property_count: int = 0
 
-    def property_by_name(self, name: str) -> Optional[PropertyInfo]:
+    def property_by_name(self, name: str) -> PropertyInfo | None:
         lowered = name.lower()
         for prop in self.properties.values():
             if prop.name.lower() == lowered:
@@ -101,16 +103,16 @@ class StructMapping:
 class TypeMappings:
     """Unified Usmap/Jmap mapping container."""
 
-    types: Dict[str, StructMapping] = field(default_factory=dict)
-    enums: Dict[str, Dict[int, str]] = field(default_factory=dict)
+    types: dict[str, StructMapping] = field(default_factory=dict)
+    enums: dict[str, dict[int, str]] = field(default_factory=dict)
 
-    def get_struct(self, name: Optional[str]) -> Optional[StructMapping]:
+    def get_struct(self, name: str | None) -> StructMapping | None:
         if not name:
             return None
         key = name.split(".")[-1]
         return self.types.get(key) or self.types.get(name)
 
-    def property_by_name(self, struct_name: Optional[str], property_name: str) -> Optional[PropertyInfo]:
+    def property_by_name(self, struct_name: str | None, property_name: str) -> PropertyInfo | None:
         """Find a mapped property on a struct, walking mapped super structs."""
         seen: set[str] = set()
         current = self.get_struct(struct_name)
@@ -150,7 +152,7 @@ class _BytesReader:
     def u64(self) -> int:
         return struct.unpack_from("<Q", self.read(8))[0]
 
-    def name(self, lut: list[str]) -> Optional[str]:
+    def name(self, lut: list[str]) -> str | None:
         idx = self.i32()
         if idx == -1:
             return None
@@ -210,7 +212,7 @@ class UsmapParser:
         for _ in range(enum_count):
             enum_name = ar.name(name_lut) or ""
             value_count = ar.u16() if version >= 3 else ar.u8()
-            values: Dict[int, str] = {}
+            values: dict[int, str] = {}
             for index in range(value_count):
                 if version >= 4:
                     value = int(ar.u64())
@@ -260,7 +262,7 @@ class UsmapParser:
         super_type = ar.name(lut)
         property_count = ar.u16()
         serializable_count = ar.u16()
-        properties: Dict[int, PropertyInfo] = {}
+        properties: dict[int, PropertyInfo] = {}
         for _ in range(serializable_count):
             prop = self._parse_property_info(ar, lut)
             for offset in range(prop.array_size):
@@ -322,7 +324,7 @@ class JmapParser:
                     budget.reserve(len(data), "jmap_gzip_decompress_output")
         self.mappings = self._parse(json.loads(data.decode("utf-8")))
 
-    def _parse(self, root: Dict[str, Any]) -> TypeMappings:
+    def _parse(self, root: dict[str, Any]) -> TypeMappings:
         mappings = TypeMappings()
         for full_name, obj in root.get("objects", {}).items():
             if not isinstance(obj, dict):
@@ -330,13 +332,13 @@ class JmapParser:
             short_name = full_name.split(".")[-1]
             obj_type = obj.get("type")
             if obj_type == "Enum":
-                values: Dict[int, str] = {}
+                values: dict[int, str] = {}
                 for item in obj.get("names", []):
                     if isinstance(item, list) and len(item) >= 2:
                         values[int(item[1])] = str(item[0])
                 mappings.enums[short_name] = values
             elif obj_type in {"Class", "ScriptStruct"}:
-                properties: Dict[int, PropertyInfo] = {}
+                properties: dict[int, PropertyInfo] = {}
                 index = 0
                 for prop in obj.get("properties", []):
                     if not isinstance(prop, dict):
@@ -353,7 +355,7 @@ class JmapParser:
                 )
         return mappings
 
-    def _parse_property_info(self, prop: Dict[str, Any], index: int) -> PropertyInfo:
+    def _parse_property_info(self, prop: dict[str, Any], index: int) -> PropertyInfo:
         raw_dim = prop.get("array_dim")
         array_dim = int(raw_dim) if raw_dim is not None else 1
         if array_dim < 1 or array_dim > MAX_ARRAY_DIM:
@@ -365,7 +367,7 @@ class JmapParser:
             array_size=array_dim,
         )
 
-    def _parse_property_type(self, prop: Dict[str, Any], depth: int = 0) -> PropertyType:
+    def _parse_property_type(self, prop: dict[str, Any], depth: int = 0) -> PropertyType:
         if depth > MAX_RECURSION_DEPTH:
             raise ParseError(f"Jmap property type recursion depth exceeds limit {MAX_RECURSION_DEPTH}")
         type_name = str(prop.get("type") or "Unknown")
