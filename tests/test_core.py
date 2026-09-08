@@ -3274,6 +3274,7 @@ def test_test_suite_structure_gate():
         "test_bulk_data_parser.py",
         "test_cli.py",
         "test_core.py",
+        "test_handler_capability_ledger.py",
         "test_payload_extraction.py",
         "test_samples.py",
         "test_size_baseline.py",
