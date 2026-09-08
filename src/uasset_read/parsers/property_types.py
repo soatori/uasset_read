@@ -8,6 +8,7 @@ Equivalent migration of uasset_read.py lines 5289-6004.
 import logging
 import struct
 from typing import TYPE_CHECKING, Dict, Any
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -440,12 +441,8 @@ def parse_uint64_property(tag: PropertyTag, archive: FArchive) -> int:
 
 
 def parse_float_property(tag: PropertyTag, archive: FArchive) -> float:
-    """Parse FloatProperty/DoubleProperty (PROP-03)."""
-    type_name = tag.type
-    if type_name == "DoubleProperty":
-        return archive.read_f64()
-    else:  # FloatProperty (default)
-        return archive.read_f32()
+    """Parse FloatProperty (PROP-03)."""
+    return archive.read_f32()
 
 
 def parse_str_property(tag: PropertyTag, archive: FArchive) -> str:
@@ -1290,9 +1287,7 @@ def parse_delegate_property(tag: PropertyTag, archive: FArchive, name_map: list[
 # ============================================================================
 
 
-def parse_multicast_delegate_property(
-    tag: PropertyTag, archive: FArchive, name_map: list[str] | None = None
-) -> list:
+def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive, name_map: list[str] | None = None) -> list:
     """Parse MulticastDelegateProperty.
 
     UE FMulticastScriptDelegate::SerializeItem serializes function name with FName
