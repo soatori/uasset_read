@@ -60,6 +60,7 @@ from uasset_read.constants import (
 )
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.constants import MIN_UASSET_SIZE
+from uasset_read.versioning import EngineVersion
 
 # ResourceBudget type is available via TYPE_CHECKING import above.
 # At runtime, functions accept None or any ResourceBudget instance — no eager import needed.
@@ -103,17 +104,6 @@ class GenerationInfo:
 
     export_count: int = 0
     name_count: int = 0
-
-
-@dataclass
-class EngineVersion:
-    """FEngineVersion — engine version info."""
-
-    major: int = 0
-    minor: int = 0
-    patch: int = 0
-    changelist: int = 0
-    branch: str = ""
 
 
 @dataclass
