@@ -11,7 +11,7 @@ and UE5_LEGACY_VERSIONS in uasset_read.constants.
 
 import logging
 import struct
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.memory_safety import ResourceBudget
@@ -44,6 +44,7 @@ from uasset_read.constants import (
     UE5_PAYLOAD_TOC,
     UE5_DATA_RESOURCES,
     PKG_FilterEditorOnly,
+    PKG_UnversionedProperties,
     UE_NONE_SENTINEL,
     UE4_ADD_STRING_ASSET_REFERENCES_MAP,
     UE4_ADDED_SEARCHABLE_NAMES,
@@ -329,14 +330,20 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, int, b
     else:
         file_version_ue5 = 0
 
-    if legacy_file_version <= -8 and file_version_ue5 < UE5_VERSION_MIN:
-        raise VersionError(f"Unsupported UE5 version: {file_version_ue5}")
+    # NOTE: Strict version check is deferred to read_package_summary() after
+    # package flags are read. Unversioned packages have file_version_ue5 == 0,
+    # which is valid when PKG_UnversionedProperties flag is set.
 
     file_version_licensee = archive.read_i32()
 
-    # SavedHash + TotalHeaderSize BEFORE CustomVersions (UE5 >= PACKAGE_SAVED_HASH)
+    # SavedHash + TotalHeaderSize BEFORE CustomVersions (UE5 format)
     # Older versions: no SavedHash, TotalHeaderSize comes AFTER CustomVersions
-    if file_version_ue5 >= UE5_PACKAGE_SAVED_HASH:
+    # For unversioned packages, file_version_ue5 == 0 but legacy_file_version <= -8
+    # indicates UE5 format with SavedHash present.  The original condition used
+    # file_version_ue5 >= UE5_PACKAGE_SAVED_HASH which fails for unversioned
+    # packages where file_version_ue5 is literally 0.
+    is_unversioned_zero = (file_version_ue4 == 0 and file_version_ue5 == 0)
+    if file_version_ue5 >= UE5_PACKAGE_SAVED_HASH or (legacy_file_version <= -8 and is_unversioned_zero):
         saved_hash = archive.read(20)
         total_header_size = archive.read_i32()
         custom_versions = _read_custom_versions(archive)
@@ -536,7 +543,7 @@ def _read_guids(
     has_filter_editor_only: bool,
 ) -> str:
     """Read LegacyGuid / PersistentGuid / OwnerPersistentGuid."""
-    # LegacyGuid (exists when UE5 < 1016)
+    # PackageGuid (UE4 legacy: exists when UE5 < 1016)
     if file_version_ue5 < UE5_PACKAGE_SAVED_HASH:
         archive.read(16)
 
@@ -693,6 +700,22 @@ def read_package_summary(
     # Step 4: PackageName + PackageFlags
     package_name, package_flags = _read_package_identity(archive)
     has_filter_editor_only = (package_flags & PKG_FilterEditorOnly) != 0
+
+    # Deferred version check: validate UE5 version unless this is an unversioned package
+    uses_unversioned = bool(package_flags & PKG_UnversionedProperties)
+    if legacy_file_version <= -8 and file_version_ue5 < UE5_VERSION_MIN and not uses_unversioned:
+        raise VersionError(f"Unsupported UE5 version: {file_version_ue5}")
+
+    # Unversioned package version resolution (CUE4Parse: FPackageFileSummary)
+    # When all three version fields are 0, the package is unversioned. CUE4Parse
+    # overrides FileVersionUE to Ar.Ver (the archive's current version), which means
+    # ALL subsequent field reads use the resolved version. We replicate this by
+    # setting both file_version_ue4 and file_version_ue5 to AUTOMATIC_VERSION.
+    # UE4 AUTOMATIC_VERSION ~ 522; UE5 AUTOMATIC_VERSION = IMPORT_TYPE_HIERARCHIES (1018).
+    if file_version_ue4 == 0 and file_version_ue5 == 0 and file_version_licensee == 0:
+        from uasset_read.constants import UE5_IMPORT_TYPE_HIERARCHIES
+        file_version_ue4 = 522  # VER_UE4_AUTOMATIC_VERSION at UE5.4
+        file_version_ue5 = UE5_IMPORT_TYPE_HIERARCHIES  # 1018 = AUTOMATIC_VERSION
 
     # Step 5: NameCount + NameOffset
     name_count, name_offset = _read_name_table_offsets(archive)

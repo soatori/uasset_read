@@ -3277,6 +3277,7 @@ def test_test_suite_structure_gate():
         "test_payload_extraction.py",
         "test_samples.py",
         "test_size_baseline.py",
+        "test_unversioned_fixtures.py",
     ]
     assert test_files == expected
     subdirs = {p.name for p in root.iterdir() if p.is_dir() and p.name != "__pycache__"}

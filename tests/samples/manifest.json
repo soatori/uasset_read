@@ -915,10 +915,54 @@
       "diagnostics": [
         "EXPORT_TRAILING_BYTES_UNCONSUMED"
       ]
+    },
+    {
+      "name": "BP_UnversionedTest.uasset",
+      "sha256": "72a83da43e3cb260a7339176029ab8aa6dfbb1954d67b62dd448ab51b863cd04",
+      "size_bytes": 3098,
+      "engine_layout": "legacy",
+      "file_version_ue4": 0,
+      "file_version_ue5": 0,
+      "sidecars": [
+        {
+          "name": "BP_UnversionedTest.uexp",
+          "sha256": "f61e632b2763f519d5332df63f50f84baa57c88c6b22c0798ce21e7bf3e0312a",
+          "size_bytes": 1347
+        }
+      ],
+      "asset_type_hint": "Blueprint",
+      "has_multiple_b_is_asset": true,
+      "export_count": 5,
+      "b_is_asset_count": 1,
+      "diagnostics": [],
+      "unversioned": true,
+      "usmap_file": "UnversionedTest.usmap"
+    },
+    {
+      "name": "DA_UnversionedTest.uasset",
+      "sha256": "5b51d3f0bdaa7ab3af87e9612d8e427dbb2ee81de2176c47b6fafd41001ad857",
+      "size_bytes": 803,
+      "engine_layout": "legacy",
+      "file_version_ue4": 0,
+      "file_version_ue5": 0,
+      "sidecars": [
+        {
+          "name": "DA_UnversionedTest.uexp",
+          "sha256": "d6ef2635ebfef33856676a6c7042d2851f6bb068ae45770b255d01c0e4acbc03",
+          "size_bytes": 121
+        }
+      ],
+      "asset_type_hint": "DataAsset",
+      "has_multiple_b_is_asset": false,
+      "export_count": 1,
+      "b_is_asset_count": 1,
+      "diagnostics": [],
+      "unversioned": true,
+      "usmap_file": "UnversionedTest.usmap"
     }
   ],
   "summary": {
-    "total_samples": 64,
+    "total_samples": 66,
     "layout_distribution": {
       "legacy": 64
     },
@@ -945,9 +989,10 @@
       "Niagara": 1,
       "Blueprint": 5,
       "CurveFloat": 1,
-      "CurveTable": 3
+      "CurveTable": 3,
+      "DataAsset": 1
     },
-    "samples_with_sidecars": 6,
+    "samples_with_sidecars": 8,
     "samples_with_multiple_b_is_asset": [
       "ABP_RifleAnimLayers.uasset",
       "ALS_AnimBP.uasset",
@@ -973,7 +1018,7 @@
     "zen_package": {
       "status": "missing",
       "description": "No Zen package (.uasset with FZenPackageSummary) samples. All 54 samples use legacy FPackageFileSummary layout.",
-      "needed_for": "Phase 5 (Zen & Container Streaming) — ZenPackageReader implementation",
+      "needed_for": "Phase 5 (Zen & Container Streaming) \u2014 ZenPackageReader implementation",
       "acquisition": "Request legitimate redistributable real samples with version info from the user: 3-5 Zen-layout .uasset files (file_version_ue5 >= 522, hash-based table layout) that may be committed to the repository.",
       "verification": "After copying, verify:\n- struct.unpack_from('<i', data, 4)[0] >= 0 (not legacy negative version)\n- struct.unpack_from('<i', data, 12)[0] >= 522 (UE5.1+)\n- parse_package_document() produces valid PackageDocument",
       "minimum_samples": 3,
@@ -982,7 +1027,7 @@
     "iostore_container": {
       "status": "available",
       "description": "Two UE 5.8 IoStore containers: MyProject-Windows (.utoc 222,772 B / 2,221 entries, Oodle, directory index; .ucas 259,193,536 B kept out of git) and the committed global.utoc/global.ucas pair.",
-      "needed_for": "Phase 5 — IoStore container parsing (target design, see docs/designs/)",
+      "needed_for": "Phase 5 \u2014 IoStore container parsing (target design, see docs/designs/)",
       "acquisition": "Request legitimate redistributable real samples with version info from the user: an IoStore .utoc/.ucas pair (UE5.3+) plus a few contained .uasset files for cross-validation.",
       "verification": "After copying, verify:\n- .utoc file starts with IoStore TOC magic bytes\n- the IoStore TOC header parses\n- Package names can be listed from directory index",
       "minimum_samples": 1,

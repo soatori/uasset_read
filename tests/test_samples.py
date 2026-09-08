@@ -282,9 +282,9 @@ def test_manifest_matches_every_real_sample():
     for entry in manifest["samples"]:
         expected_files |= {side["name"] for side in entry["sidecars"]}
     actual_files = {path.name for path in SAMPLES.iterdir() if path.suffix in PACKAGE_SUFFIXES}
-    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 64
+    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 66
     assert actual_files == expected_files
-    allowed = expected_files | {"manifest.json", "README.md", "golden", "containers"} | ORIGIN_DOCS
+    allowed = expected_files | {"manifest.json", "README.md", "golden", "containers", "UnversionedTest.usmap"} | ORIGIN_DOCS
     extra = {path.name for path in SAMPLES.iterdir()} - allowed
     assert not extra, f"Unexpected files in samples/: {extra}"
     for entry in manifest["samples"]:
