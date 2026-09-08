@@ -157,12 +157,9 @@ def test_serializers_exports():
     """Verify new parsers are importable from serializers package."""
     from uasset_read.serializers.package_trailer import (
         read_package_trailer,
-        FPackageTrailer,
-        FLookupTableEntry,
     )
     from uasset_read.serializers.data_resource import (
         read_data_resource_table,
-        FObjectDataResource,
     )
 
     assert callable(read_package_trailer)

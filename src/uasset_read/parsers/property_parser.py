@@ -448,101 +448,6 @@ def _try_recover_property_tag(
     return False
 
 
-def _try_asset_type_handler(
-    export: ObjectExport,
-    archive: FArchive,
-    name_map: list[str],
-    class_name: str,
-    parsed_properties: list["PropertyValue"] | None = None,
-    export_map: list[Any] | None = None,
-    import_map: list[Any] | None = None,
-    summary: "PackageFileSummary" | None = None,
-) -> None:
-    """Try to extract raw binary data using a registered ClassHandler.
-
-    For asset types like StaticMesh, SkeletalMesh, Material, Texture2D,
-    handler reads custom payload from the Super::Serialize completion position,
-    attaching results to the export objects _asset_type_data attribute.
-
-    For animation types（AnimBlueprint/AnimSequence/AnimMontage），
-    Set parsed properties list to export.properties,
-    so the handler can extract structured metadata.
-    """
-    from uasset_read.parsers.class_registry import get_class_registry
-
-    registry = get_class_registry()
-    handler = registry.find_handler(class_name)
-    if handler is None:
-        return
-
-    # Set parsed properties to the export object
-    # For animation handlers (AnimBlueprint/AnimSequence/AnimMontage) to extract metadata
-    if parsed_properties is not None:
-        export.properties = parsed_properties
-
-    # Store resolved class name on export for handler use
-    setattr(export, "resolved_class_name", class_name)
-
-    # Store package tables for handlers that resolve object references (#521)
-    if export_map is not None:
-        setattr(export, "package_export_map", export_map)
-        setattr(export, "package_import_map", import_map or [])
-
-    # Store summary for handlers that need version info
-    if summary is not None:
-        setattr(export, "package_summary", summary)
-
-    saved_pos = archive.tell()
-    try:
-        # Do not seek to property_end -- After property parsing the current position is already past Super::Serialize.
-        # Custom payloads for assets like DataTable follow immediately after properties, rather than at the export data end.
-        result = handler.parse(export, archive, context=name_map)
-        if result.success and result.data:
-            # Attach to export object for downstream use
-            setattr(export, "_asset_type_data", result.data)
-            # Sync animation data to custom_data (for ir_builder use)
-            custom_data = getattr(export, "custom_data", {})
-            if not custom_data:
-                custom_data = {}
-            for key in ["anim_blueprint", "anim_sequence", "anim_montage"]:
-                if key in result.data and key not in custom_data:
-                    custom_data[key] = result.data[key]
-            if custom_data:
-                setattr(export, "custom_data", custom_data)
-            # Propagate handler parse_status to export level
-            handler_status = result.data.get("parse_status")
-            if handler_status:
-                setattr(export, "parse_status", handler_status)
-            else:
-                setattr(export, "parse_status", "success")
-            logger.debug(
-                "AssetTypeHandler '%s' extracted data for '%s' (status=%s)",
-                handler.handler_name,
-                export.object_name,
-                handler_status,
-            )
-        elif not result.success:
-            # Handler reported a recoverable failure via HandlerResult.
-            # Record the error on the export so callers see it in parse_status.
-            setattr(export, "parse_status", "partial")
-            if result.error_message:
-                setattr(export, "handler_error", result.error_message)
-            logger.warning(
-                "AssetTypeHandler '%s' failed for '%s' (%s): %s",
-                handler.handler_name,
-                export.object_name,
-                class_name,
-                result.error_message,
-            )
-    except PROPERTY_ACCESS_ERRORS as e:
-        logger.warning(
-            "AssetTypeHandler failed for '%s' (%s): %s",
-            export.object_name,
-            class_name,
-            e,
-        )
-    finally:
-        archive.seek(saved_pos)
 
 
 def parse_property_value(
@@ -1095,7 +1000,6 @@ def parse_properties_from_export(
     mappings: Any | None = None,
     game: str | None = None,
     tolerant: bool = True,
-    run_class_handlers: bool = True,
 ) -> list[PropertyValue]:
     """Read all properties from an export entry (PROP-01).
 
@@ -1194,19 +1098,6 @@ def parse_properties_from_export(
             mappings,
             property_end,
             tolerant,
-        )
-
-    # Asset type handler dispatch: called after property parsing
-    if run_class_handlers and skip_class_name is not None:
-        _try_asset_type_handler(
-            export,
-            archive,
-            name_map,
-            skip_class_name,
-            parsed_properties=properties,
-            export_map=export_map,
-            import_map=import_map,
-            summary=summary,
         )
 
     return properties

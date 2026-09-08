@@ -870,8 +870,6 @@ class LegacyPackageReader:
                     mappings=mappings,
                     game=self._game,
                     tolerant=self._tolerant,
-                    # v2 has no v1 class-handler dispatch at any depth.
-                    run_class_handlers=False,
                 )
                 overrun = archive.tell() - prop_range_end
                 obj.properties = normalize_property_bag(raw_props)

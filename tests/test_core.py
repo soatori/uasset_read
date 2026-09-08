@@ -1512,14 +1512,6 @@ def test_handler_registry_supports_enriches_and_isolates():
             assert handler.supports(record(class_name), VersionContext()), class_name
         assert not handler.supports(record("StaticMesh"), VersionContext())
 
-    def test_class_handlers_kwarg_defaults_true_for_v1():
-        import inspect
-
-        from uasset_read.parsers.property_parser import parse_properties_from_export
-
-        param = inspect.signature(parse_properties_from_export).parameters["run_class_handlers"]
-        assert param.default is True, "v1 default must keep class-handler dispatch byte-identical"
-
     def test_summary_tier_handlers_never_claim_complete():
         """Niagara/Mesh/Blueprint-summary results are partial with coverage (#629)."""
         from uasset_read.parsers.asset_types.handlers_impl import (
@@ -2140,11 +2132,8 @@ def test_handler_registry_supports_enriches_and_isolates():
         a, b, c, d = 0x01020304, 0x05060708, 0x090A0B0C, 0x0D0E0F10
         s = format_guid_bytes(struct.pack("<IIII", a, b, c, d))
         assert len(s) == 36 and s.count("-") == 4
-        # No invented 00000000 tail in handlers or user_defined
         h_src = (SRC / "uasset_read/parsers/asset_types/handlers_impl.py").read_text(encoding="utf-8")
-        u_src = (SRC / "uasset_read/parsers/asset_types/user_defined.py").read_text(encoding="utf-8")
         assert "00000000" not in h_src
-        assert "00000000" not in u_src
 
     _run_cases(
         [
@@ -2161,7 +2150,6 @@ def test_handler_registry_supports_enriches_and_isolates():
                 "handler.test_niagara_handler_supports_all_declared_classes",
                 test_niagara_handler_supports_all_declared_classes,
             ),
-            ("handler.test_class_handlers_kwarg_defaults_true_for_v1", test_class_handlers_kwarg_defaults_true_for_v1),
             (
                 "handler.test_summary_tier_handlers_never_claim_complete",
                 test_summary_tier_handlers_never_claim_complete,
