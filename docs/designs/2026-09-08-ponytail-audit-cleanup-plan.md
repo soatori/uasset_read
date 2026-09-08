@@ -1,5 +1,7 @@
 # Ponytail Audit Cleanup Implementation Plan
 
+> **Status (2026-09-08):** Executed via [code-size waves 0-5 plan](../superpowers/plans/2026-09-08-code-size-reduction-waves.md). Tasks 1-2, 7-14 of this design were implemented as Wave 0-5 tasks. Tasks 3 (Source/ArchiveLike family), 4 (VersionContext slimming), 5 (CLI log flags), 6 (JmapParser) were rejected by the roadmap exclusion list. Net result: src 28,085→23,327 lines (−4,758), wheel 300,836→249,257 bytes (−51,579), 208 tests passing.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Delete the ~5,580 lines of unreachable, write-only, and duplicated code identified by the 2026-09-08 whole-repo ponytail audit, plus extract shared patterns to reduce additional ~15-20% code size while preserving all functionality and memory safety.
