@@ -200,6 +200,8 @@
 
 ### Task 7: Dedup class resolvers + delete dead model/constant scraps (~60 lines)
 
+> **Partial 2026-09-10 (`148385b0`):** 7.1/7.2/7.4 already landed earlier. Residual done: `is_map_key`/`is_map_value`, `PARTIAL_PARSE`/`CUSTOM_PAYLOAD`, `_normalize_ext`. Live left alone: DIAGNOSTIC_CODE_INVALID_SERIAL_*, `PayloadDescriptor.hash`.
+
 **Files:** Modify `src/uasset_read/serializers/object_resources.py:390-401` (`get_asset_class`) + `:455` (internal caller), `serializers/graph_helpers.py:57-66` (`_rcn`,`_gac`) + `:29-32` import block, `serializers/{graph_node.py,graph_pin.py,graph.py,blueprint_graph.py}` call sites, `src/uasset_read/iostore.py:64-70,118-124,176-183,201-202`, dead-field list below, `tests/size-baseline.json`
 
 - [ ] **Step 7.1:** Delete `get_asset_class`; fix its internal caller `object_resources.py:455` → `resolve_class_name(exp.class_index, import_map, export_map)`, `blueprint_graph.py:112,124` same pattern. Delete `_rcn`/`_gac` wrappers from graph_helpers.py (and the `get_asset_class` import there); mechanically rename every `_rcn(` call to `resolve_class_name(` (import it directly in graph_node.py/graph_pin.py), and `_gac(X, im, em)` calls to `resolve_class_name(X.class_index, im, em)` (graph.py:147,200, graph_node.py:442).
