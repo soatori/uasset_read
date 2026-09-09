@@ -126,7 +126,7 @@ python -m uasset_read path/to/file.uasset --depth decode --limit 20         # Ca
 python -m uasset_read path/to/file.uasset --depth decode --max-bytes 4096   # Cap the serialized response
 
 # Advanced options
-python -m uasset_read path/to/file.uasset --mappings path/to/usmap  # Load .usmap/.jmap type mappings
+python -m uasset_read path/to/file.uasset --mappings path/to/usmap  # Load .usmap type mappings
 python -m uasset_read path/to/file.uasset --game NAME               # Enable game-specific property readers
 python -m uasset_read path/to/file.uasset --list-package-files      # List the package files discovered
 ```
@@ -205,7 +205,7 @@ Shared readers behind that document: `kismet/` (bytecode → expressions + diagn
 | Package Mgmt | `package.py` | `PackageBundle`, `FileSystemPackageProvider`, `PackageArchive`, `open_package_bundle` |
 | CLI | `cli.py` | argparse entry point; emits the v2 document page, or the retired-flag error |
 | Versioning | `versioning.py` | `VersionContext`, `build_version_context_from_summary` |
-| Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
+| Mappings | `mappings.py` | UE type mappings (`.usmap` parsing; `.jmap` removed 2026-09-10) |
 | Memory Safety | `memory_safety.py` | `ResourceBudget` read/decompress checkpoints, `MemoryLimitExceeded` |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, FEdGraphPinType, FMemberReference, PropertyTag/PropertyValue, Anim IR, structured diagnostics, property fallback |
