@@ -6,6 +6,8 @@ status: target
 >
 > **2026-09-05 后续状态更新（已实现，非目标）**：Semantic JSON 1.x 输出路径已删除（`--legacy-json` 等旧 CLI flag 进入 retired 集合，唯一顶层 format 为 `uasset_read.package`）；Blueprint VarType（`FEdGraphPinType`）类型解码与 Kismet 反编译已迁移到 v2 object model（`BlueprintFamilyHandler` decode 分支 + `kismet.decompile_bridge`，由 `tests/test_blueprint_decode.py` 覆盖）。**仍未完成：Zen/IoStore、USMAP/unversioned 的 SchemaProvider 完整路径、外部容器 payload 提取、其余深层语义、Blueprint C++ skeleton。parent-asset 解析已于 2026-09-10 Gate G 产品决策放弃（D1 §7），不再列为 deferred gap。**
 >
+> **2026-09-10 Gate K 状态更新**：C++ 伪代码文本生成链（`kismet/translator.py` / `body_builder.py` / `jump_analyzer.py`）已退役；公共函数逻辑表示为 `semantic.functions[]` 的 K0 expression 摘要（asset）与 decode 级 expression tree。`cpp_code` / `translation_status` / `structured_rate` 不再出现在 experimental semantic 输出中。
+>
 > 本文是当前项目唯一权威的重构目标。源码与测试仍是“当前已经实现什么”的唯一依据；本文只定义“接下来要实现什么”。旧版输出、Semantic JSON 1.x 和单资产设计文档均为历史资料，不得继续作为新功能的目标架构。
 
 ## Executive Summary
@@ -62,7 +64,7 @@ status: target
 - `.uasset` 写回或二进制等价重建。
 - UE1/UE2/UE3 通用兼容承诺。
 - 默认内嵌纹理、音频或任意大型 BulkData。
-- 把 Blueprint/Kismet/C++ 生成作为核心 package 读取的前置条件。
+- 把 Blueprint/Kismet 反编译或任何 C++ 文本生成作为核心 package 读取的前置条件（C++ 伪代码生成已于 2026-09-10 Gate K 退役）。
 - 为每个资产类预先建立独立接口、工厂和目录。
 - 为尚无真实样本或 UE 源码证据的格式建立猜测性解析器。
 
@@ -719,11 +721,11 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 2. Texture/Sound metadata 与 payload descriptors。
 3. Skeleton/Mesh summary。
 4. Material/Niagara graph summary。
-5. Blueprint/AnimBlueprint/Kismet/C++ 扩展迁移。
+5. Blueprint/AnimBlueprint/Kismet 扩展迁移（C++ 伪代码生成不在此列，2026-09-10 Gate K 退役）。
 
     - Phase 4.5：graph/node/pin 解码 + declaration（parent_class/interfaces/functions）+ SCS components + NewVariables names 已迁移到 v2 `BlueprintFamilyHandler` decode 分支。fixture 测试覆盖 StackOBot/BP_CombatCharacter/ABP_RifleAnimLayers/ALS_AnimBP。
     - 已迁移（2026-09-05 核对源码与测试）：VarType（`FEdGraphPinType`）类型解码、Kismet 反编译（`blueprint.kismet` coverage）。
-    - 未迁移：C++ skeleton。parent-asset 解析已放弃（2026-09-10 Gate G，D1 §7）。C++ 伪代码生成链已退役（2026-09-10 Gate K）；函数逻辑以 expression 摘要/decode tree 公开。，不再作为迁移目标。
+    - 未迁移：C++ skeleton。parent-asset 解析已放弃（2026-09-10 Gate G，D1 §7）。C++ 伪代码生成链已退役（2026-09-10 Gate K）；函数逻辑以 expression 摘要/decode tree 公开，不再作为迁移目标。
 
 退出条件：每个 handler 至少有一个真实样本、一个缺失/partial 样本和明确 coverage；handler 失败不影响同包其他对象。
 
