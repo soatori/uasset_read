@@ -120,6 +120,8 @@
 
 ### Task 3: Delete the Source abstraction family, ArchiveLike, read_cstring (~180 lines)
 
+> **Executed 2026-09-10** (`319d9179`): ArchiveLike, read_cstring, Source/FileSource/MemorySource/SliceReader deleted; package/package_trailer annotations → FArchive; SourceInfo kept; Source-family tests removed (export_bounds retained).
+
 **Files:** Modify `src/uasset_read/archive.py` (lines :27-35 `ArchiveLike`, :349-364 `read_cstring`, :743-879 protocol+impls), `src/uasset_read/package.py:12,29-30,175`, `tests/test_core.py` (Source nested defs in `test_reader_boundaries_reject_malformed_access`, :~97-190 and :~253-267), `src/uasset_read/serializers/graph_pin.py:452` + `archive.py:662` (`_contains_binary_data` params), `tests/size-baseline.json`
 
 **Interfaces:** `package.py` annotations become `FArchive`; `PackageArchive` still accepts `FArchive`/`ByteArchive` (both subclasses).
@@ -140,6 +142,8 @@
 ---
 
 ### Task 4: Slim VersionContext to `depth` (~100 lines)
+
+> **SKIP 2026-09-10:** G1 contract (`2026-08-31-version-context-field-contract.md`) requires frozen multi-field VersionContext; an identical cut was already reverted (`280b7e09`). Fields remain extension points for Zen/#623/#624. Revisit only after amending G1.
 
 **Files:** Modify `src/uasset_read/versioning.py:40-159` (keep `EngineVersion`, GUID constants, `get_custom_version`), `src/uasset_read/parsers/legacy_reader.py:50,693-699`, `tests/test_core.py` (`test_v2_mappings_never_passes_raw_path_string` + its `_run_cases` entry), `tests/size-baseline.json`
 
@@ -181,6 +185,8 @@
 ---
 
 ### Task 6: Delete JmapParser + mappings tidy (~95 lines)
+
+> **Executed 2026-09-10** (`2509f99d` + `74e1ad7b`): JmapParser and `.jmap` dispatch deleted; pathlib; constants.MAX_RECURSION_DEPTH dropped; CLI/README `.jmap` claims removed.
 
 **Files:** Modify `src/uasset_read/mappings.py` (:304-389 class, :401-402 `.jmap` branch, `:5 import json`, `Dict` typing import if orphaned, :172/:312→ wait 312 dies with the class; remaining `os.path.getsize`/`os.path.basename` → `pathlib`), `src/uasset_read/cli.py:108` (`--mappings` help), `src/uasset_read/constants.py:61-63` (`MAX_RECURSION_DEPTH` — zero importers; mappings.py keeps its own `= 64`), `tests/size-baseline.json`
 

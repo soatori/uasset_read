@@ -173,7 +173,7 @@ class PackageBundle:
         return PackageArchive(main, uexp, tolerant=tolerant)
 
     def _open_archive_for(self, extension: str, tolerant: bool) -> FArchive:
-        extension = _normalize_ext(extension)
+        # Callers pass dotted literals (".uasset" / ".umap" / ".uexp").
         path = self.files.get(extension)
         if path is None:
             raise ParseError(f"Package sidecar not found: {extension}")
@@ -238,10 +238,6 @@ class FileSystemPackageProvider:
 def open_package_bundle(path: str, tolerant: bool = False) -> PackageBundle:
     """Discover a package bundle from a filesystem path."""
     return FileSystemPackageProvider().open_package_bundle(path, tolerant=tolerant)
-
-
-def _normalize_ext(extension: str) -> str:
-    return extension if extension.startswith(".") else f".{extension}"
 
 
 def parse_package_document(

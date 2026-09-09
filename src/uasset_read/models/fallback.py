@@ -17,9 +17,7 @@ class FallbackReason(str, Enum):
     UNSUPPORTED_TYPE = "unsupported_type"
     UNSUPPORTED_STRUCT = "unsupported_struct"
     PARSE_ERROR = "parse_error"
-    PARTIAL_PARSE = "partial_parse"
     MISSING_MAPPING = "missing_mapping"
-    CUSTOM_PAYLOAD = "custom_payload"
     SIZE_EXCEEDED = "size_exceeded"
 
 

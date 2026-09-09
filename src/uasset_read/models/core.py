@@ -27,8 +27,6 @@ class FEdGraphPinType:
     pin_subcategory_object: int | None = None  # FPackageIndex (int32)
     pin_subcategory_object_name: str | None = None
     container_type: int = 0
-    is_map_key: bool = False
-    is_map_value: bool = False
     is_reference: bool = False
     is_weak_pointer: bool = False
     is_const: bool = False
