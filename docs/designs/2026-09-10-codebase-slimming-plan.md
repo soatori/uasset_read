@@ -1,9 +1,10 @@
 # 代码库精简计划
 
-> **Status**: current + target（Phase 0/A、Gate G parent 和 Gate K 已完成；Gate L 与其余 Gate G 仍为 target）  
+> **Status**: current + target（Phase 0/A 与 Gate G parent_resolver / Gate K / Gate L 已完成；agent_tools / iostore / mappings 仍为 keep）  
 > **Date**: 2026-09-10  
-> **Revision**: 2026-09-10 实际项目复核与执行状态版——统一正式 size ratchet 口径，区分死参数与在用能力，并记录已批准的 Gate G/K。  
-> **Goal**: 在不暗中改写 package-first 权威架构、不丢失蓝图执行流/数据流可观察性、不削弱结构化失败诊断的前提下做减法。已完成死 CLI 参数、parent-asset 和 C++ 文本生成器的退役；日志清理、Agent/IoStore/mappings 仍须先通过各自决策门。
+> **Revision**: 2026-09-10 执行完成版——记录 Phase A、Gate G(parent)、Gate K、Gate L 的落地结果与最终 ratchet。  
+> **Goal**: 在不暗中改写 package-first 权威架构、不丢失蓝图执行流/数据流可观察性、不削弱结构化失败诊断的前提下做减法。已完成：死 CLI 参数、parent-asset、C++ 文本生成器、日志清理。剩余 Gate G 项保持 keep，除非另有产品决策。  
+> **Execution record**: Phase A `cff2f328`；Gate G parent `b22c5aae`；Gate K `12dcb49c`；Gate L `6a5eeea8`。最终 suite **218 passed**；src 74/21105；tests 13/5941；docs 150/45613；wheel 247036。
 
 ---
 
@@ -54,26 +55,13 @@ legacy_reader
 `expression_count` / `expression_types` / `expressions_truncated` /
 （decode）`expressions` / 失败诊断与证据字段。不再公开 `cpp_code` / `translation_status`。
 
-### 1.2 日志事实
+### 1.2 日志事实（**2026-09-10 Gate L 后 current**）
 
-current `project_logging.py` 不调用 `dictConfig`、`fileConfig` 或 `basicConfig`，也不安装
-process-global handler。旧全局 logging 配置链已经随 v1 删除。
+库与 CLI 均不配置 process-global logging，也不提供文件日志或旧日志清理。
 
-模块当前唯一职责是 `cleanup_project_logs(...)`；CLI 的 `--clean-logs` 仍调用它，并使用：
-
-- `--log-dir`
-- `--log-keep-latest`
-- `--log-max-total-mb`
-
-其余五个参数仅被 argparse 解析，从未读取：
-
-- `--log-level`
-- `--log-cleanup` / `--no-log-cleanup`
-- `--log-max-bytes`
-- `--log-backup-count`
-- `--log-format`
-
-删除这五个参数是死代码清理；删除 `--clean-logs` 及其三个输入参数是公开能力退役，二者不得混为同一 Phase。
+- Phase A 已删除五个无消费者参数：`--log-level`、`--log-cleanup` / `--no-log-cleanup`、`--log-max-bytes`、`--log-backup-count`、`--log-format`。
+- Gate L 已删除 `project_logging.py` 与 `--clean-logs`、`--log-dir`、`--log-keep-latest`、`--log-max-total-mb`；这些 flag 进入 retired 显式拒绝集合（退出码 2）。
+- 旧版本遗留的 `log/` 目录由用户自行删除。
 
 ---
 
@@ -99,36 +87,36 @@ for prefix in ('src/','tests/','docs/'):
 "
 ```
 
-当前正式基线：
+当前正式基线（**2026-09-10 Gate L 实施后**）：
 
 | 范围 | tracked 文件数 | 物理行数 | `size-baseline.json` |
 | --- | ---: | ---: | ---: |
-| `src/**/*.py` | 79 | **23,246** → Phase A 后 **23,228** | 23,228 |
-| `tests/**/*.py` | 13 | **5,930** → Phase A 后 **5,949** | 5,949 |
+| `src/**/*.py` | 74 | **21,105** | 21,105 |
+| `tests/**/*.py` | 13 | **5,941** | 5,941 |
+| `docs/**/*.md` | 150 | **45,613** | 45,613 |
 
-`23,228` / `5,949`（Phase A 实施后）当前既是实测值，也是 ratchet ceiling；两种身份不矛盾。Phase A 之前的官方口径仍是 23,246 / 5,930。
+`wheel_bytes._measured` = **247,036**。上述数值既是实测值，也是 ratchet ceiling。
 
-### 2.2 相关模块物理行数
+### 2.2 相关模块物理行数（实施前快照，供审计对照）
 
-| 模块 | 行数 |
-| --- | ---: |
-| `agent_tools.py` | 451 |
-| `iostore.py` | 437 |
-| `parent_resolver.py` | 120 |
-| `project_logging.py` | 91 |
-| `cli.py` | 410 |
-| `kismet/translator.py` | 769 |
-| `kismet/body_builder.py` | 435 |
-| `kismet/jump_analyzer.py` | 648 |
-| `kismet/decompile_bridge.py` | 281 |
-| `kismet/result.py` | 105 |
-| `kismet/expressions/` | 2,107 / 17 文件 |
-| `mappings.py` | 407 |
-| `projection.py` | 464 |
-| `models/` | 686 / 9 文件 |
+| 模块 | 行数 | 2026-09-10 结局 |
+| --- | ---: | --- |
+| `agent_tools.py` | 451 | keep |
+| `iostore.py` | 437 | keep |
+| `parent_resolver.py` | 120 | **retired**（Gate G） |
+| `project_logging.py` | 91 | **retired**（Gate L） |
+| `cli.py` | 410 | 净瘦身（Phase A + Gate L） |
+| `kismet/translator.py` | 769 | **retired**（Gate K） |
+| `kismet/body_builder.py` | 435 | **retired**（Gate K） |
+| `kismet/jump_analyzer.py` | 648 | **retired**（Gate K） |
+| `kismet/decompile_bridge.py` | 281 | kept（K0 表达式输出） |
+| `kismet/result.py` | 105 | kept（去 translation pair） |
+| `kismet/expressions/` | 2,107 / 17 文件 | kept |
+| `mappings.py` | 407 | keep（tidy only） |
+| `projection.py` | 464 | keep |
+| `models/` | 686 / 9 文件 | keep |
 
-三个伪代码生成器文件合计 **1,852 物理行**。删除 `project_logging.py` 加这三个文件时，
-文件数是 **79 -> 75**；bridge/result/handler/CLI 的净改动必须实施后实测，不能预先伪精确承诺。
+三个伪代码生成器原合计 **1,852 物理行**；连同 `project_logging.py` / `parent_resolver.py` 删除后，src 文件数 **79 → 74**。
 
 ### 2.3 Ratchet 规则
 
@@ -139,8 +127,8 @@ for prefix in ('src/','tests/','docs/'):
 - `min_files` 是防止未跟踪子树绕过门禁的 floor，不是“文件越多越好”的目标。
 
 历史审查时曾出现 `test_docs_tree_within_baseline` 的一项失败；Phase 0 已将计划、design
-index 和 docs ratchet 一并纳入。当前 latest 验证为 `213 passed`，正式 tracked 基线为 src
-75 / 21,217 行、tests 13 / 5,882 行、docs 150 / 45,630 行。
+index 和 docs ratchet 一并纳入。当前 latest 验证为 **218 passed**，正式 tracked 基线为 src
+74 / 21,105 行、tests 13 / 5,941 行、docs 150 / 45,613 行、wheel 247,036 bytes。
 
 ---
 
@@ -437,7 +425,7 @@ Gate G（可选）
 ### Phase A
 
 - 五个删除参数被拒绝。
-- `--clean-logs` 及三个输入参数仍工作。
+- ~~`--clean-logs` 及三个输入参数仍工作~~（Phase A 时点成立；**Gate L 已于同日退役该能力**）。
 - 普通 parse/CLI JSON 行为不变。
 
 ### Gate L
@@ -468,5 +456,5 @@ Gate G（可选）
 
 1. **先补齐 K3 的两个剩余回归测试。** 为 `BP_CombatCharacter` 的 `depth=decode` CLI 输出增加 `max_bytes` 联合断言；再构造同包两个 Function export、其中一个失败的最小测试，锁定“失败可见且不吞掉其他函数”。这是最小、风险最低的收尾工作。
 2. **将 K3 验收清单全部勾选后，关闭 Gate K 的执行记录。** 同一提交重测并收紧 tests/docs ratchet，避免把已完成功能长期留在 target 状态。
-3. **对 Gate L 作单独产品决策。** 若保留旧日志清理，不再继续改动；若退役，先按 §7 更新 canonical、CLI/Wiki/API，再删除 `project_logging.py` 和其公开参数。
+3. ~~**对 Gate L 作单独产品决策。**~~ Gate L 已批准并执行（2026-09-10）：canonical/CLI/Wiki/API 已同步，`project_logging.py` 与公开清理参数已删除。
 4. **其余 Gate G 不应按体积排序强推。** IoStore、Agent tools、mappings 各自依赖 deferred capability / 文档契约；只有产品目标明确收缩时再独立立项。

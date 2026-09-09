@@ -147,7 +147,7 @@ Key retained capabilities from v1:
 
 #### Logging
 
-Public API uses scoped logging internally but may call `configure_project_logging()` (retired — see `project_logging.py:4-8`) which replaces handlers and creates new run IDs.
+Public API never installs process-global logging. There is no `configure_project_logging()` and no CLI log-cleanup path (Gate L, 2026-09-10); callers receive structured `Diagnostic`s only.
 
 #### Agent & size
 

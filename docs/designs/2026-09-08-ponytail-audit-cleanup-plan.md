@@ -174,8 +174,8 @@
 **Files:** Modify `src/uasset_read/cli.py:113-145`, plus grep tests for `--log-` usage; `tests/size-baseline.json`
 
 - [x] **Step 5.1:** `grep -rn "log_level\|log_format\|log_max_bytes\|log_backup_count\|log_cleanup" src tests --include="*.py"` — confirm the only hits are the five `add_argument` blocks.
-- [x] **Step 5.2:** Delete the `--log-level`, `--log-cleanup`, `--log-max-bytes`, `--log-backup-count`, `--log-format` `add_argument` calls. Keep `--log-dir`, `--log-keep-latest`, `--log-max-total-mb` (they feed `--clean-logs` at cli.py:291-294).
-- [x] **Step 5.3:** Fix help texts that reference the deleted flags: `--log-keep-latest` "When cleanup is enabled..." → "When --clean-logs runs, keep only the newest N complete runs"; `--log-max-total-mb` "When --log-cleanup is set..." → "When --clean-logs runs, cap total log storage to MB megabytes".
+- [x] **Step 5.2:** Delete the `--log-level`, `--log-cleanup`, `--log-max-bytes`, `--log-backup-count`, `--log-format` `add_argument` calls. Keep `--log-dir`, `--log-keep-latest`, `--log-max-total-mb` (they feed `--clean-logs` at cli.py:291-294). *(Gate L 2026-09-10 later retired `--clean-logs` and those three inputs as well.)*
+- [x] **Step 5.3:** Fix help texts that reference the deleted flags: `--log-keep-latest` "When cleanup is enabled..." → "When --clean-logs runs, keep only the newest N complete runs"; `--log-max-total-mb` "When --log-cleanup is set..." → "When --clean-logs runs, cap total log storage to MB megabytes". *(Superseded by Gate L: the remaining cleanup flags no longer exist.)*
 - [x] **Step 5.4:** Suite parity (`tests/test_cli.py` must stay green), baseline json, commit `refactor: drop five CLI log flags that were parsed but never read`.
 
 ---
