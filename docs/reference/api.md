@@ -37,11 +37,11 @@ result = parse_uasset_with_linker("path/to/asset.uasset")
 | 参数 | 类型 | 默认 | 说明 |
 |------|------|------|------|
 | `tolerant` | bool | True | 容错模式 |
-| `mappings_path` | str \| None | None | .usmap/.jmap 映射文件 |
+| `mappings_path` | str \| None | None | .usmap 映射文件 |
 | `game` | str \| None | None | 游戏标识（用于自定义属性 handler） |
-| `include_parent_assets` | bool | False | 是否递归解析父资产 |
-| `asset_roots` | list[str] \| None | None | 资产搜索根目录 |
 | `provider` | PackageProvider \| None | None | 自定义 provider（PAK/IoStore） |
+
+> 2026-09-10：`resolve_parents` / `parent_root`（及 CLI `--include-parent-assets` / `--asset-root`）已随 parent-asset 解析产品决策退役，见 D1 §7。
 
 ## 常量
 

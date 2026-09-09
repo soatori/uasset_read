@@ -33,3 +33,13 @@ def test_retired_log_flags_are_rejected(monkeypatch, flag: str) -> None:
     with pytest.raises(SystemExit) as excinfo:
         cli.main()
     assert excinfo.value.code == 3
+
+
+@pytest.mark.parametrize("flag", ["--include-parent-assets", "--asset-root"])
+def test_retired_parent_asset_flags_are_rejected(monkeypatch, flag: str, capsys) -> None:
+    """Parent-asset resolution is retired (Gate G); flags exit 2 with a clear message."""
+    monkeypatch.setattr(sys, "argv", ["uasset_read", flag])
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main()
+    assert excinfo.value.code == 2
+    assert "parent-asset resolution is retired" in capsys.readouterr().err

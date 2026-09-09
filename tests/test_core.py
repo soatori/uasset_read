@@ -3124,133 +3124,6 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     assert cross == main_tail + uexp_head, f"cross-boundary splice failed: {cross!r}"
 
 
-def test_resolve_parent_assets_returns_relations():
-    """resolve_parent_assets must return parent class relations."""
-    from uasset_read.parent_resolver import resolve_parent_assets
-    from uasset_read.models.object_model import Relation
-    from uasset_read.models.diagnostics import Diagnostic
-    from uasset_read.models.document import PackageDocument
-    from pathlib import Path
-
-    # Minimal document with a Blueprint that has a parent
-    doc = PackageDocument(
-        source={
-            "kind": "legacy",
-            "name": "test.uasset",
-            "size": 0,
-        },
-        package=None,
-        objects=[],
-        relations=[],
-        dependencies=[],
-        diagnostics=[],
-        summary={},
-        payloads=[],
-        depth="package",
-    )
-
-    # No parent files on disk → should return empty relations + diagnostic
-    relations, diagnostics = resolve_parent_assets(doc, root=Path("/nonexistent"), max_depth=1)
-    assert isinstance(relations, list)
-    assert len(relations) == 0
-    assert isinstance(diagnostics, list)
-    # Verify return type annotation uses Relation by inspecting the function's annotations
-    import typing
-
-    hints = typing.get_type_hints(
-        resolve_parent_assets,
-        globalns={
-            "Relation": Relation,
-            "Diagnostic": Diagnostic,
-            "PackageDocument": PackageDocument,
-            "Path": Path,
-        },
-    )
-    assert hints["return"] == tuple[list[Relation], list[Diagnostic]]
-
-
-def test_resolve_parent_assets_respects_max_depth():
-    """Resolution must stop at max_depth."""
-    from uasset_read.parent_resolver import resolve_parent_assets
-    from uasset_read.models.document import PackageDocument
-    from pathlib import Path
-
-    doc = PackageDocument(
-        source={
-            "kind": "legacy",
-            "name": "test.uasset",
-            "size": 0,
-        },
-        package=None,
-        objects=[],
-        relations=[],
-        dependencies=[],
-        diagnostics=[],
-        summary={},
-        payloads=[],
-        depth="package",
-    )
-
-    # max_depth=0 should not search
-    relations, diagnostics = resolve_parent_assets(doc, root=Path("/nonexistent"), max_depth=0)
-    assert relations == []
-
-
-def test_resolve_parent_handles_circular_reference():
-    """Circular parent references must not cause infinite recursion."""
-    from uasset_read.parent_resolver import resolve_parent_assets
-    from uasset_read.models.document import PackageDocument
-    from pathlib import Path
-
-    doc = PackageDocument(
-        source={
-            "kind": "legacy",
-            "name": "test.uasset",
-            "size": 0,
-        },
-        package=None,
-        objects=[],
-        relations=[],
-        dependencies=[],
-        diagnostics=[],
-        summary={},
-        payloads=[],
-        depth="package",
-    )
-
-    # No files on disk → no circular reference possible
-    relations, diagnostics = resolve_parent_assets(doc, root=Path("/nonexistent"), max_depth=5)
-    assert isinstance(relations, list)
-
-
-def test_api_resolve_parents_parameter():
-    """parse_package_document must accept resolve_parents parameter."""
-    from uasset_read.package import parse_package_document
-    from pathlib import Path
-
-    fixture = Path("tests/samples/ABP_RifleAnimLayers.uasset")
-    if not fixture.exists():
-        pytest.skip("fixture not found")
-
-    # Without resolution (default)
-    doc1 = parse_package_document(str(fixture), depth="package")
-    # With resolution
-    doc2 = parse_package_document(
-        str(fixture),
-        depth="package",
-        resolve_parents=True,
-        parent_root=str(fixture.parent),
-    )
-    # Both should return valid documents
-    assert doc1 is not None
-    assert doc2 is not None
-    # Relations may or may not be populated depending on fixtures on disk
-    assert isinstance(doc1.relations, list)
-    assert isinstance(doc2.relations, list)
-    assert isinstance(doc1.diagnostics, list)
-    assert isinstance(doc2.diagnostics, list)
-
-
 def test_test_suite_structure_gate():
     import ast
 
@@ -3273,7 +3146,7 @@ def test_test_suite_structure_gate():
     assert subdirs == {"samples", "serialization"}
     tree = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
     funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
-    assert len(funcs) == 17
+    assert len(funcs) == 13
     assert not any(isinstance(n, ast.ClassDef) for n in tree.body)
     # The design bans decorators on test functions; cache helpers like
     # _document legitimately carry @lru_cache, so the check is scoped to

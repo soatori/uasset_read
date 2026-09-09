@@ -160,4 +160,4 @@ void AMYCharacter::DoJumpStart()
 | `cpp_gen/cpp_default_value_formatter.py` | UE 默认值 → C++ 字面量 |
 | `cpp_gen/cpp_constructor_ir_builder.py` | 从 BlueprintVariable 构建构造函数 IR |
 
-> 历史使用方式（已失效）：`parse_single(path, format="cpp_skeleton")`，通过渲染器系统输出。当前 v2 入口为 `parse_package_document(path, depth="decode")`，蓝图变量（含 VarType）与 Kismet 反编译结果位于对应 `ObjectRecord` 的 `semantic`/`coverage`；C++ skeleton 与 parent-asset 解析仍未实现。
+> 历史使用方式（已失效）：`parse_single(path, format="cpp_skeleton")`，通过渲染器系统输出。当前 v2 入口为 `parse_package_document(path, depth="decode")`，蓝图变量（含 VarType）与 Kismet 反编译结果位于对应 `ObjectRecord` 的 `semantic`/`coverage`；C++ skeleton 仍未实现；parent-asset 解析已于 2026-09-10 Gate G 退役。

@@ -142,20 +142,6 @@ def create_parser():
         help="Batch output format: jsonl (one JSON per line, default) or json (array)",
     )
 
-    # Parent-assets
-    parser.add_argument(
-        "--include-parent-assets",
-        action="store_true",
-        default=False,
-        help="Include parent asset resolution",
-    )
-    parser.add_argument(
-        "--asset-root",
-        metavar="DIR",
-        default=None,
-        help="Root directory for parent asset search",
-    )
-
     # Utility flags
     parser.add_argument(
         "--clean-logs",
@@ -222,8 +208,6 @@ def _handle_batch(args) -> None:
                 mappings_path=args.mappings,
                 game=args.game,
                 depth=args.depth,
-                resolve_parents=args.include_parent_assets,
-                parent_root=args.asset_root,
             )
             projected = project_document(
                 doc,
@@ -313,11 +297,15 @@ def main():
     """Main CLI entry point."""
     parser = create_parser()
 
-    # v1 pipeline removal: retired flags get an explicit unsupported message
-    # instead of argparse's generic unrecognized-argument error (Gate B).
-    retired = {"--legacy-json", "--markdown", "--list-formats", "--diff"}
+    # Parent-asset resolution was abandoned (Gate G, 2026-09-10): explicit
+    # unsupported messages instead of argparse's generic unknown-argument error.
+    retired = {"--legacy-json", "--markdown", "--list-formats", "--diff", "--include-parent-assets", "--asset-root"}
     hit = next((flag for flag in sys.argv if flag in retired), None)
     if hit is not None:
+        if hit in {"--include-parent-assets", "--asset-root"}:
+            parser.error(
+                f"{hit} was removed: parent-asset resolution is retired (product decision, Gate G 2026-09-10)"
+            )
         parser.error(
             f"{hit} was removed together with the v1 pipeline; the v2 document output (--depth) is the only parse path"
         )
@@ -368,8 +356,6 @@ def main():
             mappings_path=args.mappings,
             game=args.game,
             depth=args.depth,
-            resolve_parents=args.include_parent_assets,
-            parent_root=args.asset_root,
         )
         projected = project_document(
             doc,
