@@ -9,7 +9,7 @@ import logging
 import struct as _struct
 from typing import TYPE_CHECKING, Any
 
-from uasset_read.parsers.errors import BINARY_READ_ERRORS, PROPERTY_ACCESS_ERRORS, REFERENCE_RESOLVE_ERRORS
+from uasset_read.parsers.errors import BINARY_READ_ERRORS, REFERENCE_RESOLVE_ERRORS
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -337,14 +337,7 @@ def _try_recover_property_tag(
         limit = min(limit, file_size)
 
     # Size validation uses actual data boundary (excluding max_scan) to avoid false positives from scan window truncation
-    if property_end is not None and isinstance(file_size, int):
-        data_boundary = min(property_end, file_size)
-    elif property_end is not None:
-        data_boundary = property_end
-    elif isinstance(file_size, int):
-        data_boundary = file_size
-    else:
-        data_boundary = limit
+    data_boundary = min((b for b in (property_end, file_size) if isinstance(b, int)), default=limit)
 
     map_len = len(name_map)
     # Get UE5 version number to determine PropertyTag type field format
@@ -446,8 +439,6 @@ def _try_recover_property_tag(
 
     archive.seek(current)  # restore original position
     return False
-
-
 
 
 def parse_property_value(

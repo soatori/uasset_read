@@ -260,36 +260,6 @@ def _decode_nd(raw: bytes, size: int, keys: tuple[str, ...]) -> dict[str, Any]:
     return dict(zip(keys, values))
 
 
-def _decode_vector(raw: bytes, size: int) -> dict[str, Any]:
-    """Decode Vector / Vector3f / Vector3d (12 or 24 bytes)."""
-    return _decode_nd(raw, size, ("X", "Y", "Z"))
-
-
-def _decode_rotator(raw: bytes, size: int) -> dict[str, Any]:
-    """Decode Rotator / Rotator3f / Rotator3d (12 or 24 bytes)."""
-    return _decode_nd(raw, size, ("Pitch", "Yaw", "Roll"))
-
-
-def _decode_vector2d(raw: bytes, size: int) -> dict[str, Any]:
-    """Decode Vector2D / Vector2f / Vector2d (8 or 16 bytes)."""
-    return _decode_nd(raw, size, ("X", "Y"))
-
-
-def _decode_vector4(raw: bytes, size: int) -> dict[str, Any]:
-    """Decode Vector4 / Vector4f / Vector4d (16 or 32 bytes)."""
-    return _decode_nd(raw, size, ("X", "Y", "Z", "W"))
-
-
-def _decode_quat(raw: bytes, size: int) -> dict[str, Any]:
-    """Decode Quat / Quat4f / Quat4d (16 or 32 bytes)."""
-    return _decode_nd(raw, size, ("X", "Y", "Z", "W"))
-
-
-def _decode_linear_color(raw: bytes, size: int) -> dict[str, Any]:
-    """Decode LinearColor (16 bytes, 4 float RGBA)."""
-    return _decode_nd(raw, size, ("R", "G", "B", "A"))
-
-
 def _decode_color(raw: bytes, size: int) -> dict[str, Any]:
     """Decode Color (4 bytes). FColor little-endian byte order is B,G,R,A (Color.h union)."""
 
@@ -324,11 +294,6 @@ def _decode_two_vectors(raw: bytes, size: int) -> dict[str, Any]:
     v1 = _decode_nd(raw[:elem_size], elem_size, ("X", "Y", "Z"))
     v2 = _decode_nd(raw[elem_size:size], elem_size, ("X", "Y", "Z"))
     return {"V1": v1, "V2": v2}
-
-
-def _decode_plane(raw: bytes, size: int) -> dict[str, Any]:
-    """Decode Plane / Plane4f / Plane4d (16 or 32 bytes)."""
-    return _decode_nd(raw, size, ("X", "Y", "Z", "W"))
 
 
 def _decode_sphere(raw: bytes, size: int) -> dict[str, Any]:
@@ -469,32 +434,32 @@ def _decode_ed_graph_pin_type(raw: bytes, size: int, name_map: list[str]) -> dic
 
 # struct_type -> (set of valid byte sizes, decoder function) dispatch dictionary
 _STRUCT_DECODERS: dict[str, tuple] = {
-    "Vector": ((12, 24), _decode_vector),
-    "Vector3f": ((12, 24), _decode_vector),
-    "Vector3d": ((12, 24), _decode_vector),
-    "Rotator": ((12, 24), _decode_rotator),
-    "Rotator3f": ((12, 24), _decode_rotator),
-    "Rotator3d": ((12, 24), _decode_rotator),
-    "Vector2D": ((8, 16), _decode_vector2d),
-    "Vector2f": ((8, 16), _decode_vector2d),
-    "Vector2d": ((8, 16), _decode_vector2d),
-    "DeprecateSlateVector2D": ((8,), _decode_vector2d),
-    "Vector4": ((16, 32), _decode_vector4),
-    "Vector4f": ((16, 32), _decode_vector4),
-    "Vector4d": ((16, 32), _decode_vector4),
-    "Quat": ((16, 32), _decode_quat),
-    "Quat4f": ((16, 32), _decode_quat),
-    "Quat4d": ((16, 32), _decode_quat),
-    "LinearColor": ((16,), _decode_linear_color),
+    "Vector": ((12, 24), lambda raw, size: _decode_nd(raw, size, ("X", "Y", "Z"))),
+    "Vector3f": ((12, 24), lambda raw, size: _decode_nd(raw, size, ("X", "Y", "Z"))),
+    "Vector3d": ((12, 24), lambda raw, size: _decode_nd(raw, size, ("X", "Y", "Z"))),
+    "Rotator": ((12, 24), lambda raw, size: _decode_nd(raw, size, ("Pitch", "Yaw", "Roll"))),
+    "Rotator3f": ((12, 24), lambda raw, size: _decode_nd(raw, size, ("Pitch", "Yaw", "Roll"))),
+    "Rotator3d": ((12, 24), lambda raw, size: _decode_nd(raw, size, ("Pitch", "Yaw", "Roll"))),
+    "Vector2D": ((8, 16), lambda raw, size: _decode_nd(raw, size, ("X", "Y"))),
+    "Vector2f": ((8, 16), lambda raw, size: _decode_nd(raw, size, ("X", "Y"))),
+    "Vector2d": ((8, 16), lambda raw, size: _decode_nd(raw, size, ("X", "Y"))),
+    "DeprecateSlateVector2D": ((8,), lambda raw, size: _decode_nd(raw, size, ("X", "Y"))),
+    "Vector4": ((16, 32), lambda raw, size: _decode_nd(raw, size, ("X", "Y", "Z", "W"))),
+    "Vector4f": ((16, 32), lambda raw, size: _decode_nd(raw, size, ("X", "Y", "Z", "W"))),
+    "Vector4d": ((16, 32), lambda raw, size: _decode_nd(raw, size, ("X", "Y", "Z", "W"))),
+    "Quat": ((16, 32), lambda raw, size: _decode_nd(raw, size, ("X", "Y", "Z", "W"))),
+    "Quat4f": ((16, 32), lambda raw, size: _decode_nd(raw, size, ("X", "Y", "Z", "W"))),
+    "Quat4d": ((16, 32), lambda raw, size: _decode_nd(raw, size, ("X", "Y", "Z", "W"))),
+    "LinearColor": ((16,), lambda raw, size: _decode_nd(raw, size, ("R", "G", "B", "A"))),
     "Color": ((4,), _decode_color),
     "Guid": ((16,), _decode_guid),
     "IntPoint": ((8,), _decode_int_point),
     "IntVector": ((12,), _decode_int_vector),
     "IntVector3": ((12,), _decode_int_vector),
     "TwoVectors": ((24, 48), _decode_two_vectors),
-    "Plane": ((16, 32), _decode_plane),
-    "Plane4f": ((16, 32), _decode_plane),
-    "Plane4d": ((16, 32), _decode_plane),
+    "Plane": ((16, 32), lambda raw, size: _decode_nd(raw, size, ("X", "Y", "Z", "W"))),
+    "Plane4f": ((16, 32), lambda raw, size: _decode_nd(raw, size, ("X", "Y", "Z", "W"))),
+    "Plane4d": ((16, 32), lambda raw, size: _decode_nd(raw, size, ("X", "Y", "Z", "W"))),
     "Sphere": ((16, 32), _decode_sphere),
     "Sphere3f": ((16, 32), _decode_sphere),
     "Sphere3d": ((16, 32), _decode_sphere),
