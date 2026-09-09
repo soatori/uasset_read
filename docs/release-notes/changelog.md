@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Breaking Changes
+- Removed five CLI flags that argparse accepted but no code read: `--log-level`, `--log-cleanup` / `--no-log-cleanup`, `--log-max-bytes`, `--log-backup-count`, `--log-format`. The dry-run `--clean-logs` path and its inputs `--log-dir` / `--log-keep-latest` / `--log-max-total-mb` are unchanged.
+
 ## [0.5.4.45] — 2026-07-23
 
 Major release since v0.5.3.23 — comprehensive code quality, security hardening, and feature expansion.

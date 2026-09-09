@@ -109,39 +109,21 @@ def create_parser():
     parser.add_argument("--game", metavar="NAME", help="Enable game-specific property readers")
     parser.add_argument("--strict", action="store_true", help="Disable tolerant mode")
     parser.add_argument(
-        "--log-level",
-        choices=["debug", "info", "warning", "error", "off"],
-        default=None,
-        help="File log level: debug, info, warning, error, or off",
-    )
-    parser.add_argument("--log-dir", metavar="DIR", help="Write project logs to DIR instead of ./log")
-    parser.add_argument(
-        "--log-cleanup",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Clean old run logs automatically (default: enabled)",
+        "--log-dir",
+        metavar="DIR",
+        help="Log directory scanned by --clean-logs (default: ./log)",
     )
     parser.add_argument(
-        "--log-keep-latest", metavar="N", type=int, help="When cleanup is enabled, keep only the newest N complete runs"
+        "--log-keep-latest",
+        metavar="N",
+        type=int,
+        help="When --clean-logs runs, keep only the newest N complete runs",
     )
     parser.add_argument(
         "--log-max-total-mb",
         metavar="MB",
         type=int,
-        help="When --log-cleanup is set, cap total log storage to MB megabytes",
-    )
-    parser.add_argument(
-        "--log-max-bytes",
-        metavar="BYTES",
-        type=int,
-        default=10_000_000,
-        help="Max size per log file in bytes (default: 10MB)",
-    )
-    parser.add_argument(
-        "--log-backup-count", metavar="N", type=int, default=5, help="Number of backup log files to keep (default: 5)"
-    )
-    parser.add_argument(
-        "--log-format", choices=["text", "json"], default="text", help="Log output format: text (default) or json"
+        help="When --clean-logs runs, cap total log storage to MB megabytes",
     )
 
     # Batch mode
@@ -291,11 +273,7 @@ def _handle_clean_logs(args) -> None:
     planned = cleanup_project_logs(
         log_dir=args.log_dir,
         keep_latest=args.log_keep_latest if args.log_keep_latest is not None else 20,
-        max_total_bytes=(
-            args.log_max_total_mb * 1_000_000
-            if args.log_max_total_mb is not None
-            else 500 * 1024 * 1024
-        ),
+        max_total_bytes=(args.log_max_total_mb * 1_000_000 if args.log_max_total_mb is not None else 500 * 1024 * 1024),
         dry_run=True,
     )
     print(f"Would delete {len(planned)} log file(s)")

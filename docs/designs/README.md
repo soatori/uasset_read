@@ -26,6 +26,7 @@ These sit beside the canonical target on purpose. Each carries its own `status:`
 | S2 | [`2026-08-31-payload-extraction-path.md`](2026-08-31-payload-extraction-path.md) | target | `PAYLOAD_EXTRACTION_DEFERRED` shape and the two future optimization routes. |
 | S3 | [`2026-08-31-doc-status-marking-spec.md`](2026-08-31-doc-status-marking-spec.md) | current | The status-marking rules this index follows. |
 | — | [`2026-09-02-peer-corroboration-usage-scheme.md`](2026-09-02-peer-corroboration-usage-scheme.md) | current | How external parsers may be used as evidence. |
+| — | [`2026-09-10-codebase-slimming-plan.md`](2026-09-10-codebase-slimming-plan.md) | target | Reviewed slimming plan. The only default cut is five unconsumed CLI log flags. Retiring live log cleanup or C++ pseudocode requires separate product/canonical gates; a C++ cut must first preserve public expression/diagnostic output. agent_tools/iostore/parent_resolver/mappings remain gated. The official tracked physical-line baseline is src 23,246/79 and tests 5,930/13. |
 
 ## Archive
 

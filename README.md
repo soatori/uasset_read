@@ -133,15 +133,11 @@ python -m uasset_read path/to/file.uasset --list-package-files      # List the p
 
 ### Logging Parameters
 
-The v2 library never configures process-global logging, and the CLI no longer writes per-run log files (file logging was removed with the v1 pipeline). The `--log-*` flags below are retained as configuration carriers; only `--log-dir` and the retention flags (`--log-keep-latest`, `--log-max-total-mb`) currently have an observable effect — they scope the `--clean-logs` deletion plan for logs left over from older releases.
+The v2 library never configures process-global logging, and the CLI no longer writes per-run log files (file logging was removed with the v1 pipeline). The only remaining `--log-*` flags configure the dry-run `--clean-logs` plan for leftover logs from older releases; the CLI does not create new log files.
 
 | Parameter | Default | Description |
 | ----------- | --------- | ------------- |
-| `--log-level` | debug | File log level: debug, info, warning, error, off |
-| `--log-dir` | ./log | Log output directory |
-| `--log-max-bytes` | 10000000 | Max size per log file (bytes) |
-| `--log-backup-count` | 5 | Number of backup log files to keep |
-| `--log-cleanup` / `--no-log-cleanup` | enabled | Retention switch for the `--clean-logs` plan |
+| `--log-dir` | ./log | Log directory scanned by `--clean-logs` |
 | `--log-keep-latest` | 20 | Number of latest complete runs to keep |
 | `--log-max-total-mb` | 500 | Total log storage limit (MB) |
 | `--clean-logs` | false | Plan cleanup only, do not delete |
