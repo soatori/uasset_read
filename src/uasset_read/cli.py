@@ -104,7 +104,7 @@ def create_parser():
 
     # Optional flags
     parser.add_argument("--output", metavar="FILE", help="Write output to file instead of stdout")
-    parser.add_argument("--mappings", metavar="FILE", help="Load .usmap/.jmap type mappings")
+    parser.add_argument("--mappings", metavar="FILE", help="Load .usmap type mappings")
     parser.add_argument("--game", metavar="NAME", help="Enable game-specific property readers")
     parser.add_argument("--strict", action="store_true", help="Disable tolerant mode")
 

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-"""Usmap/Jmap mapping reader and unified type model."""
+"""Usmap mapping reader and unified type model."""
 
 from dataclasses import dataclass, field
-import gzip
-import json
-import os
 import struct
+from pathlib import Path
 from typing import Any
 
 from uasset_read.exceptions import ParseError
@@ -101,7 +99,7 @@ class StructMapping:
 
 @dataclass
 class TypeMappings:
-    """Unified Usmap/Jmap mapping container."""
+    """Unified Usmap mapping container."""
 
     types: dict[str, StructMapping] = field(default_factory=dict)
     enums: dict[str, dict[int, str]] = field(default_factory=dict)
@@ -171,7 +169,7 @@ class UsmapParser:
             data = path_or_bytes
         else:
             if budget is not None:
-                file_size = os.path.getsize(path_or_bytes)
+                file_size = Path(path_or_bytes).stat().st_size
                 budget.reserve(file_size, "usmap_file_read")
             with open(path_or_bytes, "rb") as fh:
                 data = fh.read()
@@ -303,96 +301,8 @@ class UsmapParser:
         return PropertyType(type_name)
 
 
-class JmapParser:
-    """Read CUE4Parse-compatible .jmap/.jmap.gz mapping file."""
-
-    def __init__(self, path_or_bytes: str | bytes, budget: ResourceBudget | None = None):
-        if isinstance(path_or_bytes, bytes):
-            data = path_or_bytes
-        else:
-            if budget is not None:
-                file_size = os.path.getsize(path_or_bytes)
-                budget.reserve(file_size, "jmap_file_read")
-            with open(path_or_bytes, "rb") as fh:
-                data = fh.read()
-            if path_or_bytes.lower().endswith(".gz"):
-                if budget is not None:
-                    budget.reserve(len(data), "jmap_gzip_input")
-                raw_gz = data
-                data = gzip.decompress(raw_gz)
-                if budget is not None:
-                    budget.reserve(len(data), "jmap_gzip_decompress_output")
-        self.mappings = self._parse(json.loads(data.decode("utf-8")))
-
-    def _parse(self, root: dict[str, Any]) -> TypeMappings:
-        mappings = TypeMappings()
-        for full_name, obj in root.get("objects", {}).items():
-            if not isinstance(obj, dict):
-                continue
-            short_name = full_name.split(".")[-1]
-            obj_type = obj.get("type")
-            if obj_type == "Enum":
-                values: dict[int, str] = {}
-                for item in obj.get("names", []):
-                    if isinstance(item, list) and len(item) >= 2:
-                        values[int(item[1])] = str(item[0])
-                mappings.enums[short_name] = values
-            elif obj_type in {"Class", "ScriptStruct"}:
-                properties: dict[int, PropertyInfo] = {}
-                index = 0
-                for prop in obj.get("properties", []):
-                    if not isinstance(prop, dict):
-                        continue
-                    info = self._parse_property_info(prop, index)
-                    for _offset in range(info.array_size):
-                        properties[index] = PropertyInfo(index, info.name, info.mapping_type, info.array_size)
-                        index += 1
-                mappings.types[short_name] = StructMapping(
-                    name=short_name,
-                    super_type=(obj.get("super_struct") or "").split(".")[-1] or None,
-                    properties=properties,
-                    property_count=len(properties),
-                )
-        return mappings
-
-    def _parse_property_info(self, prop: dict[str, Any], index: int) -> PropertyInfo:
-        raw_dim = prop.get("array_dim")
-        array_dim = int(raw_dim) if raw_dim is not None else 1
-        if array_dim < 1 or array_dim > MAX_ARRAY_DIM:
-            raise ParseError(f"Jmap array_dim out of range: {array_dim} (must be 1..{MAX_ARRAY_DIM})")
-        return PropertyInfo(
-            index=index,
-            name=str(prop.get("name") or ""),
-            mapping_type=self._parse_property_type(prop),
-            array_size=array_dim,
-        )
-
-    def _parse_property_type(self, prop: dict[str, Any], depth: int = 0) -> PropertyType:
-        if depth > MAX_RECURSION_DEPTH:
-            raise ParseError(f"Jmap property type recursion depth exceeds limit {MAX_RECURSION_DEPTH}")
-        type_name = str(prop.get("type") or "Unknown")
-        inner_src = prop.get("container") or prop.get("inner") or prop.get("key_prop")
-        value_src = prop.get("value_prop")
-        inner = self._parse_property_type(inner_src, depth + 1) if isinstance(inner_src, dict) else None
-        value = self._parse_property_type(value_src, depth + 1) if isinstance(value_src, dict) else None
-        if type_name == "EnumProperty" and inner is None:
-            inner = PropertyType("ByteProperty")
-        if type_name in {"ArrayProperty", "SetProperty", "OptionalProperty"} and inner is None:
-            inner = PropertyType("Unknown")
-        if type_name == "MapProperty":
-            inner = inner or PropertyType("Unknown")
-            value = value or PropertyType("Unknown")
-        return PropertyType(
-            type=type_name,
-            struct_type=(prop.get("struct") or "").split(".")[-1] or None,
-            inner_type=inner,
-            value_type=value,
-            enum_name=(prop.get("enum") or "").split(".")[-1] or None,
-        )
-
-
 class TypeMappingsProvider:
-    """Load Usmap/Jmap mapping by file extension."""
+    """Load a .usmap mapping file."""
 
     def __init__(self, mappings: TypeMappings):
         self.mappings = mappings
@@ -402,6 +312,4 @@ class TypeMappingsProvider:
         lower = path.lower()
         if lower.endswith(".usmap"):
             return cls(UsmapParser(path, budget=budget).mappings)
-        if lower.endswith(".jmap") or lower.endswith(".jmap.gz"):
-            return cls(JmapParser(path, budget=budget).mappings)
-        raise ParseError(f"Unsupported mapping file type: {os.path.basename(path)}")
+        raise ParseError(f"Unsupported mapping file type: {Path(path).name}")

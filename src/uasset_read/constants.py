@@ -58,9 +58,6 @@ MAX_COMPRESSED_CHUNKS = 100_000  # Maximum CompressedChunks entries
 MAX_SOFT_PACKAGE_REFS = 1_000_000  # Maximum SoftPackageReferences entries
 MMAP_THRESHOLD = 10 * 1024 * 1024  # 10MB - switch to mmap above this (lower threshold to reduce memory peak)
 MAX_PROPERTY_COUNT = 10_000  # Property loop limit
-MAX_RECURSION_DEPTH = (
-    50  # Maximum property nesting recursion depth (prevents stack overflow from malicious/malformed assets)
-)
 MIN_UASSET_SIZE = 64  # Minimum legal .uasset file size (bytes)
 # Contains minimum of Tag(4) + version fields(16~20) + LicenseeVer(4) + Hash(20) + HeaderSize(4)
 MAX_ARRAY_COUNT = 1_000_000  # Maximum ArrayProperty elements (per HIGH-07/35d-01)
