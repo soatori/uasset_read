@@ -338,7 +338,7 @@
 
 **Files:** Modify `src/uasset_read/kismet/{property_pointer,ufunction_reader,archive,native_fields}.py`, `kismet/expressions/{casts,special,functions,delegates}.py`, `tests/size-baseline.json`
 
-> **Note 2026-09-10 (Gate K):** `body_builder.py`, `jump_analyzer.py`, and `translator.py` no longer exist. Skip generator-related steps 12.2–12.5 for those three modules.
+> **Note 2026-09-10 (Gate K):** `body_builder.py`, `jump_analyzer.py`, and `translator.py` no longer exist. Steps 12.2 and 12.3 are canceled; in step 12.5, skip only the deleted `translator.py` portion and independently re-evaluate any surviving `kismet/archive.py` work.
 
 Each sub-cut below is independent; do them in listed order, suite-run after every 3-4.
 
@@ -353,28 +353,8 @@ Each sub-cut below is independent; do them in listed order, suite-run after ever
   ```
 
   Drop the now-unused `name_map` parameter only if no caller uses it (keep otherwise).
-- [ ] **Step 12.2** body_builder.py — replace `class FunctionBodyBuilder` with a module function `def build_function_body(expressions, func_name=None) -> str:` holding the current `to_function_body` body verbatim (delete `__init__` and its unused `self._translator`); update `decompile_bridge.py:184-189` to `cpp_code = build_function_body(expressions, func_name=export.object_name)` and its import. Then single-detect the loop: replace `_is_structured_block_start(...)` / `_emit_structured_block(...)` re-running 5 detectors / `_get_structured_block_end(...)` (each calling `detect_pattern` again) with one call:
-
-  ```python
-  result = jump_analyzer.detect_pattern(idx)
-  if result is not None:
-      lines.extend(_emit_structured_block(result, translator, expressions, jump_targets, offset_to_index, label_set))
-      skip_until = _structured_block_end(result)
-      continue
-  ```
-
-  where `_structured_block_end(result)` is the old `_get_structured_block_end` switch moved to operate on the dict directly (`ptype in ("while","for")→body_end`, `("if_else","push_pop")→else_end`, `"if"→then_end`, else `idx`), and `_emit_structured_block(result, ...)` dispatches on `result["type"]` calling the same `_emit_for_block/_emit_while_block/_emit_push_pop_block/_emit_if_else_block/_emit_switch_block` with the result dict (detection priority order is identical to `detect_pattern`'s — verified). Delete `_is_structured_block_start` and the old five sequential detector calls.
-- [ ] **Step 12.3** jump_analyzer.py — delete `_ASSIGNMENT_TYPES`, `_get_assignment_types`; `_is_assignment` becomes:
-
-  ```python
-  def _is_assignment(expr: object) -> bool:
-      from uasset_read.kismet.expressions.assignments import (
-          EX_Let, EX_LetBool, EX_LetObj, EX_LetWeakObjPtr, EX_LetValueOnPersistentFrame,
-      )
-      return isinstance(expr, (EX_Let, EX_LetBool, EX_LetObj, EX_LetWeakObjPtr, EX_LetValueOnPersistentFrame))
-  ```
-
-  In `detect_while_pattern` delete the dead `start_offset = getattr(expr, "StatementIndex", None)` + its `if start_offset is None: return None` guard (value unused after).
+- [x] **Step 12.2 — canceled 2026-09-10 (Gate K).** `body_builder.py` and its C++ pseudocode call path were deleted as a product change; the proposed equivalent tidy must not be applied.
+- [x] **Step 12.3 — canceled 2026-09-10 (Gate K).** `jump_analyzer.py` was deleted with the C++ pseudocode generator chain; no residual analyzer implementation remains to tidy.
 - [ ] **Step 12.4** ufunction_reader.py — drop the unused params: `summary` from `_make_control_bit_error` and `_make_offset_mismatch_error`, `declared_start` from the latter, field `remaining_serialized` from `FunctionScriptFailure` (`grep -rn remaining_serialized src tests` first). Then collapse the two near-identical `_make_*_error` builders into one:
 
   ```python
