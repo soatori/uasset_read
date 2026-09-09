@@ -618,11 +618,11 @@ payload 提取使用单独 API/tool（当前恒返回 `PAYLOAD_EXTRACTION_DEFERR
 
 ### CLI 层
 
-- `--verbose` 控制 stderr 展示。
-- `--log-file` 或 `--log-dir` 显式启用文件日志。
-- 一次 CLI invocation 只有一个 run id 和一个日志生命周期。
+- CLI 不提供文件日志，也不提供旧日志目录清理（Gate L，2026-09-10 退役）。
+- `--verbose`/`--log-file`/`--log-dir`/`--clean-logs` 等文件日志与清理 flag 均不存在；若传入则显式拒绝。
+- 一次 CLI invocation 只输出 package document JSON（或结构化错误）到 stdout/stderr。
 - batch worker 把 diagnostics 返回父进程，由父进程决定输出。
-- 日志清理只处理明确日志目录，默认 dry-run 预览后再删除。
+- 旧版本遗留的 `log/` 目录由用户自行删除。
 
 ### Debug 输出
 
@@ -876,7 +876,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - Writer 延后，第一阶段保持只读。
 - Blueprint/Kismet 字节码反编译保留为可选扩展（expressions + diagnostics，非 C++ 文本），后于 core v2。
 - Agent tool 是正式接口；MCP 是可选 transport。
-- 默认不写文件日志，不内嵌大型 payload。
+- 默认不写文件日志，不提供 CLI 日志清理；不内嵌大型 payload。
 - 最小依赖优先，但不把零依赖作为不可改变的架构限制。
 - Phase 0 原子删除并重建测试体系；后续测试与实现 Phase 同步增长，不保留旧/新双套测试。
 - 当前只以本机 Windows + Python 3.14 作为测试阻断环境；其他系统和 Python 版本暂缓且不得宣称已验证。
@@ -899,7 +899,6 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - `src/uasset_read/cli.py` — CLI 与 retired flag 集合
 - `src/uasset_read/package.py`
 - `src/uasset_read/versioning.py`
-- `src/uasset_read/project_logging.py`
 
 UE 源码核验入口使用相对于 Unreal Engine checkout 的路径：
 

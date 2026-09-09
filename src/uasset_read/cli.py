@@ -10,7 +10,6 @@ import re
 import sys
 from pathlib import Path
 
-from uasset_read.project_logging import cleanup_project_logs
 from uasset_read.constants import (
     EXIT_SUCCESS,
     EXIT_PARSE_ERROR,
@@ -108,23 +107,6 @@ def create_parser():
     parser.add_argument("--mappings", metavar="FILE", help="Load .usmap/.jmap type mappings")
     parser.add_argument("--game", metavar="NAME", help="Enable game-specific property readers")
     parser.add_argument("--strict", action="store_true", help="Disable tolerant mode")
-    parser.add_argument(
-        "--log-dir",
-        metavar="DIR",
-        help="Log directory scanned by --clean-logs (default: ./log)",
-    )
-    parser.add_argument(
-        "--log-keep-latest",
-        metavar="N",
-        type=int,
-        help="When --clean-logs runs, keep only the newest N complete runs",
-    )
-    parser.add_argument(
-        "--log-max-total-mb",
-        metavar="MB",
-        type=int,
-        help="When --clean-logs runs, cap total log storage to MB megabytes",
-    )
 
     # Batch mode
     parser.add_argument(
@@ -143,11 +125,6 @@ def create_parser():
     )
 
     # Utility flags
-    parser.add_argument(
-        "--clean-logs",
-        action="store_true",
-        help="Dry-run log cleanup plan and exit; never deletes files",
-    )
     parser.add_argument(
         "--list-package-files",
         action="store_true",
@@ -253,19 +230,6 @@ def _handle_batch(args) -> None:
     _write_output(output_str, args.output)
 
 
-def _handle_clean_logs(args) -> None:
-    planned = cleanup_project_logs(
-        log_dir=args.log_dir,
-        keep_latest=args.log_keep_latest if args.log_keep_latest is not None else 20,
-        max_total_bytes=(args.log_max_total_mb * 1_000_000 if args.log_max_total_mb is not None else 500 * 1024 * 1024),
-        dry_run=True,
-    )
-    print(f"Would delete {len(planned)} log file(s)")
-    for path in planned:
-        print(str(path))
-    sys.exit(EXIT_SUCCESS)
-
-
 def _handle_list_package_files(file_path: str, tolerant: bool) -> None:
     """List the discovered package files (main + present sidecars)."""
     from uasset_read.package import open_package_bundle
@@ -297,14 +261,32 @@ def main():
     """Main CLI entry point."""
     parser = create_parser()
 
-    # Parent-asset resolution was abandoned (Gate G, 2026-09-10): explicit
-    # unsupported messages instead of argparse's generic unknown-argument error.
-    retired = {"--legacy-json", "--markdown", "--list-formats", "--diff", "--include-parent-assets", "--asset-root"}
+    # Retired product surfaces: explicit unsupported messages (exit 2)
+    # instead of argparse's generic unknown-argument error.
+    retired = {
+        "--legacy-json",
+        "--markdown",
+        "--list-formats",
+        "--diff",
+        "--include-parent-assets",
+        "--asset-root",
+        "--clean-logs",
+        "--log-dir",
+        "--log-keep-latest",
+        "--log-max-total-mb",
+    }
+    parent_retired = {"--include-parent-assets", "--asset-root"}
+    log_retired = {"--clean-logs", "--log-dir", "--log-keep-latest", "--log-max-total-mb"}
     hit = next((flag for flag in sys.argv if flag in retired), None)
     if hit is not None:
-        if hit in {"--include-parent-assets", "--asset-root"}:
+        if hit in parent_retired:
             parser.error(
                 f"{hit} was removed: parent-asset resolution is retired (product decision, Gate G 2026-09-10)"
+            )
+        if hit in log_retired:
+            parser.error(
+                f"{hit} was removed: log cleanup / file logging helpers are retired "
+                "(product decision, Gate L 2026-09-10); delete leftover ./log directories yourself"
             )
         parser.error(
             f"{hit} was removed together with the v1 pipeline; the v2 document output (--depth) is the only parse path"
@@ -316,9 +298,6 @@ def main():
         if e.code == 0:
             sys.exit(EXIT_SUCCESS)
         sys.exit(EXIT_ARGUMENT_ERROR)
-
-    if args.clean_logs:
-        _handle_clean_logs(args)
 
     # --batch mode
     if args.batch is not None:

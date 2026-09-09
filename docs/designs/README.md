@@ -26,7 +26,7 @@ These sit beside the canonical target on purpose. Each carries its own `status:`
 | S2 | [`2026-08-31-payload-extraction-path.md`](2026-08-31-payload-extraction-path.md) | target | `PAYLOAD_EXTRACTION_DEFERRED` shape and the two future optimization routes. |
 | S3 | [`2026-08-31-doc-status-marking-spec.md`](2026-08-31-doc-status-marking-spec.md) | current | The status-marking rules this index follows. |
 | — | [`2026-09-02-peer-corroboration-usage-scheme.md`](2026-09-02-peer-corroboration-usage-scheme.md) | current | How external parsers may be used as evidence. |
-| — | [`2026-09-10-codebase-slimming-plan.md`](2026-09-10-codebase-slimming-plan.md) | target | Reviewed slimming plan. Phase A, Gate G (parent_resolver), and Gate K (C++ pseudocode → expression contract) executed 2026-09-10. Gate L (log cleanup) and remaining Gate G items (agent_tools/iostore/mappings) still gated. |
+| — | [`2026-09-10-codebase-slimming-plan.md`](2026-09-10-codebase-slimming-plan.md) | target | Reviewed slimming plan. Phase A, Gate G (parent_resolver), Gate K (C++ pseudocode), and Gate L (log cleanup) executed 2026-09-10. Remaining Gate G items (agent_tools/iostore/mappings) stay keep/tidy-only. |
 
 ## Archive
 

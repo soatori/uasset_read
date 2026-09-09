@@ -7,15 +7,6 @@ import pytest
 from uasset_read import cli
 
 
-def test_clean_logs_uses_surviving_log_config_fields(monkeypatch, capsys) -> None:
-    """`--clean-logs` must not crash after the log-config inlining (#587)."""
-    monkeypatch.setattr(sys, "argv", ["uasset_read", "--clean-logs"])
-    with pytest.raises(SystemExit) as excinfo:
-        cli.main()
-    assert excinfo.value.code == 0
-    assert "Would delete" in capsys.readouterr().out
-
-
 @pytest.mark.parametrize(
     "flag",
     [
@@ -43,3 +34,17 @@ def test_retired_parent_asset_flags_are_rejected(monkeypatch, flag: str, capsys)
         cli.main()
     assert excinfo.value.code == 2
     assert "parent-asset resolution is retired" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "flag",
+    ["--clean-logs", "--log-dir", "--log-keep-latest", "--log-max-total-mb"],
+)
+def test_retired_log_cleanup_flags_are_rejected(monkeypatch, flag: str, capsys) -> None:
+    """Gate L: file-log cleanup surface is retired; flags exit 2 with a clear message."""
+    monkeypatch.setattr(sys, "argv", ["uasset_read", flag])
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main()
+    assert excinfo.value.code == 2
+    err = capsys.readouterr().err
+    assert "log cleanup / file logging helpers are retired" in err

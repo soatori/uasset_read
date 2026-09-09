@@ -16,7 +16,7 @@
 | 切口 | 当前事实 | 状态 |
 | --- | --- | --- |
 | 五个 CLI `--log-*` 参数 | 已删除；其余 cleanup 参数仍在用 | **retired 2026-09-10（Phase A）** |
-| `project_logging.py` / `--clean-logs` | 仍有生产调用；只做旧日志清理，不配置全局 logging | **Gate L：产品退役决策** |
+| `project_logging.py` / `--clean-logs` | 仍有生产调用；只做旧日志清理，不配置全局 logging | **retired 2026-09-10**（Gate L） |
 | C++ 伪代码生成链 | 三个生成器已删除；K0 expression contract 接替公共函数逻辑表示 | **retired 2026-09-10（Gate K）** |
 | `agent_tools` / `iostore` / `parent_resolver` / `mappings` | 产品能力或 deferred issue，不是死代码 | **Gate G：分别决策**（parent_resolver 已于 2026-09-10 退役） |
 | projection 分页/预算、expressions/models 分包 | package-first 契约或维护性结构 | **不做** |
@@ -201,25 +201,25 @@ index 和 docs ratchet 一并纳入。当前 latest 验证为 `213 passed`，正
 
 风险：低。只删除无消费者的兼容参数；仍需在 release note 中记录 CLI 参数移除。
 
-### Gate L — 退役旧日志清理能力（默认不执行）
+### Gate L — 退役旧日志清理能力（**已批准，2026-09-10 执行**）
 
-只有在产品明确不再负责清理旧版本日志后才能执行。
+产品决策：不再负责清理旧版本日志。
 
 前置条件：
 
-- [ ] canonical 的 CLI logging/cleanup target 已修改。
-- [ ] README、Wiki CLI、Quick Start、Public API 和 agent-dev-reference 已列入同步清单。
-- [ ] 明确这是一项 CLI/API breaking removal，而不是修复全局 logging 违规。
-- [ ] 决定是否提供迁移提示（例如直接删除旧 `log/` 目录由用户自行负责）。
+- [x] canonical 的 CLI logging/cleanup target 已修改。
+- [x] README、Wiki CLI、Quick Start、Public API 和 agent-dev-reference 已列入同步清单。
+- [x] 明确这是一项 CLI/API breaking removal，而不是修复全局 logging 违规。
+- [x] 迁移提示：旧 `log/` 目录由用户自行删除。
 
 批准后的实现范围：
 
-- 删除 `src/uasset_read/project_logging.py`。
-- 删除 `cleanup_project_logs` import、`_handle_clean_logs` 和 `--clean-logs`。
-- 删除 `--log-dir`、`--log-keep-latest`、`--log-max-total-mb`。
-- 将现有 clean-logs 成功测试改成“旧参数被拒绝”的契约测试。
-- 更新 canonical、README、Wiki、agent reference、design index 和 release note。
-- 精确收紧 ratchet；文件数减少 1。
+- [x] 删除 `src/uasset_read/project_logging.py`。
+- [x] 删除 `cleanup_project_logs` import、`_handle_clean_logs` 和 `--clean-logs`。
+- [x] 删除 `--log-dir`、`--log-keep-latest`、`--log-max-total-mb`。
+- [x] 将现有 clean-logs 成功测试改成“旧参数被拒绝”的契约测试。
+- [x] 更新 canonical、README、Wiki、agent reference、design index 和 release note。
+- [x] 精确收紧 ratchet；文件数减少 1。
 
 ### Gate K — 退役 C++ 伪代码生成链（**已批准，2026-09-10 执行**）
 

@@ -133,25 +133,14 @@ python -m uasset_read path/to/file.uasset --list-package-files      # List the p
 
 ### Logging Parameters
 
-The v2 library never configures process-global logging, and the CLI no longer writes per-run log files (file logging was removed with the v1 pipeline). The only remaining `--log-*` flags configure the dry-run `--clean-logs` plan for leftover logs from older releases; the CLI does not create new log files.
-
-| Parameter | Default | Description |
-| ----------- | --------- | ------------- |
-| `--log-dir` | ./log | Log directory scanned by `--clean-logs` |
-| `--log-keep-latest` | 20 | Number of latest complete runs to keep |
-| `--log-max-total-mb` | 500 | Total log storage limit (MB) |
-| `--clean-logs` | false | Plan cleanup only, do not delete |
-
-`--clean-logs` is always dry-run: it prints which files a cleanup would remove
-and exits without deleting anything. Parser failures surface as structured
-diagnostics inside the `PackageDocument` (`diagnostics[]`), not as log output.
+The v2 library never configures process-global logging, and the CLI neither writes per-run log files nor cleans up leftover `log/` directories (file logging left with the v1 pipeline; cleanup was retired 2026-09-10, Gate L). Delete old `log/` directories yourself if they remain from earlier releases.
 
 ## Core API
 
 The v2 package-document API is the only parse entry point (v1 pipeline was removed):
 
 ```python
-from uasset_read import parse_package_document, LogConfig
+from uasset_read import parse_package_document
 
 # Parse a .uasset file → PackageDocument v2
 doc = parse_package_document("path/to/file.uasset")
@@ -182,7 +171,6 @@ Import directly from submodules for deeper access:
 ```python
 from uasset_read import (
     parse_package_document,
-    LogConfig,
     ParseError, FArchive,
 )
 
@@ -214,13 +202,11 @@ Shared readers behind that document: `kismet/` (bytecode → expressions + diagn
 | FArchive | `archive.py` | Binary reader with byte swapping, mmap |
 | Constants | `constants.py` | Version numbers, property type thresholds, PropertyTag flags |
 | Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
-| Config | `config.py` | `LogConfig` dataclass |
 | Package Mgmt | `package.py` | `PackageBundle`, `FileSystemPackageProvider`, `PackageArchive`, `open_package_bundle` |
 | CLI | `cli.py` | argparse entry point; emits the v2 document page, or the retired-flag error |
 | Versioning | `versioning.py` | `VersionContext`, `build_version_context_from_summary` |
 | Mappings | `mappings.py` | UE type mappings (`.usmap`/`.jmap` parsing) |
 | Memory Safety | `memory_safety.py` | `ResourceBudget` read/decompress checkpoints, `MemoryLimitExceeded` |
-| Project Logging | `project_logging.py` | `--clean-logs` retention and per-run log files (the library never configures process-global logging) |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, FEdGraphPinType, FMemberReference, PropertyTag/PropertyValue, Anim IR, structured diagnostics, property fallback |
 | **Parsers** | `parsers/` | 28 tagged-property parse functions + dispatcher, custom property registry, class handler registry, BinaryOrNative handlers |
