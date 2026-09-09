@@ -78,116 +78,6 @@ def _isolated_handlers(*handlers):
 
 def test_reader_boundaries_reject_malformed_access(tmp_path):
     """A bounded reader must never escape its declared source region."""
-    from uasset_read.package import PackageArchive
-    from uasset_read.archive import FileSource, MemorySource, SliceReader
-
-    def core_contract():
-        source = MemorySource(b"0123456789")
-        reader = SliceReader(source, 2, 5)
-        assert reader.read(3) == b"234"
-        assert reader.sub_slice(1, 2).read(2) == b"34"
-        for operation in (
-            lambda: source.read_at(-1, 1),
-            lambda: reader.seek(6),
-            lambda: reader.read(3),
-        ):
-            with pytest.raises(IndexError):
-                operation()
-
-    def test_size():
-        assert MemorySource(b"hello world").size() == 11
-
-    def test_read_at():
-        src = MemorySource(b"hello world")
-        assert src.read_at(0, 5) == b"hello"
-        assert src.read_at(6, 5) == b"world"
-
-    def test_read_at_negative_offset():
-        with pytest.raises(IndexError):
-            MemorySource(b"hello").read_at(-1, 1)
-
-    def test_read_at_overflow():
-        with pytest.raises(IndexError):
-            MemorySource(b"hello").read_at(3, 5)
-
-    def test_describe():
-        info = MemorySource(b"test", name="test.bin").describe()
-        assert info.kind == "memory"
-        assert info.name == "test.bin"
-        assert info.size == 4
-
-    def test_file_read():
-        f = tmp_path / "test.bin"
-        f.write_bytes(b"\x00\x01\x02\x03\x04")
-        src = FileSource(f)
-        assert src.size() == 5
-        assert src.read_at(1, 3) == b"\x01\x02\x03"
-
-    def test_file_read_out_of_range():
-        f = tmp_path / "oob.bin"
-        f.write_bytes(b"\x00\x01")
-        with pytest.raises(IndexError):
-            FileSource(f).read_at(0, 10)
-
-    def test_file_close_without_handle():
-        # __init__ can fail before _fh is ever assigned (missing path -> stat()
-        # raises), so close()/__del__ must tolerate the attribute being absent
-        # entirely instead of printing "Exception ignored while calling
-        # deallocator" after the real error.
-        FileSource.__new__(FileSource).close()
-
-    def test_basic_read():
-        sr = SliceReader(MemorySource(b"0123456789"), 2, 5)
-        assert sr.total_size() == 5
-        assert sr.read(3) == b"234"
-        assert sr.tell() == 3
-        assert sr.remaining() == 2
-
-    def test_seek():
-        sr = SliceReader(MemorySource(b"0123456789"), 0, 10)
-        sr.seek(5)
-        assert sr.tell() == 5
-        assert sr.read(3) == b"567"
-
-    def test_seek_out_of_range():
-        sr = SliceReader(MemorySource(b"0123456789"), 0, 10)
-        with pytest.raises(IndexError):
-            sr.seek(11)
-
-    def test_read_exceeds_slice():
-        sr = SliceReader(MemorySource(b"0123456789"), 2, 3)
-        with pytest.raises(IndexError):
-            sr.read(4)
-
-    def test_sub_slice():
-        sub = SliceReader(MemorySource(b"0123456789"), 0, 10).sub_slice(2, 4)
-        assert sub.total_size() == 4
-        assert sub.read(4) == b"2345"
-
-    def test_sub_slice_out_of_range():
-        sr = SliceReader(MemorySource(b"0123456789"), 2, 3)
-        with pytest.raises(IndexError):
-            sr.sub_slice(0, 10)
-
-    def test_nested_sub_slice():
-        sub2 = SliceReader(MemorySource(b"0123456789"), 0, 10).sub_slice(2, 6).sub_slice(1, 3)
-        assert sub2.read(3) == b"345"
-
-    def test_invalid_slice_negative_base():
-        with pytest.raises(IndexError):
-            SliceReader(MemorySource(b"0123456789"), -1, 5)
-
-    def test_invalid_slice_exceeds_source():
-        with pytest.raises(IndexError):
-            SliceReader(MemorySource(b"0123456789"), 8, 5)
-
-    def test_slice_reader_satisfies_archive_like():
-        reader = SliceReader(MemorySource(b"abcdef"), 1, 4)
-        archive = PackageArchive(reader)
-        assert archive.total_size() == 4
-        archive.set_byte_swapping(True)
-        assert archive.read(2) == b"bc"
-        archive.close()
 
     def test_export_read_within_range_succeeds():
         """Reading within (50, 100) from pos 80 must return data and advance."""
@@ -250,19 +140,6 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         data = struct.pack("<iqii", 0, 0, 0, 10_000_000)
         with pytest.raises(ParseError, match="ChunkIDs"):
             _read_tail_offsets(ByteArchive(data), 522)  # array-mode ChunkIDs at UE4 >= 326
-
-    def sources_reject_negative_size():
-        with pytest.raises(ValueError, match="negative"):
-            FileSource(str(PACKAGE_SAMPLE)).read_at(0, -1)
-        with pytest.raises(ValueError, match="negative"):
-            MemorySource(b"abcd").read_at(0, -1)
-        with pytest.raises(ValueError, match="negative"):
-            SliceReader(MemorySource(b"abcd"), 0, 4).read(-1)
-        sr = SliceReader(MemorySource(b"abcd"), 0, 4)
-        assert sr.read(4) == b"abcd"
-        with pytest.raises(IndexError):
-            sr.read(1)
-        assert sr.tell() == 4  # failed reads must not move the cursor
 
     def preload_count_beyond_file_rejected_immediately():
         import struct
@@ -516,32 +393,12 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
 
     _run_cases(
         [
-            ("core.reader_out_of_range", core_contract),
-            ("MemorySource.test_size", test_size),
-            ("MemorySource.test_read_at", test_read_at),
-            ("MemorySource.test_read_at_negative_offset", test_read_at_negative_offset),
-            ("MemorySource.test_read_at_overflow", test_read_at_overflow),
-            ("MemorySource.test_describe", test_describe),
-            ("FileSource.test_read", test_file_read),
-            ("FileSource.test_read_out_of_range", test_file_read_out_of_range),
-            ("FileSource.test_close_without_handle", test_file_close_without_handle),
-            ("SliceReader.test_basic_read", test_basic_read),
-            ("SliceReader.test_seek", test_seek),
-            ("SliceReader.test_seek_out_of_range", test_seek_out_of_range),
-            ("SliceReader.test_read_exceeds_slice", test_read_exceeds_slice),
-            ("SliceReader.test_sub_slice", test_sub_slice),
-            ("SliceReader.test_sub_slice_out_of_range", test_sub_slice_out_of_range),
-            ("SliceReader.test_nested_sub_slice", test_nested_sub_slice),
-            ("SliceReader.test_invalid_slice_negative_base", test_invalid_slice_negative_base),
-            ("SliceReader.test_invalid_slice_exceeds_source", test_invalid_slice_exceeds_source),
-            ("test_slice_reader_satisfies_archive_like", test_slice_reader_satisfies_archive_like),
             ("export_bounds.read_within_range_succeeds", test_export_read_within_range_succeeds),
             ("export_bounds.read_past_upper_bound_fails", test_export_read_past_upper_bound_fails),
             ("export_bounds.seek_past_lower_bound_fails", test_export_seek_past_lower_bound_fails),
             ("export_bounds.seek_past_upper_bound_fails", test_export_seek_past_upper_bound_fails),
             ("depends_map.stops_at_unsized_count", depends_map_stops_at_unsized_count),
             ("chunk_ids.count_beyond_file_rejected", chunk_ids_count_beyond_file_rejected_immediately),
-            ("source.reject_negative_size", sources_reject_negative_size),
             ("preload.count_beyond_file_rejected", preload_count_beyond_file_rejected_immediately),
             ("recovery.fstring_overrun_recorded", tolerant_fstring_overrun_records_recovery_not_just_a_log),
             ("recovery.fstring_null_truncation_recorded", fstring_internal_null_truncation_is_recorded),

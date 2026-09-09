@@ -9,7 +9,7 @@ from typing import Literal
 import logging
 import os
 
-from uasset_read.archive import FArchive, ArchiveLike
+from uasset_read.archive import FArchive
 from uasset_read.exceptions import ParseError
 from uasset_read.memory_safety import ResourceBudget
 from uasset_read.models.document import PackageDocument
@@ -26,8 +26,8 @@ class PackageArchive(FArchive):
 
     def __init__(
         self,
-        main_archive: ArchiveLike,
-        uexp_archive: ArchiveLike | None = None,
+        main_archive: FArchive,
+        uexp_archive: FArchive | None = None,
         tolerant: bool = False,
     ):
         self._init_archive_attrs(getattr(main_archive, "_path", "<package>"), tolerant)
@@ -172,7 +172,7 @@ class PackageBundle:
             raise
         return PackageArchive(main, uexp, tolerant=tolerant)
 
-    def _open_archive_for(self, extension: str, tolerant: bool) -> ArchiveLike:
+    def _open_archive_for(self, extension: str, tolerant: bool) -> FArchive:
         extension = _normalize_ext(extension)
         path = self.files.get(extension)
         if path is None:

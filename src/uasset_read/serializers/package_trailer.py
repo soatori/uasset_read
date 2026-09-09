@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass
-from uasset_read.archive import ArchiveLike
+from uasset_read.archive import FArchive
 
 from uasset_read.constants import PACKAGE_TRAILER_HEADER_TAG
 
@@ -33,7 +33,7 @@ _ENTRY_TAIL_V2 = struct.Struct("<HHB")  # flags(u16) + filter_flags(u16) + acces
 _ENTRY_TAIL_V1 = struct.Struct("<B")  # access_mode(u8)
 
 
-def read_lookup_table_entry(archive: ArchiveLike, version: int) -> FLookupTableEntry:
+def read_lookup_table_entry(archive: FArchive, version: int) -> FLookupTableEntry:
     """Read one FLookupTableEntry from the archive.
 
     Entry size depends on EPackageTrailerVersion:
@@ -83,7 +83,7 @@ class FPackageTrailer:
     lookup_table: list[FLookupTableEntry]
 
 
-def read_package_trailer(archive: ArchiveLike) -> FPackageTrailer:
+def read_package_trailer(archive: FArchive) -> FPackageTrailer:
     """Read FPackageTrailer from the archive.
 
     Args:
