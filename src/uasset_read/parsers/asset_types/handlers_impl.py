@@ -916,6 +916,18 @@ class BlueprintFamilyHandler:
         }
 
         if context.depth == "asset":
+            extras = package_data[2] if package_data else {}
+            entry = extras.get(obj.id, {}) if isinstance(extras, dict) else {}
+            kismet = entry.get("kismet", []) if isinstance(entry, dict) else []
+            if kismet:
+                result["functions"] = _project_kismet_functions(kismet, include_expressions=False)
+                obj.coverage.append(
+                    CoverageEntry(
+                        feature=f"{self._feature}.kismet",
+                        status="present",
+                        detail=f"{len(kismet)} functions",
+                    )
+                )
             obj.coverage.append(
                 CoverageEntry(
                     feature=f"{self._feature}.summary",
@@ -982,19 +994,10 @@ class BlueprintFamilyHandler:
                             detail=f"{len(result['components'])} components",
                         )
                     )
-                # --- Kismet bytecode decompilation results ---
+                # --- Kismet bytecode decompilation results (K0 contract) ---
                 kismet = entry.get("kismet", []) if isinstance(entry, dict) else []
                 if kismet:
-                    result["functions"] = [
-                        {
-                            "function_name": fn.get("function_name"),
-                            "signature": fn.get("signature"),
-                            "cpp_code": fn.get("cpp_code", ""),
-                            "bytecode_status": fn.get("bytecode_status", "unknown"),
-                            "translation_status": fn.get("translation_status", "not_applicable"),
-                        }
-                        for fn in kismet
-                    ]
+                    result["functions"] = _project_kismet_functions(kismet, include_expressions=True)
                     obj.coverage.append(
                         CoverageEntry(
                             feature=f"{self._feature}.kismet",
@@ -1063,6 +1066,49 @@ class BlueprintFamilyHandler:
         if result.get("graphs") and not result.get("truncated_graphs"):
             return "decoded"
         return "summary"
+
+
+_KISMET_ASSET_TYPE_LIMIT = 128
+
+
+def _project_kismet_functions(kismet: list[dict[str, Any]], *, include_expressions: bool) -> list[dict[str, Any]]:
+    """Project KismetDecompiledResult dicts onto the public K0 functions contract.
+
+    depth=asset gets count/types summary only (types capped at 128);
+    depth=decode also includes the serialized expression tree (budgeted by projection max_bytes).
+    """
+    projected: list[dict[str, Any]] = []
+    for fn in kismet:
+        entry: dict[str, Any] = {
+            "function_name": fn.get("function_name"),
+            "signature": fn.get("signature"),
+            "bytecode_status": fn.get("bytecode_status", "unknown"),
+        }
+        exprs = fn.get("expressions") or []
+        types: list[str] = []
+        for e in exprs:
+            if isinstance(e, dict):
+                types.append(str(e.get("Inst") or e.get("type") or "unknown"))
+            else:
+                types.append(type(e).__name__)
+        entry["expression_count"] = len(exprs)
+        entry["expression_types"] = types[:_KISMET_ASSET_TYPE_LIMIT]
+        entry["expressions_truncated"] = len(types) > _KISMET_ASSET_TYPE_LIMIT
+        if include_expressions:
+            entry["expressions"] = exprs
+        for key in (
+            "error_code",
+            "error_message",
+            "error_context",
+            "script_metrics",
+            "fallback_reasons",
+            "bytecode_confidence",
+        ):
+            val = fn.get(key)
+            if val is not None:
+                entry[key] = val
+        projected.append(entry)
+    return projected
 
 
 def _function_graph_ids(properties: dict[str, Any] | None) -> set[str]:

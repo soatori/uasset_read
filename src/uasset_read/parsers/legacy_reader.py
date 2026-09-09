@@ -717,6 +717,21 @@ class LegacyPackageReader:
                     object_ids=object_ids,
                 )
 
+            # 16c. Kismet bytecode for Function/UFunction exports at asset+decode
+            # (Gate K: expression summaries at asset; full tree at decode).
+            if depth in ("asset", "decode") and not (summary.package_flags & PKG_Cooked):
+                _attach_kismet_extras(
+                    archive=archive,
+                    summary=summary,
+                    name_map=name_map,
+                    import_map=import_map,
+                    export_map=export_map,
+                    objects=objects,
+                    extras=extras,
+                    diagnostics=diagnostics,
+                    object_ids=object_ids,
+                )
+
             # 17. Run asset handlers at depth >= asset
             if depth in ("asset", "decode"):
                 context = build_version_context_from_summary(
@@ -1164,7 +1179,25 @@ def _attach_blueprint_graph_extras(
                         names.append(imp.object_name)
             entry["interfaces"] = names
 
-    # --- Kismet bytecode decompile for Function/UFunction exports ---
+
+def _attach_kismet_extras(
+    *,
+    archive,
+    summary,
+    name_map,
+    import_map,
+    export_map,
+    objects,
+    extras,
+    diagnostics,
+    object_ids,
+) -> None:
+    """Attach Kismet function results to Blueprint-family owners (asset+decode)."""
+    family = {o.id for o in objects if (o.class_name or "") in _BLUEPRINT_FAMILY_CLASSES}
+    if not family:
+        return
+    if object_ids is not None and not family.intersection(object_ids):
+        return
     try:
         from ..kismet.decompile_bridge import extract_kismet_decompiled
 
@@ -1178,11 +1211,8 @@ def _attach_blueprint_graph_extras(
             tolerant=True,
         )
         if kismet_results:
-            # Key by export id so the handler can look them up
             kismet_by_export: dict[str, list[dict]] = {}
             for kr in kismet_results:
-                # Derive the export index from the function_name by scanning
-                # the export map for matching Function/UFunction entries
                 for exp_idx, exp in enumerate(export_map):
                     if exp.object_name == kr.function_name:
                         owner = _resolve_graph_owner(exp_idx, export_map, objects)

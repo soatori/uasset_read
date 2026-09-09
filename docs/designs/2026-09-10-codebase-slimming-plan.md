@@ -19,6 +19,7 @@
 | `project_logging.py` / `--clean-logs` | 仍有生产调用；只做旧日志清理，不配置全局 logging | **Gate L：产品退役决策** |
 | C++ 伪代码生成链 | 仍是 Blueprint semantic JSON 的函数逻辑表示；canonical 明确保留为可选扩展 | **Gate K：canonical 目标变更** |
 | `agent_tools` / `iostore` / `parent_resolver` / `mappings` | 产品能力或 deferred issue，不是死代码 | **Gate G：分别决策**（parent_resolver 已于 2026-09-10 退役） |
+| C++ 伪代码生成链 | Gate K 已批准并执行 | **retired 2026-09-10**（K0 expression 契约） |
 | projection 分页/预算、expressions/models 分包 | package-first 契约或维护性结构 | **不做** |
 
 不得用“零内部 import”“体积较大”或“测试仍绿”代替产品退役决策。

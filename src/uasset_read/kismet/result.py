@@ -1,32 +1,19 @@
 """
 Kismet Decompilation Result — Single function decompilation result.
 
-Data model for Kismet bytecode decompilation output.
+Data model for Kismet bytecode decompilation output (expressions + diagnostics).
+C++ pseudocode generation was retired 2026-09-10 (Gate K).
 """
 
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
-
-# Allowed (bytecode_status, translation_status) pairs
-ALLOWED_STATUS_PAIRS = frozenset(
-    {
-        ("parsed", "complete"),
-        ("parsed", "partial"),
-        ("parsed", "failed"),
-        ("no_script", "not_applicable"),
-        ("failed", "not_applicable"),
-    }
-)
+BYTECODE_STATUSES = frozenset({"parsed", "no_script", "failed", "unknown"})
 
 
-def _validate_status_pair(bytecode_status: str, translation_status: str) -> None:
-    """Raise ValueError for disallowed (bytecode_status, translation_status) pairs."""
-    if (bytecode_status, translation_status) not in ALLOWED_STATUS_PAIRS:
-        raise ValueError(
-            f"disallowed status pair: ({bytecode_status!r}, {translation_status!r}); "
-            f"allowed: {sorted(ALLOWED_STATUS_PAIRS)}"
-        )
+def _validate_bytecode_status(bytecode_status: str) -> None:
+    if bytecode_status not in BYTECODE_STATUSES:
+        raise ValueError(f"disallowed bytecode_status: {bytecode_status!r}; allowed: {sorted(BYTECODE_STATUSES)}")
 
 
 def infer_bytecode_confidence(
@@ -50,31 +37,25 @@ def infer_bytecode_confidence(
 @dataclass
 class KismetDecompiledResult:
     """
-    Single function decompilation result (D-04).
+    Single function decompilation result.
 
-    Contains all information extracted from a Blueprint UStruct's bytecode:
+    Contains information extracted from a Blueprint UStruct's bytecode:
     - function_name: Name of the decompiled function
-    - signature: Full C++ function signature (return type + params)
-    - local_variables: List of local variable type info (currently unpopulated)
-    - cpp_code: Complete C++ pseudocode body
-    - expressions: Raw KismetExpression list for debugging
+    - signature: Full C++ function signature (return type + params) from native fields
+    - expressions: Parsed KismetExpression list (public function-logic representation)
 
     Supports JSON serialization via to_dict().
     """
 
-    function_name: str  # e.g. "ExecuteUbergraph_MyBP"
-    signature: str  # e.g. "void ExecuteUbergraph_MyBP(int32 EntryPoint)"
-    local_variables: list[dict[str, str]]  # [{name, type}, ...] (currently unpopulated)
-    cpp_code: str  # C++ pseudocode string (multi-line, indented)
-    expressions: list[Any] = field(default_factory=list)  # raw KismetExpression list for debugging
+    function_name: str
+    signature: str
+    local_variables: list[dict[str, str]] = field(default_factory=list)
+    expressions: list[Any] = field(default_factory=list)
     bytecode_source: str = "unknown"
     bytecode_status: str = "unknown"
-    translation_status: str = "not_applicable"
-    # Native field-derived signature data
     parameters: list[dict[str, object]] = field(default_factory=list)
     return_type: str = "void"
-    native_signature: bool = False  # True when parameters/return_type from native fields
-    # "complete" | "partial" | "failed" | "not_applicable"
+    native_signature: bool = False
     error_code: str | None = None
     error_message: str | None = None
     error_context: dict[str, Any] | None = None
@@ -84,11 +65,9 @@ class KismetDecompiledResult:
     semantic_calls: list[dict[str, Any]] = field(default_factory=list)
     logic_source: str = "current_asset"
     function_ref_stats: dict[str, Any] = field(default_factory=dict)
-    structured_rate: float | None = None
 
     def __post_init__(self) -> None:
-        """Validate status pair on construction."""
-        _validate_status_pair(self.bytecode_status, self.translation_status)
+        _validate_bytecode_status(self.bytecode_status)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -99,7 +78,7 @@ class KismetDecompiledResult:
         d["expressions"] = [
             e.to_dict() if hasattr(e, "to_dict") else str(e) for e in self.expressions
         ]
-        return {k: v for k, v in d.items() if v is not None}  # None-valued keys are omitted by design; this domain is experimental and envelope-whitelisted downstream
+        return {k: v for k, v in d.items() if v is not None}
 
 
-__all__ = ["KismetDecompiledResult", "infer_bytecode_confidence", "ALLOWED_STATUS_PAIRS"]
+__all__ = ["KismetDecompiledResult", "infer_bytecode_confidence", "BYTECODE_STATUSES"]

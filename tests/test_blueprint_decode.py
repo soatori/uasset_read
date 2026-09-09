@@ -96,14 +96,13 @@ def test_combat_character_components_tree():
 
 
 def test_combat_character_kismet_functions():
-    # Kismet bytecode decompile for Function/UFunction exports in the blueprint family.
+    # K0: function_name/signature/bytecode_status + expression summary/tree
     dec = _decode("BP_CombatCharacter.uasset", ("export:1",))
     bp = next(o for o in dec.objects if o.id == "export:1")
     assert bp.semantic is not None
     fns = bp.semantic.get("functions")
     assert fns is not None, "expected 'functions' key in semantic output"
     assert len(fns) > 0, "expected at least one decompiled function"
-    # Each entry must carry the required fields
     for fn in fns:
         assert fn["function_name"], "function_name must be non-empty"
         assert fn["signature"], "signature must be non-empty"
@@ -113,11 +112,90 @@ def test_combat_character_kismet_functions():
             "failed",
             "unknown",
         }, f"unexpected bytecode_status: {fn['bytecode_status']}"
-    # Coverage entry
+        assert "expression_count" in fn
+        assert "expression_types" in fn
+        assert "expressions_truncated" in fn
+        assert "cpp_code" not in fn
+        assert "translation_status" not in fn
+        if fn["bytecode_status"] == "parsed":
+            assert fn["expression_count"] > 0, "parsed function must expose expressions"
+            assert len(fn["expression_types"]) == min(fn["expression_count"], 128)
+            assert "expressions" in fn, "depth=decode must include expression tree"
+            assert isinstance(fn["expressions"], list)
+            assert all(isinstance(e, dict) and "Inst" in e for e in fn["expressions"])
+    # At least one function must be observable as parsed with expressions
+    assert any(f["bytecode_status"] == "parsed" and f.get("expression_count", 0) > 0 for f in fns)
     feature_names = [c.feature for c in bp.coverage]
     assert "blueprint.kismet" in feature_names
     kismet_cov = next(c for c in bp.coverage if c.feature == "blueprint.kismet")
     assert kismet_cov.status in ("present", "partial")
+
+
+def test_combat_character_kismet_asset_depth_summary():
+    """depth=asset projects expression_count/types without the full tree."""
+    from uasset_read import parse_package_document
+
+    doc = parse_package_document(
+        "tests/samples/BP_CombatCharacter.uasset",
+        depth="asset",
+        object_ids=["export:1"],
+    )
+    bp = next(o for o in doc.objects if o.id == "export:1")
+    fns = (bp.semantic or {}).get("functions")
+    assert fns, "asset depth should still project kismet function summaries"
+    for fn in fns:
+        assert "expression_count" in fn
+        assert "expression_types" in fn
+        assert "expressions_truncated" in fn
+        assert "expressions" not in fn, "asset depth must not embed the full tree"
+        assert len(fn["expression_types"]) <= 128
+
+
+def test_kismet_result_status_serializations():
+    """KismetDecompiledResult must serialize parsed / no_script / failed without cpp_code."""
+    from uasset_read.kismet.result import KismetDecompiledResult
+    from uasset_read.kismet.expressions.literals import EX_True
+
+    true_expr = EX_True()
+    true_expr.StatementIndex = 0
+    parsed = KismetDecompiledResult(
+        function_name="F",
+        signature="void F()",
+        expressions=[true_expr],
+        bytecode_status="parsed",
+    )
+    d = parsed.to_dict()
+    assert d["bytecode_status"] == "parsed"
+    assert d["bytecode_confidence"] == "verified"
+    assert d["expressions"][0]["Inst"] == "EX_True"
+    assert "cpp_code" not in d
+    assert "translation_status" not in d
+
+    no_script = KismetDecompiledResult(
+        function_name="G",
+        signature="void G()",
+        bytecode_status="no_script",
+        error_code="confirmed_no_script",
+        script_metrics={"bytecode_buffer_size": 0},
+    )
+    d2 = no_script.to_dict()
+    assert d2["bytecode_status"] == "no_script"
+    assert d2["bytecode_confidence"] == "no_script"
+    assert d2["error_code"] == "confirmed_no_script"
+    assert d2["script_metrics"]["bytecode_buffer_size"] == 0
+
+    failed = KismetDecompiledResult(
+        function_name="H",
+        signature="void H()",
+        bytecode_status="failed",
+        error_code="bytecode_decode_error",
+        error_message="boom",
+        fallback_reasons=["bytecode extraction error: boom"],
+    )
+    d3 = failed.to_dict()
+    assert d3["bytecode_status"] == "failed"
+    assert d3["error_message"] == "boom"
+    assert d3["fallback_reasons"] == ["bytecode extraction error: boom"]
 
 
 def test_als_animbp_state_machines():
@@ -154,31 +232,3 @@ def test_als_animbp_state_machines():
     sm_cov = next(c for c in abp.coverage if c.feature == "anim_blueprint.state_machines")
     assert sm_cov.status == "present"
     assert len(state_machines) == 17, f"expected 17 state machines, got {len(state_machines)}"
-
-
-def test_translator_emits_text_and_soft_object_constants():
-    """EX_TextConst stores `Text`, EX_SoftObjectConst stores `SoftObject`.
-
-    The translator probed a non-existent `.Value` behind a hasattr guard, so neither
-    branch ever matched and every constant degraded to an empty FText/FSoftObjectPath.
-    """
-    from uasset_read.kismet.expressions.special import EX_NameConst
-    from uasset_read.kismet.expressions.string_consts import EX_SoftObjectConst, EX_TextConst, FScriptText
-    from uasset_read.kismet.tokens import EBlueprintTextLiteralType
-    from uasset_read.kismet.translator import KismetTranslator
-
-    translate = KismetTranslator()
-    text = EX_TextConst(
-        Text=FScriptText(
-            TextLiteralType=EBlueprintTextLiteralType.LiteralString,
-            SourceString="Damage Taken",
-        )
-    )
-    assert translate.line_cpp(text) == 'FText("Damage Taken")'
-
-    soft = EX_SoftObjectConst(SoftObject=EX_NameConst(Value="Actor"))
-    assert translate.line_cpp(soft) == 'FSoftObjectPath(FName("Actor"))'
-
-    # The None default degrades to the empty forms instead of raising.
-    assert translate.line_cpp(EX_TextConst()) == 'FText("")'
-    assert translate.line_cpp(EX_SoftObjectConst()) == 'FSoftObjectPath("")'
