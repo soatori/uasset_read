@@ -232,3 +232,57 @@ def test_als_animbp_state_machines():
     sm_cov = next(c for c in abp.coverage if c.feature == "anim_blueprint.state_machines")
     assert sm_cov.status == "present"
     assert len(state_machines) == 17, f"expected 17 state machines, got {len(state_machines)}"
+
+
+def test_project_document_decode_max_bytes_keeps_k0_functions():
+    """K3: decode + max_bytes still yields K0 function fields when the page fits."""
+    from uasset_read.projection import project_document
+
+    doc = parse_package_document(
+        SAMPLES / "BP_CombatCharacter.uasset",
+        depth="decode",
+        object_ids=["export:1"],
+    )
+    # Budget large enough that the selected blueprint export is retained.
+    projected = project_document(doc, depth="decode", max_bytes=500_000)
+    assert projected.get("format") == "uasset_read.package"
+    objs = projected.get("objects") or []
+    assert objs, "budget must leave at least one object"
+    bp = next((o for o in objs if o.get("id") == "export:1"), objs[0])
+    fns = (bp.get("semantic") or {}).get("functions")
+    assert fns, f"projected decode page must include functions; got semantic keys {list((bp.get('semantic') or {}).keys())}"
+    for fn in fns:
+        assert "expression_count" in fn
+        assert "expression_types" in fn
+        assert "expressions_truncated" in fn
+        assert "cpp_code" not in fn
+    assert any(f.get("expression_count", 0) > 0 for f in fns)
+
+
+def test_kismet_one_failed_function_keeps_others():
+    """K3: a failed function must not remove sibling results in the same owner list."""
+    from uasset_read.kismet.result import KismetDecompiledResult
+
+    # Simulate bridge output for one owner: one failed + one parsed sibling.
+    failed = KismetDecompiledResult(
+        function_name="Broken",
+        signature="void Broken()",
+        bytecode_status="failed",
+        error_code="bytecode_decode_error",
+        error_message="boom",
+        fallback_reasons=["bytecode extraction error: boom"],
+    ).to_dict()
+    parsed = KismetDecompiledResult(
+        function_name="Fine",
+        signature="void Fine()",
+        bytecode_status="parsed",
+        expressions=[],
+    ).to_dict()
+    # Handler projection must keep both entries (no filtering by status).
+    from uasset_read.parsers.asset_types.handlers_impl import _project_kismet_functions
+
+    projected = _project_kismet_functions([failed, parsed], include_expressions=True)
+    assert [p["function_name"] for p in projected] == ["Broken", "Fine"]
+    assert projected[0]["bytecode_status"] == "failed"
+    assert projected[0]["error_code"] == "bytecode_decode_error"
+    assert projected[1]["bytecode_status"] == "parsed"

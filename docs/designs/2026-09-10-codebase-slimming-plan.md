@@ -1,9 +1,9 @@
 # 代码库精简计划
 
-> **Status**: target（待决策门批准）  
+> **Status**: current + target（Phase 0/A、Gate G parent 和 Gate K 已完成；Gate L 与其余 Gate G 仍为 target）  
 > **Date**: 2026-09-10  
-> **Revision**: 2026-09-10 实际项目复核版——统一正式 size ratchet 口径，区分死参数与在用能力，并把 C++ 伪代码退役改为 canonical 决策门。  
-> **Goal**: 在不暗中改写 package-first 权威架构、不丢失蓝图执行流/数据流可观察性、不削弱结构化失败诊断的前提下做减法。默认可直接执行的范围只有无消费者的 CLI 日志参数；日志清理、C++ 伪代码、Agent/IoStore/parent/mappings 均须先通过各自决策门。
+> **Revision**: 2026-09-10 实际项目复核与执行状态版——统一正式 size ratchet 口径，区分死参数与在用能力，并记录已批准的 Gate G/K。  
+> **Goal**: 在不暗中改写 package-first 权威架构、不丢失蓝图执行流/数据流可观察性、不削弱结构化失败诊断的前提下做减法。已完成死 CLI 参数、parent-asset 和 C++ 文本生成器的退役；日志清理、Agent/IoStore/mappings 仍须先通过各自决策门。
 
 ---
 
@@ -15,11 +15,10 @@
 
 | 切口 | 当前事实 | 状态 |
 | --- | --- | --- |
-| 五个 CLI `--log-*` 参数 | 被 argparse 接受，但生产代码从不读取 | **默认可执行** |
+| 五个 CLI `--log-*` 参数 | 已删除；其余 cleanup 参数仍在用 | **retired 2026-09-10（Phase A）** |
 | `project_logging.py` / `--clean-logs` | 仍有生产调用；只做旧日志清理，不配置全局 logging | **Gate L：产品退役决策** |
-| C++ 伪代码生成链 | 仍是 Blueprint semantic JSON 的函数逻辑表示；canonical 明确保留为可选扩展 | **Gate K：canonical 目标变更** |
+| C++ 伪代码生成链 | 三个生成器已删除；K0 expression contract 接替公共函数逻辑表示 | **retired 2026-09-10（Gate K）** |
 | `agent_tools` / `iostore` / `parent_resolver` / `mappings` | 产品能力或 deferred issue，不是死代码 | **Gate G：分别决策**（parent_resolver 已于 2026-09-10 退役） |
-| C++ 伪代码生成链 | Gate K 已批准并执行 | **retired 2026-09-10**（K0 expression 契约） |
 | projection 分页/预算、expressions/models 分包 | package-first 契约或维护性结构 | **不做** |
 
 不得用“零内部 import”“体积较大”或“测试仍绿”代替产品退役决策。
@@ -40,27 +39,20 @@ python -m uasset_read file.uasset
   -> uasset_read.package JSON
 ```
 
-蓝图 Kismet 当前路径是：
+蓝图 Kismet 路径（**2026-09-10 Gate K 后 current**）：
 
 ```text
 legacy_reader
-  -> extract_kismet_decompiled
+  -> extract_kismet_decompiled                 # asset + decode
   -> read_ufunction_script
   -> parse_bytecode_stream                 # bytes -> expressions
-  -> FunctionBodyBuilder / JumpAnalyzer    # expressions -> C++ pseudocode/metric
   -> KismetDecompiledResult.to_dict()
-  -> BlueprintFamilyHandler                # 白名单投影到 semantic.functions[]
+  -> BlueprintFamilyHandler                # K0 投影到 semantic.functions[]
 ```
 
-`KismetDecompiledResult.to_dict()` 内含 `expressions`、`error_*`、
-`script_metrics` 和 `fallback_reasons`，但 current `BlueprintFamilyHandler` 只公开：
-
-```text
-function_name / signature / cpp_code / bytecode_status / translation_status
-```
-
-因此，若只删除 `cpp_code` / `translation_status` 而不新增受控的表达式输出，公共
-JSON 将只剩函数名、签名和状态，无法支撑“理解执行流和数据传递”的核心用途。
+公共函数字段为 K0：`function_name` / `signature` / `bytecode_status` /
+`expression_count` / `expression_types` / `expressions_truncated` /
+（decode）`expressions` / 失败诊断与证据字段。不再公开 `cpp_code` / `translation_status`。
 
 ### 1.2 日志事实
 
@@ -146,9 +138,9 @@ for prefix in ('src/','tests/','docs/'):
 - wheel 先构建实测，再收紧 `wheel_bytes.max_bytes`，不按源码行数估算。
 - `min_files` 是防止未跟踪子树绕过门禁的 floor，不是“文件越多越好”的目标。
 
-当前工作树基线运行结果是 `207 passed, 1 failed`；唯一失败为
-`test_docs_tree_within_baseline`（tracked docs 45,145 行，ceiling 45,144）。本计划纳入 Git 后
-还会增加一个文档文件及其物理行，Phase 0 必须先按最终文档树实测并更新 `docs_markdown`。
+历史审查时曾出现 `test_docs_tree_within_baseline` 的一项失败；Phase 0 已将计划、design
+index 和 docs ratchet 一并纳入。当前 latest 验证为 `213 passed`，正式 tracked 基线为 src
+75 / 21,217 行、tests 13 / 5,882 行、docs 150 / 45,630 行。
 
 ---
 
@@ -156,13 +148,13 @@ for prefix in ('src/','tests/','docs/'):
 
 1. **Canonical**：任何改变 repository-wide target 的决策先改 canonical design，再改实现。本计划不能用“产品决策”一句话覆盖 canonical。
 2. **Logging**：canonical 当前要求显式文件日志能力与 dry-run 清理。Gate L 若批准，必须更新其 Logging and Debugging、Decisions、测试策略和 Source Pointers，不只是删一个文件名。
-3. **Kismet/C++**：canonical 当前明确写有“Blueprint/Kismet/C++ 生成保留为可选扩展”。Gate K 若批准，必须先改该 Decision、Phase 4/迁移完成条件、README 当前能力说明。
+3. **Kismet/C++**：Gate K 已先修改 canonical 的 Decision、Phase 4/迁移完成条件和 README 当前能力说明；bytes → expressions + diagnostics 仍是可选扩展，C++ 文本生成器已 retired。
 4. **G4** [`2026-08-31-projection-layering.md`](2026-08-31-projection-layering.md)：projection 的 view/depth/selection/pagination/max_bytes/truncation 行为不变。
 5. **S1** [`2026-08-31-v2-contract-stability.md`](2026-08-31-v2-contract-stability.md)：`objects[].semantic` 是 experimental。其内部字段删除 **不 bump `format_version`**，但必须记录 breaking note 并同步消费者文档。
 6. **G2/S2**：Agent cache 与 payload extraction 契约在 Agent 产品面退役前仍绑定。
 7. **#623/#624/#625**：deferred 不等于 canceled。mappings/IoStore/Pak 前置 issue 与 fixture/manifest 声明必须同步处置。
 8. **D1/#642**：`kismet` 是 permanent v2 internal；即使 Gate K 通过，也只删除文本生成器，不删除 bytecode extractor、expression tree、UFunction reader 或 token definitions。
-9. **Ponytail** [`2026-09-08-ponytail-audit-cleanup-plan.md`](2026-09-08-ponytail-audit-cleanup-plan.md)：其 Task 5 当前保留 `--clean-logs`，与本计划默认 Phase A 一致；若 Gate L/K 通过，必须在执行前把 companion 中对应未完成步骤标记为 canceled/superseded，不能只靠本文件的所有权表覆盖。
+9. **Ponytail** [`2026-09-08-ponytail-audit-cleanup-plan.md`](2026-09-08-ponytail-audit-cleanup-plan.md)：其 Task 5 当前保留 `--clean-logs`，与 Phase A 一致；其 body-builder 微调步骤因 Gate K 删除整个生成器链而标记 canceled，不能继续作为可执行工作。
 
 ---
 
@@ -175,7 +167,7 @@ for prefix in ('src/','tests/','docs/'):
 - [x] 把 `docs_markdown.min_files/max_lines` 更新为纳入本计划后的精确值。
 - [x] 运行 `python -m pytest -q`，记录基线通过数及任何既有失败。
 - [x] 确认本轮只执行 Phase A，还是另有 Gate L / Gate K 的明确批准记录。
-- [ ] 若批准 Gate L/K，先更新 canonical 和 companion 文档，再改代码。
+- [x] Gate K 已先更新 canonical；companion 中与已删除生成器链冲突的步骤已标记 canceled。
 
 **退出条件**：文档状态一致；正式 size test 全绿；产品决策与实现范围无歧义。
 
@@ -204,7 +196,7 @@ for prefix in ('src/','tests/','docs/'):
 - [x] 参数搜索确认五个 destination 没有消费者。
 - [x] 新增/保留测试：五个删除参数被 argparse 拒绝。
 - [x] `tests/test_cli.py` 的 `--clean-logs` 路径仍通过。
-- [x] 全套测试通过（214 passed）。
+- [x] Phase A 完成时全套测试通过；最新组合验证为 `213 passed`。
 - [x] 精确收紧 src/tests/wheel ratchet。
 
 风险：低。只删除无消费者的兼容参数；仍需在 release note 中记录 CLI 参数移除。
@@ -254,6 +246,8 @@ Gate K 不是纯重构。它改变 canonical target 和 Blueprint semantic exper
 
 #### K1：删除生成器
 
+**状态：已完成，`12dcb49c`。**
+
 批准 K0 契约并先更新 canonical 后，删除：
 
 | 文件 | 当前物理行 |
@@ -274,6 +268,8 @@ Gate K 不是纯重构。它改变 canonical target 和 Blueprint semantic exper
 - `decompile_bridge.py`
 
 #### K2：瘦身 bridge/result/handler
+
+**状态：已完成，`12dcb49c`。**
 
 `decompile_bridge.py` 继续负责：
 
@@ -313,13 +309,13 @@ FUNCTION_EXPORT_CLASSES
 
 删除 translator 专属测试的同一提交必须增加最小严格替代覆盖：
 
-- [ ] 合成或真实函数字节码解析出非空、有序 expressions。
-- [ ] `KismetDecompiledResult` 的 `parsed` / `no_script` / `failed` 三种序列化。
-- [ ] 失败结果保留 `error_*`、`script_metrics`、`fallback_reasons`。
-- [ ] handler 在 `depth=asset` 输出摘要，在 `depth=decode` 输出 expressions。
-- [ ] `project_document`/CLI JSON 实际包含 K0 字段并遵守 `max_bytes`。
-- [ ] 真实 `BP_CombatCharacter` 样本不仅检查函数名/状态，还检查至少一个函数具有可观察的表达式信息。
-- [ ] 一个函数失败时其他函数仍保留。
+- [x] 合成或真实函数字节码解析出非空、有序 expressions。
+- [x] `KismetDecompiledResult` 的 `parsed` / `no_script` / `failed` 三种序列化。
+- [x] 失败结果保留 `error_*`、`script_metrics`、`fallback_reasons`。
+- [x] handler 在 `depth=asset` 输出摘要，在 `depth=decode` 输出 expressions。
+- [x] `project_document`/CLI 对 Blueprint K0 JSON 的 `depth=decode` + `max_bytes` 联合回归。
+- [x] 真实 `BP_CombatCharacter` 样本不仅检查函数名/状态，还检查至少一个函数具有可观察的表达式信息。
+- [x] 一个函数失败时其他函数仍保留。
 
 全套测试通过只是必要条件；若上述断言缺失，现有套件无法证明函数逻辑没有退化。
 
@@ -461,12 +457,16 @@ Gate G（可选）
 
 ---
 
-## 10. 最小可交付切片
+## 10. 已交付切片
 
-若当前只做一次低风险落地：
+1. Phase 0：文档门禁、正式 physical-line 基线和全绿验证。
+2. Phase A：删除五个无消费者的 CLI 日志参数，保留 cleanup 能力。
+3. Gate G：退役 parent-asset resolution，删除模块并将旧 CLI 参数显式拒绝。
+4. Gate K：删除 C++ 文本生成器，以 K0 expression summaries / decode tree 取代公共函数逻辑表示。
 
-1. Phase 0：修正文档门禁并建立全绿基线。
-2. Phase A：删除五个无消费者的 CLI 参数，保留 cleanup 能力。
-3. 停止；Gate L、Gate K、Gate G 分别提交产品决策后再继续。
+## 11. 下一步建议
 
-这能完成可信的小幅精简，同时不把目标架构变更伪装成普通 dead-code cleanup。
+1. **先补齐 K3 的两个剩余回归测试。** 为 `BP_CombatCharacter` 的 `depth=decode` CLI 输出增加 `max_bytes` 联合断言；再构造同包两个 Function export、其中一个失败的最小测试，锁定“失败可见且不吞掉其他函数”。这是最小、风险最低的收尾工作。
+2. **将 K3 验收清单全部勾选后，关闭 Gate K 的执行记录。** 同一提交重测并收紧 tests/docs ratchet，避免把已完成功能长期留在 target 状态。
+3. **对 Gate L 作单独产品决策。** 若保留旧日志清理，不再继续改动；若退役，先按 §7 更新 canonical、CLI/Wiki/API，再删除 `project_logging.py` 和其公开参数。
+4. **其余 Gate G 不应按体积排序强推。** IoStore、Agent tools、mappings 各自依赖 deferred capability / 文档契约；只有产品目标明确收缩时再独立立项。

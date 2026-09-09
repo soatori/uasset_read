@@ -14,7 +14,7 @@ Unreal Engine blueprints are stored as binary `.uasset` files — unreadable wit
 
 - **Blueprint graphs** — nodes, pins, execution flow, data dependencies
 - **Variables & metadata** — types, defaults, categories, tooltips
-- **Kismet bytecode** — decompiled to C++-like pseudo-code
+- **Kismet bytecode** — expression trees with structured diagnostics (`semantic.functions[]`; C++ pseudocode retired 2026-09-10)
 - **Component properties** — transforms, materials, mesh references
 - **Dependency graphs** — import/export relationships, soft object paths
 
@@ -79,7 +79,7 @@ print(project_document(doc))  # PackageDocument JSON dict
 
 ### Advanced Features
 
-- **Kismet bytecode decompiler** — EExprToken → AST → C++ pseudo-code with structured control flow
+- **Kismet bytecode decompiler** — EExprToken → expression tree (`expression_count` / `expression_types` at asset depth; full `expressions` at decode)
 - **Dependency analysis** — ImportMap + SoftObjectPaths dependency graph
 
 ### File Format Support
@@ -204,7 +204,7 @@ Data flow is the v2 package-first pipeline defined in the [canonical refactor de
               → projection → JSON / CLI / Agent tools (same document)
 ```
 
-Shared readers behind that document: `kismet/` (bytecode → C++ pseudocode, reached through `parsers/legacy_reader.py`), `serializers/` and `models/`.
+Shared readers behind that document: `kismet/` (bytecode → expressions + diagnostics, reached through `parsers/legacy_reader.py` at asset/decode), `serializers/` and `models/`.
 
 ### Module Structure (`src/uasset_read/`)
 
@@ -225,7 +225,7 @@ Shared readers behind that document: `kismet/` (bytecode → C++ pseudocode, rea
 | **Data Models** | `models/` | UEdGraph/Node/Pin, FEdGraphPinType, FMemberReference, PropertyTag/PropertyValue, Anim IR, structured diagnostics, property fallback |
 | **Parsers** | `parsers/` | 28 tagged-property parse functions + dispatcher, custom property registry, class handler registry, BinaryOrNative handlers |
 | ├ Asset Types | `parsers/asset_types/` | 18 asset type parser files + opaque stubs; 70 registered class handlers |
-| **Kismet** | `kismet/` | Bytecode extractor, EExprToken → AST, C++ translator, BPGC fallback, UFunction script reader |
+| **Kismet** | `kismet/` | Bytecode extractor, EExprToken → expressions, decompile bridge, BPGC fallback, UFunction script reader (C++ translator retired 2026-09-10) |
 | ├ Expressions | `kismet/expressions/` | 15 expression types (assignments, control flow, function calls, literals, casts, delegates, etc.) |
 | **v2 Document** | `v2/` | `api.py` entry point, `document.py` PackageDocument, `object_model.py`, `properties.py`, `handlers.py`, `package/legacy.py` reader, `projection.py` paging/budget, `agent_tools.py`, `blueprint_graph.py`, `diagnostics.py` |
 
@@ -261,7 +261,7 @@ When Unreal Editor 5.8 is released, use the official Experimental Unreal MCP ser
 ## Current Limitations
 
 - **Only unbaked/editor-saved assets**: Cooked assets have stripped graph data
-- **Limited bytecode decompilation**: Kismet EExprToken→AST→C++ implemented for known token types
+- **Limited bytecode coverage**: Kismet EExprToken → expressions for known token types; C++ pseudocode generation retired 2026-09-10
 - **Limited binary data export**: Large payloads (textures, audio) require sidecar files; `extract_payload` reads from `.uexp/.ubulk` when available
 - **Read-only**: Parsing only, no modification
 - **UE source reference required**: No official .uasset format documentation
