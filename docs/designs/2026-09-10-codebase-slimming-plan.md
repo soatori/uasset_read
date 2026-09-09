@@ -228,7 +228,7 @@ for prefix in ('src/','tests/','docs/'):
 - 更新 canonical、README、Wiki、agent reference、design index 和 release note。
 - 精确收紧 ratchet；文件数减少 1。
 
-### Gate K — 退役 C++ 伪代码生成链（默认不执行）
+### Gate K — 退役 C++ 伪代码生成链（**已批准，2026-09-10 执行**）
 
 Gate K 不是纯重构。它改变 canonical target 和 Blueprint semantic experimental 字段，必须有明确批准记录。
 
@@ -249,7 +249,7 @@ Gate K 不是纯重构。它改变 canonical target 和 Blueprint semantic exper
 `depth=asset` 不强制输出完整 expression tree，但不能只留下函数名和状态；至少输出
 `expression_count`、有序 `expression_types` 和 `expressions_truncated`。`depth=decode` 是检查执行流和数据流的正式入口。
 
-若团队不接受上述公共表达式表示，则 Gate K 不得执行；应继续保留 `cpp_code` 作为当前唯一函数逻辑表示，并只做 ponytail 等价 tidy。
+**K0 契约状态：已批准并写入 canonical（2026-09-10）。** 若团队日后拒绝该公共表达式表示，不得静默回退到 `cpp_code`；需新的产品决策。
 
 #### K1：删除生成器
 

@@ -22,7 +22,7 @@ status: target
 6. 默认输出面向检查与 Agent；raw/debug/decode 通过投影和深度参数按需展开。
 7. 大型 payload 永不默认内嵌 JSON，只返回可定位、可提取的描述符。
 8. 解析核心产生结构化 diagnostics，不配置全局日志；CLI 决定是否写日志。
-9. Blueprint/Kismet/C++ 生成保留并迁移为可选扩展，不阻塞新核心第一个稳定版本。
+9. Blueprint/Kismet 反编译保留为可选扩展（bytes → expressions + 结构化诊断）；C++ 伪代码文本生成已于 2026-09-10 Gate K 退役。公共函数逻辑表示为 `semantic.functions[]` 的表达式摘要 / decode 级 expression tree（见 D1 与 slimming plan K0）。
 
 ## Authority and Reading Rules
 
@@ -723,7 +723,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 
     - Phase 4.5：graph/node/pin 解码 + declaration（parent_class/interfaces/functions）+ SCS components + NewVariables names 已迁移到 v2 `BlueprintFamilyHandler` decode 分支。fixture 测试覆盖 StackOBot/BP_CombatCharacter/ABP_RifleAnimLayers/ALS_AnimBP。
     - 已迁移（2026-09-05 核对源码与测试）：VarType（`FEdGraphPinType`）类型解码、Kismet 反编译（`blueprint.kismet` coverage）。
-    - 未迁移：C++ skeleton。parent-asset 解析已放弃（2026-09-10 Gate G，D1 §7），不再作为迁移目标。
+    - 未迁移：C++ skeleton。parent-asset 解析已放弃（2026-09-10 Gate G，D1 §7）。C++ 伪代码生成链已退役（2026-09-10 Gate K）；函数逻辑以 expression 摘要/decode tree 公开。，不再作为迁移目标。
 
 退出条件：每个 handler 至少有一个真实样本、一个缺失/partial 样本和明确 coverage；handler 失败不影响同包其他对象。
 
@@ -843,7 +843,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 
 - 旧 Semantic 1.x 不再是默认 JSON。（已满足：1.x 输出路径已删除。）
 - 所有公开文档只把旧契约描述为 legacy/current historical。
-- Blueprint/Kismet 扩展在 v2 object model 上运行，或明确保留为未迁移可选能力。（已满足：graph/node/pin、declaration、SCS、VarType、Kismet 反编译均在 v2 运行；C++ skeleton 明确为未迁移 deferred；parent-asset 解析已放弃，见 D1 §7。）
+- Blueprint/Kismet 扩展在 v2 object model 上运行，或明确保留为未迁移可选能力。（已满足：graph/node/pin、declaration、SCS、VarType、Kismet 反编译均在 v2 运行；C++ skeleton 明确为未迁移 deferred；parent-asset 解析已放弃；C++ 伪代码生成已退役并由 expression 公共输出替代。）
 - 旧 builder/projection/promotion 路径已删除，而不是永久并行。
 - 发行包、源码树和文档树的体积基线已记录并进入 CI/发布检查。
 - 根目录独立 Python 入口已删除，公开命令统一为 `python -m uasset_read`。
@@ -872,7 +872,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - Legacy 与 Zen 使用独立 reader。
 - Tagged 与 Unversioned 使用独立 property reader。
 - Writer 延后，第一阶段保持只读。
-- Blueprint/Kismet/C++ 生成保留为可选扩展，后于 core v2。
+- Blueprint/Kismet 字节码反编译保留为可选扩展（expressions + diagnostics，非 C++ 文本），后于 core v2。
 - Agent tool 是正式接口；MCP 是可选 transport。
 - 默认不写文件日志，不内嵌大型 payload。
 - 最小依赖优先，但不把零依赖作为不可改变的架构限制。
