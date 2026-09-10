@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import struct
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -305,7 +305,7 @@ def validate_pin_reference_at(
     pos: int,
     export_map: list[ObjectExport],
     import_map: list[ObjectImport] | None = None,
-) -> dict[str, Any] | None:
+) -> tuple[bool, str] | None:
     """Validate PinReference structure at given position.
 
     Does not move pointer; only checks if the position conforms to PinReference format:
@@ -316,16 +316,8 @@ def validate_pin_reference_at(
     Supports 4-byte null PinReference (only 4 bytes when b_null != 0).
 
     Returns:
-        None: invalid structure
-        Dict: {
-            "b_null": int,
-            "owning_node": int,
-            "owning_node_valid": bool,
-            "guid_nonzero": bool,
-            "valid": bool,
-            "reason": str,
-            "serialized_size": int,  # 4 for null, 24 for non-null
-        }
+        None: invalid structure / not enough bytes
+        (valid, reason): validation outcome
     """
     current_pos = archive.tell()
 
@@ -345,15 +337,7 @@ def validate_pin_reference_at(
     if b_null != 0:
         # Null PinReference: only consumes 4 bytes
         archive.seek(current_pos)
-        return {
-            "b_null": b_null,
-            "owning_node": 0,
-            "owning_node_valid": True,
-            "guid_nonzero": False,
-            "valid": True,
-            "reason": "valid null ref (b_null!=0, no actual pin)",
-            "serialized_size": 4,
-        }
+        return True, "valid null ref (b_null!=0, no actual pin)"
 
     # b_null == 0: needs full 24 bytes
     if file_size and pos + 24 > file_size:
@@ -391,12 +375,4 @@ def validate_pin_reference_at(
         valid = True
         reason = "valid pin reference"
 
-    return {
-        "b_null": b_null,
-        "owning_node": owning_node,
-        "owning_node_valid": owning_node_valid,
-        "guid_nonzero": guid_nonzero,
-        "valid": valid,
-        "reason": reason,
-        "serialized_size": 24,
-    }
+    return valid, reason

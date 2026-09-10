@@ -200,8 +200,8 @@ def read_pin_array(
     for _ in range(array_count):
         ref_pos = archive.tell()
         ref_validation = validate_pin_reference_at(archive, ref_pos, export_map, import_map)
-        if ref_validation is None or not ref_validation["valid"]:
-            reason = ref_validation["reason"] if ref_validation else "not enough bytes"
+        if ref_validation is None or not ref_validation[0]:
+            reason = ref_validation[1] if ref_validation else "not enough bytes"
             raise ParseError(f"Invalid pin reference at pos {ref_pos}: {reason}")
         pin_ref = read_pin_reference(archive, name_map, export_map, import_map)
         if pin_ref is not None:
@@ -395,7 +395,7 @@ def _try_recover_to_subpins(
         # Validate using validate_pin_reference_at
         if candidate > 0 and after + 24 <= len(window):
             pin_ref_result = validate_pin_reference_at(archive, candidate_pos + 4, export_map, import_map)
-            if pin_ref_result is not None and pin_ref_result["valid"]:
+            if pin_ref_result is not None and pin_ref_result[0]:
                 recovered_pos = candidate_pos
                 archive.seek(recovered_pos)
                 # Converged: this path is only for SubPins resync, no longer marked as linkedto_recovered
@@ -405,13 +405,13 @@ def _try_recover_to_subpins(
                     recovered_pos,
                     candidate,
                     recovery_type,
-                    pin_ref_result["reason"],
+                    pin_ref_result[1],
                 )
                 return {
                     "recovered_pos": recovered_pos,
                     "count": candidate,
                     "recovery_type": recovery_type,
-                    "reason": pin_ref_result["reason"],
+                    "reason": pin_ref_result[1],
                 }
 
         # count=0 or b_null!=0 case: check if empty array or null ref
@@ -470,7 +470,7 @@ def _read_pin_ftext_field(
     archive: FArchive,
     field_name: str,
     dev_notes: bool = False,
-) -> tuple:
+) -> str | None:
     """Read Pin FText field (PinFriendlyName / DefaultTextValue)."""
     _start = archive.tell()
     try:
@@ -486,10 +486,10 @@ def _read_pin_ftext_field(
             )
             archive.seek(_start)  # Seek back to field start, not _start + 5
             value = None
-        return value, True
+        return value
     except BINARY_READ_ERRORS:
         archive.seek(_start)  # On exception, also seek back to start position
-        return None, False
+        return None
 
 
 def _read_pin_ref_array(
@@ -586,7 +586,7 @@ def read_ue_graph_pin(
 
     # 4. PinFriendlyName (FText) — DevNotes gated per package custom version
     dev_notes = ftext_dev_notes_enabled(summary)
-    pin_friendly_name, _ = _read_pin_ftext_field(archive, "PinFriendlyName", dev_notes=dev_notes)
+    pin_friendly_name = _read_pin_ftext_field(archive, "PinFriendlyName", dev_notes=dev_notes)
 
     # 5. SourceIndex (UE5 always present)
     source_index = archive.read_i32()
@@ -608,7 +608,7 @@ def read_ue_graph_pin(
     default_object = archive.read_i32()
 
     # 12. DefaultTextValue (FText)
-    default_text_value, _ = _read_pin_ftext_field(archive, "DefaultTextValue", dev_notes=dev_notes)
+    default_text_value = _read_pin_ftext_field(archive, "DefaultTextValue", dev_notes=dev_notes)
 
     # 13. LinkedTo array
     linked_to = _read_pin_ref_array(
