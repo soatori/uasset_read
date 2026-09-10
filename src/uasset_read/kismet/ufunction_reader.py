@@ -62,7 +62,6 @@ class FunctionScriptFailure:
     export_offset: int
     bytecode_buffer_size: int | None = None
     serialized_script_size: int | None = None
-    remaining_serialized: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +83,23 @@ class InvalidScriptPropertyRange(Exception):
     def __init__(self, failure: FunctionScriptFailure):
         self.failure = failure
         super().__init__(failure.error_message)
+
+
+def _make_failure(
+    export: ObjectExport,
+    export_index: int,
+    error_code: str,
+    error_message: str,
+) -> FunctionScriptFailure:
+    return FunctionScriptFailure(
+        error_code=error_code,
+        error_message=error_message,
+        function_name=export.object_name,
+        export_index=export_index,
+        class_name=resolve_class_name(export.class_index, [], [export]) or "Unknown",
+        package_offset=export.serial_offset,
+        export_offset=export.serial_offset,
+    )
 
 
 @dataclass
@@ -144,7 +160,6 @@ def _read_native_payload_start(
             raise _make_control_bit_error(
                 ctrl_byte,
                 export,
-                summary,
                 export_index=export_index,
             )
         if ctrl_byte & _SER_CTRL_OVERRIDE_OPERATION:
@@ -156,17 +171,14 @@ def _read_native_payload_start(
 
     # Cross-check script_serialization offsets if they are non-zero
     if export.script_serialization_start_offset != 0 or export.script_serialization_end_offset != 0:
-        declared_start = export.script_serialization_start_offset
         declared_end = export.script_serialization_end_offset
         measured_end = pos_after_tags
 
         if declared_end != measured_end:
             raise _make_offset_mismatch_error(
-                declared_start,
                 declared_end,
                 measured_end,
                 export,
-                summary,
                 export_index=export_index,
             )
 
@@ -204,57 +216,36 @@ def _consume_tagged_properties(
 def _make_control_bit_error(
     ctrl_byte: int,
     export: ObjectExport,
-    summary: PackageFileSummary,
     *,
     export_index: int = 0,
 ) -> UnsupportedSerializationVersion:
     """Create an error for unknown serialization-control bits."""
-    failure = FunctionScriptFailure(
-        error_code="unsupported_serialization_version",
-        error_message=(
-            f"Unknown serialization-control bits 0x{ctrl_byte:02X} (known: 0x{_SER_CTRL_OVERRIDE_OPERATION:02X})"
-        ),
-        function_name=export.object_name,
-        export_index=export_index,
-        class_name=resolve_class_name(
-            export.class_index,
-            [],
-            [export],
+    return UnsupportedSerializationVersion(
+        _make_failure(
+            export,
+            export_index,
+            "unsupported_serialization_version",
+            f"Unknown serialization-control bits 0x{ctrl_byte:02X} (known: 0x{_SER_CTRL_OVERRIDE_OPERATION:02X})",
         )
-        or "Unknown",
-        package_offset=export.serial_offset,
-        export_offset=export.serial_offset,
     )
-    return UnsupportedSerializationVersion(failure)
 
 
 def _make_offset_mismatch_error(
-    declared_start: int,
     declared_end: int,
     measured_end: int,
     export: ObjectExport,
-    summary: PackageFileSummary,
     *,
     export_index: int = 0,
 ) -> InvalidScriptPropertyRange:
     """Create an error for mismatched script property offsets."""
-    failure = FunctionScriptFailure(
-        error_code="invalid_script_property_range",
-        error_message=(
-            f"Script serialization offset mismatch: declared end={declared_end}, measured end={measured_end}"
-        ),
-        function_name=export.object_name,
-        export_index=export_index,
-        class_name=resolve_class_name(
-            export.class_index,
-            [],
-            [export],
+    return InvalidScriptPropertyRange(
+        _make_failure(
+            export,
+            export_index,
+            "invalid_script_property_range",
+            f"Script serialization offset mismatch: declared end={declared_end}, measured end={measured_end}",
         )
-        or "Unknown",
-        package_offset=export.serial_offset,
-        export_offset=export.serial_offset,
     )
-    return InvalidScriptPropertyRange(failure)
 
 
 # ---------------------------------------------------------------------------
@@ -402,7 +393,6 @@ def _read_ustruct_prefix_and_script(
                     export_offset=export.serial_offset,
                     bytecode_buffer_size=bytecode_buffer_size,
                     serialized_script_size=serialized_script_size,
-                    remaining_serialized=remaining_after_header,
                 ),
             )
 

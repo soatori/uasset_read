@@ -70,7 +70,6 @@ def parse_bytecode_stream(
         return []
 
     archive = FKismetArchive(bytecode_bytes, "ScriptBytecode", name_map, tolerant=tolerant)
-    archive.bytecode_buffer_size = bytecode_buffer_size
     if summary is not None:
         archive.summary = summary
         from uasset_read.versioning import (

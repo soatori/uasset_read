@@ -31,7 +31,6 @@ class FKismetArchive(FArchive):
         # Dual-cursor tracking
         self.serialized_offset: int = 0  # bytes consumed from disk
         self.bytecode_index: int = 0  # reconstructed in-memory address
-        self.bytecode_buffer_size: int = 0
         self.fortnite_version: int = -1
         self.release_version: int = -1
 

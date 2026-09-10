@@ -18,15 +18,12 @@ def _validate_bytecode_status(bytecode_status: str) -> None:
 
 def infer_bytecode_confidence(
     bytecode_status: str = "unknown",
-    logic_source: str = "current_asset",
 ) -> str:
     """Classify the confidence of a public function body.
 
     Keep this shared by direct Kismet serialization and the v2 decompile output so
     callers cannot receive conflicting provenance for the same function body.
     """
-    if logic_source == "graph_topology":
-        return "graph_topology"
     if bytecode_status == "failed":
         return "failed"
     if bytecode_status == "no_script":
@@ -62,8 +59,6 @@ class KismetDecompiledResult:
     script_metrics: dict[str, Any] | None = None
     warnings: list[str] = field(default_factory=list)
     fallback_reasons: list[str] = field(default_factory=list)
-    semantic_calls: list[dict[str, Any]] = field(default_factory=list)
-    logic_source: str = "current_asset"
     function_ref_stats: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -73,7 +68,6 @@ class KismetDecompiledResult:
         d = asdict(self)
         d["bytecode_confidence"] = infer_bytecode_confidence(
             bytecode_status=self.bytecode_status,
-            logic_source=self.logic_source,
         )
         d["expressions"] = [
             e.to_dict() if hasattr(e, "to_dict") else str(e) for e in self.expressions
