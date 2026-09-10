@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from uasset_read.kismet.expressions.base import KismetExpression
 from uasset_read.kismet.tokens import EExprToken
-from uasset_read.kismet.value_types import FNameRef
 
 if TYPE_CHECKING:
     from uasset_read.kismet.archive import FKismetArchive
@@ -63,7 +62,6 @@ class EX_BindDelegate(KismetExpression):
     """Bind object and name to delegate (EX_BindDelegate, 0x61)."""
 
     FunctionName: str = ""
-    FunctionNameRef: FNameRef | None = None
     Delegate: KismetExpression | None = None
     ObjectTerm: KismetExpression | None = None
 
@@ -76,7 +74,6 @@ class EX_BindDelegate(KismetExpression):
         obj = archive.read_expression()
         return cls(
             FunctionName=fname_ref.base_name or "",
-            FunctionNameRef=fname_ref,
             Delegate=d,
             ObjectTerm=obj,
         )
@@ -116,14 +113,13 @@ class EX_InstanceDelegate(KismetExpression):
     """Const reference to a delegate or normal function object (EX_InstanceDelegate, 0x4B)."""
 
     FunctionName: str = ""
-    FunctionNameRef: FNameRef | None = None
 
     Token = EExprToken.EX_InstanceDelegate
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_InstanceDelegate:
         fname_ref = archive.xfer_fname()
-        return cls(FunctionName=fname_ref.base_name or "", FunctionNameRef=fname_ref)
+        return cls(FunctionName=fname_ref.base_name or "")
 
     def to_dict(self) -> dict:
         result = super().to_dict()

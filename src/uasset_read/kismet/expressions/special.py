@@ -15,8 +15,6 @@ from uasset_read.kismet.expressions.base import (
     make_simple_expression,
 )
 from uasset_read.kismet.tokens import EExprToken, EScriptInstrumentationType
-from uasset_read.kismet.value_types import FNameRef
-from uasset_read.serializers.object_resources import PackageIndex
 
 if TYPE_CHECKING:
     from uasset_read.kismet.archive import FKismetArchive
@@ -114,7 +112,6 @@ class EX_InstrumentationEvent(KismetExpression):
 
     EventType: EScriptInstrumentationType = EScriptInstrumentationType.None_
     EventName: str | None = None
-    EventNameRef: FNameRef | None = None
 
     Token = EExprToken.EX_InstrumentationEvent
 
@@ -122,12 +119,10 @@ class EX_InstrumentationEvent(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_InstrumentationEvent:
         evt_type = EScriptInstrumentationType(archive.read_u8())
         name = None
-        name_ref = None
         if evt_type == EScriptInstrumentationType.InlineEvent:
             fname_ref = archive.xfer_fname()
             name = fname_ref.base_name
-            name_ref = fname_ref
-        return cls(EventType=evt_type, EventName=name, EventNameRef=name_ref)
+        return cls(EventType=evt_type, EventName=name)
 
 
 # Data-free expression: returns Token only
@@ -156,14 +151,13 @@ class EX_ObjectConst(KismetExpressionT):
     """Object constant — reads object reference index."""
 
     Value: int = 0
-    ObjectRef: PackageIndex | None = None
 
     Token = EExprToken.EX_ObjectConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ObjectConst:
         obj_ref = archive.xfer_object_pointer()
-        return cls(Value=obj_ref.index, ObjectRef=obj_ref)
+        return cls(Value=obj_ref.index)
 
 
 @dataclass
@@ -171,11 +165,10 @@ class EX_NameConst(KismetExpressionT):
     """Name constant — reads FName index + number from name_map."""
 
     Value: str = ""
-    NameRef: FNameRef | None = None
 
     Token = EExprToken.EX_NameConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_NameConst:
         fname_ref = archive.xfer_fname()
-        return cls(Value=fname_ref.base_name or "", NameRef=fname_ref)
+        return cls(Value=fname_ref.base_name or "")

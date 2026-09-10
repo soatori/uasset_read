@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 from uasset_read.kismet.expressions.base import KismetExpression, make_simple_expression, make_token_subclass
 from uasset_read.kismet.tokens import EExprToken
-from uasset_read.kismet.value_types import FNameRef
 
 if TYPE_CHECKING:
     from uasset_read.kismet.archive import FKismetArchive
@@ -54,7 +53,6 @@ class EX_VirtualFunction(KismetExpression):
     """Virtual function call, resolved by function name."""
 
     VirtualFunctionName: str = ""
-    VirtualFunctionNameRef: FNameRef | None = None
     Parameters: list[KismetExpression] = field(default_factory=list)
 
     Token = EExprToken.EX_VirtualFunction
@@ -70,7 +68,6 @@ class EX_VirtualFunction(KismetExpression):
             full_name = fname_ref.base_name or ""
         return cls(
             VirtualFunctionName=full_name,
-            VirtualFunctionNameRef=fname_ref,
             Parameters=params,
         )
 

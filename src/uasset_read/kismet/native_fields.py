@@ -64,22 +64,19 @@ class NativeFieldDeclaration:
     """Deserialized native FField / FProperty record.
 
     Retains raw package indices for diagnostics and aligned resolved names
-    for C++ type mapping.
+    for C++ type mapping. Wire fields without consumers (array_dim, element_size,
+    metadata, rep_notify, replication_condition) are still consumed from the
+    archive cursor but not retained on the declaration.
     """
 
     type_name: str
     name: str = ""
-    array_dim: int = 1
-    element_size: int = 0
     property_flags: int = 0
-    rep_notify_name: FNameRef | None = None
-    replication_condition: int = 0
-    metadata: dict[str, str] = field(default_factory=dict)
     # Raw package indices (preserved for diagnostics)
     references: list[int] = field(default_factory=list)
     # Resolved names parallel to references (None when index is null or out-of-range)
     reference_names: list[str | None] = field(default_factory=list)
-    # Inner fields for container types (array/set/map/enum/optional) — added in Task 4
+    # Inner fields for container types (array/set/map/enum/optional)
     inner_fields: list[NativeFieldDeclaration] = field(default_factory=list)
 
 
@@ -139,12 +136,12 @@ def _read_package_ref(archive: ByteArchive, context: NativeFieldContext) -> tupl
 def _read_fproperty_prefix(
     archive: ByteArchive,
     context: NativeFieldContext,
-) -> tuple[str, FNameRef, dict[str, str], int, int, int, int, FNameRef | None, int]:
+) -> tuple[str, int]:
     """Read the common FProperty prefix after the FField type-name.
 
-    Returns:
-        (name, name_ref, metadata, array_dim, element_size, property_flags,
-         rep_index, rep_notify_name, replication_condition)
+    Consumes NamePrivate, FlagsPrivate, metadata, ArrayDim, ElementSize,
+    PropertyFlags, RepIndex, RepNotifyFunc, and optional ReplicationCondition.
+    Returns only the retained subset: (name, property_flags).
     """
     # NamePrivate: FName
     name_ref = _read_fname_ref(archive, context)
@@ -158,34 +155,23 @@ def _read_fproperty_prefix(
 
     # FField metadata is serialized by Super::Serialize before the
     # FProperty-specific fields.
-    metadata = _read_metadata(archive, context)
+    _metadata = _read_metadata(archive, context)
 
     # ArrayDim / ElementSize: int32
-    array_dim = archive.read_i32()
-    element_size = archive.read_i32()
+    archive.read_i32()
+    archive.read_i32()
     # PropertyFlags: u64
     property_flags = archive.read_u64()
     # RepIndex: u16
-    rep_index = archive.read_u16()
+    archive.read_u16()
     # RepNotifyFunc: FName
-    rep_notify_name = _read_fname_ref(archive, context)
+    _read_fname_ref(archive, context)
 
     # ReplicationCondition: u8 (Release version >= 21)
-    replication_condition = 0
     if context.release_version >= _PROPERTIES_SERIALIZE_REP_CONDITION_VERSION:
-        replication_condition = archive.read_u8()
+        archive.read_u8()
 
-    return (
-        name_ref.base_name or "",
-        name_ref,
-        metadata,
-        array_dim,
-        element_size,
-        property_flags,
-        rep_index,
-        rep_notify_name,
-        replication_condition,
-    )
+    return (name_ref.base_name or "", property_flags)
 
 
 # ---------------------------------------------------------------------------
@@ -379,27 +365,10 @@ def _read_single_field(
     # Build the declaration
     decl = NativeFieldDeclaration(type_name=type_name)
 
-    # Read the common FProperty prefix
-    (
-        name,
-        _name_ref,
-        metadata,
-        array_dim,
-        element_size,
-        property_flags,
-        _rep_index,
-        rep_notify_name,
-        replication_condition,
-    ) = _read_fproperty_prefix(archive, context)
-
+    # Read the common FProperty prefix (retained subset)
+    name, property_flags = _read_fproperty_prefix(archive, context)
     decl.name = name
-    decl.array_dim = array_dim
-    decl.element_size = element_size
     decl.property_flags = property_flags
-    decl.rep_notify_name = rep_notify_name
-    decl.replication_condition = replication_condition
-
-    decl.metadata = metadata
 
     # Type-specific tail
     if type_name in _NO_EXTRA_BYTES_TYPES:
