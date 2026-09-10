@@ -636,24 +636,16 @@ class FArchive:
         return None
 
 
-def _contains_binary_data(value: str, threshold: float = 0.3, max_check_length: int = 256) -> bool:
+def _contains_binary_data(value: str) -> bool:
     """Check whether a string contains a large amount of binary/null characters.
 
     Used for binary data detection in FString/FText output.
-    Optimization: only checks the first max_check_length characters to avoid full scan.
-
-    Args:
-        value: string to check
-        threshold: null character ratio threshold, default 0.3 (30%)
-        max_check_length: maximum characters to check, default 256
-
-    Returns:
-        True if null character ratio exceeds threshold, indicating possible binary data
+    Only the first 256 characters are checked to avoid a full scan.
     """
     if not value:
         return False
-    check_len = min(len(value), max_check_length)
-    return value.count("\x00", 0, check_len) / check_len > threshold
+    check_len = min(len(value), 256)
+    return value.count("\x00", 0, check_len) / check_len > 0.3
 
 
 class ByteArchive(FArchive):

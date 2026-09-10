@@ -133,17 +133,17 @@
   ```
 
   Expected: only `package.py` `ArchiveLike` annotations and the `legacy_reader.py:~1294` docstring word "read_cstring" (that docstring describes the *wire format*, keep the prose, optionally reword "(`read_cstring`)" → "(byte-at-a-time)").
-- [ ] **Step 3.2:** archive.py: delete `ArchiveLike` (:27-35), `read_cstring` (:349-364), and the block from `# Source abstraction` (:743) to end-of-file EXCEPT the `SourceInfo` dataclass — keep `SourceInfo` verbatim (move it next to `ByteArchive`). Drop now-unused imports (`Protocol`, `runtime_checkable`; keep `dataclass`, `Path`).
-- [ ] **Step 3.3:** In `_contains_binary_data` (:662) drop the `threshold` and `max_check_length` parameters (sole caller `graph_pin.py:456` uses defaults); inline `0.3`/`256` as locals.
-- [ ] **Step 3.4:** package.py: change `ArchiveLike` annotations (:29-30, :175) to `FArchive` and drop `ArchiveLike` from the line-12 import.
-- [ ] **Step 3.5:** test_core.py: inside `test_reader_boundaries_reject_malformed_access`, delete the `from uasset_read.package import PackageArchive` + `from uasset_read.archive import FileSource, MemorySource, SliceReader` import and these nested defs: `test_size`, `test_read_at`, `test_read_at_negative_offset`, `test_read_at_overflow`, `test_describe`, `test_file_read`, `test_file_read_out_of_range`, `test_file_close_without_handle`, `test_basic_read`, `test_seek`, `test_seek_out_of_range`, `test_read_exceeds_slice`, `test_sub_slice`, `test_sub_slice_out_of_range`, `test_nested_sub_slice`, `test_invalid_slice_negative_base`, `test_invalid_slice_exceeds_source`, `test_slice_reader_satisfies_archive_like`, `sources_reject_negative_size` — and their 19 matching entries in the `_run_cases([...])` list. KEEP every other nested def and entry (`core_contract`, `test_export_read_within_range_succeeds`, iostore cases, etc.).
-- [ ] **Step 3.6:** Suite parity, baseline json, commit `refactor: delete Source protocol family, ArchiveLike and read_cstring (zero production consumers)`.
+- [x] **Step 3.2:** archive.py: delete `ArchiveLike` (:27-35), `read_cstring` (:349-364), and the block from `# Source abstraction` (:743) to end-of-file EXCEPT the `SourceInfo` dataclass — keep `SourceInfo` verbatim (move it next to `ByteArchive`). Drop now-unused imports (`Protocol`, `runtime_checkable`; keep `dataclass`, `Path`).
+- [x] **Step 3.3:** In `_contains_binary_data` (:662) drop the `threshold` and `max_check_length` parameters (sole caller `graph_pin.py:456` uses defaults); inline `0.3`/`256` as locals. *(Residual completed 2026-09-10 after main Task 3 land.)*
+- [x] **Step 3.4:** package.py: change `ArchiveLike` annotations (:29-30, :175) to `FArchive` and drop `ArchiveLike` from the line-12 import.
+- [x] **Step 3.5:** test_core.py: inside `test_reader_boundaries_reject_malformed_access`, delete the `from uasset_read.package import PackageArchive` + `from uasset_read.archive import FileSource, MemorySource, SliceReader` import and these nested defs: `test_size`, `test_read_at`, `test_read_at_negative_offset`, `test_read_at_overflow`, `test_describe`, `test_file_read`, `test_file_read_out_of_range`, `test_file_close_without_handle`, `test_basic_read`, `test_seek`, `test_seek_out_of_range`, `test_read_exceeds_slice`, `test_sub_slice`, `test_sub_slice_out_of_range`, `test_nested_sub_slice`, `test_invalid_slice_negative_base`, `test_invalid_slice_exceeds_source`, `test_slice_reader_satisfies_archive_like`, `sources_reject_negative_size` — and their 19 matching entries in the `_run_cases([...])` list. KEEP every other nested def and entry (`core_contract`, `test_export_read_within_range_succeeds`, iostore cases, etc.).
+- [x] **Step 3.6:** Suite parity, baseline json, commit `refactor: delete Source protocol family, ArchiveLike and read_cstring (zero production consumers)`.
 
 ---
 
 ### Task 4: Slim VersionContext to `depth` (~100 lines)
 
-> **SKIP 2026-09-10:** G1 contract (`2026-08-31-version-context-field-contract.md`) requires frozen multi-field VersionContext; an identical cut was already reverted (`280b7e09`). Fields remain extension points for Zen/#623/#624. Revisit only after amending G1.
+> **SKIP 2026-09-10 (confirmed):** G1 contract (`docs/designs/2026-08-31-version-context-field-contract.md`) requires frozen multi-field VersionContext; an identical cut was already reverted (`280b7e09`). Fields remain extension points for Zen/#623/#624. **Do not execute** until G1 is amended. Steps below remain historical only.
 
 **Files:** Modify `src/uasset_read/versioning.py:40-159` (keep `EngineVersion`, GUID constants, `get_custom_version`), `src/uasset_read/parsers/legacy_reader.py:50,693-699`, `tests/test_core.py` (`test_v2_mappings_never_passes_raw_path_string` + its `_run_cases` entry), `tests/size-baseline.json`
 
@@ -201,6 +201,8 @@
 ### Task 7: Dedup class resolvers + delete dead model/constant scraps (~60 lines)
 
 > **Partial 2026-09-10 (`148385b0`):** 7.1/7.2/7.4 already landed earlier. Residual done: `is_map_key`/`is_map_value`, `PARTIAL_PARSE`/`CUSTOM_PAYLOAD`, `_normalize_ext`. Live left alone: DIAGNOSTIC_CODE_INVALID_SERIAL_*, `PayloadDescriptor.hash`.
+>
+> **Residual re-verify 2026-09-10:** All remaining Task 7 symbols above are gone from `src/` except the two live-by-design items. No further safe cuts from this task list.
 
 **Files:** Modify `src/uasset_read/serializers/object_resources.py:390-401` (`get_asset_class`) + `:455` (internal caller), `serializers/graph_helpers.py:57-66` (`_rcn`,`_gac`) + `:29-32` import block, `serializers/{graph_node.py,graph_pin.py,graph.py,blueprint_graph.py}` call sites, `src/uasset_read/iostore.py:64-70,118-124,176-183,201-202`, dead-field list below, `tests/size-baseline.json`
 

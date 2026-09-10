@@ -42,7 +42,7 @@
 | 版本上下文 | `src/uasset_read/versioning.py`, `src/uasset_read/serializers/package_summary.py` |
 | 属性解析 | `src/uasset_read/serializers/property_tags.py`, `src/uasset_read/parsers/` |
 | Blueprint/Kismet | `src/uasset_read/kismet/`（#642 永久内部化：v2 实现细节，不承诺公共 API）, `src/uasset_read/serializers/graph*.py` |
-| Source / Archive / SourceInfo | `src/uasset_read/archive.py`（`Source`, `FileSource`, `SourceInfo`, `FArchive`） |
+| Archive / SourceInfo | `src/uasset_read/archive.py`（`FArchive`, `ByteArchive`, `SourceInfo`；Source/FileSource/SliceReader 协议族已于 2026-09-10 删除） |
 | Pak / IoStore 读取 | **未实现**（deferred：Zen/IoStore #624，`.pak` #625） |
 | 日志 | 无（Gate L 2026-09-10 退役：project_logging.py 已删除；库只返回 structured diagnostics） |
 | 重构验收条件 | 最新目标架构的 `Acceptance Gates` |

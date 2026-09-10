@@ -1401,7 +1401,7 @@ def _read_string_table(
     never a silently truncated table.
 
     Key format note: FTextKey in StringTable packages is serialized as a raw
-    null-terminated ANSI string (``read_cstring``), NOT a length-prefixed
+    null-terminated ANSI string (byte-at-a-time), NOT a length-prefixed
     FString.  The namespace and values remain FStrings.  This matches the
     binary layout observed in real UE4.27/5.2 editor-saved StringTable assets
     and corroborates CUE4Parse's ``FStringTable`` read path where the archive
