@@ -1,6 +1,6 @@
 # Ponytail Audit Cleanup Implementation Plan
 
-> **Status (2026-09-08):** Executed via [code-size waves 0-5 plan](../superpowers/plans/2026-09-08-code-size-reduction-waves.md). Tasks 1-2, 7-14 of this design were implemented as Wave 0-5 tasks. Tasks 3 (Source/ArchiveLike family), 4 (VersionContext slimming), 5 (CLI log flags), 6 (JmapParser) were rejected by the roadmap exclusion list. Net result: src 28,085→23,327 lines (−4,758), wheel 300,836→249,257 bytes (−51,579), 208 tests passing.
+> **Status (2026-09-10 update):** Waves 0-5 plus later gates executed. Task 3 Source family retired; Task 4 SKIP (G1); Task 5/6 log/Jmap retired; Task 7 residual done; Tasks 8-12 micro-cuts largely landed (validate_pin ftext, package-summary tuples, UFunction builders, native-field/expression write-only fields). Task 13 partial (13.4/13.5 done; 13.1-13.3/13.6-13.8 re-verify before any further cut). **Do not re-execute completed steps.**
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

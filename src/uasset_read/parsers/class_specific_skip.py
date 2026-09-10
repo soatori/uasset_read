@@ -65,11 +65,13 @@ def should_skip_export_for_tolerant_parsing(
     Returns:
         True if property parsing should be skipped, keeping only export metadata
     """
-    # #521: check allowlist first — exact classes with verified tagged properties bypass prefix skip
+    # #521: CubeBuilder is allowlisted; remaining prefixes skip
+    if class_name == "CubeBuilder":
+        return False
     object_name = str(export.object_name)
-    if class_name != "CubeBuilder" and object_name.startswith(SKIP_CLASS_PREFIXES):
+    if object_name.startswith(SKIP_CLASS_PREFIXES):
         return True
-    if class_name is not None and class_name != "CubeBuilder" and class_name.startswith(SKIP_CLASS_PREFIXES):
+    if (class_name or "").startswith(SKIP_CLASS_PREFIXES):
         return True
     return False
 

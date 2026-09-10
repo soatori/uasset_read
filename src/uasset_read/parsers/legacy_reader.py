@@ -47,7 +47,7 @@ from ..models.object_model import (
     ROLES_CDO,
     ROLES_GENERATED_CLASS,
 )
-from ..versioning import MappingInfo, build_version_context_from_summary
+from ..versioning import MappingInfo, FORTNITE_GUID, build_version_context_from_summary, get_custom_version
 
 
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:
@@ -1371,20 +1371,13 @@ def _read_table_rows(
 # trailing key->(FName,FString) metadata map is not parsed here.
 # Corroborated (not proof): UAssetAPI StringTableExport.Read,
 # CUE4Parse FStringTable ctor.
-_FORTNITE_MB_GUID = (
-    "86181d60844f64acded316aad6c7ea0d"  # FGuid(0x601D1886,0xAC644F84,0xAA16D3DE,0x0DEAC7D6), little-endian bytes
-)
-_FORTNITE_ADD_DEV_NOTES = 260  # FFortniteMainBranchObjectVersion::AddDevNotesToFText
 
 
 def _string_table_has_dev_notes(summary: PackageFileSummary) -> bool:
     """True when the editor-saved trailer wrote per-entry DevNotes strings."""
     if summary.package_flags & PKG_FilterEditorOnly:
         return False
-    for cv in getattr(summary, "custom_versions", []):
-        if getattr(cv, "guid", "") == _FORTNITE_MB_GUID:
-            return getattr(cv, "version", 0) >= _FORTNITE_ADD_DEV_NOTES
-    return False
+    return get_custom_version(summary, FORTNITE_GUID) >= 260
 
 
 def _read_string_table(
