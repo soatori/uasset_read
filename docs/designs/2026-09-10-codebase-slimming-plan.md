@@ -1,10 +1,10 @@
 # 代码库精简计划
 
-> **Status**: current + target（Phase 0/A 与 Gate G parent_resolver / Gate K / Gate L 已完成；agent_tools / iostore / mappings 仍为 keep）  
+> **Status**: current（Phase 0/A、Gate G parent_resolver、Gate K、Gate L 及 K3 收尾回归均已完成；agent_tools / iostore / mappings 仍为 keep）  
 > **Date**: 2026-09-10  
-> **Revision**: 2026-09-10 执行完成版——记录 Phase A、Gate G(parent)、Gate K、Gate L 的落地结果与最终 ratchet。  
+> **Revision**: 2026-09-10 执行完成版 + K3 收尾——补齐 CLI `depth=decode`+`max_bytes` 联合断言与同包 Function 失败不吞兄弟的 bridge 回归，关闭 Gate K 执行记录。  
 > **Goal**: 在不暗中改写 package-first 权威架构、不丢失蓝图执行流/数据流可观察性、不削弱结构化失败诊断的前提下做减法。已完成：死 CLI 参数、parent-asset、C++ 文本生成器、日志清理。剩余 Gate G 项保持 keep，除非另有产品决策。  
-> **Execution record**: Phase A `cff2f328`；Gate G parent `b22c5aae`；Gate K `12dcb49c`；Gate L `6a5eeea8`。最终 suite **218 passed**；src 74/21105；tests 13/5941；docs 150/45613；wheel 247036。
+> **Execution record**: Phase A `cff2f328`；Gate G parent `b22c5aae`；Gate K `12dcb49c`；Gate L `6a5eeea8`。K3 收尾后 suite **220 passed**；src 74/20602；tests 13/5860；docs 150/45623；wheel 247036。
 
 ---
 
@@ -87,13 +87,13 @@ for prefix in ('src/','tests/','docs/'):
 "
 ```
 
-当前正式基线（**2026-09-10 Gate L 实施后**）：
+当前正式基线（**2026-09-10 K3 收尾后**）：
 
 | 范围 | tracked 文件数 | 物理行数 | `size-baseline.json` |
 | --- | ---: | ---: | ---: |
-| `src/**/*.py` | 74 | **21,105** | 21,105 |
-| `tests/**/*.py` | 13 | **5,941** | 5,941 |
-| `docs/**/*.md` | 150 | **45,613** | 45,613 |
+| `src/**/*.py` | 74 | **20,602** | 20,602 |
+| `tests/**/*.py` | 13 | **5,860** | 5,860 |
+| `docs/**/*.md` | 150 | **45,624** | 45,624 |
 
 `wheel_bytes._measured` = **247,036**。上述数值既是实测值，也是 ratchet ceiling。
 
@@ -127,8 +127,8 @@ for prefix in ('src/','tests/','docs/'):
 - `min_files` 是防止未跟踪子树绕过门禁的 floor，不是“文件越多越好”的目标。
 
 历史审查时曾出现 `test_docs_tree_within_baseline` 的一项失败；Phase 0 已将计划、design
-index 和 docs ratchet 一并纳入。当前 latest 验证为 **218 passed**，正式 tracked 基线为 src
-74 / 21,105 行、tests 13 / 5,941 行、docs 150 / 45,613 行、wheel 247,036 bytes。
+index 和 docs ratchet 一并纳入。当前 latest 验证为 **220 passed**，正式 tracked 基线为 src
+74 / 20,602 行、tests 13 / 5,860 行、docs 150 / 45,624 行、wheel 247,036 bytes。
 
 ---
 
@@ -451,10 +451,11 @@ Gate G（可选）
 2. Phase A：删除五个无消费者的 CLI 日志参数，保留 cleanup 能力。
 3. Gate G：退役 parent-asset resolution，删除模块并将旧 CLI 参数显式拒绝。
 4. Gate K：删除 C++ 文本生成器，以 K0 expression summaries / decode tree 取代公共函数逻辑表示。
+5. **K3 收尾**：`test_cli_decode_max_bytes_keeps_k0_functions`（CLI `--depth decode --max-bytes` 仍暴露 K0 字段）与 `test_extract_bridge_one_failure_keeps_sibling_functions`（同包注入一个 Function 解析失败后兄弟结果仍完整、失败侧保留 `error_*`）。
 
 ## 11. 下一步建议
 
-1. **先补齐 K3 的两个剩余回归测试。** 为 `BP_CombatCharacter` 的 `depth=decode` CLI 输出增加 `max_bytes` 联合断言；再构造同包两个 Function export、其中一个失败的最小测试，锁定“失败可见且不吞掉其他函数”。这是最小、风险最低的收尾工作。
-2. **将 K3 验收清单全部勾选后，关闭 Gate K 的执行记录。** 同一提交重测并收紧 tests/docs ratchet，避免把已完成功能长期留在 target 状态。
+1. ~~**先补齐 K3 的两个剩余回归测试。**~~ 已完成（2026-09-10）：CLI `depth=decode`+`max_bytes` 联合断言；bridge 层注入单 Function 失败后兄弟结果仍可见。
+2. ~~**将 K3 验收清单全部勾选后，关闭 Gate K 的执行记录。**~~ 已完成：全套 suite 绿，tests ratchet 按实测收紧。
 3. ~~**对 Gate L 作单独产品决策。**~~ Gate L 已批准并执行（2026-09-10）：canonical/CLI/Wiki/API 已同步，`project_logging.py` 与公开清理参数已删除。
 4. **其余 Gate G 不应按体积排序强推。** IoStore、Agent tools、mappings 各自依赖 deferred capability / 文档契约；只有产品目标明确收缩时再独立立项。

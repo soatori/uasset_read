@@ -9,6 +9,8 @@ from functools import lru_cache
 
 from pathlib import Path
 
+import pytest
+
 from uasset_read.package import parse_package_document
 
 SAMPLES = Path(__file__).parent / "samples"
@@ -286,3 +288,120 @@ def test_kismet_one_failed_function_keeps_others():
     assert projected[0]["bytecode_status"] == "failed"
     assert projected[0]["error_code"] == "bytecode_decode_error"
     assert projected[1]["bytecode_status"] == "parsed"
+
+
+def test_cli_decode_max_bytes_keeps_k0_functions(tmp_path, monkeypatch):
+    """K3: CLI --depth decode --max-bytes still yields K0 function fields.
+
+    Joint regression for the public Blueprint JSON path (CLI), not just
+    project_document: budget mode must keep expression summaries on the page.
+    """
+    import json
+    import sys
+
+    from uasset_read import cli
+
+    # Compact decode of this sample is ~861 kB; 2 MB retains the full page.
+    budget = 2_000_000
+    sample = SAMPLES / "BP_CombatCharacter.uasset"
+    out_path = tmp_path / "combat.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "uasset_read",
+            str(sample),
+            "--depth",
+            "decode",
+            "--max-bytes",
+            str(budget),
+            "--output",
+            str(out_path),
+        ],
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main()
+    assert excinfo.value.code == 0
+
+    raw = out_path.read_text(encoding="utf-8")
+    assert len(raw.encode("utf-8")) <= budget
+    projected = json.loads(raw)
+    assert projected.get("format") == "uasset_read.package"
+    bp = next(o for o in projected.get("objects") or [] if o.get("id") == "export:1")
+    fns = (bp.get("semantic") or {}).get("functions")
+    assert fns, "CLI decode page must include semantic.functions"
+    for fn in fns:
+        assert "expression_count" in fn
+        assert "expression_types" in fn
+        assert "expressions_truncated" in fn
+        assert "cpp_code" not in fn
+    assert any(f.get("expression_count", 0) > 0 for f in fns)
+
+
+def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
+    """K3: inject one decode failure among real Function exports; siblings stay.
+
+    BP_CombatCharacter carries 45 Function/UFunction exports. Forcing the second
+    parse_bytecode_stream call to fail must still return every export, with the
+    failed one carrying structured error fields.
+    """
+    from uasset_read.exceptions import ParseError
+    from uasset_read.kismet import bytecode_extractor
+    from uasset_read.kismet.decompile_bridge import extract_kismet_decompiled
+    from uasset_read.memory_safety import ResourceBudget
+    from uasset_read.package import open_package_bundle
+    from uasset_read.serializers.object_resources import read_export_map, read_import_map
+    from uasset_read.serializers.package_summary import read_name_table, read_package_summary
+
+    sample = SAMPLES / "BP_CombatCharacter.uasset"
+    bundle = open_package_bundle(str(sample), tolerant=True)
+    archive = bundle.open_archive(tolerant=True)
+    try:
+        budget = ResourceBudget()
+        summary = read_package_summary(archive, budget)
+        archive.set_property_version_gates(summary.file_version_ue4, summary.file_version_ue5)
+        name_map = read_name_table(archive, summary)
+        archive.set_name_map(name_map)
+        import_map = read_import_map(archive, summary, name_map)
+        export_map = read_export_map(archive, summary, name_map)
+
+        real_parse = bytecode_extractor.parse_bytecode_stream
+        calls = {"n": 0}
+
+        def flaky_parse(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise ParseError("injected K3 failure")
+            return real_parse(*args, **kwargs)
+
+        monkeypatch.setattr(bytecode_extractor, "parse_bytecode_stream", flaky_parse)
+        results = extract_kismet_decompiled(
+            str(sample),
+            archive,
+            summary,
+            name_map,
+            import_map,
+            export_map,
+            tolerant=True,
+        )
+    finally:
+        archive.close()
+
+    from uasset_read.kismet.bytecode_extractor import FUNCTION_EXPORT_CLASSES
+    from uasset_read.serializers.object_resources import resolve_class_name
+
+    function_exports = [
+        e
+        for e in export_map
+        if resolve_class_name(e.class_index, import_map, export_map) in FUNCTION_EXPORT_CLASSES
+    ]
+    assert len(results) == len(function_exports) > 2
+    by_status = {s: [r for r in results if r.bytecode_status == s] for s in ("parsed", "failed")}
+    assert by_status["failed"], "injected failure must surface as a failed result"
+    assert by_status["parsed"], "sibling Function exports must remain after one failure"
+    failed = by_status["failed"][0]
+    assert failed.error_code == "bytecode_decode_error"
+    assert failed.error_message
+    assert failed.fallback_reasons
+    # At least one sibling still exposes a non-empty expression tree.
+    assert any(r.expressions for r in by_status["parsed"])
