@@ -327,15 +327,15 @@ def _read_property_tag_legacy(
             enum_name = archive.read_name(name_map)
             if enum_name and enum_name != UE_NONE_SENTINEL:
                 tag.enum_type = enum_name
-        elif tag.type == "ArrayProperty" and file_version_ue4 >= UE4_ARRAY_PROPERTY_INNER_TAGS:
-            # InnerType (FName) — Reference: PropertyTag.cpp:318-330
-            tag.inner_type = archive.read_name(name_map)
-        elif tag.type == "SetProperty" and file_version_ue4 >= UE4_PROPERTY_TAG_SET_MAP_SUPPORT:
-            # InnerType (FName) — Reference: PropertyTag.cpp:346-355
-            tag.inner_type = archive.read_name(name_map)
-        elif tag.type == "OptionalProperty" and file_version_ue4 >= UE4_PROPERTY_TAG_SET_MAP_SUPPORT:
-            # InnerType (FName) — Reference: PropertyTag.cpp:333-342
-            tag.inner_type = archive.read_name(name_map)
+        elif tag.type in ("ArrayProperty", "SetProperty", "OptionalProperty"):
+            min_version = (
+                UE4_ARRAY_PROPERTY_INNER_TAGS
+                if tag.type == "ArrayProperty"
+                else UE4_PROPERTY_TAG_SET_MAP_SUPPORT
+            )
+            if file_version_ue4 >= min_version:
+                # InnerType (FName) — Reference: PropertyTag.cpp:318-355
+                tag.inner_type = archive.read_name(name_map)
         elif tag.type == "MapProperty" and file_version_ue4 >= UE4_PROPERTY_TAG_SET_MAP_SUPPORT:
             # InnerType (FName) + ValueType (FName) — Reference: PropertyTag.cpp:357-371
             tag.inner_type = archive.read_name(name_map)

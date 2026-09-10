@@ -173,24 +173,11 @@ class PackageFileSummary:
     preload_dependencies: list[int] = field(default_factory=list)
 
 
-def _read_custom_versions(archive: FArchive) -> list:
-    """Read CustomVersions table (Optimized format, UE5 / UE4 LegacyFileVersion < -5)."""
-    custom_versions_count = archive.read_u32()
-    if custom_versions_count > MAX_CUSTOM_VERSIONS:
-        raise ParseError("Custom versions count exceeds maximum")
-    custom_versions = []
-    for _ in range(custom_versions_count):
-        guid_bytes = archive.read(16)
-        version = archive.read_i32()
-        custom_versions.append(CustomVersion(guid=guid_bytes.hex(), version=version))
-    return custom_versions
+def _read_custom_versions(archive: FArchive, with_names: bool = False) -> list:
+    """Read CustomVersions table.
 
-
-def _read_custom_versions_guids(archive: FArchive) -> list:
-    """Read CustomVersions table (Guids format, UE4 LegacyFileVersion -3 to -5).
-
-    Each record: FGuid (16 bytes) + int32 Version + FString FriendlyName
-    Reference: UE CustomVersion.cpp FGuidCustomVersion_DEPRECATED
+    with_names=True: Guids format (UE4 LegacyFileVersion -3 to -5) includes FriendlyName.
+    with_names=False: Optimized format (UE5 / UE4 LegacyFileVersion < -5).
     """
     custom_versions_count = archive.read_u32()
     if custom_versions_count > MAX_CUSTOM_VERSIONS:
@@ -199,8 +186,9 @@ def _read_custom_versions_guids(archive: FArchive) -> list:
     for _ in range(custom_versions_count):
         guid_bytes = archive.read(16)
         version = archive.read_i32()
-        # FriendlyName: FString (i32 length + chars), included in UE4 GUID format
-        archive.read_fstring()
+        if with_names:
+            # FriendlyName: FString (i32 length + chars), included in UE4 GUID format
+            archive.read_fstring()
         custom_versions.append(CustomVersion(guid=guid_bytes.hex(), version=version))
     return custom_versions
 
@@ -353,7 +341,7 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, int, b
         # UE4 LegacyFileVersion -3 to -5 uses Guids format (with FriendlyName)
         # UE5 LegacyFileVersion -6 to -8 uses Optimized format
         if is_ue4_legacy:
-            custom_versions = _read_custom_versions_guids(archive)
+            custom_versions = _read_custom_versions(archive, with_names=True)
         else:
             custom_versions = _read_custom_versions(archive)
         total_header_size = archive.read_i32()
@@ -422,7 +410,7 @@ def _read_pre_export_optional_fields(
     file_version_ue5: int,
     file_version_ue4: int,
     has_filter_editor_only: bool,
-) -> dict:
+) -> tuple[int, int, str, int, int]:
     """Read version-gated fields between NameOffset and ExportCount."""
     # SoftObjectPaths（UE5 >= 1011）
     soft_object_paths_count = 0
@@ -447,19 +435,19 @@ def _read_pre_export_optional_fields(
         if gatherable_text_data_offset > 0:
             archive.validate_offset(gatherable_text_data_offset, "GatherableTextDataOffset")
 
-    return {
-        "soft_object_paths_count": soft_object_paths_count,
-        "soft_object_paths_offset": soft_object_paths_offset,
-        "localization_id": localization_id,
-        "gatherable_text_data_count": gatherable_text_data_count,
-        "gatherable_text_data_offset": gatherable_text_data_offset,
-    }
+    return (
+        soft_object_paths_count,
+        soft_object_paths_offset,
+        localization_id,
+        gatherable_text_data_count,
+        gatherable_text_data_offset,
+    )
 
 
 def _read_post_import_optional_fields(
     archive: FArchive,
     file_version_ue5: int,
-) -> dict:
+) -> tuple[int, int, int, int, int]:
     """Read version-gated fields between ImportOffset and DependsOffset."""
     # CellExport/CellImport (UE5 >= cell version)
     cell_export_count = 0
@@ -476,20 +464,20 @@ def _read_post_import_optional_fields(
         if metadata_offset > 0:
             archive.validate_offset(metadata_offset, "MetadataOffset")
 
-    return {
-        "cell_export_count": cell_export_count,
-        "cell_export_offset": cell_export_offset,
-        "cell_import_count": cell_import_count,
-        "cell_import_offset": cell_import_offset,
-        "metadata_offset": metadata_offset,
-    }
+    return (
+        cell_export_count,
+        cell_export_offset,
+        cell_import_count,
+        cell_import_offset,
+        metadata_offset,
+    )
 
 
 def _read_secondary_offset_fields(
     archive: FArchive,
     file_version_ue4: int,
     budget: "ResourceBudget | None" = None,
-) -> dict:
+) -> tuple[int, int, int, int, int]:
     """Read DependsOffset, SoftPackageReferences, SearchableNames, ThumbnailTable."""
     depends_offset = archive.read_i32()
 
@@ -514,13 +502,13 @@ def _read_secondary_offset_fields(
     if thumbnail_table_offset > 0:
         archive.validate_offset(thumbnail_table_offset, "ThumbnailTableOffset")
 
-    return {
-        "depends_offset": depends_offset,
-        "soft_package_references_count": soft_package_references_count,
-        "soft_package_references_offset": soft_package_references_offset,
-        "searchable_names_offset": searchable_names_offset,
-        "thumbnail_table_offset": thumbnail_table_offset,
-    }
+    return (
+        depends_offset,
+        soft_package_references_count,
+        soft_package_references_offset,
+        searchable_names_offset,
+        thumbnail_table_offset,
+    )
 
 
 def _read_import_type_hierarchies(archive: FArchive, file_version_ue5: int) -> tuple[int, int]:
@@ -602,7 +590,7 @@ def _read_additional_packages(archive: FArchive, legacy_file_version: int) -> No
         archive.read_i32()
 
 
-def _read_tail_offsets(archive: FArchive, file_version_ue4: int) -> dict:
+def _read_tail_offsets(archive: FArchive, file_version_ue4: int) -> tuple[int, int, int, list]:
     """Read AssetRegistry, BulkData, WorldTile (>=224), ChunkIDs (>=278/326)."""
     asset_registry_data_offset = archive.read_i32()
     if asset_registry_data_offset > 0:
@@ -632,19 +620,19 @@ def _read_tail_offsets(archive: FArchive, file_version_ue4: int) -> dict:
         chunk_id = archive.read_i32()
         chunk_ids = [chunk_id] if chunk_id >= 0 else []
 
-    return {
-        "asset_registry_data_offset": asset_registry_data_offset,
-        "bulk_data_start_offset": bulk_data_start_offset,
-        "world_tile_info_data_offset": world_tile_info_data_offset,
-        "chunk_ids": chunk_ids,
-    }
+    return (
+        asset_registry_data_offset,
+        bulk_data_start_offset,
+        world_tile_info_data_offset,
+        chunk_ids,
+    )
 
 
 def _read_late_versioned_fields(
     archive: FArchive,
     file_version_ue4: int,
     file_version_ue5: int,
-) -> dict:
+) -> tuple[int, int, int, int, int]:
     """Read PreloadDependencies, NamesReferenced, PayloadToc, DataResource."""
     preload_dependency_count = -1
     preload_dependency_offset = 0
@@ -668,13 +656,13 @@ def _read_late_versioned_fields(
         if data_resource_offset > 0:
             archive.validate_offset(data_resource_offset, "DataResourceOffset")
 
-    return {
-        "preload_dependency_count": preload_dependency_count,
-        "preload_dependency_offset": preload_dependency_offset,
-        "names_referenced_from_export_data_count": names_referenced_from_export_data_count,
-        "payload_toc_offset": payload_toc_offset,
-        "data_resource_offset": data_resource_offset,
-    }
+    return (
+        preload_dependency_count,
+        preload_dependency_offset,
+        names_referenced_from_export_data_count,
+        payload_toc_offset,
+        data_resource_offset,
+    )
 
 
 def read_package_summary(
@@ -774,10 +762,43 @@ def read_package_summary(
     _read_additional_packages(archive, legacy_file_version)
 
     # Step 24-27: AssetRegistry/BulkData/WorldTile/ChunkIDs
-    tail = _read_tail_offsets(archive, file_version_ue4)
+    (
+        asset_registry_data_offset,
+        bulk_data_start_offset,
+        world_tile_info_data_offset,
+        chunk_ids,
+    ) = _read_tail_offsets(archive, file_version_ue4)
 
     # Step 28-31: PreloadDeps / NamesReferenced / PayloadToc / DataResource
-    late = _read_late_versioned_fields(archive, file_version_ue4, file_version_ue5)
+    (
+        preload_dependency_count,
+        preload_dependency_offset,
+        names_referenced_from_export_data_count,
+        payload_toc_offset,
+        data_resource_offset,
+    ) = _read_late_versioned_fields(archive, file_version_ue4, file_version_ue5)
+
+    (
+        soft_object_paths_count,
+        soft_object_paths_offset,
+        localization_id,
+        gatherable_text_data_count,
+        gatherable_text_data_offset,
+    ) = pre_export
+    (
+        cell_export_count,
+        cell_export_offset,
+        cell_import_count,
+        cell_import_offset,
+        metadata_offset,
+    ) = post_import
+    (
+        depends_offset,
+        soft_package_references_count,
+        soft_package_references_offset,
+        searchable_names_offset,
+        thumbnail_table_offset,
+    ) = secondary
 
     return PackageFileSummary(
         tag=tag,
@@ -793,25 +814,25 @@ def read_package_summary(
         package_flags=package_flags,
         name_count=name_count,
         name_offset=name_offset,
-        soft_object_paths_count=pre_export["soft_object_paths_count"],
-        soft_object_paths_offset=pre_export["soft_object_paths_offset"],
-        localization_id=pre_export["localization_id"],
-        gatherable_text_data_count=pre_export["gatherable_text_data_count"],
-        gatherable_text_data_offset=pre_export["gatherable_text_data_offset"],
+        soft_object_paths_count=soft_object_paths_count,
+        soft_object_paths_offset=soft_object_paths_offset,
+        localization_id=localization_id,
+        gatherable_text_data_count=gatherable_text_data_count,
+        gatherable_text_data_offset=gatherable_text_data_offset,
         export_count=export_count,
         export_offset=export_offset,
         import_count=import_count,
         import_offset=import_offset,
-        cell_export_count=post_import["cell_export_count"],
-        cell_export_offset=post_import["cell_export_offset"],
-        cell_import_count=post_import["cell_import_count"],
-        cell_import_offset=post_import["cell_import_offset"],
-        metadata_offset=post_import["metadata_offset"],
-        depends_offset=secondary["depends_offset"],
-        soft_package_references_count=secondary["soft_package_references_count"],
-        soft_package_references_offset=secondary["soft_package_references_offset"],
-        searchable_names_offset=secondary["searchable_names_offset"],
-        thumbnail_table_offset=secondary["thumbnail_table_offset"],
+        cell_export_count=cell_export_count,
+        cell_export_offset=cell_export_offset,
+        cell_import_count=cell_import_count,
+        cell_import_offset=cell_import_offset,
+        metadata_offset=metadata_offset,
+        depends_offset=depends_offset,
+        soft_package_references_count=soft_package_references_count,
+        soft_package_references_offset=soft_package_references_offset,
+        searchable_names_offset=searchable_names_offset,
+        thumbnail_table_offset=thumbnail_table_offset,
         import_type_hierarchies_count=import_type_hierarchies_count,
         import_type_hierarchies_offset=import_type_hierarchies_offset,
         persistent_guid=persistent_guid,
@@ -820,15 +841,15 @@ def read_package_summary(
         compatible_with_engine_version=compatible_with_engine_version or EngineVersion(),
         compression_flags=compression_flags,
         package_source=package_source,
-        asset_registry_data_offset=tail["asset_registry_data_offset"],
-        bulk_data_start_offset=tail["bulk_data_start_offset"],
-        world_tile_info_data_offset=tail["world_tile_info_data_offset"],
-        chunk_ids=tail["chunk_ids"],
-        preload_dependency_count=late["preload_dependency_count"],
-        preload_dependency_offset=late["preload_dependency_offset"],
-        names_referenced_from_export_data_count=late["names_referenced_from_export_data_count"],
-        payload_toc_offset=late["payload_toc_offset"],
-        data_resource_offset=late["data_resource_offset"],
+        asset_registry_data_offset=asset_registry_data_offset,
+        bulk_data_start_offset=bulk_data_start_offset,
+        world_tile_info_data_offset=world_tile_info_data_offset,
+        chunk_ids=chunk_ids,
+        preload_dependency_count=preload_dependency_count,
+        preload_dependency_offset=preload_dependency_offset,
+        names_referenced_from_export_data_count=names_referenced_from_export_data_count,
+        payload_toc_offset=payload_toc_offset,
+        data_resource_offset=data_resource_offset,
     )
 
 
