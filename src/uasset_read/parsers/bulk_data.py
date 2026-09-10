@@ -10,20 +10,9 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass
 
-# BulkData flags from BulkData.h
-BULKDATA_None = 0x00
+# BulkData flags from BulkData.h (only the two consumers of this module need)
 BULKDATA_CompressedZlib = 0x02
 BULKDATA_CompressedOodle = 0x04
-BULKDATA_MemoryMapped = 0x08
-BULKDATA_SerializeAsVoid = 0x10
-BULKDATA_SkipBulkDataCompress = 0x20
-BULKDATA_Unused = 0x40  # Unused in newer UE versions
-BULKDATA_ContainsEmbeddedPkgs = 0x80
-BULKDATA_OptionalPayload = 0x100
-BULKDATA_MemoryMappedFromFrozenFile = 0x200
-BULKDATA_ShortForwardReference = 0x400
-BULKDATA_CustomChunk = 0x800
-BULKDATA_ForceUsage = 0x1000
 
 
 @dataclass(frozen=True)
@@ -70,11 +59,7 @@ def parse_bulk_data_header(data: bytes) -> BulkDataHeader:
     )
 
 
-def extract_bulk_data_descriptors(
-    serial_data: bytes,
-    base_offset: int = 0,
-    export_index: int = 0,
-) -> list[BulkDataHeader]:
+def extract_bulk_data_descriptors(serial_data: bytes) -> list[BulkDataHeader]:
     """Extract BulkData descriptors from export serial data.
 
     Scans for BulkData headers at the end of export serial regions.
@@ -83,8 +68,6 @@ def extract_bulk_data_descriptors(
 
     Args:
         serial_data: Raw bytes of the export serial region.
-        base_offset: Starting offset of this region in the package.
-        export_index: Index of the export (for header IDs).
 
     Returns:
         List of BulkDataHeader objects found.

@@ -186,7 +186,6 @@ def extract_payload(
     payload_id: str,
     *,
     max_bytes: int = _MAX_BYTES_EXTRACT_PAYLOAD,
-    offset: int = 0,
     export_index: int | None = None,
 ) -> dict[str, Any]:
     """Tool: extract_payload — extract payload bytes from a cooked package.
@@ -198,7 +197,6 @@ def extract_payload(
         file_path: Path to the .uasset file.
         payload_id: Payload identifier (e.g., "payload:(export:0)").
         max_bytes: Maximum response size in bytes.
-        offset: Byte offset for pagination (unused for now).
         export_index: Index of the export that owns the payload. If not
             provided, derived from payload_id.
 
@@ -246,30 +244,13 @@ def extract_payload(
 
     # Determine export index from payload_id if not provided
     if export_index is None:
-        # Try to parse from payload_id format: "payload:(export:N)" or "payload:(import:N)"
         import re
 
         match = re.search(r"\((export|import):(\d+)\)", payload_id)
         if match:
-            try:
-                export_index = int(match.group(2))
-            except ValueError:
-                export_index = None
-        else:
-            # Cannot determine export index, return deferred
-            response: dict[str, Any] = {
-                "id": payload_id,
-                "error": "Payload extraction is deferred: real payloads require per-export BulkData mapping from cooked fixtures (issue #627)",
-                "code": PAYLOAD_EXTRACTION_DEFERRED,
-                "available_ids": [],
-                "offset": 0,
-                "returned": 0,
-                "total": 0,
-            }
-            return fit_list_response(response, max_bytes, list_key="available_ids")
+            export_index = int(match.group(2))
 
     if export_index is None:
-        # Still no valid export index after parsing attempt
         response = {
             "id": payload_id,
             "error": "Payload extraction is deferred: real payloads require per-export BulkData mapping from cooked fixtures (issue #627)",
@@ -326,11 +307,7 @@ def extract_payload(
             # Try BulkData extraction if we have serial data
             if serial_data:
                 try:
-                    bulk_headers = extract_bulk_data_descriptors(
-                        serial_data,
-                        base_offset=serial_offset,
-                        export_index=export_index,
-                    )
+                    bulk_headers = extract_bulk_data_descriptors(serial_data)
 
                     if bulk_headers:
                         # Use the first (last in serial data) BulkData header

@@ -434,7 +434,7 @@ class StringTableHandler(_SupportsClasses):
         return result
 
 
-class TextureHandler:
+class TextureHandler(_SupportsClasses):
     """Enrich Texture2D/TextureCube objects from obj.properties.
 
     Extracts semantic fields: kind, texture_type, srgb, compression_settings.
@@ -443,11 +443,7 @@ class TextureHandler:
 
     capability = "decoded"  # fields read from the tagged property bag
 
-    _TEXTURE_CLASSES = ("Texture2D", "TextureCube")
-
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        cn = obj.class_name or ""
-        return cn in self._TEXTURE_CLASSES
+    classes = ("Texture2D", "TextureCube")
 
     def enrich(
         self,
@@ -492,7 +488,7 @@ class TextureHandler:
         return result
 
 
-class TexturePayloadHandler:
+class TexturePayloadHandler(_SupportsClasses):
     """Extract payload descriptors from texture properties.
 
     Reads ImportedSize struct to emit a texture_mip payload descriptor
@@ -501,11 +497,7 @@ class TexturePayloadHandler:
 
     capability = "decoded"  # descriptor read from the real ImportedSize struct
 
-    _TEXTURE_CLASSES = ("Texture2D", "TextureCube")
-
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        cn = obj.class_name or ""
-        return cn in self._TEXTURE_CLASSES
+    classes = ("Texture2D", "TextureCube")
 
     def enrich(
         self,
@@ -641,15 +633,12 @@ class MaterialHandler(_SupportsClasses):
         return result if len(result) > 1 else None
 
 
-class MaterialInstanceHandler:
+class MaterialInstanceHandler(_SupportsClasses):
     """Enrich MaterialInstance/MaterialInstanceConstant objects."""
 
     capability = "decoded"  # returns output only when real properties were read
 
-    _INSTANCE_CLASSES = ("MaterialInstance", "MaterialInstanceConstant")
-
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        return (obj.class_name or "") in self._INSTANCE_CLASSES
+    classes = ("MaterialInstance", "MaterialInstanceConstant")
 
     def enrich(
         self,
@@ -804,7 +793,7 @@ class SkeletonHandler(_SupportsClasses):
         return result
 
 
-class MeshHandler:
+class MeshHandler(_SupportsClasses):
     """Enrich StaticMesh/SkeletalMesh objects with geometry summary.
 
     Summary-tier: mesh geometry is not decoded, so this never yields
@@ -813,10 +802,7 @@ class MeshHandler:
 
     capability = "summary"
 
-    _MESH_CLASSES = ("StaticMesh", "SkeletalMesh")
-
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        return (obj.class_name or "") in self._MESH_CLASSES
+    classes = ("StaticMesh", "SkeletalMesh")
 
     def enrich(
         self,
@@ -1278,7 +1264,7 @@ register_handler(
 register_handler(BlueprintFamilyHandler(("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint"))
 
 
-class NiagaraHandler:
+class NiagaraHandler(_SupportsClasses):
     """Enrich Niagara objects with light summary.
 
     Summary-tier: the name/type echo is not a decoded Niagara script, so
@@ -1287,7 +1273,7 @@ class NiagaraHandler:
 
     capability = "summary"
 
-    _NIAGARA_CLASSES = (
+    classes = (
         "NiagaraScript",
         "NiagaraScriptSource",
         "NiagaraScriptVariable",
@@ -1302,10 +1288,6 @@ class NiagaraHandler:
         "NiagaraNodeSelect",
         "NiagaraNodeStaticSwitch",
     )
-
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        cn = obj.class_name or ""
-        return cn in self._NIAGARA_CLASSES
 
     def enrich(
         self,
@@ -1482,7 +1464,7 @@ def _struct_fields(item: Any) -> dict[str, Any] | None:
     return None
 
 
-class AnimBlendSpaceHandler:
+class AnimBlendSpaceHandler(_SupportsClasses):
     """Enrich BlendSpace/BlendSpace1D objects with axis and sample summary (#618).
 
     Property names per UE source:
@@ -1497,10 +1479,7 @@ class AnimBlendSpaceHandler:
 
     capability = "summary"
 
-    _BLEND_CLASSES = ("BlendSpace", "BlendSpace1D")
-
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        return (obj.class_name or "") in self._BLEND_CLASSES
+    classes = ("BlendSpace", "BlendSpace1D")
 
     def enrich(
         self,
@@ -1697,7 +1676,7 @@ register_handler(AnimLayerInterfaceHandler())
 # ── Material family (#620) — summary tier until decoded fixtures exist ──
 
 
-class MaterialFunctionHandler:
+class MaterialFunctionHandler(_SupportsClasses):
     """Enrich MaterialFunction objects with input/output and expression counts (#620).
 
     UE source: ``Engine/Source/Runtime/Engine/Public/Materials/
@@ -1714,10 +1693,7 @@ class MaterialFunctionHandler:
 
     capability = "summary"
 
-    _FUNCTION_CLASSES = ("MaterialFunction", "MaterialFunctionInterface")
-
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
-        return (obj.class_name or "") in self._FUNCTION_CLASSES
+    classes = ("MaterialFunction", "MaterialFunctionInterface")
 
     def enrich(
         self,

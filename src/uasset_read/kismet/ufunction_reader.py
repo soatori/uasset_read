@@ -157,10 +157,13 @@ def _read_native_payload_start(
         ctrl_byte = window.read_u8()
         if ctrl_byte & ~_SER_CTRL_OVERRIDE_OPERATION:
             # Unknown bits set — reject
-            raise _make_control_bit_error(
-                ctrl_byte,
-                export,
-                export_index=export_index,
+            raise UnsupportedSerializationVersion(
+                _make_failure(
+                    export,
+                    export_index,
+                    "unsupported_serialization_version",
+                    f"Unknown serialization-control bits 0x{ctrl_byte:02X} (known: 0x{_SER_CTRL_OVERRIDE_OPERATION:02X})",
+                )
             )
         if ctrl_byte & _SER_CTRL_OVERRIDE_OPERATION:
             # Consume the override-operation byte
@@ -175,11 +178,13 @@ def _read_native_payload_start(
         measured_end = pos_after_tags
 
         if declared_end != measured_end:
-            raise _make_offset_mismatch_error(
-                declared_end,
-                measured_end,
-                export,
-                export_index=export_index,
+            raise InvalidScriptPropertyRange(
+                _make_failure(
+                    export,
+                    export_index,
+                    "invalid_script_property_range",
+                    f"Script serialization offset mismatch: declared end={declared_end}, measured end={measured_end}",
+                )
             )
 
     # UObject::Serialize follows tagged properties with the optional lazy-object
@@ -211,41 +216,6 @@ def _consume_tagged_properties(
         # Seek to the tag's value_end_offset to skip the property value
         if tag.value_end_offset is not None:
             archive.seek(tag.value_end_offset)
-
-
-def _make_control_bit_error(
-    ctrl_byte: int,
-    export: ObjectExport,
-    *,
-    export_index: int = 0,
-) -> UnsupportedSerializationVersion:
-    """Create an error for unknown serialization-control bits."""
-    return UnsupportedSerializationVersion(
-        _make_failure(
-            export,
-            export_index,
-            "unsupported_serialization_version",
-            f"Unknown serialization-control bits 0x{ctrl_byte:02X} (known: 0x{_SER_CTRL_OVERRIDE_OPERATION:02X})",
-        )
-    )
-
-
-def _make_offset_mismatch_error(
-    declared_end: int,
-    measured_end: int,
-    export: ObjectExport,
-    *,
-    export_index: int = 0,
-) -> InvalidScriptPropertyRange:
-    """Create an error for mismatched script property offsets."""
-    return InvalidScriptPropertyRange(
-        _make_failure(
-            export,
-            export_index,
-            "invalid_script_property_range",
-            f"Script serialization offset mismatch: declared end={declared_end}, measured end={measured_end}",
-        )
-    )
 
 
 # ---------------------------------------------------------------------------

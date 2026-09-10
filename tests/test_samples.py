@@ -666,7 +666,7 @@ def test_niagara_fixture_enriched_at_summary_tier():
     from uasset_read.parsers.asset_types.handlers_impl import NiagaraHandler
 
     doc = _asset_document("NM_BPSystemEvent.uasset")
-    covered = [o for o in doc.objects if o.class_name in NiagaraHandler._NIAGARA_CLASSES]
+    covered = [o for o in doc.objects if o.class_name in NiagaraHandler.classes]
     assert covered, "Niagara class set must match the fixture"
     for o in covered:
         assert o.semantic and o.semantic["kind"] == "niagara", o.id

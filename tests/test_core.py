@@ -1364,8 +1364,8 @@ def test_handler_registry_supports_enriches_and_isolates():
         from uasset_read.parsers.asset_types.handlers_impl import NiagaraHandler
 
         handler = NiagaraHandler()
-        assert len(handler._NIAGARA_CLASSES) == 13
-        for class_name in handler._NIAGARA_CLASSES:
+        assert len(handler.classes) == 13
+        for class_name in handler.classes:
             assert handler.supports(record(class_name), VersionContext()), class_name
         assert not handler.supports(record("StaticMesh"), VersionContext())
 

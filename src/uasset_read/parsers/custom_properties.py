@@ -23,13 +23,9 @@ logger = logging.getLogger(__name__)
 class CustomPropertyContext:
     """CustomProperty handler invocation context."""
 
-    type_id: int
     tag: PropertyTag
     archive: FArchive
     name_map: list[str] | None = None
-    mappings: Any | None = None
-    game: str | None = None
-    summary: Any | None = None
 
 
 # Custom property handler registry: (game, type_id/property_name) -> handler
@@ -60,9 +56,7 @@ def handle_custom_property(
     tag: PropertyTag,
     archive: FArchive,
     name_map: list[str] | None = None,
-    mappings: Any | None = None,
     game: str | None = None,
-    summary: Any | None = None,
 ) -> Any | None:
     """Find and invoke a registered custom property handler.
 
@@ -71,6 +65,7 @@ def handle_custom_property(
         tag: PropertyTag instance
         archive: FArchive instance
         name_map: Name mapping table (optional)
+        game: Optional game key for game-specific handler lookup
 
     Returns:
         Handler return value, or None if no handler found
@@ -98,13 +93,9 @@ def handle_custom_property(
         }
     return handler(
         CustomPropertyContext(
-            type_id=type_id,
             tag=tag,
             archive=archive,
             name_map=name_map,
-            mappings=mappings,
-            game=game,
-            summary=summary,
         )
     )
 

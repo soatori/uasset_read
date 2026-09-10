@@ -39,7 +39,7 @@ from uasset_read.parsers.utils import make_enum_value, extract_inner_from_tag, r
 
 
 # Expected byte sizes for fixed-layout structs (used for fast-path validation)
-_EXPECTED_STRUCT_SIZES: dict[str, int | None] = {
+_EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "Vector": 12,
     "Rotator": 12,
     "Vector2D": 8,
@@ -59,7 +59,6 @@ _EXPECTED_STRUCT_SIZES: dict[str, int | None] = {
     "TwoVectors": 24,
     "OrientedBox": 60,
     "Transform": 40,  # FTransform3f: FQuat4f(16) + FVector3f(12) + FVector3f(12)
-    "TopLevelAssetPath": None,  # Two FNames, variable size, handled directly by fast-path
     # Time/frame types
     "Timespan": 8,  # int64
     "DateTime": 8,  # uint64
@@ -1433,16 +1432,8 @@ def _get_inner_type(array_type: str) -> str:
     Supports the UE5 full type name format, e.g. ArrayProperty(IntProperty)
     -> IntProperty.  Unknown formats return "Unknown".
     """
-    # Try to extract from bracket format: ArrayProperty(IntProperty) -> IntProperty
-    if "(" in array_type and ")" in array_type:
-        start = array_type.find("(")
-        end = array_type.find(")")
-        inner = array_type[start + 1 : end].strip()
-        # Handle types with path: /Script/CoreUObject.IntProperty -> IntProperty
-        if "." in inner:
-            inner = inner.split(".")[-1]
-        return inner
-    return "Unknown"
+    inner = extract_inner_from_tag(array_type)
+    return inner.rsplit(".", 1)[-1] if inner else "Unknown"
 
 
 def _extract_struct_type_from_tag(tag: PropertyTag) -> str:

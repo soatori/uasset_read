@@ -526,7 +526,7 @@ def parse_property_value(
             if custom_id is not None:
                 try:
                     return handle_custom_property(
-                        custom_id, tag, archive, name_map, mappings=mappings, game=game, summary=summary
+                        custom_id, tag, archive, name_map, game=game
                     )
                 except BINARY_READ_ERRORS as e:
                     logger.debug("Custom property handler (0x%02X) failed for %s: %s", custom_id, tag.type, e)
@@ -534,7 +534,7 @@ def parse_property_value(
         if (game_key, tag.type) in CUSTOM_PROPERTY_HANDLERS or (None, tag.type) in CUSTOM_PROPERTY_HANDLERS:
             try:
                 return handle_custom_property(
-                    0xFF, tag, archive, name_map, mappings=mappings, game=game, summary=summary
+                    0xFF, tag, archive, name_map, game=game
                 )
             except BINARY_READ_ERRORS as e:
                 logger.debug("Game-specific custom property handler failed for %s (game=%s): %s", tag.type, game, e)

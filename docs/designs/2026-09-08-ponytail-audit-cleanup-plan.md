@@ -1,6 +1,6 @@
 # Ponytail Audit Cleanup Implementation Plan
 
-> **Status (2026-09-10 update):** Waves 0-5 plus later gates executed. Task 3 Source family retired; Task 4 SKIP (G1); Task 5/6 log/Jmap retired; Task 7 residual done; Tasks 8-12 micro-cuts largely landed (validate_pin ftext, package-summary tuples, UFunction builders, native-field/expression write-only fields). Task 13 partial (13.4/13.5 done; 13.1-13.3/13.6-13.8 re-verify before any further cut). **Do not re-execute completed steps.**
+> **Status (2026-09-10 update):** Waves 0-5 plus later gates executed. Task 3 Source family retired; Task 4 SKIP (G1); Task 5/6 log/Jmap retired; Task 7 residual done; Tasks 8-13 micro-cuts landed (validate_pin ftext, package-summary tuples, UFunction builders, native-field/expression write-only fields, property_pointer branch, bulk_data/custom_properties/property_types/handlers residual cuts). **Do not re-execute completed steps.**
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -352,7 +352,7 @@
 
 Each sub-cut below is independent; do them in listed order, suite-run after every 3-4.
 
-- [ ] **Step 12.1** property_pointer.py — delete the legacy generic-archive branch in `from_archive` (everything after the `if hasattr(archive, "xfer_field_pointer")` return); verify first that every caller passes `FKismetArchive`: `grep -rn "FKismetPropertyPointer.from_archive" src tests --include="*.py"`. New body:
+- [x] **Step 12.1** property_pointer.py — delete the legacy generic-archive branch in `from_archive` (everything after the `if hasattr(archive, "xfer_field_pointer")` return); verify first that every caller passes `FKismetArchive`: `grep -rn "FKismetPropertyPointer.from_archive" src tests --include="*.py"`. New body:
 
   ```python
   @classmethod
@@ -365,7 +365,7 @@ Each sub-cut below is independent; do them in listed order, suite-run after ever
   Drop the now-unused `name_map` parameter only if no caller uses it (keep otherwise).
 - [x] **Step 12.2 — canceled 2026-09-10 (Gate K).** `body_builder.py` and its C++ pseudocode call path were deleted as a product change; the proposed equivalent tidy must not be applied.
 - [x] **Step 12.3 — canceled 2026-09-10 (Gate K).** `jump_analyzer.py` was deleted with the C++ pseudocode generator chain; no residual analyzer implementation remains to tidy.
-- [ ] **Step 12.4** ufunction_reader.py — drop the unused params: `summary` from `_make_control_bit_error` and `_make_offset_mismatch_error`, `declared_start` from the latter, field `remaining_serialized` from `FunctionScriptFailure` (`grep -rn remaining_serialized src tests` first). Then collapse the two near-identical `_make_*_error` builders into one:
+- [x] **Step 12.4** ufunction_reader.py — drop the unused params: `summary` from `_make_control_bit_error` and `_make_offset_mismatch_error`, `declared_start` from the latter, field `remaining_serialized` from `FunctionScriptFailure` (`grep -rn remaining_serialized src tests` first). Then collapse the two near-identical `_make_*_error` builders into one:
 
   ```python
   def _make_failure(export, export_index, error_code, error_message) -> FunctionScriptFailure:
@@ -378,11 +378,11 @@ Each sub-cut below is independent; do them in listed order, suite-run after ever
   ```
 
   and raise `UnsupportedSerializationVersion(_make_failure(export, export_index, "unsupported_serialization_version", f"Unknown serialization-control bits 0x{ctrl_byte:02X} (known: 0x{_SER_CTRL_OVERRIDE_OPERATION:02X})"))` / `InvalidScriptPropertyRange(_make_failure(export, export_index, "invalid_script_property_range", f"Script serialization offset mismatch: declared end={declared_end}, measured end={measured_end}"))` at the two call sites (keep the existing exception classes and the `except (UnsupportedSerializationVersion, InvalidScriptPropertyRange)` catch shape; the catch sites must switch to constructing-and-raising with `_make_failure`).
-- [ ] **Step 12.5** translator.py — delete `_build_structured_indices`; in `__init__` use `self._structured_indices = self._jump_analyzer.get_structured_indices()` inside the `if expressions is not None:` block. kismet/archive.py: delete `self.bytecode_buffer_size` (grep-verify: written once, read nowhere: `grep -rn bytecode_buffer_size src tests`).
-- [ ] **Step 12.6** expressions Ref fields — delete `ClassPtrRef` (casts.py) + `ObjectRef` and set the site to `return cls(Value=obj_ref.index)` (delegates.py EX_BindDelegate + EX_InstanceDelegate `FunctionNameRef` fields + their assignment lines, keeping whatever read the string value uses), `NameRef` (NameConst), `EventNameRef`, `VirtualFunctionNameRef`, plus any now-dead `FNameRef` imports in those files (`grep -rn "Ref:" src/uasset_read/kismet/expressions/` should end at zero). Before deleting each, `grep -rn "<FieldName>" src tests` to confirm no reader.
-- [ ] **Step 12.7** native_fields.py — delete dead `NativeFieldDeclaration` fields `array_dim`, `element_size`, `metadata`, `rep_notify_name`, `replication_condition` and their `decl.*` assignments (~:72-77, 395-402); keep the *reads* inside `_read_fproperty_prefix` (cursor advance). Shrink `_read_fproperty_prefix`'s 9-tuple to `(name, property_flags)` — the other seven values have no consumer after the field delete; adjust the unpack in `_read_single_field` to `name, property_flags = _read_fproperty_prefix(archive, context)`.
-- [ ] **Step 12.8** result.py — delete `logic_source` param + `graph_topology` branch from `infer_bytecode_confidence`, and the `logic_source`/`semantic_calls` fields ONLY IF no test/schema gate asserts them (`grep -rn "logic_source\|semantic_calls\|bytecode_confidence" tests src` — if `logic_source` appears in an output-key assertion, keep the field, delete only the param/branch).
-- [ ] **Step 12.9** Suite parity, baseline json, commit `refactor: kismet dead branches, write-only fields, single-detect structured blocks`.
+- [x] **Step 12.5** translator.py — delete `_build_structured_indices`; in `__init__` use `self._structured_indices = self._jump_analyzer.get_structured_indices()` inside the `if expressions is not None:` block. kismet/archive.py: delete `self.bytecode_buffer_size` (grep-verify: written once, read nowhere: `grep -rn bytecode_buffer_size src tests`).
+- [x] **Step 12.6** expressions Ref fields — delete `ClassPtrRef` (casts.py) + `ObjectRef` and set the site to `return cls(Value=obj_ref.index)` (delegates.py EX_BindDelegate + EX_InstanceDelegate `FunctionNameRef` fields + their assignment lines, keeping whatever read the string value uses), `NameRef` (NameConst), `EventNameRef`, `VirtualFunctionNameRef`, plus any now-dead `FNameRef` imports in those files (`grep -rn "Ref:" src/uasset_read/kismet/expressions/` should end at zero). Before deleting each, `grep -rn "<FieldName>" src tests` to confirm no reader.
+- [x] **Step 12.7** native_fields.py — delete dead `NativeFieldDeclaration` fields `array_dim`, `element_size`, `metadata`, `rep_notify_name`, `replication_condition` and their `decl.*` assignments (~:72-77, 395-402); keep the *reads* inside `_read_fproperty_prefix` (cursor advance). Shrink `_read_fproperty_prefix`'s 9-tuple to `(name, property_flags)` — the other seven values have no consumer after the field delete; adjust the unpack in `_read_single_field` to `name, property_flags = _read_fproperty_prefix(archive, context)`.
+- [x] **Step 12.8** result.py — delete `logic_source` param + `graph_topology` branch from `infer_bytecode_confidence`, and the `logic_source`/`semantic_calls` fields ONLY IF no test/schema gate asserts them (`grep -rn "logic_source\|semantic_calls\|bytecode_confidence" tests src` — if `logic_source` appears in an output-key assertion, keep the field, delete only the param/branch).
+- [x] **Step 12.9** Suite parity, baseline json, commit `refactor: kismet dead branches, write-only fields, single-detect structured blocks`.
 
 ---
 
@@ -390,7 +390,7 @@ Each sub-cut below is independent; do them in listed order, suite-run after ever
 
 **Files:** Modify `src/uasset_read/parsers/{bulk_data,property_parser,property_types,custom_properties,class_specific_skip,legacy_reader}.py`, `parsers/asset_types/handlers_impl.py`, `parsers/binary_or_native_handlers.py`, `src/uasset_read/agent_tools.py`, `tests/size-baseline.json`
 
-- [ ] **Step 13.1** bulk_data.py — `grep -rn "BULKDATA_" src tests` and keep only the constants actually imported/used (`CompressedZlib`, `CompressedOodle`; `None` only if used). Delete unused params `base_offset`/`export_index` from `extract_bulk_data_descriptors` and update the `agent_tools.py` call. agent_tools.py `extract_payload`: collapse the dead control flow (regex `\d+` makes `int()` unfailable — delete the `try/except ValueError` and the second `if export_index is None` block) to:
+- [x] **Step 13.1** bulk_data.py — `grep -rn "BULKDATA_" src tests` and keep only the constants actually imported/used (`CompressedZlib`, `CompressedOodle`; `None` only if used). Delete unused params `base_offset`/`export_index` from `extract_bulk_data_descriptors` and update the `agent_tools.py` call. agent_tools.py `extract_payload`: collapse the dead control flow (regex `\d+` makes `int()` unfailable — delete the `try/except ValueError` and the second `if export_index is None` block) to:
 
   ```python
   if export_index is None:
@@ -409,8 +409,8 @@ Each sub-cut below is independent; do them in listed order, suite-run after ever
   ```
 
   and drop the `offset` parameter only if `grep -rn "extract_payload(" src tests` shows no caller passing it.
-- [ ] **Step 13.2** custom_properties.py — delete `CustomPropertyContext` fields `type_id`, `mappings`, `game`, `summary` (verify no handler reads them: `grep -rn "\.type_id\|ctx\.mappings\|ctx\.game\|ctx\.summary" src`), and the corresponding kwargs at the two `handle_custom_property(...)` call sites in property_parser.py (~:629-638) plus the context construction inside `handle_custom_property`.
-- [ ] **Step 13.3** property_types.py —
+- [x] **Step 13.2** custom_properties.py — delete `CustomPropertyContext` fields `type_id`, `mappings`, `game`, `summary` (verify no handler reads them: `grep -rn "\.type_id\|ctx\.mappings\|ctx\.game\|ctx\.summary" src`), and the corresponding kwargs at the two `handle_custom_property(...)` call sites in property_parser.py (~:629-638) plus the context construction inside `handle_custom_property`.
+- [x] **Step 13.3** property_types.py —
 
   ```python
   def _get_inner_type(array_type: str) -> str:
@@ -439,16 +439,16 @@ Each sub-cut below is independent; do them in listed order, suite-run after ever
   return object_name.startswith(SKIP_CLASS_PREFIXES) or (class_name or "").startswith(SKIP_CLASS_PREFIXES)
   ```
 
-- [ ] **Step 13.6** handlers_impl.py — convert the seven hand-written `supports()` (`cn in self._X_CLASSES`) at :450, :508, :653, :820, :1266, :1462, :1679 to the existing `_SupportsClasses` mixin: base list `classes = ("...", ...)` (rename the `_X_CLASSES` tuple contents into a `classes` class attribute, delete the `supports` override). One class at a time; suite after each.
-- [ ] **Step 13.7** property_parser.py — `data_boundary` 4-branch chain → `data_boundary = min((b for b in (property_end, file_size) if isinstance(b, int)), default=limit)` (verify the read-back semantics: original picks property_end/file_size/limit in exactly that min-without-limit form; do NOT include `limit` in the min when either is present — the `default=limit` covers the both-None case).
-- [ ] **Step 13.8** binary_or_native_handlers.py — delete `_decode_vector`, `_decode_rotator`, `_decode_vector2d`, `_decode_vector4`, `_decode_quat`, `_decode_plane` and put the key tuples at the call point in the table:
+- [x] **Step 13.6** handlers_impl.py — convert the seven hand-written `supports()` (`cn in self._X_CLASSES`) at :450, :508, :653, :820, :1266, :1462, :1679 to the existing `_SupportsClasses` mixin: base list `classes = ("...", ...)` (rename the `_X_CLASSES` tuple contents into a `classes` class attribute, delete the `supports` override). One class at a time; suite after each.
+- [x] **Step 13.7** property_parser.py — `data_boundary` 4-branch chain → `data_boundary = min((b for b in (property_end, file_size) if isinstance(b, int)), default=limit)` (verify the read-back semantics: original picks property_end/file_size/limit in exactly that min-without-limit form; do NOT include `limit` in the min when either is present — the `default=limit` covers the both-None case).
+- [x] **Step 13.8** binary_or_native_handlers.py — delete `_decode_vector`, `_decode_rotator`, `_decode_vector2d`, `_decode_vector4`, `_decode_quat`, `_decode_plane` and put the key tuples at the call point in the table:
 
   ```python
   "Vector": ((12, 24), lambda raw, size: _decode_nd(raw, size, ("X", "Y", "Z"))),
   ```
 
   (same for Vector3f/Vector3d/Rotator*/Vector2D/Vector2f/Vector2d/DeprecateSlateVector2D/Vector4*/Quat*/Plane*/LinearColor via `("R","G","B","A")`). Keep `_decode_color/_decode_guid/_decode_int_point/_decode_int_vector/_decode_two_vectors/_decode_sphere` (their bodies are not `_decode_nd` forwards).
-- [ ] **Step 13.9** Suite parity, baseline json, commit `refactor: parsers dead params, duplicated helpers and wrapper indirection`.
+- [x] **Step 13.9** Suite parity, baseline json, commit `refactor: parsers dead params, duplicated helpers and wrapper indirection`.
 
 ---
 
