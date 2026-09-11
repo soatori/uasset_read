@@ -274,27 +274,6 @@ def read_ftext_with_history(
     return value, consumed
 
 
-def read_ftext(archive: FArchive, tolerant: bool = True) -> str:
-    """Read complete FText (flags + history_type + payload), return decoded string.
-
-    Convenience wrapper: reads the FText header (u32 Flags + i8 HistoryType)
-    then delegates to read_ftext_with_history. On any failure in tolerant mode,
-    restores archive to field start and returns "".
-    """
-    start_pos = archive.tell()
-    try:
-        _flags = archive.read_u32()
-        history_type_raw = archive.read_u8()
-        history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
-        value, _ = read_ftext_with_history(archive, history_type, tolerant=tolerant)
-        return value
-    except (ParseError, struct.error, EOFError, OSError):
-        if tolerant:
-            archive.seek(start_pos)
-            return ""
-        raise
-
-
 # ============================================================================
 # Pin reference validation helper
 # ============================================================================

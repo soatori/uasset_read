@@ -103,44 +103,22 @@ def read_ed_graph_pin_type(
 # ============================================================================
 
 
-def read_pin_reference(
-    archive: FArchive,
-    name_map: list[str],
-    export_map: list[ObjectExport],
-    import_map: list[ObjectImport],
-) -> dict | None:
+def read_pin_reference(archive: FArchive) -> dict | None:
     """Read a single Pin reference (FBlueprintEditorUtils::FPinReference)."""
     b_null_ptr = archive.read_i32()
     if b_null_ptr != 0:
         return None  # null marker consumed 4 bytes only, no more reading
 
-    owning_node_index = archive.read_i32()
+    archive.read_i32()  # owning_node index (write-only; validation lives in validate_pin_reference_at)
     pin_guid_raw = _read_guid(archive)
 
     # Normalize to 32-char lowercase hex (remove dashes), matching pin_id format
     pin_guid = pin_guid_raw.replace("-", "").lower() if pin_guid_raw else pin_guid_raw
-
-    # Resolve owning node name
-    owning_node_name: str | None = None
-    if owning_node_index > 0:
-        node_idx = owning_node_index - 1
-        if node_idx < len(export_map):
-            owning_node_name = export_map[node_idx].object_name
-    elif owning_node_index < 0:
-        import_idx = -owning_node_index - 1
-        if import_idx < len(import_map):
-            owning_node_name = import_map[import_idx].object_name
-
-    # pin_guid already normalized above to 32-char lowercase hex (no dashes)
-    return {
-        "owning_node": owning_node_name,
-        "pin_guid": pin_guid,
-    }
+    return {"pin_guid": pin_guid}
 
 
 def read_pin_array(
     archive: FArchive,
-    name_map: list[str],
     export_map: list[ObjectExport],
     import_map: list[ObjectImport],
 ) -> list[dict]:
@@ -183,7 +161,7 @@ def read_pin_array(
         if ref_validation is None or not ref_validation[0]:
             reason = ref_validation[1] if ref_validation else "not enough bytes"
             raise ParseError(f"Invalid pin reference at pos {ref_pos}: {reason}")
-        pin_ref = read_pin_reference(archive, name_map, export_map, import_map)
+        pin_ref = read_pin_reference(archive)
         if pin_ref is not None:
             pins.append(pin_ref)
     return pins
@@ -330,26 +308,14 @@ def _try_recover_to_subpins(
     export_map: list[ObjectExport],
     import_map: list[ObjectImport] | None = None,
     max_scan: int = 256,
-) -> dict[str, Any] | None:
+) -> int | None:
     """Recover to SubPins after LinkedTo failure.
 
     Scan strategy: search for a reasonable small integer (0..20) in the range
     error_pos to error_pos + max_scan, then verify the data after that position
     matches pin reference header structure.
 
-    Improvements:
-    - Use validate_pin_reference_at() for structural validation
-    - Distinguish linkedto_recovered (valid Pin array found) from subpins_resync (jump to next structure)
-    - Return structured recovery result
-
-    Returns:
-        None: recovery failed
-        Dict: {
-            "recovered_pos": int,
-            "count": int,
-            "recovery_type": "linkedto_recovered" / "subpins_resync",
-            "reason": str,
-        }
+    Returns recovered file position, or None on failure.
     """
     scan_start = archive.tell()
     # Safely get archive size: prefer public API total_size(),
@@ -378,21 +344,13 @@ def _try_recover_to_subpins(
             if pin_ref_result is not None and pin_ref_result[0]:
                 recovered_pos = candidate_pos
                 archive.seek(recovered_pos)
-                # Converged: this path is only for SubPins resync, no longer marked as linkedto_recovered
-                recovery_type = "subpins_resync"
                 logger.debug(
-                    "[P73-SUBPINS] Recovery at pos %d (count=%d, type=%s, reason=%s)",
+                    "[P73-SUBPINS] Recovery at pos %d (count=%d, reason=%s)",
                     recovered_pos,
                     candidate,
-                    recovery_type,
                     pin_ref_result[1],
                 )
-                return {
-                    "recovered_pos": recovered_pos,
-                    "count": candidate,
-                    "recovery_type": recovery_type,
-                    "reason": pin_ref_result[1],
-                }
+                return recovered_pos
 
         # count=0 or b_null!=0 case: check if empty array or null ref
         if after + 4 <= len(window):
@@ -406,12 +364,7 @@ def _try_recover_to_subpins(
                     recovered_pos,
                     candidate,
                 )
-                return {
-                    "recovered_pos": recovered_pos,
-                    "count": candidate,
-                    "recovery_type": "subpins_resync",  # Jump to next structure
-                    "reason": "b_null!=0 null reference",
-                }
+                return recovered_pos
 
     # Recovery failed, stay at current position
     logger.debug(
@@ -429,13 +382,13 @@ def _read_pin_fstring_field(
     archive: FArchive,
     field_name: str,
     pin_name: str = "",
-    max_length: int = 4096,
 ) -> str:
     """Read Pin FString field (DefaultValue / AutogeneratedDefaultValue / PinToolTip)."""
     from uasset_read.archive import _contains_binary_data
 
     try:
-        value = _read_fstring_safe(archive, max_length=max_length)
+        # 4096 is the pin-field ceiling; _read_fstring_safe's default is MAX_SAFE_COUNT.
+        value = _read_fstring_safe(archive, max_length=4096)
         if _contains_binary_data(value):
             logger.debug(
                 "Binary %s at pos %d for pin '%s' — returning empty", field_name, archive.tell() - len(value), pin_name
@@ -474,7 +427,6 @@ def _read_pin_ftext_field(
 
 def _read_pin_ref_array(
     archive: FArchive,
-    name_map: list[str],
     export_map: list[ObjectExport],
     import_map: list[ObjectImport],
     field: str,
@@ -488,7 +440,7 @@ def _read_pin_ref_array(
     """
     start = archive.tell()
     try:
-        refs = read_pin_array(archive, name_map, export_map, import_map)
+        refs = read_pin_array(archive, export_map, import_map)
         logger.debug("%s: %d refs at pos %d", field, len(refs), start)
         return refs
     except BINARY_READ_ERRORS as e:
@@ -500,13 +452,9 @@ def _read_pin_ref_array(
                 logger.error("%s read failed at pos %d (pin=%s): %s", field, start, pin_name, e)
             else:
                 logger.debug("%s read failed (deduped) at pos %d (pin=%s): %s", field, start, pin_name, e)
-            recovery_result = _try_recover_to_subpins(archive, start, export_map, import_map)
-            if recovery_result is not None:
-                logger.info(
-                    "[P73-RECOVERY] SubPins resynced: pos=%d, type=%s",
-                    recovery_result.get("recovered_pos"),
-                    recovery_result.get("recovery_type"),
-                )
+            recovered_pos = _try_recover_to_subpins(archive, start, export_map, import_map)
+            if recovered_pos is not None:
+                logger.info("[P73-RECOVERY] SubPins resynced at %d for pin %s", recovered_pos, pin_name)
         return []
 
 
@@ -570,18 +518,16 @@ def read_ue_graph_pin(
     _read_pin_ftext_field(archive, "DefaultTextValue", dev_notes=dev_notes)
 
     # 13. LinkedTo array
-    linked_to = _read_pin_ref_array(
-        archive, name_map, export_map, import_map, "LinkedTo", recover_on_fail=True, pin_name=pin_name
-    )
+    linked_to = _read_pin_ref_array(archive, export_map, import_map, "LinkedTo", recover_on_fail=True, pin_name=pin_name)
 
     # 14. SubPins array (write-only — consumed to keep the cursor aligned)
-    _read_pin_ref_array(archive, name_map, export_map, import_map, "SubPins", recover_on_fail=False)
+    _read_pin_ref_array(archive, export_map, import_map, "SubPins", recover_on_fail=False)
 
     # 15. ParentPin — reuse read_pin_reference() (UE5: null → 4B, non-null → 24B)
-    read_pin_reference(archive, name_map, export_map, import_map)
+    read_pin_reference(archive)
 
     # 16. ReferencePassThroughConnection — reuse read_pin_reference()
-    read_pin_reference(archive, name_map, export_map, import_map)
+    read_pin_reference(archive)
 
     # 17. PersistentGuid (EditorOnly, write-only)
     try:

@@ -86,11 +86,6 @@ def _is_graph_class(class_name: str | None) -> bool:
     return class_name.endswith("Graph")
 
 
-def _pin_direction(direction: int) -> str:
-    # EEdGraphPinDirection: EGPD_Input = 0, EGPD_Output = 1
-    return {0: "input", 1: "output"}.get(direction, "unknown")
-
-
 def read_blueprint_graphs(
     archive: FArchive,
     summary: PackageFileSummary,
@@ -182,7 +177,8 @@ def _convert_nodes(graph: Any, nodes: list[dict[str, Any]], pin_count: int, node
                 {
                     "id": str(pin.pin_id),
                     "name": str(pin.pin_name),
-                    "direction": _pin_direction(pin.direction),
+                    # EEdGraphPinDirection: EGPD_Input = 0, EGPD_Output = 1
+                    "direction": {0: "input", 1: "output"}.get(pin.direction, "unknown"),
                     "category": str(pin.pin_type.pin_category) if pin.pin_type else "",
                     "linked": [],
                 }
@@ -253,11 +249,10 @@ def _graph_to_dict(graph: Any, export_idx: int, class_name: str) -> dict[str, An
 def _collect_pin_links(graph: Any) -> list[dict[str, Any]]:
     """Collect (source pin, target pin-guid) link records from one UEdGraph tree.
 
-    ``UEdGraphPin.linked_to_raw`` entries are ``{"owning_node": <target node
-    name>, "pin_guid": <target 32-hex>}`` — the *target's* GUID (verified on
-    the tracked fixtures); the source is the pin owning the list. So each
-    record carries the owning pin's own id (``from_pin``) plus the target
-    ``pin_guid``; ``owning_node`` (a display name, not an index) is unused.
+    ``UEdGraphPin.linked_to_raw`` entries are ``{"pin_guid": <target 32-hex>}``
+    — the *target's* GUID (verified on the tracked fixtures); the source is the
+    pin owning the list. So each record carries the owning pin's own id
+    (``from_pin``) plus the target ``pin_guid``.
     """
     links: list[dict[str, Any]] = []
     for node in graph.nodes:
@@ -273,16 +268,6 @@ def _collect_pin_links(graph: Any) -> list[dict[str, Any]]:
     return links
 
 
-def _collect_all_nodes(graphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Collect every node dict from the emitted graphs.
-
-    The emitter inlines subgraph nodes into their owning graph's ``nodes`` list
-    (see ``_graph_to_dict``), so an emitted graph dict carries no ``subgraphs``
-    key and a recursive walk here would be dead weight.
-    """
-    return [n for g in graphs for n in g.get("nodes", [])]
-
-
 def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:
     """Resolve every graph's GUID-keyed links to (to_node, to_pin), in place.
 
@@ -292,7 +277,10 @@ def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:
     and dropped — the reader pass turns that counter into a diagnostic, never
     a silent loss. Consumes and deletes ``_pin_links``; sets ``edge_count``.
     """
-    all_nodes = _collect_all_nodes(graphs)
+    # The emitter inlines subgraph nodes into their owning graph's ``nodes``
+    # list (see ``_graph_to_dict``), so an emitted graph dict carries no
+    # ``subgraphs`` key.
+    all_nodes = [n for g in graphs for n in g.get("nodes", [])]
     guid_index: dict[str, tuple[str, str]] = {}
     for node in all_nodes:
         for pin in node.get("pins", []):
