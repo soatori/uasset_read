@@ -56,13 +56,6 @@ class EngineVersion:
 
 
 @dataclass(frozen=True)
-class MappingInfo:
-    """Type mapping source (e.g. .usmap file path)."""
-
-    path: str = ""
-
-
-@dataclass(frozen=True)
 class VersionContext:
     """Immutable parse context. All readers share this."""
 
@@ -78,7 +71,7 @@ class VersionContext:
     platform: str | None = None
     game: str | None = None
     byte_order: Literal["little", "big"] = "little"
-    mappings: MappingInfo | None = None
+    mappings_path: str | None = None
     depth: Literal["package", "object", "asset", "decode"] = "package"
 
     @property
@@ -103,7 +96,7 @@ def build_version_context_from_summary(
     editor_only_filtered: bool | None = None,
     platform: str | None = None,
     game: str | None = None,
-    mappings: MappingInfo | None = None,
+    mappings_path: str | None = None,
     depth: Literal["package", "object", "asset", "decode"] = "package",
 ) -> VersionContext:
     """Build a VersionContext from an existing PackageFileSummary.
@@ -154,6 +147,6 @@ def build_version_context_from_summary(
         editor_only_filtered=editor_only_filtered,
         platform=platform,
         game=game,
-        mappings=mappings,
+        mappings_path=mappings_path,
         depth=depth,
     )

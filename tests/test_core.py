@@ -1095,10 +1095,10 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         assert any(d.code == "MAPPINGS_LOAD_FAILED" for d in doc.diagnostics)
         assert not isinstance(calls.get("mappings"), str)  # never a raw path string
 
-    def test_v2_mappings_provider_object_on_successful_load():
+    def test_v2_mappings_object_on_successful_load():
         import tempfile
 
-        from uasset_read.mappings import TypeMappingsProvider
+        from uasset_read.mappings import TypeMappings
 
         # Minimal uncompressed version-0 .usmap: empty name/enum/struct tables.
         payload = b"\x00" * 12  # name_count=0, enum_count=0, struct_count=0
@@ -1123,7 +1123,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
             ok_path.write_bytes(blob)
             doc = parse_package_document(str(DATA_SAMPLE), depth="object", mappings_path=str(ok_path))
         assert not any(d.code == "MAPPINGS_LOAD_FAILED" for d in doc.diagnostics)
-        assert isinstance(calls.get("mappings"), TypeMappingsProvider)
+        assert isinstance(calls.get("mappings"), TypeMappings)
 
     def test_silent_recovery_downgrades_object_and_reaches_document():
         from uasset_read.models.diagnostics import Diagnostic
@@ -1219,8 +1219,8 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
                 test_silent_recovery_downgrades_object_and_reaches_document,
             ),
             (
-                "mappings.test_v2_mappings_provider_object_on_successful_load",
-                test_v2_mappings_provider_object_on_successful_load,
+                "mappings.test_v2_mappings_object_on_successful_load",
+                test_v2_mappings_object_on_successful_load,
             ),
         ]
     )

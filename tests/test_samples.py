@@ -802,10 +802,7 @@ def test_version_context_is_frozen_and_summary_derived():
 
     from uasset_read.serializers.package_summary import read_package_summary
     from uasset_read.package import open_package_bundle
-    from uasset_read.versioning import (
-        MappingInfo,
-        build_version_context_from_summary,
-    )
+    from uasset_read.versioning import build_version_context_from_summary
 
     archive = open_package_bundle(str(SAMPLES / "ABP_RifleAnimLayers.uasset")).open_archive(tolerant=True)
     try:
@@ -817,7 +814,7 @@ def test_version_context_is_frozen_and_summary_derived():
         summary,
         package_layout="legacy",
         game="ue",
-        mappings=MappingInfo(path="x.usmap"),
+        mappings_path="x.usmap",
         depth="asset",
     )
     # ABP fixture facts verified at plan time: UE4 522, UE5 1004, 10 custom versions,
@@ -830,7 +827,7 @@ def test_version_context_is_frozen_and_summary_derived():
     assert ctx.compatible_engine_version is not None
     assert ctx.package_layout == "legacy"
     assert ctx.game == "ue"
-    assert ctx.mappings is not None and ctx.mappings.path == "x.usmap"
+    assert ctx.mappings_path == "x.usmap"
     assert ctx.depth == "asset"
     assert ctx.is_ue5 is True
     assert ctx.version_string.startswith("5.0")

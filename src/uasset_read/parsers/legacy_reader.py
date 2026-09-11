@@ -47,7 +47,7 @@ from ..models.object_model import (
     ROLES_CDO,
     ROLES_GENERATED_CLASS,
 )
-from ..versioning import MappingInfo, FORTNITE_GUID, build_version_context_from_summary, get_custom_version
+from ..versioning import FORTNITE_GUID, build_version_context_from_summary, get_custom_version
 
 
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:
@@ -738,7 +738,7 @@ class LegacyPackageReader:
                     summary,
                     package_layout="legacy",
                     game=self._game,
-                    mappings=MappingInfo(path=self._mappings_path) if self._mappings_path else None,
+                    mappings_path=self._mappings_path,
                     depth=depth,
                 )
                 for obj in objects:
@@ -803,9 +803,9 @@ class LegacyPackageReader:
             # Lazy import mirrors v1 (pipeline/core.py, pipeline/stages.py):
             # the mappings module and its optional codecs must not become a
             # core-import dependency.
-            from ..mappings import TypeMappingsProvider
+            from ..mappings import load_usmap
 
-            return TypeMappingsProvider.from_file(self._mappings_path, budget=budget)
+            return load_usmap(self._mappings_path, budget=budget)
         except Exception as exc:
             diagnostics.append(
                 _diag(

@@ -301,15 +301,9 @@ class UsmapParser:
         return PropertyType(type_name)
 
 
-class TypeMappingsProvider:
-    """Load a .usmap mapping file."""
-
-    def __init__(self, mappings: TypeMappings):
-        self.mappings = mappings
-
-    @classmethod
-    def from_file(cls, path: str, budget: ResourceBudget | None = None) -> "TypeMappingsProvider":
-        lower = path.lower()
-        if lower.endswith(".usmap"):
-            return cls(UsmapParser(path, budget=budget).mappings)
-        raise ParseError(f"Unsupported mapping file type: {Path(path).name}")
+def load_usmap(path: str, budget: ResourceBudget | None = None) -> TypeMappings:
+    """Load a .usmap mapping file into a TypeMappings container."""
+    lower = path.lower()
+    if lower.endswith(".usmap"):
+        return UsmapParser(path, budget=budget).mappings
+    raise ParseError(f"Unsupported mapping file type: {Path(path).name}")
