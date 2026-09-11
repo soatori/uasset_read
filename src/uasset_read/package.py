@@ -7,11 +7,9 @@ from functools import cached_property
 from pathlib import Path
 from typing import Literal
 import logging
-import os
 
 from uasset_read.archive import FArchive
 from uasset_read.exceptions import ParseError
-from uasset_read.memory_safety import ResourceBudget
 from uasset_read.models.document import PackageDocument
 
 logger = logging.getLogger(__name__)
@@ -180,64 +178,30 @@ class PackageBundle:
         return FArchive(path, tolerant=tolerant)
 
 
-class FileSystemPackageProvider:
-    """Filesystem package provider: discovers and opens .uasset/.umap bundles."""
-
-    container = "filesystem"
-
-    def __init__(self, root: str | os.PathLike[str] | None = None):
-        self.root = Path(root).resolve() if root is not None else None
-
-    @staticmethod
-    def _assert_within_root(path: Path, root: Path | None) -> Path:
-        """Validate that the path is within root, return resolved path."""
-        if root is None:
-            return path.resolve()
-        resolved = (root / path).resolve()
-        try:
-            resolved.relative_to(root)
-        except ValueError:
-            raise PermissionError(f"Path '{path}' resolves outside root '{root}': {resolved}")
-        return resolved
-
-    def open_package_bundle(
-        self, path: str, tolerant: bool = False, budget: ResourceBudget | None = None
-    ) -> PackageBundle:
-        main = Path(path)
-        if self.root is not None and not main.is_file() and not main.is_absolute():
-            root_relative = self.root / main
-            if root_relative.is_file():
-                main = root_relative
-        if self.root is not None:
-            main = self._assert_within_root(main, self.root)
-        if main.suffix.lower() not in PACKAGE_EXTENSIONS:
-            for ext in PACKAGE_EXTENSIONS:
-                candidate = main.with_suffix(ext)
-                if candidate.is_file():
-                    main = candidate
-                    break
-        if not main.is_file():
-            raise FileNotFoundError(path)
-        ext = main.suffix.lower()
-        package_kind = "map" if ext == ".umap" else "asset"
-        files = {ext: str(main)}
-        for payload_ext in PACKAGE_PAYLOAD_EXTENSIONS:
-            sidecar = main.with_suffix(payload_ext)
-            if sidecar.is_file():
-                files[payload_ext] = str(sidecar)
-        if budget is not None:
-            budget.reserve(main.stat().st_size, f"bundle_main:{main.name}")
-        return PackageBundle(
-            main_path=str(main),
-            package_kind=package_kind,
-            container=self.container,
-            files=files,
-        )
-
-
 def open_package_bundle(path: str, tolerant: bool = False) -> PackageBundle:
     """Discover a package bundle from a filesystem path."""
-    return FileSystemPackageProvider().open_package_bundle(path, tolerant=tolerant)
+    main = Path(path)
+    if main.suffix.lower() not in PACKAGE_EXTENSIONS:
+        for ext in PACKAGE_EXTENSIONS:
+            candidate = main.with_suffix(ext)
+            if candidate.is_file():
+                main = candidate
+                break
+    if not main.is_file():
+        raise FileNotFoundError(path)
+    ext = main.suffix.lower()
+    package_kind = "map" if ext == ".umap" else "asset"
+    files = {ext: str(main)}
+    for payload_ext in PACKAGE_PAYLOAD_EXTENSIONS:
+        sidecar = main.with_suffix(payload_ext)
+        if sidecar.is_file():
+            files[payload_ext] = str(sidecar)
+    return PackageBundle(
+        main_path=str(main),
+        package_kind=package_kind,
+        container="filesystem",
+        files=files,
+    )
 
 
 def parse_package_document(
