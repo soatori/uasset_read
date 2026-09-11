@@ -60,7 +60,7 @@ class EX_PropertyConst(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_PropertyConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
-        prop = FKismetPropertyPointer.from_archive(archive, name_map)
+        prop = FKismetPropertyPointer.from_archive(archive)
         return cls(Property=prop)
 
     def to_dict(self) -> dict:
@@ -82,7 +82,7 @@ class EX_BitFieldConst(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_BitFieldConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
-        prop = FKismetPropertyPointer.from_archive(archive, name_map)
+        prop = FKismetPropertyPointer.from_archive(archive)
         val = archive.read_u8()
         return cls(InnerProperty=prop, ConstValue=val)
 

@@ -13,18 +13,13 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from uasset_read.archive import ByteArchive
+from uasset_read.constants import PKG_Cooked, PKG_FilterEditorOnly
 from uasset_read.kismet.value_types import FNameRef
 
 if TYPE_CHECKING:
     from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Package flags constant (mirrored from constants.py to avoid circular import)
-# ---------------------------------------------------------------------------
-PKG_Cooked = 0x00000200
-PKG_FilterEditorOnly = 0x80000000
 
 # FReleaseObjectVersion threshold for replication condition byte
 _PROPERTIES_SERIALIZE_REP_CONDITION_VERSION = 21

@@ -85,7 +85,7 @@ class EX_ArrayConst(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ArrayConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
-        prop = FKismetPropertyPointer.from_archive(archive, name_map)
+        prop = FKismetPropertyPointer.from_archive(archive)
         num = archive.read_i32()  # ScriptSerialization.inl:536-541: int32 element count
         elements = archive.read_expression_array(EExprToken.EX_EndArrayConst)
         return cls(InnerProperty=prop, Num=num, Elements=elements)
@@ -108,8 +108,8 @@ class EX_MapConst(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_MapConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
-        key_prop = FKismetPropertyPointer.from_archive(archive, name_map)
-        val_prop = FKismetPropertyPointer.from_archive(archive, name_map)
+        key_prop = FKismetPropertyPointer.from_archive(archive)
+        val_prop = FKismetPropertyPointer.from_archive(archive)
         num = archive.read_i32()
         elements = archive.read_expression_array(EExprToken.EX_EndMapConst)
         return cls(
@@ -136,7 +136,7 @@ class EX_SetConst(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
-        prop = FKismetPropertyPointer.from_archive(archive, name_map)
+        prop = FKismetPropertyPointer.from_archive(archive)
         num = archive.read_i32()  # ScriptSerialization.inl:543-548: int32 element count
         elements = archive.read_expression_array(EExprToken.EX_EndSetConst)
         return cls(InnerProperty=prop, Num=num, Elements=elements)

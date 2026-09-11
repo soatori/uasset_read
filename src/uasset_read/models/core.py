@@ -59,9 +59,6 @@ class UEdGraphPin:
     default_value: str | None = None
     auto_default_value: str | None = None
     default_object: int | None = None
-    default_object_ref: Any | None = (
-        None  # D-04: reserved for object-reference resolution (unused on the single-package path)
-    )
     default_text_value: str | None = None
     # PIN-04: Link references — raw dict (backward compat)
     linked_to_raw: list[dict] = field(default_factory=list)

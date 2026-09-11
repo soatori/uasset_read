@@ -51,7 +51,7 @@ class EX_Let(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Let:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
-        prop = FKismetPropertyPointer.from_archive(archive, name_map)
+        prop = FKismetPropertyPointer.from_archive(archive)
         var = archive.read_expression()
         assign = archive.read_expression()
         return cls(Property=prop, Variable=var, Assignment=assign)
@@ -85,7 +85,7 @@ class EX_LetValueOnPersistentFrame(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_LetValueOnPersistentFrame:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
-        prop = FKismetPropertyPointer.from_archive(archive, name_map)
+        prop = FKismetPropertyPointer.from_archive(archive)
         expr = archive.read_expression()
         return cls(DestinationProperty=prop, AssignmentExpression=expr)
 

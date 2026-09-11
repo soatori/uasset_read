@@ -25,7 +25,7 @@ class EX_Context(KismetExpression):
 
         obj = archive.read_expression()
         offset = archive.read_u32()
-        rvalue = FKismetPropertyPointer.from_archive(archive, name_map)
+        rvalue = FKismetPropertyPointer.from_archive(archive)
         ctx = archive.read_expression()
         return cls(ObjectExpression=obj, Offset=offset, RValuePointer=rvalue, ContextExpression=ctx)
 
@@ -58,6 +58,6 @@ class EX_StructMemberContext(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_StructMemberContext:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
-        prop = FKismetPropertyPointer.from_archive(archive, name_map)
+        prop = FKismetPropertyPointer.from_archive(archive)
         expr = archive.read_expression()
         return cls(Property=prop, StructExpression=expr)

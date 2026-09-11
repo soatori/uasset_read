@@ -156,19 +156,6 @@ UE4_CHANGED_CHUNKID_TO_BE_AN_ARRAY_OF_CHUNKIDS = 326
 UE4_ENGINE_VERSION_OBJECT = 335
 UE4_ADDED_COMPATIBLE_WITH_ENGINE_VERSION = 443
 
-# ============================================================================
-# EnhancedInput TriggerEvent pin mapping
-# ============================================================================
-
-ETRIGGER_EVENT_PIN_MAP = {
-    "Started": "Started",
-    "Triggered": "Triggered",
-    "Completed": "Completed",
-    "Exited": "Exited",
-}
-
-# =============================================================================
-
 FIXED_UNVERSIONED_SIZES: dict[str, int] = {
     "BoolProperty": 1,  # PropertyBool.cpp SerializeItem: unversioned bool is one uint8
     "IntProperty": 4,

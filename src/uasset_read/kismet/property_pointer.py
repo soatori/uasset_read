@@ -50,10 +50,12 @@ class FKismetPropertyPointer:
     path: FFieldPath | None = field(default=None)
 
     @classmethod
-    def from_archive(cls, archive: FArchive, name_map: list[str]) -> FKismetPropertyPointer:
-        """Deserialize FKismetPropertyPointer from FArchive."""
-        # Persistent Kismet Script serialization routes FProperty* through
-        # FPropertyProxyArchive, which writes an FFieldPath directly.
+    def from_archive(cls, archive: FArchive) -> FKismetPropertyPointer:
+        """Deserialize FKismetPropertyPointer from FArchive.
+
+        Persistent Kismet Script serialization routes FProperty* through
+        FPropertyProxyArchive, which writes an FFieldPath directly.
+        """
         return cls(bNew=True, path=archive.xfer_field_pointer())  # type: ignore[reportAttributeAccessIssue]
 
     def to_dict(self) -> dict:

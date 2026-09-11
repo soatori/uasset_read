@@ -143,7 +143,6 @@ def read_k2node_event(
         "b_internal_event": b_internal_event if b_internal_event is not None else False,
         "custom_function_name": custom_function_name or "",
         "function_flags": function_flags if function_flags is not None else 0,
-        "is_event": True,
     }
 
 
@@ -169,30 +168,24 @@ def read_edgraph_node_comment(raw_properties: dict[str, Any] | None = None) -> d
     }
 
 
+# EnhancedInput ETriggerEvent pin names (identity: pin name == enum string).
+TRIGGER_EVENT_NAMES = frozenset({"Started", "Triggered", "Completed", "Exited"})
+
+
 def _build_trigger_events_from_pins(pins: list["UEdGraphPin"]) -> dict[str, str]:
-    """Extract trigger_events mapping from EnhancedInputAction node pins.
-
-    Iterates exec-direction output pins and maps pin names to
-    ETriggerEvent enum string values via ETRIGGER_EVENT_PIN_MAP.
-    """
-    from uasset_read.constants import ETRIGGER_EVENT_PIN_MAP
-
+    """Map EnhancedInputAction trigger pin names onto themselves (ETriggerEvent strings)."""
     trigger_events = {}
     for pin in pins:
-        pin_category = getattr(pin.pin_type, "pin_category", "") if pin.pin_type else ""
-        direction = getattr(pin, "direction", None)
-        pin_name = getattr(pin, "pin_name", "")
-
-        # Check if this is an output exec pin or if pin_category matches trigger events
-        is_exec_output = pin_category == "exec" and direction == 1
-        is_trigger_pin = pin_name in ETRIGGER_EVENT_PIN_MAP
-        is_trigger_category = pin_category in ETRIGGER_EVENT_PIN_MAP
-
-        if is_exec_output or is_trigger_pin or is_trigger_category:
-            # Use pin_name if available and valid, otherwise use pin_category
-            trigger_name = pin_name if pin_name and pin_name in ETRIGGER_EVENT_PIN_MAP else pin_category
-            if trigger_name in ETRIGGER_EVENT_PIN_MAP:
-                trigger_events[trigger_name] = ETRIGGER_EVENT_PIN_MAP[trigger_name]
+        pin_type = pin.pin_type
+        pin_category = pin_type.pin_category if pin_type else ""
+        pin_name = pin.pin_name or ""
+        is_exec_output = pin_category == "exec" and pin.direction == 1
+        name = pin_name if pin_name in TRIGGER_EVENT_NAMES else (
+            pin_category if pin_category in TRIGGER_EVENT_NAMES else None
+        )
+        if is_exec_output or name is not None:
+            if name is not None:
+                trigger_events[name] = name
     return trigger_events
 
 

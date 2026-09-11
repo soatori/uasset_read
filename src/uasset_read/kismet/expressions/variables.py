@@ -25,7 +25,7 @@ class EX_VariableBase(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_VariableBase:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
-        var = FKismetPropertyPointer.from_archive(archive, name_map)
+        var = FKismetPropertyPointer.from_archive(archive)
         return cls(Variable=var)
 
 
