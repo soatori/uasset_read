@@ -292,6 +292,47 @@ def test_node_name_is_not_graph_name_for_multi_node_graphs():
             assert any(n.get("name") != g.get("name") for n in nodes)
 
 
+def test_call_function_raw_properties_reach_node_data():
+    """CallFunction nodes surface allow-listed tag-derived node_data."""
+    from uasset_read import parse_package_document
+    from uasset_read.projection import project_document
+
+    doc = parse_package_document(
+        SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True
+    )
+    page = project_document(doc, depth="decode", max_bytes=2_000_000)
+    nodes = [
+        n
+        for o in page.get("objects") or []
+        for g in (o.get("semantic") or {}).get("graphs") or []
+        for n in g.get("nodes") or []
+        if "CallFunction" in (n.get("type") or "")
+    ]
+    assert nodes
+    hits = [n for n in nodes if n.get("node_data")]
+    assert hits, "CallFunction nodes must surface tag-derived node_data"
+    # node_data stays within the allow-listed surface (no private bookkeeping).
+    for n in hits:
+        for key in n["node_data"]:
+            assert not key.startswith("_"), key
+            assert key in {
+                "FunctionReference",
+                "EventReference",
+                "MemberName",
+                "MemberParent",
+                "VariableReference",
+                "SelfContextInfo",
+                "FunctionName",
+                "CustomFunctionName",
+                "subgraph_references",
+                "bDefaultsToPure",
+                "bDefaultsToPureFunc",
+                "InputActionShortName",
+                "OperationName",
+                "TimelineName",
+            }, key
+
+
 def test_project_document_decode_max_bytes_keeps_k0_functions():
     """K3: decode + max_bytes still yields K0 function fields when the page fits."""
     from uasset_read.projection import project_document

@@ -162,6 +162,14 @@ def create_node_from_archive(
     # Prefix match: AnimGraphNode types (cannot exhaustively enumerate)
     if class_name.startswith("AnimGraphNode_") or class_name.startswith("AnimState"):
         base_node.node_data = _handle_full_context(ctx)
+    elif raw_properties:
+        # Tag-derived allow-list projection only (Wave A removed K2Node binary
+        # readers). Surviving primitive tags land on node_data for decode.
+        from uasset_read.serializers.blueprint_graph import _project_node_data
+
+        projected = _project_node_data(raw_properties)
+        if projected is not None:
+            base_node.node_data = projected
 
     return base_node
 

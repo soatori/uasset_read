@@ -33,6 +33,29 @@ MAX_GRAPHS_PER_PACKAGE = 512
 MAX_NODES_PER_GRAPH_OUTPUT = 512
 MAX_PINS_PER_NODE_OUTPUT = 64
 
+# Allow-list of tag-derived node_data keys emitted onto decode nodes.
+# Wave A removed K2Node / FMemberReference binary readers; these keys are the
+# surviving primitive projections of raw script-serial tags (and Anim
+# subgraph_references). Private bookkeeping (leading "_") is never emitted.
+_NODE_DATA_ALLOW = frozenset(
+    {
+        "FunctionReference",
+        "EventReference",
+        "MemberName",
+        "MemberParent",
+        "VariableReference",
+        "SelfContextInfo",
+        "FunctionName",
+        "CustomFunctionName",
+        "subgraph_references",
+        "bDefaultsToPure",
+        "bDefaultsToPureFunc",
+        "InputActionShortName",
+        "OperationName",
+        "TimelineName",
+    }
+)
+
 
 def _validate_graph_export_offset(export, archive_size: int) -> bool:
     """Validate whether a graph export's serialization offset is within valid range.
@@ -157,25 +180,49 @@ def _error_graph(export_idx: int, class_name: str, reason: str) -> dict[str, Any
     }
 
 
-def _anim_node_data(node: Any) -> dict[str, Any] | None:
-    """Compact Anim node_data onto the projection: package_index ints only.
+def _project_node_data(node_data: Any) -> dict[str, Any] | None:
+    """Project allow-listed tag-derived keys onto the decode node dict.
 
-    ``UEdGraphNode.node_data`` for AnimGraphNode_/AnimState* types is a dict
-    produced by the tag-derived full-context reader. Keep only the small
-    ``subgraph_references`` map (key -> package_index) so the decode output
-    stays JSON-safe and bounded; richer Anim payload fields stay reader-side.
+    Never invents binary readers: only primitives (and nested primitive maps)
+    already present on ``UEdGraphNode.node_data`` survive. ``None`` means
+    nothing projectable — omit the key.
     """
-    nd = getattr(node, "node_data", None)
-    if not isinstance(nd, dict):
+    if not isinstance(node_data, dict):
         return None
-    refs = nd.get("subgraph_references")
-    if not refs or not isinstance(refs, dict):
-        return None
-    compact: dict[str, Any] = {}
-    for key, info in refs.items():
-        if isinstance(info, dict) and isinstance(info.get("package_index"), int):
-            compact[str(key)] = info["package_index"]
-    return {"subgraph_references": compact} if compact else None
+    out: dict[str, Any] = {}
+    for key, value in node_data.items():
+        if not isinstance(key, str) or key.startswith("_"):
+            continue  # never emit private bookkeeping
+        if key not in _NODE_DATA_ALLOW:
+            continue
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            out[key] = value
+        elif key == "subgraph_references" and isinstance(value, dict):
+            # Anim subgraph_references: {name: {package_index, object_name, ...}}
+            compact: dict[str, Any] = {}
+            for ref_key, info in value.items():
+                if isinstance(info, dict):
+                    prims = {
+                        k: v
+                        for k, v in info.items()
+                        if isinstance(v, (str, int, float, bool, type(None)))
+                    }
+                    if prims:
+                        compact[str(ref_key)] = prims
+            if compact:
+                out[key] = compact
+        elif isinstance(value, dict):
+            prims = {
+                k: v for k, v in value.items() if isinstance(v, (str, int, float, bool, type(None)))
+            }
+            if prims:
+                out[key] = prims
+    return out or None
+
+
+def _anim_node_data(node: Any) -> dict[str, Any] | None:
+    """Project node.node_data (Anim full-context or tag-derived allow-list)."""
+    return _project_node_data(getattr(node, "node_data", None))
 
 
 def _convert_nodes(graph: Any, nodes: list[dict[str, Any]], pin_count: int, node_limit: int) -> tuple[int, bool, bool]:
