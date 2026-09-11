@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 # These classes have serialization data not fully compatible with the generic property parser.
 SKIP_CLASS_PREFIXES = (
     # P0: Builder / Brush
-    "CubeBuilder",
     "GeomModifier_",
     "BrushBuilder",
     # P0: Animation -- migrated to opaque whitelist (#166)
@@ -52,28 +51,10 @@ def should_skip_export_for_tolerant_parsing(
     export: "ObjectExport",
     class_name: str | None = None,
 ) -> bool:
-    """Determine whether tolerant skip should be used for an export (no property parsing attempted).
-
-    Check order:
-    1. Whether export.object_name starts with SKIP_CLASS_PREFIXES
-    2. Whether class_name starts with SKIP_CLASS_PREFIXES
-
-    Args:
-        export: ObjectExport instance
-        class_name: Optional class name (resolved from class_index)
-
-    Returns:
-        True if property parsing should be skipped, keeping only export metadata
-    """
-    # #521: CubeBuilder is allowlisted; remaining prefixes skip
-    if class_name == "CubeBuilder":
-        return False
-    object_name = str(export.object_name)
-    if object_name.startswith(SKIP_CLASS_PREFIXES):
-        return True
-    if (class_name or "").startswith(SKIP_CLASS_PREFIXES):
-        return True
-    return False
+    """True when the export should bypass the generic property parser."""
+    return str(export.object_name).startswith(SKIP_CLASS_PREFIXES) or (
+        class_name or ""
+    ).startswith(SKIP_CLASS_PREFIXES)
 
 
 def skip_export_payload(
