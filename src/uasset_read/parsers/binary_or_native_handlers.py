@@ -49,10 +49,7 @@ def _parse_instanced_struct(
 
             # Remaining data is struct content
             remaining_size = tag.size - 4
-            if remaining_size > 0:
-                struct_data = archive.read(remaining_size)
-            else:
-                struct_data = b""
+            struct_data = archive.read(remaining_size) if remaining_size > 0 else b""
 
             return {
                 "kind": "instanced_struct",

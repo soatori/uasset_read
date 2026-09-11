@@ -667,10 +667,7 @@ def _handle_unversioned_properties(
 
     # Unversioned package with no reliable mapping -> output opaque block, do not guess fields
     opaque_size = property_end - archive.tell()
-    if opaque_size > 0:
-        raw_bytes = archive.read(opaque_size)
-    else:
-        raw_bytes = b""
+    raw_bytes = archive.read(opaque_size) if opaque_size > 0 else b""
     logger.debug(
         "Unversioned export '%s' without mappings, returning opaque block (%d bytes)",
         export.object_name,
@@ -1176,10 +1173,7 @@ def _parse_unversioned_properties_from_mapping(
         # #276: Safely read tail, prevent property_end from exceeding actual archive size
         current_pos = archive.tell()
         file_size = getattr(archive, "_file_size", None)
-        if isinstance(file_size, int):
-            tail_size = max(0, min(remaining, file_size - current_pos))
-        else:
-            tail_size = remaining
+        tail_size = max(0, min(remaining, file_size - current_pos)) if isinstance(file_size, int) else remaining
         tail = archive.read(tail_size) if tail_size > 0 else b""
         if tail:
             out.append(

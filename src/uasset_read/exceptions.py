@@ -14,13 +14,9 @@ Extracted from uasset_read.py (per D-13).
 class UAssetError(Exception):
     """uasset parsing error base class"""
 
-    pass
-
 
 class VersionError(UAssetError):
     """Unsupported version error"""
-
-    pass
 
 
 class ParseError(UAssetError):
@@ -29,5 +25,3 @@ class ParseError(UAssetError):
 
 class ExportBoundsExceeded(ParseError):
     """Raised when a read or seek would exceed the current export bound."""
-
-    pass

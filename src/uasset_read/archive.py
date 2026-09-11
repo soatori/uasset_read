@@ -237,9 +237,7 @@ class FArchive:
         """
         current = self.tell()
         remaining = self._file_size - current
-        if remaining < expected_bytes:
-            return False
-        return True
+        return remaining >= expected_bytes
 
     def _record_structured_diagnostic(
         self,
@@ -564,11 +562,8 @@ class FArchive:
 
         if 0 <= index < len(name_map):
             base_name = name_map[index]
-            if number > 0:
-                # NAME_INTERNAL_TO_EXTERNAL: on-disk Number is internal; display is Number-1 (LinkerLoad.h).
-                result = f"{base_name}_{number - 1}"
-            else:
-                result = base_name
+            # NAME_INTERNAL_TO_EXTERNAL: on-disk Number is internal; display is Number-1 (LinkerLoad.h).
+            result = f"{base_name}_{number - 1}" if number > 0 else base_name
         else:
             # Keep "None" return value (PropertyTag terminator depends on it)
             # Deduplication: same out-of-bounds index only logged once (#411)

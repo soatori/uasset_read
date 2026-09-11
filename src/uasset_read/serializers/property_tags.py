@@ -307,12 +307,7 @@ def _read_property_tag_legacy(
             # BoolVal: uint8 — serialized as 1 byte in binary format
             # Reference: PropertyTag.cpp:271-281 (Slot << SA_ATTRIBUTE(TEXT("BoolVal"), Tag.BoolVal))
             tag.bool_val = archive.read_u8()
-        elif tag.type == "ByteProperty":
-            # EnumName (FName)
-            enum_name = archive.read_name(name_map)
-            if enum_name and enum_name != UE_NONE_SENTINEL:
-                tag.enum_type = enum_name
-        elif tag.type == "EnumProperty":
+        elif tag.type in ("ByteProperty", "EnumProperty"):
             # EnumName (FName)
             enum_name = archive.read_name(name_map)
             if enum_name and enum_name != UE_NONE_SENTINEL:

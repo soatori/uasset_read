@@ -65,9 +65,8 @@ class FKismetArchive(FArchive):
                     # The unknown byte is already consumed from both cursors.
                     self.seek(serialized_start + 1)
                     continue
-                else:
-                    token_name = token.name if token is not None else "<unknown>"
-                    raise ParseError(f"Unknown EExprToken {token_name} (0x{token_byte:02X}) at offset {stmt_index}")
+                token_name = token.name if token is not None else "<unknown>"
+                raise ParseError(f"Unknown EExprToken {token_name} (0x{token_byte:02X}) at offset {stmt_index}")
 
             # Reset consecutive unknown counter on successful token match
             consecutive_unknown = 0
@@ -158,10 +157,7 @@ class FKismetArchive(FArchive):
         resolved_path: list[FFieldPathSegment] = []
         assert self._name_map is not None  # always set in __init__
         for name_idx, name_num in path_segments:
-            if 0 <= name_idx < len(self._name_map):
-                base_name = self._name_map[name_idx]
-            else:
-                base_name = f"Unknown_{name_idx}"
+            base_name = self._name_map[name_idx] if 0 <= name_idx < len(self._name_map) else f"Unknown_{name_idx}"
             resolved_path.append(
                 FFieldPathSegment(
                     name_index=name_idx,
@@ -198,10 +194,7 @@ class FKismetArchive(FArchive):
 
         # Resolve base name
         assert self._name_map is not None  # always set in __init__
-        if 0 <= name_index < len(self._name_map):
-            base_name = self._name_map[name_index]
-        else:
-            base_name = f"Unknown_{name_index}"
+        base_name = self._name_map[name_index] if 0 <= name_index < len(self._name_map) else f"Unknown_{name_index}"
 
         self.bytecode_index = start_bytecode + 12
 

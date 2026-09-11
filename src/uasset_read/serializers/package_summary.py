@@ -314,10 +314,7 @@ def _read_version_and_tag(archive: FArchive) -> tuple[int, int, int, int, int, b
     file_version_ue4 = archive.read_i32()
 
     # FileVersionUE5: only present when legacy_file_version <= -8
-    if legacy_file_version <= -8:
-        file_version_ue5 = archive.read_i32()
-    else:
-        file_version_ue5 = 0
+    file_version_ue5 = archive.read_i32() if legacy_file_version <= -8 else 0
 
     # NOTE: Strict version check is deferred to read_package_summary() after
     # package flags are read. Unversioned packages have file_version_ue5 == 0,
@@ -749,11 +746,8 @@ def read_package_summary(
     else:
         archive.read_i32()  # legacy: single changelist int32 (PackageFileSummary.cpp:411-416)
         saved_by_engine_version = None
-    if gates["compatible"]:
-        compatible_with_engine_version = _read_engine_version(archive)
-    else:
-        # UE load path copies SavedByEngineVersion when the field is absent (:427-438).
-        compatible_with_engine_version = saved_by_engine_version
+    # UE load path copies SavedByEngineVersion when the field is absent (:427-438).
+    compatible_with_engine_version = _read_engine_version(archive) if gates["compatible"] else saved_by_engine_version
 
     # Step 20-22: Compression + PackageSource
     compression_flags, package_source = _read_compression_and_source(archive, budget)

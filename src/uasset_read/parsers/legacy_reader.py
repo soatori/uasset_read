@@ -7,6 +7,7 @@ without going through the v1 pipeline.
 
 from __future__ import annotations
 
+import contextlib
 import struct
 from pathlib import Path
 from typing import Any, Literal, Sequence
@@ -850,10 +851,8 @@ class LegacyPackageReader:
             target_indices = set()
             for oid in object_ids:
                 if oid.startswith("export:"):
-                    try:
+                    with contextlib.suppress(ValueError, IndexError):
                         target_indices.add(int(oid.split(":")[1]))
-                    except (ValueError, IndexError):
-                        pass
 
         extras: dict[str, dict[str, Any]] = {}
 
@@ -1201,7 +1200,6 @@ def _attach_kismet_extras(
         from ..kismet.decompile_bridge import extract_kismet_decompiled
 
         kismet_results = extract_kismet_decompiled(
-            str(archive._path) if hasattr(archive, "_path") else "",
             archive,
             summary,
             name_map,

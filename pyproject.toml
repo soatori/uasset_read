@@ -41,7 +41,6 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["F401", "F821", "F841", "F811", "F541", "B007", "B009", "B023", "E741"]
-ignore = ["E501"]
 
 [tool.setuptools.dynamic]
 version = {attr = "uasset_read.__version__"}

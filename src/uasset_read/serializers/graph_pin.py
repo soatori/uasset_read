@@ -150,12 +150,10 @@ def read_pin_reference(
             owning_node_name = import_map[import_idx].object_name
 
     # pin_guid already normalized above to 32-char lowercase hex (no dashes)
-    result = {
+    return {
         "owning_node": owning_node_name,
         "pin_guid": pin_guid,
     }
-
-    return result
 
 
 def read_pin_array(

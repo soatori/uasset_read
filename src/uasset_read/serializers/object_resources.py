@@ -431,8 +431,7 @@ def resolve_package_index_to_reference(
                 "class_name": imp.class_name,
                 "outer_name": imp.package_name or imp.class_package,
             }
-        else:
-            return None
+        return None
 
     if pkg_idx.is_export:
         idx = pkg_idx.to_export_index()
@@ -452,7 +451,6 @@ def resolve_package_index_to_reference(
                 "class_name": class_name,
                 "outer_name": outer_name,
             }
-        else:
-            return None
+        return None
 
     return None

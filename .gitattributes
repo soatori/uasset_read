@@ -1,9 +1,7 @@
 * text=auto eol=lf
 
 *.uasset binary
-*.uasset diff=uasset-read
 *.umap binary
-*.umap diff=uasset-read
 *.uexp binary
 *.ubulk binary
 *.pak binary

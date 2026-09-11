@@ -415,14 +415,13 @@ def parse_int_property(tag: PropertyTag, archive: FArchive, name_map: list[str] 
 
     if type_name == "Int64Property":
         return archive.read_i64()
-    elif type_name == "Int16Property":
+    if type_name == "Int16Property":
         return archive.read_i16()
-    elif type_name == "Int8Property":
+    if type_name == "Int8Property":
         return archive.read_i8()
-    elif type_name == "ByteProperty":
+    if type_name == "ByteProperty":
         return archive.read_u8()
-    else:  # IntProperty (default)
-        return archive.read_i32()
+    return archive.read_i32()  # IntProperty (default)
 
 
 def parse_uint16_property(tag: PropertyTag, archive: FArchive) -> int:
@@ -486,31 +485,29 @@ def parse_soft_object_property(
                 sub_path=entry.get("sub_path", ""),
                 index=index,
             )
-        else:
-            return SoftObjectPathValue(
-                raw_kind=tag.type,
-                asset_path="",
-                sub_path="",
-                index=index,
-                error=f"SoftObjectPath index {index} out of bounds (list size {len(soft_object_path_list)})",
-            )
-    else:
-        # No summary table (UE5 < 1008): FSoftObjectPath inline. A two-FString layout
-        # never existed in UE (SoftObjectPath.cpp SerializePathWithoutFixup). UE5 >= 1007:
-        # FTopLevelAssetPath = PackageName FName + AssetName FName, then subpath FString.
-        # Older: one FName + subpath FString. The pre-4.19 single-FString form is outside
-        # this project's supported window; such a package hits the tolerant skip, not a
-        # fabricated decode.
-        ue5 = getattr(summary, "file_version_ue5", 0) if summary is not None else 0
-        package_name = ""
-        if ue5 >= UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES:
-            package_name = archive.read_name(name_map)
-        asset_path = archive.read_name(name_map)
-        sub_path = archive.read_fstring()
-        if package_name:
-            # FTopLevelAssetPath renders as "PackageName.AssetPath" in FSoftObjectPath
-            asset_path = f"{package_name}.{asset_path}"
-        return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
+        return SoftObjectPathValue(
+            raw_kind=tag.type,
+            asset_path="",
+            sub_path="",
+            index=index,
+            error=f"SoftObjectPath index {index} out of bounds (list size {len(soft_object_path_list)})",
+        )
+    # No summary table (UE5 < 1008): FSoftObjectPath inline. A two-FString layout
+    # never existed in UE (SoftObjectPath.cpp SerializePathWithoutFixup). UE5 >= 1007:
+    # FTopLevelAssetPath = PackageName FName + AssetName FName, then subpath FString.
+    # Older: one FName + subpath FString. The pre-4.19 single-FString form is outside
+    # this project's supported window; such a package hits the tolerant skip, not a
+    # fabricated decode.
+    ue5 = getattr(summary, "file_version_ue5", 0) if summary is not None else 0
+    package_name = ""
+    if ue5 >= UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES:
+        package_name = archive.read_name(name_map)
+    asset_path = archive.read_name(name_map)
+    sub_path = archive.read_fstring()
+    if package_name:
+        # FTopLevelAssetPath renders as "PackageName.AssetPath" in FSoftObjectPath
+        asset_path = f"{package_name}.{asset_path}"
+    return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
 
 
 # Direct aliases — single-FString types share parse_str_property;

@@ -41,8 +41,7 @@ def inspect_package(
     Default limit=0 gives "package envelope + diagnostics summary" semantics.
     """
     doc = parse_package_document(file_path, depth=depth)
-    projected = project_document(doc, depth=depth, limit=limit, max_bytes=max_bytes)
-    return projected
+    return project_document(doc, depth=depth, limit=limit, max_bytes=max_bytes)
 
 
 def list_objects(
