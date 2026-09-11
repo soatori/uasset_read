@@ -112,7 +112,6 @@ def test_combat_character_kismet_functions():
             "parsed",
             "no_script",
             "failed",
-            "unknown",
         }, f"unexpected bytecode_status: {fn['bytecode_status']}"
         assert "expression_count" in fn
         assert "expression_types" in fn
@@ -198,6 +197,9 @@ def test_kismet_result_status_serializations():
     assert d3["bytecode_status"] == "failed"
     assert d3["error_message"] == "boom"
     assert d3["fallback_reasons"] == ["bytecode extraction error: boom"]
+
+    with pytest.raises(ValueError, match="disallowed bytecode_status"):
+        KismetDecompiledResult(function_name="I", signature="void I()", bytecode_status="unknown")
 
 
 def test_als_animbp_state_machines():

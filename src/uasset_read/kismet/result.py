@@ -8,7 +8,7 @@ C++ pseudocode generation was retired 2026-09-10 (Gate K).
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
-BYTECODE_STATUSES = frozenset({"parsed", "no_script", "failed", "unknown"})
+BYTECODE_STATUSES = frozenset({"parsed", "no_script", "failed"})
 
 
 def _validate_bytecode_status(bytecode_status: str) -> None:
@@ -16,9 +16,7 @@ def _validate_bytecode_status(bytecode_status: str) -> None:
         raise ValueError(f"disallowed bytecode_status: {bytecode_status!r}; allowed: {sorted(BYTECODE_STATUSES)}")
 
 
-def infer_bytecode_confidence(
-    bytecode_status: str = "unknown",
-) -> str:
+def infer_bytecode_confidence(bytecode_status: str) -> str:
     """Classify the confidence of a public function body.
 
     Keep this shared by direct Kismet serialization and the v2 decompile output so
@@ -46,10 +44,10 @@ class KismetDecompiledResult:
 
     function_name: str
     signature: str
+    bytecode_status: str
     local_variables: list[dict[str, str]] = field(default_factory=list)
     expressions: list[Any] = field(default_factory=list)
     bytecode_source: str = "unknown"
-    bytecode_status: str = "unknown"
     parameters: list[dict[str, object]] = field(default_factory=list)
     return_type: str = "void"
     native_signature: bool = False

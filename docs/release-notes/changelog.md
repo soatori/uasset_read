@@ -6,6 +6,7 @@
 - Removed five CLI flags that argparse accepted but no code read: `--log-level`, `--log-cleanup` / `--no-log-cleanup`, `--log-max-bytes`, `--log-backup-count`, `--log-format`. (The then-remaining `--clean-logs` chain was later retired in Gate L below.)
 - Retired parent-asset resolution (Gate G product decision): deleted `parent_resolver.py`, removed `resolve_parents` / `parent_root` from `parse_package_document`, and moved `--include-parent-assets` / `--asset-root` into the CLI retired-flag rejection set (exit 2).
 - Retired C++ pseudocode generation (Gate K): deleted `kismet/translator.py`, `body_builder.py`, and `jump_analyzer.py`. Blueprint `semantic.functions[]` now exposes K0 expression summaries (`expression_count` / `expression_types` / `expressions_truncated`) at `depth=asset`, plus the full expression tree at `depth=decode`. Removed experimental fields `cpp_code`, `translation_status`, and `structured_rate` (no `format_version` bump; semantic is experimental).
+- Tightened the K0 `bytecode_status` vocabulary to `parsed`, `no_script`, or `failed`; internal results can no longer serialize an undocumented `unknown` status.
 - Retired log cleanup (Gate L): deleted `project_logging.py` and CLI `--clean-logs` / `--log-dir` / `--log-keep-latest` / `--log-max-total-mb` (explicit rejection, exit 2). Leftover `log/` directories from older releases are the user's responsibility.
 
 ## [0.5.4.45] — 2026-07-23

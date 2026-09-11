@@ -2,9 +2,9 @@
 
 > **Status**: current（Phase 0/A、Gate G parent_resolver、Gate K、Gate L 及 K3 收尾回归均已完成；agent_tools / iostore / mappings 仍为 keep）  
 > **Date**: 2026-09-10  
-> **Revision**: 2026-09-10 执行完成版 + K3 收尾——补齐 CLI `depth=decode`+`max_bytes` 联合断言与同包 Function 失败不吞兄弟的 bridge 回归，关闭 Gate K 执行记录。  
+> **Revision**: 2026-09-10 执行完成版 + K3/验收收尾——补齐 CLI `depth=decode`+`max_bytes` 联合断言与同包 Function 失败不吞兄弟的 bridge 回归；K0 状态词汇表、Wiki 退役说明和当前体积基线均已复核。
 > **Goal**: 在不暗中改写 package-first 权威架构、不丢失蓝图执行流/数据流可观察性、不削弱结构化失败诊断的前提下做减法。已完成：死 CLI 参数、parent-asset、C++ 文本生成器、日志清理。剩余 Gate G 项保持 keep，除非另有产品决策。  
-> **Execution record**: Phase A `cff2f328`；Gate G parent `b22c5aae`；Gate K `12dcb49c`；Gate L `6a5eeea8`。K3 收尾后 suite **220 passed**；src 74/20602；tests 13/5860；docs 150/45623；wheel 247036。
+> **Execution record**: Phase A `cff2f328`；Gate G parent `b22c5aae`；Gate K `12dcb49c`；Gate L `6a5eeea8`。K3 收尾验证为 **220 passed**；其后继续瘦身，当前 ratchet 见 §2.1。
 
 ---
 
@@ -87,15 +87,15 @@ for prefix in ('src/','tests/','docs/'):
 "
 ```
 
-当前正式基线（**2026-09-10 K3 收尾后**）：
+当前正式基线（**2026-09-10 验收复核后**）：
 
 | 范围 | tracked 文件数 | 物理行数 | `size-baseline.json` |
 | --- | ---: | ---: | ---: |
-| `src/**/*.py` | 74 | **20,602** | 20,602 |
-| `tests/**/*.py` | 13 | **5,860** | 5,860 |
-| `docs/**/*.md` | 150 | **45,624** | 45,624 |
+| `src/**/*.py` | 74 | **20,488** | 20,488 |
+| `tests/**/*.py` | 13 | **5,862** | 5,862 |
+| `docs/**/*.md` | 150 | **45,625** | 45,625 |
 
-`wheel_bytes._measured` = **247,036**。上述数值既是实测值，也是 ratchet ceiling。
+`wheel_bytes._measured` = **224,983**（干净 build tree 实测）；CI ceiling 为 **300,000**，保留 zip 构建差异余量。源码、测试和文档行数使用表中实测值作为精确 ratchet ceiling。
 
 ### 2.2 相关模块物理行数（实施前快照，供审计对照）
 
@@ -127,8 +127,8 @@ for prefix in ('src/','tests/','docs/'):
 - `min_files` 是防止未跟踪子树绕过门禁的 floor，不是“文件越多越好”的目标。
 
 历史审查时曾出现 `test_docs_tree_within_baseline` 的一项失败；Phase 0 已将计划、design
-index 和 docs ratchet 一并纳入。当前 latest 验证为 **220 passed**，正式 tracked 基线为 src
-74 / 20,602 行、tests 13 / 5,860 行、docs 150 / 45,624 行、wheel 247,036 bytes。
+index 和 docs ratchet 一并纳入。K3 收尾验证为 **220 passed**；当前 tracked 基线见 §2.1，
+wheel 干净构建实测为 224,983 bytes，CI ceiling 为 300,000 bytes。
 
 ---
 

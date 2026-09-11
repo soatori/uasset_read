@@ -1068,7 +1068,7 @@ def _project_kismet_functions(kismet: list[dict[str, Any]], *, include_expressio
         entry: dict[str, Any] = {
             "function_name": fn.get("function_name"),
             "signature": fn.get("signature"),
-            "bytecode_status": fn.get("bytecode_status", "unknown"),
+            "bytecode_status": fn["bytecode_status"],
         }
         exprs = fn.get("expressions") or []
         types: list[str] = []
