@@ -40,25 +40,13 @@ from uasset_read.parsers.utils import make_enum_value, extract_inner_from_tag, r
 
 # Expected byte sizes for fixed-layout structs (used for fast-path validation)
 _EXPECTED_STRUCT_SIZES: dict[str, int] = {
-    "Vector": 12,
-    "Rotator": 12,
-    "Vector2D": 8,
-    "Vector4": 16,
     "LinearColor": 16,
     "Color": 4,
-    "Quat": 16,
-    "Plane": 16,
     "Guid": 16,
     "IntPoint": 8,
     "IntVector": 12,
     "Box2D": 20,
-    "Box": 28,
-    "Sphere": 16,
-    "BoxSphereBounds": 28,
-    "Matrix": 64,
-    "TwoVectors": 24,
     "OrientedBox": 60,
-    "Transform": 40,  # FTransform3f: FQuat4f(16) + FVector3f(12) + FVector3f(12)
     # Time/frame types
     "Timespan": 8,  # int64
     "DateTime": 8,  # uint64
@@ -84,20 +72,6 @@ _EXPECTED_STRUCT_SIZES: dict[str, int] = {
     "DeprecateSlateVector2D": 16,  # alias of Vector2D
     "VectorDouble": 24,  # Wuthering Waves alias for Vector3d
     "Int32Point": 8,  # alias of IntPoint
-    # UE5 LWC math types
-    "Vector2f": 8,  # 2 * float32
-    "Vector3f": 12,  # 3 * float32
-    "Vector3d": 24,  # 3 * float64
-    "Vector4f": 16,  # 4 * float32
-    "Vector4d": 32,  # 4 * float64
-    "Rotator3f": 12,  # 3 * float32
-    "Rotator3d": 24,  # 3 * float64
-    "Quat4f": 16,  # 4 * float32
-    "Quat4d": 32,  # 4 * float64
-    "Plane4f": 16,  # 4 * float32
-    "Plane4d": 32,  # 4 * float64
-    "Sphere3f": 16,  # 4 * float32
-    "Sphere3d": 32,  # 4 * float64
     "Box2f": 16,  # 2 * Vector2f(8)
     "Box3f": 24,  # 2 * Vector3f(12)
     "Matrix44f": 64,  # 4 * Plane4f(16)

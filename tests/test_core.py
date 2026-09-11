@@ -2981,6 +2981,24 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     assert cross == main_tail + uexp_head, f"cross-boundary splice failed: {cross!r}"
 
 
+def test_get_struct_size_matches_lwc_tables_for_shadowed_names():
+    """Names present in the LWC tables are served by the LWC branch, never by the
+    _EXPECTED_STRUCT_SIZES fallback. Pins the values the subtraction wave relies on."""
+    from uasset_read.parsers.property_types import get_struct_size
+
+    expected = {
+        "Vector": (12, 24),
+        "Rotator": (12, 24),
+        "Vector2D": (8, 16),
+        "Quat": (16, 32),
+        "Vector3f": (12, 12),
+        "Rotator3f": (12, 12),
+    }
+    for name, (float_size, double_size) in expected.items():
+        assert get_struct_size(name, 0) == float_size, name
+        assert get_struct_size(name, 1005) == double_size, name
+
+
 def test_test_suite_structure_gate():
     import ast
 
@@ -3003,7 +3021,7 @@ def test_test_suite_structure_gate():
     assert subdirs == {"samples", "serialization"}
     tree = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
     funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
-    assert len(funcs) == 13
+    assert len(funcs) == 14
     assert not any(isinstance(n, ast.ClassDef) for n in tree.body)
     # The design bans decorators on test functions; cache helpers like
     # _document legitimately carry @lru_cache, so the check is scoped to
