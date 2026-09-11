@@ -8,8 +8,7 @@ from uasset_read.exceptions import ParseError
 from uasset_read.kismet.tokens import EExprToken
 from uasset_read.kismet.expressions.base import KismetExpression
 from uasset_read.kismet.expressions._map import EXPR_CLASS_MAP
-from uasset_read.kismet.property_pointer import FFieldPath, FFieldPathSegment
-from uasset_read.kismet.value_types import FNameRef
+from uasset_read.kismet.property_pointer import FFieldPath, FFieldPathSegment, FNameRef
 from uasset_read.serializers.package_summary import PackageFileSummary
 from uasset_read.serializers.object_resources import PackageIndex
 

@@ -37,16 +37,6 @@ UE4_STRUCT_GUID_IN_PROPERTY_TAG = 441
 UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 503
 UE4_PROPERTY_TAG_SET_MAP_SUPPORT = 509
 
-# Legacy format: MapProperty only stores key/value type names, not the struct
-# name for struct values.  This registry maps (containing_struct, property_name)
-# to the value struct type, so the tag reader can set value_type_struct.
-# UE source: Engine/Source/Runtime/Engine/Classes/Engine/StaticMesh.h:403
-# FMeshSectionInfoMap::Map is TMap<uint32, FMeshSectionInfo>
-_MAP_VALUE_STRUCT_TYPES: dict[str, dict[str, str]] = {
-    "MeshSectionInfoMap": {"Map": "FMeshSectionInfo"},
-}
-
-
 def _read_property_type_name(
     archive: FArchive,
     name_map: list[str],
@@ -340,12 +330,8 @@ def _read_property_tag_legacy(
             # InnerType (FName) + ValueType (FName) — Reference: PropertyTag.cpp:357-371
             tag.inner_type = archive.read_name(name_map)
             tag.value_type = archive.read_name(name_map)
-            # For legacy format, the value struct name is not serialized in the tag.
-            # Look it up from the containing struct's declaration when available.
-            if tag.value_type == "StructProperty" and struct_name is not None:
-                struct_map = _MAP_VALUE_STRUCT_TYPES.get(struct_name, {})
-                if tag.name in struct_map:
-                    tag.value_type_struct = struct_map[tag.name]
+            if tag.value_type == "StructProperty" and struct_name == "MeshSectionInfoMap" and tag.name == "Map":
+                tag.value_type_struct = "FMeshSectionInfo"
 
     # Pass property type for dynamic threshold (StructProperty passes struct_type)
     # Note: must be after type-specific field reads, when tag.struct_type is already assigned

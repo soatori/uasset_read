@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from uasset_read.archive import ByteArchive
 from uasset_read.constants import PKG_Cooked, PKG_FilterEditorOnly
-from uasset_read.kismet.value_types import FNameRef
+from uasset_read.kismet.property_pointer import FNameRef
 
 if TYPE_CHECKING:
     from uasset_read.serializers.object_resources import ObjectExport, ObjectImport

@@ -18,6 +18,19 @@ if TYPE_CHECKING:
 from uasset_read.serializers.object_resources import PackageIndex
 
 
+@dataclass(frozen=True)
+class FNameRef:
+    """Lossless FName reference: raw index + number + resolved base name.
+
+    Index zero is a legitimate null where UE permits it; nonzero invalid
+    indices produce a structured failure rather than a guessed name.
+    """
+
+    name_index: int
+    number: int
+    base_name: str | None  # None when index is null or out-of-range
+
+
 @dataclass
 class FFieldPathSegment:
     """Single segment in an FFieldPath: FName index + number + resolved name."""
