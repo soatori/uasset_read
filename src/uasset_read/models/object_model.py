@@ -72,11 +72,9 @@ class Relation:
         "depends_on",
         "preload_of",
         "references",
-        "parent_class",  # Cross-package parent class resolution
     ]
     from_id: str  # "export:0" or "import:3"
-    to_id: str  # "export:1", "import:5", or a class name for parent_class relations
-    target_package: str | None = None  # Path to parent package file
+    to_id: str  # "export:1" or "import:5"
 
 
 @dataclass

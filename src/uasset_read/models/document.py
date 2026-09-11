@@ -16,7 +16,6 @@ from .object_model import (
     Relation,
 )
 from ..archive import SourceInfo
-from .payloads import PayloadDescriptor
 
 if TYPE_CHECKING:
     from ..serializers.package_trailer import FPackageTrailer
@@ -55,7 +54,6 @@ class PackageDocument:
     dependencies: list[Dependency] = field(default_factory=list)
     diagnostics: list[Diagnostic] = field(default_factory=list)
     summary: Summary = field(default_factory=Summary)
-    payloads: list[PayloadDescriptor] = field(default_factory=list)
     depth: str = "asset"
     package_trailer: FPackageTrailer | None = None
     data_resource_map: list[FObjectDataResource] | None = None
