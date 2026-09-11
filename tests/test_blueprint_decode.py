@@ -275,6 +275,23 @@ def test_exec_edges_available_for_event_graph():
     assert chains and any(c.get("edges") for c in chains)
 
 
+def test_node_name_is_not_graph_name_for_multi_node_graphs():
+    """Nodes must not all be labeled with their owning graph name."""
+    from uasset_read import parse_package_document
+    from uasset_read.projection import project_document
+
+    doc = parse_package_document(
+        SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True
+    )
+    page = project_document(doc, depth="decode", max_bytes=2_000_000)
+    for o in page.get("objects") or []:
+        for g in (o.get("semantic") or {}).get("graphs") or []:
+            nodes = g.get("nodes") or []
+            if len(nodes) <= 1:
+                continue
+            assert any(n.get("name") != g.get("name") for n in nodes)
+
+
 def test_project_document_decode_max_bytes_keeps_k0_functions():
     """K3: decode + max_bytes still yields K0 function fields when the page fits."""
     from uasset_read.projection import project_document

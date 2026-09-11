@@ -205,10 +205,15 @@ def _convert_nodes(graph: Any, nodes: list[dict[str, Any]], pin_count: int, node
                 }
             )
         pin_count += len(pins)
+        short_id = f"export:{node._export_index - 1}" if getattr(node, "_export_index", 0) else ""
+        class_name = str(node.class_name or "")
+        # Display name: export object names were removed from the reader path
+        # (Wave A); use class_name + short id instead of the graph name.
+        display_name = f"{class_name}:{short_id}" if class_name and short_id else (class_name or short_id)
         node_dict: dict[str, Any] = {
-            "id": f"export:{node._export_index - 1}" if getattr(node, "_export_index", 0) else "",
-            "type": str(node.class_name or ""),
-            "name": str(graph.graph_name or ""),
+            "id": short_id,
+            "type": class_name,
+            "name": display_name,
             "position": {
                 "x": int(node.node_pos_x or 0),
                 "y": int(node.node_pos_y or 0),
