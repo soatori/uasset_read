@@ -14,6 +14,7 @@ from typing import Any, Protocol
 from ...constants import format_guid_bytes
 from ...models.diagnostics import Diagnostic, make_diagnostic
 from ...models.object_model import ObjectRecord, CoverageEntry
+from ...serializers.blueprint_graph import summarize_exec_edges
 from ...versioning import VersionContext
 
 
@@ -939,6 +940,11 @@ class BlueprintFamilyHandler:
                 # Build state_machines list for AnimBlueprint family
                 if self._kind == "anim_blueprint":
                     result["state_machines"] = self._extract_state_machines(graphs)
+
+                # Experimental exec-pin edge chains (category=exec + linked).
+                exec_chains = summarize_exec_edges(graphs)
+                if exec_chains:
+                    result["exec_chains"] = exec_chains
 
                 detail = f"{len(graphs)} graphs, {sum(g['node_count'] for g in graphs)} nodes"
                 if truncated:

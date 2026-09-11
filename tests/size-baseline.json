@@ -1,12 +1,12 @@
 {
-  "_note": "Ratchet ceilings for tests/test_size_baseline.py and the CI package-smoke wheel check; raise only as a deliberate reviewable diff, tighten after deletion waves. Tightened 2026-09-12 after subtraction wave task 7 (folded property arg table into handler map; dropped soft-class forwarder) and task 13 (test-tree dedup: manifest dead keys, fixture boilerplate, duplicate serialization tests). Tightened 2026-09-12 after subtraction wave task 9: deleted unreachable UE5.7 soft-object-path index branch. Tightened 2026-09-12 after subtraction wave task 16 (decode kismet regression tests; intentional output change). Raised 2026-09-12 after productize Wave B P1: compact node_data.subgraph_references projection in blueprint_graph (+23 src) and state_count-from-subgraph_references test (+22 tests).",
+  "_note": "Ratchet ceilings for tests/test_size_baseline.py and the CI package-smoke wheel check; raise only as a deliberate reviewable diff, tighten after deletion waves. Tightened 2026-09-12 after subtraction wave task 7 (folded property arg table into handler map; dropped soft-class forwarder) and task 13 (test-tree dedup: manifest dead keys, fixture boilerplate, duplicate serialization tests). Tightened 2026-09-12 after subtraction wave task 9: deleted unreachable UE5.7 soft-object-path index branch. Tightened 2026-09-12 after subtraction wave task 16 (decode kismet regression tests; intentional output change). Raised 2026-09-12 after productize Wave B P1 (state_count from subgraph_references) and P2 (exec_chains) plus the unversioned-usmap fix landing on the same branch.",
   "src_python": {
     "min_files": 72,
-    "max_lines": 18973
+    "max_lines": 19240
   },
   "tests_python": {
     "min_files": 13,
-    "max_lines": 5720
+    "max_lines": 5794
   },
   "docs_markdown": {
     "min_files": 151,

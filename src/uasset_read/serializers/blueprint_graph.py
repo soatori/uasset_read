@@ -326,3 +326,30 @@ def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:
                     if pin["id"] == rec["from_pin"]:
                         pin["linked"].append({"to_node": target[0], "to_pin": target[1]})
         graph["edge_count"] = edge_count
+
+
+def summarize_exec_edges(graphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Summarize exec-pin (category=exec) edges per graph.
+
+    Consumes the five-key pin projection (category + linked already resolved
+    by ``resolve_pin_links``). Graphs with no exec edges are omitted.
+    """
+    out: list[dict[str, Any]] = []
+    for graph in graphs:
+        edges: list[dict[str, Any]] = []
+        for node in graph.get("nodes") or []:
+            for pin in node.get("pins") or []:
+                if (pin.get("category") or "") != "exec":
+                    continue
+                for link in pin.get("linked") or []:
+                    edges.append(
+                        {
+                            "from_node": node.get("id"),
+                            "from_pin": pin.get("name"),
+                            "to_node": link.get("to_node"),
+                            "to_pin": link.get("to_pin"),
+                        }
+                    )
+        if edges:
+            out.append({"graph": graph.get("name"), "edges": edges})
+    return out
