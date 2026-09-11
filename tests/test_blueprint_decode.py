@@ -238,6 +238,28 @@ def test_als_animbp_state_machines():
     assert len(state_machines) == 17, f"expected 17 state machines, got {len(state_machines)}"
 
 
+def test_state_machine_state_count_not_node_count():
+    """state_count comes from node_data.subgraph_references, never node_count."""
+    from uasset_read import parse_package_document
+    from uasset_read.projection import project_document
+
+    doc = parse_package_document(
+        SAMPLES / "ALS_AnimBP.uasset",
+        depth="decode",
+        object_ids=["export:274"],
+        tolerant=True,
+    )
+    page = project_document(doc, depth="decode", max_bytes=4_000_000)
+    machines = []
+    for o in page.get("objects") or []:
+        machines.extend((o.get("semantic") or {}).get("state_machines") or [])
+    assert machines
+    for sm in machines:
+        assert sm["state_count"] <= sm["node_count"]
+        if sm["node_count"] > 20:
+            assert sm["state_count"] < sm["node_count"], sm
+
+
 def test_project_document_decode_max_bytes_keeps_k0_functions():
     """K3: decode + max_bytes still yields K0 function fields when the page fits."""
     from uasset_read.projection import project_document

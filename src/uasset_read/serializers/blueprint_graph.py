@@ -157,6 +157,27 @@ def _error_graph(export_idx: int, class_name: str, reason: str) -> dict[str, Any
     }
 
 
+def _anim_node_data(node: Any) -> dict[str, Any] | None:
+    """Compact Anim node_data onto the projection: package_index ints only.
+
+    ``UEdGraphNode.node_data`` for AnimGraphNode_/AnimState* types is a dict
+    produced by the tag-derived full-context reader. Keep only the small
+    ``subgraph_references`` map (key -> package_index) so the decode output
+    stays JSON-safe and bounded; richer Anim payload fields stay reader-side.
+    """
+    nd = getattr(node, "node_data", None)
+    if not isinstance(nd, dict):
+        return None
+    refs = nd.get("subgraph_references")
+    if not refs or not isinstance(refs, dict):
+        return None
+    compact: dict[str, Any] = {}
+    for key, info in refs.items():
+        if isinstance(info, dict) and isinstance(info.get("package_index"), int):
+            compact[str(key)] = info["package_index"]
+    return {"subgraph_references": compact} if compact else None
+
+
 def _convert_nodes(graph: Any, nodes: list[dict[str, Any]], pin_count: int, node_limit: int) -> tuple[int, bool, bool]:
     """Convert nodes from a UEdGraph into dicts, appending to *nodes*.
 
@@ -184,18 +205,20 @@ def _convert_nodes(graph: Any, nodes: list[dict[str, Any]], pin_count: int, node
                 }
             )
         pin_count += len(pins)
-        nodes.append(
-            {
-                "id": f"export:{node._export_index - 1}" if getattr(node, "_export_index", 0) else "",
-                "type": str(node.class_name or ""),
-                "name": str(graph.graph_name or ""),
-                "position": {
-                    "x": int(node.node_pos_x or 0),
-                    "y": int(node.node_pos_y or 0),
-                },
-                "pins": pins,
-            }
-        )
+        node_dict: dict[str, Any] = {
+            "id": f"export:{node._export_index - 1}" if getattr(node, "_export_index", 0) else "",
+            "type": str(node.class_name or ""),
+            "name": str(graph.graph_name or ""),
+            "position": {
+                "x": int(node.node_pos_x or 0),
+                "y": int(node.node_pos_y or 0),
+            },
+            "pins": pins,
+        }
+        anim_data = _anim_node_data(node)
+        if anim_data is not None:
+            node_dict["node_data"] = anim_data
+        nodes.append(node_dict)
     return pin_count, node_truncated, pin_truncated
 
 

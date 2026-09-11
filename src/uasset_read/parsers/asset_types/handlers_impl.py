@@ -1023,19 +1023,23 @@ class BlueprintFamilyHandler:
 
         State machines are identified by graph kind == "state_machine".
         state_count = number of nodes that represent distinct states
-        (nodes carrying at least one subgraph reference);
-        node_count = total node count in the graph.
+        (nodes carrying node_data.subgraph_references); never falls back
+        to node_count. node_count = total node count in the graph.
         """
         state_machines: list[dict[str, Any]] = []
         for graph in graphs:
             if graph.get("kind") == "state_machine" and graph.get("node_count", 0) > 1:
                 nodes = graph.get("nodes", [])
-                states = sum(1 for n in nodes if n.get("subgraph_references"))
+                states = sum(
+                    1
+                    for n in nodes
+                    if (n.get("node_data") or {}).get("subgraph_references")
+                )
                 state_machines.append(
                     {
                         "name": graph["name"],
                         "kind": "state_machine",
-                        "state_count": states if states else graph.get("node_count", 0),
+                        "state_count": states,
                         "node_count": graph.get("node_count", 0),
                     }
                 )
