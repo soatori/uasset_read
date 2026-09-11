@@ -178,21 +178,17 @@ K2Node 是 UE 蓝图图系统中的节点基类（`UK2Node : UEdGraphNode`）。
 
 ## 解析器分派机制
 
-解析器通过 `class_name` 字段分派到特定的反序列化函数：
+解析器通过 `class_name` 字段分派（`serializers/graph_node.py::create_node_from_archive`）：
 
 ```
-graph.py → read_node_data()
-  ├─ "K2Node_CallFunction"      → read_k2node_call_function()
-  ├─ "K2Node_Event"             → read_k2node_event()
-  ├─ "K2Node_Knot"              → read_k2node_knot()
-  ├─ "K2Node_FunctionEntry"     → read_k2node_functionentry()
-  ├─ "K2Node_EnhancedInputAction" → read_k2node_enhanced_input()
-  ├─ "K2Node_Message"           → read_k2node_message()
-  ├─ "K2Node_CallDelegate"      → read_k2node_call_delegate()
-  ├─ "K2Node_CallArrayFunction" → read_k2node_call_array_function()
-  ├─ "K2Node_MacroInstance"     → read_k2node_macro_instance()
-  └─ 其他 K2Node               → 通用 UEdGraphNode 反序列化
+graph_node.py → create_node_from_archive()
+  ├─ "AnimGraphNode_*" / "AnimState*" → _handle_full_context()（子图引用与动画节点数据）
+  └─ 其他节点类型                    → 不生成 node_data（script_serial 属性与 Pins 仍按序读取）
 ```
+
+节点级 PropertyTag 细节（NodeGuid / NodePosX / NodeComment 等）由
+`_NODE_SIMPLE_TAGS` 与 `_NODE_TAG_HANDLERS` 表驱动解析，写入 serial 字典与
+`raw_properties`，不再有按节点类名的二进制尾部分派链。
 
 ---
 
@@ -213,6 +209,9 @@ graph.py → read_node_data()
 ---
 
 ## 关键节点语义详解
+
+> **状态(2026-09-12):** K2Node 体读取链已按减法波次删除——这些语义字段在 v2 投影层从未被输出。
+> 若需要它们,应在投影层(`serializers/blueprint_graph.py`)重新设计,而不是恢复读者。
 
 ### K2Node_CallFunction
 

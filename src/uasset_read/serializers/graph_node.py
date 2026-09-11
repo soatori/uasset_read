@@ -20,12 +20,11 @@ from uasset_read.constants import (
 )
 from uasset_read.exceptions import ParseError
 from uasset_read.serializers.object_resources import PackageIndex
-from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
-from uasset_read.models.core import UEdGraphNode, UEdGraphPin, FMemberReference
+from uasset_read.serializers.property_tags import read_property_tag
+from uasset_read.models.core import UEdGraphNode, UEdGraphPin
 from uasset_read.serializers.object_resources import resolve_class_name
 
 from uasset_read.serializers.graph_helpers import (
-    _read_guid,
     _read_tag_bool,
     _read_tag_i32,
     _read_tag_fname,
@@ -36,303 +35,15 @@ from uasset_read.serializers.graph_pin import read_ue_graph_pin
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# FMemberReference reading
-# ============================================================================
-
-
-def read_fmember_reference(
-    archive: FArchive,
-    name_map: list[str],
-    import_map: list[ObjectImport],
-    export_map: list[ObjectExport],
-) -> FMemberReference:
-    """Read FMemberReference (MemberReference.h L74-95)."""
-    member_parent_index = archive.read_i32()
-    member_parent: str | None = None
-    if member_parent_index != 0:
-        member_parent = resolve_class_name(PackageIndex(member_parent_index), import_map, export_map)
-
-    _member_scope = archive.read_fstring()  # noqa: F841 - protocol read
-    member_name = archive.read_name(name_map)
-    member_guid = _read_guid(archive, uppercase=False)
-    b_self_context = archive.read_bool()
-    _b_was_deprecated = archive.read_bool()
-
-    return FMemberReference(
-        member_parent=member_parent,
-        member_name=member_name,
-        member_guid=member_guid,
-        b_self_context=b_self_context,
-    )
-
-
-# ============================================================================
 # 5 Node type readers
 # ============================================================================
-
-
-def read_k2node_call_function(
-    archive: FArchive,
-    name_map: list[str],
-    import_map: list[ObjectImport],
-    export_map: list[ObjectExport],
-    function_reference: FMemberReference | None = None,
-    b_defaults_to_pure: bool | None = None,
-) -> dict[str, Any]:
-    """Read K2Node_CallFunction specific fields, return dict (as node_data).
-
-    If function_reference was already parsed at the PropertyTag layer (script_serial), use it directly;
-    otherwise read FMemberReference from the archive's current position.
-
-    Reference: UE C++ FK2Node_CallFunction::Serialize() implementation.
-
-    b_defaults_to_pure is a UPROPERTY uint32 bitfield reaching the tagged layer
-    (K2Node_CallFunction.cpp Serialize = Super + fixup only); it is never a
-    binary tail after Pins — absent-tag nodes expose None.
-    """
-    # D-11: PropertyTag layer already correctly parsed FunctionReference, use it preferentially
-    if function_reference is None:
-        function_reference = read_fmember_reference(archive, name_map, import_map, export_map)
-
-    return {
-        "function_reference": function_reference,
-        "b_defaults_to_pure": b_defaults_to_pure,
-    }
-
-
-def read_k2node_event(
-    archive: FArchive,
-    name_map: list[str],
-    import_map: list[ObjectImport],
-    export_map: list[ObjectExport],
-    event_reference: FMemberReference | None = None,
-    b_override_function: bool | None = None,
-    b_internal_event: bool | None = None,
-    custom_function_name: str | None = None,
-    function_flags: int | None = None,
-) -> dict[str, Any]:
-    """Read K2Node_Event specific fields, return dict (as node_data).
-
-    If event_reference, b_override_function, etc. were already parsed at the PropertyTag layer
-    (script_serial), use them directly; fallback reads must be protected by
-    script_serial_size / field trace verification.
-
-    Return fields:
-    - event_reference: FMemberReference
-    - b_override_function: bool
-    - b_internal_event: bool (new)
-    - custom_function_name: str (new)
-    - function_flags: int (new)
-
-    Reference: UE C++ FK2Node_Event::Serialize() implementation.
-    """
-    # D-11: PropertyTag layer already correctly parsed EventReference, use it preferentially
-    if event_reference is None:
-        event_reference = read_fmember_reference(archive, name_map, import_map, export_map)
-
-    # b_override_function uses PropertyTag value preferentially, no blind read
-    if b_override_function is None:
-        # K2Node_Event.cpp has no binary tail for this (tagged UPROPERTY only); do not
-        # blind-read past Pins — report as not provided instead of garbage.
-        logger.debug("K2Node_Event b_override_function absent from tagged layer")
-        b_override_function = False
-
-    return {
-        "event_reference": event_reference,
-        "b_override_function": b_override_function,
-        "b_internal_event": b_internal_event if b_internal_event is not None else False,
-        "custom_function_name": custom_function_name or "",
-        "function_flags": function_flags if function_flags is not None else 0,
-    }
-
-
-def read_k2node_knot(archive: FArchive) -> dict[str, Any]:
-    """K2Node_Knot has no extra fields."""
-    return {}
-
-
-def read_edgraph_node_comment(raw_properties: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Read EdGraphNode_Comment specific fields, return dict (as node_data).
-
-    In UE5 samples, the comment node's color and size are in tagged properties.
-    The old implementation continued reading float/int from trailing binary,
-    which easily misreads subsequent fields as absurd sizes.
-    """
-    raw_properties = raw_properties or {}
-    return {
-        "comment_color": raw_properties.get("CommentColor"),
-        "node_width": raw_properties.get("NodeWidth"),
-        "node_height": raw_properties.get("NodeHeight"),
-        "font_size": raw_properties.get("FontSize"),
-        "comment_depth": raw_properties.get("CommentDepth"),
-    }
-
-
-# EnhancedInput ETriggerEvent pin names (identity: pin name == enum string).
-TRIGGER_EVENT_NAMES = frozenset({"Started", "Triggered", "Completed", "Exited"})
-
-
-def _build_trigger_events_from_pins(pins: list["UEdGraphPin"]) -> dict[str, str]:
-    """Map EnhancedInputAction trigger pin names onto themselves (ETriggerEvent strings)."""
-    trigger_events = {}
-    for pin in pins:
-        pin_type = pin.pin_type
-        pin_category = pin_type.pin_category if pin_type else ""
-        pin_name = pin.pin_name or ""
-        is_exec_output = pin_category == "exec" and pin.direction == 1
-        name = pin_name if pin_name in TRIGGER_EVENT_NAMES else (
-            pin_category if pin_category in TRIGGER_EVENT_NAMES else None
-        )
-        if is_exec_output or name is not None:
-            if name is not None:
-                trigger_events[name] = name
-    return trigger_events
-
-
-def read_k2node_enhanced_input(
-    archive: FArchive,
-    name_map: list[str],
-    raw_properties: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Read K2Node_EnhancedInputAction specific fields, return dict (as node_data).
-
-    Retrieves AdvancedPinDisplay, InputAction short name, etc. from the PropertyTag layer.
-
-    Return fields:
-    - input_action_path: full object path
-    - input_action_short_name: short name (e.g. "IA_Move")
-    - input_action_package_index: raw FPackageIndex
-    - advanced_pin_display: formatted enum name (e.g. "Hidden")
-    - advanced_pin_display_raw: raw int value
-    """
-    raw_properties = raw_properties or {}
-
-    # InputAction from PropertyTag (already parsed in read_ue_graph_node).
-    # K2Node_EnhancedInputAction.h:49-50 — InputAction is an ObjectProperty UPROPERTY
-    # reaching the tagged layer; there is no FString binary tail to read.
-    input_action_path = raw_properties.get("InputAction") or ""
-    input_action_short_name = raw_properties.get("InputActionShortName") or ""
-    input_action_package_index = raw_properties.get("InputActionPackageIndex", 0)
-
-    # AdvancedPinDisplay from PropertyTag
-    advanced_pin_display_raw = raw_properties.get("AdvancedPinDisplay", 0)
-    advanced_pin_display = raw_properties.get("AdvancedPinDisplayFormatted", "Default")
-
-    return {
-        "input_action_path": input_action_path,
-        "input_action_short_name": input_action_short_name,
-        "input_action_package_index": input_action_package_index,
-        "advanced_pin_display": advanced_pin_display,
-        "advanced_pin_display_raw": advanced_pin_display_raw,
-    }
-
-
-def read_k2node_functionentry(
-    archive: FArchive,
-    name_map: list[str],
-    import_map: list[ObjectImport],
-    export_map: list[ObjectExport],
-    function_reference: FMemberReference | None = None,
-    raw_properties: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Read K2Node_FunctionEntry specific fields, return dict (as node_data).
-
-    Retrieves ExtraFlags, bIsEditable from the PropertyTag layer.
-
-    FunctionReference was already parsed from PropertyTag in read_ue_graph_node().
-
-    Return fields:
-    - function_reference: FMemberReference
-    - extra_flags: int
-    - b_is_editable: bool
-    """
-    raw_properties = raw_properties or {}
-
-    extra_flags = raw_properties.get("ExtraFlags", 0)
-    b_is_editable = raw_properties.get("bIsEditable", False)
-
-    return {
-        "function_reference": function_reference,
-        "extra_flags": extra_flags,
-        "b_is_editable": b_is_editable,
-    }
 
 
 # ============================================================================
 # dispatch handlers -- unified signature (ctx: dict[str, Any]) -> dict[str, Any]
 # ctx contains: archive, name_map, summary, export_map, import_map,
-#               node_refs, raw_properties, class_name, node_export, base_node
+#               raw_properties, class_name, node_export, base_node
 # ============================================================================
-
-
-def _handle_call_function(ctx: dict[str, Any]) -> dict[str, Any]:
-    """K2Node_CallFunction dispatch handler."""
-    return read_k2node_call_function(
-        ctx["archive"],
-        ctx["name_map"],
-        ctx["import_map"],
-        ctx["export_map"],
-        function_reference=ctx.get("node_refs", {}).get("function_reference"),
-        b_defaults_to_pure=(ctx.get("raw_properties") or {}).get("bDefaultsToPureFunc"),
-    )
-
-
-def _handle_event(ctx: dict[str, Any]) -> dict[str, Any]:
-    """K2Node_Event dispatch handler."""
-    refs = ctx.get("node_refs") or {}
-    return read_k2node_event(
-        ctx["archive"],
-        ctx["name_map"],
-        ctx["import_map"],
-        ctx["export_map"],
-        event_reference=refs.get("event_reference"),
-        b_override_function=refs.get("b_override_function"),
-        b_internal_event=refs.get("b_internal_event"),
-        custom_function_name=refs.get("custom_function_name"),
-        function_flags=refs.get("function_flags"),
-    )
-
-
-def _handle_comment(ctx: dict[str, Any]) -> dict[str, Any]:
-    """EdGraphNode_Comment dispatch handler, with attribute writeback."""
-    node_data = read_edgraph_node_comment(ctx.get("raw_properties"))
-    base_node = ctx["base_node"]
-    if isinstance(node_data, dict):
-        for attr, key in (
-            ("comment_color", "comment_color"),
-            ("node_width", "node_width"),
-            ("node_height", "node_height"),
-            ("font_size", "font_size"),
-        ):
-            value = node_data.get(key)
-            if value is not None:
-                setattr(base_node, attr, value)
-    return node_data
-
-
-def _handle_enhanced_input(ctx: dict[str, Any]) -> dict[str, Any]:
-    """K2Node_EnhancedInputAction dispatch handler, with trigger_events extraction."""
-    node_data = read_k2node_enhanced_input(
-        ctx["archive"],
-        ctx["name_map"],
-        ctx.get("raw_properties"),
-    )
-    if isinstance(node_data, dict):
-        node_data["trigger_events"] = _build_trigger_events_from_pins(ctx["base_node"].pins)
-    return node_data
-
-
-def _handle_function_entry(ctx: dict[str, Any]) -> dict[str, Any]:
-    """K2Node_FunctionEntry dispatch handler."""
-    fr = ctx.get("node_refs", {}).get("function_reference")
-    return read_k2node_functionentry(
-        ctx["archive"],
-        ctx["name_map"],
-        ctx["import_map"],
-        ctx["export_map"],
-        function_reference=fr,
-        raw_properties=ctx.get("raw_properties"),
-    )
 
 
 def _handle_full_context(ctx: dict[str, Any]) -> dict[str, Any]:
@@ -347,50 +58,6 @@ def _handle_full_context(ctx: dict[str, Any]) -> dict[str, Any]:
         ctx.get("raw_properties"),
     )
 
-
-def _handle_unknown_type(ctx: dict[str, Any]) -> dict[str, Any]:
-    """Fallback handler for unknown node types."""
-    raw = ctx.get("raw_properties")
-    return {"_raw_properties": raw} if raw else {}
-
-
-def _handle_raw_prop_copies(copy_spec: dict[str, str]):
-    """Dispatch handler factory: copy present script tags into node_data under new keys."""
-
-    def handler(ctx: dict[str, Any]) -> dict[str, Any]:
-        raw = ctx.get("raw_properties") or {}
-        return {out_key: raw[tag] for tag, out_key in copy_spec.items() if raw.get(tag) is not None}
-
-    return handler
-
-
-# Node type -> handler mapping. Classes whose node_data is just a copy of
-# present script tags live in the {node_class: {tag: out_key}} table instead.
-_NODE_TYPE_HANDLERS: dict[str, Any] = {
-    "K2Node_CallFunction": _handle_call_function,
-    "K2Node_Event": _handle_event,
-    "K2Node_Knot": lambda ctx: read_k2node_knot(ctx["archive"]),
-    "EdGraphNode_Comment": _handle_comment,
-    "K2Node_EnhancedInputAction": _handle_enhanced_input,
-    "K2Node_FunctionEntry": _handle_function_entry,
-    "K2Node_CallArrayFunction": _handle_raw_prop_copies({"FunctionReference": "function_reference"}),
-    "K2Node_CallParentFunction": _handle_raw_prop_copies({"FunctionReference": "function_reference"}),
-    "K2Node_FunctionResult": _handle_raw_prop_copies({"FunctionReference": "function_reference"}),
-    "K2Node_CreateWidget": _handle_raw_prop_copies({"WidgetClass": "widget_class"}),
-    "K2Node_AddDelegate": _handle_raw_prop_copies({"DelegateName": "delegate_name"}),
-    "K2Node_AssignDelegate": _handle_raw_prop_copies({"DelegateName": "delegate_name"}),
-    "K2Node_MacroInstance": _handle_raw_prop_copies(
-        {
-            "MacroGraph": "macro_graph",
-            "Macro": "macro_name",
-            "MacroGraphReference": "macro_graph_reference",
-            "ResolvedWildcardType": "resolved_wildcard_type",
-        }
-    ),
-    "K2Node_GetDataTableRow": _handle_raw_prop_copies({"DataTable": "data_table", "RowStructName": "row_struct_name"}),
-    "K2Node_LoadAsset": _handle_raw_prop_copies({"AssetType": "asset_type"}),
-    "K2Node_SpawnActorFromClass": _handle_raw_prop_copies({"Class": "spawn_class"}),
-}
 
 # ============================================================================
 # AnimGraphNode reading
@@ -467,12 +134,11 @@ def create_node_from_archive(
     node_export: ObjectExport,
     base_node: UEdGraphNode,
     raw_properties: dict[str, Any] | None = None,
-    node_refs: dict[str, Any] | None = None,
 ) -> UEdGraphNode:
-    """Dispatch to the corresponding node read function based on class_name (D-07/D-08 factory pattern).
+    """Attach node_data to base_node: AnimGraphNode prefix dispatch, else leave unset.
 
-    Uses dictionary dispatch instead of if/elif chain. Exact match is preferred (_NODE_TYPE_HANDLERS),
-    then prefix match (AnimGraphNode_ / AnimState), finally fallback retains raw_properties.
+    Exact K2Node class handlers were deleted (their node_data never reached any
+    projection); AnimGraphNode_/AnimState* types keep the full-context reader.
     """
     class_name = base_node.class_name
 
@@ -487,23 +153,15 @@ def create_node_from_archive(
         "summary": summary,
         "export_map": export_map,
         "import_map": import_map,
-        "node_refs": node_refs,
         "raw_properties": raw_properties,
         "class_name": class_name,
         "node_export": node_export,
         "base_node": base_node,
     }
 
-    # Dictionary dispatch: exact match
-    handler = _NODE_TYPE_HANDLERS.get(class_name)
-    if handler is not None:
-        base_node.node_data = handler(ctx)
     # Prefix match: AnimGraphNode types (cannot exhaustively enumerate)
-    elif class_name.startswith("AnimGraphNode_") or class_name.startswith("AnimState"):
+    if class_name.startswith("AnimGraphNode_") or class_name.startswith("AnimState"):
         base_node.node_data = _handle_full_context(ctx)
-    elif raw_properties:
-        # Unknown type: retain raw PropertyTag metadata for debugging and future extension
-        base_node.node_data = _handle_unknown_type(ctx)
 
     return base_node
 
@@ -511,64 +169,6 @@ def create_node_from_archive(
 # ============================================================================
 # UEdGraphNode reading
 # ============================================================================
-
-
-def _read_member_reference_from_tags(
-    archive: FArchive,
-    tag,
-    name_map: list[str],
-    import_map: list[ObjectImport],
-    export_map: list[ObjectExport],
-) -> FMemberReference:
-    """Read FMemberReference structure from PropertyTag (shared by FunctionReference/EventReference)."""
-    value_end = tag.value_end_offset or (archive.tell() + tag.size)
-    mp_idx = 0
-    m_name = ""
-    m_guid = ""
-    m_self = False
-
-    while archive.tell() < value_end:
-        inner = read_property_tag(archive, name_map)
-        if inner.name == UE_NONE_SENTINEL:
-            break
-        if inner.value_end_offset is not None and inner.value_end_offset > value_end:
-            raise ParseError(f"MemberReference field '{inner.name}' exceeds struct boundary")
-
-        def _read_inner(inner=inner):
-            if inner.name == "MemberParent" and inner.size > 0:
-                return archive.read_i32()
-            if inner.name == "MemberScope" and inner.size > 0:
-                archive.read_fstring()
-                return None
-            if inner.name == "MemberName":
-                return archive.read_name(name_map)
-            if inner.name == "MemberGuid" and inner.size > 0:
-                return archive.read_bytes(16).hex()
-            if inner.name == "bSelfContext":
-                return (archive.read_i32() != 0) if inner.size > 0 else (inner.bool_val != 0)
-            if inner.name == "bWasDeprecated" and inner.size > 0:
-                archive.read_i32()
-            return None
-
-        inner_value = read_tag_value_bounded(archive, inner, _read_inner)
-        if inner.name == "MemberParent":
-            try:
-                mp_idx = int(inner_value) if inner_value else 0
-            except (ValueError, TypeError):
-                mp_idx = 0
-        elif inner.name == "MemberName":
-            m_name = str(inner_value) if inner_value else ""
-        elif inner.name == "MemberGuid":
-            m_guid = str(inner_value) if inner_value else ""
-        elif inner.name == "bSelfContext":
-            m_self = bool(inner_value)
-
-    return FMemberReference(
-        member_parent=resolve_class_name(PackageIndex(mp_idx), import_map, export_map) if mp_idx != 0 else None,
-        member_name=m_name,
-        member_guid=m_guid,
-        b_self_context=m_self,
-    )
 
 
 # ============================================================================
@@ -818,12 +418,6 @@ def _read_node_script_serial(
 ) -> dict[str, Any]:
     """Read script_serial PropertyTags of a node into one dict of parsed fields."""
     result: dict[str, Any] = {
-        "function_reference": None,
-        "event_reference": None,
-        "b_override_function": None,
-        "b_internal_event": None,
-        "custom_function_name": None,
-        "function_flags": None,
         "node_pos_x": 0,
         "node_pos_y": 0,
         "node_guid": "",
@@ -875,22 +469,9 @@ def _read_node_script_serial(
         if tag.name == UE_NONE_SENTINEL:
             break
 
-        if tag.name == "FunctionReference" and tag.size > 0:
-            result["function_reference"] = read_tag_value_bounded(
-                archive,
-                tag,
-                lambda: _read_member_reference_from_tags(archive, tag, name_map, import_map, export_map),  # noqa: B023 - tag bound at call time
-            )
-        elif tag.name == "EventReference" and tag.size > 0:
-            result["event_reference"] = read_tag_value_bounded(
-                archive,
-                tag,
-                lambda: _read_member_reference_from_tags(archive, tag, name_map, import_map, export_map),  # noqa: B023 - tag bound at call time
-            )
-        else:
-            result.update(
-                _read_node_property_tag(archive, tag, name_map, import_map, export_map, result["raw_properties"])
-            )
+        result.update(
+            _read_node_property_tag(archive, tag, name_map, import_map, export_map, result["raw_properties"])
+        )
 
     return result
 
@@ -944,6 +525,4 @@ def read_ue_graph_node(
         node_export,
         base_node,
         raw_properties=raw_properties if raw_properties else None,
-        # serial keys match node_refs names (references + K2Node_Event fields)
-        node_refs=serial,
     )
