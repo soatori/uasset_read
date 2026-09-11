@@ -65,12 +65,7 @@ class VersionContext:
     custom_versions: Mapping[str, int] = field(default_factory=dict)
     engine_version: EngineVersion | None = None
     compatible_engine_version: EngineVersion | None = None
-    package_layout: Literal["legacy", "zen"] = "legacy"
-    cooked: bool | None = None
-    editor_only_filtered: bool | None = None
-    platform: str | None = None
     game: str | None = None
-    byte_order: Literal["little", "big"] = "little"
     mappings_path: str | None = None
     depth: Literal["package", "object", "asset", "decode"] = "package"
 
@@ -91,19 +86,11 @@ class VersionContext:
 def build_version_context_from_summary(
     summary: Any,
     *,
-    package_layout: Literal["legacy", "zen"] = "legacy",
-    cooked: bool | None = None,
-    editor_only_filtered: bool | None = None,
-    platform: str | None = None,
     game: str | None = None,
     mappings_path: str | None = None,
     depth: Literal["package", "object", "asset", "decode"] = "package",
 ) -> VersionContext:
-    """Build a VersionContext from an existing PackageFileSummary.
-
-    This is the bridge between v1 and v2 — callers pass the v1 summary
-    and get back a frozen v2 context.
-    """
+    """Build a VersionContext from an existing PackageFileSummary."""
     # Build custom versions map from summary.custom_versions
     custom_versions: dict[str, int] = {}
     for cv in getattr(summary, "custom_versions", []):
@@ -142,10 +129,6 @@ def build_version_context_from_summary(
         custom_versions=custom_versions,
         engine_version=engine_version,
         compatible_engine_version=compat_version,
-        package_layout=package_layout,
-        cooked=cooked,
-        editor_only_filtered=editor_only_filtered,
-        platform=platform,
         game=game,
         mappings_path=mappings_path,
         depth=depth,

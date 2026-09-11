@@ -812,7 +812,6 @@ def test_version_context_is_frozen_and_summary_derived():
 
     ctx = build_version_context_from_summary(
         summary,
-        package_layout="legacy",
         game="ue",
         mappings_path="x.usmap",
         depth="asset",
@@ -825,7 +824,6 @@ def test_version_context_is_frozen_and_summary_derived():
     assert next(iter(ctx.custom_versions)) == next(iter(summary.custom_versions)).guid
     assert ctx.engine_version is not None and ctx.engine_version.major == 5
     assert ctx.compatible_engine_version is not None
-    assert ctx.package_layout == "legacy"
     assert ctx.game == "ue"
     assert ctx.mappings_path == "x.usmap"
     assert ctx.depth == "asset"

@@ -736,7 +736,6 @@ class LegacyPackageReader:
             if depth in ("asset", "decode"):
                 context = build_version_context_from_summary(
                     summary,
-                    package_layout="legacy",
                     game=self._game,
                     mappings_path=self._mappings_path,
                     depth=depth,
