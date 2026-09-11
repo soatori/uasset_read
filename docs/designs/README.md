@@ -27,6 +27,7 @@ These sit beside the canonical target on purpose. Each carries its own `status:`
 | S3 | [`2026-08-31-doc-status-marking-spec.md`](2026-08-31-doc-status-marking-spec.md) | current | The status-marking rules this index follows. |
 | — | [`2026-09-02-peer-corroboration-usage-scheme.md`](2026-09-02-peer-corroboration-usage-scheme.md) | current | How external parsers may be used as evidence. |
 | — | [`2026-09-10-codebase-slimming-plan.md`](2026-09-10-codebase-slimming-plan.md) | target | Reviewed slimming plan. Phase A, Gate G (parent_resolver), Gate K (C++ pseudocode), and Gate L (log cleanup) executed 2026-09-10. Remaining Gate G items (agent_tools/iostore/mappings) stay keep/tidy-only. |
+| — | [`2026-09-12-ponytail-residual-cuts.md`](2026-09-12-ponytail-residual-cuts.md) | target | Residual ponytail cuts after audit waves 0–13: identity map, false import mirror, write-only fields, CubeBuilder skip-list contradiction. Not yet executed. |
 
 ## Archive
 
