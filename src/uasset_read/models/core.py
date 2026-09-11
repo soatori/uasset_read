@@ -23,21 +23,10 @@ class FEdGraphPinType:
     """Blueprint pin type structure."""
 
     pin_category: str = ""
-    pin_subcategory: str = ""
-    pin_subcategory_object: int | None = None  # FPackageIndex (int32)
-    pin_subcategory_object_name: str | None = None
     container_type: int = 0
     is_reference: bool = False
-    is_weak_pointer: bool = False
-    is_const: bool = False
-    is_uobject_wrapper: bool = False
-    b_serialize_as_single_precision_float: bool = False
-    # Map terminal type (when container_type == 3, key terminal info)
-    map_key_terminal_category: str = ""
-    map_key_terminal_sub_category: str = ""
-    map_key_terminal_sub_category_object: int | None = None  # FPackageIndex (int32)
-    map_key_terminal_sub_category_object_name: str | None = None
-    # FEdGraphTerminalType trailing bools (EdGraphNode.cpp operator<<)
+    # FEdGraphTerminalType trailing bools (EdGraphNode.cpp operator<<;
+    # map-key terminal only — value terminal category reads stay cursor-only)
     map_key_terminal_is_const: bool = False
     map_key_terminal_is_weak_pointer: bool = False
     map_key_terminal_is_uobject_wrapper: bool = False
@@ -47,42 +36,17 @@ class FEdGraphPinType:
 class UEdGraphPin:
     """UEdGraphPin complete blueprint pin structure."""
 
-    # PIN-01: Basic information
     pin_id: str
     pin_name: str
-    pin_friendly_name: str | None = None
-    pin_tooltip: str = ""
     direction: int = 0
-    # PIN-02: PinType
     pin_type: FEdGraphPinType | None = None
-    # PIN-03: Default values
-    default_value: str | None = None
-    auto_default_value: str | None = None
-    default_object: int | None = None
-    default_text_value: str | None = None
-    # PIN-04: Link references — raw dict (backward compat)
     linked_to_raw: list[dict] = field(default_factory=list)
-    sub_pins: list[dict] = field(default_factory=list)
-    parent_pin: dict | None = None
-    ref_pass_through: dict | None = None
-    # PIN-05: Display attributes
-    hidden: bool = False
-    not_connectable: bool = False
-    advanced_view: bool = False
-    orphaned_pin: bool = False
-    # EditorOnly
-    owning_node_index: int = 0
-    source_index: int | None = None
-    persistent_guid: str | None = None
-    # Legacy
-    flags: int = 0
 
 
 @dataclass
 class UEdGraphNode:
     """UEdGraphNode base class for blueprint nodes."""
 
-    node_guid: str
     node_pos_x: int = 0
     node_pos_y: int = 0
     node_comment: str = ""
@@ -91,7 +55,6 @@ class UEdGraphNode:
     node_data: Any | None = None
     # Internal bookkeeping set during graph reading (1-based export index)
     _export_index: int | None = None
-    _export_object_name: str | None = None
 
 
 @dataclass
@@ -99,11 +62,7 @@ class UEdGraph:
     """UEdGraph blueprint graph container."""
 
     graph_name: str
-    graph_class: str
-    schema: str | None = None
     nodes: list["UEdGraphNode"] = field(default_factory=list)
-    graph_guid: str | None = None
-    b_editable: bool = True
     subgraphs: list["UEdGraph"] = field(default_factory=list)
 
 

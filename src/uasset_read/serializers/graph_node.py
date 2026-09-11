@@ -507,14 +507,12 @@ def read_ue_graph_node(
     class_name = resolve_class_name(node_export.class_index, import_map, export_map) or ""
 
     base_node = UEdGraphNode(
-        node_guid=serial["node_guid"],
         node_pos_x=serial["node_pos_x"],
         node_pos_y=serial["node_pos_y"],
         node_comment=serial["node_comment"],
         pins=pins,
         class_name=class_name,
     )
-    setattr(base_node, "_export_object_name", node_export.object_name)
 
     return create_node_from_archive(
         archive,

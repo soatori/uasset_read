@@ -31,50 +31,26 @@ logger = logging.getLogger(__name__)
 
 def _extract_graph_properties(
     graph_export: ObjectExport,
-) -> tuple:
-    """Extract UEdGraph fields from pre-parsed PropertyTag data.
+) -> list[int]:
+    """Extract the Nodes export-index list from pre-parsed PropertyTag data.
 
-    UEdGraph Schema, Nodes, GraphGuid are UPROPERTY in UE, so they are
-    serialized via PropertyTag in export body.  Read them from
-    graph_export.properties instead of parsing binary again.
+    UEdGraph.Nodes is a UPROPERTY in UE, serialized via PropertyTag in the
+    export body. Schema/GraphGuid/bEditable were write-only for the v2
+    projection and were deleted with the subtraction wave.
 
     Returns:
-        (schema_name, node_indices, graph_guid_str)
-        schema_name: full name of Schema import, e.g. "EdGraphSchema_K2", None if not found
         node_indices: 1-based export index list of nodes
-        graph_guid_str: hex string of GraphGuid (lowercase, no dash), "" if not found
     """
-    schema_name: str | None = None
     node_indices: list[int] = []
-    graph_guid: str = ""
 
     props = getattr(graph_export, "properties", None) or []
     for prop in props:
         name = getattr(prop, "name", None) or (prop.get("name") if isinstance(prop, dict) else None)
         value = getattr(prop, "value", None) or (prop.get("value") if isinstance(prop, dict) else None)
-        if name == "Schema" and value is not None:
-            # ObjectProperty -> import reference
-            if isinstance(value, dict):
-                schema_name = value.get("object_name") or value.get("full_name")
-        elif name == "Nodes" and isinstance(value, list):
+        if name == "Nodes" and isinstance(value, list):
             node_indices = [v for v in value if isinstance(v, int) and v > 0]
-        elif name == "GraphGuid" and isinstance(value, dict):
-            fields = value.get("fields", {})
-            if fields:
-                try:
-                    a = int(fields.get("A", 0) or 0) & 0xFFFFFFFF
-                    b = int(fields.get("B", 0) or 0) & 0xFFFFFFFF
-                    c = int(fields.get("C", 0) or 0) & 0xFFFFFFFF
-                    d = int(fields.get("D", 0) or 0) & 0xFFFFFFFF
-                    graph_guid = struct.pack("<4I", a, b, c, d).hex()
-                except (TypeError, ValueError):
-                    logger.warning(
-                        "GraphGuid: non-integer field values in %s, using zero GUID",
-                        fields,
-                    )
-                    graph_guid = ""
 
-    return schema_name, node_indices, graph_guid
+    return node_indices
 
 
 def read_ue_graph(
@@ -84,15 +60,14 @@ def read_ue_graph(
     export_map: list[ObjectExport],
     import_map: list[ObjectImport],
     graph_export: ObjectExport,
-    graph_class: str,
     graph_export_idx: int = 0,
     _parsed_indices: set | None = None,
 ) -> UEdGraph:
     """Read UEdGraph container (EdGraph.cpp).
 
-    Schema / Nodes / GraphGuid are UPROPERTY, extracted by the PropertyTag
-    parser during preload into graph_export.properties.  This function reads
-    them from the pre-parsed properties instead of parsing binary again.
+    Nodes are a UPROPERTY extracted by the PropertyTag parser during preload
+    into graph_export.properties. This function reads them from the
+    pre-parsed properties instead of parsing binary again.
 
     Node data is still read via archive.seek(node_export.serial_offset)
     (node export's script_serial + pins are separate binary segments).
@@ -106,11 +81,8 @@ def read_ue_graph(
         _parsed_indices = set()
     _parsed_indices.add(graph_export_idx)
 
-    # -- 1. Extract Schema / Nodes / GraphGuid from PropertyTag --
-    schema_name, node_indices, graph_guid = _extract_graph_properties(graph_export)
-
-    # Resolve Schema reference
-    schema: str | None = schema_name
+    # -- 1. Extract Nodes from PropertyTag --
+    node_indices = _extract_graph_properties(graph_export)
 
     # -- 2. Read each node's binary data by node_indices --
     if len(node_indices) > MAX_NODES_PER_GRAPH:
@@ -158,7 +130,6 @@ def read_ue_graph(
                     except (ParseError, struct.error, OSError, ValueError, KeyError):
                         nodes.append(
                             UEdGraphNode(
-                                node_guid="",
                                 node_pos_x=0,
                                 node_pos_y=0,
                                 node_comment="",
@@ -167,20 +138,15 @@ def read_ue_graph(
                                 node_data={"_parse_error": True, "node_name": node_export.object_name},
                             )
                         )
-                        nodes[-1]._export_object_name = node_export.object_name
 
-    # -- 3. bEditable / SubGraphs -- from PropertyTag or fallback --
-    # These fields may be WITH_EDITORONLY_DATA and absent from PropertyTag.
-    b_editable = True  # default
+    # -- 3. SubGraphs -- from PropertyTag --
     subgraph_indices: list[int] = []
 
     props = getattr(graph_export, "properties", None) or []
     for prop in props:
         pname = getattr(prop, "name", None) or (prop.get("name") if isinstance(prop, dict) else None)
         pvalue = getattr(prop, "value", None) or (prop.get("value") if isinstance(prop, dict) else None)
-        if pname == "bEditable":
-            b_editable = bool(pvalue) if pvalue is not None else True
-        elif pname == "SubGraphs" and isinstance(pvalue, list):
+        if pname == "SubGraphs" and isinstance(pvalue, list):
             if len(pvalue) > MAX_SUBGRAPHS:
                 logger.debug(
                     "SubGraphs count %d exceeds limit %d, truncating",
@@ -208,7 +174,6 @@ def read_ue_graph(
             export_map,
             import_map,
             subgraph_export,
-            subgraph_class,
             pkg_idx,
             _parsed_indices=_parsed_indices,
         )
@@ -241,10 +206,6 @@ def read_ue_graph(
 
     return UEdGraph(
         graph_name=graph_export.object_name,
-        graph_class=graph_class,
-        schema=schema,
         nodes=nodes,
-        graph_guid=graph_guid,
-        b_editable=b_editable,
         subgraphs=subgraphs,
     )

@@ -406,3 +406,18 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
     assert failed.fallback_reasons
     # At least one sibling still exposes a non-empty expression tree.
     assert any(r.expressions for r in by_status["parsed"])
+
+
+def test_decode_pin_payload_key_set_is_frozen():
+    """The emitted pin dict carries exactly id/name/direction/category/linked.
+
+    Write-only UEdGraphPin fields must never leak into this payload. The subtraction
+    wave deletes those fields; this test is the contract that guards the emitter.
+    """
+    dec = _decode("StackOBot_BP_Drone.uasset", ("export:0",))
+    bp = next(o for o in dec.objects if o.id == "export:0")
+    graphs = bp.semantic["graphs"]
+    pins = [p for g in graphs for n in g["nodes"] for p in n["pins"]]
+    assert pins, "expected at least one decoded pin"
+    for pin in pins:
+        assert set(pin) == {"id", "name", "direction", "category", "linked"}, sorted(pin)

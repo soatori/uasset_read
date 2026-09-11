@@ -22,7 +22,6 @@ from uasset_read.constants import (
 )
 from uasset_read.exceptions import ParseError
 from uasset_read.versioning import RELEASE_GUID, get_custom_version
-from uasset_read.serializers.object_resources import PackageIndex, resolve_class_name
 from uasset_read.models.core import UEdGraphPin, FEdGraphPinType
 
 from uasset_read.serializers.graph_helpers import (
@@ -49,41 +48,28 @@ def read_ed_graph_pin_type(
     import_map: list[ObjectImport] | None = None,
     export_map: list[ObjectExport] | None = None,
 ) -> FEdGraphPinType:
-    """Parse FEdGraphPinType (UE5.7 specific — custom serialization path)."""
+    """Parse FEdGraphPinType (UE5.7 specific — custom serialization path).
+
+    All archive.read_*() cursor steps are mandatory; only the retained fields
+    are stored on the model (write-only category/object names stay cursor-only).
+    """
     pin_type = FEdGraphPinType()
 
     # PinCategory / PinSubCategory (UE5 always uses FName format)
     pin_type.pin_category = archive.read_name(name_map)
-    pin_type.pin_subcategory = archive.read_name(name_map)
+    archive.read_name(name_map)  # PinSubCategory (write-only)
 
-    # PinSubCategoryObject (FPackageIndex)
-    pin_type.pin_subcategory_object = archive.read_i32()
-    if pin_type.pin_subcategory_object:
-        pkg_idx = PackageIndex(pin_type.pin_subcategory_object)
-        try:
-            if import_map is not None and export_map is not None:
-                pin_type.pin_subcategory_object_name = resolve_class_name(pkg_idx, import_map, export_map)
-        except (KeyError, IndexError, AttributeError):
-            pin_type.pin_subcategory_object_name = None
+    # PinSubCategoryObject (FPackageIndex, write-only)
+    archive.read_i32()
 
     # ContainerType (UE5 always uses modern uint8 format)
     pin_type.container_type = archive.read_u8()
     if pin_type.container_type == 3:  # Map
         # Map key terminal type (FEdGraphTerminalType serialization)
         # Reference: UE EdGraphPin.cpp:218 — Ar << PinValueType
-        pin_type.map_key_terminal_category = archive.read_name(name_map)
-        pin_type.map_key_terminal_sub_category = archive.read_name(name_map)
-        terminal_sub_category_object = archive.read_i32()
-        pin_type.map_key_terminal_sub_category_object = terminal_sub_category_object
-        if terminal_sub_category_object:
-            pkg_idx = PackageIndex(terminal_sub_category_object)
-            try:
-                if import_map is not None and export_map is not None:
-                    pin_type.map_key_terminal_sub_category_object_name = resolve_class_name(
-                        pkg_idx, import_map, export_map
-                    )
-            except (KeyError, IndexError, AttributeError):
-                pin_type.map_key_terminal_sub_category_object_name = None
+        archive.read_name(name_map)  # map key terminal category (write-only)
+        archive.read_name(name_map)  # map key terminal sub-category (write-only)
+        archive.read_i32()  # map key terminal sub-category object (write-only)
 
         # FEdGraphTerminalType tail — EdGraphNode.cpp operator<<: two unconditional
         # 4-byte bools, then bTerminalIsUObjectWrapper gated on
@@ -97,21 +83,17 @@ def read_ed_graph_pin_type(
 
     # bIsReference / bIsWeakPointer (UE5 FArchive bool = uint32, 4B)
     pin_type.is_reference = archive.read_bool()
-    pin_type.is_weak_pointer = archive.read_bool()
+    archive.read_bool()  # bIsWeakPointer (write-only)
 
     # FSimpleMemberReference (UE5 always present)
     archive.read_i32()
     archive.read_name(name_map)
     archive.read_bytes(16)
 
-    # bIsConst (UE5 FArchive bool = uint32, 4B)
-    pin_type.is_const = archive.read_bool()
-
-    # bIsUObjectWrapper (UE5 FArchive bool = uint32, 4B)
-    pin_type.is_uobject_wrapper = archive.read_bool()
-
-    # bSerializeAsSinglePrecisionFloat (UE5 FArchive bool = uint32, 4B)
-    pin_type.b_serialize_as_single_precision_float = archive.read_bool()
+    # bIsConst / bIsUObjectWrapper / bSerializeAsSinglePrecisionFloat (write-only)
+    archive.read_bool()
+    archive.read_bool()
+    archive.read_bool()
 
     return pin_type
 
@@ -528,25 +510,6 @@ def _read_pin_ref_array(
         return []
 
 
-def _read_pin_bitfield(
-    archive: FArchive,
-) -> tuple:
-    """Read Pin BitField (EditorOnly). Returns (hidden, not_connectable, advanced_view, orphaned_pin)."""
-    hidden = False
-    not_connectable = False
-    advanced_view = False
-    orphaned_pin = False
-    try:
-        bitfield = archive.read_u32()
-        hidden = bool(bitfield & (1 << 0))
-        not_connectable = bool(bitfield & (1 << 1))
-        advanced_view = bool(bitfield & (1 << 4))
-        orphaned_pin = bool(bitfield & (1 << 5))
-    except (struct.error, OSError, ValueError, AttributeError) as e:
-        logger.debug("Failed to read Pin BitField: %s", e, exc_info=True)
-    return hidden, not_connectable, advanced_view, orphaned_pin
-
-
 def read_ue_graph_pin(
     archive: FArchive,
     name_map: list[str],
@@ -563,13 +526,11 @@ def read_ue_graph_pin(
       - Body: Complete UEdGraphPin (duplicates owning_node + pin_guid + PinName + ...)
 
     If header_owning_node and header_pin_id provided, skip internal duplicates and use provided values.
+    Write-only UEdGraphPin fields keep their archive.read_*() cursor steps but
+    are not stored on the model.
     """
-    # 1. OwningNode - D-12: If header provided, read and discard internal duplicate to advance position
-    if header_owning_node is not None:
-        archive.read_i32()  # Discard internal duplicate
-        owning_node_index = header_owning_node
-    else:
-        owning_node_index = archive.read_i32()
+    # 1. OwningNode - D-12: internal duplicate; header path reads the same 4 bytes
+    archive.read_i32()
 
     # 2. PinId (FGuid 16 bytes) - D-12: If header provided, read and discard internal duplicate
     if header_pin_id is not None:
@@ -582,15 +543,15 @@ def read_ue_graph_pin(
     # 3. PinName
     pin_name = archive.read_name(name_map)
 
-    # 4. PinFriendlyName (FText) — DevNotes gated per package custom version
+    # 4. PinFriendlyName (FText) — DevNotes gated per package custom version; write-only
     dev_notes = ftext_dev_notes_enabled(summary)
-    pin_friendly_name = _read_pin_ftext_field(archive, "PinFriendlyName", dev_notes=dev_notes)
+    _read_pin_ftext_field(archive, "PinFriendlyName", dev_notes=dev_notes)
 
-    # 5. SourceIndex (UE5 always present)
-    source_index = archive.read_i32()
+    # 5. SourceIndex (UE5 always present, write-only)
+    archive.read_i32()
 
-    # 6. PinToolTip — FString (NOT FText!)
-    pin_tooltip = _read_pin_fstring_field(archive, "PinToolTip", pin_name)
+    # 6. PinToolTip — FString (NOT FText!); write-only
+    _read_pin_fstring_field(archive, "PinToolTip", pin_name)
 
     # 7. Direction — u8 for both UE4 and UE5
     direction = archive.read_u8()
@@ -598,59 +559,43 @@ def read_ue_graph_pin(
     # 8. PinType
     pin_type = read_ed_graph_pin_type(archive, name_map, summary, import_map, export_map)
 
-    # 9-10. DefaultValue strings (tolerant)
-    default_value = _read_pin_fstring_field(archive, "DefaultValue")
-    autogenerated_default_value = _read_pin_fstring_field(archive, "AutogeneratedDefaultValue")
+    # 9-10. DefaultValue strings (tolerant, write-only)
+    _read_pin_fstring_field(archive, "DefaultValue")
+    _read_pin_fstring_field(archive, "AutogeneratedDefaultValue")
 
-    # 11. DefaultObject (FPackageIndex)
-    default_object = archive.read_i32()
+    # 11. DefaultObject (FPackageIndex, write-only)
+    archive.read_i32()
 
-    # 12. DefaultTextValue (FText)
-    default_text_value = _read_pin_ftext_field(archive, "DefaultTextValue", dev_notes=dev_notes)
+    # 12. DefaultTextValue (FText, write-only)
+    _read_pin_ftext_field(archive, "DefaultTextValue", dev_notes=dev_notes)
 
     # 13. LinkedTo array
     linked_to = _read_pin_ref_array(
         archive, name_map, export_map, import_map, "LinkedTo", recover_on_fail=True, pin_name=pin_name
     )
 
-    # 14. SubPins array
-    sub_pins = _read_pin_ref_array(archive, name_map, export_map, import_map, "SubPins", recover_on_fail=False)
+    # 14. SubPins array (write-only — consumed to keep the cursor aligned)
+    _read_pin_ref_array(archive, name_map, export_map, import_map, "SubPins", recover_on_fail=False)
 
     # 15. ParentPin — reuse read_pin_reference() (UE5: null → 4B, non-null → 24B)
-    parent_pin = read_pin_reference(archive, name_map, export_map, import_map)
+    read_pin_reference(archive, name_map, export_map, import_map)
 
     # 16. ReferencePassThroughConnection — reuse read_pin_reference()
-    ref_pass_through = read_pin_reference(archive, name_map, export_map, import_map)
+    read_pin_reference(archive, name_map, export_map, import_map)
 
-    # 17. PersistentGuid (EditorOnly)
+    # 17. PersistentGuid (EditorOnly, write-only)
     try:
-        persistent_guid = _read_guid(archive)
+        _read_guid(archive)
     except (struct.error, OSError, ParseError):
-        persistent_guid = None
+        pass
 
     # 18. BitField (EditorOnly) — uint32 in both UE4 and UE5 (EdGraphPin.cpp L1902)
-    hidden, not_connectable, advanced_view, orphaned_pin = _read_pin_bitfield(archive)
+    archive.read_u32()
 
     return UEdGraphPin(
         pin_id=pin_id,
         pin_name=pin_name,
-        pin_friendly_name=pin_friendly_name,
-        pin_tooltip=pin_tooltip,
         direction=direction,
         pin_type=pin_type,
-        default_value=default_value,
-        auto_default_value=autogenerated_default_value,
-        default_object=default_object,
-        default_text_value=default_text_value,
         linked_to_raw=linked_to,
-        sub_pins=sub_pins,
-        parent_pin=parent_pin,
-        ref_pass_through=ref_pass_through,
-        owning_node_index=owning_node_index,
-        source_index=source_index,
-        persistent_guid=persistent_guid,
-        hidden=hidden,
-        not_connectable=not_connectable,
-        advanced_view=advanced_view,
-        orphaned_pin=orphaned_pin,
     )

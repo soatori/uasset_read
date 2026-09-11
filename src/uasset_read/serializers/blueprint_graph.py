@@ -138,7 +138,6 @@ def read_blueprint_graphs(
                 export_map,
                 import_map,
                 export,
-                class_name,
                 export_idx + 1,  # 1-based index
             )
             graphs.append(_graph_to_dict(graph, export_idx, class_name))
