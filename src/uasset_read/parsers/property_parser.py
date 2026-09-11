@@ -1345,8 +1345,10 @@ def _read_unversioned_ftext(archive: FArchive, property_end: int) -> Any | None:
                 source_string=(source or "").rstrip("\x00"),
                 history_type=255,
             )
-        # Other history types: opaque body unknown without tag.size.
-        return TextValue(namespace="", key="", source_string="", history_type=history)
+        # Other history types: body layout unknown without tag.size — stop so
+        # the caller can opaque the remainder instead of inventing empty text.
+        archive.seek(start)
+        return None
     except (BINARY_READ_ERRORS, ValueError, _struct.error):
         archive.seek(start)
         return None
