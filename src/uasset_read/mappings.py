@@ -5,11 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import struct
 from pathlib import Path
-from typing import Any
 
 from uasset_read.exceptions import ParseError
 from uasset_read.memory_safety import ResourceBudget
-from uasset_read.constants import MAX_ARRAY_DIM
 
 
 MAX_RECURSION_DEPTH: int = 64

@@ -465,7 +465,6 @@ def parse_property_value(
     Returns:
         Parsed property value, unknown types return PropertyFallback
     """
-    mappings = getattr(summary, "_mappings", None)
     game = getattr(summary, "_game", None)
 
     if getattr(tag, "serialize_type", "Property") == "Skipped":

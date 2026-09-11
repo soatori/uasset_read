@@ -61,7 +61,6 @@ MAX_PROPERTY_COUNT = 10_000  # Property loop limit
 MIN_UASSET_SIZE = 64  # Minimum legal .uasset file size (bytes)
 # Contains minimum of Tag(4) + version fields(16~20) + LicenseeVer(4) + Hash(20) + HeaderSize(4)
 MAX_ARRAY_COUNT = 1_000_000  # Maximum ArrayProperty elements (per HIGH-07/35d-01)
-MAX_ARRAY_DIM = 256  # Maximum array dimension in mapping property info
 MAX_FSTRING_LENGTH = 10_000_000  # 10 MB — FString maximum length (UTF-8/UTF-16)
 
 # ============================================================================
