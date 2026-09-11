@@ -28,6 +28,8 @@ These sit beside the canonical target on purpose. Each carries its own `status:`
 | — | [`2026-09-02-peer-corroboration-usage-scheme.md`](2026-09-02-peer-corroboration-usage-scheme.md) | current | How external parsers may be used as evidence. |
 | — | [`2026-09-10-codebase-slimming-plan.md`](2026-09-10-codebase-slimming-plan.md) | target | Reviewed slimming plan. Phase A, Gate G (parent_resolver), Gate K (C++ pseudocode), and Gate L (log cleanup) executed 2026-09-10. Remaining Gate G items (agent_tools/iostore/mappings) stay keep/tidy-only. |
 | — | [`2026-09-12-ponytail-residual-cuts.md`](2026-09-12-ponytail-residual-cuts.md) | current | Residual ponytail cuts after audit waves 0–13: identity map, false import mirror, write-only fields, CubeBuilder skip-list contradiction. Executed 2026-09-12 (`f55b2d1e`/`4bface99`); suite 220 passed. |
+| — | [`2026-09-12-ponytail-evaluation-fix-plan.md`](2026-09-12-ponytail-evaluation-fix-plan.md) | current | Adversarially reviewed ponytail subtraction + two real defects (CI ruff, decode dropping Kismet bodies). Wave A executed 2026-09-12 (T1–T14/T16; T15 deferred). |
+| — | [`2026-09-12-post-refactor-productize-plan.md`](2026-09-12-post-refactor-productize-plan.md) | current | Merged master sequencer: Wave A = ponytail plan; Wave B = productize (state_count, exec edges, tag-only node_data, unversioned partial). Wave A + Wave B executed 2026-09-12 on `docs/productize-unversioned`. |
 
 ## Archive
 

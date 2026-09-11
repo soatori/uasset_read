@@ -817,11 +817,11 @@
       "recommended_samples": "1 with .uexp, 1 with .ubulk"
     },
     "unversioned_properties": {
-      "status": "unknown",
-      "description": "Cannot determine if any samples use unversioned properties without parsing all exports. Unversioned properties typically appear in cooked packages.",
-      "needed_for": "Phase 2 (Unversioned reader + SchemaProvider)",
+      "status": "partial",
+      "description": "Editor-saved unversioned fixtures (BP_UnversionedTest / DA_UnversionedTest) parse via UnversionedTest.usmap. Mapping-driven path lives in parsers/property_parser.py; unmapped or misaligned tails become explicit UnversionedOpaque. Cooked/Zen unversioned packages remain out of scope.",
+      "needed_for": "Phase 2 (full unversioned + SchemaProvider)",
       "acquisition": "Request legitimate redistributable real samples with version info from the user: a cooked .uasset using unversioned properties plus its matching .usmap schema file.",
-      "verification": "After obtaining, verify:\n- Property parser detects unversioned format\n- SchemaProvider can supply field schemas\n- Properties round-trip to value model correctly",
+      "verification": "After obtaining, verify:\n- Property parser detects unversioned format\n- Mapped fields produce a non-empty bag or explicit opaque\n- No tagged name-index fallback while still reporting complete",
       "minimum_samples": 1,
       "recommended_samples": "1 cooked Blueprint with unversioned properties + matching .usmap"
     },
