@@ -19,6 +19,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from uasset_read.serializers.node_data_project import project_node_data as _project_node_data
+
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport
@@ -32,29 +34,6 @@ logger = logging.getLogger(__name__)
 MAX_GRAPHS_PER_PACKAGE = 512
 MAX_NODES_PER_GRAPH_OUTPUT = 512
 MAX_PINS_PER_NODE_OUTPUT = 64
-
-# Allow-list of tag-derived node_data keys emitted onto decode nodes.
-# Wave A removed K2Node / FMemberReference binary readers; these keys are the
-# surviving primitive projections of raw script-serial tags (and Anim
-# subgraph_references). Private bookkeeping (leading "_") is never emitted.
-_NODE_DATA_ALLOW = frozenset(
-    {
-        "FunctionReference",
-        "EventReference",
-        "MemberName",
-        "MemberParent",
-        "VariableReference",
-        "SelfContextInfo",
-        "FunctionName",
-        "CustomFunctionName",
-        "subgraph_references",
-        "bDefaultsToPure",
-        "bDefaultsToPureFunc",
-        "InputActionShortName",
-        "OperationName",
-        "TimelineName",
-    }
-)
 
 
 def _validate_graph_export_offset(export, archive_size: int) -> bool:
@@ -178,46 +157,6 @@ def _error_graph(export_idx: int, class_name: str, reason: str) -> dict[str, Any
         "truncated": {"nodes": False, "pins": False},
         "parse_errors": [reason],
     }
-
-
-def _project_node_data(node_data: Any) -> dict[str, Any] | None:
-    """Project allow-listed tag-derived keys onto the decode node dict.
-
-    Never invents binary readers: only primitives (and nested primitive maps)
-    already present on ``UEdGraphNode.node_data`` survive. ``None`` means
-    nothing projectable — omit the key.
-    """
-    if not isinstance(node_data, dict):
-        return None
-    out: dict[str, Any] = {}
-    for key, value in node_data.items():
-        if not isinstance(key, str) or key.startswith("_"):
-            continue  # never emit private bookkeeping
-        if key not in _NODE_DATA_ALLOW:
-            continue
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            out[key] = value
-        elif key == "subgraph_references" and isinstance(value, dict):
-            # Anim subgraph_references: {name: {package_index, object_name, ...}}
-            compact: dict[str, Any] = {}
-            for ref_key, info in value.items():
-                if isinstance(info, dict):
-                    prims = {
-                        k: v
-                        for k, v in info.items()
-                        if isinstance(v, (str, int, float, bool, type(None)))
-                    }
-                    if prims:
-                        compact[str(ref_key)] = prims
-            if compact:
-                out[key] = compact
-        elif isinstance(value, dict):
-            prims = {
-                k: v for k, v in value.items() if isinstance(v, (str, int, float, bool, type(None)))
-            }
-            if prims:
-                out[key] = prims
-    return out or None
 
 
 def _anim_node_data(node: Any) -> dict[str, Any] | None:

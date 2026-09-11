@@ -165,9 +165,9 @@ def create_node_from_archive(
     elif raw_properties:
         # Tag-derived allow-list projection only (Wave A removed K2Node binary
         # readers). Surviving primitive tags land on node_data for decode.
-        from uasset_read.serializers.blueprint_graph import _project_node_data
+        from uasset_read.serializers.node_data_project import project_node_data
 
-        projected = _project_node_data(raw_properties)
+        projected = project_node_data(raw_properties)
         if projected is not None:
             base_node.node_data = projected
 

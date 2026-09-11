@@ -333,8 +333,13 @@ def test_call_function_raw_properties_reach_node_data():
             }, key
 
 
-def test_variable_nodes_carry_tag_derived_reference():
-    """VariableGet/Set nodes surface VariableReference (or equivalent) from tags."""
+def test_variable_nodes_do_not_fake_member_reference():
+    """Variable nodes must not emit size/offset-only VariableReference stubs.
+
+    Unmatched tags store ``{size, offset}`` only. Until MemberName/MemberParent
+    (or equivalent primitives) survive in tags, that locator must not be
+    projected as VariableReference.
+    """
     from uasset_read import parse_package_document
     from uasset_read.projection import project_document
 
@@ -350,7 +355,12 @@ def test_variable_nodes_carry_tag_derived_reference():
         if "Variable" in (n.get("type") or "")
     ]
     assert nodes
-    assert any(n.get("node_data") for n in nodes)
+    for node in nodes:
+        node_data = node.get("node_data") or {}
+        var_ref = node_data.get("VariableReference")
+        if var_ref is not None:
+            assert isinstance(var_ref, dict)
+            assert set(var_ref) - {"size", "offset"}, f"opaque locator leaked: {var_ref}"
 
 
 def test_project_document_decode_max_bytes_keeps_k0_functions():
