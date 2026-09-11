@@ -187,9 +187,9 @@ def read_property_tag(
         )
 
     # === UE5 >= 1012: full FPropertyTypeName format ===
-    tag.type_name = _read_property_type_name(archive, name_map, file_version_ue5=file_version_ue5)
-    tag.type_parts = tag.type_name.to_parts()
-    _apply_property_type_to_tag(tag, tag.type_name)
+    type_name = _read_property_type_name(archive, name_map, file_version_ue5=file_version_ue5)
+    tag.type_parts = type_name.to_parts()
+    _apply_property_type_to_tag(tag, type_name)
 
     mapping_container = getattr(mappings, "mappings", mappings)
     struct_mapping = (
@@ -225,17 +225,17 @@ def read_property_tag(
         tag.array_index = archive.read_i32()
 
     if tag.flags & PROP_TAG_HAS_PROPERTY_GUID:
-        tag.property_guid = archive.read_bytes(16)
+        archive.read_bytes(16)  # PropertyGuid — write-only; advance cursor only.
 
     if tag.flags & PROP_TAG_HAS_EXTENSIONS:
         property_extensions = archive.read_u8()
         if property_extensions & PROP_EXT_SERIALIZE_CONTROL:
-            tag.override_operation = archive.read_u8()
-            tag.experimental_overridable_logic = archive.read_u8()
+            archive.read_u8()  # override_operation — write-only; advance cursor only.
+            archive.read_u8()  # experimental_overridable_logic — write-only; advance cursor only.
         if property_extensions & PROP_EXT_HAS_EXTERNAL_OBJECTS:
             # PropertyTag.cpp SerializePropertyExtensions: HasExternalsObjects appends
             # one uint8 external-object slot in the same tag.
-            tag.external_objects_byte = archive.read_u8()
+            archive.read_u8()  # external_objects_byte — write-only; advance cursor only.
 
     if tag.flags & PROP_TAG_BOOL_TRUE:
         tag.bool_val = 1
@@ -302,7 +302,7 @@ def _read_property_tag_legacy(
             # StructName (FName) + StructGuid (FGuid = 16 bytes)
             tag.struct_type = archive.read_name(name_map)
             if file_version_ue4 >= UE4_STRUCT_GUID_IN_PROPERTY_TAG:
-                tag.struct_guid = archive.read_bytes(16)
+                archive.read_bytes(16)  # StructGuid — write-only; advance cursor only.
         elif tag.type == "BoolProperty":
             # BoolVal: uint8 — serialized as 1 byte in binary format
             # Reference: PropertyTag.cpp:271-281 (Slot << SA_ATTRIBUTE(TEXT("BoolVal"), Tag.BoolVal))
@@ -341,7 +341,7 @@ def _read_property_tag_legacy(
         # HasPropertyGuid — VER_UE4_PROPERTY_GUID_IN_PROPERTY_TAG.
         has_property_guid = archive.read_u8()
         if has_property_guid:
-            tag.property_guid = archive.read_bytes(16)
+            archive.read_bytes(16)  # PropertyGuid — write-only; advance cursor only.
 
     # PropertyExtensions (ue5 >= 1011)
     # Reference: PropertyTag.cpp:395-399, SerializePropertyExtensions
@@ -349,12 +349,12 @@ def _read_property_tag_legacy(
         property_extensions = archive.read_u8()
         tag.flags = property_extensions  # Reuse flags field to store extension flags
         if property_extensions & PROP_EXT_SERIALIZE_CONTROL:
-            tag.override_operation = archive.read_u8()
-            tag.experimental_overridable_logic = archive.read_u8()
+            archive.read_u8()  # override_operation — write-only; advance cursor only.
+            archive.read_u8()  # experimental_overridable_logic — write-only; advance cursor only.
         if property_extensions & PROP_EXT_HAS_EXTERNAL_OBJECTS:
             # PropertyTag.cpp SerializePropertyExtensions: HasExternalsObjects appends
             # one uint8 external-object slot in the same tag.
-            tag.external_objects_byte = archive.read_u8()
+            archive.read_u8()  # external_objects_byte — write-only; advance cursor only.
 
     # Legacy format has no Flags byte (except extensions) -> serialize_type is always "Property"
     tag.serialize_type = "Property"

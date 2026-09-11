@@ -1,9 +1,9 @@
-from __future__ import annotations
-
 """Property parsing dispatcher and export entry property loop.
 
 Equivalent migration of uasset_read.py lines 6007-6220.
 """
+
+from __future__ import annotations
 
 import logging
 import struct as _struct
@@ -592,9 +592,8 @@ def _handle_serialization_control(
     """
     control_offset = archive.tell()
     serialization_control = archive.read_u8()
-    overridden_operation = None
     if serialization_control & 0x02:
-        overridden_operation = archive.read_u8()
+        archive.read_u8()  # overridden operation — write-only; advance cursor only.
     # Record unknown bits (bits other than known bits 0x01|0x02)
     unknown_bits = serialization_control & ~_KNOWN_SERIALIZATION_CONTROL_BITS
     if unknown_bits:
@@ -611,26 +610,8 @@ def _handle_serialization_control(
             fallback="skipped_subsequent_reads",
             message=f"Export '{getattr(export, 'object_name', '')}' SerializationControlExtensions unknown bits: 0x{unknown_bits:02X} (bits: {', '.join(bit_names)})",
         )
-        # Store in export transforms, for IR/JSON output
-        if not hasattr(export, "transforms") or export.transforms is None:
-            export.transforms = {}
-        export.transforms["serialization_control"] = {
-            "value": serialization_control,
-            "overridden_operation": None,
-            "unknown_bits": unknown_bits,
-            "offset": control_offset,
-        }
         # Unknown bits may cause subsequent byte misalignment; return early so caller handles recovery
         return
-    # Store in export transforms, for IR/JSON output
-    if not hasattr(export, "transforms") or export.transforms is None:
-        export.transforms = {}
-    export.transforms["serialization_control"] = {
-        "value": serialization_control,
-        "overridden_operation": overridden_operation,
-        "unknown_bits": unknown_bits,
-        "offset": control_offset,
-    }
 
 
 def _handle_unversioned_properties(
@@ -673,9 +654,6 @@ def _handle_unversioned_properties(
         export.object_name,
         len(raw_bytes),
     )
-    # Mark export status as opaque_unversioned, not as a full success in the final report
-    setattr(export, "parse_status", "opaque_unversioned")
-    setattr(export, "fallback_reason", "missing_mapping")
     return [
         PropertyFallback(
             name=export.object_name,
@@ -921,7 +899,6 @@ def _read_property_loop(
                         array_index=tag.array_index,
                     )
                 )
-                setattr(export, "parse_status", "partial")
                 break
 
             # Boundary check: PropertyTag.Size should not exceed remaining property data range
@@ -1045,9 +1022,6 @@ def parse_properties_from_export(
             skip_export_payload(archive, export, summary)
         except BINARY_READ_ERRORS as e:
             logger.debug("Failed to skip export '%s' payload: %s", export.object_name, e)
-        setattr(export, "parse_status", "skipped")
-        setattr(export, "fallback_reason", "unsupported_type")
-        setattr(export, "class_name", skip_class_name or "")
         return []
 
     # D-02: SerializationControlExtensions header handling

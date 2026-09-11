@@ -71,7 +71,6 @@ class ObjectImport:
     outer_index: PackageIndex
     object_name: str
     package_name: str | None = None
-    b_import_optional: bool = False
 
 
 @dataclass
@@ -86,14 +85,7 @@ class ObjectExport:
     serial_size: int
     serial_offset: int
     template_index: PackageIndex = field(default_factory=lambda: PackageIndex(0))
-    b_forced_export: bool = False
-    b_not_for_client: bool = False
-    b_not_for_server: bool = False
-    b_is_inherited_instance: bool = False
-    package_flags: int = 0
-    b_not_always_loaded_for_editor_game: bool = False
     b_is_asset: bool = False
-    b_generate_public_hash: bool = False
     script_serialization_end_offset: int = 0
     script_serialization_start_offset: int = 0
     # Preload dependency span into summary PreloadDependencyValues
@@ -115,8 +107,6 @@ class ObjectExport:
         return self.script_serialization_end_offset > self.script_serialization_start_offset
 
     properties: list[Any] = field(default_factory=list)
-    transforms: dict[str, Any] = field(default_factory=dict)
-    guid: str = ""  # 16 bytes GUID (exists when version < 1005)
 
 
 def script_property_region(export: ObjectExport) -> tuple[int, int, bool]:
@@ -179,10 +169,9 @@ def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: li
         if file_version >= UE4_NON_OUTER_PACKAGE_IMPORT:
             package_name = archive.read_name(name_map)
 
-        # bImportOptional: UE5 >= 1003 (OPTIONAL_RESOURCES)
-        b_import_optional = False
+        # bImportOptional: UE5 >= 1003 (OPTIONAL_RESOURCES) — write-only; advance cursor only.
         if summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
-            b_import_optional = archive.read_bool()
+            archive.read_bool()
 
         import_map.append(
             ObjectImport(
@@ -191,7 +180,6 @@ def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: li
                 outer_index=outer_index,
                 object_name=object_name,
                 package_name=package_name,
-                b_import_optional=b_import_optional,
             )
         )
     return import_map
@@ -267,38 +255,33 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: li
                 serial_offset = 0
                 serial_size = 0
 
-            # bool flags (always present)
-            b_forced_export = archive.read_bool()
-            b_not_for_client = archive.read_bool()
-            b_not_for_server = archive.read_bool()
+            # bool flags (always present) — all write-only except bIsAsset; advance cursor only.
+            archive.read_bool()  # bForcedExport
+            archive.read_bool()  # bNotForClient
+            archive.read_bool()  # bNotForServer
 
-            # PackageGuid: removed in UE5 1005
-            package_guid = ""
+            # PackageGuid: removed in UE5 1005 — write-only; advance cursor only.
             if summary.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:
-                guid_bytes = archive.read(16)
-                package_guid = guid_bytes.hex()
+                archive.read(16)
 
-            # bIsInheritedInstance: UE5 >= 1006
-            b_is_inherited_instance = False
+            # bIsInheritedInstance: UE5 >= 1006 — write-only; advance cursor only.
             if summary.file_version_ue5 >= UE5_TRACK_OBJECT_EXPORT_IS_INHERITED:
-                b_is_inherited_instance = archive.read_bool()
+                archive.read_bool()
 
-            package_flags = archive.read_u32()
+            archive.read_u32()  # PackageFlags — write-only; advance cursor only.
 
-            # bNotAlwaysLoadedForEditorGame: VER_UE4_LOAD_FOR_EDITOR_GAME (365)
-            b_not_always_loaded_for_editor_game = True
+            # bNotAlwaysLoadedForEditorGame: VER_UE4_LOAD_FOR_EDITOR_GAME (365) — write-only.
             if file_version >= UE4_LOAD_FOR_EDITOR_GAME:
-                b_not_always_loaded_for_editor_game = archive.read_bool()
+                archive.read_bool()
 
             # bIsAsset: VER_UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT (485; historical 4.x numbering)
             b_is_asset = False
             if file_version >= UE4_COOKED_ASSETS_IN_EDITOR_SUPPORT:
                 b_is_asset = archive.read_bool()
 
-            # bGeneratePublicHash: UE5 >= 1003 (OPTIONAL_RESOURCES)
-            b_generate_public_hash = False
+            # bGeneratePublicHash: UE5 >= 1003 (OPTIONAL_RESOURCES) — write-only; advance cursor only.
             if summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
-                b_generate_public_hash = archive.read_bool()
+                archive.read_bool()
 
             # Dependency arrays: VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS (507)
             # Span into summary PreloadDependencyValues:
@@ -348,17 +331,9 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: li
                     object_flags=object_flags,
                     serial_size=serial_size,
                     serial_offset=serial_offset,
-                    b_forced_export=b_forced_export,
-                    b_not_for_client=b_not_for_client,
-                    b_not_for_server=b_not_for_server,
-                    b_is_inherited_instance=b_is_inherited_instance,
-                    package_flags=package_flags,
-                    b_not_always_loaded_for_editor_game=b_not_always_loaded_for_editor_game,
                     b_is_asset=b_is_asset,
-                    b_generate_public_hash=b_generate_public_hash,
                     script_serialization_end_offset=script_serialization_end_offset,
                     script_serialization_start_offset=script_serialization_start_offset,
-                    guid=package_guid,
                     first_export_dependency=first_export_dependency,
                     serialization_before_serialization_dependencies=ser_before_ser_deps,
                     create_before_serialization_dependencies=create_before_ser_deps,

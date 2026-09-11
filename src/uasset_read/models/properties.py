@@ -29,14 +29,8 @@ class PropertyTag:
     size: int  # Serialized data size (bytes)
     array_index: int = 0  # Array element index (default 0)
     flags: int = 0  # EPropertyTagFlags bit flags
-    struct_guid: bytes | None = None  # 16 bytes GUID (legacy StructProperty tag)
-    property_guid: bytes | None = None  # 16 bytes GUID (when HasPropertyGuid)
     bool_val: int = 0  # BoolProperty value (BoolTrue flag)
-    override_operation: int | None = None  # EOverriddenPropertyOperation (u8)
-    experimental_overridable_logic: int | None = None  # bExperimentalOverridableLogic (u8)
-    external_objects_byte: int | None = None  # HasExternalsObjects extension slot (u8)
     serialize_type: str = "Property"  # Property / Skipped / BinaryOrNative
-    type_name: PropertyTypeName | None = None  # Recursive FPropertyTypeName
     enum_type: str | None = None  # ByteProperty/EnumProperty enum type (extracted from FPropertyTypeName)
     type_parts: list[tuple[str, int]] = field(default_factory=list)  # Complete FPropertyTypeName nodes
     struct_type: str | None = None  # StructProperty struct type name
