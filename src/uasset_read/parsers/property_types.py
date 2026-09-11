@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import TYPE_CHECKING, Dict, Any
+from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
 
@@ -343,34 +343,14 @@ def parse_soft_object_property(
     tag: PropertyTag,
     archive: FArchive,
     name_map: list[str],
-    soft_object_path_list: list[Dict] | None = None,
     summary: Any | None = None,
 ) -> SoftObjectPathValue:
     """Parse SoftObjectProperty (FSoftObjectPath).
 
-    When soft_object_path_list exists (UE5.7+), read int32 index.
-    Otherwise read the inline FSoftObjectPath layout (FName-based).
+    Inline FSoftObjectPath layout (FName-based).
     """
-    if soft_object_path_list is not None and len(soft_object_path_list) > 0:
-        # UE5.7+ index format
-        index = archive.read_i32()
-        if 0 <= index < len(soft_object_path_list):
-            entry = soft_object_path_list[index]
-            return SoftObjectPathValue(
-                raw_kind=tag.type,
-                asset_path=entry.get("asset_path", ""),
-                sub_path=entry.get("sub_path", ""),
-                index=index,
-            )
-        return SoftObjectPathValue(
-            raw_kind=tag.type,
-            asset_path="",
-            sub_path="",
-            index=index,
-            error=f"SoftObjectPath index {index} out of bounds (list size {len(soft_object_path_list)})",
-        )
-    # No summary table (UE5 < 1008): FSoftObjectPath inline. A two-FString layout
-    # never existed in UE (SoftObjectPath.cpp SerializePathWithoutFixup). UE5 >= 1007:
+    # FSoftObjectPath inline. A two-FString layout never existed in UE
+    # (SoftObjectPath.cpp SerializePathWithoutFixup). UE5 >= 1007:
     # FTopLevelAssetPath = PackageName FName + AssetName FName, then subpath FString.
     # Older: one FName + subpath FString. The pre-4.19 single-FString form is outside
     # this project's supported window; such a package hits the tolerant skip, not a

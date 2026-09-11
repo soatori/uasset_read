@@ -581,21 +581,17 @@ def test_property_bag_normalization_is_bounded_lossless():
         # UE5 < 1007 legacy inline: FName(index+number) + FString (SerializePathWithoutFixup)
         body = struct.pack("<ii", 2, 0) + struct.pack("<i", len("SubPath") + 1) + b"SubPath\x00"
         arc = ByteArchive(body)
-        summary = SimpleNamespace(
-            file_version_ue5=500, _soft_object_path_list=None, package_flags=0, custom_versions=[]
-        )
+        summary = SimpleNamespace(file_version_ue5=500, package_flags=0, custom_versions=[])
         val = parse_soft_object_property(
-            PropertyTag(name="S", type="SoftObjectProperty", size=len(body)), arc, names, None, summary
+            PropertyTag(name="S", type="SoftObjectProperty", size=len(body)), arc, names, summary
         )
         assert val.asset_path == "Bar" and val.sub_path == "SubPath"
         # UE5 >= 1007: FTopLevelAssetPath = PackageName FName + AssetName FName, then subpath FString
         body2 = struct.pack("<iiii", 1, 0, 2, 0) + struct.pack("<i", 1) + b"\x00"
         arc2 = ByteArchive(body2)
-        summary2 = SimpleNamespace(
-            file_version_ue5=1007, _soft_object_path_list=None, package_flags=0, custom_versions=[]
-        )
+        summary2 = SimpleNamespace(file_version_ue5=1007, package_flags=0, custom_versions=[])
         val2 = parse_soft_object_property(
-            PropertyTag(name="S", type="SoftObjectProperty", size=len(body2)), arc2, names, None, summary2
+            PropertyTag(name="S", type="SoftObjectProperty", size=len(body2)), arc2, names, summary2
         )
         assert val2.asset_path == "Game/Foo/Bar.Bar"
 

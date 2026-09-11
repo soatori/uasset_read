@@ -299,35 +299,6 @@ def _decode_sphere(raw: bytes, size: int) -> dict[str, Any]:
     return {"Center": {"X": vals["X"], "Y": vals["Y"], "Z": vals["Z"]}, "Radius": vals["W"]}
 
 
-def _decode_soft_object_path_index(
-    raw: bytes,
-    summary: Any,
-) -> dict[str, Any] | None:
-    """Resolve a UE5 header-table FSoftObjectPath index without guessing."""
-    soft_object_path_list = getattr(summary, "_soft_object_path_list", None)
-    if len(raw) != 4 or not isinstance(soft_object_path_list, list) or not soft_object_path_list:
-        return None
-
-    index = struct.unpack("<i", raw)[0]
-    if not 0 <= index < len(soft_object_path_list):
-        return None
-
-    entry = soft_object_path_list[index]
-    if not isinstance(entry, dict):
-        return None
-
-    return {
-        "kind": "struct_binary_decoded",
-        "struct_type": "SoftObjectPath",
-        "size": 4,
-        "fields": {
-            "asset_path": entry.get("asset_path", ""),
-            "sub_path": entry.get("sub_path", ""),
-            "index": index,
-        },
-    }
-
-
 def _decode_ed_graph_pin_type(raw: bytes, size: int, name_map: list[str]) -> dict[str, Any] | None:
     """Decode FEdGraphPinType from raw binary.
 
@@ -486,11 +457,6 @@ def _parse_struct_binary(
             raw = archive.read(size)
     except (struct.error, OSError):
         return None
-
-    if struct_type == "SoftObjectPath":
-        resolved_path = _decode_soft_object_path_index(raw, summary)
-        if resolved_path is not None:
-            return resolved_path
 
     # Dispatch decoder by struct_type + size
     decoder_entry = _STRUCT_DECODERS.get(struct_type)

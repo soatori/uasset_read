@@ -194,9 +194,6 @@ def _get_parse_functions():
 
 # Positional args parse_property_value passes each handler. Only the deviations from
 # the ("tag", "archive") default are listed; names index the `values` dict below.
-# "soft_path_list" resolves to summary._soft_object_path_list (UE5.7+ soft object
-# path table); it stays in the two soft overrides until parse_soft_object_property
-# drops the positional (planned Task 9).
 _ARGS_DEFAULT: tuple[str, ...] = ("tag", "archive")
 _ARGS_OVERRIDES: dict[str, tuple[str, ...]] = {
     "TextProperty": ("tag", "archive", "dev_notes"),
@@ -207,8 +204,8 @@ _ARGS_OVERRIDES: dict[str, tuple[str, ...]] = {
     "MulticastSparseDelegateProperty": ("tag", "archive", "name_map"),
     "FieldPathProperty": ("tag", "archive", "name_map"),
     "EnumProperty": ("tag", "archive", "name_map", "summary"),
-    "SoftObjectProperty": ("tag", "archive", "name_map", "soft_path_list", "summary"),
-    "SoftClassProperty": ("tag", "archive", "name_map", "soft_path_list", "summary"),
+    "SoftObjectProperty": ("tag", "archive", "name_map", "summary"),
+    "SoftClassProperty": ("tag", "archive", "name_map", "summary"),
     "MapProperty": ("tag", "archive", "name_map", "export_map", "summary"),
     "SetProperty": ("tag", "archive", "name_map", "export_map", "summary"),
     "OptionalProperty": ("tag", "archive", "name_map", "export_map", "summary"),
@@ -520,7 +517,6 @@ def parse_property_value(
             "export_map": export_map,
             "summary": summary,
             "depth": depth,
-            "soft_path_list": getattr(summary, "_soft_object_path_list", None) if summary is not None else None,
             "dev_notes": dev_notes,
         }
         return handler(*(values[n] for n in _ARGS_OVERRIDES.get(tag.type, _ARGS_DEFAULT)))
