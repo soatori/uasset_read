@@ -258,13 +258,13 @@ def _recover_pin_array_count(
 
         # Validate first PinReference
         pin_ref_1 = validate_pin_reference_at(archive, candidate_pos + 4, export_map, import_map)
-        if pin_ref_1 is None or not pin_ref_1["valid"]:
+        if pin_ref_1 is None or not pin_ref_1[0]:
             continue
 
         # Validate second PinReference (if count >= 2)
         if candidate >= 2 and after_count + 48 <= len(window):
             pin_ref_2 = validate_pin_reference_at(archive, candidate_pos + 4 + 24, export_map, import_map)
-            if pin_ref_2 is None or not pin_ref_2["valid"]:
+            if pin_ref_2 is None or not pin_ref_2[0]:
                 # Second ref invalid, medium confidence
                 best_candidate = (candidate_pos, candidate)
                 best_confidence = "medium"

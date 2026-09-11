@@ -924,20 +924,6 @@ class BlueprintFamilyHandler:
             extras = package_data[2] if package_data else {}
             entry = extras.get(obj.id, {}) if isinstance(extras, dict) else {}
             graphs = entry.get("graphs", []) if isinstance(entry, dict) else []
-            # Kismet functions belong to the export, not to its graphs: a
-            # BlueprintGeneratedClass owns Function exports but no FunctionGraph
-            # exports, so gating this projection on `graphs` silently drops them
-            # at depth=decode.
-            kismet = entry.get("kismet", []) if isinstance(entry, dict) else []
-            if kismet:
-                result["functions"] = _project_kismet_functions(kismet, include_expressions=True)
-                obj.coverage.append(
-                    CoverageEntry(
-                        feature=f"{self._feature}.kismet",
-                        status="present",
-                        detail=f"{len(kismet)} functions",
-                    )
-                )
             if graphs:
                 fg_ids = _function_graph_ids(obj.properties)
                 self._finalize_graph_kinds(graphs, fg_ids)
@@ -994,6 +980,18 @@ class BlueprintFamilyHandler:
                         feature=f"{self._feature}.graph",
                         status="missing",
                         detail="no graphs owned by this export",
+                    )
+                )
+            # After graphs so coverage order matches pre-T16 for graph owners;
+            # still ungated so graph-less BlueprintGeneratedClass keeps functions.
+            kismet = entry.get("kismet", []) if isinstance(entry, dict) else []
+            if kismet:
+                result["functions"] = _project_kismet_functions(kismet, include_expressions=True)
+                obj.coverage.append(
+                    CoverageEntry(
+                        feature=f"{self._feature}.kismet",
+                        status="present",
+                        detail=f"{len(kismet)} functions",
                     )
                 )
 
