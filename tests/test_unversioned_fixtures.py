@@ -1,7 +1,6 @@
 """Structural assertions for unversioned property fixtures."""
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import struct
@@ -12,58 +11,20 @@ SAMPLES_DIR = os.path.join(os.path.dirname(__file__), "samples")
 MANIFEST_PATH = os.path.join(SAMPLES_DIR, "manifest.json")
 
 
-def _load_manifest():
-    with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def _sha256_file(path: str) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 class TestUnversionedFixtureIntegrity:
-    """Verify fixture files exist, match manifest, and have expected structure."""
+    """Unversioned-specific invariants; file integrity is covered by test_samples.py."""
 
     @pytest.fixture
-    def manifest(self):
-        return _load_manifest()
-
-    @pytest.fixture
-    def unversioned_entries(self, manifest):
+    def unversioned_entries(self):
+        with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
         return [s for s in manifest.get("samples", []) if s.get("unversioned")]
-
-    def test_unversioned_fixtures_exist(self, unversioned_entries):
-        assert len(unversioned_entries) >= 2, (
-            f"Expected >=2 unversioned fixtures, got {len(unversioned_entries)}"
-        )
-        for entry in unversioned_entries:
-            path = os.path.join(SAMPLES_DIR, entry["name"])
-            assert os.path.isfile(path), f"Fixture file missing: {path}"
-
-    def test_sha256_matches(self, unversioned_entries):
-        for entry in unversioned_entries:
-            path = os.path.join(SAMPLES_DIR, entry["name"])
-            actual = _sha256_file(path)
-            assert actual == entry["sha256"], (
-                f"SHA-256 mismatch for {entry['name']}: "
-                f"expected {entry['sha256']}, got {actual}"
-            )
-
-    def test_size_matches(self, unversioned_entries):
-        for entry in unversioned_entries:
-            path = os.path.join(SAMPLES_DIR, entry["name"])
-            actual = os.path.getsize(path)
-            assert actual == entry["size_bytes"], (
-                f"Size mismatch for {entry['name']}: "
-                f"expected {entry['size_bytes']}, got {actual}"
-            )
 
     def test_version_zero_indicates_unversioned(self, unversioned_entries):
         """FileVersionUE4 == 0 is the detection signal for unversioned properties."""
+        assert len(unversioned_entries) >= 2, (
+            f"Expected >=2 unversioned fixtures, got {len(unversioned_entries)}"
+        )
         for entry in unversioned_entries:
             assert entry.get("file_version_ue4") == 0, (
                 f"{entry['name']}: expected file_version_ue4=0 for unversioned, "

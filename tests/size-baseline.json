@@ -1,12 +1,12 @@
 {
-  "_note": "Ratchet ceilings for tests/test_size_baseline.py and the CI package-smoke wheel check; raise only as a deliberate reviewable diff, tighten after deletion waves. Tightened 2026-09-12 after subtraction wave task 7: folded property arg table into handler map; dropped soft-class forwarder and small dead parser code.",
+  "_note": "Ratchet ceilings for tests/test_size_baseline.py and the CI package-smoke wheel check; raise only as a deliberate reviewable diff, tighten after deletion waves. Tightened 2026-09-12 after subtraction wave task 7 (folded property arg table into handler map; dropped soft-class forwarder) and task 13 (test-tree dedup: manifest dead keys, fixture boilerplate, duplicate serialization tests).",
   "src_python": {
     "min_files": 72,
     "max_lines": 19003
   },
   "tests_python": {
     "min_files": 13,
-    "max_lines": 5888
+    "max_lines": 5678
   },
   "docs_markdown": {
     "min_files": 151,

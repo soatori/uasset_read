@@ -982,18 +982,17 @@ def test_iostore_toc_read_does_not_load_the_container():
     assert toc.compression_block_count == len(toc.blocks)
 
 
+_UE5_SPLIT_SAMPLES = [
+    s
+    for s in _MANIFEST_DATA["samples"]
+    if any(sc["name"].endswith(".uexp") for sc in s.get("sidecars", [])) and s.get("file_version_ue5", 0) >= 1018
+]
+
+
 @pytest.mark.parametrize(
     "sample_entry",
-    [
-        s
-        for s in _MANIFEST_DATA["samples"]
-        if any(sc["name"].endswith(".uexp") for sc in s.get("sidecars", [])) and s.get("file_version_ue5", 0) >= 1018
-    ],
-    ids=[
-        s["name"]
-        for s in _MANIFEST_DATA["samples"]
-        if any(sc["name"].endswith(".uexp") for sc in s.get("sidecars", [])) and s.get("file_version_ue5", 0) >= 1018
-    ],
+    _UE5_SPLIT_SAMPLES,
+    ids=[s["name"] for s in _UE5_SPLIT_SAMPLES],
 )
 def test_missing_sidecar_diagnostic(sample_entry):
     """A split package without its .uexp emits PACKAGE_SIDECAR_MISSING."""

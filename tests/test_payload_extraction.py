@@ -12,18 +12,31 @@ from uasset_read.models.payloads import (
     extract_payload_bytes,
 )
 
+FIXTURE_DIR = Path(__file__).parent / "samples"
+MAIN_PATH = FIXTURE_DIR / "T_ParserBulk.uasset"
+
+pytestmark = pytest.mark.skipif(
+    not (MAIN_PATH.exists() and MAIN_PATH.with_suffix(".uexp").exists()),
+    reason="T_ParserBulk fixture or its .uexp sidecar is missing",
+)
+
+
+def _desc(**overrides) -> PayloadDescriptor:
+    base = {
+        "id": "payload:(export:0)",
+        "owner": "export:0",
+        "kind": "bulk_data",
+        "source_region": "main",
+        "offset": 0,
+        "stored_size": 0,
+        "status": "available",
+    }
+    return PayloadDescriptor(**{**base, **overrides})
+
 
 def test_payload_descriptor_creation():
     """Test creating a PayloadDescriptor with required fields."""
-    descriptor = PayloadDescriptor(
-        id="payload:(export:0)",
-        owner="export:0",
-        kind="bulk_data",
-        source_region="main",
-        offset=0,
-        stored_size=2048,
-        status="available",
-    )
+    descriptor = _desc(source_region="main", stored_size=2048)
 
     assert descriptor.id == "payload:(export:0)"
     assert descriptor.owner == "export:0"
@@ -33,14 +46,13 @@ def test_payload_descriptor_creation():
 
 def test_payload_descriptor_optional_fields():
     """Test creating a PayloadDescriptor with optional fields."""
-    descriptor = PayloadDescriptor(
+    descriptor = _desc(
         id="payload:(export:1)",
         owner="export:1",
         kind="texture_mip",
         source_region="ubulk",
         offset=1024,
         stored_size=4096,
-        status="available",
         logical_size=8192,
         compression="oodle",
         hash="abc123",
@@ -53,15 +65,7 @@ def test_payload_descriptor_optional_fields():
 
 def test_extract_payload_main_read_failure():
     """Test that extract_payload returns error when main file doesn't exist."""
-    descriptor = PayloadDescriptor(
-        id="payload:(export:0)",
-        owner="export:0",
-        kind="bulk_data",
-        source_region="main",
-        offset=0,
-        stored_size=2048,
-        status="available",
-    )
+    descriptor = _desc(stored_size=2048)
 
     data, error = extract_payload_bytes(descriptor, main_path=Path("nonexistent.uasset"))
     assert error is not None
@@ -71,15 +75,7 @@ def test_extract_payload_main_read_failure():
 
 def test_extract_payload_with_missing_sidecar():
     """Test that extract_payload returns error when sidecar file doesn't exist."""
-    descriptor = PayloadDescriptor(
-        id="payload:(export:0)",
-        owner="export:0",
-        kind="bulk_data",
-        source_region="uexp",
-        offset=0,
-        stored_size=1024,
-        status="available",
-    )
+    descriptor = _desc(source_region="uexp", stored_size=1024)
 
     sidecar_paths = {"uexp": Path("nonexistent.uexp")}
     data, error = extract_payload_bytes(
@@ -93,27 +89,14 @@ def test_extract_payload_with_missing_sidecar():
 
 def test_extract_payload_from_uexp():
     """Test extracting payload from .uexp sidecar."""
-    fixture_dir = Path(__file__).parent / "samples"
-    main_path = fixture_dir / "T_ParserBulk.uasset"
-    uexp_path = fixture_dir / "T_ParserBulk.uexp"
-
-    if not main_path.exists():
-        pytest.skip("T_ParserBulk.uasset fixture not found")
+    uexp_path = FIXTURE_DIR / "T_ParserBulk.uexp"
 
     # T_ParserBulk.uexp is 22308 bytes
-    descriptor = PayloadDescriptor(
-        id="payload:(export:0)",
-        owner="export:0",
-        kind="bulk_data",
-        source_region="uexp",
-        offset=0,
-        stored_size=22308,
-        status="available",
-    )
+    descriptor = _desc(source_region="uexp", stored_size=22308)
 
     data, error = extract_payload_bytes(
         descriptor,
-        main_path=main_path,
+        main_path=MAIN_PATH,
         sidecar_paths={"uexp": uexp_path},
     )
 
@@ -123,27 +106,14 @@ def test_extract_payload_from_uexp():
 
 def test_extract_payload_from_uexp_with_offset():
     """Test extracting payload from .uexp with offset."""
-    fixture_dir = Path(__file__).parent / "samples"
-    main_path = fixture_dir / "T_ParserBulk.uasset"
-    uexp_path = fixture_dir / "T_ParserBulk.uexp"
-
-    if not main_path.exists():
-        pytest.skip("T_ParserBulk.uasset fixture not found")
+    uexp_path = FIXTURE_DIR / "T_ParserBulk.uexp"
 
     # Read first 100 bytes from offset 100
-    descriptor = PayloadDescriptor(
-        id="payload:(export:0)",
-        owner="export:0",
-        kind="bulk_data",
-        source_region="uexp",
-        offset=100,
-        stored_size=100,
-        status="available",
-    )
+    descriptor = _desc(source_region="uexp", offset=100, stored_size=100)
 
     data, error = extract_payload_bytes(
         descriptor,
-        main_path=main_path,
+        main_path=MAIN_PATH,
         sidecar_paths={"uexp": uexp_path},
     )
 
@@ -153,27 +123,14 @@ def test_extract_payload_from_uexp_with_offset():
 
 def test_extract_payload_short_read():
     """Test extraction when stored_size exceeds file size."""
-    fixture_dir = Path(__file__).parent / "samples"
-    main_path = fixture_dir / "T_ParserBulk.uasset"
-    uexp_path = fixture_dir / "T_ParserBulk.uexp"
-
-    if not main_path.exists():
-        pytest.skip("T_ParserBulk.uasset fixture not found")
+    uexp_path = FIXTURE_DIR / "T_ParserBulk.uexp"
 
     # Request more bytes than available
-    descriptor = PayloadDescriptor(
-        id="payload:(export:0)",
-        owner="export:0",
-        kind="bulk_data",
-        source_region="uexp",
-        offset=0,
-        stored_size=100000,  # uexp is only 22308 bytes
-        status="available",
-    )
+    descriptor = _desc(source_region="uexp", stored_size=100000)  # uexp is only 22308 bytes
 
     data, error = extract_payload_bytes(
         descriptor,
-        main_path=main_path,
+        main_path=MAIN_PATH,
         sidecar_paths={"uexp": uexp_path},
     )
 
@@ -184,15 +141,7 @@ def test_extract_payload_short_read():
 
 def test_extract_payload_missing_sidecar_returns_deferred():
     """Test that missing sidecar returns DEFERRED."""
-    descriptor = PayloadDescriptor(
-        id="payload:(export:0)",
-        owner="export:0",
-        kind="bulk_data",
-        source_region="ubulk",
-        offset=0,
-        stored_size=1024,
-        status="available",
-    )
+    descriptor = _desc(source_region="ubulk", stored_size=1024)
 
     # No sidecar_paths provided
     data, error = extract_payload_bytes(
@@ -208,13 +157,7 @@ def test_sidecar_discovery():
     """Test that PackageBundle provides sidecar path properties."""
     from uasset_read.package import open_package_bundle
 
-    fixture_dir = Path(__file__).parent / "samples"
-    main_path = fixture_dir / "T_ParserBulk.uasset"
-
-    if not main_path.exists():
-        pytest.skip("T_ParserBulk.uasset fixture not found")
-
-    bundle = open_package_bundle(str(main_path))
+    bundle = open_package_bundle(str(MAIN_PATH))
 
     # T_ParserBulk has .uexp and .ubulk sidecars
     assert bundle.uexp_path is not None
@@ -240,15 +183,9 @@ def test_agent_tool_extract_payload():
 
     from uasset_read.agent_tools import extract_payload
 
-    fixture_dir = Path(__file__).parent / "samples"
-    main_path = fixture_dir / "T_ParserBulk.uasset"
-
-    if not main_path.exists():
-        pytest.skip("T_ParserBulk.uasset not found")
-
     # Call the agent tool with export_index
     result = extract_payload(
-        file_path=str(main_path),
+        file_path=str(MAIN_PATH),
         payload_id="payload:(export:0)",
         export_index=0,
     )
@@ -268,15 +205,9 @@ def test_agent_tool_extract_payload_auto_index():
     """Test agent tool extract_payload derives export_index from payload_id."""
     from uasset_read.agent_tools import extract_payload
 
-    fixture_dir = Path(__file__).parent / "samples"
-    main_path = fixture_dir / "T_ParserBulk.uasset"
-
-    if not main_path.exists():
-        pytest.skip("T_ParserBulk.uasset not found")
-
     # Call without export_index - should derive from payload_id
     result = extract_payload(
-        file_path=str(main_path),
+        file_path=str(MAIN_PATH),
         payload_id="payload:(export:0)",
     )
 
@@ -304,15 +235,9 @@ def test_agent_tool_extract_payload_invalid_payload_id():
     """Test agent tool extract_payload with invalid payload_id format."""
     from uasset_read.agent_tools import extract_payload
 
-    fixture_dir = Path(__file__).parent / "samples"
-    main_path = fixture_dir / "T_ParserBulk.uasset"
-
-    if not main_path.exists():
-        pytest.skip("T_ParserBulk.uasset not found")
-
     # Invalid payload_id format - cannot derive export_index
     result = extract_payload(
-        file_path=str(main_path),
+        file_path=str(MAIN_PATH),
         payload_id="invalid_format",
     )
 
@@ -447,13 +372,7 @@ def test_extract_bulk_data_from_real_uexp():
     """Test extracting BulkData descriptors from real T_ParserBulk.uexp."""
     from uasset_read.parsers.bulk_data import extract_bulk_data_descriptors
 
-    fixture_dir = Path(__file__).parent / "samples"
-    uexp_path = fixture_dir / "T_ParserBulk.uexp"
-
-    if not uexp_path.exists():
-        pytest.skip("T_ParserBulk.uexp not found")
-
-    uexp_data = uexp_path.read_bytes()
+    uexp_data = (FIXTURE_DIR / "T_ParserBulk.uexp").read_bytes()
 
     # The uexp file contains export serial data
     # Scan for BulkData headers in the last 32 bytes
@@ -483,14 +402,8 @@ def test_end_to_end_payload_extraction():
     from uasset_read.agent_tools import extract_payload
     from uasset_read.package import open_package_bundle, parse_package_document
 
-    fixture_dir = Path(__file__).parent / "samples"
-    main_path = fixture_dir / "T_ParserBulk.uasset"
-
-    if not main_path.exists():
-        pytest.skip("T_ParserBulk.uasset fixture not found")
-
     # Step 1: Parse the package to discover structure
-    doc = parse_package_document(str(main_path), depth="package")
+    doc = parse_package_document(str(MAIN_PATH), depth="package")
     assert doc is not None, "PackageDocument should not be None"
     assert len(doc.objects) > 0, "Package should have at least one export"
 
@@ -511,7 +424,7 @@ def test_end_to_end_payload_extraction():
     assert export.serial_region.offset >= 0, "Serial region offset should be non-negative"
 
     # Step 3: Discover sidecar files
-    bundle = open_package_bundle(str(main_path))
+    bundle = open_package_bundle(str(MAIN_PATH))
     assert bundle.uexp_path is not None, "T_ParserBulk should have a .uexp sidecar"
     assert bundle.uexp_path.exists(), ".uexp sidecar file should exist"
     assert bundle.ubulk_path is not None, "T_ParserBulk should have a .ubulk sidecar"
@@ -520,7 +433,7 @@ def test_end_to_end_payload_extraction():
     # Step 4: Extract payload using the agent tool
     payload_id = f"payload:(export:{texture_export_index})"
     result = extract_payload(
-        file_path=str(main_path),
+        file_path=str(MAIN_PATH),
         payload_id=payload_id,
         export_index=texture_export_index,
     )
@@ -558,15 +471,9 @@ def test_end_to_end_payload_extraction_auto_index():
 
     from uasset_read.agent_tools import extract_payload
 
-    fixture_dir = Path(__file__).parent / "samples"
-    main_path = fixture_dir / "T_ParserBulk.uasset"
-
-    if not main_path.exists():
-        pytest.skip("T_ParserBulk.uasset fixture not found")
-
     # Extract without export_index - should derive from payload_id
     result = extract_payload(
-        file_path=str(main_path),
+        file_path=str(MAIN_PATH),
         payload_id="payload:(export:0)",
     )
 
@@ -585,38 +492,24 @@ def test_end_to_end_payload_extraction_direct_api():
 
     Verifies the core extraction function works with real sidecar files.
     """
-    from uasset_read.models.payloads import PayloadDescriptor, extract_payload_bytes
+    from uasset_read.models.payloads import extract_payload_bytes
     from uasset_read.package import open_package_bundle, parse_package_document
 
-    fixture_dir = Path(__file__).parent / "samples"
-    main_path = fixture_dir / "T_ParserBulk.uasset"
-
-    if not main_path.exists():
-        pytest.skip("T_ParserBulk.uasset fixture not found")
-
     # Discover sidecars
-    bundle = open_package_bundle(str(main_path))
+    bundle = open_package_bundle(str(MAIN_PATH))
     assert bundle.uexp_path is not None
 
     # Parse to get serial region info
-    doc = parse_package_document(str(main_path), depth="package")
+    doc = parse_package_document(str(MAIN_PATH), depth="package")
     assert len(doc.objects) > 0
 
     # Create a descriptor for the uexp region
-    descriptor = PayloadDescriptor(
-        id="payload:(export:0)",
-        owner="export:0",
-        kind="bulk_data",
-        source_region="uexp",
-        offset=0,
-        stored_size=bundle.uexp_path.stat().st_size,
-        status="available",
-    )
+    descriptor = _desc(source_region="uexp", stored_size=bundle.uexp_path.stat().st_size)
 
     # Extract using the direct API
     data, error = extract_payload_bytes(
         descriptor,
-        main_path=main_path,
+        main_path=MAIN_PATH,
         sidecar_paths={"uexp": bundle.uexp_path},
     )
 

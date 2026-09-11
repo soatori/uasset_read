@@ -8,7 +8,7 @@ real v1 semantics (five property-projections, one binary reader); porting them
 to v2 handlers is deferred to the handler-semantic-tiers work and requires
 real fixtures first (see tests/samples/manifest.json fixture gaps).
 """
-from uasset_read.models.object_model import ObjectRecord, ObjectStatus
+from tests.test_core import _object_record as _record
 from uasset_read.parsers.asset_types.handlers_impl import get_handlers
 from uasset_read.versioning import VersionContext
 
@@ -47,10 +47,6 @@ FALLBACK_CLASSES = (
     "VolumeTexture", "WidgetBlueprint", "WidgetBlueprintGeneratedClass",
     "World",
 )
-
-def _record(class_name):
-    return ObjectRecord(id="export:0", table_index=0, name="X",
-                        class_name=class_name, status=ObjectStatus())
 
 def test_handler_classes_still_claimed():
     handlers = get_handlers()

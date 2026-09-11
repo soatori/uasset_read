@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "description": "Test sample manifest for uasset_read v2 refactor",
   "samples": [
     {
       "name": "ABP_RifleAnimLayers.uasset",
@@ -10,8 +9,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "AnimBlueprint",
-      "has_multiple_b_is_asset": true,
       "export_count": 10,
       "b_is_asset_count": 2
     },
@@ -23,8 +20,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "AnimBlueprint",
-      "has_multiple_b_is_asset": true,
       "export_count": 3395,
       "b_is_asset_count": 2
     },
@@ -36,8 +31,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 4,
       "b_is_asset_count": 1
     },
@@ -49,8 +42,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "SoundWave",
-      "has_multiple_b_is_asset": false,
       "export_count": 3,
       "b_is_asset_count": 1
     },
@@ -62,8 +53,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "DataTable",
-      "has_multiple_b_is_asset": false,
       "export_count": 3,
       "b_is_asset_count": 1
     },
@@ -75,8 +64,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "Skeleton",
-      "has_multiple_b_is_asset": false,
       "export_count": 11,
       "b_is_asset_count": 1
     },
@@ -88,8 +75,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 5,
       "b_is_asset_count": 1
     },
@@ -101,8 +86,6 @@
       "file_version_ue4": 522,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "PhysicsAsset",
-      "has_multiple_b_is_asset": false,
       "export_count": 40,
       "b_is_asset_count": 1
     },
@@ -114,8 +97,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "MaterialInstance",
-      "has_multiple_b_is_asset": false,
       "export_count": 4,
       "b_is_asset_count": 1
     },
@@ -127,8 +108,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 11,
       "b_is_asset_count": 1
     },
@@ -140,8 +119,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "SoundAttenuation",
-      "has_multiple_b_is_asset": false,
       "export_count": 2,
       "b_is_asset_count": 1
     },
@@ -153,8 +130,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "PoseAsset",
-      "has_multiple_b_is_asset": false,
       "export_count": 3,
       "b_is_asset_count": 1
     },
@@ -166,8 +141,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": true,
       "export_count": 69,
       "b_is_asset_count": 2
     },
@@ -179,8 +152,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": true,
       "export_count": 10,
       "b_is_asset_count": 2
     },
@@ -192,8 +163,6 @@
       "file_version_ue4": 522,
       "file_version_ue5": 1017,
       "sidecars": [],
-      "asset_type_hint": "BlendSpace",
-      "has_multiple_b_is_asset": false,
       "export_count": 1,
       "b_is_asset_count": 1
     },
@@ -205,8 +174,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "DataTable",
-      "has_multiple_b_is_asset": false,
       "export_count": 2,
       "b_is_asset_count": 1
     },
@@ -218,8 +185,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "World",
-      "has_multiple_b_is_asset": false,
       "export_count": 19,
       "b_is_asset_count": 1
     },
@@ -231,8 +196,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 6,
       "b_is_asset_count": 1
     },
@@ -244,8 +207,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 113,
       "b_is_asset_count": 1
     },
@@ -257,8 +218,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 3,
       "b_is_asset_count": 1
     },
@@ -270,8 +229,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 6,
       "b_is_asset_count": 1
     },
@@ -283,8 +240,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "AnimConfig",
-      "has_multiple_b_is_asset": false,
       "export_count": 2,
       "b_is_asset_count": 1
     },
@@ -296,8 +251,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "AnimConfig",
-      "has_multiple_b_is_asset": false,
       "export_count": 3,
       "b_is_asset_count": 1
     },
@@ -309,8 +262,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "SubsurfaceProfile",
-      "has_multiple_b_is_asset": false,
       "export_count": 2,
       "b_is_asset_count": 1
     },
@@ -322,8 +273,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": true,
       "export_count": 32,
       "b_is_asset_count": 2
     },
@@ -335,8 +284,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": true,
       "export_count": 4,
       "b_is_asset_count": 2
     },
@@ -348,8 +295,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 2,
       "b_is_asset_count": 1
     },
@@ -361,8 +306,6 @@
       "file_version_ue4": 522,
       "file_version_ue5": 1018,
       "sidecars": [],
-      "asset_type_hint": "StringTable",
-      "has_multiple_b_is_asset": false,
       "export_count": 1,
       "b_is_asset_count": 1
     },
@@ -374,8 +317,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 3,
       "b_is_asset_count": 1
     },
@@ -387,8 +328,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": true,
       "export_count": 13,
       "b_is_asset_count": 2
     },
@@ -400,8 +339,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "Material",
-      "has_multiple_b_is_asset": false,
       "export_count": 3,
       "b_is_asset_count": 1
     },
@@ -413,8 +350,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "DataTable",
-      "has_multiple_b_is_asset": false,
       "export_count": 3,
       "b_is_asset_count": 1
     },
@@ -426,8 +361,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "UserDefined",
-      "has_multiple_b_is_asset": false,
       "export_count": 2,
       "b_is_asset_count": 1
     },
@@ -439,8 +372,6 @@
       "file_version_ue4": 522,
       "file_version_ue5": 1003,
       "sidecars": [],
-      "asset_type_hint": "PhysicalMaterial",
-      "has_multiple_b_is_asset": false,
       "export_count": 2,
       "b_is_asset_count": 1
     },
@@ -452,8 +383,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "LevelSequence",
-      "has_multiple_b_is_asset": true,
       "export_count": 73,
       "b_is_asset_count": 2
     },
@@ -465,8 +394,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "Texture",
-      "has_multiple_b_is_asset": false,
       "export_count": 3,
       "b_is_asset_count": 1
     },
@@ -478,8 +405,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "Niagara",
-      "has_multiple_b_is_asset": false,
       "export_count": 43,
       "b_is_asset_count": 1
     },
@@ -491,8 +416,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 2,
       "b_is_asset_count": 1
     },
@@ -504,8 +427,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": true,
       "export_count": 31,
       "b_is_asset_count": 2
     },
@@ -517,8 +438,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "UserDefined",
-      "has_multiple_b_is_asset": false,
       "export_count": 1,
       "b_is_asset_count": 1
     },
@@ -530,8 +449,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": true,
       "export_count": 146,
       "b_is_asset_count": 2
     },
@@ -543,8 +460,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 42,
       "b_is_asset_count": 1
     },
@@ -556,8 +471,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 2,
       "b_is_asset_count": 1
     },
@@ -569,8 +482,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 32,
       "b_is_asset_count": 1
     },
@@ -582,8 +493,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 8,
       "b_is_asset_count": 1
     },
@@ -595,8 +504,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 28,
       "b_is_asset_count": 1
     },
@@ -608,8 +515,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "Blueprint",
-      "has_multiple_b_is_asset": true,
       "export_count": 440,
       "b_is_asset_count": 2
     },
@@ -621,8 +526,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "Blueprint",
-      "has_multiple_b_is_asset": true,
       "export_count": 284,
       "b_is_asset_count": 2
     },
@@ -634,8 +537,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": true,
       "export_count": 155,
       "b_is_asset_count": 2
     },
@@ -647,8 +548,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 113,
       "b_is_asset_count": 1
     },
@@ -660,8 +559,6 @@
       "file_version_ue4": 864,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "unknown",
-      "has_multiple_b_is_asset": false,
       "export_count": 12,
       "b_is_asset_count": 1
     },
@@ -673,8 +570,6 @@
       "file_version_ue4": 482,
       "file_version_ue5": 0,
       "sidecars": [],
-      "asset_type_hint": "Blueprint",
-      "has_multiple_b_is_asset": false,
       "export_count": 6,
       "b_is_asset_count": 0
     },
@@ -686,8 +581,6 @@
       "file_version_ue4": 522,
       "file_version_ue5": 1018,
       "sidecars": [],
-      "asset_type_hint": "Blueprint",
-      "has_multiple_b_is_asset": true,
       "export_count": 24,
       "b_is_asset_count": 2
     },
@@ -699,8 +592,6 @@
       "file_version_ue4": 522,
       "file_version_ue5": 1018,
       "sidecars": [],
-      "asset_type_hint": "Material",
-      "has_multiple_b_is_asset": false,
       "export_count": 4,
       "b_is_asset_count": 1
     },
@@ -709,71 +600,50 @@
       "sha256": "0f99372dafcff15a6e49cb964d92a3e3ca59906e6a9c78fbae3fe22eb2db6069",
       "size_bytes": 4757,
       "engine_layout": "legacy",
-      "legacy_file_version": -9,
       "file_version_ue4": 522,
       "file_version_ue5": 1018,
       "sidecars": [],
-      "asset_type_hint": "CurveFloat",
-      "has_multiple_b_is_asset": false,
       "export_count": 2,
-      "b_is_asset_count": 1,
-      "asset_class": "CurveFloat",
-      "diagnostics": []
+      "b_is_asset_count": 1
     },
     {
       "name": "testrCurveTable.uasset",
       "sha256": "4d8581b9f4a05026edd2a9ab021b1bbd0a5d5b85bbd86a2812e3bac7c8c576f7",
       "size_bytes": 2669,
       "engine_layout": "legacy",
-      "legacy_file_version": -9,
       "file_version_ue4": 522,
       "file_version_ue5": 1018,
       "sidecars": [],
-      "asset_type_hint": "CurveTable",
-      "has_multiple_b_is_asset": false,
       "export_count": 2,
-      "b_is_asset_count": 1,
-      "asset_class": "CurveTable",
-      "diagnostics": []
+      "b_is_asset_count": 1
     },
     {
       "name": "TestRichCurveTable.uasset",
       "sha256": "be08b1b889ed9f421cc4f1f3a9f4bd70d4a7b1b14d0813361472340675ebe64f",
       "size_bytes": 2746,
       "engine_layout": "legacy",
-      "legacy_file_version": -9,
       "file_version_ue4": 522,
       "file_version_ue5": 1018,
       "sidecars": [],
-      "asset_type_hint": "CurveTable",
-      "has_multiple_b_is_asset": false,
       "export_count": 2,
-      "b_is_asset_count": 1,
-      "asset_class": "CurveTable",
-      "diagnostics": []
+      "b_is_asset_count": 1
     },
     {
       "name": "TestSimpleCurveTable.uasset",
       "sha256": "2d98adad5f156e26d7efabaf6954755ae564a5e88954ec9980a123a3c6e29f20",
       "size_bytes": 2796,
       "engine_layout": "legacy",
-      "legacy_file_version": -9,
       "file_version_ue4": 522,
       "file_version_ue5": 1018,
       "sidecars": [],
-      "asset_type_hint": "CurveTable",
-      "has_multiple_b_is_asset": false,
       "export_count": 2,
-      "b_is_asset_count": 1,
-      "asset_class": "CurveTable",
-      "diagnostics": []
+      "b_is_asset_count": 1
     },
     {
       "name": "DT_ParserWeapon.uasset",
       "sha256": "d3fae6faed554ca98d2d02c517669272ef39df770ab13e7baacd8a093f880c36",
       "size_bytes": 1066,
       "engine_layout": "legacy",
-      "legacy_file_version": -9,
       "file_version_ue4": 522,
       "file_version_ue5": 1018,
       "sidecars": [
@@ -783,19 +653,14 @@
           "size_bytes": 230
         }
       ],
-      "asset_type_hint": "DataTable",
-      "has_multiple_b_is_asset": false,
       "export_count": 1,
-      "b_is_asset_count": 1,
-      "asset_class": "DataTable",
-      "diagnostics": []
+      "b_is_asset_count": 1
     },
     {
       "name": "T_ParserBulk.uasset",
       "sha256": "4f518bc6fbcd20308a8a8927296f461fa03cb37cb35ec14220078be74f74f847",
       "size_bytes": 1487,
       "engine_layout": "legacy",
-      "legacy_file_version": -9,
       "file_version_ue4": 522,
       "file_version_ue5": 1018,
       "sidecars": [
@@ -810,21 +675,14 @@
           "size_bytes": 5570560
         }
       ],
-      "asset_type_hint": "Texture",
-      "has_multiple_b_is_asset": false,
       "export_count": 1,
-      "b_is_asset_count": 1,
-      "asset_class": "Texture2D",
-      "diagnostics": [
-        "EXPORT_TRAILING_BYTES_UNCONSUMED"
-      ]
+      "b_is_asset_count": 1
     },
     {
       "name": "TestBlueprint.uasset",
       "sha256": "70806823d99cd8c07ff972794042f513dd6cb7b99b951faba3081897424770d6",
       "size_bytes": 3565,
       "engine_layout": "legacy",
-      "legacy_file_version": -9,
       "file_version_ue4": 522,
       "file_version_ue5": 1018,
       "sidecars": [
@@ -834,24 +692,14 @@
           "size_bytes": 1894
         }
       ],
-      "asset_type_hint": "Blueprint",
-      "has_multiple_b_is_asset": false,
       "export_count": 7,
-      "b_is_asset_count": 1,
-      "asset_class": "BlueprintGeneratedClass",
-      "diagnostics": [
-        "EXPORT_TRAILING_BYTES_UNCONSUMED",
-        "EXPORT_TRAILING_BYTES_UNCONSUMED",
-        "EXPORT_TRAILING_BYTES_UNCONSUMED",
-        "fstring_all_null"
-      ]
+      "b_is_asset_count": 1
     },
     {
       "name": "TestDataRow.uasset",
       "sha256": "35ab689138b67e42a2358ba3a65db0debf315f5a370c55348b3c5f3174aae82c",
       "size_bytes": 981,
       "engine_layout": "legacy",
-      "legacy_file_version": -9,
       "file_version_ue4": 522,
       "file_version_ue5": 1018,
       "sidecars": [
@@ -861,21 +709,14 @@
           "size_bytes": 359
         }
       ],
-      "asset_type_hint": "UserDefined",
-      "has_multiple_b_is_asset": false,
       "export_count": 1,
-      "b_is_asset_count": 1,
-      "asset_class": "UserDefinedStruct",
-      "diagnostics": [
-        "EXPORT_TRAILING_BYTES_UNCONSUMED"
-      ]
+      "b_is_asset_count": 1
     },
     {
       "name": "TestDataTable.uasset",
       "sha256": "18f243bef71eab64976fc51de2bcabab35e7c70cad5d5b7334d1322439815a86",
       "size_bytes": 1046,
       "engine_layout": "legacy",
-      "legacy_file_version": -9,
       "file_version_ue4": 522,
       "file_version_ue5": 1018,
       "sidecars": [
@@ -885,19 +726,14 @@
           "size_bytes": 206
         }
       ],
-      "asset_type_hint": "DataTable",
-      "has_multiple_b_is_asset": false,
       "export_count": 1,
-      "b_is_asset_count": 1,
-      "asset_class": "DataTable",
-      "diagnostics": []
+      "b_is_asset_count": 1
     },
     {
       "name": "TestMaterial.uasset",
       "sha256": "0d949b49fedd9f2dc78f66bac03145c0b50ddddee8400394406a02b2b59cdebd",
       "size_bytes": 2803,
       "engine_layout": "legacy",
-      "legacy_file_version": -9,
       "file_version_ue4": 522,
       "file_version_ue5": 1018,
       "sidecars": [
@@ -907,14 +743,8 @@
           "size_bytes": 124909
         }
       ],
-      "asset_type_hint": "Material",
-      "has_multiple_b_is_asset": false,
       "export_count": 1,
-      "b_is_asset_count": 1,
-      "asset_class": "Material",
-      "diagnostics": [
-        "EXPORT_TRAILING_BYTES_UNCONSUMED"
-      ]
+      "b_is_asset_count": 1
     },
     {
       "name": "BP_UnversionedTest.uasset",
@@ -930,11 +760,8 @@
           "size_bytes": 1347
         }
       ],
-      "asset_type_hint": "Blueprint",
-      "has_multiple_b_is_asset": true,
       "export_count": 5,
       "b_is_asset_count": 1,
-      "diagnostics": [],
       "unversioned": true,
       "usmap_file": "UnversionedTest.usmap"
     },
@@ -952,67 +779,14 @@
           "size_bytes": 121
         }
       ],
-      "asset_type_hint": "DataAsset",
-      "has_multiple_b_is_asset": false,
       "export_count": 1,
       "b_is_asset_count": 1,
-      "diagnostics": [],
       "unversioned": true,
       "usmap_file": "UnversionedTest.usmap"
     }
   ],
   "summary": {
-    "total_samples": 66,
-    "layout_distribution": {
-      "legacy": 64
-    },
-    "asset_type_distribution": {
-      "AnimBlueprint": 2,
-      "unknown": 25,
-      "SoundWave": 1,
-      "DataTable": 5,
-      "Skeleton": 1,
-      "PhysicsAsset": 1,
-      "MaterialInstance": 1,
-      "SoundAttenuation": 1,
-      "PoseAsset": 1,
-      "BlendSpace": 1,
-      "World": 1,
-      "AnimConfig": 2,
-      "SubsurfaceProfile": 1,
-      "StringTable": 1,
-      "Material": 3,
-      "UserDefined": 3,
-      "PhysicalMaterial": 1,
-      "LevelSequence": 1,
-      "Texture": 2,
-      "Niagara": 1,
-      "Blueprint": 5,
-      "CurveFloat": 1,
-      "CurveTable": 3,
-      "DataAsset": 1
-    },
-    "samples_with_sidecars": 8,
-    "samples_with_multiple_b_is_asset": [
-      "ABP_RifleAnimLayers.uasset",
-      "ALS_AnimBP.uasset",
-      "FirstPerson_BP_FirstPersonCharacter.uasset",
-      "FirstPerson_BP_FirstPersonGameMode.uasset",
-      "IntroToUnreal_BP_Light.uasset",
-      "IntroToUnreal_BP_SaveData.uasset",
-      "Lyra_B_Rifle.uasset",
-      "Lyra_SEQ_LobbyScreen_LevelSequence.uasset",
-      "StackOBot_BP_Drone.uasset",
-      "StackOBot_GI_StackOBot.uasset",
-      "BP_CombatCharacter.uasset",
-      "BP_CombatEnemy.uasset",
-      "LevelDesign_ABP_Manny.uasset",
-      "MyProject_UE58_TestBlueprint.uasset"
-    ],
-    "samples_with_parse_errors": [],
-    "fixture_gap_count": 3,
-    "fixture_gaps_total": 7,
-    "fixture_gaps_note": "curve_table, sidecar_files, pak_container and iostore_container are now registered; zen_package (a readable Zen package body) and unversioned_properties remain open"
+    "total_samples": 66
   },
   "fixture_gaps": {
     "zen_package": {
@@ -1086,8 +860,7 @@
       "sha256": "455a61189574e330d25a9728540e165e53f0cea07601598fc096513cd4895a23",
       "size_bytes": 169486,
       "generator": "UAssetAPI",
-      "generator_version": "2.0.0",
-      "generator_commit": "5c22374"
+      "generator_version": "2.0.0"
     },
     {
       "name": "ALS_FootstepDataTable.uasset.golden.json",
@@ -1095,8 +868,7 @@
       "sha256": "8d5944827442e9eb052746be61138013ce5af698c52bbc3f3dd88bd1850d6675",
       "size_bytes": 730,
       "generator": "UAssetAPI",
-      "generator_version": "2.0.0",
-      "generator_commit": "5c22374"
+      "generator_version": "2.0.0"
     },
     {
       "name": "LevelDesign_ABP_Manny.uasset.golden.json",
@@ -1104,8 +876,7 @@
       "sha256": "e5393414b94261f0c87f83a9c38164d7d2a38fe1cec370f5934d8b44a6d3ae43",
       "size_bytes": 8204,
       "generator": "UAssetAPI",
-      "generator_version": "2.0.0",
-      "generator_commit": "5c22374"
+      "generator_version": "2.0.0"
     }
   ],
   "containers": [
@@ -1115,8 +886,7 @@
       "sha256": "1c5e7bb264810f197480d124434acaf56af8452c48df583708c25c14a019b478",
       "size_bytes": 11450886,
       "committed": true,
-      "issue": 625,
-      "note": "UE 5.8 Windows cooked build pak (IoStore companion container wrapper)."
+      "issue": 625
     },
     {
       "name": "MyProject-Windows.utoc",
@@ -1124,8 +894,7 @@
       "sha256": "46f0ab59102ead46bbd5f647b94414f1d57e72df265b0c17c20b24250a79162a",
       "size_bytes": 222772,
       "committed": true,
-      "issue": 624,
-      "note": "IoStore TOC v8: 2221 entries, 6694 compressed blocks, Oodle method, directory index."
+      "issue": 624
     },
     {
       "name": "MyProject-Windows.ucas",
@@ -1134,7 +903,6 @@
       "size_bytes": 259193536,
       "committed": false,
       "issue": 624,
-      "note": "IoStore data archive for the package-rich container.",
       "local_only_reason": "259,193,536 bytes exceeds GitHub's 100 MB hard file limit. Pinned by sha256 and kept out of git; Phase 5 chunk-range tests use it only when it is present locally."
     },
     {
@@ -1143,8 +911,7 @@
       "sha256": "97d7856030734fdff11bc4cddd2619c9142a693f0d37adc2ac3c59f4a4a9df3c",
       "size_bytes": 782,
       "committed": true,
-      "issue": 624,
-      "note": "Secondary container TOC v8: 1 ScriptObjects chunk, no directory index, no compression."
+      "issue": 624
     },
     {
       "name": "global.ucas",
@@ -1152,8 +919,7 @@
       "sha256": "989837d42550dcccf3b7332c033f6de6ae4af256778011d9c04ecc71d8782fe8",
       "size_bytes": 3209824,
       "committed": true,
-      "issue": 624,
-      "note": "Matching data archive for global.utoc (committed pair)."
+      "issue": 624
     }
   ]
 }

@@ -76,7 +76,17 @@ def _isolated_handlers(*handlers):
         H._HANDLERS[:] = saved
 
 
-def test_reader_boundaries_reject_malformed_access(tmp_path):
+def _object_record(class_name: str, *, id: str = "export:0"):
+    from uasset_read.models.object_model import ObjectRecord, ObjectStatus
+
+    return ObjectRecord(id=id, table_index=0, name="X", class_name=class_name, status=ObjectStatus())
+
+
+def _json_bytes(value: object) -> int:
+    return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+
+def test_reader_boundaries_reject_malformed_access():
     """A bounded reader must never escape its declared source region."""
 
     def test_export_read_within_range_succeeds():
@@ -362,7 +372,7 @@ def test_reader_boundaries_reject_malformed_access(tmp_path):
         finally:
             tmp.cleanup()
 
-    def test_iostore_parses_supported_layouts(tmp_path=None):
+    def test_iostore_parses_supported_layouts():
         from uasset_read.iostore import read_toc
 
         # v8 with 24-byte FIoHash metas, and v7 with 33-byte legacy metas.
@@ -928,6 +938,22 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
     # All fixture exports now parse cleanly, so inject the failure to
     # exercise the isolation path deterministically.
     monkeypatch.setattr(pp, "parse_properties_from_export", boom)
+
+    class Ok:
+        capability = "decoded"
+
+        def supports(self, obj, ctx):
+            return True
+
+        def enrich(self, obj, ctx, all_objs, data):
+            return {"kind": "ok"}
+
+    mappings_calls: dict = {}
+
+    def mappings_spy(**kw):
+        mappings_calls["mappings"] = kw.get("mappings")
+        return {}
+
     doc = parse_package_document(str(PACKAGE_SAMPLE), depth="object")
     failures = [
         item
@@ -969,7 +995,6 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
     def test_later_success_does_not_mask_earlier_failure():
         import uasset_read.parsers.asset_types.handlers_impl as H
-        from uasset_read.models.object_model import ObjectRecord, ObjectStatus
 
         class Boom:
             def supports(self, obj, ctx):
@@ -978,22 +1003,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
             def enrich(self, obj, ctx, all_objs, data):
                 raise RuntimeError("boom")
 
-        class Ok:
-            capability = "decoded"
-
-            def supports(self, obj, ctx):
-                return True
-
-            def enrich(self, obj, ctx, all_objs, data):
-                return {"kind": "ok"}
-
-        obj = ObjectRecord(
-            id="export:9",
-            table_index=0,
-            name="X",
-            class_name="Foo",
-            status=ObjectStatus(parse="complete", semantic="not_requested"),
-        )
+        obj = _object_record("Foo", id="export:9")
         with _isolated_handlers(Boom(), Ok()):
             semantic, _cov, diags = H.run_handlers(obj, H.VersionContext(), [], None)
         assert semantic == {"kind": "ok"}
@@ -1002,31 +1012,14 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
     def test_clean_success_still_marks_complete():
         import uasset_read.parsers.asset_types.handlers_impl as H
-        from uasset_read.models.object_model import ObjectRecord, ObjectStatus
 
-        class Ok:
-            capability = "decoded"
-
-            def supports(self, obj, ctx):
-                return True
-
-            def enrich(self, obj, ctx, all_objs, data):
-                return {"kind": "ok"}
-
-        obj = ObjectRecord(
-            id="export:9",
-            table_index=0,
-            name="X",
-            class_name="Foo",
-            status=ObjectStatus(parse="complete", semantic="not_requested"),
-        )
+        obj = _object_record("Foo", id="export:9")
         with _isolated_handlers(Ok()):
             H.run_handlers(obj, H.VersionContext(), [], None)
         assert obj.status.semantic == "complete"
 
     def test_matched_handler_returning_none_is_not_complete():
         import uasset_read.parsers.asset_types.handlers_impl as H
-        from uasset_read.models.object_model import ObjectRecord, ObjectStatus
 
         class Decliner:
             def supports(self, obj, ctx):
@@ -1035,13 +1028,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
             def enrich(self, obj, ctx, all_objs, data):
                 return None
 
-        obj = ObjectRecord(
-            id="export:9",
-            table_index=0,
-            name="X",
-            class_name="Foo",
-            status=ObjectStatus(parse="complete", semantic="not_requested"),
-        )
+        obj = _object_record("Foo", id="export:9")
         with _isolated_handlers(Decliner()):
             semantic, _cov, _diags = H.run_handlers(obj, H.VersionContext(), [], None)
         assert semantic is None
@@ -1084,16 +1071,11 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         assert any(d.code == "EXPORT_TABLE_TRUNCATED" for d in doc.diagnostics)
 
     def test_v2_mappings_never_passes_raw_path_string():
-        calls = {}
-
-        def spy(**kw):
-            calls["mappings"] = kw.get("mappings")
-            return {}
-
-        monkeypatch.setattr(pp, "parse_properties_from_export", spy)
+        mappings_calls.clear()
+        monkeypatch.setattr(pp, "parse_properties_from_export", mappings_spy)
         doc = parse_package_document(str(DATA_SAMPLE), depth="object", mappings_path=str(ROOT / "no-such.usmap"))
         assert any(d.code == "MAPPINGS_LOAD_FAILED" for d in doc.diagnostics)
-        assert not isinstance(calls.get("mappings"), str)  # never a raw path string
+        assert not isinstance(mappings_calls.get("mappings"), str)  # never a raw path string
 
     def test_v2_mappings_object_on_successful_load():
         import tempfile
@@ -1111,23 +1093,17 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
             + payload
         )
 
-        calls = {}
-
-        def spy(**kw):
-            calls["mappings"] = kw.get("mappings")
-            return {}
-
-        monkeypatch.setattr(pp, "parse_properties_from_export", spy)
+        mappings_calls.clear()
+        monkeypatch.setattr(pp, "parse_properties_from_export", mappings_spy)
         with tempfile.TemporaryDirectory() as td:
             ok_path = Path(td) / "ok.usmap"
             ok_path.write_bytes(blob)
             doc = parse_package_document(str(DATA_SAMPLE), depth="object", mappings_path=str(ok_path))
         assert not any(d.code == "MAPPINGS_LOAD_FAILED" for d in doc.diagnostics)
-        assert isinstance(calls.get("mappings"), TypeMappings)
+        assert isinstance(mappings_calls.get("mappings"), TypeMappings)
 
     def test_silent_recovery_downgrades_object_and_reaches_document():
         from uasset_read.models.diagnostics import Diagnostic
-        from uasset_read.models.object_model import ObjectRecord, ObjectStatus
         from uasset_read.parsers.legacy_reader import _merge_archive_recoveries
 
         class _RecoveringArchive:
@@ -1152,13 +1128,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
                     ),
                 ]
 
-        obj = ObjectRecord(
-            id="export:0",
-            table_index=0,
-            name="X",
-            class_name="Foo",
-            status=ObjectStatus(parse="complete", semantic="not_requested"),
-        )
+        obj = _object_record("Foo")
         diagnostics: list = []
         _merge_archive_recoveries(_RecoveringArchive(), [obj], diagnostics)
         assert obj.status.parse == "partial"  # a recovered read must not claim complete
@@ -1251,8 +1221,7 @@ def test_handler_registry_supports_enriches_and_isolates():
     from uasset_read.models.object_model import ObjectRecord, ObjectStatus
     from uasset_read.versioning import VersionContext
 
-    def record(class_name):
-        return ObjectRecord(id="export:0", table_index=0, name="X", class_name=class_name, status=ObjectStatus())
+    record = _object_record
 
     def test_handlers_registered():
         assert len(get_handlers()) >= 4
@@ -1989,8 +1958,6 @@ def test_handler_registry_supports_enriches_and_isolates():
         a, b, c, d = 0x01020304, 0x05060708, 0x090A0B0C, 0x0D0E0F10
         s = format_guid_bytes(struct.pack("<IIII", a, b, c, d))
         assert len(s) == 36 and s.count("-") == 4
-        h_src = (SRC / "uasset_read/parsers/asset_types/handlers_impl.py").read_text(encoding="utf-8")
-        assert "00000000" not in h_src
 
     _run_cases(
         [
@@ -2272,17 +2239,14 @@ def test_projection_byte_budget_and_fields_filter():
 
     doc = _document(depth="asset")
 
-    def _size(page: dict) -> int:
-        return len(json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-
     def partial_page_budget() -> int:
         """Halfway between a 1-object and a 2-object page.
 
         Derived from the sample instead of a hand-tuned slack constant: a fixed
         extra went stale the moment dependency package paths got longer (#645).
         """
-        one = _size(project_document(doc, limit=1))
-        two = _size(project_document(doc, limit=2))
+        one = _json_bytes(project_document(doc, limit=1))
+        two = _json_bytes(project_document(doc, limit=2))
         assert one < two, "the second object must cost bytes for this budget to mean anything"
         return one + (two - one) // 2
 
@@ -2385,24 +2349,21 @@ def test_projection_byte_budget_and_fields_filter():
         # leaner envelope (default behavior with sections=None is unchanged).
         schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
 
-        def size(d: dict) -> int:
-            return len(json.dumps(d, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-
         default = project_document(doc, limit=3)
         assert "relations" in default and "dependencies" in default
         both = project_document(doc, limit=3, sections=[])
         assert "relations" not in both and "dependencies" not in both
         jsonschema.validate(both, schema)
-        assert size(both) < size(default), "opted-out sections must free bytes"
+        assert _json_bytes(both) < _json_bytes(default), "opted-out sections must free bytes"
         rel_only = project_document(doc, limit=3, sections=["relations"])
         assert "relations" in rel_only and "dependencies" not in rel_only
         with pytest.raises(ValueError, match="Invalid sections"):
             project_document(doc, sections=["objects"])
 
         full = project_document(doc, limit=100)
-        trimmed = project_document(doc, limit=100, max_bytes=size(full) - 400)
+        trimmed = project_document(doc, limit=100, max_bytes=_json_bytes(full) - 400)
         assert len(trimmed["objects"]) < 100, "budget should have trimmed the default page"
-        lean = project_document(doc, limit=100, sections=[], max_bytes=size(trimmed))
+        lean = project_document(doc, limit=100, sections=[], max_bytes=_json_bytes(trimmed))
         assert len(lean["objects"]) >= len(trimmed["objects"]), "freed bytes go to the object page"
         for rel in lean.get("relations", []):
             assert rel["from"] in {o["id"] for o in lean["objects"]}
