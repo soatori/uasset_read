@@ -199,3 +199,62 @@ class TestUnversionedPackageParsing:
         finally:
             archive.close()
         assert len(doc.objects) >= 1
+
+
+class TestUnversionedMappedProperties:
+    """Wave B P6: usmap-driven unversioned parse must yield mapped values or opaque."""
+
+    def _parse(self, asset_name: str):
+        from uasset_read.package import open_package_bundle
+        from uasset_read.parsers.legacy_reader import LegacyPackageReader
+
+        path = f"tests/samples/{asset_name}.uasset"
+        bundle = open_package_bundle(path)
+        archive = bundle.open_archive(tolerant=True)
+        try:
+            reader = LegacyPackageReader(mappings_path="tests/samples/UnversionedTest.usmap")
+            return reader.read(archive=archive, main_path=path, depth="object")
+        finally:
+            archive.close()
+
+    def test_da_unversioned_exposes_mapped_properties(self):
+        """DA asset with usmap must produce a non-empty mapped bag."""
+        doc = self._parse("DA_UnversionedTest")
+        assert doc is not None
+        primary = next(o for o in doc.objects if o.name == "DA_UnversionedTest")
+        props = primary.properties or {}
+        assert props, "unversioned export with usmap must produce a non-empty property bag"
+        # Mapped values, not opaque
+        assert props.get("AssetID", {}).get("kind") == "value"
+        assert props["AssetID"]["value"] == "UnversionedAssetID"
+        assert props.get("NumericArray", {}).get("value") == [10, 20, 30, 40]
+        # No name-index misparse
+        codes = [d.code for d in doc.diagnostics]
+        assert codes.count("name_index_out_of_range") == 0
+
+    def test_bp_unversioned_exposes_mapped_properties(self):
+        """BP CDO with usmap must produce non-empty bag or explicit opaque; no name-index storm."""
+        doc = self._parse("BP_UnversionedTest")
+        assert doc is not None
+        # CDO has BP_UnversionedTest_C mapping in the usmap
+        cdo = next(o for o in doc.objects if o.name == "Default__BP_UnversionedTest_C")
+        props = cdo.properties or {}
+        assert props, "unversioned CDO with usmap must produce a non-empty property bag"
+        # Early scalar fields must be real values
+        assert props.get("ScriptInt", {}).get("value") == 77
+        assert props.get("ScriptBool", {}).get("value") is True
+        # BlueprintGeneratedClass export has no usmap entry -> whole-region opaque
+        class_obj = next(o for o in doc.objects if o.name == "BP_UnversionedTest_C")
+        class_props = class_obj.properties or {}
+        assert class_props, "unmapped class export must still yield explicit opaque"
+        class_is_opaque = any(
+            isinstance(v, dict) and v.get("kind") == "opaque" for v in class_props.values()
+        )
+        assert class_is_opaque, "BlueprintGeneratedClass without usmap must be UnversionedOpaque"
+        # Forbid tagged name-index misparse: zero name_index_out_of_range diagnostics.
+        # The mapping path stops and opaques the remainder instead of falling back
+        # to tagged FName parsing.
+        codes = [d.code for d in doc.diagnostics]
+        assert codes.count("name_index_out_of_range") == 0, (
+            f"unversioned parse must not emit name_index_out_of_range; got: {codes}"
+        )

@@ -977,8 +977,12 @@ def parse_properties_from_export(
             logger.debug("Failed to skip export '%s' payload: %s", export.object_name, e)
         return []
 
-    # D-02: SerializationControlExtensions header handling
-    if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION:
+    # D-02: SerializationControlExtensions header handling.
+    # UE source: SerializeVersionedTaggedProperties writes this byte (Class.cpp);
+    # SerializeUnversionedProperties starts directly with FUnversionedHeader and
+    # never emits the control byte — consuming it here would desync the fragment.
+    uses_unversioned = bool(getattr(summary, "package_flags", 0) & PKG_UnversionedProperties)
+    if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION and not uses_unversioned:
         _handle_serialization_control(archive, summary, export)
 
     # When the export records no script region the legacy boundary applies: the whole
@@ -1041,27 +1045,189 @@ def _parse_unversioned_properties_from_mapping(
     property_end: int,
     tolerant: bool = True,
 ) -> list[PropertyValue]:
-    """Parse a simple mapping-driven unversioned property stream.
+    """Parse a mapping-driven unversioned property stream.
 
-    This covers the common sequential field case and preserves unknown tail data
-    as an opaque warning instead of guessing beyond mapped fields.
+    Principles (Wave B P6):
+    1. No usmap / struct miss → whole-region UnversionedOpaque.
+    2. Hit → sequential read from correct unversioned start; variable size
+       unreliable → stop and opaque remainder.
+    3. Never fall back to tagged FName parsing.
     """
     struct_mapping = mappings.get_struct(struct_name)
     if struct_mapping is None:
         return []
     ordered_properties = _ordered_mapping_properties(mappings, struct_mapping)
+    region_start = archive.tell()
     header = _try_read_unversioned_header(archive, property_end, len(ordered_properties))
-    selected_properties = (
-        [(ordered_properties[index], is_zero) for index, is_zero in header]
-        if header is not None
-        else [(info, False) for info in ordered_properties]
-    )
+    if header is None:
+        # Unversioned packages always carry an FUnversionedHeader; a failed
+        # header means the stream start is wrong or the schema does not match.
+        # Never fall back to sequential tagged-style guessing.
+        archive.seek(region_start)
+        remaining = property_end - region_start
+        raw_bytes = archive.read(remaining) if remaining > 0 else b""
+        return [
+            PropertyFallback(
+                name=export.object_name,
+                type="UnversionedOpaque",
+                size=len(raw_bytes),
+                raw_bytes=raw_bytes,
+                reason=FallbackReason.MISSING_MAPPING,
+            )
+        ]
+    selected_properties = [(ordered_properties[index], is_zero) for index, is_zero in header]
     out: list[PropertyValue] = []
     for position, (info, is_zero) in enumerate(selected_properties):
         if archive.tell() >= property_end and not is_zero:
             break
         remaining = property_end - archive.tell()
         is_last = position == len(selected_properties) - 1
+        fixed_size = _fixed_unversioned_size(info.mapping_type)
+        estimated_size = (
+            0
+            if fixed_size > 0
+            else _estimate_unversioned_variable_size(info.mapping_type, archive, remaining)
+        )
+        # Unversioned bool is a raw uint8; the tagged handler reads tag.bool_val.
+        if info.mapping_type.type == "BoolProperty" and not is_zero:
+            if remaining < 1:
+                break
+            out.append(PropertyValue(info.name, "BoolProperty", bool(archive.read_u8())))
+            continue
+        # Unversioned FText: flags(i32) + history(u8) + typed body.
+        if info.mapping_type.type == "TextProperty" and not is_zero:
+            text_value = _read_unversioned_ftext(archive, property_end)
+            if text_value is None:
+                break
+            out.append(PropertyValue(info.name, "TextProperty", text_value))
+            continue
+        # Unversioned EnumProperty: FName value; validate index before consuming.
+        if info.mapping_type.type == "EnumProperty" and not is_zero:
+            if remaining < 8:
+                break
+            name_pos = archive.tell()
+            name_idx = archive.read_i32()
+            name_num = archive.read_i32()
+            if not (0 <= name_idx < len(name_map)):
+                archive.seek(name_pos)
+                break
+            from uasset_read.models.properties import EnumValue
+
+            enum_type = getattr(info.mapping_type, "enum_name", None) or "UnknownEnum"
+            value_name = name_map[name_idx]
+            if name_num > 0:
+                value_name = f"{value_name}_{name_num}"
+            out.append(
+                PropertyValue(
+                    info.name,
+                    "EnumProperty",
+                    EnumValue(enum_type=enum_type, value_name=value_name),
+                )
+            )
+            continue
+        # Unversioned StructProperty: nested FUnversionedHeader for the struct.
+        if info.mapping_type.type == "StructProperty" and not is_zero:
+            struct_type = getattr(info.mapping_type, "struct_type", None)
+            fields = None
+            if struct_type and hasattr(mappings, "get_struct") and mappings.get_struct(struct_type) is not None:
+                nested_ordered = _ordered_mapping_properties(mappings, mappings.get_struct(struct_type))
+                nested_start = archive.tell()
+                nested_header = _try_read_unversioned_header(archive, property_end, len(nested_ordered))
+                if nested_header is not None:
+                    fields = {}
+                    for npos, (ninfo, nzero) in enumerate([(nested_ordered[ix], z) for ix, z in nested_header]):
+                        if archive.tell() >= property_end and not nzero:
+                            break
+                        if nzero:
+                            fields[ninfo.name] = _unversioned_zero_value(ninfo.mapping_type)
+                            continue
+                        nfixed = _fixed_unversioned_size(ninfo.mapping_type)
+                        nest_remaining = property_end - archive.tell()
+                        ntag = PropertyTag(
+                            name=ninfo.name,
+                            type=ninfo.mapping_type.type,
+                            size=_unversioned_property_size(
+                                ninfo.mapping_type, archive, nest_remaining, npos == len(nested_header) - 1
+                            ),
+                        )
+                        _apply_mapping_type_to_tag(ntag, ninfo.mapping_type)
+                        nstart = archive.tell()
+                        try:
+                            nvalue = parse_property_value(
+                                ntag, archive, name_map, export_map, summary, tolerant=tolerant
+                            )
+                        except (ParseError, BINARY_READ_ERRORS):
+                            fields = None
+                            archive.seek(nested_start)
+                            break
+                        if nfixed <= 0 and ntag.size <= 0 and archive.tell() == nstart:
+                            fields = None
+                            archive.seek(nested_start)
+                            break
+                        fields[ninfo.name] = nvalue
+                else:
+                    archive.seek(nested_start)
+            if fields is not None:
+                from uasset_read.models.properties import StructValue
+
+                out.append(
+                    PropertyValue(
+                        info.name,
+                        "StructProperty",
+                        StructValue(
+                            struct_type=struct_type or "UnknownStruct",
+                            fields=fields,
+                            raw_size=0,
+                            parse_status="complete",
+                        ),
+                    )
+                )
+                continue
+            # Nested struct unmapped/unreliable: opaque remainder.
+            tail_start = archive.tell()
+            tail_size = max(0, property_end - tail_start)
+            tail = archive.read(tail_size) if tail_size > 0 else b""
+            if tail:
+                out.append(
+                    PropertyValue(
+                        name="_unversioned_tail",
+                        type="Opaque",
+                        value={
+                            "parse_status": "opaque",
+                            "raw_offset": tail_start,
+                            "raw_size": len(tail),
+                            "raw_data": tail,
+                        },
+                    )
+                )
+            break
+        # Variable-size types without reliable estimate: stop and opaque remainder.
+        # SoftObjectProperty reads FNames that can emit name-index diagnostics when
+        # misaligned; stop before parsing rather than after.
+        if (
+            not is_zero
+            and fixed_size <= 0
+            and estimated_size <= 0
+            and info.mapping_type.type
+            in ("ArrayProperty", "SetProperty", "MapProperty", "OptionalProperty", "SoftObjectProperty")
+        ):
+            tail_start = archive.tell()
+            tail_size = max(0, property_end - tail_start)
+            tail = archive.read(tail_size) if tail_size > 0 else b""
+            if tail:
+                out.append(
+                    PropertyValue(
+                        name="_unversioned_tail",
+                        type="Opaque",
+                        value={
+                            "parse_status": "opaque",
+                            "raw_offset": tail_start,
+                            "raw_size": len(tail),
+                            "raw_data": tail,
+                        },
+                    )
+                )
+            break
         tag = PropertyTag(
             name=info.name,
             type=info.mapping_type.type,
@@ -1072,10 +1238,12 @@ def _parse_unversioned_properties_from_mapping(
             out.append(PropertyValue(info.name, tag.type, _unversioned_zero_value(info.mapping_type)))
             continue
         start = archive.tell()
+        diag_mark = (
+            len(archive.get_structured_diagnostics()) if hasattr(archive, "get_structured_diagnostics") else 0
+        )
         try:
             value = parse_property_value(tag, archive, name_map, export_map, summary, tolerant=tolerant)
         except ParseError as exc:
-            # #276: strict mode: propagate directly
             if not tolerant:
                 raise
             if tag.size > 0:
@@ -1092,12 +1260,33 @@ def _parse_unversioned_properties_from_mapping(
             )
             out.append(PropertyValue(info.name, "Warning", fb))
             continue
+        # Name-index diagnostics mean the stream is misaligned; stop and opaque.
+        if hasattr(archive, "get_structured_diagnostics"):
+            new_diags = archive.get_structured_diagnostics()[diag_mark:]
+            if any(d.code == "name_index_out_of_range" for d in new_diags):
+                archive.seek(start)
+                tail_start = archive.tell()
+                tail_size = max(0, property_end - tail_start)
+                tail = archive.read(tail_size) if tail_size > 0 else b""
+                if tail:
+                    out.append(
+                        PropertyValue(
+                            name="_unversioned_tail",
+                            type="Opaque",
+                            value={
+                                "parse_status": "opaque",
+                                "raw_offset": tail_start,
+                                "raw_size": len(tail),
+                                "raw_data": tail,
+                            },
+                        )
+                    )
+                break
         if tag.size <= 0:
             tag.size = archive.tell() - start
         out.append(PropertyValue(info.name, tag.type, value))
     if archive.tell() < property_end:
         remaining = property_end - archive.tell()
-        # #276: Safely read tail, prevent property_end from exceeding actual archive size
         current_pos = archive.tell()
         file_size = getattr(archive, "_file_size", None)
         tail_size = max(0, min(remaining, file_size - current_pos)) if isinstance(file_size, int) else remaining
@@ -1116,6 +1305,51 @@ def _parse_unversioned_properties_from_mapping(
                 )
             )
     return out
+
+
+def _read_unversioned_ftext(archive: FArchive, property_end: int) -> Any | None:
+    """Read an unversioned FText value; return None when the stream is short.
+
+    UE FText layout (Text.cpp / TextHistory.cpp): flags(i32) + history(u8) +
+    typed body. ETextHistoryType::None is -1 (0xFF): bHasCultureInvariantString
+    (bool as u32) + optional FString. Base (0) is three FStrings.
+    """
+    from uasset_read.models.properties import TextValue
+
+    start = archive.tell()
+    try:
+        if start + 5 > property_end:
+            return None
+        _flags = archive.read_i32()
+        history = archive.read_u8()
+        if history == 0:  # Base
+            if archive.tell() > property_end:
+                return None
+            namespace = archive.read_fstring()
+            key = archive.read_fstring()
+            source = archive.read_fstring()
+            return TextValue(
+                namespace=namespace or "",
+                key=key or "",
+                source_string=source or "",
+                history_type=0,
+            )
+        if history in (255, 0xFF):  # None / culture-invariant
+            if archive.tell() + 4 > property_end:
+                return None
+            has_culture = archive.read_bool()
+            source = archive.read_fstring() if has_culture else ""
+            return TextValue(
+                namespace="",
+                key="",
+                source_string=(source or "").rstrip("\x00"),
+                history_type=255,
+            )
+        # Other history types: opaque body unknown without tag.size.
+        return TextValue(namespace="", key="", source_string="", history_type=history)
+    except (BINARY_READ_ERRORS, ValueError, _struct.error):
+        archive.seek(start)
+        return None
 
 
 def _try_read_unversioned_header(
