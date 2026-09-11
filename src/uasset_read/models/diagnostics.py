@@ -34,10 +34,6 @@ class Diagnostic:
         return {k: v for k, v in d.items() if v is not None and (k == "recoverable" or (not isinstance(v, bool) or v))}
 
 
-# Backward-compatible alias
-StructuredDiagnostic = Diagnostic
-
-
 def make_diagnostic(
     code: str,
     message: str,

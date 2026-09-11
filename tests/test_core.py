@@ -1126,7 +1126,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         assert isinstance(calls.get("mappings"), TypeMappingsProvider)
 
     def test_silent_recovery_downgrades_object_and_reaches_document():
-        from uasset_read.models.diagnostics import StructuredDiagnostic
+        from uasset_read.models.diagnostics import Diagnostic
         from uasset_read.models.object_model import ObjectRecord, ObjectStatus
         from uasset_read.parsers.legacy_reader import _merge_archive_recoveries
 
@@ -1135,7 +1135,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
             def get_structured_diagnostics(self):
                 return [
-                    StructuredDiagnostic(
+                    Diagnostic(
                         code="fstring_out_of_range",
                         stage="read_fstring",
                         offset=7,
@@ -1143,7 +1143,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
                         message="FString overran the file",
                         object_id="export:0",
                     ),
-                    StructuredDiagnostic(
+                    Diagnostic(
                         code="EXPORT_TABLE_TRUNCATED",
                         stage="read_export_map",
                         offset=9,
