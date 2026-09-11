@@ -74,7 +74,7 @@ print(project_document(doc))  # PackageDocument JSON dict
 - **Blueprint graph parsing** — UEdGraph / Node / Pin structures with typed node models
 - **Variable extraction** — variables, functions, events, metadata with type inference
 - **Component properties** — Transform / Rotation / Scale + scalar attributes
-- **Execution / data flow** — `exec_chains` from pin `category=exec` + `linked` (experimental); not full Event→CallFunction chain tracking
+- **Execution / data flow** — `exec_chains` from pin `category=exec` + `linked` (experimental; unique undirected edges, pin-id endpoints); not full Event→CallFunction chain tracking
 - **Function graph analysis** — FunctionEntry identification; pin keys frozen to `id`/`name`/`direction`/`category`/`linked` (Wave A contract)
 
 ### Advanced Features

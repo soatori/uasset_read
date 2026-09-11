@@ -261,7 +261,7 @@ def test_state_machine_state_count_not_node_count():
 
 
 def test_exec_edges_available_for_event_graph():
-    """exec_chains surfaces exec-pin edges for the EventGraph."""
+    """exec_chains surfaces unique exec-pin edges with pin-id endpoints."""
     from uasset_read import parse_package_document
     from uasset_read.projection import project_document
 
@@ -273,6 +273,18 @@ def test_exec_edges_available_for_event_graph():
     for o in page.get("objects") or []:
         chains.extend((o.get("semantic") or {}).get("exec_chains") or [])
     assert chains and any(c.get("edges") for c in chains)
+    for chain in chains:
+        edges = chain.get("edges") or []
+        pairs: set[frozenset[str]] = set()
+        for edge in edges:
+            from_pin = edge.get("from_pin")
+            to_pin = edge.get("to_pin")
+            assert from_pin and to_pin and from_pin != to_pin, edge
+            # Both ends must be pin GUIDs (32 hex), not display names.
+            assert len(from_pin) == 32 and len(to_pin) == 32, edge
+            pair = frozenset((from_pin, to_pin))
+            assert pair not in pairs, f"bidirectional duplicate: {edge}"
+            pairs.add(pair)
 
 
 def test_node_name_is_not_graph_name_for_multi_node_graphs():

@@ -323,22 +323,49 @@ def summarize_exec_edges(graphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Summarize exec-pin (category=exec) edges per graph.
 
     Consumes the five-key pin projection (category + linked already resolved
-    by ``resolve_pin_links``). Graphs with no exec edges are omitted.
+    by ``resolve_pin_links``). Each undirected pin connection is emitted once
+    (bidirectional ``linked`` entries are reverse pairs). Endpoints use pin
+    ids on both sides so consumers can join; when both orientations exist the
+    edge prefers output→input. Graphs with no exec edges are omitted.
     """
     out: list[dict[str, Any]] = []
     for graph in graphs:
+        pin_meta: dict[str, tuple[str, str]] = {}
+        for node in graph.get("nodes") or []:
+            for pin in node.get("pins") or []:
+                pid = pin.get("id")
+                if pid:
+                    pin_meta[pid] = (node.get("id"), pin.get("direction") or "")
+
+        seen: set[frozenset[str]] = set()
         edges: list[dict[str, Any]] = []
         for node in graph.get("nodes") or []:
             for pin in node.get("pins") or []:
                 if (pin.get("category") or "") != "exec":
                     continue
                 for link in pin.get("linked") or []:
+                    from_id = pin.get("id")
+                    to_id = link.get("to_pin")
+                    if not from_id or not to_id or from_id == to_id:
+                        continue
+                    pair = frozenset((from_id, to_id))
+                    if pair in seen:
+                        continue
+                    seen.add(pair)
+                    from_node = node.get("id")
+                    if pin.get("direction") != "output":
+                        other = pin_meta.get(to_id)
+                        if other and other[1] == "output":
+                            from_id, to_id = to_id, from_id
+                            from_node = other[0]
+                    to_meta = pin_meta.get(to_id)
+                    to_node = to_meta[0] if to_meta else link.get("to_node")
                     edges.append(
                         {
-                            "from_node": node.get("id"),
-                            "from_pin": pin.get("name"),
-                            "to_node": link.get("to_node"),
-                            "to_pin": link.get("to_pin"),
+                            "from_node": from_node,
+                            "from_pin": from_id,
+                            "to_node": to_node,
+                            "to_pin": to_id,
                         }
                     )
         if edges:
