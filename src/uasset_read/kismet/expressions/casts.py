@@ -18,14 +18,11 @@ if TYPE_CHECKING:
 class EX_CastBase(KismetExpression):
     """Abstract base class for cast expressions -- reads class pointer and target expression."""
 
-    ClassPtr: int = 0
-    Target: KismetExpression | None = None
-
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_CastBase:
-        cls_ptr_ref = archive.xfer_object_pointer()
-        target = archive.read_expression()
-        return cls(ClassPtr=cls_ptr_ref.index, Target=target)
+        archive.xfer_object_pointer()
+        archive.read_expression()
+        return cls()
 
 
 @dataclass
@@ -33,15 +30,14 @@ class EX_Cast(KismetExpression):
     """General type cast operator -- reads a conversion type byte followed by the target expression."""
 
     ConversionType: ECastToken = ECastToken.CST_ObjectToInterface
-    Target: KismetExpression | None = None
 
     Token = EExprToken.EX_Cast
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Cast:
         conv = ECastToken(archive.read_u8())
-        target = archive.read_expression()
-        return cls(ConversionType=conv, Target=target)
+        archive.read_expression()
+        return cls(ConversionType=conv)
 
     def to_dict(self) -> dict:
         d = super().to_dict()

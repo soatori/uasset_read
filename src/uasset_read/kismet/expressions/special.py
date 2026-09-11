@@ -24,30 +24,26 @@ if TYPE_CHECKING:
 class FKismetSwitchCase:
     """Switch case struct for EX_SwitchValue."""
 
-    CaseIndexValueTerm: KismetExpression | None = None
     NextOffset: int = 0
-    CaseTerm: KismetExpression | None = None
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> FKismetSwitchCase:
-        case_idx = archive.read_expression()
+        archive.read_expression()
         offset = archive.read_u32()
-        case_term = archive.read_expression()
-        return cls(CaseIndexValueTerm=case_idx, NextOffset=offset, CaseTerm=case_term)
+        archive.read_expression()
+        return cls(NextOffset=offset)
 
 
 @dataclass
 class EX_Return(KismetExpression):
     """Return from function — reads return expression."""
 
-    ReturnExpression: KismetExpression | None = None
-
     Token = EExprToken.EX_Return
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Return:
-        expr = archive.read_expression()
-        return cls(ReturnExpression=expr)
+        archive.read_expression()
+        return cls()
 
 
 @dataclass
@@ -56,7 +52,6 @@ class EX_Assert(KismetExpression):
 
     LineNumber: int = 0
     DebugMode: bool = False
-    AssertExpression: KismetExpression | None = None
 
     Token = EExprToken.EX_Assert
 
@@ -65,8 +60,8 @@ class EX_Assert(KismetExpression):
         line = archive.read_u16()
         # ScriptSerialization.inl:597-603 — debug flag is uint8 (XFER(uint8)), NOT a 4-byte UBOOL.
         debug = archive.read_u8() != 0
-        expr = archive.read_expression()
-        return cls(LineNumber=line, DebugMode=debug, AssertExpression=expr)
+        archive.read_expression()
+        return cls(LineNumber=line, DebugMode=debug)
 
 
 @dataclass
@@ -87,9 +82,7 @@ class EX_SwitchValue(KismetExpression):
     """Switch expression — evaluates index, matches cases, falls through to default."""
 
     EndGotoOffset: int = 0
-    IndexTerm: KismetExpression | None = None
     Cases: list[FKismetSwitchCase] | None = None
-    DefaultTerm: KismetExpression | None = None
 
     Token = EExprToken.EX_SwitchValue
 
@@ -97,32 +90,27 @@ class EX_SwitchValue(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SwitchValue:
         num_cases = archive.read_u16()
         end_offset = archive.read_u32()
-        index = archive.read_expression()
+        archive.read_expression()
         cases = []
         for _ in range(num_cases):
             case = FKismetSwitchCase.from_archive(archive, name_map)
             cases.append(case)
-        default = archive.read_expression()
-        return cls(EndGotoOffset=end_offset, IndexTerm=index, Cases=cases, DefaultTerm=default)
+        archive.read_expression()
+        return cls(EndGotoOffset=end_offset, Cases=cases)
 
 
 @dataclass
 class EX_InstrumentationEvent(KismetExpression):
     """Instrumentation event — reads event type and optional name."""
 
-    EventType: EScriptInstrumentationType = EScriptInstrumentationType.None_
-    EventName: str | None = None
-
     Token = EExprToken.EX_InstrumentationEvent
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_InstrumentationEvent:
         evt_type = EScriptInstrumentationType(archive.read_u8())
-        name = None
         if evt_type == EScriptInstrumentationType.InlineEvent:
-            fname_ref = archive.xfer_fname()
-            name = fname_ref.base_name
-        return cls(EventType=evt_type, EventName=name)
+            archive.xfer_fname()
+        return cls()
 
 
 # Data-free expression: returns Token only
@@ -136,14 +124,12 @@ EX_WireTracepoint = make_simple_expression(EExprToken.EX_WireTracepoint)
 class EX_FieldPathConst(KismetExpression):
     """FProperty constant — wraps a field path expression."""
 
-    Value: KismetExpression | None = None
-
     Token = EExprToken.EX_FieldPathConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_FieldPathConst:
-        val = archive.read_expression()
-        return cls(Value=val)
+        archive.read_expression()
+        return cls()
 
 
 @dataclass

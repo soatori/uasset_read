@@ -403,7 +403,6 @@ def read_native_fields(
 
 # Property flag constants (mirrored from constants.py to avoid circular import)
 _CPF_Parm = 0x0000000000000080
-_CPF_OutParm = 0x0000000000000100
 _CPF_ReturnParm = 0x0000000000000400
 _CPF_ReferenceParm = 0x0000000008000000
 _CPF_ConstParm = 0x0000000000000002
@@ -412,19 +411,13 @@ _CPF_ConstParm = 0x0000000000000002
 def build_native_function_signature(
     function_name: str,
     fields: list[NativeFieldDeclaration],
-) -> tuple[str, list[dict[str, object]], str]:
+) -> str:
     """Build a C++ function signature from native field declarations.
 
     Selects fields with CPF_Parm, separates CPF_ReturnParm as the return type,
-    and produces a structured parameter list.
-
-    Returns:
-        (signature, parameters, return_type) where:
-        - signature is the full C++ signature string, e.g. "bool Aim(float Yaw, UObject*& Target)"
-        - parameters is a list of dicts with keys: name, param_type, is_input, is_output
-        - return_type is the C++ return type string
+    and produces the full C++ signature string.
     """
-    params: list[dict[str, object]] = []
+    param_strs: list[str] = []
     return_cpp = "void"
 
     for field in fields:
@@ -445,20 +438,9 @@ def build_native_function_signature(
         if is_return:
             return_cpp = cpp_type
         else:
-            params.append(
-                {
-                    "name": field.name,
-                    "param_type": cpp_type,
-                    "is_input": True,
-                    "is_output": bool(field.property_flags & _CPF_OutParm),
-                }
-            )
+            param_strs.append(f"{cpp_type} {field.name}")
 
-    # Build signature string
-    param_strs = [f"{p['param_type']} {p['name']}" for p in params]
-    signature = f"{return_cpp} {function_name}({', '.join(param_strs)})"
-
-    return signature, params, return_cpp
+    return f"{return_cpp} {function_name}({', '.join(param_strs)})"
 
 
 # ---------------------------------------------------------------------------

@@ -90,19 +90,7 @@ class EX_TransformConst(KismetExpression):
 
     UE FTransform serialization order: quaternion rotation (XYZW) -> translation (XYZ) -> scale (XYZ).
     Reads doubles when summary.file_version_ue5 >= UE5_LARGE_WORLD_COORDINATES.
-    Field naming retains Pitch/Yaw/Roll as translation components to align with design documents.
     """
-
-    X: float = 0.0
-    Y: float = 0.0
-    Z: float = 0.0
-    W: float = 0.0
-    Pitch: float = 0.0
-    Yaw: float = 0.0
-    Roll: float = 0.0
-    SX: float = 1.0
-    SY: float = 1.0
-    SZ: float = 1.0
 
     Token = EExprToken.EX_TransformConst
 
@@ -110,30 +98,19 @@ class EX_TransformConst(KismetExpression):
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_TransformConst:
         read_num = archive.read_f64 if _is_lwc(archive) else archive.read_f32
         # Rotation (quat): X, Y, Z, W
-        rx = read_num()
-        ry = read_num()
-        rz = read_num()
-        rw = read_num()
+        read_num()
+        read_num()
+        read_num()
+        read_num()
         # Translation: X, Y, Z
-        tx = read_num()
-        ty = read_num()
-        tz = read_num()
+        read_num()
+        read_num()
+        read_num()
         # Scale: X, Y, Z
-        sx = read_num()
-        sy = read_num()
-        sz = read_num()
-        return cls(
-            X=rx,
-            Y=ry,
-            Z=rz,
-            W=rw,
-            Pitch=tx,
-            Yaw=ty,
-            Roll=tz,
-            SX=sx,
-            SY=sy,
-            SZ=sz,
-        )
+        read_num()
+        read_num()
+        read_num()
+        return cls()
 
 
 @dataclass

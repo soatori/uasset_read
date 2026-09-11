@@ -142,8 +142,3 @@ def _validate_jump_targets(expressions: list[KismetExpression]) -> None:
         for target in targets:
             if target not in top_level_indices:
                 raise ParseError(f"Invalid jump target {target} at offset {expr.StatementIndex}")
-
-
-# ===========================================================================
-# Output formatting (BYTECODE-03)
-# ===========================================================================

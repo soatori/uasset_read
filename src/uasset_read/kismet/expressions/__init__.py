@@ -1,9 +1,6 @@
-"""Kismet expression classes and token-to-class mapping.
+"""Kismet expression classes.
 
 Import expression classes from the submodules (literals, variables, ...).
-``EXPR_CLASS_MAP`` is re-exported here for the archive dispatcher.
+``EXPR_CLASS_MAP`` lives in ``uasset_read.kismet.expressions._map`` and is
+imported directly by the archive dispatcher.
 """
-
-from uasset_read.kismet.expressions._map import EXPR_CLASS_MAP
-
-__all__ = ["EXPR_CLASS_MAP"]

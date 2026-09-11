@@ -45,19 +45,12 @@ class KismetDecompiledResult:
     function_name: str
     signature: str
     bytecode_status: str
-    local_variables: list[dict[str, str]] = field(default_factory=list)
     expressions: list[Any] = field(default_factory=list)
-    bytecode_source: str = "unknown"
-    parameters: list[dict[str, object]] = field(default_factory=list)
-    return_type: str = "void"
-    native_signature: bool = False
     error_code: str | None = None
     error_message: str | None = None
     error_context: dict[str, Any] | None = None
     script_metrics: dict[str, Any] | None = None
-    warnings: list[str] = field(default_factory=list)
     fallback_reasons: list[str] = field(default_factory=list)
-    function_ref_stats: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _validate_bytecode_status(self.bytecode_status)

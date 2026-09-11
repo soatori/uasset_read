@@ -60,7 +60,6 @@ def extract_kismet_decompiled(
                     KismetDecompiledResult(
                         function_name=export.object_name,
                         signature=f"void {export.object_name}()",
-                        bytecode_source="unknown",
                         bytecode_status="no_script",
                         error_code="confirmed_no_script",
                         error_message="UFunction Script header declares no bytecode",
@@ -88,7 +87,6 @@ def extract_kismet_decompiled(
                     KismetDecompiledResult(
                         function_name=export.object_name,
                         signature=f"void {export.object_name}()",
-                        bytecode_source="unknown",
                         bytecode_status="failed",
                         error_code=failure.error_code if failure else "ufunction_script_read_error",
                         error_message=reason,
@@ -138,7 +136,6 @@ def extract_kismet_decompiled(
                     KismetDecompiledResult(
                         function_name=export.object_name,
                         signature=f"void {export.object_name}()",
-                        bytecode_source="function_export",
                         bytecode_status="failed",
                         error_code="bytecode_decode_error",
                         error_message=reason,
@@ -160,20 +157,15 @@ def extract_kismet_decompiled(
                 )
                 continue
 
-            native_params: list[dict[str, object]] = []
-            native_return_type = "void"
-            native_signature_used = False
             signature = f"void {export.object_name}()"
             if script_result.native_fields:
                 try:
                     from uasset_read.kismet.native_fields import build_native_function_signature
 
-                    sig_str, native_params, native_return_type = build_native_function_signature(
+                    signature = build_native_function_signature(
                         export.object_name,
                         script_result.native_fields,
                     )
-                    signature = sig_str
-                    native_signature_used = True
                 except (ValueError, KeyError, IndexError):
                     signature = f"void {export.object_name}()"
 
@@ -182,12 +174,7 @@ def extract_kismet_decompiled(
                     function_name=export.object_name,
                     signature=signature,
                     expressions=expressions,
-                    bytecode_source="function_export",
                     bytecode_status="parsed",
-                    parameters=native_params,
-                    return_type=native_return_type,
-                    native_signature=native_signature_used,
-                    function_ref_stats={},
                 )
             )
 
@@ -197,7 +184,6 @@ def extract_kismet_decompiled(
                 KismetDecompiledResult(
                     function_name=export.object_name,
                     signature=f"void {export.object_name}()",
-                    bytecode_source="unknown",
                     bytecode_status="failed",
                     error_code="function_processing_error",
                     error_message=str(e),

@@ -45,7 +45,6 @@ class FScriptText:
     KeyString: str | None = None
     Namespace: str | None = None
     DevNotes: str | None = None
-    StringTableAsset: str | None = None
     TableIdString: str | None = None
 
     @staticmethod
@@ -127,11 +126,9 @@ class EX_TextConst(KismetExpression):
 class EX_SoftObjectConst(KismetExpression):
     """Soft object constant expression (EX_SoftObjectConst, 0x67)."""
 
-    SoftObject: KismetExpression | None = None  # type: ignore[assignment]
-
     Token = EExprToken.EX_SoftObjectConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SoftObjectConst:
-        expr = archive.read_expression()
-        return cls(SoftObject=expr)
+        archive.read_expression()
+        return cls()
