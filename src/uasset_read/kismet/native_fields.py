@@ -150,7 +150,7 @@ def _read_fproperty_prefix(
 
     # FField metadata is serialized by Super::Serialize before the
     # FProperty-specific fields.
-    _metadata = _read_metadata(archive, context)
+    _read_metadata(archive, context)
 
     # ArrayDim / ElementSize: int32
     archive.read_i32()
@@ -174,45 +174,36 @@ def _read_fproperty_prefix(
 # ---------------------------------------------------------------------------
 
 
-def _read_metadata(archive: ByteArchive, context: NativeFieldContext) -> dict[str, str]:
+def _read_metadata(archive: ByteArchive, context: NativeFieldContext) -> None:
     """Read the metadata boolean and, when true, a TMap<FName, FString>.
 
-    Returns a dict of key-value pairs. UE5.0-5.3 use the package's
-    bIsCookedForEditor state (derived by the loader from PKG_FilterEditorOnly);
-    UE5.4+ use PKG_Cooked. A present record may still contain false.
+    Consumes the record to advance the cursor; the key-value pairs are not
+    retained.  UE5.0-5.3 use the package's bIsCookedForEditor state (derived
+    by the loader from PKG_FilterEditorOnly); UE5.4+ use PKG_Cooked.  A
+    present record may still contain false.
     """
     metadata_omission_flag = (
         PKG_FilterEditorOnly if context.saved_engine_version < _FFIELD_METADATA_USES_COOKED_FLAG_VERSION else PKG_Cooked
     )
     if context.package_flags & metadata_omission_flag:
-        return {}
+        return
 
     has_metadata = archive.read_bool()
     if not has_metadata:
-        return {}
+        return
 
     count = archive.read_i32()
     if count < 0:
         raise ValueError(f"Negative metadata count: {count}")
 
-    metadata: dict[str, str] = {}
     for _ in range(count):
-        key_ref = _read_fname_ref(archive, context)
-        value = archive.read_fstring()
-        key_name = key_ref.base_name or ""
-        metadata[key_name] = value
-    return metadata
+        _read_fname_ref(archive, context)
+        archive.read_fstring()
 
 
 # ---------------------------------------------------------------------------
 # Leaf type-specific tail readers
 # ---------------------------------------------------------------------------
-
-
-def _read_bool_tail(archive: ByteArchive) -> None:
-    """BoolProperty: six uint8 values."""
-    for _ in range(6):
-        archive.read_u8()
 
 
 def _read_single_ref_tail(
@@ -225,16 +216,6 @@ def _read_single_ref_tail(
     raw, name = _read_package_ref(archive, context)
     decl.references.append(raw)
     decl.reference_names.append(name)
-
-
-def _read_class_tail(
-    archive: ByteArchive,
-    context: NativeFieldContext,
-    decl: NativeFieldDeclaration,
-) -> None:
-    """Class/SoftClassProperty: base class ref + meta-class ref."""
-    _read_single_ref_tail(archive, context, decl)
-    _read_single_ref_tail(archive, context, decl)
 
 
 def _read_fieldpath_tail(
@@ -277,17 +258,6 @@ def _read_inner_field_tail(
     """Container tail with one FName inner-type + inner field (Array/Set/Optional)."""
     inner = _read_inner_field(archive, context, depth + 1)
     decl.inner_fields.append(inner)
-
-
-def _read_map_tail(
-    archive: ByteArchive,
-    context: NativeFieldContext,
-    decl: NativeFieldDeclaration,
-    depth: int,
-) -> None:
-    """MapProperty: key FName/field + value FName/field."""
-    _read_inner_field_tail(archive, context, decl, depth)
-    _read_inner_field_tail(archive, context, decl, depth)
 
 
 # Scalar types with no extra bytes
@@ -369,13 +339,17 @@ def _read_single_field(
     if type_name in _NO_EXTRA_BYTES_TYPES:
         pass  # no extra bytes
     elif type_name == "BoolProperty":
-        _read_bool_tail(archive)
+        # BoolProperty: six uint8 values.
+        for _ in range(6):
+            archive.read_u8()
     elif type_name == "ByteProperty":
         _read_single_ref_tail(archive, context, decl)
     elif type_name in ("ObjectProperty", "WeakObjectProperty", "LazyObjectProperty", "SoftObjectProperty"):
         _read_single_ref_tail(archive, context, decl)
     elif type_name in ("ClassProperty", "SoftClassProperty"):
-        _read_class_tail(archive, context, decl)
+        # Class/SoftClassProperty: base class ref + meta-class ref.
+        _read_single_ref_tail(archive, context, decl)
+        _read_single_ref_tail(archive, context, decl)
     elif type_name in ("InterfaceProperty", "StructProperty"):
         _read_single_ref_tail(archive, context, decl)
     elif type_name in (
@@ -392,7 +366,9 @@ def _read_single_field(
     elif type_name in ("ArrayProperty", "SetProperty", "OptionalProperty"):
         _read_inner_field_tail(archive, context, decl, depth)
     elif type_name == "MapProperty":
-        _read_map_tail(archive, context, decl, depth)
+        # MapProperty: key FName/field + value FName/field.
+        _read_inner_field_tail(archive, context, decl, depth)
+        _read_inner_field_tail(archive, context, decl, depth)
     else:
         # Unknown property class — emit unsupported_native_field failure
         logger.warning(

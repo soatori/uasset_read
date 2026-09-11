@@ -90,15 +90,21 @@ def _make_failure(
     export_index: int,
     error_code: str,
     error_message: str,
+    *,
+    class_name: str | None = None,
+    bytecode_buffer_size: int | None = None,
+    serialized_script_size: int | None = None,
 ) -> FunctionScriptFailure:
     return FunctionScriptFailure(
         error_code=error_code,
         error_message=error_message,
         function_name=export.object_name,
         export_index=export_index,
-        class_name=resolve_class_name(export.class_index, [], [export]) or "Unknown",
+        class_name=class_name or (resolve_class_name(export.class_index, [], [export]) or "Unknown"),
         package_offset=export.serial_offset,
         export_offset=export.serial_offset,
+        bytecode_buffer_size=bytecode_buffer_size,
+        serialized_script_size=serialized_script_size,
     )
 
 
@@ -269,16 +275,24 @@ def _read_ustruct_prefix_and_script(
             # Modern: count + pointers
             children_count = window.read_i32()
             if children_count < 0:
-                return _make_invalid_script_size_failure(
-                    f"Negative Children count: {children_count}",
-                    export,
-                    export_index,
+                return FunctionScriptReadResult(
+                    status="failed",
+                    failure=_make_failure(
+                        export,
+                        export_index,
+                        "invalid_script_size",
+                        f"Negative Children count: {children_count}",
+                    ),
                 )
             if children_count > max_i32_slots:
-                return _make_invalid_script_size_failure(
-                    f"Children count {children_count} exceeds remaining capacity ({max_i32_slots} slots)",
-                    export,
-                    export_index,
+                return FunctionScriptReadResult(
+                    status="failed",
+                    failure=_make_failure(
+                        export,
+                        export_index,
+                        "invalid_script_size",
+                        f"Children count {children_count} exceeds remaining capacity ({max_i32_slots} slots)",
+                    ),
                 )
             for _ in range(children_count):
                 window.read_i32()
@@ -291,10 +305,14 @@ def _read_ustruct_prefix_and_script(
         if core_version >= CORE_FPROPERTIES_VERSION:
             native_property_count = window.read_i32()
             if native_property_count < 0:
-                return _make_invalid_script_size_failure(
-                    f"Negative NativePropertyCount: {native_property_count}",
-                    export,
-                    export_index,
+                return FunctionScriptReadResult(
+                    status="failed",
+                    failure=_make_failure(
+                        export,
+                        export_index,
+                        "invalid_script_size",
+                        f"Negative NativePropertyCount: {native_property_count}",
+                    ),
                 )
 
         # 3a. Read native field declarations when count > 0
@@ -325,15 +343,7 @@ def _read_ustruct_prefix_and_script(
         if validation is not None:
             return FunctionScriptReadResult(
                 status="failed",
-                failure=FunctionScriptFailure(
-                    error_code=validation[0],
-                    error_message=validation[1],
-                    function_name=export.object_name,
-                    export_index=export_index,
-                    class_name=resolve_class_name(export.class_index, [], [export]) or "Unknown",
-                    package_offset=export.serial_offset,
-                    export_offset=export.serial_offset,
-                ),
+                failure=_make_failure(export, export_index, validation[0], validation[1]),
             )
 
         # 0/0 = no_script
@@ -350,17 +360,14 @@ def _read_ustruct_prefix_and_script(
         if serialized_script_size > remaining_after_header:
             return FunctionScriptReadResult(
                 status="failed",
-                failure=FunctionScriptFailure(
-                    error_code="truncated_script",
-                    error_message=(
+                failure=_make_failure(
+                    export,
+                    export_index,
+                    "truncated_script",
+                    (
                         f"Declared SerializedScriptSize={serialized_script_size} "
                         f"but only {remaining_after_header} bytes remain"
                     ),
-                    function_name=export.object_name,
-                    export_index=export_index,
-                    class_name=resolve_class_name(export.class_index, [], [export]) or "Unknown",
-                    package_offset=export.serial_offset,
-                    export_offset=export.serial_offset,
                     bytecode_buffer_size=bytecode_buffer_size,
                     serialized_script_size=serialized_script_size,
                 ),
@@ -380,14 +387,11 @@ def _read_ustruct_prefix_and_script(
         # Catch any read errors during UStruct prefix parsing
         return FunctionScriptReadResult(
             status="failed",
-            failure=FunctionScriptFailure(
-                error_code="read_error",
-                error_message=f"Error reading UStruct prefix: {exc}",
-                function_name=export.object_name,
-                export_index=export_index,
-                class_name=resolve_class_name(export.class_index, [], [export]) or "Unknown",
-                package_offset=export.serial_offset,
-                export_offset=export.serial_offset,
+            failure=_make_failure(
+                export,
+                export_index,
+                "read_error",
+                f"Error reading UStruct prefix: {exc}",
             ),
         )
 
@@ -420,26 +424,6 @@ def _validate_script_sizes(
             f"SerializedScriptSize={serialized_script_size}",
         )
     return None
-
-
-def _make_invalid_script_size_failure(
-    message: str,
-    export: ObjectExport,
-    export_index: int,
-) -> FunctionScriptReadResult:
-    """Create a failed result for invalid script size."""
-    return FunctionScriptReadResult(
-        status="failed",
-        failure=FunctionScriptFailure(
-            error_code="invalid_script_size",
-            error_message=message,
-            function_name=export.object_name,
-            export_index=export_index,
-            class_name=resolve_class_name(export.class_index, [], [export]) or "Unknown",
-            package_offset=export.serial_offset,
-            export_offset=export.serial_offset,
-        ),
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -481,14 +465,12 @@ def read_ufunction_script(
     if class_name not in ("Function", "UFunction"):
         return FunctionScriptReadResult(
             status="no_script",
-            failure=FunctionScriptFailure(
-                error_code="not_function_export",
-                error_message=f"Export class is {class_name!r}, not Function",
-                function_name=export.object_name,
-                export_index=export_index,
+            failure=_make_failure(
+                export,
+                export_index,
+                "not_function_export",
+                f"Export class is {class_name!r}, not Function",
                 class_name=class_name or "Unknown",
-                package_offset=export.serial_offset,
-                export_offset=export.serial_offset,
             ),
         )
 
