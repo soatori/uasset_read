@@ -401,17 +401,6 @@ def parse_lazy_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjec
     return SoftObjectPathValue(raw_kind=tag.type, guid=raw.hex())
 
 
-def parse_soft_class_property(
-    tag: PropertyTag,
-    archive: FArchive,
-    name_map: list[str] | None = None,
-    soft_object_path_list: list[Dict] | None = None,
-    summary: Any | None = None,
-) -> SoftObjectPathValue:
-    """Parse SoftClassProperty -- same parsing as SoftObjectProperty."""
-    return parse_soft_object_property(tag, archive, name_map or [], soft_object_path_list, summary)
-
-
 def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjectPathValue:
     """Parse AssetObjectProperty."""
     return SoftObjectPathValue(raw_kind=tag.type, asset_path=archive.read_fstring())
@@ -1310,18 +1299,17 @@ def _get_inner_type(array_type: str) -> str:
     return inner.rsplit(".", 1)[-1] if inner else "Unknown"
 
 
+def _split_inner(inner: str | None, default: str) -> str:
+    """Return the last dotted segment of *inner*, or *default* when absent."""
+    return default if inner is None else inner.rsplit(".", 1)[-1]
+
+
 def _extract_struct_type_from_tag(tag: PropertyTag) -> str:
     """Extract struct type name from PropertyTag (D-08)."""
     if getattr(tag, "struct_type", None):
         return str(tag.struct_type).split(".")[-1]
 
-    inner = extract_inner_from_tag(tag.type)
-    if inner is not None:
-        if "." in inner:
-            return inner.split(".")[-1]
-        return inner
-
-    return "UnknownStruct"
+    return _split_inner(extract_inner_from_tag(tag.type), "UnknownStruct")
 
 
 def _extract_map_types_from_tag(tag: PropertyTag) -> tuple[str, str]:
@@ -1346,13 +1334,7 @@ def _extract_set_type_from_tag(tag: PropertyTag) -> str:
 
 def _extract_enum_type_from_tag(tag: PropertyTag) -> str:
     """Extract enum type name from PropertyTag (D-08)."""
-    inner = extract_inner_from_tag(tag.type)
-    if inner is not None:
-        if "." in inner:
-            return inner.split(".")[-1]
-        return inner
-
-    return "UnknownEnum"
+    return _split_inner(extract_inner_from_tag(tag.type), "UnknownEnum")
 
 
 # ============================================================================

@@ -126,7 +126,6 @@ def _get_parse_functions():
         parse_weak_object_property,
         parse_lazy_object_property,
         parse_class_property,
-        parse_soft_class_property,
         parse_asset_object_property,
         parse_multicast_delegate_property,
         parse_multicast_inline_delegate_property,
@@ -172,7 +171,7 @@ def _get_parse_functions():
         "WeakObjectProperty": parse_weak_object_property,
         "LazyObjectProperty": parse_lazy_object_property,
         "ClassProperty": parse_class_property,
-        "SoftClassProperty": parse_soft_class_property,
+        "SoftClassProperty": parse_soft_object_property,
         "AssetObjectProperty": parse_asset_object_property,
         "AssetClassProperty": parse_asset_object_property,
         "MulticastDelegateProperty": parse_multicast_delegate_property,
@@ -193,74 +192,34 @@ def _get_parse_functions():
     return _TYPE_HANDLER_MAP
 
 
-# Positional args parse_property_value passes each handler, keyed by property
-# type; covers exactly the keys of _TYPE_HANDLER_MAP.  "soft_path_list"
-# resolves to summary._soft_object_path_list (UE5.7+ soft object path table).
-_PROPERTY_ARGS: dict[str, tuple[str, ...]] = (
-    {
-        t: ("tag", "archive")
-        for t in (
-            "BoolProperty",
-            "IntProperty",
-            "Int64Property",
-            "Int16Property",
-            "Int8Property",
-            "ByteProperty",
-            "UInt16Property",
-            "UInt32Property",
-            "UInt64Property",
-            "FloatProperty",
-            "DoubleProperty",
-            "StrProperty",
-            "ObjectProperty",
-            "Utf8StrProperty",
-            "WeakObjectProperty",
-            "LazyObjectProperty",
-            "ClassProperty",
-            "AssetObjectProperty",
-            "AssetClassProperty",
-            "InterfaceProperty",
-            "VerseStringProperty",
-            "VerseClassProperty",
-            "VerseFunctionProperty",
-            "VerseDynamicProperty",
-            "AnsiStrProperty",
-            "GuidProperty",
-            "VerseCellProperty",
-            "VerseValueProperty",
-        )
-    }
-    | {
-        "TextProperty": ("tag", "archive", "dev_notes"),
-    }
-    | {
-        t: ("tag", "archive", "name_map")
-        for t in (
-            "NameProperty",
-            "DelegateProperty",
-            "MulticastDelegateProperty",
-            "MulticastInlineDelegateProperty",
-            "MulticastSparseDelegateProperty",
-            "FieldPathProperty",
-        )
-    }
-    | {
-        t: ("tag", "archive", "name_map", "soft_path_list", "summary")
-        for t in ("SoftObjectProperty", "SoftClassProperty")
-    }
-    | {t: ("tag", "archive", "name_map", "export_map", "summary", "depth") for t in ("ArrayProperty", "StructProperty")}
-    | {
-        t: ("tag", "archive", "name_map", "export_map", "summary")
-        for t in ("MapProperty", "SetProperty", "OptionalProperty")
-    }
-    | {t: ("tag", "archive", "name_map", "summary") for t in ("EnumProperty",)}
-)
+# Positional args parse_property_value passes each handler. Only the deviations from
+# the ("tag", "archive") default are listed; names index the `values` dict below.
+# "soft_path_list" resolves to summary._soft_object_path_list (UE5.7+ soft object
+# path table); it stays in the two soft overrides until parse_soft_object_property
+# drops the positional (planned Task 9).
+_ARGS_DEFAULT: tuple[str, ...] = ("tag", "archive")
+_ARGS_OVERRIDES: dict[str, tuple[str, ...]] = {
+    "TextProperty": ("tag", "archive", "dev_notes"),
+    "NameProperty": ("tag", "archive", "name_map"),
+    "DelegateProperty": ("tag", "archive", "name_map"),
+    "MulticastDelegateProperty": ("tag", "archive", "name_map"),
+    "MulticastInlineDelegateProperty": ("tag", "archive", "name_map"),
+    "MulticastSparseDelegateProperty": ("tag", "archive", "name_map"),
+    "FieldPathProperty": ("tag", "archive", "name_map"),
+    "EnumProperty": ("tag", "archive", "name_map", "summary"),
+    "SoftObjectProperty": ("tag", "archive", "name_map", "soft_path_list", "summary"),
+    "SoftClassProperty": ("tag", "archive", "name_map", "soft_path_list", "summary"),
+    "MapProperty": ("tag", "archive", "name_map", "export_map", "summary"),
+    "SetProperty": ("tag", "archive", "name_map", "export_map", "summary"),
+    "OptionalProperty": ("tag", "archive", "name_map", "export_map", "summary"),
+    "ArrayProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth"),
+    "StructProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth"),
+}
 
 
 def _skip_type_tree_nodes(
     archive,
     limit: int,
-    name_map: list[str],
     map_len: int,
 ) -> bool:
     """Try to skip UE5.3+ FPropertyTypeName type tree, locating to the size field start position.
@@ -271,7 +230,6 @@ def _skip_type_tree_nodes(
     Args:
         archive: FArchive positioned at the type tree start
         limit: readable upper bound (scan window or data boundary)
-        name_map: name table
         map_len: name table length
 
     Returns:
@@ -407,17 +365,17 @@ def _try_recover_property_tag(
                 first_node_raw = archive.read(8)
                 if len(first_node_raw) < 8:
                     continue
-                first_idx, first_ic = _struct.unpack("<II", first_node_raw)
+                first_idx, _ = _struct.unpack("<II", first_node_raw)
                 if not (0 <= first_idx < map_len):
                     continue
                 first_type_name = name_map[first_idx]
                 # #428: validate type tree root node is a known property type
                 if first_type_name not in _KNOWN_PROPERTY_TYPES:
                     continue
-                # Skip remaining type tree (first node already read, inner_count=first_ic)
+                # Skip remaining type tree (first node already read)
                 # Re-seek and use _skip_type_tree_nodes to fully skip
                 archive.seek(candidate + 8)
-                if not _skip_type_tree_nodes(archive, limit, name_map, map_len):
+                if not _skip_type_tree_nodes(archive, limit, map_len):
                     continue
                 size_pos = archive.tell()
                 if size_pos + 4 > limit:
@@ -544,7 +502,8 @@ def parse_property_value(
 
     try:
         # Dispatch based on handler signature
-        # Special case: ByteProperty with enum backing needs name_map (reads FName)
+        # Special case: ByteProperty with enum backing needs name_map (reads FName);
+        # bypasses the arg table below.
         if tag.type == "ByteProperty" and tag.enum_type is not None:
             return handler(tag, archive, name_map)
         dev_notes = False
@@ -564,7 +523,7 @@ def parse_property_value(
             "soft_path_list": getattr(summary, "_soft_object_path_list", None) if summary is not None else None,
             "dev_notes": dev_notes,
         }
-        return handler(*(values[n] for n in _PROPERTY_ARGS[tag.type]))
+        return handler(*(values[n] for n in _ARGS_OVERRIDES.get(tag.type, _ARGS_DEFAULT)))
     except (_struct.error, OSError, ValueError, AttributeError, KeyError, ParseError) as e:
         if not tolerant:
             raise
@@ -984,8 +943,6 @@ def parse_properties_from_export(
     Returns:
         list[PropertyValue] property value list
     """
-    if mappings is not None:
-        setattr(summary, "_mappings", mappings)
     if game is not None:
         setattr(summary, "_game", game)
 

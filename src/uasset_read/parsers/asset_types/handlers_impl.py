@@ -61,17 +61,6 @@ def get_handlers() -> list[AssetHandler]:
     return list(_HANDLERS)
 
 
-def _capability_tier(handler: AssetHandler, result: dict[str, Any]) -> str:
-    """Resolve a handler's declared tier ("decoded"/"summary") for its output.
-
-    ``capability`` may be a plain tier string or a callable of the produced
-    result. Undeclared handlers default to "summary": an undeclared handler
-    must not claim that a type was fully decoded (#629).
-    """
-    cap: str | Any = getattr(handler, "capability", "summary")
-    return str(cap(result)) if callable(cap) else str(cap)
-
-
 def run_handlers(
     obj: ObjectRecord,
     context: VersionContext,
@@ -100,7 +89,12 @@ def run_handlers(
                 result = handler.enrich(obj, context, all_objects, package_data)
                 if result is not None:
                     semantic.update(result)
-                    if _capability_tier(handler, result) == "decoded":
+                    # capability may be a tier string or a callable of the result;
+                    # undeclared handlers default to "summary" and must not claim
+                    # a type was fully decoded (#629).
+                    cap = getattr(handler, "capability", "summary")
+                    tier = str(cap(result)) if callable(cap) else str(cap)
+                    if tier == "decoded":
                         decoded = True
         except Exception as e:
             # Handler failure must not affect other objects

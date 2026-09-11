@@ -25,7 +25,6 @@ SKIP_CLASS_PREFIXES = (
     # P0: Animation -- migrated to opaque whitelist (#166)
     # P1: Niagara
     "NiagaraMeshRendererProperties",
-    "NiagaraNodeParameterMapGet",
     "NiagaraNode",
     "NiagaraSystem",
     # P1: MovieScene -- moved to opaque whitelist (#164)
