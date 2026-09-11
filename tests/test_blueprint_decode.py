@@ -333,6 +333,26 @@ def test_call_function_raw_properties_reach_node_data():
             }, key
 
 
+def test_variable_nodes_carry_tag_derived_reference():
+    """VariableGet/Set nodes surface VariableReference (or equivalent) from tags."""
+    from uasset_read import parse_package_document
+    from uasset_read.projection import project_document
+
+    doc = parse_package_document(
+        SAMPLES / "BP_CombatCharacter.uasset", depth="decode", tolerant=True
+    )
+    page = project_document(doc, depth="decode", max_bytes=3_000_000)
+    nodes = [
+        n
+        for o in page.get("objects") or []
+        for g in (o.get("semantic") or {}).get("graphs") or []
+        for n in g.get("nodes") or []
+        if "Variable" in (n.get("type") or "")
+    ]
+    assert nodes
+    assert any(n.get("node_data") for n in nodes)
+
+
 def test_project_document_decode_max_bytes_keeps_k0_functions():
     """K3: decode + max_bytes still yields K0 function fields when the page fits."""
     from uasset_read.projection import project_document
