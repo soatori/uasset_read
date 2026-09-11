@@ -356,7 +356,7 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
     from uasset_read.serializers.package_summary import read_name_table, read_package_summary
 
     sample = SAMPLES / "BP_CombatCharacter.uasset"
-    bundle = open_package_bundle(str(sample), tolerant=True)
+    bundle = open_package_bundle(str(sample))
     archive = bundle.open_archive(tolerant=True)
     try:
         budget = ResourceBudget()
@@ -378,7 +378,6 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
 
         monkeypatch.setattr(bytecode_extractor, "parse_bytecode_stream", flaky_parse)
         results = extract_kismet_decompiled(
-            str(sample),
             archive,
             summary,
             name_map,

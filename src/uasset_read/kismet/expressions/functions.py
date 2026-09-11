@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 """Kismet expression -- function calls and end markers.
 
 Contains function call related expressions (EX_FinalFunction / EX_CallMath / EX_VirtualFunction, etc.)
 as well as function parameter end markers (EX_EndFunctionParms / EX_EndParmValue).
 """
 
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING

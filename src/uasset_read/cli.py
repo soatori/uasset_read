@@ -235,7 +235,7 @@ def _handle_list_package_files(file_path: str, tolerant: bool) -> None:
     from uasset_read.package import open_package_bundle
 
     try:
-        bundle = open_package_bundle(file_path, tolerant=tolerant)
+        bundle = open_package_bundle(file_path)
     except Exception as e:
         _logger.debug("Package discovery error (full): %s", e, exc_info=True)
         print(

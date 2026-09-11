@@ -178,7 +178,7 @@ class PackageBundle:
         return FArchive(path, tolerant=tolerant)
 
 
-def open_package_bundle(path: str, tolerant: bool = False) -> PackageBundle:
+def open_package_bundle(path: str) -> PackageBundle:
     """Discover a package bundle from a filesystem path."""
     main = Path(path)
     if main.suffix.lower() not in PACKAGE_EXTENSIONS:
@@ -221,7 +221,7 @@ def parse_package_document(
     """
     from .parsers.legacy_reader import LegacyPackageReader
 
-    bundle = open_package_bundle(str(file_path), tolerant=tolerant)
+    bundle = open_package_bundle(str(file_path))
     archive = bundle.open_archive(tolerant=tolerant)
     try:
         reader = LegacyPackageReader(

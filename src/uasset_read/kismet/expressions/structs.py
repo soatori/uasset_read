@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 """Kismet expression -- Struct-related expressions.
 
 Contains EX_StructConst, EX_EndStructConst, EX_PropertyConst, EX_BitFieldConst.
 """
 
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING

@@ -1,9 +1,9 @@
-from __future__ import annotations
-
 """Property type parsing functions -- 14 parse_*_property functions and TypeName extraction helpers.
 
 Equivalent migration of uasset_read.py lines 5289-6004.
 """
+
+from __future__ import annotations
 
 import logging
 import struct
@@ -257,106 +257,9 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
 """Set of struct names requiring tagged fallback parsing.
 
 When struct properties use tagged format (PropertyTag contains type information)
-but cannot be parsed via standard StructProperty, use the field lists defined in
-_TAGGED_FALLBACK_STRUCT_SCHEMAS for fallback parsing.
+but cannot be parsed via standard StructProperty, members of this set are re-read
+as inline tagged properties instead of opaque bytes.
 """
-
-_TAGGED_FALLBACK_STRUCT_SCHEMAS: dict[str, list[tuple[str, str]]] = {
-    "MemberReference": [
-        ("MemberParent", "ObjectProperty"),
-        ("MemberName", "NameProperty"),
-        ("MemberGuid", "GuidProperty"),
-    ],
-    "SimpleMemberReference": [
-        ("MemberParent", "ObjectProperty"),
-        ("MemberName", "NameProperty"),
-        ("MemberGuid", "GuidProperty"),
-    ],
-    # New UE5.5 structs
-    "NewVariables": [
-        ("VarName", "NameProperty"),
-        ("VarGuid", "GuidProperty"),
-        ("VarType", "StructProperty"),  # FEdGraphPinType
-    ],
-    "ImplementedInterfaces": [
-        ("InterfaceName", "NameProperty"),
-        ("InterfaceGuid", "GuidProperty"),
-    ],
-    "BPInterfaceDescription": [
-        ("InterfaceName", "NameProperty"),
-        ("InterfaceGuid", "GuidProperty"),
-    ],
-    "LastEditedDocuments": [
-        ("DocumentName", "NameProperty"),
-    ],
-    "CategorySorting": [
-        ("CategoryName", "NameProperty"),
-    ],
-    # AnimSequence struct tagged fallback schemas
-    "FrameRate": [
-        ("Numerator", "IntProperty"),  # UE source: int32 Numerator (not float)
-    ],
-    "AnimNotifyTrack": [
-        ("TrackIndex", "Int64Property"),
-        ("TrackName", "NameProperty"),
-    ],
-    # Editor structs
-    "FEditorElement": [
-        ("DisplayName", "TextProperty"),
-        ("Value", "StrProperty"),
-        ("bIsDefault", "BoolProperty"),
-    ],
-    # Material parameter struct tagged fallback schemas
-    "FMaterialParameterInfo": [
-        ("ParameterName", "NameProperty"),
-        ("Index", "IntProperty"),
-        ("bOverride", "BoolProperty"),
-    ],
-    # FScalarParameterValue
-    "ScalarParameterValue": [
-        ("ParameterInfo", "StructProperty"),  # FMaterialParameterInfo
-        ("ParameterValue", "FloatProperty"),
-        ("bOverride", "BoolProperty"),
-    ],
-    # Animation blend space struct tagged fallback schemas
-    "BlendSample": [
-        ("SampleValue", "StructProperty"),  # FVector
-        ("Time", "FloatProperty"),
-        ("RateScale", "IntProperty"),  # int32
-        ("bIsValid", "BoolProperty"),
-    ],
-    # Builder polygon struct (UE source: Engine/BrushBuilder.h)
-    "BuilderPoly": [
-        ("VertexIndices", "ArrayProperty"),
-        ("Direction", "IntProperty"),
-        ("ItemName", "NameProperty"),
-        ("PolyFlags", "IntProperty"),
-    ],
-    # StaticMesh section info tagged fallback schemas
-    # UE source: Engine/Source/Runtime/Engine/Classes/Engine/StaticMesh.h:344
-    "FMeshSectionInfo": [
-        ("MaterialIndex", "IntProperty"),
-        ("bEnableCollision", "BoolProperty"),
-        ("bCastShadow", "BoolProperty"),
-        ("bVisibleInRayTracing", "BoolProperty"),
-        ("bAffectDistanceFieldLighting", "BoolProperty"),
-        ("bForceOpaque", "BoolProperty"),
-    ],
-}
-
-
-def _register_schema_alias(schemas: dict, canonical: str, *aliases: str) -> None:
-    """Register alias names pointing to the same schema as *canonical*."""
-    for alias in aliases:
-        schemas[alias] = schemas[canonical]
-
-
-# F/non-F and variant aliases — single source of truth for duplicate struct names.
-_register_schema_alias(_TAGGED_FALLBACK_STRUCT_SCHEMAS, "FEditorElement", "EditorElement")
-_register_schema_alias(_TAGGED_FALLBACK_STRUCT_SCHEMAS, "ScalarParameterValue", "FScalarParameterValue")
-_register_schema_alias(_TAGGED_FALLBACK_STRUCT_SCHEMAS, "BlendSample", "FBlendSample")
-_register_schema_alias(_TAGGED_FALLBACK_STRUCT_SCHEMAS, "BuilderPoly", "FBuilderPoly")
-_register_schema_alias(_TAGGED_FALLBACK_STRUCT_SCHEMAS, "FMeshSectionInfo", "MeshSectionInfo")
 
 # ============================================================================
 # Lazy import helpers (avoid circular dependency with property_parser.py)

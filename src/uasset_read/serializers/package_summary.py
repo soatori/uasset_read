@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Package Summary serialization — PackageFileSummary and related read functions.
 
@@ -8,6 +6,8 @@ Supports both UE4 and UE5 summaries: LegacyFileVersion -3..-5 (UE4,
 GUID-based custom versions) and -6..-9 (UE5), per UE4_LEGACY_VERSIONS
 and UE5_LEGACY_VERSIONS in uasset_read.constants.
 """
+
+from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING

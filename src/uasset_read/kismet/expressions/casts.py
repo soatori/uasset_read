@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 """Kismet expression -- type casts.
 
 Contains type-cast related expressions (EX_Cast / EX_MetaCast / EX_DynamicCast, etc.).
 """
 
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

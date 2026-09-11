@@ -27,8 +27,8 @@ Layout authority (UE 5.8 sources, paths relative to the engine root):
 Entry metas are version-dependent, not one width: from
 ``EIoStoreTocVersion::ReplaceIoChunkHashWithIoHash`` (8) the entry is ``FIoStoreTocEntryMeta``
 (20-byte ``FIoHash`` + flags + 3 pad = 24 bytes); before it ``FIoStoreTocEntryMetaOld`` is
-``uint8 ChunkHash[32]`` + flags = 33 bytes, of which UE copies the first 20
-(``IoStore.cpp:1405-1434``). Both widths are handled here; ``hash`` always carries 20 bytes.
+``uint8 ChunkHash[32]`` + flags = 33 bytes. Only the flags byte is surfaced here; the chunk
+hash fields are write-only for the current read-only surface and are skipped.
 """
 
 from __future__ import annotations
@@ -55,11 +55,9 @@ VERSION_PERFECT_HASH_OVERFLOW = 5
 VERSION_IOHASH_METAS = 8
 
 # EIoContainerFlags (IoDispatcher.h:435-444).
-FLAG_COMPRESSED = 1 << 0
 FLAG_ENCRYPTED = 1 << 1
 FLAG_SIGNED = 1 << 2
 FLAG_INDEXED = 1 << 3
-FLAG_ON_DEMAND = 1 << 4
 
 META_COMPRESSED = 1 << 0  # FIoStoreTocEntryMetaFlags (IoStore.h:81-85)
 META_MEMORY_MAPPED = 1 << 1
@@ -100,7 +98,6 @@ class IoStoreChunk:
     type_id: int
     offset: int
     length: int
-    hash: bytes
     meta_flags: int
 
     @property
@@ -124,8 +121,6 @@ class IoStoreBlock:
 
     offset: int
     compressed_size: int
-    uncompressed_size: int
-    method_index: int
 
 
 @dataclass(frozen=True)
@@ -148,12 +143,7 @@ class IoStoreToc:
     compression_block_size: int
     compression_methods: tuple[str, ...]
     container_flags: int
-    container_id: int
     encryption_key_guid: str
-    partition_count: int
-    partition_size: int
-    perfect_hash_seed_count: int
-    chunks_without_perfect_hash_count: int
     directory_index_size: int
     mount_point: str
     chunks: tuple[IoStoreChunk, ...]
@@ -297,13 +287,11 @@ def read_toc(path: str | Path) -> IoStoreToc:
         method_name_length,
         compression_block_size,
         directory_index_size,
-        partition_count,
+        _partition_count,
     ) = struct.unpack_from("<BBH" + "I" * 9, data, 16)
-    container_id = struct.unpack_from("<Q", data, 56)[0]
     encryption_key_guid = data[64:80].hex()
     (container_flags,) = struct.unpack_from("<B", data, 80)
     perfect_hash_seeds = struct.unpack_from("<I", data, 84)[0]
-    partition_size = struct.unpack_from("<Q", data, 88)[0]
     chunks_without_perfect_hash = struct.unpack_from("<I", data, 96)[0]
 
     if header_size != TOC_HEADER_SIZE:
@@ -353,13 +341,10 @@ def read_toc(path: str | Path) -> IoStoreToc:
     for i in range(block_count):
         raw = data[block_start + i * COMPRESSED_BLOCK_ENTRY_SIZE : block_start + (i + 1) * COMPRESSED_BLOCK_ENTRY_SIZE]
         word1 = struct.unpack_from("<I", raw, 4)[0]
-        word2 = struct.unpack_from("<I", raw, 8)[0]
         blocks.append(
             IoStoreBlock(
                 offset=struct.unpack_from("<Q", raw, 0)[0] & ((1 << 40) - 1),
                 compressed_size=(word1 >> 8) & ((1 << 24) - 1),
-                uncompressed_size=word2 & ((1 << 24) - 1),
-                method_index=word2 >> 24,
             )
         )
     stored_methods = [
@@ -373,10 +358,7 @@ def read_toc(path: str | Path) -> IoStoreToc:
     directory_start = pos
     pos += directory_index_size
     metas = [
-        (
-            data[pos + i * meta_size : pos + i * meta_size + CHUNK_HASH_SIZE],
-            data[pos + i * meta_size + (CHUNK_HASH_SIZE if version >= VERSION_IOHASH_METAS else 32)],
-        )
+        data[pos + i * meta_size + (CHUNK_HASH_SIZE if version >= VERSION_IOHASH_METAS else 32)]
         for i in range(entry_count)
     ]
 
@@ -384,7 +366,6 @@ def read_toc(path: str | Path) -> IoStoreToc:
     for i in range(entry_count):
         ol = offset_lengths[i]
         chunk_id = chunk_ids[i]
-        hash_bytes, meta_flags = metas[i]
         chunks.append(
             IoStoreChunk(
                 index=i,
@@ -393,8 +374,7 @@ def read_toc(path: str | Path) -> IoStoreToc:
                 # FIoOffsetAndLength: two big-endian 5-byte fields (IoOffsetLength.h).
                 offset=int.from_bytes(ol[:5], "big"),
                 length=int.from_bytes(ol[5:], "big"),
-                hash=hash_bytes,
-                meta_flags=meta_flags & (META_COMPRESSED | META_MEMORY_MAPPED),
+                meta_flags=metas[i] & (META_COMPRESSED | META_MEMORY_MAPPED),
             )
         )
 
@@ -419,12 +399,7 @@ def read_toc(path: str | Path) -> IoStoreToc:
         compression_block_size=compression_block_size,
         compression_methods=methods,
         container_flags=container_flags,
-        container_id=container_id,
         encryption_key_guid=encryption_key_guid,
-        partition_count=partition_count,
-        partition_size=partition_size,
-        perfect_hash_seed_count=perfect_hash_seeds,
-        chunks_without_perfect_hash_count=chunks_without_perfect_hash,
         directory_index_size=directory_index_size,
         mount_point=mount_point,
         chunks=tuple(chunks),

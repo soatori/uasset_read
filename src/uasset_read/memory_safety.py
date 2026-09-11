@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Central resource budget for parser read/decompress checkpoints."""
+
+from __future__ import annotations
 
 from pathlib import Path
 

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Kismet decompile bridge, reached from v2 asset/decode depth.
 
 Permanent v2 internal (#642). Produces expression trees and structured
@@ -7,6 +5,8 @@ diagnostics for Function/UFunction exports. C++ pseudocode generation was
 retired 2026-09-10 (Gate K); the public function-logic representation is
 ``semantic.functions[]`` expressions (K0 contract).
 """
+
+from __future__ import annotations
 
 import logging
 import struct
@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 
 
 def extract_kismet_decompiled(
-    path: str,
     archive: "FArchive",
     summary,
     name_map: list[str],

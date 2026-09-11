@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """CustomProperty registry -- handles custom property slots like 0xFD/0xFE.
 
 UE PropertyTag.h defines custom property slots (CustomProperty 0xFD/0xFE),
@@ -7,6 +5,8 @@ used for plugin/Mod extended custom property types.
 
 This module provides a registry mechanism allowing dynamic registration of custom property handlers.
 """
+
+from __future__ import annotations
 
 import logging
 from dataclasses import dataclass

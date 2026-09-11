@@ -214,7 +214,7 @@ class TestUnversionedPackageParsing:
         from uasset_read.package import open_package_bundle
         from uasset_read.parsers.legacy_reader import LegacyPackageReader
 
-        bundle = open_package_bundle("tests/samples/BP_UnversionedTest.uasset", tolerant=True)
+        bundle = open_package_bundle("tests/samples/BP_UnversionedTest.uasset")
         archive = bundle.open_archive(tolerant=True)
         try:
             reader = LegacyPackageReader(mappings_path="tests/samples/UnversionedTest.usmap")
@@ -229,7 +229,7 @@ class TestUnversionedPackageParsing:
         from uasset_read.package import open_package_bundle
         from uasset_read.parsers.legacy_reader import LegacyPackageReader
 
-        bundle = open_package_bundle("tests/samples/DA_UnversionedTest.uasset", tolerant=True)
+        bundle = open_package_bundle("tests/samples/DA_UnversionedTest.uasset")
         archive = bundle.open_archive(tolerant=True)
         try:
             reader = LegacyPackageReader(mappings_path="tests/samples/UnversionedTest.usmap")

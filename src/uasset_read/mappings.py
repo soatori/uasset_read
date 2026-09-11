@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Usmap mapping reader and unified type model."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 import struct
@@ -65,7 +65,6 @@ class PropertyType:
     inner_type: "PropertyType" | None = None
     value_type: "PropertyType" | None = None
     enum_name: str | None = None
-    is_enum_as_byte: bool | None = None
 
 
 @dataclass
@@ -100,7 +99,6 @@ class TypeMappings:
     """Unified Usmap mapping container."""
 
     types: dict[str, StructMapping] = field(default_factory=dict)
-    enums: dict[str, dict[int, str]] = field(default_factory=dict)
 
     def get_struct(self, name: str | None) -> StructMapping | None:
         if not name:
@@ -206,18 +204,12 @@ class UsmapParser:
         mappings = TypeMappings()
         enum_count = ar.u32()
         for _ in range(enum_count):
-            enum_name = ar.name(name_lut) or ""
+            ar.name(name_lut)
             value_count = ar.u16() if version >= 3 else ar.u8()
-            values: dict[int, str] = {}
-            for index in range(value_count):
+            for _ in range(value_count):
                 if version >= 4:
-                    value = int(ar.u64())
-                    name = ar.name(name_lut) or ""
-                else:
-                    value = index
-                    name = ar.name(name_lut) or ""
-                values[value] = name
-            mappings.enums.setdefault(enum_name, values)
+                    ar.u64()
+                ar.name(name_lut)
 
         struct_count = ar.u32()
         for _ in range(struct_count):

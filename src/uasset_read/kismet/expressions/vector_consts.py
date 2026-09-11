@@ -1,7 +1,6 @@
-from __future__ import annotations
-
 """Kismet expression -- vector and transform constant expressions."""
 
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

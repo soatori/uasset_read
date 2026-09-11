@@ -1,10 +1,10 @@
-from __future__ import annotations
-
 """Class-specific payload type identification + tolerant skip helper functions.
 
 When the generic property parser enters an unsupported serialization region,
 this module provides type identification and safe skip logic.
 """
+
+from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING

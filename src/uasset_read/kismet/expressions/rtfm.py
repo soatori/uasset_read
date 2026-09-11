@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Kismet expression system -- AutoRTFM expressions.
 
@@ -7,6 +5,7 @@ Contains transaction-related AutoRTFM instructions for software transactional me
 Corresponding opcodes: EX_AutoRtfmTransact, EX_AutoRtfmStopTransact, EX_AutoRtfmAbortIfNot.
 """
 
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

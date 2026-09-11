@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 """Kismet control flow expressions.
 
 Contains expression subclasses for jumps, conditional branches, execution flow stack operations,
 and other control-flow-related constructs.
 """
 
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

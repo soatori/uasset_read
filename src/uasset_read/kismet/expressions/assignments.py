@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 """Kismet assignment expressions.
 
 Contains expression subclasses for the EX_Let family of assignment instructions.
 """
 
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

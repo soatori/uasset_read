@@ -130,8 +130,6 @@ def _read_native_payload_start(
     export: ObjectExport,
     summary: PackageFileSummary,
     name_map: list[str],
-    import_map: list[ObjectImport],
-    export_map: list[ObjectExport],
     *,
     export_index: int = 0,
 ) -> ByteArchive:
@@ -176,7 +174,7 @@ def _read_native_payload_start(
             window.read_u8()
 
     # Read tagged properties until the None terminator
-    pos_after_tags = _consume_tagged_properties(window, name_map, summary)
+    pos_after_tags = _consume_tagged_properties(window, name_map)
 
     # Cross-check script_serialization offsets if they are non-zero
     if export.script_serialization_start_offset != 0 or export.script_serialization_end_offset != 0:
@@ -207,7 +205,6 @@ def _read_native_payload_start(
 def _consume_tagged_properties(
     archive: ByteArchive,
     name_map: list[str],
-    summary: PackageFileSummary,
 ) -> int:
     """Read property tags until the None terminator and return the archive
     position after the terminator.
@@ -480,8 +477,6 @@ def read_ufunction_script(
             export,
             summary,
             name_map,
-            import_map,
-            export_map,
             export_index=export_index,
         )
         return _read_ustruct_prefix_and_script(
