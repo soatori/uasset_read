@@ -1,11 +1,14 @@
 # Ponytail Residual Cuts
 
-> **Status:** target (ready to execute). Follow-up to the 2026-09-08 whole-repo audit
-> waves, which already landed Tasks 0–13 on this tree. This plan covers only the
-> residual findings re-verified against the current source on 2026-09-12.
+> **Status:** current (executed 2026-09-12). Follow-up to the 2026-09-08 whole-repo
+> audit waves (Tasks 0–13 already landed). **Do not re-execute completed steps.**
 >
 > **Scope:** pure subtraction / identity-preserving rewrites. No parse-path behavior
 > change except CubeBuilder prefix edges (Task 6), documented below.
+>
+> **Execution record:** Tasks 1–5 `f55b2d1e`; Task 6 `4bface99`; baseline `e97cb191`.
+> Suite parity **220 passed**. Residual risk: CubeBuilder-prefixed non-exact class
+> names are no longer force-skipped (intentional).
 
 **Goal:** Delete the remaining write-only fields, identity maps, false circular-import
 mirrors, and a dead skip-list entry. Estimated net cut: ~80–120 lines.
@@ -36,10 +39,10 @@ symbol if the base moves.
 
 **Files:** none (record only)
 
-- [ ] **Step 0.1:** Confirm clean tree (or that unrelated WIP is stashed).
-- [ ] **Step 0.2:** Baseline: `python -m pytest -q` — record pass/fail. Any pre-existing
+- [x] **Step 0.1:** Confirm clean tree (or that unrelated WIP is stashed).
+- [x] **Step 0.2:** Baseline: `python -m pytest -q` — record pass/fail. Any pre-existing
   failures become the parity gate ("same failures, no new ones").
-- [ ] **Step 0.3:** Sanity-grep each premise still holds (commands appear in each task).
+- [x] **Step 0.3:** Sanity-grep each premise still holds (commands appear in each task).
 
 ---
 
@@ -56,7 +59,7 @@ the value as itself. Output JSON is unchanged if the value becomes the key.
 **Interfaces:** Public name `ETRIGGER_EVENT_PIN_MAP` disappears. No test imports it
 (`grep -rn ETRIGGER_EVENT tests` → empty). Wiki/docs do not reference the symbol.
 
-- [ ] **Step 1.1:** Verify sole consumer:
+- [x] **Step 1.1:** Verify sole consumer:
 
   ```bash
   grep -rn "ETRIGGER_EVENT_PIN_MAP" src tests --include="*.py"
@@ -64,7 +67,7 @@ the value as itself. Output JSON is unchanged if the value becomes the key.
 
   Expected: `constants.py` definition + `graph_node.py` import/uses only.
 
-- [ ] **Step 1.2:** In `constants.py`, replace the dict with:
+- [x] **Step 1.2:** In `constants.py`, replace the dict with:
 
   ```python
   # EnhancedInput ETriggerEvent pin names (identity: pin name == enum string).
@@ -75,7 +78,7 @@ the value as itself. Output JSON is unchanged if the value becomes the key.
   preferred: move the frozenset next to `_build_trigger_events_from_pins` and delete
   the constants entry entirely, since nothing else needs it.)
 
-- [ ] **Step 1.3:** Rewrite `_build_trigger_events_from_pins` body:
+- [x] **Step 1.3:** Rewrite `_build_trigger_events_from_pins` body:
 
   ```python
   def _build_trigger_events_from_pins(pins: list[UEdGraphPin]) -> dict[str, str]:
@@ -104,7 +107,7 @@ the value as itself. Output JSON is unchanged if the value becomes the key.
   - Prefer keeping the frozenset **in graph_node.py** (module-level) and deleting
     the constants entry — constants.py should not hold one-callsite UI tables.
 
-- [ ] **Step 1.4:** Suite parity. Commit:
+- [x] **Step 1.4:** Suite parity. Commit:
   `refactor: replace identity ETRIGGER_EVENT_PIN_MAP with a frozenset of names`
 
 ---
@@ -121,14 +124,14 @@ cycle.
 
 **Interfaces:** unchanged.
 
-- [ ] **Step 2.1:** Verify no cycle:
+- [x] **Step 2.1:** Verify no cycle:
 
   ```bash
   grep -n "^import\|^from" src/uasset_read/constants.py
   grep -n "PKG_Cooked\|PKG_FilterEditorOnly" src/uasset_read/kismet/native_fields.py
   ```
 
-- [ ] **Step 2.2:** Delete the local constants and the "mirrored" comment block. Add:
+- [x] **Step 2.2:** Delete the local constants and the "mirrored" comment block. Add:
 
   ```python
   from uasset_read.constants import PKG_Cooked, PKG_FilterEditorOnly
@@ -137,7 +140,7 @@ cycle.
   next to the existing `uasset_read.archive` import. Leave the `_FFIELD_*` version
   thresholds in place (those are legitimately local).
 
-- [ ] **Step 2.3:** Suite parity. Commit:
+- [x] **Step 2.3:** Suite parity. Commit:
   `refactor: import package-flag constants instead of mirroring them in native_fields`
 
 ---
@@ -157,7 +160,7 @@ was left behind.
 (dataclass default). JSON projection of pins does not include this field (Task 8
 already dropped it from payloads).
 
-- [ ] **Step 3.1:** Re-verify zero readers/writers:
+- [x] **Step 3.1:** Re-verify zero readers/writers:
 
   ```bash
   grep -rn "default_object_ref" src tests --include="*.py"
@@ -165,10 +168,10 @@ already dropped it from payloads).
 
   Expected: one hit in `models/core.py`.
 
-- [ ] **Step 3.2:** Delete the field and its two-line comment. Keep `default_object`
+- [x] **Step 3.2:** Delete the field and its two-line comment. Keep `default_object`
   (the real int index field) untouched.
 
-- [ ] **Step 3.3:** Suite parity. Commit:
+- [x] **Step 3.3:** Suite parity. Commit:
   `refactor: delete write-only UEdGraphPin.default_object_ref field`
 
 ---
@@ -185,7 +188,7 @@ No consumer, no schema assertion.
 **Interfaces:** `node_data` for `K2Node_Event` loses the key `"is_event"`. Callers
 (`_handle_event` → generic node assembly) treat `node_data` as a free dict.
 
-- [ ] **Step 4.1:**
+- [x] **Step 4.1:**
 
   ```bash
   grep -rn "is_event" src tests --include="*.py"
@@ -193,9 +196,9 @@ No consumer, no schema assertion.
 
   Expected: single hit at graph_node.py:146.
 
-- [ ] **Step 4.2:** Delete `"is_event": True,` from the return dict.
+- [x] **Step 4.2:** Delete `"is_event": True,` from the return dict.
 
-- [ ] **Step 4.3:** Suite parity. Commit:
+- [x] **Step 4.3:** Suite parity. Commit:
   `refactor: drop never-read is_event key from K2Node_Event node_data`
 
 ---
@@ -222,7 +225,7 @@ many expression bodies legitimately use `name_map` for FNames. Only the
 **Interfaces:** `FKismetPropertyPointer.from_archive(archive)` — one argument.
 Expression classmethods keep their two-arg signature.
 
-- [ ] **Step 5.1:** Enumerate call sites:
+- [x] **Step 5.1:** Enumerate call sites:
 
   ```bash
   grep -rn "FKismetPropertyPointer.from_archive" src tests --include="*.py"
@@ -230,7 +233,7 @@ Expression classmethods keep their two-arg signature.
 
   Expected: 11 hits, all `from_archive(archive, name_map)`.
 
-- [ ] **Step 5.2:** In `property_pointer.py`:
+- [x] **Step 5.2:** In `property_pointer.py`:
 
   ```python
   @classmethod
@@ -243,13 +246,13 @@ Expression classmethods keep their two-arg signature.
       return cls(bNew=True, path=archive.xfer_field_pointer())
   ```
 
-- [ ] **Step 5.3:** Mechanically change every call site to
+- [x] **Step 5.3:** Mechanically change every call site to
   `FKismetPropertyPointer.from_archive(archive)`. Leave the enclosing expression
   `from_archive(cls, archive, name_map)` signatures alone (dispatch protocol). Unused
   `name_map` params on expression methods that only forwarded it are acceptable —
   the same pattern already exists in `make_value_expression` (`expressions/base.py:98`).
 
-- [ ] **Step 5.4:** Suite parity (kismet expression tests in `test_core.py`,
+- [x] **Step 5.4:** Suite parity (kismet expression tests in `test_core.py`,
   sample decode paths). Commit:
   `refactor: drop unused name_map from FKismetPropertyPointer.from_archive`
 
@@ -285,7 +288,7 @@ prefixes (`GeomModifier_`, `Niagara*`, …) are unchanged.
 **Interfaces:** `SKIP_CLASS_PREFIXES` loses one entry; `should_skip_export_for_tolerant_parsing`
 signature unchanged.
 
-- [ ] **Step 6.1:** Confirm sole skip-list consumer:
+- [x] **Step 6.1:** Confirm sole skip-list consumer:
 
   ```bash
   grep -rn "SKIP_CLASS_PREFIXES\|should_skip_export_for_tolerant_parsing" src tests --include="*.py"
@@ -293,11 +296,11 @@ signature unchanged.
 
   Expected: definition + `property_parser.py` call site.
 
-- [ ] **Step 6.2:** Delete `"CubeBuilder",` from the tuple (keep the surrounding
+- [x] **Step 6.2:** Delete `"CubeBuilder",` from the tuple (keep the surrounding
   category comments that still apply to other prefixes; drop the P0 Builder line if
   only CubeBuilder was under it — keep `GeomModifier_` / `BrushBuilder`).
 
-- [ ] **Step 6.3:** Delete the allowlist branch and the `# #521` comment. Collapse:
+- [x] **Step 6.3:** Delete the allowlist branch and the `# #521` comment. Collapse:
 
   ```python
   def should_skip_export_for_tolerant_parsing(
@@ -312,20 +315,20 @@ signature unchanged.
 
   Trim the long docstring to the one-liner above.
 
-- [ ] **Step 6.4:** Suite parity. If any sample test asserts CubeBuilder is skipped,
+- [x] **Step 6.4:** Suite parity. If any sample test asserts CubeBuilder is skipped,
   STOP and report — that would mean a real fixture depends on the dead prefix edge.
 
-- [ ] **Step 6.5:** Commit:
+- [x] **Step 6.5:** Commit:
   `refactor: remove CubeBuilder from skip prefixes — exact class already allowlisted (#521)`
 
 ---
 
 ### Task 7: Baseline re-measure + report
 
-- [ ] **Step 7.1:** `python -m pytest -q` — parity with Task 0.
-- [ ] **Step 7.2:** Re-measure src line count and tighten `tests/size-baseline.json`
+- [x] **Step 7.1:** `python -m pytest -q` — parity with Task 0.
+- [x] **Step 7.2:** Re-measure src line count and tighten `tests/size-baseline.json`
   `src_python.max_lines` to the exact value; append one `_note` sentence.
-- [ ] **Step 7.3:** Report: lines removed per task, suite parity proof.
+- [x] **Step 7.3:** Report: lines removed per task, suite parity proof.
 
 ---
 
