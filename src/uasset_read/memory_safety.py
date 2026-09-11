@@ -11,11 +11,9 @@ class ResourceBudget:
     def __init__(
         self,
         max_single_read_bytes: int = 16 * 1024 * 1024,
-        max_decompressed_block_bytes: int = 64 * 1024 * 1024,
         max_total_decompressed_bytes: int = 256 * 1024 * 1024,
     ):
         self.max_single_read_bytes = max_single_read_bytes
-        self.max_decompressed_block_bytes = max_decompressed_block_bytes
         self.max_total_decompressed_bytes = max_total_decompressed_bytes
         self._total_decompressed = 0
 
@@ -25,15 +23,8 @@ class ResourceBudget:
             raise MemoryLimitExceeded(
                 asset_path=asset,
                 stage=stage,
-                current_rss_mb=0,
-                limit_mb=self.max_single_read_bytes / 1024 / 1024,
-            )
-        if bytes_needed > self.max_decompressed_block_bytes:
-            raise MemoryLimitExceeded(
-                asset_path=asset,
-                stage=stage,
                 current_rss_mb=bytes_needed / 1024 / 1024,
-                limit_mb=self.max_decompressed_block_bytes / 1024 / 1024,
+                limit_mb=self.max_single_read_bytes / 1024 / 1024,
             )
         self._total_decompressed += bytes_needed
         if self._total_decompressed > self.max_total_decompressed_bytes:
@@ -46,7 +37,7 @@ class ResourceBudget:
 
 
 class MemoryLimitExceeded(MemoryError):
-    """Raised when a parser checkpoint exceeds its configured RSS limit."""
+    """Raised when a parser checkpoint exceeds its configured limit."""
 
     def __init__(
         self,
