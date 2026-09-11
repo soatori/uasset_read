@@ -421,3 +421,27 @@ def test_decode_pin_payload_key_set_is_frozen():
     assert pins, "expected at least one decoded pin"
     for pin in pins:
         assert set(pin) == {"id", "name", "direction", "category", "linked"}, sorted(pin)
+
+
+def test_generated_class_kismet_functions_survive_decode():
+    """A BlueprintGeneratedClass owns Function exports (bytecode) but no FunctionGraph exports.
+
+    decode is documented as a superset of asset (handlers_impl.py kismet projection;
+    wiki Kismet.md depth monotonicity), so the graph gate must not drop its Kismet
+    functions.
+    """
+    dec = _decode("BP_CombatCharacter.uasset", ("export:2",))
+    bpgc = next(o for o in dec.objects if o.id == "export:2")
+    fns = (bpgc.semantic or {}).get("functions")
+    assert fns, "decode dropped the generated class's Kismet functions"
+
+
+def test_generated_class_function_count_is_depth_independent():
+    counts = {}
+    for depth in ("asset", "decode"):
+        doc = parse_package_document(
+            SAMPLES / "BP_CombatCharacter.uasset", depth=depth, object_ids=["export:2"]
+        )
+        bpgc = next(o for o in doc.objects if o.id == "export:2")
+        counts[depth] = len(((bpgc.semantic or {}).get("functions") or []))
+    assert counts["decode"] == counts["asset"] == 42, counts
