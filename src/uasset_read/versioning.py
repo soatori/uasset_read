@@ -6,8 +6,8 @@ Corresponds to COR-02: FCustomVersion system.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, Mapping
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from uasset_read.serializers.package_summary import PackageFileSummary
@@ -57,79 +57,11 @@ class EngineVersion:
 
 @dataclass(frozen=True)
 class VersionContext:
-    """Immutable parse context. All readers share this."""
+    """Immutable parse context shared by all readers.
 
-    file_version_ue4: int = 0
-    file_version_ue5: int = 0
-    licensee_version: int = 0
-    custom_versions: Mapping[str, int] = field(default_factory=dict)
-    engine_version: EngineVersion | None = None
-    compatible_engine_version: EngineVersion | None = None
-    game: str | None = None
-    mappings_path: str | None = None
+    Production-used fields only (G1 amended 2026-09-13 after revert
+    ``280b7e09``): handlers read ``depth``; version facts stay on the
+    package summary / archive gates until a real consumer lands.
+    """
+
     depth: Literal["package", "object", "asset", "decode"] = "package"
-
-    @property
-    def is_ue5(self) -> bool:
-        # ObjectVersion.h: UE5 range starts at INITIAL_VERSION=1000
-        return self.file_version_ue5 >= 1000
-
-    @property
-    def version_string(self) -> str:
-        if self.engine_version:
-            return str(self.engine_version)
-        if self.is_ue5:
-            return f"UE5.{self.file_version_ue5}"
-        return f"UE4.{self.file_version_ue4}"
-
-
-def build_version_context_from_summary(
-    summary: Any,
-    *,
-    game: str | None = None,
-    mappings_path: str | None = None,
-    depth: Literal["package", "object", "asset", "decode"] = "package",
-) -> VersionContext:
-    """Build a VersionContext from an existing PackageFileSummary."""
-    # Build custom versions map from summary.custom_versions
-    custom_versions: dict[str, int] = {}
-    for cv in getattr(summary, "custom_versions", []):
-        guid = getattr(cv, "guid", "")
-        ver = getattr(cv, "version", 0)
-        if guid:
-            custom_versions[guid] = ver
-
-    # Build engine version
-    engine_version = None
-    saved = getattr(summary, "saved_by_engine_version", None)
-    if saved and hasattr(saved, "major"):
-        engine_version = EngineVersion(
-            major=getattr(saved, "major", 0),
-            minor=getattr(saved, "minor", 0),
-            patch=getattr(saved, "patch", 0),
-            changelist=getattr(saved, "changelist", 0),
-            branch=getattr(saved, "branch", ""),
-        )
-
-    compat_version = None
-    compat = getattr(summary, "compatible_with_engine_version", None)
-    if compat and hasattr(compat, "major"):
-        compat_version = EngineVersion(
-            major=getattr(compat, "major", 0),
-            minor=getattr(compat, "minor", 0),
-            patch=getattr(compat, "patch", 0),
-            changelist=getattr(compat, "changelist", 0),
-            branch=getattr(compat, "branch", ""),
-        )
-
-    return VersionContext(
-        file_version_ue4=getattr(summary, "file_version_ue4", 0),
-        file_version_ue5=getattr(summary, "file_version_ue5", 0),
-        licensee_version=getattr(summary, "file_version_licensee", 0),
-        custom_versions=custom_versions,
-        engine_version=engine_version,
-        compatible_engine_version=compat_version,
-        game=game,
-        mappings_path=mappings_path,
-        depth=depth,
-    )

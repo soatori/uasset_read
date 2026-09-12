@@ -1,16 +1,16 @@
-"""CustomProperty registry -- handles custom property slots like 0xFD/0xFE.
+"""Custom property slots — 0xFD/0xFE and game-specific custom pairs.
 
 UE PropertyTag.h defines custom property slots (CustomProperty 0xFD/0xFE),
 used for plugin/Mod extended custom property types.
 
-This module provides a registry mechanism allowing dynamic registration of custom property handlers.
+Unhandled custom slots are raw-skipped (tag.size bytes); only real custom
+pairs (e.g. Borderlands 4) get a handler below.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -19,36 +19,45 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class CustomPropertyContext:
-    """CustomProperty handler invocation context."""
+def _parse_bl4_gbx_def_ptr_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: list[str] | None = None,
+) -> dict:
+    """Borderlands4 GbxDefPtrProperty: FName + FPackageIndex."""
+    name = archive.read_name(name_map or [])
+    struct_ref = archive.read_i32()
+    return {
+        "kind": "GbxDefPtrProperty",
+        "name": name,
+        "struct": struct_ref,
+    }
 
-    tag: PropertyTag
-    archive: FArchive
-    name_map: list[str] | None = None
+
+def _parse_bl4_game_data_handle_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: list[str] | None = None,
+) -> dict:
+    """Borderlands4 GameDataHandleProperty: FName + uint32 flags."""
+    name = archive.read_name(name_map or [])
+    flags = archive.read_u32()
+    return {
+        "kind": "GameDataHandleProperty",
+        "name": name,
+        "flags": flags,
+    }
 
 
-# Custom property handler registry: (game, type_id/property_name) -> handler
-CUSTOM_PROPERTY_HANDLERS: dict[tuple[str | None, Any], Callable[[CustomPropertyContext], Any]] = {}
-
-
-def register_custom_property(type_id: int | str, game: str | None = None):
-    """Decorator: register a custom property handler.
-
-    Args:
-        type_id: Custom property type ID (e.g. 0xFD, 0xFE)
-
-    Usage:
-        @register_custom_property(0xFD)
-        def parse_fd_custom_property(tag, archive, name_map):
-            ...
-    """
-
-    def decorator(func: Callable) -> Callable:
-        CUSTOM_PROPERTY_HANDLERS[(game.lower() if game else None, type_id)] = func
-        return func
-
-    return decorator
+# Real custom pairs only — (game_key, type_id | property_name) -> handler.
+# Default 0xFD/0xFE slots are NOT registered: the unhandled path raw-skips
+# them, which is identical to the old default handlers.
+CUSTOM_PROPERTY_HANDLERS: dict[tuple[str | None, Any], Callable[..., Any]] = {
+    ("borderlands4", 0xFD): _parse_bl4_gbx_def_ptr_property,
+    ("borderlands4", "GbxDefPtrProperty"): _parse_bl4_gbx_def_ptr_property,
+    ("borderlands4", 0xFE): _parse_bl4_game_data_handle_property,
+    ("borderlands4", "GameDataHandleProperty"): _parse_bl4_game_data_handle_property,
+}
 
 
 def handle_custom_property(
@@ -68,7 +77,7 @@ def handle_custom_property(
         game: Optional game key for game-specific handler lookup
 
     Returns:
-        Handler return value, or None if no handler found
+        Handler return value, or the unhandled raw-skip dict if no handler found
     """
     game_key = game.lower() if game else None
     handler = (
@@ -91,71 +100,4 @@ def handle_custom_property(
             "size": tag.size,
             "raw_data": raw_data,
         }
-    return handler(
-        CustomPropertyContext(
-            tag=tag,
-            archive=archive,
-            name_map=name_map,
-        )
-    )
-
-
-# ============================================================================
-# Default handlers -- 0xFD / 0xFE (used by Borderlands 4, 2XKO, etc.)
-# ============================================================================
-
-
-@register_custom_property(0xFD)
-def _parse_fd_custom_property(context: CustomPropertyContext) -> dict:
-    """Handle 0xFD custom property (Borderlands 4, 2XKO, etc.).
-
-    Default tolerant behavior: read tag.size bytes as raw_data and return.
-    """
-    raw_data = context.archive.read(context.tag.size) if context.tag.size > 0 else b""
-    logger.debug("CustomProperty 0xFD: read %d bytes of custom data", len(raw_data))
-    return {
-        "type_id": 0xFD,
-        "size": context.tag.size,
-        "raw_data": raw_data,
-    }
-
-
-@register_custom_property(0xFE)
-def _parse_fe_custom_property(context: CustomPropertyContext) -> dict:
-    """Handle 0xFE custom property (Borderlands 4, 2XKO, etc.).
-
-    Default tolerant behavior: read tag.size bytes as raw_data and return.
-    """
-    raw_data = context.archive.read(context.tag.size) if context.tag.size > 0 else b""
-    logger.debug("CustomProperty 0xFE: read %d bytes of custom data", len(raw_data))
-    return {
-        "type_id": 0xFE,
-        "size": context.tag.size,
-        "raw_data": raw_data,
-    }
-
-
-@register_custom_property(0xFD, game="Borderlands4")
-@register_custom_property("GbxDefPtrProperty", game="Borderlands4")
-def _parse_bl4_gbx_def_ptr_property(context: CustomPropertyContext) -> dict:
-    """Borderlands4 GbxDefPtrProperty: FName + FPackageIndex。"""
-    name = context.archive.read_name(context.name_map or [])
-    struct_ref = context.archive.read_i32()
-    return {
-        "kind": "GbxDefPtrProperty",
-        "name": name,
-        "struct": struct_ref,
-    }
-
-
-@register_custom_property(0xFE, game="Borderlands4")
-@register_custom_property("GameDataHandleProperty", game="Borderlands4")
-def _parse_bl4_game_data_handle_property(context: CustomPropertyContext) -> dict:
-    """Borderlands4 GameDataHandleProperty: FName + uint32 flags。"""
-    name = context.archive.read_name(context.name_map or [])
-    flags = context.archive.read_u32()
-    return {
-        "kind": "GameDataHandleProperty",
-        "name": name,
-        "flags": flags,
-    }
+    return handler(tag, archive, name_map)

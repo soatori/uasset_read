@@ -48,53 +48,6 @@ _SERIALIZATION_CONTROL_BIT_NAMES = {
 # #341/#428: PropertyTag corruption recovery max scan bytes
 _MAX_RECOVERY_SCAN = 2048
 
-# #428: Known property type name set (used to filter candidates during recovery scan)
-_KNOWN_PROPERTY_TYPES = {
-    "BoolProperty",
-    "IntProperty",
-    "Int64Property",
-    "Int16Property",
-    "Int8Property",
-    "ByteProperty",
-    "UInt16Property",
-    "UInt32Property",
-    "UInt64Property",
-    "FloatProperty",
-    "DoubleProperty",
-    "StrProperty",
-    "NameProperty",
-    "ObjectProperty",
-    "SoftObjectProperty",
-    "ArrayProperty",
-    "StructProperty",
-    "MapProperty",
-    "SetProperty",
-    "EnumProperty",
-    "TextProperty",
-    "DelegateProperty",
-    "Utf8StrProperty",
-    "WeakObjectProperty",
-    "LazyObjectProperty",
-    "ClassProperty",
-    "SoftClassProperty",
-    "AssetObjectProperty",
-    "AssetClassProperty",
-    "MulticastDelegateProperty",
-    "MulticastInlineDelegateProperty",
-    "MulticastSparseDelegateProperty",
-    "InterfaceProperty",
-    "FieldPathProperty",
-    "OptionalProperty",
-    "VerseStringProperty",
-    "VerseClassProperty",
-    "VerseFunctionProperty",
-    "VerseDynamicProperty",
-    "VerseCellProperty",
-    "VerseValueProperty",
-    "AnsiStrProperty",
-    "GuidProperty",
-}
-
 # Poison diagnostics mean the stream is misaligned (cursor rolled back);
 # continuing the export property loop only multiplies the same OOR (Lyra
 # MovieScene x28). name_index_out_of_range is intentionally excluded: read_name
@@ -189,28 +142,19 @@ def _get_parse_functions():
         parse_uint16_property,
         parse_uint32_property,
         parse_uint64_property,
-        parse_utf8_str_property,
-        parse_weak_object_property,
         parse_lazy_object_property,
-        parse_class_property,
         parse_asset_object_property,
         parse_multicast_delegate_property,
-        parse_multicast_inline_delegate_property,
-        parse_multicast_sparse_delegate_property,
-        parse_interface_property,
         parse_field_path_property,
         parse_optional_property,
-        parse_verse_string_property,
-        parse_verse_class_property,
-        parse_verse_function_property,
-        parse_verse_dynamic_property,
-        parse_ansi_str_property,
         parse_verse_cell_property,
         parse_verse_value_property,
         parse_double_property,
         parse_guid_property,
     )
 
+    # Type strings map straight to base functions; aliases like
+    # parse_utf8_str_property / parse_class_property were removed with T12.
     _TYPE_HANDLER_MAP = {
         "BoolProperty": parse_bool_property,
         "IntProperty": parse_int_property,
@@ -234,26 +178,26 @@ def _get_parse_functions():
         "EnumProperty": parse_enum_property,
         "TextProperty": parse_text_property,
         "DelegateProperty": parse_delegate_property,
-        "Utf8StrProperty": parse_utf8_str_property,
-        "WeakObjectProperty": parse_weak_object_property,
+        "Utf8StrProperty": parse_str_property,
+        "WeakObjectProperty": parse_object_property,
         "LazyObjectProperty": parse_lazy_object_property,
-        "ClassProperty": parse_class_property,
+        "ClassProperty": parse_object_property,
         "SoftClassProperty": parse_soft_object_property,
         "AssetObjectProperty": parse_asset_object_property,
         "AssetClassProperty": parse_asset_object_property,
         "MulticastDelegateProperty": parse_multicast_delegate_property,
-        "MulticastInlineDelegateProperty": parse_multicast_inline_delegate_property,
-        "MulticastSparseDelegateProperty": parse_multicast_sparse_delegate_property,
-        "InterfaceProperty": parse_interface_property,
+        "MulticastInlineDelegateProperty": parse_multicast_delegate_property,
+        "MulticastSparseDelegateProperty": parse_multicast_delegate_property,
+        "InterfaceProperty": parse_object_property,
         "FieldPathProperty": parse_field_path_property,
         "OptionalProperty": parse_optional_property,
-        "VerseStringProperty": parse_verse_string_property,
-        "VerseClassProperty": parse_verse_class_property,
-        "VerseFunctionProperty": parse_verse_function_property,
-        "VerseDynamicProperty": parse_verse_dynamic_property,
+        "VerseStringProperty": parse_str_property,
+        "VerseClassProperty": parse_object_property,
+        "VerseFunctionProperty": parse_object_property,
+        "VerseDynamicProperty": parse_object_property,
         "VerseCellProperty": parse_verse_cell_property,
         "VerseValueProperty": parse_verse_value_property,
-        "AnsiStrProperty": parse_ansi_str_property,
+        "AnsiStrProperty": parse_str_property,
         "GuidProperty": parse_guid_property,
     }
     return _TYPE_HANDLER_MAP
@@ -411,7 +355,7 @@ def _try_recover_property_tag(
                 if not type_name or type_name.isdigit() or type_name == "None":
                     continue
                 # #428: validate type_name is a known property type
-                if type_name not in _KNOWN_PROPERTY_TYPES:
+                if type_name not in _get_parse_functions():
                     continue
                 # Validate size
                 archive.seek(size_pos)
@@ -434,7 +378,7 @@ def _try_recover_property_tag(
                     continue
                 first_type_name = name_map[first_idx]
                 # #428: validate type tree root node is a known property type
-                if first_type_name not in _KNOWN_PROPERTY_TYPES:
+                if first_type_name not in _get_parse_functions():
                     continue
                 # Skip remaining type tree (first node already read)
                 # Re-seek and use _skip_type_tree_nodes to fully skip

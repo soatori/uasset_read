@@ -27,7 +27,6 @@ class FLookupTableEntry:
 
 
 # Precompiled struct formats
-_HEADER_FMT = struct.Struct("<QIIQi")  # tag(u64) + version(u32) + header_length(u32) + payloads_data_length(u64) + num_payloads(i32)
 _ENTRY_HEAD = struct.Struct("<20sQQQ")  # identifier(20) + offset(i64) + compressed(u64) + raw(u64)
 _ENTRY_TAIL_V2 = struct.Struct("<HHB")  # flags(u16) + filter_flags(u16) + access_mode(u8)
 _ENTRY_TAIL_V1 = struct.Struct("<B")  # access_mode(u8)

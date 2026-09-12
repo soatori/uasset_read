@@ -27,7 +27,7 @@ class FKismetSwitchCase:
     NextOffset: int = 0
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> FKismetSwitchCase:
+    def from_archive(cls, archive: FKismetArchive) -> FKismetSwitchCase:
         archive.read_expression()
         offset = archive.read_u32()
         archive.read_expression()
@@ -41,7 +41,7 @@ class EX_Return(KismetExpression):
     Token = EExprToken.EX_Return
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Return:
+    def from_archive(cls, archive: FKismetArchive) -> EX_Return:
         archive.read_expression()
         return cls()
 
@@ -56,7 +56,7 @@ class EX_Assert(KismetExpression):
     Token = EExprToken.EX_Assert
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Assert:
+    def from_archive(cls, archive: FKismetArchive) -> EX_Assert:
         line = archive.read_u16()
         # ScriptSerialization.inl:597-603 — debug flag is uint8 (XFER(uint8)), NOT a 4-byte UBOOL.
         debug = archive.read_u8() != 0
@@ -73,7 +73,7 @@ class EX_NothingInt32(KismetExpressionT):
     Token = EExprToken.EX_NothingInt32
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_NothingInt32:
+    def from_archive(cls, archive: FKismetArchive) -> EX_NothingInt32:
         return cls(Value=archive.read_i32())
 
 
@@ -87,13 +87,13 @@ class EX_SwitchValue(KismetExpression):
     Token = EExprToken.EX_SwitchValue
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SwitchValue:
+    def from_archive(cls, archive: FKismetArchive) -> EX_SwitchValue:
         num_cases = archive.read_u16()
         end_offset = archive.read_u32()
         archive.read_expression()
         cases = []
         for _ in range(num_cases):
-            case = FKismetSwitchCase.from_archive(archive, name_map)
+            case = FKismetSwitchCase.from_archive(archive)
             cases.append(case)
         archive.read_expression()
         return cls(EndGotoOffset=end_offset, Cases=cases)
@@ -106,7 +106,7 @@ class EX_InstrumentationEvent(KismetExpression):
     Token = EExprToken.EX_InstrumentationEvent
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_InstrumentationEvent:
+    def from_archive(cls, archive: FKismetArchive) -> EX_InstrumentationEvent:
         evt_type = EScriptInstrumentationType(archive.read_u8())
         if evt_type == EScriptInstrumentationType.InlineEvent:
             archive.xfer_fname()
@@ -127,7 +127,7 @@ class EX_FieldPathConst(KismetExpression):
     Token = EExprToken.EX_FieldPathConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_FieldPathConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_FieldPathConst:
         archive.read_expression()
         return cls()
 
@@ -141,20 +141,20 @@ class EX_ObjectConst(KismetExpressionT):
     Token = EExprToken.EX_ObjectConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ObjectConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_ObjectConst:
         obj_ref = archive.xfer_object_pointer()
         return cls(Value=obj_ref.index)
 
 
 @dataclass
 class EX_NameConst(KismetExpressionT):
-    """Name constant — reads FName index + number from name_map."""
+    """Name constant — reads FName index + number via the archive's name map."""
 
     Value: str = ""
 
     Token = EExprToken.EX_NameConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_NameConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_NameConst:
         fname_ref = archive.xfer_fname()
         return cls(Value=fname_ref.base_name or "")

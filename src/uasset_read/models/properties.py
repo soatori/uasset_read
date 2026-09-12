@@ -65,7 +65,6 @@ class SoftObjectPathValue:
     sub_path: str = ""
     package_index: int | None = None
     guid: str | None = None
-    property_type: str = "SoftObjectPath"
     index: int | None = None  # SoftObjectPathList index (UE5.7+)
     error: str | None = None  # Out-of-bounds and other diagnostic info
 
@@ -78,7 +77,6 @@ class StructValue:
     fields: dict[str, Any] = field(default_factory=dict)
     raw_size: int | None = None
     parse_status: str = "success"
-    property_type: str = "StructProperty"
 
 
 @dataclass
@@ -88,7 +86,6 @@ class MapValue:
     key_type: str
     value_type: str
     entries: list[dict[str, Any]] = field(default_factory=list)
-    property_type: str = "MapProperty"
 
 
 @dataclass
@@ -97,7 +94,6 @@ class SetValue:
 
     element_type: str
     elements: list[Any] = field(default_factory=list)
-    property_type: str = "SetProperty"
 
 
 @dataclass
@@ -106,7 +102,6 @@ class EnumValue:
 
     enum_type: str
     value_name: str
-    property_type: str = "EnumProperty"
 
 
 @dataclass
@@ -117,7 +112,7 @@ class TextValue:
     key: str = ""
     source_string: str = ""
     history_type: int | None = None  # ETextHistoryType seen; None when not decoded
-    property_type: str = "TextProperty"
+    property_type: str = "TextProperty"  # read by properties_v2 TextValue serialization
 
 
 @dataclass
@@ -126,4 +121,3 @@ class DelegateValue:
 
     object_ref: int
     function_name: str
-    property_type: str = "DelegateProperty"

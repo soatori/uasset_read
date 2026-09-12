@@ -10,6 +10,8 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 from typing import Any
 
+from uasset_read.models.properties import PropertyValue
+
 
 class FallbackReason(str, Enum):
     """Fallback reason."""
@@ -21,32 +23,14 @@ class FallbackReason(str, Enum):
     SIZE_EXCEEDED = "size_exceeded"
 
 
-from uasset_read.models.properties import PropertyValue
-
-
+@dataclass
 class PropertyFallback(PropertyValue):
     """Structured fallback for unknown/corrupted properties (replaces original None return)."""
 
-    def __init__(
-        self,
-        name: str,
-        type: str,
-        size: int = 0,
-        raw_bytes: bytes = b"",
-        reason: FallbackReason = FallbackReason.UNSUPPORTED_TYPE,
-        array_index: int = 0,
-        error_message: str | None = None,
-        value: Any = None,
-    ):
-        super().__init__(name=name, type=type, value=value, array_index=array_index)
-        self.size = size
-        self.raw_bytes = raw_bytes
-        self.reason = reason
-        self.error_message = error_message
-
-    @property
-    def kind(self) -> str:
-        return "unknown_property"
+    size: int = 0
+    raw_bytes: bytes = b""
+    reason: FallbackReason = FallbackReason.UNSUPPORTED_TYPE
+    error_message: str | None = None
 
     @classmethod
     def from_tag(

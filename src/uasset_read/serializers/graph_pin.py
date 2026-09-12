@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from uasset_read.parsers.errors import BINARY_READ_ERRORS
 
@@ -26,7 +26,6 @@ from uasset_read.models.core import UEdGraphPin, FEdGraphPinType
 
 from uasset_read.serializers.graph_helpers import (
     _read_guid,
-    _get_thread_local,
     _read_fstring_safe,
     _read_ftext_value,
     ftext_dev_notes_enabled,
@@ -124,35 +123,15 @@ def read_pin_array(
 ) -> list[dict]:
     """Read Pin reference array (SerializePinArray format).
 
-    Sliding recovery mechanism — when count is abnormal, scan nearby bytes for a valid i32 count,
-    validate candidates before resuming parsing, to avoid losing entire pin arrays due to a single field misalignment.
+    Corrupt or out-of-range counts fail closed with ParseError — no
+    sliding-window salvage of a misaligned stream.
     """
     array_count = archive.read_i32()
 
-    if array_count < 0 or array_count > MAX_LINKEDTO_PER_PIN:
-        # Sliding recovery: scan within ±8 bytes of current pointer for valid count
-        recovery_pos = archive.tell()
-        recovered = _recover_pin_array_count(archive, recovery_pos, array_count, export_map, import_map)
-        if recovered is not None:
-            array_count = recovered["count"]
-            if recovered["confidence"] == "low":
-                # Low-confidence recovery excluded from connection building to avoid polluting downstream semantics
-                logger.info(
-                    "[P73-RECOVERY] low-confidence recovered (count=%d, reason=%s) -> ignored",
-                    array_count,
-                    recovered["reason"],
-                )
-                return []
-            logger.info(
-                "[P73-RECOVERY] recovered: count=%d, confidence=%s, reason=%s",
-                array_count,
-                recovered["confidence"],
-                recovered["reason"],
-            )
-        else:
-            if array_count < 0:
-                raise ParseError(f"Invalid pin array count: {array_count} (negative)")
-            raise ParseError(f"Pin array count {array_count} exceeds MAX_LINKEDTO_PER_PIN {MAX_LINKEDTO_PER_PIN}")
+    if array_count < 0:
+        raise ParseError(f"Invalid pin array count: {array_count} (negative)")
+    if array_count > MAX_LINKEDTO_PER_PIN:
+        raise ParseError(f"Pin array count {array_count} exceeds MAX_LINKEDTO_PER_PIN {MAX_LINKEDTO_PER_PIN}")
 
     pins: list[dict] = []
     for _ in range(array_count):
@@ -165,214 +144,6 @@ def read_pin_array(
         if pin_ref is not None:
             pins.append(pin_ref)
     return pins
-
-
-def _recover_pin_array_count(
-    archive: FArchive,
-    error_pos: int,
-    bad_count: int,
-    export_map: list[ObjectExport],
-    import_map: list[ObjectImport] | None = None,
-    scan_window: int = 16,
-) -> dict[str, Any] | None:
-    """Sliding recovery enhanced validation (Phase 75: dynamic window).
-
-    Scan error_pos +/- scan_window for a valid i32 count (0..20).
-
-    scan_window adjusts dynamically based on bad_count size:
-    - bad_count <= 20: base window 16 bytes
-    - bad_count <= 100: window 32 bytes
-    - bad_count > 100: window 64 bytes
-
-    Improvements:
-    - count=0 alone cannot be a success condition; must verify subsequent structure is reasonable
-    - count>0 must validate all or at least the first two PinReferences
-    - Successful recovery returns structured result: {count, candidate_pos, confidence, reason}
-
-    Returns:
-        None: recovery failed
-        Dict: {
-            "count": int,
-            "candidate_pos": int,
-            "confidence": "high"/"medium"/"low",
-            "reason": str,
-        }
-    """
-    # Phase 75: dynamically adjust scan_window
-    if bad_count > 100:
-        scan_window = max(scan_window, 64)
-    elif bad_count > 20:
-        scan_window = max(scan_window, 32)
-
-    current_pos = archive.tell()
-    search_start = max(0, error_pos - scan_window)
-    # Safely get archive size: prefer public API total_size(),
-    # fall back to _file_size attribute for mock archive compatibility in tests
-    try:
-        archive_size = archive.total_size()
-        if not isinstance(archive_size, int):
-            raise TypeError("total_size() did not return int")
-    except (AttributeError, TypeError):
-        archive_size = getattr(archive, "_file_size", 0)
-    search_end = min(archive_size, error_pos + scan_window)
-
-    archive.seek(search_start)
-    window = archive.read(search_end - search_start)
-
-    best_candidate = None
-    best_confidence = "low"
-    best_reason = ""
-
-    for offset in range(len(window) - 4):
-        candidate_bytes = window[offset : offset + 4]
-        candidate = struct.unpack("<i", candidate_bytes)[0]
-        if candidate < 0 or candidate > 20:
-            continue  # Out of reasonable range
-
-        candidate_pos = search_start + offset
-        after_count = offset + 4
-
-        # count=0 requires additional verification of subsequent structure
-        if candidate == 0:
-            # count=0 should be followed by a SubPins array or other reasonable structure
-            # Check if another small integer count (0..20) follows immediately
-            if after_count + 4 <= len(window):
-                next_val = struct.unpack("<i", window[after_count : after_count + 4])[0]
-                if 0 <= next_val <= 20:
-                    # Another array count follows, matches SubPins structure
-                    best_candidate = (candidate_pos, candidate)
-                    best_confidence = "medium"
-                    best_reason = "count=0 followed by valid SubPins count"
-                    # Don't break, continue searching for higher confidence candidates
-                    continue
-            # count=0 but subsequent structure unknown, low confidence (fallback only)
-            if best_candidate is None:
-                best_candidate = (candidate_pos, candidate)
-                best_confidence = "low"
-                best_reason = "count=0 without verified subsequent structure"
-            continue
-
-        # count > 0: validate PinReference structure
-        if after_count + 24 > len(window):
-            continue  # Insufficient space
-
-        # Validate first PinReference
-        pin_ref_1 = validate_pin_reference_at(archive, candidate_pos + 4, export_map, import_map)
-        if pin_ref_1 is None or not pin_ref_1[0]:
-            continue
-
-        # Validate second PinReference (if count >= 2)
-        if candidate >= 2 and after_count + 48 <= len(window):
-            pin_ref_2 = validate_pin_reference_at(archive, candidate_pos + 4 + 24, export_map, import_map)
-            if pin_ref_2 is None or not pin_ref_2[0]:
-                # Second ref invalid, medium confidence
-                best_candidate = (candidate_pos, candidate)
-                best_confidence = "medium"
-                best_reason = f"count={candidate}, ref1 valid but ref2 invalid"
-                continue
-
-        # All validations passed, high confidence
-        best_candidate = (candidate_pos, candidate)
-        best_confidence = "high"
-        best_reason = f"count={candidate}, all refs validated"
-        break  # Found high-confidence candidate, stop search
-
-    if best_candidate is not None:
-        candidate_pos, recovered_count = best_candidate
-        logger.debug(
-            "[P73-RECOVERY] LinkedTo: count=%d at pos %d (confidence=%s, scan=%d bytes, bad_count=%d, reason=%s)",
-            recovered_count,
-            candidate_pos,
-            best_confidence,
-            scan_window,
-            bad_count,
-            best_reason,
-        )
-        # Seek to just after the valid count (start of first pin ref)
-        archive.seek(candidate_pos + 4)
-        return {
-            "count": recovered_count,
-            "candidate_pos": candidate_pos,
-            "confidence": best_confidence,
-            "reason": best_reason,
-        }
-
-    # Recovery failed: seek back to original error position
-    archive.seek(current_pos)
-    return None
-
-
-def _try_recover_to_subpins(
-    archive: FArchive,
-    error_pos: int,
-    export_map: list[ObjectExport],
-    import_map: list[ObjectImport] | None = None,
-    max_scan: int = 256,
-) -> int | None:
-    """Recover to SubPins after LinkedTo failure.
-
-    Scan strategy: search for a reasonable small integer (0..20) in the range
-    error_pos to error_pos + max_scan, then verify the data after that position
-    matches pin reference header structure.
-
-    Returns recovered file position, or None on failure.
-    """
-    scan_start = archive.tell()
-    # Safely get archive size: prefer public API total_size(),
-    # fall back to _file_size attribute for mock archive compatibility in tests
-    try:
-        archive_size = archive.total_size()
-        if not isinstance(archive_size, int):
-            raise TypeError("total_size() did not return int")
-    except (AttributeError, TypeError):
-        archive_size = getattr(archive, "_file_size", 0)
-    scan_end = min(archive_size, scan_start + max_scan)
-    archive.seek(scan_start)
-    window = archive.read(scan_end - scan_start)
-
-    for offset in range(len(window) - 4):
-        candidate = struct.unpack("<i", window[offset : offset + 4])[0]
-        if candidate < 0 or candidate > 20:
-            continue
-
-        candidate_pos = scan_start + offset
-        after = offset + 4
-
-        # Validate using validate_pin_reference_at
-        if candidate > 0 and after + 24 <= len(window):
-            pin_ref_result = validate_pin_reference_at(archive, candidate_pos + 4, export_map, import_map)
-            if pin_ref_result is not None and pin_ref_result[0]:
-                recovered_pos = candidate_pos
-                archive.seek(recovered_pos)
-                logger.debug(
-                    "[P73-SUBPINS] Recovery at pos %d (count=%d, reason=%s)",
-                    recovered_pos,
-                    candidate,
-                    pin_ref_result[1],
-                )
-                return recovered_pos
-
-        # count=0 or b_null!=0 case: check if empty array or null ref
-        if after + 4 <= len(window):
-            b_null = struct.unpack("<i", window[after : after + 4])[0]
-            if b_null != 0:
-                # b_null!=0: null reference, valid
-                recovered_pos = candidate_pos
-                archive.seek(recovered_pos)
-                logger.debug(
-                    "[P73-SUBPINS] Recovery to SubPins at pos %d (count=%d, null ref)",
-                    recovered_pos,
-                    candidate,
-                )
-                return recovered_pos
-
-    # Recovery failed, stay at current position
-    logger.debug(
-        "[P73-SUBPINS] Could not find valid structure within %d bytes from pos %d",
-        max_scan,
-        error_pos,
-    )
-    return None
 
 
 # ============================================================================
@@ -423,39 +194,6 @@ def _read_pin_ftext_field(
     except BINARY_READ_ERRORS:
         archive.seek(_start)  # On exception, also seek back to start position
         return None
-
-
-def _read_pin_ref_array(
-    archive: FArchive,
-    export_map: list[ObjectExport],
-    import_map: list[ObjectImport],
-    field: str,
-    recover_on_fail: bool,
-    pin_name: str = "",
-) -> list:
-    """Read a Pin reference array (LinkedTo / SubPins).
-
-    LinkedTo failures are logged once per (offset, exception, pin) and resynced
-    toward the SubPins array; SubPins failures silently yield an empty array.
-    """
-    start = archive.tell()
-    try:
-        refs = read_pin_array(archive, export_map, import_map)
-        logger.debug("%s: %d refs at pos %d", field, len(refs), start)
-        return refs
-    except BINARY_READ_ERRORS as e:
-        if recover_on_fail:
-            failure_key = (start, type(e).__name__, pin_name)
-            tl = _get_thread_local()
-            if failure_key not in tl.linkedto_failure_seen:
-                tl.linkedto_failure_seen.add(failure_key)
-                logger.error("%s read failed at pos %d (pin=%s): %s", field, start, pin_name, e)
-            else:
-                logger.debug("%s read failed (deduped) at pos %d (pin=%s): %s", field, start, pin_name, e)
-            recovered_pos = _try_recover_to_subpins(archive, start, export_map, import_map)
-            if recovered_pos is not None:
-                logger.info("[P73-RECOVERY] SubPins resynced at %d for pin %s", recovered_pos, pin_name)
-        return []
 
 
 def read_ue_graph_pin(
@@ -518,10 +256,10 @@ def read_ue_graph_pin(
     _read_pin_ftext_field(archive, "DefaultTextValue", dev_notes=dev_notes)
 
     # 13. LinkedTo array
-    linked_to = _read_pin_ref_array(archive, export_map, import_map, "LinkedTo", recover_on_fail=True, pin_name=pin_name)
+    linked_to = read_pin_array(archive, export_map, import_map)
 
     # 14. SubPins array (write-only — consumed to keep the cursor aligned)
-    _read_pin_ref_array(archive, export_map, import_map, "SubPins", recover_on_fail=False)
+    read_pin_array(archive, export_map, import_map)
 
     # 15. ParentPin — reuse read_pin_reference() (UE5: null → 4B, non-null → 24B)
     read_pin_reference(archive)

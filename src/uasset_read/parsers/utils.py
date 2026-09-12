@@ -7,15 +7,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def resolve_name_from_index(
-    name_map: list[str],
-    index: int,
-    fallback_prefix: str = "param",
-) -> str:
-    """Unified name index resolution logic."""
-    return name_map[index] if 0 <= index < len(name_map) else f"{fallback_prefix}_{index}"
-
-
 def read_validated_count_tolerant(
     archive: Any,
     max_count: int,

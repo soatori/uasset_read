@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import struct
 from pathlib import Path
 
+from uasset_read.archive import ByteArchive
 from uasset_read.exceptions import ParseError
 from uasset_read.memory_safety import ResourceBudget
 
@@ -119,40 +119,14 @@ class TypeMappings:
         return None
 
 
-class _BytesReader:
-    def __init__(self, data: bytes):
-        self.data = data
-        self.pos = 0
-
-    def read(self, size: int) -> bytes:
-        if self.pos + size > len(self.data):
-            raise ParseError("Mapping file data insufficient")
-        value = self.data[self.pos : self.pos + size]
-        self.pos += size
-        return value
-
-    def u8(self) -> int:
-        return self.read(1)[0]
-
-    def u16(self) -> int:
-        return struct.unpack_from("<H", self.read(2))[0]
-
-    def u32(self) -> int:
-        return struct.unpack_from("<I", self.read(4))[0]
-
-    def i32(self) -> int:
-        return struct.unpack_from("<i", self.read(4))[0]
-
-    def u64(self) -> int:
-        return struct.unpack_from("<Q", self.read(8))[0]
-
-    def name(self, lut: list[str]) -> str | None:
-        idx = self.i32()
-        if idx == -1:
-            return None
-        if idx < 0 or idx >= len(lut):
-            raise ParseError(f"Usmap name index out of bounds: {idx}")
-        return lut[idx]
+def _read_name(ar: ByteArchive, lut: list[str]) -> str | None:
+    """Read a usmap name-table reference (i32 index; -1 means None)."""
+    idx = ar.read_i32()
+    if idx == -1:
+        return None
+    if idx < 0 or idx >= len(lut):
+        raise ParseError(f"Usmap name index out of bounds: {idx}")
+    return lut[idx]
 
 
 class UsmapParser:
@@ -172,46 +146,46 @@ class UsmapParser:
         self.mappings = self._parse(data, budget)
 
     def _parse(self, data: bytes, budget: ResourceBudget | None = None) -> TypeMappings:
-        reader = _BytesReader(data)
-        magic = reader.u16()
+        reader = ByteArchive(data)
+        magic = reader.read_u16()
         if magic != self.FILE_MAGIC:
             raise ParseError("Invalid Usmap magic")
-        version = reader.u8()
+        version = reader.read_u8()
         if version > 4:
             raise ParseError(f"Invalid Usmap version: {version}")
 
-        if version >= 1 and reader.u8():
+        if version >= 1 and reader.read_u8():
             reader.read(8)  # PackageFileVersion
-            custom_count = reader.i32()
+            custom_count = reader.read_i32()
             if custom_count < 0:
                 raise ParseError("Invalid Usmap CustomVersion count")
             reader.read(custom_count * 20)
             reader.read(4)  # NetCL
 
-        compression = reader.u8()
-        comp_size = reader.u32()
-        decomp_size = reader.u32()
+        compression = reader.read_u8()
+        comp_size = reader.read_u32()
+        decomp_size = reader.read_u32()
         payload = reader.read(comp_size)
         data = self._decompress(payload, compression, comp_size, decomp_size, budget=budget)
-        ar = _BytesReader(data)
+        ar = ByteArchive(data)
 
-        name_count = ar.u32()
+        name_count = ar.read_u32()
         name_lut: list[str] = []
         for _ in range(name_count):
-            length = ar.u16() if version >= 2 else ar.u8()
+            length = ar.read_u16() if version >= 2 else ar.read_u8()
             name_lut.append(ar.read(length).decode("utf-8", errors="replace"))
 
         mappings = TypeMappings()
-        enum_count = ar.u32()
+        enum_count = ar.read_u32()
         for _ in range(enum_count):
-            ar.name(name_lut)
-            value_count = ar.u16() if version >= 3 else ar.u8()
+            _read_name(ar, name_lut)
+            value_count = ar.read_u16() if version >= 3 else ar.read_u8()
             for _ in range(value_count):
                 if version >= 4:
-                    ar.u64()
-                ar.name(name_lut)
+                    ar.read_u64()
+                _read_name(ar, name_lut)
 
-        struct_count = ar.u32()
+        struct_count = ar.read_u32()
         for _ in range(struct_count):
             struct = self._parse_struct(ar, name_lut)
             mappings.types[struct.name] = struct
@@ -245,11 +219,11 @@ class UsmapParser:
             return zstd.ZstdDecompressor().decompress(payload, max_output_size=decomp_size)
         raise ParseError(f"Unsupported Usmap compression method: {method}")
 
-    def _parse_struct(self, ar: _BytesReader, lut: list[str]) -> StructMapping:
-        name = ar.name(lut) or ""
-        super_type = ar.name(lut)
-        property_count = ar.u16()
-        serializable_count = ar.u16()
+    def _parse_struct(self, ar: ByteArchive, lut: list[str]) -> StructMapping:
+        name = _read_name(ar, lut) or ""
+        super_type = _read_name(ar, lut)
+        property_count = ar.read_u16()
+        serializable_count = ar.read_u16()
         properties: dict[int, PropertyInfo] = {}
         for _ in range(serializable_count):
             prop = self._parse_property_info(ar, lut)
@@ -262,24 +236,24 @@ class UsmapParser:
                 )
         return StructMapping(name=name, super_type=super_type, properties=properties, property_count=property_count)
 
-    def _parse_property_info(self, ar: _BytesReader, lut: list[str]) -> PropertyInfo:
-        index = ar.u16()
-        array_dim = ar.u8()
-        name = ar.name(lut) or ""
+    def _parse_property_info(self, ar: ByteArchive, lut: list[str]) -> PropertyInfo:
+        index = ar.read_u16()
+        array_dim = ar.read_u8()
+        name = _read_name(ar, lut) or ""
         return PropertyInfo(
             index=index, name=name, mapping_type=self._parse_property_type(ar, lut), array_size=array_dim
         )
 
-    def _parse_property_type(self, ar: _BytesReader, lut: list[str], depth: int = 0) -> PropertyType:
+    def _parse_property_type(self, ar: ByteArchive, lut: list[str], depth: int = 0) -> PropertyType:
         if depth > MAX_RECURSION_DEPTH:
             raise ParseError(f"Usmap property type recursion depth exceeds limit {MAX_RECURSION_DEPTH}")
-        type_id = ar.u8()
+        type_id = ar.read_u8()
         type_name = _PROPERTY_TYPE_NAMES.get(type_id, "Unknown")
         if type_name == "EnumProperty":
             inner = self._parse_property_type(ar, lut, depth + 1)
-            return PropertyType(type_name, inner_type=inner, enum_name=ar.name(lut))
+            return PropertyType(type_name, inner_type=inner, enum_name=_read_name(ar, lut))
         if type_name == "StructProperty":
-            return PropertyType(type_name, struct_type=ar.name(lut))
+            return PropertyType(type_name, struct_type=_read_name(ar, lut))
         if type_name in {"ArrayProperty", "SetProperty", "OptionalProperty"}:
             return PropertyType(type_name, inner_type=self._parse_property_type(ar, lut, depth + 1))
         if type_name == "MapProperty":

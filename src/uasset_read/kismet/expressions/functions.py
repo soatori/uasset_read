@@ -30,7 +30,7 @@ class EX_FinalFunction(KismetExpression):
     Token = EExprToken.EX_FinalFunction
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_FinalFunction:
+    def from_archive(cls, archive: FKismetArchive) -> EX_FinalFunction:
         stack_ref = archive.xfer_object_pointer()
         params = archive.read_expression_array(EExprToken.EX_EndFunctionParms)
         return cls(StackNode=stack_ref.index, Parameters=params)
@@ -57,7 +57,7 @@ class EX_VirtualFunction(KismetExpression):
     Token = EExprToken.EX_VirtualFunction
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_VirtualFunction:
+    def from_archive(cls, archive: FKismetArchive) -> EX_VirtualFunction:
         fname_ref = archive.xfer_fname()
         params = archive.read_expression_array(EExprToken.EX_EndFunctionParms)
         # Build full name with number suffix (e.g., "TestFunc_3")
@@ -91,7 +91,7 @@ class EX_CallMulticastDelegate(KismetExpression):
     Token = EExprToken.EX_CallMulticastDelegate
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_CallMulticastDelegate:
+    def from_archive(cls, archive: FKismetArchive) -> EX_CallMulticastDelegate:
         stack_ref = archive.xfer_object_pointer()
         delegate = archive.read_expression()
         params = archive.read_expression_array(EExprToken.EX_EndFunctionParms)

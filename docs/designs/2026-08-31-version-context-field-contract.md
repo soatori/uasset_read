@@ -8,6 +8,11 @@ status: target
 > 2026-09-01 勘误：`280b7e09`（"cut dead v2 fields"）曾把 `VersionContext` 裁至仅剩
 > `depth` 并删除 builder；本节 current 描述随之失效。已由「restore VersionContext」提交
 > 按基线 `bd3309a7` 原样恢复，本文件的行号引用以恢复后的源码为准。
+> **2026-09-13 修订（T1，ponytail-residual-fix）**：吸取 `280b7e09` 恢复的教训后，契约改为
+> **production-used-only**——绑定字段集 = 存在生产读取点的字段（当前仅 `depth`，handler
+> 在 `handlers_impl.py` 按 depth 分支）。§2 的"无消费者"字段不再是绑定契约的一部分；
+> 未来若要恢复任一字段，必须先带来真实消费者（源码读取点 + fixture 证据），不得再冻结
+> 投机载荷。§3 决策 4（"字段只增不减"）相应改为"按消费者增删"。历史现状描述见 §1/§2。
 
 ## 1. 当前实现位置
 
@@ -44,7 +49,7 @@ status: target
 1. **frozen 不可变**：`VersionContext` 保持 `@dataclass(frozen=True)`（`version.py:33`）。不得引入 setter、`dataclasses.replace` 后的"影子版本"或原地 `Mapping` 内容修改；`custom_versions` 构建完成后视为常量。
 2. **reader 在解析入口一次性构建**：版本事实只有 reader 有资格汇总。由 `LegacyPackageReader`（未来 `ZenPackageReader`）在 `read()` 内构造一次并传给全部 handler；同一 document 生命周期内不存在第二个 context 实例。基线的"仅 depth≥asset 才构造"是懒化细节，target 收敛为入口一次性构建（handler 之外的 property 分支也应改读 context，替代 `legacy.py:313-314` 的 archive 回写）。
 3. **handler 不得自行推导版本事实**：`AssetHandler` 的两个方法都以 `context: VersionContext` 为唯一版本输入（`handlers.py:21-28`）。handler 不接触 archive（基线已满足：`handlers.py` 全部 enrich 只读 `obj.properties`/`obj.coverage`/`package_data` tuple），不得重读 summary、不得按 `class_name` 之外的文件名/引擎大版本猜格式。游戏特殊分支必须是对 `context.game`/`context.custom_versions` 的显式查询，不允许散落字符串匹配（权威设计"解析器读取同一个不可变 context"一节）。
-4. **字段只增不减**：新增字段必须带默认值，保证既有构造点（当前仅 `version.py:111-125`）不破坏。
+4. **按消费者增删字段**（2026-09-13 修订，替代原"字段只增不减"）：字段集 = 存在生产读取点的字段（当前仅 `depth`）。新增字段必须带默认值且附真实消费者；无消费者的投机字段不进入契约（历史教训：`280b7e09` 裁剪被恢复，但冻结载荷始终无人读取——见修订注）。
 
 ## 4. 扩展点（target，随 Zen reader 到来）
 
@@ -56,5 +61,5 @@ status: target
 
 ## 5. 验收
 
-- 契约测试断言 frozen（赋值抛 `FrozenInstanceError`）与 `build_version_context_from_summary` 对真实样本 summary 的逐字段映射（版本/自定义版本数非零）归 `tests/test_core.py` 收集项预算内。
+- 契约测试断言 frozen（赋值抛 `FrozenInstanceError`）与 `build_version_context_from_summary` 对真实样本 summary 的逐字段映射（版本/自定义版本数非零）归 `tests/test_core.py` 收集项预算内。（2026-09-13 修订：builder 已随 T9 删除；现行测试断言 frozen + 字段集恰为 `{depth}`。）
 - 任何"VersionContext 字段已生效"的宣称必须有源码消费点 + fixture 证据；本文 §2 的消费列是唯一的 current 依据。

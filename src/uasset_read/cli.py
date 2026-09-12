@@ -10,58 +10,26 @@ import re
 import sys
 from pathlib import Path
 
-from uasset_read.constants import (
-    EXIT_SUCCESS,
-    EXIT_PARSE_ERROR,
-    EXIT_FILE_NOT_FOUND,
-    EXIT_ARGUMENT_ERROR,
-)
+# CLI exit codes — this module is their only consumer.
+EXIT_SUCCESS = 0
+EXIT_PARSE_ERROR = 1
+EXIT_FILE_NOT_FOUND = 2
+EXIT_ARGUMENT_ERROR = 3
 
 _logger = logging.getLogger(__name__)
 
 
 def _sanitize_error_message(message: object) -> str:
-    """清理异常消息中的内部路径，防止信息泄露。
+    """Reduce path-like tokens in a CLI error to their basenames.
 
-    将绝对路径替换为 basename，保留异常类型和关键信息。
-    详细原始消息可通过 DEBUG 级别日志获取。
+    Full messages stay available at DEBUG; the terminal only needs the
+    offending filename, not the developer's directory layout.
     """
-
-    def basename(path: str) -> str:
-        normalized = path.rstrip("\\/").replace("\\", "/")
-        return normalized.rsplit("/", 1)[-1] if "/" in normalized else normalized
-
-    sanitized = str(message)
-
-    # Prefer extension-anchored matches so paths with spaces followed by prose
-    # do not consume the following error text.
-    path_extensions = (
-        "uasset",
-        "umap",
-        "uexp",
-        "ubulk",
-        "uptnl",
-        "pak",
-        "json",
-        "txt",
-        "bin",
-        "dat",
-        "log",
+    return re.sub(
+        r"(?:[A-Za-z]:)?(?:[/\\][^\s:;\"']+)+",
+        lambda m: Path(m.group(0).rstrip("\\/")).name or m.group(0),
+        str(message),
     )
-    ext_group = "|".join(path_extensions)
-    # Fallback patterns for paths without extensions (stop at delimiters)
-    _close_delims = r"[\x29\x5d\x22\x27]"  # ) ] " '
-    patterns = [
-        rf"[A-Za-z]:\\[^:\r\n]*?\.({ext_group})(?::\d+)?",
-        rf"\\\\[^:\r\n]*?\.({ext_group})(?::\d+)?",
-        rf"/[^:\r\n;,)\]\"']*?\.({ext_group})(?::\d+)?",
-        rf"[A-Za-z]:\\[^:\r\n]+?(?=(?::\s|{_close_delims}|$))",
-        rf"\\\\[^:\r\n]+?(?=(?::\s|{_close_delims}|$))",
-        rf"/(?:[^/:\r\n;,)\]\"']+/)+[^/:\r\n;,)\]\"']+?(?=(?::\s|{_close_delims}|$))",
-    ]
-    for pattern in patterns:
-        sanitized = re.sub(pattern, lambda m: basename(m.group(0)), sanitized)
-    return sanitized
 
 
 def create_parser():
@@ -155,11 +123,26 @@ def _write_output(output_str: str, output_path: str | None) -> None:
         print(output_str)
 
 
-def _handle_batch(args) -> None:
-    """Handle batch mode: parse all .uasset files in a directory."""
+def _parse_and_project(file_path: Path, args) -> dict:
+    """Parse one package and project it under the CLI's depth/limit/budget flags.
+
+    Shared by single-file and batch modes so both stay in lockstep.
+    """
     from uasset_read.package import parse_package_document
     from uasset_read.projection import project_document
 
+    doc = parse_package_document(
+        str(file_path),
+        tolerant=not args.strict,
+        mappings_path=args.mappings,
+        game=args.game,
+        depth=args.depth,
+    )
+    return project_document(doc, depth=args.depth, limit=args.limit, max_bytes=args.max_bytes)
+
+
+def _handle_batch(args) -> None:
+    """Handle batch mode: parse all .uasset files in a directory."""
     batch_dir = Path(args.batch)
     if not batch_dir.is_dir():
         print(f"Error: Not a directory: {args.batch}", file=sys.stderr)
@@ -171,7 +154,6 @@ def _handle_batch(args) -> None:
         print(f"Error: No .uasset files found in {args.batch}", file=sys.stderr)
         sys.exit(EXIT_FILE_NOT_FOUND)
 
-    tolerant = not args.strict
     results = []
     errors = []
     total = len(uasset_files)
@@ -179,19 +161,7 @@ def _handle_batch(args) -> None:
     for i, file_path in enumerate(uasset_files, 1):
         print(f"[{i}/{total}] {file_path.name}", file=sys.stderr)
         try:
-            doc = parse_package_document(
-                str(file_path),
-                tolerant=tolerant,
-                mappings_path=args.mappings,
-                game=args.game,
-                depth=args.depth,
-            )
-            projected = project_document(
-                doc,
-                depth=args.depth,
-                limit=args.limit,
-                max_bytes=args.max_bytes,
-            )
+            projected = _parse_and_project(file_path, args)
             # Add source file info
             projected["_source_file"] = str(file_path)
             results.append(projected)
@@ -230,7 +200,7 @@ def _handle_batch(args) -> None:
     _write_output(output_str, args.output)
 
 
-def _handle_list_package_files(file_path: str, tolerant: bool) -> None:
+def _handle_list_package_files(file_path: str) -> None:
     """List the discovered package files (main + present sidecars)."""
     from uasset_read.package import open_package_bundle
 
@@ -261,36 +231,27 @@ def main():
     """Main CLI entry point."""
     parser = create_parser()
 
-    # Retired product surfaces: explicit unsupported messages (exit 2)
+    # Retired product surfaces: one reason per group, exit 2 via parser.error
     # instead of argparse's generic unknown-argument error.
-    retired = {
-        "--legacy-json",
-        "--markdown",
-        "--list-formats",
-        "--diff",
-        "--include-parent-assets",
-        "--asset-root",
-        "--clean-logs",
-        "--log-dir",
-        "--log-keep-latest",
-        "--log-max-total-mb",
-    }
-    parent_retired = {"--include-parent-assets", "--asset-root"}
-    log_retired = {"--clean-logs", "--log-dir", "--log-keep-latest", "--log-max-total-mb"}
-    hit = next((flag for flag in sys.argv if flag in retired), None)
-    if hit is not None:
-        if hit in parent_retired:
-            parser.error(
-                f"{hit} was removed: parent-asset resolution is retired (product decision, Gate G 2026-09-10)"
-            )
-        if hit in log_retired:
-            parser.error(
-                f"{hit} was removed: log cleanup / file logging helpers are retired "
-                "(product decision, Gate L 2026-09-10); delete leftover ./log directories yourself"
-            )
-        parser.error(
-            f"{hit} was removed together with the v1 pipeline; the v2 document output (--depth) is the only parse path"
-        )
+    retired = (
+        (
+            "parent-asset resolution is retired (product decision, Gate G 2026-09-10)",
+            ("--include-parent-assets", "--asset-root"),
+        ),
+        (
+            "log cleanup / file logging helpers are retired "
+            "(product decision, Gate L 2026-09-10); delete leftover ./log directories yourself",
+            ("--clean-logs", "--log-dir", "--log-keep-latest", "--log-max-total-mb"),
+        ),
+        (
+            "part of the v1 pipeline; the v2 document output (--depth) is the only parse path",
+            ("--legacy-json", "--markdown", "--list-formats", "--diff"),
+        ),
+    )
+    for reason, flags in retired:
+        hit = next((flag for flag in sys.argv if flag in flags), None)
+        if hit is not None:
+            parser.error(f"{hit} was removed: {reason}")
 
     try:
         args = parser.parse_args()
@@ -317,31 +278,14 @@ def main():
             print(f"Error: File not found: {args.file}", file=sys.stderr)
         sys.exit(EXIT_FILE_NOT_FOUND)
 
-    tolerant = not args.strict
-
     # --list-package-files
     if args.list_package_files:
-        _handle_list_package_files(args.file, tolerant)
+        _handle_list_package_files(args.file)
         return
 
     # PackageDocument v2 (the only parse path).
     try:
-        from uasset_read.package import parse_package_document
-        from uasset_read.projection import project_document
-
-        doc = parse_package_document(
-            str(file_path),
-            tolerant=tolerant,
-            mappings_path=args.mappings,
-            game=args.game,
-            depth=args.depth,
-        )
-        projected = project_document(
-            doc,
-            depth=args.depth,
-            limit=args.limit,
-            max_bytes=args.max_bytes,
-        )
+        projected = _parse_and_project(file_path, args)
         # Budget mode must serialize exactly like projection's byte measure
         # (compact separators); otherwise indent inflation breaks the cap.
         if args.max_bytes is None:

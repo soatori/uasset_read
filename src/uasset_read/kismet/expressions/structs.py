@@ -26,7 +26,7 @@ class EX_StructConst(KismetExpression):
     Token = EExprToken.EX_StructConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_StructConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_StructConst:
         struct_ref = archive.xfer_object_pointer()
         size = archive.read_u32()
         props = archive.read_expression_array(EExprToken.EX_EndStructConst)
@@ -56,7 +56,7 @@ class EX_PropertyConst(KismetExpression):
     Token = EExprToken.EX_PropertyConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_PropertyConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_PropertyConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
         prop = FKismetPropertyPointer.from_archive(archive)
@@ -78,7 +78,7 @@ class EX_BitFieldConst(KismetExpression):
     Token = EExprToken.EX_BitFieldConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_BitFieldConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_BitFieldConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
         prop = FKismetPropertyPointer.from_archive(archive)

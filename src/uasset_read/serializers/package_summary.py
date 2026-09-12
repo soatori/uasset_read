@@ -364,150 +364,6 @@ def _read_package_identity(archive: FArchive) -> tuple[str, int]:
     return package_name, package_flags
 
 
-def _read_name_table_offsets(archive: FArchive) -> tuple[int, int]:
-    """Read NameCount and NameOffset."""
-    name_count = archive.read_i32()
-    if name_count < 0:
-        raise ParseError(f"Negative name count: {name_count}")
-    if name_count > MAX_NAME_COUNT:
-        raise ParseError("Name count exceeds maximum")
-    name_offset = archive.read_i32()
-    archive.validate_offset(name_offset, "NameOffset")
-    return name_count, name_offset
-
-
-def _read_export_import_offsets(archive: FArchive) -> tuple[int, int, int, int]:
-    """Read Export/Import table count and offset."""
-    export_count = archive.read_i32()
-    if export_count < 0:
-        raise ParseError(f"Negative export count: {export_count}")
-    if export_count > MAX_EXPORT_COUNT:
-        raise ParseError("Export count exceeds maximum")
-    export_offset = archive.read_i32()
-    archive.validate_offset(export_offset, "ExportOffset")
-
-    import_count = archive.read_i32()
-    if import_count < 0:
-        raise ParseError(f"Negative import count: {import_count}")
-    if import_count > MAX_IMPORT_COUNT:
-        raise ParseError("Import count exceeds maximum")
-    if export_count + import_count > MAX_TOTAL_OBJECT_COUNT:
-        raise ParseError(
-            f"Total object count ({export_count} + {import_count} = "
-            f"{export_count + import_count}) exceeds maximum {MAX_TOTAL_OBJECT_COUNT}"
-        )
-    import_offset = archive.read_i32()
-    archive.validate_offset(import_offset, "ImportOffset")
-
-    return export_count, export_offset, import_count, import_offset
-
-
-def _read_pre_export_optional_fields(
-    archive: FArchive,
-    file_version_ue5: int,
-    file_version_ue4: int,
-    has_filter_editor_only: bool,
-) -> tuple[int, int, str, int, int]:
-    """Read version-gated fields between NameOffset and ExportCount."""
-    # SoftObjectPaths（UE5 >= 1011）
-    soft_object_paths_count = 0
-    soft_object_paths_offset = 0
-    if file_version_ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
-        soft_object_paths_count = archive.read_i32()
-        soft_object_paths_offset = archive.read_i32()
-        if soft_object_paths_offset > 0:
-            archive.validate_offset(soft_object_paths_offset, "SoftObjectPathsOffset")
-
-    # LocalizationId (non FilterEditorOnly, UE4 >= 516)
-    localization_id = ""
-    if not has_filter_editor_only and file_version_ue4 >= UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID:
-        localization_id = archive.read_fstring()
-
-    # GatherableTextData（UE4 >= 513）
-    gatherable_text_data_count = 0
-    gatherable_text_data_offset = 0
-    if file_version_ue4 >= UE4_SERIALIZE_TEXT_IN_PACKAGES:
-        gatherable_text_data_count = archive.read_i32()
-        gatherable_text_data_offset = archive.read_i32()
-        if gatherable_text_data_offset > 0:
-            archive.validate_offset(gatherable_text_data_offset, "GatherableTextDataOffset")
-
-    return (
-        soft_object_paths_count,
-        soft_object_paths_offset,
-        localization_id,
-        gatherable_text_data_count,
-        gatherable_text_data_offset,
-    )
-
-
-def _read_post_import_optional_fields(
-    archive: FArchive,
-    file_version_ue5: int,
-) -> tuple[int, int, int, int, int]:
-    """Read version-gated fields between ImportOffset and DependsOffset."""
-    # CellExport/CellImport (UE5 >= cell version)
-    cell_export_count = 0
-    cell_export_offset = 0
-    cell_import_count = 0
-    cell_import_offset = 0
-    if file_version_ue5 >= UE5_VERSE_CELLS:
-        cell_export_count, cell_export_offset, cell_import_count, cell_import_offset = _read_cell_counts(archive)
-
-    # MetaDataOffset (UE5 >= meta version)
-    metadata_offset = 0
-    if file_version_ue5 >= UE5_METADATA_SERIALIZATION_OFFSET:
-        metadata_offset = archive.read_i32()
-        if metadata_offset > 0:
-            archive.validate_offset(metadata_offset, "MetadataOffset")
-
-    return (
-        cell_export_count,
-        cell_export_offset,
-        cell_import_count,
-        cell_import_offset,
-        metadata_offset,
-    )
-
-
-def _read_secondary_offset_fields(
-    archive: FArchive,
-    file_version_ue4: int,
-    budget: "ResourceBudget | None" = None,
-) -> tuple[int, int, int, int, int]:
-    """Read DependsOffset, SoftPackageReferences, SearchableNames, ThumbnailTable."""
-    depends_offset = archive.read_i32()
-
-    soft_package_references_count = 0
-    soft_package_references_offset = 0
-    if file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP:
-        soft_package_references_count = archive.read_i32()
-        read_validated_count_strict(
-            soft_package_references_count,
-            MAX_SOFT_PACKAGE_REFS,
-            "soft_package_references",
-            4,
-            budget,
-        )
-        soft_package_references_offset = archive.read_i32()
-
-    searchable_names_offset = 0
-    if file_version_ue4 >= UE4_ADDED_SEARCHABLE_NAMES:
-        searchable_names_offset = archive.read_i32()
-
-    thumbnail_table_offset = archive.read_i32()
-    if thumbnail_table_offset > 0:
-        archive.validate_offset(thumbnail_table_offset, "ThumbnailTableOffset")
-
-    return (
-        depends_offset,
-        soft_package_references_count,
-        soft_package_references_offset,
-        searchable_names_offset,
-        thumbnail_table_offset,
-    )
-
-
 def _read_import_type_hierarchies(archive: FArchive, file_version_ue5: int) -> tuple[int, int]:
     """Read ImportTypeHierarchies (UE5 >= 1015)."""
     if file_version_ue5 >= UE5_IMPORT_TYPE_HIERARCHIES:
@@ -523,7 +379,6 @@ def _read_import_type_hierarchies(archive: FArchive, file_version_ue5: int) -> t
 
 def _read_guids(
     archive: FArchive,
-    legacy_file_version: int,
     file_version_ue4: int,
     file_version_ue5: int,
     has_filter_editor_only: bool,
@@ -705,24 +560,99 @@ def read_package_summary(
         file_version_ue5 = UE5_IMPORT_TYPE_HIERARCHIES  # 1018 = AUTOMATIC_VERSION
 
     # Step 5: NameCount + NameOffset
-    name_count, name_offset = _read_name_table_offsets(archive)
+    name_count = archive.read_i32()
+    if name_count < 0:
+        raise ParseError(f"Negative name count: {name_count}")
+    if name_count > MAX_NAME_COUNT:
+        raise ParseError("Name count exceeds maximum")
+    name_offset = archive.read_i32()
+    archive.validate_offset(name_offset, "NameOffset")
 
     # Step 6-8: SoftObjectPaths / Localization / GatherableText (between NameOffset and ExportCount)
-    pre_export = _read_pre_export_optional_fields(
-        archive,
-        file_version_ue5,
-        file_version_ue4,
-        has_filter_editor_only,
-    )
+    # SoftObjectPaths（UE5 >= 1011）
+    soft_object_paths_count = 0
+    soft_object_paths_offset = 0
+    if file_version_ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
+        soft_object_paths_count = archive.read_i32()
+        soft_object_paths_offset = archive.read_i32()
+        if soft_object_paths_offset > 0:
+            archive.validate_offset(soft_object_paths_offset, "SoftObjectPathsOffset")
+
+    # LocalizationId (non FilterEditorOnly, UE4 >= 516)
+    localization_id = ""
+    if not has_filter_editor_only and file_version_ue4 >= UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID:
+        localization_id = archive.read_fstring()
+
+    # GatherableTextData（UE4 >= 513）
+    gatherable_text_data_count = 0
+    gatherable_text_data_offset = 0
+    if file_version_ue4 >= UE4_SERIALIZE_TEXT_IN_PACKAGES:
+        gatherable_text_data_count = archive.read_i32()
+        gatherable_text_data_offset = archive.read_i32()
+        if gatherable_text_data_offset > 0:
+            archive.validate_offset(gatherable_text_data_offset, "GatherableTextDataOffset")
 
     # Step 9-10: ExportCount/Offset + ImportCount/Offset
-    export_count, export_offset, import_count, import_offset = _read_export_import_offsets(archive)
+    export_count = archive.read_i32()
+    if export_count < 0:
+        raise ParseError(f"Negative export count: {export_count}")
+    if export_count > MAX_EXPORT_COUNT:
+        raise ParseError("Export count exceeds maximum")
+    export_offset = archive.read_i32()
+    archive.validate_offset(export_offset, "ExportOffset")
+
+    import_count = archive.read_i32()
+    if import_count < 0:
+        raise ParseError(f"Negative import count: {import_count}")
+    if import_count > MAX_IMPORT_COUNT:
+        raise ParseError("Import count exceeds maximum")
+    if export_count + import_count > MAX_TOTAL_OBJECT_COUNT:
+        raise ParseError(
+            f"Total object count ({export_count} + {import_count} = "
+            f"{export_count + import_count}) exceeds maximum {MAX_TOTAL_OBJECT_COUNT}"
+        )
+    import_offset = archive.read_i32()
+    archive.validate_offset(import_offset, "ImportOffset")
 
     # Step 11-12: Cells / MetaData (between ImportOffset and DependsOffset)
-    post_import = _read_post_import_optional_fields(archive, file_version_ue5)
+    # CellExport/CellImport (UE5 >= cell version)
+    cell_export_count = 0
+    cell_export_offset = 0
+    cell_import_count = 0
+    cell_import_offset = 0
+    if file_version_ue5 >= UE5_VERSE_CELLS:
+        cell_export_count, cell_export_offset, cell_import_count, cell_import_offset = _read_cell_counts(archive)
+
+    # MetaDataOffset (UE5 >= meta version)
+    metadata_offset = 0
+    if file_version_ue5 >= UE5_METADATA_SERIALIZATION_OFFSET:
+        metadata_offset = archive.read_i32()
+        if metadata_offset > 0:
+            archive.validate_offset(metadata_offset, "MetadataOffset")
 
     # Step 13-14: DependsOffset + SoftPackageRefs + SearchableNames + Thumbnail
-    secondary = _read_secondary_offset_fields(archive, file_version_ue4, budget)
+    depends_offset = archive.read_i32()
+
+    soft_package_references_count = 0
+    soft_package_references_offset = 0
+    if file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP:
+        soft_package_references_count = archive.read_i32()
+        read_validated_count_strict(
+            soft_package_references_count,
+            MAX_SOFT_PACKAGE_REFS,
+            "soft_package_references",
+            4,
+            budget,
+        )
+        soft_package_references_offset = archive.read_i32()
+
+    searchable_names_offset = 0
+    if file_version_ue4 >= UE4_ADDED_SEARCHABLE_NAMES:
+        searchable_names_offset = archive.read_i32()
+
+    thumbnail_table_offset = archive.read_i32()
+    if thumbnail_table_offset > 0:
+        archive.validate_offset(thumbnail_table_offset, "ThumbnailTableOffset")
 
     # Step 15: ImportTypeHierarchies
     import_type_hierarchies_count, import_type_hierarchies_offset = _read_import_type_hierarchies(
@@ -732,7 +662,6 @@ def read_package_summary(
     # Step 16: GUIDs
     persistent_guid = _read_guids(
         archive,
-        legacy_file_version,
         file_version_ue4,
         file_version_ue5,
         has_filter_editor_only,
@@ -771,28 +700,6 @@ def read_package_summary(
         payload_toc_offset,
         data_resource_offset,
     ) = _read_late_versioned_fields(archive, file_version_ue4, file_version_ue5)
-
-    (
-        soft_object_paths_count,
-        soft_object_paths_offset,
-        localization_id,
-        gatherable_text_data_count,
-        gatherable_text_data_offset,
-    ) = pre_export
-    (
-        cell_export_count,
-        cell_export_offset,
-        cell_import_count,
-        cell_import_offset,
-        metadata_offset,
-    ) = post_import
-    (
-        depends_offset,
-        soft_package_references_count,
-        soft_package_references_offset,
-        searchable_names_offset,
-        thumbnail_table_offset,
-    ) = secondary
 
     return PackageFileSummary(
         tag=tag,

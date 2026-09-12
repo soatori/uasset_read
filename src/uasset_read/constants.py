@@ -3,18 +3,10 @@ uasset_read Constants Definition
 
 Contains all version numbers, property type thresholds, and boundary constants.
 Extracted from uasset_read.py (per D-11).
+CLI exit codes live in cli.py, their only consumer.
 """
 
 import uuid
-
-# ============================================================================
-# CLI Exit Codes
-# ============================================================================
-
-EXIT_SUCCESS = 0
-EXIT_PARSE_ERROR = 1
-EXIT_FILE_NOT_FOUND = 2
-EXIT_ARGUMENT_ERROR = 3
 
 # ============================================================================
 # Package file tags (from UE source code)
@@ -219,48 +211,29 @@ UE5_LARGE_PROPERTY_TYPES = frozenset(
 UE5_LARGE_PROPERTY_MAX_REASONABLE = 500 * 1024 * 1024  # 500 MB — UE5 large property size cap
 
 # ============================================================================
-# Material property decode tables
-# Reference: Engine/Source/Runtime/Engine/Public/Materials/Material.h
+# UE5 large property size cap selection
 # ============================================================================
-
-BLEND_MODE_MAP: dict[int, str] = {
-    0: "Opaque",
-    1: "Masked",
-    2: "Translucent",
-    3: "Additive",
-    4: "Modulate",
-    5: "AlphaComposite",
-    6: "AlphaHoldout",
-    7: "TranslucentColoredTransmittance",
-}
-
-SHADING_MODEL_MAP: dict[int, str] = {
-    0: "Unlit",
-    1: "DefaultLit",
-    2: "Subsurface",
-    3: "PreintegratedSkin",
-    4: "ClearCoat",
-    5: "SubsurfaceProfile",
-    6: "TwoSidedFoliage",
-    8: "Cloth",
-    10: "SingleLayerWater",
-    11: "ThinTranslucent",
-}
 
 
 def get_max_reasonable(property_type: str, engine_version: int) -> int:
-    """Return reasonable size cap based on property type and engine version.
+    """Return reasonable size cap based on property type.
 
     For UE5 known large property types (BoneAnimationTracks, PoseContainer,
-    ArrayConnectionMap, RigVM), relax threshold to 500MB.
+    ArrayConnectionMap, RigVM, MapProperty), relax threshold to 500MB.
+
+    ``engine_version`` stays in the signature for the archive call site but is
+    no longer consulted: the sole caller passes ``_file_version_ue5`` (>=1000
+    when set), so the old ``>= 5`` gate never narrowed real packages — large
+    types relax to the 500MB cap by type alone.
 
     Args:
         property_type: Property type name (e.g., "IntProperty", "StructProperty")
-        engine_version: Engine version (4 or 5)
+        engine_version: Unused; retained for call-site compatibility
 
     Returns:
         Maximum reasonable size (bytes) allowed for this property type
     """
-    if engine_version >= 5 and property_type in UE5_LARGE_PROPERTY_TYPES:
+    del engine_version
+    if property_type in UE5_LARGE_PROPERTY_TYPES:
         return UE5_LARGE_PROPERTY_MAX_REASONABLE
     return MAX_REASONABLE_CAP

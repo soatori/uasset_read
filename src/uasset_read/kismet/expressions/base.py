@@ -95,7 +95,7 @@ def make_value_expression(token: EExprToken, read_func_name: str):
         Token = token
 
         @classmethod
-        def from_archive(cls, archive, name_map):
+        def from_archive(cls, archive):
             reader = getattr(archive, read_func_name)
             return cls(Value=reader())
 

@@ -367,13 +367,6 @@ def parse_soft_object_property(
     return SoftObjectPathValue(raw_kind=tag.type, asset_path=asset_path, sub_path=sub_path)
 
 
-# Direct aliases — single-FString types share parse_str_property;
-# single-int32-reference types share parse_object_property.
-parse_utf8_str_property = parse_str_property
-parse_weak_object_property = parse_object_property
-parse_class_property = parse_object_property
-
-
 def parse_lazy_object_property(tag: PropertyTag, archive: FArchive) -> SoftObjectPathValue:
     """Parse LazyObjectProperty."""
     read_size = tag.size if tag.size > 0 else 16
@@ -1147,18 +1140,9 @@ def parse_multicast_delegate_property(tag: PropertyTag, archive: FArchive, name_
     return delegates
 
 
-# Direct aliases — all multicast delegate variants share the same serialization
-parse_multicast_inline_delegate_property = parse_multicast_delegate_property
-parse_multicast_sparse_delegate_property = parse_multicast_delegate_property
-
-
 # ============================================================================
 # Special type parsers
 # ============================================================================
-
-
-# InterfaceProperty: single int32 reference (see parse_object_property).
-parse_interface_property = parse_object_property
 
 
 def parse_field_path_property(tag: PropertyTag, archive: FArchive, name_map: list[str] | None = None) -> dict:
@@ -1199,16 +1183,6 @@ def parse_optional_property(
 # ============================================================================
 # Verse language type parsers
 # ============================================================================
-
-
-# Verse string types are plain FString; Verse class/function/dynamic are
-# single int32 references.  AnsiStrProperty uses the same length-prefixed
-# format as FString (read_fstring already decodes it).
-parse_verse_string_property = parse_str_property
-parse_verse_class_property = parse_object_property
-parse_verse_function_property = parse_object_property
-parse_verse_dynamic_property = parse_object_property
-parse_ansi_str_property = parse_str_property
 
 
 def parse_verse_cell_property(tag: PropertyTag, archive: FArchive) -> dict:

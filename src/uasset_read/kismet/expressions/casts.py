@@ -19,7 +19,7 @@ class EX_CastBase(KismetExpression):
     """Abstract base class for cast expressions -- reads class pointer and target expression."""
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_CastBase:
+    def from_archive(cls, archive: FKismetArchive) -> EX_CastBase:
         archive.xfer_object_pointer()
         archive.read_expression()
         return cls()
@@ -34,7 +34,7 @@ class EX_Cast(KismetExpression):
     Token = EExprToken.EX_Cast
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Cast:
+    def from_archive(cls, archive: FKismetArchive) -> EX_Cast:
         conv = ECastToken(archive.read_u8())
         archive.read_expression()
         return cls(ConversionType=conv)

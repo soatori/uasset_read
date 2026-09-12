@@ -74,7 +74,7 @@ class FKismetArchive(FArchive):
             self._expression_depth += 1
             try:
                 if hasattr(expr_class, "from_archive"):
-                    expr = expr_class.from_archive(self, self._name_map)  # type: ignore[reportAttributeAccessIssue]
+                    expr = expr_class.from_archive(self)  # type: ignore[reportAttributeAccessIssue]
                 else:
                     expr = expr_class()
             finally:

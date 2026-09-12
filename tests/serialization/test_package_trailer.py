@@ -20,14 +20,6 @@ def test_data_resources_version():
     assert UE5_DATA_RESOURCES == 1009
 
 
-def test_package_document_has_trailer_field():
-    from uasset_read.models.document import PackageDocument
-
-    doc = PackageDocument(source=None, package=None)
-    assert hasattr(doc, "package_trailer")
-    assert doc.package_trailer is None
-
-
 # --- FLookupTableEntry tests ---
 
 import struct

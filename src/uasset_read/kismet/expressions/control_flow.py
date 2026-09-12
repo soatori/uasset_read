@@ -29,7 +29,7 @@ class EX_Jump(KismetExpression):
     Token = EExprToken.EX_Jump
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Jump:
+    def from_archive(cls, archive: FKismetArchive) -> EX_Jump:
         offset = archive.read_u32()
         return cls(CodeOffset=offset)
 
@@ -48,7 +48,7 @@ class EX_JumpIfNot(EX_Jump):
     Token = EExprToken.EX_JumpIfNot
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_JumpIfNot:
+    def from_archive(cls, archive: FKismetArchive) -> EX_JumpIfNot:
         offset = archive.read_u32()
         expr = archive.read_expression()
         return cls(CodeOffset=offset, BooleanExpression=expr)
@@ -68,7 +68,7 @@ class EX_Skip(EX_Jump):
     Token = EExprToken.EX_Skip
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Skip:
+    def from_archive(cls, archive: FKismetArchive) -> EX_Skip:
         offset = archive.read_u32()
         expr = archive.read_expression()
         return cls(CodeOffset=offset, SkipExpression=expr)
@@ -88,7 +88,7 @@ class EX_ComputedJump(KismetExpression):
     Token = EExprToken.EX_ComputedJump
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ComputedJump:
+    def from_archive(cls, archive: FKismetArchive) -> EX_ComputedJump:
         expr = archive.read_expression()
         return cls(CodeOffsetExpression=expr)
 
@@ -107,7 +107,7 @@ class EX_PushExecutionFlow(KismetExpression):
     Token = EExprToken.EX_PushExecutionFlow
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_PushExecutionFlow:
+    def from_archive(cls, archive: FKismetArchive) -> EX_PushExecutionFlow:
         addr = archive.read_u32()
         return cls(PushingAddress=addr)
 
@@ -130,7 +130,7 @@ class EX_PopExecutionFlowIfNot(KismetExpression):
     Token = EExprToken.EX_PopExecutionFlowIfNot
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_PopExecutionFlowIfNot:
+    def from_archive(cls, archive: FKismetArchive) -> EX_PopExecutionFlowIfNot:
         expr = archive.read_expression()
         return cls(BooleanExpression=expr)
 
@@ -151,5 +151,5 @@ class EX_SkipOffsetConst(KismetExpressionT):
     Token = EExprToken.EX_SkipOffsetConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SkipOffsetConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_SkipOffsetConst:
         return cls(Value=archive.read_u32())

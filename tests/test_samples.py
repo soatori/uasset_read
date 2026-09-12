@@ -798,47 +798,20 @@ def test_preload_relations_report_invalid_ranges_without_crashing():
     assert diagnostics[0].recoverable is True
 
 
-def test_version_context_is_frozen_and_summary_derived():
-    """G1 contract: full immutable context built once from the package summary."""
+def test_version_context_is_frozen_and_depth_only():
+    """G1 (amended): immutable context carries production-used fields only."""
     import dataclasses
 
-    from uasset_read.serializers.package_summary import read_package_summary
-    from uasset_read.package import open_package_bundle
-    from uasset_read.versioning import build_version_context_from_summary
-
-    archive = open_package_bundle(str(SAMPLES / "ABP_RifleAnimLayers.uasset")).open_archive(tolerant=True)
-    try:
-        summary = read_package_summary(archive)
-    finally:
-        archive.close()
-
-    ctx = build_version_context_from_summary(
-        summary,
-        game="ue",
-        mappings_path="x.usmap",
-        depth="asset",
-    )
-    # ABP fixture facts verified at plan time: UE4 522, UE5 1004, 10 custom versions,
-    # saved/compatible engine version 5.0.0.19274859.
-    assert ctx.file_version_ue4 == 522
-    assert ctx.file_version_ue5 == 1004
-    assert len(ctx.custom_versions) == 10
-    assert next(iter(ctx.custom_versions)) == next(iter(summary.custom_versions)).guid
-    assert ctx.engine_version is not None and ctx.engine_version.major == 5
-    assert ctx.compatible_engine_version is not None
-    assert ctx.game == "ue"
-    assert ctx.mappings_path == "x.usmap"
-    assert ctx.depth == "asset"
-    assert ctx.is_ue5 is True
-    assert ctx.version_string.startswith("5.0")
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        ctx.file_version_ue5 = 0
-
-    # UE5 floor is 1000 (ObjectVersion.h INITIAL_VERSION / FPackageFileVersion::ToValue)
     from uasset_read.versioning import VersionContext
 
-    assert VersionContext(file_version_ue5=522).is_ue5 is False
-    assert VersionContext(file_version_ue5=1000).is_ue5 is True
+    ctx = VersionContext(depth="asset")
+    assert ctx.depth == "asset"
+    assert VersionContext().depth == "package"
+    # Only field: depth — speculative version/game/mappings payload was cut
+    # (G1 amend after revert 280b7e09; handlers read depth only).
+    assert {f.name for f in dataclasses.fields(VersionContext)} == {"depth"}
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        ctx.depth = "decode"
 
 
 def test_blueprint_fixtures_carry_generated_and_cdo_relations():

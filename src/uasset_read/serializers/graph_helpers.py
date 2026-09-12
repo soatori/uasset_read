@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import logging
 import struct
-import threading
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -30,8 +29,6 @@ from uasset_read.versioning import FORTNITE_GUID, get_custom_version
 from uasset_read.serializers.property_tags import read_tag_value_bounded
 
 logger = logging.getLogger(__name__)
-
-_thread_local = threading.local()
 
 
 # ============================================================================
@@ -50,13 +47,6 @@ def _read_guid(archive: FArchive, uppercase: bool = True) -> str:
     if len(data) != 16:
         raise ParseError(f"FGuid requires 16 bytes, got {len(data)}")
     return format_guid_bytes(data, uppercase=uppercase)
-
-
-def _get_thread_local():
-    """Return per-thread isolated diagnostic state, avoiding global mutable race."""
-    if not hasattr(_thread_local, "linkedto_failure_seen"):
-        _thread_local.linkedto_failure_seen = set()
-    return _thread_local
 
 
 # ============================================================================

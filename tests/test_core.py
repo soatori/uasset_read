@@ -975,32 +975,6 @@ def test_package_document_preserves_every_export_and_role():
             "chunk_ids": "array",
         }
 
-    def test_material_enum_tables_match_engine_types():
-        from uasset_read.constants import BLEND_MODE_MAP, SHADING_MODEL_MAP
-
-        assert BLEND_MODE_MAP == {
-            0: "Opaque",
-            1: "Masked",
-            2: "Translucent",
-            3: "Additive",
-            4: "Modulate",
-            5: "AlphaComposite",
-            6: "AlphaHoldout",
-            7: "TranslucentColoredTransmittance",
-        }
-        assert SHADING_MODEL_MAP == {
-            0: "Unlit",
-            1: "DefaultLit",
-            2: "Subsurface",
-            3: "PreintegratedSkin",
-            4: "ClearCoat",
-            5: "SubsurfaceProfile",
-            6: "TwoSidedFoliage",
-            8: "Cloth",
-            10: "SingleLayerWater",
-            11: "ThinTranslucent",
-        }
-
     _run_cases(
         [
             ("document.test_all_exports_present", test_all_exports_present),
@@ -1013,7 +987,6 @@ def test_package_document_preserves_every_export_and_role():
                 "table.test_table_rows_skip_tagged_stream_not_size_prefix",
                 test_table_rows_skip_tagged_stream_not_size_prefix,
             ),
-            ("table.test_material_enum_tables_match_engine_types", test_material_enum_tables_match_engine_types),
             ("table.test_curve_table_mode_byte_is_consumed", test_curve_table_mode_byte_is_consumed),
             (
                 "table.test_table_payload_residue_is_disclosed_not_complete",
@@ -1936,12 +1909,12 @@ def test_handler_registry_supports_enriches_and_isolates():
             return bytes([0x1F]) + s.encode("utf-8") + b"\x00"
 
         data = bytes([1]) + ansi("Hello") + ansi("5A1B") + ansi("NS")  # source,key,namespace
-        text = FScriptText.from_archive(_KismetLike(data), [])
+        text = FScriptText.from_archive(_KismetLike(data))
         assert text.SourceString == "Hello" and text.KeyString == "5A1B" and text.Namespace == "NS"
         uni = bytes([1]) + bytes([0x34]) + "Héy".encode("utf-16-le") + b"\x00\x00" + ansi("K") + ansi("N")
-        assert FScriptText.from_archive(_KismetLike(uni), []).SourceString == "Héy"
+        assert FScriptText.from_archive(_KismetLike(uni)).SourceString == "Héy"
         ste = bytes([5]) + struct.pack("<i", -3) + ansi("MyTable") + ansi("Key42")
-        t3 = FScriptText.from_archive(_KismetLike(ste), [])
+        t3 = FScriptText.from_archive(_KismetLike(ste))
         assert t3.TableIdString == "MyTable" and t3.KeyString == "Key42"
 
     def test_ex_assert_u8_and_container_counts():
@@ -1978,11 +1951,11 @@ def test_handler_registry_supports_enriches_and_isolates():
                 return self._arc.tell()
 
         probe = _WidthProbe(struct.pack("<HB", 42, 1))  # line + uint8 debug flag
-        node = EX_Assert.from_archive(probe, [])
+        node = EX_Assert.from_archive(probe)
         assert node.LineNumber == 42 and node.DebugMode is True
         assert probe.tell() == 3  # old 4-byte read_bool would land at 6
         probe2 = _WidthProbe(struct.pack("<i", 7))  # the int32 element count
-        node2 = EX_SetSet.from_archive(probe2, [])
+        node2 = EX_SetSet.from_archive(probe2)
         assert node2.Num == 7 and probe2.tell() == 4
 
     def test_fstring_negative_one_consumes_two_bytes():
@@ -2036,6 +2009,26 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert pt.map_key_terminal_is_weak_pointer is False
         assert pt.map_key_terminal_is_uobject_wrapper is True
         assert pt.is_reference is False  # reads the 4-byte value AFTER the tail: desync guard
+
+    def test_pin_array_bad_count_fails_closed():
+        """T6: corrupt pin-array count raises ParseError (no sliding-window salvage)."""
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.exceptions import ParseError
+        from uasset_read.serializers.graph_pin import read_pin_array
+
+        # count=999 exceeds MAX_LINKEDTO_PER_PIN; the trailing bytes mimic a
+        # "recoverable" pin ref that the deleted sliding-window salvage sought.
+        data = struct.pack("<i", 999) + struct.pack("<i", 1) + bytes(20) + bytes(32)
+        arc = ByteArchive(data)
+        with pytest.raises(ParseError, match="exceeds MAX_LINKEDTO_PER_PIN"):
+            read_pin_array(arc, [], [])
+
+        # Negative count also fails closed.
+        arc2 = ByteArchive(struct.pack("<i", -1))
+        with pytest.raises(ParseError, match="negative"):
+            read_pin_array(arc2, [], [])
 
     def test_byte_enum_node_tag_decodes_fname():
         """G5: UENUM-backed byte tags carry the enum-entry FName (PropertyByte.cpp SerializeItem)."""
@@ -2128,6 +2121,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             ("handler.test_ex_assert_u8_and_container_counts", test_ex_assert_u8_and_container_counts),
             ("handler.test_fstring_negative_one_consumes_two_bytes", test_fstring_negative_one_consumes_two_bytes),
             ("handler.test_map_pin_terminal_reads_trailing_bools", test_map_pin_terminal_reads_trailing_bools),
+            ("handler.test_pin_array_bad_count_fails_closed", test_pin_array_bad_count_fails_closed),
             ("handler.test_byte_enum_node_tag_decodes_fname", test_byte_enum_node_tag_decodes_fname),
             ("handler.test_no_invented_k2node_tails", test_no_invented_k2node_tails),
             ("handler.test_guid_display_is_36_chars", test_guid_display_is_36_chars),

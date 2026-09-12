@@ -48,7 +48,7 @@ from ..models.object_model import (
     ROLES_CDO,
     ROLES_GENERATED_CLASS,
 )
-from ..versioning import FORTNITE_GUID, build_version_context_from_summary, get_custom_version
+from ..versioning import FORTNITE_GUID, VersionContext, get_custom_version
 
 
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:
@@ -479,56 +479,6 @@ class LegacyPackageReader:
             # the UE5.3+ FPropertyTypeName path (mirrors v1 behavior).
             archive.set_property_version_gates(summary.file_version_ue4, summary.file_version_ue5)
 
-            # 1b. Parse PackageTrailer (UE5, after summary validation)
-            package_trailer = None
-            if (
-                hasattr(summary, "payload_toc_offset")
-                and summary.payload_toc_offset > 0
-                and getattr(summary, "file_version_ue5", 0) >= 1002
-            ):
-                try:
-                    from uasset_read.serializers.package_trailer import read_package_trailer
-
-                    archive.seek(summary.payload_toc_offset)
-                    package_trailer = read_package_trailer(
-                        archive,
-                    )
-                except (struct.error, ValueError, OverflowError, OSError) as e:
-                    diagnostics.append(
-                        _diag(
-                            "PACKAGE_TRAILER_PARSE_FAILED",
-                            f"PackageTrailer parse failed: {e}",
-                            "package.trailer",
-                            effect=None,
-                        )
-                    )
-                    package_trailer = None
-
-            # 1c. Parse DataResource table (UE5.1+, after trailer)
-            data_resource_map = None
-            if (
-                hasattr(summary, "data_resource_offset")
-                and summary.data_resource_offset > 0
-                and getattr(summary, "file_version_ue5", 0) >= 1009
-            ):
-                try:
-                    from uasset_read.serializers.data_resource import read_data_resource_table
-
-                    data_resource_map = read_data_resource_table(
-                        archive,
-                        summary.data_resource_offset,  # type: ignore[arg-type]
-                    )
-                except (struct.error, ValueError, OverflowError, OSError) as e:
-                    diagnostics.append(
-                        _diag(
-                            "DATA_RESOURCE_PARSE_FAILED",
-                            f"DataResource parse failed: {e}",
-                            "package.data_resource",
-                            effect=None,
-                        )
-                    )
-                    data_resource_map = None
-
             # 2. Validate name table
             if summary.name_count <= 0:
                 diagnostics.append(
@@ -735,12 +685,7 @@ class LegacyPackageReader:
 
             # 17. Run asset handlers at depth >= asset
             if depth in ("asset", "decode"):
-                context = build_version_context_from_summary(
-                    summary,
-                    game=self._game,
-                    mappings_path=self._mappings_path,
-                    depth=depth,
-                )
+                context = VersionContext(depth=depth)
                 for obj in objects:
                     try:
                         semantic, cov, handler_diags = run_handlers(
@@ -781,8 +726,6 @@ class LegacyPackageReader:
                 diagnostics=diagnostics,
                 summary=summary_obj,
                 depth=depth,
-                package_trailer=package_trailer,
-                data_resource_map=data_resource_map,
             )
 
         except ParseError as e:

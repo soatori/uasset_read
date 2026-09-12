@@ -36,7 +36,7 @@ class EX_VectorConst(KismetExpression):
     Token = EExprToken.EX_VectorConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_VectorConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_VectorConst:
         if _is_lwc(archive):
             x = archive.read_f64()
             y = archive.read_f64()
@@ -67,7 +67,7 @@ class EX_RotationConst(KismetExpression):
     Token = EExprToken.EX_RotationConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_RotationConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_RotationConst:
         if _is_lwc(archive):
             p = archive.read_f64()
             y = archive.read_f64()
@@ -95,7 +95,7 @@ class EX_TransformConst(KismetExpression):
     Token = EExprToken.EX_TransformConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_TransformConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_TransformConst:
         read_num = archive.read_f64 if _is_lwc(archive) else archive.read_f32
         # Rotation (quat): X, Y, Z, W
         read_num()
@@ -124,7 +124,7 @@ class EX_Vector3fConst(KismetExpression):
     Token = EExprToken.EX_Vector3fConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Vector3fConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_Vector3fConst:
         x = archive.read_f32()
         y = archive.read_f32()
         z = archive.read_f32()

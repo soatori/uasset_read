@@ -40,26 +40,6 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# dispatch handlers -- unified signature (ctx: dict[str, Any]) -> dict[str, Any]
-# ctx contains: archive, name_map, summary, export_map, import_map,
-#               raw_properties, class_name, node_export, base_node
-# ============================================================================
-
-
-def _handle_full_context(ctx: dict[str, Any]) -> dict[str, Any]:
-    """AnimGraphNode type dispatch handler."""
-    return _read_anim_graph_node(
-        ctx["archive"],
-        ctx["name_map"],
-        ctx["summary"],
-        ctx["export_map"],
-        ctx["import_map"],
-        ctx["class_name"],
-        ctx.get("raw_properties"),
-    )
-
-
-# ============================================================================
 # AnimGraphNode reading
 # ============================================================================
 
@@ -146,22 +126,18 @@ def create_node_from_archive(
     if isinstance(base_node.node_data, dict) and base_node.node_data.get("_parse_error"):
         return base_node
 
-    # Build unified context for all handlers to use as needed
-    ctx: dict[str, Any] = {
-        "archive": archive,
-        "name_map": name_map,
-        "summary": summary,
-        "export_map": export_map,
-        "import_map": import_map,
-        "raw_properties": raw_properties,
-        "class_name": class_name,
-        "node_export": node_export,
-        "base_node": base_node,
-    }
-
-    # Prefix match: AnimGraphNode types (cannot exhaustively enumerate)
+    # Single dispatch path: AnimGraphNode_/AnimState* full-context reader,
+    # else tag-derived allow-list projection.
     if class_name.startswith("AnimGraphNode_") or class_name.startswith("AnimState"):
-        base_node.node_data = _handle_full_context(ctx)
+        base_node.node_data = _read_anim_graph_node(
+            archive,
+            name_map,
+            summary,
+            export_map,
+            import_map,
+            class_name,
+            raw_properties,
+        )
     elif raw_properties:
         # Tag-derived allow-list projection only (Wave A removed K2Node binary
         # readers). Surviving primitive tags land on node_data for decode.

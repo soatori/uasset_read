@@ -14,7 +14,7 @@ class EX_Context(KismetExpression):
     Token = EExprToken.EX_Context
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_Context:
+    def from_archive(cls, archive: FKismetArchive) -> EX_Context:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
         archive.read_expression()
@@ -34,7 +34,7 @@ class EX_InterfaceContext(KismetExpression):
     Token = EExprToken.EX_InterfaceContext
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_InterfaceContext:
+    def from_archive(cls, archive: FKismetArchive) -> EX_InterfaceContext:
         archive.read_expression()
         return cls()
 
@@ -44,7 +44,7 @@ class EX_StructMemberContext(KismetExpression):
     Token = EExprToken.EX_StructMemberContext
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_StructMemberContext:
+    def from_archive(cls, archive: FKismetArchive) -> EX_StructMemberContext:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
         FKismetPropertyPointer.from_archive(archive)

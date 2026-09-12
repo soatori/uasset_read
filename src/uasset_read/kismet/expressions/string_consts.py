@@ -19,7 +19,7 @@ class EX_StringConst(KismetExpressionT):
     Token = EExprToken.EX_StringConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_StringConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_StringConst:
         value = archive.xfer_ansi_string()
         return cls(Value=value)
 
@@ -31,7 +31,7 @@ class EX_UnicodeStringConst(KismetExpressionT):
     Token = EExprToken.EX_UnicodeStringConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_UnicodeStringConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_UnicodeStringConst:
         value = archive.xfer_unicode_string()
         return cls(Value=value)
 
@@ -58,7 +58,7 @@ class FScriptText:
         raise ParseError(f"FScriptText: unexpected string operand token {token:#x}")
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> FScriptText:
+    def from_archive(cls, archive: FKismetArchive) -> FScriptText:
         lit_type = EBlueprintTextLiteralType(archive.read_u8())
         if lit_type == EBlueprintTextLiteralType.Empty:
             return cls(TextLiteralType=lit_type)
@@ -105,8 +105,8 @@ class EX_TextConst(KismetExpression):
     Token = EExprToken.EX_TextConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_TextConst:
-        text = FScriptText.from_archive(archive, name_map)
+    def from_archive(cls, archive: FKismetArchive) -> EX_TextConst:
+        text = FScriptText.from_archive(archive)
         return cls(Text=text)
 
     def to_dict(self) -> dict:
@@ -129,6 +129,6 @@ class EX_SoftObjectConst(KismetExpression):
     Token = EExprToken.EX_SoftObjectConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SoftObjectConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_SoftObjectConst:
         archive.read_expression()
         return cls()

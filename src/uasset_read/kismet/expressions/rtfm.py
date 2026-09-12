@@ -26,7 +26,7 @@ class EX_AutoRtfmTransact(KismetExpression):
     Token = EExprToken.EX_AutoRtfmTransact
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_AutoRtfmTransact:
+    def from_archive(cls, archive: FKismetArchive) -> EX_AutoRtfmTransact:
         archive.read_i32()
         offset = archive.read_u32()
         archive.read_expression_array(EExprToken.EX_AutoRtfmStopTransact)
@@ -40,7 +40,7 @@ class EX_AutoRtfmStopTransact(KismetExpression):
     Token = EExprToken.EX_AutoRtfmStopTransact
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_AutoRtfmStopTransact:
+    def from_archive(cls, archive: FKismetArchive) -> EX_AutoRtfmStopTransact:
         archive.read_i32()
         EAutoRtfmStopTransactMode(archive.read_u8())
         return cls()
@@ -53,6 +53,6 @@ class EX_AutoRtfmAbortIfNot(KismetExpression):
     Token = EExprToken.EX_AutoRtfmAbortIfNot
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_AutoRtfmAbortIfNot:
+    def from_archive(cls, archive: FKismetArchive) -> EX_AutoRtfmAbortIfNot:
         archive.read_expression()
         return cls()

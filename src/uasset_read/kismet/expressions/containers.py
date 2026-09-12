@@ -16,7 +16,7 @@ class EX_SetArray(KismetExpression):
     Token = EExprToken.EX_SetArray
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetArray:
+    def from_archive(cls, archive: FKismetArchive) -> EX_SetArray:
         # UE5's post-VER_UE4_CHANGE_SETARRAY_BYTECODE layout serializes the
         # array target as an expression, not as a bare FProperty pointer.
         archive.read_expression()
@@ -33,7 +33,7 @@ class EX_SetMap(KismetExpression):
     Token = EExprToken.EX_SetMap
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetMap:
+    def from_archive(cls, archive: FKismetArchive) -> EX_SetMap:
         archive.read_expression()
         archive.read_i32()  # ScriptSerialization.inl:531-534: int32 element count
         archive.read_expression_array(EExprToken.EX_EndMap)
@@ -51,7 +51,7 @@ class EX_SetSet(KismetExpression):
     Token = EExprToken.EX_SetSet
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetSet:
+    def from_archive(cls, archive: FKismetArchive) -> EX_SetSet:
         archive.read_expression()
         num = archive.read_i32()  # ScriptSerialization.inl:526-529: int32 element count
         archive.read_expression_array(EExprToken.EX_EndSet)
@@ -67,7 +67,7 @@ class EX_ArrayConst(KismetExpression):
     Token = EExprToken.EX_ArrayConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ArrayConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_ArrayConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
         FKismetPropertyPointer.from_archive(archive)
@@ -85,7 +85,7 @@ class EX_MapConst(KismetExpression):
     Token = EExprToken.EX_MapConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_MapConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_MapConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
         FKismetPropertyPointer.from_archive(archive)
@@ -104,7 +104,7 @@ class EX_SetConst(KismetExpression):
     Token = EExprToken.EX_SetConst
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_SetConst:
+    def from_archive(cls, archive: FKismetArchive) -> EX_SetConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
         FKismetPropertyPointer.from_archive(archive)
@@ -122,7 +122,7 @@ class EX_ArrayGetByRef(KismetExpression):
     Token = EExprToken.EX_ArrayGetByRef
 
     @classmethod
-    def from_archive(cls, archive: FKismetArchive, name_map: list[str]) -> EX_ArrayGetByRef:
+    def from_archive(cls, archive: FKismetArchive) -> EX_ArrayGetByRef:
         archive.read_expression()
         archive.read_expression()
         return cls()

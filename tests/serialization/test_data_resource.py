@@ -44,12 +44,3 @@ def test_read_data_resource_table():
     assert resources[0].raw_size == 800
     assert resources[1].cooked_index == 1
     assert resources[1].legacy_bulk_data_flags == 0x100
-
-
-def test_parse_stages_populates_data_resource():
-    """Verify pipeline populates data_resource_map when present."""
-    from uasset_read.models.document import PackageDocument
-
-    result = PackageDocument(source=None, package=None)
-    assert hasattr(result, "data_resource_map")
-    assert result.data_resource_map is None
