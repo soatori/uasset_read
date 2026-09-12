@@ -1,5 +1,5 @@
 {
-  "_note": "Ratchet ceilings for tests/test_size_baseline.py and the CI package-smoke wheel check; raise only as a deliberate reviewable diff, tighten after deletion waves. Tightened 2026-09-12 after subtraction wave task 7 (folded property arg table into handler map; dropped soft-class forwarder) and task 13 (test-tree dedup: manifest dead keys, fixture boilerplate, duplicate serialization tests). Tightened 2026-09-12 after subtraction wave task 9: deleted unreachable UE5.7 soft-object-path index branch. Tightened 2026-09-12 after subtraction wave task 16 (decode kismet regression tests; intentional output change). Raised 2026-09-12 after productize Wave B P1–P5 (state_count, exec_chains, node names, allow-listed node_data, Variable reference test) plus the unversioned-usmap fix on the same branch. Raised docs_markdown +1 for designs README Wave A/B status rows (P7). Raised src_python after review fixes: node_data_project.py module (+ exec edge dedupe, VariableReference locator filter, unversioned FText stop-opaque). Raised tests after second-review hardening: FText unknown-history unit test + EventGraph edge_count pin.",
+  "_note": "Ratchet ceilings for tests/test_size_baseline.py and the CI package-smoke wheel check; raise only as a deliberate reviewable diff, tighten after deletion waves. Tightened 2026-09-12 after subtraction wave task 7 (folded property arg table into handler map; dropped soft-class forwarder) and task 13 (test-tree dedup: manifest dead keys, fixture boilerplate, duplicate serialization tests). Tightened 2026-09-12 after subtraction wave task 9: deleted unreachable UE5.7 soft-object-path index branch. Tightened 2026-09-12 after subtraction wave task 16 (decode kismet regression tests; intentional output change). Raised 2026-09-12 after productize Wave B P1–P5 (state_count, exec_chains, node names, allow-listed node_data, Variable reference test) plus the unversioned-usmap fix on the same branch. Raised docs_markdown +1 for designs README Wave A/B status rows (P7). Raised src_python after review fixes: node_data_project.py module (+ exec edge dedupe, VariableReference locator filter, unversioned FText stop-opaque). Raised tests after second-review hardening: FText unknown-history unit test + EventGraph edge_count pin. Raised docs_markdown after next-phase closeout: productize plan file tracked as executed + deferred bundling record + closeout plan doc (~+1.3k lines; 2026-09-13).",
   "src_python": {
     "min_files": 73,
     "max_lines": 19500
@@ -9,8 +9,8 @@
     "max_lines": 5960
   },
   "docs_markdown": {
-    "min_files": 151,
-    "max_lines": 45980
+    "min_files": 153,
+    "max_lines": 47350
   },
   "wheel_bytes": {
     "max_bytes": 300000
