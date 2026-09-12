@@ -273,6 +273,10 @@ def test_exec_edges_available_for_event_graph():
     for o in page.get("objects") or []:
         chains.extend((o.get("semantic") or {}).get("exec_chains") or [])
     assert chains and any(c.get("edges") for c in chains)
+    event = next((c for c in chains if c.get("graph") == "EventGraph"), None)
+    assert event is not None, "StackOBot EventGraph must surface exec_chains"
+    # Live fixture has 3 unique logical connections (was 6 with reverse pairs).
+    assert len(event.get("edges") or []) == 3, event
     for chain in chains:
         edges = chain.get("edges") or []
         pairs: set[frozenset[str]] = set()

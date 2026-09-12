@@ -258,3 +258,36 @@ class TestUnversionedMappedProperties:
         assert codes.count("name_index_out_of_range") == 0, (
             f"unversioned parse must not emit name_index_out_of_range; got: {codes}"
         )
+
+
+class TestUnversionedFTextStopPath:
+    """Unknown FText history must stop + rewind, not invent an empty complete TextValue."""
+
+    def test_unknown_history_returns_none_and_rewinds(self):
+        from uasset_read.archive import ByteArchive
+        from uasset_read.parsers.property_parser import _read_unversioned_ftext
+
+        # flags(i32=0) + history=1 (not Base/None) + garbage body that must
+        # not be consumed as typed text or projected as complete.
+        payload = struct.pack("<iB", 0, 1) + b"\xde\xad\xbe\xef" * 2
+        archive = ByteArchive(payload)
+        start = archive.tell()
+        result = _read_unversioned_ftext(archive, property_end=len(payload))
+        assert result is None
+        assert archive.tell() == start, "unknown history must rewind so the caller can opaque the tail"
+
+    def test_base_history_still_reads_three_fstrings(self):
+        from uasset_read.archive import ByteArchive
+        from uasset_read.models.properties import TextValue
+        from uasset_read.parsers.property_parser import _read_unversioned_ftext
+
+        def _fstring(text: str) -> bytes:
+            raw = text.encode("utf-8")
+            return struct.pack("<i", len(text) + 1) + raw + b"\x00"
+
+        payload = struct.pack("<iB", 0, 0) + _fstring("NS") + _fstring("Key") + _fstring("Src")
+        archive = ByteArchive(payload)
+        result = _read_unversioned_ftext(archive, property_end=len(payload))
+        assert isinstance(result, TextValue)
+        assert result.history_type == 0
+        assert result.source_string == "Src"

@@ -289,7 +289,10 @@ def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:
     each graph's ``_pin_links`` records. A link whose target guid is absent is
     counted in the graph's ``unresolved_links`` (cross-package or clipped pin)
     and dropped — the reader pass turns that counter into a diagnostic, never
-    a silent loss. Consumes and deletes ``_pin_links``; sets ``edge_count``.
+    a silent loss. Consumes and deletes ``_pin_links``; sets ``edge_count`` to
+    the number of resolved *link records* (bidirectional pairs count twice).
+    That is not the same as ``summarize_exec_edges``'s unique undirected
+    exec-only ``edges`` list.
     """
     # The emitter inlines subgraph nodes into their owning graph's ``nodes``
     # list (see ``_graph_to_dict``), so an emitted graph dict carries no
@@ -326,7 +329,8 @@ def summarize_exec_edges(graphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     by ``resolve_pin_links``). Each undirected pin connection is emitted once
     (bidirectional ``linked`` entries are reverse pairs). Endpoints use pin
     ids on both sides so consumers can join; when both orientations exist the
-    edge prefers output→input. Graphs with no exec edges are omitted.
+    edge prefers output→input. Distinct from ``graph["edge_count"]``, which
+    counts every resolved link record. Graphs with no exec edges are omitted.
     """
     out: list[dict[str, Any]] = []
     for graph in graphs:
