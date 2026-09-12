@@ -32,6 +32,10 @@ class PropertyFallback(PropertyValue):
     reason: FallbackReason = FallbackReason.UNSUPPORTED_TYPE
     error_message: str | None = None
 
+    @property
+    def kind(self) -> str:
+        return "unknown_property"
+
     @classmethod
     def from_tag(
         cls, tag, reason: "FallbackReason", *, error_message: str = "", raw_bytes: bytes = b""

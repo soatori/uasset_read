@@ -20,13 +20,14 @@ _logger = logging.getLogger(__name__)
 
 
 def _sanitize_error_message(message: object) -> str:
-    """Reduce path-like tokens in a CLI error to their basenames.
+    """Reduce filesystem-looking path tokens in a CLI error to basenames.
 
-    Full messages stay available at DEBUG; the terminal only needs the
-    offending filename, not the developer's directory layout.
+    Only tokens with a file extension are reduced — avoids mangling type or
+    attribute paths such as ``/defs/PayloadDescriptor``. Full messages stay
+    available at DEBUG.
     """
     return re.sub(
-        r"(?:[A-Za-z]:)?(?:[/\\][^\s:;\"']+)+",
+        r"(?:(?:[A-Za-z]:)?(?:[/\\][^\s:;\"']+)+|(?:[^\s:;\"'\\/]+[/\\])+[^\s:;\"'\\/]+)\.[A-Za-z0-9_]{1,16}\b",
         lambda m: Path(m.group(0).rstrip("\\/")).name or m.group(0),
         str(message),
     )

@@ -3136,6 +3136,7 @@ def test_test_suite_structure_gate():
         "test_handler_capability_ledger.py",
         "test_parse_hardening.py",
         "test_payload_extraction.py",
+        "test_review_pins.py",
         "test_samples.py",
         "test_size_baseline.py",
         "test_unversioned_fixtures.py",
