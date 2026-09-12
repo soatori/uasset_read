@@ -43,8 +43,8 @@ def test_custom_property_bl4_handlers_still_routed():
 
 
 def test_max_reasonable_map_property_is_large_cap():
-    assert get_max_reasonable("MapProperty", engine_version=0) == UE5_LARGE_PROPERTY_MAX_REASONABLE
-    assert get_max_reasonable("IntProperty", engine_version=1000) == MAX_REASONABLE_CAP
+    assert get_max_reasonable("MapProperty") == UE5_LARGE_PROPERTY_MAX_REASONABLE
+    assert get_max_reasonable("IntProperty") == MAX_REASONABLE_CAP
 
 
 def test_ue5_version_pins():

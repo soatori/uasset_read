@@ -70,7 +70,6 @@ def _stream_is_poisoned(archive: "FArchive", diag_mark: int) -> bool:
 
 
 # Shared control-flow exception (also re-raised by parse_struct_property).
-_StreamPoisonedError = StreamPoisonedError
 
 
 _IMPORT_JSON_MAX = 65536
@@ -540,11 +539,11 @@ def parse_property_value(
         if _stream_is_poisoned(archive, diag_mark):
             # Abort nested multi-entry parsers (Map/Set/Array) that would
             # re-read the same misaligned position for every remaining entry.
-            raise _StreamPoisonedError(
+            raise StreamPoisonedError(
                 f"Poison diagnostic while parsing '{tag.name}' ({tag.type}); aborting value stream"
             )
         return result
-    except _StreamPoisonedError:
+    except StreamPoisonedError:
         raise
     except (_struct.error, OSError, ValueError, AttributeError, KeyError, ParseError) as e:
         if not tolerant:

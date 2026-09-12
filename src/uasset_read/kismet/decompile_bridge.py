@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
@@ -27,7 +27,7 @@ def extract_kismet_decompiled(
     import_map,
     export_map,
     tolerant: bool = True,
-) -> List:
+) -> list:
     """Extract Kismet bytecode from Blueprint UStruct Function/UFunction exports.
 
     Tolerant mode: failures return a result for that function, never crash.

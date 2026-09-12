@@ -173,8 +173,7 @@ class FArchive:
         # The actual archive-safety boundary is the remaining-bytes check above.
         # No file-size percentage heuristic — real assets legitimately have large
         # properties relative to file size (#302).
-        engine_version = getattr(self, "_file_version_ue5", 0)
-        max_reasonable = get_max_reasonable(property_type or "", engine_version)
+        max_reasonable = get_max_reasonable(property_type or "")
         if size > max_reasonable:
             if tolerant:
                 return False

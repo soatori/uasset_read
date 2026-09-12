@@ -212,25 +212,12 @@ UE5_LARGE_PROPERTY_MAX_REASONABLE = 500 * 1024 * 1024  # 500 MB — UE5 large pr
 # ============================================================================
 
 
-def get_max_reasonable(property_type: str, engine_version: int) -> int:
+def get_max_reasonable(property_type: str) -> int:
     """Return reasonable size cap based on property type.
 
-    For UE5 known large property types (BoneAnimationTracks, PoseContainer,
-    ArrayConnectionMap, RigVM, MapProperty), relax threshold to 500MB.
-
-    ``engine_version`` stays in the signature for the archive call site but is
-    no longer consulted: the sole caller passes ``_file_version_ue5`` (>=1000
-    when set), so the old ``>= 5`` gate never narrowed real packages — large
-    types relax to the 500MB cap by type alone.
-
-    Args:
-        property_type: Property type name (e.g., "IntProperty", "StructProperty")
-        engine_version: Unused; retained for call-site compatibility
-
-    Returns:
-        Maximum reasonable size (bytes) allowed for this property type
+    UE5 known large property types relax to the 500MB cap; everything else
+    stays at the standard 100MB cap.
     """
-    del engine_version
     if property_type in UE5_LARGE_PROPERTY_TYPES:
         return UE5_LARGE_PROPERTY_MAX_REASONABLE
     return MAX_REASONABLE_CAP

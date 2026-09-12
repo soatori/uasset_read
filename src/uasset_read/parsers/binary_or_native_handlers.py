@@ -22,9 +22,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# BinaryOrNative handler type signature
-BinaryOrNativeHandler = Callable[["PropertyTag", "FArchive", list[str], list[Any], Any], dict[str, Any] | None]
-
 
 def _parse_instanced_struct(
     tag: "PropertyTag",
@@ -553,7 +550,7 @@ def _parse_niagara_variable(
 # Handler registry
 # ============================================================================
 
-BINARY_OR_NATIVE_HANDLERS: dict[str, BinaryOrNativeHandler] = {
+BINARY_OR_NATIVE_HANDLERS: dict[str, Callable[..., dict[str, Any] | None]] = {
     # Material-related
     "FMaterialInput": _parse_material_input,
     "FColorMaterialInput": _parse_material_input,
