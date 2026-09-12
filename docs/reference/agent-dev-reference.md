@@ -30,6 +30,7 @@
 - 正式测试契约层为 `tests/test_core.py`（核心单元 + 结构门禁）与 `tests/test_samples.py`（manifest 驱动的真实样本），加上 `test_size_baseline.py`（体积门禁）。无 `tests/contract/` 目录。
 - 当前 v2 使用 package-first `PackageDocument`（legacy + tagged properties + sample-backed handlers 已实现；Zen/IoStore deferred；unversioned 为 usmap 驱动的 partial 路径，未映射尾部显式 opaque，payload extraction 已实现，见 docs/designs/README.md），输出所有 objects。
 - 当前 Pak/IoStore、日志和 Agent 能力不得按目标设计提前宣称完成。
+- **契约稳定性（S1，2026-09-13）：** `format_version: "2.0"` 对 stable 域已冻结；破坏性变更才 bump major。`objects[].properties` / `semantic` / `coverage` 与顶层 `payloads` 为 experimental（schema `x-stability`）——**不得**作为跨版本 golden 的稳定断言面。
 - 旧领域 Semantic 文档可用于理解 v0.5.5，但不得继续扩展为新的顶层 format。
 
 ## 按任务定位

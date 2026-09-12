@@ -22,7 +22,7 @@ These sit beside the canonical target on purpose. Each carries its own `status:`
 | G2 | [`2026-08-31-agent-doc-cache-contract.md`](2026-08-31-agent-doc-cache-contract.md) | target | Deferred: shared-`PackageDocument` cache contract. |
 | G3 | [`2026-08-31-handler-registry-thread-safety.md`](2026-08-31-handler-registry-thread-safety.md) | target | Deferred until multi-threaded MCP consumption is real. |
 | G4 | [`2026-08-31-projection-layering.md`](2026-08-31-projection-layering.md) | target | Projection → truncation → serialization boundary. |
-| S1 | [`2026-08-31-v2-contract-stability.md`](2026-08-31-v2-contract-stability.md) | target | Contract stability tiers; the `format_version` freeze declaration it requires is not yet emitted. |
+| S1 | [`2026-08-31-v2-contract-stability.md`](2026-08-31-v2-contract-stability.md) | current | Stable-field freeze of `format_version: "2.0"` (2026-09-13); experimental keys marked in schema; breaking stable changes bump major. |
 | S2 | [`2026-08-31-payload-extraction-path.md`](2026-08-31-payload-extraction-path.md) | target | `PAYLOAD_EXTRACTION_DEFERRED` shape and the two future optimization routes. |
 | S3 | [`2026-08-31-doc-status-marking-spec.md`](2026-08-31-doc-status-marking-spec.md) | current | The status-marking rules this index follows. |
 | — | [`2026-09-02-peer-corroboration-usage-scheme.md`](2026-09-02-peer-corroboration-usage-scheme.md) | current | How external parsers may be used as evidence. |
@@ -30,6 +30,8 @@ These sit beside the canonical target on purpose. Each carries its own `status:`
 | — | [`2026-09-12-ponytail-residual-cuts.md`](2026-09-12-ponytail-residual-cuts.md) | current | Residual ponytail cuts after audit waves 0–13: identity map, false import mirror, write-only fields, CubeBuilder skip-list contradiction. Executed 2026-09-12 (`f55b2d1e`/`4bface99`); suite 220 passed. |
 | — | [`2026-09-12-ponytail-evaluation-fix-plan.md`](2026-09-12-ponytail-evaluation-fix-plan.md) | current | Adversarially reviewed ponytail subtraction + two real defects (CI ruff, decode dropping Kismet bodies). Wave A executed 2026-09-12 (T1–T14/T16; T15 deferred). |
 | — | [`2026-09-12-post-refactor-productize-plan.md`](2026-09-12-post-refactor-productize-plan.md) | current | Merged master sequencer: Wave A = ponytail plan; Wave B = productize (state_count, exec edges, tag-only node_data, unversioned partial). **Executed** on `docs/productize-unversioned` (Wave A + Wave B + review hardening through `2419de4e`); T15 `_run_cases` intentionally out of scope. |
+| — | [`2026-09-13-next-phase-closeout-and-deferred-gates.md`](2026-09-13-next-phase-closeout-and-deferred-gates.md) | current | A1–D1 executed; merged to `dev-0.6.0`. Follow-on: residual docs/gates + G2 + Bundle 1/2 plan below. |
+| — | [`2026-09-13-residual-closeout-g2-zen-schema-plan.md`](2026-09-13-residual-closeout-g2-zen-schema-plan.md) | target | Wave A S1 freeze + batch口径 + wiki Gate C local commit; Wave B G2 cache; Wave C Bundle 1 Zen/IoStore partial; Wave D Bundle 2 usmap/SchemaProvider partial. No push; product-deferred (diff/Pak/C++/batch orchestration) out of scope. |
 
 ## Archive
 

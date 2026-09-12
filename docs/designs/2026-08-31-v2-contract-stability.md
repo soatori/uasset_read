@@ -1,8 +1,10 @@
 # PackageDocument v2 契约稳定性分级（S1）
 
-status: target
+status: current
 
-> 对照 `docs/designs/contract/package_document_v2.schema.json` 给字段分级 stable / experimental，并决定版本字段去留。分级依据：Phase 6（删除旧路径）之前，payload 与 semantic 域尚未定型，保持 experimental。
+> 对照 `docs/designs/contract/package_document_v2.schema.json` 给字段分级 stable / experimental，并决定版本字段去留。
+>
+> **2026-09-13 执行记录（Wave A / Task A1）：** Phase 6 已完成。`format_version: "2.0"` 对 **stable 域** 冻结为兼容承诺；experimental 域已在 schema 标注 `"x-stability": "experimental"`。此后 stable 破坏性变更必须 bump major（`"3.0"`）；experimental 增删改不 bump。
 
 ## format_version 决策：**不加新字段，复用现有 `format_version`**
 
@@ -30,7 +32,7 @@ status: target
 | `diagnostics`（条目结构） | stable | 必填四键定型（schema `:305-351`）；`code` 取值集合是开放集，**新增 code 不算破坏** |
 | `summary` | stable | 键定型（schema `:365-393`） |
 | `next_offset` / `truncation` / `debug` | stable | 截断可发现性契约（canonical §Selection 与 Pagination） |
-| `payloads` | **experimental** | 本轮 fabricate 提取正被撤回为 `PAYLOAD_EXTRACTION_DEFERRED`（见 [`2026-08-31-payload-extraction-path.md`](2026-08-31-payload-extraction-path.md)），descriptor 来源与 `status` 语义待定型 |
+| `payloads` | **experimental** | Descriptor 来源与 `status` 语义仍可演进（cooked sidecar 提取已实现，见 [`2026-08-31-payload-extraction-path.md`](2026-08-31-payload-extraction-path.md)）；schema 已标 `x-stability` |
 
 ### `objects[]`（schema `:162-224`）
 
@@ -42,12 +44,19 @@ status: target
 | `coverage` | **experimental** | `feature` 字符串词汇表由各 handler 自定，无契约（如 `handler.SoundHandler` vs `texture.srgb`，见 `src/uasset_read/v2/handlers.py`） |
 | `flags` | stable | raw/debug-only 原始值，语义即 EObjectFlags |
 
-## 已发现的 schema/实现漂移（记录，随撤回变更一并修）
+## 已发现的 schema/实现漂移（已修）
 
-- **payload id 模式不匹配**：schema 要求 `"^payload:[0-9]+$"`（`:283`），实际 id 是 `payload:export:<i>`（`src/uasset_read/v2/package/legacy.py:489`，工具侧解析同样按此假设：`agent_tools.py:197-198`）。schema 应改为 `"^payload:(export|import):[0-9]+$"`。本文档不改文件，列为 follow-up。
+- ~~**payload id 模式不匹配**~~：schema 已改为 `"^payload:(export|import):[0-9]+$"`（与 `PayloadDescriptor.id` 一致）。
 
-## 落地动作
+## 落地动作（2026-09-13 已执行）
 
-1. schema `$defs` 内为 experimental 子 schema 加 `"x-stability": "experimental"` 标注（`x-` 前缀不影响校验），stable 不加标注即为默认。
-2. `docs/agents/` 消费方指引：experimental 键不得进入跨版本 golden 断言。
-3. Phase 6 完成时输出一次 `format_version` 冻结声明。
+1. [x] schema 内 experimental 子 schema 加 `"x-stability": "experimental"`（stable 不加标注即为默认）：`ObjectEntry.properties`、`ObjectEntry.semantic`、`ObjectEntry.coverage`、顶层 `payloads`。
+2. [x] 消费方指引写入 `docs/reference/agent-dev-reference.md`：experimental 键不得进入跨版本 golden 断言。
+3. [x] Phase 6 完成后输出 `format_version` 冻结声明（见文首执行记录；同步 README / changelog / design index）。
+
+## 冻结声明（normative）
+
+- **Envelope identity:** `"format": "uasset_read.package"`, `"format_version": "2.0"` — stable.
+- **Stable fields** (default when not marked experimental): listed in the tables above under stable; breaking changes bump `format_version` major to `"3.0"`.
+- **Experimental fields:** `objects[].properties`, `objects[].semantic`, `objects[].coverage`, top-level `payloads` (schema `"x-stability": "experimental"`). Additive or breaking changes inside these keys do **not** bump `format_version`.
+- Consumers must not pin cross-version golden assertions on experimental keys.

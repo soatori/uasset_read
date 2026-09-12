@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Contract
+- **`format_version: "2.0"` frozen for stable PackageDocument fields (S1, 2026-09-13).** Breaking changes to stable keys bump major to `"3.0"`. Experimental keys (`objects[].properties`, `objects[].semantic`, `objects[].coverage`, top-level `payloads`) are marked `"x-stability": "experimental"` in the schema and do not bump the version when they change.
+
 ### Breaking Changes
 - Removed five CLI flags that argparse accepted but no code read: `--log-level`, `--log-cleanup` / `--no-log-cleanup`, `--log-max-bytes`, `--log-backup-count`, `--log-format`. (The then-remaining `--clean-logs` chain was later retired in Gate L below.)
 - Retired parent-asset resolution (Gate G product decision): deleted `parent_resolver.py`, removed `resolve_parents` / `parent_root` from `parse_package_document`, and moved `--include-parent-assets` / `--asset-root` into the CLI retired-flag rejection set (exit 2).

@@ -56,7 +56,8 @@
       "items": {
         "$ref": "#/$defs/PayloadDescriptor"
       },
-      "description": "Large payload descriptors (texture, audio, etc.)."
+      "description": "Large payload descriptors (texture, audio, etc.).",
+      "x-stability": "experimental"
     },
     "diagnostics": {
       "type": "array",
@@ -198,20 +199,23 @@
           "$ref": "#/$defs/ObjectStatus"
         },
         "properties": {
-          "description": "Property bag (raw/debug views, depth >= object)."
+          "description": "Property bag (raw/debug views, depth >= object).",
+          "x-stability": "experimental"
         },
         "properties_summary": {
           "$ref": "#/$defs/PropertySummary"
         },
         "semantic": {
           "type": ["object", "null"],
-          "description": "Domain-specific extension (only when depth >= asset and handler supports this object)."
+          "description": "Domain-specific extension (only when depth >= asset and handler supports this object).",
+          "x-stability": "experimental"
         },
         "coverage": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/CoverageEntry"
-          }
+          },
+          "x-stability": "experimental"
         },
         "diagnostics": {
           "type": "array",
