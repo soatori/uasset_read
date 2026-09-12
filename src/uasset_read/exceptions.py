@@ -23,5 +23,15 @@ class ParseError(UAssetError):
     """Parse error."""
 
 
+class StreamPoisonedError(ParseError):
+    """Raised when a poison diagnostic aborts a nested multi-entry value parse.
+
+    Subclasses ParseError so the export property loop's tolerant recovery path
+    can catch it, but parsers re-raise it before their general ParseError
+    fallback so Map/Set/Array entry loops stop instead of retrying the same
+    misaligned position for every remaining entry.
+    """
+
+
 class ExportBoundsExceeded(ParseError):
     """Raised when a read or seek would exceed the current export bound."""

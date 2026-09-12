@@ -634,8 +634,9 @@ class MaterialHandler(_SupportsClasses):
         return result if len(result) > 1 else None
 
     def capability(self, result: dict[str, Any]) -> str:
-        # Flags/editor-position alone are a summary projection; decoded only
-        # when a core material field (parent/blend/shading/expressions) was found.
+        # Flags/editor-position alone are a summary projection. The decoded
+        # branch is reserved for when enrich projects parent/blend/shading/
+        # expressions; until then Material never claims semantic=complete.
         if any(k in result for k in ("parent", "blend_mode", "shading_model", "expression_count")):
             return "decoded"
         return "summary"

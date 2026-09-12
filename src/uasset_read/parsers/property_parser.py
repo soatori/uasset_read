@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 from uasset_read.models.properties import PropertyTag, PropertyValue
 from uasset_read.models.fallback import PropertyFallback, FallbackReason
-from uasset_read.exceptions import ParseError
+from uasset_read.exceptions import ParseError, StreamPoisonedError
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
     PKG_UnversionedProperties,
@@ -95,13 +95,15 @@ _KNOWN_PROPERTY_TYPES = {
     "GuidProperty",
 }
 
-# Poison diagnostics mean the stream is misaligned; continuing the export
-# property loop only multiplies the same OOR (Lyra MovieScene x28).
+# Poison diagnostics mean the stream is misaligned (cursor rolled back);
+# continuing the export property loop only multiplies the same OOR (Lyra
+# MovieScene x28). name_index_out_of_range is intentionally excluded: read_name
+# advances 8 bytes and returns "None" without rollback, so an aligned stream
+# with an incomplete name map is a supported recovery path, not a stream abort.
 _PROPERTY_STREAM_POISON_CODES = frozenset(
     {
         "fstring_out_of_range",
         "fstring_length_exceeds_limit",
-        "name_index_out_of_range",
     }
 )
 
@@ -114,14 +116,8 @@ def _stream_is_poisoned(archive: "FArchive", diag_mark: int) -> bool:
     return any(d.code in _PROPERTY_STREAM_POISON_CODES for d in new_diags)
 
 
-class _StreamPoisonedError(ParseError):
-    """Raised when a poison diagnostic aborts a nested multi-entry value parse.
-
-    Subclasses ParseError so the export property loop's tolerant recovery path
-    can catch it, but parse_property_value re-raises it before its general
-    ParseError fallback so Map/Set/Array entry loops stop instead of retrying
-    the same misaligned position for every remaining entry.
-    """
+# Shared control-flow exception (also re-raised by parse_struct_property).
+_StreamPoisonedError = StreamPoisonedError
 
 
 _IMPORT_JSON_MAX = 65536

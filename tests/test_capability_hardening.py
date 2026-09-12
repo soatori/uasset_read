@@ -38,7 +38,7 @@ def test_material_instance_zero_params_is_not_semantic_complete():
 # --- Task 5: DataTable row field projection ---
 
 
-def test_table_rows_decode_field_values_when_tagged():
+def test_table_rows_project_empty_field_skeleton_for_none_only_rows():
     import struct
 
     from uasset_read.archive import ByteArchive
