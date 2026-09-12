@@ -25,7 +25,7 @@ from uasset_read.models.properties import (
     SoftObjectPathValue,
 )
 from uasset_read.parsers.errors import BINARY_READ_ERRORS
-from uasset_read.exceptions import ParseError
+from uasset_read.exceptions import ParseError, StreamPoisonedError
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
     MAX_ARRAY_COUNT,
@@ -949,6 +949,9 @@ def parse_struct_property(
                 ),
             )
             fields[inner_tag.name] = field_value
+    except StreamPoisonedError:
+        # Control-flow signal: do not swallow into an opaque StructValue.
+        raise
     except (struct.error, ParseError, OSError, ValueError):
         if declared_struct_type in _TAGGED_FALLBACK_STRUCTS:
             raise
@@ -1364,7 +1367,10 @@ def _dispatch_key_parse(
         if tag is not None:
             struct_type = getattr(tag, "key_type_struct", None)
         dummy_tag = PropertyTag(name="Key", type="StructProperty", size=0, struct_type=struct_type or "Unknown")
-        return parse_struct_property(dummy_tag, archive, name_map, export_map, summary)
+        # Route through parse_property_value so poison diagnostics abort the
+        # multi-entry map loop instead of opaque-swallowing inside the struct.
+        parse_property_value = _get_parse_property_value()
+        return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
 
     return None
 
@@ -1388,7 +1394,9 @@ def _dispatch_value_parse(
         if tag is not None:
             struct_type = getattr(tag, "value_type_struct", None)
         dummy_tag = PropertyTag(name="Value", type="StructProperty", size=0, struct_type=struct_type or "Unknown")
-        return parse_struct_property(dummy_tag, archive, name_map, export_map, summary)
+        # Same as keys: poison must abort the map entry loop, not become opaque.
+        parse_property_value = _get_parse_property_value()
+        return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
 
     dummy_tag = PropertyTag(name="Value", type=value_type, size=0)
     parse_property_value = _get_parse_property_value()
