@@ -225,6 +225,108 @@ def test_reader_boundaries_reject_malformed_access():
         sd = [d for d in arc.get_structured_diagnostics() if d.code == "fname_index_shift_recovered"]
         assert sd and sd[0].offset == 4 and sd[0].fallback == "shifted_read"
 
+    def property_loop_aborts_on_fstring_out_of_range():
+        """A misaligned FString length must stop the export property stream (P0 Lyra)."""
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from uasset_read.models.diagnostics import Diagnostic
+        from uasset_read.models.properties import PropertyTag
+        from uasset_read.parsers import property_parser
+        from uasset_read.parsers.property_parser import _read_property_loop
+
+        tag_calls = {"n": 0}
+
+        class _StubArchive:
+            def __init__(self):
+                self._diags: list = []
+                self._pos = 0
+
+            def tell(self):
+                return self._pos
+
+            def seek(self, pos):
+                self._pos = pos
+
+            def total_size(self):
+                return 1000
+
+            def get_structured_diagnostics(self):
+                return self._diags
+
+            def read_i32(self):
+                return 0
+
+            def read(self, n):
+                return b"\x00" * n
+
+        def fake_read_property_tag(archive, name_map, **kwargs):
+            tag_calls["n"] += 1
+            if tag_calls["n"] == 1:
+                archive._pos += 8
+                return PropertyTag(name="Foo", type="StrProperty", size=4)
+            archive._diags.append(
+                Diagnostic(
+                    code="fstring_out_of_range",
+                    stage="read_fstring",
+                    offset=99,
+                    message="FString at pos 99: UTF-8 expected 7667713 bytes but only 8 remain",
+                    object_id="export:9",
+                )
+            )
+            # Second property is non-None so an unpatched loop keeps going.
+            archive._pos += 8
+            return PropertyTag(name="Bar", type="StrProperty", size=4)
+
+        archive = _StubArchive()
+        with (
+            patch.object(property_parser, "read_property_tag", side_effect=fake_read_property_tag),
+            patch.object(property_parser, "read_tag_value_bounded", return_value="ok"),
+        ):
+            props = _read_property_loop(
+                export=SimpleNamespace(
+                    class_index=None, object_name="MovieScene_0", serial_offset=0, serial_size=1000
+                ),
+                archive=archive,
+                summary=SimpleNamespace(file_version_ue4=522, file_version_ue5=1018, package_flags=0),
+                name_map=["None", "Foo", "Bar"],
+                export_map=[],
+                import_map=None,
+                mappings=None,
+                property_end=1000,
+                tolerant=True,
+            )
+        assert isinstance(props, list)
+        assert tag_calls["n"] == 2
+
+    def import_data_json_prelude_is_skipped_before_tagged_stream():
+        import struct
+
+        from uasset_read.archive import ByteArchive
+        from uasset_read.parsers.property_parser import (
+            _maybe_skip_import_data_json_prelude,
+        )
+
+        json_body = b'[{"RelativeFilename" : "x.wav"}]'
+        blob = struct.pack("<i", len(json_body)) + json_body + b"\x00" * 8
+        arc = ByteArchive(blob)
+        assert (
+            _maybe_skip_import_data_json_prelude(arc, class_name="AssetImportData", region_end=len(blob))
+            is True
+        )
+        assert arc.tell() == 4 + len(json_body)
+
+        arc2 = ByteArchive(blob)
+        assert (
+            _maybe_skip_import_data_json_prelude(arc2, class_name="Material", region_end=len(blob)) is False
+        )
+        assert arc2.tell() == 0
+
+        arc3 = ByteArchive(struct.pack("<i", 0x01000000) + b"\xff" * 16)
+        assert (
+            _maybe_skip_import_data_json_prelude(arc3, class_name="AssetImportData", region_end=20) is False
+        )
+
     def export_map_recoveries_are_attributed_to_their_slot():
         import struct
         from types import SimpleNamespace
@@ -416,6 +518,14 @@ def test_reader_boundaries_reject_malformed_access():
             ("recovery.fstring_all_null_recorded", fstring_all_null_recorded_both_encodings),
             ("recovery.fname_shift_recorded", fname_shift_recovery_is_recorded),
             ("recovery.export_map_attribution", export_map_recoveries_are_attributed_to_their_slot),
+            (
+                "recovery.property_loop_aborts_on_fstring_oor",
+                property_loop_aborts_on_fstring_out_of_range,
+            ),
+            (
+                "recovery.import_data_json_prelude_skipped",
+                import_data_json_prelude_is_skipped_before_tagged_stream,
+            ),
             ("fname.display_external_number", test_fname_display_uses_external_number),
             ("iostore.rejects_non_toc_input", test_iostore_rejects_non_toc_input),
             ("iostore.rejects_unsupported_shapes", test_iostore_rejects_unsupported_shapes),
@@ -2965,9 +3075,11 @@ def test_test_suite_structure_gate():
         "test_blueprint_decode.py",
         "test_blueprint_graph.py",
         "test_bulk_data_parser.py",
+        "test_capability_hardening.py",
         "test_cli.py",
         "test_core.py",
         "test_handler_capability_ledger.py",
+        "test_parse_hardening.py",
         "test_payload_extraction.py",
         "test_samples.py",
         "test_size_baseline.py",

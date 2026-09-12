@@ -1251,6 +1251,7 @@ def _read_table_rows(
     result: dict[str, Any] = {
         "row_count": 0,
         "row_names": [],
+        "rows": [],
         "curve_table_mode": None,
         "row_bytes_consumed": 0,
         "complete": False,
@@ -1278,6 +1279,7 @@ def _read_table_rows(
         result["curve_table_mode"] = _CURVE_TABLE_MODES.get(mode_raw, f"Unknown({mode_raw})")
         header = 5
     names: list[str] = []
+    rows_out: list[dict[str, Any]] = []
     payload = ByteArchive(blob[header:])
     # Tag reads must use the real package layout version, not a fresh default.
     payload._file_version_ue4 = getattr(archive, "_file_version_ue4", 0)
@@ -1289,16 +1291,19 @@ def _read_table_rows(
         idx, number = struct.unpack_from("<II", blob, header + payload.tell())
         payload.seek(payload.tell() + 8)
         if not 0 <= idx < len(name_map):
-            names.append(f"<row:{idx}>")
+            display_name = f"<row:{idx}>"
         elif number > 0:
             # NAME_INTERNAL_TO_EXTERNAL: the on-disk Number is internal, so the
             # display instance is Number-1 (LinkerLoad.h, same rule as FArchive.read_name).
-            names.append(f"{name_map[idx]}_{number - 1}")
+            display_name = f"{name_map[idx]}_{number - 1}"
         else:
-            names.append(name_map[idx])
+            display_name = name_map[idx]
+        names.append(display_name)
         # Each row is a tagged property stream terminated by the None tag (DataTable.cpp
         # LoadStructData -> SerializeItem; versioned path = SerializeTaggedProperties,
-        # CurveTable.cpp:112-171 same). Skip field values; stop at None.
+        # CurveTable.cpp:112-171 same). Collect field name/type/size descriptors
+        # (values not decoded yet); stop at None.
+        row_fields: dict[str, Any] = {}
         while payload.tell() < limit:
             header_pos = payload.tell()
             try:
@@ -1313,7 +1318,9 @@ def _read_table_rows(
                 # on None, which would raise out of a recoverable parse path.
                 payload.seek(header_pos)
                 break
+            row_fields[t.name] = {"type": t.type, "size": int(getattr(t, "size", 0) or 0)}
             payload.seek(t.value_end_offset)
+        rows_out.append({"name": display_name, "fields": row_fields})
     complete = len(names) == row_count
     # The row block is the whole payload: NumRows followed by exactly that many
     # (FName + tagged row stream) records, each ending on its own None tag. Bytes
@@ -1347,6 +1354,7 @@ def _read_table_rows(
         )
     result["row_count"] = len(names)
     result["row_names"] = names
+    result["rows"] = rows_out[:row_count]
     result["row_bytes_consumed"] = payload.tell()
     result["complete"] = complete
     return result

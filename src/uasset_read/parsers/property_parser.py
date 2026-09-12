@@ -95,6 +95,77 @@ _KNOWN_PROPERTY_TYPES = {
     "GuidProperty",
 }
 
+# Poison diagnostics mean the stream is misaligned; continuing the export
+# property loop only multiplies the same OOR (Lyra MovieScene x28).
+_PROPERTY_STREAM_POISON_CODES = frozenset(
+    {
+        "fstring_out_of_range",
+        "fstring_length_exceeds_limit",
+        "name_index_out_of_range",
+    }
+)
+
+
+def _stream_is_poisoned(archive: "FArchive", diag_mark: int) -> bool:
+    """True if a poison diagnostic was recorded since diag_mark."""
+    if not hasattr(archive, "get_structured_diagnostics"):
+        return False
+    new_diags = archive.get_structured_diagnostics()[diag_mark:]
+    return any(d.code in _PROPERTY_STREAM_POISON_CODES for d in new_diags)
+
+
+class _StreamPoisonedError(ParseError):
+    """Raised when a poison diagnostic aborts a nested multi-entry value parse.
+
+    Subclasses ParseError so the export property loop's tolerant recovery path
+    can catch it, but parse_property_value re-raises it before its general
+    ParseError fallback so Map/Set/Array entry loops stop instead of retrying
+    the same misaligned position for every remaining entry.
+    """
+
+
+_IMPORT_JSON_MAX = 65536
+
+
+def _is_import_data_class(class_name: str | None) -> bool:
+    name = class_name or ""
+    return name == "AssetImportData" or ("ImportData" in name and name.startswith("Fbx"))
+
+
+def _maybe_skip_import_data_json_prelude(
+    archive: "FArchive",
+    *,
+    class_name: str | None,
+    region_end: int,
+) -> bool:
+    """Skip UAssetImportData's FAssetImportInfo JSON FString prelude.
+
+    Pre-5.4 packages have no authoritative script region, so the property
+    parser starts at SerialOffset while the import JSON still precedes the
+    tagged stream (object_resources.script_property_region comment / #626).
+    """
+    if not _is_import_data_class(class_name):
+        return False
+    start = archive.tell()
+    if region_end - start < 5:
+        return False
+    # Peek length without committing.
+    length = archive.read_i32()
+    if length <= 0 or length > _IMPORT_JSON_MAX:
+        archive.seek(start)
+        return False
+    if start + 4 + length > region_end:
+        archive.seek(start)
+        return False
+    first = archive.read(1)
+    archive.seek(start)
+    if first not in (b"{", b"["):
+        return False
+    # Consume exactly the FString (length includes optional NUL).
+    archive.seek(start + 4 + length)
+    return True
+
+
 # Lazy import + cache: avoid circular dependency + avoid rebuilding dict per property parse
 _TYPE_HANDLER_MAP: dict | None = None
 
@@ -501,25 +572,40 @@ def parse_property_value(
         # Dispatch based on handler signature
         # Special case: ByteProperty with enum backing needs name_map (reads FName);
         # bypasses the arg table below.
+        diag_mark = (
+            len(archive.get_structured_diagnostics())
+            if hasattr(archive, "get_structured_diagnostics")
+            else 0
+        )
         if tag.type == "ByteProperty" and tag.enum_type is not None:
-            return handler(tag, archive, name_map)
-        dev_notes = False
-        if summary is not None and (getattr(summary, "package_flags", 0) & PKG_FilterEditorOnly) == 0:
-            # FText Base appends DevNotes when FortniteMainBranch >= AddDevNotesToFText=260
-            # and the package was not filtered for editor-only data (TextHistory.cpp:917).
-            from uasset_read.versioning import FORTNITE_GUID, get_custom_version
+            result = handler(tag, archive, name_map)
+        else:
+            dev_notes = False
+            if summary is not None and (getattr(summary, "package_flags", 0) & PKG_FilterEditorOnly) == 0:
+                # FText Base appends DevNotes when FortniteMainBranch >= AddDevNotesToFText=260
+                # and the package was not filtered for editor-only data (TextHistory.cpp:917).
+                from uasset_read.versioning import FORTNITE_GUID, get_custom_version
 
-            dev_notes = get_custom_version(summary, FORTNITE_GUID) >= 260
-        values = {
-            "tag": tag,
-            "archive": archive,
-            "name_map": name_map,
-            "export_map": export_map,
-            "summary": summary,
-            "depth": depth,
-            "dev_notes": dev_notes,
-        }
-        return handler(*(values[n] for n in _ARGS_OVERRIDES.get(tag.type, _ARGS_DEFAULT)))
+                dev_notes = get_custom_version(summary, FORTNITE_GUID) >= 260
+            values = {
+                "tag": tag,
+                "archive": archive,
+                "name_map": name_map,
+                "export_map": export_map,
+                "summary": summary,
+                "depth": depth,
+                "dev_notes": dev_notes,
+            }
+            result = handler(*(values[n] for n in _ARGS_OVERRIDES.get(tag.type, _ARGS_DEFAULT)))
+        if _stream_is_poisoned(archive, diag_mark):
+            # Abort nested multi-entry parsers (Map/Set/Array) that would
+            # re-read the same misaligned position for every remaining entry.
+            raise _StreamPoisonedError(
+                f"Poison diagnostic while parsing '{tag.name}' ({tag.type}); aborting value stream"
+            )
+        return result
+    except _StreamPoisonedError:
+        raise
     except (_struct.error, OSError, ValueError, AttributeError, KeyError, ParseError) as e:
         if not tolerant:
             raise
@@ -733,6 +819,11 @@ def _read_property_loop(
 
         tag = None
         start_pos = None
+        diag_mark = (
+            len(archive.get_structured_diagnostics())
+            if hasattr(archive, "get_structured_diagnostics")
+            else 0
+        )
 
         try:
             # Boundary check: current position should not exceed property data range
@@ -792,6 +883,8 @@ def _read_property_loop(
                             ),
                         )
                     )
+                    if _stream_is_poisoned(archive, diag_mark):
+                        break
                     continue
                 # Recovery failed — break to avoid infinite loop
                 break
@@ -840,6 +933,8 @@ def _read_property_loop(
                                 ),
                             )
                         )
+                        if _stream_is_poisoned(archive, diag_mark):
+                            break
                         continue
                 # Recovery failed, create PropertyFallback
                 properties.append(
@@ -886,6 +981,9 @@ def _read_property_loop(
             if resolved is not None:
                 properties[-1].value = resolved
 
+            if _stream_is_poisoned(archive, diag_mark):
+                break
+
         except ParseError as e:
             # #276: strict mode: propagate directly, no retry
             if not tolerant:
@@ -900,6 +998,8 @@ def _read_property_loop(
                     property_end,
                 )
             )
+            if _stream_is_poisoned(archive, diag_mark):
+                break
 
     return properties
 
@@ -989,6 +1089,16 @@ def parse_properties_from_export(
     # serial block is the property stream (pre-5.4 packages, unversioned properties).
     if not _authoritative:
         property_end = export.serial_offset + export.serial_size
+
+    # Pre-5.4: no authoritative script region; AssetImportData exports may still
+    # begin with UAssetImportData's FAssetImportInfo JSON FString before the
+    # tagged stream (#626). Only skip for non-authoritative regions.
+    if not _authoritative:
+        _maybe_skip_import_data_json_prelude(
+            archive,
+            class_name=skip_class_name,
+            region_end=export.serial_offset + export.serial_size,
+        )
 
     # Unversioned property handling (including opaque fallback)
     unversioned_result = _handle_unversioned_properties(

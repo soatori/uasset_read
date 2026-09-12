@@ -325,8 +325,6 @@ class DataTableHandler(_SupportsClasses):
     per row (CurveTable.cpp:102-171), so the two assets never share a contract.
     """
 
-    capability = "decoded"  # row struct/count read from real property + payload data
-
     classes = ("DataTable", "CurveTable")
 
     def enrich(
@@ -361,6 +359,8 @@ class DataTableHandler(_SupportsClasses):
             result["row_count"] = rows["row_count"]
             if rows.get("row_names"):
                 result["row_names"] = rows["row_names"][:100]
+            if rows.get("rows"):
+                result["rows"] = rows["rows"][:50]
             if is_curve:
                 result["curve_table_mode"] = rows.get("curve_table_mode")
             status = "present" if rows["complete"] else "partial"
@@ -370,6 +370,14 @@ class DataTableHandler(_SupportsClasses):
 
         obj.coverage.append(CoverageEntry(feature="handler.DataTableHandler", status=status))
         return result
+
+    def capability(self, result: dict[str, Any]) -> str:
+        # Decoded only when at least one row carries a non-empty field map;
+        # row-names-only tables stay a summary projection.
+        rows = result.get("rows") or []
+        if any((r.get("fields") or {}) for r in rows):
+            return "decoded"
+        return "summary"
 
 
 class StringTableHandler(_SupportsClasses):
@@ -595,8 +603,6 @@ register_handler(SoundHandler())
 class MaterialHandler(_SupportsClasses):
     """Enrich Material objects with shader/material property summary."""
 
-    capability = "decoded"  # returns output only when real properties were read
-
     classes = ("Material",)
 
     def enrich(
@@ -627,11 +633,16 @@ class MaterialHandler(_SupportsClasses):
         obj.coverage.extend(coverage)
         return result if len(result) > 1 else None
 
+    def capability(self, result: dict[str, Any]) -> str:
+        # Flags/editor-position alone are a summary projection; decoded only
+        # when a core material field (parent/blend/shading/expressions) was found.
+        if any(k in result for k in ("parent", "blend_mode", "shading_model", "expression_count")):
+            return "decoded"
+        return "summary"
+
 
 class MaterialInstanceHandler(_SupportsClasses):
     """Enrich MaterialInstance/MaterialInstanceConstant objects."""
-
-    capability = "decoded"  # returns output only when real properties were read
 
     classes = ("MaterialInstance", "MaterialInstanceConstant")
 
@@ -668,6 +679,19 @@ class MaterialInstanceHandler(_SupportsClasses):
 
         obj.coverage.extend(coverage)
         return result if len(result) > 1 else None
+
+    def capability(self, result: dict[str, Any]) -> str:
+        # Parent-only, zero-param results are a summary projection; decoded
+        # only when the instance actually carries parameter values.
+        if not result.get("has_parent"):
+            return "summary"
+        if (
+            (result.get("scalar_param_count") or 0) > 0
+            or (result.get("vector_param_count") or 0) > 0
+            or (result.get("texture_param_count") or 0) > 0
+        ):
+            return "decoded"
+        return "summary"
 
 
 _BONE_NAME_RE = re.compile(

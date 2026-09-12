@@ -126,12 +126,14 @@ CAPABILITIES = (
         {"kind": "mesh", "mesh_type": "StaticMesh"},
         "partial",  # summary tier: geometry is not decoded
     ),
-    ("FirstPerson_M_PrototypeGrid.uasset", "Material", {"kind": "material"}, "complete"),
+    # Flags/editor-position only — not enough core fields for decoded tier (#629 hardening).
+    ("FirstPerson_M_PrototypeGrid.uasset", "Material", {"kind": "material"}, "partial"),
+    # Parent-only with zero params — not enough core fields for decoded tier.
     (
         "CassiniSample_MI_Template_BaseGray_Metal.uasset",
         "MaterialInstanceConstant",
         {"kind": "material_instance"},
-        "complete",
+        "partial",
     ),
     (
         "StackOBot_BP_Drone.uasset",
