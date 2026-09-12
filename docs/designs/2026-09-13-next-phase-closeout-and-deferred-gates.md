@@ -592,13 +592,24 @@ git commit -m "docs: record deferred capability bundling recommendation without 
 
 # Final Gates (this plan)
 
-- [ ] **F1.** `git status -sb` clean on productize branch (or only `temp/` noise).
-- [ ] **F2.** `ruff check` PASS.
-- [ ] **F3.** `pytest -q` → 226 passed + 2 ucas.
-- [ ] **F4.** `temp/decode_parity.py check` identical.
+- [x] **F1.** `git status -sb` clean on productize branch (or only `temp/` noise).
+- [x] **F2.** `ruff check` PASS.
+- [x] **F3.** `pytest -q` → 226 passed + 2 ucas.
+- [x] **F4.** `temp/decode_parity.py check` identical.
 - [ ] **F5.** `dev-0.6.0` tip == productize tip; **no push**.
-- [ ] **F6.** C notes exist; user received GO/NO-GO; no T15/T13 production edit unless separately authorized.
-- [ ] **F7.** D bundling doc committed; zero production code in D.
+- [x] **F6.** C notes exist; user received GO/NO-GO; no T15/T13 production edit unless separately authorized.
+- [x] **F7.** D bundling doc committed; zero production code in D.
+
+## Phase C decision record (executed)
+
+Research finished 2026-09-13. **No T15/T13 production code was changed.**
+
+| Item | Recommendation | Binding decision |
+| --- | --- | --- |
+| T15 `_run_cases` | **DEFER** | Do **not** migrate to pytest.parametrize under the current `test_test_suite_structure_gate` (14 top-level tests, no decorators). A later scoped GO may cover only the pure sites (reader boundaries, property bag, package document, projection views/budget, schema) **after** an explicit gate amendment design. Site 4 (export-failure monkeypatch stack) and site 5 (handler registry) stay on `_run_cases`. |
+| T13 residual test-tree | **DEFER** (leaning **NO-GO**) | Post-`71ab2b7b` there are **zero** true ≥3×10-line duplicate scaffolds. Do not extract helpers from assertion-local blueprint decode scaffolds. Revisit only if a future wave creates a new ≥3× identical 10+ line cluster. |
+
+Scratch evidence (not committed): `temp/c1-run-cases-survey.md`, `temp/c2-test-tree-survey.md`.
 
 ---
 
