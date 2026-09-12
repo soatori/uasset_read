@@ -1,5 +1,6 @@
 # Next-Phase Closeout, Polish, and Deferred-Gate Decision Plan
 
+> **Status:** current (A1–D1 executed; merged to `dev-0.6.0` at `ae7366c7` + this backfill; worktree/branch cleanup and push under user "all" closeout)
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** On the completed Wave A+B productize branch, (1) merge and backfill plan status without push, (2) land the three non-deferred second-review polish items, (3) research T15/T13 and decide go/no-go from evidence, (4) evaluate which deferred out-of-plan capabilities should be batched into the next project — **without implementing any of them here**.
@@ -73,7 +74,7 @@
 - Consumes: git history proving Wave A (`5b07a2e8` region) and Wave B (`42946379`…`2419de4e`) landed.
 - Produces: docs state `current` / executed so later readers do not re-run A/B.
 
-- [ ] **Step A1.1: Confirm tip and gates before editing docs**
+- [x] **Step A1.1: Confirm tip and gates before editing docs**
 
 ```powershell
 Set-Location "E:/Develop/uasset_read/.worktrees/productize-unversioned"
@@ -87,7 +88,7 @@ $env:PYTHONPATH="E:/Develop/uasset_read/.worktrees/productize-unversioned/src"
 
 Expected: clean tree; ruff PASS; 226 passed + 2 ucas fails; parity identical.
 
-- [ ] **Step A1.2: Rewrite plan header Status**
+- [x] **Step A1.2: Rewrite plan header Status**
 
 Replace:
 
@@ -101,7 +102,7 @@ with:
 > **Status:** current（Wave A 已执行于 `docs/productize-unversioned`；Wave B P0–P8 及二次审查加固已执行；本文仅作完成记录与交接索引）
 ```
 
-- [ ] **Step A1.3: Check off executed Wave A and Wave B steps**
+- [x] **Step A1.3: Check off executed Wave A and Wave B steps**
 
 In the same file, mark every completed checkbox for:
 
@@ -109,7 +110,7 @@ In the same file, mark every completed checkbox for:
 - Wave B Tasks P0–P8 steps (P0.1–P0.3, P1, P2, P3, P4.1–P4.5, P5.1–P5.4, P6.1–P6.3, P7.1–P7.3, P8.1–P8.3) → `[x]`.
 - Leave unchecked only if a step is known not done; expected: all productize steps done.
 
-- [ ] **Step A1.4: Rewrite “执行交接（仍不执行）” footer**
+- [x] **Step A1.4: Rewrite “执行交接（仍不执行）” footer**
 
 Replace the footer with:
 
@@ -123,14 +124,14 @@ Replace the footer with:
 3. Remaining work is outside this plan: Phase A (this document’s successor plan), Phase C research gates, Phase D deferred bundling. See `docs/designs/2026-09-13-next-phase-closeout-and-deferred-gates.md` if present.
 ```
 
-- [ ] **Step A1.5: Update `docs/designs/README.md` index rows**
+- [x] **Step A1.5: Update `docs/designs/README.md` index rows**
 
 For the two `2026-09-12-ponytail-evaluation-fix-plan.md` and `2026-09-12-post-refactor-productize-plan.md` rows:
 
 - Change `status:` cell from `target` to `current`.
 - For productize row, replace “**Not executed.**” with “**Executed** on `docs/productize-unversioned` (Wave A + Wave B + review hardening through `2419de4e`); T15 `_run_cases` intentionally out of scope.”
 
-- [ ] **Step A1.6: Commit docs backfill**
+- [x] **Step A1.6: Commit docs backfill**
 
 ```powershell
 git add docs/designs/2026-09-12-post-refactor-productize-plan.md docs/designs/README.md
@@ -150,7 +151,7 @@ Expected: one commit; working tree clean for docs.
 - Consumes: A1 docs commit on `docs/productize-unversioned`.
 - Produces: `dev-0.6.0` advanced to the productize tip (fast-forward).
 
-- [ ] **Step A2.1: Reconfirm ancestry**
+- [x] **Step A2.1: Reconfirm ancestry**
 
 ```powershell
 Set-Location "E:/Develop/uasset_read/.worktrees/productize-unversioned"
@@ -160,7 +161,7 @@ git rev-list --count dev-0.6.0..docs/productize-unversioned
 
 Expected: ancestry true; count ≈ 27 (26 prior + A1 docs commit).
 
-- [ ] **Step A2.2: Fast-forward merge from the main checkout**
+- [x] **Step A2.2: Fast-forward merge from the main checkout**
 
 ```powershell
 Set-Location "E:/Develop/uasset_read"
@@ -173,7 +174,7 @@ Expected: `Fast-forward`; tip equals productize tip; **do not push**.
 
 If main tree is dirty: stop and report; do not stash user work automatically.
 
-- [ ] **Step A2.3: Spot-check main checkout gates (optional but preferred)**
+- [x] **Step A2.3: Spot-check main checkout gates (optional but preferred)**
 
 ```powershell
 Set-Location "E:/Develop/uasset_read"
@@ -194,7 +195,7 @@ Expected: same 226+2 profile.
 - Consumes: README claims already aligned in `abf7e1fb`.
 - Produces: either a wiki commit **locally only**, or a recorded “blocked: no wiki checkout” note.
 
-- [ ] **Step A3.1: Probe for a local wiki checkout**
+- [x] **Step A3.1: Probe for a local wiki checkout**
 
 ```powershell
 $roots = @(
@@ -205,7 +206,7 @@ $roots = @(
 foreach ($r in $roots) { if (Test-Path $r) { Write-Output "FOUND $r"; Get-ChildItem $r | Select-Object -First 10 Name } }
 ```
 
-- [ ] **Step A3.2: Branch on result**
+- [x] **Step A3.2: Branch on result**
 
 - **Not found (expected on this machine):** write a one-line note in the commit body of A4 or in `temp/wiki-sync.txt`: `wiki checkout not present; deferred until user provides path`. Do **not** invent a remote push.
 - **Found:** open the wiki Home/Sidebar pages that still claim Semantic 1.x / pre-Wave-B blueprint features; update only pages that contradict README (pin-level links, exec_chains, tag-derived node_data, unversioned partial). Commit message: `docs: align wiki blueprint/unversioned claims with post-subtraction v2`. **No push.**
@@ -225,7 +226,7 @@ Order: B1 Variable test → B2 exec orientation comment → B3 FText dead check.
 - Consumes: existing negative assertion (size/offset stubs rejected).
 - Produces: a **conditional** positive path: if any Variable node’s projected `node_data` contains `MemberName` (string non-empty), assert it is primitive and not a fake; if none exist on current fixtures, the test still enforces the negative contract and documents the empty positive with an explicit inventory assert (count == 0 on today’s sample) so a future sample flip is visible.
 
-- [ ] **Step B1.1: Inventory current Variable node_data on the sample**
+- [x] **Step B1.1: Inventory current Variable node_data on the sample**
 
 ```powershell
 Set-Location "E:/Develop/uasset_read/.worktrees/productize-unversioned"
@@ -235,7 +236,7 @@ $env:PYTHONPATH="E:/Develop/uasset_read/.worktrees/productize-unversioned/src"
 
 Recorded baseline (2026-09-12): `n=84`, `ref=0`, `member=0`. Use these numbers in the test comments only if still true after re-probe.
 
-- [ ] **Step B1.2: Extend the Variable test**
+- [x] **Step B1.2: Extend the Variable test**
 
 In `tests/test_blueprint_decode.py`, replace/extend `test_variable_nodes_do_not_fake_member_reference` with the following body (keep the existing negative loop; add the positive-when-present and inventory pins):
 
@@ -281,7 +282,7 @@ def test_variable_nodes_do_not_fake_member_reference():
     assert member_names == []
 ```
 
-- [ ] **Step B1.3: Run the single test**
+- [x] **Step B1.3: Run the single test**
 
 ```powershell
 & "C:\Program Files\Python314\python.exe" -m pytest tests/test_blueprint_decode.py::test_variable_nodes_do_not_fake_member_reference -v
@@ -289,7 +290,7 @@ def test_variable_nodes_do_not_fake_member_reference():
 
 Expected: PASS.
 
-- [ ] **Step B1.4: Commit**
+- [x] **Step B1.4: Commit**
 
 ```powershell
 git add tests/test_blueprint_decode.py
@@ -307,11 +308,11 @@ git commit -m "test: pin Variable MemberName when present without fabricating re
 - Consumes: existing flip at lines ~360–364 (prefer output→input; no peer category check).
 - Produces: comment/docstring honesty; **no behavior change**.
 
-- [ ] **Step B2.1: Confirm no functional change is required**
+- [x] **Step B2.1: Confirm no functional change is required**
 
 Current code only checks the current pin is `category==exec`; when flipping to the peer output pin it does **not** re-check that the peer is also exec. That is intentional for unique undirected emission: one side being exec is enough to register the connection. Document that; do not add a peer filter (would change edge sets and parity).
 
-- [ ] **Step B2.2: Extend the docstring**
+- [x] **Step B2.2: Extend the docstring**
 
 Append to `summarize_exec_edges` docstring:
 
@@ -323,7 +324,7 @@ Append to `summarize_exec_edges` docstring:
     side of the link table.
 ```
 
-- [ ] **Step B2.3: Confirm parity and tests**
+- [x] **Step B2.3: Confirm parity and tests**
 
 ```powershell
 & "C:\Program Files\Python314\python.exe" -m pytest tests/test_blueprint_decode.py -q
@@ -332,7 +333,7 @@ Append to `summarize_exec_edges` docstring:
 
 Expected: PASS / identical (docstring-only).
 
-- [ ] **Step B2.4: Commit**
+- [x] **Step B2.4: Commit**
 
 ```powershell
 git add src/uasset_read/serializers/blueprint_graph.py
@@ -350,13 +351,13 @@ git commit -m "docs: note exec edge orientation does not re-check peer category"
 - Consumes: early bound `if start + 5 > property_end: return None` before the two reads that advance exactly 5 bytes.
 - Produces: same None/rewind contract; fewer impossible branches. Existing tests in `tests/test_unversioned_fixtures.py::TestUnversionedFTextStopPath` must stay green.
 
-- [ ] **Step B3.1: Prove the check is dead (reasoning + probe)**
+- [x] **Step B3.1: Prove the check is dead (reasoning + probe)**
 
 After `read_i32()` + `read_u8()`, `archive.tell() == start + 5`. The guard `start + 5 > property_end` already returned. Therefore `tell() > property_end` cannot become true on the Base path without an exception, which the outer `except` already handles with rewind.
 
 Optional probe (Base history under tight property_end) already covered by existing unit tests using a synthetic payload.
 
-- [ ] **Step B3.2: Delete the dead lines**
+- [x] **Step B3.2: Delete the dead lines**
 
 In `_read_unversioned_ftext`, change:
 
@@ -376,7 +377,7 @@ to:
 
 Leave the early `start + 5 > property_end` guard and the `history in (255, 0xFF)` + unknown-history rewind paths unchanged.
 
-- [ ] **Step B3.3: Run focused + full gates**
+- [x] **Step B3.3: Run focused + full gates**
 
 ```powershell
 & "C:\Program Files\Python314\python.exe" -m pytest tests/test_unversioned_fixtures.py -q
@@ -387,7 +388,7 @@ Leave the early `start + 5 > property_end` guard and the `history in (255, 0xFF)
 
 Expected: unversioned tests PASS; ruff PASS; suite 226+2; parity identical (or note any intentional decode-hash delta — expected none for this pure branch delete).
 
-- [ ] **Step B3.4: Commit**
+- [x] **Step B3.4: Commit**
 
 ```powershell
 git add src/uasset_read/parsers/property_parser.py
@@ -410,7 +411,7 @@ C produces evidence and a GO/NO-GO. **No production refactor** unless C2/C3 end 
 - Consumes: current helper at `tests/test_core.py:49-54`.
 - Produces: recommendation GO / NO-GO / DEFER with effort and risk; no code change.
 
-- [ ] **Step C1.1: Enumerate call sites and case shapes**
+- [x] **Step C1.1: Enumerate call sites and case shapes**
 
 ```powershell
 Set-Location "E:/Develop/uasset_read/.worktrees/productize-unversioned"
@@ -423,7 +424,7 @@ print('call_sites', locs)"
 
 Manually record for each site: whether cases are multi-assertion packs, whether isolation contexts wrap them, and whether pytest parametrize would change failure attribution.
 
-- [ ] **Step C1.2: Draft the native-pytest shape (design only)**
+- [x] **Step C1.2: Draft the native-pytest shape (design only)**
 
 Preferred target shape if GO:
 
@@ -438,16 +439,16 @@ or nested functions collected via a thin loop that still yields separate test it
 - Keep `_isolated_handlers` semantics.
 - No skip/xfail; zero production-code change; size-baseline tests may grow slightly.
 
-- [ ] **Step C1.3: Estimate blast radius**
+- [x] **Step C1.3: Estimate blast radius**
 
 - Count approximate assertion blocks under all `_run_cases` sites.
 - Note whether any case depends on prior case order (shared module state). If yes → strong NO-GO for blind parametrize.
 
-- [ ] **Step C1.4: Write `temp/c1-run-cases-survey.md`**
+- [x] **Step C1.4: Write `temp/c1-run-cases-survey.md`**
 
 Required sections: Call sites; Dependency/order risks; Proposed shape; Effort (S/M/L); Recommendation (`GO` | `NO-GO` | `DEFER`); Rationale ≤10 lines.
 
-- [ ] **Step C1.5: Decision gate (user-facing)**
+- [x] **Step C1.5: Decision gate (user-facing)**
 
 Present the note’s Recommendation to the user. **Do not start T15 implementation in this plan** unless the user opens a new execution authorization in the same conversation after GO.
 
@@ -463,11 +464,11 @@ Present the note’s Recommendation to the user. **Do not start T15 implementati
 - Consumes: prior dedupe already landed.
 - Produces: residual-duplicate inventory; GO/NO-GO for a second tightening pass.
 
-- [ ] **Step C2.1: List remaining fixture boilerplate clusters**
+- [x] **Step C2.1: List remaining fixture boilerplate clusters**
 
 Search for repeated `parse_package_document` + `project_document` scaffolds in `tests/` (exclude intentionally independent contract tests).
 
-- [ ] **Step C2.2: Classify each cluster**
+- [x] **Step C2.2: Classify each cluster**
 
 | Class | Action if GO |
 | --- | --- |
@@ -475,7 +476,7 @@ Search for repeated `parse_package_document` + `project_document` scaffolds in `
 | Same shape, different assertion | keep separate |
 | Isolation-critical | keep separate |
 
-- [ ] **Step C2.3: Write `temp/c2-test-tree-survey.md` and recommend**
+- [x] **Step C2.3: Write `temp/c2-test-tree-survey.md` and recommend**
 
 Default expectation: **DEFER / NO-GO** unless a cluster is ≥3 identical 10+ line blocks with no isolation need.
 
@@ -483,8 +484,8 @@ Default expectation: **DEFER / NO-GO** unless a cluster is ≥3 identical 10+ li
 
 ### Task C3: Record Phase C outcome (no code)
 
-- [ ] **Step C3.1:** After C1+C2 notes exist, send the user a short GO/NO-GO table (T15, T13).
-- [ ] **Step C3.2:** If both NO-GO/DEFER, stop. If GO, offer to write a **new** implementation plan (`docs/designs/YYYY-MM-DD-t15-run-cases-refactor.md`) — do not execute under this plan.
+- [x] **Step C3.1:** After C1+C2 notes exist, send the user a short GO/NO-GO table (T15, T13).
+- [x] **Step C3.2:** If both NO-GO/DEFER, stop. If GO, offer to write a **new** implementation plan (`docs/designs/YYYY-MM-DD-t15-run-cases-refactor.md`) — do not execute under this plan.
 
 ---
 
@@ -512,7 +513,7 @@ D answers: **which deferred capabilities should ship as one future project vs st
 | D-DIFF | CLI `--diff` | D1 retirement plan deferred |
 | D-CPP | Blueprint C++ skeleton | Gate K retired; skeleton still unmigrated |
 
-- [ ] **Step D1.1: Build the edge table**
+- [x] **Step D1.1: Build the edge table**
 
 For each pair, mark coupling: `hard` (same fixtures, same reader), `soft` (shared protocol only), `none`.
 
@@ -530,7 +531,7 @@ Seed expectations to verify against source (correct if wrong):
 | D-CPP ↔ D-ZEN | none | Blueprint source emission independent of container |
 | D-CPP ↔ Wave B blueprint | soft | Consumes same object model; no Zen need |
 
-- [ ] **Step D1.2: Apply bundling rules**
+- [x] **Step D1.2: Apply bundling rules**
 
 Rules (fixed for this evaluation):
 
@@ -540,7 +541,7 @@ Rules (fixed for this evaluation):
 4. **C++ skeleton** only bundles with Blueprint semantic depth work, never with containers.
 5. **No sample acquisition** inside a bundle; fixtures remain a listed precondition with `fixture_gaps`.
 
-- [ ] **Step D1.3: Produce recommended bundles**
+- [x] **Step D1.3: Produce recommended bundles**
 
 Fill this table in the memo (values below are the **hypothesis to confirm**):
 
@@ -554,11 +555,11 @@ Fill this table in the memo (values below are the **hypothesis to confirm**):
 
 D-PAK: evaluate whether it joins Bundle 1 or stays its own pack-index project; default **own project** unless Pak samples share the Zen IoStore trust path in source review.
 
-- [ ] **Step D1.4: Write scratch memo `temp/d-deferred-bundling-memo.md`**
+- [x] **Step D1.4: Write scratch memo `temp/d-deferred-bundling-memo.md`**
 
 Sections: Capability inventory; Edge table (verified); Bundle recommendation; Explicit non-bundles; Open questions for the user (fixtures, product need for batch, whether C++ skeleton is ever wanted).
 
-- [ ] **Step D1.5: Commit the decision record (docs only)**
+- [x] **Step D1.5: Commit the decision record (docs only)**
 
 Copy the durable parts into `docs/designs/2026-09-13-deferred-capability-bundling.md`:
 
@@ -596,7 +597,7 @@ git commit -m "docs: record deferred capability bundling recommendation without 
 - [x] **F2.** `ruff check` PASS.
 - [x] **F3.** `pytest -q` → 226 passed + 2 ucas.
 - [x] **F4.** `temp/decode_parity.py check` identical.
-- [ ] **F5.** `dev-0.6.0` tip == productize tip; **no push**.
+- [x] **F5.** `dev-0.6.0` tip == productize tip (merged). Push authorized by user "all" closeout; performed after this commit.
 - [x] **F6.** C notes exist; user received GO/NO-GO; no T15/T13 production edit unless separately authorized.
 - [x] **F7.** D bundling doc committed; zero production code in D.
 
