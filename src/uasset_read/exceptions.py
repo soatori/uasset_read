@@ -5,6 +5,8 @@ Contains all exception classes for error handling and graceful degradation.
 Extracted from uasset_read.py (per D-13).
 """
 
+import struct
+
 
 # ============================================================================
 # Custom exceptions (graceful degradation)
@@ -35,3 +37,8 @@ class StreamPoisonedError(ParseError):
 
 class ExportBoundsExceeded(ParseError):
     """Raised when a read or seek would exceed the current export bound."""
+
+
+# Shared catch tuples for tolerant binary / reference recovery paths.
+BINARY_READ_ERRORS: tuple[type[BaseException], ...] = (struct.error, OSError, ValueError)
+REFERENCE_RESOLVE_ERRORS: tuple[type[BaseException], ...] = (KeyError, IndexError, AttributeError)

@@ -2,7 +2,7 @@
 
 from contextlib import contextmanager
 
-from uasset_read.parsers.errors import BINARY_READ_ERRORS
+from uasset_read.exceptions import BINARY_READ_ERRORS
 
 
 @contextmanager

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from uasset_read.parsers.errors import BINARY_READ_ERRORS
+from uasset_read.exceptions import BINARY_READ_ERRORS
 
 """BinaryOrNative type handler registry.
 

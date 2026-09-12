@@ -9,7 +9,7 @@ import logging
 import struct
 from typing import TYPE_CHECKING
 
-from uasset_read.parsers.errors import BINARY_READ_ERRORS
+from uasset_read.exceptions import BINARY_READ_ERRORS
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive

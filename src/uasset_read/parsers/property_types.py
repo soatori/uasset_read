@@ -24,7 +24,7 @@ from uasset_read.models.properties import (
     DelegateValue,
     SoftObjectPathValue,
 )
-from uasset_read.parsers.errors import BINARY_READ_ERRORS
+from uasset_read.exceptions import BINARY_READ_ERRORS
 from uasset_read.exceptions import ParseError, StreamPoisonedError
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,

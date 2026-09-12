@@ -50,3 +50,12 @@ def test_max_reasonable_map_property_is_large_cap():
 def test_ue5_version_pins():
     assert UE5_PAYLOAD_TOC == 1002
     assert UE5_DATA_RESOURCES == 1009
+
+
+def test_error_tuples_live_on_exceptions_module():
+    import struct
+
+    from uasset_read.exceptions import BINARY_READ_ERRORS, REFERENCE_RESOLVE_ERRORS
+
+    assert BINARY_READ_ERRORS == (struct.error, OSError, ValueError)
+    assert REFERENCE_RESOLVE_ERRORS == (KeyError, IndexError, AttributeError)
