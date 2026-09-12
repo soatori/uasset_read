@@ -1323,8 +1323,6 @@ def _read_unversioned_ftext(archive: FArchive, property_end: int) -> Any | None:
         _flags = archive.read_i32()
         history = archive.read_u8()
         if history == 0:  # Base
-            if archive.tell() > property_end:
-                return None
             namespace = archive.read_fstring()
             key = archive.read_fstring()
             source = archive.read_fstring()
