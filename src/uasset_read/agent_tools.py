@@ -27,6 +27,24 @@ _MAX_BYTES_GET_DIAG = 8192
 _MAX_BYTES_EXTRACT_PAYLOAD = 65536
 
 
+def _err(
+    code: str,
+    stage: str,
+    *,
+    recoverable: bool,
+    message: str,
+    **extra: Any,
+) -> dict[str, Any]:
+    """Stable structured-error envelope for agent tools."""
+    return {
+        "error": message,
+        "code": code,
+        "stage": stage,
+        "recoverable": recoverable,
+        **extra,
+    }
+
+
 def inspect_package(
     file_path: str,
     *,
@@ -90,13 +108,13 @@ def get_object(
     if not any(o.id == object_id for o in doc.objects):
         # Stable structured-diagnostic shape (cf. extract_payload's deferred code):
         # consumers branch on code/stage/recoverable, not on message text.
-        return {
-            "error": f"Object '{object_id}' not found",
-            "code": "OBJECT_NOT_FOUND",
-            "stage": "agent.get_object",
-            "recoverable": True,
-            "available_ids": [o.id for o in doc.objects[:20]],
-        }
+        return _err(
+            "OBJECT_NOT_FOUND",
+            "agent.get_object",
+            recoverable=True,
+            message=f"Object '{object_id}' not found",
+            available_ids=[o.id for o in doc.objects[:20]],
+        )
 
     full = project_document(doc, object_ids=[object_id], view="raw")
     # The whole response is what the budget has to cover; the object alone is
@@ -104,15 +122,15 @@ def get_object(
     size = len(json.dumps(full, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
     if size <= max_bytes:
         return full["objects"][0]
-    return {
-        "error": f"Object '{object_id}' exists but needs {size} bytes, over the {max_bytes}-byte budget",
-        "code": "BUDGET_EXHAUSTED",
-        "stage": "agent.get_object",
-        "recoverable": True,
-        "object_id": object_id,
-        "max_bytes": max_bytes,
-        "min_bytes": size,
-    }
+    return _err(
+        "BUDGET_EXHAUSTED",
+        "agent.get_object",
+        recoverable=True,
+        message=f"Object '{object_id}' exists but needs {size} bytes, over the {max_bytes}-byte budget",
+        object_id=object_id,
+        max_bytes=max_bytes,
+        min_bytes=size,
+    )
 
 
 def list_dependencies(
@@ -214,23 +232,23 @@ def extract_payload(
 
     main_path = Path(file_path)
     if not main_path.exists():
-        return {
-            "error": f"Package not found: {file_path}",
-            "code": "PACKAGE_NOT_FOUND",
-            "stage": "agent.extract_payload",
-            "recoverable": False,
-        }
+        return _err(
+            "PACKAGE_NOT_FOUND",
+            "agent.extract_payload",
+            recoverable=False,
+            message=f"Package not found: {file_path}",
+        )
 
     # Discover sidecars
     try:
         bundle = open_package_bundle(str(main_path))
     except Exception as e:
-        return {
-            "error": f"Failed to open package bundle: {e}",
-            "code": "BUNDLE_OPEN_FAILED",
-            "stage": "agent.extract_payload",
-            "recoverable": False,
-        }
+        return _err(
+            "BUNDLE_OPEN_FAILED",
+            "agent.extract_payload",
+            recoverable=False,
+            message=f"Failed to open package bundle: {e}",
+        )
 
     # Build sidecar paths dict
     sidecar_paths: dict[str, Path] = {}
@@ -305,14 +323,14 @@ def extract_payload(
     # Enforce max_bytes on success path
     response_size = len(json.dumps(response_payload, ensure_ascii=False).encode("utf-8"))
     if response_size > max_bytes:
-        return {
-            "error": f"Payload response ({response_size} bytes) exceeds budget ({max_bytes} bytes)",
-            "code": "BUDGET_EXHAUSTED",
-            "stage": "agent.extract_payload",
-            "recoverable": True,
-            "object_id": payload_id,
-            "max_bytes": max_bytes,
-            "min_bytes": response_size,
-        }
+        return _err(
+            "BUDGET_EXHAUSTED",
+            "agent.extract_payload",
+            recoverable=True,
+            message=f"Payload response ({response_size} bytes) exceeds budget ({max_bytes} bytes)",
+            object_id=payload_id,
+            max_bytes=max_bytes,
+            min_bytes=response_size,
+        )
 
     return response_payload
