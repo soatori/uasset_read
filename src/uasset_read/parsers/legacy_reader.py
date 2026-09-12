@@ -44,9 +44,6 @@ from ..models.object_model import (
     ObjectStatus,
     Region,
     Relation,
-    ROLES_ASSET,
-    ROLES_CDO,
-    ROLES_GENERATED_CLASS,
 )
 from ..versioning import FORTNITE_GUID, VersionContext, get_custom_version
 
@@ -271,11 +268,11 @@ def _build_object_record_direct(
     # Determine roles
     roles: list[str] = []
     if b_is_asset:
-        roles.append(ROLES_ASSET)
+        roles.append("asset")
     if name.startswith("Default__"):
-        roles.append(ROLES_CDO)
+        roles.append("class_default_object")
     if name.endswith("_C") and not name.startswith("Default__"):
-        roles.append(ROLES_GENERATED_CLASS)
+        roles.append("generated_class")
 
     # Serial region
     serial_region = None
@@ -622,7 +619,7 @@ class LegacyPackageReader:
             # property parsing has attributed them to their objects.
 
             # 13. Compute asset_object_ids
-            asset_ids = tuple(obj.id for obj in objects if ROLES_ASSET in obj.roles)
+            asset_ids = tuple(obj.id for obj in objects if "asset" in obj.roles)
 
             # 14. Build PackageInfo
             package_info = _build_package_info_from_summary(summary, name_map, source_path=self._main_path)

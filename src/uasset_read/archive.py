@@ -54,7 +54,6 @@ class FArchive:
         self._tolerant: bool = tolerant
         self._mmap: mmap.mmap | None = None
         self._use_mmap: bool = False
-        self._logger = logging.getLogger(__name__)
         self._name_map: list | None = None  # optional name table cache
         self._name_warnings_seen: set[int] = set()  # read_name out-of-range index dedup (#411, #481)
         self._structured_diagnostics: list[Diagnostic] = []  # stable-code diagnostics
@@ -414,7 +413,7 @@ class FArchive:
             # UTF-16 alignment padding noise reduction: common alignment sizes +
             # 4-byte aligned positions → debug instead of structured (#369)
             if utf16 and self._is_likely_alignment_padding(pos_before + 4, len(data)):
-                self._logger.debug(
+                logger.debug(
                     "FString at pos %d: length=%d, encoding=UTF-16, "
                     "all nulls (likely alignment padding), consumed=%d bytes",
                     pos_before,
@@ -451,7 +450,7 @@ class FArchive:
                     message=f"FString at pos {pos_before}: length={length}, encoding=UTF-8, "
                     f"truncated at null (null_at={first_null_idx}, nulls_total={null_count})",
                 )
-                self._logger.debug(
+                logger.debug(
                     "FString hex detail: pos=%d, hex=%s, preview_orig=%r, truncated_value=%r",
                     pos_before,
                     data[:32].hex(),
@@ -465,7 +464,7 @@ class FArchive:
             # If so, advance to file end to prevent offset cascade (#138).
             # Alignment padding noise reduction: common alignment sizes + 4-byte aligned positions → debug (#369)
             if self._is_likely_alignment_padding(pos_before + 4, len(data)):
-                self._logger.debug(
+                logger.debug(
                     "FString at pos %d: length=%d, encoding=UTF-8, "
                     "all nulls (likely alignment padding), "
                     "consumed=%d bytes, end_pos=%d",
@@ -483,7 +482,7 @@ class FArchive:
                     fallback="used_empty_string",
                     message=f"FString at pos {pos_before}: length={length}, encoding=UTF-8, all nulls (completely corrupted)",
                 )
-            self._logger.debug("FString hex detail: pos=%d, hex=%s", pos_before, data[:32].hex())
+            logger.debug("FString hex detail: pos=%d, hex=%s", pos_before, data[:32].hex())
             # Padding zone detection: scan ahead up to 1KB for non-zero data
             current_pos = self.tell()
             remaining = self._file_size - current_pos
@@ -494,7 +493,7 @@ class FArchive:
                 non_zero = sum(1 for b in scan_data if b != 0)
                 # If less than 5% non-zero bytes → padding zone
                 if scan_size > 0 and non_zero / scan_size < 0.05:
-                    self._logger.debug(
+                    logger.debug(
                         "FString padding zone detected at pos %d: "
                         "%d/%d non-zero bytes in next %d bytes, seeking to file end",
                         current_pos,
@@ -615,7 +614,7 @@ class FArchive:
                 # string/JSON data pass an index-only check far too easily.
                 # Instance numbers are tiny in practice; 24 bits is generous.
                 if 0 <= test_index < len(name_map) and test_number < (1 << 24):
-                    self._logger.debug(
+                    logger.debug(
                         "read_name: recovered at offset %d (adjust %+d), index=%d", try_pos, offset_adjust, test_index
                     )
                     base_name = name_map[test_index]

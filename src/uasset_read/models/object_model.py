@@ -83,8 +83,3 @@ class Dependency:
     class_name: str
     object_name: str
     package_name: str = ""
-
-
-ROLES_ASSET = "asset"
-ROLES_GENERATED_CLASS = "generated_class"
-ROLES_CDO = "class_default_object"

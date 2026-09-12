@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from functools import cached_property, lru_cache
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 import logging
@@ -142,21 +142,21 @@ class PackageBundle:
     container: str = "filesystem"
     files: dict[str, str] = field(default_factory=dict)
 
-    @cached_property
+    @property
     def uexp_path(self) -> Path | None:
-        """Return .uexp sidecar path if it exists, else None (cached)."""
+        """Return .uexp sidecar path if it exists, else None."""
         path = self.files.get(".uexp")
         return Path(path) if path is not None else None
 
-    @cached_property
+    @property
     def ubulk_path(self) -> Path | None:
-        """Return .ubulk sidecar path if it exists, else None (cached)."""
+        """Return .ubulk sidecar path if it exists, else None."""
         path = self.files.get(".ubulk")
         return Path(path) if path is not None else None
 
-    @cached_property
+    @property
     def uptnl_path(self) -> Path | None:
-        """Return .uptnl sidecar path if it exists, else None (cached)."""
+        """Return .uptnl sidecar path if it exists, else None."""
         path = self.files.get(".uptnl")
         return Path(path) if path is not None else None
 

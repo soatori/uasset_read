@@ -171,11 +171,6 @@ def test_sidecar_discovery():
     # T_ParserBulk does NOT have .uptnl sidecar
     assert bundle.uptnl_path is None
 
-    # Verify Path caching: same object returned on repeated access
-    assert bundle.uexp_path is bundle.uexp_path
-    assert bundle.ubulk_path is bundle.ubulk_path
-    assert bundle.uptnl_path is bundle.uptnl_path
-
 
 def test_agent_tool_extract_payload():
     """Test agent tool extract_payload with real fixture."""
