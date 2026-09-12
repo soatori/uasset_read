@@ -1,11 +1,13 @@
 # Residual Closeout, G2 Cache, and Bundle 1/2 Execution Plan
 
-> **Status:** target（本文是执行计划；勾选步骤后改 current 并记录 commit）
+> **Status:** current（Wave A + Wave B 已执行；**Wave C/D 用户暂缓**——不实现 Zen/IoStore 与 SchemaProvider；Wave E 收尾。本文为完成记录）
 > **Date:** 2026-09-13
-> **Branch context:** `dev-0.6.0` tip `7d1275c1`（本地领先 origin 3 个 parse-hardening 提交）
+> **Branch context:** `dev-0.6.0` tip `c2151db4`（本地领先 origin 8 提交；合并入 `master` 见执行记录）
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax.
 
 **Goal:** 关闭重构后的文档/门禁残留；实现已冻结的 G2 解析缓存；按 UE 源码证据启动 Bundle 1（Zen/IoStore package body）与 Bundle 2（SchemaProvider / cooked unversioned）。产品向 deferred（`--diff`、Pak 全产品路径、C++ skeleton、batch 编排增强）**只记录不实现**。
+
+**2026-09-13 执行边界（用户决策）：** 只执行 Wave A（S1/batch/wiki Gate C）与 Wave B（G2）。**Wave C（Zen/IoStore）与 Wave D（SchemaProvider）暂缓不实现**；对应 Bundles 仍见 `2026-09-13-deferred-capability-bundling.md`。合并动作：本地 `dev-0.6.0` → `master` fast-forward；**不 push** 主仓与 wiki。
 
 **Architecture:**
 
@@ -292,6 +294,8 @@ git commit -m "feat: cache PackageDocument parses per path-stat-depth-key (G2)"
 
 ## Wave C — Bundle 1: Zen package body + IoStore package path（research → bounded implement）
 
+> **DEFERRED 2026-09-13（user: 先合并，不处理 iostore/zen）.** No C0–C4 work was executed. Re-open only under a new authorized plan.
+
 ### Task C0: Research note (scratch, not committed)
 
 **Files:**
@@ -405,6 +409,8 @@ git commit -m "feat: add IoStore range source and partial Zen package table read
 
 ## Wave D — Bundle 2: SchemaProvider / cooked unversioned（research → bounded implement）
 
+> **DEFERRED 2026-09-13（same user decision as Wave C).** No D0–D2 work was executed.
+
 ### Task D0: Research note
 
 **Files:**
@@ -460,8 +466,8 @@ Default: **GO on usmap path hardening + SchemaProvider-shaped interface behind m
 
 ### Task E1: Product deferred ledger (no code)
 
-- [ ] **E1.1** Ensure `2026-09-13-deferred-capability-bundling.md` open questions remain listed; add one line: “2026-09-13 plan executed Waves A–D; Pak/diff/C++/batch-orchestration still out of scope.”
-- [ ] **E1.2** Design index: mark executed plan `current` with checkboxes; G2 implemented; S1 current; Zen partial noted.
+- [x] **E1.1** Ensure `2026-09-13-deferred-capability-bundling.md` open questions remain listed; add one line: “2026-09-13 plan executed Waves A–B only; C/D deferred; Pak/diff/C++/batch-orchestration still out of scope.”
+- [x] **E1.2** Design index: plan `current`; G2 implemented; S1 current; Wave C/D deferred in plan body.
 
 ### Task E2: Final gates
 

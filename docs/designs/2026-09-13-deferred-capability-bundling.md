@@ -72,4 +72,4 @@ A new implementation plan is required before any Bundle N code lands, and it mus
 4. Should the known-missing `.ucas` gap (#624 test failures) become the formal Bundle 1 fixture goal, or wait for a separately redistributable Zen package?
 5. Is a loose-sidecar (legacy cooked, no Zen) variant of route A worth a small separate slice, or should route A fold entirely under "real descriptors + Zen"?
 
-**Residual note 2026-09-13:** product answers above remain open except batch live-mode; residual plan Waves A–D do not implement diff/Pak/C++.
+**Residual note 2026-09-13:** product answers above remain open except batch live-mode. Residual plan executed Waves A–B only (S1 freeze, batch口径, wiki Gate C local commit, G2 cache); **Wave C/D (Zen/IoStore, SchemaProvider) deferred by user**; diff/Pak/C++ not implemented.
