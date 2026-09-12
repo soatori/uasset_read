@@ -331,6 +331,12 @@ def summarize_exec_edges(graphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ids on both sides so consumers can join; when both orientations exist the
     edge prefers output→input. Distinct from ``graph["edge_count"]``, which
     counts every resolved link record. Graphs with no exec edges are omitted.
+
+    Orientation flip only prefers an output endpoint when the current pin is
+    not already output. It does not re-validate that the peer pin's category
+    is also ``exec``: the walk already required *this* pin to be exec, and
+    filtering on the peer would drop legitimate edges recorded on only one
+    side of the link table.
     """
     out: list[dict[str, Any]] = []
     for graph in graphs:
