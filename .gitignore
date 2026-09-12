@@ -95,8 +95,13 @@ docs/reference/refactor-reference.md
 # Accidentally added submodule (no .gitmodules mapping)
 .claude/skills/unreal-mcp-skills
 
+# Local skill install (unreal-mcp) + its lockfile — not part of the library
+.claude/skills/unreal-mcp/
+skills-lock.json
+
 # Git worktrees
 .worktrees/
+worktrees/
 
 # Documentation build artifacts
 docs/superpowers/
@@ -105,7 +110,6 @@ docs/compose/
 
 # Wiki submodule (external)
 wiki/
-worktrees/
 
 # dotnet build output for the golden dumper (dev-time only)
 tests/samples/golden/dumper/bin/
