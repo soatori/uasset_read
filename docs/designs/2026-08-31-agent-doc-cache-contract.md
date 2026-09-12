@@ -1,8 +1,8 @@
 # Agent 工具 PackageDocument 缓存契约（G2）
 
-status: target
+status: implemented
 
-> 本轮不实现。定义 `agent_tools` 六个工具共享 `PackageDocument` 的缓存契约；实现落地时对外签名不得变化。
+> **2026-09-13 执行记录（Wave B）：** 缓存落在 `src/uasset_read/package.py` 的 `parse_package_document` → `_parse_cached`（`functools.lru_cache(maxsize=8)`）。公开签名不变；命中返回同一 `PackageDocument` 对象（只读共享）。验收见 `tests/test_core.py::test_package_document_cache_is_process_local`。 Monkeypatch isolation tests call `_parse_cached.cache_clear()` so injected failures are not served from a prior hit.
 
 ## 现状（基线 bd3309a7 核实；下表行号为该基线时点的快照，实现时以当前代码符号为准）
 

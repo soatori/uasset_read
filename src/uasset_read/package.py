@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from functools import cached_property
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Literal
 import logging
@@ -204,6 +204,39 @@ def open_package_bundle(path: str) -> PackageBundle:
     )
 
 
+@lru_cache(maxsize=8)
+def _parse_cached(
+    resolved: str,
+    _mtime_ns: int,
+    _size: int,
+    depth: Literal["package", "object", "asset", "decode"],
+    ids_key: tuple[str, ...] | None,
+    tolerant: bool,
+    mappings_path: str | None,
+    game: str | None,
+) -> PackageDocument:
+    """Process-local parse cache body (G2). Unused key fields force invalidation."""
+    from .parsers.legacy_reader import LegacyPackageReader
+
+    bundle = open_package_bundle(resolved)
+    archive = bundle.open_archive(tolerant=tolerant)
+    try:
+        reader = LegacyPackageReader(
+            tolerant=tolerant,
+            mappings_path=mappings_path,
+            game=game,
+        )
+        object_ids = None if ids_key is None else list(ids_key)
+        return reader.read(
+            depth=depth,
+            object_ids=object_ids,
+            archive=archive,
+            main_path=bundle.main_path,
+        )
+    finally:
+        archive.close()
+
+
 def parse_package_document(
     file_path: str | Path,
     *,
@@ -218,22 +251,22 @@ def parse_package_document(
     Reads the binary format directly using LegacyPackageReader.
     Discovers sidecar files (.uexp, .ubulk, .uptnl) via PackageBundle
     so that the reader receives an archive spanning main + .uexp.
-    """
-    from .parsers.legacy_reader import LegacyPackageReader
 
+    Repeated calls with the same resolved path, mtime_ns, size, depth,
+    object_ids, tolerant, mappings_path, and game return the same document
+    object (G2). Callers must treat the returned document as read-only.
+    """
     bundle = open_package_bundle(str(file_path))
-    archive = bundle.open_archive(tolerant=tolerant)
-    try:
-        reader = LegacyPackageReader(
-            tolerant=tolerant,
-            mappings_path=mappings_path,
-            game=game,
-        )
-        return reader.read(
-            depth=depth,
-            object_ids=object_ids,
-            archive=archive,
-            main_path=bundle.main_path,
-        )
-    finally:
-        archive.close()
+    main = Path(bundle.main_path).resolve()
+    st = main.stat()
+    ids_key = None if object_ids is None else tuple(sorted(object_ids))
+    return _parse_cached(
+        str(main),
+        st.st_mtime_ns,
+        st.st_size,
+        depth,
+        ids_key,
+        tolerant,
+        mappings_path,
+        game,
+    )

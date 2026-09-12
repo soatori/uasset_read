@@ -19,7 +19,7 @@ These sit beside the canonical target on purpose. Each carries its own `status:`
 | D1 | [`2026-08-31-v1-retirement-plan.md`](2026-08-31-v1-retirement-plan.md) | target | Gates in §3 and the §5/§6 decisions. §1/§2/§4 are pre-Phase-6 snapshots. **Gate C wiki residual committed locally 2026-09-13 (`wiki` `a10946b`); closes on wiki remote push only.** |
 | D2 | [`2026-08-31-semantic-handlers-boundary.md`](2026-08-31-semantic-handlers-boundary.md) | current + target | §2.1/§2.3/§2.4 and stage 3. §1 and the `semantic/` half of §2 describe a deleted package. |
 | G1 | [`2026-08-31-version-context-field-contract.md`](2026-08-31-version-context-field-contract.md) | target | VersionContext field contract. |
-| G2 | [`2026-08-31-agent-doc-cache-contract.md`](2026-08-31-agent-doc-cache-contract.md) | target | Deferred: shared-`PackageDocument` cache contract. |
+| G2 | [`2026-08-31-agent-doc-cache-contract.md`](2026-08-31-agent-doc-cache-contract.md) | implemented | Process-local `lru_cache` on `parse_package_document` (Wave B, 2026-09-13). |
 | G3 | [`2026-08-31-handler-registry-thread-safety.md`](2026-08-31-handler-registry-thread-safety.md) | target | Deferred until multi-threaded MCP consumption is real. |
 | G4 | [`2026-08-31-projection-layering.md`](2026-08-31-projection-layering.md) | target | Projection → truncation → serialization boundary. |
 | S1 | [`2026-08-31-v2-contract-stability.md`](2026-08-31-v2-contract-stability.md) | current | Stable-field freeze of `format_version: "2.0"` (2026-09-13); experimental keys marked in schema; breaking stable changes bump major. |

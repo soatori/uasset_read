@@ -7,6 +7,8 @@ the case name appears in the failure message.
 
 Like ``test_samples.py`` this file feeds duck-typed stub archives/summaries to internal
 helpers, so the strict-object rules are off; ``src/uasset_read`` is the pyright gate (ci.yml).
+
+Top-level test count is locked by ``test_test_suite_structure_gate`` (currently 15).
 """
 
 # pyright: reportArgumentType=false, reportAttributeAccessIssue=false
@@ -1142,21 +1144,26 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
     def test_parse_past_serial_end_is_flagged_not_silent():
         import uasset_read.parsers.property_parser as pp
-        from uasset_read.package import parse_package_document
+        from uasset_read.package import _parse_cached, parse_package_document
 
-        def fake_overrun(**kwargs):
-            export = kwargs["export"]
-            kwargs["archive"].seek(export.serial_offset + export.serial_size + 8)
-            return []
+        _parse_cached.cache_clear()
+        try:
+            def fake_overrun(**kwargs):
+                export = kwargs["export"]
+                kwargs["archive"].seek(export.serial_offset + export.serial_size + 8)
+                return []
 
-        monkeypatch.setattr(pp, "parse_properties_from_export", fake_overrun)
-        overrun_doc = parse_package_document(str(PACKAGE_SAMPLE), depth="object")
+            monkeypatch.setattr(pp, "parse_properties_from_export", fake_overrun)
+            overrun_doc = parse_package_document(str(PACKAGE_SAMPLE), depth="object")
+        finally:
+            _parse_cached.cache_clear()
         overrun = [d for d in overrun_doc.diagnostics if d.code == "EXPORT_PROPERTY_BOUNDS_EXCEEDED"]
         assert overrun, "property parse exceeded the serial region with no diagnostic"
         assert all(d.object_id and d.stage == "properties.tagged" for d in overrun)
 
     def test_export_table_failure_preserves_slot_identity():
         import uasset_read.serializers.object_resources as orm
+        from uasset_read.package import _parse_cached
 
         healthy = _document(str(PACKAGE_SAMPLE), depth="package")
         first_name = healthy.objects[0].name
@@ -1170,8 +1177,12 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
                 raise ValueError("injected export table entry failure")
             return real(**kwargs)
 
-        monkeypatch.setattr(orm, "ObjectExport", boom)
-        doc = parse_package_document(str(PACKAGE_SAMPLE))  # direct call, NOT the lru_cache'd _document
+        _parse_cached.cache_clear()
+        try:
+            monkeypatch.setattr(orm, "ObjectExport", boom)
+            doc = parse_package_document(str(PACKAGE_SAMPLE))  # depth=asset default; cleared G2 cache so boom runs
+        finally:
+            _parse_cached.cache_clear()
         assert doc.objects[0].name == first_name  # slot 0 kept its identity
         assert all(o.name != second_name for o in doc.objects)  # second export did NOT become export:0
         assert any(d.code == "EXPORT_TABLE_TRUNCATED" for d in doc.diagnostics)
@@ -3066,6 +3077,56 @@ def test_get_struct_size_matches_lwc_tables_for_shadowed_names():
         assert get_struct_size(name, 1005) == double_size, name
 
 
+def test_package_document_cache_is_process_local():
+    """G2: same path-stat-depth-key returns one PackageDocument object.
+
+    Cache lives at the parse layer (``package.parse_package_document``).
+    Keys include resolved path, mtime_ns, size, depth, sorted object_ids,
+    tolerant, mappings_path, and game. Callers must treat hits as read-only.
+    """
+    import os
+    import shutil
+    import tempfile
+
+    from uasset_read.package import parse_package_document, _parse_cached
+
+    _parse_cached.cache_clear()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            sample = Path(tmp) / "cache_sample.uasset"
+            shutil.copy2(PACKAGE_SAMPLE, sample)
+
+            doc_a = parse_package_document(str(sample), depth="package")
+            doc_b = parse_package_document(str(sample), depth="package")
+            assert doc_a is doc_b
+
+            # Different depth is a different key (no containment hits).
+            doc_object = parse_package_document(str(sample), depth="object")
+            assert doc_object is not doc_a
+
+            # object_ids list order is normalized; None vs [] are distinct.
+            doc_ids_ab = parse_package_document(
+                str(sample), depth="package", object_ids=["export:1", "export:0"]
+            )
+            doc_ids_ba = parse_package_document(
+                str(sample), depth="package", object_ids=["export:0", "export:1"]
+            )
+            assert doc_ids_ab is doc_ids_ba
+            doc_ids_empty = parse_package_document(
+                str(sample), depth="package", object_ids=[]
+            )
+            assert doc_ids_empty is not doc_a
+            assert doc_ids_empty is not doc_ids_ab
+
+            # Touch mtime_ns → miss; old key object is not reused.
+            st0 = sample.stat()
+            os.utime(sample, ns=(st0.st_atime_ns, st0.st_mtime_ns + 1_000_000_000))
+            doc_touched = parse_package_document(str(sample), depth="package")
+            assert doc_touched is not doc_a
+    finally:
+        _parse_cached.cache_clear()
+
+
 def test_test_suite_structure_gate():
     import ast
 
@@ -3090,7 +3151,8 @@ def test_test_suite_structure_gate():
     assert subdirs == {"samples", "serialization"}
     tree = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
     funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
-    assert len(funcs) == 14
+    # 15: G2 process-local PackageDocument cache contract (Wave B).
+    assert len(funcs) == 15
     assert not any(isinstance(n, ast.ClassDef) for n in tree.body)
     # The design bans decorators on test functions; cache helpers like
     # _document legitimately carry @lru_cache, so the check is scoped to

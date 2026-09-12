@@ -216,7 +216,7 @@ Commit main repo docs change.
 - Consumes: G2 契约全文；`agent_tools` 已全部走 `parse_package_document`。
 - Produces: 同 key 二次 parse 返回同一 `PackageDocument` 对象；API 签名不变。
 
-- [ ] **Step B1.1: Internal hashable wrapper**
+- [x] **Step B1.1: Internal hashable wrapper**
 
 ```python
 # package.py (sketch — match contract exactly)
@@ -254,11 +254,11 @@ Constraints:
 - Returned doc is shared and treated read-only (projection already promises non-mutation).
 - Do **not** wrap agent tools; cache lives only at parse layer.
 
-- [ ] **Step B1.2: Preserve error paths**
+- [x] **Step B1.2: Preserve error paths**
 
 Nonexistent path / directory must keep current structured behavior. Cache only after successful `stat`. Failed parses: **do not cache** (contract: only cache successful documents — implement `_parse_cached` so exceptions propagate and are not stored; `lru_cache` does not store exceptions — verify).
 
-- [ ] **Step B1.3: Tests (top-level `test_package_document_cache_is_process_local`)**
+- [x] **Step B1.3: Tests (top-level `test_package_document_cache_is_process_local`)**
 
 Add **one** new top-level test in `test_core.py` covering:
 
@@ -269,11 +269,11 @@ Add **one** new top-level test in `test_core.py` covering:
 
 Bump structure gate: `assert len(funcs) == 14` → `15`, with comment that G2 needs an isolated process-local cache contract test.
 
-- [ ] **Step B1.4: Size baseline + docs**
+- [x] **Step B1.4: Size baseline + docs**
 
 Run size baseline test; update `tests/size-baseline.json` if required. Set G2 doc status `implemented`. Design index row update.
 
-- [ ] **Step B1.5: Commit B1**
+- [x] **Step B1.5: Commit B1**
 
 ```powershell
 git add src/uasset_read/package.py tests/test_core.py tests/size-baseline.json docs/designs/2026-08-31-agent-doc-cache-contract.md docs/designs/README.md
@@ -284,9 +284,9 @@ git commit -m "feat: cache PackageDocument parses per path-stat-depth-key (G2)"
 
 ### Task B2: Wave B gates
 
-- [ ] **B2.1** ruff + full pytest green.
-- [ ] **B2.2** Contract checks: `is` identity; mtime invalidation; no signature change (`inspect.signature(parse_package_document)` unchanged).
-- [ ] **B2.3** No agent_tools edit required; if any test asserts re-parse side effects, fix the test not the contract.
+- [x] **B2.1** ruff + full pytest green.
+- [x] **B2.2** Contract checks: `is` identity; mtime invalidation; no signature change (`inspect.signature(parse_package_document)` unchanged).
+- [x] **B2.3** No agent_tools edit required; if any test asserts re-parse side effects, fix the test not the contract.
 
 ---
 
