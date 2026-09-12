@@ -168,11 +168,11 @@ git commit -m "docs: mark v2 --batch as current and keep only --diff deferred"
 - Consumes: 已核实的 wiki dirty diff（Gate K/L 文案）。
 - Produces: wiki 工作树干净；Gate C 代码/文案侧关闭，**push 门禁保持 open 并写明**。
 
-- [ ] **Step A3.1: Review wiki dirty diff against source**
+- [x] **Step A3.1: Review wiki dirty diff against source**
 
 确认每个改动与 `src/uasset_read/kismet/`、CLI retired flags、K0 expression contract 一致；不得把 target 说成 current。
 
-- [ ] **Step A3.2: Commit wiki locally (no push)**
+- [x] **Step A3.2: Commit wiki locally (no push)**
 
 ```powershell
 Set-Location E:/Develop/uasset_read/wiki
@@ -180,7 +180,7 @@ git add 01-Getting-Started/Overview.md 01-Getting-Started/Quick-Start.md 02-Arch
 git commit -m "docs: finish Gate K/L wiki residual (remove translator body_builder cpp_code clean-logs claims)"
 ```
 
-- [ ] **Step A3.3: Update Gate C note in main repo**
+- [x] **Step A3.3: Update Gate C note in main repo**
 
 In `2026-08-31-v1-retirement-plan.md` header note:
 
