@@ -354,7 +354,9 @@ def test_variable_nodes_do_not_fake_member_reference():
 
     Unmatched tags store ``{size, offset}`` only. Until MemberName/MemberParent
     (or equivalent primitives) survive in tags, that locator must not be
-    projected as VariableReference.
+    projected as VariableReference. When MemberName *does* appear it must be a
+    non-empty string primitive — a regression guard for the day fixtures carry
+    real member tags, without inventing data today.
     """
     from uasset_read import parse_package_document
     from uasset_read.projection import project_document
@@ -371,12 +373,21 @@ def test_variable_nodes_do_not_fake_member_reference():
         if "Variable" in (n.get("type") or "")
     ]
     assert nodes
+    member_names = []
     for node in nodes:
         node_data = node.get("node_data") or {}
         var_ref = node_data.get("VariableReference")
         if var_ref is not None:
             assert isinstance(var_ref, dict)
             assert set(var_ref) - {"size", "offset"}, f"opaque locator leaked: {var_ref}"
+        member = node_data.get("MemberName")
+        if member is not None:
+            assert isinstance(member, str) and member, f"MemberName must be a non-empty string: {member!r}"
+            member_names.append(member)
+    # Today's CombatCharacter Variable tags have no MemberName primitives.
+    # If this assert fails after a fixture change, that is a visible inventory
+    # flip — update the comment and keep the positive constraints above.
+    assert member_names == []
 
 
 def test_project_document_decode_max_bytes_keeps_k0_functions():
