@@ -6,6 +6,7 @@ status: target
 > 关联：`docs/designs/2026-08-26-package-first-uasset-parser-refactor.md`（Phase 6 删除旧路径）；Issue #621；本文与 `2026-08-31-semantic-handlers-boundary.md`（D2）、`2026-08-31-version-context-field-contract.md`（G1）配套。
 > **2026-09-05 执行记录**：本文冻结的退役契约已执行——Phase 6（#621，`ae8027e1`）删除 v1 管线，`--legacy-json` 现为 explicit unsupported 报错退出（非静默降级），`semantic/`、`renderers/`、`pipeline/`、`ir_builder.py`、`core/`、`link/` 已从 `src/` 消失。因此 §1、§2、§4 中描述双轨并存与"本轮不删代码"的段落均为 **historical 快照**，不再反映现状；§3 门禁与 §5/§6 决策记录仍为指导性内容，不得归为 historical。
 > **Gate C “文档同步”项：2026-09-05 已在工作树完成，尚未推送。** wiki（独立仓库 `uasset_read.wiki`）已全部重写为 v2：Home/Sidebar 与 01-07 各目录页中的 Semantic 1.x、`run.py`、`parse_single`、renderer 系统、`--markdown`/`--legacy-json` 等均已降级为 historical/retired，PAK/IoStore/raw-file/C++ skeleton 降级为 target，VarType 与 Kismet 明确标为 current。**在 wiki 仓库提交并推送之前，本项不得视为已关闭。**
+> **Residual note 2026-09-13：** `--batch` 已在 v2 CLI 以 live 形态回归（目录遍历 + `uasset_read.batch` 报告；见 `cli.py` 与 `docs/reference/agent-dev-reference.md`）。§5 中 “batch 仍 deferred” 的历史表述只对 v1 `batch_worker` 编排成立；工作流对中的 **`--diff` 仍 deferred**。主仓 push 不在 residual plan 范围。
 
 ## 1. 双轨现状（historical：基线 `bd3309a7` 快照，双轨已由 Phase 6 终结）
 
@@ -97,7 +98,7 @@ v2 直接复用、删除 v1 时必须保留或收编：`serializers/{package_sum
 | Markdown 渲染 | `renderers/markdown_renderer.py`、`--markdown` | **wontfix** | 属于被废弃的旧版输出格式；v2 唯一输出是 PackageDocument JSON |
 | 格式注册表 | `core.list_formats`、`--list-formats` | **wontfix** | 只剩一种格式，注册表无对象可列 |
 
-仍为 deferred（不是输出格式，属工作流/解析能力，各自等产品决策）：`--batch`（reader 级批量）、`--diff`（schema 化对比）。parent-assets 原实现已于 2026-09-10 Gate G 退役（见 §7）。
+仍为 deferred（不是输出格式，属工作流/解析能力，各自等产品决策）：`--diff`（schema 化对比）。~~`--batch`~~ **已非 deferred**：v2 CLI live 目录遍历（2026-09-13 residual note；`batch_worker` 隔离进程编排未重建）。parent-assets 原实现已于 2026-09-10 Gate G 退役（见 §7）。
 
 落地事实（`git ls-files` 核实，非文档推断）：`semantic/`、`renderers/`、`schemas/`、`core/`、`pipeline/`、`ir_builder.py`、`batch_worker.py`、`blueprint/`、`bulk/` 在 `src/uasset_read/` 下均无 tracked 文件——即上述 wontfix 能力的代码已不存在，本决策只关闭"重建"预期，不产生删除工作。
 

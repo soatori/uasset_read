@@ -139,7 +139,7 @@ git commit -m "docs: freeze PackageDocument 2.0 stable contract and annotate exp
 - Consumes: `cli.py` live `--batch`；README 与 agent-dev-reference 已正确。
 - Produces: 设计索引与 bundling 记录不再与源码矛盾。
 
-- [ ] **Step A2.1: Rewrite D-BATCH rows**
+- [x] **Step A2.1: Rewrite D-BATCH rows**
 
 将 D-BATCH 状态改为：**current（v2 CLI live `--batch`/`--batch-format`；uasset_read.batch report）**。D-DIFF 仍 deferred。Bundle 3 收窄为 **D-DIFF only**（或标注 batch 已出包）。
 
@@ -147,7 +147,7 @@ v1 retirement §5：保留 historical 叙事，但文首 execution note 增加�
 
 > Residual note 2026-09-13: `--batch` is live again on the v2 CLI (directory walk + `uasset_read.batch`). Only `--diff` remains deferred among the old workflow pair.
 
-- [ ] **Step A2.2: Commit A2**
+- [x] **Step A2.2: Commit A2**
 
 ```powershell
 git add docs/designs/2026-09-13-deferred-capability-bundling.md docs/designs/2026-08-31-v1-retirement-plan.md docs/designs/README.md
