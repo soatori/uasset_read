@@ -192,10 +192,10 @@ Commit main repo docs change.
 
 ### Task A4: Wave A gates
 
-- [ ] **A4.1** `ruff check` PASS。
-- [ ] **A4.2** `pytest -q` 全绿（≥236）。
-- [ ] **A4.3** schema 契约测试仍通过（`x-stability` 不破坏校验）。
-- [ ] **A4.4** `git status` 主仓仅预期提交；`wiki/` clean。
+- [x] **A4.1** `ruff check` PASS。
+- [x] **A4.2** `pytest -q` 全绿（≥236）。
+- [x] **A4.3** schema 契约测试仍通过（`x-stability` 不破坏校验）。
+- [x] **A4.4** `git status` 主仓仅预期提交；`wiki/` clean。
 
 ---
 
