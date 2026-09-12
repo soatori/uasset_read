@@ -12,7 +12,8 @@ that use native serialization instead of property tag serialization.
 
 import logging
 import struct
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from uasset_read.parsers.parse_guard import safe_parse
 

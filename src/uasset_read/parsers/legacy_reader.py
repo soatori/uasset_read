@@ -10,7 +10,8 @@ from __future__ import annotations
 import contextlib
 import struct
 from pathlib import Path
-from typing import Any, Literal, Sequence
+from collections.abc import Sequence
+from typing import Any, Literal
 
 from ..archive import ByteArchive, SourceInfo
 from ..constants import PKG_Cooked, PKG_FilterEditorOnly, PKG_UnversionedProperties

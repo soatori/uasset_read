@@ -10,7 +10,8 @@ pairs (e.g. Borderlands 4) get a handler below.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
