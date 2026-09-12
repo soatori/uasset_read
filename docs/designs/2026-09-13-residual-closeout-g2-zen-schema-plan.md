@@ -471,11 +471,19 @@ Default: **GO on usmap path hardening + SchemaProvider-shaped interface behind m
 
 ### Task E2: Final gates
 
-- [ ] **E2.1** ruff PASS.
-- [ ] **E2.2** `pytest -q` full green on Windows + Python 3.14.
-- [ ] **E2.3** `git status -sb` clean (except intentional untracked noise).
-- [ ] **E2.4** No push performed.
-- [ ] **E2.5** Wiki working tree clean; wiki still not pushed.
+- [x] **E2.1** ruff PASS.
+- [x] **E2.2** `pytest -q` full green on Windows + Python 3.14（237 passed，Wave B 后）.
+- [x] **E2.3** `git status -sb` clean (except intentional untracked noise).
+- [x] **E2.4** No push performed.
+- [x] **E2.5** Wiki working tree clean; wiki still not pushed (local commit `a10946b` only).
+
+## 执行记录（2026-09-13）
+
+1. Wave A: `889330e8` S1 freeze; `2eccee42` batch口径; wiki `a10946b` + `33d4e248` Gate C note; `8d465eb3` docs size baseline.
+2. Wave B: `c2151db4` G2 `lru_cache` parse cache + structure gate 15.
+3. Closeout docs: `113a138d` plan status A+B current, C/D deferred.
+4. **Merge:** local `master` fast-forwarded to `dev-0.6.0` tip `113a138d` (`git push . dev-0.6.0:master`). Working branch remains `dev-0.6.0`. **No remote push** (main or wiki).
+5. Wave C/D: not executed (user deferred Zen/IoStore and SchemaProvider).
 
 ---
 
