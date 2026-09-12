@@ -1,42 +1,21 @@
 """Asset handlers — domain-specific enrichments for package objects.
 
-The AssetHandler protocol defines how domain extractors add semantic
-extensions to ObjectRecord instances. Handlers are registered by class
-name and invoked lazily when depth >= asset.
+Handlers share the `_SupportsClasses` mixin (`classes` + `supports`) and
+implement `enrich`. Handlers are registered by class name and invoked
+lazily when depth >= asset.
 """
 
 from __future__ import annotations
 
 import re
 import struct
-from typing import Any, Protocol
+from typing import Any
 
 from ...constants import format_guid_bytes
 from ...models.diagnostics import Diagnostic, make_diagnostic
 from ...models.object_model import ObjectRecord, CoverageEntry
 from ...serializers.blueprint_graph import summarize_exec_edges
 from ...versioning import VersionContext
-
-
-class AssetHandler(Protocol):
-    """Domain handler that enriches an object with semantic data.
-
-    Handlers may declare a capability tier via a ``capability`` member:
-    either a plain ``"summary"``/``"decoded"`` string, or a callable of the
-    produced result for handlers whose tier depends on the data actually
-    found. Undeclared handlers are summary-tier: only decoded-tier output
-    may yield ``status.semantic = "complete"`` (#629).
-    """
-
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool: ...
-
-    def enrich(
-        self,
-        obj: ObjectRecord,
-        context: VersionContext,
-        all_objects: list[ObjectRecord],
-        package_data: Any,
-    ) -> dict[str, Any] | None: ...
 
 
 class _SupportsClasses:
@@ -49,15 +28,15 @@ class _SupportsClasses:
 
 
 # Global handler registry
-_HANDLERS: list[AssetHandler] = []
+_HANDLERS: list[_SupportsClasses] = []
 
 
-def register_handler(handler: AssetHandler) -> None:
+def register_handler(handler: _SupportsClasses) -> None:
     """Register a global asset handler."""
     _HANDLERS.append(handler)
 
 
-def get_handlers() -> list[AssetHandler]:
+def get_handlers() -> list[_SupportsClasses]:
     """Get all registered handlers."""
     return list(_HANDLERS)
 
