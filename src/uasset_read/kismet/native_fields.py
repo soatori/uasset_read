@@ -13,7 +13,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from uasset_read.archive import ByteArchive
-from uasset_read.constants import PKG_Cooked, PKG_FilterEditorOnly
+from uasset_read.constants import MAX_SAFE_COUNT, PKG_Cooked, PKG_FilterEditorOnly
+from uasset_read.exceptions import ParseError
 from uasset_read.kismet.property_pointer import FNameRef
 
 if TYPE_CHECKING:
@@ -193,8 +194,12 @@ def _read_metadata(archive: ByteArchive, context: NativeFieldContext) -> None:
         return
 
     count = archive.read_i32()
-    if count < 0:
-        raise ValueError(f"Negative metadata count: {count}")
+    if count < 0 or count > MAX_SAFE_COUNT:
+        raise ParseError(f"Invalid native metadata count: {count}")
+    # Each entry is at least an 8-byte FName key plus a 4-byte FString length.
+    remaining = max(archive.total_size() - archive.tell(), 0)
+    if count > remaining // 8:
+        raise ParseError(f"Native metadata count {count} exceeds remaining bytes")
 
     for _ in range(count):
         _read_fname_ref(archive, context)
@@ -391,6 +396,8 @@ def read_native_fields(
     The archive must be positioned at the first field's type-name FName.
     Returns a list of deserialized declarations.
     """
+    if count < 0 or count > MAX_SAFE_COUNT:
+        raise ParseError(f"Invalid native field count: {count}")
     declarations: list[NativeFieldDeclaration] = []
     for _ in range(count):
         declarations.append(_read_single_field(archive, context))

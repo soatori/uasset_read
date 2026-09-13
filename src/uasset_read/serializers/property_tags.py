@@ -27,6 +27,7 @@ from uasset_read.constants import (
     MAX_PROPERTY_TYPE_NODES,
     UE_NONE_SENTINEL,
 )
+from uasset_read.exceptions import ParseError
 from uasset_read.models.properties import PropertyTag, PropertyTypeName
 
 T = TypeVar("T")
@@ -66,6 +67,11 @@ def _read_property_type_name(
         inner_count = archive.read_i32()
         parts.append((node_name, inner_count))
         pending = pending - 1 + max(inner_count, 0)
+
+    if pending > 0 and len(parts) >= MAX_PROPERTY_TYPE_NODES:
+        raise ParseError(
+            f"FPropertyTypeName truncated: {len(parts)} nodes with pending={pending}"
+        )
 
     def build(index: int) -> tuple[PropertyTypeName, int]:
         name, count = parts[index]

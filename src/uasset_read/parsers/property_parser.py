@@ -561,14 +561,19 @@ def _handle_serialization_control(
     archive: "FArchive",
     summary: "PackageFileSummary",
     export: ObjectExport,
-) -> None:
+) -> bool:
     """Handle SerializationControlExtensions header (D-02).
 
     UE5 >= 1011: root-level overridable serialization control header.
     Applied to all UObject exports (via UObject::SerializeScriptProperties -> ObjClass->SerializeTaggedProperties).
     ObjClass is UClass*, so IsA<UClass>() is always true.
     Known bits: 0x01 = ReserveForFutureUse, 0x02 = OverridableSerializationInformation.
-    Unknown high bits (0x04+) may be new UE5.6+ flags; record as diagnostic info without affecting offsets.
+    Unknown high bits (0x04+) may be new UE5.6+ flags; they are recorded as a
+    diagnostic and make the header terminal — the caller must stop the property
+    stream rather than risk reading at a misaligned cursor.
+
+    Returns:
+        True when the control byte is fully understood; False on unknown bits.
     """
     control_offset = archive.tell()
     serialization_control = archive.read_u8()
@@ -590,8 +595,10 @@ def _handle_serialization_control(
             fallback="skipped_subsequent_reads",
             message=f"Export '{getattr(export, 'object_name', '')}' SerializationControlExtensions unknown bits: 0x{unknown_bits:02X} (bits: {', '.join(bit_names)})",
         )
-        # Unknown bits may cause subsequent byte misalignment; return early so caller handles recovery
-        return
+        # Unknown bits may cause subsequent byte misalignment; the caller must
+        # stop instead of continuing into the property loop.
+        return False
+    return True
 
 
 def _handle_unversioned_properties(
@@ -1022,7 +1029,16 @@ def parse_properties_from_export(
     # never emits the control byte — consuming it here would desync the fragment.
     uses_unversioned = bool(getattr(summary, "package_flags", 0) & PKG_UnversionedProperties)
     if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION and not uses_unversioned:
-        _handle_serialization_control(archive, summary, export)
+        if not _handle_serialization_control(archive, summary, export):
+            return [
+                PropertyFallback(
+                    name=export.object_name,
+                    type="SerializationControlExtensions",
+                    size=0,
+                    reason=FallbackReason.PARSE_ERROR,
+                    error_message="unknown SerializationControlExtensions bits; property parse stopped",
+                )
+            ]
 
     # When the export records no script region the legacy boundary applies: the whole
     # serial block is the property stream (pre-5.4 packages, unversioned properties).

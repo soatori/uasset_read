@@ -14,6 +14,10 @@ class ResourceBudget:
 
     def reserve(self, bytes_needed: int, stage: str, asset: str = "") -> None:
         """Reserve resources; raise MemoryLimitExceeded if quota exceeded."""
+        if bytes_needed < 0:
+            raise MemoryLimitExceeded(
+                f"Memory limit exceeded for {asset} at {stage}: negative request {bytes_needed}"
+            )
         if bytes_needed > self.MAX_SINGLE_READ_BYTES:
             raise MemoryLimitExceeded(
                 f"Memory limit exceeded for {asset} at {stage}: "

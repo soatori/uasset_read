@@ -142,17 +142,23 @@ def _parse_and_project(file_path: Path, args) -> dict:
     return project_document(doc, depth=args.depth, limit=args.limit, max_bytes=args.max_bytes)
 
 
+def _iter_batch_packages(batch_dir: Path) -> list[Path]:
+    """Discover package files for batch mode: sorted ``*.uasset`` and ``*.umap``."""
+    files = list(batch_dir.rglob("*.uasset")) + list(batch_dir.rglob("*.umap"))
+    return sorted(files)
+
+
 def _handle_batch(args) -> None:
-    """Handle batch mode: parse all .uasset files in a directory."""
+    """Handle batch mode: parse all .uasset/.umap files in a directory."""
     batch_dir = Path(args.batch)
     if not batch_dir.is_dir():
         print(f"Error: Not a directory: {args.batch}", file=sys.stderr)
         sys.exit(EXIT_ARGUMENT_ERROR)
 
-    # Collect all .uasset files
-    uasset_files = sorted(batch_dir.rglob("*.uasset"))
+    # Collect all .uasset and .umap files
+    uasset_files = _iter_batch_packages(batch_dir)
     if not uasset_files:
-        print(f"Error: No .uasset files found in {args.batch}", file=sys.stderr)
+        print(f"Error: No .uasset/.umap files found in {args.batch}", file=sys.stderr)
         sys.exit(EXIT_FILE_NOT_FOUND)
 
     results = []

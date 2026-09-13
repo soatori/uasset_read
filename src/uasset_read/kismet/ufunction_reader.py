@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from uasset_read.archive import ByteArchive
+from uasset_read.constants import MAX_SAFE_COUNT
 from uasset_read.kismet.native_fields import (
     NativeFieldContext,
     NativeFieldDeclaration,
@@ -309,6 +310,16 @@ def _read_ustruct_prefix_and_script(
                         export_index,
                         "invalid_script_size",
                         f"Negative NativePropertyCount: {native_property_count}",
+                    ),
+                )
+            if native_property_count > MAX_SAFE_COUNT:
+                return FunctionScriptReadResult(
+                    status="failed",
+                    failure=_make_failure(
+                        export,
+                        export_index,
+                        "invalid_script_size",
+                        f"NativePropertyCount {native_property_count} exceeds MAX_SAFE_COUNT ({MAX_SAFE_COUNT})",
                     ),
                 )
 

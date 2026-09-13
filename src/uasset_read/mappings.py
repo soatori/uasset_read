@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from uasset_read.archive import ByteArchive
+from uasset_read.constants import MAX_SAFE_COUNT
 from uasset_read.exceptions import ParseError
 from uasset_read.memory_safety import ResourceBudget
 
@@ -156,9 +157,16 @@ class UsmapParser:
 
         if version >= 1 and reader.read_u8():
             reader.read(8)  # PackageFileVersion
-            custom_count = reader.read_i32()
-            if custom_count < 0:
-                raise ParseError("Invalid Usmap CustomVersion count")
+
+            def _cap(count: int, label: str) -> int:
+                if count < 0 or count > MAX_SAFE_COUNT:
+                    raise ParseError(f"Invalid Usmap {label} count: {count}")
+                return count
+
+            custom_count = _cap(reader.read_i32(), "CustomVersion")
+            remaining = max(reader.total_size() - reader.tell(), 0)
+            if custom_count * 20 > remaining:
+                raise ParseError("Usmap CustomVersion count exceeds remaining bytes")
             reader.read(custom_count * 20)
             reader.read(4)  # NetCL
 
@@ -170,6 +178,8 @@ class UsmapParser:
         ar = ByteArchive(data)
 
         name_count = ar.read_u32()
+        if name_count > MAX_SAFE_COUNT:
+            raise ParseError(f"Invalid Usmap name_count count: {name_count}")
         name_lut: list[str] = []
         for _ in range(name_count):
             length = ar.read_u16() if version >= 2 else ar.read_u8()
@@ -177,6 +187,8 @@ class UsmapParser:
 
         mappings = TypeMappings()
         enum_count = ar.read_u32()
+        if enum_count > MAX_SAFE_COUNT:
+            raise ParseError(f"Invalid Usmap enum_count count: {enum_count}")
         for _ in range(enum_count):
             _read_name(ar, name_lut)
             value_count = ar.read_u16() if version >= 3 else ar.read_u8()
@@ -186,6 +198,8 @@ class UsmapParser:
                 _read_name(ar, name_lut)
 
         struct_count = ar.read_u32()
+        if struct_count > MAX_SAFE_COUNT:
+            raise ParseError(f"Invalid Usmap struct_count count: {struct_count}")
         for _ in range(struct_count):
             struct = self._parse_struct(ar, name_lut)
             mappings.types[struct.name] = struct

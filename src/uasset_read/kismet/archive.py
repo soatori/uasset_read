@@ -4,6 +4,7 @@ import io
 import logging
 
 from uasset_read.archive import FArchive
+from uasset_read.constants import MAX_SAFE_COUNT
 from uasset_read.exceptions import ParseError
 from uasset_read.kismet.tokens import EExprToken
 from uasset_read.kismet.expressions.base import KismetExpression
@@ -147,6 +148,12 @@ class FKismetArchive(FArchive):
 
         # Read TArray<FName> path
         count = self.read_i32()
+        if count < 0:
+            raise ParseError(f"Negative FFieldPath count: {count}")
+        remaining = max(self.total_size() - self.tell(), 0)
+        # Each segment is two uint32 words on disk.
+        if count > min(MAX_SAFE_COUNT, remaining // 8):
+            raise ParseError(f"FFieldPath count {count} exceeds limit")
         path_segments: list[tuple[int, int]] = []
         for _ in range(count):
             name_index = self.read_u32()
