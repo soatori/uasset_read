@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from uasset_read.exceptions import BINARY_READ_ERRORS
-
 """BinaryOrNative type handler registry.
 
 Provides parsing support for known BinaryOrNative types; falls back to raw bytes on failure.
@@ -13,15 +11,27 @@ that use native serialization instead of property tag serialization.
 import logging
 import struct
 from collections.abc import Callable
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
-from uasset_read.parsers.parse_guard import safe_parse
+from uasset_read.exceptions import BINARY_READ_ERRORS
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.models.properties import PropertyTag
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _safe_parse(archive):
+    """Seek back to start on binary read errors."""
+    start = archive.tell()
+    try:
+        yield
+    except BINARY_READ_ERRORS:
+        archive.seek(start)
+        raise
 
 
 def _parse_instanced_struct(
@@ -41,7 +51,7 @@ def _parse_instanced_struct(
         return None
 
     try:
-        with safe_parse(archive):
+        with _safe_parse(archive):
             # Read ScriptStruct reference
             script_struct_index = archive.read_i32()
 
@@ -89,7 +99,7 @@ def _parse_material_input(
 
     start_pos = archive.tell()
     try:
-        with safe_parse(archive):
+        with _safe_parse(archive):
             expression_index = archive.read_i32()
             output_index = archive.read_i32()
             input_name = archive.read_name(name_map)
@@ -157,7 +167,7 @@ def _parse_expression_output(
         return None
 
     try:
-        with safe_parse(archive):
+        with _safe_parse(archive):
             output_name = archive.read_name(name_map)
             mask = archive.read_i32()
             mask_r = archive.read_i32()
@@ -207,7 +217,7 @@ def _parse_expression_input(
         return None
 
     try:
-        with safe_parse(archive):
+        with _safe_parse(archive):
             expression_index = archive.read_i32()
             output_index = archive.read_i32()
             input_name = archive.read_name(name_map)
@@ -451,7 +461,7 @@ def _parse_struct_binary(
         return None
 
     try:
-        with safe_parse(archive):
+        with _safe_parse(archive):
             raw = archive.read(size)
     except (struct.error, OSError):
         return None
@@ -509,7 +519,7 @@ def _parse_niagara_variable(
 
     start_pos = archive.tell()
     try:
-        with safe_parse(archive):
+        with _safe_parse(archive):
             # Field 1: Name (raw FName, no PropertyTag prefix)
             name = archive.read_name(name_map)
 
