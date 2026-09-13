@@ -1,7 +1,7 @@
-"""Agent tools — 6 tool functions for MCP/Agent consumption.
+"""Agent tools — 6 bounded library tools for programmatic consumers.
 
 Each tool directly calls the v2 Python API and returns structured JSON.
-Tools are transport-agnostic; MCP is just one possible adapter.
+In-library API only; no MCP server/SDK or other agent transport here.
 
 Design doc reference:
 - Agent Gate: 6 tools sharing Python API

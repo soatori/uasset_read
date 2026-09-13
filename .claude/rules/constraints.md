@@ -26,7 +26,7 @@ The authoritative target is `docs/designs/2026-08-26-package-first-uasset-parser
 ## Dependency Constraints
 
 - Prefer the standard library and already-installed project code.
-- Optional codecs, encryption, and MCP support belong behind capability boundaries; missing optional packages must not break core imports.
+- Optional codecs and encryption belong behind capability boundaries; missing optional packages must not break core imports. This repository does not implement MCP or other agent transports.
 - A mandatory dependency requires a documented maintenance benefit, license review, and cross-platform CI evidence. Zero runtime dependencies is a preference, not an immutable product requirement.
 - Do not vendor external reference repositories or generated caches into the release package.
 

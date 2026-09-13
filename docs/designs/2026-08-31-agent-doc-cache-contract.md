@@ -2,6 +2,8 @@
 
 status: implemented
 
+> **范围说明（2026-09-13）：** 「Agent 工具」指 `agent_tools.py` 六个有界库 API。本仓库不实现 MCP server/SDK。
+
 > **2026-09-13 执行记录（Wave B）：** 缓存落在 `src/uasset_read/package.py` 的 `parse_package_document` → `_parse_cached`（`functools.lru_cache(maxsize=8)`）。公开签名不变；命中返回同一 `PackageDocument` 对象（只读共享）。验收见 `tests/test_core.py::test_package_document_cache_is_process_local`。 Monkeypatch isolation tests call `_parse_cached.cache_clear()` so injected failures are not served from a prior hit.
 
 ## 现状（基线 bd3309a7 核实；下表行号为该基线时点的快照，实现时以当前代码符号为准）
@@ -51,7 +53,7 @@ stdlib `functools.lru_cache(maxsize=8)` 包住一个只收 hashable 参数的内
 
 ### 生命周期与共享语义
 
-- 进程级、单进程内有效；MCP server 常驻即跨调用复用，CLI 单次调用无收益（也不受害）。
+- 进程级、单进程内有效；任何常驻进程内对同一文件的多次 parse（多文件 agent 会话、串行批处理）跨调用复用，CLI 单次调用无收益（也不受害）。本仓库不依赖 MCP server。
 - 命中返回**同一个 `PackageDocument` 对象**。契约：调用方视其为只读。projection 已承诺不 mutate（`src/uasset_read/v2/projection.py:3`），六个工具仅读取；deep-copy 防御会把缓存收益原样退回去，不做。若未来出现 mutate-doc 消费者，那个消费者自己 copy。
 
 ### 失效

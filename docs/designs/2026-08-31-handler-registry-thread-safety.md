@@ -2,7 +2,7 @@
 
 status: target
 
-> P2，deferred：等 MCP 多线程消费真实出现后再实施。本文只锁定决策，防止届时重新讨论。
+> P2，deferred：等**真实的多线程并发消费**出现后再实施。本文只锁定决策，防止届时重新讨论。本仓库不实现 MCP；单次 CLI/库调用不构成触发条件。
 
 ## 现状（基线 bd3309a7 核实）
 
@@ -42,4 +42,6 @@ def register_handler(handler):
 
 ## 触发条件
 
-MCP adapter 出现多线程并发消费（线程池或 async 桥接 worker）即实施；在那之前维持现状，仅以本文锁定方案。实施时同步在 `handlers.py` 顶部 docstring 写明"注册仅限 import 期"。
+出现对 handler registry 的**多线程并发解析消费**（线程池或 async worker 同时调用 parse 路径，且共享同一 `_HANDLERS` 模块全局）时实施；在那之前维持现状，仅以本文锁定方案。实施时同步在 `handlers.py` 顶部 docstring 写明"注册仅限 import 期"。
+
+**明确非触发：** 单次 CLI、单次库调用、串行脚本循环；本仓库没有 MCP server/adapter，也不以 MCP 消费者为前提。当前无已规划的多线程消费者。

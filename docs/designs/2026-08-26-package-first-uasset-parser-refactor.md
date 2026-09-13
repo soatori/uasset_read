@@ -151,7 +151,7 @@ Public API never installs process-global logging. There is no `configure_project
 
 #### Agent & size
 
-- No stable Agent/MCP tool contract; only string-typed CLI/Python API.
+- No stable Agent tool contract; only string-typed CLI/Python API.
 - Full-package JSON uncontrolled for large graphs/properties/payloads.
 
 ## Design Principles
@@ -598,7 +598,7 @@ payload 提取使用单独 API/tool（当前恒返回 `PAYLOAD_EXTRACTION_DEFERR
 | `get_diagnostics` | 按 stage/severity/object 过滤 |
 | `extract_payload` | 当前恒返回 `PAYLOAD_EXTRACTION_DEFERRED`；extraction 恢复后在大小上限内返回或写出指定 payload |
 
-工具直接调用 Python document API，不通过 CLI 文本反序列化。MCP 只是 transport adapter；核心包不强制依赖 MCP SDK。
+工具直接调用 Python document API，不通过 CLI 文本反序列化。本仓库不实现任何外部 agent transport（含 MCP server/SDK）；若将来需要适配层，它必须落在本仓库之外，不得把 transport 依赖引入核心包。
 
 每个工具必须：
 
@@ -633,7 +633,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - 所有核心路径使用 `pathlib.Path`，输出 package path 统一使用 `/`。
 - 测试不得依赖固定盘符或用户目录。
 - 核心格式、JSON、压缩中的 zlib/lzma 使用标准库优先。
-- AES、Zstd、LZ4、Oodle、MCP 等放在明确 capability 边界；缺失时返回 `unsupported`，不让导入核心包失败。
+- AES、Zstd、LZ4、Oodle 等放在明确 capability 边界；缺失时返回 `unsupported`，不让导入核心包失败。
 - 不再把“零依赖”当作不可改变的产品目标；新增 mandatory dependency 必须证明它减少了更多自维护代码，并通过跨平台 CI。
 - 发行包不包含 `external/`、`.codegraph/`、Agent 缓存、日志、临时报告或真实商业资产。
 
@@ -839,7 +839,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - 六个工具共享 Python API。
 - 工具调用可限定对象、字段、条数和 bytes。
 - 错误为结构化 diagnostics，不返回日志堆栈作为正常数据。
-- MCP adapter 缺失不影响核心库导入和 CLI。
+- 本仓库不提供 MCP server；Agent tools 仅为库内有界 API，CLI 与核心导入不依赖任何 agent transport。
 
 ### Migration Completion Gate
 
@@ -875,7 +875,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - Tagged 与 Unversioned 使用独立 property reader。
 - Writer 延后，第一阶段保持只读。
 - Blueprint/Kismet 字节码反编译保留为可选扩展（expressions + diagnostics，非 C++ 文本），后于 core v2。
-- Agent tool 是正式接口；MCP 是可选 transport。
+- Agent tool 是正式的有界库接口；本仓库不实现 MCP 或其他 agent transport。
 - 默认不写文件日志，不提供 CLI 日志清理；不内嵌大型 payload。
 - 最小依赖优先，但不把零依赖作为不可改变的架构限制。
 - Phase 0 原子删除并重建测试体系；后续测试与实现 Phase 同步增长，不保留旧/新双套测试。
