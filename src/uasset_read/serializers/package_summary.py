@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from uasset_read.exceptions import BINARY_READ_ERRORS
+from uasset_read.exceptions import RECOVERY_READ_ERRORS, StreamPoisonedError
 
 if TYPE_CHECKING:
     from uasset_read.memory_safety import ResourceBudget
@@ -435,6 +435,14 @@ def _read_additional_packages(archive: FArchive, legacy_file_version: int) -> No
     additional_packages_count = archive.read_i32()
     if additional_packages_count < 0:
         raise ParseError(f"Negative additional packages count: {additional_packages_count}")
+    remaining = max(archive.total_size() - archive.tell(), 0)
+    trailer = 4 if legacy_file_version > -7 else 0
+    # Each entry is at least an empty FString (4 bytes). Cap by remaining bytes and MAX_SAFE_COUNT.
+    max_count = min(MAX_SAFE_COUNT, max(remaining - trailer, 0) // 4)
+    if additional_packages_count > max_count:
+        raise ParseError(
+            f"Additional packages count {additional_packages_count} exceeds feasible {max_count}"
+        )
     for _ in range(additional_packages_count):
         archive.read_fstring()
 
@@ -801,7 +809,11 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> list[str]
 
             if summary.file_version_ue5 > 0 or summary.file_version_ue4 >= UE4_NAME_HASHES_SERIALIZED:
                 archive.read(4)
-        except BINARY_READ_ERRORS as e:
+        except StreamPoisonedError:
+            # A poisoned stream cannot resume at the next entry; the partial
+            # map already read is invalid for continued property decoding.
+            raise
+        except RECOVERY_READ_ERRORS as e:
             logger.debug(
                 "read_name_table: failed to read name entry %d/%d: %s (read %d names so far)",
                 i,

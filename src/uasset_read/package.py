@@ -198,11 +198,37 @@ def open_package_bundle(path: str) -> PackageBundle:
     )
 
 
+def _file_stat_key(path: str | None) -> tuple[int, int]:
+    """(mtime_ns, size) stat key for a dependency file; (0, 0) when absent."""
+    if not path:
+        return (0, 0)
+    try:
+        st = Path(path).stat()
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return (0, 0)
+
+
+def _bundle_sidecar_key(main: Path) -> tuple[tuple[int, int, int], ...]:
+    """Per-sidecar (exists, mtime_ns, size) key for .uexp/.ubulk/.uptnl."""
+    keys = []
+    for ext in PACKAGE_PAYLOAD_EXTENSIONS:
+        p = main.with_suffix(ext)
+        try:
+            st = p.stat()
+            keys.append((1, st.st_mtime_ns, st.st_size))
+        except OSError:
+            keys.append((0, 0, 0))
+    return tuple(keys)
+
+
 @lru_cache(maxsize=8)
 def _parse_cached(
     resolved: str,
     _mtime_ns: int,
     _size: int,
+    _sidecar_key: tuple[tuple[int, int, int], ...],
+    _mappings_stat: tuple[int, int],
     depth: Literal["package", "object", "asset", "decode"],
     ids_key: tuple[str, ...] | None,
     tolerant: bool,
@@ -246,9 +272,12 @@ def parse_package_document(
     Discovers sidecar files (.uexp, .ubulk, .uptnl) via PackageBundle
     so that the reader receives an archive spanning main + .uexp.
 
-    Repeated calls with the same resolved path, mtime_ns, size, depth,
-    object_ids, tolerant, mappings_path, and game return the same document
-    object (G2). Callers must treat the returned document as read-only.
+    Repeated calls with the same resolved path, mtime_ns, size, per-sidecar
+    (exists, mtime_ns, size) stats for .uexp/.ubulk/.uptnl, mappings-file
+    (mtime_ns, size) stat, depth, object_ids, tolerant, mappings_path, and
+    game return the same document object (G2). This is a stat-based contract;
+    it does not promise content hashing for same-size/same-mtime replacements.
+    Callers must treat the returned document as read-only.
     """
     bundle = open_package_bundle(str(file_path))
     main = Path(bundle.main_path).resolve()
@@ -258,6 +287,8 @@ def parse_package_document(
         str(main),
         st.st_mtime_ns,
         st.st_size,
+        _bundle_sidecar_key(main),
+        _file_stat_key(mappings_path),
         depth,
         ids_key,
         tolerant,

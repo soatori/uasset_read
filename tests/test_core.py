@@ -8,7 +8,7 @@ the case name appears in the failure message.
 Like ``test_samples.py`` this file feeds duck-typed stub archives/summaries to internal
 helpers, so the strict-object rules are off; ``src/uasset_read`` is the pyright gate (ci.yml).
 
-Top-level test count is locked by ``test_test_suite_structure_gate`` (currently 15).
+Top-level test count is locked by ``test_test_suite_structure_gate`` (currently 19).
 """
 
 # pyright: reportArgumentType=false, reportAttributeAccessIssue=false
@@ -2831,7 +2831,10 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     budget_doc = json.loads(budget_result.stdout)
     assert budget_doc["truncation"]["reason"] == "max_bytes"
 
-    # --- Payload extraction is fully deferred (merged from test_samples) ---
+    # --- Unavailable payload is fully deferred (merged from test_samples) ---
+    # A recognized canonical id whose export index is out of range must return
+    # the deferred envelope (no data keys); valid exports may now extract real
+    # bytes since the id contract accepts canonical payload:export:N.
     from uasset_read.package import parse_package_document
 
     decode_doc = parse_package_document(
@@ -2843,10 +2846,56 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     if isinstance(sem_payload, dict):
         assert "ref" not in sem_payload and "stored_size" not in sem_payload
 
-    pb_tool = extract_payload(str(SAMPLES / "FirstPerson_T_GridChecker_A.uasset"), "payload:export:2")
+    pb_tool = extract_payload(str(SAMPLES / "FirstPerson_T_GridChecker_A.uasset"), "payload:export:9999")
     assert pb_tool["code"] == "PAYLOAD_EXTRACTION_DEFERRED"
     assert pb_tool["available_ids"] == []
     assert not {"data", "data_b64", "sha256"} & pb_tool.keys()
+
+
+def test_agent_tools_missing_file_return_structured_errors(tmp_path):
+    from uasset_read.agent_tools import (
+        get_diagnostics,
+        get_object,
+        inspect_package,
+        list_dependencies,
+        list_objects,
+    )
+
+    missing = str(tmp_path / "missing.uasset")
+    calls = [
+        lambda: inspect_package(missing),
+        lambda: list_objects(missing),
+        lambda: get_object(missing, "export:0"),
+        lambda: list_dependencies(missing),
+        lambda: get_diagnostics(missing),
+    ]
+    for call in calls:
+        result = call()
+        assert result["code"] == "PACKAGE_NOT_FOUND"
+        assert result["stage"].startswith("agent.")
+        assert result["recoverable"] is False
+
+
+def test_agent_tools_parse_error_return_structured_errors(monkeypatch, tmp_path):
+    import uasset_read.agent_tools as tools
+    from uasset_read.exceptions import ParseError
+
+    def fail_parse(*args, **kwargs):
+        raise ParseError("injected parse failure")
+
+    monkeypatch.setattr(tools, "parse_package_document", fail_parse)
+    path = str(tmp_path / "parse-fails.uasset")
+    calls = [
+        lambda: tools.inspect_package(path),
+        lambda: tools.list_objects(path),
+        lambda: tools.get_object(path, "export:0"),
+        lambda: tools.list_dependencies(path),
+        lambda: tools.get_diagnostics(path),
+    ]
+    for call in calls:
+        result = call()
+        assert result["code"] == "PACKAGE_PARSE_FAILED"
+        assert result["recoverable"] is True
 
 
 def test_agent_tool_queries_distinguish_budget_and_reject_negative_paging():
@@ -3075,8 +3124,10 @@ def test_package_document_cache_is_process_local():
     """G2: same path-stat-depth-key returns one PackageDocument object.
 
     Cache lives at the parse layer (``package.parse_package_document``).
-    Keys include resolved path, mtime_ns, size, depth, sorted object_ids,
-    tolerant, mappings_path, and game. Callers must treat hits as read-only.
+    Keys include resolved path, mtime_ns, size, per-sidecar (exists, mtime_ns,
+    size) for .uexp/.ubulk/.uptnl, mappings-file (mtime_ns, size), depth,
+    sorted object_ids, tolerant, mappings_path, and game. Callers must treat
+    hits as read-only.
     """
     import os
     import shutil
@@ -3117,8 +3168,82 @@ def test_package_document_cache_is_process_local():
             os.utime(sample, ns=(st0.st_atime_ns, st0.st_mtime_ns + 1_000_000_000))
             doc_touched = parse_package_document(str(sample), depth="package")
             assert doc_touched is not doc_a
+
+            # Sidecar content change must miss even when main stat is unchanged.
+            uexp = sample.with_suffix(".uexp")
+            uexp.write_bytes(b"sidecar-v1")
+            doc_s1 = parse_package_document(str(sample), depth="package")
+            uexp.write_bytes(b"sidecar-v2-longer")
+            doc_s2 = parse_package_document(str(sample), depth="package")
+            assert doc_s1 is not doc_s2
+
+            # Mappings file stat participates in the key.
+            usmap = Path(tmp) / "cache_sample.usmap"
+            usmap.write_bytes(b"\x00" * 32)
+            doc_m1 = parse_package_document(
+                str(sample), depth="package", mappings_path=str(usmap)
+            )
+            usmap.write_bytes(b"\x00" * 64)
+            doc_m2 = parse_package_document(
+                str(sample), depth="package", mappings_path=str(usmap)
+            )
+            assert doc_m1 is not doc_m2
     finally:
         _parse_cached.cache_clear()
+
+
+def test_export_map_parse_error_is_truncated_not_fatal(monkeypatch):
+    import uasset_read.serializers.object_resources as orm
+    from uasset_read.exceptions import ParseError
+    from uasset_read.package import _parse_cached, parse_package_document
+
+    real = orm.ObjectExport
+    calls = {"n": 0}
+
+    def boom(**kwargs):
+        calls["n"] += 1
+        if calls["n"] == 3:
+            raise ParseError("injected export ParseError")
+        return real(**kwargs)
+
+    _parse_cached.cache_clear()
+    try:
+        monkeypatch.setattr(orm, "ObjectExport", boom)
+        doc = parse_package_document(str(PACKAGE_SAMPLE), depth="package")
+    finally:
+        _parse_cached.cache_clear()
+    assert any(d.code == "EXPORT_TABLE_TRUNCATED" for d in doc.diagnostics)
+    assert len(doc.objects) >= 2
+
+
+def test_read_name_table_returns_partial_on_parse_error():
+    from types import SimpleNamespace
+
+    from uasset_read.exceptions import ParseError
+    from uasset_read.serializers.package_summary import read_name_table
+
+    summary = SimpleNamespace(
+        name_count=4,
+        name_offset=1,
+        file_version_ue5=0,
+        file_version_ue4=400,  # < UE4_NAME_HASHES_SERIALIZED (504 in this repo)
+    )
+
+    class Stub:
+        def __init__(self):
+            self.n = 0
+
+        def seek(self, pos):
+            return None
+
+        def read_fstring(self):
+            self.n += 1
+            if self.n == 3:
+                raise ParseError("truncated")
+            return f"N{self.n}"
+
+    names = read_name_table(Stub(), summary)
+    assert names == ["N1", "N2"]
 
 
 def test_test_suite_structure_gate():
@@ -3146,8 +3271,10 @@ def test_test_suite_structure_gate():
     assert subdirs == {"samples", "serialization"}
     tree = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
     funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
-    # 15: G2 process-local PackageDocument cache contract (Wave B).
-    assert len(funcs) == 15
+    # 19: G2 process-local PackageDocument cache contract (Wave B), the
+    # Agent-tools structured parse-error envelope pair (missing file /
+    # ParseError), and ExportMap/NameMap ParseError table recovery.
+    assert len(funcs) == 19
     assert not any(isinstance(n, ast.ClassDef) for n in tree.body)
     # The design bans decorators on test functions; cache helpers like
     # _document legitimately carry @lru_cache, so the check is scoped to

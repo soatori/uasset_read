@@ -41,4 +41,7 @@ class ExportBoundsExceeded(ParseError):
 
 # Shared catch tuples for tolerant binary / reference recovery paths.
 BINARY_READ_ERRORS: tuple[type[BaseException], ...] = (struct.error, OSError, ValueError)
+# Table-level recovery: include ParseError (archive truncation). Property loops
+# keep StreamPoisonedError re-raise semantics and must not use this blindly.
+RECOVERY_READ_ERRORS: tuple[type[BaseException], ...] = BINARY_READ_ERRORS + (ParseError,)
 REFERENCE_RESOLVE_ERRORS: tuple[type[BaseException], ...] = (KeyError, IndexError, AttributeError)

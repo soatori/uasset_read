@@ -12,8 +12,11 @@ Design doc reference:
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
+from .exceptions import BINARY_READ_ERRORS, ParseError
+from .models.document import PackageDocument
 from .package import parse_package_document
 from .projection import dependency_to_dict, fit_list_response, json_byte_size, paginate, project_document, select_objects
 
@@ -24,6 +27,30 @@ _MAX_BYTES_GET_OBJECT = 32768
 _MAX_BYTES_LIST_DEPS = 8192
 _MAX_BYTES_GET_DIAG = 8192
 _MAX_BYTES_EXTRACT_PAYLOAD = 65536
+
+# Canonical schema spelling is payload:export:N / payload:import:N; the
+# parenthesized spelling payload:(export:N) is accepted only as a
+# backward-compatible request alias.
+_PAYLOAD_ID_RE = re.compile(
+    r"^payload:(?:\((?P<p_kind>export|import):(?P<p_idx>\d+)\)"
+    r"|(?P<s_kind>export|import):(?P<s_idx>\d+))$"
+)
+
+
+def _parse_payload_id(payload_id: str) -> tuple[Literal["export", "import"], int] | None:
+    """Parse canonical or parenthesized payload ids; None when malformed."""
+    m = _PAYLOAD_ID_RE.match(payload_id.strip())
+    if not m:
+        return None
+    kind = m.group("p_kind") or m.group("s_kind")
+    raw = m.group("p_idx") if m.group("p_idx") is not None else m.group("s_idx")
+    return (kind, int(raw))
+
+
+def _parse_export_index(payload_id: str) -> int | None:
+    """Return the export index for an export payload; imports are deferred."""
+    parsed = _parse_payload_id(payload_id)
+    return parsed[1] if parsed is not None and parsed[0] == "export" else None
 
 
 def _err(
@@ -44,6 +71,35 @@ def _err(
     }
 
 
+def _parse_or_error(
+    file_path: str, *, stage: str, **parse_kwargs: Any
+) -> tuple[PackageDocument | None, dict[str, Any] | None]:
+    """Parse a package, converting parse-layer failures into error envelopes.
+
+    Returns ``(doc, None)`` on success, ``(None, envelope)`` on
+    ``FileNotFoundError`` (PACKAGE_NOT_FOUND) or
+    ``BINARY_READ_ERRORS + (ParseError,)`` (PACKAGE_PARSE_FAILED).  Every
+    parse-backed Agent tool funnels through here so callers receive the same
+    structured error shape instead of a leaked parser exception.
+    """
+    try:
+        return parse_package_document(file_path, **parse_kwargs), None
+    except FileNotFoundError:
+        return None, _err(
+            "PACKAGE_NOT_FOUND",
+            stage,
+            recoverable=False,
+            message=f"Package not found: {file_path}",
+        )
+    except BINARY_READ_ERRORS + (ParseError,) as exc:
+        return None, _err(
+            "PACKAGE_PARSE_FAILED",
+            stage,
+            recoverable=True,
+            message=f"Package parse failed: {type(exc).__name__}: {exc}",
+        )
+
+
 def inspect_package(
     file_path: str,
     *,
@@ -56,7 +112,10 @@ def inspect_package(
     Returns a concise summary of the package without listing all objects.
     Default limit=0 gives "package envelope + diagnostics summary" semantics.
     """
-    doc = parse_package_document(file_path, depth=depth)
+    doc, error = _parse_or_error(file_path, stage="agent.inspect_package", depth=depth)
+    if error is not None:
+        return error
+    assert doc is not None
     return project_document(doc, depth=depth, limit=limit, max_bytes=max_bytes)
 
 
@@ -74,7 +133,10 @@ def list_objects(
 
     Returns object list with pagination info.
     """
-    doc = parse_package_document(file_path)
+    doc, error = _parse_or_error(file_path, stage="agent.list_objects")
+    if error is not None:
+        return error
+    assert doc is not None
     selected = select_objects(doc, object_ids=object_ids, roles=roles, classes=classes)
     return project_document(
         doc,
@@ -102,7 +164,10 @@ def get_object(
     applied (#644): the old order trimmed the whole envelope first and then
     read the resulting empty page as a missing object.
     """
-    doc = parse_package_document(file_path)
+    doc, error = _parse_or_error(file_path, stage="agent.get_object")
+    if error is not None:
+        return error
+    assert doc is not None
 
     if not any(o.id == object_id for o in doc.objects):
         # Stable structured-diagnostic shape (cf. extract_payload's deferred code):
@@ -144,7 +209,10 @@ def list_dependencies(
     Pages the complete `doc.dependencies` import set; the response is bounded
     to `max_bytes` by dropping trailing items (adjust `next_offset` accordingly).
     """
-    doc = parse_package_document(file_path)
+    doc, error = _parse_or_error(file_path, stage="agent.list_dependencies")
+    if error is not None:
+        return error
+    assert doc is not None
     deps = [dependency_to_dict(d) for d in doc.dependencies]
     page, next_offset, _trunc = paginate(deps, offset=offset, limit=limit)
     response: dict[str, Any] = {
@@ -172,7 +240,10 @@ def get_diagnostics(
 
     Filters by stage, severity, and/or object_id.
     """
-    doc = parse_package_document(file_path)
+    doc, error = _parse_or_error(file_path, stage="agent.get_diagnostics")
+    if error is not None:
+        return error
+    assert doc is not None
 
     # Apply filters
     filtered = list(doc.diagnostics)
@@ -211,7 +282,9 @@ def extract_payload(
 
     Args:
         file_path: Path to the .uasset file.
-        payload_id: Payload identifier (e.g., "payload:(export:0)").
+        payload_id: Payload identifier (e.g., "payload:export:0"). The
+            parenthesized spelling "payload:(export:0)" is accepted only as a
+            backward-compatible request alias.
         max_bytes: Maximum response size in bytes.
         export_index: Index of the export that owns the payload. If not
             provided, derived from payload_id.
@@ -258,13 +331,23 @@ def extract_payload(
     if bundle.uptnl_path is not None:
         sidecar_paths["uptnl"] = bundle.uptnl_path
 
-    # Determine export index from payload_id if not provided
+    # Determine export index from payload_id if not provided.
+    # Only ("export", index) may populate export_index; an import payload is
+    # deferred/unsupported and is never treated as an export.
     if export_index is None:
-        import re
-
-        match = re.search(r"\((export|import):(\d+)\)", payload_id)
-        if match:
-            export_index = int(match.group(2))
+        parsed = _parse_payload_id(payload_id)
+        if parsed is not None and parsed[0] == "import":
+            response = {
+                "id": payload_id,
+                "error": "Payload extraction is deferred: real payloads require per-export BulkData mapping from cooked fixtures (issue #627)",
+                "code": PAYLOAD_EXTRACTION_DEFERRED,
+                "available_ids": [],
+                "offset": 0,
+                "returned": 0,
+                "total": 0,
+            }
+            return fit_list_response(response, max_bytes, list_key="available_ids")
+        export_index = _parse_export_index(payload_id)
 
     if export_index is None:
         response = {
@@ -285,6 +368,55 @@ def extract_payload(
         main_path=main_path,
         sidecar_paths=sidecar_paths,
     )
+
+    if descriptor.status == "missing" or descriptor.stored_size <= 0:
+        response = {
+            "id": payload_id,
+            "error": "Payload not available for this export index",
+            "code": PAYLOAD_EXTRACTION_DEFERRED,
+            "available_ids": [],
+            "offset": 0,
+            "returned": 0,
+            "total": 0,
+        }
+        return fit_list_response(response, max_bytes, list_key="available_ids")
+
+    # Estimate the complete JSON response before opening the payload file.
+    # Base64 has an exact 4 * ceil(n / 3) expansion; the empty-data envelope
+    # accounts for escaped ids, metadata, and the remaining JSON overhead.
+    encoded_size = 4 * ((descriptor.stored_size + 2) // 3)
+    empty_response = {
+        "id": payload_id,
+        "payload_id": descriptor.id,
+        "data": "",
+        "size": descriptor.stored_size,
+        "source_region": descriptor.source_region,
+        "offset": descriptor.offset,
+    }
+    estimated = json_byte_size(empty_response) + encoded_size
+    if estimated > max_bytes:
+        return _err(
+            "BUDGET_EXHAUSTED",
+            "agent.extract_payload",
+            recoverable=True,
+            message=f"Payload stored_size={descriptor.stored_size} would exceed budget {max_bytes}",
+            object_id=payload_id,
+            max_bytes=max_bytes,
+            min_bytes=estimated,
+        )
+
+    from .memory_safety import MemoryLimitExceeded, ResourceBudget
+
+    try:
+        ResourceBudget().reserve(descriptor.stored_size, "agent.extract_payload", payload_id)
+    except MemoryLimitExceeded as e:
+        return _err(
+            "BUDGET_EXHAUSTED",
+            "agent.extract_payload",
+            recoverable=False,
+            message=str(e),
+            object_id=payload_id,
+        )
 
     # Extract payload bytes
     data, error = extract_payload_bytes(

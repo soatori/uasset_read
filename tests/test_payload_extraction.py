@@ -23,7 +23,7 @@ pytestmark = pytest.mark.skipif(
 
 def _desc(**overrides) -> PayloadDescriptor:
     base = {
-        "id": "payload:(export:0)",
+        "id": "payload:export:0",
         "owner": "export:0",
         "kind": "bulk_data",
         "source_region": "main",
@@ -38,7 +38,7 @@ def test_payload_descriptor_creation():
     """Test creating a PayloadDescriptor with required fields."""
     descriptor = _desc(source_region="main", stored_size=2048)
 
-    assert descriptor.id == "payload:(export:0)"
+    assert descriptor.id == "payload:export:0"
     assert descriptor.owner == "export:0"
     assert descriptor.source_region == "main"
     assert descriptor.status == "available"
@@ -47,7 +47,7 @@ def test_payload_descriptor_creation():
 def test_payload_descriptor_optional_fields():
     """Test creating a PayloadDescriptor with optional fields."""
     descriptor = _desc(
-        id="payload:(export:1)",
+        id="payload:export:1",
         owner="export:1",
         kind="texture_mip",
         source_region="ubulk",
@@ -181,7 +181,7 @@ def test_agent_tool_extract_payload():
     # Call the agent tool with export_index
     result = extract_payload(
         file_path=str(MAIN_PATH),
-        payload_id="payload:(export:0)",
+        payload_id="payload:export:0",
         export_index=0,
     )
 
@@ -190,6 +190,8 @@ def test_agent_tool_extract_payload():
     assert "data" in result
     assert "size" in result
     assert result["size"] > 0
+    # Discovery emits the schema-canonical (non-parenthesized) descriptor id.
+    assert result["payload_id"] == "payload:export:0"
 
     # Verify the data is valid base64
     data = base64.b64decode(result["data"])
@@ -203,7 +205,7 @@ def test_agent_tool_extract_payload_auto_index():
     # Call without export_index - should derive from payload_id
     result = extract_payload(
         file_path=str(MAIN_PATH),
-        payload_id="payload:(export:0)",
+        payload_id="payload:export:0",
     )
 
     # Should not return DEFERRED
@@ -426,7 +428,7 @@ def test_end_to_end_payload_extraction():
     assert bundle.ubulk_path.exists(), ".ubulk sidecar file should exist"
 
     # Step 4: Extract payload using the agent tool
-    payload_id = f"payload:(export:{texture_export_index})"
+    payload_id = f"payload:export:{texture_export_index}"
     result = extract_payload(
         file_path=str(MAIN_PATH),
         payload_id=payload_id,
@@ -469,13 +471,14 @@ def test_end_to_end_payload_extraction_auto_index():
     # Extract without export_index - should derive from payload_id
     result = extract_payload(
         file_path=str(MAIN_PATH),
-        payload_id="payload:(export:0)",
+        payload_id="payload:export:0",
     )
 
     # Should succeed
     assert "error" not in result or result.get("code") != PAYLOAD_EXTRACTION_DEFERRED
     assert "data" in result
     assert result["size"] > 0
+    assert result["payload_id"] == "payload:export:0"
 
     # Verify data is valid
     decoded_data = base64.b64decode(result["data"])
@@ -510,3 +513,117 @@ def test_end_to_end_payload_extraction_direct_api():
 
     assert error is None, f"Should have no error: {error}"
     assert len(data) == 22308, f"Should extract all uexp bytes: {len(data)}"
+
+
+def test_discover_rejects_negative_export_index(tmp_path):
+    from uasset_read.models.payloads import discover_payload_descriptor
+
+    main = tmp_path / "neg.uasset"
+    main.write_bytes(b"x" * 16)
+    uexp = tmp_path / "neg.uexp"
+    uexp.write_bytes(b"y" * 64)
+
+    d = discover_payload_descriptor(
+        "payload:export:0",
+        -1,
+        main_path=main,
+        sidecar_paths={"uexp": uexp},
+    )
+    assert d.status == "missing"
+    assert d.stored_size == 0
+    assert d.offset == 0
+
+
+def test_discover_rejects_out_of_range_export_index(tmp_path):
+    from uasset_read.models.payloads import discover_payload_descriptor
+
+    main = tmp_path / "oor.uasset"
+    main.write_bytes(b"x" * 16)
+    uexp = tmp_path / "oor.uexp"
+    uexp.write_bytes(b"y" * 64)
+
+    d = discover_payload_descriptor(
+        "payload:export:99",
+        99,
+        main_path=main,
+        sidecar_paths={"uexp": uexp},
+    )
+    assert d.status == "missing"
+    assert d.stored_size == 0
+
+
+def test_extract_rejects_negative_stored_size(tmp_path):
+    from uasset_read.models.payloads import PayloadDescriptor, extract_payload_bytes
+
+    main = tmp_path / "negsize.uasset"
+    main.write_bytes(b"abc")
+    bad = PayloadDescriptor(
+        id="payload:export:0",
+        owner="export:0",
+        kind="bulk_data",
+        source_region="main",
+        offset=0,
+        stored_size=-1,
+        status="available",
+    )
+    data, err = extract_payload_bytes(bad, main_path=main)
+    assert data == b""
+    assert err == "INVALID_PAYLOAD_DESCRIPTOR"
+
+
+def test_extract_rejects_negative_offset(tmp_path):
+    from uasset_read.models.payloads import PayloadDescriptor, extract_payload_bytes
+
+    main = tmp_path / "negoff.uasset"
+    main.write_bytes(b"abc")
+    bad = PayloadDescriptor(
+        id="payload:export:0",
+        owner="export:0",
+        kind="bulk_data",
+        source_region="main",
+        offset=-4,
+        stored_size=3,
+        status="available",
+    )
+    data, err = extract_payload_bytes(bad, main_path=main)
+    assert data == b""
+    assert err == "INVALID_PAYLOAD_DESCRIPTOR"
+
+
+def test_agent_parses_both_payload_id_forms(tmp_path):
+    from uasset_read.agent_tools import _parse_export_index, _parse_payload_id
+
+    assert _parse_export_index("payload:(export:0)") == 0
+    assert _parse_export_index("payload:export:2") == 2
+    assert _parse_payload_id("payload:(import:1)") == ("import", 1)
+    assert _parse_payload_id("payload:import:1") == ("import", 1)
+    assert _parse_export_index("payload:(import:1)") is None
+    assert _parse_export_index("invalid_format") is None
+
+
+def test_agent_rejects_payload_before_reading_bytes(monkeypatch):
+    from pathlib import Path
+
+    import uasset_read.models.payloads as payloads
+    from uasset_read.agent_tools import extract_payload
+
+    sample = Path(__file__).parent / "samples" / "T_ParserBulk.uasset"
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("payload bytes were read before the budget check")
+
+    monkeypatch.setattr(payloads, "extract_payload_bytes", fail_if_called)
+    result = extract_payload(
+        str(sample), "payload:(export:0)", export_index=0, max_bytes=64
+    )
+    assert result["code"] == "BUDGET_EXHAUSTED"
+
+
+def test_agent_does_not_treat_import_payload_as_export():
+    from pathlib import Path
+
+    from uasset_read.agent_tools import extract_payload
+
+    sample = Path(__file__).parent / "samples" / "T_ParserBulk.uasset"
+    result = extract_payload(str(sample), "payload:import:1")
+    assert result["code"] == "PAYLOAD_EXTRACTION_DEFERRED"

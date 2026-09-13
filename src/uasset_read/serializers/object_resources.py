@@ -7,7 +7,6 @@ Extracted from uasset_read.py (core lines 940-3048).
 from __future__ import annotations
 
 import logging
-import struct
 from typing import Any
 from dataclasses import dataclass, field
 
@@ -30,7 +29,7 @@ from uasset_read.constants import (
     UE4_TemplateIndex_IN_COOKED_EXPORTS,
     UE4_64BIT_EXPORTMAP_SERIALSIZES,
 )
-from uasset_read.exceptions import ParseError
+from uasset_read.exceptions import RECOVERY_READ_ERRORS, ParseError, StreamPoisonedError
 from uasset_read.models.diagnostics import (
     DIAGNOSTIC_CODE_INVALID_SERIAL_OFFSET,
     DIAGNOSTIC_CODE_INVALID_SERIAL_SIZE,
@@ -341,7 +340,11 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: li
                     create_before_create_dependencies=create_before_create_deps,
                 )
             )
-        except (struct.error, OSError, ValueError, AttributeError) as e:
+        except StreamPoisonedError:
+            # A poisoned stream must stop the whole table; retrying the next
+            # entry at the same misaligned position cannot recover.
+            raise
+        except RECOVERY_READ_ERRORS + (AttributeError,) as e:
             # A failed entry leaves the stream position unknown; continuing
             # would silently renumber later exports. Stop the table instead.
             # The failed slot never materializes, so un-attribute before recording.
