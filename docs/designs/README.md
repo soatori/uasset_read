@@ -33,6 +33,7 @@ These sit beside the canonical target on purpose. Each carries its own `status:`
 | — | [`2026-09-13-next-phase-closeout-and-deferred-gates.md`](2026-09-13-next-phase-closeout-and-deferred-gates.md) | current | A1–D1 executed; merged to `dev-0.6.0`. Follow-on: residual docs/gates + G2 + Bundle 1/2 plan below. |
 | — | [`2026-09-13-deferred-capability-bundling.md`](2026-09-13-deferred-capability-bundling.md) | current | Bundle map for Zen/Schema/G2/diff. **D-BATCH is current** on the v2 CLI (2026-09-13); only `--diff` remains deferred among the old workflow pair. |
 | — | [`2026-09-13-residual-closeout-g2-zen-schema-plan.md`](2026-09-13-residual-closeout-g2-zen-schema-plan.md) | current | **Wave A + B executed** (S1 freeze, batch口径, wiki Gate C local commit, G2 cache). **Wave C/D deferred** (Zen/IoStore, SchemaProvider). No push; product-deferred (diff/Pak/C++) out of scope. |
+| — | [`2026-09-13-ponytail-byteswap-thin-wrappers.md`](2026-09-13-ponytail-byteswap-thin-wrappers.md) | current | Byte-swap & thin-wrapper residual: LE-only archive path, dead `FMemberReference`, `load_usmap`/`parse_guard` wrappers, always-default budget knobs. Executed 2026-09-13 (`9efa5efa`…`c7e13567`); suite 231 passed. BE packages remain rejected. |
 
 ## Archive
 

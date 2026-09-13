@@ -208,7 +208,7 @@ Shared readers behind that document: `kismet/` (bytecode → expressions + diagn
 | Mappings | `mappings.py` | UE type mappings (`.usmap` parsing; `.jmap` removed 2026-09-10) |
 | Memory Safety | `memory_safety.py` | `ResourceBudget` read/decompress checkpoints, `MemoryLimitExceeded` |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
-| **Data Models** | `models/` | UEdGraph/Node/Pin, FEdGraphPinType, FMemberReference, PropertyTag/PropertyValue, Anim IR, structured diagnostics, property fallback |
+| **Data Models** | `models/` | UEdGraph/Node/Pin, FEdGraphPinType, PropertyTag/PropertyValue, Anim IR, structured diagnostics, property fallback |
 | **Parsers** | `parsers/` | 28 tagged-property parse functions + dispatcher, custom property registry, class handler registry, BinaryOrNative handlers |
 | ├ Asset Types | `parsers/asset_types/` | 18 asset type parser files + opaque stubs; 70 registered class handlers |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → expressions, decompile bridge, BPGC fallback, UFunction script reader (C++ translator retired 2026-09-10) |
