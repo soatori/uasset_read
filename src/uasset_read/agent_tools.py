@@ -12,11 +12,10 @@ Design doc reference:
 
 from __future__ import annotations
 
-import json
 from typing import Any, Literal
 
 from .package import parse_package_document
-from .projection import dependency_to_dict, fit_list_response, select_objects, paginate, project_document
+from .projection import dependency_to_dict, fit_list_response, json_byte_size, paginate, project_document, select_objects
 
 # Max response sizes per tool (bytes)
 _MAX_BYTES_INSPECT = 4096
@@ -119,7 +118,7 @@ def get_object(
     full = project_document(doc, object_ids=[object_id], view="raw")
     # The whole response is what the budget has to cover; the object alone is
     # never returned over cap, and 'too small' is never dressed up as 'missing'.
-    size = len(json.dumps(full, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    size = json_byte_size(full)
     if size <= max_bytes:
         return full["objects"][0]
     return _err(
@@ -321,7 +320,7 @@ def extract_payload(
     }
 
     # Enforce max_bytes on success path
-    response_size = len(json.dumps(response_payload, ensure_ascii=False).encode("utf-8"))
+    response_size = json_byte_size(response_payload)
     if response_size > max_bytes:
         return _err(
             "BUDGET_EXHAUSTED",

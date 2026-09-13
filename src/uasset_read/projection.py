@@ -33,7 +33,7 @@ def select_objects(
     return result
 
 
-def _json_size(payload: Any) -> int:
+def json_byte_size(payload: Any) -> int:
     """Compact-JSON UTF-8 byte length — the single measure every byte-budget trim shares."""
     return len(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
@@ -83,14 +83,14 @@ def fit_list_response(response: dict, max_bytes: int, *, list_key: str, total_ke
     the empty-list envelope.
     """
     items = response[list_key]
-    while _json_size(response) > max_bytes and items:
+    while json_byte_size(response) > max_bytes and items:
         items.pop()
         n = len(items)
         response["returned"] = n
         response["next_offset"] = response["offset"] + n
     if not items:
         response.pop("next_offset", None)  # a cursor that doesn't advance ends nothing
-    size = _json_size(response)  # one measure serves both the test and the message
+    size = json_byte_size(response)  # one measure serves both the test and the message
     if size > max_bytes:
         raise ValueError(f"Response budget {max_bytes} bytes too small for minimal envelope ({size} bytes)")
     if items and response["offset"] + len(items) >= response[total_key]:
@@ -282,7 +282,7 @@ def project_document(
 
     # max_bytes enforcement — measure AFTER adding TRUNCATED diagnostic
     if max_bytes is not None:
-        if _json_size(result) > max_bytes:
+        if json_byte_size(result) > max_bytes:
             trunc_diag = {
                 "severity": "warning",
                 "code": "TRUNCATED",
@@ -296,11 +296,11 @@ def project_document(
             result["truncation"] = {
                 "reason": "max_bytes",
                 "budget": max_bytes,
-                "actual": _json_size(result),
+                "actual": json_byte_size(result),
                 "objects_dropped": 0,
             }
             result["next_offset"] = offset + len(result["objects"])
-            while len(result["objects"]) > 0 and _json_size(result) > max_bytes:
+            while len(result["objects"]) > 0 and json_byte_size(result) > max_bytes:
                 result["objects"].pop()
                 result["next_offset"] = offset + len(result["objects"])
                 remaining_ids = {o["id"] for o in result["objects"] if isinstance(o, dict) and "id" in o}
@@ -316,10 +316,10 @@ def project_document(
             if page_total == 0:
                 # Out-of-range empty page: never a cursor, never over budget.
                 result.pop("next_offset", None)
-                result["truncation"]["actual"] = _json_size(result)
-                if _json_size(result) > max_bytes:
+                result["truncation"]["actual"] = json_byte_size(result)
+                if json_byte_size(result) > max_bytes:
                     raise ValueError(
-                        f"Output budget {max_bytes} bytes too small for minimal envelope ({_json_size(result)} bytes)"
+                        f"Output budget {max_bytes} bytes too small for minimal envelope ({json_byte_size(result)} bytes)"
                     )
                 return result
             if len(result["objects"]) == 0:
@@ -329,7 +329,7 @@ def project_document(
                 result["truncation"] = {
                     "reason": "max_bytes",
                     "budget": max_bytes,
-                    "actual": _json_size(result),
+                    "actual": json_byte_size(result),
                     "objects_dropped": page_total,
                 }
                 result["diagnostics"].append(
@@ -343,10 +343,10 @@ def project_document(
                 )
                 # The byte count includes its own digits, so stabilize it
                 # after all metadata has been added before checking the cap.
-                actual = _json_size(result)
+                actual = json_byte_size(result)
                 while result["truncation"]["actual"] != actual:
                     result["truncation"]["actual"] = actual
-                    actual = _json_size(result)
+                    actual = json_byte_size(result)
                 if actual > max_bytes:
                     raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({actual} bytes)")
                 return result
@@ -354,7 +354,7 @@ def project_document(
             result["truncation"] = {
                 "reason": "max_bytes",
                 "budget": max_bytes,
-                "actual": _json_size(result),
+                "actual": json_byte_size(result),
                 "objects_dropped": objects_dropped,
             }
 
