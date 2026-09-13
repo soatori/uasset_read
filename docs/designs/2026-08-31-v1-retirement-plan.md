@@ -5,8 +5,8 @@ status: target
 > **文档状态：target**（退役决策与门禁；文中"现状"段落为基线 `bd3309a7` 的 current 事实，引用 `file:line`）。
 > 关联：`docs/designs/2026-08-26-package-first-uasset-parser-refactor.md`（Phase 6 删除旧路径）；Issue #621；本文与 `2026-08-31-semantic-handlers-boundary.md`（D2）、`2026-08-31-version-context-field-contract.md`（G1）配套。
 > **2026-09-05 执行记录**：本文冻结的退役契约已执行——Phase 6（#621，`ae8027e1`）删除 v1 管线，`--legacy-json` 现为 explicit unsupported 报错退出（非静默降级），`semantic/`、`renderers/`、`pipeline/`、`ir_builder.py`、`core/`、`link/` 已从 `src/` 消失。因此 §1、§2、§4 中描述双轨并存与"本轮不删代码"的段落均为 **historical 快照**，不再反映现状；§3 门禁与 §5/§6 决策记录仍为指导性内容，不得归为 historical。
-> **Gate C “文档同步”项：wiki 内容已重写为 v2；Gate K/L 残留文案于 2026-09-13 在 wiki 仓库本地 commit（`a10946b`）。** wiki（独立仓库 `uasset_read.wiki`）Home/Sidebar 与 01-07 各目录页中的 Semantic 1.x、`run.py`、`parse_single`、renderer 系统、`--markdown`/`--legacy-json` 等均已降级为 historical/retired，PAK/IoStore/raw-file/C++ skeleton 降级为 target，VarType 与 Kismet 明确标为 current。**在 wiki 仓库 push 到 remote 之前，本项不得视为已关闭。** 主仓 push 不在 residual plan 范围。
-> **Residual note 2026-09-13：** `--batch` 已在 v2 CLI 以 live 形态回归（目录遍历 + `uasset_read.batch` 报告；见 `cli.py` 与 `docs/reference/agent-dev-reference.md`）。§5 中 “batch 仍 deferred” 的历史表述只对 v1 `batch_worker` 编排成立；工作流对中的 **`--diff` 仍 deferred**。主仓 push 不在 residual plan 范围。
+> **Gate C “文档同步”项：已关闭（2026-09-13）。** wiki 内容已重写为 v2；Gate K/L 残留文案已入库并 **push 到 wiki remote**（`a10946b` + `8821779`）。Home/Sidebar 与 01-07 各目录页中的 Semantic 1.x、`run.py`、`parse_single`、renderer 系统、`--markdown`/`--legacy-json` 等均已降级为 historical/retired，PAK/IoStore/raw-file/C++ skeleton 降级为 target，VarType 与 Kismet 明确标为 current。
+> **Residual note 2026-09-13：** `--batch` 已在 v2 CLI 以 live 形态回归（目录遍历 + `uasset_read.batch` 报告；见 `cli.py` 与 `docs/reference/agent-dev-reference.md`）。§5 中 “batch 仍 deferred” 的历史表述只对 v1 `batch_worker` 编排成立；工作流对中的 **`--diff` 仍 deferred**。
 
 ## 1. 双轨现状（historical：基线 `bd3309a7` 快照，双轨已由 Phase 6 终结）
 
