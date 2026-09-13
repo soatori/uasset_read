@@ -90,12 +90,6 @@ class PackageArchive(FArchive):
             self._uexp_archive.close()
         self._use_mmap = False
 
-    def set_byte_swapping(self, enabled: bool) -> None:
-        self._byte_swapping = enabled
-        self._main_archive.set_byte_swapping(enabled)
-        if self._uexp_archive is not None:
-            self._uexp_archive.set_byte_swapping(enabled)
-
     def total_size(self) -> int:
         return self._file_size
 

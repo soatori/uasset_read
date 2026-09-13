@@ -1,7 +1,7 @@
 """Binary reader mirroring UE's FArchive mode.
 
-Supports byte-order detection and swapping, mmap for large files, and
-boundary validation.
+Little-endian only (BE packages are rejected at PACKAGE_FILE_TAG_SWAPPED);
+supports mmap for large files and boundary validation.
 Extracted from uasset_read.py lines 204-895.
 """
 
@@ -34,7 +34,7 @@ _FNAME_GARBAGE_MIN = 1 << 24
 class FArchive:
     """
     Binary reader class mirroring UE's FArchive mode.
-    Supports byte-order detection and swapping, boundary validation.
+    Little-endian only; supports boundary validation.
     """
 
     # Version gates set by callers after summary read (not all code paths set these).
@@ -49,7 +49,6 @@ class FArchive:
         """
         self._path = path
         self._file: BinaryIO | None = None
-        self._byte_swapping: bool = False
         self._file_size: int = 0
         self._tolerant: bool = tolerant
         self._mmap: mmap.mmap | None = None
@@ -112,14 +111,6 @@ class FArchive:
         f = self._file
         assert f is not None  # opened in __init__ or subclass
         return f.read(size)
-
-    @property
-    def is_byte_swapping(self) -> bool:
-        """Global byte-order flag — True means big-endian.
-
-        UE FArchive uses this flag to determine whether byte swapping is needed.
-        """
-        return self._byte_swapping
 
     def seek(self, pos: int) -> None:
         """Seek to a given position (with boundary validation)."""
@@ -214,10 +205,6 @@ class FArchive:
         except Exception:
             logger.debug("FArchive.__del__ cleanup failed", exc_info=True)
 
-    def set_byte_swapping(self, enabled: bool) -> None:
-        """Set byte swapping flag."""
-        self._byte_swapping = enabled
-
     def total_size(self) -> int:
         """Return total file size."""
         return self._file_size
@@ -276,65 +263,48 @@ class FArchive:
 
     # Type read methods
 
-    def _read_swapped(self, fmt_char: str, size: int):
-        """General byte-order-aware read (internal helper)."""
-        fmt = ">" if self._byte_swapping else "<"
-        return struct.unpack(fmt + fmt_char, self.read(size))[0]
+    def _read_le(self, fmt_char: str, size: int):
+        """Little-endian typed read (UE packages on supported platforms are LE)."""
+        return struct.unpack("<" + fmt_char, self.read(size))[0]
 
     def read_u8(self) -> int:
-        """Read unsigned 8-bit integer (byte-order independent)."""
         data = self.read(1)
         return struct.unpack("<B", data)[0]
 
     def read_i8(self) -> int:
-        """Read signed 8-bit integer (byte-order independent)."""
         data = self.read(1)
-        return struct.unpack("<b", data)[0]  # 'b' = signed byte
+        return struct.unpack("<b", data)[0]
 
     def read_bytes(self, n: int) -> bytes:
-        """Read raw bytes (no byte swapping)."""
         return self.read(n)
 
     def read_i32(self) -> int:
-        """Read signed 32-bit integer (supports byte swapping)."""
-        return self._read_swapped("i", 4)
+        return self._read_le("i", 4)
 
     def read_u16(self) -> int:
-        """Read unsigned 16-bit integer (supports byte swapping)."""
-        return self._read_swapped("H", 2)
+        return self._read_le("H", 2)
 
     def read_i16(self) -> int:
-        """Read signed 16-bit integer (supports byte swapping)."""
-        return self._read_swapped("h", 2)
+        return self._read_le("h", 2)
 
     def read_u32(self) -> int:
-        """Read unsigned 32-bit integer (supports byte swapping)."""
-        return self._read_swapped("I", 4)
+        return self._read_le("I", 4)
 
     def read_bool(self) -> bool:
-        """Read UE bool value (serialized as uint32, 4 bytes).
-
-        Standard FArchive bool serialization format. In both UE4 and UE5,
-        FArchive::operator<<(bool&) serializes as uint32 (4 bytes).
-        This applies to most scenarios, including FText, ObjectExport, etc.
-        """
+        """UE FArchive::operator<<(bool&) serializes as uint32 (4 bytes)."""
         return self.read_u32() != 0
 
     def read_i64(self) -> int:
-        """Read signed 64-bit integer (supports byte swapping)."""
-        return self._read_swapped("q", 8)
+        return self._read_le("q", 8)
 
     def read_u64(self) -> int:
-        """Read unsigned 64-bit integer (supports byte swapping)."""
-        return self._read_swapped("Q", 8)
+        return self._read_le("Q", 8)
 
     def read_f32(self) -> float:
-        """Read 32-bit float (supports byte swapping)."""
-        return self._read_swapped("f", 4)
+        return self._read_le("f", 4)
 
     def read_f64(self) -> float:
-        """Read 64-bit double (supports byte swapping)."""
-        return self._read_swapped("d", 8)
+        return self._read_le("d", 8)
 
     def _is_likely_alignment_padding(self, data_start_pos: int, byte_count: int) -> bool:
         """Determine whether all-zero data is alignment padding rather than real corruption (#369).
@@ -400,10 +370,7 @@ class FArchive:
                 f"but only {self._file_size - pos_before - 4} remain"
             )
         data = self.read(byte_len)
-        # UE serializes UTF-16 in platform-native byte order.
-        # On swapped archives (e.g. PC reading a cooked BE package),
-        # the payload is big-endian; otherwise little-endian.
-        encoding = "utf-16-be" if (utf16 and self._byte_swapping) else "utf-16-le" if utf16 else "utf-8"
+        encoding = "utf-16-le" if utf16 else "utf-8"
         result = data.decode(encoding, errors="replace").rstrip("\x00")
         # All-null detection: result empty after rstrip but length non-zero means the
         # data was entirely null bytes. Known UE pattern (all-null FText
