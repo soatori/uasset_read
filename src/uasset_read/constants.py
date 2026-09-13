@@ -20,9 +20,9 @@ PACKAGE_FILE_TAG_SWAPPED = 0xC1832A9E  # Swapped byte order magic tag
 # ============================================================================
 
 UE5_VERSION_MIN = 1000  # FPackageFileVersion::ToValue(): UE5 starts at ObjectVersion.h INITIAL_VERSION=1000
-UE5_LEGACY_VERSION = -9  # Fixed LegacyFileVersion for UE5.6+ files
+# -9: Fixed LegacyFileVersion for UE5.6+ files
 # -8: FileVersionUE5 field added, -7: texture allocation info removed, -6: custom version serialization optimization
-UE5_LEGACY_VERSIONS = frozenset({-6, -7, -8, UE5_LEGACY_VERSION})  # Supported UE5 LegacyFileVersion
+UE5_LEGACY_VERSIONS = frozenset({-6, -7, -8, -9})  # Supported UE5 LegacyFileVersion
 
 # UE4 LegacyFileVersion (GUID-based custom versions)
 # -3: GUID-based custom versions, has LegacyUE3Version
