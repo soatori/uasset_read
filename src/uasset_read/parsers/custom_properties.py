@@ -51,8 +51,7 @@ def _parse_bl4_game_data_handle_property(
 
 
 # Real custom pairs only — (game_key, type_id | property_name) -> handler.
-# Default 0xFD/0xFE slots are NOT registered: the unhandled path raw-skips
-# them, which is identical to the old default handlers.
+# There are no (None, ...) keys: unscoped slots raw-skip.
 CUSTOM_PROPERTY_HANDLERS: dict[tuple[str | None, Any], Callable[..., Any]] = {
     ("borderlands4", 0xFD): _parse_bl4_gbx_def_ptr_property,
     ("borderlands4", "GbxDefPtrProperty"): _parse_bl4_gbx_def_ptr_property,
@@ -70,22 +69,12 @@ def handle_custom_property(
 ) -> Any | None:
     """Find and invoke a registered custom property handler.
 
-    Args:
-        type_id: Custom property type ID
-        tag: PropertyTag instance
-        archive: FArchive instance
-        name_map: Name mapping table (optional)
-        game: Optional game key for game-specific handler lookup
-
-    Returns:
-        Handler return value, or the unhandled raw-skip dict if no handler found
+    Registry keys are (game_key, type_id | property_name). Only game-scoped
+    keys are registered; an unhandled slot raw-skips ``tag.size`` bytes.
     """
     game_key = game.lower() if game else None
-    handler = (
-        CUSTOM_PROPERTY_HANDLERS.get((game_key, type_id))
-        or CUSTOM_PROPERTY_HANDLERS.get((None, type_id))
-        or CUSTOM_PROPERTY_HANDLERS.get((game_key, tag.type))
-        or CUSTOM_PROPERTY_HANDLERS.get((None, tag.type))
+    handler = CUSTOM_PROPERTY_HANDLERS.get((game_key, type_id)) or CUSTOM_PROPERTY_HANDLERS.get(
+        (game_key, tag.type)
     )
     if handler is None:
         logger.debug(
