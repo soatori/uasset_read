@@ -264,10 +264,3 @@ class UsmapParser:
             )
         return PropertyType(type_name)
 
-
-def load_usmap(path: str, budget: ResourceBudget | None = None) -> TypeMappings:
-    """Load a .usmap mapping file into a TypeMappings container."""
-    lower = path.lower()
-    if lower.endswith(".usmap"):
-        return UsmapParser(path, budget=budget).mappings
-    raise ParseError(f"Unsupported mapping file type: {Path(path).name}")

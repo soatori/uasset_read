@@ -744,9 +744,9 @@ class LegacyPackageReader:
             # Lazy import mirrors v1 (pipeline/core.py, pipeline/stages.py):
             # the mappings module and its optional codecs must not become a
             # core-import dependency.
-            from ..mappings import load_usmap
+            from ..mappings import UsmapParser
 
-            return load_usmap(self._mappings_path, budget=budget)
+            return UsmapParser(self._mappings_path, budget=budget).mappings
         except Exception as exc:
             diagnostics.append(
                 _diag(
