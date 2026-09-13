@@ -129,7 +129,7 @@ CLI 契约：这五个 flag 由 `cli.py` 的 `retired` 集合显式拒绝（`par
 
 ## 7. 决策记录：parent-asset 解析放弃（2026-09-10）
 
-决策：**跨包 parent-asset 解析能力放弃，不在 v2 重建。** 实施见 `docs/designs/2026-09-10-codebase-slimming-plan.md` Gate G。
+决策：**跨包 parent-asset 解析能力放弃，不在 v2 重建。** 实施见 `docs/designs/archive/2026-09-10-codebase-slimming-plan.md` Gate G。
 
 | 变更 | 处理 |
 | --- | --- |

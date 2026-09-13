@@ -1,23 +1,40 @@
-> **status:** historical — Documents the v0.5.x API surface. The legacy pipeline (`parse_uasset`, `parse_uasset_with_linker`, `--legacy-json`) has been retired in v2. See `src/uasset_read/cli.py` and `src/uasset_read/package.py` for the current API.
+> **status:** historical — Documents the retired v0.5.x API surface. The v1 pipeline (`parse_uasset`, `parse_uasset_with_linker`, `--legacy-json`) is gone. For the current surface, see [Wiki Public API](../../wiki/07-Dev-Guide/Public-API.md) and `src/uasset_read/package.py`.
 
-# API 快速参考
+# API 快速参考（historical — v0.5.x）
 
-## 核心入口
+> **Do not use the snippets below.** They describe APIs that no longer exist. Current public surface:
+
+```python
+from uasset_read import parse_package_document, ParseError, FArchive, __version__
+
+doc = parse_package_document(
+    "path/to/asset.uasset",
+    *,
+    tolerant=True,
+    mappings_path=None,   # .usmap
+    game=None,
+    depth="asset",        # package | object | asset | decode
+    object_ids=None,
+)
+```
+
+CLI: `python -m uasset_read file.uasset` (see Wiki Quick-Start). Agent tools live in `src/uasset_read/agent_tools.py`.
+
+---
+
+## Retired v0.5.x surface (do not use)
+
+### 核心入口
 
 ```python
 from uasset_read import parse_package, parse_uasset, parse_uasset_with_linker
 
-# 推荐入口 — 支持 .uasset/.umap/package
 result = parse_package("path/to/asset.uasset")
-
-# 兼容入口 — 仅 .uasset
 result = parse_uasset("path/to/asset.uasset")
-
-# Linker 模式 — 完整对象图解析
 result = parse_uasset_with_linker("path/to/asset.uasset")
 ```
 
-## ParseResult 字段
+### ParseResult 字段（已删除）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -25,45 +42,24 @@ result = parse_uasset_with_linker("path/to/asset.uasset")
 | `name_map` | list[str] | 名称表 |
 | `import_map` | list[ObjectImport] | 导入表 |
 | `export_map` | list[ObjectExport] | 导出表（含 properties） |
-| `linker` | PackageLinker \| None | 对象链接器（parse_uasset_with_linker 模式） |
+| `linker` | PackageLinker \| None | 对象链接器 |
 | `blueprint` | BlueprintMetadata \| None | 蓝图元数据 |
 | `graphs` | list \| None | 蓝图图数据 |
 | `decompiled_functions` | list[KismetDecompiledResult] | 反编译函数 |
 | `errors` | list[str] | 错误列表 |
 | `is_success` | bool | 解析是否成功 |
 
-## 配置选项
+### 配置选项（v0.5.x）
 
 | 参数 | 类型 | 默认 | 说明 |
 |------|------|------|------|
 | `tolerant` | bool | True | 容错模式 |
 | `mappings_path` | str \| None | None | .usmap 映射文件 |
-| `game` | str \| None | None | 游戏标识（用于自定义属性 handler） |
+| `game` | str \| None | None | 游戏标识 |
 | `provider` | PackageProvider \| None | None | 自定义 provider（PAK/IoStore） |
 
-> 2026-09-10：`resolve_parents` / `parent_root`（及 CLI `--include-parent-assets` / `--asset-root`）已随 parent-asset 解析产品决策退役，见 D1 §7。
+> 2026-09-10：`resolve_parents` / `parent_root`（及 CLI `--include-parent-assets` / `--asset-root`）已随 parent-asset 解析产品决策退役（D1 §7）。
 
-## 常量
+### 异常类（部分仍存在）
 
-```python
-from uasset_read import (
-    MAX_PROPERTY_COUNT,      # 属性循环上限 10,000
-    MAX_ARRAY_COUNT,         # 数组元素上限 1,000,000
-    MMAP_THRESHOLD,          # mmap 阈值 50MB
-    MAX_FSTRING_LENGTH,      # FString 上限 10MB
-)
-```
-
-## 异常类
-
-```python
-from uasset_read import ParseError, VersionError, UAssetError, ErrorContext
-
-try:
-    result = parse_package(path)
-except ParseError as e:
-    # e.context 包含 OffsetRangeDiagnostic 上下文
-    print(f"解析失败: {e}")
-except VersionError as e:
-    print(f"不支持的版本: {e}")
-```
+`ParseError` / `FArchive` remain public. `parse_uasset` and related helpers were removed with the v1 pipeline.

@@ -3,7 +3,7 @@
 > **Status:** current（evaluation record；**no implementation**）
 > Date: 2026-09-13
 > Branch context: post Wave A+B productize on `docs/productize-unversioned` / `dev-0.6.0`
-> Scope: Phase D of [`2026-09-13-next-phase-closeout-and-deferred-gates.md`](2026-09-13-next-phase-closeout-and-deferred-gates.md). Evaluation only — this record does not authorize implementation of any deferred capability.
+> Scope: Phase D of the archived [next-phase closeout](archive/2026-09-13-next-phase-closeout-and-deferred-gates.md). Evaluation only — this record does not authorize implementation of any deferred capability.
 
 ## Capabilities evaluated
 

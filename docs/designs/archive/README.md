@@ -22,6 +22,14 @@ Source code and tests determine current behavior. The package-first report is th
 | `2026-08-17-remaining-uasset-semantic-design.md` | Remaining Semantic 1.x domain design | Current source/tests for v0.5.5; canonical report for v2 |
 | `core-extras-layering.md` | Earlier Core/Extras lazy-import boundary | Canonical report: Asset Handlers and dependency boundaries |
 | `output-refactor.md` | Earlier monolithic JSON output proposal | Canonical report: package envelope, views, depth, and pagination |
+| `2026-09-08-ponytail-audit-cleanup-plan.md` | Executed whole-repo ponytail cleanup plan | Source/tests; residual notes in 2026-09-12/13 archived records |
+| `2026-09-10-codebase-slimming-plan.md` | Executed slimming plan (Phase A + Gates G/K/L) | Source/tests; residual Gate G items are keep/tidy-only |
+| `2026-09-12-ponytail-evaluation-fix-plan.md` | Executed Wave A subtraction plan (restored 2026-09-26 from local draft) | Source/tests |
+| `2026-09-12-ponytail-residual-cuts.md` | Executed residual ponytail cuts (2026-09-12) | Source/tests |
+| `2026-09-12-post-refactor-productize-plan.md` | Executed Wave A/B productize sequencer | Source/tests |
+| `2026-09-13-next-phase-closeout-and-deferred-gates.md` | Executed A1–D1 closeout (merged to `dev-0.6.0`) | Deferred work: `../2026-09-13-deferred-capability-bundling.md` |
+| `2026-09-13-residual-closeout-g2-zen-schema-plan.md` | Executed Wave A/B residual closeout (G2 cache, S1 freeze, wiki Gate C local) | Deferred work: `../2026-09-13-deferred-capability-bundling.md` |
+| `2026-09-13-ponytail-byteswap-thin-wrappers.md` | Executed byteswap / thin-wrapper residual wave | Source/tests; BE packages remain rejected |
 
 ## Archive Rules
 

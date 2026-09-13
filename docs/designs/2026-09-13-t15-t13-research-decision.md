@@ -2,7 +2,7 @@
 
 > **Status:** current (research decision only; **no implementation**)
 > Date: 2026-09-13
-> Branch context: post Wave A+B productize; plan `2026-09-13-next-phase-closeout-and-deferred-gates.md`
+> Branch context: post Wave A+B productize; plan `archive/2026-09-13-next-phase-closeout-and-deferred-gates.md`
 
 ## Scope
 

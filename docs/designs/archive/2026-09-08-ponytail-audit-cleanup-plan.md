@@ -1,4 +1,7 @@
-# Ponytail Audit Cleanup Implementation Plan
+﻿# Ponytail Audit Cleanup Implementation Plan
+
+> **ARCHIVED (2026-09-26):** Executed closeout / plan-of-record. Historical evidence only — do not re-execute. Binding contracts and the canonical target remain under [`docs/designs/`](../README.md).
+
 
 > **Status (2026-09-10 update):** Waves 0-5 plus later gates executed. Task 3 Source family retired; Task 4 SKIP (G1); Task 5/6 log/Jmap retired; Task 7 residual done; Tasks 8-13 micro-cuts landed (validate_pin ftext, package-summary tuples, UFunction builders, native-field/expression write-only fields, property_pointer branch, bulk_data/custom_properties/property_types/handlers residual cuts). **Do not re-execute completed steps.**
 

@@ -1,4 +1,7 @@
-# Residual Closeout, G2 Cache, and Bundle 1/2 Execution Plan
+﻿# Residual Closeout, G2 Cache, and Bundle 1/2 Execution Plan
+
+> **ARCHIVED (2026-09-26):** Executed closeout / plan-of-record. Historical evidence only — do not re-execute. Binding contracts and the canonical target remain under [`docs/designs/`](../README.md).
+
 
 > **Status:** current（Wave A + Wave B 已执行；**Wave C/D 用户暂缓**——不实现 Zen/IoStore 与 SchemaProvider；Wave E 收尾。本文为完成记录）
 > **Date:** 2026-09-13

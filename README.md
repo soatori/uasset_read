@@ -4,7 +4,7 @@
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
-> 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 96 source files · 70 registered UE class handlers
+> 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 69 source files · 21 registered semantic asset handlers
 
 > **Refactor status:** v2 package-first architecture: default CLI/API output is `PackageDocument v2` (legacy packages; tagged properties parsed within export bounds; sample-backed handlers incl. lightweight Niagara kind coverage (semantic status partial until domain fields land), no Semantic 1.x handler dependency). Payload extraction from cooked sidecar files is now implemented: `extract_payload` reads actual bytes from `.uexp/.ubulk` files using BulkData header mapping. Default `semantic` view excludes raw offsets/property trees; they are opt-in via `raw`/`debug` views. Zen/IoStore remain deferred; unversioned-with-usmap is partial on editor samples (see `docs/designs/README.md`); Semantic 1.x JSON is no longer available — the v1 pipeline was removed. **Contract:** `format_version: "2.0"` is frozen for stable fields (S1, 2026-09-13); experimental keys (`properties` / `semantic` / `coverage` / `payloads`) may change without a version bump.
 
@@ -26,7 +26,7 @@ Whether you're auditing blueprint dependencies, building tooling for game develo
 | -------- | ------- |
 | Version | v0.5.4.45 (last tagged) / 0.6.0-dev (v2 default) |
 | Source | Python parser for Unreal Engine .uasset files |
-| Modules | 96 source files across 8 subpackages |
+| Modules | 69 source files; top-level subpackages `kismet`, `models`, `parsers`, `serializers` |
 | v2 Tests | test_core (exactly 13 functions, structure-gated) + manifest-driven test_samples (118 collected total, no skips/xfail) |
 | Tracked samples | 54 legacy fixtures with manifest validation |
 
@@ -84,7 +84,7 @@ print(project_document(doc))  # PackageDocument JSON dict
 
 ### File Format Support
 
-- **Dedicated asset type parsers** — 70 registrations covering 61 distinct UE class names (`asset_types/__init__.py`), 13 bound to real extractors (DataTable, CurveTable, LevelSequence, MovieScene*, Skeleton, SoundWave, AnimSequence, AnimMontage, AnimBlueprintGeneratedClass, UserDefinedEnum, UserDefinedStruct); the remaining 48 are metadata/property-metadata stubs. 21 semantic AssetHandler classes in `handlers_impl.py` provide deeper coverage for selected class families.
+- **Dedicated asset type parsers** — 21 semantic handler instances in `handlers_impl.py` (registered by UE class name / family) plus tagged-property fallback for the rest of the export map.
 - **Payload extraction** — cooked payload extraction from sidecar files (.uexp/.ubulk) with sidecar discovery and BulkData header mapping
 - **Game version support** — Game-specific serialization constants
 - **Binary/native handlers** — binary or native property serialization support
@@ -210,10 +210,10 @@ Shared readers behind that document: `kismet/` (bytecode → expressions + diagn
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, FEdGraphPinType, PropertyTag/PropertyValue, Anim IR, structured diagnostics, property fallback |
 | **Parsers** | `parsers/` | 28 tagged-property parse functions + dispatcher, custom property registry, class handler registry, BinaryOrNative handlers |
-| ├ Asset Types | `parsers/asset_types/` | 18 asset type parser files + opaque stubs; 70 registered class handlers |
+| ├ Asset Types | `parsers/asset_types/` | `handlers_impl.py` — 21 registered semantic handler instances |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → expressions, decompile bridge, BPGC fallback, UFunction script reader (C++ translator retired 2026-09-10) |
 | ├ Expressions | `kismet/expressions/` | 15 expression types (assignments, control flow, function calls, literals, casts, delegates, etc.) |
-| **v2 Document** | `v2/` | `api.py` entry point, `document.py` PackageDocument, `object_model.py`, `properties.py`, `handlers.py`, `package/legacy.py` reader, `projection.py` paging/budget, `agent_tools.py`, `blueprint_graph.py`, `diagnostics.py` |
+| **Package Document** | `package.py`, `models/`, `projection.py`, `agent_tools.py` | `parse_package_document` entry, `PackageDocument` / `ObjectRecord`, view/depth projection, agent tools (no `v2/` subpackage — flattened) |
 
 ## Testing
 

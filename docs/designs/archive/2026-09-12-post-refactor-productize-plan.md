@@ -1,4 +1,7 @@
-# Post-Refactor Productize Plan（合并总调度）
+﻿# Post-Refactor Productize Plan（合并总调度）
+
+> **ARCHIVED (2026-09-26):** Executed closeout / plan-of-record. Historical evidence only — do not re-execute. Binding contracts and the canonical target remain under [`docs/designs/`](../README.md).
+
 
 > **Status:** current（Wave A 已执行于 `docs/productize-unversioned`；Wave B P0–P8 及二次审查加固已执行；本文仅作完成记录与交接索引）
 > **合并决策:** 减法优先——先完整落地 [`2026-09-12-ponytail-evaluation-fix-plan.md`](2026-09-12-ponytail-evaluation-fix-plan.md)（Wave A），再在减法后的树上执行本文 Wave B。  

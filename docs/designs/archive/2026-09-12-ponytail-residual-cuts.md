@@ -1,4 +1,7 @@
-# Ponytail Residual Cuts
+﻿# Ponytail Residual Cuts
+
+> **ARCHIVED (2026-09-26):** Executed closeout / plan-of-record. Historical evidence only — do not re-execute. Binding contracts and the canonical target remain under [`docs/designs/`](../README.md).
+
 
 > **Status:** current (executed 2026-09-12). Follow-up to the 2026-09-08 whole-repo
 > audit waves (Tasks 0–13 already landed). **Do not re-execute completed steps.**

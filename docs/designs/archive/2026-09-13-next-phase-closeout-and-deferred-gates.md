@@ -1,4 +1,7 @@
-# Next-Phase Closeout, Polish, and Deferred-Gate Decision Plan
+﻿# Next-Phase Closeout, Polish, and Deferred-Gate Decision Plan
+
+> **ARCHIVED (2026-09-26):** Executed closeout / plan-of-record. Historical evidence only — do not re-execute. Binding contracts and the canonical target remain under [`docs/designs/`](../README.md).
+
 
 > **Status:** current (A1–D1 executed; merged to `dev-0.6.0` at `ae7366c7` + this backfill; worktree/branch cleanup and push under user "all" closeout)
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

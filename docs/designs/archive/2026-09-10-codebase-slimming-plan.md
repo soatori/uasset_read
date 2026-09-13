@@ -1,4 +1,7 @@
-# 代码库精简计划
+﻿# 代码库精简计划
+
+> **ARCHIVED (2026-09-26):** Executed closeout / plan-of-record. Historical evidence only — do not re-execute. Binding contracts and the canonical target remain under [`docs/designs/`](../README.md).
+
 
 > **Status**: current（Phase 0/A、Gate G parent_resolver、Gate K、Gate L 及 K3 收尾回归均已完成；agent_tools / iostore / mappings 仍为 keep）  
 > **Date**: 2026-09-10  
