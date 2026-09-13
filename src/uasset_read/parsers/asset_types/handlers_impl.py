@@ -643,19 +643,27 @@ class MaterialInstanceHandler(_SupportsClasses):
             result["has_parent"] = True
             coverage.append(CoverageEntry(feature="material_instance.parent", status="present"))
 
-        # Scalar parameters
-        scalar_params = props.get("ScalarParameterValues")
-        if scalar_params and isinstance(scalar_params, dict):
-            fields = scalar_params.get("fields", {})
-            result["scalar_param_count"] = len(fields) if isinstance(fields, dict) else 0
+        # Scalar parameters — normalized arrays first; legacy fields dict fallback.
+        scalar_params = _array_value(props, "ScalarParameterValues")
+        if scalar_params is not None:
+            result["scalar_param_count"] = len(scalar_params)
             coverage.append(CoverageEntry(feature="material_instance.scalars", status="present"))
+        else:
+            legacy = props.get("ScalarParameterValues")
+            if isinstance(legacy, dict) and isinstance(legacy.get("fields"), dict):
+                result["scalar_param_count"] = len(legacy["fields"])
+                coverage.append(CoverageEntry(feature="material_instance.scalars", status="present"))
 
-        # Vector parameters
-        vector_params = props.get("VectorParameterValues")
-        if vector_params and isinstance(vector_params, dict):
-            fields = vector_params.get("fields", {})
-            result["vector_param_count"] = len(fields) if isinstance(fields, dict) else 0
+        # Vector parameters — normalized arrays first; legacy fields dict fallback.
+        vector_params = _array_value(props, "VectorParameterValues")
+        if vector_params is not None:
+            result["vector_param_count"] = len(vector_params)
             coverage.append(CoverageEntry(feature="material_instance.vectors", status="present"))
+        else:
+            legacy = props.get("VectorParameterValues")
+            if isinstance(legacy, dict) and isinstance(legacy.get("fields"), dict):
+                result["vector_param_count"] = len(legacy["fields"])
+                coverage.append(CoverageEntry(feature="material_instance.vectors", status="present"))
 
         obj.coverage.extend(coverage)
         return result if len(result) > 1 else None

@@ -128,12 +128,13 @@ CAPABILITIES = (
     ),
     # Flags/editor-position only — not enough core fields for decoded tier (#629 hardening).
     ("FirstPerson_M_PrototypeGrid.uasset", "Material", {"kind": "material"}, "partial"),
-    # Parent-only with zero params — not enough core fields for decoded tier.
+    # Real fixture carries 3 scalar + 1 vector parameters (normalized arrays);
+    # decoded tier per audit-remediation Task 5.
     (
         "CassiniSample_MI_Template_BaseGray_Metal.uasset",
         "MaterialInstanceConstant",
         {"kind": "material_instance"},
-        "partial",
+        "complete",
     ),
     (
         "StackOBot_BP_Drone.uasset",
@@ -857,6 +858,41 @@ def test_blueprint_graph_decodes_without_parse_errors():
     assert len(graphs) == 4 and len(nodes) == 370, f"got {len(graphs)} graphs / {len(nodes)} nodes"
     assert not [g for g in graphs if g.get("parse_errors")], "graph-level parse errors"
     assert not [d for d in doc.diagnostics if d.code.startswith("BLUEPRINT_GRAPH")], "graph diagnostics"
+
+
+def test_als_graph_owners_resolve_beyond_eight_hops():
+    """Task 7: ALS's 74 nine-hop outer chains must attach, not go unresolved.
+
+    Direct graph extraction stays at 275; the decode pass no longer reports
+    the known BLUEPRINT_GRAPH_OWNER_UNRESOLVED owner-loss diagnostics.
+    """
+    from uasset_read.package import open_package_bundle, parse_package_document
+    from uasset_read.serializers.package_summary import read_package_summary, read_name_table
+    from uasset_read.serializers.object_resources import read_export_map, read_import_map
+    from uasset_read.serializers.blueprint_graph import read_blueprint_graphs
+
+    # Direct extraction: graph count is a fixture regression, owner-independent.
+    archive = open_package_bundle(str(SAMPLES / "ALS_AnimBP.uasset")).open_archive(tolerant=True)
+    try:
+        summary = read_package_summary(archive)
+        name_map = read_name_table(archive, summary)
+        archive.set_name_map(name_map)
+        import_map = read_import_map(archive, summary, name_map)
+        export_map = read_export_map(archive, summary, name_map)
+        graphs = read_blueprint_graphs(archive, summary, name_map, import_map, export_map)
+    finally:
+        archive.close()
+    assert len(graphs) == 275, f"expected 275 direct graphs, got {len(graphs)}"
+    for graph in graphs:
+        for node in graph["nodes"]:
+            assert node["id"].startswith("export:"), node
+
+    # Full decode: every graph attaches to a Blueprint-family owner.
+    doc = parse_package_document(str(SAMPLES / "ALS_AnimBP.uasset"), depth="decode", tolerant=True)
+    owner_unresolved = [d for d in doc.diagnostics if d.code == "BLUEPRINT_GRAPH_OWNER_UNRESOLVED"]
+    assert not owner_unresolved, f"nine-hop owners must resolve: {len(owner_unresolved)} unresolved"
+    attached = sum(len((o.semantic or {}).get("graphs") or []) for o in doc.objects)
+    assert attached == 275, f"expected all 275 graphs attached, got {attached}"
 
 
 # --------------------------------------------------------------------------- #
