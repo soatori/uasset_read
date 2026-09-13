@@ -8,25 +8,27 @@ C++ pseudocode generation was retired 2026-09-10 (Gate K).
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
-BYTECODE_STATUSES = frozenset({"parsed", "no_script", "failed"})
-
-
-def _validate_bytecode_status(bytecode_status: str) -> None:
-    if bytecode_status not in BYTECODE_STATUSES:
-        raise ValueError(f"disallowed bytecode_status: {bytecode_status!r}; allowed: {sorted(BYTECODE_STATUSES)}")
+# status -> public confidence (K0 contract)
+BYTECODE_CONFIDENCE: dict[str, str] = {
+    "parsed": "verified",
+    "no_script": "no_script",
+    "failed": "failed",
+}
 
 
 def infer_bytecode_confidence(bytecode_status: str) -> str:
     """Classify the confidence of a public function body.
 
-    Keep this shared by direct Kismet serialization and the v2 decompile output so
+    Shared by direct Kismet serialization and the v2 decompile output so
     callers cannot receive conflicting provenance for the same function body.
     """
-    if bytecode_status == "failed":
-        return "failed"
-    if bytecode_status == "no_script":
-        return "no_script"
-    return "verified"
+    try:
+        return BYTECODE_CONFIDENCE[bytecode_status]
+    except KeyError:
+        raise ValueError(
+            f"disallowed bytecode_status: {bytecode_status!r}; "
+            f"allowed: {sorted(BYTECODE_CONFIDENCE)}"
+        ) from None
 
 
 @dataclass
@@ -53,17 +55,15 @@ class KismetDecompiledResult:
     fallback_reasons: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        _validate_bytecode_status(self.bytecode_status)
+        infer_bytecode_confidence(self.bytecode_status)  # validates
 
     def to_dict(self) -> dict:
         d = asdict(self)
-        d["bytecode_confidence"] = infer_bytecode_confidence(
-            bytecode_status=self.bytecode_status,
-        )
+        d["bytecode_confidence"] = infer_bytecode_confidence(self.bytecode_status)
         d["expressions"] = [
             e.to_dict() if hasattr(e, "to_dict") else str(e) for e in self.expressions
         ]
         return {k: v for k, v in d.items() if v is not None}
 
 
-__all__ = ["KismetDecompiledResult", "infer_bytecode_confidence", "BYTECODE_STATUSES"]
+__all__ = ["KismetDecompiledResult", "infer_bytecode_confidence", "BYTECODE_CONFIDENCE"]
