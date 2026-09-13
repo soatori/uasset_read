@@ -199,7 +199,7 @@ Shared readers behind that document: `kismet/` (bytecode → expressions + diagn
 | Module | Path | Description |
 | -------- | ------ | ------------- |
 | **Core** | | |
-| FArchive | `archive.py` | Binary reader with byte swapping, mmap |
+| FArchive | `archive.py` | Little-endian binary reader, mmap |
 | Constants | `constants.py` | Version numbers, property type thresholds, PropertyTag flags |
 | Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
 | Package Mgmt | `package.py` | `PackageBundle`, `FileSystemPackageProvider`, `PackageArchive`, `open_package_bundle` |
