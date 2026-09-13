@@ -64,3 +64,6 @@ class UEdGraph:
     graph_name: str
     nodes: list["UEdGraphNode"] = field(default_factory=list)
     subgraphs: list["UEdGraph"] = field(default_factory=list)
+    # Compact node-level recovery reasons collected while reading Nodes
+    # (empty for a clean graph; see graph.read_ue_graph's fallback path).
+    parse_errors: list[str] = field(default_factory=list)

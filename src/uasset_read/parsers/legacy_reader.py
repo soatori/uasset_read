@@ -985,6 +985,10 @@ _BLUEPRINT_FAMILY_CLASSES = frozenset(
     {"Blueprint", "AnimBlueprint", "BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}
 )
 
+# Hard safety cap on graph-owner outer-chain traversal. The export-table size
+# bounds real chains; this named limit stops malformed data even on huge tables.
+MAX_GRAPH_OWNER_HOPS = 256
+
 
 def _resolve_graph_owner(export_idx: int, export_map: list[ObjectExport], objects: list[ObjectRecord]) -> str | None:
     """Walk a graph export's outer chain to its Blueprint-family owner.
@@ -993,12 +997,20 @@ def _resolve_graph_owner(export_idx: int, export_map: list[ObjectExport], object
     tracked fixtures: StackOBot EventGraph export:4 outer=export:0,
     ABP_RifleAnimLayers EventGraph export:3 outer=export:1). Walks the raw
     ``outer_index`` chain (FPackageIndex: positive = export index + 1,
-    negative = import) at most 8 hops — a chain cannot cycle in a valid
-    package. Returns None when no family export is on the chain.
+    negative = import) with a visited-export set so cycles terminate, bounded
+    by ``min(len(export_map), MAX_GRAPH_OWNER_HOPS)``. ALS chains of nine hops
+    must resolve; a partial chain never guesses an owner. Returns None when no
+    family export is on the chain, an index is invalid, a cycle repeats, or
+    the bound is reached.
     """
     by_index = {o.table_index: o for o in objects}
     idx = export_idx
-    for _ in range(8):
+    visited: set[int] = set()
+    bound = min(len(export_map), MAX_GRAPH_OWNER_HOPS) if export_map else MAX_GRAPH_OWNER_HOPS
+    for _ in range(bound):
+        if idx in visited:
+            return None  # cyclic outer chain — never resolve through a loop
+        visited.add(idx)
         rec = by_index.get(idx)
         if rec is None:
             return None
@@ -1045,17 +1057,35 @@ def _attach_blueprint_graph_extras(
     graphs = read_blueprint_graphs(archive, summary, name_map, import_map, export_map)
     owners: dict[str, list[dict]] = {}
     for graph in graphs:
-        if graph.get("parse_errors"):
+        parse_errors = graph.get("parse_errors") or []
+        if parse_errors and not graph.get("nodes"):
+            # Whole-graph failure: the conversion emitted an error dict with no
+            # nodes. Drop it with a diagnostic; the export id stays addressable.
             diagnostics.append(
                 _diag(
                     "BLUEPRINT_GRAPH_PARSE_FAILED",
-                    f"graph export {graph['id']}: {graph['parse_errors'][0]}",
+                    f"graph export {graph['id']}: {parse_errors[0]}",
                     "semantic.blueprint",
                     object_id=graph["id"],
                     effect=None,
                 )
             )
             continue
+        if parse_errors:
+            # Node-level partial failures: the graph stays attached and
+            # addressable; each fallback node is already in the projection.
+            diagnostics.append(
+                _diag(
+                    "BLUEPRINT_GRAPH_NODE_PARTIAL",
+                    (
+                        f"graph export {graph['id']}: {len(parse_errors)} node-level "
+                        f"recovery(ies); first: {parse_errors[0]}"
+                    ),
+                    "semantic.blueprint",
+                    object_id=graph["id"],
+                    effect="semantic_loss",
+                )
+            )
         try:
             export_idx = int(graph["id"].split(":")[1])
         except (ValueError, IndexError):
@@ -1095,9 +1125,23 @@ def _attach_blueprint_graph_extras(
                 effect=None,
             )
         )
+    total_ambiguous = sum(g.get("ambiguous_links", 0) for grouped in owners.values() for g in grouped)
+    if total_ambiguous:
+        diagnostics.append(
+            _diag(
+                "BLUEPRINT_LINK_AMBIGUOUS",
+                (
+                    f"{total_ambiguous} pin link(s) had multiple GUID candidates and no "
+                    f"owning-node identity; left unresolved rather than guessed"
+                ),
+                "semantic.blueprint",
+                effect="semantic_loss",
+            )
+        )
     for grouped in owners.values():
         for graph in grouped:
             graph.pop("unresolved_links", None)
+            graph.pop("ambiguous_links", None)
     for owner_id, owner_graphs in owners.items():
         entry = extras.setdefault(owner_id, {})
         entry["graphs"] = owner_graphs

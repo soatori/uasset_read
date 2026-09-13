@@ -597,3 +597,131 @@ def test_generated_class_function_count_is_depth_independent():
         bpgc = next(o for o in doc.objects if o.id == "export:2")
         counts[depth] = len(((bpgc.semantic or {}).get("functions") or []))
     assert counts["decode"] == counts["asset"] == 42, counts
+
+
+# --------------------------------------------------------------------------- #
+# Task 7: node addressability, partial failures, exec-edge orientation.
+# --------------------------------------------------------------------------- #
+
+
+def _low_level_graphs(sample: str):
+    from uasset_read.package import open_package_bundle
+    from uasset_read.serializers.package_summary import read_package_summary, read_name_table
+    from uasset_read.serializers.object_resources import read_export_map, read_import_map
+    from uasset_read.serializers.blueprint_graph import read_blueprint_graphs
+
+    archive = open_package_bundle(str(SAMPLES / sample)).open_archive(tolerant=True)
+    try:
+        summary = read_package_summary(archive)
+        name_map = read_name_table(archive, summary)
+        archive.set_name_map(name_map)
+        import_map = read_import_map(archive, summary, name_map)
+        export_map = read_export_map(archive, summary, name_map)
+        return read_blueprint_graphs(archive, summary, name_map, import_map, export_map)
+    finally:
+        archive.close()
+
+
+def test_every_converted_node_id_is_addressable():
+    """No converted node may have id=\"\"; fallback nodes stay export:N."""
+    graphs = _low_level_graphs("StackOBot_BP_Drone.uasset")
+    assert graphs
+    for graph in graphs:
+        for node in graph["nodes"]:
+            assert node["id"].startswith("export:"), f"unaddressable node in {graph['id']}: {node}"
+        for error in graph.get("parse_errors", []):
+            assert error
+
+
+def test_node_reader_failure_keeps_fallback_export_id(monkeypatch):
+    """A controlled node-reader failure yields an addressable fallback node
+    plus a surfaced graph parse error — never an empty id."""
+    from uasset_read.exceptions import ParseError
+    from uasset_read.package import open_package_bundle
+    from uasset_read.serializers.package_summary import read_package_summary, read_name_table
+    from uasset_read.serializers.object_resources import read_export_map, read_import_map
+    from uasset_read.serializers import graph_node
+
+    sample = SAMPLES / "StackOBot_BP_Drone.uasset"
+    archive = open_package_bundle(str(sample)).open_archive(tolerant=True)
+    try:
+        summary = read_package_summary(archive)
+        name_map = read_name_table(archive, summary)
+        archive.set_name_map(name_map)
+        import_map = read_import_map(archive, summary, name_map)
+        export_map = read_export_map(archive, summary, name_map)
+
+        real = graph_node.read_ue_graph_node
+        calls = {"n": 0}
+
+        def flaky(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise ParseError("injected node failure")
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(graph_node, "read_ue_graph_node", flaky)
+        from uasset_read.serializers.blueprint_graph import read_blueprint_graphs
+
+        graphs = read_blueprint_graphs(archive, summary, name_map, import_map, export_map)
+    finally:
+        archive.close()
+
+    assert calls["n"] >= 1
+    all_nodes = [n for g in graphs for n in g["nodes"]]
+    assert all_nodes
+    for node in all_nodes:
+        assert node["id"].startswith("export:"), node
+    error_graphs = [g for g in graphs if g.get("parse_errors")]
+    assert error_graphs, "the injected failure must surface in graph parse_errors"
+    for g in error_graphs:
+        for err in g["parse_errors"]:
+            assert "injected node failure" in err or err
+
+
+def test_exec_edges_are_oriented_unique_and_graph_local():
+    """Every exec edge is output→input, graph-local, and undirected-unique.
+
+    Keeps the StackOBot fixture count of three; this is a direct unique
+    exec-edge summary, not a full runtime execution trace.
+    """
+    from uasset_read import parse_package_document
+    from uasset_read.projection import project_document
+
+    doc = parse_package_document(
+        SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True
+    )
+    page = project_document(doc, depth="decode", max_bytes=2_000_000)
+    chains = []
+    for o in page.get("objects") or []:
+        chains.extend((o.get("semantic") or {}).get("exec_chains") or [])
+    event = next((c for c in chains if c.get("graph") == "EventGraph"), None)
+    assert event is not None, "StackOBot EventGraph must surface exec_chains"
+    edges = event.get("edges") or []
+    assert len(edges) == 3, event
+
+    # Direction/category metadata for endpoints, scoped to one decoded page.
+    pin_meta: dict[str, tuple[str, str, str]] = {}
+    graph_of_node: dict[str, str] = {}
+    for o in page.get("objects") or []:
+        for g in (o.get("semantic") or {}).get("graphs") or []:
+            for n in g.get("nodes") or []:
+                graph_of_node[n["id"]] = g["id"]
+                for p in n.get("pins") or []:
+                    pin_meta[p["id"]] = (n["id"], p.get("direction") or "", p.get("category") or "")
+
+    seen_pairs: set[frozenset[str]] = set()
+    for edge in edges:
+        from_pin, to_pin = edge["from_pin"], edge["to_pin"]
+        from_node, to_node = edge["from_node"], edge["to_node"]
+        # Endpoints join the same emitted graph projection.
+        assert graph_of_node.get(from_node) == graph_of_node.get(to_node), edge
+        # Source is an output exec pin; target is an input exec pin.
+        src = pin_meta.get(from_pin)
+        dst = pin_meta.get(to_pin)
+        assert src is not None and dst is not None, edge
+        assert src[1] == "output" and src[2] == "exec", (edge, src)
+        assert dst[1] == "input" and dst[2] == "exec", (edge, dst)
+        pair = frozenset((from_pin, to_pin))
+        assert pair not in seen_pairs, f"undirected duplicate: {edge}"
+        seen_pairs.add(pair)

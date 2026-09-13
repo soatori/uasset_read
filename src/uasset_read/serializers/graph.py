@@ -92,11 +92,27 @@ def read_ue_graph(
         node_indices = node_indices[:MAX_NODES_PER_GRAPH]
 
     nodes: list[UEdGraphNode] = []
+    parse_errors: list[str] = []
 
     def read_node(node_export: ObjectExport, node_idx: int) -> UEdGraphNode:
         node = read_ue_graph_node(archive, name_map, summary, export_map, import_map, node_export)
         node._export_index = node_idx  # tag for dedup
         return node
+
+    def fallback_node(node_export: ObjectExport, node_idx: int, node_class: str, exc: BaseException) -> UEdGraphNode:
+        """Addressable partial node: keeps the 1-based export index so the
+        conversion emits export:N — never id=\"\" — and never fabricates pins."""
+        reason = f"node export:{node_idx - 1} ({node_export.object_name}): {type(exc).__name__}: {exc}"
+        parse_errors.append(reason)
+        return UEdGraphNode(
+            node_pos_x=0,
+            node_pos_y=0,
+            node_comment="",
+            pins=[],
+            class_name=node_class or "",
+            node_data={"_parse_error": True, "node_name": node_export.object_name, "reason": reason},
+            _export_index=node_idx,
+        )
 
     for node_index in node_indices:
         if node_index <= 0 or node_index > len(export_map):
@@ -104,13 +120,15 @@ def read_ue_graph(
         node_export = export_map[node_index - 1]
         try:
             nodes.append(read_node(node_export, node_index))
-        except (ParseError, struct.error, OSError, ValueError, KeyError):
+        except (ParseError, struct.error, OSError, ValueError, KeyError) as exc:
             logger.debug(
                 "Failed to read node %s (export #%d) in graph %s",
                 node_export.object_name,
                 node_index,
                 graph_export.object_name,
             )
+            node_class = resolve_class_name(node_export.class_index, import_map, export_map) or ""
+            nodes.append(fallback_node(node_export, node_index, node_class, exc))
 
     # UE 5.x fallback: scan export_map for nodes whose outer is this graph.
     # Catches nodes not listed in the Nodes PropertyTag (e.g. dynamically added nodes).
@@ -127,17 +145,8 @@ def read_ue_graph(
                         continue
                     try:
                         nodes.append(read_node(node_export, node_idx))
-                    except (ParseError, struct.error, OSError, ValueError, KeyError):
-                        nodes.append(
-                            UEdGraphNode(
-                                node_pos_x=0,
-                                node_pos_y=0,
-                                node_comment="",
-                                pins=[],
-                                class_name=node_class or "",
-                                node_data={"_parse_error": True, "node_name": node_export.object_name},
-                            )
-                        )
+                    except (ParseError, struct.error, OSError, ValueError, KeyError) as exc:
+                        nodes.append(fallback_node(node_export, node_idx, node_class or "", exc))
 
     # -- 3. SubGraphs -- from PropertyTag --
     subgraph_indices: list[int] = []
@@ -208,4 +217,5 @@ def read_ue_graph(
         graph_name=graph_export.object_name,
         nodes=nodes,
         subgraphs=subgraphs,
+        parse_errors=parse_errors,
     )

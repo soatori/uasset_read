@@ -246,6 +246,14 @@ def _graph_to_dict(graph: Any, export_idx: int, class_name: str) -> dict[str, An
         if sub_pin_trunc:
             pin_truncated = True
 
+    # Node-level recovery reasons (empty for a clean graph). Whole-graph
+    # failures use _error_graph instead and never reach this converter.
+    # Subgraph node failures surface here too because subgraph nodes are
+    # flattened into this projection.
+    parse_errors: list[str] = list(getattr(graph, "parse_errors", []) or [])
+    for sub in graph.subgraphs:
+        parse_errors.extend(str(e) for e in (getattr(sub, "parse_errors", []) or []))
+
     return {
         "id": f"export:{export_idx}",
         "name": str(graph.graph_name or ""),
@@ -256,17 +264,19 @@ def _graph_to_dict(graph: Any, export_idx: int, class_name: str) -> dict[str, An
         "pin_count": pin_count,
         "edge_count": 0,  # set by resolve_pin_links
         "truncated": {"nodes": node_truncated, "pins": pin_truncated},
+        "parse_errors": parse_errors,
         "_pin_links": _collect_pin_links_recursive(graph),
     }
 
 
 def _collect_pin_links(graph: Any) -> list[dict[str, Any]]:
-    """Collect (source pin, target pin-guid) link records from one UEdGraph tree.
+    """Collect (source pin, target pin-ref) link records from one UEdGraph tree.
 
-    ``UEdGraphPin.linked_to_raw`` entries are ``{"pin_guid": <target 32-hex>}``
-    — the *target's* GUID (verified on the tracked fixtures); the source is the
-    pin owning the list. So each record carries the owning pin's own id
-    (``from_pin``) plus the target ``pin_guid``.
+    ``UEdGraphPin.linked_to_raw`` entries are
+    ``{"owning_node": <raw FPackageIndex int>, "pin_guid": <target 32-hex>}``
+    — the *target's* owning node and GUID (verified on the tracked fixtures);
+    the source is the pin owning the list. Each record carries the owning
+    pin's own id (``from_pin``) plus the target identity fields.
     """
     links: list[dict[str, Any]] = []
     for node in graph.nodes:
@@ -277,40 +287,89 @@ def _collect_pin_links(graph: Any) -> list[dict[str, Any]]:
                         "from_node": getattr(node, "_export_index", 0),  # 1-based
                         "from_pin": str(pin.pin_id),
                         "to_pin": str(entry.get("pin_guid", "")),
+                        "to_owning_node": entry.get("owning_node"),
                     }
                 )
     return links
 
 
+def _normalize_pin_owner(owning_node: Any) -> str | None:
+    """Translate a serialized PinReference owning_node into node identity.
+
+    FPackageIndex convention (ObjectResource.h): positive = export index + 1,
+    negative = import, 0 = null. Only positive export references name a node
+    in the converted graph projection; imports/null yield None so the
+    resolver can fall back to a unique GUID candidate.
+    """
+    if isinstance(owning_node, int) and owning_node > 0:
+        return f"export:{owning_node - 1}"
+    return None
+
+
 def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:
     """Resolve every graph's GUID-keyed links to (to_node, to_pin), in place.
 
-    Builds one package-wide index of pin_guid -> (node id, pin id), then walks
-    each graph's ``_pin_links`` records. A link whose target guid is absent is
-    counted in the graph's ``unresolved_links`` (cross-package or clipped pin)
-    and dropped — the reader pass turns that counter into a diagnostic, never
-    a silent loss. Consumes and deletes ``_pin_links``; sets ``edge_count`` to
-    the number of resolved *link records* (bidirectional pairs count twice).
-    That is not the same as ``summarize_exec_edges``'s unique undirected
-    exec-only ``edges`` list.
+    Target lookup uses the (owning_node, pin_guid) key first. Because
+    ``_graph_to_dict`` flattens subgraphs, the same pin GUID can legitimately
+    appear under several node ids package-wide; the owner key disambiguates
+    those duplicates. A GUID-only fallback runs only when the owner is
+    unavailable *and* exactly one candidate carries the GUID. Zero candidates
+    or multiple candidates without an owner are unresolved: they increment
+    ``unresolved_links`` (and ``ambiguous_links`` for the multi-candidate
+    case) — never resolved to an arbitrary last duplicate. The reader pass
+    turns those counters into diagnostics. Consumes and deletes
+    ``_pin_links``; sets ``edge_count`` to the number of resolved *link
+    records* (bidirectional pairs count twice). That is not the same as
+    ``summarize_exec_edges``'s unique undirected exec-only ``edges`` list.
     """
     # The emitter inlines subgraph nodes into their owning graph's ``nodes``
     # list (see ``_graph_to_dict``), so an emitted graph dict carries no
-    # ``subgraphs`` key.
+    # ``subgraphs`` key. The same physical node export can still appear in
+    # several emitted graphs — dedupe candidates by (node id, pin id).
     all_nodes = [n for g in graphs for n in g.get("nodes", [])]
-    guid_index: dict[str, tuple[str, str]] = {}
+    by_owner_guid: dict[tuple[str, str], list[tuple[str, str]]] = {}
+    by_guid: dict[str, list[tuple[str, str]]] = {}
     for node in all_nodes:
         for pin in node.get("pins", []):
             if pin["id"]:
-                guid_index[pin["id"]] = (node["id"], pin["id"])
+                entry = (node["id"], pin["id"])
+                by_owner_guid.setdefault((node["id"], pin["id"]), []).append(entry)
+                by_guid.setdefault(pin["id"], []).append(entry)
+    # Flatten repeated (node, pin) entries from multi-graph appearances.
+    by_owner_guid = {k: list(dict.fromkeys(v)) for k, v in by_owner_guid.items()}
+    by_guid = {k: list(dict.fromkeys(v)) for k, v in by_guid.items()}
+
     for graph in graphs:
         graph["unresolved_links"] = 0
+        graph["ambiguous_links"] = 0
         edge_count = 0
         for rec in graph.pop("_pin_links", []):
-            target = guid_index.get(rec["to_pin"])
-            if target is None:
-                graph["unresolved_links"] += 1
-                continue
+            guid = rec["to_pin"]
+            owner = _normalize_pin_owner(rec.get("to_owning_node"))
+            target: tuple[str, str] | None = None
+            if owner is not None:
+                candidates = by_owner_guid.get((owner, guid), [])
+                if len(candidates) == 1:
+                    target = candidates[0]
+                else:
+                    # Zero candidates: the owner names a node the projection
+                    # does not carry. Multiple distinct candidates under one
+                    # owner key should not occur; treat both as unresolved.
+                    graph["unresolved_links"] += 1
+                    if len(candidates) > 1:
+                        graph["ambiguous_links"] += 1
+                    continue
+            else:
+                candidates = by_guid.get(guid, [])
+                if len(candidates) == 1:
+                    target = candidates[0]
+                elif len(candidates) > 1:
+                    graph["unresolved_links"] += 1
+                    graph["ambiguous_links"] += 1
+                    continue
+                else:
+                    graph["unresolved_links"] += 1
+                    continue
             edge_count += 1
             source_node_id = f"export:{rec['from_node'] - 1}"
             for node in graph["nodes"]:

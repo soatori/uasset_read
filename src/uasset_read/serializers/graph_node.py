@@ -384,9 +384,14 @@ def _read_node_pins(
                 header_owning_node=header_owning,
                 header_pin_id=header_pin_id,
             )
-            pins.append(pin)
-        except (struct.error, OSError, ValueError, KeyError):
-            continue
+        except (ParseError, struct.error, OSError, ValueError, KeyError) as exc:
+            # A mid-array pin failure leaves the cursor untrusted: fail the
+            # whole node (structured partial node upstream) rather than
+            # continue reading garbage pins into a "complete" node.
+            raise ParseError(
+                f"Pin {len(pins) + 1}/{pins_count} read failed at node {node_name}: {type(exc).__name__}: {exc}"
+            ) from exc
+        pins.append(pin)
 
     return pins
 

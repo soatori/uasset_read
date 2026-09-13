@@ -103,17 +103,24 @@ def read_ed_graph_pin_type(
 
 
 def read_pin_reference(archive: FArchive) -> dict | None:
-    """Read a single Pin reference (FBlueprintEditorUtils::FPinReference)."""
+    """Read a single Pin reference (FBlueprintEditorUtils::FPinReference).
+
+    Returns ``{"owning_node": <raw FPackageIndex int>, "pin_guid": <32-hex>}``
+    for non-null references. ``owning_node`` keeps the serialized
+    FPackageIndex convention (positive = export index + 1, negative = import);
+    conversion to node identity lives in the link resolver so the offset is
+    applied in exactly one place.
+    """
     b_null_ptr = archive.read_i32()
     if b_null_ptr != 0:
         return None  # null marker consumed 4 bytes only, no more reading
 
-    archive.read_i32()  # owning_node index (write-only; validation lives in validate_pin_reference_at)
+    owning_node = archive.read_i32()
     pin_guid_raw = _read_guid(archive)
 
     # Normalize to 32-char lowercase hex (remove dashes), matching pin_id format
     pin_guid = pin_guid_raw.replace("-", "").lower() if pin_guid_raw else pin_guid_raw
-    return {"pin_guid": pin_guid}
+    return {"owning_node": owning_node, "pin_guid": pin_guid}
 
 
 def read_pin_array(
@@ -174,11 +181,14 @@ def _read_pin_ftext_field(
     archive: FArchive,
     field_name: str,
     dev_notes: bool = False,
+    summary: PackageFileSummary | None = None,
 ) -> str | None:
     """Read Pin FText field (PinFriendlyName / DefaultTextValue)."""
     _start = archive.tell()
     try:
-        value, flags, history_type, _ = _read_ftext_value(archive, tolerant=True, dev_notes=dev_notes)
+        value, flags, history_type, _ = _read_ftext_value(
+            archive, tolerant=True, dev_notes=dev_notes, summary=summary
+        )
         consumed = archive.tell() - _start
         if consumed > MAX_FTEXT_CONSUMPTION:
             logger.debug(
@@ -231,7 +241,7 @@ def read_ue_graph_pin(
 
     # 4. PinFriendlyName (FText) — DevNotes gated per package custom version; write-only
     dev_notes = ftext_dev_notes_enabled(summary)
-    _read_pin_ftext_field(archive, "PinFriendlyName", dev_notes=dev_notes)
+    _read_pin_ftext_field(archive, "PinFriendlyName", dev_notes=dev_notes, summary=summary)
 
     # 5. SourceIndex (UE5 always present, write-only)
     archive.read_i32()
@@ -253,7 +263,7 @@ def read_ue_graph_pin(
     archive.read_i32()
 
     # 12. DefaultTextValue (FText, write-only)
-    _read_pin_ftext_field(archive, "DefaultTextValue", dev_notes=dev_notes)
+    _read_pin_ftext_field(archive, "DefaultTextValue", dev_notes=dev_notes, summary=summary)
 
     # 13. LinkedTo array
     linked_to = read_pin_array(archive, export_map, import_map)

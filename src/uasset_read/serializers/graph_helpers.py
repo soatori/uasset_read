@@ -173,17 +173,36 @@ def ftext_dev_notes_enabled(summary) -> bool:
     return get_custom_version(summary, FORTNITE_GUID) >= 260  # AddDevNotesToFText
 
 
+# FEditorObjectVersion::GUID (Engine/Source/Runtime/Core/Private/UObject/DevObjectVersion.cpp
+# — serialized as little-endian FGuid A,B,C,D hex). Used only for the
+# FNumberFormattingOptions AlwaysSign gate inside FText history type 4.
+EDITOR_OBJECT_GUID = "ed68b0e4e94294f40bda31a241bb462e"
+# FEditorObjectVersion::AddedAlwaysSignNumberFormattingOption (EditorObjectVersion.h)
+EDITOR_VERSION_ADDED_ALWAYS_SIGN = 21
+
+
+def _editor_object_version(summary) -> int:
+    """FEditorObjectVersion for *summary*; modern layout (-1→skip) when absent."""
+    if summary is None:
+        # Synthetic callers without a package summary get the modern layout —
+        # every UE4.15+/UE5 package that can carry AsNumber histories includes
+        # the GUID at >= AddedAlwaysSignNumberFormattingOption.
+        return EDITOR_VERSION_ADDED_ALWAYS_SIGN
+    return get_custom_version(summary, EDITOR_OBJECT_GUID)
+
+
 def _read_ftext_value(
     archive: FArchive,
     tolerant: bool = True,
     dev_notes: bool = False,
+    summary=None,
 ) -> tuple[str, int, int, int]:
     """Read complete FText, returns (value, flags, history_type, consumed)."""
     start_pos = archive.tell()
     flags = archive.read_i32()
     history_type_raw = archive.read_u8()
     history_type = history_type_raw - 256 if history_type_raw >= 128 else history_type_raw
-    value, _ = read_ftext_with_history(archive, history_type, tolerant=tolerant, dev_notes=dev_notes)
+    value, _ = read_ftext_with_history(archive, history_type, tolerant=tolerant, dev_notes=dev_notes, summary=summary)
     return value, flags, history_type, archive.tell() - start_pos
 
 
@@ -192,6 +211,7 @@ def read_ftext_with_history(
     history_type: int,
     tolerant: bool = True,
     dev_notes: bool = False,
+    summary=None,
 ) -> tuple[str, int]:
     """Read FText, returns (value, consumed_bytes).
 
@@ -200,13 +220,23 @@ def read_ftext_with_history(
     - 0: Base - Namespace (FString) + Key (FString) + SourceString (FString)
       [+ DevNotes (FString) when dev_notes is gated]
     - 1: NamedFormat - FormatText (recursive FText) + Arguments (TArray<FFormatArgumentData>)
-    - 2+: other generated types (not parsed in tolerant mode)
+    - 4: AsNumber - SourceValue (FFormatArgumentValue) + bHasFormatOptions
+      [+ FNumberFormattingOptions] + CultureName (FString)
+    - 2/3/5+: other generated types (not parsed; raise at the field boundary)
 
-    References UE C++ source:
-    - Text.cpp L850-1044: FText::SerializeText
-    - TextHistory.cpp L792-861: FTextHistory_Base::Serialize
-    - TextHistory.cpp L1150-1169: FTextHistory_NamedFormat::Serialize
-    - Text.cpp L1680-1761: FFormatArgumentData serialization
+    References UE C++ source (paths relative to the Unreal Engine source root):
+    - Engine/Source/Runtime/Core/Private/Internationalization/Text.cpp
+      L888-1088: FText::SerializeText (Flags + HistoryType + history body)
+      L1498-1538: FFormatArgumentValue operator<< (int8 Type + typed value)
+      L140-161: FNumberFormattingOptions operator<< (AlwaysSign gated)
+    - Engine/Source/Runtime/Core/Private/Internationalization/TextHistory.h
+      L24-42: ETextHistoryType enum (AsNumber = 4)
+    - Engine/Source/Runtime/Core/Private/Internationalization/TextHistory.cpp
+      L1199-1207: FTextHistory_Generated::Serialize (no bytes)
+      L1679-1723: FTextHistory_FormatNumber::Serialize
+      L1774-1777: FTextHistory_AsNumber::Serialize
+    - Engine/Source/Runtime/Core/Public/UObject/EditorObjectVersion.h
+      L55: AddedAlwaysSignNumberFormattingOption (=21)
     """
     start_pos = archive.tell()
     value = ""
@@ -226,7 +256,7 @@ def read_ftext_with_history(
             # TextHistory.cpp:915-937: the gated 4th DevNotes FString follows SourceString.
             read_ftext_fstring(archive)
     elif history_type == 1:
-        format_text, _, _, _ = _read_ftext_value(archive, tolerant=tolerant, dev_notes=dev_notes)
+        format_text, _, _, _ = _read_ftext_value(archive, tolerant=tolerant, dev_notes=dev_notes, summary=summary)
         arg_count = archive.read_i32()
         if arg_count < 0 or arg_count > MAX_SAFE_COUNT:
             # Design decision: from raise ParseError to warning+skip,
@@ -247,7 +277,7 @@ def read_ftext_with_history(
             elif arg_type == 3:
                 arg_value = str(archive.read_f64())
             elif arg_type == 4:
-                arg_value, _, _, _ = _read_ftext_value(archive, tolerant=tolerant, dev_notes=dev_notes)
+                arg_value, _, _, _ = _read_ftext_value(archive, tolerant=tolerant, dev_notes=dev_notes, summary=summary)
             elif arg_type == 5:
                 arg_value = str(archive.read_u8())
             else:
@@ -257,7 +287,48 @@ def read_ftext_with_history(
         for key, arg in format_args.items():
             if key:
                 value = value.replace("{" + key + "}", arg)
+    elif history_type == 4:
+        # ETextHistoryType::AsNumber → FTextHistory_AsNumber::Serialize
+        # (TextHistory.cpp:1774) = FTextHistory_FormatNumber::Serialize
+        # (TextHistory.cpp:1679); FTextHistory_Generated::Serialize writes no
+        # bytes (TextHistory.cpp:1199).
+        #
+        # SourceValue: FFormatArgumentValue (Text.cpp:1498) — int8 Type then
+        # Int=i32 / UInt,Gender=u32 / Float=f32 / Double=f64 / Text=FText.
+        arg_type = archive.read_i8()
+        if arg_type == 0:  # EFormatArgumentType::Int
+            source_value = str(archive.read_i32())
+        elif arg_type in (1, 5):  # UInt / Gender (stored as UInt)
+            source_value = str(archive.read_u32())
+        elif arg_type == 2:  # Float
+            source_value = str(archive.read_f32())
+        elif arg_type == 3:  # Double
+            source_value = str(archive.read_f64())
+        elif arg_type == 4:  # Text (recursive FText)
+            source_value, _, _, _ = _read_ftext_value(archive, tolerant=tolerant, dev_notes=dev_notes, summary=summary)
+        else:
+            raise ParseError(f"Unsupported FFormatArgumentType={arg_type} in AsNumber history at pos {start_pos}")
+
+        # bHasFormatOptions (FArchive bool = 4 bytes); when set, the
+        # FNumberFormattingOptions record follows (Text.cpp:140-161):
+        # AlwaysSign bool gated on FEditorObjectVersion >= 21, then UseGrouping
+        # bool, RoundingMode int8, and four int32 digit bounds.
+        if archive.read_bool():
+            if _editor_object_version(summary) >= EDITOR_VERSION_ADDED_ALWAYS_SIGN:
+                archive.read_bool()  # AlwaysSign
+            archive.read_bool()  # UseGrouping
+            archive.read_i8()  # RoundingMode
+            archive.read_i32()  # MinimumIntegralDigits
+            archive.read_i32()  # MaximumIntegralDigits
+            archive.read_i32()  # MinimumFractionalDigits
+            archive.read_i32()  # MaximumFractionalDigits
+
+        # CultureName FString (formatting culture; empty in cooked/editor data)
+        read_ftext_fstring(archive)
+        value = source_value
     else:
+        # Unsupported history: stop at the field boundary. No guessed byte
+        # skips — the caller treats this as a structured partial failure.
         raise ParseError(f"Unsupported FText history_type={history_type}")
 
     consumed = archive.tell() - start_pos
