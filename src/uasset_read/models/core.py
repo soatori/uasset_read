@@ -1,5 +1,5 @@
 """
-Serialization models — UE Blueprint pins, nodes, graph containers, member references.
+Serialization models — UE Blueprint pins, nodes, and graph containers.
 
 The classes defined here are direct mappings of the UE binary format (serialization
 models), used by the serializers layer to construct instances when reading data from
@@ -64,13 +64,3 @@ class UEdGraph:
     graph_name: str
     nodes: list["UEdGraphNode"] = field(default_factory=list)
     subgraphs: list["UEdGraph"] = field(default_factory=list)
-
-
-@dataclass
-class FMemberReference:
-    """FMemberReference member reference structure."""
-
-    member_parent: str | None = None
-    member_name: str = ""
-    member_guid: str | None = None
-    b_self_context: bool = False

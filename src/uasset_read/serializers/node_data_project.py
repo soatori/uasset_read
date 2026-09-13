@@ -1,8 +1,9 @@
 """Allow-listed tag-derived node_data projection (no binary readers).
 
 Shared by the Anim full-context path and the K2Node/tag projection path.
-Wave A removed K2Node / FMemberReference binary readers; only primitives
-already present on raw script-serial tags survive here.
+Wave A removed K2Node / FMemberReference binary readers and the unused
+``FMemberReference`` model; only primitives already present on raw
+script-serial tags survive here.
 """
 
 from __future__ import annotations
