@@ -186,3 +186,15 @@ def test_datatable_table_diagnostics_marked_conservative_complete():
 
         d = make_diagnostic("TABLE_ROWS_TRUNCATED", "m", "payload.table", reason="conservative_complete")
         assert d.reason == "conservative_complete"
+
+
+def test_bp_combat_character_trailing_diagnostics_carry_reason():
+    from uasset_read.package import parse_package_document
+
+    doc = parse_package_document("tests/samples/BP_CombatCharacter.uasset", depth="asset")
+    trailing = [d for d in doc.diagnostics if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"]
+    assert trailing, "expected trailing diagnostics on this fixture"
+    assert all(d.reason is not None for d in trailing)
+    assert {"editor_only", "bulk_expected", "known_unimplemented", "unexpected"} & {
+        d.reason for d in trailing
+    }
