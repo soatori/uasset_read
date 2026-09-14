@@ -1330,6 +1330,7 @@ def _read_table_rows(
                 ),
                 "payload.table",
                 object_id=object_id,
+                reason="conservative_complete",
             )
         )
     if not complete:
@@ -1342,6 +1343,7 @@ def _read_table_rows(
                 ),
                 "payload.table",
                 object_id=object_id,
+                reason="conservative_complete",
             )
         )
     result["row_count"] = len(names)

@@ -125,3 +125,64 @@ def test_merge_archive_recoveries_stop_table_keeps_reason():
     assert merged.fallback == "stop_table"
     assert merged.effect == "data_loss"
     assert merged.recoverable is False
+
+
+def test_table_payload_residue_emits_conservative_complete_reason():
+    """Residue is fully disclosed; the parser stopped conservatively, not corruptly."""
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.parsers.legacy_reader import _read_table_rows
+
+    # One valid row then 2 undecoded bytes -> TABLE_PAYLOAD_RESIDUE (+ TRUNCATED).
+    data = struct.pack("<i", 1) + struct.pack("<ii", 1, 0) + struct.pack("<ii", 0, 0) + b"\x7f\x7f"
+    diags: list = []
+    _read_table_rows(
+        ByteArchive(data),
+        serial_end=len(data),
+        name_map=["None", "RowA"],
+        object_id="export:1",
+        diagnostics=diags,
+    )
+    residue_diags = [d for d in diags if d.code == "TABLE_PAYLOAD_RESIDUE"]
+    assert residue_diags, f"expected TABLE_PAYLOAD_RESIDUE, got {[d.code for d in diags]}"
+    assert all(d.reason == "conservative_complete" for d in residue_diags)
+
+
+def test_table_rows_truncated_emits_conservative_complete_reason():
+    """Row shortfall is disclosed as conservative stop, not silent data loss."""
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.parsers.legacy_reader import _read_table_rows
+
+    # Claims 2 rows, only 1 fits -> TABLE_ROWS_TRUNCATED, no residue.
+    data = struct.pack("<i", 2) + struct.pack("<ii", 1, 0) + struct.pack("<ii", 0, 0)
+    diags: list = []
+    _read_table_rows(
+        ByteArchive(data),
+        serial_end=len(data),
+        name_map=["None", "A"],
+        object_id="export:1",
+        diagnostics=diags,
+    )
+    truncated = [d for d in diags if d.code == "TABLE_ROWS_TRUNCATED"]
+    assert truncated, f"expected TABLE_ROWS_TRUNCATED, got {[d.code for d in diags]}"
+    assert all(d.reason == "conservative_complete" for d in truncated)
+
+
+def test_datatable_table_diagnostics_marked_conservative_complete():
+    from uasset_read.package import parse_package_document
+
+    doc = parse_package_document("tests/samples/FirstPerson_DT_WeaponList.uasset")
+    table_diags = [
+        d for d in doc.diagnostics if d.code in {"TABLE_PAYLOAD_RESIDUE", "TABLE_ROWS_TRUNCATED"}
+    ]
+    # Fixture may or may not emit both; assert every emitted TABLE_* is classified.
+    assert all(d.reason == "conservative_complete" for d in table_diags)
+    if not table_diags:
+        # Force one synthetic check that make_diagnostic can carry the reason.
+        from uasset_read.models.diagnostics import make_diagnostic
+
+        d = make_diagnostic("TABLE_ROWS_TRUNCATED", "m", "payload.table", reason="conservative_complete")
+        assert d.reason == "conservative_complete"
