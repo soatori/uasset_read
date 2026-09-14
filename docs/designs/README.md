@@ -24,6 +24,7 @@ These sit beside the canonical target on purpose. Each carries its own `status:`
 | — | [`2026-09-02-peer-corroboration-usage-scheme.md`](2026-09-02-peer-corroboration-usage-scheme.md) | current | How external parsers may be used as evidence. |
 | — | [`2026-09-13-deferred-capability-bundling.md`](2026-09-13-deferred-capability-bundling.md) | current | Bundle map for still-deferred work: Zen/IoStore chunk extract, SchemaProvider, `--diff`. Evaluation record only — no implementation. MCP transport is out of product scope. |
 | — | [`2026-09-13-t15-t13-research-decision.md`](2026-09-13-t15-t13-research-decision.md) | current | Research decision only (**no implementation**). Constrains future T15/T13 work. |
+| — | [`2026-09-15-parser-quality-system.md`](2026-09-15-parser-quality-system.md) | target | Diagnostic.reason taxonomy + sample quality baseline gates. |
 
 ## Executed plans (archive)
 
