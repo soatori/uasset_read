@@ -300,6 +300,7 @@ def test_manifest_matches_every_real_sample():
             "containers",
             "UnversionedTest.usmap",
             "UnversionedTest.provenance.md",
+            "quality_baseline.json",
         }
         | ORIGIN_DOCS
     )
