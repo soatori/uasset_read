@@ -12,6 +12,15 @@ from typing import Any, Literal
 DIAGNOSTIC_CODE_INVALID_SERIAL_SIZE = "invalid_serial_size"
 DIAGNOSTIC_CODE_INVALID_SERIAL_OFFSET = "invalid_serial_offset"
 
+DiagnosticReason = Literal[
+    "bulk_expected",
+    "editor_only",
+    "known_unimplemented",
+    "recovered_corruption",
+    "conservative_complete",
+    "unexpected",
+]
+
 
 @dataclass
 class Diagnostic:
@@ -27,6 +36,7 @@ class Diagnostic:
     effect: Literal["semantic_loss", "data_loss", "parse_failure", "recovery"] | None = None
     recoverable: bool = True
     fallback: str | None = None  # fallback action for structured diagnostics
+    reason: DiagnosticReason | None = None  # optional classification
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -42,6 +52,7 @@ def make_diagnostic(
     object_id: str | None = None,
     severity: Literal["info", "warning", "error", "critical"] = "warning",
     effect: Literal["semantic_loss", "data_loss", "parse_failure", "recovery"] | None = "semantic_loss",
+    reason: DiagnosticReason | None = None,
 ) -> Diagnostic:
     """Build a Diagnostic with common defaults."""
     return Diagnostic(
@@ -51,4 +62,5 @@ def make_diagnostic(
         stage=stage,
         object_id=object_id,
         effect=effect,
+        reason=reason,
     )

@@ -3271,6 +3271,7 @@ def test_test_suite_structure_gate():
         "test_capability_hardening.py",
         "test_cli.py",
         "test_core.py",
+        "test_diagnostics_reason.py",
         "test_handler_capability_ledger.py",
         "test_parse_hardening.py",
         "test_payload_extraction.py",

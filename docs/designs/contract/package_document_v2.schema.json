@@ -377,6 +377,18 @@
           "type": "integer",
           "minimum": 1,
           "description": "Aggregation count for repeated identical diagnostics."
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "bulk_expected",
+            "editor_only",
+            "known_unimplemented",
+            "recovered_corruption",
+            "conservative_complete",
+            "unexpected"
+          ],
+          "description": "Optional classification of why this diagnostic was emitted. Omitted when unset."
         }
       },
       "additionalProperties": false
