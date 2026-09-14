@@ -389,6 +389,10 @@
             "unexpected"
           ],
           "description": "Optional classification of why this diagnostic was emitted. Omitted when unset."
+        },
+        "fallback": {
+          "type": "string",
+          "description": "Fallback action taken when the diagnostic was recovered. Omitted when unset."
         }
       },
       "additionalProperties": false

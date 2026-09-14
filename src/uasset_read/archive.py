@@ -18,7 +18,7 @@ from uasset_read.constants import (
     MAX_FSTRING_LENGTH,
     get_max_reasonable,
 )
-from uasset_read.models.diagnostics import Diagnostic
+from uasset_read.models.diagnostics import Diagnostic, DiagnosticReason
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +234,7 @@ class FArchive:
         fallback: str = "",
         message: str = "",
         severity: Literal["info", "warning", "error", "critical"] = "warning",
+        reason: DiagnosticReason | None = None,
     ) -> None:
         """Record a structured diagnostic with stable code."""
         # Build enriched message from legacy fields
@@ -253,7 +254,8 @@ class FArchive:
                 object_id=self._current_object_id,
                 offset=offset,
                 message=enriched,
-                fallback=fallback,
+                fallback=fallback or None,
+                reason=reason,
             )
         )
 
@@ -396,6 +398,7 @@ class FArchive:
                     raw_value=null_len,
                     fallback="used_empty_string",
                     message=f"FString at pos {pos_before}: length={null_len}, encoding={enc}, all nulls",
+                    reason="recovered_corruption",
                 )
         # Internal null detection (UTF-8 only — null bytes mid-string are abnormal)
         # Improved handling — truncate at first null rather than
@@ -416,6 +419,7 @@ class FArchive:
                     fallback="truncated_at_first_null",
                     message=f"FString at pos {pos_before}: length={length}, encoding=UTF-8, "
                     f"truncated at null (null_at={first_null_idx}, nulls_total={null_count})",
+                    reason="recovered_corruption",
                 )
                 logger.debug(
                     "FString hex detail: pos=%d, hex=%s, preview_orig=%r, truncated_value=%r",
@@ -448,6 +452,7 @@ class FArchive:
                     raw_value=length,
                     fallback="used_empty_string",
                     message=f"FString at pos {pos_before}: length={length}, encoding=UTF-8, all nulls (completely corrupted)",
+                    reason="recovered_corruption",
                 )
             logger.debug("FString hex detail: pos=%d, hex=%s", pos_before, data[:32].hex())
             # Padding zone detection: scan ahead up to 1KB for non-zero data
@@ -522,6 +527,7 @@ class FArchive:
                     raw_value=index,
                     fallback="shifted_read",
                     message=f"FName index {index} at pos {start} recovered via shifted read: {recovered}",
+                    reason="recovered_corruption",
                 )
                 return recovered
 
@@ -541,6 +547,7 @@ class FArchive:
                     raw_value=index,
                     fallback="used_default_name",
                     message=f"Name index {index} out of range [0, {len(name_map)}]",
+                    reason="recovered_corruption",
                 )
             # strict mode raises exception
             if not self._tolerant:

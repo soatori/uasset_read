@@ -30,3 +30,28 @@ def test_make_diagnostic_accepts_reason_keyword():
         reason="recovered_corruption",
     )
     assert d.reason == "recovered_corruption"
+
+
+def test_fname_out_of_range_carries_recovered_corruption_reason(tmp_path):
+    # Build a minimal ByteArchive-like path is heavy; call _record on FArchive subclass.
+    from uasset_read.archive import FArchive
+
+    class _Mem(FArchive):
+        def __init__(self):
+            self._init_archive_attrs(path="<mem>", tolerant=True)
+            self._file = None
+
+    arch = _Mem()
+    arch._current_object_id = "export:1"
+    arch._record_structured_diagnostic(
+        code="name_index_out_of_range",
+        stage="read_name",
+        offset=16,
+        raw_value=3223003549,
+        fallback="used_default_name",
+        message="Name index out of range",
+        reason="recovered_corruption",
+    )
+    (diag,) = arch.get_structured_diagnostics()
+    assert diag.reason == "recovered_corruption"
+    assert diag.code == "name_index_out_of_range"
