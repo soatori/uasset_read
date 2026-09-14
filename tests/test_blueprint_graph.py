@@ -415,6 +415,38 @@ def test_ftext_history_as_number_value_and_cursor():
     assert archive.read_i32() == 0x12345678, "subsequent Pin fields stay aligned"
 
 
+def test_ftext_history_as_number_gender_is_u8():
+    """AsNumber Gender (arg_type=5) is ETextGender as uint8, matching Format."""
+    import struct
+    from types import SimpleNamespace
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.serializers.graph_helpers import _read_ftext_value
+
+    blob = b"".join(
+        [
+            struct.pack("<i", 0),  # Flags
+            struct.pack("<b", 4),  # HistoryType = AsNumber
+            struct.pack("<b", 5),  # FFormatArgumentType::Gender
+            struct.pack("<B", 2),  # ETextGender::Neuter as uint8
+            struct.pack("<i", 0),  # bHasFormatOptions = false
+            struct.pack("<i", 0),  # CultureName = empty FString
+            struct.pack("<i", 0x12345678),  # sentinel: next pin field
+        ]
+    )
+    summary = SimpleNamespace(
+        package_flags=0,
+        custom_versions=[SimpleNamespace(guid="ed68b0e4e94294f40bda31a241bb462e", version=40)],
+    )
+    archive = ByteArchive(blob)
+    value, flags, history_type, _ = _read_ftext_value(archive, tolerant=True, summary=summary)
+    assert flags == 0
+    assert history_type == 4
+    assert value == "2"
+    assert archive.tell() == len(blob) - 4, "cursor must sit exactly after the FText field"
+    assert archive.read_i32() == 0x12345678, "subsequent Pin fields stay aligned"
+
+
 def test_ftext_history_as_number_format_options_with_always_sign():
     """Format-options branch includes the FEditorObjectVersion-gated AlwaysSign bool."""
     import struct

@@ -294,14 +294,16 @@ def read_ftext_with_history(
         # bytes (TextHistory.cpp:1199).
         #
         # SourceValue: FFormatArgumentValue (Text.cpp) — int8 Type then
-        # Int=int64 / UInt,Gender=uint64 / Float=f32 / Double=f64 / Text=FText.
-        # Widths match the Format (history=1) branch above and UE's
-        # FFormatArgumentValue::{IntValue,UIntValue} storage.
+        # Int=int64 / UInt=uint64 / Float=f32 / Double=f64 / Text=FText /
+        # Gender=uint8 (ETextGender). Widths match the Format (history=1)
+        # branch above and UE's FFormatArgumentValue storage.
         arg_type = archive.read_i8()
         if arg_type == 0:  # EFormatArgumentType::Int
             source_value = str(archive.read_i64())
-        elif arg_type in (1, 5):  # UInt / Gender (stored as UInt)
+        elif arg_type == 1:  # UInt
             source_value = str(archive.read_u64())
+        elif arg_type == 5:  # Gender (ETextGender, uint8)
+            source_value = str(archive.read_u8())
         elif arg_type == 2:  # Float
             source_value = str(archive.read_f32())
         elif arg_type == 3:  # Double
