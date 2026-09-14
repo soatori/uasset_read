@@ -293,13 +293,15 @@ def read_ftext_with_history(
         # (TextHistory.cpp:1679); FTextHistory_Generated::Serialize writes no
         # bytes (TextHistory.cpp:1199).
         #
-        # SourceValue: FFormatArgumentValue (Text.cpp:1498) — int8 Type then
-        # Int=i32 / UInt,Gender=u32 / Float=f32 / Double=f64 / Text=FText.
+        # SourceValue: FFormatArgumentValue (Text.cpp) — int8 Type then
+        # Int=int64 / UInt,Gender=uint64 / Float=f32 / Double=f64 / Text=FText.
+        # Widths match the Format (history=1) branch above and UE's
+        # FFormatArgumentValue::{IntValue,UIntValue} storage.
         arg_type = archive.read_i8()
         if arg_type == 0:  # EFormatArgumentType::Int
-            source_value = str(archive.read_i32())
+            source_value = str(archive.read_i64())
         elif arg_type in (1, 5):  # UInt / Gender (stored as UInt)
-            source_value = str(archive.read_u32())
+            source_value = str(archive.read_u64())
         elif arg_type == 2:  # Float
             source_value = str(archive.read_f32())
         elif arg_type == 3:  # Double

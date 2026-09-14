@@ -172,6 +172,36 @@ def test_resolve_pin_links_guid_fallback_single_candidate():
     assert g["nodes"][0]["pins"][0]["linked"] == [{"to_node": "export:2", "to_pin": guid}]
 
 
+def test_resolve_pin_links_import_owner_is_not_guid_fallback():
+    """A negative (import) owning_node must stay unresolved even when a
+    unique local export carries the same pin GUID."""
+    from uasset_read.serializers.blueprint_graph import resolve_pin_links
+
+    guid = "e" * 32
+    local_pin = {
+        "id": guid,
+        "name": "execute",
+        "direction": "input",
+        "category": "exec",
+        "linked": [],
+    }
+    graphs = [
+        {
+            "id": "export:0",
+            "nodes": [{"id": "export:1", "pins": [local_pin]}],
+            "_pin_links": [
+                # owning_node=-1 is an import reference (FPackageIndex).
+                {"from_node": 1, "from_pin": "f" * 32, "to_pin": guid, "to_owning_node": -1},
+            ],
+        }
+    ]
+    resolve_pin_links(graphs)
+    g = graphs[0]
+    assert g["edge_count"] == 0
+    assert g["unresolved_links"] == 1
+    assert local_pin["linked"] == []
+
+
 def _raw_graph_links(sample: str) -> list[dict]:
     """Independently re-read every node export and collect raw pin-link records.
 
@@ -363,7 +393,7 @@ def test_ftext_history_as_number_value_and_cursor():
             struct.pack("<i", 0),  # Flags
             struct.pack("<b", 4),  # HistoryType = AsNumber
             struct.pack("<b", 0),  # FFormatArgumentType::Int
-            struct.pack("<i", 42),  # IntValue
+            struct.pack("<q", 42),  # IntValue: int64 (FFormatArgumentValue::IntValue)
             struct.pack("<i", 0),  # bHasFormatOptions = false (FArchive bool)
             struct.pack("<i", 0),  # CultureName = empty FString
             struct.pack("<i", 0x12345678),  # sentinel: next pin field
@@ -398,7 +428,7 @@ def test_ftext_history_as_number_format_options_with_always_sign():
             struct.pack("<i", 0),
             struct.pack("<b", 4),
             struct.pack("<b", 1),  # UInt
-            struct.pack("<I", 7),
+            struct.pack("<Q", 7),  # UIntValue: uint64 (FFormatArgumentValue::UIntValue)
             struct.pack("<i", 1),  # bHasFormatOptions = true
             struct.pack("<i", 0),  # AlwaysSign (FEditorObjectVersion >= 21)
             struct.pack("<i", 1),  # UseGrouping
@@ -436,3 +466,104 @@ def test_ftext_unsupported_history_stops_at_field_boundary():
     archive = ByteArchive(blob)
     with pytest.raises(ParseError, match="history_type"):
         _read_ftext_value(archive, tolerant=True)
+
+
+def test_summarize_exec_edges_keeps_owner_aware_to_node():
+    """Duplicate pin GUIDs across nodes: the edge target must be the
+    owner-resolved to_node, not the last node that registered the GUID."""
+    from uasset_read.serializers.blueprint_graph import summarize_exec_edges
+
+    shared = "1" * 32
+    out_pin = {
+        "id": "2" * 32,
+        "name": "then",
+        "direction": "output",
+        "category": "exec",
+        "linked": [{"to_node": "export:1", "to_pin": shared}],
+    }
+    # export:1 and export:2 both carry an exec pin with the same GUID.
+    # resolve_pin_links already chose export:1 as the owner-aware target.
+    graphs = [
+        {
+            "name": "EventGraph",
+            "nodes": [
+                {"id": "export:0", "pins": [out_pin]},
+                {
+                    "id": "export:1",
+                    "pins": [
+                        {"id": shared, "name": "execute", "direction": "input", "category": "exec", "linked": []}
+                    ],
+                },
+                {
+                    "id": "export:2",
+                    "pins": [
+                        {"id": shared, "name": "execute", "direction": "input", "category": "exec", "linked": []}
+                    ],
+                },
+            ],
+        }
+    ]
+    chains = summarize_exec_edges(graphs)
+    assert len(chains) == 1
+    edges = chains[0]["edges"]
+    assert len(edges) == 1
+    assert edges[0]["from_node"] == "export:0"
+    assert edges[0]["to_node"] == "export:1", edges[0]
+    assert edges[0]["to_pin"] == shared
+
+
+def test_summarize_exec_edges_duplicate_guid_nodes_stay_distinct():
+    """Two different (node, pin) exec pairs that share a pin GUID must not
+    collapse into one undirected edge."""
+    from uasset_read.serializers.blueprint_graph import summarize_exec_edges
+
+    shared = "3" * 32
+    graphs = [
+        {
+            "name": "EventGraph",
+            "nodes": [
+                {
+                    "id": "export:0",
+                    "pins": [
+                        {
+                            "id": "4" * 32,
+                            "name": "then",
+                            "direction": "output",
+                            "category": "exec",
+                            "linked": [{"to_node": "export:1", "to_pin": shared}],
+                        }
+                    ],
+                },
+                {
+                    "id": "export:5",
+                    "pins": [
+                        {
+                            "id": "6" * 32,
+                            "name": "then",
+                            "direction": "output",
+                            "category": "exec",
+                            "linked": [{"to_node": "export:2", "to_pin": shared}],
+                        }
+                    ],
+                },
+                {
+                    "id": "export:1",
+                    "pins": [
+                        {"id": shared, "name": "execute", "direction": "input", "category": "exec", "linked": []}
+                    ],
+                },
+                {
+                    "id": "export:2",
+                    "pins": [
+                        {"id": shared, "name": "execute", "direction": "input", "category": "exec", "linked": []}
+                    ],
+                },
+            ],
+        }
+    ]
+    chains = summarize_exec_edges(graphs)
+    assert len(chains) == 1
+    edges = chains[0]["edges"]
+    assert len(edges) == 2
+    targets = {(e["from_node"], e["to_node"]) for e in edges}
+    assert targets == {("export:0", "export:1"), ("export:5", "export:2")}

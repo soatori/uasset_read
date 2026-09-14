@@ -298,8 +298,9 @@ def _normalize_pin_owner(owning_node: Any) -> str | None:
 
     FPackageIndex convention (ObjectResource.h): positive = export index + 1,
     negative = import, 0 = null. Only positive export references name a node
-    in the converted graph projection; imports/null yield None so the
-    resolver can fall back to a unique GUID candidate.
+    in the converted graph projection. Callers must treat negative owners as
+    unresolved (never GUID-fallback); null/missing owners may use the unique
+    GUID fallback.
     """
     if isinstance(owning_node, int) and owning_node > 0:
         return f"export:{owning_node - 1}"
@@ -345,7 +346,13 @@ def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:
         edge_count = 0
         for rec in graph.pop("_pin_links", []):
             guid = rec["to_pin"]
-            owner = _normalize_pin_owner(rec.get("to_owning_node"))
+            raw_owner = rec.get("to_owning_node")
+            # Negative FPackageIndex = import. The target is outside this
+            # package's export table — never resolve it to a local GUID match.
+            if isinstance(raw_owner, int) and raw_owner < 0:
+                graph["unresolved_links"] += 1
+                continue
+            owner = _normalize_pin_owner(raw_owner)
             target: tuple[str, str] | None = None
             if owner is not None:
                 candidates = by_owner_guid.get((owner, guid), [])
@@ -391,6 +398,12 @@ def summarize_exec_edges(graphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     edge prefers output→input. Distinct from ``graph["edge_count"]``, which
     counts every resolved link record. Graphs with no exec edges are omitted.
 
+    ``to_node`` comes from the owner-aware ``link["to_node"]`` written by
+    ``resolve_pin_links`` — never from a package-wide pin-GUID map (duplicate
+    pin GUIDs across nodes would make the last registration win). Undirected
+    uniqueness keys on frozensets of ``(node_id, pin_id)`` endpoint pairs so
+    distinct node/pin pairs sharing a pin GUID stay distinct edges.
+
     Orientation flip only prefers an output endpoint when the current pin is
     not already output. It does not re-validate that the peer pin's category
     is also ``exec``: the walk already required *this* pin to be exec, and
@@ -399,14 +412,17 @@ def summarize_exec_edges(graphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     out: list[dict[str, Any]] = []
     for graph in graphs:
-        pin_meta: dict[str, tuple[str, str]] = {}
+        # Direction lookup only — never override the owner-aware to_node.
+        # Key is (node_id, pin_id) so duplicate pin GUIDs across nodes stay distinct.
+        pin_direction: dict[tuple[str, str], str] = {}
         for node in graph.get("nodes") or []:
             for pin in node.get("pins") or []:
                 pid = pin.get("id")
-                if pid:
-                    pin_meta[pid] = (node.get("id"), pin.get("direction") or "")
+                nid = node.get("id")
+                if pid and nid:
+                    pin_direction[(nid, pid)] = pin.get("direction") or ""
 
-        seen: set[frozenset[str]] = set()
+        seen: set[frozenset[tuple[str, str]]] = set()
         edges: list[dict[str, Any]] = []
         for node in graph.get("nodes") or []:
             for pin in node.get("pins") or []:
@@ -415,20 +431,21 @@ def summarize_exec_edges(graphs: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 for link in pin.get("linked") or []:
                     from_id = pin.get("id")
                     to_id = link.get("to_pin")
+                    from_node = node.get("id")
+                    to_node = link.get("to_node")
                     if not from_id or not to_id or from_id == to_id:
                         continue
-                    pair = frozenset((from_id, to_id))
+                    if not from_node or not to_node:
+                        continue
+                    pair = frozenset({(from_node, from_id), (to_node, to_id)})
                     if pair in seen:
                         continue
                     seen.add(pair)
-                    from_node = node.get("id")
                     if pin.get("direction") != "output":
-                        other = pin_meta.get(to_id)
-                        if other and other[1] == "output":
+                        other_dir = pin_direction.get((to_node, to_id), "")
+                        if other_dir == "output":
                             from_id, to_id = to_id, from_id
-                            from_node = other[0]
-                    to_meta = pin_meta.get(to_id)
-                    to_node = to_meta[0] if to_meta else link.get("to_node")
+                            from_node, to_node = to_node, from_node
                     edges.append(
                         {
                             "from_node": from_node,
