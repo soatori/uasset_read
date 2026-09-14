@@ -7,7 +7,9 @@
         "EXPORT_PROPERTY_PARSE_FAILED",
         "HANDLER_FAILURE"
       ],
-      "max_by_code_reason": {}
+      "forbid_unlisted": true,
+      "max_by_code_reason": {},
+      "max_total_diagnostics": 0
     },
     "FirstPerson_T_GridChecker_A.uasset": {
       "depth": "asset",
@@ -15,12 +17,13 @@
         "EXPORT_PROPERTY_PARSE_FAILED",
         "HANDLER_FAILURE"
       ],
+      "forbid_unlisted": true,
       "max_by_code_reason": {
         "EXPORT_TRAILING_BYTES_UNCONSUMED": {
-          "editor_only": {
+          "bulk_expected": {
             "max": 1
           },
-          "unexpected": {
+          "editor_only": {
             "max": 1
           }
         }
@@ -32,9 +35,10 @@
         "EXPORT_PROPERTY_PARSE_FAILED",
         "HANDLER_FAILURE"
       ],
+      "forbid_unlisted": true,
       "max_by_code_reason": {
         "EXPORT_TRAILING_BYTES_UNCONSUMED": {
-          "unexpected": {
+          "known_unimplemented": {
             "max": 1
           }
         }
@@ -46,6 +50,7 @@
         "EXPORT_PROPERTY_PARSE_FAILED",
         "HANDLER_FAILURE"
       ],
+      "forbid_unlisted": true,
       "max_by_code_reason": {
         "EXPORT_TRAILING_BYTES_UNCONSUMED": {
           "editor_only": {
@@ -63,6 +68,7 @@
         "EXPORT_PROPERTY_PARSE_FAILED",
         "HANDLER_FAILURE"
       ],
+      "forbid_unlisted": true,
       "max_by_code_reason": {
         "EXPORT_TRAILING_BYTES_UNCONSUMED": {
           "editor_only": {

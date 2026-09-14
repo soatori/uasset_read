@@ -71,7 +71,6 @@ _EDITOR_ONLY_PREFIXES = (
     "PackageMetaData",
     "K2Node_",
     "EdGraph",
-    "EdGraphNode",
     "Blueprint",
     "WidgetBlueprint",
     "AnimBlueprint",
@@ -85,7 +84,15 @@ _BULK_CLASSES = frozenset(
         "SoundWave",
         "SoundCue",
         "RawAudio",
+        "Texture",
+        "Texture2D",
+        "TextureCube",
+        "Texture2DArray",
     }
+)
+
+_BULK_PREFIXES = (
+    "TextureRenderTarget",
 )
 
 _KNOWN_UNIMPLEMENTED_CLASSES = frozenset(
@@ -96,6 +103,11 @@ _KNOWN_UNIMPLEMENTED_CLASSES = frozenset(
         "StaticMesh",
         "StaticMeshDescriptionBulkData",
         "UserDefinedStruct",
+        "AnimSequence",
+        "AnimMontage",
+        "AnimComposite",
+        "Material",
+        "MaterialFunction",
     }
 )
 
@@ -104,6 +116,8 @@ _KNOWN_UNIMPLEMENTED_PREFIXES = (
     "NiagaraScript",
     "NiagaraEmitter",
     "NiagaraSystem",
+    "BlendSpace",
+    "MaterialInstance",
 )
 
 
@@ -115,9 +129,9 @@ def classify_trailing_reason(class_name: str, remaining: int) -> DiagnosticReaso
     call-site symmetry and future size-sensitive rules; the current mapping
     is class-only.
     """
-    if class_name in _BULK_CLASSES:
+    if class_name in _BULK_CLASSES or any(class_name.startswith(p) for p in _BULK_PREFIXES):
         return "bulk_expected"
-    if any(class_name.startswith(p) or class_name == p for p in _EDITOR_ONLY_PREFIXES):
+    if any(class_name.startswith(p) for p in _EDITOR_ONLY_PREFIXES):
         return "editor_only"
     if class_name in _KNOWN_UNIMPLEMENTED_CLASSES or any(
         class_name.startswith(p) for p in _KNOWN_UNIMPLEMENTED_PREFIXES

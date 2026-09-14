@@ -1035,6 +1035,12 @@ def _assert_quality_baseline(doc, name: str) -> None:
     for forbidden in entry.get("forbidden_codes", []):
         assert forbidden not in codes, f"{name}: forbidden diagnostic {forbidden}"
 
+    max_total = entry.get("max_total_diagnostics")
+    if max_total is not None:
+        assert len(doc.diagnostics) <= max_total, (
+            f"{name}: total diagnostics {len(doc.diagnostics)} > baseline max_total {max_total}"
+        )
+
     def _count(code: str, reason: str | None) -> int:
         return sum(
             1
@@ -1049,6 +1055,23 @@ def _assert_quality_baseline(doc, name: str) -> None:
             assert actual <= rule["max"], (
                 f"{name}: {code}/{reason_key} count {actual} > baseline max {rule['max']}"
             )
+
+    if entry.get("forbid_unlisted"):
+        known = set()
+        for code, by_reason in entry.get("max_by_code_reason", {}).items():
+            for reason_key in by_reason:
+                known.add((code, None if reason_key == "_" else reason_key))
+        unlisted = sorted(
+            {
+                (d.code, getattr(d, "reason", None))
+                for d in doc.diagnostics
+                if (d.code, getattr(d, "reason", None)) not in known
+            }
+        )
+        assert not unlisted, (
+            f"{name}: unlisted (code, reason) pairs {unlisted}; "
+            "regenerate baseline or classify the diagnostic"
+        )
 
 
 @pytest.mark.parametrize("sample_name", sorted(QUALITY_BASELINE["samples"]))

@@ -40,8 +40,12 @@ def main() -> None:
         samples[name] = {
             "depth": "asset",
             "forbidden_codes": ["EXPORT_PROPERTY_PARSE_FAILED", "HANDLER_FAILURE"],
+            "forbid_unlisted": True,
             "max_by_code_reason": max_by,
         }
+        if name == "FirstPerson_DT_WeaponList.uasset":
+            # Explicit zero-diag pin: this seed exists to stay clean.
+            samples[name]["max_total_diagnostics"] = 0
         print(f"{name}: {sum(counts.values())} diagnostics")
 
     OUT.write_text(json.dumps({"version": 1, "samples": samples}, indent=2) + "\n", encoding="utf-8")
