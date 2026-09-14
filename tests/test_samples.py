@@ -23,6 +23,7 @@ from functools import lru_cache
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import jsonschema
 import pytest
@@ -1042,11 +1043,7 @@ def _assert_quality_baseline(doc, name: str) -> None:
         )
 
     def _count(code: str, reason: str | None) -> int:
-        return sum(
-            1
-            for d in doc.diagnostics
-            if d.code == code and getattr(d, "reason", None) == reason
-        )
+        return sum(1 for d in doc.diagnostics if d.code == code and d.reason == reason)
 
     for code, by_reason in entry.get("max_by_code_reason", {}).items():
         for reason_key, rule in by_reason.items():
@@ -1057,15 +1054,16 @@ def _assert_quality_baseline(doc, name: str) -> None:
             )
 
     if entry.get("forbid_unlisted"):
-        known = set()
-        for code, by_reason in entry.get("max_by_code_reason", {}).items():
-            for reason_key in by_reason:
-                known.add((code, None if reason_key == "_" else reason_key))
+        known = {
+            (code, None if rk == "_" else rk)
+            for code, by_reason in entry.get("max_by_code_reason", {}).items()
+            for rk in by_reason
+        }
         unlisted = sorted(
             {
-                (d.code, getattr(d, "reason", None))
+                (d.code, d.reason)
                 for d in doc.diagnostics
-                if (d.code, getattr(d, "reason", None)) not in known
+                if (d.code, d.reason) not in known
             },
             key=lambda pair: (pair[0], pair[1] or ""),
         )
@@ -1075,42 +1073,35 @@ def _assert_quality_baseline(doc, name: str) -> None:
         )
 
 
-def test_quality_baseline_forbid_unlisted_rejects_new_pair(monkeypatch):
-    """Fail path: forbid_unlisted must reject a (code, reason) absent from the baseline."""
-    from types import SimpleNamespace
-
-    entry = {
-        "forbidden_codes": [],
-        "forbid_unlisted": True,
-        "max_by_code_reason": {"EXPORT_TRAILING_BYTES_UNCONSUMED": {"editor_only": {"max": 1}}},
-    }
-    monkeypatch.setitem(QUALITY_BASELINE["samples"], "__fail_unlisted__", entry)
-    doc = SimpleNamespace(
-        diagnostics=[
-            SimpleNamespace(code="EXPORT_TRAILING_BYTES_UNCONSUMED", reason="editor_only"),
-            SimpleNamespace(code="NAME_INDEX_OUT_OF_RANGE", reason="recovered_corruption"),
-        ]
-    )
-    with pytest.raises(AssertionError, match="unlisted"):
-        _assert_quality_baseline(doc, "__fail_unlisted__")
-
-
-def test_quality_baseline_max_total_diagnostics_rejects_overflow(monkeypatch):
-    """Fail path: max_total_diagnostics must reject a sample that emits more than the pin."""
-    from types import SimpleNamespace
-
-    entry = {
-        "forbidden_codes": [],
-        "max_total_diagnostics": 0,
-        "forbid_unlisted": True,
-        "max_by_code_reason": {},
-    }
-    monkeypatch.setitem(QUALITY_BASELINE["samples"], "__fail_total__", entry)
-    doc = SimpleNamespace(
-        diagnostics=[SimpleNamespace(code="EXPORT_TRAILING_BYTES_UNCONSUMED", reason="editor_only")]
-    )
-    with pytest.raises(AssertionError, match="total diagnostics"):
-        _assert_quality_baseline(doc, "__fail_total__")
+@pytest.mark.parametrize(
+    ("entry", "diags", "match"),
+    [
+        pytest.param(
+            {
+                "forbid_unlisted": True,
+                "max_by_code_reason": {"EXPORT_TRAILING_BYTES_UNCONSUMED": {"editor_only": {"max": 1}}},
+            },
+            [
+                SimpleNamespace(code="EXPORT_TRAILING_BYTES_UNCONSUMED", reason="editor_only"),
+                SimpleNamespace(code="NAME_INDEX_OUT_OF_RANGE", reason="recovered_corruption"),
+            ],
+            "unlisted",
+            id="forbid_unlisted",
+        ),
+        pytest.param(
+            {"max_total_diagnostics": 0, "max_by_code_reason": {}},
+            [SimpleNamespace(code="EXPORT_TRAILING_BYTES_UNCONSUMED", reason="editor_only")],
+            "total diagnostics",
+            id="max_total",
+        ),
+    ],
+)
+def test_quality_baseline_fail_paths(monkeypatch, entry, diags, match):
+    """Fail path: forbid_unlisted rejects new pairs; max_total_diagnostics rejects overflow."""
+    name = "__fail_path__"
+    monkeypatch.setitem(QUALITY_BASELINE["samples"], name, {**entry, "forbidden_codes": []})
+    with pytest.raises(AssertionError, match=match):
+        _assert_quality_baseline(SimpleNamespace(diagnostics=diags), name)
 
 
 @pytest.mark.parametrize("sample_name", sorted(QUALITY_BASELINE["samples"]))

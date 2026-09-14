@@ -884,7 +884,7 @@ class LegacyPackageReader:
                                 ),
                                 "objects.export",
                                 object_id=obj.id,
-                                reason=classify_trailing_reason(cn, remaining),
+                                reason=classify_trailing_reason(cn),
                             )
                         )
                 if overrun > 0:

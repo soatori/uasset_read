@@ -84,16 +84,10 @@ _BULK_CLASSES = frozenset(
         "SoundWave",
         "SoundCue",
         "RawAudio",
-        "Texture",
-        "Texture2D",
-        "TextureCube",
-        "Texture2DArray",
     }
 )
 
-_BULK_PREFIXES = (
-    "TextureRenderTarget",
-)
+_BULK_PREFIXES = ("Texture",)
 
 _KNOWN_UNIMPLEMENTED_CLASSES = frozenset(
     {
@@ -103,11 +97,6 @@ _KNOWN_UNIMPLEMENTED_CLASSES = frozenset(
         "StaticMesh",
         "StaticMeshDescriptionBulkData",
         "UserDefinedStruct",
-        "AnimSequence",
-        "AnimMontage",
-        "AnimComposite",
-        "Material",
-        "MaterialFunction",
     }
 )
 
@@ -117,17 +106,16 @@ _KNOWN_UNIMPLEMENTED_PREFIXES = (
     "NiagaraEmitter",
     "NiagaraSystem",
     "BlendSpace",
-    "MaterialInstance",
+    "Material",
+    "Anim",
 )
 
 
-def classify_trailing_reason(class_name: str, remaining: int) -> DiagnosticReason:
+def classify_trailing_reason(class_name: str) -> DiagnosticReason:
     """Map export trailing-bytes context to a closed reason value.
 
     Bulk-data classes are checked first so names such as ``FontFace`` are
-    never swallowed by a broader prefix rule. ``remaining`` is accepted for
-    call-site symmetry and future size-sensitive rules; the current mapping
-    is class-only.
+    never swallowed by a broader prefix rule.
     """
     if class_name in _BULK_CLASSES or any(class_name.startswith(p) for p in _BULK_PREFIXES):
         return "bulk_expected"

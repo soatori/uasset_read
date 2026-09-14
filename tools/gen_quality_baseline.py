@@ -32,12 +32,9 @@ def main() -> None:
         doc = parse_package_document(str(path), depth="asset")
         counts: Counter[tuple[str, str | None]] = Counter()
         for d in doc.diagnostics:
-            counts[(d.code, getattr(d, "reason", None))] += 1
+            counts[(d.code, d.reason)] += 1
         max_by: dict[str, dict[str, dict[str, int]]] = {}
-        for (code, reason), n in sorted(
-            counts.items(),
-            key=lambda item: (item[0][0], item[0][1] or ""),
-        ):
+        for (code, reason), n in sorted(counts.items(), key=lambda item: (item[0][0], item[0][1] or "")):
             key = reason or "_"
             max_by.setdefault(code, {})[key] = {"max": n}
         samples[name] = {
