@@ -41,6 +41,10 @@ MANIFEST_BY_NAME = {entry["name"]: entry for entry in MANIFEST_SAMPLES}
 GOLDEN_DIR = SAMPLES / "golden"
 GOLDEN_FILES = _MANIFEST_DATA["golden_files"]
 
+# Diagnostic-count ceilings for the quality-system seed fixtures. Regenerate
+# with tools/gen_quality_baseline.py after intentional diagnostic-count changes.
+QUALITY_BASELINE = json.loads((SAMPLES / "quality_baseline.json").read_text(encoding="utf-8"))
+
 # (sample, class, expected keys, expected status.semantic at depth=asset).
 # "complete" requires decoded-tier handler output; summary-tier handlers
 # (mesh, blueprint summary, niagara) stay "partial" (#629).
@@ -1022,3 +1026,36 @@ def test_missing_sidecar_diagnostic(sample_entry):
         assert "PACKAGE_SIDECAR_MISSING" in codes, (
             f"expected PACKAGE_SIDECAR_MISSING for {sample_entry['name']}, got: {codes}"
         )
+
+
+def _assert_quality_baseline(doc, name: str) -> None:
+    entry = QUALITY_BASELINE["samples"][name]
+    codes = [d.code for d in doc.diagnostics]
+    for forbidden in entry.get("forbidden_codes", []):
+        assert forbidden not in codes, f"{name}: forbidden diagnostic {forbidden}"
+
+    def _count(code: str, reason: str | None) -> int:
+        return sum(
+            1
+            for d in doc.diagnostics
+            if d.code == code and getattr(d, "reason", None) == reason
+        )
+
+    for code, by_reason in entry.get("max_by_code_reason", {}).items():
+        for reason_key, rule in by_reason.items():
+            reason = None if reason_key == "_" else reason_key
+            actual = _count(code, reason)
+            assert actual <= rule["max"], (
+                f"{name}: {code}/{reason_key} count {actual} > baseline max {rule['max']}"
+            )
+
+
+@pytest.mark.parametrize("sample_name", sorted(QUALITY_BASELINE["samples"]))
+def test_quality_baseline_diagnostics(sample_name):
+    from uasset_read.package import parse_package_document
+    from uasset_read.projection import project_document
+
+    doc = parse_package_document(str(SAMPLES / sample_name), depth="asset")
+    page = project_document(doc)
+    jsonschema.validate(page, SCHEMA)
+    _assert_quality_baseline(doc, sample_name)

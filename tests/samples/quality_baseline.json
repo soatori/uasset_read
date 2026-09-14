@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "samples": {
+    "FirstPerson_DT_WeaponList.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "max_by_code_reason": {}
+    },
+    "FirstPerson_T_GridChecker_A.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "max_by_code_reason": {
+        "EXPORT_TRAILING_BYTES_UNCONSUMED": {
+          "editor_only": {
+            "max": 1
+          },
+          "unexpected": {
+            "max": 1
+          }
+        }
+      }
+    },
+    "FirstPerson_BS_Idle_Walk_Run.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "max_by_code_reason": {
+        "EXPORT_TRAILING_BYTES_UNCONSUMED": {
+          "unexpected": {
+            "max": 1
+          }
+        }
+      }
+    },
+    "ALS_Mannequin_Skeleton.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "max_by_code_reason": {
+        "EXPORT_TRAILING_BYTES_UNCONSUMED": {
+          "editor_only": {
+            "max": 1
+          },
+          "known_unimplemented": {
+            "max": 1
+          }
+        }
+      }
+    },
+    "BP_CombatCharacter.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "max_by_code_reason": {
+        "EXPORT_TRAILING_BYTES_UNCONSUMED": {
+          "editor_only": {
+            "max": 324
+          }
+        },
+        "fstring_all_null": {
+          "recovered_corruption": {
+            "max": 16
+          }
+        }
+      }
+    }
+  }
+}
