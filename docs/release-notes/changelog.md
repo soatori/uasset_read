@@ -12,6 +12,9 @@
 - Tightened the K0 `bytecode_status` vocabulary to `parsed`, `no_script`, or `failed`; internal results can no longer serialize an undocumented `unknown` status.
 - Retired log cleanup (Gate L): deleted `project_logging.py` and CLI `--clean-logs` / `--log-dir` / `--log-keep-latest` / `--log-max-total-mb` (explicit rejection, exit 2). Leftover `log/` directories from older releases are the user's responsibility.
 
+### Improvements
+- Diagnostics: optional `reason` classification (`bulk_expected`, `editor_only`, `known_unimplemented`, `recovered_corruption`, `conservative_complete`, `unexpected`) on `Diagnostic`; trailing-bytes and recovery sites populate it. Sample tests gain `tests/samples/quality_baseline.json` gate.
+
 ## [0.5.4.45] — 2026-07-23
 
 Major release since v0.5.3.23 — comprehensive code quality, security hardening, and feature expansion.
