@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 
-from .exceptions import BINARY_READ_ERRORS, ParseError
+from .exceptions import BINARY_READ_ERRORS, ParseError, VersionError
 from .models.document import PackageDocument
 from .package import parse_package_document
 from .projection import dependency_to_dict, fit_list_response, json_byte_size, paginate, project_document, select_objects
@@ -78,9 +78,9 @@ def _parse_or_error(
 
     Returns ``(doc, None)`` on success, ``(None, envelope)`` on
     ``FileNotFoundError`` (PACKAGE_NOT_FOUND) or
-    ``BINARY_READ_ERRORS + (ParseError,)`` (PACKAGE_PARSE_FAILED).  Every
-    parse-backed Agent tool funnels through here so callers receive the same
-    structured error shape instead of a leaked parser exception.
+    ``BINARY_READ_ERRORS + (ParseError, VersionError)`` (PACKAGE_PARSE_FAILED).
+    Every parse-backed Agent tool funnels through here so callers receive the
+    same structured error shape instead of a leaked parser exception.
     """
     try:
         return parse_package_document(file_path, **parse_kwargs), None
@@ -91,7 +91,7 @@ def _parse_or_error(
             recoverable=False,
             message=f"Package not found: {file_path}",
         )
-    except BINARY_READ_ERRORS + (ParseError,) as exc:
+    except BINARY_READ_ERRORS + (ParseError, VersionError) as exc:
         return None, _err(
             "PACKAGE_PARSE_FAILED",
             stage,
@@ -331,22 +331,23 @@ def extract_payload(
     if bundle.uptnl_path is not None:
         sidecar_paths["uptnl"] = bundle.uptnl_path
 
-    # Determine export index from payload_id if not provided.
-    # Only ("export", index) may populate export_index; an import payload is
-    # deferred/unsupported and is never treated as an export.
+    # Always classify the payload id first. An import payload is deferred
+    # even when the caller also passes an export_index — import ids are
+    # never treated as exports.
+    parsed = _parse_payload_id(payload_id)
+    if parsed is not None and parsed[0] == "import":
+        response = {
+            "id": payload_id,
+            "error": "Payload extraction is deferred: real payloads require per-export BulkData mapping from cooked fixtures (issue #627)",
+            "code": PAYLOAD_EXTRACTION_DEFERRED,
+            "available_ids": [],
+            "offset": 0,
+            "returned": 0,
+            "total": 0,
+        }
+        return fit_list_response(response, max_bytes, list_key="available_ids")
+
     if export_index is None:
-        parsed = _parse_payload_id(payload_id)
-        if parsed is not None and parsed[0] == "import":
-            response = {
-                "id": payload_id,
-                "error": "Payload extraction is deferred: real payloads require per-export BulkData mapping from cooked fixtures (issue #627)",
-                "code": PAYLOAD_EXTRACTION_DEFERRED,
-                "available_ids": [],
-                "offset": 0,
-                "returned": 0,
-                "total": 0,
-            }
-            return fit_list_response(response, max_bytes, list_key="available_ids")
         export_index = _parse_export_index(payload_id)
 
     if export_index is None:

@@ -627,3 +627,15 @@ def test_agent_does_not_treat_import_payload_as_export():
     sample = Path(__file__).parent / "samples" / "T_ParserBulk.uasset"
     result = extract_payload(str(sample), "payload:import:1")
     assert result["code"] == "PAYLOAD_EXTRACTION_DEFERRED"
+
+
+def test_agent_rejects_import_payload_even_with_export_index():
+    """An import payload_id must stay deferred even if the caller also
+    passes export_index — import ids are never treated as exports."""
+    from pathlib import Path
+
+    from uasset_read.agent_tools import extract_payload
+
+    sample = Path(__file__).parent / "samples" / "T_ParserBulk.uasset"
+    result = extract_payload(str(sample), "payload:import:1", export_index=0)
+    assert result["code"] == "PAYLOAD_EXTRACTION_DEFERRED"

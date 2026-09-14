@@ -2897,6 +2897,19 @@ def test_agent_tools_parse_error_return_structured_errors(monkeypatch, tmp_path)
         assert result["code"] == "PACKAGE_PARSE_FAILED"
         assert result["recoverable"] is True
 
+    from uasset_read.exceptions import VersionError
+
+    def fail_version(*args, **kwargs):
+        raise VersionError("injected unsupported package version")
+
+    monkeypatch.setattr(tools, "parse_package_document", fail_version)
+    for call in calls:
+        result = call()
+        assert result["code"] == "PACKAGE_PARSE_FAILED"
+        assert result["recoverable"] is True
+        # _err maps the message= kwarg to the stable "error" field.
+        assert "VersionError" in result["error"]
+
 
 def test_agent_tool_queries_distinguish_budget_and_reject_negative_paging():
     """#644: budget exhaustion must not read as a missing object, and every
