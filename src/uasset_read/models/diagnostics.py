@@ -64,3 +64,63 @@ def make_diagnostic(
         effect=effect,
         reason=reason,
     )
+
+
+_EDITOR_ONLY_PREFIXES = (
+    "MetaData",
+    "PackageMetaData",
+    "K2Node_",
+    "EdGraph",
+    "EdGraphNode",
+    "Blueprint",
+    "WidgetBlueprint",
+    "AnimBlueprint",
+    "Function",
+)
+
+_BULK_CLASSES = frozenset(
+    {
+        "FontFace",
+        "Font",
+        "SoundWave",
+        "SoundCue",
+        "RawAudio",
+    }
+)
+
+_KNOWN_UNIMPLEMENTED_CLASSES = frozenset(
+    {
+        "Skeleton",
+        "PhysicsAsset",
+        "SkeletalBodySetup",
+        "StaticMesh",
+        "StaticMeshDescriptionBulkData",
+        "UserDefinedStruct",
+    }
+)
+
+_KNOWN_UNIMPLEMENTED_PREFIXES = (
+    "NiagaraNode",
+    "NiagaraScript",
+    "NiagaraEmitter",
+    "NiagaraSystem",
+)
+
+
+def classify_trailing_reason(class_name: str, remaining: int) -> DiagnosticReason:
+    """Map export trailing-bytes context to a closed reason value.
+
+    Bulk-data classes are checked first so names such as ``FontFace`` are
+    never swallowed by a broader prefix rule. ``remaining`` is accepted for
+    call-site symmetry and future size-sensitive rules; the current mapping
+    is class-only.
+    """
+    if class_name in _BULK_CLASSES:
+        return "bulk_expected"
+    if any(class_name.startswith(p) or class_name == p for p in _EDITOR_ONLY_PREFIXES):
+        return "editor_only"
+    if class_name in _KNOWN_UNIMPLEMENTED_CLASSES or any(
+        class_name.startswith(p) for p in _KNOWN_UNIMPLEMENTED_PREFIXES
+    ):
+        return "known_unimplemented"
+    return "unexpected"

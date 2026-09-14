@@ -35,7 +35,11 @@ from ..serializers.package_summary import (
     read_package_summary,
     read_preload_dependencies,
 )
-from ..models.diagnostics import Diagnostic, make_diagnostic as _diag
+from ..models.diagnostics import (
+    Diagnostic,
+    classify_trailing_reason,
+    make_diagnostic as _diag,
+)
 from .asset_types.handlers_impl import run_handlers
 from ..models.document import PackageDocument, PackageInfo, Summary
 from ..models.object_model import (
@@ -336,6 +340,8 @@ def _merge_archive_recoveries(
                 offset=sd.offset,
                 effect="recovery" if recovered else "data_loss",
                 recoverable=recovered,
+                fallback=getattr(sd, "fallback", None),
+                reason=getattr(sd, "reason", None),
             )
         )
 
@@ -878,6 +884,7 @@ class LegacyPackageReader:
                                 ),
                                 "objects.export",
                                 object_id=obj.id,
+                                reason=classify_trailing_reason(cn, remaining),
                             )
                         )
                 if overrun > 0:
