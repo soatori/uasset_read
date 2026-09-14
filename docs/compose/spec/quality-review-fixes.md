@@ -1,14 +1,25 @@
 ---
 feature: quality-review-fixes
-status: designed
+status: delivered
 updated: 2026-09-15
 branch: fix/quality-review-i1-i4
-commits: ea163122..  # filled at delivery
+commits: ea163122..c796784f
 ---
 
 # Quality Review Fixes (I1–I4)
 
 ## Report
+
+**What was built** — Extended `classify_trailing_reason` so ordinary residue classes (Texture*, BlendSpace*, AnimSequence/Montage/Composite, Material*) no longer classify as `unexpected`. Regenerated `quality_baseline.json`: seeds pin `bulk_expected` / `known_unimplemented` instead of noise. Baseline gate gained `forbid_unlisted` (fail on unlisted `(code, reason)` pairs) and `max_total_diagnostics`; DataTable seed is an explicit zero-diag pin. Changelog documents optional `reason` **and** schema `fallback`. Fail-path unit tests cover both gate rejections; None-safe sorting for mixed reason pairs.
+
+**Verification** — `PYTHONPATH=src python -m pytest -q tests/test_diagnostics_reason.py tests/test_core.py tests/test_samples.py tests/test_size_baseline.py` → **160+ passed** (fail-path + size green after ceiling raise). Classifier unit asserts cover Texture2D/BlendSpace/Material/etc. Regenerator re-run produced identical seed diagnostics counts. Independent review of `ea163122..a00a0bcb` flagged T3 fail-path gap; scoped re-review of `a00a0bcb..c6e0f097` confirmed Critical + sorted TypeError **ADDRESSED**; residual generator sort fixed in `c796784f`.
+
+**Journey log**
+1. User chose all I1–I4, minimal+evidence classifier tables, allowlist this round.
+2. Environment blocked `git worktree add`; worked on branch `fix/quality-review-i1-i4` from `ea163122` on the main checkout.
+3. First commit failed on PowerShell `git add` with backslash paths; fixed with forward-slash paths.
+4. Size-baseline ratchets needed raises for docs/compose spec + fail-path tests (deliberate reviewable diffs).
+5. Independent review required one fix round for T3 fail-path tests; re-review clean.
 
 ## [S1] Problem
 
@@ -92,8 +103,8 @@ Extend the Unreleased Improvements bullet:
 
 ## Tasks
 
-- [ ] T1: Extend `classify_trailing_reason` tables + unit tests — acceptance: `Texture2D`→`bulk_expected`, `BlendSpace`→`known_unimplemented`, `AnimSequence`→`known_unimplemented`, `Material`→`known_unimplemented`; existing MetaData/Niagara/Skeleton mappings unchanged (covers: S2.1)
-- [ ] T2: Regenerate `quality_baseline.json` after T1 — acceptance: GridChecker no longer pins Texture2D as `unexpected`; BS seed reason is `known_unimplemented`; file committed with generator output (covers: S2.1; depends: T1)
-- [ ] T3: Baseline gate allowlist + zero-diag pin — acceptance: `_assert_quality_baseline` fails on unlisted `(code,reason)` when `forbid_unlisted`; DT seed has `max_total_diagnostics: 0` and `forbid_unlisted: true`; unit/integration tests cover fail and pass paths (covers: S2.2, S2.3; depends: T2)
-- [ ] T4: Generator sets `forbid_unlisted` on all seeds — acceptance: regenerated baseline JSON includes `"forbid_unlisted": true` for every seed (covers: S2.3; depends: T3)
-- [ ] T5: Changelog documents `fallback` + reason — acceptance: Unreleased bullet mentions both keys; commit docs-only (covers: S2.4)
+- [x] T1: Extend `classify_trailing_reason` tables + unit tests — acceptance: `Texture2D`→`bulk_expected`, `BlendSpace`→`known_unimplemented`, `AnimSequence`→`known_unimplemented`, `Material`→`known_unimplemented`; existing MetaData/Niagara/Skeleton mappings unchanged (covers: S2.1)
+- [x] T2: Regenerate `quality_baseline.json` after T1 — acceptance: GridChecker no longer pins Texture2D as `unexpected`; BS seed reason is `known_unimplemented`; file committed with generator output (covers: S2.1; depends: T1)
+- [x] T3: Baseline gate allowlist + zero-diag pin — acceptance: `_assert_quality_baseline` fails on unlisted `(code,reason)` when `forbid_unlisted`; DT seed has `max_total_diagnostics: 0` and `forbid_unlisted: true`; unit/integration tests cover fail and pass paths (covers: S2.2, S2.3; depends: T2)
+- [x] T4: Generator sets `forbid_unlisted` on all seeds — acceptance: regenerated baseline JSON includes `"forbid_unlisted": true` for every seed (covers: S2.3; depends: T3)
+- [x] T5: Changelog documents `fallback` + reason — acceptance: Unreleased bullet mentions both keys; commit docs-only (covers: S2.4)
