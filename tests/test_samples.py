@@ -1066,12 +1066,51 @@ def _assert_quality_baseline(doc, name: str) -> None:
                 (d.code, getattr(d, "reason", None))
                 for d in doc.diagnostics
                 if (d.code, getattr(d, "reason", None)) not in known
-            }
+            },
+            key=lambda pair: (pair[0], pair[1] or ""),
         )
         assert not unlisted, (
             f"{name}: unlisted (code, reason) pairs {unlisted}; "
             "regenerate baseline or classify the diagnostic"
         )
+
+
+def test_quality_baseline_forbid_unlisted_rejects_new_pair(monkeypatch):
+    """Fail path: forbid_unlisted must reject a (code, reason) absent from the baseline."""
+    from types import SimpleNamespace
+
+    entry = {
+        "forbidden_codes": [],
+        "forbid_unlisted": True,
+        "max_by_code_reason": {"EXPORT_TRAILING_BYTES_UNCONSUMED": {"editor_only": {"max": 1}}},
+    }
+    monkeypatch.setitem(QUALITY_BASELINE["samples"], "__fail_unlisted__", entry)
+    doc = SimpleNamespace(
+        diagnostics=[
+            SimpleNamespace(code="EXPORT_TRAILING_BYTES_UNCONSUMED", reason="editor_only"),
+            SimpleNamespace(code="NAME_INDEX_OUT_OF_RANGE", reason="recovered_corruption"),
+        ]
+    )
+    with pytest.raises(AssertionError, match="unlisted"):
+        _assert_quality_baseline(doc, "__fail_unlisted__")
+
+
+def test_quality_baseline_max_total_diagnostics_rejects_overflow(monkeypatch):
+    """Fail path: max_total_diagnostics must reject a sample that emits more than the pin."""
+    from types import SimpleNamespace
+
+    entry = {
+        "forbidden_codes": [],
+        "max_total_diagnostics": 0,
+        "forbid_unlisted": True,
+        "max_by_code_reason": {},
+    }
+    monkeypatch.setitem(QUALITY_BASELINE["samples"], "__fail_total__", entry)
+    doc = SimpleNamespace(
+        diagnostics=[SimpleNamespace(code="EXPORT_TRAILING_BYTES_UNCONSUMED", reason="editor_only")]
+    )
+    with pytest.raises(AssertionError, match="total diagnostics"):
+        _assert_quality_baseline(doc, "__fail_total__")
 
 
 @pytest.mark.parametrize("sample_name", sorted(QUALITY_BASELINE["samples"]))
