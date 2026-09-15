@@ -481,9 +481,7 @@ def test_real_sample_proves_claimed_capability(
             assert feature in feature_names, f"{sample}:{class_name} missing coverage {feature}"
         twin = copy.deepcopy(obj)
         from uasset_read.parsers.asset_types.handlers_impl import TexturePayloadHandler
-        from uasset_read.versioning import VersionContext
-
-        result = TexturePayloadHandler().enrich(twin, VersionContext(), doc.objects, None)
+        result = TexturePayloadHandler().enrich(twin, "package", doc.objects, None)
         if class_name == "TextureCube":
             # TextureCube doesn't have ImportedSize property, so result is None
             assert result is None, f"{sample}:{class_name}"
@@ -803,22 +801,6 @@ def test_preload_relations_report_invalid_ranges_without_crashing():
     assert diagnostics[0].code == "PRELOAD_DEPENDENCY_RANGE_INVALID"
     assert diagnostics[0].object_id == "export:0"
     assert diagnostics[0].recoverable is True
-
-
-def test_version_context_is_frozen_and_depth_only():
-    """G1 (amended): immutable context carries production-used fields only."""
-    import dataclasses
-
-    from uasset_read.versioning import VersionContext
-
-    ctx = VersionContext(depth="asset")
-    assert ctx.depth == "asset"
-    assert VersionContext().depth == "package"
-    # Only field: depth — speculative version/game/mappings payload was cut
-    # (G1 amend after revert 280b7e09; handlers read depth only).
-    assert {f.name for f in dataclasses.fields(VersionContext)} == {"depth"}
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        ctx.depth = "decode"
 
 
 def test_blueprint_fixtures_carry_generated_and_cdo_relations():

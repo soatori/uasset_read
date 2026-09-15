@@ -50,7 +50,7 @@ from ..models.object_model import (
     Region,
     Relation,
 )
-from ..versioning import FORTNITE_GUID, VersionContext, get_custom_version
+from ..versioning import FORTNITE_GUID, get_custom_version
 
 
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:
@@ -685,11 +685,10 @@ class LegacyPackageReader:
 
             # 17. Run asset handlers at depth >= asset
             if depth in ("asset", "decode"):
-                context = VersionContext(depth=depth)
                 for obj in objects:
                     try:
                         semantic, cov, handler_diags = run_handlers(
-                            obj, context, objects, (export_map, name_map, extras)
+                            obj, depth, objects, (export_map, name_map, extras)
                         )
                         if semantic is not None:
                             obj.semantic = semantic

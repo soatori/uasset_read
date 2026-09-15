@@ -7,7 +7,7 @@ Corresponds to COR-02: FCustomVersion system.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.serializers.package_summary import PackageFileSummary
@@ -53,15 +53,3 @@ class EngineVersion:
 
     def __str__(self) -> str:
         return f"{self.major}.{self.minor}.{self.patch}.{self.changelist}"
-
-
-@dataclass(frozen=True)
-class VersionContext:
-    """Immutable parse context shared by all readers.
-
-    Production-used fields only (G1 amended 2026-09-13 after revert
-    ``280b7e09``): handlers read ``depth``; version facts stay on the
-    package summary / archive gates until a real consumer lands.
-    """
-
-    depth: Literal["package", "object", "asset", "decode"] = "package"

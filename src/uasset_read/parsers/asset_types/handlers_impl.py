@@ -15,7 +15,6 @@ from ...constants import format_guid_bytes
 from ...models.diagnostics import Diagnostic, make_diagnostic
 from ...models.object_model import ObjectRecord, CoverageEntry
 from ...serializers.blueprint_graph import summarize_exec_edges
-from ...versioning import VersionContext
 
 
 class _SupportsClasses:
@@ -23,7 +22,7 @@ class _SupportsClasses:
 
     classes: tuple[str, ...] = ()
 
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+    def supports(self, obj: ObjectRecord, depth: str) -> bool:
         return (obj.class_name or "") in self.classes
 
 
@@ -43,7 +42,7 @@ def get_handlers() -> list[_SupportsClasses]:
 
 def run_handlers(
     obj: ObjectRecord,
-    context: VersionContext,
+    depth: str,
     all_objects: list[ObjectRecord],
     package_data: Any,
 ) -> tuple[dict[str, Any] | None, list[CoverageEntry], list[Diagnostic]]:
@@ -64,9 +63,9 @@ def run_handlers(
 
     for handler in _HANDLERS:
         try:
-            if handler.supports(obj, context):
+            if handler.supports(obj, depth):
                 matched = True
-                result = handler.enrich(obj, context, all_objects, package_data)
+                result = handler.enrich(obj, depth, all_objects, package_data)
                 if result is not None:
                     semantic.update(result)
                     # capability may be a tier string or a callable of the result;
@@ -173,7 +172,7 @@ class UserDefinedEnumHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -244,7 +243,7 @@ class UserDefinedStructHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -309,7 +308,7 @@ class DataTableHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -382,7 +381,7 @@ class StringTableHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -430,7 +429,7 @@ class TextureHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -484,7 +483,7 @@ class TexturePayloadHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -533,7 +532,7 @@ class SoundHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -587,7 +586,7 @@ class MaterialHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -629,7 +628,7 @@ class MaterialInstanceHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -736,7 +735,7 @@ class SkeletonHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -814,7 +813,7 @@ class MeshHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -890,14 +889,14 @@ class BlueprintFamilyHandler:
         self._kind = kind
         self._feature = feature
 
-    def supports(self, obj: ObjectRecord, context: VersionContext) -> bool:
+    def supports(self, obj: ObjectRecord, depth: str) -> bool:
         cn = obj.class_name or ""
         return cn in self._classes
 
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -908,7 +907,7 @@ class BlueprintFamilyHandler:
             "name": obj.name,
         }
 
-        if context.depth == "asset":
+        if depth == "asset":
             extras = package_data[2] if package_data else {}
             entry = extras.get(obj.id, {}) if isinstance(extras, dict) else {}
             kismet = entry.get("kismet", []) if isinstance(entry, dict) else []
@@ -933,7 +932,7 @@ class BlueprintFamilyHandler:
         # depth == "decode": real graphs arrive via extras (reader-side pass).
         # Only the owning asset export carries them; GeneratedClass exports
         # keep the summary and stay "partial" (#629 tier contract).
-        if context.depth == "decode":
+        if depth == "decode":
             extras = package_data[2] if package_data else {}
             entry = extras.get(obj.id, {}) if isinstance(extras, dict) else {}
             graphs = entry.get("graphs", []) if isinstance(entry, dict) else []
@@ -1309,7 +1308,7 @@ class NiagaraHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -1357,7 +1356,7 @@ class PhysicsAssetHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -1437,7 +1436,7 @@ class PhysicalMaterialHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -1501,7 +1500,7 @@ class AnimBlendSpaceHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -1590,7 +1589,7 @@ class AnimCompositeHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -1654,7 +1653,7 @@ class AnimLayerInterfaceHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -1715,7 +1714,7 @@ class MaterialFunctionHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:
@@ -1787,7 +1786,7 @@ class MaterialParameterCollectionHandler(_SupportsClasses):
     def enrich(
         self,
         obj: ObjectRecord,
-        context: VersionContext,
+        depth: str,
         all_objects: list[ObjectRecord],
         package_data: Any,
     ) -> dict[str, Any] | None:

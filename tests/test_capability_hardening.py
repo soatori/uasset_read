@@ -133,7 +133,6 @@ def _mi_record(props: dict):
 
 def test_material_instance_counts_normalized_array_params():
     from uasset_read.parsers.asset_types.handlers_impl import MaterialInstanceHandler
-    from uasset_read.versioning import VersionContext
 
     obj = _mi_record(
         {
@@ -150,7 +149,7 @@ def test_material_instance_counts_normalized_array_params():
             },
         }
     )
-    result = MaterialInstanceHandler().enrich(obj, VersionContext(), [], None)
+    result = MaterialInstanceHandler().enrich(obj, "package", [], None)
     assert result is not None
     assert result["scalar_param_count"] == 3
     assert result["vector_param_count"] == 1
@@ -159,7 +158,6 @@ def test_material_instance_counts_normalized_array_params():
 
 def test_material_instance_fields_dict_still_counted():
     from uasset_read.parsers.asset_types.handlers_impl import MaterialInstanceHandler
-    from uasset_read.versioning import VersionContext
 
     obj = _mi_record(
         {
@@ -167,7 +165,7 @@ def test_material_instance_fields_dict_still_counted():
             "ScalarParameterValues": {"fields": {"A": 1, "B": 2}},
         }
     )
-    result = MaterialInstanceHandler().enrich(obj, VersionContext(), [], None)
+    result = MaterialInstanceHandler().enrich(obj, "package", [], None)
     assert result["scalar_param_count"] == 2
 
 
@@ -175,7 +173,6 @@ def test_material_instance_empty_arrays_stay_summary():
     # Empty normalized arrays count as present-but-zero: parent-only MI with
     # no parameters remains a summary projection, not semantic=complete.
     from uasset_read.parsers.asset_types.handlers_impl import MaterialInstanceHandler
-    from uasset_read.versioning import VersionContext
 
     obj = _mi_record(
         {
@@ -193,7 +190,7 @@ def test_material_instance_empty_arrays_stay_summary():
         }
     )
     handler = MaterialInstanceHandler()
-    result = handler.enrich(obj, VersionContext(), [], None)
+    result = handler.enrich(obj, "package", [], None)
     assert result is not None
     assert result["scalar_param_count"] == 0
     assert result["vector_param_count"] == 0
