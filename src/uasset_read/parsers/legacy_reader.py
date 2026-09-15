@@ -288,20 +288,16 @@ def _build_object_record_direct(
     class_name = resolve_class_name(export.class_index, import_map, export_map)
 
     # ObjectRef fields
-    class_ref = _package_index_to_ref(export.class_index)
     outer_ref = _package_index_to_ref(export.outer_index)
     super_ref = _package_index_to_ref(export.super_index)
-    template_ref = _package_index_to_ref(export.template_index)
 
     return ObjectRecord(
         id=f"export:{index}",
         table_index=index,
         name=name,
         class_name=class_name,
-        class_ref=class_ref,
         outer_ref=outer_ref,
         super_ref=super_ref,
-        template_ref=template_ref,
         flags=export.object_flags,
         roles=tuple(roles),
         serial_region=serial_region,
