@@ -28,27 +28,21 @@ class PropertyFallback(PropertyValue):
     """Structured fallback for unknown/corrupted properties (replaces original None return)."""
 
     size: int = 0
-    raw_bytes: bytes = b""
     reason: FallbackReason = FallbackReason.UNSUPPORTED_TYPE
-    error_message: str | None = None
 
     @property
     def kind(self) -> str:
         return "unknown_property"
 
     @classmethod
-    def from_tag(
-        cls, tag, reason: "FallbackReason", *, error_message: str = "", raw_bytes: bytes = b""
-    ) -> "PropertyFallback":
+    def from_tag(cls, tag, reason: "FallbackReason") -> "PropertyFallback":
         """Build a fallback from a property tag (shared name/type/size/array_index plumbing)."""
         return cls(
             name=tag.name,
             type=tag.type,
             size=tag.size,
-            raw_bytes=raw_bytes,
             reason=reason,
             array_index=getattr(tag, "array_index", 0),
-            error_message=error_message or None,
         )
 
 

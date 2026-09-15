@@ -71,6 +71,30 @@ def _parse_instanced_struct(
         return None
 
 
+def _read_mask_rgba(archive: "FArchive") -> dict[str, int]:
+    """Mask + RGBA channels shared by FExpressionOutput and expression-input heads."""
+    return {
+        "mask": archive.read_i32(),
+        "mask_r": archive.read_i32(),
+        "mask_g": archive.read_i32(),
+        "mask_b": archive.read_i32(),
+        "mask_a": archive.read_i32(),
+    }
+
+
+def _read_expression_input_header(
+    archive: "FArchive",
+    name_map: list[str],
+) -> dict[str, Any]:
+    """FMaterialInput / expression-input head: Expression + OutputIndex + InputName + Mask + RGBA."""
+    return {
+        "expression_index": archive.read_i32(),
+        "output_index": archive.read_i32(),
+        "input_name": archive.read_name(name_map),
+        **_read_mask_rgba(archive),
+    }
+
+
 def _parse_material_input(
     tag: "PropertyTag",
     archive: "FArchive",
@@ -80,18 +104,8 @@ def _parse_material_input(
 ) -> dict[str, Any] | None:
     """Parse material input BinaryOrNative data.
 
-    FMaterialInput format (MaterialShared.cpp:449-467):
-    - Expression: FPackageIndex int32 (leading)
-    - OutputIndex: int32
-    - InputName: FName
-    - Mask: int32
-    - MaskR: int32
-    - MaskG: int32
-    - MaskB: int32
-    - MaskA: int32
-    Then subclass tail:
-    - UseConstant: uint8
-    - Constant: varies by subclass (Scalar=float, Vector=3 floats, etc.)
+    FMaterialInput format (MaterialShared.cpp:449-467): shared expression-input
+    header, then subclass tail UseConstant + variant constant.
     """
     # Minimum: Expression(4) + OutputIndex(4) + InputName(8) + Mask(4) + RGBA(16) = 36
     if tag.size < 36:
@@ -100,27 +114,11 @@ def _parse_material_input(
     start_pos = archive.tell()
     try:
         with _safe_parse(archive):
-            expression_index = archive.read_i32()
-            output_index = archive.read_i32()
-            input_name = archive.read_name(name_map)
-            mask = archive.read_i32()
-            mask_r = archive.read_i32()
-            mask_g = archive.read_i32()
-            mask_b = archive.read_i32()
-            mask_a = archive.read_i32()
-
             result: dict[str, Any] = {
                 "kind": "material_input",
                 "type": tag.type,
                 "size": tag.size,
-                "expression_index": expression_index,
-                "output_index": output_index,
-                "input_name": input_name,
-                "mask": mask,
-                "mask_r": mask_r,
-                "mask_g": mask_g,
-                "mask_b": mask_b,
-                "mask_a": mask_a,
+                **_read_expression_input_header(archive, name_map),
             }
 
             # Subclass tail: UseConstant (uint8) + Constant (variant-dependent)
@@ -169,23 +167,10 @@ def _parse_expression_output(
     try:
         with _safe_parse(archive):
             output_name = archive.read_name(name_map)
-            mask = archive.read_i32()
-            mask_r = archive.read_i32()
-            mask_g = archive.read_i32()
-            mask_b = archive.read_i32()
-            mask_a = archive.read_i32()
-
             return {
                 "kind": "struct_property",
                 "struct_type": "FExpressionOutput",
-                "fields": {
-                    "output_name": output_name,
-                    "mask": mask,
-                    "mask_r": mask_r,
-                    "mask_g": mask_g,
-                    "mask_b": mask_b,
-                    "mask_a": mask_a,
-                },
+                "fields": {"output_name": output_name, **_read_mask_rgba(archive)},
             }
     except BINARY_READ_ERRORS as e:
         logger.debug("ExpressionOutput parse failed: %s", e)
@@ -201,16 +186,7 @@ def _parse_expression_input(
 ) -> dict[str, Any] | None:
     """Parse FExpressionInput binary data.
 
-    FExpressionInput format (36 bytes):
-    - Expression: int32 (PackageIndex — references a MaterialExpression export)
-    - OutputIndex: int32
-    - InputName: FName (8 bytes: index + number)
-    - Mask: int32
-    - MaskR: int32
-    - MaskG: int32
-    - MaskB: int32
-    - MaskA: int32
-
+    FExpressionInput format (36 bytes) — same head as FMaterialInput.
     Reference: Engine/Source/Runtime/Engine/Public/Materials/MaterialExpression.h:47-79
     """
     if tag.size < 36:
@@ -218,28 +194,10 @@ def _parse_expression_input(
 
     try:
         with _safe_parse(archive):
-            expression_index = archive.read_i32()
-            output_index = archive.read_i32()
-            input_name = archive.read_name(name_map)
-            mask = archive.read_i32()
-            mask_r = archive.read_i32()
-            mask_g = archive.read_i32()
-            mask_b = archive.read_i32()
-            mask_a = archive.read_i32()
-
             return {
                 "kind": "struct_property",
                 "struct_type": "FExpressionInput",
-                "fields": {
-                    "expression_index": expression_index,
-                    "output_index": output_index,
-                    "input_name": input_name,
-                    "mask": mask,
-                    "mask_r": mask_r,
-                    "mask_g": mask_g,
-                    "mask_b": mask_b,
-                    "mask_a": mask_a,
-                },
+                "fields": _read_expression_input_header(archive, name_map),
             }
     except BINARY_READ_ERRORS as e:
         logger.debug("ExpressionInput parse failed: %s", e)
@@ -569,7 +527,7 @@ BINARY_OR_NATIVE_HANDLERS: dict[str, Callable[..., dict[str, Any] | None]] = {
     "FVectorMaterialInput": _parse_material_input,
     "FVector2MaterialInput": _parse_material_input,
     "FExpressionOutput": _parse_expression_output,
-    "ExpressionInput": _parse_expression_input,
+    # Non-F "ExpressionInput" is covered by property_parser's F-prefix struct_type retry.
     "FExpressionInput": _parse_expression_input,
     # General structs
     "FInstancedStruct": _parse_instanced_struct,

@@ -20,7 +20,7 @@ def _graphs_for(sample: str) -> list[dict]:
 
     archive = open_package_bundle(str(SAMPLES / sample)).open_archive(tolerant=True)
     try:
-        summary = read_package_summary(archive)
+        summary, _ = read_package_summary(archive)
         name_map = read_name_table(archive, summary)
         archive.set_name_map(name_map)
         import_map = read_import_map(archive, summary, name_map)
@@ -216,7 +216,7 @@ def _raw_graph_links(sample: str) -> list[dict]:
 
     archive = open_package_bundle(str(SAMPLES / sample)).open_archive(tolerant=True)
     try:
-        summary = read_package_summary(archive)
+        summary, _ = read_package_summary(archive)
         name_map = read_name_table(archive, summary)
         archive.set_name_map(name_map)
         import_map = read_import_map(archive, summary, name_map)

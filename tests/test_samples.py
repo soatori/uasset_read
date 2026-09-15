@@ -261,7 +261,7 @@ def _raw_depends_map(sample: str):
 
     archive = open_package_bundle(str(SAMPLES / sample)).open_archive(tolerant=True)
     try:
-        summary = read_package_summary(archive)
+        summary, _ = read_package_summary(archive)
         name_map = read_name_table(archive, summary)
         archive.set_name_map(name_map)
         return read_depends_map(archive, summary)
@@ -481,9 +481,7 @@ def test_real_sample_proves_claimed_capability(
             assert feature in feature_names, f"{sample}:{class_name} missing coverage {feature}"
         twin = copy.deepcopy(obj)
         from uasset_read.parsers.asset_types.handlers_impl import TexturePayloadHandler
-        from uasset_read.versioning import VersionContext
-
-        result = TexturePayloadHandler().enrich(twin, VersionContext(), doc.objects, None)
+        result = TexturePayloadHandler().enrich(twin, "package", doc.objects, None)
         if class_name == "TextureCube":
             # TextureCube doesn't have ImportedSize property, so result is None
             assert result is None, f"{sample}:{class_name}"
@@ -644,17 +642,11 @@ def test_large_sample_all_exports():
     doc = _object_document("ALS_AnimBP.uasset")
     assert len(doc.objects) == 3395
 
-    # #631 acceptance: bounded agent request — 25 objects, id/name/class only,
-    # relations/dependencies opted out — fits a 10 KB budget; the opted-out
-    # keys are absent and the page is schema-valid.
-    page = project_document(
-        doc, depth="package", fields=["id", "name", "class"], limit=25, sections=[], max_bytes=10_000
-    )
-    size = len(json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-    assert size < 10_000, f"bounded request must fit 10 KB, got {size}"
+    # Default envelope: both relations and dependencies always included;
+    # 25-object page stays schema-valid.
+    page = project_document(doc, depth="package", limit=25)
     assert len(page["objects"]) == 25, page.get("truncation")
-    assert "relations" not in page and "dependencies" not in page
-    assert not any(d.get("code") in ("TRUNCATED", "BUDGET_EXHAUSTED") for d in page["diagnostics"])
+    assert "relations" in page and "dependencies" in page
     jsonschema.validate(page, SCHEMA)
 
 
@@ -805,22 +797,6 @@ def test_preload_relations_report_invalid_ranges_without_crashing():
     assert diagnostics[0].recoverable is True
 
 
-def test_version_context_is_frozen_and_depth_only():
-    """G1 (amended): immutable context carries production-used fields only."""
-    import dataclasses
-
-    from uasset_read.versioning import VersionContext
-
-    ctx = VersionContext(depth="asset")
-    assert ctx.depth == "asset"
-    assert VersionContext().depth == "package"
-    # Only field: depth — speculative version/game/mappings payload was cut
-    # (G1 amend after revert 280b7e09; handlers read depth only).
-    assert {f.name for f in dataclasses.fields(VersionContext)} == {"depth"}
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        ctx.depth = "decode"
-
-
 def test_blueprint_fixtures_carry_generated_and_cdo_relations():
     """Output Gate: blueprint packages expose generated-class and CDO edges."""
     from uasset_read.package import parse_package_document
@@ -880,7 +856,7 @@ def test_als_graph_owners_resolve_beyond_eight_hops():
     # Direct extraction: graph count is a fixture regression, owner-independent.
     archive = open_package_bundle(str(SAMPLES / "ALS_AnimBP.uasset")).open_archive(tolerant=True)
     try:
-        summary = read_package_summary(archive)
+        summary, _ = read_package_summary(archive)
         name_map = read_name_table(archive, summary)
         archive.set_name_map(name_map)
         import_map = read_import_map(archive, summary, name_map)

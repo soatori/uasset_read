@@ -10,12 +10,9 @@ and UE5_LEGACY_VERSIONS in uasset_read.constants.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
 from uasset_read.exceptions import RECOVERY_READ_ERRORS, StreamPoisonedError
 
-if TYPE_CHECKING:
-    from uasset_read.memory_safety import ResourceBudget
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -63,9 +60,7 @@ from uasset_read.constants import (
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.constants import MIN_UASSET_SIZE
 from uasset_read.versioning import EngineVersion
-
-# ResourceBudget type is available via TYPE_CHECKING import above.
-# At runtime, functions accept None or any ResourceBudget instance — no eager import needed.
+from uasset_read.memory_safety import reserve_memory
 
 
 def read_validated_count_strict(
@@ -73,31 +68,32 @@ def read_validated_count_strict(
     max_value: int,
     stage: str,
     bytes_per_entry: int,
-    budget: "ResourceBudget | None" = None,
-) -> int:
+    *,
+    total_decompressed: int = 0,
+) -> tuple[int, int]:
     """Read and validate table count physical feasibility (strict: raises ParseError on excess).
 
     Args:
         count: Raw count read from archive
         max_value: Maximum allowed count for this table
-        stage: Stage name (for exceptions and budget logs)
-        bytes_per_entry: Bytes per record (for budget.reserve)
-        budget: Optional resource budget tracker
+        stage: Stage name (for exceptions)
+        bytes_per_entry: Bytes per record (for reserve_memory)
+        total_decompressed: Running decompressed-byte total for this document
 
     Returns:
-        Validated count value
+        (validated count, updated total_decompressed)
 
     Raises:
         ParseError: When count exceeds max_value
-        MemoryLimitExceeded: When budget.reserve exceeds limit
+        MemoryLimitExceeded: When reserve_memory exceeds limit
     """
     if count < 0:
         raise ParseError(f"Negative {stage} count: {count}")
     if count > max_value:
         raise ParseError(f"{stage} count {count} exceeds maximum {max_value}")
-    if budget is not None and count > 0:
-        budget.reserve(count * bytes_per_entry, stage)
-    return count
+    if count > 0:
+        total_decompressed = reserve_memory(count * bytes_per_entry, stage, total_decompressed=total_decompressed)
+    return count, total_decompressed
 
 
 @dataclass
@@ -193,16 +189,18 @@ def _read_custom_versions(archive: FArchive, with_names: bool = False) -> list:
     return custom_versions
 
 
-def _read_generations(archive: FArchive, budget: "ResourceBudget | None" = None) -> list:
-    """Read Generations table."""
+def _read_generations(archive: FArchive, *, total_decompressed: int = 0) -> tuple[list, int]:
+    """Read Generations table. Returns (generations, updated total_decompressed)."""
     generations_count = archive.read_i32()
-    read_validated_count_strict(generations_count, MAX_GENERATIONS, "generations", 8, budget)
+    _, total_decompressed = read_validated_count_strict(
+        generations_count, MAX_GENERATIONS, "generations", 8, total_decompressed=total_decompressed
+    )
     generations = []
     for _ in range(generations_count):
         gen_export_count = archive.read_i32()
         gen_name_count = archive.read_i32()
         generations.append(GenerationInfo(export_count=gen_export_count, name_count=gen_name_count))
-    return generations
+    return generations, total_decompressed
 
 
 def summary_gate_modes(file_version_ue4: int) -> dict:
@@ -409,25 +407,26 @@ def _read_guids(
 
 def _read_compression_and_source(
     archive: FArchive,
-    budget: "ResourceBudget | None" = None,
-) -> tuple[int, int]:
-    """Read CompressionFlags, CompressedChunks, PackageSource."""
+    *,
+    total_decompressed: int = 0,
+) -> tuple[int, int, int]:
+    """Read CompressionFlags, CompressedChunks, PackageSource. Returns (flags, source, total_decompressed)."""
     compression_flags = archive.read_u32()
 
     compressed_chunks_count = archive.read_i32()
-    read_validated_count_strict(
+    _, total_decompressed = read_validated_count_strict(
         compressed_chunks_count,
         MAX_COMPRESSED_CHUNKS,
         "compressed_chunks",
         16,
-        budget,
+        total_decompressed=total_decompressed,
     )
     for _ in range(compressed_chunks_count):
         # FCompressedChunk = 4 * int32 = 16 bytes (Linker.cpp operator<<)
         archive.read(16)
 
     package_source = archive.read_u32()
-    return compression_flags, package_source
+    return compression_flags, package_source, total_decompressed
 
 
 def _read_additional_packages(archive: FArchive, legacy_file_version: int) -> None:
@@ -527,7 +526,8 @@ def _read_late_versioned_fields(
 
 def read_package_summary(
     archive: FArchive,
-    budget: "ResourceBudget | None" = None,
+    *,
+    total_decompressed: int = 0,
 ) -> PackageFileSummary:
     """Read PackageFileSummary header (UE4 and UE5)."""
     _validate_file_size(archive)
@@ -645,12 +645,12 @@ def read_package_summary(
     soft_package_references_offset = 0
     if file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP:
         soft_package_references_count = archive.read_i32()
-        read_validated_count_strict(
+        _, total_decompressed = read_validated_count_strict(
             soft_package_references_count,
             MAX_SOFT_PACKAGE_REFS,
             "soft_package_references",
             4,
-            budget,
+            total_decompressed=total_decompressed,
         )
         soft_package_references_offset = archive.read_i32()
 
@@ -677,7 +677,7 @@ def read_package_summary(
 
     # Step 17-19: Generations + EngineVersions
     gates = summary_gate_modes(file_version_ue4)
-    generations = _read_generations(archive, budget)
+    generations, total_decompressed = _read_generations(archive, total_decompressed=total_decompressed)
     if gates["engine_versions"] == "full":
         saved_by_engine_version = _read_engine_version(archive)
     else:
@@ -687,7 +687,9 @@ def read_package_summary(
     compatible_with_engine_version = _read_engine_version(archive) if gates["compatible"] else saved_by_engine_version
 
     # Step 20-22: Compression + PackageSource
-    compression_flags, package_source = _read_compression_and_source(archive, budget)
+    compression_flags, package_source, total_decompressed = _read_compression_and_source(
+        archive, total_decompressed=total_decompressed
+    )
 
     # Step 23: AdditionalPackages + TextureAllocations
     _read_additional_packages(archive, legacy_file_version)
@@ -759,7 +761,7 @@ def read_package_summary(
         names_referenced_from_export_data_count=names_referenced_from_export_data_count,
         payload_toc_offset=payload_toc_offset,
         data_resource_offset=data_resource_offset,
-    )
+    ), total_decompressed
 
 
 def read_name_table(archive: FArchive, summary: PackageFileSummary) -> list[str]:
@@ -835,8 +837,9 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> list[str]
 def read_depends_map(
     archive: FArchive,
     summary: PackageFileSummary,
-    budget: "ResourceBudget | None" = None,
     warnings: "list[str] | None" = None,
+    *,
+    total_decompressed: int = 0,
 ) -> list[list[int]]:
     """Read DependsMap (dependency table).
 
@@ -851,7 +854,6 @@ def read_depends_map(
     Args:
         archive: File archive reader
         summary: Package file summary
-        budget: Optional resource budget tracker
         warnings: Optional warnings list for collecting degradation info (e.g. invalid entries)
 
     Returns:
@@ -889,8 +891,10 @@ def read_depends_map(
             truncated_table = True
             stopped_at = i
             break
-        if budget is not None and dep_count > 0:
-            budget.reserve(dep_count * 4, f"DependsMap[{i}]")
+        if dep_count > 0:
+            total_decompressed = reserve_memory(
+                dep_count * 4, f"DependsMap[{i}]", total_decompressed=total_decompressed
+            )
         deps = []
         for j in range(dep_count):
             pkg_index = archive.read_i32()

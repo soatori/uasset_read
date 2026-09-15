@@ -155,7 +155,7 @@ def test_combat_character_kismet_asset_depth_summary():
 def test_kismet_result_status_serializations():
     """KismetDecompiledResult must serialize parsed / no_script / failed without cpp_code."""
     from uasset_read.kismet.result import KismetDecompiledResult
-    from uasset_read.kismet.expressions.literals import EX_True
+    from uasset_read.kismet.expressions import EX_True
 
     true_expr = EX_True()
     true_expr.StatementIndex = 0
@@ -502,7 +502,6 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
     from uasset_read.exceptions import ParseError
     from uasset_read.kismet import bytecode_extractor
     from uasset_read.kismet.decompile_bridge import extract_kismet_decompiled
-    from uasset_read.memory_safety import ResourceBudget
     from uasset_read.package import open_package_bundle
     from uasset_read.serializers.object_resources import read_export_map, read_import_map
     from uasset_read.serializers.package_summary import read_name_table, read_package_summary
@@ -511,8 +510,7 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
     bundle = open_package_bundle(str(sample))
     archive = bundle.open_archive(tolerant=True)
     try:
-        budget = ResourceBudget()
-        summary = read_package_summary(archive, budget)
+        summary, _ = read_package_summary(archive)
         archive.set_property_version_gates(summary.file_version_ue4, summary.file_version_ue5)
         name_map = read_name_table(archive, summary)
         archive.set_name_map(name_map)
@@ -612,7 +610,7 @@ def _low_level_graphs(sample: str):
 
     archive = open_package_bundle(str(SAMPLES / sample)).open_archive(tolerant=True)
     try:
-        summary = read_package_summary(archive)
+        summary, _ = read_package_summary(archive)
         name_map = read_name_table(archive, summary)
         archive.set_name_map(name_map)
         import_map = read_import_map(archive, summary, name_map)
@@ -645,7 +643,7 @@ def test_node_reader_failure_keeps_fallback_export_id(monkeypatch):
     sample = SAMPLES / "StackOBot_BP_Drone.uasset"
     archive = open_package_bundle(str(sample)).open_archive(tolerant=True)
     try:
-        summary = read_package_summary(archive)
+        summary, _ = read_package_summary(archive)
         name_map = read_name_table(archive, summary)
         archive.set_name_map(name_map)
         import_map = read_import_map(archive, summary, name_map)

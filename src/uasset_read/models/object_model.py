@@ -47,10 +47,8 @@ class ObjectRecord:
     table_index: int
     name: str
     class_name: str | None = None
-    class_ref: ObjectRef | None = None
     outer_ref: ObjectRef | None = None
     super_ref: ObjectRef | None = None
-    template_ref: ObjectRef | None = None
     flags: int = 0
     roles: tuple[str, ...] = ()
     serial_region: Region | None = None

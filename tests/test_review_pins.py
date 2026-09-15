@@ -13,7 +13,7 @@ from uasset_read.constants import (
     get_max_reasonable,
 )
 from uasset_read.models.properties import PropertyTag
-from uasset_read.parsers.custom_properties import (
+from uasset_read.parsers.property_parser import (
     CUSTOM_PROPERTY_HANDLERS,
     handle_custom_property,
 )

@@ -16,7 +16,7 @@ from typing import Any, Literal
 from ..archive import ByteArchive, SourceInfo
 from ..constants import PKG_Cooked, PKG_FilterEditorOnly, PKG_UnversionedProperties
 from ..exceptions import ParseError, ExportBoundsExceeded
-from ..memory_safety import ResourceBudget
+
 from ..package import PackageArchive
 from ..serializers.property_tags import read_property_tag
 from ..serializers.object_resources import (
@@ -50,7 +50,7 @@ from ..models.object_model import (
     Region,
     Relation,
 )
-from ..versioning import FORTNITE_GUID, VersionContext, get_custom_version
+from ..versioning import FORTNITE_GUID, get_custom_version
 
 
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:
@@ -288,20 +288,16 @@ def _build_object_record_direct(
     class_name = resolve_class_name(export.class_index, import_map, export_map)
 
     # ObjectRef fields
-    class_ref = _package_index_to_ref(export.class_index)
     outer_ref = _package_index_to_ref(export.outer_index)
     super_ref = _package_index_to_ref(export.super_index)
-    template_ref = _package_index_to_ref(export.template_index)
 
     return ObjectRecord(
         id=f"export:{index}",
         table_index=index,
         name=name,
         class_name=class_name,
-        class_ref=class_ref,
         outer_ref=outer_ref,
         super_ref=super_ref,
-        template_ref=template_ref,
         flags=export.object_flags,
         roles=tuple(roles),
         serial_region=serial_region,
@@ -401,6 +397,95 @@ def _build_package_info_from_summary(
     )
 
 
+def normalize_property_bag(properties: Sequence[Any]) -> dict[str, Any]:
+    """Convert a list of parsed properties to a JSON-safe dict.
+
+    - Known properties: name -> serialized value
+    - PropertyFallback: name -> opaque descriptor (no raw bytes)
+    - StructValue: name -> recursive dict
+    - Other PropertyValue: name -> value attribute
+    """
+    from ..models.fallback import PropertyFallback
+    from ..models.properties import StructValue, PropertyValue
+
+    bag: dict[str, Any] = {}
+    for prop in properties:
+        name = getattr(prop, "name", None)
+        if name is None:
+            continue
+
+        if isinstance(prop, PropertyFallback):
+            bag[name] = {
+                "kind": "opaque",
+                "type": prop.type,
+                "size": prop.size,
+                "reason": prop.reason.value,
+            }
+        elif isinstance(prop, StructValue):
+            bag[name] = _serialize_value(prop)
+        elif isinstance(prop, PropertyValue):
+            inner_val = prop.value
+            if isinstance(inner_val, StructValue):
+                bag[name] = _serialize_value(inner_val)
+            else:
+                bag[name] = {
+                    "kind": "value",
+                    "type": prop.type,
+                    "value": _serialize_value(inner_val),
+                }
+    return bag
+
+
+def _serialize_value(value: Any) -> Any:
+    """Recursively serialize a property value to JSON-safe form."""
+    from ..models.fallback import PropertyFallback, StructFallback
+    from ..models.properties import (
+        StructValue,
+        SetValue,
+        MapValue,
+        TextValue,
+    )
+
+    if value is None or isinstance(value, (bool, int, float, str, bytes)):
+        if isinstance(value, bytes):
+            return {"kind": "bytes", "length": len(value)}
+        return value
+    if isinstance(value, PropertyFallback):
+        return {
+            "kind": "opaque",
+            "type": value.type,
+            "size": value.size,
+            "reason": value.reason.value,
+        }
+    if isinstance(value, StructValue):
+        inner: dict[str, Any] = {}
+        for k, v in value.fields.items():
+            inner[k] = _serialize_value(v)
+        return {"kind": "struct", "struct_type": value.struct_type, "fields": inner}
+    if isinstance(value, StructFallback):
+        return value.to_dict()
+    if isinstance(value, TextValue):
+        return {
+            "kind": "text",
+            "namespace": value.namespace,
+            "key": value.key,
+            "source_string": value.source_string,
+            "property_type": value.property_type,
+        }
+    if isinstance(value, SetValue):
+        return [_serialize_value(elem) for elem in value.elements]
+    if isinstance(value, MapValue):
+        return [
+            {"key": _serialize_value(e.get("key")), "value": _serialize_value(e.get("value"))} for e in value.entries
+        ]
+    if isinstance(value, list):
+        return [_serialize_value(elem) for elem in value]
+    if isinstance(value, dict):
+        return {k: _serialize_value(v) for k, v in value.items()}
+    # ObjectRef, other objects — repr as string
+    return str(value)
+
+
 class LegacyPackageReader:
     """Direct binary reader for legacy .uasset packages.
 
@@ -444,11 +529,11 @@ class LegacyPackageReader:
         try:
             # 0. Load the mappings provider once per document (mirrors v1
             # _init_parse_env); None + diagnostic when unloadable.
-            budget = ResourceBudget()
-            mappings_provider = self._load_mappings(budget, diagnostics)
+            total_decompressed = 0
+            mappings_provider, total_decompressed = self._load_mappings(diagnostics, total_decompressed)
 
             # 1. Read summary
-            summary = read_package_summary(archive, budget)
+            summary, total_decompressed = read_package_summary(archive, total_decompressed=total_decompressed)
 
             # 1a. .uexp address-space guard.
             # UE source (independent reviewer verdict, 2026-09-08):
@@ -534,7 +619,7 @@ class LegacyPackageReader:
                     )
 
             # 6. Read depends map
-            depends_map = read_depends_map(archive, summary, budget)
+            depends_map = read_depends_map(archive, summary, total_decompressed=total_decompressed)
 
             # 7. Read preload dependencies
             preload_deps = read_preload_dependencies(archive, summary)
@@ -689,11 +774,10 @@ class LegacyPackageReader:
 
             # 17. Run asset handlers at depth >= asset
             if depth in ("asset", "decode"):
-                context = VersionContext(depth=depth)
                 for obj in objects:
                     try:
                         semantic, cov, handler_diags = run_handlers(
-                            obj, context, objects, (export_map, name_map, extras)
+                            obj, depth, objects, (export_map, name_map, extras)
                         )
                         if semantic is not None:
                             obj.semantic = semantic
@@ -736,7 +820,7 @@ class LegacyPackageReader:
             diagnostics.append(_diag("PACKAGE_READ_FAILED", str(e), "package.read", severity="error", effect=None))
             return self._build_minimal_document(None, diagnostics)
 
-    def _load_mappings(self, budget: ResourceBudget, diagnostics: list[Diagnostic]) -> Any | None:
+    def _load_mappings(self, diagnostics: list[Diagnostic], total_decompressed: int = 0) -> tuple[Any | None, int]:
         """Build the mappings provider once per document (mirrors v1 _init_parse_env).
 
         The property decoder expects a loaded provider object, never a raw
@@ -745,14 +829,15 @@ class LegacyPackageReader:
         diagnostic; the parse continues and unversioned exports stay opaque.
         """
         if not self._mappings_path:
-            return None
+            return None, total_decompressed
         try:
             # Lazy import mirrors v1 (pipeline/core.py, pipeline/stages.py):
             # the mappings module and its optional codecs must not become a
             # core-import dependency.
             from ..mappings import UsmapParser
 
-            return UsmapParser(self._mappings_path, budget=budget).mappings
+            parser = UsmapParser(self._mappings_path, total_decompressed=total_decompressed)
+            return parser.mappings, parser.total_decompressed
         except Exception as exc:
             diagnostics.append(
                 _diag(
@@ -761,7 +846,7 @@ class LegacyPackageReader:
                     "package.mappings",
                 )
             )
-            return None
+            return None, total_decompressed
 
     def _parse_requested_object_properties(
         self,
@@ -790,7 +875,6 @@ class LegacyPackageReader:
         not prevent parsing of others; unexpected exception types propagate.
         """
         from .property_parser import parse_properties_from_export
-        from .properties_v2 import normalize_property_bag
 
         # Determine which exports to parse
         target_indices: set[int] | None = None
