@@ -63,10 +63,7 @@ class SoftObjectPathValue:
     raw_kind: str
     asset_path: str = ""
     sub_path: str = ""
-    package_index: int | None = None
     guid: str | None = None
-    index: int | None = None  # SoftObjectPathList index (UE5.7+)
-    error: str | None = None  # Out-of-bounds and other diagnostic info
 
 
 @dataclass
