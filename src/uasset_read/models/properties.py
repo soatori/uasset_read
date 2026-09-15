@@ -109,7 +109,7 @@ class TextValue:
     key: str = ""
     source_string: str = ""
     history_type: int | None = None  # ETextHistoryType seen; None when not decoded
-    property_type: str = "TextProperty"  # read by properties_v2 TextValue serialization
+    property_type: str = "TextProperty"  # read by legacy_reader TextValue serialization
 
 
 @dataclass

@@ -541,7 +541,7 @@ def test_property_bag_normalization_is_bounded_lossless():
     """normalize_property_bag must bound, describe, and never embed raw bytes."""
     from uasset_read.models.fallback import FallbackReason, PropertyFallback
     from uasset_read.models.properties import PropertyValue, StructValue
-    from uasset_read.parsers.properties_v2 import normalize_property_bag
+    from uasset_read.parsers.legacy_reader import normalize_property_bag
 
     def test_empty_list_returns_empty_dict():
         assert normalize_property_bag([]) == {}
