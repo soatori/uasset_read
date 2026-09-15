@@ -1305,17 +1305,17 @@ def test_handler_registry_supports_enriches_and_isolates():
         TextureHandler,
         UserDefinedEnumHandler,
         UserDefinedStructHandler,
-        get_handlers,
+        _HANDLERS,
     )
     from uasset_read.models.object_model import ObjectRecord, ObjectStatus
 
     record = _object_record
 
     def test_handlers_registered():
-        assert len(get_handlers()) >= 4
+        assert len(_HANDLERS) >= 4
 
     def test_expected_handlers():
-        names = [type(h).__name__ for h in get_handlers()]
+        names = [type(h).__name__ for h in list(_HANDLERS)]
         assert "DataTableHandler" in names
         assert "TextureHandler" in names
         assert "TexturePayloadHandler" in names

@@ -9,7 +9,7 @@ to v2 handlers is deferred to the handler-semantic-tiers work and requires
 real fixtures first (see tests/samples/manifest.json fixture gaps).
 """
 from tests.test_core import _object_record as _record
-from uasset_read.parsers.asset_types.handlers_impl import get_handlers
+from uasset_read.parsers.asset_types.handlers_impl import _HANDLERS
 
 HANDLER_CLASSES = (
     "AnimBlueprintGeneratedClass", "AnimComposite", "AnimLayerInterface",
@@ -48,13 +48,13 @@ FALLBACK_CLASSES = (
 )
 
 def test_handler_classes_still_claimed():
-    handlers = get_handlers()
+    handlers = list(_HANDLERS)
     ctx = "package"
     for name in HANDLER_CLASSES:
         assert any(h.supports(_record(name), ctx) for h in handlers), name
 
 def test_fallback_classes_stay_unclaimed():
-    handlers = get_handlers()
+    handlers = list(_HANDLERS)
     ctx = "package"
     for name in FALLBACK_CLASSES:
         assert not any(h.supports(_record(name), ctx) for h in handlers), name

@@ -35,11 +35,6 @@ def register_handler(handler: _SupportsClasses) -> None:
     _HANDLERS.append(handler)
 
 
-def get_handlers() -> list[_SupportsClasses]:
-    """Get all registered handlers."""
-    return list(_HANDLERS)
-
-
 def run_handlers(
     obj: ObjectRecord,
     depth: str,
