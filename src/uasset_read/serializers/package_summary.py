@@ -10,12 +10,9 @@ and UE5_LEGACY_VERSIONS in uasset_read.constants.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
 from uasset_read.exceptions import RECOVERY_READ_ERRORS, StreamPoisonedError
 
-if TYPE_CHECKING:
-    from uasset_read.memory_safety import ResourceBudget
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -63,9 +60,7 @@ from uasset_read.constants import (
 from uasset_read.exceptions import VersionError, ParseError
 from uasset_read.constants import MIN_UASSET_SIZE
 from uasset_read.versioning import EngineVersion
-
-# ResourceBudget type is available via TYPE_CHECKING import above.
-# At runtime, functions accept None or any ResourceBudget instance — no eager import needed.
+from uasset_read.memory_safety import reserve_memory
 
 
 def read_validated_count_strict(
@@ -73,7 +68,6 @@ def read_validated_count_strict(
     max_value: int,
     stage: str,
     bytes_per_entry: int,
-    budget: "ResourceBudget | None" = None,
 ) -> int:
     """Read and validate table count physical feasibility (strict: raises ParseError on excess).
 
@@ -81,22 +75,21 @@ def read_validated_count_strict(
         count: Raw count read from archive
         max_value: Maximum allowed count for this table
         stage: Stage name (for exceptions and budget logs)
-        bytes_per_entry: Bytes per record (for budget.reserve)
-        budget: Optional resource budget tracker
+        bytes_per_entry: Bytes per record (for reserve_memory)
 
     Returns:
         Validated count value
 
     Raises:
         ParseError: When count exceeds max_value
-        MemoryLimitExceeded: When budget.reserve exceeds limit
+        MemoryLimitExceeded: When reserve_memory exceeds limit
     """
     if count < 0:
         raise ParseError(f"Negative {stage} count: {count}")
     if count > max_value:
         raise ParseError(f"{stage} count {count} exceeds maximum {max_value}")
-    if budget is not None and count > 0:
-        budget.reserve(count * bytes_per_entry, stage)
+    if count > 0:
+        reserve_memory(count * bytes_per_entry, stage)
     return count
 
 
@@ -193,10 +186,10 @@ def _read_custom_versions(archive: FArchive, with_names: bool = False) -> list:
     return custom_versions
 
 
-def _read_generations(archive: FArchive, budget: "ResourceBudget | None" = None) -> list:
+def _read_generations(archive: FArchive) -> list:
     """Read Generations table."""
     generations_count = archive.read_i32()
-    read_validated_count_strict(generations_count, MAX_GENERATIONS, "generations", 8, budget)
+    read_validated_count_strict(generations_count, MAX_GENERATIONS, "generations", 8)
     generations = []
     for _ in range(generations_count):
         gen_export_count = archive.read_i32()
@@ -409,7 +402,6 @@ def _read_guids(
 
 def _read_compression_and_source(
     archive: FArchive,
-    budget: "ResourceBudget | None" = None,
 ) -> tuple[int, int]:
     """Read CompressionFlags, CompressedChunks, PackageSource."""
     compression_flags = archive.read_u32()
@@ -420,7 +412,6 @@ def _read_compression_and_source(
         MAX_COMPRESSED_CHUNKS,
         "compressed_chunks",
         16,
-        budget,
     )
     for _ in range(compressed_chunks_count):
         # FCompressedChunk = 4 * int32 = 16 bytes (Linker.cpp operator<<)
@@ -527,7 +518,6 @@ def _read_late_versioned_fields(
 
 def read_package_summary(
     archive: FArchive,
-    budget: "ResourceBudget | None" = None,
 ) -> PackageFileSummary:
     """Read PackageFileSummary header (UE4 and UE5)."""
     _validate_file_size(archive)
@@ -650,7 +640,6 @@ def read_package_summary(
             MAX_SOFT_PACKAGE_REFS,
             "soft_package_references",
             4,
-            budget,
         )
         soft_package_references_offset = archive.read_i32()
 
@@ -677,7 +666,7 @@ def read_package_summary(
 
     # Step 17-19: Generations + EngineVersions
     gates = summary_gate_modes(file_version_ue4)
-    generations = _read_generations(archive, budget)
+    generations = _read_generations(archive)
     if gates["engine_versions"] == "full":
         saved_by_engine_version = _read_engine_version(archive)
     else:
@@ -687,7 +676,7 @@ def read_package_summary(
     compatible_with_engine_version = _read_engine_version(archive) if gates["compatible"] else saved_by_engine_version
 
     # Step 20-22: Compression + PackageSource
-    compression_flags, package_source = _read_compression_and_source(archive, budget)
+    compression_flags, package_source = _read_compression_and_source(archive)
 
     # Step 23: AdditionalPackages + TextureAllocations
     _read_additional_packages(archive, legacy_file_version)
@@ -835,7 +824,6 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> list[str]
 def read_depends_map(
     archive: FArchive,
     summary: PackageFileSummary,
-    budget: "ResourceBudget | None" = None,
     warnings: "list[str] | None" = None,
 ) -> list[list[int]]:
     """Read DependsMap (dependency table).
@@ -851,7 +839,6 @@ def read_depends_map(
     Args:
         archive: File archive reader
         summary: Package file summary
-        budget: Optional resource budget tracker
         warnings: Optional warnings list for collecting degradation info (e.g. invalid entries)
 
     Returns:
@@ -889,8 +876,8 @@ def read_depends_map(
             truncated_table = True
             stopped_at = i
             break
-        if budget is not None and dep_count > 0:
-            budget.reserve(dep_count * 4, f"DependsMap[{i}]")
+        if dep_count > 0:
+            reserve_memory(dep_count * 4, f"DependsMap[{i}]")
         deps = []
         for j in range(dep_count):
             pkg_index = archive.read_i32()

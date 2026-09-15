@@ -16,7 +16,7 @@ from typing import Any, Literal
 from ..archive import ByteArchive, SourceInfo
 from ..constants import PKG_Cooked, PKG_FilterEditorOnly, PKG_UnversionedProperties
 from ..exceptions import ParseError, ExportBoundsExceeded
-from ..memory_safety import ResourceBudget
+
 from ..package import PackageArchive
 from ..serializers.property_tags import read_property_tag
 from ..serializers.object_resources import (
@@ -440,11 +440,10 @@ class LegacyPackageReader:
         try:
             # 0. Load the mappings provider once per document (mirrors v1
             # _init_parse_env); None + diagnostic when unloadable.
-            budget = ResourceBudget()
-            mappings_provider = self._load_mappings(budget, diagnostics)
+            mappings_provider = self._load_mappings(diagnostics)
 
             # 1. Read summary
-            summary = read_package_summary(archive, budget)
+            summary = read_package_summary(archive)
 
             # 1a. .uexp address-space guard.
             # UE source (independent reviewer verdict, 2026-09-08):
@@ -530,7 +529,7 @@ class LegacyPackageReader:
                     )
 
             # 6. Read depends map
-            depends_map = read_depends_map(archive, summary, budget)
+            depends_map = read_depends_map(archive, summary)
 
             # 7. Read preload dependencies
             preload_deps = read_preload_dependencies(archive, summary)
@@ -731,7 +730,7 @@ class LegacyPackageReader:
             diagnostics.append(_diag("PACKAGE_READ_FAILED", str(e), "package.read", severity="error", effect=None))
             return self._build_minimal_document(None, diagnostics)
 
-    def _load_mappings(self, budget: ResourceBudget, diagnostics: list[Diagnostic]) -> Any | None:
+    def _load_mappings(self, diagnostics: list[Diagnostic]) -> Any | None:
         """Build the mappings provider once per document (mirrors v1 _init_parse_env).
 
         The property decoder expects a loaded provider object, never a raw
@@ -747,7 +746,7 @@ class LegacyPackageReader:
             # core-import dependency.
             from ..mappings import UsmapParser
 
-            return UsmapParser(self._mappings_path, budget=budget).mappings
+            return UsmapParser(self._mappings_path).mappings
         except Exception as exc:
             diagnostics.append(
                 _diag(

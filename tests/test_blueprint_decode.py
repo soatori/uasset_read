@@ -502,7 +502,6 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
     from uasset_read.exceptions import ParseError
     from uasset_read.kismet import bytecode_extractor
     from uasset_read.kismet.decompile_bridge import extract_kismet_decompiled
-    from uasset_read.memory_safety import ResourceBudget
     from uasset_read.package import open_package_bundle
     from uasset_read.serializers.object_resources import read_export_map, read_import_map
     from uasset_read.serializers.package_summary import read_name_table, read_package_summary
@@ -511,8 +510,7 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
     bundle = open_package_bundle(str(sample))
     archive = bundle.open_archive(tolerant=True)
     try:
-        budget = ResourceBudget()
-        summary = read_package_summary(archive, budget)
+        summary = read_package_summary(archive)
         archive.set_property_version_gates(summary.file_version_ue4, summary.file_version_ue5)
         name_map = read_name_table(archive, summary)
         archive.set_name_map(name_map)

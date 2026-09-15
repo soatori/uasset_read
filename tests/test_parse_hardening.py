@@ -63,10 +63,10 @@ def test_import_data_samples_have_no_name_index_out_of_range():
 def test_resource_budget_rejects_negative_reserve():
     import pytest
 
-    from uasset_read.memory_safety import MemoryLimitExceeded, ResourceBudget
+    from uasset_read.memory_safety import MemoryLimitExceeded, reserve_memory
 
     with pytest.raises(MemoryLimitExceeded, match="negative"):
-        ResourceBudget().reserve(-100, "unit")
+        reserve_memory(-100, "unit")
 
 
 def test_read_native_fields_rejects_oversized_count():

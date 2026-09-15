@@ -3026,8 +3026,8 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     lr_real_fn = lr.read_package_summary
 
     # === Refusal path: main_size != TotalHeaderSize ===
-    def patched_wrong(archive, budget):
-        s = real_read_summary(archive, budget)
+    def patched_wrong(archive):
+        s = real_read_summary(archive)
         s.total_header_size = main_size - 1
         return s
 
@@ -3047,8 +3047,8 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     assert arc.total_size() == main_size, "total_size must equal main only"
 
     # === Refusal path: total_header_size == 0 (fail-open fix, 1a) ===
-    def patched_zero(archive, budget):
-        s = real_read_summary(archive, budget)
+    def patched_zero(archive):
+        s = real_read_summary(archive)
         s.total_header_size = 0
         return s
 
@@ -3066,8 +3066,8 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     assert arc0.total_size() == main_size
 
     # === Acceptance path: main_size == TotalHeaderSize ===
-    def patched_ok(archive, budget):
-        s = real_read_summary(archive, budget)
+    def patched_ok(archive):
+        s = real_read_summary(archive)
         s.total_header_size = main_size
         return s
 
@@ -3249,6 +3249,7 @@ def test_test_suite_structure_gate():
         "test_core.py",
         "test_diagnostics_reason.py",
         "test_handler_capability_ledger.py",
+        "test_memory_safety.py",
         "test_parse_hardening.py",
         "test_payload_extraction.py",
         "test_review_pins.py",
