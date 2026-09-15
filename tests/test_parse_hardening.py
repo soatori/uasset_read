@@ -60,7 +60,7 @@ def test_import_data_samples_have_no_name_index_out_of_range():
 # ---------------------------------------------------------------------------
 
 
-def test_resource_budget_rejects_negative_reserve():
+def test_reserve_memory_rejects_negative_reserve():
     import pytest
 
     from uasset_read.memory_safety import MemoryLimitExceeded, reserve_memory

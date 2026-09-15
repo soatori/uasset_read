@@ -849,7 +849,7 @@ def test_package_document_preserves_every_export_and_role():
 
         data = struct.pack("<ii", 0, 1) + struct.pack("<iiii", 40, 8, 48, 8) + struct.pack("<i", 0x11223344)
         arc = ByteArchive(data)
-        flags, source = _read_compression_and_source(arc)
+        flags, source, _ = _read_compression_and_source(arc)
         assert source == 0x11223344  # wrong 12-byte skip desyncs PackageSource
 
     def test_table_rows_skip_tagged_stream_not_size_prefix():
@@ -3026,10 +3026,10 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     lr_real_fn = lr.read_package_summary
 
     # === Refusal path: main_size != TotalHeaderSize ===
-    def patched_wrong(archive):
-        s = real_read_summary(archive)
+    def patched_wrong(archive, *, total_decompressed=0):
+        s, total = real_read_summary(archive, total_decompressed=total_decompressed)
         s.total_header_size = main_size - 1
-        return s
+        return s, total
 
     lr.read_package_summary = patched_wrong  # type: ignore[assignment]
     bundle = open_package_bundle(str(sample))
@@ -3047,10 +3047,10 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     assert arc.total_size() == main_size, "total_size must equal main only"
 
     # === Refusal path: total_header_size == 0 (fail-open fix, 1a) ===
-    def patched_zero(archive):
-        s = real_read_summary(archive)
+    def patched_zero(archive, *, total_decompressed=0):
+        s, total = real_read_summary(archive, total_decompressed=total_decompressed)
         s.total_header_size = 0
-        return s
+        return s, total
 
     lr.read_package_summary = patched_zero  # type: ignore[assignment]
     bundle0 = open_package_bundle(str(sample))
@@ -3066,10 +3066,10 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     assert arc0.total_size() == main_size
 
     # === Acceptance path: main_size == TotalHeaderSize ===
-    def patched_ok(archive):
-        s = real_read_summary(archive)
+    def patched_ok(archive, *, total_decompressed=0):
+        s, total = real_read_summary(archive, total_decompressed=total_decompressed)
         s.total_header_size = main_size
-        return s
+        return s, total
 
     lr.read_package_summary = patched_ok  # type: ignore[assignment]
     bundle_ok = open_package_bundle(str(sample))

@@ -440,10 +440,11 @@ class LegacyPackageReader:
         try:
             # 0. Load the mappings provider once per document (mirrors v1
             # _init_parse_env); None + diagnostic when unloadable.
-            mappings_provider = self._load_mappings(diagnostics)
+            total_decompressed = 0
+            mappings_provider, total_decompressed = self._load_mappings(diagnostics, total_decompressed)
 
             # 1. Read summary
-            summary = read_package_summary(archive)
+            summary, total_decompressed = read_package_summary(archive, total_decompressed=total_decompressed)
 
             # 1a. .uexp address-space guard.
             # UE source (independent reviewer verdict, 2026-09-08):
@@ -529,7 +530,7 @@ class LegacyPackageReader:
                     )
 
             # 6. Read depends map
-            depends_map = read_depends_map(archive, summary)
+            depends_map = read_depends_map(archive, summary, total_decompressed=total_decompressed)
 
             # 7. Read preload dependencies
             preload_deps = read_preload_dependencies(archive, summary)
@@ -730,7 +731,7 @@ class LegacyPackageReader:
             diagnostics.append(_diag("PACKAGE_READ_FAILED", str(e), "package.read", severity="error", effect=None))
             return self._build_minimal_document(None, diagnostics)
 
-    def _load_mappings(self, diagnostics: list[Diagnostic]) -> Any | None:
+    def _load_mappings(self, diagnostics: list[Diagnostic], total_decompressed: int = 0) -> tuple[Any | None, int]:
         """Build the mappings provider once per document (mirrors v1 _init_parse_env).
 
         The property decoder expects a loaded provider object, never a raw
@@ -739,14 +740,15 @@ class LegacyPackageReader:
         diagnostic; the parse continues and unversioned exports stay opaque.
         """
         if not self._mappings_path:
-            return None
+            return None, total_decompressed
         try:
             # Lazy import mirrors v1 (pipeline/core.py, pipeline/stages.py):
             # the mappings module and its optional codecs must not become a
             # core-import dependency.
             from ..mappings import UsmapParser
 
-            return UsmapParser(self._mappings_path).mappings
+            parser = UsmapParser(self._mappings_path, total_decompressed=total_decompressed)
+            return parser.mappings, parser.total_decompressed
         except Exception as exc:
             diagnostics.append(
                 _diag(
@@ -755,7 +757,7 @@ class LegacyPackageReader:
                     "package.mappings",
                 )
             )
-            return None
+            return None, total_decompressed
 
     def _parse_requested_object_properties(
         self,

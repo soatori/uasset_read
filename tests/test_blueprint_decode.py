@@ -510,7 +510,7 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
     bundle = open_package_bundle(str(sample))
     archive = bundle.open_archive(tolerant=True)
     try:
-        summary = read_package_summary(archive)
+        summary, _ = read_package_summary(archive)
         archive.set_property_version_gates(summary.file_version_ue4, summary.file_version_ue5)
         name_map = read_name_table(archive, summary)
         archive.set_name_map(name_map)
@@ -610,7 +610,7 @@ def _low_level_graphs(sample: str):
 
     archive = open_package_bundle(str(SAMPLES / sample)).open_archive(tolerant=True)
     try:
-        summary = read_package_summary(archive)
+        summary, _ = read_package_summary(archive)
         name_map = read_name_table(archive, summary)
         archive.set_name_map(name_map)
         import_map = read_import_map(archive, summary, name_map)
@@ -643,7 +643,7 @@ def test_node_reader_failure_keeps_fallback_export_id(monkeypatch):
     sample = SAMPLES / "StackOBot_BP_Drone.uasset"
     archive = open_package_bundle(str(sample)).open_archive(tolerant=True)
     try:
-        summary = read_package_summary(archive)
+        summary, _ = read_package_summary(archive)
         name_map = read_name_table(archive, summary)
         archive.set_name_map(name_map)
         import_map = read_import_map(archive, summary, name_map)

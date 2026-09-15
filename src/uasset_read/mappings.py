@@ -135,12 +135,15 @@ class UsmapParser:
 
     FILE_MAGIC = 0x30C4
 
-    def __init__(self, path_or_bytes: str | bytes):
+    def __init__(self, path_or_bytes: str | bytes, *, total_decompressed: int = 0):
+        self.total_decompressed = total_decompressed
         if isinstance(path_or_bytes, bytes):
             data = path_or_bytes
         else:
             file_size = Path(path_or_bytes).stat().st_size
-            reserve_memory(file_size, "usmap_file_read")
+            self.total_decompressed = reserve_memory(
+                file_size, "usmap_file_read", total_decompressed=self.total_decompressed
+            )
             with open(path_or_bytes, "rb") as fh:
                 data = fh.read()
         self.mappings = self._parse(data)
@@ -216,7 +219,9 @@ class UsmapParser:
                 import brotli  # type: ignore
             except ImportError as exc:
                 raise ParseError("Usmap Brotli compression requires the brotli package") from exc
-            reserve_memory(decomp_size, "usmap_brotli_decompress")
+            self.total_decompressed = reserve_memory(
+                decomp_size, "usmap_brotli_decompress", total_decompressed=self.total_decompressed
+            )
             result = brotli.decompress(payload)
             if len(result) > decomp_size:
                 raise ParseError(f"Usmap Brotli decompressed size exceeds expected: {len(result)} > {decomp_size}")
@@ -226,7 +231,9 @@ class UsmapParser:
                 import zstandard as zstd  # type: ignore
             except ImportError as exc:
                 raise ParseError("Usmap ZStandard compression requires the zstandard package") from exc
-            reserve_memory(decomp_size, "usmap_zstd_decompress")
+            self.total_decompressed = reserve_memory(
+                decomp_size, "usmap_zstd_decompress", total_decompressed=self.total_decompressed
+            )
             return zstd.ZstdDecompressor().decompress(payload, max_output_size=decomp_size)
         raise ParseError(f"Unsupported Usmap compression method: {method}")
 
