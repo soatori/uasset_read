@@ -13,7 +13,7 @@
 - Retired log cleanup (Gate L): deleted `project_logging.py` and CLI `--clean-logs` / `--log-dir` / `--log-keep-latest` / `--log-max-total-mb` (explicit rejection, exit 2). Leftover `log/` directories from older releases are the user's responsibility.
 
 ### Improvements
-- Diagnostics: optional `reason` classification (`bulk_expected`, `editor_only`, `known_unimplemented`, `recovered_corruption`, `conservative_complete`, `unexpected`) on `Diagnostic`; trailing-bytes and recovery sites populate it. Sample tests gain `tests/samples/quality_baseline.json` gate.
+- Diagnostics: optional `reason` classification (`bulk_expected`, `editor_only`, `known_unimplemented`, `recovered_corruption`, `conservative_complete`, `unexpected`) on `Diagnostic`; trailing-bytes and recovery sites populate it. Merge path surfaces optional `reason` and `fallback` on PackageDocument diagnostics when archive recovery diagnostics are lifted. Sample tests gain `tests/samples/quality_baseline.json` gate (known `(code, reason)` ceilings, optional `forbid_unlisted` allowlist, and a zero-diag pin on the DataTable seed).
 
 ## [0.5.4.45] — 2026-07-23
 

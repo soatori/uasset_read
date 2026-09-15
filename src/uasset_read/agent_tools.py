@@ -406,10 +406,10 @@ def extract_payload(
             min_bytes=estimated,
         )
 
-    from .memory_safety import MemoryLimitExceeded, ResourceBudget
+    from .memory_safety import MemoryLimitExceeded, reserve_memory
 
     try:
-        ResourceBudget().reserve(descriptor.stored_size, "agent.extract_payload", payload_id)
+        reserve_memory(descriptor.stored_size, "agent.extract_payload", payload_id)
     except MemoryLimitExceeded as e:
         return _err(
             "BUDGET_EXHAUSTED",

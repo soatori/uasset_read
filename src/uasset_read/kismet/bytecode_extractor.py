@@ -11,7 +11,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from uasset_read.kismet.archive import FKismetArchive
-from uasset_read.kismet.expressions.base import KismetExpression
+from uasset_read.kismet.expressions import KismetExpression
 from uasset_read.exceptions import ParseError
 
 if TYPE_CHECKING:
@@ -114,14 +114,14 @@ def _validate_jump_targets(expressions: list[KismetExpression]) -> None:
     Checks EX_Jump, EX_JumpIfNot, EX_PushExecutionFlow, EX_SwitchValue, and
     EX_AutoRtfmTransact targets.
     """
-    from uasset_read.kismet.expressions.control_flow import (
+    from uasset_read.kismet.expressions import (
+        EX_AutoRtfmTransact,
         EX_Jump,
         EX_JumpIfNot,
         EX_PushExecutionFlow,
         EX_Skip,
+        EX_SwitchValue,
     )
-    from uasset_read.kismet.expressions.rtfm import EX_AutoRtfmTransact
-    from uasset_read.kismet.expressions.special import EX_SwitchValue
 
     top_level_indices = {expr.StatementIndex for expr in expressions}
 

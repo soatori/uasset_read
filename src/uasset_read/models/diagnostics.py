@@ -71,7 +71,6 @@ _EDITOR_ONLY_PREFIXES = (
     "PackageMetaData",
     "K2Node_",
     "EdGraph",
-    "EdGraphNode",
     "Blueprint",
     "WidgetBlueprint",
     "AnimBlueprint",
@@ -87,6 +86,8 @@ _BULK_CLASSES = frozenset(
         "RawAudio",
     }
 )
+
+_BULK_PREFIXES = ("Texture",)
 
 _KNOWN_UNIMPLEMENTED_CLASSES = frozenset(
     {
@@ -104,20 +105,21 @@ _KNOWN_UNIMPLEMENTED_PREFIXES = (
     "NiagaraScript",
     "NiagaraEmitter",
     "NiagaraSystem",
+    "BlendSpace",
+    "Material",
+    "Anim",
 )
 
 
-def classify_trailing_reason(class_name: str, remaining: int) -> DiagnosticReason:
+def classify_trailing_reason(class_name: str) -> DiagnosticReason:
     """Map export trailing-bytes context to a closed reason value.
 
     Bulk-data classes are checked first so names such as ``FontFace`` are
-    never swallowed by a broader prefix rule. ``remaining`` is accepted for
-    call-site symmetry and future size-sensitive rules; the current mapping
-    is class-only.
+    never swallowed by a broader prefix rule.
     """
-    if class_name in _BULK_CLASSES:
+    if class_name in _BULK_CLASSES or any(class_name.startswith(p) for p in _BULK_PREFIXES):
         return "bulk_expected"
-    if any(class_name.startswith(p) or class_name == p for p in _EDITOR_ONLY_PREFIXES):
+    if any(class_name.startswith(p) for p in _EDITOR_ONLY_PREFIXES):
         return "editor_only"
     if class_name in _KNOWN_UNIMPLEMENTED_CLASSES or any(
         class_name.startswith(p) for p in _KNOWN_UNIMPLEMENTED_PREFIXES

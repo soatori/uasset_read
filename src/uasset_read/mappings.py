@@ -8,7 +8,7 @@ from pathlib import Path
 from uasset_read.archive import ByteArchive
 from uasset_read.constants import MAX_SAFE_COUNT
 from uasset_read.exceptions import ParseError
-from uasset_read.memory_safety import ResourceBudget
+from uasset_read.memory_safety import reserve_memory
 
 
 MAX_RECURSION_DEPTH: int = 64
@@ -135,18 +135,20 @@ class UsmapParser:
 
     FILE_MAGIC = 0x30C4
 
-    def __init__(self, path_or_bytes: str | bytes, budget: ResourceBudget | None = None):
+    def __init__(self, path_or_bytes: str | bytes, *, total_decompressed: int = 0):
+        self.total_decompressed = total_decompressed
         if isinstance(path_or_bytes, bytes):
             data = path_or_bytes
         else:
-            if budget is not None:
-                file_size = Path(path_or_bytes).stat().st_size
-                budget.reserve(file_size, "usmap_file_read")
+            file_size = Path(path_or_bytes).stat().st_size
+            self.total_decompressed = reserve_memory(
+                file_size, "usmap_file_read", total_decompressed=self.total_decompressed
+            )
             with open(path_or_bytes, "rb") as fh:
                 data = fh.read()
-        self.mappings = self._parse(data, budget)
+        self.mappings = self._parse(data)
 
-    def _parse(self, data: bytes, budget: ResourceBudget | None = None) -> TypeMappings:
+    def _parse(self, data: bytes) -> TypeMappings:
         reader = ByteArchive(data)
         magic = reader.read_u16()
         if magic != self.FILE_MAGIC:
@@ -174,7 +176,7 @@ class UsmapParser:
         comp_size = reader.read_u32()
         decomp_size = reader.read_u32()
         payload = reader.read(comp_size)
-        data = self._decompress(payload, compression, comp_size, decomp_size, budget=budget)
+        data = self._decompress(payload, compression, comp_size, decomp_size)
         ar = ByteArchive(data)
 
         name_count = ar.read_u32()
@@ -206,7 +208,7 @@ class UsmapParser:
         return mappings
 
     def _decompress(
-        self, payload: bytes, method: int, comp_size: int, decomp_size: int, budget: "ResourceBudget | None" = None
+        self, payload: bytes, method: int, comp_size: int, decomp_size: int
     ) -> bytes:
         if method == 0:
             if comp_size != decomp_size:
@@ -217,8 +219,9 @@ class UsmapParser:
                 import brotli  # type: ignore
             except ImportError as exc:
                 raise ParseError("Usmap Brotli compression requires the brotli package") from exc
-            if budget is not None:
-                budget.reserve(decomp_size, "usmap_brotli_decompress")
+            self.total_decompressed = reserve_memory(
+                decomp_size, "usmap_brotli_decompress", total_decompressed=self.total_decompressed
+            )
             result = brotli.decompress(payload)
             if len(result) > decomp_size:
                 raise ParseError(f"Usmap Brotli decompressed size exceeds expected: {len(result)} > {decomp_size}")
@@ -228,8 +231,9 @@ class UsmapParser:
                 import zstandard as zstd  # type: ignore
             except ImportError as exc:
                 raise ParseError("Usmap ZStandard compression requires the zstandard package") from exc
-            if budget is not None:
-                budget.reserve(decomp_size, "usmap_zstd_decompress")
+            self.total_decompressed = reserve_memory(
+                decomp_size, "usmap_zstd_decompress", total_decompressed=self.total_decompressed
+            )
             return zstd.ZstdDecompressor().decompress(payload, max_output_size=decomp_size)
         raise ParseError(f"Unsupported Usmap compression method: {method}")
 

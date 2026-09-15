@@ -101,10 +101,6 @@ def fit_list_response(response: dict, max_bytes: int, *, list_key: str, total_ke
 _VALID_DEPTHS = {"package", "object", "asset", "decode"}
 _DEPTH_ORDER = {"package": 0, "object": 1, "asset": 2, "decode": 3}
 
-# Top-level scoped sections that ``project_document(sections=...)`` may drop.
-_VALID_SECTIONS = {"relations", "dependencies"}
-
-
 def dependency_to_dict(dep: Dependency) -> dict[str, Any]:
     """Serialize one import-dependency entry (#632).
 
@@ -127,8 +123,6 @@ def project_document(
     object_ids: list[str] | None = None,
     roles: list[str] | None = None,
     classes: list[str] | None = None,
-    fields: list[str] | None = None,
-    sections: list[str] | None = None,
     offset: int = 0,
     limit: int | None = None,
     max_bytes: int | None = None,
@@ -140,10 +134,6 @@ def project_document(
       - semantic (default): object identity, roles, status, coverage
       - raw: adds flags, serial offsets, header details
       - debug: raw + parse statistics, recovery info, offset evidence
-    ``sections`` is an allowlist of the scoped envelope sections to include
-    (valid names: "relations", "dependencies"); excluded sections are dropped
-    from the response before ``max_bytes`` accounting, so their bytes go to
-    the object page instead. Default None keeps both (unchanged behavior).
     ``offset``/``limit`` are validated by ``paginate`` (#644), the single
     guard every paging caller routes through.
     ``response_extras`` entries are merged with ``dict.update()`` (same-named
@@ -155,10 +145,6 @@ def project_document(
         raise ValueError(f"Invalid view: {view!r}. Expected one of {_VALID_VIEWS}")
     if depth not in _VALID_DEPTHS:
         raise ValueError(f"Invalid depth: {depth!r}. Expected one of {_VALID_DEPTHS}")
-    if sections is not None:
-        unknown = set(sections) - _VALID_SECTIONS
-        if unknown:
-            raise ValueError(f"Invalid sections: {sorted(unknown)}. Expected from {_VALID_SECTIONS}")
     if max_bytes is not None and max_bytes < 0:
         raise ValueError("max_bytes must be non-negative")
     if _DEPTH_ORDER[depth] > _DEPTH_ORDER[doc.depth]:
@@ -186,19 +172,7 @@ def project_document(
     )
 
     # Scope relations and diagnostics to the returned page
-    # IMPORTANT: compute page_ids BEFORE fields filter, since fields converts to dicts
-    page_ids = {o.id for o in page if isinstance(o, ObjectRecord)}
-    if not page_ids and page and isinstance(page[0], dict):
-        page_ids = {o["id"] for o in page if "id" in o}
-
-    # Filter fields if requested
-    if fields:
-        field_set = set(fields)
-        filtered = []
-        for obj in page:
-            d = _emit(obj)
-            filtered.append({k: v for k, v in d.items() if k in field_set or k in ("id", "name")})
-        page = filtered
+    page_ids = {o.id for o in page}
 
     # Display names for relation targets (peer-borrowed readability):
     # exports -> object name, imports -> "package.object" path (UE class-path
@@ -243,7 +217,7 @@ def project_document(
         "depth": depth,
         "source": {"kind": doc.source.kind, "name": doc.source.name, "size": doc.source.size},
         "package": _package_to_dict(doc, view=view),
-        "objects": page if (fields and page and isinstance(page[0], dict)) else [_emit(o) for o in page],
+        "objects": [_emit(o) for o in page],
         "relations": relations,
         "dependencies": filtered_dependencies,
         # Payloads stay deferred; per-export BulkData mapping requires
@@ -257,11 +231,6 @@ def project_document(
             "total_exports": doc.summary.total_exports,
         },
     }
-
-    # Drop opted-out scoped sections BEFORE max_bytes accounting (#631).
-    if sections is not None:
-        for dropped in _VALID_SECTIONS - set(sections):
-            result.pop(dropped)
 
     if next_offset is not None:
         result["next_offset"] = next_offset

@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import struct as _struct
 from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
 
 from uasset_read.exceptions import BINARY_READ_ERRORS, REFERENCE_RESOLVE_ERRORS
 
@@ -61,10 +62,81 @@ _PROPERTY_STREAM_POISON_CODES = frozenset(
 )
 
 
+def _parse_bl4_gbx_def_ptr_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: list[str] | None = None,
+) -> dict:
+    """Borderlands4 GbxDefPtrProperty: FName + FPackageIndex."""
+    name = archive.read_name(name_map or [])
+    struct_ref = archive.read_i32()
+    return {
+        "kind": "GbxDefPtrProperty",
+        "name": name,
+        "struct": struct_ref,
+    }
+
+
+def _parse_bl4_game_data_handle_property(
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: list[str] | None = None,
+) -> dict:
+    """Borderlands4 GameDataHandleProperty: FName + uint32 flags."""
+    name = archive.read_name(name_map or [])
+    flags = archive.read_u32()
+    return {
+        "kind": "GameDataHandleProperty",
+        "name": name,
+        "flags": flags,
+    }
+
+
+# Real custom pairs only — (game_key, type_id | property_name) -> handler.
+# There are no (None, ...) keys: unscoped slots raw-skip.
+CUSTOM_PROPERTY_HANDLERS: dict[tuple[str | None, Any], Callable[..., Any]] = {
+    ("borderlands4", 0xFD): _parse_bl4_gbx_def_ptr_property,
+    ("borderlands4", "GbxDefPtrProperty"): _parse_bl4_gbx_def_ptr_property,
+    ("borderlands4", 0xFE): _parse_bl4_game_data_handle_property,
+    ("borderlands4", "GameDataHandleProperty"): _parse_bl4_game_data_handle_property,
+}
+
+
+def handle_custom_property(
+    type_id: int,
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: list[str] | None = None,
+    game: str | None = None,
+) -> Any | None:
+    """Find and invoke a registered custom property handler.
+
+    Registry keys are (game_key, type_id | property_name). Only game-scoped
+    keys are registered; an unhandled slot raw-skips ``tag.size`` bytes.
+    """
+    game_key = game.lower() if game else None
+    handler = CUSTOM_PROPERTY_HANDLERS.get((game_key, type_id)) or CUSTOM_PROPERTY_HANDLERS.get(
+        (game_key, tag.type)
+    )
+    if handler is None:
+        logger.debug(
+            "CustomProperty 0x%02X: no handler registered, skipping %d bytes",
+            type_id,
+            tag.size,
+        )
+        raw_data = archive.read(tag.size) if tag.size > 0 else b""
+        return {
+            "kind": "custom_property_unhandled",
+            "type_id": type_id,
+            "property_type": tag.type,
+            "size": tag.size,
+            "raw_data": raw_data,
+        }
+    return handler(tag, archive, name_map)
+
+
 def _stream_is_poisoned(archive: "FArchive", diag_mark: int) -> bool:
     """True if a poison diagnostic was recorded since diag_mark."""
-    if not hasattr(archive, "get_structured_diagnostics"):
-        return False
     new_diags = archive.get_structured_diagnostics()[diag_mark:]
     return any(d.code in _PROPERTY_STREAM_POISON_CODES for d in new_diags)
 
@@ -480,8 +552,6 @@ def parse_property_value(
     if handler is None:
         # D-05: Unknown type -- return structured PropertyFallback instead of None
         # First try custom property handling (0xFD/0xFE)
-        from uasset_read.parsers.custom_properties import CUSTOM_PROPERTY_HANDLERS, handle_custom_property
-
         type_parts = getattr(tag, "type_parts", None)
         if type_parts:
             first_node_name = type_parts[0][0] if type_parts else ""
@@ -495,7 +565,7 @@ def parse_property_value(
                 except BINARY_READ_ERRORS as e:
                     logger.debug("Custom property handler (0x%02X) failed for %s: %s", custom_id, tag.type, e)
         game_key = game.lower() if game else None
-        if (game_key, tag.type) in CUSTOM_PROPERTY_HANDLERS or (None, tag.type) in CUSTOM_PROPERTY_HANDLERS:
+        if (game_key, tag.type) in CUSTOM_PROPERTY_HANDLERS:
             try:
                 return handle_custom_property(
                     0xFF, tag, archive, name_map, game=game
@@ -503,19 +573,16 @@ def parse_property_value(
             except BINARY_READ_ERRORS as e:
                 logger.debug("Game-specific custom property handler failed for %s (game=%s): %s", tag.type, game, e)
 
-        # All handlers do not match -- read raw bytes and return PropertyFallback
-        raw_data = archive.read(tag.size) if tag.size > 0 else b""
-        return PropertyFallback.from_tag(tag, FallbackReason.UNSUPPORTED_TYPE, raw_bytes=raw_data)
+        # All handlers do not match -- consume the payload and return PropertyFallback
+        if tag.size > 0:
+            archive.read(tag.size)
+        return PropertyFallback.from_tag(tag, FallbackReason.UNSUPPORTED_TYPE)
 
     try:
         # Dispatch based on handler signature
         # Special case: ByteProperty with enum backing needs name_map (reads FName);
         # bypasses the arg table below.
-        diag_mark = (
-            len(archive.get_structured_diagnostics())
-            if hasattr(archive, "get_structured_diagnostics")
-            else 0
-        )
+        diag_mark = len(archive.get_structured_diagnostics())
         if tag.type == "ByteProperty" and tag.enum_type is not None:
             result = handler(tag, archive, name_map)
         else:
@@ -549,7 +616,7 @@ def parse_property_value(
         if not tolerant:
             raise
         logger.debug("Property handler failed for %s.%s: %s", tag.name, tag.type, e)
-        return PropertyFallback.from_tag(tag, FallbackReason.PARSE_ERROR, error_message=str(e))
+        return PropertyFallback.from_tag(tag, FallbackReason.PARSE_ERROR)
 
 
 # ---------------------------------------------------------------------------
@@ -646,7 +713,6 @@ def _handle_unversioned_properties(
             name=export.object_name,
             type="UnversionedOpaque",
             size=len(raw_bytes),
-            raw_bytes=raw_bytes,
             reason=FallbackReason.MISSING_MAPPING,
         )
     ]
@@ -729,10 +795,8 @@ def _handle_property_parse_error(
         name=tag.name if tag is not None else "Unknown",
         type=tag.type if tag is not None else "Unknown",
         size=tag.size if tag is not None else 0,
-        raw_bytes=b"",
         reason=FallbackReason.PARSE_ERROR,
         array_index=tag.array_index if tag is not None else 0,
-        error_message=f"ParseError at offset {start_pos}: {e}",
     )
     return PropertyValue(
         name=fb.name,
@@ -765,11 +829,7 @@ def _read_property_loop(
 
         tag = None
         start_pos = None
-        diag_mark = (
-            len(archive.get_structured_diagnostics())
-            if hasattr(archive, "get_structured_diagnostics")
-            else 0
-        )
+        diag_mark = len(archive.get_structured_diagnostics())
 
         try:
             # Boundary check: current position should not exceed property data range
@@ -823,9 +883,7 @@ def _read_property_loop(
                                 name="Corrupted",
                                 type="Unknown",
                                 size=0,
-                                raw_bytes=b"",
                                 reason=FallbackReason.PARSE_ERROR,
-                                error_message=f"PropertyTag read failed: {e}",
                             ),
                         )
                     )
@@ -872,10 +930,7 @@ def _read_property_loop(
                                     name=tag.name,
                                     type=tag.type,
                                     size=tag.size,
-                                    raw_bytes=b"",
                                     reason=FallbackReason.SIZE_EXCEEDED,
-                                    error_message=f"Size {tag.size} exceeds remaining bytes; "
-                                    f"skipped to next valid PropertyTag",
                                 ),
                             )
                         )
@@ -890,7 +945,6 @@ def _read_property_loop(
                         value=PropertyFallback.from_tag(
                             tag,
                             FallbackReason.SIZE_EXCEEDED,
-                            error_message=f"Size {tag.size} exceeds remaining bytes",
                         ),
                         array_index=tag.array_index,
                     )
@@ -917,7 +971,6 @@ def _read_property_loop(
                 value = PropertyFallback.from_tag(
                     tag,
                     FallbackReason.UNSUPPORTED_TYPE,
-                    error_message="Parser returned None (unsupported or missing handler)",
                 )
 
             properties.append(PropertyValue(name=tag.name, type=tag.type, value=value, array_index=tag.array_index))
@@ -948,6 +1001,86 @@ def _read_property_loop(
                 break
 
     return properties
+
+
+# Export class name prefixes/keywords that need skipping.
+# These classes have serialization data not fully compatible with the generic property parser.
+SKIP_CLASS_PREFIXES = (
+    # P0: Builder / Brush
+    "GeomModifier_",
+    "BrushBuilder",
+    # P0: Animation -- migrated to opaque whitelist (#166)
+    # P1: Niagara
+    "NiagaraMeshRendererProperties",
+    "NiagaraNode",
+    "NiagaraSystem",
+    # P1: MovieScene -- moved to opaque whitelist (#164)
+    # P2: MetaSound -- moved to opaque whitelist (#165)
+    # P2: K2Node
+    # K2Node_FunctionEntry removed from skip list (#286):
+    # Generic tagged property parser can handle it. K2Node_FunctionEntry specific fields
+    # are serialized via PropertyTag, no skip needed. Skipping would mark legitimate assets as partial.
+    "K2Node_FormatText",
+    # P2: Material
+    # MaterialExpressionDynamicParameter removed from skip list (#136 extension):
+    # Generic tagged property parser can handle it; failures handled by generic fallback.
+    # MaterialExpression removed from skip list (#136):
+    # Generic tagged property parser can handle most MaterialExpression subclasses.
+    # Subclasses that fail to parse are handled by generic fallback (opaque/partial).
+    # P3: Other
+    "SkySphereMesh",
+    "AggGeom_",
+)
+
+
+def should_skip_export_for_tolerant_parsing(
+    export: ObjectExport,
+    class_name: str | None = None,
+) -> bool:
+    """True when the export should bypass the generic property parser."""
+    return str(export.object_name).startswith(SKIP_CLASS_PREFIXES) or (
+        class_name or ""
+    ).startswith(SKIP_CLASS_PREFIXES)
+
+
+def skip_export_payload(
+    archive: FArchive,
+    export: ObjectExport,
+    summary: PackageFileSummary,
+) -> None:
+    """Safely skip the payload data of a single export.
+
+    Seek past the export property region without attempting to parse.
+
+    Args:
+        archive: FArchive instance
+        export: ObjectExport instance
+        summary: PackageFileSummary instance
+    """
+    from uasset_read.constants import UE5_SCRIPT_SERIALIZATION_OFFSET
+
+    if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+        # Use getattr for safe fallback to prevent AttributeError when attribute does not exist
+        script_serial_end = getattr(export, "script_serialization_end_offset", None)
+        if script_serial_end is None:
+            # Fall back to serial_size for compatibility
+            script_serial_end = export.serial_size
+        payload_end = export.serial_offset + script_serial_end
+    else:
+        payload_end = export.serial_offset + export.serial_size
+
+    # Ensure it does not exceed file size
+    file_size = archive.total_size()
+    safe_end = min(payload_end, file_size)
+
+    logger.debug(
+        "Skipping export '%s' payload: seek from %d to %d (%d bytes)",
+        export.object_name,
+        archive.tell(),
+        safe_end,
+        safe_end - archive.tell(),
+    )
+    archive.seek(safe_end)
 
 
 # ---------------------------------------------------------------------------
@@ -998,11 +1131,6 @@ def parse_properties_from_export(
     archive.seek(property_start)
 
     # Tolerant skip: directly skip known incompatible class-specific payloads
-    from uasset_read.parsers.class_specific_skip import (
-        should_skip_export_for_tolerant_parsing,
-        skip_export_payload,
-    )
-
     # Parse export class name for skip check
     skip_class_name = None
     if import_map is not None:
@@ -1036,7 +1164,6 @@ def parse_properties_from_export(
                     type="SerializationControlExtensions",
                     size=0,
                     reason=FallbackReason.PARSE_ERROR,
-                    error_message="unknown SerializationControlExtensions bits; property parse stopped",
                 )
             ]
 
@@ -1136,7 +1263,6 @@ def _parse_unversioned_properties_from_mapping(
                 name=export.object_name,
                 type="UnversionedOpaque",
                 size=len(raw_bytes),
-                raw_bytes=raw_bytes,
                 reason=FallbackReason.MISSING_MAPPING,
             )
         ]
@@ -1303,9 +1429,7 @@ def _parse_unversioned_properties_from_mapping(
             out.append(PropertyValue(info.name, tag.type, _unversioned_zero_value(info.mapping_type)))
             continue
         start = archive.tell()
-        diag_mark = (
-            len(archive.get_structured_diagnostics()) if hasattr(archive, "get_structured_diagnostics") else 0
-        )
+        diag_mark = len(archive.get_structured_diagnostics())
         try:
             value = parse_property_value(tag, archive, name_map, export_map, summary, tolerant=tolerant)
         except ParseError as exc:
@@ -1318,35 +1442,32 @@ def _parse_unversioned_properties_from_mapping(
                 name=info.name,
                 type=tag.type,
                 size=tag.size,
-                raw_bytes=b"",
                 reason=FallbackReason.PARSE_ERROR,
                 array_index=0,
-                error_message=f"ParseError: {exc}",
             )
             out.append(PropertyValue(info.name, "Warning", fb))
             continue
         # Name-index diagnostics mean the stream is misaligned; stop and opaque.
-        if hasattr(archive, "get_structured_diagnostics"):
-            new_diags = archive.get_structured_diagnostics()[diag_mark:]
-            if any(d.code == "name_index_out_of_range" for d in new_diags):
-                archive.seek(start)
-                tail_start = archive.tell()
-                tail_size = max(0, property_end - tail_start)
-                tail = archive.read(tail_size) if tail_size > 0 else b""
-                if tail:
-                    out.append(
-                        PropertyValue(
-                            name="_unversioned_tail",
-                            type="Opaque",
-                            value={
-                                "parse_status": "opaque",
-                                "raw_offset": tail_start,
-                                "raw_size": len(tail),
-                                "raw_data": tail,
-                            },
-                        )
+        new_diags = archive.get_structured_diagnostics()[diag_mark:]
+        if any(d.code == "name_index_out_of_range" for d in new_diags):
+            archive.seek(start)
+            tail_start = archive.tell()
+            tail_size = max(0, property_end - tail_start)
+            tail = archive.read(tail_size) if tail_size > 0 else b""
+            if tail:
+                out.append(
+                    PropertyValue(
+                        name="_unversioned_tail",
+                        type="Opaque",
+                        value={
+                            "parse_status": "opaque",
+                            "raw_offset": tail_start,
+                            "raw_size": len(tail),
+                            "raw_data": tail,
+                        },
                     )
-                break
+                )
+            break
         if tag.size <= 0:
             tag.size = archive.tell() - start
         out.append(PropertyValue(info.name, tag.type, value))

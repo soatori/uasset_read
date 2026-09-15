@@ -541,7 +541,7 @@ def test_property_bag_normalization_is_bounded_lossless():
     """normalize_property_bag must bound, describe, and never embed raw bytes."""
     from uasset_read.models.fallback import FallbackReason, PropertyFallback
     from uasset_read.models.properties import PropertyValue, StructValue
-    from uasset_read.parsers.properties_v2 import normalize_property_bag
+    from uasset_read.parsers.legacy_reader import normalize_property_bag
 
     def test_empty_list_returns_empty_dict():
         assert normalize_property_bag([]) == {}
@@ -551,7 +551,6 @@ def test_property_bag_normalization_is_bounded_lossless():
             name="Mystery",
             type="UnknownProperty",
             size=4,
-            raw_bytes=b"\x01\x02\x03\x04",
             reason=FallbackReason.UNSUPPORTED_TYPE,
         )
         bag = normalize_property_bag([prop])
@@ -850,7 +849,7 @@ def test_package_document_preserves_every_export_and_role():
 
         data = struct.pack("<ii", 0, 1) + struct.pack("<iiii", 40, 8, 48, 8) + struct.pack("<i", 0x11223344)
         arc = ByteArchive(data)
-        flags, source = _read_compression_and_source(arc)
+        flags, source, _ = _read_compression_and_source(arc)
         assert source == 0x11223344  # wrong 12-byte skip desyncs PackageSource
 
     def test_table_rows_skip_tagged_stream_not_size_prefix():
@@ -1086,7 +1085,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
         obj = _object_record("Foo", id="export:9")
         with _isolated_handlers(Boom(), Ok()):
-            semantic, _cov, diags = H.run_handlers(obj, H.VersionContext(), [], None)
+            semantic, _cov, diags = H.run_handlers(obj, "package", [], None)
         assert semantic == {"kind": "ok"}
         assert obj.status.semantic == "partial"
         assert any(d.code == "HANDLER_FAILURE" for d in diags)
@@ -1096,7 +1095,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
         obj = _object_record("Foo", id="export:9")
         with _isolated_handlers(Ok()):
-            H.run_handlers(obj, H.VersionContext(), [], None)
+            H.run_handlers(obj, "package", [], None)
         assert obj.status.semantic == "complete"
 
     def test_matched_handler_returning_none_is_not_complete():
@@ -1111,7 +1110,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
         obj = _object_record("Foo", id="export:9")
         with _isolated_handlers(Decliner()):
-            semantic, _cov, _diags = H.run_handlers(obj, H.VersionContext(), [], None)
+            semantic, _cov, _diags = H.run_handlers(obj, "package", [], None)
         assert semantic is None
         assert obj.status.semantic == "partial"
 
@@ -1306,18 +1305,17 @@ def test_handler_registry_supports_enriches_and_isolates():
         TextureHandler,
         UserDefinedEnumHandler,
         UserDefinedStructHandler,
-        get_handlers,
+        _HANDLERS,
     )
     from uasset_read.models.object_model import ObjectRecord, ObjectStatus
-    from uasset_read.versioning import VersionContext
 
     record = _object_record
 
     def test_handlers_registered():
-        assert len(get_handlers()) >= 4
+        assert len(_HANDLERS) >= 4
 
     def test_expected_handlers():
-        names = [type(h).__name__ for h in get_handlers()]
+        names = [type(h).__name__ for h in list(_HANDLERS)]
         assert "DataTableHandler" in names
         assert "TextureHandler" in names
         assert "TexturePayloadHandler" in names
@@ -1363,8 +1361,8 @@ def test_handler_registry_supports_enriches_and_isolates():
             ),
         ]
         for name, handler, good_class, bad_class in cases:
-            assert handler.supports(record(good_class), VersionContext()), f"{name} must support {good_class}"
-            assert not handler.supports(record(bad_class), VersionContext()), f"{name} must reject {bad_class}"
+            assert handler.supports(record(good_class), "package"), f"{name} must support {good_class}"
+            assert not handler.supports(record(bad_class), "package"), f"{name} must reject {bad_class}"
 
     def test_texture_no_properties_returns_none():
         obj = ObjectRecord(
@@ -1375,7 +1373,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             status=ObjectStatus(),
             properties=None,
         )
-        assert TextureHandler().enrich(obj, VersionContext(), [], None) is None
+        assert TextureHandler().enrich(obj, "package", [], None) is None
 
     def test_handler_exception_doesnt_crash():
         from uasset_read.parsers.asset_types.handlers_impl import register_handler, run_handlers
@@ -1390,7 +1388,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         with _isolated_handlers():
             register_handler(BadHandler())
             obj = ObjectRecord(id="export:0", table_index=0, name="X", class_name="Anything", status=ObjectStatus())
-            semantic, cov, diags = run_handlers(obj, VersionContext(), [obj], None)
+            semantic, cov, diags = run_handlers(obj, "package", [obj], None)
             assert semantic is None
             assert any("BadHandler" in c.feature for c in cov)
             assert any(d.stage == "semantic.handler" for d in diags)
@@ -1398,8 +1396,6 @@ def test_handler_registry_supports_enriches_and_isolates():
     def test_handler_exception_becomes_object_diagnostic():
         import uasset_read.parsers.asset_types.handlers_impl as handlers
         from uasset_read.package import parse_package_document
-        from uasset_read.versioning import VersionContext
-
         class RaisingHandler:
             def supports(self, obj, context):
                 return True
@@ -1411,7 +1407,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             handlers._HANDLERS.append(RaisingHandler())
             sample_doc = parse_package_document(str(DATA_SAMPLE), depth="object", object_ids=["export:0"])
             semantic, coverage, diagnostics = handlers.run_handlers(
-                sample_doc.objects[0], VersionContext(), sample_doc.objects, None
+                sample_doc.objects[0], "package", sample_doc.objects, None
             )
             assert semantic is None
             assert any(c.status == "missing" for c in coverage)
@@ -1425,8 +1421,8 @@ def test_handler_registry_supports_enriches_and_isolates():
         handler = NiagaraHandler()
         assert len(handler.classes) == 13
         for class_name in handler.classes:
-            assert handler.supports(record(class_name), VersionContext()), class_name
-        assert not handler.supports(record("StaticMesh"), VersionContext())
+            assert handler.supports(record(class_name), "package"), class_name
+        assert not handler.supports(record("StaticMesh"), "package")
 
     def test_summary_tier_handlers_never_claim_complete():
         """Niagara/Mesh/Blueprint-summary results are partial with coverage (#629)."""
@@ -1437,8 +1433,6 @@ def test_handler_registry_supports_enriches_and_isolates():
             NiagaraHandler,
             run_handlers,
         )
-        from uasset_read.versioning import VersionContext
-
         cases = [
             ("NiagaraScript", NiagaraHandler()),
             ("StaticMesh", MeshHandler()),
@@ -1451,7 +1445,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             for class_name, handler in cases:
                 _HANDLERS[:] = [handler]
                 obj = record(class_name)
-                semantic, _cov, _diags = run_handlers(obj, VersionContext(depth="asset"), [obj], None)
+                semantic, _cov, _diags = run_handlers(obj, "asset", [obj], None)
                 assert semantic, class_name
                 assert obj.status.semantic == "partial", class_name
                 assert obj.coverage, class_name
@@ -1459,8 +1453,6 @@ def test_handler_registry_supports_enriches_and_isolates():
     def test_decode_tier_blueprint_graph_marks_complete():
         """Only decoded-tier output (Blueprint graph at depth=decode) yields complete (#629)."""
         from uasset_read.parsers.asset_types.handlers_impl import BlueprintFamilyHandler, run_handlers
-        from uasset_read.versioning import VersionContext
-
         bp = record("Blueprint")
         node = record("K2Node_CallFunction")
         node.id = "export:1"
@@ -1478,14 +1470,12 @@ def test_handler_registry_supports_enriches_and_isolates():
         }
         extras = {bp.id: {"graphs": [dummy_graph]}}
         with _isolated_handlers(handler):
-            semantic, _cov, _diags = run_handlers(bp, VersionContext(depth="decode"), [bp, node], (None, [], extras))
+            semantic, _cov, _diags = run_handlers(bp, "decode", [bp, node], (None, [], extras))
         assert "graphs" in semantic
         assert bp.status.semantic == "complete"
 
     def test_undeclared_handler_tier_defaults_to_summary():
         from uasset_read.parsers.asset_types.handlers_impl import run_handlers
-        from uasset_read.versioning import VersionContext
-
         class Echo:
             def supports(self, obj, ctx):
                 return True
@@ -1495,18 +1485,16 @@ def test_handler_registry_supports_enriches_and_isolates():
 
         obj = record("Whatever")
         with _isolated_handlers(Echo()):
-            run_handlers(obj, VersionContext(), [obj], None)
+            run_handlers(obj, "package", [obj], None)
         assert obj.status.semantic == "partial"
 
     def test_skeleton_name_guess_is_marked_heuristic():
         """NameMap-regex bones are marked bone_source=name_guess and never complete (#630)."""
         from uasset_read.parsers.asset_types.handlers_impl import SkeletonHandler, run_handlers
-        from uasset_read.versioning import VersionContext
-
         obj = record("Skeleton")
         name_map = ["None", "SomeWidget", "root", "pelvis", "spine_01"]
         with _isolated_handlers(SkeletonHandler()):
-            semantic, _cov, _diags = run_handlers(obj, VersionContext(depth="asset"), [obj], (None, name_map, None))
+            semantic, _cov, _diags = run_handlers(obj, "asset", [obj], (None, name_map, None))
         assert semantic["bone_source"] == "name_guess"
         assert [b["name"] for b in semantic["bones"]] == ["root", "pelvis", "spine_01"]
         assert semantic["bone_count"] == 3
@@ -1518,8 +1506,6 @@ def test_handler_registry_supports_enriches_and_isolates():
     def test_skeleton_bone_tree_wins_over_name_guess():
         """Decoded BoneTree names take precedence over the regex path (#630)."""
         from uasset_read.parsers.asset_types.handlers_impl import SkeletonHandler, run_handlers
-        from uasset_read.versioning import VersionContext
-
         obj = record("Skeleton")
         obj.properties = {
             "BoneTree": {
@@ -1536,7 +1522,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         # "head" would match the NameMap regex — its absence proves the real path won.
         name_map = ["head", "thigh_l"]
         with _isolated_handlers(SkeletonHandler()):
-            semantic, _cov, _diags = run_handlers(obj, VersionContext(depth="asset"), [obj], (None, name_map, None))
+            semantic, _cov, _diags = run_handlers(obj, "asset", [obj], (None, name_map, None))
         assert semantic["bone_source"] == "bone_tree"
         assert [b["name"] for b in semantic["bones"]] == ["root", "pelvis"]
         assert obj.status.semantic == "complete"
@@ -1598,11 +1584,9 @@ def test_handler_registry_supports_enriches_and_isolates():
             StringTableHandler,
             run_handlers,
         )
-        from uasset_read.versioning import VersionContext
-
-        assert not DataTableHandler().supports(record("StringTable"), VersionContext())
-        assert DataTableHandler().supports(record("DataTable"), VersionContext())
-        assert StringTableHandler().supports(record("StringTable"), VersionContext())
+        assert not DataTableHandler().supports(record("StringTable"), "package")
+        assert DataTableHandler().supports(record("DataTable"), "package")
+        assert StringTableHandler().supports(record("StringTable"), "package")
 
         obj = record("StringTable")
         obj.id = "export:5"
@@ -1614,7 +1598,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         }
         with _isolated_handlers(DataTableHandler(), StringTableHandler()):
             semantic, _cov, _diags = run_handlers(
-                obj, VersionContext(depth="asset"), [obj], (None, [], {obj.id: {"string_table": st}})
+                obj, "asset", [obj], (None, [], {obj.id: {"string_table": st}})
             )
         assert semantic["kind"] == "string_table"
         assert semantic["namespace"] == "MyNS"
@@ -1624,10 +1608,8 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_string_table_handler_missing_trailer_reports_coverage():
         from uasset_read.parsers.asset_types.handlers_impl import StringTableHandler
-        from uasset_read.versioning import VersionContext
-
         obj = record("StringTable")
-        result = StringTableHandler().enrich(obj, VersionContext(), [], (None, [], {}))
+        result = StringTableHandler().enrich(obj, "package", [], (None, [], {}))
         assert result["kind"] == "string_table"
         cov = [c for c in obj.coverage if c.feature == "handler.StringTableHandler"]
         assert len(cov) == 1 and cov[0].status == "missing"
@@ -1639,8 +1621,6 @@ def test_handler_registry_supports_enriches_and_isolates():
             PhysicalMaterialHandler,
             run_handlers,
         )
-        from uasset_read.versioning import VersionContext
-
         pa = record("PhysicsAsset")
         pa.properties = {
             "SkeletalBodySetups": {"kind": "value", "type": "ArrayProperty", "value": ["ref0", "ref1"]},
@@ -1657,11 +1637,11 @@ def test_handler_registry_supports_enriches_and_isolates():
             "SurfaceType": {"kind": "value", "type": "ByteProperty", "value": {"value_name": "SCE_Plastic"}},
         }
         with _isolated_handlers(PhysicsAssetHandler(), PhysicalMaterialHandler()):
-            sem_pa, _c, _d = run_handlers(pa, VersionContext(depth="asset"), [pa, body], None)
-            sem_pm, _c, _d = run_handlers(pm, VersionContext(depth="asset"), [pm], None)
+            sem_pa, _c, _d = run_handlers(pa, "asset", [pa, body], None)
+            sem_pm, _c, _d = run_handlers(pm, "asset", [pm], None)
             empty_pm = record("PhysicalMaterial")
             empty_pm.properties = {}
-            sem_empty, _c, _d = run_handlers(empty_pm, VersionContext(depth="asset"), [empty_pm], None)
+            sem_empty, _c, _d = run_handlers(empty_pm, "asset", [empty_pm], None)
 
         assert sem_pa["kind"] == "physics_asset"
         assert sem_pa["body_count"] == 2
@@ -1687,8 +1667,6 @@ def test_handler_registry_supports_enriches_and_isolates():
             AnimLayerInterfaceHandler,
             run_handlers,
         )
-        from uasset_read.versioning import VersionContext
-
         bs = record("BlendSpace")
         bs.properties = {
             "BlendParameters": {
@@ -1758,10 +1736,10 @@ def test_handler_registry_supports_enriches_and_isolates():
         bare.properties = {}
 
         with _isolated_handlers(AnimBlendSpaceHandler(), AnimCompositeHandler(), AnimLayerInterfaceHandler()):
-            sem_bs, _c, _d = run_handlers(bs, VersionContext(depth="asset"), [bs], None)
-            sem_comp, _c, _d = run_handlers(comp, VersionContext(depth="asset"), [comp], None)
-            sem_ali, _c, _d = run_handlers(ali, VersionContext(depth="asset"), [ali], None)
-            sem_bare, _c, _d = run_handlers(bare, VersionContext(depth="asset"), [bare], None)
+            sem_bs, _c, _d = run_handlers(bs, "asset", [bs], None)
+            sem_comp, _c, _d = run_handlers(comp, "asset", [comp], None)
+            sem_ali, _c, _d = run_handlers(ali, "asset", [ali], None)
+            sem_bare, _c, _d = run_handlers(bare, "asset", [bare], None)
 
         assert sem_bs["kind"] == "anim_blend_space"
         assert sem_bs["dimension"] == 2, "unconfigured BlendParameters slot must not count as an axis"
@@ -1795,8 +1773,6 @@ def test_handler_registry_supports_enriches_and_isolates():
             MaterialParameterCollectionHandler,
             run_handlers,
         )
-        from uasset_read.versioning import VersionContext
-
         fn = record("MaterialFunction")
         inp = record("MaterialExpressionFunctionInput")
         inp.id = "export:1"
@@ -1845,9 +1821,9 @@ def test_handler_registry_supports_enriches_and_isolates():
         bare_fn.properties = {}
 
         with _isolated_handlers(MaterialFunctionHandler(), MaterialParameterCollectionHandler()):
-            sem_fn, _c, _d = run_handlers(fn, VersionContext(depth="asset"), [fn, inp, out, call, add], None)
-            sem_mpc, _c, _d = run_handlers(mpc, VersionContext(depth="asset"), [mpc], None)
-            sem_bfn, _c, _d = run_handlers(bare_fn, VersionContext(depth="asset"), [bare_fn], None)
+            sem_fn, _c, _d = run_handlers(fn, "asset", [fn, inp, out, call, add], None)
+            sem_mpc, _c, _d = run_handlers(mpc, "asset", [mpc], None)
+            sem_bfn, _c, _d = run_handlers(bare_fn, "asset", [bare_fn], None)
 
         assert sem_fn["kind"] == "material_function"
         assert sem_fn["input_names"] == ["Speed"]
@@ -1877,7 +1853,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         import struct
 
         from uasset_read.archive import ByteArchive
-        from uasset_read.kismet.expressions.string_consts import FScriptText
+        from uasset_read.kismet.expressions import FScriptText
         from uasset_read.kismet.tokens import EBlueprintTextLiteralType as T
 
         assert T.LocalizedTextWithNotes == 2 and T.InvariantText == 3
@@ -1922,8 +1898,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         import struct
 
         from uasset_read.archive import ByteArchive
-        from uasset_read.kismet.expressions.containers import EX_SetSet
-        from uasset_read.kismet.expressions.special import EX_Assert
+        from uasset_read.kismet.expressions import EX_Assert, EX_SetSet
 
         class _WidthProbe:  # forwards the width-sensitive reads, stubs expression dispatch
             def __init__(self, data):
@@ -2270,13 +2245,6 @@ def test_projection_views_depths_pagination_table():
         assert page["next_offset"] > 0
         assert page["truncation"]["reason"] == "max_bytes"
 
-        # fields filter: only requested fields plus id/name are returned
-        result = project_document(pkg_doc, depth="package", limit=2, fields=["id"])
-        assert len(result["objects"]) == 2
-        assert set(result["objects"][0].keys()).issubset({"id", "name"})
-        assert isinstance(result["payloads"], list)
-        assert isinstance(result["relations"], list)
-
     def depth_beyond_parsed_document_raises():
         pkg_doc = _document(str(PACKAGE_SAMPLE), depth="package")
         with pytest.raises(ValueError, match="cannot project"):
@@ -2454,56 +2422,6 @@ def test_projection_byte_budget_and_fields_filter():
         page = project_document(doc, limit=2, max_bytes=1_000_000)
         assert page.get("truncation") is None or page["truncation"].get("reason") != "max_bytes"
 
-    def sections_opt_out_drops_scope_before_budget():
-        # #631: sections is an allowlist of the scoped envelope sections;
-        # excluded ones never enter the response, so max_bytes measures the
-        # leaner envelope (default behavior with sections=None is unchanged).
-        schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
-
-        default = project_document(doc, limit=3)
-        assert "relations" in default and "dependencies" in default
-        both = project_document(doc, limit=3, sections=[])
-        assert "relations" not in both and "dependencies" not in both
-        jsonschema.validate(both, schema)
-        assert _json_bytes(both) < _json_bytes(default), "opted-out sections must free bytes"
-        rel_only = project_document(doc, limit=3, sections=["relations"])
-        assert "relations" in rel_only and "dependencies" not in rel_only
-        with pytest.raises(ValueError, match="Invalid sections"):
-            project_document(doc, sections=["objects"])
-
-        full = project_document(doc, limit=100)
-        trimmed = project_document(doc, limit=100, max_bytes=_json_bytes(full) - 400)
-        assert len(trimmed["objects"]) < 100, "budget should have trimmed the default page"
-        lean = project_document(doc, limit=100, sections=[], max_bytes=_json_bytes(trimmed))
-        assert len(lean["objects"]) >= len(trimmed["objects"]), "freed bytes go to the object page"
-        for rel in lean.get("relations", []):
-            assert rel["from"] in {o["id"] for o in lean["objects"]}
-
-    def core_fields_filter_scopes_payloads():
-        pkg_doc = _document()
-        result = project_document(pkg_doc, depth="package", limit=2, fields=["class"])
-        assert len(result["objects"]) == 2
-        assert set(result["objects"][0]).issubset({"id", "name", "class"})
-        assert isinstance(result["payloads"], list)
-        assert isinstance(result["relations"], list)
-
-    def core_fields_properties_in_raw_view():
-        obj_doc = _document(depth="object")
-        result = project_document(obj_doc, depth="object", view="raw", limit=2, fields=["properties"])
-        assert len(result["objects"]) == 2
-        for obj in result["objects"]:
-            assert set(obj.keys()).issubset({"id", "name", "properties"})
-            assert "properties" in obj  # object-depth raw view carries the property bag
-            assert "serial_region" not in obj  # not in requested fields
-
-    def core_fields_properties_absent_in_semantic_view():
-        pkg_doc = _document()
-        result = project_document(pkg_doc, depth="package", view="semantic", limit=2, fields=["properties"])
-        assert len(result["objects"]) == 2
-        for obj in result["objects"]:
-            # semantic view never has properties, so fields=["properties"] yields only id/name
-            assert set(obj.keys()).issubset({"id", "name"})
-
     def core_max_bytes_caps_final_output():
         pkg_doc = _document()
         full = project_document(pkg_doc, depth="package", limit=100)
@@ -2537,19 +2455,6 @@ def test_projection_byte_budget_and_fields_filter():
             ("projection.test_object_diagnostics_scoped_to_page", test_object_diagnostics_scoped_to_page),
             ("projection.test_budget_too_small_raises", test_budget_too_small_raises),
             ("projection.test_no_truncation_when_budget_generous", test_no_truncation_when_budget_generous),
-            ("projection.sections_opt_out_drops_scope_before_budget", sections_opt_out_drops_scope_before_budget),
-            (
-                "core.test_projection_fields_filter_does_not_crash_and_scopes_payloads",
-                core_fields_filter_scopes_payloads,
-            ),
-            (
-                "core.test_fields_properties_available_in_raw_view",
-                core_fields_properties_in_raw_view,
-            ),
-            (
-                "core.test_fields_properties_absent_in_semantic_view",
-                core_fields_properties_absent_in_semantic_view,
-            ),
             ("core.test_max_bytes_caps_final_output_including_truncation_block", core_max_bytes_caps_final_output),
         ]
     )
@@ -3050,10 +2955,10 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     lr_real_fn = lr.read_package_summary
 
     # === Refusal path: main_size != TotalHeaderSize ===
-    def patched_wrong(archive, budget):
-        s = real_read_summary(archive, budget)
+    def patched_wrong(archive, *, total_decompressed=0):
+        s, total = real_read_summary(archive, total_decompressed=total_decompressed)
         s.total_header_size = main_size - 1
-        return s
+        return s, total
 
     lr.read_package_summary = patched_wrong  # type: ignore[assignment]
     bundle = open_package_bundle(str(sample))
@@ -3071,10 +2976,10 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     assert arc.total_size() == main_size, "total_size must equal main only"
 
     # === Refusal path: total_header_size == 0 (fail-open fix, 1a) ===
-    def patched_zero(archive, budget):
-        s = real_read_summary(archive, budget)
+    def patched_zero(archive, *, total_decompressed=0):
+        s, total = real_read_summary(archive, total_decompressed=total_decompressed)
         s.total_header_size = 0
-        return s
+        return s, total
 
     lr.read_package_summary = patched_zero  # type: ignore[assignment]
     bundle0 = open_package_bundle(str(sample))
@@ -3090,10 +2995,10 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     assert arc0.total_size() == main_size
 
     # === Acceptance path: main_size == TotalHeaderSize ===
-    def patched_ok(archive, budget):
-        s = real_read_summary(archive, budget)
+    def patched_ok(archive, *, total_decompressed=0):
+        s, total = real_read_summary(archive, total_decompressed=total_decompressed)
         s.total_header_size = main_size
-        return s
+        return s, total
 
     lr.read_package_summary = patched_ok  # type: ignore[assignment]
     bundle_ok = open_package_bundle(str(sample))
@@ -3273,6 +3178,7 @@ def test_test_suite_structure_gate():
         "test_core.py",
         "test_diagnostics_reason.py",
         "test_handler_capability_ledger.py",
+        "test_memory_safety.py",
         "test_parse_hardening.py",
         "test_payload_extraction.py",
         "test_review_pins.py",

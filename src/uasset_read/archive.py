@@ -198,13 +198,6 @@ class FArchive:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.close()
 
-    def __del__(self) -> None:
-        """Safety net: ensure file handle is released."""
-        try:
-            self.close()
-        except Exception:
-            logger.debug("FArchive.__del__ cleanup failed", exc_info=True)
-
     def total_size(self) -> int:
         """Return total file size."""
         return self._file_size

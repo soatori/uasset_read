@@ -63,10 +63,7 @@ class SoftObjectPathValue:
     raw_kind: str
     asset_path: str = ""
     sub_path: str = ""
-    package_index: int | None = None
     guid: str | None = None
-    index: int | None = None  # SoftObjectPathList index (UE5.7+)
-    error: str | None = None  # Out-of-bounds and other diagnostic info
 
 
 @dataclass
@@ -112,7 +109,7 @@ class TextValue:
     key: str = ""
     source_string: str = ""
     history_type: int | None = None  # ETextHistoryType seen; None when not decoded
-    property_type: str = "TextProperty"  # read by properties_v2 TextValue serialization
+    property_type: str = "TextProperty"  # read by legacy_reader TextValue serialization
 
 
 @dataclass
