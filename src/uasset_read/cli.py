@@ -238,28 +238,6 @@ def main():
     """Main CLI entry point."""
     parser = create_parser()
 
-    # Retired product surfaces: one reason per group, exit 2 via parser.error
-    # instead of argparse's generic unknown-argument error.
-    retired = (
-        (
-            "parent-asset resolution is retired (product decision, Gate G 2026-09-10)",
-            ("--include-parent-assets", "--asset-root"),
-        ),
-        (
-            "log cleanup / file logging helpers are retired "
-            "(product decision, Gate L 2026-09-10); delete leftover ./log directories yourself",
-            ("--clean-logs", "--log-dir", "--log-keep-latest", "--log-max-total-mb"),
-        ),
-        (
-            "part of the v1 pipeline; the v2 document output (--depth) is the only parse path",
-            ("--legacy-json", "--markdown", "--list-formats", "--diff"),
-        ),
-    )
-    for reason, flags in retired:
-        hit = next((flag for flag in sys.argv if flag in flags), None)
-        if hit is not None:
-            parser.error(f"{hit} was removed: {reason}")
-
     try:
         args = parser.parse_args()
     except SystemExit as e:
