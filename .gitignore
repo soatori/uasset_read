@@ -118,3 +118,5 @@ tests/samples/golden/dumper/obj/
 # Local-only IoStore fixture: 259 MB exceeds GitHub's 100 MB hard file limit.
 # It stays hash-pinned in tests/samples/manifest.json ("committed": false).
 tests/samples/containers/MyProject-Windows.ucas
+
+pytest.out
