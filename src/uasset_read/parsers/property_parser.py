@@ -503,9 +503,10 @@ def parse_property_value(
             except BINARY_READ_ERRORS as e:
                 logger.debug("Game-specific custom property handler failed for %s (game=%s): %s", tag.type, game, e)
 
-        # All handlers do not match -- read raw bytes and return PropertyFallback
-        raw_data = archive.read(tag.size) if tag.size > 0 else b""
-        return PropertyFallback.from_tag(tag, FallbackReason.UNSUPPORTED_TYPE, raw_bytes=raw_data)
+        # All handlers do not match -- consume the payload and return PropertyFallback
+        if tag.size > 0:
+            archive.read(tag.size)
+        return PropertyFallback.from_tag(tag, FallbackReason.UNSUPPORTED_TYPE)
 
     try:
         # Dispatch based on handler signature
@@ -549,7 +550,7 @@ def parse_property_value(
         if not tolerant:
             raise
         logger.debug("Property handler failed for %s.%s: %s", tag.name, tag.type, e)
-        return PropertyFallback.from_tag(tag, FallbackReason.PARSE_ERROR, error_message=str(e))
+        return PropertyFallback.from_tag(tag, FallbackReason.PARSE_ERROR)
 
 
 # ---------------------------------------------------------------------------
@@ -646,7 +647,6 @@ def _handle_unversioned_properties(
             name=export.object_name,
             type="UnversionedOpaque",
             size=len(raw_bytes),
-            raw_bytes=raw_bytes,
             reason=FallbackReason.MISSING_MAPPING,
         )
     ]
@@ -729,10 +729,8 @@ def _handle_property_parse_error(
         name=tag.name if tag is not None else "Unknown",
         type=tag.type if tag is not None else "Unknown",
         size=tag.size if tag is not None else 0,
-        raw_bytes=b"",
         reason=FallbackReason.PARSE_ERROR,
         array_index=tag.array_index if tag is not None else 0,
-        error_message=f"ParseError at offset {start_pos}: {e}",
     )
     return PropertyValue(
         name=fb.name,
@@ -823,9 +821,7 @@ def _read_property_loop(
                                 name="Corrupted",
                                 type="Unknown",
                                 size=0,
-                                raw_bytes=b"",
                                 reason=FallbackReason.PARSE_ERROR,
-                                error_message=f"PropertyTag read failed: {e}",
                             ),
                         )
                     )
@@ -872,10 +868,7 @@ def _read_property_loop(
                                     name=tag.name,
                                     type=tag.type,
                                     size=tag.size,
-                                    raw_bytes=b"",
                                     reason=FallbackReason.SIZE_EXCEEDED,
-                                    error_message=f"Size {tag.size} exceeds remaining bytes; "
-                                    f"skipped to next valid PropertyTag",
                                 ),
                             )
                         )
@@ -890,7 +883,6 @@ def _read_property_loop(
                         value=PropertyFallback.from_tag(
                             tag,
                             FallbackReason.SIZE_EXCEEDED,
-                            error_message=f"Size {tag.size} exceeds remaining bytes",
                         ),
                         array_index=tag.array_index,
                     )
@@ -917,7 +909,6 @@ def _read_property_loop(
                 value = PropertyFallback.from_tag(
                     tag,
                     FallbackReason.UNSUPPORTED_TYPE,
-                    error_message="Parser returned None (unsupported or missing handler)",
                 )
 
             properties.append(PropertyValue(name=tag.name, type=tag.type, value=value, array_index=tag.array_index))
@@ -1036,7 +1027,6 @@ def parse_properties_from_export(
                     type="SerializationControlExtensions",
                     size=0,
                     reason=FallbackReason.PARSE_ERROR,
-                    error_message="unknown SerializationControlExtensions bits; property parse stopped",
                 )
             ]
 
@@ -1136,7 +1126,6 @@ def _parse_unversioned_properties_from_mapping(
                 name=export.object_name,
                 type="UnversionedOpaque",
                 size=len(raw_bytes),
-                raw_bytes=raw_bytes,
                 reason=FallbackReason.MISSING_MAPPING,
             )
         ]
@@ -1318,10 +1307,8 @@ def _parse_unversioned_properties_from_mapping(
                 name=info.name,
                 type=tag.type,
                 size=tag.size,
-                raw_bytes=b"",
                 reason=FallbackReason.PARSE_ERROR,
                 array_index=0,
-                error_message=f"ParseError: {exc}",
             )
             out.append(PropertyValue(info.name, "Warning", fb))
             continue

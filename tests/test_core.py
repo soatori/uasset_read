@@ -551,7 +551,6 @@ def test_property_bag_normalization_is_bounded_lossless():
             name="Mystery",
             type="UnknownProperty",
             size=4,
-            raw_bytes=b"\x01\x02\x03\x04",
             reason=FallbackReason.UNSUPPORTED_TYPE,
         )
         bag = normalize_property_bag([prop])
