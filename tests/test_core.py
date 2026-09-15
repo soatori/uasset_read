@@ -1853,7 +1853,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         import struct
 
         from uasset_read.archive import ByteArchive
-        from uasset_read.kismet.expressions.string_consts import FScriptText
+        from uasset_read.kismet.expressions import FScriptText
         from uasset_read.kismet.tokens import EBlueprintTextLiteralType as T
 
         assert T.LocalizedTextWithNotes == 2 and T.InvariantText == 3
@@ -1898,8 +1898,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         import struct
 
         from uasset_read.archive import ByteArchive
-        from uasset_read.kismet.expressions.containers import EX_SetSet
-        from uasset_read.kismet.expressions.special import EX_Assert
+        from uasset_read.kismet.expressions import EX_Assert, EX_SetSet
 
         class _WidthProbe:  # forwards the width-sensitive reads, stubs expression dispatch
             def __init__(self, data):

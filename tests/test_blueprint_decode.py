@@ -155,7 +155,7 @@ def test_combat_character_kismet_asset_depth_summary():
 def test_kismet_result_status_serializations():
     """KismetDecompiledResult must serialize parsed / no_script / failed without cpp_code."""
     from uasset_read.kismet.result import KismetDecompiledResult
-    from uasset_read.kismet.expressions.literals import EX_True
+    from uasset_read.kismet.expressions import EX_True
 
     true_expr = EX_True()
     true_expr.StatementIndex = 0
