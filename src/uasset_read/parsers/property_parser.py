@@ -137,8 +137,6 @@ def handle_custom_property(
 
 def _stream_is_poisoned(archive: "FArchive", diag_mark: int) -> bool:
     """True if a poison diagnostic was recorded since diag_mark."""
-    if not hasattr(archive, "get_structured_diagnostics"):
-        return False
     new_diags = archive.get_structured_diagnostics()[diag_mark:]
     return any(d.code in _PROPERTY_STREAM_POISON_CODES for d in new_diags)
 
@@ -584,11 +582,7 @@ def parse_property_value(
         # Dispatch based on handler signature
         # Special case: ByteProperty with enum backing needs name_map (reads FName);
         # bypasses the arg table below.
-        diag_mark = (
-            len(archive.get_structured_diagnostics())
-            if hasattr(archive, "get_structured_diagnostics")
-            else 0
-        )
+        diag_mark = len(archive.get_structured_diagnostics())
         if tag.type == "ByteProperty" and tag.enum_type is not None:
             result = handler(tag, archive, name_map)
         else:
@@ -835,11 +829,7 @@ def _read_property_loop(
 
         tag = None
         start_pos = None
-        diag_mark = (
-            len(archive.get_structured_diagnostics())
-            if hasattr(archive, "get_structured_diagnostics")
-            else 0
-        )
+        diag_mark = len(archive.get_structured_diagnostics())
 
         try:
             # Boundary check: current position should not exceed property data range
@@ -1439,9 +1429,7 @@ def _parse_unversioned_properties_from_mapping(
             out.append(PropertyValue(info.name, tag.type, _unversioned_zero_value(info.mapping_type)))
             continue
         start = archive.tell()
-        diag_mark = (
-            len(archive.get_structured_diagnostics()) if hasattr(archive, "get_structured_diagnostics") else 0
-        )
+        diag_mark = len(archive.get_structured_diagnostics())
         try:
             value = parse_property_value(tag, archive, name_map, export_map, summary, tolerant=tolerant)
         except ParseError as exc:
@@ -1460,27 +1448,26 @@ def _parse_unversioned_properties_from_mapping(
             out.append(PropertyValue(info.name, "Warning", fb))
             continue
         # Name-index diagnostics mean the stream is misaligned; stop and opaque.
-        if hasattr(archive, "get_structured_diagnostics"):
-            new_diags = archive.get_structured_diagnostics()[diag_mark:]
-            if any(d.code == "name_index_out_of_range" for d in new_diags):
-                archive.seek(start)
-                tail_start = archive.tell()
-                tail_size = max(0, property_end - tail_start)
-                tail = archive.read(tail_size) if tail_size > 0 else b""
-                if tail:
-                    out.append(
-                        PropertyValue(
-                            name="_unversioned_tail",
-                            type="Opaque",
-                            value={
-                                "parse_status": "opaque",
-                                "raw_offset": tail_start,
-                                "raw_size": len(tail),
-                                "raw_data": tail,
-                            },
-                        )
+        new_diags = archive.get_structured_diagnostics()[diag_mark:]
+        if any(d.code == "name_index_out_of_range" for d in new_diags):
+            archive.seek(start)
+            tail_start = archive.tell()
+            tail_size = max(0, property_end - tail_start)
+            tail = archive.read(tail_size) if tail_size > 0 else b""
+            if tail:
+                out.append(
+                    PropertyValue(
+                        name="_unversioned_tail",
+                        type="Opaque",
+                        value={
+                            "parse_status": "opaque",
+                            "raw_offset": tail_start,
+                            "raw_size": len(tail),
+                            "raw_data": tail,
+                        },
                     )
-                break
+                )
+            break
         if tag.size <= 0:
             tag.size = archive.tell() - start
         out.append(PropertyValue(info.name, tag.type, value))
