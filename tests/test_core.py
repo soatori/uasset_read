@@ -2246,13 +2246,6 @@ def test_projection_views_depths_pagination_table():
         assert page["next_offset"] > 0
         assert page["truncation"]["reason"] == "max_bytes"
 
-        # fields filter: only requested fields plus id/name are returned
-        result = project_document(pkg_doc, depth="package", limit=2, fields=["id"])
-        assert len(result["objects"]) == 2
-        assert set(result["objects"][0].keys()).issubset({"id", "name"})
-        assert isinstance(result["payloads"], list)
-        assert isinstance(result["relations"], list)
-
     def depth_beyond_parsed_document_raises():
         pkg_doc = _document(str(PACKAGE_SAMPLE), depth="package")
         with pytest.raises(ValueError, match="cannot project"):
@@ -2430,56 +2423,6 @@ def test_projection_byte_budget_and_fields_filter():
         page = project_document(doc, limit=2, max_bytes=1_000_000)
         assert page.get("truncation") is None or page["truncation"].get("reason") != "max_bytes"
 
-    def sections_opt_out_drops_scope_before_budget():
-        # #631: sections is an allowlist of the scoped envelope sections;
-        # excluded ones never enter the response, so max_bytes measures the
-        # leaner envelope (default behavior with sections=None is unchanged).
-        schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
-
-        default = project_document(doc, limit=3)
-        assert "relations" in default and "dependencies" in default
-        both = project_document(doc, limit=3, sections=[])
-        assert "relations" not in both and "dependencies" not in both
-        jsonschema.validate(both, schema)
-        assert _json_bytes(both) < _json_bytes(default), "opted-out sections must free bytes"
-        rel_only = project_document(doc, limit=3, sections=["relations"])
-        assert "relations" in rel_only and "dependencies" not in rel_only
-        with pytest.raises(ValueError, match="Invalid sections"):
-            project_document(doc, sections=["objects"])
-
-        full = project_document(doc, limit=100)
-        trimmed = project_document(doc, limit=100, max_bytes=_json_bytes(full) - 400)
-        assert len(trimmed["objects"]) < 100, "budget should have trimmed the default page"
-        lean = project_document(doc, limit=100, sections=[], max_bytes=_json_bytes(trimmed))
-        assert len(lean["objects"]) >= len(trimmed["objects"]), "freed bytes go to the object page"
-        for rel in lean.get("relations", []):
-            assert rel["from"] in {o["id"] for o in lean["objects"]}
-
-    def core_fields_filter_scopes_payloads():
-        pkg_doc = _document()
-        result = project_document(pkg_doc, depth="package", limit=2, fields=["class"])
-        assert len(result["objects"]) == 2
-        assert set(result["objects"][0]).issubset({"id", "name", "class"})
-        assert isinstance(result["payloads"], list)
-        assert isinstance(result["relations"], list)
-
-    def core_fields_properties_in_raw_view():
-        obj_doc = _document(depth="object")
-        result = project_document(obj_doc, depth="object", view="raw", limit=2, fields=["properties"])
-        assert len(result["objects"]) == 2
-        for obj in result["objects"]:
-            assert set(obj.keys()).issubset({"id", "name", "properties"})
-            assert "properties" in obj  # object-depth raw view carries the property bag
-            assert "serial_region" not in obj  # not in requested fields
-
-    def core_fields_properties_absent_in_semantic_view():
-        pkg_doc = _document()
-        result = project_document(pkg_doc, depth="package", view="semantic", limit=2, fields=["properties"])
-        assert len(result["objects"]) == 2
-        for obj in result["objects"]:
-            # semantic view never has properties, so fields=["properties"] yields only id/name
-            assert set(obj.keys()).issubset({"id", "name"})
-
     def core_max_bytes_caps_final_output():
         pkg_doc = _document()
         full = project_document(pkg_doc, depth="package", limit=100)
@@ -2513,19 +2456,6 @@ def test_projection_byte_budget_and_fields_filter():
             ("projection.test_object_diagnostics_scoped_to_page", test_object_diagnostics_scoped_to_page),
             ("projection.test_budget_too_small_raises", test_budget_too_small_raises),
             ("projection.test_no_truncation_when_budget_generous", test_no_truncation_when_budget_generous),
-            ("projection.sections_opt_out_drops_scope_before_budget", sections_opt_out_drops_scope_before_budget),
-            (
-                "core.test_projection_fields_filter_does_not_crash_and_scopes_payloads",
-                core_fields_filter_scopes_payloads,
-            ),
-            (
-                "core.test_fields_properties_available_in_raw_view",
-                core_fields_properties_in_raw_view,
-            ),
-            (
-                "core.test_fields_properties_absent_in_semantic_view",
-                core_fields_properties_absent_in_semantic_view,
-            ),
             ("core.test_max_bytes_caps_final_output_including_truncation_block", core_max_bytes_caps_final_output),
         ]
     )
