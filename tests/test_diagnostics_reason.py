@@ -209,3 +209,43 @@ def test_bp_combat_character_trailing_diagnostics_carry_reason():
     assert {"editor_only", "bulk_expected", "known_unimplemented", "unexpected"} & {
         d.reason for d in trailing
     }
+
+
+def test_bp_seeds_have_zero_fstring_all_null():
+    from pathlib import Path
+
+    from uasset_read.package import parse_package_document
+
+    samples = Path("tests/samples")
+    names = (
+        "BP_CombatCharacter.uasset",
+        "BP_CombatEnemy.uasset",
+        "LevelDesign_ABP_Manny.uasset",
+    )
+    for name in names:
+        doc = parse_package_document(str(samples / name), depth="asset")
+        codes = [d.code for d in doc.diagnostics]
+        assert "fstring_all_null" not in codes, f"{name}: {codes.count('fstring_all_null')} fstring_all_null"
+
+
+def test_bp_combat_character_category_text_still_decodes():
+    from uasset_read.package import parse_package_document
+
+    doc = parse_package_document("tests/samples/BP_CombatCharacter.uasset", depth="asset")
+    export = next(o for o in doc.objects if o.id == "export:1")
+    nv_prop = (export.properties or {}).get("NewVariables")
+    # NewVariables is an ArrayProperty wrapper: {kind, type, value: [...]}
+    entries = nv_prop.get("value", []) if isinstance(nv_prop, dict) else []
+    categories = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        fields = entry.get("fields") or {}
+        cat = fields.get("Category")
+        if isinstance(cat, dict) and cat.get("kind") == "text":
+            categories.append(cat)
+    assert categories, "expected at least one FText Category on NewVariables"
+    for cat in categories:
+        assert cat.get("namespace") == ""
+        assert "key" in cat, cat
+        assert "source_string" in cat, cat
