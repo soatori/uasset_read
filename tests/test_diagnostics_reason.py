@@ -249,3 +249,5 @@ def test_bp_combat_character_category_text_still_decodes():
         assert cat.get("namespace") == ""
         assert "key" in cat, cat
         assert "source_string" in cat, cat
+    assert any(c.get("key") for c in categories), categories
+    assert any(c.get("source_string") for c in categories), categories
