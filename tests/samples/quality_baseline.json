@@ -74,11 +74,6 @@
           "editor_only": {
             "max": 324
           }
-        },
-        "fstring_all_null": {
-          "recovered_corruption": {
-            "max": 16
-          }
         }
       }
     }
