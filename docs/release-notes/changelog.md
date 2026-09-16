@@ -14,6 +14,7 @@
 
 ### Improvements
 - Diagnostics: optional `reason` classification (`bulk_expected`, `editor_only`, `known_unimplemented`, `recovered_corruption`, `conservative_complete`, `unexpected`) on `Diagnostic`; trailing-bytes and recovery sites populate it. Merge path surfaces optional `reason` and `fallback` on PackageDocument diagnostics when archive recovery diagnostics are lifted. Sample tests gain `tests/samples/quality_baseline.json` gate (known `(code, reason)` ceilings, optional `forbid_unlisted` allowlist, and a zero-diag pin on the DataTable seed).
+- Diagnostics: empty FText namespace/key FString (`length=1` + single NUL, UE valid empty string) is no longer recorded as `fstring_all_null` / `recovered_corruption`. Tracked BP seeds (`BP_CombatCharacter`, `BP_CombatEnemy`, `LevelDesign_ABP_Manny`) now emit zero `fstring_all_null`; quality baseline regenerated.
 
 ## [0.5.4.45] — 2026-07-23
 
