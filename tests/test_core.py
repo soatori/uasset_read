@@ -212,6 +212,25 @@ def test_reader_boundaries_reject_malformed_access():
             codes = [d.code for d in arc.get_structured_diagnostics()]
             assert "fstring_all_null" in codes, payload
 
+    def fstring_empty_ftext_namespace_is_silent():
+        import struct
+        from uasset_read.archive import ByteArchive
+
+        # UE empty FText namespace/key: ANSI length=1 + single NUL (#405).
+        # Valid in BPVariableDescription.Category — must not be recovered_corruption.
+        arc = ByteArchive(struct.pack("<i", 1) + b"\x00", tolerant=True)
+        assert arc.read_fstring() == ""
+        assert arc.get_structured_diagnostics() == []
+
+    def fstring_all_null_longer_run_still_recorded():
+        import struct
+        from uasset_read.archive import ByteArchive
+
+        arc = ByteArchive(struct.pack("<i", 4) + b"\x00" * 4, tolerant=True)
+        assert arc.read_fstring() == ""
+        codes = [d.code for d in arc.get_structured_diagnostics()]
+        assert "fstring_all_null" in codes
+
     def fname_shift_recovery_is_recorded():
         import struct
         from uasset_read.archive import ByteArchive
@@ -518,6 +537,8 @@ def test_reader_boundaries_reject_malformed_access():
             ("recovery.fstring_null_truncation_recorded", fstring_internal_null_truncation_is_recorded),
             ("recovery.fstring_length_cap_recorded", fstring_length_cap_recorded_both_encodings),
             ("recovery.fstring_all_null_recorded", fstring_all_null_recorded_both_encodings),
+            ("recovery.fstring_empty_namespace_silent", fstring_empty_ftext_namespace_is_silent),
+            ("recovery.fstring_all_null_longer_run", fstring_all_null_longer_run_still_recorded),
             ("recovery.fname_shift_recorded", fname_shift_recovery_is_recorded),
             ("recovery.export_map_attribution", export_map_recoveries_are_attributed_to_their_slot),
             (

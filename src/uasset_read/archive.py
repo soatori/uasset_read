@@ -367,6 +367,14 @@ class FArchive:
         data = self.read(byte_len)
         encoding = "utf-16-le" if utf16 else "utf-8"
         result = data.decode(encoding, errors="replace").rstrip("\x00")
+        # Empty FText namespace/key: UE writes ANSI length=1 + single NUL (not length=0).
+        # Valid on BPVariableDescription.Category etc. (#405). Not a recovery.
+        if not result and not utf16 and length == 1 and data == b"\x00":
+            logger.debug(
+                "FString at pos %d: empty FText-style namespace (length=1 + NUL)",
+                pos_before,
+            )
+            return ""
         # All-null detection: result empty after rstrip but length non-zero means the
         # data was entirely null bytes. Known UE pattern (all-null FText
         # namespaces/keys in valid assets) — return empty string in both modes and
