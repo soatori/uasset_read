@@ -13,6 +13,7 @@
 - Retired log cleanup (Gate L): deleted `project_logging.py` and CLI `--clean-logs` / `--log-dir` / `--log-keep-latest` / `--log-max-total-mb` (explicit rejection, exit 2). Leftover `log/` directories from older releases are the user's responsibility.
 
 ### Improvements
+- Quality baseline: large fixture `ALS_AnimBP.uasset` (~10MB) is gated behind `UASSET_QUALITY_OPT_IN=1` (`"opt_in": true` in `quality_baseline.json`). Default sample quality tests stay fast; opt-in run pins known trailing/recovery ceilings for the AnimBP regression surface.
 - Diagnostics: optional `reason` classification (`bulk_expected`, `editor_only`, `known_unimplemented`, `recovered_corruption`, `conservative_complete`, `unexpected`) on `Diagnostic`; trailing-bytes and recovery sites populate it. Merge path surfaces optional `reason` and `fallback` on PackageDocument diagnostics when archive recovery diagnostics are lifted. Sample tests gain `tests/samples/quality_baseline.json` gate (known `(code, reason)` ceilings, optional `forbid_unlisted` allowlist, and a zero-diag pin on the DataTable seed).
 - Diagnostics: empty FText namespace/key FString (`length=1` + single NUL, UE valid empty string) is no longer recorded as `fstring_all_null` / `recovered_corruption`. Tracked BP seeds (`BP_CombatCharacter`, `BP_CombatEnemy`, `LevelDesign_ABP_Manny`) now emit zero `fstring_all_null`; quality baseline regenerated.
 

@@ -864,7 +864,7 @@ git commit -m "docs: note Diagnostic.reason and quality baseline gate"
 | BP/GA name_index root cause | `recovered_corruption` forbidden-list tightening |
 | DataTable residue / row_names | TABLE_* semantics fix + baseline tighten |
 | RefSkeleton real hierarchy | Skeleton trailing size drop |
-| Optional CI job for multi-MB ALS_AnimBP | opt-in baseline entry |
+| Optional CI job for multi-MB ALS_AnimBP | opt-in baseline entry — implemented 2026-09-16 (`docs/plans/2026-09-16-als-animbp-opt-in-baseline.md`, env `UASSET_QUALITY_OPT_IN=1`) |
 | ALS_AnimBP `name_index_out_of_range` at offset 4497945 (export:281, raw index 2560 vs name table 1582) | moderate out-of-range cluster, not the external 1e9 garbage cluster |
 | External sweep `BP_Player` `name_index` cluster unverified against tracked fixtures | needs fixture-level confirmation |
 
