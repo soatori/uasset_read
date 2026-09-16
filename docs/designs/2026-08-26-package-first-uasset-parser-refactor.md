@@ -7,6 +7,8 @@ status: target
 > **2026-09-05 后续状态更新（已实现，非目标）**：Semantic JSON 1.x 输出路径已删除（`--legacy-json` 等旧 CLI flag 进入 retired 集合，唯一顶层 format 为 `uasset_read.package`）；Blueprint VarType（`FEdGraphPinType`）类型解码与 Kismet 反编译已迁移到 v2 object model（`BlueprintFamilyHandler` decode 分支 + `kismet.decompile_bridge`，由 `tests/test_blueprint_decode.py` 覆盖）。**仍未完成：Zen/IoStore、USMAP/unversioned 的 SchemaProvider 完整路径、外部容器 payload 提取、其余深层语义、Blueprint C++ skeleton。parent-asset 解析已于 2026-09-10 Gate G 产品决策放弃（D1 §7），不再列为 deferred gap。**
 >
 > **2026-09-10 Gate K 状态更新**：C++ 伪代码文本生成链（`kismet/translator.py` / `body_builder.py` / `jump_analyzer.py`）已退役；公共函数逻辑表示为 `semantic.functions[]` 的 K0 expression 摘要（asset）与 decode 级 expression tree。`cpp_code` / `translation_status` / `structured_rate` 不再出现在 experimental semantic 输出中。
+
+> **2026-09-16 approved target amendment**：在保留 package-first、统一对象模型和结构化诊断原则的前提下，下一轮允许进行不保证旧输出兼容性的纯 Python 模块化重构。目标输出可升级为 `format_version: "3.0"`；Blueprint/Kismet 目标由 expression 摘要扩展为指令 IR、CFG、静态调用/变量读写分析，并增加从同一语义 IR 投影 C++ 声明和迁移代码的能力。该 C++ 投影不执行 Blueprint、不恢复 native C++ 函数体，也不伪造 cooking、加密或缺失数据。Epic Blueprint Header View 仅作为声明范围参考，不作为运行时依赖或实现桥接。
 >
 > 本文是当前项目唯一权威的重构目标。源码与测试仍是“当前已经实现什么”的唯一依据；本文只定义“接下来要实现什么”。旧版输出、Semantic JSON 1.x 和单资产设计文档均为历史资料，不得继续作为新功能的目标架构。
 
