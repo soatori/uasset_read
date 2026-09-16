@@ -76,6 +76,33 @@
           }
         }
       }
+    },
+    "ALS_AnimBP.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {
+        "EXPORT_TRAILING_BYTES_UNCONSUMED": {
+          "editor_only": {
+            "max": 577
+          },
+          "known_unimplemented": {
+            "max": 1251
+          },
+          "unexpected": {
+            "max": 3
+          }
+        },
+        "name_index_out_of_range": {
+          "recovered_corruption": {
+            "max": 1
+          }
+        }
+      },
+      "opt_in": true
     }
   }
 }
