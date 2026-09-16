@@ -22,6 +22,7 @@ import copy
 from functools import lru_cache
 import hashlib
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -1080,7 +1081,63 @@ def test_quality_baseline_fail_paths(monkeypatch, entry, diags, match):
         _assert_quality_baseline(SimpleNamespace(diagnostics=diags), name)
 
 
-@pytest.mark.parametrize("sample_name", sorted(QUALITY_BASELINE["samples"]))
+def _quality_baseline_include_opt_in() -> bool:
+    return os.environ.get("UASSET_QUALITY_OPT_IN") == "1"
+
+
+def _quality_baseline_sample_names(
+    include_opt_in: bool,
+    samples: dict | None = None,
+) -> list[str]:
+    src = QUALITY_BASELINE["samples"] if samples is None else samples
+    names = []
+    for name, entry in src.items():
+        if entry.get("opt_in") and not include_opt_in:
+            continue
+        names.append(name)
+    return sorted(names)
+
+
+def test_quality_baseline_sample_names_excludes_opt_in_by_default():
+    baseline = {
+        "samples": {
+            "A.uasset": {"opt_in": False},
+            "B.uasset": {"opt_in": True},
+            "C.uasset": {},
+        }
+    }
+    names = _quality_baseline_sample_names(
+        False,
+        samples=baseline["samples"],
+    )
+    assert names == ["A.uasset", "C.uasset"]
+
+
+def test_quality_baseline_sample_names_includes_opt_in_when_enabled():
+    baseline = {
+        "samples": {
+            "A.uasset": {"opt_in": False},
+            "B.uasset": {"opt_in": True},
+        }
+    }
+    names = _quality_baseline_sample_names(
+        True,
+        samples=baseline["samples"],
+    )
+    assert names == ["A.uasset", "B.uasset"]
+
+
+def test_quality_baseline_opt_in_env_flag(monkeypatch):
+    monkeypatch.setenv("UASSET_QUALITY_OPT_IN", "1")
+    assert _quality_baseline_include_opt_in() is True
+    monkeypatch.delenv("UASSET_QUALITY_OPT_IN", raising=False)
+    assert _quality_baseline_include_opt_in() is False
+
+
+@pytest.mark.parametrize(
+    "sample_name",
+    _quality_baseline_sample_names(_quality_baseline_include_opt_in()),
+)
 def test_quality_baseline_diagnostics(sample_name):
     from uasset_read.package import parse_package_document
     from uasset_read.projection import project_document
