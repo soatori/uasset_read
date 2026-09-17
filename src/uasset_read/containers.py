@@ -102,7 +102,7 @@ def _inspect_utoc(path: Path) -> ContainerReport:
             diagnostics=[_diag(code, str(exc))],
         )
 
-    entries = [ContainerEntry(entry_id, offset, size, compression) for entry_id, offset, size, compression in toc.iter_entries()]
+    entries = [ContainerEntry(*entry) for entry in toc.iter_entries()]
     diagnostics = [
         _diag(
             "CHUNK_BYTES_UNAVAILABLE",

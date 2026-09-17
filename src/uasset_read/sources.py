@@ -108,7 +108,7 @@ class CompositeSource:
         cursor = offset
         chunks: list[bytes] = []
         start = 0
-        for (seg_name, src), seg_size in zip(self._segments, self._sizes):
+        for (_seg_name, src), seg_size in zip(self._segments, self._sizes):
             if remaining <= 0:
                 break
             if cursor >= start + seg_size:
