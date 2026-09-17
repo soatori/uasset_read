@@ -795,10 +795,10 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - manifest 不能由测试自动改写。新增或修改预期值必须先核对样本与 UE 源码，再由评审确认。
 - 不提交墙钟耗时阈值。性能门禁只使用确定性的 bytes、count、range、pagination 和 resource budget。
 - 测试代码只放在 `tests/`；根目录和 `scripts/` 不增加独立验证程序。一次性调查使用命令行或未跟踪的 `temp/` 输出。
-- 标准库 AST 门禁要求：
-  - `tests/` 根目录的正式 Python 测试文件集合由 `tests/test_core.py::test_test_suite_structure_gate` 锁定，当前为五个：`test_core.py`（核心单元与结构门禁）、`test_samples.py`（manifest 驱动的真实样本）、`test_blueprint_decode.py`、`test_blueprint_graph.py`、`test_size_baseline.py`（体积门禁）。新增第六个文件必须同时修改该门禁并说明为何不能归入现有文件；唯一允许的永久子目录仍为 `tests/samples/`。
-  - `test_core.py` 只能使用顶层 `test_*` 函数；拒绝测试类、参数化 decorator、动态 `test_*` 赋值，从而使 AST 数量等于 pytest 收集项。
-  - 核心测试收集项由 `test_test_suite_structure_gate` 以 `len(funcs) == N` 锁定（当前 N=13）；raising N 需作为 deliberate, reviewable diff；样本参数项不设上限。
+- 标准库 AST 门禁要求（策略门禁，2026-09-16 Task 1 起替代旧的精确清单/计数锁定）：
+  - `tests/` 根目录的正式 Python 测试文件由 `tests/test_core.py::test_test_suite_structure_gate` 以策略检查锁定：至少存在根目录 `test_*.py` 文件，且必须包含 `test_core.py`（核心单元与结构门禁）、`test_samples.py`（manifest 驱动的真实样本）、`test_size_baseline.py`（体积门禁）；每个根测试文件必须至少收集到一个 `test_*` 函数。不再锁定精确文件清单或精确函数计数，新增测试文件无需改门禁。
+  - 允许的永久子目录为 `tests/samples/` 与 `tests/serialization/`（门禁断言 `{samples, serialization}`，忽略 `__pycache__`）。
+  - `test_core.py` 只能使用顶层 `test_*` 函数；拒绝测试类、参数化 decorator、动态 `test_*` 赋值，从而使 AST 数量等于 pytest 收集项；样本文件的参数化项不设上限。
 - pytest cache、`__pycache__`、日志、golden 调试转储和本机路径不得进入版本控制。
 
 ### 必须存在的回归

@@ -1,14 +1,17 @@
 """Small permanent suite for stable cross-cutting contracts.
 
-Exactly ten top-level ``test_*`` functions (design: test-organization
-constraints). Fixture-sample contracts live in ``test_samples.py``. Case
-bodies folded from the former ``tests/contract/`` layer are kept verbatim;
-the case name appears in the failure message.
+Top-level ``test_*`` functions only (policy structure gate: no test classes,
+no parametrizing decorators, no dynamic ``test_*`` assignment in this file).
+Fixture-sample contracts live in ``test_samples.py``. Case bodies folded from
+the former ``tests/contract/`` layer are kept verbatim; the case name appears
+in the failure message.
 
 Like ``test_samples.py`` this file feeds duck-typed stub archives/summaries to internal
 helpers, so the strict-object rules are off; ``src/uasset_read`` is the pyright gate (ci.yml).
 
-Top-level test count is locked by ``test_test_suite_structure_gate`` (currently 19).
+The test-tree shape is locked by ``test_test_suite_structure_gate`` as a
+policy (required files, per-file test functions, subdirs, strict test_core
+shape), not by an exact filename list or function count.
 """
 
 # pyright: reportArgumentType=false, reportAttributeAccessIssue=false
@@ -3187,44 +3190,45 @@ def test_read_name_table_returns_partial_on_parse_error():
 
 
 def test_test_suite_structure_gate():
+    """Policy gate for the test tree (v3 contract freeze, Task 1).
+
+    Replaces the brittle exact-filename list and ``len(funcs) == N`` lock:
+    every root ``test_*.py`` must exist and collect at least one ``test_*``
+    function, the three baseline files are required, permanent subdirs stay
+    ``{samples, serialization}``, and ``test_core.py`` itself keeps the strict
+    class-free / decorator-free / assignment-free top-level shape. Sample
+    files may parametrize; their parameterized items are not capped.
+    """
     import ast
 
     root = Path(__file__).parent
-    test_files = sorted(p.name for p in root.glob("test_*.py"))
-    expected = [
-        "test_blueprint_decode.py",
-        "test_blueprint_graph.py",
-        "test_bulk_data_parser.py",
-        "test_capability_hardening.py",
-        "test_cli.py",
-        "test_core.py",
-        "test_diagnostics_reason.py",
-        "test_handler_capability_ledger.py",
-        "test_memory_safety.py",
-        "test_parse_hardening.py",
-        "test_payload_extraction.py",
-        "test_review_pins.py",
-        "test_samples.py",
-        "test_size_baseline.py",
-        "test_unversioned_fixtures.py",
-    ]
-    assert test_files == expected
+    paths = sorted(root.glob("test_*.py"))
+    assert paths
+    assert {"test_core.py", "test_samples.py", "test_size_baseline.py"} <= {p.name for p in paths}
     subdirs = {p.name for p in root.iterdir() if p.is_dir() and p.name != "__pycache__"}
     assert subdirs == {"samples", "serialization"}
-    tree = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
-    funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
-    # 19: G2 process-local PackageDocument cache contract (Wave B), the
-    # Agent-tools structured parse-error envelope pair (missing file /
-    # ParseError), and ExportMap/NameMap ParseError table recovery.
-    assert len(funcs) == 19
-    assert not any(isinstance(n, ast.ClassDef) for n in tree.body)
-    # The design bans decorators on test functions; cache helpers like
-    # _document legitimately carry @lru_cache, so the check is scoped to
-    # the collected test_* defs (the plan's gate body over-blocked here).
-    assert all(not n.decorator_list for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_"))
+    for path in paths:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        collected = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_")
+        ]
+        assert collected, f"{path.name} contains no test functions"
+    # test_core keeps the strict AST shape so its top-level AST count equals
+    # pytest collection: no classes, no decorators on top-level test_* defs
+    # (sample files may use @pytest.mark.parametrize), no dynamic test_*
+    # assignment.
+    core = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
+    assert not any(isinstance(n, ast.ClassDef) for n in core.body)
+    assert all(
+        not n.decorator_list
+        for n in core.body
+        if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")
+    )
     assigned = {
         t.id
-        for n in tree.body
+        for n in core.body
         if isinstance(n, ast.Assign)
         for t in n.targets
         if isinstance(t, ast.Name) and t.id.startswith("test_")
