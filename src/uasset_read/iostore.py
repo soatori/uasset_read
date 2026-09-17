@@ -34,6 +34,7 @@ hash fields are write-only for the current read-only surface and are skipped.
 from __future__ import annotations
 
 import struct
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -171,6 +172,22 @@ class IoStoreToc:
         """Directory-index names that address an ExportBundle chunk (i.e. packages)."""
         bundles = {c.index for c in self.package_chunks}
         return tuple(f for f in self.files if f.chunk_index in bundles)
+
+    def iter_entries(self) -> Iterator[tuple[str, int, int, str | None]]:
+        """Flat TOC-entry projection: ``(entry_id, offset, size, compression)``.
+
+        This is the data-only iteration ``inspect_container`` wraps so
+        classification never re-parses the TOC. ``compression`` is
+        ``"compressed"`` when the entry meta carries the compressed flag and
+        ``None`` otherwise; per-block codec names are not claimed here.
+        """
+        for chunk in self.chunks:
+            yield (
+                f"chunk:{chunk.index}",
+                chunk.offset,
+                chunk.length,
+                "compressed" if chunk.compressed else None,
+            )
 
 
 def _array_count(blob: bytes, pos: int, element_size: int, what: str, limit: int) -> int:

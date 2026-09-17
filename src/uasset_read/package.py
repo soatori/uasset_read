@@ -9,6 +9,7 @@ from typing import Literal
 import logging
 
 from uasset_read.archive import FArchive
+from uasset_read.containers import inspect_container
 from uasset_read.exceptions import ParseError
 from uasset_read.models.document import PackageDocument
 
@@ -279,6 +280,17 @@ def parse_package_document(
     it does not promise content hashing for same-size/same-mtime replacements.
     Callers must treat the returned document as read-only.
     """
+    path = Path(file_path)
+    if path.suffix.lower() in {".utoc", ".pak"}:
+        report = inspect_container(path)
+        # Task 3 may return the explicit Zen-unavailable result here. For
+        # Task 2, surface the report as structured unavailability — never a
+        # silent Legacy parse of container metadata bytes. BaseException
+        # rejects keyword arguments, so code/diagnostics ride as attributes.
+        error = ParseError(f"container input not yet parseable as a package: kind={report.kind}")
+        error.code = "CONTAINER_PACKAGE_UNSUPPORTED"
+        error.diagnostics = report.diagnostics
+        raise error
     bundle = open_package_bundle(str(file_path))
     main = Path(bundle.main_path).resolve()
     st = main.stat()
