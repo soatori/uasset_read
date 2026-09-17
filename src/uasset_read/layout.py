@@ -67,26 +67,31 @@ def _validated_legacy(source: ByteSource) -> bool:
 
     # Validate through the existing summary reader: TotalHeaderSize, custom
     # versions, and the name/import/export counts must parse with sane
-    # bounds. Offsets index the full package address space, so probe a
-    # bounded prefix (summary fields sit in the first 64 KiB for supported
-    # UE4/UE5 layouts) and re-check counts against the full source size.
+    # bounds. read_package_summary validate_offset()s the map offsets
+    # (ExportOffset, CellExportOffset, ...) against the archive size without
+    # seeking to them, so a fixed 64 KiB window alone would reject any real
+    # package whose header maps sit beyond the window. Start with the cheap
+    # bounded probe and escalate once to the full source before declaring
+    # the candidate unknown. Absurd counts still reject the candidate.
     from uasset_read.archive import ByteArchive
-    from uasset_read.exceptions import ParseError
     from uasset_read.serializers.package_summary import read_package_summary
 
-    probe_cap = 65536
-    read_len = probe_cap if size is None else min(size, probe_cap)
-    try:
-        data = source.read_at(0, read_len)
-    except Exception:
-        return False
-    if len(data) < 8:
-        return False
-    try:
-        summary, _total_decompressed = read_package_summary(ByteArchive(data))
-    except ParseError:
-        return False
-    except Exception:
+    caps = [65536]
+    if size is not None and size > 65536:
+        caps.append(size)
+    summary = None
+    for cap in caps:
+        read_len = cap if size is None else min(size, cap)
+        try:
+            data = source.read_at(0, read_len)
+            summary, _total_decompressed = read_package_summary(ByteArchive(data))
+        except Exception:
+            # ParseError (offset beyond this window / absurd counts) or any
+            # other summary failure: try the next larger window, else unknown.
+            summary = None
+            continue
+        break
+    if summary is None:
         return False
     if summary.total_header_size <= 0:
         return False

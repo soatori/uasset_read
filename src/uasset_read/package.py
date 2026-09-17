@@ -243,6 +243,42 @@ def _parse_cached(
     from .parsers.legacy_reader import LegacyPackageReader
 
     bundle = open_package_bundle(resolved)
+    # Layout dispatch: detection SELECTS the reader from validated main-file
+    # bytes before the Legacy reader is opened or run — never a post-read
+    # stamp. Probe the main file only; summary fields never live in .uexp.
+    main_source = FileSource(Path(bundle.main_path))
+    layout = PackageLayoutDetector().detect(main_source)
+    if layout.kind != "legacy":
+        # Structured refusal (BaseException rejects kwargs, so code and
+        # diagnostics ride as attributes — CONTAINER_PACKAGE_UNSUPPORTED
+        # pattern). Zen/unknown bytes never reach a Legacy parse.
+        if layout.kind == "zen":
+            error = ParseError(
+                f"validated zen layout is not decodable from loose package bytes "
+                f"(reason={layout.detection_reason}): {bundle.main_path}"
+            )
+            error.code = "ZEN_PACKAGE_UNSUPPORTED"
+            diag_reason = "known_unimplemented"
+        else:
+            error = ParseError(
+                f"unknown package layout (reason={layout.detection_reason}); "
+                f"refusing Legacy parse: {bundle.main_path}"
+            )
+            error.code = "LAYOUT_UNKNOWN_UNSUPPORTED"
+            diag_reason = "unexpected"
+        error.diagnostics = [
+            Diagnostic(
+                severity="error",
+                code=error.code,
+                message=str(error),
+                stage="package.layout",
+                offset=0,
+                size=main_source.size(),
+                effect="parse_failure",
+                reason=diag_reason,
+            )
+        ]
+        raise error
     archive = bundle.open_archive(tolerant=tolerant)
     try:
         reader = LegacyPackageReader(
@@ -257,25 +293,8 @@ def _parse_cached(
             archive=archive,
             main_path=bundle.main_path,
         )
-        # Layout dispatch: stamp the detector's verdict so an unrecognized
-        # input can never be mislabeled "legacy". Probe the main file only —
-        # summary fields never live in the .uexp splice region.
-        layout = PackageLayoutDetector().detect(FileSource(Path(bundle.main_path)))
-        if layout.kind == "legacy":
-            document.layout = "legacy"
-        else:
-            document.layout = layout.kind
-            document.reader_diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="LAYOUT_REVALIDATION_FAILED",
-                    message=(
-                        f"detector returned {layout.kind}/{layout.detection_reason} "
-                        "after a successful Legacy read"
-                    ),
-                    stage="package.layout",
-                )
-            )
+        # Detection already validated these bytes as legacy before the read.
+        document.layout = "legacy"
         return document
     finally:
         archive.close()
