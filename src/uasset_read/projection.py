@@ -11,6 +11,11 @@ from typing import Any
 from .models.document import PackageDocument
 from .models.object_model import Dependency, ObjectRecord
 
+# Envelope schema major for project_document() output. Deliberately lives on
+# the projection layer: PackageDocument stays a package-level aggregate with
+# no presentation-version state (v3 contract freeze, Task 1).
+FORMAT_VERSION = "3.0"
+
 
 def select_objects(
     doc: PackageDocument,
@@ -212,7 +217,9 @@ def project_document(
     # Build result
     result: dict[str, Any] = {
         "format": "uasset_read.package",
-        "format_version": "2.0",
+        "format_version": FORMAT_VERSION,
+        "projections": [],
+        "sidecars": [],
         "view": view,
         "depth": depth,
         "source": {"kind": doc.source.kind, "name": doc.source.name, "size": doc.source.size},

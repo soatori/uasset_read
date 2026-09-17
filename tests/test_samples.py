@@ -34,7 +34,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = Path(__file__).parent / "samples"
 MANIFEST = SAMPLES / "manifest.json"
 SCHEMA = json.loads(
-    (ROOT / "docs" / "designs" / "contract" / "package_document_v2.schema.json").read_text(encoding="utf-8")
+    (ROOT / "docs" / "designs" / "contract" / "package_document_v3.schema.json").read_text(encoding="utf-8")
 )
 
 _MANIFEST_DATA = json.loads(MANIFEST.read_text(encoding="utf-8"))

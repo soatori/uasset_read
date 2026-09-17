@@ -8,7 +8,7 @@ Adopt an in-place, modular rewrite of the parser core. Keep `PackageDocument` as
 
 The implementation is pure Python 3.10+ and has no runtime bridge to CUE4Parse, UAssetAPI, UAssetGUI, UnrealBPInspect, FModel, or Unreal Editor. Those projects remain external comparison evidence only.
 
-Backward compatibility is not a requirement for the refactored output. The package document may move to a new major format version while retaining the package-first model and explicit capability states.
+Backward compatibility is not a requirement for the refactored output. The package document moves to the new major format version `format_version: "3.0"` (an envelope field, not state on `PackageDocument`) while retaining the package-first model and explicit capability states. One input package has one canonical serialized output document; type-specific projections are embedded in that document as `projections[]` records with explicit status/completeness and provenance, physical `sidecars[]` are created only when a payload or size boundary makes a single physical file unsafe, and the committed contract is `docs/designs/contract/package_document_v3.schema.json`.
 
 ## Goal
 
@@ -34,7 +34,7 @@ The project will reproduce the useful declaration output and extend it with a se
 
 - Loose `.uasset` and `.umap` packages.
 - `.uexp`, `.ubulk`, and `.uptnl` sidecars.
-- Pak entries.
+- Traditional Pak entries only when a validated FPak fixture is available; an IoStore wrapper with a `.pak` suffix is classified truthfully and is not treated as FPak evidence.
 - IoStore/Zen package sources when the required index, chunk, compression, and key information is available.
 - Legacy and Zen packages through separate binary readers.
 - Tagged and unversioned properties through separate readers.
@@ -43,7 +43,7 @@ The project will reproduce the useful declaration output and extend it with a se
 - Kismet expressions and normalized bytecode instructions.
 - Static basic-block/control-flow, call-target, and variable read/write analysis.
 - Material expression nodes, pins, links, parameters, and material function references when editor data exists.
-- JSON/package projections and C++ header/source projections from the same `PackageDocument`.
+- One JSON/package document per input package, containing structured data plus C++ header/source and table projections from the same `PackageDocument`.
 
 ### Explicitly excluded
 
@@ -124,14 +124,17 @@ The existing expression tree remains an input/compatibility projection, but the 
 
 ```text
 BytecodeInstruction
-  offset
+  statement_index
+  logical_end
+  serialized_start
+  serialized_end
   opcode
   operands
   expression
   reads[]
   writes[]
   call_target
-  jump_target
+  jump_target_statement_index
   source_node_id
 
 BasicBlock
@@ -146,6 +149,8 @@ ControlFlowEdge
 ```
 
 `exec_chains` becomes a derived summary from this model. It must not be described as runtime execution order.
+
+`StatementIndex` and serialized file offsets are different coordinate systems. CFG construction and jump resolution use logical statement indexes; diagnostics and byte provenance use serialized ranges. One canonical instruction represents one top-level script statement. Nested Kismet expressions remain operand trees and are not flattened into additional CFG instructions.
 
 ### Static Blueprint analysis
 
@@ -168,9 +173,11 @@ Material semantics include material properties, expression nodes, input/output p
 
 The C++ layer is a projection from the canonical semantic IR, never a second parser.
 
+The projection modules live outside the parser package. Declaration correctness is checked against a committed normalized oracle for a user-owned Blueprint fixture; rendering tests must compare parent class, property types, function signatures, components, and dispatchers, not merely search for `UCLASS`/`UPROPERTY` tokens.
+
 ### Declaration mode
 
-Produces a C++-style header containing:
+Produces C++-style header content containing:
 
 - Blueprint parent class;
 - `UPROPERTY`-style variables and types;
@@ -183,7 +190,7 @@ This is the project’s equivalent of Blueprint Header View.
 
 ### Migration mode
 
-Produces `.h` and `.cpp` files. Known control-flow, assignments, branches, loops, literals, pure operators, and resolvable function calls are rendered as C++ AST nodes. Unsupported or ambiguous operations are rendered as valid diagnostic-bearing migration statements and recorded in a sidecar report; no unknown symbol or behavior is fabricated.
+Produces C++ header/source content embedded in the canonical package document. Known control-flow, assignments, branches, loops, literals, pure operators, and resolvable function calls are rendered as C++ AST nodes. Unsupported or ambiguous operations are rendered as valid diagnostic-bearing migration statements and recorded in the projection diagnostics; no unknown symbol or behavior is fabricated.
 
 The generator must distinguish:
 
@@ -193,6 +200,14 @@ The generator must distinguish:
 - `unavailable`: source bytes or editor data are absent.
 
 Generated C++ is therefore an auditable migration artifact, not a promise of binary/runtime equivalence.
+
+## Single-file output contract
+
+The canonical output boundary is one serialized document for each input `.uasset` or `.umap` package. Package envelope data, every addressable object, semantic IR projections, type-aware projections, capability states, diagnostics, and payload references are represented in that document.
+
+The document stores C++ header/source text, CSV-compatible table text, and structured JSON data as embedded projection records. These records are derived from the same `PackageDocument`; no projection reparses bytes or becomes a second source of truth. The first implementation does not expose a user-selected output split mode.
+
+Automatic physical splitting is permitted only when required by a hard safety boundary, such as an oversized output or a large raw/compressed/bulk payload that cannot be safely represented in the text document. The main document remains authoritative and records each sidecar's relative path, size, hash, source range, and reason. Assets are not split merely because they have multiple graphs, functions, exports, or type-specific projections.
 
 ## Capability and error contract
 
@@ -206,6 +221,8 @@ The parser must never label a document complete merely because the package heade
 - payload reference when raw bytes can be extracted.
 
 Unknown bytes must be measurable. Trailing bytes, unsupported control bits, missing sidecars, missing IoStore chunks, encryption, and stripped cooked data are first-class outcomes.
+
+Byte accounting is scoped. Every requested non-empty export window has a non-empty set of leaf regions that exactly tiles the window without gaps or overlaps. An empty region collection can never satisfy completeness. Each non-decoded leaf carries a reason and, when recoverable, a payload reference.
 
 ## Migration constraints
 
@@ -222,7 +239,8 @@ Unknown bytes must be measurable. Trailing bytes, unsupported control bits, miss
 2. UE5.8 Blueprint exposes `K2Node_IfThenElse`, `EX_JumpIfNot`, and explicit true/false control-flow edges.
 3. StackOBot Material exposes 42 exports, 39 material expressions, expression properties, and links where the package contains them.
 4. Unversioned samples either decode through schema or expose bounded opaque fields; no field is guessed from position alone.
-5. Loose sidecars, Pak, and available IoStore/Zen sources can be listed, extracted, and reparsed; unavailable keys/chunks/codecs produce structured unavailable diagnostics.
-6. Generated declaration output covers Blueprint variables, functions, components, and dispatchers; migration output contains a traceable mapping for every function instruction.
-7. Every requested byte range is decoded, opaque, payload-addressable, or unavailable with a reason.
-8. The complete test suite, structural baseline, size baseline, and sample quality gates pass.
+5. Loose sidecars and committed IoStore fixtures prove metadata/classification and available chunk reads; extraction/reparse is required only where committed bytes and codecs exist. Traditional Pak and real Zen-package parsing remain explicitly unverified until redistributable fixtures are added.
+6. Generated declaration AST matches the normalized UE5.8 oracle for parent, variables/types, function signatures, components, and dispatchers; migration output contains a dual-offset traceable mapping for every top-level function instruction.
+7. Every requested non-empty export range is exactly tiled by decoded, opaque, payload-addressable, or unavailable leaves with reasons where required.
+8. Each sampled input package produces one canonical output document containing its package, object, semantic, projection, capability, and diagnostic data; no ordinary asset-family or graph boundary causes a split.
+9. The complete test suite, structural baseline, size baseline, and sample quality gates pass.

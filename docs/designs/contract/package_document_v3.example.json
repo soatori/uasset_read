@@ -1,6 +1,6 @@
 {
   "format": "uasset_read.package",
-  "format_version": "2.0",
+  "format_version": "3.0",
   "view": "semantic",
   "depth": "asset",
   "source": {
@@ -24,19 +24,37 @@
       "table_index": 0,
       "name": "Default__ABP_RifleAnimLayers_C",
       "class": "AnimBlueprintGeneratedClass",
+      "class_ref": { "table": "import", "index": 3 },
+      "outer_ref": null,
+      "super_ref": null,
+      "template_ref": null,
       "roles": ["class_default_object"],
       "serial_region": { "offset": 0, "size": 0 },
-      "status": { "parse": "complete", "semantic": "not_requested" }
+      "status": { "parse": "complete", "semantic": "not_requested" },
+      "diagnostics": []
     },
     {
       "id": "export:1",
       "table_index": 1,
       "name": "ABP_RifleAnimLayers",
       "class": "AnimBlueprint",
+      "class_ref": { "table": "import", "index": 7 },
+      "outer_ref": null,
+      "super_ref": null,
+      "template_ref": null,
       "roles": ["asset"],
       "serial_region": { "offset": 128, "size": 3456 },
       "status": { "parse": "complete", "semantic": "complete" },
-      "properties": {},
+      "properties": [
+        {
+          "name": "BlueprintDisplayName",
+          "type": "StrProperty",
+          "occurrence": 0,
+          "array_index": null,
+          "value_range": { "offset": 160, "size": 22 },
+          "value": "Rifle Anim Layers"
+        }
+      ],
       "semantic": {
         "kind": "anim_blueprint",
         "graphs": [],
@@ -54,6 +72,10 @@
       "table_index": 2,
       "name": "ABP_RifleAnimLayers_C",
       "class": "AnimBlueprintGeneratedClass",
+      "class_ref": { "table": "import", "index": 3 },
+      "outer_ref": { "table": "export", "index": 1 },
+      "super_ref": { "table": "import", "index": 4 },
+      "template_ref": null,
       "roles": ["asset", "generated_class"],
       "serial_region": { "offset": 3584, "size": 2048 },
       "status": { "parse": "complete", "semantic": "partial" },
@@ -72,6 +94,24 @@
     { "kind": "default_object_of", "from": "export:0", "to": "export:2" }
   ],
   "dependencies": [],
+  "projections": [
+    {
+      "source_object_id": "export:1",
+      "kind": "blueprint_declaration",
+      "media_type": "text/x-c++",
+      "embedded": true,
+      "status": "translated",
+      "completeness": "partial",
+      "dependencies": ["export:2"],
+      "diagnostics": [],
+      "provenance": {
+        "derived_from": ["export:1", "export:2"],
+        "generator": "blueprint_declaration_projector"
+      },
+      "content": "UCLASS(BlueprintType)\nclass UABP_RifleAnimLayers : public UAnimInstance\n{\n    GENERATED_BODY()\n};"
+    }
+  ],
+  "sidecars": [],
   "payloads": [],
   "diagnostics": [],
   "summary": {

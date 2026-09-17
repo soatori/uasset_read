@@ -10,6 +10,10 @@ status: target
 
 > **2026-09-16 approved target amendment**：在保留 package-first、统一对象模型和结构化诊断原则的前提下，下一轮允许进行不保证旧输出兼容性的纯 Python 模块化重构。目标输出可升级为 `format_version: "3.0"`；Blueprint/Kismet 目标由 expression 摘要扩展为指令 IR、CFG、静态调用/变量读写分析，并增加从同一语义 IR 投影 C++ 声明和迁移代码的能力。该 C++ 投影不执行 Blueprint、不恢复 native C++ 函数体，也不伪造 cooking、加密或缺失数据。Epic Blueprint Header View 仅作为声明范围参考，不作为运行时依赖或实现桥接。
 >
+> **2026-09-17 clarification**：2026-09-10 Gate K 退役的是旧的字符串拼接式 `cpp_code`/伪代码链；它仍是 v2 当前状态的历史事实，但不禁止 2026-09-16 批准的 v3 typed IR → C++ projection。后文提到“C++ 已退役/非迁移目标”时，除非明确写为 v3 target，均应理解为旧 v2 链的历史状态。v3 `format_version` 仍属于投影信封，不向 `PackageDocument` 增加展示层版本状态。
+>
+> **2026-09-16 v3 contract freeze（Task 1）**：(1) 下一实现波是纯 Python 模块化重写；(2) 输出 schema major 固定为 `format_version: "3.0"`（信封字段，由 `projection.py` 的 `FORMAT_VERSION` 注入，不落到 `PackageDocument`；契约文件为 `docs/designs/contract/package_document_v3.schema.json`，v2 契约文件已删除）；(3) Blueprint/Kismet 公共逻辑目标为 instruction IR + CFG + 静态调用/变量读写分析；(4) C++ declaration/migration projection 从同一语义 IR 派生，不是第二解析器；(5) Gate K 只退役旧字符串伪代码链，不禁止新的 typed v3 projection；(6) Epic Blueprint Header View（`Engine/Plugins/Editor/BlueprintHeaderView/`）仅作 declaration-scope 参考——它在编辑器 UI 预览 C++ header，不导出 `.h`/`.cpp` 文件，也不是运行时依赖；(7) type-aware projection 是 v3 公共目标：Blueprint declaration/migration、Material graph/editor-builder、table/curve/struct/enum data、physical asset 的 metadata/payload 引用；没有任何资产族被要求产出 C++；(8) 每个内嵌 projection 都带显式 capability/status 与 provenance；不可用或低置信信息不得用伪造源码填补。
+>
 > 本文是当前项目唯一权威的重构目标。源码与测试仍是“当前已经实现什么”的唯一依据；本文只定义“接下来要实现什么”。旧版输出、Semantic JSON 1.x 和单资产设计文档均为历史资料，不得继续作为新功能的目标架构。
 
 ## Executive Summary
@@ -26,7 +30,7 @@ status: target
 6. 默认输出面向检查与 Agent；raw/debug/decode 通过投影和深度参数按需展开。
 7. 大型 payload 永不默认内嵌 JSON，只返回可定位、可提取的描述符。
 8. 解析核心产生结构化 diagnostics，不配置全局日志；CLI 决定是否写日志。
-9. Blueprint/Kismet 反编译保留为可选扩展（bytes → expressions + 结构化诊断）；C++ 伪代码文本生成已于 2026-09-10 Gate K 退役。公共函数逻辑表示为 `semantic.functions[]` 的表达式摘要 / decode 级 expression tree（见 D1 与 slimming plan K0）。
+9. 当前 v2 的 Blueprint/Kismet 能力是 bytes → expressions + 结构化诊断；旧 C++ 伪代码文本链已于 2026-09-10 Gate K 退役。v3 目标改为 top-level instruction IR + 双偏移 provenance + CFG，并从 typed semantic IR 生成独立 C++ projection；不得复活旧 `cpp_code` 字段或字符串拼接链。
 
 ## Authority and Reading Rules
 
@@ -66,7 +70,7 @@ status: target
 - `.uasset` 写回或二进制等价重建。
 - UE1/UE2/UE3 通用兼容承诺。
 - 默认内嵌纹理、音频或任意大型 BulkData。
-- 把 Blueprint/Kismet 反编译或任何 C++ 文本生成作为核心 package 读取的前置条件（C++ 伪代码生成已于 2026-09-10 Gate K 退役）。
+- 把 Blueprint/Kismet 分析或 C++ projection 作为核心 package 读取成功的前置条件。旧 v2 C++ 伪代码链保持退役；v3 typed projection 是后置、可选、可诊断的输出能力。
 - 为每个资产类预先建立独立接口、工厂和目录。
 - 为尚无真实样本或 UE 源码证据的格式建立猜测性解析器。
 
@@ -348,7 +352,7 @@ class ObjectRecord:
 
 契约保留、当前读取器尚未发射的 kind（方向以契约示例为准，从主语侧表述）：
 
-- `generated_class_of` — `from` 是 `to` 的生成类（见 `package_document_v2.example.json`：`export:2`（`ABP_RifleAnimLayers_C`）→ `export:1`（`ABP_RifleAnimLayers`））
+- `generated_class_of` — `from` 是 `to` 的生成类（见 `package_document_v3.example.json`：`export:2`（`ABP_RifleAnimLayers_C`）→ `export:1`（`ABP_RifleAnimLayers`））
 - `default_object_of` — `from` 是 `to` 的默认对象
 - `references` — `from` 引用 `to`
 
@@ -403,12 +407,12 @@ class AssetHandler(Protocol):
 
 ### 顶层规则
 
-目标公共格式固定为 `uasset_read.package`：
+目标公共格式固定为 `uasset_read.package`，当前目标 schema major 为 `format_version: "3.0"`（v2 的 `"2.0"` 已随 S1 归档，见 `docs/designs/archive/2026-08-31-v2-contract-stability.md`）：
 
 ```json
 {
   "format": "uasset_read.package",
-  "format_version": "2.0",
+  "format_version": "3.0",
   "view": "semantic",
   "depth": "asset",
   "source": {},
@@ -416,6 +420,8 @@ class AssetHandler(Protocol):
   "objects": [],
   "relations": [],
   "dependencies": [],
+  "projections": [],
+  "sidecars": [],
   "payloads": [],
   "diagnostics": [],
   "summary": {}
@@ -429,7 +435,7 @@ class AssetHandler(Protocol):
 ```json
 {
   "format": "uasset_read.package",
-  "format_version": "2.0",
+  "format_version": "3.0",
   "view": "semantic",
   "depth": "asset",
   "source": {
@@ -478,6 +484,8 @@ class AssetHandler(Protocol):
     }
   ],
   "dependencies": [],
+  "projections": [],
+  "sidecars": [],
   "payloads": [],
   "diagnostics": [],
   "summary": {
@@ -486,6 +494,8 @@ class AssetHandler(Protocol):
   }
 }
 ```
+
+`projections[]` 承载 type-aware 内嵌投影记录（Blueprint declaration/migration、Material graph、table data、metadata 引用；每条带 `status`/`completeness` 与 provenance），`sidecars[]` 只在 payload 或体积硬边界迫使物理拆分时出现并记录相对路径、大小、SHA-256、原因与序列化源区间。`next_offset`/`truncation` 只对有界分页响应有效，canonical writer 不输出它们。
 
 ### View 与 Depth
 
@@ -571,10 +581,10 @@ payload 提取使用单独 API/tool（当前恒返回 `PAYLOAD_EXTRACTION_DEFERR
 
 ### Schema 策略
 
-- 一个 package envelope schema。
+- 一个 package envelope schema（`docs/designs/contract/package_document_v3.schema.json`，`format_version` const `"3.0"`）。
 - `objects[].semantic.kind` 使用 discriminator 选择可选领域定义。
 - 领域 schema 不能重新定义 package 公共字段。
-- Schema 版本只在不兼容公共契约变化时升级。
+- Schema 版本只在不兼容公共契约变化时升级；v3 是有意的 breaking rewrite，v2 冻结已归档为 historical。
 - Semantic JSON 1.x 已删除，不再是任何投影的 output adapter；`uasset_read.package` 是唯一顶层 format，新功能不再新增 1.x 顶层 format。
 
 ## Multi-Asset Rules
@@ -723,11 +733,11 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 2. Texture/Sound metadata 与 payload descriptors。
 3. Skeleton/Mesh summary。
 4. Material/Niagara graph summary。
-5. Blueprint/AnimBlueprint/Kismet 扩展迁移（C++ 伪代码生成不在此列，2026-09-10 Gate K 退役）。
+5. Blueprint/AnimBlueprint/Kismet 扩展迁移。旧字符串式 C++ 伪代码链不在此列；v3 typed C++ projection 按 2026-09-16/17 amendment 作为新的后置 projection 实施。
 
     - Phase 4.5：graph/node/pin 解码 + declaration（parent_class/interfaces/functions）+ SCS components + NewVariables names 已迁移到 v2 `BlueprintFamilyHandler` decode 分支。fixture 测试覆盖 StackOBot/BP_CombatCharacter/ABP_RifleAnimLayers/ALS_AnimBP。
     - 已迁移（2026-09-05 核对源码与测试）：VarType（`FEdGraphPinType`）类型解码、Kismet 反编译（`blueprint.kismet` coverage）。
-    - 未迁移：C++ skeleton。parent-asset 解析已放弃（2026-09-10 Gate G，D1 §7）。C++ 伪代码生成链已退役（2026-09-10 Gate K）；函数逻辑以 expression 摘要/decode tree 公开，不再作为迁移目标。
+    - v2 当前未迁移：C++ skeleton。parent-asset 解析已放弃（2026-09-10 Gate G，D1 §7）。旧 C++ 伪代码生成链保持退役；v3 后续以 instruction/CFG semantic IR 为唯一输入实现声明和迁移 projection。
 
 退出条件：每个 handler 至少有一个真实样本、一个缺失/partial 样本和明确 coverage；handler 失败不影响同包其他对象。
 
@@ -847,7 +857,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 
 - 旧 Semantic 1.x 不再是默认 JSON。（已满足：1.x 输出路径已删除。）
 - 所有公开文档只把旧契约描述为 legacy/current historical。
-- Blueprint/Kismet 扩展在 v2 object model 上运行，或明确保留为未迁移可选能力。（已满足：graph/node/pin、declaration、SCS、VarType、Kismet 反编译均在 v2 运行；C++ skeleton 明确为未迁移 deferred；parent-asset 解析已放弃；C++ 伪代码生成已退役并由 expression 公共输出替代。）
+- v2 migration completion（历史 gate）：Blueprint/Kismet 扩展在 v2 object model 上运行，旧 C++ 伪代码链保持退役并由 expression 公共输出替代。v3 typed C++ projection 属于 2026-09-16 后续目标，不改变此历史 gate 的完成结论。
 - 旧 builder/projection/promotion 路径已删除，而不是永久并行。
 - 发行包、源码树和文档树的体积基线已记录并进入 CI/发布检查。
 - 根目录独立 Python 入口已删除，公开命令统一为 `python -m uasset_read`。
@@ -876,7 +886,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - Legacy 与 Zen 使用独立 reader。
 - Tagged 与 Unversioned 使用独立 property reader。
 - Writer 延后，第一阶段保持只读。
-- Blueprint/Kismet 字节码反编译保留为可选扩展（expressions + diagnostics，非 C++ 文本），后于 core v2。
+- v2 当前：Blueprint/Kismet 字节码反编译是可选 expressions + diagnostics。v3 目标：增加 instruction IR/CFG，并在 core package 读取之后提供 typed C++ declaration/migration projection。
 - Agent tool 是正式的有界库接口；本仓库不实现 MCP 或其他 agent transport。
 - 默认不写文件日志，不提供 CLI 日志清理；不内嵌大型 payload。
 - 最小依赖优先，但不把零依赖作为不可改变的架构限制。
@@ -907,7 +917,7 @@ UE 源码核验入口使用相对于 Unreal Engine checkout 的路径：
 - `Engine/Source/Runtime/CoreUObject/Public/UObject/PackageFileSummary.h`
 - `Engine/Source/Runtime/CoreUObject/Public/UObject/ObjectResource.h`
 - `Engine/Source/Runtime/CoreUObject/Public/UObject/PropertyTag.h`
-- `Engine/Source/Runtime/CoreUObject/Public/Serialization/PackageTrailer.h`
+- `Engine/Source/Runtime/CoreUObject/Public/UObject/PackageTrailer.h`
 - `Engine/Source/Runtime/CoreUObject/Public/Serialization/AsyncLoading2.h`
 - `Engine/Source/Runtime/CoreUObject/Internal/Serialization/ZenPackageHeader.h`
 - `Engine/Source/Runtime/Core/Public/IO/IoDispatcher.h`

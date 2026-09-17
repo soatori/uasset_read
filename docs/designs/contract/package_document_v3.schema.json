@@ -1,18 +1,18 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/soatori/uasset_read/schemas/package_document_v2.json",
-  "title": "PackageDocument v2",
-  "description": "Unified package-level output for uasset_read v2. One document per .uasset/.umap file, expressing all exports as first-class objects.",
+  "$id": "https://github.com/soatori/uasset_read/schemas/package_document_v3.json",
+  "title": "PackageDocument v3",
+  "description": "Unified package-level output for uasset_read v3 (intentional breaking rewrite of the v2 envelope). One document per .uasset/.umap file, expressing all exports as first-class objects plus embedded projection records and optional physical sidecars.",
   "type": "object",
-  "required": ["format", "format_version", "view", "depth", "source", "package", "objects", "payloads", "diagnostics", "summary"],
+  "required": ["format", "format_version", "view", "depth", "source", "package", "objects", "projections", "payloads", "diagnostics", "summary"],
   "properties": {
     "format": {
       "const": "uasset_read.package",
       "description": "Fixed format identifier."
     },
     "format_version": {
-      "const": "2.0",
-      "description": "Schema version."
+      "const": "3.0",
+      "description": "Schema version. Envelope field injected by projection.py (FORMAT_VERSION); not carried on PackageDocument."
     },
     "view": {
       "type": "string",
@@ -51,12 +51,34 @@
       },
       "description": "Package-level import dependencies. Omitted only when the requester opted the section out via projection `sections` (#631)."
     },
+    "projections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ProjectionRecord"
+      },
+      "description": "Type-aware projections embedded in the canonical document (Blueprint declaration/migration, material graph, table data, metadata references). Every record carries explicit capability/status and provenance; unavailable information is never replaced with fabricated source."
+    },
+    "sidecars": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SidecarRecord"
+      },
+      "description": "Physical sidecar files created only when a payload or size boundary makes a single physical file unsafe. Each entry records relative path, size, SHA-256, reason, and the serialized source range."
+    },
     "payloads": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/PayloadDescriptor"
       },
       "description": "Large payload descriptors (texture, audio, etc.).",
+      "x-stability": "experimental"
+    },
+    "byte_accounting": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ByteAccountingScope"
+      },
+      "description": "Complete per-object byte-accounting scopes. An object cannot be declared complete merely because its convenience property map is non-empty: every requested non-empty export window is exactly tiled by its non-empty leaf regions.",
       "x-stability": "experimental"
     },
     "diagnostics": {
@@ -72,11 +94,11 @@
     "next_offset": {
       "type": "integer",
       "minimum": 0,
-      "description": "Continuation cursor when objects were truncated."
+      "description": "Continuation cursor when objects were truncated. Valid only for bounded/paginated responses; the canonical writer omits it."
     },
     "truncation": {
       "type": "object",
-      "description": "Truncation metadata emitted when limit or max_bytes cut the page.",
+      "description": "Truncation metadata emitted when limit or max_bytes cut the page. Valid only for bounded responses; the canonical writer omits it.",
       "properties": {
         "reason": { "type": "string" },
         "total": { "type": "integer" },
@@ -163,7 +185,7 @@
     "ObjectEntry": {
       "type": "object",
       "required": ["id", "name"],
-      "description": "id/name are the only keys that survive a projection `fields` trim; untrimmed projections carry roles/status too.",
+      "description": "id/name are the only keys that survive a projection `fields` trim; untrimmed projections carry roles/status too. The richer identity fields (class_ref/outer_ref/super_ref/template_ref, per-object diagnostics, serial source ranges, ordered properties) are part of the canonical v3 envelope as they land.",
       "properties": {
         "id": {
           "type": "string",
@@ -181,6 +203,22 @@
           "type": ["string", "null"],
           "description": "Resolved class name (null when unresolvable, e.g. imports with missing outer)."
         },
+        "class_ref": {
+          "$ref": "#/$defs/ObjectRef",
+          "description": "Class reference as a table/index pair; null when unresolvable."
+        },
+        "outer_ref": {
+          "$ref": "#/$defs/ObjectRef",
+          "description": "Outer (containing object) reference; null for top-level objects."
+        },
+        "super_ref": {
+          "$ref": "#/$defs/ObjectRef",
+          "description": "Superclass reference; null when the object has none."
+        },
+        "template_ref": {
+          "$ref": "#/$defs/ObjectRef",
+          "description": "Template/archetype reference; null when none."
+        },
         "roles": {
           "type": "array",
           "items": {
@@ -193,13 +231,21 @@
           "oneOf": [
             { "$ref": "#/$defs/Region" },
             { "type": "null" }
-          ]
+          ],
+          "description": "Serialized source range of this object in the package."
         },
         "status": {
           "$ref": "#/$defs/ObjectStatus"
         },
         "properties": {
-          "description": "Property bag (raw/debug views, depth >= object).",
+          "description": "Property bag: either the name-keyed normalized map (raw/debug views, depth >= object) or the canonical ordered occurrence list with array-index and value ranges.",
+          "oneOf": [
+            { "type": "object" },
+            {
+              "type": "array",
+              "items": { "$ref": "#/$defs/PropertyEntry" }
+            }
+          ],
           "x-stability": "experimental"
         },
         "properties_summary": {
@@ -221,11 +267,211 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/Diagnostic"
-          }
+          },
+          "description": "Per-object structured diagnostics."
         },
         "flags": {
           "type": "integer",
           "description": "EObjectFlags raw value (raw/debug views only)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "ObjectRef": {
+      "description": "Reference to another package object as a table/index pair, or null.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["table", "index"],
+          "properties": {
+            "table": { "type": "string", "enum": ["export", "import"] },
+            "index": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "PropertyEntry": {
+      "type": "object",
+      "required": ["name", "occurrence", "value"],
+      "description": "One ordered property occurrence. Duplicate names and array elements stay distinct; lookup by name is a derived convenience view.",
+      "properties": {
+        "name": { "type": "string" },
+        "type": {
+          "type": "string",
+          "description": "Property type name from the tag (e.g. StrProperty); omitted when unknown."
+        },
+        "occurrence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "0-based occurrence of this name on the object; repeated names keep their serialized order."
+        },
+        "array_index": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Array element index when the property tag carries one; null for non-array values."
+        },
+        "tag_range": {
+          "$ref": "#/$defs/Region",
+          "description": "Serialized range of the property tag."
+        },
+        "value_range": {
+          "$ref": "#/$defs/Region",
+          "description": "Serialized range of the property value."
+        },
+        "value": {
+          "description": "JSON-safe projected value or opaque descriptor (never inline raw bytes)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProjectionRecord": {
+      "type": "object",
+      "required": ["source_object_id", "kind", "media_type", "embedded", "status", "completeness", "dependencies", "diagnostics"],
+      "description": "One type-aware projection derived from the same PackageDocument. Either embedded content (embedded=true + content) or an external sidecar reference (embedded=false + external). The four statuses are the migration-mode contract: translated, represented, untranslated, unavailable.",
+      "properties": {
+        "source_object_id": {
+          "type": "string",
+          "pattern": "^(export|import):[0-9]+$",
+          "description": "Object the projection was derived from."
+        },
+        "kind": {
+          "type": "string",
+          "description": "Projection kind (e.g. blueprint_declaration, blueprint_migration, material_graph, material_builder, table_data, metadata_reference)."
+        },
+        "media_type": {
+          "type": "string",
+          "description": "Media type of the projected content (e.g. text/x-c++, application/json, text/csv)."
+        },
+        "embedded": {
+          "type": "boolean",
+          "description": "True when content is embedded in this document; false when the payload lives in an external sidecar."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["translated", "represented", "untranslated", "unavailable"],
+          "description": "translated = mapped to a known construct; represented = preserved as call/reference or migration hook; untranslated = source information exists but no safe mapping is known; unavailable = source bytes or editor data are absent."
+        },
+        "completeness": {
+          "type": "string",
+          "enum": ["complete", "partial", "opaque", "unavailable", "failed"],
+          "description": "Capability status of this projection, independent of the migration status."
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(export|import):[0-9]+$"
+          },
+          "description": "Object ids this projection depends on."
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Diagnostic"
+          },
+          "description": "Structured diagnostics produced while building the projection."
+        },
+        "provenance": {
+          "type": "object",
+          "description": "Where the projection came from (deriving objects, source ranges, generator identity). Every embedded projection carries provenance; shape may grow with projection implementers.",
+          "additionalProperties": true
+        },
+        "content": {
+          "description": "Embedded projection payload when embedded=true."
+        },
+        "external": {
+          "$ref": "#/$defs/SidecarRecord",
+          "description": "Sidecar reference when embedded=false."
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["content"],
+          "properties": { "embedded": { "const": true } }
+        },
+        {
+          "required": ["external"],
+          "properties": { "embedded": { "const": false } }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "SidecarRecord": {
+      "type": "object",
+      "required": ["path", "size", "sha256", "reason", "source_range"],
+      "description": "A physical sidecar file created only at a hard safety boundary (oversized output, raw/compressed/bulk payload).",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path relative to the canonical document's directory; never absolute, never escaping via '..'."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sidecar size in bytes."
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$",
+          "description": "Lower- or upper-case hex SHA-256 of the sidecar bytes."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why the sidecar was split out (e.g. size boundary, raw payload that cannot be safely embedded)."
+        },
+        "source_range": {
+          "$ref": "#/$defs/Region",
+          "description": "Serialized source range in the package the sidecar content was derived from."
+        }
+      },
+      "additionalProperties": false
+    },
+    "ByteAccountingScope": {
+      "type": "object",
+      "required": ["object_id", "window", "leaves"],
+      "description": "Byte accounting for one requested object window: a non-empty tiling of leaf regions with no gaps or overlaps. An empty leaf collection never satisfies completeness.",
+      "properties": {
+        "object_id": {
+          "type": "string",
+          "pattern": "^(export|import):[0-9]+$"
+        },
+        "window": {
+          "$ref": "#/$defs/Region",
+          "description": "The requested serialized window for this object."
+        },
+        "leaves": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/ByteLeaf"
+          },
+          "description": "Leaf regions that exactly tile the window; never empty for a non-empty window."
+        }
+      },
+      "additionalProperties": false
+    },
+    "ByteLeaf": {
+      "type": "object",
+      "required": ["offset", "size", "status"],
+      "description": "One leaf region of an object's serialized window.",
+      "properties": {
+        "offset": { "type": "integer", "minimum": 0 },
+        "size": { "type": "integer", "minimum": 0 },
+        "status": {
+          "type": "string",
+          "enum": ["decoded", "opaque", "payload", "unavailable"],
+          "description": "How the bytes were accounted for."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why the leaf is opaque/payload/unavailable; required in practice for non-decoded leaves."
+        },
+        "payload_ref": {
+          "type": "string",
+          "description": "Payload descriptor id when the leaf is extractable."
         }
       },
       "additionalProperties": false

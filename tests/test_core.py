@@ -33,8 +33,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = Path(__file__).parent / "samples"
 PACKAGE_SAMPLE = SAMPLES / "ABP_RifleAnimLayers.uasset"
 DATA_SAMPLE = SAMPLES / "ALS_FootstepDataTable.uasset"
-SCHEMA = ROOT / "docs/designs/contract/package_document_v2.schema.json"
-EXAMPLE = ROOT / "docs/designs/contract/package_document_v2.example.json"
+SCHEMA = ROOT / "docs/designs/contract/package_document_v3.schema.json"
+EXAMPLE = ROOT / "docs/designs/contract/package_document_v3.example.json"
 SRC = ROOT / "src"
 
 
@@ -2498,6 +2498,7 @@ def test_schema_contract_statics():
         assert "source" in required
         assert "package" in required
         assert "objects" in required
+        assert "projections" in required
         assert "payloads" in required
         assert "diagnostics" in required
         assert "summary" in required
