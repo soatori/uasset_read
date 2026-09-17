@@ -6,8 +6,9 @@ Corresponds to COR-02: FCustomVersion system.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Literal, Mapping
 
 if TYPE_CHECKING:
     from uasset_read.serializers.package_summary import PackageFileSummary
@@ -53,3 +54,29 @@ class EngineVersion:
 
     def __str__(self) -> str:
         return f"{self.major}.{self.minor}.{self.patch}.{self.changelist}"
+
+
+@dataclass(frozen=True)
+class VersionContext:
+    """Per-read version bundle passed to readers and handlers.
+
+    Not a replacement for the summary/custom-version system: a small frozen
+    value carrying the fields the current plan's readers consume.
+    ``custom_versions`` is copied into a MappingProxyType so the context is
+    immutable after construction.
+    """
+
+    depth: Literal["package", "object", "asset", "decode"]
+    file_version_ue: int | None = None
+    file_version_licensee_ue: int | None = None
+    custom_versions: Mapping[str, int] = field(default_factory=dict)
+    package_layout: Literal["legacy", "zen", "unknown"] = "legacy"
+    cooked: bool | None = None
+    editor_only_filtered: bool | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "custom_versions",
+            MappingProxyType(dict(self.custom_versions)),
+        )

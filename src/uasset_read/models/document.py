@@ -21,7 +21,7 @@ from ..archive import SourceInfo
 @dataclass(frozen=True)
 class PackageInfo:
     name: str
-    layout: Literal["legacy", "zen"]
+    layout: Literal["legacy", "zen", "unknown"]
     engine_version: str = ""
     compatible_engine_version: str = ""
     package_flags: int = 0
@@ -51,3 +51,7 @@ class PackageDocument:
     diagnostics: list[Diagnostic] = field(default_factory=list)
     summary: Summary = field(default_factory=Summary)
     depth: str = "asset"
+    # Detected package layout ("legacy" | "zen" | "unknown"); reader-level
+    # diagnostics ride alongside package diagnostics, not per-object.
+    layout: Literal["legacy", "zen", "unknown"] = "unknown"
+    reader_diagnostics: list[Diagnostic] = field(default_factory=list)

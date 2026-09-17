@@ -6,7 +6,10 @@ ObjectRecord, ObjectStatus, Region, ObjectRef.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from .diagnostics import Diagnostic
 
 
 @dataclass(frozen=True)
@@ -49,6 +52,11 @@ class ObjectRecord:
     class_name: str | None = None
     outer_ref: ObjectRef | None = None
     super_ref: ObjectRef | None = None
+    # Structural refs resolved from the export resource (Legacy FPackageIndex
+    # or Zen FPackageObjectIndex). class_name stays the display name only —
+    # never object identity.
+    class_ref: ObjectRef | None = None
+    template_ref: ObjectRef | None = None
     flags: int = 0
     roles: tuple[str, ...] = ()
     serial_region: Region | None = None
@@ -56,6 +64,7 @@ class ObjectRecord:
     properties: dict[str, Any] | None = None
     semantic: dict[str, Any] | None = None
     coverage: list[CoverageEntry] = field(default_factory=list)
+    diagnostics: list[Diagnostic] = field(default_factory=list)
 
 
 @dataclass

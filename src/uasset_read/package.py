@@ -11,7 +11,10 @@ import logging
 from uasset_read.archive import FArchive
 from uasset_read.containers import inspect_container
 from uasset_read.exceptions import ParseError
+from uasset_read.layout import PackageLayoutDetector
+from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.models.document import PackageDocument
+from uasset_read.sources import FileSource
 
 logger = logging.getLogger(__name__)
 
@@ -248,12 +251,32 @@ def _parse_cached(
             game=game,
         )
         object_ids = None if ids_key is None else list(ids_key)
-        return reader.read(
+        document = reader.read(
             depth=depth,
             object_ids=object_ids,
             archive=archive,
             main_path=bundle.main_path,
         )
+        # Layout dispatch: stamp the detector's verdict so an unrecognized
+        # input can never be mislabeled "legacy". Probe the main file only —
+        # summary fields never live in the .uexp splice region.
+        layout = PackageLayoutDetector().detect(FileSource(Path(bundle.main_path)))
+        if layout.kind == "legacy":
+            document.layout = "legacy"
+        else:
+            document.layout = layout.kind
+            document.reader_diagnostics.append(
+                Diagnostic(
+                    severity="warning",
+                    code="LAYOUT_REVALIDATION_FAILED",
+                    message=(
+                        f"detector returned {layout.kind}/{layout.detection_reason} "
+                        "after a successful Legacy read"
+                    ),
+                    stage="package.layout",
+                )
+            )
+        return document
     finally:
         archive.close()
 
