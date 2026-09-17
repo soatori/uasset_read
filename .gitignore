@@ -80,6 +80,7 @@ memory/
 tests/*
 !tests/__init__.py
 !tests/conftest.py
+!tests/fixtures.py
 !tests/README.md
 !tests/test_*.py
 !tests/serialization/

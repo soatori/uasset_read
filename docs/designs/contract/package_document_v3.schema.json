@@ -56,7 +56,7 @@
       "items": {
         "$ref": "#/$defs/ProjectionRecord"
       },
-      "description": "Type-aware projections embedded in the canonical document (Blueprint declaration/migration, material graph, table data, metadata references). Every record carries explicit capability/status and provenance; unavailable information is never replaced with fabricated source."
+      "description": "Type-aware projections embedded in the canonical document (Blueprint declaration/migration, material graph, table data, metadata references). Every record carries explicit capability/status; every embedded record also carries provenance (schema-enforced). Unavailable information is never replaced with fabricated source."
     },
     "sidecars": {
       "type": "array",
@@ -329,7 +329,7 @@
     "ProjectionRecord": {
       "type": "object",
       "required": ["source_object_id", "kind", "media_type", "embedded", "status", "completeness", "dependencies", "diagnostics"],
-      "description": "One type-aware projection derived from the same PackageDocument. Either embedded content (embedded=true + content) or an external sidecar reference (embedded=false + external). The four statuses are the migration-mode contract: translated, represented, untranslated, unavailable.",
+      "description": "One type-aware projection derived from the same PackageDocument. Exactly one of: embedded content (embedded=true + content + provenance, no external) or an external sidecar reference (embedded=false + external, no content). The four statuses are the migration-mode contract: translated, represented, untranslated, unavailable.",
       "properties": {
         "source_object_id": {
           "type": "string",
@@ -375,7 +375,7 @@
         },
         "provenance": {
           "type": "object",
-          "description": "Where the projection came from (deriving objects, source ranges, generator identity). Every embedded projection carries provenance; shape may grow with projection implementers.",
+          "description": "Where the projection came from (deriving objects, source ranges, generator identity). Schema-required on every embedded projection (oneOf embedded branch); optional on external-only records. Shape may grow with projection implementers.",
           "additionalProperties": true
         },
         "content": {
@@ -388,12 +388,14 @@
       },
       "oneOf": [
         {
-          "required": ["content"],
-          "properties": { "embedded": { "const": true } }
+          "required": ["content", "provenance"],
+          "properties": { "embedded": { "const": true } },
+          "not": { "required": ["external"] }
         },
         {
           "required": ["external"],
-          "properties": { "embedded": { "const": false } }
+          "properties": { "embedded": { "const": false } },
+          "not": { "required": ["content"] }
         }
       ],
       "additionalProperties": false
