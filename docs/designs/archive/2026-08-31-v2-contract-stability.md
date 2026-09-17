@@ -1,8 +1,10 @@
 # PackageDocument v2 契约稳定性分级（S1）
 
-status: current
+status: superseded
 
-> 对照 `docs/designs/contract/package_document_v2.schema.json` 给字段分级 stable / experimental，并决定版本字段去留。
+> **Archive banner（2026-09-16，Task 1）：** 本 S1 冻结被有意的 v3 breaking output rewrite 取代。下文的 `format_version: "2.0"` stable-envelope 冻结与对 `package_document_v2.schema.json` 的引用仅作历史证据；当前目标是 `format_version: "3.0"`，见 [package-first canonical design](../2026-08-26-package-first-uasset-parser-refactor.md) Output Contract 与 `docs/designs/contract/package_document_v3.schema.json`。
+>
+> 对照 `docs/designs/contract/package_document_v2.schema.json`（历史；现行 `package_document_v3.schema.json`）给字段分级 stable / experimental，并决定版本字段去留。
 >
 > **2026-09-13 执行记录（Wave A / Task A1）：** Phase 6 已完成。`format_version: "2.0"` 对 **stable 域** 冻结为兼容承诺；experimental 域已在 schema 标注 `"x-stability": "experimental"`。此后 stable 破坏性变更必须 bump major（`"3.0"`）；experimental 增删改不 bump。
 
