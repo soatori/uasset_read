@@ -455,6 +455,7 @@ def normalize_property_bag(
     )
 
     bag = PropertyBag()
+    range_diags: list[Diagnostic] = []
     for prop in properties:
         name = getattr(prop, "name", None)
         if name is None:
@@ -561,13 +562,26 @@ def normalize_property_bag(
                         status="decoded",
                         feature="property_value",
                     )
-            except Exception:
+            except Exception as exc:
                 tag_region = None
                 value_region = None
+                range_diags.append(
+                    Diagnostic(
+                        severity="warning",
+                        code="PROPERTY_RANGE_INVALID",
+                        message=f"invalid tag/value range for {name!r}: {exc}",
+                        stage="properties.normalize",
+                        object_id=object_id,
+                        offset=int(tag_start) if tag_start is not None else None,
+                        size=None,
+                        effect="semantic_loss",
+                        reason="recovered_corruption",
+                    )
+                )
 
         bag.entries.append(
             PropertyEntry(
-                name=str(name),
+                name=name,
                 type_name=type_name,
                 value=entry_value,
                 array_index=array_index,
@@ -575,6 +589,9 @@ def normalize_property_bag(
                 value_region=value_region,
             )
         )
+    # Attach range diagnostics onto the bag for projector visibility.
+    if range_diags:
+        bag.diagnostics.extend(range_diags)
     return bag
 
 
@@ -1055,7 +1072,7 @@ class LegacyPackageReader:
         Caught property-parse errors (bounded exception set) on one export do
         not prevent parsing of others; unexpected exception types propagate.
         """
-        from .property_parser import parse_properties_from_export
+        from .properties.tagged import TaggedPropertyReader
 
         # Determine which exports to parse
         target_indices: set[int] | None = None
@@ -1067,6 +1084,7 @@ class LegacyPackageReader:
                         target_indices.add(int(oid.split(":")[1]))
 
         extras: dict[str, dict[str, Any]] = {}
+        tagged_reader = TaggedPropertyReader()
 
         for i, obj in enumerate(objects):
             if target_indices is not None and i not in target_indices:
@@ -1082,9 +1100,9 @@ class LegacyPackageReader:
             prev_range = archive.set_read_range((script_start, prop_range_end))
             archive._current_object_id = obj.id
             try:
-                # Absolute-offset parser over the full archive, bounded by
-                # _read_range enforced inside PackageArchive.read/validate_offset.
-                raw_props = parse_properties_from_export(
+                # Sole public tagged entry: TaggedPropertyReader owns the
+                # export-level stream; value dispatch stays in property_parser.
+                raw_props = tagged_reader.read_export(
                     export=exp,
                     archive=archive,
                     summary=summary,
@@ -1213,22 +1231,26 @@ class LegacyPackageReader:
                     for region in (entry.tag_region, entry.value_region):
                         if region is not None and region.size > 0:
                             decoded.append(region)
-            if source is None:
-                # Fall back to virtual tiling without physical split.
+            active_source = source
+            if active_source is None:
+                # Per-export virtual tiling — never reuse another export's source_id.
                 source_id = obj.serial_region.source_id or "package"
 
                 class _Identity:
-                    def map_range(self, offset: int, size: int, _sid: str = source_id):
-                        return [(_sid, offset, size)]
+                    def __init__(self, sid: str) -> None:
+                        self._sid = sid
 
-                source = _Identity()
+                    def map_range(self, offset: int, size: int, _sid: str | None = None):
+                        return [(_sid or self._sid, offset, size)]
+
+                active_source = _Identity(source_id)
             try:
                 scope = tile_export_scope(
                     obj.id,
                     obj.serial_region.start,
                     obj.serial_region.size,
                     decoded,
-                    source,
+                    active_source,
                 )
                 accounting.scopes[obj.id] = scope
             except ValueError as exc:

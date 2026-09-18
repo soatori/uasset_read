@@ -14,6 +14,18 @@ def test_tagged_reader_reports_consumed_boundary(tagged_fixture):
     assert result.regions[-1].end == tagged_fixture.start + result.consumed
 
 
+def test_tagged_reader_is_sole_production_entry():
+    import inspect
+
+    from uasset_read.parsers import legacy_reader
+    from uasset_read.parsers.properties.tagged import TaggedPropertyReader
+
+    source = inspect.getsource(legacy_reader)
+    assert "TaggedPropertyReader" in source
+    assert "parse_properties_from_export" not in source
+    assert hasattr(TaggedPropertyReader, "read_export")
+
+
 def test_unversioned_reader_does_not_guess_without_schema(unversioned_fixture):
     result = UnversionedPropertyReader(schema=None).read(unversioned_fixture)
     assert result.status in {"opaque", "unavailable"}

@@ -1113,7 +1113,7 @@ def skip_export_payload(
 
 
 # ---------------------------------------------------------------------------
-# parse_properties_from_export -- main entry point
+# Export-level stream implementation — public entry is TaggedPropertyReader.
 # ---------------------------------------------------------------------------
 
 
@@ -1129,6 +1129,9 @@ def parse_properties_from_export(
     tolerant: bool = True,
 ) -> list[PropertyValue]:
     """Read all properties from an export entry (PROP-01).
+
+    Not a public API: production callers use
+    ``uasset_read.parsers.properties.tagged.TaggedPropertyReader.read_export``.
 
     Reference: Class.cpp SerializeVersionedTaggedProperties pattern:
     1. Seek to property start position

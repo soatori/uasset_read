@@ -547,6 +547,12 @@ BINARY_OR_NATIVE_HANDLERS: dict[str, Callable[..., dict[str, Any] | None]] = {
     "FExpressionOutput": _parse_expression_output,
     "ExpressionInput": _parse_expression_input,
     "FExpressionInput": _parse_expression_input,
+    "MaterialAttributesInput": _parse_expression_input,
+    "FMaterialAttributesInput": _parse_expression_input,
+    "FunctionExpressionInput": _parse_expression_input,
+    "FFunctionExpressionInput": _parse_expression_input,
+    "FunctionExpressionOutput": _parse_expression_input,
+    "FFunctionExpressionOutput": _parse_expression_input,
     # General structs
     "FInstancedStruct": _parse_instanced_struct,
     # Niagara structs

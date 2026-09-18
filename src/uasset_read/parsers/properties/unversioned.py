@@ -49,8 +49,28 @@ def parse_unversioned_header(data: bytes) -> UnversionedHeader:
         raise ValueError("empty unversioned header")
     if not fragments[-1].is_last:
         raise ValueError("unterminated unversioned header")
-    # zero-mask is omitted from the pure header when only fragments are asserted;
-    # consumers that need the mask read past header_size.
+    # UE zero-mask after fragments when any HasAnyZeroes:
+    # NumBits as uint8 (<=8) or wider encoding, then packed mask bytes.
+    # See UnversionedPropertySerialization.cpp FUnversionedHeader.
+    if any(f.has_any_zeroes for f in fragments):
+        if cursor >= total:
+            raise ValueError("unversioned zero-mask truncated")
+        nbits = data[cursor]
+        cursor += 1
+        if nbits == 0:
+            pass
+        elif nbits <= 8:
+            cursor += (nbits + 7) // 8
+        elif nbits <= 16:
+            # NumBits stored as uint16 when >8 in some paths; re-read as LE u16
+            # after the first count byte is incomplete — treat first byte as low
+            # and require 2-byte count then mask (UE: SerializeNumBits).
+            # Conservative bound: consume ceil(nbits/8) mask bytes from here.
+            cursor += (nbits + 7) // 8
+        else:
+            cursor += ((nbits + 31) // 32) * 4
+        if cursor > total:
+            raise ValueError("unversioned zero-mask truncated")
     return UnversionedHeader(fragments=tuple(fragments), header_size=cursor)
 
 
@@ -109,12 +129,12 @@ class UnversionedPropertyReader:
                 status="opaque",
             )
 
-        # Schema present: parse header only to bound the stream; full field walk
-        # stays in the legacy mapping path for cooked fixtures. Without a proven
-        # byte layout for every mapping type here, remain opaque rather than guess.
+        # Schema present: parse header (incl. zero-mask) to bound the stream.
+        # Full field walk remains in property_parser._parse_unversioned_properties_from_mapping
+        # (archive+export context); this reader never guesses field widths.
         try:
             raw = input.source.read_at(input.start, input.size)
-            parse_unversioned_header(raw)
+            header = parse_unversioned_header(raw)
         except (ValueError, _struct.error, OSError) as exc:
             diag = Diagnostic(
                 severity="warning",
@@ -135,10 +155,23 @@ class UnversionedPropertyReader:
                 status="opaque",
             )
 
+        # Header validated; field walk needs archive/export identity (production
+        # path). Without it, bound the stream as opaque rather than invent layout.
+        consumed = min(header.header_size, input.size)
+        walk_region = region_from_source(
+            input.source,
+            input.start,
+            input.size,
+            status="opaque",
+            reason="schema_walk_needs_export_context",
+        )
         diag = Diagnostic(
             severity="warning",
-            code="UNVERSIONED_SCHEMA_REQUIRED",
-            message=f"schema fields present but bounded walk not applied for {input.class_name}",
+            code="UNVERSIONED_SCHEMA_WALK_DEFERRED",
+            message=(
+                f"schema fields present for {input.class_name}; "
+                "byte walk runs via property_parser with export context"
+            ),
             stage="properties.unversioned",
             object_id=input.object_id,
             offset=input.start,
@@ -148,8 +181,8 @@ class UnversionedPropertyReader:
         )
         return PropertyReadResult(
             values=PropertyBag(),
-            consumed=input.size,
-            regions=[region],
+            consumed=consumed,
+            regions=[walk_region],
             diagnostics=[diag],
             status="opaque",
         )

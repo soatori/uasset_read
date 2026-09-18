@@ -12,7 +12,35 @@ from uasset_read.parsers.properties import PropertyInput, PropertyReadResult
 
 
 class TaggedPropertyReader:
-    """Iterate PropertyTags until Name is None; never read past the export slice."""
+    """Sole public tagged entry: bounded slice read + production export stream."""
+
+    def read_export(
+        self,
+        *,
+        export: Any,
+        archive: Any,
+        summary: Any,
+        name_map: list[str],
+        export_map: list[Any],
+        import_map: Any | None = None,
+        mappings: Any | None = None,
+        game: str | None = None,
+        tolerant: bool = True,
+    ) -> list[Any]:
+        """Production export-level tagged/unversioned stream via property_parser value dispatch."""
+        from uasset_read.parsers.property_parser import parse_properties_from_export
+
+        return parse_properties_from_export(
+            export=export,
+            archive=archive,
+            summary=summary,
+            name_map=name_map,
+            export_map=export_map,
+            import_map=import_map,
+            mappings=mappings,
+            game=game,
+            tolerant=tolerant,
+        )
 
     def read(self, input: PropertyInput) -> PropertyReadResult:
         end = input.start + input.size

@@ -146,6 +146,7 @@ class PropertyBag:
     """Ordered lossless occurrences; name lookup is only a derived view."""
 
     entries: list[PropertyEntry] = field(default_factory=list)
+    diagnostics: list[Any] = field(default_factory=list)
 
     def get(self, name: str, default: Any = None) -> Any:
         for entry in reversed(self.entries):
