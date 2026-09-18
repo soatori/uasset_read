@@ -566,7 +566,12 @@ def test_every_real_sample_forms_a_valid_package_document(sample: str):
     for o in doc.objects:
         if o.serial_region and o.serial_region.size > 0:
             assert o.properties is not None, f"{sample}:{o.id} has no property bag"
-            json.dumps(o.properties)
+            from uasset_read.models.properties import PropertyBag, project_property_bag
+
+            if isinstance(o.properties, PropertyBag):
+                json.dumps(project_property_bag(o.properties))
+            else:
+                json.dumps(o.properties)
 
     bounds = [d for d in doc.diagnostics if d.code == "EXPORT_PROPERTY_BOUNDS_EXCEEDED"]
     failed = [d for d in doc.diagnostics if d.code == "EXPORT_PROPERTY_PARSE_FAILED"]

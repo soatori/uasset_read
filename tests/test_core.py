@@ -568,16 +568,21 @@ def test_property_bag_normalization_is_bounded_lossless():
     from uasset_read.parsers.legacy_reader import normalize_property_bag
 
     def test_empty_list_returns_empty_dict():
+        from uasset_read.models.properties import project_property_bag
+
         assert normalize_property_bag([]) == {}
+        assert project_property_bag(normalize_property_bag([])) == {}
 
     def test_unknown_property_is_descriptor_not_blob():
+        from uasset_read.models.properties import project_property_bag
+
         prop = PropertyFallback(
             name="Mystery",
             type="UnknownProperty",
             size=4,
             reason=FallbackReason.UNSUPPORTED_TYPE,
         )
-        bag = normalize_property_bag([prop])
+        bag = project_property_bag(normalize_property_bag([prop]))
         assert bag["Mystery"] == {
             "kind": "opaque",
             "type": "UnknownProperty",
@@ -588,22 +593,32 @@ def test_property_bag_normalization_is_bounded_lossless():
         json.dumps(bag)
 
     def test_known_property_preserves_value():
-        bag = normalize_property_bag([PropertyValue(name="Health", type="FloatProperty", value=100.0)])
+        from uasset_read.models.properties import project_property_bag
+
+        bag = project_property_bag(
+            normalize_property_bag([PropertyValue(name="Health", type="FloatProperty", value=100.0)])
+        )
         assert bag["Health"]["kind"] == "value"
         assert bag["Health"]["value"] == 100.0
         json.dumps(bag)
 
     def test_struct_property_normalizes():
+        from uasset_read.models.properties import project_property_bag
+
         sv = StructValue(struct_type="Vector", fields={"X": 1.0, "Y": 2.0, "Z": 3.0})
         prop = PropertyValue(name="Location", type="StructProperty", value=sv)
-        bag = normalize_property_bag([prop])
+        bag = project_property_bag(normalize_property_bag([prop]))
         assert bag["Location"]["kind"] == "struct"
         assert bag["Location"]["struct_type"] == "Vector"
         assert bag["Location"]["fields"]["X"] == 1.0
         json.dumps(bag)
 
     def test_bytes_value_serializes():
-        bag = normalize_property_bag([PropertyValue(name="Data", type="BlobProperty", value=b"\x00\x01")])
+        from uasset_read.models.properties import project_property_bag
+
+        bag = project_property_bag(
+            normalize_property_bag([PropertyValue(name="Data", type="BlobProperty", value=b"\x00\x01")])
+        )
         assert bag["Data"]["kind"] == "value"
         assert bag["Data"]["value"]["kind"] == "bytes"
         assert bag["Data"]["value"]["length"] == 2

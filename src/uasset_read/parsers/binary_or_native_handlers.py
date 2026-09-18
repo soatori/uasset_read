@@ -87,8 +87,10 @@ def _read_expression_input_header(
     name_map: list[str],
 ) -> dict[str, Any]:
     """FMaterialInput / expression-input head: Expression + OutputIndex + InputName + Mask + RGBA."""
+    expression_index = archive.read_i32()
     return {
-        "expression_index": archive.read_i32(),
+        "expression_index": expression_index,
+        "expression_ref": expression_index,
         "output_index": archive.read_i32(),
         "input_name": archive.read_name(name_map),
         **_read_mask_rgba(archive),
@@ -194,10 +196,11 @@ def _parse_expression_input(
 
     try:
         with _safe_parse(archive):
+            fields = _read_expression_input_header(archive, name_map)
             return {
                 "kind": "struct_property",
                 "struct_type": "FExpressionInput",
-                "fields": _read_expression_input_header(archive, name_map),
+                **fields,
             }
     except BINARY_READ_ERRORS as e:
         logger.debug("ExpressionInput parse failed: %s", e)
@@ -437,6 +440,21 @@ def _parse_struct_binary(
                 "fields": fields,
             }
 
+    # ExpressionInput family — decode from already-read raw bytes before fallback
+    if struct_type in {"ExpressionInput", "FExpressionInput"} and size >= 36:
+        from uasset_read.archive import ByteArchive
+
+        try:
+            window = ByteArchive(raw, name="expression_input", tolerant=True)
+            header = _read_expression_input_header(window, name_map)
+            return {
+                "kind": "struct_property",
+                "struct_type": "FExpressionInput",
+                **header,
+            }
+        except Exception:
+            pass
+
     # EdGraphPinType — FEdGraphPinType serialized member-wise, resolved here with name_map
     if struct_type == "EdGraphPinType":
         decoded = _decode_ed_graph_pin_type(raw, size, name_map)
@@ -527,7 +545,7 @@ BINARY_OR_NATIVE_HANDLERS: dict[str, Callable[..., dict[str, Any] | None]] = {
     "FVectorMaterialInput": _parse_material_input,
     "FVector2MaterialInput": _parse_material_input,
     "FExpressionOutput": _parse_expression_output,
-    # Non-F "ExpressionInput" is covered by property_parser's F-prefix struct_type retry.
+    "ExpressionInput": _parse_expression_input,
     "FExpressionInput": _parse_expression_input,
     # General structs
     "FInstancedStruct": _parse_instanced_struct,

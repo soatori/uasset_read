@@ -19,6 +19,7 @@ DiagnosticReason = Literal[
     "recovered_corruption",
     "conservative_complete",
     "unexpected",
+    "schema_required",
 ]
 
 

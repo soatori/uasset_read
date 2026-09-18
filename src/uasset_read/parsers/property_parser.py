@@ -513,6 +513,24 @@ def parse_property_value(
             "raw_data": raw_data,
         }
     if getattr(tag, "serialize_type", "Property") == "BinaryOrNative":
+        # Prefer concrete struct_type handlers before generic StructProperty
+        # raw fallback so known natives (ExpressionInput family) stay structured.
+        struct_type = getattr(tag, "struct_type", None)
+        if tag.type == "StructProperty" and struct_type:
+            for candidate in (struct_type, f"F{struct_type}" if not struct_type.startswith("F") else None):
+                if not candidate:
+                    continue
+                from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
+
+                handler = BINARY_OR_NATIVE_HANDLERS.get(candidate)
+                if handler is not None:
+                    try:
+                        result = handler(tag, archive, name_map, export_map, summary)
+                        if result is not None:
+                            return result
+                    except BINARY_READ_ERRORS as e:
+                        logger.debug("BinaryOrNative struct_type handler failed for %s: %s", candidate, e)
+
         # Try to use a known type parser
         from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
 
@@ -526,7 +544,6 @@ def parse_property_value(
             except BINARY_READ_ERRORS as e:
                 logger.debug("BinaryOrNative handler failed for %s: %s", tag.type, e)
         # Also try by struct_type (with F-prefix fallback) for struct-specific handlers
-        struct_type = getattr(tag, "struct_type", None)
         if struct_type:
             handler = BINARY_OR_NATIVE_HANDLERS.get(struct_type)
             if handler is None and not struct_type.startswith("F"):
@@ -958,6 +975,7 @@ def _read_property_loop(
 
             # Dispatch to type-specific parser
             # lambda executes immediately inside read_tag_value_bounded, tag is bound at call time
+            value_start = archive.tell()
             value = read_tag_value_bounded(
                 archive,
                 tag,
@@ -965,6 +983,7 @@ def _read_property_loop(
                     tag, archive, name_map, export_map, summary, tolerant=tolerant
                 ),
             )
+            value_end = archive.tell()
 
             # If parsing returns None (old path or handler explicitly returns None), convert to PropertyFallback
             if value is None:
@@ -973,7 +992,17 @@ def _read_property_loop(
                     FallbackReason.UNSUPPORTED_TYPE,
                 )
 
-            properties.append(PropertyValue(name=tag.name, type=tag.type, value=value, array_index=tag.array_index))
+            properties.append(
+                PropertyValue(
+                    name=tag.name,
+                    type=tag.type,
+                    value=value,
+                    array_index=tag.array_index,
+                    tag_start_offset=tag.tag_start_offset,
+                    value_start_offset=value_start,
+                    value_end_offset=value_end,
+                )
+            )
 
             # ObjectProperty enhancement: resolve the index against import_map
             resolved = _resolve_object_property(tag, value, import_map, export_map, name_map)

@@ -47,9 +47,9 @@ from ..models.object_model import (
     ObjectRecord,
     ObjectRef,
     ObjectStatus,
-    Region,
     Relation,
 )
+from ..models.properties import PropertyBag
 from ..versioning import FORTNITE_GUID, get_custom_version
 
 
@@ -265,6 +265,7 @@ def _build_object_record_direct(
     index: int,
     import_map: list[ObjectImport],
     export_map: list[ObjectExport],
+    main_path: str = "",
 ) -> ObjectRecord:
     """Convert an ObjectExport to an ObjectRecord using direct binary data."""
     name = export.object_name
@@ -279,10 +280,40 @@ def _build_object_record_direct(
     if name.endswith("_C") and not name.startswith("Default__"):
         roles.append("generated_class")
 
-    # Serial region
+    # Serial region — package-virtual ByteRegion with physical source mapping.
     serial_region = None
     if export.serial_size > 0:
-        serial_region = Region(offset=export.serial_offset, size=export.serial_size)
+        from ..models.byte_ranges import ByteRegion, region_from_source
+        from ..sources import CompositeSource, FileSource
+
+        if main_path:
+            try:
+                source = CompositeSource.from_package(Path(main_path))
+                serial_region = region_from_source(
+                    source,
+                    export.serial_offset,
+                    export.serial_size,
+                    status="decoded",
+                    feature="serial",
+                )
+            except Exception:
+                source = FileSource(Path(main_path))
+                serial_region = region_from_source(
+                    source,
+                    export.serial_offset,
+                    export.serial_size,
+                    status="decoded",
+                    feature="serial",
+                )
+        else:
+            serial_region = ByteRegion(
+                start=export.serial_offset,
+                size=export.serial_size,
+                status="decoded",
+                source_id="package",
+                source_start=export.serial_offset,
+                feature="serial",
+            )
 
     # Class name resolution
     class_name = resolve_class_name(export.class_index, import_map, export_map)
@@ -401,43 +432,173 @@ def _build_package_info_from_summary(
     )
 
 
-def normalize_property_bag(properties: Sequence[Any]) -> dict[str, Any]:
-    """Convert a list of parsed properties to a JSON-safe dict.
+def normalize_property_bag(
+    properties: Sequence[Any],
+    *,
+    package_source: Any | None = None,
+    object_id: str = "",
+) -> Any:
+    """Convert every parsed occurrence into a lossless ordered PropertyBag.
 
-    - Known properties: name -> serialized value
-    - PropertyFallback: name -> opaque descriptor (no raw bytes)
-    - StructValue: name -> recursive dict
-    - Other PropertyValue: name -> value attribute
+    Never keys the result by name. Presentation maps are built later by
+    ``project_property_bag``. Missing/invalid ranges become diagnostics on
+    the bag's entries via opaque regions rather than silent skips.
     """
+    from ..models.byte_ranges import opaque_region
     from ..models.fallback import PropertyFallback
-    from ..models.properties import StructValue, PropertyValue
+    from ..models.properties import (
+        PropertyBag,
+        PropertyEntry,
+        StructValue,
+        PropertyValue,
+        project_property_value,
+    )
 
-    bag: dict[str, Any] = {}
+    bag = PropertyBag()
     for prop in properties:
         name = getattr(prop, "name", None)
         if name is None:
             continue
 
+        array_index: int | None = getattr(prop, "array_index", None)
+        if isinstance(array_index, int) and array_index < 0:
+            array_index = None
+        type_name = getattr(prop, "type", "") or ""
+
+        tag_start = getattr(prop, "tag_start_offset", None)
+        value_start = getattr(prop, "value_start_offset", None)
+        value_end = getattr(prop, "value_end_offset", None)
+
         if isinstance(prop, PropertyFallback):
-            bag[name] = {
-                "kind": "opaque",
-                "type": prop.type,
-                "size": prop.size,
-                "reason": prop.reason.value,
-            }
-        elif isinstance(prop, StructValue):
-            bag[name] = _serialize_value(prop)
-        elif isinstance(prop, PropertyValue):
-            inner_val = prop.value
-            if isinstance(inner_val, StructValue):
-                bag[name] = _serialize_value(inner_val)
+            size = int(getattr(prop, "size", 0) or 0)
+            if value_start is not None and value_end is not None and value_end > value_start:
+                value_region = opaque_region(
+                    int(value_start),
+                    int(value_end - value_start),
+                    getattr(prop.reason, "value", str(prop.reason)),
+                    feature="property_fallback",
+                )
+            elif size > 0 and value_start is not None:
+                value_region = opaque_region(
+                    int(value_start),
+                    size,
+                    getattr(prop.reason, "value", str(prop.reason)),
+                    feature="property_fallback",
+                )
             else:
-                bag[name] = {
+                value_region = None
+            bag.entries.append(
+                PropertyEntry(
+                    name=str(name),
+                    type_name=type_name,
+                    value={
+                        "kind": "opaque",
+                        "type": prop.type,
+                        "size": prop.size,
+                        "reason": prop.reason.value,
+                    },
+                    array_index=array_index,
+                    tag_region=None,
+                    value_region=value_region,
+                )
+            )
+            continue
+
+        if isinstance(prop, StructValue):
+            entry_value: Any = {
+                "kind": "struct",
+                "struct_type": prop.struct_type,
+                "fields": {k: project_property_value(v) for k, v in prop.fields.items()},
+            }
+        elif isinstance(prop, PropertyValue):
+            inner = prop.value
+            if isinstance(inner, dict) and (
+                "expression_ref" in inner
+                or "expression_index" in inner
+                or (inner.get("kind") in {"struct_property", "material_input", "struct_binary_decoded"})
+            ):
+                entry_value = _normalize_structured_dict(inner)
+            elif isinstance(inner, StructValue):
+                entry_value = {
+                    "kind": "struct",
+                    "struct_type": inner.struct_type,
+                    "fields": {k: project_property_value(v) for k, v in inner.fields.items()},
+                }
+            else:
+                entry_value = {
                     "kind": "value",
                     "type": prop.type,
-                    "value": _serialize_value(inner_val),
+                    "value": project_property_value(inner),
                 }
+        elif isinstance(prop, dict):
+            entry_value = _normalize_structured_dict(prop)
+        else:
+            entry_value = project_property_value(prop)
+
+        tag_region = None
+        value_region = None
+        if (
+            package_source is not None
+            and tag_start is not None
+            and value_start is not None
+            and value_start >= tag_start
+        ):
+            from ..models.byte_ranges import region_from_source
+
+            try:
+                tag_region = region_from_source(
+                    package_source,
+                    int(tag_start),
+                    int(value_start - tag_start),
+                    status="decoded",
+                    feature="property_tag",
+                )
+                if value_end is not None and value_end > value_start:
+                    value_region = region_from_source(
+                        package_source,
+                        int(value_start),
+                        int(value_end - value_start),
+                        status="decoded",
+                        feature="property_value",
+                    )
+            except Exception:
+                tag_region = None
+                value_region = None
+
+        bag.entries.append(
+            PropertyEntry(
+                name=str(name),
+                type_name=type_name,
+                value=entry_value,
+                array_index=array_index,
+                tag_region=tag_region,
+                value_region=value_region,
+            )
+        )
     return bag
+
+
+def _normalize_structured_dict(inner: dict[str, Any]) -> dict[str, Any]:
+    """Flatten known native structs so consumers see expression_ref/output_index."""
+    out = dict(inner)
+    fields = out.get("fields")
+    if isinstance(fields, dict):
+        for key, value in fields.items():
+            out.setdefault(key, value)
+        if "fields" in out and out.get("kind") in {"struct_property", "struct_binary_decoded"}:
+            # Keep structured fields at top level for lossless consumers.
+            merged = {k: v for k, v in out.items() if k != "fields"}
+            merged.update(fields)
+            out = merged
+    if "expression_index" in out and "expression_ref" not in out:
+        out["expression_ref"] = out["expression_index"]
+    if "Expression" in out and "expression_ref" not in out:
+        out["expression_ref"] = out["Expression"]
+    if "OutputIndex" in out and "output_index" not in out:
+        out["output_index"] = out["OutputIndex"]
+    if "InputName" in out and "input_name" not in out:
+        out["input_name"] = out["InputName"]
+    return out
 
 
 def _serialize_value(value: Any) -> Any:
@@ -510,6 +671,7 @@ class LegacyPackageReader:
         # Resolved from the required read(main_path=...) argument; every
         # consumer needs the path for SourceInfo/PackageInfo.
         self._main_path: str = ""
+        self._package_source: Any = None
 
     def read(
         self,
@@ -529,6 +691,12 @@ class LegacyPackageReader:
         """
         self._main_path = main_path
         diagnostics: list[Diagnostic] = []
+        try:
+            from ..sources import CompositeSource
+
+            self._package_source = CompositeSource.from_package(Path(main_path))
+        except Exception:
+            self._package_source = None
 
         try:
             # 0. Load the mappings provider once per document (mirrors v1
@@ -629,7 +797,10 @@ class LegacyPackageReader:
             preload_deps = read_preload_dependencies(archive, summary)
 
             # 8. Build ObjectRecords — ALL exports, no filtering
-            objects = [_build_object_record_direct(exp, i, import_map, export_map) for i, exp in enumerate(export_map)]
+            objects = [
+                _build_object_record_direct(exp, i, import_map, export_map, self._main_path)
+                for i, exp in enumerate(export_map)
+            ]
 
             # 10. Build relations from export indices
             relations: list[Relation] = []
@@ -742,6 +913,11 @@ class LegacyPackageReader:
                     diagnostics=diagnostics,
                     mappings=mappings_provider,
                 )
+                byte_accounting = self._attach_byte_accounting(objects, diagnostics)
+            else:
+                from ..models.byte_ranges import ByteAccounting
+
+                byte_accounting = ByteAccounting()
 
             # 16b. Blueprint deep-decode graph pass at depth="decode".
             # Editor saves do not export pins — they live in each node export's
@@ -818,6 +994,7 @@ class LegacyPackageReader:
                 diagnostics=diagnostics,
                 summary=summary_obj,
                 depth=depth,
+                byte_accounting=byte_accounting,
             )
 
         except ParseError as e:
@@ -895,7 +1072,7 @@ class LegacyPackageReader:
             if target_indices is not None and i not in target_indices:
                 continue
             if not obj.serial_region or obj.serial_region.size <= 0:
-                obj.properties = {}
+                obj.properties = PropertyBag()
                 continue
 
             exp = export_map[i]
@@ -919,7 +1096,11 @@ class LegacyPackageReader:
                     tolerant=self._tolerant,
                 )
                 overrun = archive.tell() - prop_range_end
-                obj.properties = normalize_property_bag(raw_props)
+                obj.properties = normalize_property_bag(
+                    raw_props,
+                    package_source=self._package_source,
+                    object_id=obj.id,
+                )
                 cn = obj.class_name or ""
                 uses_unversioned = bool(getattr(summary, "package_flags", 0) & PKG_UnversionedProperties)
                 # The export map pins the tagged stream; trust it over however far the
@@ -990,7 +1171,7 @@ class LegacyPackageReader:
                     )
 
             except ExportBoundsExceeded as e:
-                obj.properties = {}
+                obj.properties = PropertyBag()
                 obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
                 diagnostics.append(
                     _diag(
@@ -1001,7 +1182,7 @@ class LegacyPackageReader:
                     )
                 )
             except (ParseError, EOFError, struct.error, ValueError, UnicodeError) as e:
-                obj.properties = {}
+                obj.properties = PropertyBag()
                 obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
                 diagnostics.append(
                     _diag(
@@ -1017,12 +1198,60 @@ class LegacyPackageReader:
 
         return extras
 
+    def _attach_byte_accounting(self, objects: Sequence[ObjectRecord], diagnostics: list[Diagnostic]) -> Any:
+        """Tile every requested export serial range with non-overlapping leaves."""
+        from ..models.byte_ranges import ByteAccounting, tile_export_scope
+
+        accounting = ByteAccounting()
+        source = self._package_source
+        for obj in objects:
+            if not obj.serial_region or obj.serial_region.size <= 0:
+                continue
+            decoded = []
+            if isinstance(obj.properties, PropertyBag):
+                for entry in obj.properties.entries:
+                    for region in (entry.tag_region, entry.value_region):
+                        if region is not None and region.size > 0:
+                            decoded.append(region)
+            if source is None:
+                # Fall back to virtual tiling without physical split.
+                source_id = obj.serial_region.source_id or "package"
+
+                class _Identity:
+                    def map_range(self, offset: int, size: int, _sid: str = source_id):
+                        return [(_sid, offset, size)]
+
+                source = _Identity()
+            try:
+                scope = tile_export_scope(
+                    obj.id,
+                    obj.serial_region.start,
+                    obj.serial_region.size,
+                    decoded,
+                    source,
+                )
+                accounting.scopes[obj.id] = scope
+            except ValueError as exc:
+                diagnostics.append(
+                    _diag(
+                        "BYTE_ACCOUNTING_INVALID",
+                        str(exc),
+                        "objects.export",
+                        object_id=obj.id,
+                        effect="semantic_loss",
+                        reason="unexpected",
+                    )
+                )
+        return accounting
+
     def _build_minimal_document(
         self,
         summary: PackageFileSummary | None,
         diagnostics: list[Diagnostic],
     ) -> PackageDocument:
         """Build a minimal PackageDocument when parsing fails early."""
+        from ..models.byte_ranges import ByteAccounting
+
         package_info = PackageInfo(name="", layout="legacy")
         if summary:
             package_info = _build_package_info_from_summary(summary, [], source_path=self._main_path)
@@ -1031,6 +1260,7 @@ class LegacyPackageReader:
             source=_build_source_info(self._main_path),
             package=package_info,
             diagnostics=diagnostics,
+            byte_accounting=ByteAccounting(),
         )
 
 

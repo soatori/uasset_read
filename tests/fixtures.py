@@ -75,7 +75,7 @@ def make_property_input(name: str, *, object_name: str | None = None):
     return PropertyInput(
         source=CompositeSource.from_package(path),
         object_id=obj.id,
-        start=obj.serial_region.offset,
+        start=obj.serial_region.start,
         size=obj.serial_region.size,
         class_name=obj.class_name or "Unknown",
         context=VersionContext(depth="object"),

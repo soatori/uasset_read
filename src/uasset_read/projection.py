@@ -379,25 +379,52 @@ def _summary_value(val: Any) -> Any:
             inner = val.get("value")
             if isinstance(inner, list):
                 return {"kind": "value", "type": val.get("type"), "length": len(inner)}
-            if isinstance(inner, dict) and inner.get("kind") in ("struct", "struct_fallback"):
+            if isinstance(inner, dict):
                 return {"kind": "value", "type": val.get("type"), "value": _summary_value(inner)}
+            return val
+        if kind == "map":
+            return {
+                "kind": "map",
+                "key_type": val.get("key_type"),
+                "value_type": val.get("value_type"),
+                "length": len(val.get("entries") or []),
+            }
+        if kind == "set":
+            return {"kind": "set", "element_type": val.get("element_type"), "length": len(val.get("elements") or [])}
+        if kind in {"struct_property", "material_input", "binary_or_native_property"}:
+            # Bounded native headers stay; never expand nested raw blobs here.
+            keys = {
+                k: v
+                for k, v in val.items()
+                if k in {"kind", "struct_type", "type", "size", "expression_ref", "output_index", "input_name"}
+                and not isinstance(v, (bytes, dict, list))
+            }
+            return keys or {"kind": kind}
         return val
     if isinstance(val, list):
         return {"kind": "array", "length": len(val)}
     return val
 
 
-def _property_summary(bag: dict[str, Any]) -> dict[str, Any]:
+def _property_summary(bag: Any) -> dict[str, Any]:
     """Bounded compact view of a property bag for the semantic view (#636).
 
     Names + scalars only; containers keep kind and length, never elements or
     raw bytes. Truncation is explicit via ``property_count``; the full bag
     stays available in the raw/debug views.
     """
-    items = list(bag.items())[:_SUMMARY_MAX_NAMES]
+    from uasset_read.models.properties import PropertyBag, project_property_value
+
+    if isinstance(bag, PropertyBag):
+        items = [(entry.name, project_property_value(entry.value)) for entry in bag.entries]
+        count = len(bag.entries)
+    else:
+        items = list(bag.items())
+        count = len(bag)
+    items = items[:_SUMMARY_MAX_NAMES]
     return {
         "properties": {name: _summary_value(v) for name, v in items},
-        "property_count": len(bag),
+        "property_count": count,
     }
 
 
@@ -420,10 +447,15 @@ def obj_to_dict(obj: ObjectRecord, *, view: str = "semantic") -> dict[str, Any]:
     if view in ("raw", "debug"):
         d["flags"] = obj.flags
         d["serial_region"] = (
-            {"offset": obj.serial_region.offset, "size": obj.serial_region.size} if obj.serial_region else None
+            {"offset": obj.serial_region.start, "size": obj.serial_region.size} if obj.serial_region else None
         )
         if obj.properties is not None:
-            d["properties"] = obj.properties
+            from uasset_read.models.properties import PropertyBag, project_property_bag
+
+            if isinstance(obj.properties, PropertyBag):
+                d["properties"] = project_property_bag(obj.properties)
+            else:
+                d["properties"] = obj.properties
     elif view == "semantic" and obj.properties is not None:
         d["properties_summary"] = _property_summary(obj.properties)
     if obj.semantic is not None:

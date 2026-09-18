@@ -418,7 +418,7 @@ def test_end_to_end_payload_extraction():
     export = doc.objects[texture_export_index]
     assert export.serial_region is not None, "Texture2D export should have a serial region"
     assert export.serial_region.size > 0, "Serial region should have non-zero size"
-    assert export.serial_region.offset >= 0, "Serial region offset should be non-negative"
+    assert export.serial_region.start >= 0, "Serial region should have non-negative start"
 
     # Step 3: Discover sidecar files
     bundle = open_package_bundle(str(MAIN_PATH))

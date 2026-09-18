@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from .diagnostics import Diagnostic
+from .byte_ranges import ByteAccounting
 from .object_model import (
     Dependency,
     ObjectRecord,
@@ -55,3 +56,5 @@ class PackageDocument:
     # diagnostics ride alongside package diagnostics, not per-object.
     layout: Literal["legacy", "zen", "unknown"] = "unknown"
     reader_diagnostics: list[Diagnostic] = field(default_factory=list)
+    # Non-empty per-export byte coverage once property scopes exist (Task 4).
+    byte_accounting: ByteAccounting = field(default_factory=ByteAccounting)

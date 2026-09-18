@@ -8,12 +8,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
+from .byte_ranges import ByteRegion
+from .properties import PropertyBag
+
 if TYPE_CHECKING:
     from .diagnostics import Diagnostic
 
 
 @dataclass(frozen=True)
 class Region:
+    """Legacy offset/size pair. Prefer ByteRegion for new lossless ranges."""
+
     offset: int
     size: int
 
@@ -59,9 +64,9 @@ class ObjectRecord:
     template_ref: ObjectRef | None = None
     flags: int = 0
     roles: tuple[str, ...] = ()
-    serial_region: Region | None = None
+    serial_region: ByteRegion | None = None
     status: ObjectStatus = field(default_factory=ObjectStatus)
-    properties: dict[str, Any] | None = None
+    properties: PropertyBag | None = None
     semantic: dict[str, Any] | None = None
     coverage: list[CoverageEntry] = field(default_factory=list)
     diagnostics: list[Diagnostic] = field(default_factory=list)

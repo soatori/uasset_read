@@ -108,10 +108,10 @@ def discover_payload_descriptor(
     export = doc.objects[export_index]
     if export.serial_region is not None and export.serial_region.size > 0:
         # For cooked packages, serial data may be in the uexp sidecar.
-        # serial_region.offset is absolute in the combined stream; if
-        # offset >= total_header_size, data lives in the uexp sidecar.
+        # serial_region.start is absolute in the combined stream; if
+        # start >= total_header_size, data lives in the uexp sidecar.
         total_header_size = doc.package.total_header_size
-        serial_offset = export.serial_region.offset
+        serial_offset = export.serial_region.start
         serial_size = export.serial_region.size
 
         # extract_bulk_data_descriptors only inspects the final 16 bytes, so
@@ -181,8 +181,8 @@ def discover_payload_descriptor(
     fallback_size = 0
     if export.serial_region is not None:
         total_header_size = doc.package.total_header_size
-        if export.serial_region.offset >= total_header_size and total_header_size > 0:
-            fallback_offset = export.serial_region.offset - total_header_size
+        if export.serial_region.start >= total_header_size and total_header_size > 0:
+            fallback_offset = export.serial_region.start - total_header_size
         fallback_size = export.serial_region.size
 
     return PayloadDescriptor(
