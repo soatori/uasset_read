@@ -930,6 +930,7 @@ class LegacyPackageReader:
                     object_ids=object_ids,
                     diagnostics=diagnostics,
                     mappings=mappings_provider,
+                    depth=depth,
                 )
                 byte_accounting = self._attach_byte_accounting(objects, diagnostics)
             else:
@@ -1048,6 +1049,98 @@ class LegacyPackageReader:
             )
             return None, total_decompressed
 
+    def _expand_blueprint_prerequisite_closure(
+        self,
+        target_indices: set[int],
+        *,
+        objects: list[ObjectRecord],
+        export_map: list[ObjectExport],
+        max_exports: int = 256,
+    ) -> set[int]:
+        """Add graph-container/CDO prerequisites for selected Blueprint-family owners.
+
+        ``object_ids`` remains an output filter: the returned document still
+        exposes only requested objects; this set only widens which exports
+        receive property/byte accounting so graph decode is selection-stable.
+
+        Expansion is intentionally narrow: direct graph-like children of the
+        family seed (UED/Animation state graphs) plus matching Default__ CDOs.
+        Deep node trees (ALS: ~3k node exports) stay on the package-wide graph
+        serializer path and must not be property-parsed per selection — that
+        made project_document unbounded on AnimBlueprint samples.
+        """
+        if not target_indices or len(target_indices) >= len(export_map):
+            return target_indices
+
+        family = {
+            i
+            for i, obj in enumerate(objects)
+            if i in target_indices and (obj.class_name or "") in _BLUEPRINT_FAMILY_CLASSES
+        }
+        if not family:
+            return target_indices
+
+        selected = set(target_indices)
+
+        def _is_graph_like(class_name: str) -> bool:
+            name = class_name or ""
+            return name.endswith("Graph") or name in {
+                "EdGraph",
+                "UEdGraph",
+                "AnimationBlueprint",
+            }
+
+        # One hop: direct outer=seed graph containers (and their direct graph children).
+        added = 0
+        for i, exp in enumerate(export_map):
+            if added >= max_exports:
+                break
+            if i in selected:
+                continue
+            outer = exp.outer_index
+            outer_idx = getattr(outer, "index", 0) if outer is not None else 0
+            if outer_idx <= 0:
+                continue
+            parent = outer_idx - 1
+            if parent in family or parent in selected:
+                obj = objects[i] if i < len(objects) else None
+                class_name = (obj.class_name if obj else "") or ""
+                if parent in family or _is_graph_like(class_name):
+                    selected.add(i)
+                    added += 1
+
+        # Second hop: children of newly added graph containers (still graph-like only).
+        for i, exp in enumerate(export_map):
+            if added >= max_exports:
+                break
+            if i in selected or i in family:
+                continue
+            outer = exp.outer_index
+            outer_idx = getattr(outer, "index", 0) if outer is not None else 0
+            if outer_idx <= 0:
+                continue
+            parent = outer_idx - 1
+            if parent not in selected:
+                continue
+            obj = objects[i] if i < len(objects) else None
+            class_name = (obj.class_name if obj else "") or ""
+            if _is_graph_like(class_name):
+                selected.add(i)
+                added += 1
+
+        # Export-table CDO: Default__X whose class is a selected generated class.
+        selected_ids = {f"export:{i}" for i in selected}
+        for i, exp in enumerate(export_map):
+            if i in selected or added >= max_exports:
+                break
+            if not exp.object_name.startswith("Default__"):
+                continue
+            cls = _package_index_to_id(exp.class_index)
+            if cls in selected_ids:
+                selected.add(i)
+                added += 1
+        return selected
+
     def _parse_requested_object_properties(
         self,
         archive: PackageArchive,
@@ -1059,6 +1152,7 @@ class LegacyPackageReader:
         object_ids: Sequence[str] | None,
         diagnostics: list[Diagnostic],
         mappings: Any | None = None,
+        depth: Literal["package", "object", "asset", "decode"] = "object",
     ) -> dict[str, dict[str, Any]]:
         """Parse properties for requested objects at depth >= object.
 
@@ -1084,6 +1178,17 @@ class LegacyPackageReader:
                 if oid.startswith("export:"):
                     with contextlib.suppress(ValueError, IndexError):
                         target_indices.add(int(oid.split(":")[1]))
+            # Bounded prerequisite closure only when graphs/bytecode will be
+            # decoded: object/asset depth must keep `object_ids` as the exact
+            # property-parse set (plan Task 6 / audit). Decode expands graph
+            # containers, node exports, and generated-class/CDO references
+            # needed for selection-stable graph results.
+            if depth == "decode":
+                target_indices = self._expand_blueprint_prerequisite_closure(
+                    target_indices,
+                    objects=objects,
+                    export_map=export_map,
+                )
 
         extras: dict[str, dict[str, Any]] = {}
         tagged_reader = TaggedPropertyReader()

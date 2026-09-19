@@ -559,18 +559,31 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
 
 
 def test_decode_pin_payload_key_set_is_frozen():
-    """The emitted pin dict carries exactly id/name/direction/category/linked.
+    """The emitted pin dict carries core identity plus Task-6 retained fields only.
 
-    Write-only UEdGraphPin fields must never leak into this payload. The subtraction
-    wave deletes those fields; this test is the contract that guards the emitter.
+    Write-only UEdGraphPin fields must never leak. Task 6 intentionally retains
+    defaults/subcategory/pass-through when present (plan: no read-and-discard);
+    empty/null optionals are omitted so large AnimBlueprint pages stay in budget.
     """
     dec = _decode("StackOBot_BP_Drone.uasset", ("export:0",))
     bp = next(o for o in dec.objects if o.id == "export:0")
     graphs = bp.semantic["graphs"]
     pins = [p for g in graphs for n in g["nodes"] for p in n["pins"]]
     assert pins, "expected at least one decoded pin"
+    core = {"id", "name", "direction", "category", "linked"}
+    retained = {
+        "subcategory",
+        "default_value",
+        "default_object_ref",
+        "default_text",
+        "sub_pin_ids",
+        "parent_pin_id",
+        "reference_pass_through_pin_id",
+        "is_const",
+    }
     for pin in pins:
-        assert set(pin) == {"id", "name", "direction", "category", "linked"}, sorted(pin)
+        assert core <= set(pin), sorted(pin)
+        assert set(pin) <= core | retained, sorted(pin)
 
 
 def test_generated_class_kismet_functions_survive_decode():

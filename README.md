@@ -176,7 +176,7 @@ from uasset_read import (
 
 from uasset_read.models.document import PackageDocument
 from uasset_read.projection import project_document
-from uasset_read.parsers.asset_types.handlers_impl import run_handlers
+from uasset_read.parsers.asset_types.registry import run_handlers
 ```
 
 Full API list: see `src/uasset_read/__init__.py` and `wiki/07-Dev-Guide/Public-API.md`.
@@ -188,7 +188,7 @@ Data flow is the v2 package-first pipeline defined in the [canonical refactor de
 ```text
 .uasset → archive → parsers/legacy_reader (Legacy container reader; Zen deferred, #624)
               → parsers (tagged properties; unversioned gated on #623)
-              → models/object_model + parsers/asset_types/handlers_impl → PackageDocument
+              → models/object_model + parsers/asset_types/registry → PackageDocument
               → projection → JSON / CLI / Agent tools (same document)
 ```
 
