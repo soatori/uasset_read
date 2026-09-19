@@ -969,18 +969,71 @@ class LegacyPackageReader:
                     extras=extras,
                     diagnostics=diagnostics,
                     object_ids=object_ids,
+                    include_ir=depth == "decode",
                 )
+
+            # 16d. Assemble the package envelope BEFORE the handler phase so
+            # Blueprint correlation consumes the same PackageDocument instance
+            # that read() finalizes and returns (plan Task 8 Step 4).
+            source_info = _build_source_info(self._main_path)
+            document = PackageDocument(
+                source=source_info,
+                package=package_info,
+                objects=objects,
+                relations=relations,
+                dependencies=dependencies,
+                diagnostics=diagnostics,
+                summary=summary_obj,
+                depth=depth,
+                byte_accounting=byte_accounting,
+            )
+
+            # 16e. Per-owner typed analysis contexts: convert the decoded raw
+            # graph dicts to typed IR exactly once (BlueprintGraphDecoder) and
+            # pair them with the typed Kismet function IR built at attach time.
+            from ..models.analysis import BlueprintAnalysisContext, BlueprintAnalysisEnvelope
+
+            contexts: dict[str, BlueprintAnalysisContext] = {}
+            if depth == "decode":
+                from .blueprint.graph import BlueprintGraphDecoder
+
+                decoder = BlueprintGraphDecoder()
+                for obj in objects:
+                    if (obj.class_name or "") not in _BLUEPRINT_FAMILY_CLASSES:
+                        continue
+                    entry = extras.get(obj.id) or {}
+                    graphs_raw = entry.get("graphs") or []
+                    if graphs_raw and obj.semantic is None:
+                        # Decoder channel: BlueprintGraphDecoder reads raw
+                        # graphs off the object; correlation re-reads them for
+                        # node_data/kind enrichment while the seed is live.
+                        obj.semantic = {
+                            "graphs": graphs_raw,
+                            "interfaces": entry.get("interfaces") or [],
+                        }
+                    typed_graphs = decoder.decode(obj, document, source=None)
+                    functions = list(entry.get("kismet_ir") or [])
+                    contexts[obj.id] = BlueprintAnalysisContext(
+                        owner_object_id=obj.id,
+                        graphs=typed_graphs,
+                        functions=functions,
+                    )
+            envelope = BlueprintAnalysisEnvelope(document=document, contexts=contexts)
 
             # 17. Run asset handlers at depth >= asset
             if depth in ("asset", "decode"):
                 for obj in objects:
                     try:
                         handler_result = run_handlers(
-                            obj, depth, objects, (export_map, name_map, extras)
+                            obj, depth, objects, (export_map, name_map, extras, envelope)
                         )
                         semantic = handler_result.semantic
                         if semantic is not None:
                             obj.semantic = semantic
+                        elif obj.id in contexts:
+                            # Handler produced nothing: drop the decoder seed so
+                            # a partial seed never ships as the final semantic.
+                            obj.semantic = None
                         obj.coverage.extend(handler_result.coverage)
                         diagnostics.extend(handler_result.diagnostics)
                     except Exception as exc:
@@ -1002,20 +1055,10 @@ class LegacyPackageReader:
             # property parsing) once every read has had its object context.
             _merge_archive_recoveries(archive, objects, diagnostics)
 
-            # 18. Build SourceInfo
-            source_info = _build_source_info(self._main_path)
-
-            return PackageDocument(
-                source=source_info,
-                package=package_info,
-                objects=objects,
-                relations=relations,
-                dependencies=dependencies,
-                diagnostics=diagnostics,
-                summary=summary_obj,
-                depth=depth,
-                byte_accounting=byte_accounting,
-            )
+            # 18. The envelope assembled at 16d is the returned document; the
+            # handler/correlation phases mutate the same object records and
+            # diagnostic list in place.
+            return document
 
         except ParseError as e:
             diagnostics.append(_diag("PACKAGE_READ_FAILED", str(e), "package.read", severity="error", effect=None))
@@ -1635,6 +1678,65 @@ def _attach_blueprint_graph_extras(
             entry["interfaces"] = names
 
 
+def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
+    """Typed FunctionAnalysis for one Kismet result (plan Task 8).
+
+    Reuses the already-decoded ``kr.expressions`` (no second binary pass) and
+    the same normalize/CFG builders the bridge used, keeping the typed IR the
+    correlation layer needs while the archive inputs are still open.
+    """
+    from ..models.analysis import FunctionAnalysis
+    from .blueprint.bytecode import normalize_instructions
+    from .blueprint.control_flow import build_cfg
+
+    instructions = []
+    cfg = build_cfg([])
+    if kr.expressions:
+        instructions = normalize_instructions(kr.expressions)
+        cfg = build_cfg(instructions)
+    reads: set[str] = set()
+    writes: set[str] = set()
+    calls: list[str] = []
+    for item in instructions:
+        reads.update(item.reads)
+        writes.update(item.writes)
+        if item.call_target:
+            calls.append(item.call_target)
+    status = kr.bytecode_status
+    if status not in {"parsed", "partial", "unavailable"}:
+        status = "unavailable"
+    diagnostics = list(getattr(kr, "errors", None) or [])
+    if status == "unavailable" and not diagnostics and getattr(kr, "error_code", None):
+        diagnostics.append(
+            _diag(
+                kr.error_code,
+                kr.error_message or "kismet function unavailable",
+                "semantic.kismet",
+                object_id=kr.object_id or None,
+                effect="semantic_loss",
+            )
+        )
+    base = FunctionAnalysis(
+        object_id=kr.object_id or (
+            f"export:{kr.export_index}" if getattr(kr, "export_index", -1) >= 0 else ""
+        ),
+        owner_object_id=owner_object_id,
+        name=kr.function_name,
+        function_name=kr.function_name,
+        script_source_range=kr.script_source_range,
+        expression_count=len(kr.expressions),
+        entrypoint=None,
+        instructions=instructions,
+        cfg=cfg,
+        reads=reads,
+        writes=writes,
+        calls=calls,
+        bytecode_status=status,  # type: ignore[arg-type]
+        diagnostics=diagnostics,
+    )
+    return base
+
+
 def _attach_kismet_extras(
     *,
     archive,
@@ -1646,8 +1748,11 @@ def _attach_kismet_extras(
     extras,
     diagnostics,
     object_ids,
+    include_ir: bool = False,
 ) -> None:
     """Attach Kismet function results to Blueprint-family owners (asset+decode)."""
+    from dataclasses import replace as _replace
+
     family = {o.id for o in objects if (o.class_name or "") in _BLUEPRINT_FAMILY_CLASSES}
     if not family:
         return
@@ -1671,11 +1776,13 @@ def _attach_kismet_extras(
             # Blueprint-family export on the outer chain so both the asset
             # export and its GeneratedClass expose the function list.
             kismet_by_export: dict[str, list[dict]] = {}
+            kismet_ir_by_export: dict[str, list[Any]] = {}
             for kr in kismet_results:
                 exp_idx = getattr(kr, "export_index", -1)
                 if exp_idx is None or exp_idx < 0 or exp_idx >= len(export_map):
                     continue
                 payload = kr.to_dict()
+                base_ir = _function_analysis_from_result(kr, "") if include_ir else None
                 recorded = False
                 idx = exp_idx
                 seen: set[int] = set()
@@ -1687,6 +1794,10 @@ def _attach_kismet_extras(
                     rec_obj = next((o for o in objects if o.table_index == idx), None)
                     if rec_obj is not None and (rec_obj.class_name or "") in _BLUEPRINT_FAMILY_CLASSES:
                         kismet_by_export.setdefault(rec_obj.id, []).append(payload)
+                        if base_ir is not None:
+                            kismet_ir_by_export.setdefault(rec_obj.id, []).append(
+                                _replace(base_ir, owner_object_id=rec_obj.id)
+                            )
                         recorded = True
                     outer = export_map[idx].outer_index
                     value = outer.index if outer is not None else 0
@@ -1698,9 +1809,16 @@ def _attach_kismet_extras(
                     owner = _resolve_graph_owner(exp_idx, export_map, objects)
                     if owner is not None:
                         kismet_by_export.setdefault(owner, []).append(payload)
+                        if base_ir is not None:
+                            kismet_ir_by_export.setdefault(owner, []).append(
+                                _replace(base_ir, owner_object_id=owner)
+                            )
             for owner_id, funcs in kismet_by_export.items():
                 entry = extras.setdefault(owner_id, {})
                 entry["kismet"] = funcs
+                owner_ir = kismet_ir_by_export.get(owner_id) or []
+                if owner_ir:
+                    entry["kismet_ir"] = owner_ir
             # A BlueprintGeneratedClass has a null outer; mirror its function
             # list onto Blueprint asset exports whose GeneratedClass property
             # points at it so the asset-level K0 view stays complete.
@@ -1721,6 +1839,11 @@ def _attach_kismet_extras(
                     if gen_value == gc_pkg_index:
                         mirror = extras.setdefault(obj.id, {})
                         mirror["kismet"] = funcs
+                        source_ir = kismet_ir_by_export.get(owner_id) or []
+                        if source_ir:
+                            mirror["kismet_ir"] = [
+                                _replace(item, owner_object_id=obj.id) for item in source_ir
+                            ]
     except Exception as exc:
         diagnostics.append(
             _diag("KISMET_DECOMPILE_FAILED", f"Kismet decompile pass failed: {exc}", "semantic.kismet", effect=None)

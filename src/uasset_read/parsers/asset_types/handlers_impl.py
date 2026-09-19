@@ -946,6 +946,24 @@ class BlueprintFamilyHandler:
                     )
                 )
 
+            # E1 flip: the decode path returns the projected correlation dict
+            # when the package reader supplied the named analysis envelope.
+            # The K0 assembly above still runs first so coverage side effects
+            # stay on the object; its dict is only the tuple-callback fallback
+            # for direct handler callers without an envelope.
+            envelope = _analysis_envelope(package_data)
+            if envelope is not None and obj.id in envelope.contexts:
+                from ..blueprint.correlation import (
+                    BlueprintCorrelation,
+                    project_semantic_blueprint,
+                )
+
+                semantic = BlueprintCorrelation().build(
+                    envelope.document,
+                    analysis_context=envelope.contexts[obj.id],
+                )
+                return project_semantic_blueprint(semantic, kind=self._kind)  # type: ignore[arg-type]
+
             return result
 
     @staticmethod
@@ -998,10 +1016,37 @@ class BlueprintFamilyHandler:
 
     def capability(self, result: dict[str, Any]) -> str:
         # Truncated decode output must not claim "complete" (#629, bounded by
-        # default); summary echoes stay summary tier.
-        if result.get("graphs") and not result.get("truncated_graphs"):
-            return "decoded"
-        return "summary"
+        # default); summary echoes stay summary tier. Handles both the tuple-
+        # callback K0 result (truncated_graphs / per-graph dict) and the
+        # projected v3 result (per-graph truncated bool).
+        graphs = result.get("graphs")
+        if not graphs:
+            return "summary"
+        if result.get("truncated_graphs"):
+            return "summary"
+        for graph in graphs:
+            truncated = graph.get("truncated") if isinstance(graph, dict) else None
+            if truncated is True:
+                return "summary"
+            if isinstance(truncated, dict) and (truncated.get("nodes") or truncated.get("pins")):
+                return "summary"
+        return "decoded"
+
+
+def _analysis_envelope(package_data: Any) -> Any:
+    """Named access to the Blueprint analysis envelope on package_data.
+
+    The envelope rides as the fourth tuple item; its ``document`` and
+    ``contexts`` fields are only ever read by attribute (never positional
+    tuple guessing inside the Blueprint branch).
+    """
+    from ...models.analysis import BlueprintAnalysisEnvelope
+
+    if isinstance(package_data, tuple) and len(package_data) > 3:
+        candidate = package_data[3]
+        if isinstance(candidate, BlueprintAnalysisEnvelope):
+            return candidate
+    return None
 
 
 _KISMET_ASSET_TYPE_LIMIT = 128
