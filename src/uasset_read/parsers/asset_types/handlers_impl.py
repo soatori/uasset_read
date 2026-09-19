@@ -15,91 +15,11 @@ from ...constants import format_guid_bytes
 from ...models.diagnostics import Diagnostic, make_diagnostic
 from ...models.object_model import ObjectRecord, CoverageEntry
 from ...serializers.blueprint_graph import summarize_exec_edges
+from .registry import _SupportsClasses, register_handler
 
 
-class _SupportsClasses:
-    """Mixin: matches export class names listed in `classes`."""
-
-    classes: tuple[str, ...] = ()
-
-    def supports(self, obj: ObjectRecord, depth: str) -> bool:
-        return (obj.class_name or "") in self.classes
-
-
-# Global handler registry
-_HANDLERS: list[_SupportsClasses] = []
-
-
-def register_handler(handler: _SupportsClasses) -> None:
-    """Register a global asset handler."""
-    _HANDLERS.append(handler)
-
-
-def run_handlers(
-    obj: ObjectRecord,
-    depth: str,
-    all_objects: list[ObjectRecord],
-    package_data: Any,
-) -> tuple[dict[str, Any] | None, list[CoverageEntry], list[Diagnostic]]:
-    """Run all matching handlers on an object.
-
-    Returns (semantic, coverage, diagnostics).
-    Handler failure only affects this object — no propagation.
-    ``status.semantic`` is bound to the capability tier: "complete" only
-    when a decoded-tier handler produced output; summary-tier results and
-    failures stay "partial" (#629).
-    """
-    semantic: dict[str, Any] = {}
-    coverage: list[CoverageEntry] = []
-    diagnostics: list[Diagnostic] = []
-    matched = False
-    failed = False
-    decoded = False
-
-    for handler in _HANDLERS:
-        try:
-            if handler.supports(obj, depth):
-                matched = True
-                result = handler.enrich(obj, depth, all_objects, package_data)
-                if result is not None:
-                    semantic.update(result)
-                    # capability may be a tier string or a callable of the result;
-                    # undeclared handlers default to "summary" and must not claim
-                    # a type was fully decoded (#629).
-                    cap = getattr(handler, "capability", "summary")
-                    tier = str(cap(result)) if callable(cap) else str(cap)
-                    if tier == "decoded":
-                        decoded = True
-        except Exception as e:
-            # Handler failure must not affect other objects
-            matched = True
-            failed = True
-            handler_name = type(handler).__name__
-            coverage.append(
-                CoverageEntry(
-                    feature=f"handler.{handler_name}",
-                    status="missing",
-                    detail=f"Handler error: {e}",
-                )
-            )
-            diagnostics.append(
-                make_diagnostic(
-                    code="HANDLER_FAILURE",
-                    message=f"{handler_name} failed for {obj.id}: {e}",
-                    stage="semantic.handler",
-                    object_id=obj.id,
-                )
-            )
-
-    if matched:
-        # "complete" means a decoded-tier handler delivered semantics.
-        # A summary-tier result (name/kind echo, light digest), a handler
-        # that matched but produced nothing, or a failure stays "partial".
-        obj.status.semantic = "complete" if (decoded and not failed) else "partial"
-
-    if not semantic:
-        return None, coverage, diagnostics
-    return semantic, coverage, diagnostics
+# Built-in handlers below call ``register_handler`` at import time; the
+# registry itself lives in ``registry.py``.
 
 
 # ── Built-in handlers ──────────────────────────────────────────────

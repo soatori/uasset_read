@@ -70,7 +70,7 @@ def _isolated_handlers(*handlers):
     than as silent coupling. With no arguments the registry is only snapshotted,
     for cases that append or register handlers inside the block.
     """
-    import uasset_read.parsers.asset_types.handlers_impl as H
+    import uasset_read.parsers.asset_types.registry as H
 
     saved = list(H._HANDLERS)
     if handlers:
@@ -1113,7 +1113,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
             assert diag.stage == "properties.tagged"
 
     def test_later_success_does_not_mask_earlier_failure():
-        import uasset_read.parsers.asset_types.handlers_impl as H
+        import uasset_read.parsers.asset_types.registry as H
 
         class Boom:
             def supports(self, obj, ctx):
@@ -1124,13 +1124,16 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
         obj = _object_record("Foo", id="export:9")
         with _isolated_handlers(Boom(), Ok()):
-            semantic, _cov, diags = H.run_handlers(obj, "package", [], None)
+            _result = H.run_handlers(obj, "package", [], None)
+            semantic = _result.semantic
+            _cov = _result.coverage
+            diags = _result.diagnostics
         assert semantic == {"kind": "ok"}
         assert obj.status.semantic == "partial"
         assert any(d.code == "HANDLER_FAILURE" for d in diags)
 
     def test_clean_success_still_marks_complete():
-        import uasset_read.parsers.asset_types.handlers_impl as H
+        import uasset_read.parsers.asset_types.registry as H
 
         obj = _object_record("Foo", id="export:9")
         with _isolated_handlers(Ok()):
@@ -1138,7 +1141,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         assert obj.status.semantic == "complete"
 
     def test_matched_handler_returning_none_is_not_complete():
-        import uasset_read.parsers.asset_types.handlers_impl as H
+        import uasset_read.parsers.asset_types.registry as H
 
         class Decliner:
             def supports(self, obj, ctx):
@@ -1149,7 +1152,10 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
         obj = _object_record("Foo", id="export:9")
         with _isolated_handlers(Decliner()):
-            semantic, _cov, _diags = H.run_handlers(obj, "package", [], None)
+            _result = H.run_handlers(obj, "package", [], None)
+            semantic = _result.semantic
+            _cov = _result.coverage
+            _diags = _result.diagnostics
         assert semantic is None
         assert obj.status.semantic == "partial"
 
@@ -1344,8 +1350,8 @@ def test_handler_registry_supports_enriches_and_isolates():
         TextureHandler,
         UserDefinedEnumHandler,
         UserDefinedStructHandler,
-        _HANDLERS,
     )
+    from uasset_read.parsers.asset_types.registry import _HANDLERS, get_handlers as _get_handlers
     from uasset_read.models.object_model import ObjectRecord, ObjectStatus
 
     record = _object_record
@@ -1415,7 +1421,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert TextureHandler().enrich(obj, "package", [], None) is None
 
     def test_handler_exception_doesnt_crash():
-        from uasset_read.parsers.asset_types.handlers_impl import register_handler, run_handlers
+        from uasset_read.parsers.asset_types.registry import register_handler, run_handlers
 
         class BadHandler:
             def supports(self, obj, context):
@@ -1427,13 +1433,16 @@ def test_handler_registry_supports_enriches_and_isolates():
         with _isolated_handlers():
             register_handler(BadHandler())
             obj = ObjectRecord(id="export:0", table_index=0, name="X", class_name="Anything", status=ObjectStatus())
-            semantic, cov, diags = run_handlers(obj, "package", [obj], None)
+            _result = run_handlers(obj, "package", [obj], None)
+            semantic = _result.semantic
+            cov = _result.coverage
+            diags = _result.diagnostics
             assert semantic is None
             assert any("BadHandler" in c.feature for c in cov)
             assert any(d.stage == "semantic.handler" for d in diags)
 
     def test_handler_exception_becomes_object_diagnostic():
-        import uasset_read.parsers.asset_types.handlers_impl as handlers
+        import uasset_read.parsers.asset_types.registry as handlers_registry
         from uasset_read.package import parse_package_document
         class RaisingHandler:
             def supports(self, obj, context):
@@ -1443,11 +1452,14 @@ def test_handler_registry_supports_enriches_and_isolates():
                 raise ValueError("broken handler")
 
         with _isolated_handlers():
-            handlers._HANDLERS.append(RaisingHandler())
+            handlers_registry._HANDLERS.append(RaisingHandler())
             sample_doc = parse_package_document(str(DATA_SAMPLE), depth="object", object_ids=["export:0"])
-            semantic, coverage, diagnostics = handlers.run_handlers(
+            _result = handlers_registry.run_handlers(
                 sample_doc.objects[0], "package", sample_doc.objects, None
             )
+            semantic = _result.semantic
+            coverage = _result.coverage
+            diagnostics = _result.diagnostics
             assert semantic is None
             assert any(c.status == "missing" for c in coverage)
             handler_diags = [d for d in diagnostics if d.stage == "semantic.handler"]
@@ -1466,12 +1478,11 @@ def test_handler_registry_supports_enriches_and_isolates():
     def test_summary_tier_handlers_never_claim_complete():
         """Niagara/Mesh/Blueprint-summary results are partial with coverage (#629)."""
         from uasset_read.parsers.asset_types.handlers_impl import (
-            _HANDLERS,
             BlueprintFamilyHandler,
             MeshHandler,
             NiagaraHandler,
-            run_handlers,
         )
+        from uasset_read.parsers.asset_types.registry import _HANDLERS, run_handlers
         cases = [
             ("NiagaraScript", NiagaraHandler()),
             ("StaticMesh", MeshHandler()),
@@ -1484,14 +1495,18 @@ def test_handler_registry_supports_enriches_and_isolates():
             for class_name, handler in cases:
                 _HANDLERS[:] = [handler]
                 obj = record(class_name)
-                semantic, _cov, _diags = run_handlers(obj, "asset", [obj], None)
+                _result = run_handlers(obj, "asset", [obj], None)
+                semantic = _result.semantic
+                _cov = _result.coverage
+                _diags = _result.diagnostics
                 assert semantic, class_name
                 assert obj.status.semantic == "partial", class_name
                 assert obj.coverage, class_name
 
     def test_decode_tier_blueprint_graph_marks_complete():
         """Only decoded-tier output (Blueprint graph at depth=decode) yields complete (#629)."""
-        from uasset_read.parsers.asset_types.handlers_impl import BlueprintFamilyHandler, run_handlers
+        from uasset_read.parsers.asset_types.handlers_impl import BlueprintFamilyHandler
+        from uasset_read.parsers.asset_types.registry import run_handlers
         bp = record("Blueprint")
         node = record("K2Node_CallFunction")
         node.id = "export:1"
@@ -1509,12 +1524,15 @@ def test_handler_registry_supports_enriches_and_isolates():
         }
         extras = {bp.id: {"graphs": [dummy_graph]}}
         with _isolated_handlers(handler):
-            semantic, _cov, _diags = run_handlers(bp, "decode", [bp, node], (None, [], extras))
+            _result = run_handlers(bp, "decode", [bp, node], (None, [], extras))
+            semantic = _result.semantic
+            _cov = _result.coverage
+            _diags = _result.diagnostics
         assert "graphs" in semantic
         assert bp.status.semantic == "complete"
 
     def test_undeclared_handler_tier_defaults_to_summary():
-        from uasset_read.parsers.asset_types.handlers_impl import run_handlers
+        from uasset_read.parsers.asset_types.registry import run_handlers
         class Echo:
             def supports(self, obj, ctx):
                 return True
@@ -1529,11 +1547,15 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_skeleton_name_guess_is_marked_heuristic():
         """NameMap-regex bones are marked bone_source=name_guess and never complete (#630)."""
-        from uasset_read.parsers.asset_types.handlers_impl import SkeletonHandler, run_handlers
+        from uasset_read.parsers.asset_types.handlers_impl import SkeletonHandler
+        from uasset_read.parsers.asset_types.registry import run_handlers
         obj = record("Skeleton")
         name_map = ["None", "SomeWidget", "root", "pelvis", "spine_01"]
         with _isolated_handlers(SkeletonHandler()):
-            semantic, _cov, _diags = run_handlers(obj, "asset", [obj], (None, name_map, None))
+            _result = run_handlers(obj, "asset", [obj], (None, name_map, None))
+            semantic = _result.semantic
+            _cov = _result.coverage
+            _diags = _result.diagnostics
         assert semantic["bone_source"] == "name_guess"
         assert [b["name"] for b in semantic["bones"]] == ["root", "pelvis", "spine_01"]
         assert semantic["bone_count"] == 3
@@ -1544,7 +1566,8 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_skeleton_bone_tree_wins_over_name_guess():
         """Decoded BoneTree names take precedence over the regex path (#630)."""
-        from uasset_read.parsers.asset_types.handlers_impl import SkeletonHandler, run_handlers
+        from uasset_read.parsers.asset_types.handlers_impl import SkeletonHandler
+        from uasset_read.parsers.asset_types.registry import run_handlers
         obj = record("Skeleton")
         obj.properties = {
             "BoneTree": {
@@ -1561,7 +1584,10 @@ def test_handler_registry_supports_enriches_and_isolates():
         # "head" would match the NameMap regex — its absence proves the real path won.
         name_map = ["head", "thigh_l"]
         with _isolated_handlers(SkeletonHandler()):
-            semantic, _cov, _diags = run_handlers(obj, "asset", [obj], (None, name_map, None))
+            _result = run_handlers(obj, "asset", [obj], (None, name_map, None))
+            semantic = _result.semantic
+            _cov = _result.coverage
+            _diags = _result.diagnostics
         assert semantic["bone_source"] == "bone_tree"
         assert [b["name"] for b in semantic["bones"]] == ["root", "pelvis"]
         assert obj.status.semantic == "complete"
@@ -1618,11 +1644,8 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_string_table_handler_is_summary_and_not_table():
         """#615: StringTable uses StringTableHandler and never claims complete."""
-        from uasset_read.parsers.asset_types.handlers_impl import (
-            DataTableHandler,
-            StringTableHandler,
-            run_handlers,
-        )
+        from uasset_read.parsers.asset_types.handlers_impl import DataTableHandler, StringTableHandler
+        from uasset_read.parsers.asset_types.registry import run_handlers
         assert not DataTableHandler().supports(record("StringTable"), "package")
         assert DataTableHandler().supports(record("DataTable"), "package")
         assert StringTableHandler().supports(record("StringTable"), "package")
@@ -1636,9 +1659,12 @@ def test_handler_registry_supports_enriches_and_isolates():
             "complete": True,
         }
         with _isolated_handlers(DataTableHandler(), StringTableHandler()):
-            semantic, _cov, _diags = run_handlers(
+            _result = run_handlers(
                 obj, "asset", [obj], (None, [], {obj.id: {"string_table": st}})
             )
+            semantic = _result.semantic
+            _cov = _result.coverage
+            _diags = _result.diagnostics
         assert semantic["kind"] == "string_table"
         assert semantic["namespace"] == "MyNS"
         assert semantic["entry_count"] == 1
@@ -1655,11 +1681,8 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_physics_handlers_summary_tier_synthetic():
         """#619: physics handlers read real fields but never claim complete."""
-        from uasset_read.parsers.asset_types.handlers_impl import (
-            PhysicsAssetHandler,
-            PhysicalMaterialHandler,
-            run_handlers,
-        )
+        from uasset_read.parsers.asset_types.handlers_impl import PhysicsAssetHandler, PhysicalMaterialHandler
+        from uasset_read.parsers.asset_types.registry import run_handlers
         pa = record("PhysicsAsset")
         pa.properties = {
             "SkeletalBodySetups": {"kind": "value", "type": "ArrayProperty", "value": ["ref0", "ref1"]},
@@ -1676,11 +1699,20 @@ def test_handler_registry_supports_enriches_and_isolates():
             "SurfaceType": {"kind": "value", "type": "ByteProperty", "value": {"value_name": "SCE_Plastic"}},
         }
         with _isolated_handlers(PhysicsAssetHandler(), PhysicalMaterialHandler()):
-            sem_pa, _c, _d = run_handlers(pa, "asset", [pa, body], None)
-            sem_pm, _c, _d = run_handlers(pm, "asset", [pm], None)
+            _result = run_handlers(pa, "asset", [pa, body], None)
+            sem_pa = _result.semantic
+            _c = _result.coverage
+            _d = _result.diagnostics
+            _result = run_handlers(pm, "asset", [pm], None)
+            sem_pm = _result.semantic
+            _c = _result.coverage
+            _d = _result.diagnostics
             empty_pm = record("PhysicalMaterial")
             empty_pm.properties = {}
-            sem_empty, _c, _d = run_handlers(empty_pm, "asset", [empty_pm], None)
+            _result = run_handlers(empty_pm, "asset", [empty_pm], None)
+            sem_empty = _result.semantic
+            _c = _result.coverage
+            _d = _result.diagnostics
 
         assert sem_pa["kind"] == "physics_asset"
         assert sem_pa["body_count"] == 2
@@ -1704,8 +1736,8 @@ def test_handler_registry_supports_enriches_and_isolates():
             AnimBlendSpaceHandler,
             AnimCompositeHandler,
             AnimLayerInterfaceHandler,
-            run_handlers,
         )
+        from uasset_read.parsers.asset_types.registry import run_handlers
         bs = record("BlendSpace")
         bs.properties = {
             "BlendParameters": {
@@ -1775,10 +1807,22 @@ def test_handler_registry_supports_enriches_and_isolates():
         bare.properties = {}
 
         with _isolated_handlers(AnimBlendSpaceHandler(), AnimCompositeHandler(), AnimLayerInterfaceHandler()):
-            sem_bs, _c, _d = run_handlers(bs, "asset", [bs], None)
-            sem_comp, _c, _d = run_handlers(comp, "asset", [comp], None)
-            sem_ali, _c, _d = run_handlers(ali, "asset", [ali], None)
-            sem_bare, _c, _d = run_handlers(bare, "asset", [bare], None)
+            _result = run_handlers(bs, "asset", [bs], None)
+            sem_bs = _result.semantic
+            _c = _result.coverage
+            _d = _result.diagnostics
+            _result = run_handlers(comp, "asset", [comp], None)
+            sem_comp = _result.semantic
+            _c = _result.coverage
+            _d = _result.diagnostics
+            _result = run_handlers(ali, "asset", [ali], None)
+            sem_ali = _result.semantic
+            _c = _result.coverage
+            _d = _result.diagnostics
+            _result = run_handlers(bare, "asset", [bare], None)
+            sem_bare = _result.semantic
+            _c = _result.coverage
+            _d = _result.diagnostics
 
         assert sem_bs["kind"] == "anim_blend_space"
         assert sem_bs["dimension"] == 2, "unconfigured BlendParameters slot must not count as an axis"
@@ -1810,8 +1854,8 @@ def test_handler_registry_supports_enriches_and_isolates():
         from uasset_read.parsers.asset_types.handlers_impl import (
             MaterialFunctionHandler,
             MaterialParameterCollectionHandler,
-            run_handlers,
         )
+        from uasset_read.parsers.asset_types.registry import run_handlers
         fn = record("MaterialFunction")
         inp = record("MaterialExpressionFunctionInput")
         inp.id = "export:1"
@@ -1860,9 +1904,18 @@ def test_handler_registry_supports_enriches_and_isolates():
         bare_fn.properties = {}
 
         with _isolated_handlers(MaterialFunctionHandler(), MaterialParameterCollectionHandler()):
-            sem_fn, _c, _d = run_handlers(fn, "asset", [fn, inp, out, call, add], None)
-            sem_mpc, _c, _d = run_handlers(mpc, "asset", [mpc], None)
-            sem_bfn, _c, _d = run_handlers(bare_fn, "asset", [bare_fn], None)
+            _result = run_handlers(fn, "asset", [fn, inp, out, call, add], None)
+            sem_fn = _result.semantic
+            _c = _result.coverage
+            _d = _result.diagnostics
+            _result = run_handlers(mpc, "asset", [mpc], None)
+            sem_mpc = _result.semantic
+            _c = _result.coverage
+            _d = _result.diagnostics
+            _result = run_handlers(bare_fn, "asset", [bare_fn], None)
+            sem_bfn = _result.semantic
+            _c = _result.coverage
+            _d = _result.diagnostics
 
         assert sem_fn["kind"] == "material_function"
         assert sem_fn["input_names"] == ["Speed"]

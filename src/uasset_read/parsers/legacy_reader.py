@@ -40,7 +40,8 @@ from ..models.diagnostics import (
     classify_trailing_reason,
     make_diagnostic as _diag,
 )
-from .asset_types.handlers_impl import run_handlers
+from .asset_types import handlers_impl as _handlers_side_effect  # noqa: F401  — registration
+from .asset_types.registry import run_handlers
 from ..models.document import PackageDocument, PackageInfo, Summary
 from ..models.object_model import (
     Dependency,
@@ -973,13 +974,14 @@ class LegacyPackageReader:
             if depth in ("asset", "decode"):
                 for obj in objects:
                     try:
-                        semantic, cov, handler_diags = run_handlers(
+                        handler_result = run_handlers(
                             obj, depth, objects, (export_map, name_map, extras)
                         )
+                        semantic = handler_result.semantic
                         if semantic is not None:
                             obj.semantic = semantic
-                        obj.coverage.extend(cov)
-                        diagnostics.extend(handler_diags)
+                        obj.coverage.extend(handler_result.coverage)
+                        diagnostics.extend(handler_result.diagnostics)
                     except Exception as exc:
                         diagnostics.append(
                             _diag(
