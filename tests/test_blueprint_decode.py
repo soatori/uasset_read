@@ -110,8 +110,8 @@ def test_combat_character_kismet_functions():
         assert fn["signature"], "signature must be non-empty"
         assert fn["bytecode_status"] in {
             "parsed",
-            "no_script",
-            "failed",
+            "partial",
+            "unavailable",
         }, f"unexpected bytecode_status: {fn['bytecode_status']}"
         assert "expression_count" in fn
         assert "expression_types" in fn
@@ -153,7 +153,7 @@ def test_combat_character_kismet_asset_depth_summary():
 
 
 def test_kismet_result_status_serializations():
-    """KismetDecompiledResult must serialize parsed / no_script / failed without cpp_code."""
+    """KismetDecompiledResult must serialize parsed / partial / unavailable without cpp_code."""
     from uasset_read.kismet.result import KismetDecompiledResult
     from uasset_read.kismet.expressions import EX_True
 
@@ -175,28 +175,35 @@ def test_kismet_result_status_serializations():
     no_script = KismetDecompiledResult(
         function_name="G",
         signature="void G()",
-        bytecode_status="no_script",
+        bytecode_status="unavailable",
         error_code="confirmed_no_script",
         script_metrics={"bytecode_buffer_size": 0},
     )
     d2 = no_script.to_dict()
-    assert d2["bytecode_status"] == "no_script"
-    assert d2["bytecode_confidence"] == "no_script"
+    assert d2["bytecode_status"] == "unavailable"
+    assert d2["bytecode_confidence"] == "unavailable"
     assert d2["error_code"] == "confirmed_no_script"
     assert d2["script_metrics"]["bytecode_buffer_size"] == 0
 
     failed = KismetDecompiledResult(
         function_name="H",
         signature="void H()",
-        bytecode_status="failed",
+        bytecode_status="unavailable",
         error_code="bytecode_decode_error",
         error_message="boom",
         fallback_reasons=["bytecode extraction error: boom"],
     )
     d3 = failed.to_dict()
-    assert d3["bytecode_status"] == "failed"
+    assert d3["bytecode_status"] == "unavailable"
     assert d3["error_message"] == "boom"
     assert d3["fallback_reasons"] == ["bytecode extraction error: boom"]
+
+    partial = KismetDecompiledResult(
+        function_name="P",
+        signature="void P()",
+        bytecode_status="partial",
+    )
+    assert partial.to_dict()["bytecode_confidence"] == "partial"
 
     with pytest.raises(ValueError, match="disallowed bytecode_status"):
         KismetDecompiledResult(function_name="I", signature="void I()", bytecode_status="unknown")
@@ -400,7 +407,8 @@ def test_project_document_decode_max_bytes_keeps_k0_functions():
         object_ids=["export:1"],
     )
     # Budget large enough that the selected blueprint export is retained.
-    projected = project_document(doc, depth="decode", max_bytes=500_000)
+    # Task 7 adds dual-offset instructions + CFG per function (~4 MB page).
+    projected = project_document(doc, depth="decode", max_bytes=5_000_000)
     assert projected.get("format") == "uasset_read.package"
     objs = projected.get("objects") or []
     assert objs, "budget must leave at least one object"
@@ -419,11 +427,11 @@ def test_kismet_one_failed_function_keeps_others():
     """K3: a failed function must not remove sibling results in the same owner list."""
     from uasset_read.kismet.result import KismetDecompiledResult
 
-    # Simulate bridge output for one owner: one failed + one parsed sibling.
+    # Simulate bridge output for one owner: one unavailable + one parsed sibling.
     failed = KismetDecompiledResult(
         function_name="Broken",
         signature="void Broken()",
-        bytecode_status="failed",
+        bytecode_status="unavailable",
         error_code="bytecode_decode_error",
         error_message="boom",
         fallback_reasons=["bytecode extraction error: boom"],
@@ -439,7 +447,7 @@ def test_kismet_one_failed_function_keeps_others():
 
     projected = _project_kismet_functions([failed, parsed], include_expressions=True)
     assert [p["function_name"] for p in projected] == ["Broken", "Fine"]
-    assert projected[0]["bytecode_status"] == "failed"
+    assert projected[0]["bytecode_status"] == "unavailable"
     assert projected[0]["error_code"] == "bytecode_decode_error"
     assert projected[1]["bytecode_status"] == "parsed"
 
@@ -455,8 +463,9 @@ def test_cli_decode_max_bytes_keeps_k0_functions(tmp_path, monkeypatch):
 
     from uasset_read import cli
 
-    # Compact decode of this sample is ~861 kB; 2 MB retains the full page.
-    budget = 2_000_000
+    # Compact decode of this sample is now multi-MB after Task 7 added
+    # dual-offset instructions + CFG; 6 MB retains the full page.
+    budget = 6_000_000
     sample = SAMPLES / "BP_CombatCharacter.uasset"
     out_path = tmp_path / "combat.json"
     monkeypatch.setattr(
@@ -547,10 +556,10 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
         if resolve_class_name(e.class_index, import_map, export_map) in FUNCTION_EXPORT_CLASSES
     ]
     assert len(results) == len(function_exports) > 2
-    by_status = {s: [r for r in results if r.bytecode_status == s] for s in ("parsed", "failed")}
-    assert by_status["failed"], "injected failure must surface as a failed result"
+    by_status = {s: [r for r in results if r.bytecode_status == s] for s in ("parsed", "unavailable")}
+    assert by_status["unavailable"], "injected failure must surface as an unavailable result"
     assert by_status["parsed"], "sibling Function exports must remain after one failure"
-    failed = by_status["failed"][0]
+    failed = by_status["unavailable"][0]
     assert failed.error_code == "bytecode_decode_error"
     assert failed.error_message
     assert failed.fallback_reasons
@@ -607,7 +616,7 @@ def test_generated_class_function_count_is_depth_independent():
         )
         bpgc = next(o for o in doc.objects if o.id == "export:2")
         counts[depth] = len(((bpgc.semantic or {}).get("functions") or []))
-    assert counts["decode"] == counts["asset"] == 42, counts
+    assert counts["decode"] == counts["asset"] == 45, counts
 
 
 # --------------------------------------------------------------------------- #

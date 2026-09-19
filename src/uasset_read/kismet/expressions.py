@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from uasset_read.constants import UE5_LARGE_WORLD_COORDINATES
 from uasset_read.exceptions import ParseError
+from uasset_read.models.byte_ranges import ByteRegion
 from uasset_read.kismet.tokens import (
     EAutoRtfmStopTransactMode,
     EBlueprintTextLiteralType,
@@ -32,9 +33,16 @@ class KismetExpression(ABC):
 
     All EX_* instruction parse results inherit from this class.
     Subclasses must define a Token class attribute and a from_archive classmethod.
+
+    Dual offsets: ``StatementIndex`` is the UE logical script address
+    (CodeOffset coordinate). ``SerializedStart``/``SerializedEnd`` are the
+    on-disk cursors captured by ``FKismetArchive.read_expression``; they
+    default to ``-1`` until the archive fills them.
     """
 
     StatementIndex: int
+    SerializedStart: int = -1
+    SerializedEnd: int = -1
 
     @property
     @abstractmethod
@@ -42,18 +50,63 @@ class KismetExpression(ABC):
         """Return the EExprToken value corresponding to this expression."""
         ...
 
-    def __init__(self, statement_index: int = 0) -> None:
+    def __init__(
+        self,
+        statement_index: int = 0,
+        serialized_start: int = -1,
+        serialized_end: int = -1,
+    ) -> None:
         self.StatementIndex = statement_index
+        self.SerializedStart = serialized_start
+        self.SerializedEnd = serialized_end
 
     def to_dict(self) -> dict:
         """Serialize to dictionary format (for JSON output)."""
         return {
             "Inst": self.Token.name,
             "StatementIndex": self.StatementIndex,
+            "SerializedStart": self.SerializedStart,
+            "SerializedEnd": self.SerializedEnd,
         }
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} token={self.Token.name}>"
+
+
+@dataclass
+class OpaqueExpression(KismetExpression):
+    """Bounded opaque tail for an unknown/unmapped expression token.
+
+    Covers the unknown token through the end of the function slice so a
+    malformed payload cannot silently disappear or corrupt CFG targets.
+    The parser stops reading further top-level expressions for that function.
+    """
+
+    token: int
+    raw_region: ByteRegion
+    reason: str = "unknown_expression_token"
+
+    @property
+    def Token(self) -> EExprToken:  # type: ignore[override]
+        # Not a real mapped opcode. Fall back to a neutral token so generic
+        # Token.name accessors do not crash; the raw byte stays in ``token``.
+        try:
+            return EExprToken(self.token)
+        except ValueError:
+            return EExprToken.EX_Nothing
+
+    def to_dict(self) -> dict:
+        from uasset_read.models.byte_ranges import project_region
+
+        return {
+            "Inst": "Opaque",
+            "StatementIndex": self.StatementIndex,
+            "SerializedStart": self.SerializedStart,
+            "SerializedEnd": self.SerializedEnd,
+            "token": self.token,
+            "reason": self.reason,
+            "raw_region": project_region(self.raw_region),
+        }
 
 @dataclass(kw_only=True)
 class KismetExpressionT(KismetExpression):
@@ -639,6 +692,7 @@ class EX_FinalFunction(KismetExpression):
         d = super().to_dict()
         d["StackNode"] = self.StackNode
         d["ParamCount"] = len(self.Parameters) if self.Parameters else 0
+        d["parameters"] = [p.to_dict() if hasattr(p, "to_dict") else p for p in self.Parameters]
         return d
 
 # Token-only EX_FinalFunction variants — share its serialization exactly.
@@ -672,6 +726,7 @@ class EX_VirtualFunction(KismetExpression):
         d = super().to_dict()
         d["Name"] = self.VirtualFunctionName
         d["ParamCount"] = len(self.Parameters) if self.Parameters else 0
+        d["parameters"] = [p.to_dict() if hasattr(p, "to_dict") else p for p in self.Parameters]
         return d
 
 EX_LocalVirtualFunction = make_token_subclass(EX_VirtualFunction, EExprToken.EX_LocalVirtualFunction)

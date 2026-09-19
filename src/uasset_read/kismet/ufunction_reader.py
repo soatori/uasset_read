@@ -18,6 +18,7 @@ from uasset_read.kismet.native_fields import (
     NativeFieldDeclaration,
     read_native_fields,
 )
+from uasset_read.models.byte_ranges import ByteRegion
 from uasset_read.serializers.object_resources import (
     ObjectExport,
     ObjectImport,
@@ -111,13 +112,26 @@ def _make_failure(
 
 @dataclass
 class FunctionScriptReadResult:
-    """Result of reading a native UFunction script."""
+    """Result of reading a native UFunction script.
+
+    Identity fields are populated from the export table before parsing.
+    ``script_local_start``/``script_local_end`` are local physical offsets
+    into the copied export script buffer; ``script_source_range`` carries the
+    package-source coordinate range separately. ``status`` stays in the
+    read-phase vocabulary (extracted|no_script|failed).
+    """
 
     status: Literal["extracted", "no_script", "failed"]
+    export_index: int = -1
+    object_id: str = ""
+    class_name: str = ""
     serialized_script: bytes = b""
     bytecode_buffer_size: int = 0
     serialized_script_size: int = 0
     native_fields: list[NativeFieldDeclaration] = field(default_factory=list)
+    script_local_start: int = 0
+    script_local_end: int = 0
+    script_source_range: ByteRegion | None = None
     failure: FunctionScriptFailure | None = None
 
 
@@ -365,9 +379,15 @@ def _read_ustruct_prefix_and_script(
 
         # Check remaining bytes vs declared size
         remaining_after_header = window.total_size() - window.tell()
+        resolved_class = resolve_class_name(
+            export.class_index, import_map or [], export_map or []
+        ) or "Unknown"
         if serialized_script_size > remaining_after_header:
             return FunctionScriptReadResult(
                 status="failed",
+                export_index=export_index,
+                object_id=f"export:{export_index}",
+                class_name=resolved_class,
                 failure=_make_failure(
                     export,
                     export_index,
@@ -381,14 +401,29 @@ def _read_ustruct_prefix_and_script(
                 ),
             )
 
-        # 6. SerializedScript
+        # 6. SerializedScript — capture local physical range within the
+        # copied export buffer and the package-source range separately.
+        script_local_start = window.tell()
         script = window.read(serialized_script_size)
+        script_local_end = window.tell()
+        script_source_range = ByteRegion(
+            export.serial_offset + script_local_start,
+            serialized_script_size,
+            "decoded",
+            feature="kismet.script",
+        )
         return FunctionScriptReadResult(
             status="extracted",
+            export_index=export_index,
+            object_id=f"export:{export_index}",
+            class_name=resolved_class,
             serialized_script=script,
             bytecode_buffer_size=bytecode_buffer_size,
             serialized_script_size=serialized_script_size,
             native_fields=native_fields,
+            script_local_start=script_local_start,
+            script_local_end=script_local_end,
+            script_source_range=script_source_range,
         )
 
     except Exception as exc:

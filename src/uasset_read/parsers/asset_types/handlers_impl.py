@@ -993,6 +993,7 @@ def _project_kismet_functions(kismet: list[dict[str, Any]], *, include_expressio
 
     depth=asset gets count/types summary only (types capped at 128);
     depth=decode also includes the serialized expression tree (budgeted by projection max_bytes).
+    Task 7: every entry carries identity, dual-offset instruction IR, and CFG.
     """
     projected: list[dict[str, Any]] = []
     for fn in kismet:
@@ -1001,6 +1002,14 @@ def _project_kismet_functions(kismet: list[dict[str, Any]], *, include_expressio
             "signature": fn.get("signature"),
             "bytecode_status": fn["bytecode_status"],
         }
+        for key in (
+            "export_index",
+            "object_id",
+            "class_name",
+            "script_source_range",
+        ):
+            if fn.get(key) is not None and fn.get(key) != "":
+                entry[key] = fn[key]
         exprs = fn.get("expressions") or []
         types: list[str] = []
         for e in exprs:
@@ -1013,6 +1022,12 @@ def _project_kismet_functions(kismet: list[dict[str, Any]], *, include_expressio
         entry["expressions_truncated"] = len(types) > _KISMET_ASSET_TYPE_LIMIT
         if include_expressions:
             entry["expressions"] = exprs
+        instructions = fn.get("instructions")
+        if instructions is not None:
+            entry["instructions"] = instructions
+        cfg = fn.get("cfg")
+        if cfg is not None:
+            entry["cfg"] = cfg
         for key in (
             "error_code",
             "error_message",

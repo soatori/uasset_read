@@ -7,10 +7,28 @@ internal to the parser/analysis layers.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from uasset_read.models.byte_ranges import ByteRegion, OpaqueRegion, project_region
 from uasset_read.models.diagnostics import Diagnostic
+
+if TYPE_CHECKING:
+    from uasset_read.parsers.blueprint.bytecode import BytecodeInstruction
+    from uasset_read.parsers.blueprint.control_flow import ControlFlowGraph
+
+
+@dataclass(frozen=True)
+class OpaqueOperand:
+    """Lossless fallback operand for consumed-but-unprojectable payload.
+
+    Shared by nested expression records, normalized instructions, and native
+    field reflection so every parser uses one opaque-value type.
+    """
+
+    role: str
+    source_range: ByteRegion | None
+    payload_ref: str | None
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -201,3 +219,29 @@ def project_blueprint_graph(graph: BlueprintGraph) -> dict[str, Any]:
         "truncated": graph.truncated,
         "source_range": project_region(graph.raw_region),
     }
+
+
+@dataclass
+class FunctionAnalysis:
+    """One function/UFunction export's instruction IR and control-flow graph.
+
+    ``object_id`` is the function/UFunction export identity;
+    ``owner_object_id`` is the Blueprint/GeneratedClass export that owns it.
+    Both are kept because collapsing them to a display name caused the
+    attachment bug. Entry correlation (``entrypoint``) is filled by Task 8.
+    """
+
+    object_id: str
+    owner_object_id: str
+    name: str
+    function_name: str
+    script_source_range: ByteRegion | None
+    expression_count: int
+    entrypoint: Any | None
+    instructions: list[BytecodeInstruction]
+    cfg: ControlFlowGraph
+    reads: set[str]
+    writes: set[str]
+    calls: list[str]
+    bytecode_status: Literal["parsed", "partial", "unavailable"]
+    diagnostics: list[Diagnostic]

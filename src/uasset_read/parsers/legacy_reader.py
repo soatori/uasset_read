@@ -1647,17 +1647,62 @@ def _attach_kismet_extras(
             tolerant=True,
         )
         if kismet_results:
+            # Identity-first attachment: use the bridge's export_index
+            # directly; never re-match by display function name (which
+            # collides across same-named exports). Attach to every
+            # Blueprint-family export on the outer chain so both the asset
+            # export and its GeneratedClass expose the function list.
             kismet_by_export: dict[str, list[dict]] = {}
             for kr in kismet_results:
-                for exp_idx, exp in enumerate(export_map):
-                    if exp.object_name == kr.function_name:
-                        owner = _resolve_graph_owner(exp_idx, export_map, objects)
-                        if owner is not None:
-                            kismet_by_export.setdefault(owner, []).append(kr.to_dict())
+                exp_idx = getattr(kr, "export_index", -1)
+                if exp_idx is None or exp_idx < 0 or exp_idx >= len(export_map):
+                    continue
+                payload = kr.to_dict()
+                recorded = False
+                idx = exp_idx
+                seen: set[int] = set()
+                bound = min(len(export_map), MAX_GRAPH_OWNER_HOPS) if export_map else MAX_GRAPH_OWNER_HOPS
+                for _ in range(bound):
+                    if idx in seen or idx < 0 or idx >= len(export_map):
                         break
+                    seen.add(idx)
+                    rec_obj = next((o for o in objects if o.table_index == idx), None)
+                    if rec_obj is not None and (rec_obj.class_name or "") in _BLUEPRINT_FAMILY_CLASSES:
+                        kismet_by_export.setdefault(rec_obj.id, []).append(payload)
+                        recorded = True
+                    outer = export_map[idx].outer_index
+                    value = outer.index if outer is not None else 0
+                    if value > 0:
+                        idx = value - 1
+                    else:
+                        break
+                if not recorded:
+                    owner = _resolve_graph_owner(exp_idx, export_map, objects)
+                    if owner is not None:
+                        kismet_by_export.setdefault(owner, []).append(payload)
             for owner_id, funcs in kismet_by_export.items():
                 entry = extras.setdefault(owner_id, {})
                 entry["kismet"] = funcs
+            # A BlueprintGeneratedClass has a null outer; mirror its function
+            # list onto Blueprint asset exports whose GeneratedClass property
+            # points at it so the asset-level K0 view stays complete.
+            for owner_id, funcs in list(kismet_by_export.items()):
+                owner_obj = next((o for o in objects if o.id == owner_id), None)
+                if owner_obj is None or (owner_obj.class_name or "") != "BlueprintGeneratedClass":
+                    continue
+                gc_pkg_index = owner_obj.table_index + 1
+                for obj in objects:
+                    if (obj.class_name or "") not in _BLUEPRINT_FAMILY_CLASSES:
+                        continue
+                    if (obj.class_name or "") == "BlueprintGeneratedClass":
+                        continue
+                    gen = (obj.properties or {}).get("GeneratedClass")
+                    gen_value = gen.get("value") if isinstance(gen, dict) else None
+                    if isinstance(gen_value, dict):
+                        gen_value = gen_value.get("value")
+                    if gen_value == gc_pkg_index:
+                        mirror = extras.setdefault(obj.id, {})
+                        mirror["kismet"] = funcs
     except Exception as exc:
         diagnostics.append(
             _diag("KISMET_DECOMPILE_FAILED", f"Kismet decompile pass failed: {exc}", "semantic.kismet", effect=None)
