@@ -1189,6 +1189,24 @@ class LegacyPackageReader:
                     objects=objects,
                     export_map=export_map,
                 )
+            # Material dependency closure: selecting a Material export must also
+            # parse its MaterialExpression* / MaterialEditorOnlyData bags so the
+            # expression graph is available without selecting every export.
+            material_roots = {
+                i
+                for i in target_indices
+                if i < len(objects) and (objects[i].class_name or "") == "Material"
+            }
+            if material_roots:
+                for j, child in enumerate(objects):
+                    if j in target_indices:
+                        continue
+                    cn = child.class_name or ""
+                    if cn != "MaterialEditorOnlyData" and not cn.startswith("MaterialExpression"):
+                        continue
+                    outer = child.outer_ref
+                    if outer is not None and outer.table == "export" and outer.index in material_roots:
+                        target_indices.add(j)
 
         extras: dict[str, dict[str, Any]] = {}
         tagged_reader = TaggedPropertyReader()

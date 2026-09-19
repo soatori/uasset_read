@@ -494,7 +494,15 @@ register_handler(SoundHandler())
 
 
 class MaterialHandler(_SupportsClasses):
-    """Enrich Material objects with shader/material property summary."""
+    """Enrich Material objects with shader flags and the expression graph.
+
+    At depth >= asset: shading flags / editor position (summary tier).
+    At depth=decode: attach the projected ``material_graph`` dict from
+    ``MaterialGraphDecoder`` (PropertyBag only — no raw byte reparsing).
+    A decoded editor expression graph (capability complete/partial) unlocks
+    semantic=complete (#629); cooked/stripped graphs stay limited/unavailable
+    and therefore summary tier.
+    """
 
     classes = ("Material",)
 
@@ -523,14 +531,25 @@ class MaterialHandler(_SupportsClasses):
                 result[key] = val.get("value", 0)
                 coverage.append(CoverageEntry(feature=f"material.{key}", status="present"))
 
+        if depth == "decode":
+            from ..material import MaterialGraphDecoder, project_semantic_material
+
+            graph = MaterialGraphDecoder().decode_objects(all_objects)
+            result["material_graph"] = project_semantic_material(graph)
+            result["expression_count"] = len(graph.expressions)
+            coverage.extend(graph.coverage)
+
         obj.coverage.extend(coverage)
         return result if len(result) > 1 else None
 
     def capability(self, result: dict[str, Any]) -> str:
-        # Flags/editor-position alone are a summary projection. The decoded
-        # branch is reserved for when enrich projects parent/blend/shading/
-        # expressions; until then Material never claims semantic=complete.
-        if any(k in result for k in ("parent", "blend_mode", "shading_model", "expression_count")):
+        # Flags/editor-position alone are a summary projection. A decoded
+        # editor expression graph (complete/partial) claims the tier; limited /
+        # unavailable graphs (cooked) and flag-only results stay summary.
+        graph = result.get("material_graph")
+        if isinstance(graph, dict) and graph.get("capability") in {"complete", "partial"}:
+            return "decoded"
+        if any(k in result for k in ("parent", "blend_mode", "shading_model")):
             return "decoded"
         return "summary"
 
