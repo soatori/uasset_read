@@ -256,8 +256,8 @@ def test_reader_boundaries_reject_malformed_access():
 
         from uasset_read.models.diagnostics import Diagnostic
         from uasset_read.models.properties import PropertyTag
-        from uasset_read.parsers import property_parser
-        from uasset_read.parsers.property_parser import _read_property_loop
+        from uasset_read.parsers.properties import tagged
+        from uasset_read.parsers.properties.tagged import _read_property_loop
 
         tag_calls = {"n": 0}
 
@@ -304,8 +304,8 @@ def test_reader_boundaries_reject_malformed_access():
 
         archive = _StubArchive()
         with (
-            patch.object(property_parser, "read_property_tag", side_effect=fake_read_property_tag),
-            patch.object(property_parser, "read_tag_value_bounded", return_value="ok"),
+            patch.object(tagged, "read_property_tag", side_effect=fake_read_property_tag),
+            patch.object(tagged, "read_tag_value_bounded", return_value="ok"),
         ):
             props = _read_property_loop(
                 export=SimpleNamespace(
@@ -327,7 +327,7 @@ def test_reader_boundaries_reject_malformed_access():
         import struct
 
         from uasset_read.archive import ByteArchive
-        from uasset_read.parsers.property_parser import (
+        from uasset_read.parsers.properties.tagged import (
             _maybe_skip_import_data_json_prelude,
         )
 
@@ -1066,11 +1066,11 @@ def test_package_document_preserves_every_export_and_role():
 
 def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
     """A malformed export must produce an attributable diagnostic without deleting siblings."""
-    import uasset_read.parsers.property_parser as pp
+    import uasset_read.parsers.properties.tagged as tagged
     from uasset_read.exceptions import ParseError
     from uasset_read.package import parse_package_document
 
-    real = pp.parse_properties_from_export
+    real = tagged.parse_properties_from_export
     calls = {"n": 0}
 
     def boom(**kwargs):
@@ -1081,7 +1081,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
     # All fixture exports now parse cleanly, so inject the failure to
     # exercise the isolation path deterministically.
-    monkeypatch.setattr(pp, "parse_properties_from_export", boom)
+    monkeypatch.setattr(tagged, "parse_properties_from_export", boom)
 
     class Ok:
         capability = "decoded"
@@ -1179,7 +1179,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         assert obj.status.semantic == "partial"
 
     def test_parse_past_serial_end_is_flagged_not_silent():
-        import uasset_read.parsers.property_parser as pp
+        import uasset_read.parsers.properties.tagged as tagged
         from uasset_read.package import _parse_cached, parse_package_document
 
         _parse_cached.cache_clear()
@@ -1189,7 +1189,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
                 kwargs["archive"].seek(export.serial_offset + export.serial_size + 8)
                 return []
 
-            monkeypatch.setattr(pp, "parse_properties_from_export", fake_overrun)
+            monkeypatch.setattr(tagged, "parse_properties_from_export", fake_overrun)
             overrun_doc = parse_package_document(str(PACKAGE_SAMPLE), depth="object")
         finally:
             _parse_cached.cache_clear()
@@ -1225,7 +1225,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
     def test_v2_mappings_never_passes_raw_path_string():
         mappings_calls.clear()
-        monkeypatch.setattr(pp, "parse_properties_from_export", mappings_spy)
+        monkeypatch.setattr(tagged, "parse_properties_from_export", mappings_spy)
         doc = parse_package_document(str(DATA_SAMPLE), depth="object", mappings_path=str(ROOT / "no-such.usmap"))
         assert any(d.code == "MAPPINGS_LOAD_FAILED" for d in doc.diagnostics)
         assert not isinstance(mappings_calls.get("mappings"), str)  # never a raw path string
@@ -1247,7 +1247,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         )
 
         mappings_calls.clear()
-        monkeypatch.setattr(pp, "parse_properties_from_export", mappings_spy)
+        monkeypatch.setattr(tagged, "parse_properties_from_export", mappings_spy)
         with tempfile.TemporaryDirectory() as td:
             ok_path = Path(td) / "ok.usmap"
             ok_path.write_bytes(blob)

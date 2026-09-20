@@ -323,7 +323,7 @@ def test_property_type_name_pending_incomplete_raises():
 
 def test_serialization_control_unknown_bits_are_terminal(monkeypatch):
     from uasset_read.package import _parse_cached, parse_package_document
-    from uasset_read.parsers import property_parser as pp
+    from uasset_read.parsers.properties import tagged
 
     sample = SAMPLES / "MyProject_UE58_TestMaterial.uasset"
     tag_reads = []
@@ -344,8 +344,8 @@ def test_serialization_control_unknown_bits_are_terminal(monkeypatch):
 
     _parse_cached.cache_clear()
     try:
-        monkeypatch.setattr(pp, "_handle_serialization_control", fake)
-        monkeypatch.setattr(pp, "read_property_tag", must_not_read_tag)
+        monkeypatch.setattr(tagged, "_handle_serialization_control", fake)
+        monkeypatch.setattr(tagged, "read_property_tag", must_not_read_tag)
         doc = parse_package_document(str(sample), depth="object", tolerant=True)
     finally:
         _parse_cached.cache_clear()

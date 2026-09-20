@@ -17,12 +17,19 @@ def test_tagged_reader_reports_consumed_boundary(tagged_fixture):
 def test_tagged_reader_is_sole_production_entry():
     import inspect
 
-    from uasset_read.parsers import legacy_reader
+    from uasset_read.parsers import legacy_reader, property_parser
+    from uasset_read.parsers.properties import tagged
     from uasset_read.parsers.properties.tagged import TaggedPropertyReader
 
-    source = inspect.getsource(legacy_reader)
-    assert "TaggedPropertyReader" in source
-    assert "parse_properties_from_export" not in source
+    # The production tag loop lives in tagged.py, not property_parser.
+    assert "def _read_property_loop" in inspect.getsource(tagged)
+    assert not hasattr(property_parser, "_read_property_loop")
+    assert not hasattr(property_parser, "parse_properties_from_export")
+
+    # legacy_reader reaches the stream only through TaggedPropertyReader.read_export.
+    legacy_source = inspect.getsource(legacy_reader)
+    assert "TaggedPropertyReader" in legacy_source
+    assert "parse_properties_from_export" not in legacy_source
     assert hasattr(TaggedPropertyReader, "read_export")
 
 
