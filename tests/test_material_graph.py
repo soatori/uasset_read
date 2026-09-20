@@ -68,8 +68,49 @@ def test_material_handler_attaches_projected_material_graph(stackobot_material):
     assert attached["links"]
     assert attached["parameters"]
     assert attached["capability"] in {"complete", "partial"}
+    # Minimal projection shape: identity + diagnostics when cheap.
+    assert attached["object_id"] == material.id
+    assert attached["name"] == material.name
+    assert isinstance(attached["diagnostics"], list)
     assert material.status.semantic == "complete"
 
     # Shared fixture reads the same projection.
     via_fixture = find_material_graph(stackobot_material)
     assert via_fixture is attached or via_fixture == attached
+
+
+def test_material_owner_scope_filters_foreign_expressions():
+    """An id provided to decode_objects scopes expressions by outer chain —
+    never a silent first-Material fallback."""
+    from uasset_read.models.object_model import ObjectRef, ObjectRecord
+    from uasset_read.parsers.material import MaterialGraphDecoder
+
+    def export(i: int, class_name: str, name: str, outer: int | None) -> ObjectRecord:
+        return ObjectRecord(
+            id=f"export:{i}",
+            table_index=i,
+            name=name,
+            class_name=class_name,
+            outer_ref=ObjectRef(table="export", index=outer) if outer is not None else None,
+        )
+
+    material_a = export(0, "Material", "M_A", None)
+    material_b = export(1, "Material", "M_B", None)
+    # ObjectRef.index is 0-based and matches the export id suffix.
+    expr_a = export(2, "MaterialExpressionConstant", "Const_A", outer=0)
+    expr_b = export(3, "MaterialExpressionConstant", "Const_B", outer=1)
+    objects = [material_a, material_b, expr_a, expr_b]
+
+    graph_b = MaterialGraphDecoder().decode_objects(objects, material_object_id="export:1")
+    assert graph_b.object_id == "export:1"
+    assert graph_b.name == "M_B"
+    assert [e.object_id for e in graph_b.expressions] == ["export:3"], (
+        "expressions must be filtered by outer chain to the requested material"
+    )
+    assert "export:2" not in {e.object_id for e in graph_b.expressions}
+
+    # Unknown id: unavailable + diagnostic, never first-Material fallback.
+    missing = MaterialGraphDecoder().decode_objects(objects, material_object_id="export:9")
+    assert missing.capability == "unavailable"
+    assert missing.expressions == []
+    assert any("material_not_found" in d for d in missing.diagnostics)

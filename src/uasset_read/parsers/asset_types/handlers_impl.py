@@ -534,7 +534,7 @@ class MaterialHandler(_SupportsClasses):
         if depth == "decode":
             from ..material import MaterialGraphDecoder, project_semantic_material
 
-            graph = MaterialGraphDecoder().decode_objects(all_objects)
+            graph = MaterialGraphDecoder().decode_objects(all_objects, material_object_id=obj.id)
             result["material_graph"] = project_semantic_material(graph)
             result["expression_count"] = len(graph.expressions)
             coverage.extend(graph.coverage)

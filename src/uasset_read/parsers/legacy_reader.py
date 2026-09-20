@@ -1100,17 +1100,17 @@ class LegacyPackageReader:
         export_map: list[ObjectExport],
         max_exports: int = 256,
     ) -> set[int]:
-        """Add graph-container/CDO prerequisites for selected Blueprint-family owners.
+        """Add graph-container/node/CDO prerequisites for selected Blueprint-family owners.
 
         ``object_ids`` remains an output filter: the returned document still
         exposes only requested objects; this set only widens which exports
         receive property/byte accounting so graph decode is selection-stable.
 
-        Expansion is intentionally narrow: direct graph-like children of the
-        family seed (UED/Animation state graphs) plus matching Default__ CDOs.
-        Deep node trees (ALS: ~3k node exports) stay on the package-wide graph
-        serializer path and must not be property-parsed per selection — that
-        made project_document unbounded on AnimBlueprint samples.
+        Expansion covers direct graph-like children of the family seed, every
+        node export under those graphs (K2 identity lives on the node property
+        bag), and matching Default__ CDOs. ``max_exports`` keeps large
+        AnimBlueprint selections bounded instead of parsing the whole package
+        graph tree per selection.
         """
         if not target_indices or len(target_indices) >= len(export_map):
             return target_indices
@@ -1135,6 +1135,7 @@ class LegacyPackageReader:
 
         # One hop: direct outer=seed graph containers (and their direct graph children).
         added = 0
+        graph_containers: set[int] = set()
         for i, exp in enumerate(export_map):
             if added >= max_exports:
                 break
@@ -1151,8 +1152,12 @@ class LegacyPackageReader:
                 if parent in family or _is_graph_like(class_name):
                     selected.add(i)
                     added += 1
+                    if _is_graph_like(class_name):
+                        graph_containers.add(i)
 
-        # Second hop: children of newly added graph containers (still graph-like only).
+        # Second hop: every export whose outer is a selected graph container —
+        # node exports (K2Node_*) carry FunctionReference/EventReference bags
+        # that K2 metadata enrichment needs for selected-vs-full parity.
         for i, exp in enumerate(export_map):
             if added >= max_exports:
                 break
@@ -1163,11 +1168,9 @@ class LegacyPackageReader:
             if outer_idx <= 0:
                 continue
             parent = outer_idx - 1
-            if parent not in selected:
-                continue
-            obj = objects[i] if i < len(objects) else None
-            class_name = (obj.class_name if obj else "") or ""
-            if _is_graph_like(class_name):
+            if parent in graph_containers or (
+                parent in selected and _is_graph_like((objects[parent].class_name if parent < len(objects) else "") or "")
+            ):
                 selected.add(i)
                 added += 1
 

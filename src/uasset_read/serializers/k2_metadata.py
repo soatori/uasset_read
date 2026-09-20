@@ -1,8 +1,10 @@
 """Version-gated K2 node member/event/variable/dispatcher metadata.
 
-Narrow binary boundary only: reads FMemberReference-style fields for known
-K2 node classes. Remaining node fields stay owned by ``graph_node.py``.
-Gates key off package custom versions — never a UE major-version shortcut.
+Narrow boundary only: identity comes from already-projected tag identity on
+``node_data`` and from the node export's ``ObjectRecord.properties``
+(``EventReference`` / ``FunctionReference`` / ``VariableReference`` structs).
+Remaining node fields stay owned by ``graph_node.py``. Gates key off package
+custom versions — never a UE major-version shortcut.
 """
 
 from __future__ import annotations
@@ -11,21 +13,13 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from uasset_read.models.analysis import K2NodeMetadata
-from uasset_read.models.byte_ranges import ByteRegion, opaque_region
+from uasset_read.models.byte_ranges import opaque_region
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
     from uasset_read.serializers.package_summary import PackageFileSummary
     from uasset_read.versioning import VersionContext
-
-# Custom-version GUIDs used by K2 member-reference serialization (UE source:
-# K2Node / MemberReference version gates). Keys are lowercase hex GUIDs.
-VER_UE4_VARK2NODE_USE_MEMBERREFSTRUCT = "b4e2818aef0a4d60a0a8b0a0e0c5c5e5"
-VER_UE4_SWITCH_CALL_NODE_TO_USE_MEMBER_REFERENCE = "0d0c3c1e5c5a4a0d9e8f7a6b5c4d3e2f"
-VER_UE4_MEMBERREFERENCE_IN_PINTYPE = "1a2b3c4d5e6f708192a3b4c5d6e7f809"
-VER_UE4_K2NODE_EVENT_MEMBER_REFERENCE = "2b3c4d5e6f708192a3b4c5d6e7f8091a"
-VER_UE4_K2NODE_VAR_REFERENCEGUIDS = "3c4d5e6f708192a3b4c5d6e7f8091a2b"
 
 # Known K2 classes that always receive a metadata record (may be empty fields).
 K2_METADATA_CLASSES = frozenset(
@@ -56,6 +50,17 @@ _IDENTITY_KEYS = (
     ("member_parent", ("MemberParent",)),
 )
 
+# Export-level property keys that carry FMemberReference-style identity.
+_REFERENCE_PROP_KEYS = ("EventReference", "FunctionReference", "VariableReference")
+
+_IDENTITY_FIELD_NAMES = (
+    "function_name",
+    "event_name",
+    "variable_name",
+    "dispatcher_name",
+    "member_parent",
+)
+
 
 @dataclass
 class K2NodeMetadataDecodeResult:
@@ -65,49 +70,157 @@ class K2NodeMetadataDecodeResult:
     diagnostics: list[str] = field(default_factory=list)
 
 
+def _member_fields(value: Any) -> dict[str, Any] | None:
+    """Unwrap a normalized MemberReference struct / plain mapping / name string."""
+    if isinstance(value, str) and value:
+        return {"MemberName": value}
+    if not isinstance(value, dict) or not value:
+        return None
+    if value.get("kind") == "struct" and isinstance(value.get("fields"), dict):
+        return value["fields"]
+    return value
+
+
 def _extract_name(value: Any) -> str | None:
     if isinstance(value, str) and value:
         return value
-    if isinstance(value, dict):
-        for key in ("name", "member_name", "function_name", "event_name"):
-            inner = value.get(key)
-            if isinstance(inner, str) and inner:
-                return inner
+    fields = _member_fields(value)
+    if fields is None:
+        return None
+    for key in ("MemberName", "name", "member_name", "function_name", "event_name"):
+        inner = fields.get(key)
+        if isinstance(inner, str) and inner:
+            return inner
     return None
 
 
-def _identity_from_node_data(node_class: str, node_data: Any) -> K2NodeMetadata:
+def _extract_parent(value: Any, object_names: dict[str, str] | None = None) -> str | None:
+    """MemberParent as a display string: resolved object name or package-index id."""
+    fields = _member_fields(value)
+    if fields is None:
+        return None
+    raw = fields.get("MemberParent")
+    if isinstance(raw, str) and raw:
+        return raw
+    if isinstance(raw, int) and raw != 0:
+        object_id = f"import:{-raw - 1}" if raw < 0 else f"export:{raw - 1}"
+        if object_names:
+            name = object_names.get(object_id)
+            if name:
+                return name
+        return object_id
+    return None
+
+
+def _identity_from_node_data(
+    node_class: str,
+    node_data: Any,
+    object_names: dict[str, str] | None = None,
+) -> K2NodeMetadata:
     meta = K2NodeMetadata(node_class=node_class)
-    if not isinstance(node_data, dict):
-        return meta
+    if isinstance(node_data, dict):
+        for field_name, keys in _IDENTITY_KEYS:
+            for key in keys:
+                if key not in node_data:
+                    continue
+                if field_name == "member_parent":
+                    extracted = _extract_parent(node_data[key], object_names)
+                else:
+                    extracted = _extract_name(node_data[key])
+                if extracted:
+                    setattr(meta, field_name, extracted)
+                    break
+        # Preserve structured member reference when present and JSON-safe-ish.
+        for ref_key in _REFERENCE_PROP_KEYS + ("VariableReference",):
+            raw = node_data.get(ref_key)
+            fields = _member_fields(raw)
+            if fields:
+                prims = {
+                    str(k): v
+                    for k, v in fields.items()
+                    if isinstance(v, (str, int, float, bool, type(None)))
+                }
+                if prims:
+                    meta.member_reference = prims
+                    break
+            if isinstance(raw, str) and raw:
+                meta.member_reference = {"name": raw}
+                break
+    return meta
+
+
+def _enrich_identity(
+    meta: K2NodeMetadata,
+    node_properties: Any,
+    object_names: dict[str, str] | None = None,
+) -> None:
+    """Fill empty identity slots from the node export's property bag."""
+    if node_properties is None:
+        return
+    getter = getattr(node_properties, "get", None)
+    if not callable(getter):
+        return
+
+    # Plain tag keys first (EventName / MemberName / ...).
+    data_source = {field_name: None for field_name, _ in _IDENTITY_KEYS}
     for field_name, keys in _IDENTITY_KEYS:
         for key in keys:
-            if key not in node_data:
+            value = getter(key)
+            if value is None:
                 continue
-            extracted = _extract_name(node_data[key])
+            if field_name == "member_parent":
+                extracted = _extract_parent(value, object_names)
+            else:
+                extracted = _extract_name(value)
             if extracted:
                 setattr(meta, field_name, extracted)
+                data_source[field_name] = value
                 break
-    # Preserve structured member reference when present and JSON-safe-ish.
-    for ref_key in ("FunctionReference", "EventReference", "VariableReference"):
-        raw = node_data.get(ref_key)
-        if isinstance(raw, dict) and raw:
-            meta.member_reference = {str(k): v for k, v in raw.items() if isinstance(v, (str, int, float, bool, type(None)))}
-            break
-        if isinstance(raw, str) and raw:
-            meta.member_reference = {"name": raw}
-            break
-    return meta
+
+    # FMemberReference structs (EventReference / FunctionReference / ...).
+    for ref_key in _REFERENCE_PROP_KEYS:
+        raw = getter(ref_key)
+        fields = _member_fields(raw)
+        if not fields:
+            continue
+        name = _extract_name(fields)
+        if name:
+            if ref_key == "EventReference" and not meta.event_name:
+                meta.event_name = name
+            elif ref_key == "FunctionReference" and not meta.function_name:
+                meta.function_name = name
+            elif ref_key == "VariableReference" and not meta.variable_name:
+                meta.variable_name = name
+        parent = _extract_parent(fields, object_names)
+        if parent and not meta.member_parent:
+            meta.member_parent = parent
+        if meta.member_reference is None:
+            prims = {
+                str(k): v
+                for k, v in fields.items()
+                if isinstance(v, (str, int, float, bool, type(None)))
+            }
+            if prims:
+                meta.member_reference = prims
+
+
+def _merge_identity(target: K2NodeMetadata, source: K2NodeMetadata) -> None:
+    for field_name in _IDENTITY_FIELD_NAMES:
+        if not getattr(target, field_name) and getattr(source, field_name):
+            setattr(target, field_name, getattr(source, field_name))
+    if target.member_reference is None and source.member_reference is not None:
+        target.member_reference = source.member_reference
 
 
 class K2MetadataDecoder:
     """Decode K2 member/event/variable metadata for known node classes.
 
     Prefers already-projected tag identity on ``node_data`` (populated by
-    ``graph_node`` script_serial tags). When an open archive and node export
-    are supplied, version-gated binary member-reference fields are read into
-    ``member_reference`` / identity slots without becoming a general node
-    serializer. Unsupported variants keep exact opaque ranges.
+    ``graph_node`` script_serial tags), then the node export's property bag
+    (``EventReference`` / ``FunctionReference`` structs), then any pre-existing
+    projected ``existing_metadata``. When an open archive and node export are
+    supplied, the script-serial window is recorded as provenance so
+    consumed-but-unmapped bytes stay addressable.
     """
 
     def decode(
@@ -122,6 +235,9 @@ class K2MetadataDecoder:
         name_map: list[str] | None = None,
         import_map: list[ObjectImport] | None = None,
         export_map: list[ObjectExport] | None = None,
+        node_properties: Any = None,
+        existing_metadata: K2NodeMetadata | None = None,
+        object_names: dict[str, str] | None = None,
     ) -> K2NodeMetadata:
         class_name = node_class or (
             getattr(node_export, "class_name", "")
@@ -134,9 +250,17 @@ class K2MetadataDecoder:
             class_index = getattr(node_export, "class_index", None)
             class_name = resolve_class_name(class_index, import_map, export_map) or ""
 
-        meta = _identity_from_node_data(class_name, node_data)
+        if existing_metadata is not None:
+            meta = existing_metadata
+            if not meta.node_class and class_name:
+                meta.node_class = class_name
+        else:
+            meta = K2NodeMetadata(node_class=class_name)
 
-        # Optional binary pass for known K2 classes when an archive is open.
+        _merge_identity(meta, _identity_from_node_data(class_name, node_data, object_names))
+        _enrich_identity(meta, node_properties, object_names)
+
+        # Optional provenance pass for known K2 classes when an archive is open.
         if (
             archive is not None
             and node_export is not None
@@ -174,34 +298,28 @@ class K2MetadataDecoder:
         name_map: list[str],
         context: VersionContext | None,
     ) -> None:
-        """Best-effort version-gated FMemberReference on the node script stream.
+        """Record the node script-serial window when identity stayed empty.
 
-        Exact field order follows UE MemberReference.h serialization used by
-        K2Node_CallFunction / Event / VariableGet-Set. Failures leave identity
-        from tags and record an opaque range for the attempted window.
+        FMemberReference fields live among PropertyTags, not at a fixed
+        offset; tag identity and export properties carry the names. Only the
+        window provenance is recorded here so consumed-but-unmapped bytes are
+        addressable rather than discarded.
         """
-        from uasset_read.versioning import RELEASE_GUID, get_custom_version
-
+        _ = archive, summary, name_map, context
         if not getattr(node_export, "has_script_serialization", False):
             return
         start = node_export.serial_offset + node_export.script_serialization_start_offset
         end = node_export.serial_offset + node_export.script_serialization_end_offset
         if end <= start:
             return
-        # Member reference fields live among PropertyTags, not at a fixed
-        # offset. Tag identity already carries names when present; only record
-        # the script window provenance here so consumed-but-unmapped bytes are
-        # addressable rather than discarded.
-        region = ByteRegion(
-            start=start,
-            size=end - start,
-            status="decoded",
-            source_id="package",
-            source_start=start,
-            feature="k2_script_serial",
+        has_identity = (
+            meta.member_reference is not None
+            or meta.function_name is not None
+            or meta.event_name is not None
+            or meta.variable_name is not None
         )
-        if meta.member_reference is None and meta.function_name is None and meta.event_name is None and meta.variable_name is None:
-            # No tag identity: keep the window as unresolved evidence.
+        if not has_identity:
+            # No identity: keep the window as unresolved evidence.
             meta.opaque_properties.append(
                 opaque_region(
                     start,
@@ -210,4 +328,3 @@ class K2MetadataDecoder:
                     feature="k2_metadata",
                 )
             )
-        _ = region, RELEASE_GUID, get_custom_version, summary, name_map, context

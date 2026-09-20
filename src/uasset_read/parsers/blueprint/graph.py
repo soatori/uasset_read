@@ -196,23 +196,69 @@ def _pin_from_raw(node_id: NodeId, pin: dict[str, Any]) -> BlueprintPin:
     )
 
 
-def _metadata_for(class_name: str, node: dict[str, Any]) -> K2NodeMetadata | None:
+def _node_export_object_id(raw_id: Any) -> str:
+    """Extract the node export id from raw/projected node ids.
+
+    Raw decode nodes use ``export:N``; projected re-decode nodes use the
+    NodeId string ``owner/export:N``. Returns ``""`` when unresolvable.
+    """
+    if not isinstance(raw_id, str) or not raw_id:
+        return ""
+    part = raw_id.rsplit("/", 1)[-1]
+    return part if part.startswith("export:") or part.startswith("import:") else ""
+
+
+def _object_name_index(objects_by_id: dict[str, Any] | None) -> dict[str, str]:
+    if not objects_by_id:
+        return {}
+    return {
+        obj_id: str(obj.name)
+        for obj_id, obj in objects_by_id.items()
+        if obj is not None and getattr(obj, "name", None)
+    }
+
+
+def _metadata_for(
+    class_name: str,
+    node: dict[str, Any],
+    objects_by_id: dict[str, Any] | None = None,
+) -> K2NodeMetadata | None:
     if class_name not in _K2_CLASSES and not class_name.startswith("K2Node_"):
         # Still attach metadata for allowlisted K2 classes only; other nodes
         # keep None so callers can distinguish "no K2 identity".
         if class_name not in _K2_CLASSES:
             return None
+    from uasset_read.models.analysis import k2_metadata_from_dict
     from uasset_read.serializers.k2_metadata import K2MetadataDecoder
+
+    existing = None
+    raw_meta = node.get("metadata")
+    if isinstance(raw_meta, dict) and raw_meta.get("node_class"):
+        existing = k2_metadata_from_dict(raw_meta)
+
+    node_record = None
+    if objects_by_id:
+        export_id = _node_export_object_id(node.get("id"))
+        if export_id:
+            node_record = objects_by_id.get(export_id)
+    node_properties = getattr(node_record, "properties", None) if node_record is not None else None
 
     return K2MetadataDecoder().decode(
         None,
         None,
         node_class=class_name,
         node_data=node.get("node_data"),
+        node_properties=node_properties,
+        existing_metadata=existing,
+        object_names=_object_name_index(objects_by_id),
     )
 
 
-def _node_from_raw(owner_id: NodeId, node: dict[str, Any]) -> BlueprintNode:
+def _node_from_raw(
+    owner_id: NodeId,
+    node: dict[str, Any],
+    objects_by_id: dict[str, Any] | None = None,
+) -> BlueprintNode:
     node_export = str(node.get("id") or "")
     node_id = NodeId(owner_object_id=owner_id.owner_object_id, node_export_id=node_export or "export:-1")
     class_name = str(node.get("type") or node.get("class_name") or "")
@@ -235,8 +281,8 @@ def _node_from_raw(owner_id: NodeId, node: dict[str, Any]) -> BlueprintNode:
         id=node_id,
         guid=node.get("node_guid") or node.get("guid"),
         class_name=class_name,
-        title=str(node.get("name") or class_name),
-        metadata=_metadata_for(class_name, node),
+        title=str(node.get("name") or node.get("title") or class_name),
+        metadata=_metadata_for(class_name, node, objects_by_id),
         pins=pins,
         raw_region=None,
         unknown_properties=unknown,
@@ -260,7 +306,8 @@ def _graph_kind(name: str, graph_id: str, function_graph_ids: set[str]) -> Bluep
     if graph_id in function_graph_ids:
         return "function"
     if "State" in name:
-        return "macro" if False else "unknown"  # state_machine maps to unknown in IR Literal until extended
+        # state_machine maps to unknown in IR Literal until extended
+        return "unknown"
     # Prefer known IR literals from the plan; state machines are "unknown" until
     # the kind Literal is widened (handler still records state_machines separately).
     if name.endswith("Graph") and "Function" in name:
@@ -313,6 +360,7 @@ class BlueprintGraphDecoder:
         raw_list = self._raw_graphs_for(obj, document, source=source)
         function_ids = _function_graph_ids(obj.properties)
         owner_num = _parse_export_id(obj.id)
+        objects_by_id = {o.id: o for o in document.objects}
         graphs: list[BlueprintGraph] = []
         for raw in raw_list:
             if not isinstance(raw, dict):
@@ -326,7 +374,7 @@ class BlueprintGraphDecoder:
             nodes = []
             refs: list[PinLinkRef] = []
             for node_raw in raw.get("nodes") or []:
-                node = _node_from_raw(owner_for_nodes, node_raw)
+                node = _node_from_raw(owner_for_nodes, node_raw, objects_by_id)
                 nodes.append(node)
                 for pin in node.pins:
                     for link in pin.linked:

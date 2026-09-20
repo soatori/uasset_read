@@ -125,12 +125,10 @@ def _extract_operands(expr: KismetExpression) -> dict[str, Any]:
     elif isinstance(expr, EX_LetValueOnPersistentFrame):
         operands["destination_property"] = expr.DestinationProperty
         operands["assignment"] = expr.AssignmentExpression
-    elif isinstance(expr, EX_Return):
-        # EX_Return currently consumes its expression without retaining it;
-        # nothing else to copy here until the reader retains the payload.
-        pass
     else:
         # Generic retention: copy public dataclass-ish fields when present.
+        # EX_Return and the Context/Container/Cast/Switch families land here —
+        # their retained payload fields become operands automatically.
         if dataclasses.is_dataclass(expr) and not isinstance(expr, type):
             for f in dataclasses.fields(expr):
                 if f.name in {"Token"}:

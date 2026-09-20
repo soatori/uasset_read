@@ -100,12 +100,15 @@ class MaterialFunctionCall:
 class MaterialGraph:
     """Decoded editor expression graph for one package."""
 
+    object_id: str = ""
+    name: str = ""
     expressions: list[MaterialExpression] = field(default_factory=list)
     links: list[MaterialLink] = field(default_factory=list)
     parameters: list[MaterialParameter] = field(default_factory=list)
     function_calls: list[MaterialFunctionCall] = field(default_factory=list)
     capability: str = "unavailable"
     coverage: list[CoverageEntry] = field(default_factory=list)
+    diagnostics: list[str] = field(default_factory=list)
 
 
 def _unwrap(value: Any) -> Any:
@@ -182,6 +185,25 @@ def _is_input_entry(value: Any) -> bool:
     return "expression_ref" in value or "expression_index" in value or "Expression" in value
 
 
+def _outer_chain_reaches(
+    objects_by_id: dict[str, ObjectRecord],
+    start_id: str,
+    target_id: str,
+    limit: int = 64,
+) -> bool:
+    """Walk ObjectRecord.outer_ref from *start_id* up to *target_id*."""
+    current_id = start_id
+    for _ in range(limit):
+        if current_id == target_id:
+            return True
+        record = objects_by_id.get(current_id)
+        if record is None or record.outer_ref is None:
+            return False
+        ref = record.outer_ref
+        current_id = f"{ref.table}:{ref.index}"
+    return False
+
+
 class MaterialGraphDecoder:
     """Decode a PackageDocument's material expression graph from property bags."""
 
@@ -189,14 +211,69 @@ class MaterialGraphDecoder:
         """Decode expression graphs from *document* objects (PropertyBag only)."""
         return self.decode_objects(document.objects)
 
-    def decode_objects(self, objects: list[ObjectRecord]) -> MaterialGraph:
-        """Decode from a bare object list (handler path shares this with decode)."""
-        by_export_index = {i: o for i, o in enumerate(objects) if o.id.startswith("export:")}
-        material = next((o for o in objects if (o.class_name or "") == "Material"), None)
-        editor_only = next((o for o in objects if (o.class_name or "") == "MaterialEditorOnlyData"), None)
-        expression_objs = [o for o in objects if (o.class_name or "").startswith("MaterialExpression")]
+    def decode_objects(
+        self,
+        objects: list[ObjectRecord],
+        material_object_id: str | None = None,
+    ) -> MaterialGraph:
+        """Decode from a bare object list (handler path shares this with decode).
 
-        graph = MaterialGraph()
+        When *material_object_id* is provided, only that Material and its
+        outer-chain-owned MaterialExpression* / MaterialEditorOnlyData
+        exports are decoded — never a silent first-Material fallback.
+        """
+        by_export_index = {i: o for i, o in enumerate(objects) if o.id.startswith("export:")}
+        objects_by_id = {o.id: o for o in objects}
+
+        if material_object_id is not None:
+            material = objects_by_id.get(material_object_id)
+            if material is None or (material.class_name or "") != "Material":
+                graph = MaterialGraph(
+                    object_id=str(material_object_id),
+                    name=getattr(material, "name", "") or "",
+                )
+                graph.capability = "unavailable"
+                graph.coverage.append(
+                    CoverageEntry(
+                        feature="editor_expression_graph",
+                        status="missing",
+                        detail=f"requested material {material_object_id} not found among objects",
+                    )
+                )
+                graph.diagnostics.append(f"material_not_found:{material_object_id}")
+                graph.diagnostics.extend(
+                    f"{entry.feature}:{entry.status}:{entry.detail}" for entry in graph.coverage
+                )
+                return graph
+        else:
+            material = next((o for o in objects if (o.class_name or "") == "Material"), None)
+
+        material_id = material.id if material is not None else None
+        material_name = material.name if material is not None else ""
+
+        def owned_by_material(obj: ObjectRecord) -> bool:
+            if material_id is None:
+                return False
+            if obj.id == material_id:
+                return True
+            return _outer_chain_reaches(objects_by_id, obj.id, material_id)
+
+        editor_only = next(
+            (
+                o
+                for o in objects
+                if (o.class_name or "") == "MaterialEditorOnlyData"
+                and owned_by_material(o)
+            ),
+            None,
+        )
+        expression_objs = [
+            o
+            for o in objects
+            if (o.class_name or "").startswith("MaterialExpression") and owned_by_material(o)
+        ]
+
+        graph = MaterialGraph(object_id=material_id or "", name=material_name)
         if not expression_objs:
             if material is not None:
                 # Material export present but editor expressions stripped (cooked).
@@ -217,6 +294,9 @@ class MaterialGraphDecoder:
                         detail="no Material export and no MaterialExpression* exports",
                     )
                 )
+            graph.diagnostics = [
+                f"{entry.feature}:{entry.status}:{entry.detail}" for entry in graph.coverage
+            ]
             return graph
 
         def resolve(ref: int) -> str | None:
@@ -225,8 +305,6 @@ class MaterialGraphDecoder:
                 return None
             target = by_export_index.get(ref - 1)
             return target.id if target is not None else None
-
-        material_id = material.id if material is not None else None
 
         for expr_obj in expression_objs:
             node, pins = self._decode_expression(expr_obj, resolve)
@@ -288,6 +366,11 @@ class MaterialGraphDecoder:
         graph.coverage.append(
             CoverageEntry(feature="editor_expression_graph", status=status, detail=detail)
         )
+        graph.diagnostics = [
+            f"{entry.feature}:{entry.status}:{entry.detail}"
+            for entry in graph.coverage
+            if entry.status in {"missing", "partial", "unsupported"}
+        ]
         return graph
 
     def _decode_expression(
@@ -389,7 +472,10 @@ def project_semantic_material(graph: MaterialGraph) -> dict[str, Any]:
     """Project a MaterialGraph onto the public semantic dict contract (E1)."""
     return {
         "kind": "material_graph",
+        "object_id": graph.object_id,
+        "name": graph.name,
         "capability": graph.capability,
+        "diagnostics": list(graph.diagnostics),
         "expressions": [
             {
                 "object_id": e.object_id,
