@@ -440,21 +440,6 @@ def _parse_struct_binary(
                 "fields": fields,
             }
 
-    # ExpressionInput family — decode from already-read raw bytes before fallback
-    if struct_type in {"ExpressionInput", "FExpressionInput"} and size >= 36:
-        from uasset_read.archive import ByteArchive
-
-        try:
-            window = ByteArchive(raw, name="expression_input", tolerant=True)
-            header = _read_expression_input_header(window, name_map)
-            return {
-                "kind": "struct_property",
-                "struct_type": "FExpressionInput",
-                **header,
-            }
-        except Exception:
-            pass
-
     # EdGraphPinType — FEdGraphPinType serialized member-wise, resolved here with name_map
     if struct_type == "EdGraphPinType":
         decoded = _decode_ed_graph_pin_type(raw, size, name_map)
@@ -551,8 +536,8 @@ BINARY_OR_NATIVE_HANDLERS: dict[str, Callable[..., dict[str, Any] | None]] = {
     "FMaterialAttributesInput": _parse_expression_input,
     "FunctionExpressionInput": _parse_expression_input,
     "FFunctionExpressionInput": _parse_expression_input,
-    "FunctionExpressionOutput": _parse_expression_input,
-    "FFunctionExpressionOutput": _parse_expression_input,
+    "FunctionExpressionOutput": _parse_expression_output,
+    "FFunctionExpressionOutput": _parse_expression_output,
     # General structs
     "FInstancedStruct": _parse_instanced_struct,
     # Niagara structs

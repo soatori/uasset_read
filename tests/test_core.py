@@ -824,6 +824,30 @@ def test_property_bag_normalization_is_bounded_lossless():
         assert out["use_constant"] is True
         assert out["constant"] == 0.5
 
+    def test_function_expression_output_maps_to_output_decoder():
+        import struct
+        from types import SimpleNamespace
+        from uasset_read.archive import ByteArchive
+        from uasset_read.parsers.binary_or_native_handlers import (
+            BINARY_OR_NATIVE_HANDLERS,
+            _parse_expression_output,
+        )
+
+        assert BINARY_OR_NATIVE_HANDLERS["FunctionExpressionOutput"] is _parse_expression_output
+        assert BINARY_OR_NATIVE_HANDLERS["FFunctionExpressionOutput"] is _parse_expression_output
+
+        # OutputName FName(8) + Mask + MaskR/G/B/A (5 * i32 = 20) = 28 bytes.
+        payload = struct.pack("<i i i i i i i", 8, 0, -1, 3, -1, -1, -1)
+        tag = SimpleNamespace(name="Out", type="FFunctionExpressionOutput", size=28)
+        out = BINARY_OR_NATIVE_HANDLERS["FunctionExpressionOutput"](
+            tag, ByteArchive(payload), ["None"] * 8 + ["X"], [], None
+        )
+        assert out is not None
+        assert out["struct_type"] == "FExpressionOutput"
+        assert out["fields"]["output_name"] == "X"
+        assert out["fields"]["mask_r"] == 3
+        assert "expression_ref" not in out and "output_index" not in out
+
     _run_cases(
         [
             ("property.test_empty_list_returns_empty_dict", test_empty_list_returns_empty_dict),
@@ -840,6 +864,7 @@ def test_property_bag_normalization_is_bounded_lossless():
             ("property.fcolor_bgra_decode", test_fcolor_bgra_decode),
             ("property.unversioned_header_fragments_ue_format", test_unversioned_header_fragments_ue_format),
             ("property.scalar_material_input_full_layout", test_scalar_material_input_full_layout),
+            ("property.function_expression_output_maps_to_output_decoder", test_function_expression_output_maps_to_output_decoder),
         ]
     )
 
