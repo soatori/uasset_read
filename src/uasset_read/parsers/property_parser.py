@@ -1577,68 +1577,50 @@ def _try_read_unversioned_header(
 ) -> list[tuple[int, bool | None]]:
     """Try UE FUnversionedHeader fragments; return None for legacy fixture streams.
 
-    UE source: UnversionedPropertySerialization.cpp FUnversionedHeader::Load.
-    Fragment u16 layout: SkipNum=bits 0-6, bHasAnyZeroes=bit 7,
-    bIsLast=bit 8, ValueNum=bits 9+.  Loop runs until bIsLast.
-    Zero mask is one global compact bit array sized by total masked values.
+    Byte-level fragment + zero-mask parsing is delegated to
+    ``parse_unversioned_header`` (the single header parser); this wrapper only
+    binds the stream to a bounded read and maps fragments onto schema indices.
     """
+    from uasset_read.parsers.properties.unversioned import parse_unversioned_header
+
     start = archive.tell()
-    fragments: list[tuple[int, bool, int]] = []
     try:
-        cursor = 0
-        total_values = 0
-        total_masked = 0
-        while archive.tell() + 2 <= property_end:
-            packed = archive.read_u16()
-            skip_num = packed & 0x007F
-            has_any_zeroes = bool(packed & 0x0080)
-            is_last = bool(packed & 0x0100)
-            value_num = packed >> 9
-            cursor += skip_num
-            if cursor + value_num > property_count:
-                raise ParseError("unversioned fragment exceeds mapping property count")
-            fragments.append((cursor, has_any_zeroes, value_num))
-            cursor += value_num
-            total_values += value_num
-            if has_any_zeroes:
-                total_masked += value_num
-            if is_last:
-                break
-            if len(fragments) > property_count:
-                raise ParseError("too many unversioned fragments")
-        else:
-            raise ParseError("unterminated unversioned header")
-        if not fragments or total_values == 0:
-            raise ParseError("no unversioned values")
-
-        # One global compact bit array for all masked fragments
-        # (UnversionedPropertySerialization.cpp LoadZeroMaskData:
-        # u8 if <=8 bits, u16 if <=16, else u32 words).
-        zero_bits: list[bool] = []
-        if total_masked > 0:
-            words: list[int] = []
-            if total_masked <= 8:
-                words = [archive.read_u8()]
-            elif total_masked <= 16:
-                words = [archive.read_u16()]
-            else:
-                words = [archive.read_u32() for _ in range((total_masked + 31) // 32)]
-            for word in words:
-                zero_bits.extend(bool(word & (1 << bit)) for bit in range(32))
-
-        selected: list[tuple[int, bool]] = []
-        bit_offset = 0
-        for frag_cursor, has_any_zeroes, value_num in fragments:
-            for local_index in range(value_num):
-                is_zero = zero_bits[bit_offset + local_index] if has_any_zeroes else False
-                selected.append((frag_cursor + local_index, is_zero))
-            if has_any_zeroes:
-                bit_offset += value_num
-        return selected
-    except (_struct.error, ParseError, ValueError) as e:
+        raw = archive.read(property_end - start)
+        header = parse_unversioned_header(raw)
+    except (ValueError, _struct.error, OSError, ParseError) as e:
         logger.debug("Unversioned header parse failed, falling back to legacy: %s", e)
         archive.seek(start)
         return None
+
+    total_values = 0
+    schema_cursor = 0
+    for frag in header.fragments:
+        schema_cursor += frag.skip_num
+        if schema_cursor + frag.value_num > property_count:
+            logger.debug("unversioned fragment exceeds mapping property count")
+            archive.seek(start)
+            return None
+        schema_cursor += frag.value_num
+        total_values += frag.value_num
+    if total_values == 0:
+        logger.debug("no unversioned values")
+        archive.seek(start)
+        return None
+
+    selected: list[tuple[int, bool]] = []
+    bit_offset = 0
+    schema_cursor = 0
+    for frag in header.fragments:
+        schema_cursor += frag.skip_num
+        for local_index in range(frag.value_num):
+            is_zero = header.zero_bits[bit_offset + local_index] if frag.has_any_zeroes else False
+            selected.append((schema_cursor + local_index, is_zero))
+        if frag.has_any_zeroes:
+            bit_offset += frag.value_num
+        schema_cursor += frag.value_num
+
+    archive.seek(start + header.header_size)
+    return selected
 
 
 def _unversioned_zero_value(prop_type: Any) -> Any:

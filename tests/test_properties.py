@@ -46,6 +46,18 @@ def test_unversioned_fragment_bit_layout_synthetic():
     assert only_value.fragments[1].is_last is True
 
 
+def test_unversioned_zero_mask_is_serialized_directly_without_count_byte():
+    # HasAnyZeroes=1, ValueNum=3, IsLast=1 => (3<<9)|0x100|0x80 = 0x0780.
+    # 3 masked values <= 8 bits, so the zero mask is a single uint8 (0b101),
+    # serialized directly with NO NumBits count byte (UE LoadZeroMaskData).
+    raw = (0x0780).to_bytes(2, "little") + bytes([0b101])
+    header = parse_unversioned_header(raw)
+    assert header.fragments[0].has_any_zeroes is True
+    assert header.fragments[0].value_num == 3
+    assert header.zero_bits == (True, False, True)
+    assert header.header_size == 3
+
+
 def duplicate_bag():
     return PropertyBag(
         entries=[
