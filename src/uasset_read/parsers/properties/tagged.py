@@ -385,6 +385,10 @@ def _read_property_loop(
     """Main property reading loop."""
     properties: list[PropertyValue] = []
     property_count = 0
+    # Stop reason for the bounded PropertyInput reader: "none" only when the
+    # None terminator was consumed; "tag_failed"/"size_exceeded"/"bound"/
+    # "poison" mark abnormal exits. Production read_export ignores this.
+    archive._tag_stream_stop = "running"
 
     while True:
         # D-08/D-09: Property loop limit check
@@ -400,10 +404,12 @@ def _read_property_loop(
             # Boundary check: current position should not exceed property data range
             current_pos = archive.tell()
             if current_pos >= property_end:
+                archive._tag_stream_stop = "bound"
                 break
             # #276: EOF check — prevent infinite retry at EOF when archive data is insufficient
             file_size = getattr(archive, "_file_size", None)
             if isinstance(file_size, int) and current_pos >= file_size:
+                archive._tag_stream_stop = "bound"
                 break
 
             struct_name = None
@@ -423,6 +429,7 @@ def _read_property_loop(
                 # #341: PropertyTag read failed — try recovery scan for next valid tag
                 remaining = property_end - archive.tell()
                 if remaining < 32:
+                    archive._tag_stream_stop = "tag_failed"
                     break
                 if not tolerant:
                     raise
@@ -453,9 +460,11 @@ def _read_property_loop(
                         )
                     )
                     if _stream_is_poisoned(archive, diag_mark):
+                        archive._tag_stream_stop = "poison"
                         break
                     continue
                 # Recovery failed — break to avoid infinite loop
+                archive._tag_stream_stop = "tag_failed"
                 break
 
             # Record current position after tag read (for size_exceeded recovery and boundary verification)
@@ -463,6 +472,7 @@ def _read_property_loop(
 
             # Termination marker: Name == UE_NONE_SENTINEL
             if tag.name == UE_NONE_SENTINEL:
+                archive._tag_stream_stop = "none"
                 break
 
             # size exceeds remaining bytes: try recovery, mark as partial on failure
@@ -500,6 +510,7 @@ def _read_property_loop(
                             )
                         )
                         if _stream_is_poisoned(archive, diag_mark):
+                            archive._tag_stream_stop = "poison"
                             break
                         continue
                 # Recovery failed, create PropertyFallback
@@ -514,6 +525,7 @@ def _read_property_loop(
                         array_index=tag.array_index,
                     )
                 )
+                archive._tag_stream_stop = "size_exceeded"
                 break
 
             # Boundary check: PropertyTag.Size should not exceed remaining property data range
@@ -558,6 +570,7 @@ def _read_property_loop(
                 properties[-1].value = resolved
 
             if _stream_is_poisoned(archive, diag_mark):
+                archive._tag_stream_stop = "poison"
                 break
 
         except ParseError as e:
@@ -575,6 +588,7 @@ def _read_property_loop(
                 )
             )
             if _stream_is_poisoned(archive, diag_mark):
+                archive._tag_stream_stop = "poison"
                 break
 
     return properties
@@ -841,6 +855,86 @@ def _property_values_to_bag(
     return bag, regions
 
 
+def _loop_recovery_diagnostics(
+    properties: list[PropertyValue],
+    window: ByteArchive,
+    input: PropertyInput,
+    diag_mark: int,
+) -> list[Diagnostic]:
+    """Derive PropertyReadResult diagnostics from unified-loop recovery signals.
+
+    Two sources, matching what the pre-unification ``read()`` reported:
+
+    * Structured diagnostics the loop (and the value parsers it drives) recorded
+      on the bounded window after ``diag_mark`` — fstring/name recoveries etc.
+    * ``PropertyFallback`` values the loop appended instead of raising, mapped
+      back to the PROPERTY_TAG_READ_FAILED / PROPERTY_VALUE_READ_FAILED codes.
+    """
+    diagnostics: list[Diagnostic] = []
+
+    for sd in window.get_structured_diagnostics()[diag_mark:]:
+        offset = input.start + sd.offset if sd.offset is not None else None
+        recovered = sd.fallback != "stop_table"
+        diagnostics.append(
+            Diagnostic(
+                severity=sd.severity,
+                code=sd.code,
+                message=sd.message,
+                stage=sd.stage or "properties.tagged",
+                object_id=input.object_id,
+                offset=offset,
+                size=sd.size,
+                effect="recovery" if recovered else "data_loss",
+                recoverable=recovered,
+                fallback=sd.fallback,
+                reason=sd.reason,
+            )
+        )
+
+    for pv in properties:
+        fallback = None
+        if isinstance(pv, PropertyFallback):
+            fallback = pv
+        elif isinstance(getattr(pv, "value", None), PropertyFallback):
+            fallback = pv.value
+        if fallback is None:
+            continue
+
+        # Tag-level failures (corrupted-tag placeholder, invalid tag size) keep the
+        # old PROPERTY_TAG_READ_FAILED code; value dispatch/unsupported keep VALUE.
+        tag_level = pv.name == "Corrupted" or fallback.reason in (
+            FallbackReason.SIZE_EXCEEDED,
+        )
+        code = "PROPERTY_TAG_READ_FAILED" if tag_level else "PROPERTY_VALUE_READ_FAILED"
+        reason_value = getattr(fallback.reason, "value", str(fallback.reason))
+        if fallback.reason in (FallbackReason.UNSUPPORTED_TYPE, FallbackReason.UNSUPPORTED_STRUCT):
+            diag_reason: str = "known_unimplemented"
+        elif fallback.reason is FallbackReason.MISSING_MAPPING:
+            diag_reason = "schema_required"
+        else:
+            diag_reason = "recovered_corruption"
+        tag_start = getattr(pv, "tag_start_offset", None)
+        offset = input.start + tag_start if tag_start is not None else input.start
+        diagnostics.append(
+            Diagnostic(
+                severity="warning",
+                code=code,
+                message=(
+                    f"Property {pv.name!r} ({pv.type}) recovered via fallback: "
+                    f"{reason_value}"
+                ),
+                stage="properties.tagged",
+                object_id=input.object_id,
+                offset=offset,
+                size=fallback.size if fallback.size > 0 else None,
+                effect="semantic_loss",
+                reason=diag_reason,  # type: ignore[arg-type]
+            )
+        )
+
+    return diagnostics
+
+
 class TaggedPropertyReader:
     """Sole public tagged entry: bounded slice read + production export stream."""
 
@@ -953,6 +1047,7 @@ class TaggedPropertyReader:
             serial_offset=input.start,
             serial_size=input.size,
         )
+        diag_mark = len(window.get_structured_diagnostics())
         try:
             properties = _read_property_loop(
                 export=synthetic_export,
@@ -1000,12 +1095,36 @@ class TaggedPropertyReader:
                     feature="terminator",
                 )
             )
+        diagnostics = _loop_recovery_diagnostics(properties, window, input, diag_mark)
+        stop = getattr(window, "_tag_stream_stop", "running")
+        # Silent tag-failure breaks (recovery scan failed or <32 bytes left)
+        # append no PropertyFallback — synthesize the old PROPERTY_TAG_READ_FAILED
+        # contract so those stops still report partial + a diagnostic.
+        if stop == "tag_failed" and not any(
+            d.code in ("PROPERTY_TAG_READ_FAILED", "PROPERTY_VALUE_READ_FAILED") for d in diagnostics
+        ):
+            diagnostics.append(
+                Diagnostic(
+                    severity="warning",
+                    code="PROPERTY_TAG_READ_FAILED",
+                    message="PropertyTag read failed and recovery scan did not find a next tag",
+                    stage="properties.tagged",
+                    object_id=input.object_id,
+                    offset=input.start + consumed,
+                    size=input.size - consumed if input.size > consumed else None,
+                    effect="semantic_loss",
+                    reason="recovered_corruption",
+                )
+            )
+        # complete only when the stream ended on the None terminator and no
+        # recovery (fallback or structured diagnostic) occurred in the loop.
+        status = "complete" if stop == "none" and not diagnostics else "partial"
         return PropertyReadResult(
             values=bag,
             consumed=consumed,
             regions=regions,
-            diagnostics=[],
-            status="complete",
+            diagnostics=diagnostics,
+            status=status,
         )
 
 

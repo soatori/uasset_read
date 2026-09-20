@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
+from tests.fixtures import make_property_input
 from uasset_read.models.byte_ranges import ByteRegion
 from uasset_read.models.properties import PropertyBag, PropertyEntry, project_property_bag, project_property_entries
 from uasset_read.parsers.properties.tagged import TaggedPropertyReader
@@ -12,6 +15,48 @@ def test_tagged_reader_reports_consumed_boundary(tagged_fixture):
     result = TaggedPropertyReader().read(tagged_fixture)
     assert result.consumed >= 0
     assert result.regions[-1].end == tagged_fixture.start + result.consumed
+
+
+def test_tagged_reader_recovery_reports_partial_with_diagnostics(tagged_fixture):
+    """Recovery on the PropertyInput path must not claim complete with no diagnostics.
+
+    The fixture's first FName index is out of range; tolerant read_name recovers
+    with "None" and records name_index_out_of_range on the bounded window, so
+    the unified-loop read must surface partial + that diagnostic.
+    """
+    result = TaggedPropertyReader().read(tagged_fixture)
+    assert result.status == "partial"
+    assert result.diagnostics
+    diag = next(d for d in result.diagnostics if d.code == "name_index_out_of_range")
+    assert diag.reason == "recovered_corruption"
+    assert diag.object_id == tagged_fixture.object_id
+
+
+def test_tagged_reader_property_fallback_reports_partial_with_diagnostics():
+    """A PropertyFallback recovered by the loop yields PROPERTY_VALUE_READ_FAILED + partial."""
+    inp = make_property_input("StarterContent_Starter_Background_Cue.uasset")
+    result = TaggedPropertyReader().read(inp)
+    assert result.status == "partial"
+    diag = next(d for d in result.diagnostics if d.code == "PROPERTY_VALUE_READ_FAILED")
+    assert diag.reason == "recovered_corruption"
+    assert diag.object_id == inp.object_id
+    # Recovery keeps the bag populated and the region boundary intact.
+    assert result.consumed >= 0
+    assert result.values.entries
+    assert result.regions[-1].end == inp.start + result.consumed
+
+
+def test_tagged_reader_clean_stream_reports_complete():
+    """status=complete only when the stream is clean (None-terminated, no recovery)."""
+    base = make_property_input("StackOBot_BP_Drone.uasset")
+    # The UE5.4+ serialization-control byte precedes the tags and read() enters
+    # the loop directly, so align past it to reach the clean tagged stream.
+    aligned = replace(base, start=base.start + 1, size=base.size - 1)
+    result = TaggedPropertyReader().read(aligned)
+    assert result.status == "complete"
+    assert result.diagnostics == []
+    assert result.values.entries
+    assert result.regions[-1].end == aligned.start + result.consumed
 
 
 def test_tagged_reader_is_sole_production_entry():
