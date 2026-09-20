@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from uasset_read.constants import UE5_LARGE_WORLD_COORDINATES
 from uasset_read.exceptions import ParseError
+from uasset_read.models.byte_ranges import ByteRegion
 from uasset_read.kismet.tokens import (
     EAutoRtfmStopTransactMode,
     EBlueprintTextLiteralType,
@@ -32,9 +33,16 @@ class KismetExpression(ABC):
 
     All EX_* instruction parse results inherit from this class.
     Subclasses must define a Token class attribute and a from_archive classmethod.
+
+    Dual offsets: ``StatementIndex`` is the UE logical script address
+    (CodeOffset coordinate). ``SerializedStart``/``SerializedEnd`` are the
+    on-disk cursors captured by ``FKismetArchive.read_expression``; they
+    default to ``-1`` until the archive fills them.
     """
 
     StatementIndex: int
+    SerializedStart: int = -1
+    SerializedEnd: int = -1
 
     @property
     @abstractmethod
@@ -42,18 +50,63 @@ class KismetExpression(ABC):
         """Return the EExprToken value corresponding to this expression."""
         ...
 
-    def __init__(self, statement_index: int = 0) -> None:
+    def __init__(
+        self,
+        statement_index: int = 0,
+        serialized_start: int = -1,
+        serialized_end: int = -1,
+    ) -> None:
         self.StatementIndex = statement_index
+        self.SerializedStart = serialized_start
+        self.SerializedEnd = serialized_end
 
     def to_dict(self) -> dict:
         """Serialize to dictionary format (for JSON output)."""
         return {
             "Inst": self.Token.name,
             "StatementIndex": self.StatementIndex,
+            "SerializedStart": self.SerializedStart,
+            "SerializedEnd": self.SerializedEnd,
         }
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} token={self.Token.name}>"
+
+
+@dataclass
+class OpaqueExpression(KismetExpression):
+    """Bounded opaque tail for an unknown/unmapped expression token.
+
+    Covers the unknown token through the end of the function slice so a
+    malformed payload cannot silently disappear or corrupt CFG targets.
+    The parser stops reading further top-level expressions for that function.
+    """
+
+    token: int
+    raw_region: ByteRegion
+    reason: str = "unknown_expression_token"
+
+    @property
+    def Token(self) -> EExprToken:  # type: ignore[override]
+        # Not a real mapped opcode. Fall back to a neutral token so generic
+        # Token.name accessors do not crash; the raw byte stays in ``token``.
+        try:
+            return EExprToken(self.token)
+        except ValueError:
+            return EExprToken.EX_Nothing
+
+    def to_dict(self) -> dict:
+        from uasset_read.models.byte_ranges import project_region
+
+        return {
+            "Inst": "Opaque",
+            "StatementIndex": self.StatementIndex,
+            "SerializedStart": self.SerializedStart,
+            "SerializedEnd": self.SerializedEnd,
+            "token": self.token,
+            "reason": self.reason,
+            "raw_region": project_region(self.raw_region),
+        }
 
 @dataclass(kw_only=True)
 class KismetExpressionT(KismetExpression):
@@ -367,25 +420,22 @@ class EX_TransformConst(KismetExpression):
     Reads doubles when summary.file_version_ue5 >= UE5_LARGE_WORLD_COORDINATES.
     """
 
+    Rotation: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    Translation: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    Scale: tuple[float, float, float] = (0.0, 0.0, 0.0)
+
     Token = EExprToken.EX_TransformConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive) -> EX_TransformConst:
         read_num = archive.read_f64 if _is_lwc(archive) else archive.read_f32
         # Rotation (quat): X, Y, Z, W
-        read_num()
-        read_num()
-        read_num()
-        read_num()
+        rot = (read_num(), read_num(), read_num(), read_num())
         # Translation: X, Y, Z
-        read_num()
-        read_num()
-        read_num()
+        trans = (read_num(), read_num(), read_num())
         # Scale: X, Y, Z
-        read_num()
-        read_num()
-        read_num()
-        return cls()
+        scale = (read_num(), read_num(), read_num())
+        return cls(Rotation=rot, Translation=trans, Scale=scale)
 
 @dataclass
 class EX_Vector3fConst(KismetExpression):
@@ -639,6 +689,7 @@ class EX_FinalFunction(KismetExpression):
         d = super().to_dict()
         d["StackNode"] = self.StackNode
         d["ParamCount"] = len(self.Parameters) if self.Parameters else 0
+        d["parameters"] = [p.to_dict() if hasattr(p, "to_dict") else p for p in self.Parameters]
         return d
 
 # Token-only EX_FinalFunction variants — share its serialization exactly.
@@ -672,6 +723,7 @@ class EX_VirtualFunction(KismetExpression):
         d = super().to_dict()
         d["Name"] = self.VirtualFunctionName
         d["ParamCount"] = len(self.Parameters) if self.Parameters else 0
+        d["parameters"] = [p.to_dict() if hasattr(p, "to_dict") else p for p in self.Parameters]
         return d
 
 EX_LocalVirtualFunction = make_token_subclass(EX_VirtualFunction, EExprToken.EX_LocalVirtualFunction)
@@ -699,29 +751,34 @@ class EX_CallMulticastDelegate(KismetExpression):
 class EX_CastBase(KismetExpression):
     """Abstract base class for cast expressions -- reads class pointer and target expression."""
 
+    TargetClass: int = 0
+    TargetExpression: KismetExpression | None = None
+
     @classmethod
     def from_archive(cls, archive: FKismetArchive) -> EX_CastBase:
-        archive.xfer_object_pointer()
-        archive.read_expression()
-        return cls()
+        class_ref = archive.xfer_object_pointer()
+        target = archive.read_expression()
+        return cls(TargetClass=class_ref.index, TargetExpression=target)
 
 @dataclass
 class EX_Cast(KismetExpression):
     """General type cast operator -- reads a conversion type byte followed by the target expression."""
 
     ConversionType: ECastToken = ECastToken.CST_ObjectToInterface
+    TargetExpression: KismetExpression | None = None
 
     Token = EExprToken.EX_Cast
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive) -> EX_Cast:
         conv = ECastToken(archive.read_u8())
-        archive.read_expression()
-        return cls(ConversionType=conv)
+        target = archive.read_expression()
+        return cls(ConversionType=conv, TargetExpression=target)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d["ConversionType"] = self.ConversionType.name
+        d["TargetExpression"] = self.TargetExpression.to_dict() if self.TargetExpression else None
         return d
 
 # Token-only cast variants — share EX_CastBase serialization exactly.
@@ -735,17 +792,27 @@ EX_InterfaceToObjCast = make_token_subclass(EX_CastBase, EExprToken.EX_Interface
 
 @dataclass
 class EX_Context(KismetExpression):
+    ContextExpression: KismetExpression | None = None
+    ContextualOffset: int = 0
+    ContextualProperty: Any = None
+    MemberExpression: KismetExpression | None = None
+
     Token = EExprToken.EX_Context
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive) -> EX_Context:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
-        archive.read_expression()
-        archive.read_u32()
-        FKismetPropertyPointer.from_archive(archive)
-        archive.read_expression()
-        return cls()
+        context_expr = archive.read_expression()
+        offset = archive.read_u32()
+        prop = FKismetPropertyPointer.from_archive(archive)
+        member = archive.read_expression()
+        return cls(
+            ContextExpression=context_expr,
+            ContextualOffset=offset,
+            ContextualProperty=prop,
+            MemberExpression=member,
+        )
 
 # Token-only EX_Context variants — share EX_Context serialization exactly.
 EX_Context_FailSilent = make_token_subclass(EX_Context, EExprToken.EX_Context_FailSilent)
@@ -753,24 +820,29 @@ EX_ClassContext = make_token_subclass(EX_Context, EExprToken.EX_ClassContext)
 
 @dataclass
 class EX_InterfaceContext(KismetExpression):
+    InterfaceExpression: KismetExpression | None = None
+
     Token = EExprToken.EX_InterfaceContext
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive) -> EX_InterfaceContext:
-        archive.read_expression()
-        return cls()
+        expr = archive.read_expression()
+        return cls(InterfaceExpression=expr)
 
 @dataclass
 class EX_StructMemberContext(KismetExpression):
+    MemberProperty: Any = None
+    StructExpression: KismetExpression | None = None
+
     Token = EExprToken.EX_StructMemberContext
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive) -> EX_StructMemberContext:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
-        FKismetPropertyPointer.from_archive(archive)
-        archive.read_expression()
-        return cls()
+        prop = FKismetPropertyPointer.from_archive(archive)
+        expr = archive.read_expression()
+        return cls(MemberProperty=prop, StructExpression=expr)
 
 # === Container expressions (from containers.py) ===
 
@@ -778,94 +850,116 @@ class EX_StructMemberContext(KismetExpression):
 class EX_SetArray(KismetExpression):
     """SetArray — version-dependent: with CHANGE_SETARRAY_BYTECODE has AssigningProperty."""
 
+    TargetExpression: KismetExpression | None = None
+    InitializingList: list[KismetExpression] = field(default_factory=list)
+
     Token = EExprToken.EX_SetArray
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive) -> EX_SetArray:
         # UE5's post-VER_UE4_CHANGE_SETARRAY_BYTECODE layout serializes the
         # array target as an expression, not as a bare FProperty pointer.
-        archive.read_expression()
-        archive.read_expression_array(EExprToken.EX_EndArray)
-        return cls()
+        target = archive.read_expression()
+        elements = archive.read_expression_array(EExprToken.EX_EndArray)
+        return cls(TargetExpression=target, InitializingList=elements)
 
 # Data-free expression: returns Token only
 EX_EndArray = make_simple_expression(EExprToken.EX_EndArray)
 
 @dataclass
 class EX_SetMap(KismetExpression):
+    TargetExpression: KismetExpression | None = None
+    Num: int = 0
+    Elements: list[KismetExpression] = field(default_factory=list)
+
     Token = EExprToken.EX_SetMap
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive) -> EX_SetMap:
-        archive.read_expression()
-        archive.read_i32()  # ScriptSerialization.inl:531-534: int32 element count
-        archive.read_expression_array(EExprToken.EX_EndMap)
-        return cls()
+        target = archive.read_expression()
+        num = archive.read_i32()  # ScriptSerialization.inl:531-534: int32 element count
+        elements = archive.read_expression_array(EExprToken.EX_EndMap)
+        return cls(TargetExpression=target, Num=num, Elements=elements)
 
 # Data-free expression: returns Token only
 EX_EndMap = make_simple_expression(EExprToken.EX_EndMap)
 
 @dataclass
 class EX_SetSet(KismetExpression):
+    TargetExpression: KismetExpression | None = None
     Num: int = 0
+    Elements: list[KismetExpression] = field(default_factory=list)
 
     Token = EExprToken.EX_SetSet
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive) -> EX_SetSet:
-        archive.read_expression()
+        target = archive.read_expression()
         num = archive.read_i32()  # ScriptSerialization.inl:526-529: int32 element count
-        archive.read_expression_array(EExprToken.EX_EndSet)
-        return cls(Num=num)
+        elements = archive.read_expression_array(EExprToken.EX_EndSet)
+        return cls(TargetExpression=target, Num=num, Elements=elements)
 
 # Data-free expression: returns Token only
 EX_EndSet = make_simple_expression(EExprToken.EX_EndSet)
 
 @dataclass
 class EX_ArrayConst(KismetExpression):
+    ElementType: Any = None
+    Num: int = 0
+    Values: list[KismetExpression] = field(default_factory=list)
+
     Token = EExprToken.EX_ArrayConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive) -> EX_ArrayConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
-        FKismetPropertyPointer.from_archive(archive)
-        archive.read_i32()  # ScriptSerialization.inl:536-541: int32 element count
-        archive.read_expression_array(EExprToken.EX_EndArrayConst)
-        return cls()
+        element_type = FKismetPropertyPointer.from_archive(archive)
+        num = archive.read_i32()  # ScriptSerialization.inl:536-541: int32 element count
+        values = archive.read_expression_array(EExprToken.EX_EndArrayConst)
+        return cls(ElementType=element_type, Num=num, Values=values)
 
 # Data-free expression: returns Token only
 EX_EndArrayConst = make_simple_expression(EExprToken.EX_EndArrayConst)
 
 @dataclass
 class EX_MapConst(KismetExpression):
+    KeyType: Any = None
+    ValueType: Any = None
+    Num: int = 0
+    Values: list[KismetExpression] = field(default_factory=list)
+
     Token = EExprToken.EX_MapConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive) -> EX_MapConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
-        FKismetPropertyPointer.from_archive(archive)
-        FKismetPropertyPointer.from_archive(archive)
-        archive.read_i32()
-        archive.read_expression_array(EExprToken.EX_EndMapConst)
-        return cls()
+        key_type = FKismetPropertyPointer.from_archive(archive)
+        value_type = FKismetPropertyPointer.from_archive(archive)
+        num = archive.read_i32()
+        values = archive.read_expression_array(EExprToken.EX_EndMapConst)
+        return cls(KeyType=key_type, ValueType=value_type, Num=num, Values=values)
 
 # Data-free expression: returns Token only
 EX_EndMapConst = make_simple_expression(EExprToken.EX_EndMapConst)
 
 @dataclass
 class EX_SetConst(KismetExpression):
+    ElementType: Any = None
+    Num: int = 0
+    Values: list[KismetExpression] = field(default_factory=list)
+
     Token = EExprToken.EX_SetConst
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive) -> EX_SetConst:
         from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
-        FKismetPropertyPointer.from_archive(archive)
-        archive.read_i32()  # ScriptSerialization.inl:543-548: int32 element count
-        archive.read_expression_array(EExprToken.EX_EndSetConst)
-        return cls()
+        element_type = FKismetPropertyPointer.from_archive(archive)
+        num = archive.read_i32()  # ScriptSerialization.inl:543-548: int32 element count
+        values = archive.read_expression_array(EExprToken.EX_EndSetConst)
+        return cls(ElementType=element_type, Num=num, Values=values)
 
 # Data-free expression: returns Token only
 EX_EndSetConst = make_simple_expression(EExprToken.EX_EndSetConst)
@@ -1069,25 +1163,29 @@ class EX_InstanceDelegate(KismetExpression):
 class FKismetSwitchCase:
     """Switch case struct for EX_SwitchValue."""
 
+    IndexExpression: KismetExpression | None = None
     NextOffset: int = 0
+    CaseExpression: KismetExpression | None = None
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive) -> FKismetSwitchCase:
-        archive.read_expression()
+        index_expr = archive.read_expression()
         offset = archive.read_u32()
-        archive.read_expression()
-        return cls(NextOffset=offset)
+        case_expr = archive.read_expression()
+        return cls(IndexExpression=index_expr, NextOffset=offset, CaseExpression=case_expr)
 
 @dataclass
 class EX_Return(KismetExpression):
     """Return from function — reads return expression."""
 
+    ReturnValue: KismetExpression | None = None
+
     Token = EExprToken.EX_Return
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive) -> EX_Return:
-        archive.read_expression()
-        return cls()
+        value = archive.read_expression()
+        return cls(ReturnValue=value)
 
 @dataclass
 class EX_Assert(KismetExpression):
@@ -1095,6 +1193,7 @@ class EX_Assert(KismetExpression):
 
     LineNumber: int = 0
     DebugMode: bool = False
+    AssertExpression: KismetExpression | None = None
 
     Token = EExprToken.EX_Assert
 
@@ -1103,8 +1202,8 @@ class EX_Assert(KismetExpression):
         line = archive.read_u16()
         # ScriptSerialization.inl:597-603 — debug flag is uint8 (XFER(uint8)), NOT a 4-byte UBOOL.
         debug = archive.read_u8() != 0
-        archive.read_expression()
-        return cls(LineNumber=line, DebugMode=debug)
+        expr = archive.read_expression()
+        return cls(LineNumber=line, DebugMode=debug, AssertExpression=expr)
 
 @dataclass
 class EX_NothingInt32(KismetExpressionT):
@@ -1123,7 +1222,9 @@ class EX_SwitchValue(KismetExpression):
     """Switch expression — evaluates index, matches cases, falls through to default."""
 
     EndGotoOffset: int = 0
+    IndexExpression: KismetExpression | None = None
     Cases: list[FKismetSwitchCase] | None = None
+    DefaultExpression: KismetExpression | None = None
 
     Token = EExprToken.EX_SwitchValue
 
@@ -1131,13 +1232,18 @@ class EX_SwitchValue(KismetExpression):
     def from_archive(cls, archive: FKismetArchive) -> EX_SwitchValue:
         num_cases = archive.read_u16()
         end_offset = archive.read_u32()
-        archive.read_expression()
+        index_expr = archive.read_expression()
         cases = []
         for _ in range(num_cases):
             case = FKismetSwitchCase.from_archive(archive)
             cases.append(case)
-        archive.read_expression()
-        return cls(EndGotoOffset=end_offset, Cases=cases)
+        default_expr = archive.read_expression()
+        return cls(
+            EndGotoOffset=end_offset,
+            IndexExpression=index_expr,
+            Cases=cases,
+            DefaultExpression=default_expr,
+        )
 
 @dataclass
 class EX_InstrumentationEvent(KismetExpression):

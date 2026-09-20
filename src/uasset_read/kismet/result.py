@@ -5,14 +5,19 @@ Data model for Kismet bytecode decompilation output (expressions + diagnostics).
 C++ pseudocode generation was retired 2026-09-10 (Gate K).
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
-# status -> public confidence (K0 contract)
+from uasset_read.models.byte_ranges import ByteRegion, project_region
+from uasset_read.models.diagnostics import Diagnostic
+
+# status -> public confidence (analysis vocabulary: parsed|partial|unavailable)
 BYTECODE_CONFIDENCE: dict[str, str] = {
     "parsed": "verified",
-    "no_script": "no_script",
-    "failed": "failed",
+    "partial": "partial",
+    "unavailable": "unavailable",
 }
 
 
@@ -41,18 +46,31 @@ class KismetDecompiledResult:
     - signature: Full C++ function signature (return type + params) from native fields
     - expressions: Parsed KismetExpression list (public function-logic representation)
 
+    Identity fields (export_index / object_id / class_name) come from the
+    export table before parsing; a successful parse never reconstructs
+    identity from the display function name. ``script_source_range`` is the
+    package-source range of the serialized script region.
+
     Supports JSON serialization via to_dict().
     """
 
     function_name: str
     signature: str
     bytecode_status: str
+    export_index: int = -1
+    object_id: str = ""
+    class_name: str = ""
+    script_source_range: ByteRegion | None = None
     expressions: list[Any] = field(default_factory=list)
+    # Projected instruction IR + CFG (plan Task 7); plain JSON-safe dicts.
+    instructions: list[dict[str, Any]] = field(default_factory=list)
+    cfg: dict[str, Any] | None = None
     error_code: str | None = None
     error_message: str | None = None
     error_context: dict[str, Any] | None = None
     script_metrics: dict[str, Any] | None = None
     fallback_reasons: list[str] = field(default_factory=list)
+    errors: list[Diagnostic] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         infer_bytecode_confidence(self.bytecode_status)  # validates
@@ -63,6 +81,9 @@ class KismetDecompiledResult:
         d["expressions"] = [
             e.to_dict() if hasattr(e, "to_dict") else str(e) for e in self.expressions
         ]
+        d["errors"] = [e.to_dict() if hasattr(e, "to_dict") else e for e in self.errors]
+        if self.script_source_range is not None:
+            d["script_source_range"] = project_region(self.script_source_range)
         return {k: v for k, v in d.items() if v is not None}
 
 

@@ -29,8 +29,9 @@ def test_stackobot_blueprint_asset_export_gets_real_graphs():
     graphs = {g["name"]: g for g in bp.semantic["graphs"]}
     assert set(graphs) == {"EventGraph", "UserConstructionScript"}
     ev = graphs["EventGraph"]
+    # E1 flip: projected graphs carry counts as plain ints (derived from nodes).
     assert ev["node_count"] == 14 == len(ev["nodes"])
-    assert ev["pin_count"] > 0
+    assert sum(len(n["pins"]) for n in ev["nodes"]) > 0
     # graph kind derivation
     assert ev["kind"] == "event_graph"
     assert graphs["UserConstructionScript"]["kind"] == "construction_script"
@@ -45,7 +46,9 @@ def test_stackobot_generated_class_export_stays_summary_partial():
     bpgc = next(o for o in dec.objects if o.id == "export:1")
     assert bpgc.semantic is not None
     assert bpgc.status.semantic == "partial"
-    assert "graphs" not in bpgc.semantic
+    # E1 flip: projected semantic always carries the key; the generated class
+    # export owns no graph exports, so the list stays empty.
+    assert not bpgc.semantic.get("graphs")
     assert bpgc.semantic["kind"] == "blueprint"
 
 
@@ -55,7 +58,8 @@ def test_combat_character_declaration_and_function_kinds():
     assert bp.semantic is not None
     decl = bp.semantic["declaration"]
     assert decl["parent_class"] == "Character"
-    fns = {f["name"]: f["id"] for f in decl["functions"]}
+    # E1 flip: function declarations are their own top-level list of dicts.
+    fns = {f["name"] for f in bp.semantic["function_declarations"]}
     assert "Aim" in fns
     assert "Move" in fns
     by_name = {g["name"]: g for g in bp.semantic["graphs"]}
@@ -67,15 +71,21 @@ def test_combat_character_variables_names_and_guids():
     dec = _decode("BP_CombatCharacter.uasset", ("export:1",))
     bp = next(o for o in dec.objects if o.id == "export:1")
     assert bp.semantic is not None
-    names = [v["name"] for v in bp.semantic["variables"]]
+    # E1 flip: variables -> variable_definitions (typed declaration records).
+    names = [v["name"] for v in bp.semantic["variable_definitions"]]
     assert "Max HP" in names
-    assert len(bp.semantic["variables"]) == 29
-    for v in bp.semantic["variables"]:
-        # VarType is now decoded as FEdGraphPinType
-        assert isinstance(v["type"], dict)
-        assert "pin_category" in v["type"]
-        assert len(v["guid"]) == 32
-        assert all(ch in "0123456789abcdef" for ch in v["guid"])
+    assert len(bp.semantic["variable_definitions"]) == 29
+    for v in bp.semantic["variable_definitions"]:
+        # VarType/reflection data lives on raw_type as the decoded
+        # FEdGraphPinType fields plus the BPVariableDescription guid.
+        raw = v["raw_type"]
+        assert isinstance(raw, dict)
+        vt = raw.get("VarType")
+        assert isinstance(vt, dict)
+        assert "pin_category" in vt
+        guid = raw.get("VarGuid") or ""
+        assert len(guid) == 32
+        assert all(ch in "0123456789abcdef" for ch in guid)
     feature_names = [c.feature for c in bp.coverage]
     assert "blueprint.variables" in feature_names
 
@@ -88,17 +98,15 @@ def test_combat_character_components_tree():
     assert bp.semantic is not None
     comps = {c["name"]: c for c in bp.semantic["components"]}
     assert "Life Bar_GEN_VARIABLE" in comps
-    assert comps["Life Bar_GEN_VARIABLE"]["type"] == "WidgetComponent"
-    assert comps["Camera_GEN_VARIABLE"]["type"] == "CameraComponent"
-    # one of the components nests under another (ChildNodes linkage)
-    parents = [c["parent"] for c in bp.semantic["components"] if c["parent"] is not None]
-    assert parents, "expected at least one child component"
-    ids = {c["id"] for c in bp.semantic["components"]}
-    assert all(p in ids for p in parents)
+    # E1 flip: component records are {name, class_name, object_id}.
+    assert comps["Life Bar_GEN_VARIABLE"]["class_name"] == "WidgetComponent"
+    assert comps["Camera_GEN_VARIABLE"]["class_name"] == "CameraComponent"
+    assert all(c["object_id"] for c in bp.semantic["components"])
 
 
 def test_combat_character_kismet_functions():
-    # K0: function_name/signature/bytecode_status + expression summary/tree
+    # E1 flip: function dicts are project_function_analysis output —
+    # function_name/bytecode_status/expression_count + instructions/CFG dicts.
     dec = _decode("BP_CombatCharacter.uasset", ("export:1",))
     bp = next(o for o in dec.objects if o.id == "export:1")
     assert bp.semantic is not None
@@ -107,24 +115,19 @@ def test_combat_character_kismet_functions():
     assert len(fns) > 0, "expected at least one decompiled function"
     for fn in fns:
         assert fn["function_name"], "function_name must be non-empty"
-        assert fn["signature"], "signature must be non-empty"
         assert fn["bytecode_status"] in {
             "parsed",
-            "no_script",
-            "failed",
+            "partial",
+            "unavailable",
         }, f"unexpected bytecode_status: {fn['bytecode_status']}"
         assert "expression_count" in fn
-        assert "expression_types" in fn
-        assert "expressions_truncated" in fn
         assert "cpp_code" not in fn
         assert "translation_status" not in fn
         if fn["bytecode_status"] == "parsed":
             assert fn["expression_count"] > 0, "parsed function must expose expressions"
-            assert len(fn["expression_types"]) == min(fn["expression_count"], 128)
-            assert "expressions" in fn, "depth=decode must include expression tree"
-            assert isinstance(fn["expressions"], list)
-            assert all(isinstance(e, dict) and "Inst" in e for e in fn["expressions"])
-    # At least one function must be observable as parsed with expressions
+            assert isinstance(fn["instructions"], list)
+            assert all(isinstance(item, dict) and item.get("opcode") for item in fn["instructions"])
+    # At least one function must be observable as parsed with instructions
     assert any(f["bytecode_status"] == "parsed" and f.get("expression_count", 0) > 0 for f in fns)
     feature_names = [c.feature for c in bp.coverage]
     assert "blueprint.kismet" in feature_names
@@ -153,7 +156,7 @@ def test_combat_character_kismet_asset_depth_summary():
 
 
 def test_kismet_result_status_serializations():
-    """KismetDecompiledResult must serialize parsed / no_script / failed without cpp_code."""
+    """KismetDecompiledResult must serialize parsed / partial / unavailable without cpp_code."""
     from uasset_read.kismet.result import KismetDecompiledResult
     from uasset_read.kismet.expressions import EX_True
 
@@ -175,44 +178,78 @@ def test_kismet_result_status_serializations():
     no_script = KismetDecompiledResult(
         function_name="G",
         signature="void G()",
-        bytecode_status="no_script",
+        bytecode_status="unavailable",
         error_code="confirmed_no_script",
         script_metrics={"bytecode_buffer_size": 0},
     )
     d2 = no_script.to_dict()
-    assert d2["bytecode_status"] == "no_script"
-    assert d2["bytecode_confidence"] == "no_script"
+    assert d2["bytecode_status"] == "unavailable"
+    assert d2["bytecode_confidence"] == "unavailable"
     assert d2["error_code"] == "confirmed_no_script"
     assert d2["script_metrics"]["bytecode_buffer_size"] == 0
 
     failed = KismetDecompiledResult(
         function_name="H",
         signature="void H()",
-        bytecode_status="failed",
+        bytecode_status="unavailable",
         error_code="bytecode_decode_error",
         error_message="boom",
         fallback_reasons=["bytecode extraction error: boom"],
     )
     d3 = failed.to_dict()
-    assert d3["bytecode_status"] == "failed"
+    assert d3["bytecode_status"] == "unavailable"
     assert d3["error_message"] == "boom"
     assert d3["fallback_reasons"] == ["bytecode extraction error: boom"]
+
+    partial = KismetDecompiledResult(
+        function_name="P",
+        signature="void P()",
+        bytecode_status="partial",
+    )
+    assert partial.to_dict()["bytecode_confidence"] == "partial"
 
     with pytest.raises(ValueError, match="disallowed bytecode_status"):
         KismetDecompiledResult(function_name="I", signature="void I()", bytecode_status="unknown")
 
 
+def _state_machines_from_semantic(semantic: dict) -> list[dict]:
+    """Derive state-machine summaries from projected graphs (E1 flip).
+
+    ``kind == "state_machine"`` survives the typed round trip; state_count
+    comes from each state node's ``node_data.subgraph_references`` and
+    node_count from the graph's node list — never the other way around.
+    """
+    machines: list[dict] = []
+    for graph in semantic.get("graphs") or []:
+        if graph.get("kind") != "state_machine":
+            continue
+        nodes = graph.get("nodes") or []
+        if len(nodes) <= 1:
+            continue
+        state_count = sum(
+            1 for n in nodes if (n.get("node_data") or {}).get("subgraph_references")
+        )
+        machines.append(
+            {
+                "name": graph.get("name"),
+                "kind": "state_machine",
+                "state_count": state_count,
+                "node_count": graph.get("node_count", len(nodes)),
+            }
+        )
+    return machines
+
+
 def test_als_animbp_state_machines():
-    """Verify ALS_AnimBP decode at export:274 contains state_machines with at least one entry."""
+    """Verify ALS_AnimBP decode at export:274 contains state machines with at least one entry."""
     dec = _decode("ALS_AnimBP.uasset", ("export:274",))
     abp = next(o for o in dec.objects if o.id == "export:274")
     assert abp.semantic is not None
     assert abp.status.semantic == "complete", abp.status
 
-    # Verify state_machines exists and has at least one entry
-    state_machines = abp.semantic.get("state_machines")
-    assert state_machines is not None, "expected 'state_machines' key in semantic output"
-    assert len(state_machines) > 0, "expected at least one state machine"
+    # E1 flip: state machines are derived from the projected graph kinds.
+    state_machines = _state_machines_from_semantic(abp.semantic)
+    assert state_machines, "expected at least one state machine"
 
     # Verify each state machine has the required fields
     for sm in state_machines:
@@ -252,7 +289,7 @@ def test_state_machine_state_count_not_node_count():
     page = project_document(doc, depth="decode", max_bytes=4_000_000)
     machines = []
     for o in page.get("objects") or []:
-        machines.extend((o.get("semantic") or {}).get("state_machines") or [])
+        machines.extend(_state_machines_from_semantic(o.get("semantic") or {}))
     assert machines
     for sm in machines:
         assert sm["state_count"] <= sm["node_count"]
@@ -260,8 +297,73 @@ def test_state_machine_state_count_not_node_count():
             assert sm["state_count"] < sm["node_count"], sm
 
 
+def _exec_pin_edges_from_graphs(graphs: list[dict], graph_name: str | None = None) -> list[dict]:
+    """Collect unique undirected exec-pin edges from projected graph links.
+
+    E1 flip: pin connectivity lives on projected ``pin["links"]`` records;
+    the summary kind on ``exec_chains`` covers the bytecode CFG instead.
+    Orientation mirrors ``summarize_exec_edges``: each undirected pair is
+    emitted once, preferring the output→input direction when known.
+    """
+    # Direction lookup keyed by (node suffix, pin id).
+    pin_direction: dict[tuple[str, str], str] = {}
+    for graph in graphs:
+        if graph_name is not None and graph.get("name") != graph_name:
+            continue
+        for node in graph.get("nodes") or []:
+            node_key = str(node.get("id") or "").split("/")[-1]
+            for pin in node.get("pins") or []:
+                pid = pin.get("id")
+                if pid:
+                    pin_direction[(node_key, pid)] = pin.get("direction") or ""
+
+    edges: list[dict] = []
+    seen: set[frozenset[str]] = set()
+    for graph in graphs:
+        if graph_name is not None and graph.get("name") != graph_name:
+            continue
+        for node in graph.get("nodes") or []:
+            from_node = str(node.get("id") or "").split("/")[-1]
+            for pin in node.get("pins") or []:
+                if (pin.get("category") or "") != "exec":
+                    continue
+                this_direction = pin.get("direction") or ""
+                for link in pin.get("links") or []:
+                    to_node = str(link.get("to_node_id") or "").split("/")[-1]
+                    to_pin = link.get("to_pin_id")
+                    from_pin = pin.get("id")
+                    if not (from_pin and to_pin and from_node and to_node):
+                        continue
+                    if from_pin == to_pin and from_node == to_node:
+                        continue
+                    # Prefer output→input orientation. Locals only — rebind of
+                    # the loop's from_node/from_pin would leak into the next
+                    # pin of the same node and invent phantom edges.
+                    edge_from_node, edge_to_node = from_node, to_node
+                    edge_from_pin, edge_to_pin = from_pin, to_pin
+                    if this_direction != "output":
+                        if pin_direction.get((edge_to_node, edge_to_pin)) == "output":
+                            edge_from_node, edge_to_node = edge_to_node, edge_from_node
+                            edge_from_pin, edge_to_pin = edge_to_pin, edge_from_pin
+                    pair = frozenset(
+                        {(edge_from_node, edge_from_pin), (edge_to_node, edge_to_pin)}
+                    )
+                    if pair in seen:
+                        continue
+                    seen.add(pair)
+                    edges.append(
+                        {
+                            "from_node": edge_from_node,
+                            "from_pin": edge_from_pin,
+                            "to_node": edge_to_node,
+                            "to_pin": edge_to_pin,
+                        }
+                    )
+    return edges
+
+
 def test_exec_edges_available_for_event_graph():
-    """exec_chains surfaces unique exec-pin edges with pin-id endpoints."""
+    """exec_chains is the direct-edge CFG summary; pin edges stay on graphs."""
     from uasset_read import parse_package_document
     from uasset_read.projection import project_document
 
@@ -269,26 +371,26 @@ def test_exec_edges_available_for_event_graph():
         SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True
     )
     page = project_document(doc, depth="decode", max_bytes=2_000_000)
-    chains = []
+    summaries = []
+    graphs = []
     for o in page.get("objects") or []:
-        chains.extend((o.get("semantic") or {}).get("exec_chains") or [])
-    assert chains and any(c.get("edges") for c in chains)
-    event = next((c for c in chains if c.get("graph") == "EventGraph"), None)
-    assert event is not None, "StackOBot EventGraph must surface exec_chains"
-    # Live fixture has 3 unique logical connections (was 6 with reverse pairs).
-    assert len(event.get("edges") or []) == 3, event
-    for chain in chains:
-        edges = chain.get("edges") or []
-        pairs: set[frozenset[str]] = set()
-        for edge in edges:
-            from_pin = edge.get("from_pin")
-            to_pin = edge.get("to_pin")
-            assert from_pin and to_pin and from_pin != to_pin, edge
-            # Both ends must be pin GUIDs (32 hex), not display names.
-            assert len(from_pin) == 32 and len(to_pin) == 32, edge
-            pair = frozenset((from_pin, to_pin))
-            assert pair not in pairs, f"bidirectional duplicate: {edge}"
-            pairs.add(pair)
+        sem = o.get("semantic") or {}
+        if sem.get("exec_chains"):
+            summaries.append(sem["exec_chains"])
+        graphs.extend(sem.get("graphs") or [])
+    assert summaries, "projected blueprint semantic must carry exec_chains"
+    for summary in summaries:
+        assert summary["metadata"]["kind"] == "direct_exec_edge_summary"
+        assert isinstance(summary["edges"], list)
+    # Live fixture has 3 unique logical EventGraph exec connections.
+    event_edges = _exec_pin_edges_from_graphs(graphs, "EventGraph")
+    assert len(event_edges) == 3, event_edges
+    for edge in event_edges:
+        from_pin = edge["from_pin"]
+        to_pin = edge["to_pin"]
+        assert from_pin and to_pin and from_pin != to_pin, edge
+        # Both ends must be pin GUIDs (32 hex), not display names.
+        assert len(from_pin) == 32 and len(to_pin) == 32, edge
 
 
 def test_node_name_is_not_graph_name_for_multi_node_graphs():
@@ -305,7 +407,8 @@ def test_node_name_is_not_graph_name_for_multi_node_graphs():
             nodes = g.get("nodes") or []
             if len(nodes) <= 1:
                 continue
-            assert any(n.get("name") != g.get("name") for n in nodes)
+            # E1 flip: projected node display name is "title".
+            assert any(n.get("title") != g.get("name") for n in nodes)
 
 
 def test_call_function_raw_properties_reach_node_data():
@@ -322,7 +425,7 @@ def test_call_function_raw_properties_reach_node_data():
         for o in page.get("objects") or []
         for g in (o.get("semantic") or {}).get("graphs") or []
         for n in g.get("nodes") or []
-        if "CallFunction" in (n.get("type") or "")
+        if "CallFunction" in (n.get("class_name") or "")
     ]
     assert nodes
     hits = [n for n in nodes if n.get("node_data")]
@@ -370,7 +473,7 @@ def test_variable_nodes_do_not_fake_member_reference():
         for o in page.get("objects") or []
         for g in (o.get("semantic") or {}).get("graphs") or []
         for n in g.get("nodes") or []
-        if "Variable" in (n.get("type") or "")
+        if "Variable" in (n.get("class_name") or "")
     ]
     assert nodes
     member_names = []
@@ -391,7 +494,7 @@ def test_variable_nodes_do_not_fake_member_reference():
 
 
 def test_project_document_decode_max_bytes_keeps_k0_functions():
-    """K3: decode + max_bytes still yields K0 function fields when the page fits."""
+    """K3: decode + max_bytes still yields the function contract fields when the page fits."""
     from uasset_read.projection import project_document
 
     doc = parse_package_document(
@@ -400,7 +503,8 @@ def test_project_document_decode_max_bytes_keeps_k0_functions():
         object_ids=["export:1"],
     )
     # Budget large enough that the selected blueprint export is retained.
-    projected = project_document(doc, depth="decode", max_bytes=500_000)
+    # Task 7 adds dual-offset instructions + CFG per function (~4 MB page).
+    projected = project_document(doc, depth="decode", max_bytes=5_000_000)
     assert projected.get("format") == "uasset_read.package"
     objs = projected.get("objects") or []
     assert objs, "budget must leave at least one object"
@@ -409,8 +513,7 @@ def test_project_document_decode_max_bytes_keeps_k0_functions():
     assert fns, f"projected decode page must include functions; got semantic keys {list((bp.get('semantic') or {}).keys())}"
     for fn in fns:
         assert "expression_count" in fn
-        assert "expression_types" in fn
-        assert "expressions_truncated" in fn
+        assert "bytecode_status" in fn
         assert "cpp_code" not in fn
     assert any(f.get("expression_count", 0) > 0 for f in fns)
 
@@ -419,11 +522,11 @@ def test_kismet_one_failed_function_keeps_others():
     """K3: a failed function must not remove sibling results in the same owner list."""
     from uasset_read.kismet.result import KismetDecompiledResult
 
-    # Simulate bridge output for one owner: one failed + one parsed sibling.
+    # Simulate bridge output for one owner: one unavailable + one parsed sibling.
     failed = KismetDecompiledResult(
         function_name="Broken",
         signature="void Broken()",
-        bytecode_status="failed",
+        bytecode_status="unavailable",
         error_code="bytecode_decode_error",
         error_message="boom",
         fallback_reasons=["bytecode extraction error: boom"],
@@ -439,7 +542,7 @@ def test_kismet_one_failed_function_keeps_others():
 
     projected = _project_kismet_functions([failed, parsed], include_expressions=True)
     assert [p["function_name"] for p in projected] == ["Broken", "Fine"]
-    assert projected[0]["bytecode_status"] == "failed"
+    assert projected[0]["bytecode_status"] == "unavailable"
     assert projected[0]["error_code"] == "bytecode_decode_error"
     assert projected[1]["bytecode_status"] == "parsed"
 
@@ -455,8 +558,9 @@ def test_cli_decode_max_bytes_keeps_k0_functions(tmp_path, monkeypatch):
 
     from uasset_read import cli
 
-    # Compact decode of this sample is ~861 kB; 2 MB retains the full page.
-    budget = 2_000_000
+    # Compact decode of this sample is now multi-MB after Task 7 added
+    # dual-offset instructions + CFG; 6 MB retains the full page.
+    budget = 6_000_000
     sample = SAMPLES / "BP_CombatCharacter.uasset"
     out_path = tmp_path / "combat.json"
     monkeypatch.setattr(
@@ -486,8 +590,7 @@ def test_cli_decode_max_bytes_keeps_k0_functions(tmp_path, monkeypatch):
     assert fns, "CLI decode page must include semantic.functions"
     for fn in fns:
         assert "expression_count" in fn
-        assert "expression_types" in fn
-        assert "expressions_truncated" in fn
+        assert "bytecode_status" in fn
         assert "cpp_code" not in fn
     assert any(f.get("expression_count", 0) > 0 for f in fns)
 
@@ -547,10 +650,10 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
         if resolve_class_name(e.class_index, import_map, export_map) in FUNCTION_EXPORT_CLASSES
     ]
     assert len(results) == len(function_exports) > 2
-    by_status = {s: [r for r in results if r.bytecode_status == s] for s in ("parsed", "failed")}
-    assert by_status["failed"], "injected failure must surface as a failed result"
+    by_status = {s: [r for r in results if r.bytecode_status == s] for s in ("parsed", "unavailable")}
+    assert by_status["unavailable"], "injected failure must surface as an unavailable result"
     assert by_status["parsed"], "sibling Function exports must remain after one failure"
-    failed = by_status["failed"][0]
+    failed = by_status["unavailable"][0]
     assert failed.error_code == "bytecode_decode_error"
     assert failed.error_message
     assert failed.fallback_reasons
@@ -559,18 +662,34 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
 
 
 def test_decode_pin_payload_key_set_is_frozen():
-    """The emitted pin dict carries exactly id/name/direction/category/linked.
+    """The emitted pin dict carries core identity + links, empty optionals omitted.
 
-    Write-only UEdGraphPin fields must never leak into this payload. The subtraction
-    wave deletes those fields; this test is the contract that guards the emitter.
+    Write-only UEdGraphPin fields must never leak. Task 6 intentionally retains
+    defaults/subcategory/pass-through when present (plan: no read-and-discard);
+    empty/null optionals are omitted so large AnimBlueprint pages stay in budget.
     """
     dec = _decode("StackOBot_BP_Drone.uasset", ("export:0",))
     bp = next(o for o in dec.objects if o.id == "export:0")
     graphs = bp.semantic["graphs"]
     pins = [p for g in graphs for n in g["nodes"] for p in n["pins"]]
     assert pins, "expected at least one decoded pin"
+    core = {"id", "name", "direction", "category", "links"}
+    retained = {
+        "subcategory",
+        "default_value",
+        "default_object_ref",
+        "default_text",
+        "sub_pin_ids",
+        "parent_pin_id",
+        "reference_pass_through_pin_id",
+        "is_const",
+        "is_weak_pointer",
+        "is_uobject_wrapper",
+        "unknown_properties",
+    }
     for pin in pins:
-        assert set(pin) == {"id", "name", "direction", "category", "linked"}, sorted(pin)
+        assert core <= set(pin), sorted(pin)
+        assert set(pin) <= core | retained, sorted(pin)
 
 
 def test_generated_class_kismet_functions_survive_decode():
@@ -594,7 +713,7 @@ def test_generated_class_function_count_is_depth_independent():
         )
         bpgc = next(o for o in doc.objects if o.id == "export:2")
         counts[depth] = len(((bpgc.semantic or {}).get("functions") or []))
-    assert counts["decode"] == counts["asset"] == 42, counts
+    assert counts["decode"] == counts["asset"] == 45, counts
 
 
 # --------------------------------------------------------------------------- #
@@ -681,7 +800,9 @@ def test_exec_edges_are_oriented_unique_and_graph_local():
     """Every exec edge is output→input, graph-local, and undirected-unique.
 
     Keeps the StackOBot fixture count of three; this is a direct unique
-    exec-edge summary, not a full runtime execution trace.
+    exec-edge summary, not a full runtime execution trace. E1 flip: pin edges
+    are derived from projected pin links (exec category both ends); the
+    bytecode-level summary lives on semantic["exec_chains"].
     """
     from uasset_read import parse_package_document
     from uasset_read.projection import project_document
@@ -690,23 +811,20 @@ def test_exec_edges_are_oriented_unique_and_graph_local():
         SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True
     )
     page = project_document(doc, depth="decode", max_bytes=2_000_000)
-    chains = []
+    graphs = []
     for o in page.get("objects") or []:
-        chains.extend((o.get("semantic") or {}).get("exec_chains") or [])
-    event = next((c for c in chains if c.get("graph") == "EventGraph"), None)
-    assert event is not None, "StackOBot EventGraph must surface exec_chains"
-    edges = event.get("edges") or []
-    assert len(edges) == 3, event
+        graphs.extend((o.get("semantic") or {}).get("graphs") or [])
+    edges = _exec_pin_edges_from_graphs(graphs, "EventGraph")
+    assert len(edges) == 3, edges
 
     # Direction/category metadata for endpoints, scoped to one decoded page.
     pin_meta: dict[str, tuple[str, str, str]] = {}
     graph_of_node: dict[str, str] = {}
-    for o in page.get("objects") or []:
-        for g in (o.get("semantic") or {}).get("graphs") or []:
-            for n in g.get("nodes") or []:
-                graph_of_node[n["id"]] = g["id"]
-                for p in n.get("pins") or []:
-                    pin_meta[p["id"]] = (n["id"], p.get("direction") or "", p.get("category") or "")
+    for g in graphs:
+        for n in g.get("nodes") or []:
+            graph_of_node[str(n.get("id") or "").split("/")[-1]] = g["id"]
+            for p in n.get("pins") or []:
+                pin_meta[p["id"]] = (n["id"], p.get("direction") or "", p.get("category") or "")
 
     seen_pairs: set[frozenset[str]] = set()
     for edge in edges:

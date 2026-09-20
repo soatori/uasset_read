@@ -276,9 +276,14 @@ def project_document(
                 "objects_dropped": 0,
             }
             result["next_offset"] = offset + len(result["objects"])
-            while len(result["objects"]) > 0 and json_byte_size(result) > max_bytes:
-                result["objects"].pop()
-                result["next_offset"] = offset + len(result["objects"])
+            objects_snapshot = list(result["objects"])
+            page_total = max(0, len(selected) - offset)
+            if limit is not None:
+                page_total = min(limit, page_total)
+
+            def _apply_prefix(keep: int) -> None:
+                result["objects"] = objects_snapshot[:keep]
+                result["next_offset"] = offset + keep
                 remaining_ids = {o["id"] for o in result["objects"] if isinstance(o, dict) and "id" in o}
                 rels, diags, deps = _scope_to_page(remaining_ids)
                 if "relations" in result:
@@ -286,9 +291,19 @@ def project_document(
                 if "dependencies" in result:
                     result["dependencies"] = deps
                 result["diagnostics"] = [d.to_dict() for d in diags] + [trunc_diag]
-            page_total = max(0, len(selected) - offset)
-            if limit is not None:
-                page_total = min(limit, page_total)
+
+            # Binary search the longest prefix that fits. Linear pop+re-encode
+            # is O(n) full dumps and stalls AnimBlueprint decode pages (~4MB).
+            lo, hi = 0, len(objects_snapshot)
+            while lo < hi:
+                mid = (lo + hi + 1) // 2
+                _apply_prefix(mid)
+                if json_byte_size(result) <= max_bytes:
+                    lo = mid
+                else:
+                    hi = mid - 1
+            _apply_prefix(lo)
+
             if page_total == 0:
                 # Out-of-range empty page: never a cursor, never over budget.
                 result.pop("next_offset", None)

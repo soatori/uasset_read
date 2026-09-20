@@ -23,8 +23,14 @@ class FEdGraphPinType:
     """Blueprint pin type structure."""
 
     pin_category: str = ""
+    pin_subcategory: str = ""
+    pin_subcategory_object: int | None = None
     container_type: int = 0
     is_reference: bool = False
+    is_const: bool = False
+    is_weak_pointer: bool = False
+    is_uobject_wrapper: bool = False
+    serialize_as_single_precision_float: bool = False
     # FEdGraphTerminalType trailing bools (EdGraphNode.cpp operator<<;
     # map-key terminal only — value terminal category reads stay cursor-only)
     map_key_terminal_is_const: bool = False
@@ -41,6 +47,19 @@ class UEdGraphPin:
     direction: int = 0
     pin_type: FEdGraphPinType | None = None
     linked_to_raw: list[dict] = field(default_factory=list)
+    # Retained non-write-only identity fields (Task 6 losslessness).
+    default_value: str | None = None
+    default_object_ref: int | None = None
+    default_text: Any | None = None
+    sub_pin_ids: list[str] = field(default_factory=list)
+    parent_pin_id: str | None = None
+    reference_pass_through_pin_id: str | None = None
+    sub_category: str = ""
+    sub_category_object: int | None = None
+    is_const: bool = False
+    is_weak_pointer: bool = False
+    is_uobject_wrapper: bool = False
+    serialize_as_single_precision_float: bool = False
 
 
 @dataclass

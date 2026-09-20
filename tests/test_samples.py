@@ -468,12 +468,15 @@ def test_real_sample_proves_claimed_capability(
             assert abp.semantic["kind"] == "anim_blueprint"
             assert abp.semantic.get("graphs"), f"{sample}:{class_name} graphs missing"
             assert abp.status.semantic == "complete", f"{sample}:{class_name} decode tier"
-            node_ids = {n["id"] for g in abp.semantic["graphs"] for n in g["nodes"]}
+            node_ids = {n["id"].split("/")[-1] for g in abp.semantic["graphs"] for n in g["nodes"]}
             for graph in abp.semantic["graphs"]:
                 for node in graph["nodes"]:
                     for pin in node["pins"]:
-                        for link in pin["linked"]:
-                            assert link["to_node"] in node_ids, f"{sample} dangling link"
+                        for link in pin["links"]:
+                            # E1 flip: link endpoints are NodeId strings that may
+                            # qualify the node export alone; join on that suffix.
+                            target = link["to_node_id"].split("/")[-1]
+                            assert target in node_ids, f"{sample} dangling link"
     elif class_name in {"Texture2D", "TextureCube"}:
         assert isinstance(obj.semantic["srgb"], bool), f"{sample}:{class_name}"
         assert "compression_settings" in obj.semantic, f"{sample}:{class_name}"

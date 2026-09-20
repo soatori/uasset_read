@@ -63,6 +63,8 @@ def parse_bytecode_stream(
         ParseError: On closure invariant violations or invalid jump targets
     """
     from uasset_read.kismet.tokens import EExprToken as _EExprToken
+    from uasset_read.exceptions import StreamPoisonedError
+    from uasset_read.kismet.expressions import OpaqueExpression
 
     if not bytecode_bytes:
         if bytecode_buffer_size != 0:
@@ -81,12 +83,27 @@ def parse_bytecode_stream(
         archive.fortnite_version = get_custom_version(summary, FORTNITE_GUID)
         archive.release_version = get_custom_version(summary, RELEASE_GUID)
     expressions: list[KismetExpression] = []
+    opaque_tail = False
 
     while archive.tell() < len(bytecode_bytes):
-        expr = archive.read_expression()
+        try:
+            expr = archive.read_expression()
+        except StreamPoisonedError:
+            raise
         expressions.append(expr)
+        if isinstance(expr, OpaqueExpression):
+            # Unknown token consumed the remaining function bytes; stop.
+            opaque_tail = True
+            break
         if expr.Token == _EExprToken.EX_EndOfScript:
             break
+
+    if opaque_tail:
+        # The opaque tail replaced the function terminator; closure checks
+        # against EX_EndOfScript and exact buffer sizes no longer apply.
+        # Jump targets already validated against the expressions seen so far.
+        _validate_jump_targets(expressions)
+        return expressions
 
     # --- Closure invariant checks ---
     if not expressions or expressions[-1].Token != _EExprToken.EX_EndOfScript:
@@ -121,11 +138,14 @@ def _validate_jump_targets(expressions: list[KismetExpression]) -> None:
         EX_PushExecutionFlow,
         EX_Skip,
         EX_SwitchValue,
+        OpaqueExpression,
     )
 
     top_level_indices = {expr.StatementIndex for expr in expressions}
 
     for expr in expressions:
+        if isinstance(expr, OpaqueExpression):
+            continue
         targets: list[int] = []
 
         if isinstance(expr, (EX_Jump, EX_JumpIfNot, EX_Skip)):

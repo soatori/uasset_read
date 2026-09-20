@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from uasset_read.archive import ByteArchive
 from uasset_read.constants import MAX_SAFE_COUNT, PKG_Cooked, PKG_FilterEditorOnly
 from uasset_read.exceptions import ParseError
 from uasset_read.kismet.property_pointer import FNameRef
+from uasset_read.models.analysis import OpaqueOperand
+from uasset_read.models.byte_ranges import ByteRegion
 
 if TYPE_CHECKING:
     from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
@@ -60,20 +62,29 @@ class NativeFieldDeclaration:
     """Deserialized native FField / FProperty record.
 
     Retains raw package indices for diagnostics and aligned resolved names
-    for C++ type mapping. Wire fields without consumers (array_dim, element_size,
-    metadata, rep_notify, replication_condition) are still consumed from the
-    archive cursor but not retained on the declaration.
+    for C++ type mapping, plus the full reflection payload (flags, metadata,
+    array dimension, element size, replication fields) so the C++ declaration
+    projector never mistakes consumed reflection data for unsupported absence.
+    Undecodable UE-version branches are retained in ``opaque_metadata``.
     """
 
     type_name: str
     name: str = ""
-    property_flags: int = 0
+    property_flags: int | None = None
+    metadata: dict[str, Any] | None = None
+    array_dim: int | None = None
+    element_size: int | None = None
+    rep_index: int | None = None
+    rep_notify_func: str | None = None
+    replication_condition: int | None = None
     # Raw package indices (preserved for diagnostics)
     references: list[int] = field(default_factory=list)
     # Resolved names parallel to references (None when index is null or out-of-range)
     reference_names: list[str | None] = field(default_factory=list)
     # Inner fields for container types (array/set/map/enum/optional)
     inner_fields: list[NativeFieldDeclaration] = field(default_factory=list)
+    opaque_metadata: list[OpaqueOperand] = field(default_factory=list)
+    source_range: ByteRegion | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -132,12 +143,13 @@ def _read_package_ref(archive: ByteArchive, context: NativeFieldContext) -> tupl
 def _read_fproperty_prefix(
     archive: ByteArchive,
     context: NativeFieldContext,
-) -> tuple[str, int]:
+) -> tuple[str, int | None, dict[str, Any] | None, int | None, int | None, int | None, str | None, int | None]:
     """Read the common FProperty prefix after the FField type-name.
 
     Consumes NamePrivate, FlagsPrivate, metadata, ArrayDim, ElementSize,
     PropertyFlags, RepIndex, RepNotifyFunc, and optional ReplicationCondition.
-    Returns only the retained subset: (name, property_flags).
+    Returns the retained reflection payload: (name, property_flags, metadata,
+    array_dim, element_size, rep_index, rep_notify_func, replication_condition).
     """
     # NamePrivate: FName
     name_ref = _read_fname_ref(archive, context)
@@ -151,23 +163,34 @@ def _read_fproperty_prefix(
 
     # FField metadata is serialized by Super::Serialize before the
     # FProperty-specific fields.
-    _read_metadata(archive, context)
+    metadata = _read_metadata(archive, context)
 
     # ArrayDim / ElementSize: int32
-    archive.read_i32()
-    archive.read_i32()
+    array_dim = archive.read_i32()
+    element_size = archive.read_i32()
     # PropertyFlags: u64
     property_flags = archive.read_u64()
     # RepIndex: u16
-    archive.read_u16()
+    rep_index = archive.read_u16()
     # RepNotifyFunc: FName
-    _read_fname_ref(archive, context)
+    rep_notify_ref = _read_fname_ref(archive, context)
+    rep_notify_func = rep_notify_ref.base_name
 
     # ReplicationCondition: u8 (Release version >= 21)
+    replication_condition: int | None = None
     if context.release_version >= _PROPERTIES_SERIALIZE_REP_CONDITION_VERSION:
-        archive.read_u8()
+        replication_condition = archive.read_u8()
 
-    return (name_ref.base_name or "", property_flags)
+    return (
+        name_ref.base_name or "",
+        property_flags,
+        metadata,
+        array_dim,
+        element_size,
+        rep_index,
+        rep_notify_func,
+        replication_condition,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -175,23 +198,23 @@ def _read_fproperty_prefix(
 # ---------------------------------------------------------------------------
 
 
-def _read_metadata(archive: ByteArchive, context: NativeFieldContext) -> None:
+def _read_metadata(archive: ByteArchive, context: NativeFieldContext) -> dict[str, Any] | None:
     """Read the metadata boolean and, when true, a TMap<FName, FString>.
 
-    Consumes the record to advance the cursor; the key-value pairs are not
-    retained.  UE5.0-5.3 use the package's bIsCookedForEditor state (derived
-    by the loader from PKG_FilterEditorOnly); UE5.4+ use PKG_Cooked.  A
-    present record may still contain false.
+    Retains the key-value pairs when present; returns None when the record is
+    omitted or empty.  UE5.0-5.3 use the package's bIsCookedForEditor state
+    (derived by the loader from PKG_FilterEditorOnly); UE5.4+ use PKG_Cooked.
+    A present record may still contain false.
     """
     metadata_omission_flag = (
         PKG_FilterEditorOnly if context.saved_engine_version < _FFIELD_METADATA_USES_COOKED_FLAG_VERSION else PKG_Cooked
     )
     if context.package_flags & metadata_omission_flag:
-        return
+        return None
 
     has_metadata = archive.read_bool()
     if not has_metadata:
-        return
+        return None
 
     count = archive.read_i32()
     if count < 0 or count > MAX_SAFE_COUNT:
@@ -201,9 +224,13 @@ def _read_metadata(archive: ByteArchive, context: NativeFieldContext) -> None:
     if count > remaining // 8:
         raise ParseError(f"Native metadata count {count} exceeds remaining bytes")
 
+    pairs: dict[str, Any] = {}
     for _ in range(count):
-        _read_fname_ref(archive, context)
-        archive.read_fstring()
+        key_ref = _read_fname_ref(archive, context)
+        value = archive.read_fstring()
+        key = key_ref.base_name or f"name_{key_ref.name_index}"
+        pairs[key] = value
+    return pairs or None
 
 
 # ---------------------------------------------------------------------------
@@ -334,11 +361,27 @@ def _read_single_field(
 
     # Build the declaration
     decl = NativeFieldDeclaration(type_name=type_name)
+    field_start = archive.tell()
 
-    # Read the common FProperty prefix (retained subset)
-    name, property_flags = _read_fproperty_prefix(archive, context)
+    # Read the common FProperty prefix (retained reflection payload)
+    (
+        name,
+        property_flags,
+        metadata,
+        array_dim,
+        element_size,
+        rep_index,
+        rep_notify_func,
+        replication_condition,
+    ) = _read_fproperty_prefix(archive, context)
     decl.name = name
     decl.property_flags = property_flags
+    decl.metadata = metadata
+    decl.array_dim = array_dim
+    decl.element_size = element_size
+    decl.rep_index = rep_index
+    decl.rep_notify_func = rep_notify_func
+    decl.replication_condition = replication_condition
 
     # Type-specific tail
     if type_name in _NO_EXTRA_BYTES_TYPES:
@@ -375,14 +418,26 @@ def _read_single_field(
         _read_inner_field_tail(archive, context, decl, depth)
         _read_inner_field_tail(archive, context, decl, depth)
     else:
-        # Unknown property class — emit unsupported_native_field failure
+        # Unknown property class — no generic length; retain a ranged opaque
+        # marker over the bytes already consumed for this field's known
+        # prefix and emit unsupported_native_field. Never invent defaults.
         logger.warning(
             "Unsupported native field type: %s at offset %d",
             type_name,
             archive.tell(),
         )
+        decl.opaque_metadata.append(
+            OpaqueOperand(
+                role="native_field_prefix",
+                source_range=ByteRegion(field_start, max(archive.tell() - field_start, 0), "opaque"),
+                payload_ref=None,
+                reason=f"unsupported_native_field:{type_name}",
+            )
+        )
         decl.type_name = f"unsupported:{type_name}"
 
+    field_end = archive.tell()
+    decl.source_range = ByteRegion(field_start, max(field_end - field_start, 0), "decoded")
     return decl
 
 
@@ -428,18 +483,19 @@ def build_native_function_signature(
     return_cpp = "void"
 
     for field in fields:
-        if not (field.property_flags & _CPF_Parm):
+        flags = field.property_flags or 0
+        if not (flags & _CPF_Parm):
             continue
 
-        is_return = bool(field.property_flags & _CPF_ReturnParm)
+        is_return = bool(flags & _CPF_ReturnParm)
         cpp_type = native_field_cpp_type(field)
 
         # Append reference suffix
-        if field.property_flags & _CPF_ReferenceParm:
+        if flags & _CPF_ReferenceParm:
             cpp_type += "&"
 
         # Prepend const
-        if field.property_flags & _CPF_ConstParm:
+        if flags & _CPF_ConstParm:
             cpp_type = f"const {cpp_type}"
 
         if is_return:
