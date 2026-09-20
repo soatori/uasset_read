@@ -5,6 +5,7 @@ UnrealProjects/
 external/
 .reasonix/
 .ruff_cache
+reference/
 
 # Python
 __pycache__/

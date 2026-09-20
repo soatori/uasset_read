@@ -16,6 +16,31 @@ status: target
 >
 > 本文是当前项目唯一权威的重构目标。源码与测试仍是“当前已经实现什么”的唯一依据；本文只定义“接下来要实现什么”。旧版输出、Semantic JSON 1.x 和单资产设计文档均为历史资料，不得继续作为新功能的目标架构。
 
+## Status audit (2026-09-21)
+
+This is an implementation marker, not a change to the target architecture. On the
+checked-out `dev-0.6.0` branch, the v3 contract envelope and the bounded
+package foundations are present: `FORMAT_VERSION` and the `projections`/
+`sidecars` envelope are in `src/uasset_read/projection.py:17,220-223`, bounded
+sources and container reports are in `src/uasset_read/sources.py:11-101` and
+`src/uasset_read/containers.py:48,184`, layout/Zen availability is in
+`src/uasset_read/layout.py:148` and `src/uasset_read/parsers/zen_reader.py:43`,
+and the separate property readers plus byte-accounting model are in
+`src/uasset_read/parsers/properties/tagged.py:14`,
+`src/uasset_read/parsers/properties/unversioned.py:77`, and
+`src/uasset_read/models/byte_ranges.py:129-150`. Their focused tests are
+currently green.
+
+The static Blueprint IR/CFG/correlation and Material graph work exists only on
+the unmerged `compose/static-uasset-task5-12` branch (`92c3a309`); it is not
+current behavior on `dev-0.6.0`. Blueprint C++/type-aware projections, the
+canonical writer replacement, and the final sample-quality gate are not present
+on the checked-out branch. The full Task 1–4 gate in this dirty worktree is
+`155 passed, 1 failed`; the sole failure is the docs line ceiling caused by
+uncommitted documentation changes (principally the plan expansion below plus
+this audit), matching the known worktree-only red described in
+`tests/size-baseline.json:2`. It is not evidence of parser completion.
+
 ## Executive Summary
 
 `uasset_read` 已经具备可用的经典 `.uasset` 读取、属性解析、Blueprint/Kismet 分析、多个资产类型提取和结构化诊断基础，但当前系统的公共输出仍围绕“从一个包中选择一个主导出，然后生成一种领域 JSON”构建。这一前提在 Blueprint、LevelSequence、AnimBlueprintGeneratedClass、CDO、子对象以及包含多个 `bIsAsset` 导出的真实包中不成立，也是多资产输出失败、领域 Schema 增殖、调试信息混入业务输出和 Agent 消费成本过高的根因。
