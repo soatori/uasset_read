@@ -29,3 +29,23 @@ def test_writer_rejects_a_limit_below_the_mandatory_envelope(document, tmp_path)
     minimum = minimum_canonical_envelope_bytes(document)
     with pytest.raises(OutputBudgetError):
         write_projected_document(document, tmp_path / "TooSmall.json", max_main_bytes=minimum - 1)
+
+
+def test_writer_budget_uses_the_same_registry_for_minimum(document, tmp_path):
+    """Custom-registry budgets must not compare against a default-registry envelope."""
+    from uasset_read.projections.bundle import (
+        minimum_canonical_envelope_bytes,
+        write_projected_document,
+    )
+
+    custom = ProjectorRegistry()  # no projectors → smaller projection set
+    custom_minimum = minimum_canonical_envelope_bytes(document, registry=custom)
+    output = write_projected_document(
+        document,
+        tmp_path / "CustomFit.json",
+        max_main_bytes=custom_minimum,
+        registry=custom,
+    )
+    assert output.exists()
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["projections"] == []

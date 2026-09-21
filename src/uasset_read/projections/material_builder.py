@@ -12,7 +12,12 @@ from typing import Any
 from uasset_read.models.diagnostics import make_diagnostic
 from uasset_read.models.document import PackageDocument
 from uasset_read.models.object_model import ObjectRecord
-from uasset_read.projections.records import ProjectionRecord, dependency_ids, unavailable_records
+from uasset_read.projections.records import (
+    ProjectionRecord,
+    dependency_ids,
+    matches_family,
+    unavailable_records,
+)
 
 ASSET_KINDS = ("material",)
 _CLASS_NAMES = ("Material",)
@@ -80,10 +85,7 @@ class MaterialEditorBuilderProjector:
     asset_kinds = ASSET_KINDS
 
     def can_project(self, obj: ObjectRecord) -> bool:
-        semantic = _semantic(obj)
-        if semantic.get("kind") in self.asset_kinds:
-            return True
-        return (obj.class_name or "") in _CLASS_NAMES
+        return matches_family(obj, self.asset_kinds, _CLASS_NAMES)
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
         semantic = _semantic(obj)

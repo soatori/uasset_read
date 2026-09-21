@@ -134,9 +134,17 @@ def _utf8_size(payload: dict[str, Any]) -> int:
     return len(_serialize_canonical(payload).encode("utf-8"))
 
 
-def minimum_canonical_envelope_bytes(document: PackageDocument) -> int:
-    """UTF-8 byte length of the complete mandatory canonical envelope."""
-    return _utf8_size(build_canonical_document(document))
+def minimum_canonical_envelope_bytes(
+    document: PackageDocument,
+    *,
+    registry: ProjectorRegistry | None = None,
+) -> int:
+    """UTF-8 byte length of the complete mandatory canonical envelope.
+
+    ``registry`` must match the registry used by ``write_projected_document``
+    so budget checks measure the same projection set.
+    """
+    return _utf8_size(build_canonical_document(document, registry=registry))
 
 
 def write_projected_document(
@@ -150,13 +158,13 @@ def write_projected_document(
 
     Raises OutputBudgetError before creating any file when ``max_main_bytes``
     cannot fit the complete document or falls below
-    ``minimum_canonical_envelope_bytes(document)``.
+    ``minimum_canonical_envelope_bytes(document, registry=registry)``.
     """
     payload = build_canonical_document(document, registry=registry)
     text = _serialize_canonical(payload)
     size = len(text.encode("utf-8"))
     if max_main_bytes is not None:
-        minimum = minimum_canonical_envelope_bytes(document)
+        minimum = minimum_canonical_envelope_bytes(document, registry=registry)
         if max_main_bytes < minimum:
             raise OutputBudgetError(
                 f"max_main_bytes={max_main_bytes} is below mandatory envelope "

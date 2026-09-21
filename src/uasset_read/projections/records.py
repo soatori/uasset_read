@@ -72,6 +72,25 @@ def dependency_ids(document: PackageDocument, object_id: str) -> list[str]:
     )
 
 
+def matches_family(
+    obj: ObjectRecord,
+    asset_kinds: tuple[str, ...] | frozenset[str] | set[str],
+    class_names: tuple[str, ...] | frozenset[str] | set[str],
+) -> bool:
+    """Kind-first family match.
+
+    When semantic ``kind`` is present it is the sole owner key — class_name
+    never steals an object whose kind already belongs to another family.
+    Class-name fallback applies only when no semantic kind was projected.
+    """
+    semantic = obj.semantic
+    if isinstance(semantic, dict):
+        kind = semantic.get("kind")
+        if isinstance(kind, str) and kind:
+            return kind in asset_kinds
+    return (obj.class_name or "") in class_names
+
+
 def projection_to_dict(record: ProjectionRecord) -> dict[str, Any]:
     """JSON-safe projection record for the canonical document envelope."""
     return {

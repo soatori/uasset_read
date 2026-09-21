@@ -26,6 +26,7 @@ from uasset_read.projections.material_builder import MaterialEditorBuilderProjec
 from uasset_read.projections.records import (
     ProjectionRecord,
     dependency_ids,
+    matches_family,
     unavailable_records,
 )
 
@@ -173,13 +174,18 @@ def _completeness(stats: dict[str, int], *, mode: str) -> float | None:
     return mapped / seen
 
 
-def _unavailable_blueprint_projections(object_id: str, reason: str) -> list[ProjectionRecord]:
+def _unavailable_blueprint_projections(
+    document: PackageDocument,
+    object_id: str,
+    reason: str,
+) -> list[ProjectionRecord]:
     return unavailable_records(
         object_id,
         _BLUEPRINT_PAIRS,
         code=reason,
         message="Blueprint semantic input is unavailable",
         stage="projection.blueprint",
+        dependencies=dependency_ids(document, object_id),
     )
 
 
@@ -210,23 +216,35 @@ class BlueprintCppProjector:
 
     asset_kinds = _BLUEPRINT_KINDS
 
+    _CLASS_NAMES = frozenset(
+        {
+            "Blueprint",
+            "AnimBlueprint",
+            "BlueprintGeneratedClass",
+            "AnimBlueprintGeneratedClass",
+            "BlueprintFunctionLibrary",
+            "BlueprintInterface",
+        }
+    )
+
     def can_project(self, obj: ObjectRecord) -> bool:
-        family = semantic_family(obj)
-        return family in self.asset_kinds
+        return matches_family(obj, self.asset_kinds, self._CLASS_NAMES)
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
         semantic = obj.semantic
         family = semantic_family(obj)
+        dependencies = dependency_ids(document, obj.id)
         # Unproven family kinds without a projected semantic stay explicit unavailable.
         if family in {"blueprint_function_library", "blueprint_interface"} and (
             not isinstance(semantic, dict) or semantic.get("kind") != family
         ):
             return _unavailable_blueprint_projections(
-                obj.id, "blueprint_family_semantic_unavailable"
+                document, obj.id, "blueprint_family_semantic_unavailable"
             )
         if not isinstance(semantic, dict) or semantic.get("kind") not in self.asset_kinds:
-            return _unavailable_blueprint_projections(obj.id, "blueprint_semantic_unavailable")
-        dependencies = dependency_ids(document, obj.id)
+            return _unavailable_blueprint_projections(
+                document, obj.id, "blueprint_semantic_unavailable"
+            )
         try:
             decl = render_cpp(semantic, mode="declaration")
             mig = render_cpp(semantic, mode="migration")
@@ -262,7 +280,17 @@ class BlueprintCppProjector:
 class PhysicalAssetProjector:
     """Physical/binary assets: metadata + payload references only (no invented payloads)."""
 
-    asset_kinds = ("physical_asset",)
+    # Includes handler semantic kinds so kind-first dispatch stays single-owner.
+    asset_kinds = (
+        "physical_asset",
+        "texture",
+        "texture_mip",
+        "sound",
+        "mesh",
+        "skeleton",
+        "physics_asset",
+        "physical_material",
+    )
     _CLASS_NAMES = frozenset(
         {
             "Texture2D",
@@ -274,8 +302,7 @@ class PhysicalAssetProjector:
     )
 
     def can_project(self, obj: ObjectRecord) -> bool:
-        family = semantic_family(obj)
-        return family in self.asset_kinds or (obj.class_name or "") in self._CLASS_NAMES
+        return matches_family(obj, self.asset_kinds, self._CLASS_NAMES)
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
         dependencies = dependency_ids(document, obj.id)
@@ -335,7 +362,15 @@ class PhysicalAssetProjector:
 class GraphAssetProjector:
     """Other registered graph assets: graph summary only; never a fake C++ body."""
 
-    asset_kinds = ("graph_asset",)
+    asset_kinds = (
+        "graph_asset",
+        "niagara",
+        "material_function",
+        "material_parameter_collection",
+        "anim_blend_space",
+        "anim_composite",
+        "anim_layer_interface",
+    )
     _CLASS_NAMES = frozenset(
         {
             "NiagaraSystem",
@@ -348,8 +383,7 @@ class GraphAssetProjector:
     )
 
     def can_project(self, obj: ObjectRecord) -> bool:
-        family = semantic_family(obj)
-        return family in self.asset_kinds or (obj.class_name or "") in self._CLASS_NAMES
+        return matches_family(obj, self.asset_kinds, self._CLASS_NAMES)
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
         dependencies = dependency_ids(document, obj.id)

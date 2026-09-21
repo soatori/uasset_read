@@ -14,6 +14,7 @@ from uasset_read.models.object_model import ObjectRecord
 from uasset_read.projections.records import (
     ProjectionRecord,
     dependency_ids,
+    matches_family,
     unavailable_records,
 )
 
@@ -56,32 +57,67 @@ def _field_columns(row: Any) -> list[dict[str, str]]:
     return columns
 
 
-def _data_table_payload(semantic: dict[str, Any]) -> dict[str, Any] | None:
+def _projected_field_value(raw: Any) -> Any:
+    """Copy one evidenced field entry without inventing a cell value."""
+    if isinstance(raw, dict):
+        if "value" in raw:
+            return raw["value"]
+        # Handler-decoded field maps carry type/size descriptors — copy them.
+        return {
+            key: raw[key]
+            for key in ("type", "size", "struct_type", "name")
+            if key in raw
+        } or raw
+    return raw
+
+
+def _row_has_evidenced_fields(row: Any) -> bool:
+    return isinstance(row, dict) and bool(row.get("fields"))
+
+
+def _data_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], str, float | None] | None:
+    """Return (payload, status, completeness) or None when unavailable.
+
+    Matrix rule: row struct + values decoded, else unavailable. Non-empty
+    field maps are the handler's decoded evidence and are copied verbatim;
+    empty/missing field maps never claim a represented projection.
+    """
     if semantic.get("kind") != "data_table":
         return None
     rows = [r for r in semantic.get("rows") or [] if isinstance(r, dict)]
-    if not rows and not semantic.get("row_struct"):
+    evidenced = [r for r in rows if _row_has_evidenced_fields(r)]
+    if not evidenced and not semantic.get("row_struct"):
+        return None
+    if not evidenced:
         return None
     columns: list[dict[str, str]] = []
     seen: set[str] = set()
-    for row in rows:
+    for row in evidenced:
         for column in _field_columns(row):
             if column["name"] not in seen:
                 seen.add(column["name"])
                 columns.append(column)
-    projected_rows = [
-        {"name": str(row.get("name") or ""), "values": {}}
-        for row in rows
-    ]
-    return {
+    projected_rows = []
+    any_cell_value = False
+    for row in evidenced:
+        fields = row.get("fields") if isinstance(row.get("fields"), dict) else {}
+        values = {str(k): _projected_field_value(v) for k, v in fields.items()}
+        if any(isinstance(v, dict) and "value" in v for v in fields.values()):
+            any_cell_value = True
+        projected_rows.append({"name": str(row.get("name") or ""), "values": values})
+    payload = {
         "kind": "data_table",
         "row_struct": semantic.get("row_struct") or semantic.get("row_struct_ref") or "",
         "columns": columns,
         "rows": projected_rows,
         "row_count": semantic.get("row_count", len(projected_rows)),
         "row_names": list(semantic.get("row_names") or []),
-        "values_decoded": False,
+        "values_decoded": any_cell_value,
     }
+    # Evidenced field maps count as decoded schema; cell payloads upgrade status.
+    status = "translated" if any_cell_value else "represented"
+    completeness = 1.0 if any_cell_value else 0.5
+    return payload, status, completeness
 
 
 def _csv_from_table(payload: dict[str, Any]) -> str:
@@ -99,35 +135,61 @@ def _csv_from_table(payload: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _curve_table_payload(semantic: dict[str, Any]) -> dict[str, Any] | None:
+def _explicit_curve_keys(row: Any) -> list[dict[str, Any]] | None:
+    """Return decoded curve keys when keys/interp are explicit; else None."""
+    if not isinstance(row, dict):
+        return None
+    fields = row.get("fields") if isinstance(row.get("fields"), dict) else {}
+    keys_raw = fields.get("Keys")
+    if isinstance(keys_raw, dict):
+        inner = keys_raw.get("value", keys_raw.get("keys"))
+        if isinstance(inner, list) and inner:
+            return [k for k in inner if isinstance(k, dict)]
+        return None
+    if isinstance(keys_raw, list) and keys_raw:
+        return [k for k in keys_raw if isinstance(k, dict)]
+    if isinstance(row.get("keys"), list) and row["keys"]:
+        return [k for k in row["keys"] if isinstance(k, dict)]
+    return None
+
+
+def _curve_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], str, float | None] | None:
+    """Return (payload, status, completeness) or None when unavailable.
+
+    Matrix rule: keys/interp explicit; compressed-only unavailable unless decoded.
+    """
     if semantic.get("kind") != "curve_table":
         return None
     rows = [r for r in semantic.get("rows") or [] if isinstance(r, dict)]
-    if not rows and not semantic.get("row_names"):
-        return None
     curves = []
+    any_keys = False
     for row in rows:
+        keys = _explicit_curve_keys(row)
+        if keys:
+            any_keys = True
+        fields = row.get("fields") if isinstance(row.get("fields"), dict) else {}
         curves.append(
             {
                 "name": str(row.get("name") or ""),
                 "field_types": {
                     str(k): (v.get("type") if isinstance(v, dict) else None)
-                    for k, v in (row.get("fields") or {}).items()
-                }
-                if isinstance(row.get("fields"), dict)
-                else {},
-                "keys": [],
+                    for k, v in fields.items()
+                },
+                "keys": keys or [],
             }
         )
     if not curves:
-        for name in semantic.get("row_names") or []:
-            curves.append({"name": str(name), "field_types": {}, "keys": []})
-    return {
+        return None
+    if not any_keys:
+        # Row names/type skeletons without explicit keys stay unavailable.
+        return None
+    payload = {
         "kind": "curve_table",
         "mode": semantic.get("curve_table_mode") or "",
         "curves": curves,
-        "keys_decoded": False,
+        "keys_decoded": True,
     }
+    return payload, "translated", 1.0
 
 
 def _csv_from_curves(payload: dict[str, Any]) -> str:
@@ -139,27 +201,28 @@ def _csv_from_curves(payload: dict[str, Any]) -> str:
 
 class DataTableProjector:
     asset_kinds = ("data_table",)
+    _CLASS_NAMES = ("DataTable",)
 
     def can_project(self, obj: ObjectRecord) -> bool:
-        semantic = _semantic(obj)
-        return semantic.get("kind") in self.asset_kinds or (obj.class_name or "") == "DataTable"
+        return matches_family(obj, self.asset_kinds, self._CLASS_NAMES)
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
         semantic = _semantic(obj)
         deps = dependency_ids(document, obj.id)
-        payload = _data_table_payload(semantic)
-        if payload is None:
+        projected = _data_table_payload(semantic)
+        if projected is None:
             return unavailable_records(
                 obj.id,
                 _DATA_TABLE_PAIRS,
                 code="data_table_rows_unavailable",
-                message="DataTable row struct/values were not decoded into semantic",
+                message=(
+                    "DataTable row struct/values were not decoded into semantic "
+                    "(matrix requires evidenced field values or unavailable)"
+                ),
                 stage="projection.data_exports",
                 dependencies=deps,
             )
-        # Column types are evidenced; cell values are not decoded in current fixtures.
-        status = "represented"
-        completeness = 0.5
+        payload, status, completeness = projected
         return [
             ProjectionRecord(
                 kind="data_table",
@@ -199,24 +262,28 @@ class DataTableProjector:
 
 class CurveTableProjector:
     asset_kinds = ("curve_table",)
+    _CLASS_NAMES = ("CurveTable",)
 
     def can_project(self, obj: ObjectRecord) -> bool:
-        semantic = _semantic(obj)
-        return semantic.get("kind") in self.asset_kinds or (obj.class_name or "") == "CurveTable"
+        return matches_family(obj, self.asset_kinds, self._CLASS_NAMES)
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
         semantic = _semantic(obj)
         deps = dependency_ids(document, obj.id)
-        payload = _curve_table_payload(semantic)
-        if payload is None:
+        projected = _curve_table_payload(semantic)
+        if projected is None:
             return unavailable_records(
                 obj.id,
                 _CURVE_TABLE_PAIRS,
                 code="curve_table_keys_unavailable",
-                message="CurveTable keys/interpolation were not decoded into semantic",
+                message=(
+                    "CurveTable keys/interpolation were not decoded into semantic "
+                    "(matrix requires explicit keys or unavailable)"
+                ),
                 stage="projection.data_exports",
                 dependencies=deps,
             )
+        payload, status, completeness = projected
         return [
             ProjectionRecord(
                 kind="curve_table",
@@ -224,8 +291,8 @@ class CurveTableProjector:
                 media_type=_JSON,
                 content=payload,
                 embedded=True,
-                status="represented",
-                completeness=0.5,
+                status=status,
+                completeness=completeness,
                 dependencies=deps,
                 diagnostics=[],
             ),
@@ -235,8 +302,8 @@ class CurveTableProjector:
                 media_type=_CSV,
                 content=_csv_from_curves(payload),
                 embedded=True,
-                status="represented",
-                completeness=0.5,
+                status=status,
+                completeness=completeness,
                 dependencies=deps,
                 diagnostics=[],
             ),
@@ -246,8 +313,8 @@ class CurveTableProjector:
                 media_type=_JSON,
                 content=payload,
                 embedded=True,
-                status="represented",
-                completeness=0.5,
+                status=status,
+                completeness=completeness,
                 dependencies=deps,
                 diagnostics=[],
             ),
@@ -285,10 +352,10 @@ def _cpp_from_entries(name: str, entries: list[dict[str, Any]]) -> str:
 
 class UserDefinedStructProjector:
     asset_kinds = ("user_defined_struct",)
+    _CLASS_NAMES = ("UserDefinedStruct",)
 
     def can_project(self, obj: ObjectRecord) -> bool:
-        semantic = _semantic(obj)
-        return semantic.get("kind") in self.asset_kinds or (obj.class_name or "") == "UserDefinedStruct"
+        return matches_family(obj, self.asset_kinds, self._CLASS_NAMES)
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
         semantic = _semantic(obj)
@@ -337,10 +404,10 @@ class UserDefinedStructProjector:
 
 class UserDefinedEnumProjector:
     asset_kinds = ("user_defined_enum",)
+    _CLASS_NAMES = ("UserDefinedEnum",)
 
     def can_project(self, obj: ObjectRecord) -> bool:
-        semantic = _semantic(obj)
-        return semantic.get("kind") in self.asset_kinds or (obj.class_name or "") == "UserDefinedEnum"
+        return matches_family(obj, self.asset_kinds, self._CLASS_NAMES)
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
         semantic = _semantic(obj)
@@ -392,8 +459,7 @@ class MaterialInstanceProjector:
     _CLASS_NAMES = ("MaterialInstance", "MaterialInstanceConstant")
 
     def can_project(self, obj: ObjectRecord) -> bool:
-        semantic = _semantic(obj)
-        return semantic.get("kind") in self.asset_kinds or (obj.class_name or "") in self._CLASS_NAMES
+        return matches_family(obj, self.asset_kinds, self._CLASS_NAMES)
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
         semantic = _semantic(obj)
