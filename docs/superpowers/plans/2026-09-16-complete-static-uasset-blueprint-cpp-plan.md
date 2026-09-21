@@ -18,7 +18,7 @@ working branch is `dev-0.6.0`:
 | Tasks | Current marker | Evidence / next boundary |
 | --- | --- | --- |
 | 1–4 | `complete` on this branch | v3 contract, bounded sources/containers, layout/Zen refusal, separate property readers, and byte accounting present; Step 5 gates green after committing plan/docs WIP and re-measuring `docs_markdown`. |
-| 5–9 | `unmerged candidate` | Implemented in `compose/static-uasset-task5-12` through `92c3a309`, but absent from `dev-0.6.0`; do not mark these tasks complete in this branch. |
+| 5–9 | `implemented on sdd/static-uasset-finish` | Focused Tasks 5–9 suite green on execution branch `sdd/static-uasset-finish` (worktree `.worktrees/sdd-static-continue`); `objects[].semantic` is projected dict for Blueprint/Material families. Not marked complete on `dev-0.6.0` until an orchestrator merge lands there. |
 | 10–12 | `not started` | No current C++/type-aware projection implementation, canonical writer replacement, or complete-sample acceptance suite is present. |
 
 The fresh current-branch check was 155 passed and one failure in
