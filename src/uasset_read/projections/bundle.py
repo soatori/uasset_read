@@ -15,7 +15,12 @@ from typing import Any
 from uasset_read.models.byte_ranges import project_region
 from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.models.document import PackageDocument
-from uasset_read.projection import FORMAT_VERSION, dependency_to_dict, obj_to_dict
+from uasset_read.projection import (
+    FORMAT_VERSION,
+    build_projection_records,
+    dependency_to_dict,
+    obj_to_dict,
+)
 from uasset_read.projections.records import ProjectionRecord, projection_to_dict
 from uasset_read.projections.registry import CAPABILITY_MATRIX, ProjectorRegistry
 
@@ -68,9 +73,10 @@ def build_canonical_document(
     """Materialize the complete format_version 3.0 canonical document dict.
 
     No pagination, no selection, no sidecars. Every object remains addressable.
+    Embedded type-specific content is created only via ``build_projection_records``
+    (sole-creator API); this function materializes the envelope around it.
     """
-    active = registry if registry is not None else ProjectorRegistry.default()
-    projections = active.project_document(document)
+    projections = build_projection_records(document, registry=registry)
     package = document.package
     source = document.source
     return {

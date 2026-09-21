@@ -84,3 +84,36 @@ def test_paginated_cli_and_agent_share_projection_layer(document):
     page = project_document(document, view="semantic", limit=5)
     assert "projections" in page
     assert all(item["embedded"] for item in page["projections"])
+
+
+def test_canonical_document_uses_sole_creator_projection_api(stackobot_document):
+    """CLI -o / batch materialize projections only via build_projection_records."""
+    from uasset_read.projection import build_projection_records
+    from uasset_read.projections.bundle import build_canonical_document
+    from uasset_read.projections.records import projection_to_dict
+
+    canonical = build_canonical_document(stackobot_document)
+    expected = [projection_to_dict(item) for item in build_projection_records(stackobot_document)]
+    assert canonical["projections"] == expected
+
+
+def test_agent_get_object_exposes_projection_records():
+    """get_object always carries projections[] (records or explicit empty)."""
+    from tests.fixtures import find_blueprint_object, parse_sample, sample_path
+    from uasset_read.agent_tools import get_object
+
+    document = parse_sample("StackOBot_BP_Drone.uasset", depth="asset")
+    path = str(sample_path("StackOBot_BP_Drone.uasset"))
+    blueprint = find_blueprint_object(document)
+    fetched = get_object(path, blueprint.id)
+    assert fetched["id"] == blueprint.id
+    assert "projections" in fetched
+    assert fetched["projections"]
+    assert all(item["source_object_id"] == blueprint.id for item in fetched["projections"])
+    assert all(item["embedded"] for item in fetched["projections"])
+
+    # Families with no type-aware projector still get an explicit empty list.
+    plain = next(obj for obj in document.objects if obj.class_name == "Function")
+    empty = get_object(path, plain.id)
+    assert empty["id"] == plain.id
+    assert empty["projections"] == []
