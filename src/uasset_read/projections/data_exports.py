@@ -1,0 +1,449 @@
+"""Structured data projections: tables, curves, structs/enums, material instances.
+
+Only projected semantic dictionaries already on PackageDocument.objects are
+consumed. Missing required input emits explicit unavailable records; no
+projector invents field lists from positional package bytes.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from uasset_read.models.document import PackageDocument
+from uasset_read.models.object_model import ObjectRecord
+from uasset_read.projections.records import (
+    ProjectionRecord,
+    dependency_ids,
+    unavailable_records,
+)
+
+_JSON = "application/json"
+_CSV = "text/csv"
+_CPP = "text/x-c++hdr"
+
+_DATA_TABLE_PAIRS = (
+    ("data_table", _JSON),
+    ("data_table_csv", _CSV),
+    ("data_table_json", _JSON),
+)
+_CURVE_TABLE_PAIRS = (
+    ("curve_table", _JSON),
+    ("curve_table_csv", _CSV),
+    ("curve_table_json", _JSON),
+)
+_STRUCT_PAIRS = (("cpp_declaration", _CPP), ("defaults_json", _JSON))
+_ENUM_PAIRS = (("cpp_declaration", _CPP), ("defaults_json", _JSON))
+_MATERIAL_INSTANCE_PAIRS = (("material_instance", _JSON), ("material_parameters", _JSON))
+
+
+def _semantic(obj: ObjectRecord) -> dict[str, Any]:
+    semantic = obj.semantic
+    return semantic if isinstance(semantic, dict) else {}
+
+
+def _field_columns(row: Any) -> list[dict[str, str]]:
+    if not isinstance(row, dict):
+        return []
+    fields = row.get("fields")
+    if not isinstance(fields, dict):
+        return []
+    columns: list[dict[str, str]] = []
+    for name, value in fields.items():
+        type_name = ""
+        if isinstance(value, dict):
+            type_name = str(value.get("type") or "")
+        columns.append({"name": str(name), "type": type_name})
+    return columns
+
+
+def _data_table_payload(semantic: dict[str, Any]) -> dict[str, Any] | None:
+    if semantic.get("kind") != "data_table":
+        return None
+    rows = [r for r in semantic.get("rows") or [] if isinstance(r, dict)]
+    if not rows and not semantic.get("row_struct"):
+        return None
+    columns: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for row in rows:
+        for column in _field_columns(row):
+            if column["name"] not in seen:
+                seen.add(column["name"])
+                columns.append(column)
+    projected_rows = [
+        {"name": str(row.get("name") or ""), "values": {}}
+        for row in rows
+    ]
+    return {
+        "kind": "data_table",
+        "row_struct": semantic.get("row_struct") or semantic.get("row_struct_ref") or "",
+        "columns": columns,
+        "rows": projected_rows,
+        "row_count": semantic.get("row_count", len(projected_rows)),
+        "row_names": list(semantic.get("row_names") or []),
+        "values_decoded": False,
+    }
+
+
+def _csv_from_table(payload: dict[str, Any]) -> str:
+    columns = payload.get("columns") or []
+    header = ["name"] + [str(c.get("name") or "") for c in columns]
+    lines = [",".join(header)]
+    for row in payload.get("rows") or []:
+        values = row.get("values") if isinstance(row, dict) else {}
+        values = values if isinstance(values, dict) else {}
+        cells = [str(row.get("name") or "")]
+        for column in columns:
+            raw = values.get(column.get("name"))
+            cells.append("" if raw is None else str(raw))
+        lines.append(",".join(cells))
+    return "\n".join(lines) + "\n"
+
+
+def _curve_table_payload(semantic: dict[str, Any]) -> dict[str, Any] | None:
+    if semantic.get("kind") != "curve_table":
+        return None
+    rows = [r for r in semantic.get("rows") or [] if isinstance(r, dict)]
+    if not rows and not semantic.get("row_names"):
+        return None
+    curves = []
+    for row in rows:
+        curves.append(
+            {
+                "name": str(row.get("name") or ""),
+                "field_types": {
+                    str(k): (v.get("type") if isinstance(v, dict) else None)
+                    for k, v in (row.get("fields") or {}).items()
+                }
+                if isinstance(row.get("fields"), dict)
+                else {},
+                "keys": [],
+            }
+        )
+    if not curves:
+        for name in semantic.get("row_names") or []:
+            curves.append({"name": str(name), "field_types": {}, "keys": []})
+    return {
+        "kind": "curve_table",
+        "mode": semantic.get("curve_table_mode") or "",
+        "curves": curves,
+        "keys_decoded": False,
+    }
+
+
+def _csv_from_curves(payload: dict[str, Any]) -> str:
+    lines = ["name,key_count"]
+    for curve in payload.get("curves") or []:
+        lines.append(f"{curve.get('name')},{len(curve.get('keys') or [])}")
+    return "\n".join(lines) + "\n"
+
+
+class DataTableProjector:
+    asset_kinds = ("data_table",)
+
+    def can_project(self, obj: ObjectRecord) -> bool:
+        semantic = _semantic(obj)
+        return semantic.get("kind") in self.asset_kinds or (obj.class_name or "") == "DataTable"
+
+    def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
+        semantic = _semantic(obj)
+        deps = dependency_ids(document, obj.id)
+        payload = _data_table_payload(semantic)
+        if payload is None:
+            return unavailable_records(
+                obj.id,
+                _DATA_TABLE_PAIRS,
+                code="data_table_rows_unavailable",
+                message="DataTable row struct/values were not decoded into semantic",
+                stage="projection.data_exports",
+                dependencies=deps,
+            )
+        # Column types are evidenced; cell values are not decoded in current fixtures.
+        status = "represented"
+        completeness = 0.5
+        return [
+            ProjectionRecord(
+                kind="data_table",
+                source_object_id=obj.id,
+                media_type=_JSON,
+                content=payload,
+                embedded=True,
+                status=status,
+                completeness=completeness,
+                dependencies=deps,
+                diagnostics=[],
+            ),
+            ProjectionRecord(
+                kind="data_table_csv",
+                source_object_id=obj.id,
+                media_type=_CSV,
+                content=_csv_from_table(payload),
+                embedded=True,
+                status=status,
+                completeness=completeness,
+                dependencies=deps,
+                diagnostics=[],
+            ),
+            ProjectionRecord(
+                kind="data_table_json",
+                source_object_id=obj.id,
+                media_type=_JSON,
+                content=payload,
+                embedded=True,
+                status=status,
+                completeness=completeness,
+                dependencies=deps,
+                diagnostics=[],
+            ),
+        ]
+
+
+class CurveTableProjector:
+    asset_kinds = ("curve_table",)
+
+    def can_project(self, obj: ObjectRecord) -> bool:
+        semantic = _semantic(obj)
+        return semantic.get("kind") in self.asset_kinds or (obj.class_name or "") == "CurveTable"
+
+    def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
+        semantic = _semantic(obj)
+        deps = dependency_ids(document, obj.id)
+        payload = _curve_table_payload(semantic)
+        if payload is None:
+            return unavailable_records(
+                obj.id,
+                _CURVE_TABLE_PAIRS,
+                code="curve_table_keys_unavailable",
+                message="CurveTable keys/interpolation were not decoded into semantic",
+                stage="projection.data_exports",
+                dependencies=deps,
+            )
+        return [
+            ProjectionRecord(
+                kind="curve_table",
+                source_object_id=obj.id,
+                media_type=_JSON,
+                content=payload,
+                embedded=True,
+                status="represented",
+                completeness=0.5,
+                dependencies=deps,
+                diagnostics=[],
+            ),
+            ProjectionRecord(
+                kind="curve_table_csv",
+                source_object_id=obj.id,
+                media_type=_CSV,
+                content=_csv_from_curves(payload),
+                embedded=True,
+                status="represented",
+                completeness=0.5,
+                dependencies=deps,
+                diagnostics=[],
+            ),
+            ProjectionRecord(
+                kind="curve_table_json",
+                source_object_id=obj.id,
+                media_type=_JSON,
+                content=payload,
+                embedded=True,
+                status="represented",
+                completeness=0.5,
+                dependencies=deps,
+                diagnostics=[],
+            ),
+        ]
+
+
+def _cpp_from_fields(name: str, fields: list[dict[str, Any]]) -> str:
+    lines = [
+        f"// uasset_read user-defined struct projection: {name}",
+        f"struct {name}",
+        "{",
+    ]
+    for field in fields:
+        type_name = str(field.get("type") or "FString")
+        field_name = str(field.get("name") or "")
+        default = field.get("default_value")
+        suffix = f" = {default}" if default is not None else ""
+        lines.append(f"    {type_name} {field_name}{suffix};")
+    lines.append("};")
+    return "\n".join(lines) + "\n"
+
+
+def _cpp_from_entries(name: str, entries: list[dict[str, Any]]) -> str:
+    lines = [
+        f"// uasset_read user-defined enum projection: {name}",
+        f"enum class {name}",
+        "{",
+    ]
+    for index, entry in enumerate(entries):
+        entry_name = str(entry.get("name") or f"Value{index}")
+        lines.append(f"    {entry_name} = {index},")
+    lines.append("};")
+    return "\n".join(lines) + "\n"
+
+
+class UserDefinedStructProjector:
+    asset_kinds = ("user_defined_struct",)
+
+    def can_project(self, obj: ObjectRecord) -> bool:
+        semantic = _semantic(obj)
+        return semantic.get("kind") in self.asset_kinds or (obj.class_name or "") == "UserDefinedStruct"
+
+    def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
+        semantic = _semantic(obj)
+        deps = dependency_ids(document, obj.id)
+        fields = [f for f in semantic.get("fields") or [] if isinstance(f, dict)]
+        if semantic.get("kind") != "user_defined_struct" or not fields:
+            return unavailable_records(
+                obj.id,
+                _STRUCT_PAIRS,
+                code="user_defined_struct_fields_unavailable",
+                message="UserDefinedStruct reflected fields were not decoded into semantic",
+                stage="projection.data_exports",
+                dependencies=deps,
+            )
+        name = str(semantic.get("struct_name") or obj.name or "UserDefinedStruct")
+        defaults = {
+            "kind": "user_defined_struct",
+            "struct_name": name,
+            "fields": fields,
+        }
+        return [
+            ProjectionRecord(
+                kind="cpp_declaration",
+                source_object_id=obj.id,
+                media_type=_CPP,
+                content=_cpp_from_fields(name, fields),
+                embedded=True,
+                status="translated",
+                completeness=1.0,
+                dependencies=deps,
+                diagnostics=[],
+            ),
+            ProjectionRecord(
+                kind="defaults_json",
+                source_object_id=obj.id,
+                media_type=_JSON,
+                content=defaults,
+                embedded=True,
+                status="translated",
+                completeness=1.0,
+                dependencies=deps,
+                diagnostics=[],
+            ),
+        ]
+
+
+class UserDefinedEnumProjector:
+    asset_kinds = ("user_defined_enum",)
+
+    def can_project(self, obj: ObjectRecord) -> bool:
+        semantic = _semantic(obj)
+        return semantic.get("kind") in self.asset_kinds or (obj.class_name or "") == "UserDefinedEnum"
+
+    def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
+        semantic = _semantic(obj)
+        deps = dependency_ids(document, obj.id)
+        entries = [e for e in semantic.get("entries") or [] if isinstance(e, dict)]
+        if semantic.get("kind") != "user_defined_enum" or not entries:
+            return unavailable_records(
+                obj.id,
+                _ENUM_PAIRS,
+                code="user_defined_enum_entries_unavailable",
+                message="UserDefinedEnum enumerators were not decoded into semantic",
+                stage="projection.data_exports",
+                dependencies=deps,
+            )
+        name = str(semantic.get("enum_name") or obj.name or "UserDefinedEnum")
+        defaults = {
+            "kind": "user_defined_enum",
+            "enum_name": name,
+            "enumerators": entries,
+        }
+        return [
+            ProjectionRecord(
+                kind="cpp_declaration",
+                source_object_id=obj.id,
+                media_type=_CPP,
+                content=_cpp_from_entries(name, entries),
+                embedded=True,
+                status="translated",
+                completeness=1.0,
+                dependencies=deps,
+                diagnostics=[],
+            ),
+            ProjectionRecord(
+                kind="defaults_json",
+                source_object_id=obj.id,
+                media_type=_JSON,
+                content=defaults,
+                embedded=True,
+                status="translated",
+                completeness=1.0,
+                dependencies=deps,
+                diagnostics=[],
+            ),
+        ]
+
+
+class MaterialInstanceProjector:
+    asset_kinds = ("material_instance",)
+    _CLASS_NAMES = ("MaterialInstance", "MaterialInstanceConstant")
+
+    def can_project(self, obj: ObjectRecord) -> bool:
+        semantic = _semantic(obj)
+        return semantic.get("kind") in self.asset_kinds or (obj.class_name or "") in self._CLASS_NAMES
+
+    def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
+        semantic = _semantic(obj)
+        deps = dependency_ids(document, obj.id)
+        if semantic.get("kind") != "material_instance":
+            return unavailable_records(
+                obj.id,
+                _MATERIAL_INSTANCE_PAIRS,
+                code="material_instance_semantic_unavailable",
+                message="MaterialInstance parent/parameter overrides were not projected into semantic",
+                stage="projection.data_exports",
+                dependencies=deps,
+            )
+        parent_resolved = bool(semantic.get("has_parent"))
+        instance = {
+            "kind": "material_instance",
+            "name": semantic.get("name") or obj.name,
+            "parent_resolved": parent_resolved,
+            "parent": None if not parent_resolved else semantic.get("parent"),
+        }
+        parameters = {
+            "kind": "material_parameters",
+            "scalar_parameters": semantic.get("scalar_param_count"),
+            "vector_parameters": semantic.get("vector_param_count"),
+            "texture_parameters": semantic.get("texture_param_count"),
+            "resolved": parent_resolved,
+        }
+        status = "represented" if parent_resolved else "untranslated"
+        completeness = 0.5 if parent_resolved else None
+        return [
+            ProjectionRecord(
+                kind="material_instance",
+                source_object_id=obj.id,
+                media_type=_JSON,
+                content=instance,
+                embedded=True,
+                status=status,
+                completeness=completeness,
+                dependencies=deps,
+                diagnostics=[],
+            ),
+            ProjectionRecord(
+                kind="material_parameters",
+                source_object_id=obj.id,
+                media_type=_JSON,
+                content=parameters,
+                embedded=True,
+                status=status,
+                completeness=completeness,
+                dependencies=deps,
+                diagnostics=[],
+            ),
+        ]

@@ -1,8 +1,10 @@
-"""Blueprint C++ declaration and migration projection (plan Task 10 / R2).
+"""Blueprint C++ declaration/migration projection + type-aware registry (Tasks 10 / 10A).
 
-Public document-boundary entry is ``render_cpp(semantic_dict, mode)``.
-Typed-IR helpers (``build_cpp_ast``, ``render_cpp_ir``) stay internal to the
-projection layer and never reopen package bytes.
+Public entries:
+- ``render_cpp(semantic_dict, mode) -> CppProjection`` (R2)
+- ``ProjectorRegistry`` / ``build_canonical_document`` / ``write_projected_document`` (R3)
+
+Typed-IR helpers stay internal to the projection layer and never reopen package bytes.
 """
 
 from __future__ import annotations
@@ -24,8 +26,28 @@ from uasset_read.projections.cpp_render import (
     render_cpp,
     render_cpp_ir,
 )
+from uasset_read.projections.bundle import (
+    OutputBudgetError,
+    build_canonical_document,
+    minimum_canonical_envelope_bytes,
+    write_projected_document,
+)
+from uasset_read.projections.records import (
+    AssetProjector,
+    ProjectionRecord,
+    SidecarRecord,
+    dependency_ids,
+)
+from uasset_read.projections.registry import (
+    CAPABILITY_MATRIX,
+    BlueprintCppProjector,
+    ProjectorRegistry,
+)
 
 __all__ = [
+    "AssetProjector",
+    "BlueprintCppProjector",
+    "CAPABILITY_MATRIX",
     "CppClassDecl",
     "CppComponentDecl",
     "CppConstructorDecl",
@@ -36,7 +58,15 @@ __all__ = [
     "CppPropertyDecl",
     "CppStmt",
     "CppType",
+    "OutputBudgetError",
+    "ProjectorRegistry",
+    "ProjectionRecord",
+    "SidecarRecord",
+    "build_canonical_document",
     "build_cpp_ast",
+    "dependency_ids",
+    "minimum_canonical_envelope_bytes",
     "render_cpp",
     "render_cpp_ir",
+    "write_projected_document",
 ]
