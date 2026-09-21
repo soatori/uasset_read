@@ -2,16 +2,19 @@
 
 status: target
 
-> **2026-09-21 implementation marker:** This specification remains a target. On
-> the checked-out `dev-0.6.0` branch, the v3 envelope and Tasks 1–4 foundations
-> exist (`src/uasset_read/projection.py:17,220-223`,
-> `src/uasset_read/sources.py:11`, `src/uasset_read/layout.py:148`, and
-> `src/uasset_read/models/byte_ranges.py:129`), but the complete static
-> Blueprint IR/CFG/correlation, Material graph, C++/type-aware projection, and
-> canonical writer are not current behavior. The corresponding Task 5–9
-> implementation is only on the unmerged `compose/static-uasset-task5-12`
-> branch; Tasks 10–12 have no current implementation. Do not read this target
-> specification as an implementation claim.
+> **2026-09-21 implementation marker (R6 update):** This specification remains
+> a target. On `dev-0.6.0`, the v3 envelope and Tasks 1–4 foundations exist
+> (`src/uasset_read/projection.py`, `src/uasset_read/sources.py`,
+> `src/uasset_read/layout.py`, `src/uasset_read/models/byte_ranges.py`). Tasks
+> 5–12 work (static Blueprint IR/CFG/correlation, Material graph, C++/type-aware
+> projections, canonical writer/CLI, sample acceptance gates) exists on the
+> unmerged execution branch `sdd/static-uasset-finish` (worktree
+> `.worktrees/sdd-static-continue`, HEAD `ec2d0da4`; R6 checklist walk recorded
+> 442 passed + compileall clean on that branch). That work is **not** current
+> behavior on `dev-0.6.0` and is **not** claimed complete on the user-facing
+> branch until an orchestrator merge lands it. Do not read this target
+> specification as a complete-on-`dev-0.6.0` implementation claim. README
+> feature claims remain unchanged for the same reason.
 
 ## Decision
 

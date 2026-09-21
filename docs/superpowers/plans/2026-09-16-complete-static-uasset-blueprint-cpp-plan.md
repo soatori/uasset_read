@@ -10,22 +10,30 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md`
 
-## Execution status (2026-09-21)
+## Execution status (2026-09-21, R6 checklist walk)
 
-This plan is still an execution target, not a completion record. The current
-working branch is `dev-0.6.0`:
+This plan is still an execution target until an orchestrator merge lands the
+work on the user-facing branch. Implementation evidence below is from execution
+branch `sdd/static-uasset-finish` in worktree `.worktrees/sdd-static-continue`
+(HEAD `ec2d0da4` after R5). Full pytest on that branch: **442 passed**;
+`python -m compileall -q src` clean. Final controller whole-branch review is
+still outstanding (out of scope for R6).
 
-| Tasks | Current marker | Evidence / next boundary |
+| Tasks | Marker | Evidence / next boundary |
 | --- | --- | --- |
-| 1–4 | `complete` on this branch | v3 contract, bounded sources/containers, layout/Zen refusal, separate property readers, and byte accounting present; Step 5 gates green after committing plan/docs WIP and re-measuring `docs_markdown`. |
-| 5–9 | `implemented on sdd/static-uasset-finish` | Focused Tasks 5–9 suite green on execution branch `sdd/static-uasset-finish` (worktree `.worktrees/sdd-static-continue`); `objects[].semantic` is projected dict for Blueprint/Material families. Not marked complete on `dev-0.6.0` until an orchestrator merge lands there. |
-| 10–12 | `not started` | No current C++/type-aware projection implementation, canonical writer replacement, or complete-sample acceptance suite is present. |
+| 1–4 | `implemented` (dev-0.6.0 + this branch) | v3 contract, bounded sources/containers, layout/Zen refusal, separate property readers, and byte accounting present on `dev-0.6.0` and this branch. |
+| 5–9 | `implemented on sdd/static-uasset-finish` after R1 green | Tasks 5–9 modules + focused suite green on `sdd/static-uasset-finish`; `objects[].semantic` is projected dict for Blueprint/Material families (E1). Not marked complete on `dev-0.6.0` until an orchestrator merge lands there. |
+| 10 | `implemented on sdd/static-uasset-finish` after R2 green | `projections/cpp_ast.py` + `cpp_render.py`; `render_cpp(semantic_dict, mode)` public E1 entry; UE5.8 declaration oracle test green (`tests/test_blueprint_cpp.py`, golden Header View oracle). |
+| 10A | `implemented on sdd/static-uasset-finish` after R3 green | `projections/records.py`, `registry.py`, `material_builder.py`, `data_exports.py`, `bundle.py`; `ProjectorRegistry.default()` + embedded `ProjectionRecord`s; cooked material builder stays `unavailable`. |
+| 11 | `implemented on sdd/static-uasset-finish` after R4 green | `projection.project_document` / `build_projection_records` / CLI `-o` → `write_projected_document`; Agent tools share the same PackageDocument projection layer. |
+| 12 | `implemented on sdd/static-uasset-finish` after R5 green | `tests/test_complete_samples.py` acceptance gates 1–9 + quality/size baselines green in the full suite. |
 
-The fresh current-branch check was 155 passed and one failure in
-`tests/test_size_baseline.py:67-74`; the failure is the known worktree-only
-docs ratchet caused by the uncommitted plan and status-audit documentation, not
-a parser test failure.
-The final review checklist therefore remains open.
+Status markers above describe **execution-branch current behavior**, not a
+`dev-0.6.0` completion claim. Cross-branch landing remains an orchestrator/user
+action. README feature claims stay unchanged until the work is on the
+user-facing branch. R6 walked the 23-item final checklist against source/tests
+on this branch; item notes live in
+`.superpowers/sdd/2026-09-21-remaining-static-uasset-v3-projection/task-R6-report.md`.
 
 **Evidence used for this plan (do not re-derive from memory):**
 - UE source citations below are relative to the Unreal Engine source root; no developer-local checkout path is part of the contract.

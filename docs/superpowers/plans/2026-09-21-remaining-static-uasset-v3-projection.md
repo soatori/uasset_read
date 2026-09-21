@@ -14,13 +14,20 @@
 
 This remaining plan does **not** re-open Tasks 1–4. Those foundations are already on `dev-0.6.0` and on this branch through the tasks 5–9 merge.
 
-## Remaining Progress Snapshot (verified 2026-09-21)
+## Remaining Progress Snapshot (updated 2026-09-21 R6)
 
 | Tasks | Marker | Evidence |
 | --- | --- | --- |
-| 1–4 | `implemented` | On `dev-0.6.0` @ `ced9ad8e`: `sources.py`, `layout.py`, `zen_reader.py` availability boundary, tagged/unversioned property readers, byte accounting, `FORMAT_VERSION = "3.0"` in `projection.py:17`. |
-| 5–9 | `accepted on sdd/static-uasset-finish` | R1 green on branch `sdd/static-uasset-finish` (worktree `.worktrees/sdd-static-continue`): Tasks 5–9 modules + focused suite accepted; `objects[].semantic` is projected dict for Blueprint/Material families (E1). Not marked complete on `dev-0.6.0` until an orchestrator merge lands them there. |
-| 10–12 | `not started` | No `src/uasset_read/projections/` package. Missing tests: `test_blueprint_cpp.py`, `test_asset_projections.py`, `test_single_output.py`, `test_projection_v3.py`, `test_complete_samples.py`. Missing modules: `cpp_ast.py`, `cpp_render.py`, `records.py`, `registry.py`, `material_builder.py`, `data_exports.py`, `bundle.py`. |
+| 1–4 | `implemented` | On `dev-0.6.0` @ `ced9ad8e`: `sources.py`, `layout.py`, `zen_reader.py` availability boundary, tagged/unversioned property readers, byte accounting, `FORMAT_VERSION = "3.0"` in `projection.py`. |
+| 5–9 | `implemented on sdd/static-uasset-finish` (R1 green) | Tasks 5–9 modules + focused suite accepted on `sdd/static-uasset-finish`; `objects[].semantic` is projected dict for Blueprint/Material families (E1). Not complete on `dev-0.6.0` until orchestrator merge. |
+| 10 / R2 | `implemented on sdd/static-uasset-finish` | `src/uasset_read/projections/cpp_ast.py`, `cpp_render.py`; `tests/test_blueprint_cpp.py`; golden oracle `tests/samples/golden/blueprint_header_view/MyProject_UE58_TestBlueprint.json`. |
+| 10A / R3 | `implemented on sdd/static-uasset-finish` | `projections/records.py`, `registry.py`, `material_builder.py`, `data_exports.py`, `bundle.py`; `tests/test_asset_projections.py`, `tests/test_single_output.py`. |
+| 11 / R4 | `implemented on sdd/static-uasset-finish` | Projection/CLI/Agent plumbing via `PackageDocument`; `tests/test_projection_v3.py`, `tests/test_cli.py`. |
+| 12 / R5 | `implemented on sdd/static-uasset-finish` | `tests/test_complete_samples.py` gates 1–9; quality baseline + size baseline green in full suite. |
+| R6 checklist | `walked on sdd/static-uasset-finish` | 23-item checklist walked against source/tests on HEAD `ec2d0da4`: 23 pass / 0 fail / 0 unverifiable. Full suite **442 passed**; compileall clean. Controller whole-branch review remains after this report. |
+
+Markers describe execution-branch current behavior only. No `dev-0.6.0`
+completion claim. README feature claims not updated.
 
 **Samples present under `tests/samples/` (acceptance inputs):**
 
@@ -115,7 +122,7 @@ R2 depends on R1. R3 depends on R2 (`render_cpp`). R4 depends on R3 (`ProjectorR
 - Do not re-implement Tasks 5–9 from `dev-0.6.0`. Integration source of truth is this branch.
 - `compose/static-uasset-task5-12` @ `92c3a309` is the older unmerged candidate; this branch already merges it and adds property-reader fixes.
 
-- [ ] **Step 1: Record baseline**
+- [x] **Step 1: Record baseline**
 
 Run:
 
@@ -128,7 +135,7 @@ $env:PYTHONPATH='src'; python -m pytest tests/test_handler_registry.py tests/tes
 
 Expected: either all focused tests pass, or failures are limited to the already-dirty in-progress files. Write down the exact failure list.
 
-- [ ] **Step 2: Finish or revert dirty in-progress edits**
+- [x] **Step 2: Finish or revert dirty in-progress edits**
 
 For each dirty file from Step 1:
 
@@ -142,7 +149,7 @@ git add <only the files you finished>
 git commit -m "fix: finish tasks 5-9 integration residue"
 ```
 
-- [ ] **Step 3: Prove domain acceptance surface for later tasks**
+- [x] **Step 3: Prove domain acceptance surface for later tasks**
 
 Add or confirm these assertions in the existing Tasks 5–9 tests if they are missing (do not invent new acceptance numbers):
 
@@ -170,7 +177,7 @@ def test_stackobot_material_semantic_has_graph_dict(stackobot_material):
 
 If `tests/fixtures.py` helpers still return dataclasses, rewrite them to the E1 dict contract in this task (parent plan E1.2). That rewrite belongs with Tasks 5–9 acceptance, not with Task 10.
 
-- [ ] **Step 4: Run the Tasks 5–9 focused suite**
+- [x] **Step 4: Run the Tasks 5–9 focused suite**
 
 Run:
 
@@ -180,7 +187,7 @@ $env:PYTHONPATH='src'; python -m pytest tests/test_handler_registry.py tests/tes
 
 Expected: PASS. If `test_size_baseline.py` fails only on measured line growth, update `tests/size-baseline.json` from the failure output and commit that change with the integration commit.
 
-- [ ] **Step 5: Commit acceptance and update parent plan status row**
+- [x] **Step 5: Commit acceptance and update parent plan status row**
 
 Commit any remaining measured baseline/docs updates.
 
@@ -235,7 +242,7 @@ Invariant: `instructions_seen == translated + represented + untranslated + unava
 
 Declaration-scope reference only (not a runtime dependency): `Engine/Plugins/Editor/BlueprintHeaderView/`. Header View proves declaration coverage, not native body recovery.
 
-- [ ] **Step 1: Dump measured UE5.8 declaration facts under `temp/`**
+- [x] **Step 1: Dump measured UE5.8 declaration facts under `temp/`**
 
 Run a one-time probe after R1 is green:
 
@@ -274,7 +281,7 @@ PY
 
 Do **not** invent oracle fields. Populate the golden JSON only from this dump (parent class, properties/types, function signatures/parameters/directions, components, dispatchers that actually appear). If a field is absent, leave it out of the oracle until measured.
 
-- [ ] **Step 2: Write the failing C++ projection tests**
+- [x] **Step 2: Write the failing C++ projection tests**
 
 Create `tests/samples/golden/blueprint_header_view/MyProject_UE58_TestBlueprint.json` from Step 1 with `_provenance` explaining it is a normalized oracle, not a parser snapshot.
 
@@ -372,7 +379,7 @@ def stackobot_semantic(stackobot_document):
 
 If `BlueprintCorrelation.build(document)` without context is not yet implemented on this branch, implement that standalone test entry in R2 **using only projected dict keys** (parent Task 8 contract). It must not reopen package bytes.
 
-- [ ] **Step 3: Run tests and verify the projection is absent**
+- [x] **Step 3: Run tests and verify the projection is absent**
 
 Run:
 
@@ -382,7 +389,7 @@ $env:PYTHONPATH='src'; python -m pytest tests/test_blueprint_cpp.py tests/test_s
 
 Expected: FAIL with missing `uasset_read.projections.*` or missing `render_cpp`.
 
-- [ ] **Step 4: Implement the C++ AST and renderer**
+- [x] **Step 4: Implement the C++ AST and renderer**
 
 Implement in `projections/cpp_ast.py`:
 
@@ -482,7 +489,7 @@ Renderer rules:
 - Unresolved types render as comments like `/* unresolved: TypeName */` or equivalent diagnostic text — never silently `void`.
 - Do not concatenate raw bytecode strings into C++ source.
 
-- [ ] **Step 5: Run C++ projection tests and commit**
+- [x] **Step 5: Run C++ projection tests and commit**
 
 Run:
 
@@ -621,7 +628,7 @@ Frozen data shapes:
 
 `material_builder.py` may emit editor-only reconstruction C++ referencing `UMaterialEditingLibrary`-style operations when the editor graph is present. It must never claim HLSL/shader equivalence or invent cooked-away expressions.
 
-- [ ] **Step 1: Write registry and single-document tests**
+- [x] **Step 1: Write registry and single-document tests**
 
 ```python
 # tests/test_asset_projections.py
@@ -688,7 +695,7 @@ def document(stackobot_document):
     return stackobot_document
 ```
 
-- [ ] **Step 2: Run focused tests and verify absence**
+- [x] **Step 2: Run focused tests and verify absence**
 
 Run:
 
@@ -698,7 +705,7 @@ $env:PYTHONPATH='src'; python -m pytest tests/test_asset_projections.py tests/te
 
 Expected: import failures for `projections.registry` / `projections.bundle`.
 
-- [ ] **Step 3: Implement records, registry, projectors, and bundle**
+- [x] **Step 3: Implement records, registry, projectors, and bundle**
 
 Blueprint projector wiring:
 
@@ -761,7 +768,7 @@ class BlueprintCppProjector:
 
 It accepts no pagination/selection. `write_projected_document()` serializes that dict to one UTF-8 JSON file. If `max_main_bytes` cannot fit the complete document or falls below `minimum_canonical_envelope_bytes(document)`, raise `OutputBudgetError` **before creating any file**. Measure UTF-8 byte length, not Python character count. Do not implement automatic sidecars in this task.
 
-- [ ] **Step 4: Run projection tests and commit**
+- [x] **Step 4: Run projection tests and commit**
 
 Run:
 
@@ -806,7 +813,7 @@ Current-state notes:
 - Retired CLI flags stay retired. Do not resurrect Gate K `cpp_code` on Kismet results.
 - Agent tools keep the six purposes: `inspect_package`, `list_objects`, `get_object`, `list_dependencies`, `get_diagnostics`, `extract_payload`. Selection/pagination/`max_bytes` apply after semantic projection. Expose embedded projection records through `get_object`. No process-global logging.
 
-- [ ] **Step 1: Write projection consistency tests**
+- [x] **Step 1: Write projection consistency tests**
 
 ```python
 # tests/test_projection_v3.py
@@ -850,7 +857,7 @@ def test_canonical_file_api_is_not_paginated(stackobot_document, tmp_path):
     assert path.exists()
 ```
 
-- [ ] **Step 2: Run output tests and verify old plumbing fails**
+- [x] **Step 2: Run output tests and verify old plumbing fails**
 
 Run:
 
@@ -860,7 +867,7 @@ $env:PYTHONPATH='src'; python -m pytest tests/test_projection_v3.py tests/test_c
 
 Expected: missing projection records, wrong format_version assertions, or CLI still writing non-canonical shape.
 
-- [ ] **Step 3: Wire projection layer, package entry, CLI, and Agent**
+- [x] **Step 3: Wire projection layer, package entry, CLI, and Agent**
 
 Implementation checklist:
 
@@ -871,7 +878,7 @@ Implementation checklist:
 5. `build_projection_records()` is the only API that creates embedded type-specific content.
 6. Document writer is the only API that materializes the canonical file.
 
-- [ ] **Step 4: Run CLI/Agent/projection tests and commit**
+- [x] **Step 4: Run CLI/Agent/projection tests and commit**
 
 Run:
 
@@ -918,7 +925,7 @@ Acceptance numbers (from spec + manifest, verified 2026-09-16):
 | 9 | byte accounting | every requested non-empty export scope is tiled by non-empty leaves |
 | 10 | suite | full pytest + structure/size/quality baselines |
 
-- [ ] **Step 1: Write sample acceptance tests**
+- [x] **Step 1: Write sample acceptance tests**
 
 ```python
 # tests/test_complete_samples.py
@@ -1001,7 +1008,7 @@ def test_every_requested_export_is_fully_accounted(stackobot_document):
 
 If `MaterialGraphDecoder().decode(...)` is awkward after the E1 dict flip, keep using `find_material_graph(document)["expressions"]`. Do not require a live dataclass in sample-facing tests.
 
-- [ ] **Step 2: Run sample tests and record real failures**
+- [x] **Step 2: Run sample tests and record real failures**
 
 Run:
 
@@ -1011,15 +1018,15 @@ $env:PYTHONPATH='src'; python -m pytest tests/test_complete_samples.py tests/tes
 
 Expected: if gaps remain, failures identify sample/feature gaps, not generic assertion noise. Fix parser/projection gaps in the owning task (R2/R3/R4), not by weakening these gates.
 
-- [ ] **Step 3: Generate quality-v3 evidence under `temp/`**
+- [x] **Step 3: Generate quality-v3 evidence under `temp/`**
 
 Run the parser for StackOBot Blueprint, UE5.8 Blueprint, StackOBot Material, unversioned samples, and available container fixtures. Store one canonical JSON per sample under `temp/quality-v3/` containing diagnostics, Blueprint semantic trace, Blueprint C++ declaration/migration projections, Material graph/editor-builder projections, available table/curve/struct/enum projections, and capability matrix. Include a short README listing commands and git SHA. Do not stage `temp/`.
 
-- [ ] **Step 4: Update only measured baselines**
+- [x] **Step 4: Update only measured baselines**
 
 Update `tests/samples/quality_baseline.json` and `tests/size-baseline.json` from generated evidence. Add gate samples currently missing from the quality baseline. Do not suppress a parser failure by widening a baseline or marking an unavailable feature complete.
 
-- [ ] **Step 5: Run all verification commands**
+- [x] **Step 5: Run all verification commands**
 
 Run:
 
@@ -1031,7 +1038,7 @@ python -m compileall -q src
 
 Expected: all tests pass; all baseline gates pass; every discovered Blueprint instruction has a translation status; every sampled recognized asset has a best-fit embedded projection or explicit capability/diagnostic outcome; ordinary samples produce one canonical JSON file each.
 
-- [ ] **Step 6: Commit the acceptance gate**
+- [x] **Step 6: Commit the acceptance gate**
 
 ```powershell
 git add tests/test_complete_samples.py tests/samples/quality_baseline.json tests/test_quality_baseline_generator.py tests/test_size_baseline.py
@@ -1042,7 +1049,7 @@ Never `git add temp/`.
 
 ---
 
-### Task R6: Final checklist and documentation status
+### Task R6: Final checklist and documentation status — complete (execution branch)
 
 **Files:**
 - Modify: `docs/superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md`
@@ -1050,7 +1057,7 @@ Never `git add temp/`.
 - Modify: `docs/superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md` implementation marker only after source+tests support the claim
 - Do **not** update README feature claims until implementation is on the user-facing branch
 
-- [ ] **Step 1: Walk the final review checklist**
+- [x] **Step 1: Walk the final review checklist**
 
 Confirm each item against source/tests, not against design text:
 
@@ -1078,7 +1085,7 @@ Confirm each item against source/tests, not against design text:
 22. Cooked-away/encrypted/missing/unknown data are unavailable/opaque with reasons.
 23. Full tests, quality baseline, size baseline, and compileall pass.
 
-- [ ] **Step 2: Update plan execution status**
+- [x] **Step 2: Update plan execution status**
 
 In the parent plan, set:
 
@@ -1093,7 +1100,7 @@ In the parent plan, set:
 
 In this remaining plan, check off completed task boxes.
 
-- [ ] **Step 3: Commit documentation status updates**
+- [x] **Step 3: Commit documentation status updates**
 
 ```powershell
 git add docs/superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md docs/superpowers/plans/2026-09-21-remaining-static-uasset-v3-projection.md
