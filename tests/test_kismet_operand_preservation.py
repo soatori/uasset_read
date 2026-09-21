@@ -9,6 +9,7 @@ entries exercise ``from_archive`` retention with a scripted archive.
 from __future__ import annotations
 
 from uasset_read.kismet.expressions import (
+    EX_ArrayGetByRef,
     EX_Assert,
     EX_ArrayConst,
     EX_ClassContext,
@@ -51,6 +52,7 @@ OPERAND_FIELD_MATRIX: dict[str, frozenset[str]] = {
     "EX_SetConst": frozenset({"ElementType", "Num", "Values"}),
     "EX_DynamicCast": frozenset({"TargetClass", "TargetExpression"}),
     "EX_TransformConst": frozenset({"Rotation", "Translation", "Scale"}),
+    "EX_ArrayGetByRef": frozenset({"TargetExpression", "IndexExpression"}),
 }
 
 # Top-level opcodes known to appear in the tracked samples for real-data checks.
@@ -163,9 +165,33 @@ def test_matrix_from_archive_retains_payload_into_operands():
             EX_TransformConst.from_archive(archive),
             OPERAND_FIELD_MATRIX["EX_TransformConst"],
         ),
+        (
+            EX_ArrayGetByRef.from_archive(archive),
+            OPERAND_FIELD_MATRIX["EX_ArrayGetByRef"],
+        ),
     ]
     for expr, expected in cases:
         _assert_fields(expr, expected)
+
+
+def test_to_dict_emits_matrix_operand_fields():
+    """to_dict must not drop consumed payload at the projection boundary."""
+    archive = _ScriptedArchive()
+    exprs = [
+        EX_Return.from_archive(archive),
+        EX_SwitchValue.from_archive(archive),
+        EX_Context.from_archive(archive),
+        EX_SetArray.from_archive(archive),
+        EX_DynamicCast.from_archive(archive),
+        EX_TransformConst.from_archive(archive),
+        EX_ArrayGetByRef.from_archive(archive),
+    ]
+    for expr in exprs:
+        opcode = expr.Token.name
+        expected = OPERAND_FIELD_MATRIX[opcode]
+        as_dict = expr.to_dict()
+        missing = expected - set(as_dict)
+        assert not missing, f"{opcode}: to_dict missing {sorted(missing)}"
 
 
 def test_matrix_is_json_projectable_without_discarding_payload():

@@ -39,3 +39,22 @@ def test_computed_jump_is_marked_not_enumerated(stackobot_document):
             for edge in fn["cfg"]["edges"]:
                 if edge["kind"] == "computed_jump":
                     assert edge["targets_known"] is False
+
+
+def test_cfg_blocks_carry_instructions_matching_ordinals(stackobot_document):
+    """blocks[].instructions is the brief projection; ordinals stay in sync."""
+    for obj in stackobot_document.objects:
+        for fn in ((obj.semantic or {}).get("functions") or []):
+            instrs = fn.get("instructions") or []
+            blocks = (fn.get("cfg") or {}).get("blocks") or []
+            if not instrs:
+                continue
+            concat: list[dict] = []
+            for block in blocks:
+                block_instrs = block.get("instructions")
+                ordinals = block.get("instruction_ordinals") or []
+                assert block_instrs is not None, "blocks must expose instructions"
+                assert len(block_instrs) == len(ordinals)
+                assert [item["statement_ordinal"] for item in block_instrs] == ordinals
+                concat.extend(block_instrs)
+            assert concat == instrs, "block instructions must cover fn instructions in order"

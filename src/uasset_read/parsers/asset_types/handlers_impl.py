@@ -1055,9 +1055,9 @@ _KISMET_ASSET_TYPE_LIMIT = 128
 def _project_kismet_functions(kismet: list[dict[str, Any]], *, include_expressions: bool) -> list[dict[str, Any]]:
     """Project KismetDecompiledResult dicts onto the public K0 functions contract.
 
-    depth=asset gets count/types summary only (types capped at 128);
-    depth=decode also includes the serialized expression tree (budgeted by projection max_bytes).
-    Task 7: every entry carries identity, dual-offset instruction IR, and CFG.
+    depth=asset gets count/types summary only (types capped at 128); no full
+    instruction IR or CFG payloads. depth=decode includes the expression tree
+    plus dual-offset instruction IR and CFG (budgeted by projection max_bytes).
     """
     projected: list[dict[str, Any]] = []
     for fn in kismet:
@@ -1086,12 +1086,21 @@ def _project_kismet_functions(kismet: list[dict[str, Any]], *, include_expressio
         entry["expressions_truncated"] = len(types) > _KISMET_ASSET_TYPE_LIMIT
         if include_expressions:
             entry["expressions"] = exprs
-        instructions = fn.get("instructions")
-        if instructions is not None:
-            entry["instructions"] = instructions
-        cfg = fn.get("cfg")
-        if cfg is not None:
-            entry["cfg"] = cfg
+            instructions = fn.get("instructions")
+            if instructions is not None:
+                entry["instructions"] = instructions
+            cfg = fn.get("cfg")
+            if cfg is not None:
+                entry["cfg"] = cfg
+        else:
+            # depth!=decode: summary counts only — full IR stays budgeted to decode.
+            instructions = fn.get("instructions")
+            if instructions is not None:
+                entry["instruction_count"] = len(instructions)
+            cfg = fn.get("cfg")
+            if isinstance(cfg, dict):
+                entry["cfg_block_count"] = len(cfg.get("blocks") or [])
+                entry["cfg_edge_count"] = len(cfg.get("edges") or [])
         for key in (
             "error_code",
             "error_message",

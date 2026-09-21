@@ -7,7 +7,8 @@ EXPR_CLASS_MAP used by FKismetArchive.read_expression() to dispatch token parsin
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import fields, is_dataclass, dataclass, field
+from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from uasset_read.constants import UE5_LARGE_WORLD_COORDINATES
@@ -26,6 +27,60 @@ if TYPE_CHECKING:
     from uasset_read.kismet.property_pointer import FKismetPropertyPointer
 
 # === Base classes and factories (from base.py) ===
+
+
+def _operand_to_json(value: Any) -> Any:
+    """JSON-safe recursive operand projection; never str() embeds 0x bytes."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, Enum):
+        try:
+            return value.name
+        except Exception:
+            return {"kind": "opaque_value", "type": type(value).__name__}
+    if isinstance(value, bytes):
+        import base64
+
+        return {"kind": "opaque_value", "type": "bytes", "base64": base64.b64encode(value).decode("ascii")}
+    if isinstance(value, (list, tuple)):
+        return [_operand_to_json(item) for item in value]
+    if isinstance(value, dict):
+        return {str(k): _operand_to_json(v) for k, v in value.items()}
+    if is_dataclass(value) and not isinstance(value, type):
+        if hasattr(value, "to_dict") and callable(getattr(value, "to_dict")):
+            try:
+                return project_operand_safe(value.to_dict())
+            except Exception:
+                pass
+        return {f.name: _operand_to_json(getattr(value, f.name)) for f in fields(value)}
+    if hasattr(value, "to_dict") and callable(getattr(value, "to_dict")):
+        try:
+            return project_operand_safe(value.to_dict())
+        except Exception:
+            pass
+    return {"kind": "opaque_value", "type": type(value).__name__}
+
+
+def project_operand_safe(data: Any) -> Any:
+    if isinstance(data, dict):
+        return {str(k): project_operand_safe(v) for k, v in data.items()}
+    if isinstance(data, list):
+        return [project_operand_safe(v) for v in data]
+    if data is None or isinstance(data, (bool, int, float, str)):
+        return data
+    if isinstance(data, bytes):
+        import base64
+
+        return {"kind": "opaque_value", "type": "bytes", "base64": base64.b64encode(data).decode("ascii")}
+    if isinstance(data, Enum):
+        try:
+            return data.name
+        except Exception:
+            return {"kind": "opaque_value", "type": type(data).__name__}
+    if is_dataclass(data) and not isinstance(data, type):
+        return {f.name: _operand_to_json(getattr(data, f.name)) for f in fields(data)}
+    return {"kind": "opaque_value", "type": type(data).__name__}
+
 
 class KismetExpression(ABC):
     """
@@ -61,13 +116,23 @@ class KismetExpression(ABC):
         self.SerializedEnd = serialized_end
 
     def to_dict(self) -> dict:
-        """Serialize to dictionary format (for JSON output)."""
-        return {
+        """Serialize to dictionary format (for JSON output).
+
+        Emits every dataclass operand field so consumed payload is never
+        dropped at the projection boundary (operand-preservation invariant).
+        """
+        out: dict[str, Any] = {
             "Inst": self.Token.name,
-            "StatementIndex": self.StatementIndex,
-            "SerializedStart": self.SerializedStart,
-            "SerializedEnd": self.SerializedEnd,
+            "StatementIndex": getattr(self, "StatementIndex", 0),
+            "SerializedStart": getattr(self, "SerializedStart", -1),
+            "SerializedEnd": getattr(self, "SerializedEnd", -1),
         }
+        if is_dataclass(self) and not isinstance(self, type):
+            for f in fields(self):
+                if f.name in {"StatementIndex", "SerializedStart", "SerializedEnd", "Token"}:
+                    continue
+                out[f.name] = _operand_to_json(getattr(self, f.name))
+        return out
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} token={self.Token.name}>"
@@ -967,12 +1032,14 @@ EX_EndSetConst = make_simple_expression(EExprToken.EX_EndSetConst)
 @dataclass
 class EX_ArrayGetByRef(KismetExpression):
     Token = EExprToken.EX_ArrayGetByRef
+    TargetExpression: KismetExpression | None = None
+    IndexExpression: KismetExpression | None = None
 
     @classmethod
     def from_archive(cls, archive: FKismetArchive) -> EX_ArrayGetByRef:
-        archive.read_expression()
-        archive.read_expression()
-        return cls()
+        target = archive.read_expression()
+        index = archive.read_expression()
+        return cls(TargetExpression=target, IndexExpression=index)
 
 # === Struct expressions (from structs.py) ===
 

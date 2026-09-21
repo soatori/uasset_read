@@ -152,6 +152,8 @@ def test_combat_character_kismet_asset_depth_summary():
         assert "expression_types" in fn
         assert "expressions_truncated" in fn
         assert "expressions" not in fn, "asset depth must not embed the full tree"
+        assert "instructions" not in fn, "asset depth must not embed full instruction IR"
+        assert "cfg" not in fn, "asset depth must not embed full CFG"
         assert len(fn["expression_types"]) <= 128
 
 
@@ -465,9 +467,14 @@ def test_variable_nodes_do_not_fake_member_reference():
     from uasset_read.projection import project_document
 
     doc = parse_package_document(
-        SAMPLES / "BP_CombatCharacter.uasset", depth="decode", tolerant=True
+        SAMPLES / "BP_CombatCharacter.uasset",
+        depth="decode",
+        object_ids=["export:1"],
     )
-    page = project_document(doc, depth="decode", max_bytes=3_000_000)
+    # Task 7 dual-offset instructions + CFG per function push the decode page
+    # past the old 3 MB default; select the blueprint export like the sibling
+    # K0-function gate and keep a measured budget that retains graph nodes.
+    page = project_document(doc, depth="decode", max_bytes=5_000_000)
     nodes = [
         n
         for o in page.get("objects") or []
@@ -841,3 +848,17 @@ def test_exec_edges_are_oriented_unique_and_graph_local():
         pair = frozenset((from_pin, to_pin))
         assert pair not in seen_pairs, f"undirected duplicate: {edge}"
         seen_pairs.add(pair)
+
+
+def test_stackobot_blueprint_semantic_is_projected_dict(stackobot_document):
+    """E1: document-boundary blueprint semantic is a projected dict, not typed IR."""
+    from tests.fixtures import find_blueprint_object
+
+    obj = find_blueprint_object(stackobot_document)
+    semantic = obj.semantic
+    assert isinstance(semantic, dict)
+    assert semantic["kind"] in {"blueprint", "anim_blueprint"}
+    assert semantic["functions"], "functions[] must be projected dicts"
+    assert isinstance(semantic["functions"][0], dict)
+    assert "expression_count" in semantic["functions"][0]
+    assert "control_flow" in semantic

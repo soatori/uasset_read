@@ -14,6 +14,7 @@ from typing import Any, Literal
 from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.parsers.blueprint.bytecode import (
     BytecodeInstruction,
+    project_instruction,
 )
 
 
@@ -63,10 +64,10 @@ def project_cfg(cfg: ControlFlowGraph) -> dict[str, Any]:
             {
                 "start_statement_index": block.start_statement_index,
                 "end_statement_index": block.end_statement_index,
-                # Instruction payloads stay on the function's instructions[]
-                # projection; blocks carry the dual-offset ranges only so the
-                # CFG does not double-encode every instruction.
+                # Same projection as functions[].instructions so block payloads
+                # cover the function instruction list in order (Task 7 invariant).
                 "instruction_ordinals": [item.statement_ordinal for item in block.instructions],
+                "instructions": [project_instruction(item) for item in block.instructions],
             }
             for block in cfg.blocks
         ],
