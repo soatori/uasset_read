@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
+from tests.fixtures import make_property_input
 from uasset_read.models.byte_ranges import ByteRegion
 from uasset_read.models.properties import PropertyBag, PropertyEntry, project_property_bag, project_property_entries
 from uasset_read.parsers.properties.tagged import TaggedPropertyReader
@@ -14,15 +17,64 @@ def test_tagged_reader_reports_consumed_boundary(tagged_fixture):
     assert result.regions[-1].end == tagged_fixture.start + result.consumed
 
 
+def test_tagged_reader_recovery_reports_partial_with_diagnostics(tagged_fixture):
+    """Recovery on the PropertyInput path must not claim complete with no diagnostics.
+
+    The fixture's first FName index is out of range; tolerant read_name recovers
+    with "None" and records name_index_out_of_range on the bounded window, so
+    the unified-loop read must surface partial + that diagnostic.
+    """
+    result = TaggedPropertyReader().read(tagged_fixture)
+    assert result.status == "partial"
+    assert result.diagnostics
+    diag = next(d for d in result.diagnostics if d.code == "name_index_out_of_range")
+    assert diag.reason == "recovered_corruption"
+    assert diag.object_id == tagged_fixture.object_id
+
+
+def test_tagged_reader_property_fallback_reports_partial_with_diagnostics():
+    """A PropertyFallback recovered by the loop yields PROPERTY_VALUE_READ_FAILED + partial."""
+    inp = make_property_input("StarterContent_Starter_Background_Cue.uasset")
+    result = TaggedPropertyReader().read(inp)
+    assert result.status == "partial"
+    diag = next(d for d in result.diagnostics if d.code == "PROPERTY_VALUE_READ_FAILED")
+    assert diag.reason == "recovered_corruption"
+    assert diag.object_id == inp.object_id
+    # Recovery keeps the bag populated and the region boundary intact.
+    assert result.consumed >= 0
+    assert result.values.entries
+    assert result.regions[-1].end == inp.start + result.consumed
+
+
+def test_tagged_reader_clean_stream_reports_complete():
+    """status=complete only when the stream is clean (None-terminated, no recovery)."""
+    base = make_property_input("StackOBot_BP_Drone.uasset")
+    # The UE5.4+ serialization-control byte precedes the tags and read() enters
+    # the loop directly, so align past it to reach the clean tagged stream.
+    aligned = replace(base, start=base.start + 1, size=base.size - 1)
+    result = TaggedPropertyReader().read(aligned)
+    assert result.status == "complete"
+    assert result.diagnostics == []
+    assert result.values.entries
+    assert result.regions[-1].end == aligned.start + result.consumed
+
+
 def test_tagged_reader_is_sole_production_entry():
     import inspect
 
-    from uasset_read.parsers import legacy_reader
+    from uasset_read.parsers import legacy_reader, property_parser
+    from uasset_read.parsers.properties import tagged
     from uasset_read.parsers.properties.tagged import TaggedPropertyReader
 
-    source = inspect.getsource(legacy_reader)
-    assert "TaggedPropertyReader" in source
-    assert "parse_properties_from_export" not in source
+    # The production tag loop lives in tagged.py, not property_parser.
+    assert "def _read_property_loop" in inspect.getsource(tagged)
+    assert not hasattr(property_parser, "_read_property_loop")
+    assert not hasattr(property_parser, "parse_properties_from_export")
+
+    # legacy_reader reaches the stream only through TaggedPropertyReader.read_export.
+    legacy_source = inspect.getsource(legacy_reader)
+    assert "TaggedPropertyReader" in legacy_source
+    assert "parse_properties_from_export" not in legacy_source
     assert hasattr(TaggedPropertyReader, "read_export")
 
 
@@ -44,6 +96,18 @@ def test_unversioned_fragment_bit_layout_synthetic():
     assert only_value.fragments[0].value_num == 1
     assert only_value.fragments[0].is_last is False
     assert only_value.fragments[1].is_last is True
+
+
+def test_unversioned_zero_mask_is_serialized_directly_without_count_byte():
+    # HasAnyZeroes=1, ValueNum=3, IsLast=1 => (3<<9)|0x100|0x80 = 0x0780.
+    # 3 masked values <= 8 bits, so the zero mask is a single uint8 (0b101),
+    # serialized directly with NO NumBits count byte (UE LoadZeroMaskData).
+    raw = (0x0780).to_bytes(2, "little") + bytes([0b101])
+    header = parse_unversioned_header(raw)
+    assert header.fragments[0].has_any_zeroes is True
+    assert header.fragments[0].value_num == 3
+    assert header.zero_bits == (True, False, True)
+    assert header.header_size == 3
 
 
 def duplicate_bag():

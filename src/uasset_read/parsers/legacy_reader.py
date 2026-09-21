@@ -40,7 +40,8 @@ from ..models.diagnostics import (
     classify_trailing_reason,
     make_diagnostic as _diag,
 )
-from .asset_types.handlers_impl import run_handlers
+from .asset_types import handlers_impl as _handlers_side_effect  # noqa: F401  — registration
+from .asset_types.registry import run_handlers
 from ..models.document import PackageDocument, PackageInfo, Summary
 from ..models.object_model import (
     Dependency,
@@ -929,6 +930,7 @@ class LegacyPackageReader:
                     object_ids=object_ids,
                     diagnostics=diagnostics,
                     mappings=mappings_provider,
+                    depth=depth,
                 )
                 byte_accounting = self._attach_byte_accounting(objects, diagnostics)
             else:
@@ -967,19 +969,73 @@ class LegacyPackageReader:
                     extras=extras,
                     diagnostics=diagnostics,
                     object_ids=object_ids,
+                    include_ir=depth == "decode",
                 )
+
+            # 16d. Assemble the package envelope BEFORE the handler phase so
+            # Blueprint correlation consumes the same PackageDocument instance
+            # that read() finalizes and returns (plan Task 8 Step 4).
+            source_info = _build_source_info(self._main_path)
+            document = PackageDocument(
+                source=source_info,
+                package=package_info,
+                objects=objects,
+                relations=relations,
+                dependencies=dependencies,
+                diagnostics=diagnostics,
+                summary=summary_obj,
+                depth=depth,
+                byte_accounting=byte_accounting,
+            )
+
+            # 16e. Per-owner typed analysis contexts: convert the decoded raw
+            # graph dicts to typed IR exactly once (BlueprintGraphDecoder) and
+            # pair them with the typed Kismet function IR built at attach time.
+            from ..models.analysis import BlueprintAnalysisContext, BlueprintAnalysisEnvelope
+
+            contexts: dict[str, BlueprintAnalysisContext] = {}
+            if depth == "decode":
+                from .blueprint.graph import BlueprintGraphDecoder
+
+                decoder = BlueprintGraphDecoder()
+                for obj in objects:
+                    if (obj.class_name or "") not in _BLUEPRINT_FAMILY_CLASSES:
+                        continue
+                    entry = extras.get(obj.id) or {}
+                    graphs_raw = entry.get("graphs") or []
+                    if graphs_raw and obj.semantic is None:
+                        # Decoder channel: BlueprintGraphDecoder reads raw
+                        # graphs off the object; correlation re-reads them for
+                        # node_data/kind enrichment while the seed is live.
+                        obj.semantic = {
+                            "graphs": graphs_raw,
+                            "interfaces": entry.get("interfaces") or [],
+                        }
+                    typed_graphs = decoder.decode(obj, document, source=None)
+                    functions = list(entry.get("kismet_ir") or [])
+                    contexts[obj.id] = BlueprintAnalysisContext(
+                        owner_object_id=obj.id,
+                        graphs=typed_graphs,
+                        functions=functions,
+                    )
+            envelope = BlueprintAnalysisEnvelope(document=document, contexts=contexts)
 
             # 17. Run asset handlers at depth >= asset
             if depth in ("asset", "decode"):
                 for obj in objects:
                     try:
-                        semantic, cov, handler_diags = run_handlers(
-                            obj, depth, objects, (export_map, name_map, extras)
+                        handler_result = run_handlers(
+                            obj, depth, objects, (export_map, name_map, extras, envelope)
                         )
+                        semantic = handler_result.semantic
                         if semantic is not None:
                             obj.semantic = semantic
-                        obj.coverage.extend(cov)
-                        diagnostics.extend(handler_diags)
+                        elif obj.id in contexts:
+                            # Handler produced nothing: drop the decoder seed so
+                            # a partial seed never ships as the final semantic.
+                            obj.semantic = None
+                        obj.coverage.extend(handler_result.coverage)
+                        diagnostics.extend(handler_result.diagnostics)
                     except Exception as exc:
                         diagnostics.append(
                             _diag(
@@ -999,20 +1055,10 @@ class LegacyPackageReader:
             # property parsing) once every read has had its object context.
             _merge_archive_recoveries(archive, objects, diagnostics)
 
-            # 18. Build SourceInfo
-            source_info = _build_source_info(self._main_path)
-
-            return PackageDocument(
-                source=source_info,
-                package=package_info,
-                objects=objects,
-                relations=relations,
-                dependencies=dependencies,
-                diagnostics=diagnostics,
-                summary=summary_obj,
-                depth=depth,
-                byte_accounting=byte_accounting,
-            )
+            # 18. The envelope assembled at 16d is the returned document; the
+            # handler/correlation phases mutate the same object records and
+            # diagnostic list in place.
+            return document
 
         except ParseError as e:
             diagnostics.append(_diag("PACKAGE_READ_FAILED", str(e), "package.read", severity="error", effect=None))
@@ -1046,6 +1092,101 @@ class LegacyPackageReader:
             )
             return None, total_decompressed
 
+    def _expand_blueprint_prerequisite_closure(
+        self,
+        target_indices: set[int],
+        *,
+        objects: list[ObjectRecord],
+        export_map: list[ObjectExport],
+        max_exports: int = 256,
+    ) -> set[int]:
+        """Add graph-container/node/CDO prerequisites for selected Blueprint-family owners.
+
+        ``object_ids`` remains an output filter: the returned document still
+        exposes only requested objects; this set only widens which exports
+        receive property/byte accounting so graph decode is selection-stable.
+
+        Expansion covers direct graph-like children of the family seed, every
+        node export under those graphs (K2 identity lives on the node property
+        bag), and matching Default__ CDOs. ``max_exports`` keeps large
+        AnimBlueprint selections bounded instead of parsing the whole package
+        graph tree per selection.
+        """
+        if not target_indices or len(target_indices) >= len(export_map):
+            return target_indices
+
+        family = {
+            i
+            for i, obj in enumerate(objects)
+            if i in target_indices and (obj.class_name or "") in _BLUEPRINT_FAMILY_CLASSES
+        }
+        if not family:
+            return target_indices
+
+        selected = set(target_indices)
+
+        def _is_graph_like(class_name: str) -> bool:
+            name = class_name or ""
+            return name.endswith("Graph") or name in {
+                "EdGraph",
+                "UEdGraph",
+                "AnimationBlueprint",
+            }
+
+        # One hop: direct outer=seed graph containers (and their direct graph children).
+        added = 0
+        graph_containers: set[int] = set()
+        for i, exp in enumerate(export_map):
+            if added >= max_exports:
+                break
+            if i in selected:
+                continue
+            outer = exp.outer_index
+            outer_idx = getattr(outer, "index", 0) if outer is not None else 0
+            if outer_idx <= 0:
+                continue
+            parent = outer_idx - 1
+            if parent in family or parent in selected:
+                obj = objects[i] if i < len(objects) else None
+                class_name = (obj.class_name if obj else "") or ""
+                if parent in family or _is_graph_like(class_name):
+                    selected.add(i)
+                    added += 1
+                    if _is_graph_like(class_name):
+                        graph_containers.add(i)
+
+        # Second hop: every export whose outer is a selected graph container —
+        # node exports (K2Node_*) carry FunctionReference/EventReference bags
+        # that K2 metadata enrichment needs for selected-vs-full parity.
+        for i, exp in enumerate(export_map):
+            if added >= max_exports:
+                break
+            if i in selected or i in family:
+                continue
+            outer = exp.outer_index
+            outer_idx = getattr(outer, "index", 0) if outer is not None else 0
+            if outer_idx <= 0:
+                continue
+            parent = outer_idx - 1
+            if parent in graph_containers or (
+                parent in selected and _is_graph_like((objects[parent].class_name if parent < len(objects) else "") or "")
+            ):
+                selected.add(i)
+                added += 1
+
+        # Export-table CDO: Default__X whose class is a selected generated class.
+        selected_ids = {f"export:{i}" for i in selected}
+        for i, exp in enumerate(export_map):
+            if i in selected or added >= max_exports:
+                break
+            if not exp.object_name.startswith("Default__"):
+                continue
+            cls = _package_index_to_id(exp.class_index)
+            if cls in selected_ids:
+                selected.add(i)
+                added += 1
+        return selected
+
     def _parse_requested_object_properties(
         self,
         archive: PackageArchive,
@@ -1057,6 +1198,7 @@ class LegacyPackageReader:
         object_ids: Sequence[str] | None,
         diagnostics: list[Diagnostic],
         mappings: Any | None = None,
+        depth: Literal["package", "object", "asset", "decode"] = "object",
     ) -> dict[str, dict[str, Any]]:
         """Parse properties for requested objects at depth >= object.
 
@@ -1082,6 +1224,35 @@ class LegacyPackageReader:
                 if oid.startswith("export:"):
                     with contextlib.suppress(ValueError, IndexError):
                         target_indices.add(int(oid.split(":")[1]))
+            # Bounded prerequisite closure only when graphs/bytecode will be
+            # decoded: object/asset depth must keep `object_ids` as the exact
+            # property-parse set (plan Task 6 / audit). Decode expands graph
+            # containers, node exports, and generated-class/CDO references
+            # needed for selection-stable graph results.
+            if depth == "decode":
+                target_indices = self._expand_blueprint_prerequisite_closure(
+                    target_indices,
+                    objects=objects,
+                    export_map=export_map,
+                )
+            # Material dependency closure: selecting a Material export must also
+            # parse its MaterialExpression* / MaterialEditorOnlyData bags so the
+            # expression graph is available without selecting every export.
+            material_roots = {
+                i
+                for i in target_indices
+                if i < len(objects) and (objects[i].class_name or "") == "Material"
+            }
+            if material_roots:
+                for j, child in enumerate(objects):
+                    if j in target_indices:
+                        continue
+                    cn = child.class_name or ""
+                    if cn != "MaterialEditorOnlyData" and not cn.startswith("MaterialExpression"):
+                        continue
+                    outer = child.outer_ref
+                    if outer is not None and outer.table == "export" and outer.index in material_roots:
+                        target_indices.add(j)
 
         extras: dict[str, dict[str, Any]] = {}
         tagged_reader = TaggedPropertyReader()
@@ -1510,6 +1681,65 @@ def _attach_blueprint_graph_extras(
             entry["interfaces"] = names
 
 
+def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
+    """Typed FunctionAnalysis for one Kismet result (plan Task 8).
+
+    Reuses the already-decoded ``kr.expressions`` (no second binary pass) and
+    the same normalize/CFG builders the bridge used, keeping the typed IR the
+    correlation layer needs while the archive inputs are still open.
+    """
+    from ..models.analysis import FunctionAnalysis
+    from .blueprint.bytecode import normalize_instructions
+    from .blueprint.control_flow import build_cfg
+
+    instructions = []
+    cfg = build_cfg([])
+    if kr.expressions:
+        instructions = normalize_instructions(kr.expressions)
+        cfg = build_cfg(instructions)
+    reads: set[str] = set()
+    writes: set[str] = set()
+    calls: list[str] = []
+    for item in instructions:
+        reads.update(item.reads)
+        writes.update(item.writes)
+        if item.call_target:
+            calls.append(item.call_target)
+    status = kr.bytecode_status
+    if status not in {"parsed", "partial", "unavailable"}:
+        status = "unavailable"
+    diagnostics = list(getattr(kr, "errors", None) or [])
+    if status == "unavailable" and not diagnostics and getattr(kr, "error_code", None):
+        diagnostics.append(
+            _diag(
+                kr.error_code,
+                kr.error_message or "kismet function unavailable",
+                "semantic.kismet",
+                object_id=kr.object_id or None,
+                effect="semantic_loss",
+            )
+        )
+    base = FunctionAnalysis(
+        object_id=kr.object_id or (
+            f"export:{kr.export_index}" if getattr(kr, "export_index", -1) >= 0 else ""
+        ),
+        owner_object_id=owner_object_id,
+        name=kr.function_name,
+        function_name=kr.function_name,
+        script_source_range=kr.script_source_range,
+        expression_count=len(kr.expressions),
+        entrypoint=None,
+        instructions=instructions,
+        cfg=cfg,
+        reads=reads,
+        writes=writes,
+        calls=calls,
+        bytecode_status=status,  # type: ignore[arg-type]
+        diagnostics=diagnostics,
+    )
+    return base
+
+
 def _attach_kismet_extras(
     *,
     archive,
@@ -1521,8 +1751,11 @@ def _attach_kismet_extras(
     extras,
     diagnostics,
     object_ids,
+    include_ir: bool = False,
 ) -> None:
     """Attach Kismet function results to Blueprint-family owners (asset+decode)."""
+    from dataclasses import replace as _replace
+
     family = {o.id for o in objects if (o.class_name or "") in _BLUEPRINT_FAMILY_CLASSES}
     if not family:
         return
@@ -1540,17 +1773,80 @@ def _attach_kismet_extras(
             tolerant=True,
         )
         if kismet_results:
+            # Identity-first attachment: use the bridge's export_index
+            # directly; never re-match by display function name (which
+            # collides across same-named exports). Attach to every
+            # Blueprint-family export on the outer chain so both the asset
+            # export and its GeneratedClass expose the function list.
             kismet_by_export: dict[str, list[dict]] = {}
+            kismet_ir_by_export: dict[str, list[Any]] = {}
             for kr in kismet_results:
-                for exp_idx, exp in enumerate(export_map):
-                    if exp.object_name == kr.function_name:
-                        owner = _resolve_graph_owner(exp_idx, export_map, objects)
-                        if owner is not None:
-                            kismet_by_export.setdefault(owner, []).append(kr.to_dict())
+                exp_idx = getattr(kr, "export_index", -1)
+                if exp_idx is None or exp_idx < 0 or exp_idx >= len(export_map):
+                    continue
+                payload = kr.to_dict()
+                base_ir = _function_analysis_from_result(kr, "") if include_ir else None
+                recorded = False
+                idx = exp_idx
+                seen: set[int] = set()
+                bound = min(len(export_map), MAX_GRAPH_OWNER_HOPS) if export_map else MAX_GRAPH_OWNER_HOPS
+                for _ in range(bound):
+                    if idx in seen or idx < 0 or idx >= len(export_map):
                         break
+                    seen.add(idx)
+                    rec_obj = next((o for o in objects if o.table_index == idx), None)
+                    if rec_obj is not None and (rec_obj.class_name or "") in _BLUEPRINT_FAMILY_CLASSES:
+                        kismet_by_export.setdefault(rec_obj.id, []).append(payload)
+                        if base_ir is not None:
+                            kismet_ir_by_export.setdefault(rec_obj.id, []).append(
+                                _replace(base_ir, owner_object_id=rec_obj.id)
+                            )
+                        recorded = True
+                    outer = export_map[idx].outer_index
+                    value = outer.index if outer is not None else 0
+                    if value > 0:
+                        idx = value - 1
+                    else:
+                        break
+                if not recorded:
+                    owner = _resolve_graph_owner(exp_idx, export_map, objects)
+                    if owner is not None:
+                        kismet_by_export.setdefault(owner, []).append(payload)
+                        if base_ir is not None:
+                            kismet_ir_by_export.setdefault(owner, []).append(
+                                _replace(base_ir, owner_object_id=owner)
+                            )
             for owner_id, funcs in kismet_by_export.items():
                 entry = extras.setdefault(owner_id, {})
                 entry["kismet"] = funcs
+                owner_ir = kismet_ir_by_export.get(owner_id) or []
+                if owner_ir:
+                    entry["kismet_ir"] = owner_ir
+            # A BlueprintGeneratedClass has a null outer; mirror its function
+            # list onto Blueprint asset exports whose GeneratedClass property
+            # points at it so the asset-level K0 view stays complete.
+            for owner_id, funcs in list(kismet_by_export.items()):
+                owner_obj = next((o for o in objects if o.id == owner_id), None)
+                if owner_obj is None or (owner_obj.class_name or "") != "BlueprintGeneratedClass":
+                    continue
+                gc_pkg_index = owner_obj.table_index + 1
+                for obj in objects:
+                    if (obj.class_name or "") not in _BLUEPRINT_FAMILY_CLASSES:
+                        continue
+                    if (obj.class_name or "") == "BlueprintGeneratedClass":
+                        continue
+                    gen = (obj.properties or {}).get("GeneratedClass")
+                    gen_value = gen.get("value") if isinstance(gen, dict) else None
+                    if isinstance(gen_value, dict):
+                        gen_value = gen_value.get("value")
+                    if gen_value == gc_pkg_index:
+                        mirror = extras.setdefault(obj.id, {})
+                        mirror["kismet"] = funcs
+                        source_ir = kismet_ir_by_export.get(owner_id) or []
+                        if source_ir:
+                            mirror["kismet_ir"] = [
+                                _replace(item, owner_object_id=obj.id) for item in source_ir
+                            ]
     except Exception as exc:
         diagnostics.append(
             _diag("KISMET_DECOMPILE_FAILED", f"Kismet decompile pass failed: {exc}", "semantic.kismet", effect=None)

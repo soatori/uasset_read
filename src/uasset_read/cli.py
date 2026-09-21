@@ -72,7 +72,12 @@ def create_parser():
     )
 
     # Optional flags
-    parser.add_argument("--output", metavar="FILE", help="Write output to file instead of stdout")
+    parser.add_argument(
+        "-o",
+        "--output",
+        metavar="FILE",
+        help="Write output to file instead of stdout",
+    )
     parser.add_argument("--mappings", metavar="FILE", help="Load .usmap type mappings")
     parser.add_argument("--game", metavar="NAME", help="Enable game-specific property readers")
     parser.add_argument("--strict", action="store_true", help="Disable tolerant mode")
@@ -127,7 +132,9 @@ def _write_output(output_str: str, output_path: str | None) -> None:
 def _parse_and_project(file_path: Path, args) -> dict:
     """Parse one package and project it under the CLI's depth/limit/budget flags.
 
-    Shared by single-file and batch modes so both stay in lockstep.
+    Shared by the stdout single-file path and any bounded query response.
+    Canonical file/batch materialization uses write_projected_document /
+    build_canonical_document instead.
     """
     from uasset_read.package import parse_package_document
     from uasset_read.projection import project_document
@@ -142,6 +149,52 @@ def _parse_and_project(file_path: Path, args) -> dict:
     return project_document(doc, depth=args.depth, limit=args.limit, max_bytes=args.max_bytes)
 
 
+def _reject_bounded_flags_for_canonical(args, *, context: str) -> None:
+    """Canonical output never paginates; --limit is a usage error with it."""
+    if args.limit is not None:
+        print(
+            f"Error: --limit cannot be combined with {context} "
+            f"(canonical v3 documents are never paginated)",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_ARGUMENT_ERROR)
+
+
+def _parse_and_write_canonical(file_path: Path, args, output_path: Path) -> Path:
+    """Parse one package and write the complete format_version 3.0 canonical file.
+
+    Called only on the `-o FILE` path *without* ``--max-bytes``. Budgeted
+    file writes use the bounded ``project_document`` path instead; this
+    writer never receives ``max_main_bytes`` from the CLI.
+    """
+    from uasset_read.package import parse_package_document
+    from uasset_read.projections.bundle import write_projected_document
+
+    doc = parse_package_document(
+        str(file_path),
+        tolerant=not args.strict,
+        mappings_path=args.mappings,
+        game=args.game,
+        depth=args.depth,
+    )
+    return write_projected_document(doc, output_path)
+
+
+def _build_canonical_result(file_path: Path, args) -> dict:
+    """Parse one package and return its complete v3 canonical document dict."""
+    from uasset_read.package import parse_package_document
+    from uasset_read.projections.bundle import build_canonical_document
+
+    doc = parse_package_document(
+        str(file_path),
+        tolerant=not args.strict,
+        mappings_path=args.mappings,
+        game=args.game,
+        depth=args.depth,
+    )
+    return build_canonical_document(doc)
+
+
 def _iter_batch_packages(batch_dir: Path) -> list[Path]:
     """Discover package files for batch mode: sorted ``*.uasset`` and ``*.umap``."""
     files = list(batch_dir.rglob("*.uasset")) + list(batch_dir.rglob("*.umap"))
@@ -149,7 +202,12 @@ def _iter_batch_packages(batch_dir: Path) -> list[Path]:
 
 
 def _handle_batch(args) -> None:
-    """Handle batch mode: parse all .uasset/.umap files in a directory."""
+    """Handle batch mode: parse all .uasset/.umap files in a directory.
+
+    The batch envelope stays ``uasset_read.batch`` / ``1.0``; each successful
+    ``results[]`` entry is a complete v3 canonical document.
+    """
+    _reject_bounded_flags_for_canonical(args, context="--batch")
     batch_dir = Path(args.batch)
     if not batch_dir.is_dir():
         print(f"Error: Not a directory: {args.batch}", file=sys.stderr)
@@ -168,7 +226,7 @@ def _handle_batch(args) -> None:
     for i, file_path in enumerate(uasset_files, 1):
         print(f"[{i}/{total}] {file_path.name}", file=sys.stderr)
         try:
-            projected = _parse_and_project(file_path, args)
+            projected = _build_canonical_result(file_path, args)
             # Add source file info
             projected["_source_file"] = str(file_path)
             results.append(projected)
@@ -268,7 +326,38 @@ def main():
         _handle_list_package_files(args.file)
         return
 
-    # PackageDocument v2 (the only parse path).
+    # File-output contract (documented; covered by tests/test_cli.py):
+    # - `-o FILE` alone → complete format_version 3.0 canonical document
+    #   via write_projected_document. Never paginated. `--limit` is a usage
+    #   error (EXIT_ARGUMENT_ERROR).
+    # - `-o FILE --max-bytes N` → bounded project_document response written
+    #   to FILE (flag help: "truncates objects to fit"). Not the complete
+    #   canonical envelope. `--limit` remains a usage error on file paths.
+    # - stdout + `--max-bytes` → same bounded response on stdout.
+    if args.output:
+        _reject_bounded_flags_for_canonical(args, context="-o/--output")
+        if args.max_bytes is not None:
+            try:
+                projected = _parse_and_project(file_path, args)
+                output_str = json.dumps(projected, ensure_ascii=False, separators=(",", ":"))
+                _write_output(output_str, args.output)
+            except Exception as e:
+                _logger.debug("Budgeted file write error (full): %s", e, exc_info=True)
+                print(f"Error: {_sanitize_error_message(e)}", file=sys.stderr)
+                sys.exit(EXIT_PARSE_ERROR)
+            sys.exit(EXIT_SUCCESS)
+        try:
+            path = _parse_and_write_canonical(file_path, args, Path(args.output))
+            print(f"Output written to {path}", file=sys.stderr)
+        except Exception as e:
+            _logger.debug("Canonical write error (full): %s", e, exc_info=True)
+            print(f"Error: {_sanitize_error_message(e)}", file=sys.stderr)
+            # OutputBudgetError is a ValueError: only raised by callers that
+            # pass max_main_bytes; the CLI canonical path never does.
+            sys.exit(EXIT_ARGUMENT_ERROR if isinstance(e, ValueError) else EXIT_PARSE_ERROR)
+        sys.exit(EXIT_SUCCESS)
+
+    # Stdout/query path: bounded project_document() projection.
     try:
         projected = _parse_and_project(file_path, args)
         # Budget mode must serialize exactly like projection's byte measure

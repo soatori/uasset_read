@@ -180,16 +180,36 @@ def _convert_nodes(graph: Any, nodes: list[dict[str, Any]], pin_count: int, node
             if len(pins) >= MAX_PINS_PER_NODE_OUTPUT:
                 pin_truncated = True
                 break
-            pins.append(
-                {
-                    "id": str(pin.pin_id),
-                    "name": str(pin.pin_name),
-                    # EEdGraphPinDirection: EGPD_Input = 0, EGPD_Output = 1
-                    "direction": {0: "input", 1: "output"}.get(pin.direction, "unknown"),
-                    "category": str(pin.pin_type.pin_category) if pin.pin_type else "",
-                    "linked": [],
-                }
-            )
+            pin_type = pin.pin_type
+            pin_dict: dict[str, Any] = {
+                "id": str(pin.pin_id),
+                "name": str(pin.pin_name),
+                # EEdGraphPinDirection: EGPD_Input = 0, EGPD_Output = 1
+                "direction": {0: "input", 1: "output"}.get(pin.direction, "unknown"),
+                "category": str(pin_type.pin_category) if pin_type else "",
+                "linked": [],
+            }
+            # Optional Task-6 retention: omit null/empty defaults so large
+            # AnimBlueprint pages stay within project_document byte budgets.
+            subcategory = str(getattr(pin, "sub_category", "") or "")
+            if subcategory:
+                pin_dict["subcategory"] = subcategory
+            if getattr(pin, "default_value", None) is not None:
+                pin_dict["default_value"] = pin.default_value
+            if getattr(pin, "default_object_ref", None) is not None:
+                pin_dict["default_object_ref"] = pin.default_object_ref
+            if getattr(pin, "default_text", None) is not None:
+                pin_dict["default_text"] = pin.default_text
+            sub_pin_ids = list(getattr(pin, "sub_pin_ids", None) or [])
+            if sub_pin_ids:
+                pin_dict["sub_pin_ids"] = sub_pin_ids
+            if getattr(pin, "parent_pin_id", None) is not None:
+                pin_dict["parent_pin_id"] = pin.parent_pin_id
+            if getattr(pin, "reference_pass_through_pin_id", None) is not None:
+                pin_dict["reference_pass_through_pin_id"] = pin.reference_pass_through_pin_id
+            if getattr(pin, "is_const", False):
+                pin_dict["is_const"] = True
+            pins.append(pin_dict)
         pin_count += len(pins)
         short_id = f"export:{node._export_index - 1}" if getattr(node, "_export_index", 0) else ""
         class_name = str(node.class_name or "")
@@ -209,6 +229,13 @@ def _convert_nodes(graph: Any, nodes: list[dict[str, Any]], pin_count: int, node
         anim_data = _anim_node_data(node)
         if anim_data is not None:
             node_dict["node_data"] = anim_data
+        elif isinstance(getattr(node, "node_data", None), dict) and node.node_data:
+            # K2 tag-derived identity (FunctionReference/MemberName/...).
+            from uasset_read.serializers.node_data_project import project_node_data
+
+            projected = project_node_data(node.node_data)
+            if projected:
+                node_dict["node_data"] = projected
         nodes.append(node_dict)
     return pin_count, node_truncated, pin_truncated
 

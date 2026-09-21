@@ -10,22 +10,30 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md`
 
-## Execution status (2026-09-21)
+## Execution status (2026-09-21, R6 checklist walk)
 
-This plan is still an execution target, not a completion record. The current
-working branch is `dev-0.6.0`:
+This plan is still an execution target until an orchestrator merge lands the
+work on the user-facing branch. Implementation evidence below is from execution
+branch `sdd/static-uasset-finish` in worktree `.worktrees/sdd-static-continue`
+(HEAD `ec2d0da4` after R5). Full pytest on that branch: **442 passed**;
+`python -m compileall -q src` clean. Final controller whole-branch review is
+still outstanding (out of scope for R6).
 
-| Tasks | Current marker | Evidence / next boundary |
+| Tasks | Marker | Evidence / next boundary |
 | --- | --- | --- |
-| 1–4 | `implemented` on the current branch | v3 contract, bounded sources/containers, layout/Zen refusal, separate property readers, and byte accounting are present; focused checks pass. The aggregate gate is pending only because uncommitted documentation changes (principally this plan expansion) exceed the docs ceiling recorded in `tests/size-baseline.json:2`. |
-| 5–9 | `unmerged candidate` | Implemented in `compose/static-uasset-task5-12` through `92c3a309`, but absent from `dev-0.6.0`; do not mark these tasks complete in this branch. |
-| 10–12 | `not started` | No current C++/type-aware projection implementation, canonical writer replacement, or complete-sample acceptance suite is present. |
+| 1–4 | `implemented` (dev-0.6.0 + this branch) | v3 contract, bounded sources/containers, layout/Zen refusal, separate property readers, and byte accounting present on `dev-0.6.0` and this branch. |
+| 5–9 | `implemented on sdd/static-uasset-finish` after R1 green | Tasks 5–9 modules + focused suite green on `sdd/static-uasset-finish`; `objects[].semantic` is projected dict for Blueprint/Material families (E1). Not marked complete on `dev-0.6.0` until an orchestrator merge lands there. |
+| 10 | `implemented on sdd/static-uasset-finish` after R2 green | `projections/cpp_ast.py` + `cpp_render.py`; `render_cpp(semantic_dict, mode)` public E1 entry; UE5.8 declaration oracle test green (`tests/test_blueprint_cpp.py`, golden Header View oracle). |
+| 10A | `implemented on sdd/static-uasset-finish` after R3 green | `projections/records.py`, `registry.py`, `material_builder.py`, `data_exports.py`, `bundle.py`; `ProjectorRegistry.default()` + embedded `ProjectionRecord`s; cooked material builder stays `unavailable`. |
+| 11 | `implemented on sdd/static-uasset-finish` after R4 green | `projection.project_document` / `build_projection_records` / CLI `-o` → `write_projected_document`; Agent tools share the same PackageDocument projection layer. |
+| 12 | `implemented on sdd/static-uasset-finish` after R5 green | `tests/test_complete_samples.py` acceptance gates 1–9 + quality/size baselines green in the full suite. |
 
-The fresh current-branch check was 155 passed and one failure in
-`tests/test_size_baseline.py:67-74`; the failure is the known worktree-only
-docs ratchet caused by the uncommitted plan and status-audit documentation, not
-a parser test failure.
-The final review checklist therefore remains open.
+Status markers above describe **execution-branch current behavior**, not a
+`dev-0.6.0` completion claim. Cross-branch landing remains an orchestrator/user
+action. README feature claims stay unchanged until the work is on the
+user-facing branch. R6 walked the 23-item final checklist against source/tests
+on this branch; item notes live in
+`.superpowers/sdd/2026-09-21-remaining-static-uasset-v3-projection/task-R6-report.md`.
 
 **Evidence used for this plan (do not re-derive from memory):**
 - UE source citations below are relative to the Unreal Engine source root; no developer-local checkout path is part of the contract.
@@ -671,7 +679,7 @@ C++, or producing runtime-equivalent behavior.
 
 ---
 
-### Task 1: Freeze the new contract and repair the baseline gates — implementation present; final worktree gate pending
+### Task 1: Freeze the new contract and repair the baseline gates — complete
 
 **Files:**
 - Modify: `docs/designs/2026-08-26-package-first-uasset-parser-refactor.md`
@@ -825,7 +833,7 @@ def test_test_suite_structure_gate():
 
 Do not introduce byte-accounting placeholders in this task; Task 4 adds the model and parser-produced scopes together so an empty list cannot masquerade as completeness.
 
-- [ ] **Step 5: Run the gate and commit**
+- [x] **Step 5: Run the gate and commit**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_contract_v3.py tests/test_core.py tests/test_samples.py tests/test_size_baseline.py -q`
 
@@ -838,7 +846,7 @@ git rm docs/designs/contract/package_document_v2.schema.json docs/designs/contra
 git commit -m "refactor: define parser v3 projection contract"
 ```
 
-### Task 2: Introduce bounded sources and package container inputs — implementation present; final worktree gate pending
+### Task 2: Introduce bounded sources and package container inputs — complete
 
 **Files:**
 - Create: `src/uasset_read/sources.py`
@@ -1169,7 +1177,7 @@ For committed-suite execution, treat the local-only `MyProject-Windows.ucas` as 
 
 Do not implement `PakEntrySource` in this task: there is no traditional FPak fixture to validate it. Add that capability only with a real redistributable fixture and a separate evidence-backed task.
 
-- [ ] **Step 5: Run source/container tests and commit**
+- [x] **Step 5: Run source/container tests and commit**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_sources.py tests/test_containers.py tests/test_size_baseline.py -q`
 
@@ -1180,7 +1188,7 @@ git add src/uasset_read/sources.py src/uasset_read/containers.py src/uasset_read
 git commit -m "feat: add bounded package sources and containers"
 ```
 
-### Task 3: Separate the Legacy reader and establish the Zen availability boundary — implementation present; final worktree gate pending
+### Task 3: Separate the Legacy reader and establish the Zen availability boundary — complete
 
 **Files:**
 - Create: `src/uasset_read/layout.py`
@@ -1379,7 +1387,7 @@ Zen offsets inside `zen_reader.py`; legacy code must not import Zen-only structs
 The real-fixture capability remains `unverified` until a committed Zen package
 exercises export-bundle and payload reconstruction end to end.
 
-- [ ] **Step 5: Run both reader tests and commit**
+- [x] **Step 5: Run both reader tests and commit**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_layout.py tests/test_zen_reader.py tests/test_core.py tests/test_size_baseline.py -q`
 
@@ -1390,7 +1398,7 @@ git add src/uasset_read/layout.py src/uasset_read/parsers/legacy_reader.py src/u
 git commit -m "refactor: separate legacy and zen package boundaries"
 ```
 
-### Task 4: Modularize property decoding and byte accounting — implementation present; final worktree gate pending
+### Task 4: Modularize property decoding and byte accounting — complete
 
 **Files:**
 - Create: `src/uasset_read/parsers/properties/__init__.py`
@@ -1887,7 +1895,7 @@ def opaque_region(
 
 `LegacyPackageReader` creates one scope for every requested export with a non-empty serial region. Tagged/unversioned/native-tail readers contribute non-overlapping leaves. Any unconsumed remainder becomes one reasoned `opaque` or `unavailable` leaf, so full coverage cannot pass through an empty collection.
 
-- [ ] **Step 5: Run property and hardening tests and commit**
+- [x] **Step 5: Run property and hardening tests and commit**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_properties.py tests/test_byte_accounting.py tests/test_unversioned_fixtures.py tests/test_parse_hardening.py tests/test_memory_safety.py tests/test_size_baseline.py -q`
 

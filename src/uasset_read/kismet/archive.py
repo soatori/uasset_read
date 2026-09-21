@@ -7,7 +7,7 @@ from uasset_read.archive import FArchive
 from uasset_read.constants import MAX_SAFE_COUNT
 from uasset_read.exceptions import ParseError
 from uasset_read.kismet.tokens import EExprToken
-from uasset_read.kismet.expressions import EXPR_CLASS_MAP, KismetExpression
+from uasset_read.kismet.expressions import EXPR_CLASS_MAP, KismetExpression, OpaqueExpression
 from uasset_read.kismet.property_pointer import FFieldPath, FFieldPathSegment, FNameRef
 from uasset_read.serializers.package_summary import PackageFileSummary
 from uasset_read.serializers.object_resources import PackageIndex
@@ -38,12 +38,14 @@ class FKismetArchive(FArchive):
 
     def read_expression(self) -> KismetExpression:
         """Read one byte token → look up in EXPR_CLASS_MAP → construct expression → set StatementIndex."""
+        from uasset_read.exceptions import StreamPoisonedError
+        from uasset_read.models.byte_ranges import ByteRegion
+
         if self._expression_depth >= MAX_EXPRESSION_RECURSION_DEPTH:
             raise ParseError(
                 f"Kismet expression recursion depth exceeded {MAX_EXPRESSION_RECURSION_DEPTH} at offset {self.tell()}"
             )
 
-        consecutive_unknown = 0
         while True:
             serialized_start = self.tell()
             stmt_index = self.bytecode_index
@@ -56,29 +58,36 @@ class FKismetArchive(FArchive):
             expr_class = EXPR_CLASS_MAP.get(token) if token is not None else None
             if token is None or expr_class is None:
                 if self._tolerant:
-                    consecutive_unknown += 1
-                    if consecutive_unknown >= 10:
-                        raise ParseError("Too many consecutive unknown tokens in tolerant mode")
-                    logger.debug(
-                        f"Unknown EExprToken 0x{token_byte:02X} at offset {serialized_start}, skipping in tolerant mode"
+                    # Unknown token: preserve the token start plus the bounded
+                    # remaining function bytes as one opaque tail and stop
+                    # parsing this function. Never skip the payload silently.
+                    end = self.consume_remaining_function()
+                    serialized_end = self.tell()
+                    expr: KismetExpression = OpaqueExpression(
+                        token=token_byte,
+                        raw_region=ByteRegion(serialized_start, serialized_end - serialized_start, "opaque", reason="unknown_expression_token"),
+                        reason="unknown_expression_token",
                     )
-                    # The unknown byte is already consumed from both cursors.
-                    self.seek(serialized_start + 1)
-                    continue
+                    expr.StatementIndex = stmt_index
+                    expr.SerializedStart = serialized_start
+                    expr.SerializedEnd = serialized_end
+                    return expr
                 token_name = token.name if token is not None else "<unknown>"
                 raise ParseError(f"Unknown EExprToken {token_name} (0x{token_byte:02X}) at offset {stmt_index}")
 
-            # Reset consecutive unknown counter on successful token match
-            consecutive_unknown = 0
-
-            self._expression_depth += 1
             try:
-                if hasattr(expr_class, "from_archive"):
-                    expr = expr_class.from_archive(self)  # type: ignore[reportAttributeAccessIssue]
-                else:
-                    expr = expr_class()
-            finally:
-                self._expression_depth -= 1
+                self._expression_depth += 1
+                try:
+                    if hasattr(expr_class, "from_archive"):
+                        expr = expr_class.from_archive(self)  # type: ignore[reportAttributeAccessIssue]
+                    else:
+                        expr = expr_class()
+                finally:
+                    self._expression_depth -= 1
+            except StreamPoisonedError:
+                raise
+            except ParseError:
+                raise
 
             serialized_end = self.tell()
             if serialized_end <= serialized_start:
@@ -88,7 +97,26 @@ class FKismetArchive(FArchive):
                 )
 
             expr.StatementIndex = stmt_index
+            expr.SerializedStart = serialized_start
+            expr.SerializedEnd = serialized_end
             return expr
+
+    def consume_remaining_function(self) -> bytes:
+        """Consume the remaining bytes of the current (copied) function slice.
+
+        Bounded to this archive's buffer: validates the cursor is inside the
+        function slice, returns exactly the remaining local script bytes, and
+        advances both cursors to the function end. Never reads past the end.
+        """
+        remaining = self._file_size - self.tell()
+        if remaining < 0:
+            raise ParseError(
+                f"Kismet cursor past function end: tell={self.tell()} size={self._file_size}"
+            )
+        if remaining == 0:
+            return b""
+        data = self.read(remaining)
+        return data
 
     def read_expression_array(self, end_token: EExprToken) -> list[KismetExpression]:
         """Read expressions until end_token is encountered. The end_token byte IS consumed."""

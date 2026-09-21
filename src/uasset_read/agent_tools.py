@@ -185,7 +185,15 @@ def get_object(
     # never returned over cap, and 'too small' is never dressed up as 'missing'.
     size = json_byte_size(full)
     if size <= max_bytes:
-        return full["objects"][0]
+        # R4: always expose embedded type-aware projection records through
+        # get_object (empty list when the family has none). Records already
+        # rode in the bounded envelope measured above.
+        matching = [
+            item
+            for item in (full.get("projections") or [])
+            if isinstance(item, dict) and item.get("source_object_id") == object_id
+        ]
+        return {**full["objects"][0], "projections": matching}
     return _err(
         "BUDGET_EXHAUSTED",
         "agent.get_object",

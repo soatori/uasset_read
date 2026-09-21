@@ -15,91 +15,11 @@ from ...constants import format_guid_bytes
 from ...models.diagnostics import Diagnostic, make_diagnostic
 from ...models.object_model import ObjectRecord, CoverageEntry
 from ...serializers.blueprint_graph import summarize_exec_edges
+from .registry import _SupportsClasses, register_handler
 
 
-class _SupportsClasses:
-    """Mixin: matches export class names listed in `classes`."""
-
-    classes: tuple[str, ...] = ()
-
-    def supports(self, obj: ObjectRecord, depth: str) -> bool:
-        return (obj.class_name or "") in self.classes
-
-
-# Global handler registry
-_HANDLERS: list[_SupportsClasses] = []
-
-
-def register_handler(handler: _SupportsClasses) -> None:
-    """Register a global asset handler."""
-    _HANDLERS.append(handler)
-
-
-def run_handlers(
-    obj: ObjectRecord,
-    depth: str,
-    all_objects: list[ObjectRecord],
-    package_data: Any,
-) -> tuple[dict[str, Any] | None, list[CoverageEntry], list[Diagnostic]]:
-    """Run all matching handlers on an object.
-
-    Returns (semantic, coverage, diagnostics).
-    Handler failure only affects this object — no propagation.
-    ``status.semantic`` is bound to the capability tier: "complete" only
-    when a decoded-tier handler produced output; summary-tier results and
-    failures stay "partial" (#629).
-    """
-    semantic: dict[str, Any] = {}
-    coverage: list[CoverageEntry] = []
-    diagnostics: list[Diagnostic] = []
-    matched = False
-    failed = False
-    decoded = False
-
-    for handler in _HANDLERS:
-        try:
-            if handler.supports(obj, depth):
-                matched = True
-                result = handler.enrich(obj, depth, all_objects, package_data)
-                if result is not None:
-                    semantic.update(result)
-                    # capability may be a tier string or a callable of the result;
-                    # undeclared handlers default to "summary" and must not claim
-                    # a type was fully decoded (#629).
-                    cap = getattr(handler, "capability", "summary")
-                    tier = str(cap(result)) if callable(cap) else str(cap)
-                    if tier == "decoded":
-                        decoded = True
-        except Exception as e:
-            # Handler failure must not affect other objects
-            matched = True
-            failed = True
-            handler_name = type(handler).__name__
-            coverage.append(
-                CoverageEntry(
-                    feature=f"handler.{handler_name}",
-                    status="missing",
-                    detail=f"Handler error: {e}",
-                )
-            )
-            diagnostics.append(
-                make_diagnostic(
-                    code="HANDLER_FAILURE",
-                    message=f"{handler_name} failed for {obj.id}: {e}",
-                    stage="semantic.handler",
-                    object_id=obj.id,
-                )
-            )
-
-    if matched:
-        # "complete" means a decoded-tier handler delivered semantics.
-        # A summary-tier result (name/kind echo, light digest), a handler
-        # that matched but produced nothing, or a failure stays "partial".
-        obj.status.semantic = "complete" if (decoded and not failed) else "partial"
-
-    if not semantic:
-        return None, coverage, diagnostics
-    return semantic, coverage, diagnostics
+# Built-in handlers below call ``register_handler`` at import time; the
+# registry itself lives in ``registry.py``.
 
 
 # ── Built-in handlers ──────────────────────────────────────────────
@@ -574,7 +494,15 @@ register_handler(SoundHandler())
 
 
 class MaterialHandler(_SupportsClasses):
-    """Enrich Material objects with shader/material property summary."""
+    """Enrich Material objects with shader flags and the expression graph.
+
+    At depth >= asset: shading flags / editor position (summary tier).
+    At depth=decode: attach the projected ``material_graph`` dict from
+    ``MaterialGraphDecoder`` (PropertyBag only — no raw byte reparsing).
+    A decoded editor expression graph (capability complete/partial) unlocks
+    semantic=complete (#629); cooked/stripped graphs stay limited/unavailable
+    and therefore summary tier.
+    """
 
     classes = ("Material",)
 
@@ -603,14 +531,25 @@ class MaterialHandler(_SupportsClasses):
                 result[key] = val.get("value", 0)
                 coverage.append(CoverageEntry(feature=f"material.{key}", status="present"))
 
+        if depth == "decode":
+            from ..material import MaterialGraphDecoder, project_semantic_material
+
+            graph = MaterialGraphDecoder().decode_objects(all_objects, material_object_id=obj.id)
+            result["material_graph"] = project_semantic_material(graph)
+            result["expression_count"] = len(graph.expressions)
+            coverage.extend(graph.coverage)
+
         obj.coverage.extend(coverage)
         return result if len(result) > 1 else None
 
     def capability(self, result: dict[str, Any]) -> str:
-        # Flags/editor-position alone are a summary projection. The decoded
-        # branch is reserved for when enrich projects parent/blend/shading/
-        # expressions; until then Material never claims semantic=complete.
-        if any(k in result for k in ("parent", "blend_mode", "shading_model", "expression_count")):
+        # Flags/editor-position alone are a summary projection. A decoded
+        # editor expression graph (complete/partial) claims the tier; limited /
+        # unavailable graphs (cooked) and flag-only results stay summary.
+        graph = result.get("material_graph")
+        if isinstance(graph, dict) and graph.get("capability") in {"complete", "partial"}:
+            return "decoded"
+        if any(k in result for k in ("parent", "blend_mode", "shading_model")):
             return "decoded"
         return "summary"
 
@@ -1007,6 +946,24 @@ class BlueprintFamilyHandler:
                     )
                 )
 
+            # E1 flip: the decode path returns the projected correlation dict
+            # when the package reader supplied the named analysis envelope.
+            # The K0 assembly above still runs first so coverage side effects
+            # stay on the object; its dict is only the tuple-callback fallback
+            # for direct handler callers without an envelope.
+            envelope = _analysis_envelope(package_data)
+            if envelope is not None and obj.id in envelope.contexts:
+                from ..blueprint.correlation import (
+                    BlueprintCorrelation,
+                    project_semantic_blueprint,
+                )
+
+                semantic = BlueprintCorrelation().build(
+                    envelope.document,
+                    analysis_context=envelope.contexts[obj.id],
+                )
+                return project_semantic_blueprint(semantic, kind=self._kind)  # type: ignore[arg-type]
+
             return result
 
     @staticmethod
@@ -1059,10 +1016,37 @@ class BlueprintFamilyHandler:
 
     def capability(self, result: dict[str, Any]) -> str:
         # Truncated decode output must not claim "complete" (#629, bounded by
-        # default); summary echoes stay summary tier.
-        if result.get("graphs") and not result.get("truncated_graphs"):
-            return "decoded"
-        return "summary"
+        # default); summary echoes stay summary tier. Handles both the tuple-
+        # callback K0 result (truncated_graphs / per-graph dict) and the
+        # projected v3 result (per-graph truncated bool).
+        graphs = result.get("graphs")
+        if not graphs:
+            return "summary"
+        if result.get("truncated_graphs"):
+            return "summary"
+        for graph in graphs:
+            truncated = graph.get("truncated") if isinstance(graph, dict) else None
+            if truncated is True:
+                return "summary"
+            if isinstance(truncated, dict) and (truncated.get("nodes") or truncated.get("pins")):
+                return "summary"
+        return "decoded"
+
+
+def _analysis_envelope(package_data: Any) -> Any:
+    """Named access to the Blueprint analysis envelope on package_data.
+
+    The envelope rides as the fourth tuple item; its ``document`` and
+    ``contexts`` fields are only ever read by attribute (never positional
+    tuple guessing inside the Blueprint branch).
+    """
+    from ...models.analysis import BlueprintAnalysisEnvelope
+
+    if isinstance(package_data, tuple) and len(package_data) > 3:
+        candidate = package_data[3]
+        if isinstance(candidate, BlueprintAnalysisEnvelope):
+            return candidate
+    return None
 
 
 _KISMET_ASSET_TYPE_LIMIT = 128
@@ -1071,8 +1055,9 @@ _KISMET_ASSET_TYPE_LIMIT = 128
 def _project_kismet_functions(kismet: list[dict[str, Any]], *, include_expressions: bool) -> list[dict[str, Any]]:
     """Project KismetDecompiledResult dicts onto the public K0 functions contract.
 
-    depth=asset gets count/types summary only (types capped at 128);
-    depth=decode also includes the serialized expression tree (budgeted by projection max_bytes).
+    depth=asset gets count/types summary only (types capped at 128); no full
+    instruction IR or CFG payloads. depth=decode includes the expression tree
+    plus dual-offset instruction IR and CFG (budgeted by projection max_bytes).
     """
     projected: list[dict[str, Any]] = []
     for fn in kismet:
@@ -1081,6 +1066,14 @@ def _project_kismet_functions(kismet: list[dict[str, Any]], *, include_expressio
             "signature": fn.get("signature"),
             "bytecode_status": fn["bytecode_status"],
         }
+        for key in (
+            "export_index",
+            "object_id",
+            "class_name",
+            "script_source_range",
+        ):
+            if fn.get(key) is not None and fn.get(key) != "":
+                entry[key] = fn[key]
         exprs = fn.get("expressions") or []
         types: list[str] = []
         for e in exprs:
@@ -1093,6 +1086,21 @@ def _project_kismet_functions(kismet: list[dict[str, Any]], *, include_expressio
         entry["expressions_truncated"] = len(types) > _KISMET_ASSET_TYPE_LIMIT
         if include_expressions:
             entry["expressions"] = exprs
+            instructions = fn.get("instructions")
+            if instructions is not None:
+                entry["instructions"] = instructions
+            cfg = fn.get("cfg")
+            if cfg is not None:
+                entry["cfg"] = cfg
+        else:
+            # depth!=decode: summary counts only — full IR stays budgeted to decode.
+            instructions = fn.get("instructions")
+            if instructions is not None:
+                entry["instruction_count"] = len(instructions)
+            cfg = fn.get("cfg")
+            if isinstance(cfg, dict):
+                entry["cfg_block_count"] = len(cfg.get("blocks") or [])
+                entry["cfg_edge_count"] = len(cfg.get("edges") or [])
         for key in (
             "error_code",
             "error_message",
