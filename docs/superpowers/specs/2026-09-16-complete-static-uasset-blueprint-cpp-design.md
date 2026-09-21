@@ -2,6 +2,17 @@
 
 status: target
 
+> **2026-09-21 implementation marker:** This specification remains a target. On
+> the checked-out `dev-0.6.0` branch, the v3 envelope and Tasks 1–4 foundations
+> exist (`src/uasset_read/projection.py:17,220-223`,
+> `src/uasset_read/sources.py:11`, `src/uasset_read/layout.py:148`, and
+> `src/uasset_read/models/byte_ranges.py:129`), but the complete static
+> Blueprint IR/CFG/correlation, Material graph, C++/type-aware projection, and
+> canonical writer are not current behavior. The corresponding Task 5–9
+> implementation is only on the unmerged `compose/static-uasset-task5-12`
+> branch; Tasks 10–12 have no current implementation. Do not read this target
+> specification as an implementation claim.
+
 ## Decision
 
 Adopt an in-place, modular rewrite of the parser core. Keep `PackageDocument` as the only package-level document boundary, but replace the current monolithic read/enrich path with independent source, container, layout, property, object, Blueprint, Kismet, Material, analysis, and projection modules.
