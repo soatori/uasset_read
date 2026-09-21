@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import fields, is_dataclass, dataclass, field
-from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from uasset_read.constants import UE5_LARGE_WORLD_COORDINATES
@@ -28,58 +27,19 @@ if TYPE_CHECKING:
 
 # === Base classes and factories (from base.py) ===
 
-
-def _operand_to_json(value: Any) -> Any:
-    """JSON-safe recursive operand projection; never str() embeds 0x bytes."""
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
-    if isinstance(value, Enum):
-        try:
-            return value.name
-        except Exception:
-            return {"kind": "opaque_value", "type": type(value).__name__}
-    if isinstance(value, bytes):
-        import base64
-
-        return {"kind": "opaque_value", "type": "bytes", "base64": base64.b64encode(value).decode("ascii")}
-    if isinstance(value, (list, tuple)):
-        return [_operand_to_json(item) for item in value]
-    if isinstance(value, dict):
-        return {str(k): _operand_to_json(v) for k, v in value.items()}
-    if is_dataclass(value) and not isinstance(value, type):
-        if hasattr(value, "to_dict") and callable(getattr(value, "to_dict")):
-            try:
-                return project_operand_safe(value.to_dict())
-            except Exception:
-                pass
-        return {f.name: _operand_to_json(getattr(value, f.name)) for f in fields(value)}
-    if hasattr(value, "to_dict") and callable(getattr(value, "to_dict")):
-        try:
-            return project_operand_safe(value.to_dict())
-        except Exception:
-            pass
-    return {"kind": "opaque_value", "type": type(value).__name__}
+# Dual-offset placeholders. FKismetArchive.read_expression overwrites all three
+# after construction. None / -1 mean "not filled by an archive" — project them
+# as structured unset, never as plausible script/disk coordinates.
+_DUAL_OFFSET_UNSET = {"kind": "unset"}
 
 
-def project_operand_safe(data: Any) -> Any:
-    if isinstance(data, dict):
-        return {str(k): project_operand_safe(v) for k, v in data.items()}
-    if isinstance(data, list):
-        return [project_operand_safe(v) for v in data]
-    if data is None or isinstance(data, (bool, int, float, str)):
-        return data
-    if isinstance(data, bytes):
-        import base64
-
-        return {"kind": "opaque_value", "type": "bytes", "base64": base64.b64encode(data).decode("ascii")}
-    if isinstance(data, Enum):
-        try:
-            return data.name
-        except Exception:
-            return {"kind": "opaque_value", "type": type(data).__name__}
-    if is_dataclass(data) and not isinstance(data, type):
-        return {f.name: _operand_to_json(getattr(data, f.name)) for f in fields(data)}
-    return {"kind": "opaque_value", "type": type(data).__name__}
+def _project_dual_offset(name: str, value: Any) -> Any:
+    """Project one dual-offset field; never fabricate offsets at the boundary."""
+    if value is None:
+        return dict(_DUAL_OFFSET_UNSET)
+    if name in {"SerializedStart", "SerializedEnd"} and value == -1:
+        return dict(_DUAL_OFFSET_UNSET)
+    return value
 
 
 class KismetExpression(ABC):
@@ -91,13 +51,16 @@ class KismetExpression(ABC):
 
     Dual offsets: ``StatementIndex`` is the UE logical script address
     (CodeOffset coordinate). ``SerializedStart``/``SerializedEnd`` are the
-    on-disk cursors captured by ``FKismetArchive.read_expression``; they
-    default to ``-1`` until the archive fills them.
+    on-disk cursors captured by ``FKismetArchive.read_expression``. Class-level
+    defaults guarantee the attributes exist on every instance; archive parsing
+    replaces them. Unfilled offsets project as ``{"kind": "unset"}``.
     """
 
-    StatementIndex: int
-    SerializedStart: int = -1
-    SerializedEnd: int = -1
+    # Class-level defaults so dataclass EX_* constructors that skip
+    # KismetExpression.__init__ still carry the attributes.
+    StatementIndex: int | None = None
+    SerializedStart: int | None = -1
+    SerializedEnd: int | None = -1
 
     @property
     @abstractmethod
@@ -107,9 +70,9 @@ class KismetExpression(ABC):
 
     def __init__(
         self,
-        statement_index: int = 0,
-        serialized_start: int = -1,
-        serialized_end: int = -1,
+        statement_index: int | None = 0,
+        serialized_start: int | None = -1,
+        serialized_end: int | None = -1,
     ) -> None:
         self.StatementIndex = statement_index
         self.SerializedStart = serialized_start
@@ -118,20 +81,30 @@ class KismetExpression(ABC):
     def to_dict(self) -> dict:
         """Serialize to dictionary format (for JSON output).
 
-        Emits every dataclass operand field so consumed payload is never
-        dropped at the projection boundary (operand-preservation invariant).
+        Operand fields use the shared ``parsers.blueprint.bytecode.project_operand``
+        schema so instruction/CFG and expression projections agree on one
+        opaque encoding. Dual offsets the archive never filled are emitted as
+        ``{"kind": "unset"}`` — never silent 0/-1 fabrications.
         """
+        from uasset_read.parsers.blueprint.bytecode import project_operand
+
         out: dict[str, Any] = {
             "Inst": self.Token.name,
-            "StatementIndex": getattr(self, "StatementIndex", 0),
-            "SerializedStart": getattr(self, "SerializedStart", -1),
-            "SerializedEnd": getattr(self, "SerializedEnd", -1),
+            "StatementIndex": _project_dual_offset(
+                "StatementIndex", getattr(self, "StatementIndex", None)
+            ),
+            "SerializedStart": _project_dual_offset(
+                "SerializedStart", getattr(self, "SerializedStart", None)
+            ),
+            "SerializedEnd": _project_dual_offset(
+                "SerializedEnd", getattr(self, "SerializedEnd", None)
+            ),
         }
         if is_dataclass(self) and not isinstance(self, type):
             for f in fields(self):
                 if f.name in {"StatementIndex", "SerializedStart", "SerializedEnd", "Token"}:
                     continue
-                out[f.name] = _operand_to_json(getattr(self, f.name))
+                out[f.name] = project_operand(getattr(self, f.name))
         return out
 
     def __repr__(self) -> str:
@@ -165,9 +138,15 @@ class OpaqueExpression(KismetExpression):
 
         return {
             "Inst": "Opaque",
-            "StatementIndex": self.StatementIndex,
-            "SerializedStart": self.SerializedStart,
-            "SerializedEnd": self.SerializedEnd,
+            "StatementIndex": _project_dual_offset(
+                "StatementIndex", getattr(self, "StatementIndex", None)
+            ),
+            "SerializedStart": _project_dual_offset(
+                "SerializedStart", getattr(self, "SerializedStart", None)
+            ),
+            "SerializedEnd": _project_dual_offset(
+                "SerializedEnd", getattr(self, "SerializedEnd", None)
+            ),
             "token": self.token,
             "reason": self.reason,
             "raw_region": project_region(self.raw_region),

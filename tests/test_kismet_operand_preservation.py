@@ -194,6 +194,43 @@ def test_to_dict_emits_matrix_operand_fields():
         assert not missing, f"{opcode}: to_dict missing {sorted(missing)}"
 
 
+def test_to_dict_uses_shared_project_operand_schema():
+    """Expression to_dict and instruction project_operand share one opaque schema."""
+    from uasset_read.parsers.blueprint.bytecode import project_operand
+
+    class _Unprojectable:
+        __slots__ = ()
+
+    archive = _ScriptedArchive()
+    expr = EX_Return.from_archive(archive)
+    expr.ReturnValue = _Unprojectable()
+    as_dict = expr.to_dict()
+    projected_return = as_dict["ReturnValue"]
+    assert projected_return == project_operand(_Unprojectable())
+    assert projected_return["kind"] == "opaque_operand"
+    assert "opaque_value" not in str(as_dict)
+
+
+def test_to_dict_emits_structured_unset_for_unfilled_dual_offsets():
+    """Unfilled dual offsets project as structured unset — never 0/-1 fabrications."""
+    archive = _ScriptedArchive()
+    scripted = EX_Return.from_archive(archive)
+    # Scripted archive does not stamp dual offsets on the top-level expression.
+    as_dict = scripted.to_dict()
+    assert as_dict["StatementIndex"] == {"kind": "unset"}
+    assert as_dict["SerializedStart"] == {"kind": "unset"}
+    assert as_dict["SerializedEnd"] == {"kind": "unset"}
+
+    filled = EX_Return.from_archive(archive)
+    filled.StatementIndex = 7
+    filled.SerializedStart = 100
+    filled.SerializedEnd = 120
+    as_dict_filled = filled.to_dict()
+    assert as_dict_filled["StatementIndex"] == 7
+    assert as_dict_filled["SerializedStart"] == 100
+    assert as_dict_filled["SerializedEnd"] == 120
+
+
 def test_matrix_is_json_projectable_without_discarding_payload():
     import json
 
