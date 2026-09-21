@@ -1,4 +1,11 @@
-"""Package bundle and provider helpers."""
+"""Package bundle and provider helpers.
+
+Thin orchestration only: source detection → layout → reader (properties,
+domain registry, analysis live inside the reader). This module returns a
+PackageDocument and never projects it — JSON/CLI/Python/Agent outputs all
+project from that document through ``uasset_read.projection`` /
+``uasset_read.projections.bundle``.
+"""
 
 from __future__ import annotations
 
