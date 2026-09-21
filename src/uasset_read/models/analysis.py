@@ -496,18 +496,22 @@ class FunctionAnalysis:
                 continue
             instructions.append(
                 BytecodeInstruction(
-                    statement_index=int(raw.get("statement_index") or 0),
-                    statement_ordinal=int(raw.get("statement_ordinal") or 0),
-                    logical_end=int(raw.get("logical_end") or 0),
-                    serialized_start=int(raw.get("serialized_start") or -1),
-                    serialized_end=int(raw.get("serialized_end") or -1),
+                    statement_index=_projected_offset_int(raw.get("statement_index"), 0),
+                    statement_ordinal=_projected_offset_int(raw.get("statement_ordinal"), 0),
+                    logical_end=_projected_offset_int(raw.get("logical_end"), 0),
+                    serialized_start=_projected_offset_int(raw.get("serialized_start"), -1),
+                    serialized_end=_projected_offset_int(raw.get("serialized_end"), -1),
                     opcode=str(raw.get("opcode") or ""),
                     operands=dict(raw.get("operands") or {}),
                     expression=raw.get("expression"),
                     reads=list(raw.get("reads") or []),
                     writes=list(raw.get("writes") or []),
                     call_target=raw.get("call_target"),
-                    jump_target_statement_index=raw.get("jump_target_statement_index"),
+                    jump_target_statement_index=(
+                        None
+                        if isinstance(raw.get("jump_target_statement_index"), dict)
+                        else raw.get("jump_target_statement_index")
+                    ),
                     jump_kind=raw.get("jump_kind") or "none",
                     source_node_id=raw.get("source_node_id"),
                     parse_status=raw.get("parse_status") or "parsed",
@@ -592,6 +596,27 @@ _DIAGNOSTIC_FIELDS = frozenset(
         "reason",
     }
 )
+
+
+def _projected_offset_int(value: Any, default: int) -> int:
+    """Coerce one projected dual-offset field; 0 is a valid StatementIndex.
+
+    Accepts raw ints (E1 instruction envelope) and structured
+    ``{"kind": "unset"}`` values. Never uses ``or`` on the value itself —
+    that fabricates -1/0 when the measured offset is legitimately 0.
+    """
+    if value is None or isinstance(value, bool):
+        return default
+    if isinstance(value, dict):
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,32 @@
+{
+  "_provenance": "Normalized from temp/quality-v3 dump of MyProject_UE58_TestBlueprint.uasset (R2 Step 1: MyProject_UE58_TestBlueprint.declarations.json + semantic_export0.json graph pin evidence). class_name/parent_class/variables/components/constructors are measured correlation output. Function parameters and void return are measured from NewFunction graph pins (FunctionEntry output NewParam bool -> in; FunctionResult input NewParam1 bool -> out; no ReturnValue pin). required_properties C++ types are normalized from measured FEdGraphPinType pin_category/pin_subcategory/container_type. Dispatchers correlation list is empty; NewEventDispatcher measured as mcdelegate variable + DelegateSignature graph — not invented into dispatchers[]. Replace through reviewed evidence if an Editor Header View capture differs.",
+  "class_name": "TestBlueprint",
+  "parent_class": "Actor",
+  "required_properties": {
+    "Is": "bool",
+    "Int": "int32",
+    "Float": "double",
+    "Text": "FText",
+    "String": "FString",
+    "Array": "TArray<double>",
+    "Set": "TSet<double>"
+  },
+  "functions": [
+    {
+      "name": "NewFunction",
+      "return_type": "void",
+      "parameters": [
+        {"name": "NewParam", "type": "bool", "direction": "in"},
+        {"name": "NewParam1", "type": "bool", "direction": "out"}
+      ]
+    }
+  ],
+  "components": ["DefaultSceneRoot_GEN_VARIABLE"],
+  "constructors": [
+    {
+      "name": "UserConstructionScript",
+      "parent_call": "Actor",
+      "component_initializers": ["DefaultSceneRoot_GEN_VARIABLE"]
+    }
+  ]
+}
