@@ -1,12 +1,12 @@
 {
-  "_note": "Ratchet ceilings for tests/test_size_baseline.py and the CI package-smoke wheel check; raise only as a deliberate reviewable diff, tighten after deletion waves. Raised 2026-09-21 Task R5 from measured Python line counts at R5 working tree (base 492e19dd): src_python 28878 (projection_to_dict schema align + bundle contract envelope + CLI -o/--max-bytes bounded file write), tests_python 10720 (tests/test_complete_samples.py 417 lines + test_quality_baseline_generator gate coverage; tracked tests disk 10303 + new file). docs_markdown unchanged 57748 (contract schema is .json). Prior historical notes live in git history of this file.",
+  "_note": "Ratchet ceilings. Raised 2026-09-21 R5 + fix round 1/5 from measured pytest size-baseline failure output: src_python 28913 (records completeness mapping + CLI contract comments/tests deps), tests_python 10852 (CLI contract tests + completeness mapping unit test; tracked tests disk includes test_complete_samples.py). Raise only as a deliberate reviewable diff.",
   "src_python": {
     "min_files": 49,
-    "max_lines": 28878
+    "max_lines": 28913
   },
   "tests_python": {
     "min_files": 13,
-    "max_lines": 10720
+    "max_lines": 10852
   },
   "docs_markdown": {
     "min_files": 158,

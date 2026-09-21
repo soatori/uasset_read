@@ -35,6 +35,62 @@ COMPLETENESS_ENUM = {"complete", "partial", "opaque", "unavailable", "failed"}
 STATUS_ENUM = {"translated", "represented", "untranslated", "unavailable"}
 
 
+def test_completeness_label_mapping_contract():
+    """v3 completeness enum: never overclaim complete; opaque/failed when warranted."""
+    from types import SimpleNamespace
+
+    from uasset_read.projections.records import (
+        ProjectionRecord,
+        _completeness_label,
+        projection_to_dict,
+    )
+
+    # Measured full ratio → complete.
+    assert _completeness_label("translated", 1.0) == "complete"
+    # Measured partial ratio → partial.
+    assert _completeness_label("represented", 0.5) == "partial"
+    assert _completeness_label("represented", 0.97) == "partial"
+    # Missing ratio must NOT overclaim complete.
+    assert _completeness_label("represented", None) == "partial"
+    assert _completeness_label("translated", None) == "partial"
+    # Untranslated with no mapped ratio → opaque (source exists, not mapped).
+    assert _completeness_label("untranslated", None) == "opaque"
+    assert _completeness_label("untranslated", 0.0) == "opaque"
+    # Absent source → unavailable.
+    assert _completeness_label("unavailable", None) == "unavailable"
+    # Failure diagnostics → failed even when status is unavailable.
+    failed_diag = SimpleNamespace(code="blueprint_render_failed")
+    assert _completeness_label("unavailable", None, [failed_diag]) == "failed"
+    assert _completeness_label("represented", 0.5, [{"code": "graph_render_failed"}]) == "failed"
+
+    # End-to-end: represented + completeness=None projects as partial, not complete.
+    record = ProjectionRecord(
+        kind="asset_metadata",
+        source_object_id="export:0",
+        media_type="application/json",
+        content={"kind": "asset_metadata"},
+        embedded=True,
+        status="represented",
+        completeness=None,
+        dependencies=[],
+        diagnostics=[],
+    )
+    assert projection_to_dict(record)["completeness"] == "partial"
+
+    # unavailable_records with render_failed code → failed completeness.
+    from uasset_read.projections.records import unavailable_records
+
+    failed_records = unavailable_records(
+        "export:0",
+        (("cpp_declaration", "text/x-c++hdr"),),
+        code="blueprint_render_failed",
+        message="render failed",
+        stage="projection.blueprint",
+    )
+    assert projection_to_dict(failed_records[0])["completeness"] == "failed"
+    assert projection_to_dict(failed_records[0])["status"] == "unavailable"
+
+
 def count_kismet_expressions(semantic_dict) -> int:
     """Sum expression_count over projected function dicts on one semantic."""
     total = 0

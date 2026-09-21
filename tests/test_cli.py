@@ -73,6 +73,82 @@ def test_cli_rejects_limit_with_canonical_output(monkeypatch, tmp_path) -> None:
     assert not out.exists()
 
 
+def test_cli_output_max_bytes_writes_bounded_page(monkeypatch, tmp_path) -> None:
+    """`-o FILE --max-bytes N` is the bounded-response contract (flag help).
+
+    Writes project_document(..., max_bytes=N) — not the complete canonical
+    envelope. The page must fit the budget; truncation keys are allowed.
+    """
+    sample = sample_path("StackOBot_BP_Drone.uasset")
+    out = tmp_path / "bounded.json"
+    budget = 250_000
+    code = _run_cli(
+        monkeypatch,
+        str(sample),
+        "-o",
+        str(out),
+        "--depth",
+        "asset",
+        "--max-bytes",
+        str(budget),
+    )
+    assert code == 0
+    raw = out.read_bytes()
+    assert len(raw) <= budget
+    payload = json.loads(raw)
+    assert payload["format"] == "uasset_read.package"
+    assert payload["format_version"] == "3.0"
+    assert "objects" in payload
+
+
+def test_cli_canonical_path_never_passes_max_main_bytes(monkeypatch, tmp_path) -> None:
+    """`-o` without `--max-bytes` uses write_projected_document with no budget.
+
+    Guards the dead-branch fix: the canonical writer path must not forward
+    CLI `--max-bytes` as `max_main_bytes` (that flag is only valid on the
+    bounded file/stdout path).
+    """
+    import uasset_read.projections.bundle as bundle
+
+    seen: dict = {}
+    real = bundle.write_projected_document
+
+    def spy(document, output_path, *, max_main_bytes=None, registry=None):
+        seen["max_main_bytes"] = max_main_bytes
+        seen["called"] = True
+        return real(document, output_path, registry=registry)
+
+    monkeypatch.setattr(bundle, "write_projected_document", spy)
+    sample = sample_path("StackOBot_BP_Drone.uasset")
+    out = tmp_path / "canonical.json"
+    code = _run_cli(monkeypatch, str(sample), "-o", str(out), "--depth", "package")
+    assert code == 0
+    assert seen.get("called") is True
+    assert seen["max_main_bytes"] is None
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["format_version"] == "3.0"
+    assert "projections" in payload
+
+
+def test_cli_output_max_bytes_does_not_call_canonical_writer(monkeypatch, tmp_path) -> None:
+    """Budgeted `-o --max-bytes` must not materialize a complete canonical file."""
+    import uasset_read.projections.bundle as bundle
+
+    def fail_writer(*args, **kwargs):
+        raise AssertionError("write_projected_document must not run on the bounded path")
+
+    monkeypatch.setattr(bundle, "write_projected_document", fail_writer)
+    sample = sample_path("StackOBot_BP_Drone.uasset")
+    out = tmp_path / "bounded.json"
+    code = _run_cli(
+        monkeypatch, str(sample), "-o", str(out), "--depth", "asset", "--max-bytes", "300000"
+    )
+    assert code == 0
+    assert out.exists()
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["format_version"] == "3.0"
+
+
 def test_cli_batch_results_are_complete_v3_documents(monkeypatch, tmp_path) -> None:
     """Batch envelope stays 1.0; each results[] entry is a full v3 canonical doc."""
     sample = sample_path("StackOBot_BP_Drone.uasset")

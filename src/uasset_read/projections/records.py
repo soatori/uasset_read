@@ -91,21 +91,48 @@ def matches_family(
     return (obj.class_name or "") in class_names
 
 
-def _completeness_label(status: str, completeness: float | None) -> str:
-    """Map internal completeness ratio to the v3 contract enum string.
+def _diagnostic_code(item: object) -> str | None:
+    if hasattr(item, "code"):
+        code = getattr(item, "code", None)
+        return code if isinstance(code, str) else None
+    if isinstance(item, dict):
+        code = item.get("code")
+        return code if isinstance(code, str) else None
+    return None
 
-    Internal projectors keep a measured float|None; the document boundary
-    publishes the schema vocabulary: complete/partial/opaque/unavailable/failed.
+
+def _completeness_label(
+    status: str,
+    completeness: float | None,
+    diagnostics: list[Any] | None = None,
+) -> str:
+    """Map internal completeness ratio + status to the v3 contract enum.
+
+    Schema values: complete | partial | opaque | unavailable | failed.
+    Independent of migration ``status``; never overclaims ``complete`` when
+    the projector did not measure a full ratio.
+
+    - ``failed``: diagnostics carry a projection-failure code (e.g. render_failed).
+    - ``unavailable``: status unavailable without a failure code (source absent).
+    - ``complete``: only when a measured ratio is ``>= 1.0``.
+    - ``partial``: measured ``0 < ratio < 1``, or represented/translated
+      without a measured ratio (capability not proven complete).
+    - ``opaque``: source information exists but was not mapped
+      (``untranslated`` with ratio None/0).
     """
+    codes = [_diagnostic_code(d) for d in diagnostics or ()]
+    if any(code is not None and "failed" in code for code in codes):
+        return "failed"
     if status == "unavailable":
         return "unavailable"
-    if completeness is None:
-        # Represented/translated content without a measured ratio is complete
-        # for what the projector claims; untranslated without a ratio is not.
-        return "complete" if status in {"translated", "represented"} else "unavailable"
-    if completeness >= 1.0:
+    if completeness is not None and completeness >= 1.0:
         return "complete"
-    if completeness > 0:
+    if completeness is not None and completeness > 0:
+        return "partial"
+    # completeness is None or 0 — never emit complete.
+    if status == "untranslated":
+        return "opaque"
+    if status in {"translated", "represented"}:
         return "partial"
     return "unavailable"
 
@@ -125,7 +152,9 @@ def projection_to_dict(record: ProjectionRecord) -> dict[str, Any]:
         "media_type": record.media_type,
         "embedded": record.embedded,
         "status": record.status,
-        "completeness": _completeness_label(record.status, record.completeness),
+        "completeness": _completeness_label(
+            record.status, record.completeness, record.diagnostics
+        ),
         "dependencies": list(record.dependencies),
         "diagnostics": [
             item.to_dict() if hasattr(item, "to_dict") else item for item in record.diagnostics

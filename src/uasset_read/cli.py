@@ -161,7 +161,12 @@ def _reject_bounded_flags_for_canonical(args, *, context: str) -> None:
 
 
 def _parse_and_write_canonical(file_path: Path, args, output_path: Path) -> Path:
-    """Parse one package and write the complete format_version 3.0 canonical file."""
+    """Parse one package and write the complete format_version 3.0 canonical file.
+
+    Called only on the `-o FILE` path *without* ``--max-bytes``. Budgeted
+    file writes use the bounded ``project_document`` path instead; this
+    writer never receives ``max_main_bytes`` from the CLI.
+    """
     from uasset_read.package import parse_package_document
     from uasset_read.projections.bundle import write_projected_document
 
@@ -172,7 +177,7 @@ def _parse_and_write_canonical(file_path: Path, args, output_path: Path) -> Path
         game=args.game,
         depth=args.depth,
     )
-    return write_projected_document(doc, output_path, max_main_bytes=args.max_bytes)
+    return write_projected_document(doc, output_path)
 
 
 def _build_canonical_result(file_path: Path, args) -> dict:
@@ -321,13 +326,14 @@ def main():
         _handle_list_package_files(args.file)
         return
 
-    # File output paths:
-    # - --max-bytes is a bounded-response contract ("truncates objects to fit"),
-    #   so -o + --max-bytes writes project_document(..., max_bytes=N) to the file.
-    # - -o without --max-bytes materializes the complete format_version 3.0
-    #   canonical document via write_projected_document.
-    # --limit is a usage error on either path: canonical docs never paginate,
-    # and the CLI does not expose object paging into files.
+    # File-output contract (documented; covered by tests/test_cli.py):
+    # - `-o FILE` alone → complete format_version 3.0 canonical document
+    #   via write_projected_document. Never paginated. `--limit` is a usage
+    #   error (EXIT_ARGUMENT_ERROR).
+    # - `-o FILE --max-bytes N` → bounded project_document response written
+    #   to FILE (flag help: "truncates objects to fit"). Not the complete
+    #   canonical envelope. `--limit` remains a usage error on file paths.
+    # - stdout + `--max-bytes` → same bounded response on stdout.
     if args.output:
         _reject_bounded_flags_for_canonical(args, context="-o/--output")
         if args.max_bytes is not None:
@@ -346,8 +352,8 @@ def main():
         except Exception as e:
             _logger.debug("Canonical write error (full): %s", e, exc_info=True)
             print(f"Error: {_sanitize_error_message(e)}", file=sys.stderr)
-            # OutputBudgetError is a ValueError: the requested budget cannot
-            # fit the mandatory envelope — a usage problem, not a parse failure.
+            # OutputBudgetError is a ValueError: only raised by callers that
+            # pass max_main_bytes; the CLI canonical path never does.
             sys.exit(EXIT_ARGUMENT_ERROR if isinstance(e, ValueError) else EXIT_PARSE_ERROR)
         sys.exit(EXIT_SUCCESS)
 
