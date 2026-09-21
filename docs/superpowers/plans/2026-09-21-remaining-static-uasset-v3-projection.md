@@ -26,8 +26,9 @@ This remaining plan does **not** re-open Tasks 1–4. Those foundations are alre
 | 12 / R5 | `implemented on sdd/static-uasset-finish` | `tests/test_complete_samples.py` gates 1–9; quality baseline + size baseline green in full suite. |
 | R6 checklist | `walked on sdd/static-uasset-finish` | 23-item checklist walked against source/tests on HEAD `ec2d0da4`: 23 pass / 0 fail / 0 unverifiable. Full suite **442 passed**; compileall clean. Controller whole-branch review remains after this report. |
 
-Markers describe execution-branch current behavior only. No `dev-0.6.0`
-completion claim. README feature claims not updated.
+Markers describe execution-branch and (after merge `8727b067`) `dev-0.6.0`
+current behavior. Controller review pass; post-merge suite 442 passed.
+README feature claims updated for the landing.
 
 **Samples present under `tests/samples/` (acceptance inputs):**
 

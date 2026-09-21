@@ -33,7 +33,7 @@ Ponytail / productize / byteswap / closeout plans that have already been execute
 ## Active v3 implementation target
 
 - [`../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md`](../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md) — target spec for complete static parsing, dual-offset Kismet analysis, and typed Blueprint C++ projection.
-- [`../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md`](../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md) — reviewed implementation plan; planning status only until source tasks are executed.
+- [`../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md`](../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md) — Tasks 1–12 implemented on `dev-0.6.0` after merge `8727b067` (controller review pass; post-merge suite 442 passed).
 
 ## Rules
 

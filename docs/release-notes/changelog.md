@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Contract
-- **`format_version: "2.0"` frozen for stable PackageDocument fields (S1, 2026-09-13).** Breaking changes to stable keys bump major to `"3.0"`. Experimental keys (`objects[].properties`, `objects[].semantic`, `objects[].coverage`, top-level `payloads`) are marked `"x-stability": "experimental"` in the schema and do not bump the version when they change.
+- **`format_version: "3.0"` is the current package-document envelope** (landed on `dev-0.6.0` via merge `8727b067`, 2026-09-21). Contract: `docs/designs/contract/package_document_v3.schema.json`. Prior S1 freeze of `"2.0"` (2026-09-13) is superseded by the intentional v3 break: one canonical document per package with embedded type-aware `projections[]` and optional `sidecars[]` schema. Breaking changes to the envelope bump major again.
 
 ### Breaking Changes
 - Removed five CLI flags that argparse accepted but no code read: `--log-level`, `--log-cleanup` / `--no-log-cleanup`, `--log-max-bytes`, `--log-backup-count`, `--log-format`. (The then-remaining `--clean-logs` chain was later retired in Gate L below.)

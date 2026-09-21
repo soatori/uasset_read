@@ -2,7 +2,7 @@
 
 status: target
 
-> **文档状态：目标架构基线（2026-08-26）。Legacy 主路径已实现**（`PackageDocument v2` 输出全部 exports；tagged properties 在 export 边界内解析并恢复 Source/ImportedSize 等值；CLI/Python API/Agent 共用 v2 投影；v2 语义不再依赖 Semantic 1.x handler；decode 不产出顶层 payload（伪造 descriptor/ref 已撤回，`payloads[]` 恒为空））。**payload 字节提取已实现（cooked 包 + sidecar）：BulkData header 解析、sidecar discovery、`extract_payload_bytes`、agent tool 集成、`max_bytes` 强制执行。2026-09-02 顺序调整：实现不再等待 #623–#627 fixture，按 UE 源码偏移证据先行推进（CUE4Parse/UAssetAPI 只作阅读参考与佐证），reader/handler 用有界合成字节测试覆盖；样本改为回填项，各 Phase 退出条件与真实 fixture 支持声明不变。**
+> **文档状态：目标架构基线（2026-08-26）。Legacy 主路径已实现**（package document 输出全部 exports；tagged properties 在 export 边界内解析；CLI/Python API/Agent 共用同一投影；语义不再依赖 Semantic 1.x handler；decode 不产出顶层 payload）。**payload 字节提取已实现（cooked 包 + sidecar）**。**2026-09-21 合并 `8727b067` 后，v3 路径为当前默认：`format_version: "3.0"`、静态 Blueprint IR/CFG、type-aware projections 与 canonical writer 见下方 Status audit。** 2026-09-02 顺序调整：实现按 UE 源码偏移证据推进（CUE4Parse/UAssetAPI 只作阅读参考）。
 >
 > **2026-09-05 后续状态更新（已实现，非目标）**：Semantic JSON 1.x 输出路径已删除（`--legacy-json` 等旧 CLI flag 进入 retired 集合，唯一顶层 format 为 `uasset_read.package`）；Blueprint VarType（`FEdGraphPinType`）类型解码与 Kismet 反编译已迁移到 v2 object model（`BlueprintFamilyHandler` decode 分支 + `kismet.decompile_bridge`，由 `tests/test_blueprint_decode.py` 覆盖）。**仍未完成：Zen/IoStore、USMAP/unversioned 的 SchemaProvider 完整路径、外部容器 payload 提取、其余深层语义、Blueprint C++ skeleton。parent-asset 解析已于 2026-09-10 Gate G 产品决策放弃（D1 §7），不再列为 deferred gap。**
 >
@@ -16,30 +16,24 @@ status: target
 >
 > 本文是当前项目唯一权威的重构目标。源码与测试仍是“当前已经实现什么”的唯一依据；本文只定义“接下来要实现什么”。旧版输出、Semantic JSON 1.x 和单资产设计文档均为历史资料，不得继续作为新功能的目标架构。
 
-## Status audit (2026-09-21)
+## Status audit (2026-09-21, post-merge)
 
-This is an implementation marker, not a change to the target architecture. On the
-checked-out `dev-0.6.0` branch, the v3 contract envelope and the bounded
-package foundations are present: `FORMAT_VERSION` and the `projections`/
-`sidecars` envelope are in `src/uasset_read/projection.py:17,220-223`, bounded
-sources and container reports are in `src/uasset_read/sources.py:11-101` and
-`src/uasset_read/containers.py:48,184`, layout/Zen availability is in
-`src/uasset_read/layout.py:148` and `src/uasset_read/parsers/zen_reader.py:43`,
-and the separate property readers plus byte-accounting model are in
-`src/uasset_read/parsers/properties/tagged.py:14`,
-`src/uasset_read/parsers/properties/unversioned.py:77`, and
-`src/uasset_read/models/byte_ranges.py:129-150`. Their focused tests are
-currently green.
+This is an implementation marker, not a change to the target architecture. On
+`dev-0.6.0` after merge `8727b067` (controller review pass; post-merge full
+suite **442 passed**, `compileall` clean):
 
-The static Blueprint IR/CFG/correlation and Material graph work exists only on
-the unmerged `compose/static-uasset-task5-12` branch (`92c3a309`); it is not
-current behavior on `dev-0.6.0`. Blueprint C++/type-aware projections, the
-canonical writer replacement, and the final sample-quality gate are not present
-on the checked-out branch. The full Task 1–4 gate in this dirty worktree is
-`155 passed, 1 failed`; the sole failure is the docs line ceiling caused by
-uncommitted documentation changes (principally the plan expansion below plus
-this audit), matching the known worktree-only red described in
-`tests/size-baseline.json:2`. It is not evidence of parser completion.
+- v3 contract envelope: `FORMAT_VERSION` / `projections` / `sidecars` in
+  `src/uasset_read/projection.py`; contract
+  `docs/designs/contract/package_document_v3.schema.json`.
+- Bounded sources/containers, layout/Zen availability boundary, separate
+  tagged/unversioned property readers, and byte accounting are present.
+- Static Blueprint IR/CFG/correlation, Material graph, C++/type-aware
+  projections (`src/uasset_read/projections/`), canonical writer
+  (`write_projected_document`), and sample acceptance gates are current
+  behavior on this branch.
+
+Zen package full decode and traditional FPak entry extraction remain
+explicitly unverified without redistributable fixtures.
 
 ## Executive Summary
 

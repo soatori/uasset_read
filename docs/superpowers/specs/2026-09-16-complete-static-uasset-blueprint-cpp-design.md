@@ -2,19 +2,17 @@
 
 status: target
 
-> **2026-09-21 implementation marker (R6 update):** This specification remains
-> a target. On `dev-0.6.0`, the v3 envelope and Tasks 1–4 foundations exist
-> (`src/uasset_read/projection.py`, `src/uasset_read/sources.py`,
-> `src/uasset_read/layout.py`, `src/uasset_read/models/byte_ranges.py`). Tasks
-> 5–12 work (static Blueprint IR/CFG/correlation, Material graph, C++/type-aware
-> projections, canonical writer/CLI, sample acceptance gates) exists on the
-> unmerged execution branch `sdd/static-uasset-finish` (worktree
-> `.worktrees/sdd-static-continue`, HEAD `ec2d0da4`; R6 checklist walk recorded
-> 442 passed + compileall clean on that branch). That work is **not** current
-> behavior on `dev-0.6.0` and is **not** claimed complete on the user-facing
-> branch until an orchestrator merge lands it. Do not read this target
-> specification as a complete-on-`dev-0.6.0` implementation claim. README
-> feature claims remain unchanged for the same reason.
+> **2026-09-21 implementation marker (post-merge):** Tasks 1–12 are current
+> behavior on `dev-0.6.0` after merge `8727b067` from
+> `sdd/static-uasset-finish` (controller review pass; post-merge full suite
+> **442 passed**, `compileall` clean). Envelope is `format_version: "3.0"`;
+> static Blueprint IR/CFG/correlation, Material graph, C++/type-aware
+> projections, canonical writer, and sample acceptance gates are present.
+> This specification remains a design target for residual/deferred work only
+> (e.g. real Zen package decode without redistributable fixtures). Do not read
+> excluded scope (runtime Blueprint execution, native C++ body recovery,
+> encryption without keys) as planned implementation. README feature claims
+> were updated for this landing.
 
 ## Decision
 

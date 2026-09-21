@@ -1,6 +1,6 @@
 # Semantic JSON Format
 
-> **Status: historical (superseded), not current.** The Semantic JSON 1.x pipeline described here has been removed from `src/` together with the v1 pipeline (Phase 6); `--legacy-json` and the other retired flags now error out. This page is kept only as a record of the old wire format. Current output is the package-first `uasset_read.package` `format_version: 2.0` document — see the [package-first refactor design](../../designs/2026-08-26-package-first-uasset-parser-refactor.md) and the [output entry](../output/README.md). Do not add new top-level domain formats here.
+> **Status: historical (superseded), not current.** The Semantic JSON 1.x pipeline described here has been removed from `src/` together with the v1 pipeline (Phase 6); `--legacy-json` and the other retired flags now error out. This page is kept only as a record of the old wire format. Current output is the package-first `uasset_read.package` `format_version: 3.0` document — see the [package-first refactor design](../../designs/2026-08-26-package-first-uasset-parser-refactor.md) and the [output entry](../output/README.md). Do not add new top-level domain formats here.
 
 Common JSON contract for `uasset_read` semantic output. Domain schemas compose via `allOf`/`$ref` with this schema.
 
