@@ -222,6 +222,19 @@ Shared readers behind that document: `kismet/` (bytecode → expressions + diagn
 ```bash
 python -m pytest tests/ -v           # Run all tests
 python -m pytest tests/ -v --cov=uasset_read  # With coverage
+
+# Quality baseline (default seeds; skips large opt-in fixtures)
+python -m pytest tests/test_samples.py -k quality_baseline
+
+# Include ALS_AnimBP opt-in quality entry (~10MB; slower)
+UASSET_QUALITY_OPT_IN=1 python -m pytest tests/test_samples.py -k quality_baseline
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:UASSET_QUALITY_OPT_IN="1"
+python -m pytest tests/test_samples.py -k quality_baseline
 ```
 
 ### UE Editor Ground Truth

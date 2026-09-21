@@ -305,6 +305,9 @@ _TAGGED_FALLBACK_STRUCTS: set[str] = {
     # Animation curve metadata structs (tagged format, size=0)
     "FCurveMetaData",
     "CurveMetaData",
+    # AnimBlueprintGeneratedClass::OrderedSavedPoseIndicesMap values
+    # (FCachedPoseIndices is tagged FStructFallback: OrderedSavedPoseNodeIndices + None)
+    "CachedPoseIndices",
 }
 """Set of struct names requiring tagged fallback parsing.
 

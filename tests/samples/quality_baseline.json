@@ -152,11 +152,6 @@
           "unexpected": {
             "max": 3
           }
-        },
-        "name_index_out_of_range": {
-          "recovered_corruption": {
-            "max": 1
-          }
         }
       },
       "opt_in": true

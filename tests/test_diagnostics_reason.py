@@ -251,3 +251,34 @@ def test_bp_combat_character_category_text_still_decodes():
         assert "source_string" in cat, cat
     assert any(c.get("key") for c in categories), categories
     assert any(c.get("source_string") for c in categories), categories
+
+
+def test_als_animbp_has_no_name_index_out_of_range():
+    from uasset_read.package import parse_package_document
+
+    doc = parse_package_document("tests/samples/ALS_AnimBP.uasset", depth="asset")
+    codes = [d.code for d in doc.diagnostics]
+    assert "name_index_out_of_range" not in codes, (
+        [d.message for d in doc.diagnostics if d.code == "name_index_out_of_range"]
+    )
+
+
+def test_als_animbp_ordered_saved_pose_indices_map_keys():
+    from uasset_read.package import parse_package_document
+
+    doc = parse_package_document("tests/samples/ALS_AnimBP.uasset", depth="asset")
+    export = next(o for o in doc.objects if o.id == "export:281")
+    prop = (export.properties or {}).get("OrderedSavedPoseIndicesMap")
+    assert prop is not None, "OrderedSavedPoseIndicesMap missing on ALS_AnimBP_C"
+    # Property wrapper: {kind, type, value: MapValue{entries: [{key, value}]}}
+    bag = prop["value"] if isinstance(prop, dict) and "value" in prop else prop
+    entries = bag["entries"] if isinstance(bag, dict) and "entries" in bag else bag
+    assert isinstance(entries, list) and len(entries) >= 9, entries
+    keys = [e.get("key") for e in entries if isinstance(e, dict)]
+    assert "AnimGraph" in keys, keys
+    # At least one entry should expose OrderedSavedPoseNodeIndices after the fix
+    sample = next(e for e in entries if e.get("key") == "AnimGraph")
+    value = sample.get("value")
+    fields = value.get("fields") if isinstance(value, dict) else getattr(value, "fields", None)
+    assert fields is not None, value
+    assert "OrderedSavedPoseNodeIndices" in fields, fields
