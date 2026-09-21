@@ -1,5 +1,5 @@
 {
-  "_note": "Ratchet ceilings. Raised 2026-09-21 R5 + fix round 1/5 from measured pytest size-baseline failure output: src_python 28913 (records completeness mapping + CLI contract comments/tests deps), tests_python 10852 (CLI contract tests + completeness mapping unit test; tracked tests disk includes test_complete_samples.py). Raised 2026-09-21 R6 docs_markdown 57766 from measured pytest failure (parent plan + remaining plan + spec implementation-marker status text; files=166). Raise only as a deliberate reviewable diff.",
+  "_note": "Ratchet ceilings. Raised 2026-09-21 R5 + fix round 1/5 from measured pytest size-baseline failure output: src_python 28913, tests_python 10852. Raised 2026-09-21 R6 docs_markdown 57766 (parent plan + remaining plan + spec marker; files=166). Raised 2026-09-21 post-merge docs_markdown 57766→58201 from measured pytest failure after README/spec/status updates + closeout plan (files=167). Raise only as a deliberate reviewable diff.",
   "src_python": {
     "min_files": 49,
     "max_lines": 28913
@@ -10,7 +10,7 @@
   },
   "docs_markdown": {
     "min_files": 158,
-    "max_lines": 57766
+    "max_lines": 58201
   },
   "wheel_bytes": {
     "max_bytes": 300000
