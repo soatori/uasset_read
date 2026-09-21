@@ -235,14 +235,14 @@ trigger a sidecar.
 
 Sub-steps for E1:
 
-- [ ] **E1.1** Add `project_semantic_blueprint(semantic: BlueprintSemantic) -> dict` and `project_semantic_material(graph: MaterialGraph) -> dict`.
+- [x] **E1.1** Add `project_semantic_blueprint(semantic: BlueprintSemantic) -> dict` and `project_semantic_material(graph: MaterialGraph) -> dict`.
       Concrete skeleton for the Blueprint half lives in Task 8 Step 4 (`project_semantic_blueprint` / `project_function_analysis`). The Material half maps `MaterialGraph` fields to `{"kind": "material", "material_graph": {...}, "diagnostics": [...]}` with the same no-dataclass rule.
-- [ ] **E1.2** Rewrite `find_function` / `find_material_graph` to walk dicts (`fn["function_name"]`, `obj.semantic["material_graph"]`).
-- [ ] **E1.3** Point typed unit tests at explicit `*_ir` fixtures and sample tests at projected dicts — not a mixed fixture contract.
-- [ ] **E1.4** Point Task 11 and Task 10A projectors at projected dicts; the same `parse_sample` document feeds the single JSON document, embedded C++, editor-builder, and data projections.
-- [ ] **E1.5** Grep for `isinstance(.*FunctionAnalysis` / `isinstance(.*MaterialGraph` outside parser modules; none may remain in `tests/fixtures.py` or `projection.py`.
-- [ ] **E1.6** Add explicit tests that `project_document()` may paginate while `build_canonical_document()` and `write_projected_document()` reject pagination and contain all object IDs.
-- [ ] **E1.7** Keep `SidecarRecord`/`ProjectionRecord.external` as a documented late boundary. Do not add a synthetic sidecar implementation or threshold test until Task 11 measures a real output that cannot safely remain one file; a limit below the mandatory envelope must raise before writing.
+- [x] **E1.2** Rewrite `find_function` / `find_material_graph` to walk dicts (`fn["function_name"]`, `obj.semantic["material_graph"]`).
+- [x] **E1.3** Point typed unit tests at explicit `*_ir` fixtures and sample tests at projected dicts — not a mixed fixture contract.
+- [x] **E1.4** Point Task 11 and Task 10A projectors at projected dicts; the same `parse_sample` document feeds the single JSON document, embedded C++, editor-builder, and data projections.
+- [x] **E1.5** Grep for `isinstance(.*FunctionAnalysis` / `isinstance(.*MaterialGraph` outside parser modules; none may remain in `tests/fixtures.py` or `projection.py`.
+- [x] **E1.6** Add explicit tests that `project_document()` may paginate while `build_canonical_document()` and `write_projected_document()` reject pagination and contain all object IDs.
+- [x] **E1.7** Keep `SidecarRecord`/`ProjectionRecord.external` as a documented late boundary. Do not add a synthetic sidecar implementation or threshold test until Task 11 measures a real output that cannot safely remain one file; a limit below the mandatory envelope must raise before writing.
 
 ### E2. Task 3 Legacy source boundary (minimal)
 
@@ -1900,7 +1900,7 @@ git add src/uasset_read/parsers/properties src/uasset_read/parsers/property_pars
 git commit -m "refactor: separate property readers and account export bytes"
 ```
 
-### Task 5: Extract the existing handler registry into one domain dispatch path
+### Task 5: Extract the existing handler registry into one domain dispatch path — complete
 
 **Files:**
 - Create: `src/uasset_read/parsers/asset_types/registry.py`
@@ -1919,7 +1919,7 @@ git commit -m "refactor: separate property readers and account export bytes"
 - `tests/test_handler_capability_ledger.py` imports `_HANDLERS`; update that import to the new owning module while preserving the pinned class coverage.
 - `run_handlers` currently returns a 3-tuple and is unpacked at ~20 sites in `tests/test_core.py` (`semantic, _cov, _diags = H.run_handlers(...)` around lines 1109, 1119, 1134, 1412, 1430, 1469, 1494, 1518, 1546, 1621, 1661–1665, 1760–1763, 1845–1847) plus `legacy_reader.py`. Changing the return type to `DomainResult` is a repo-wide break, not a single-file refactor.
 
-- [ ] **Step 1: Write single-owner and failure-isolation tests**
+- [x] **Step 1: Write single-owner and failure-isolation tests**
 
 ```python
 # tests/test_handler_registry.py
@@ -1962,13 +1962,13 @@ def test_one_handler_failure_records_diagnostic_and_continues(unknown_object_rec
     assert result.status == "partial"
 ```
 
-- [ ] **Step 2: Run the tests and verify the ownership test fails**
+- [x] **Step 2: Run the tests and verify the ownership test fails**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_handler_registry.py tests/test_size_baseline.py -q`
 
 Expected: import failure for `registry.py` or `_HANDLERS` still owned by `handlers_impl.py`.
 
-- [ ] **Step 3: Move the current registry without creating a second abstraction**
+- [x] **Step 3: Move the current registry without creating a second abstraction**
 
 ```python
 @dataclass
@@ -1990,7 +1990,7 @@ Dispatch rules:
 - later matching handlers still run;
 - the package envelope and unrelated objects remain intact.
 
-- [ ] **Step 4: Run handler regressions and commit**
+- [x] **Step 4: Run handler regressions and commit**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_handler_registry.py tests/test_handler_capability_ledger.py tests/test_capability_hardening.py tests/test_core.py tests/test_size_baseline.py -q`
 
@@ -2001,7 +2001,7 @@ git add src/uasset_read/parsers/asset_types/registry.py src/uasset_read/parsers/
 git commit -m "refactor: give domain handlers one registry owner"
 ```
 
-### Task 6: Build the Blueprint graph IR
+### Task 6: Build the Blueprint graph IR — complete
 
 **Files:**
 - Create: `src/uasset_read/parsers/blueprint/__init__.py`
@@ -2057,7 +2057,7 @@ helpers, including the UE source branches represented by
 - `summarize_exec_edges` already emits owner-aware undirected-unique exec edges (`blueprint_graph.py:391`); keep it as a derived summary, not runtime order.
 - Current `resolve_pin_links(graphs: list[dict]) -> None` mutates raw serializer dicts in place (`serializers/blueprint_graph.py` around `:310`). Keep that helper as the raw serializer's internal operation and add the typed `(nodes, refs) -> LinkResolution` API in `parsers/blueprint/graph.py`; do not make the typed decoder depend on a second byte parser.
 
-- [ ] **Step 1: Add graph identity and duplicate-GUID tests**
+- [x] **Step 1: Add graph identity and duplicate-GUID tests**
 
 ```python
 # tests/test_blueprint_ir.py
@@ -2172,13 +2172,13 @@ def test_k2_metadata_unknown_variant_record_is_ranged_and_unresolved():
     assert all(item.size > 0 for item in metadata.opaque_properties)
 ```
 
-- [ ] **Step 2: Run graph tests and verify the new IR is absent**
+- [x] **Step 2: Run graph tests and verify the new IR is absent**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_blueprint_ir.py tests/test_blueprint_graph.py tests/test_k2_metadata.py tests/test_size_baseline.py -q`
 
 Expected: missing IR classes or identity assertions fail.
 
-- [ ] **Step 3: Define graph dataclasses and stable IDs**
+- [x] **Step 3: Define graph dataclasses and stable IDs**
 
 In `models/analysis.py`:
 
@@ -2368,7 +2368,7 @@ def project_blueprint_graph(graph: BlueprintGraph) -> dict[str, Any]:
 These helpers live in `parsers/blueprint/graph.py`; they preserve raw endpoint
 identity and physical source coordinates without exposing dataclass instances.
 
-- [ ] **Step 4: Adapt current serializers to populate the IR**
+- [x] **Step 4: Adapt current serializers to populate the IR**
 
 - keep binary readers in `serializers/graph*.py`;
 - keep `read_blueprint_graphs` as the raw dict serializer and convert its result
@@ -2433,7 +2433,7 @@ typed `(nodes, refs) -> LinkResolution` API is owned by
 `parsers/blueprint/graph.py`; it consumes the raw result and is the only API
 used by correlation and projections.
 
-- [ ] **Step 5: Run Blueprint graph regressions and commit**
+- [x] **Step 5: Run Blueprint graph regressions and commit**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_blueprint_ir.py tests/test_blueprint_graph.py tests/test_review_pins.py tests/test_k2_metadata.py tests/test_size_baseline.py -q`
 
@@ -2444,7 +2444,7 @@ git add src/uasset_read/parsers/blueprint src/uasset_read/serializers/k2_metadat
 git commit -m "feat: add owner-aware blueprint graph IR"
 ```
 
-### Task 7: Normalize Kismet bytecode into instructions and CFG
+### Task 7: Normalize Kismet bytecode into instructions and CFG — complete
 
 **Files:**
 - Create: `src/uasset_read/parsers/blueprint/bytecode.py`
@@ -2483,7 +2483,7 @@ git commit -m "feat: add owner-aware blueprint graph IR"
 
 Current Python already models `EX_Jump` / `EX_JumpIfNot` / `EX_ComputedJump` (`kismet/expressions.py:414-479`) and validates absolute jump targets (`bytecode_extractor.py:111`). What is missing is instruction offsets, typed CFG edges, and analysis objects.
 
-- [ ] **Step 1: Write instruction and branch tests**
+- [x] **Step 1: Write instruction and branch tests**
 
 ```python
 # tests/test_blueprint_cfg.py
@@ -2584,13 +2584,13 @@ def test_native_field_reflection_payload_is_retained():
     assert field.source_range is not None
 ```
 
-- [ ] **Step 2: Run the tests and verify CFG behavior is missing**
+- [x] **Step 2: Run the tests and verify CFG behavior is missing**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_blueprint_cfg.py tests/test_kismet_operand_preservation.py tests/test_native_fields.py tests/test_blueprint_decode.py tests/test_size_baseline.py -q`
 
 Expected: instruction/CFG assertions fail because current output stops at expressions/direct exec summaries.
 
-- [ ] **Step 3: Normalize expression records into instruction records**
+- [x] **Step 3: Normalize expression records into instruction records**
 
 Before normalization, change tolerant expression parsing so an unknown token
 cannot disappear:
@@ -2830,7 +2830,7 @@ uses only `parsed|partial|unavailable`. Add the new object identity and script
 range fields to the expected dictionaries; do not leave tests asserting the
 old three-value analysis status.
 
-- [ ] **Step 4: Build basic blocks and typed edges**
+- [x] **Step 4: Build basic blocks and typed edges**
 
 ```python
 @dataclass
@@ -2995,7 +2995,7 @@ convert ordinary bounded parse failures into a partial/opaque tail, but they
 must re-raise stream-poisoning failures so the function cannot be reported as a
 valid partial decode after its cursor has become untrustworthy.
 
-- [ ] **Step 5: Run the complete Blueprint/Kismet tests and commit**
+- [x] **Step 5: Run the complete Blueprint/Kismet tests and commit**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_blueprint_cfg.py tests/test_kismet_operand_preservation.py tests/test_native_fields.py tests/test_blueprint_decode.py tests/test_parse_hardening.py tests/test_size_baseline.py -q`
 
@@ -3006,7 +3006,7 @@ git add src/uasset_read/parsers/blueprint/bytecode.py src/uasset_read/parsers/bl
 git commit -m "feat: preserve kismet dual offsets and build cfg"
 ```
 
-### Task 8: Correlate graph nodes, bytecode, calls, and variables
+### Task 8: Correlate graph nodes, bytecode, calls, and variables — complete
 
 **Files:**
 - Create: `src/uasset_read/parsers/blueprint/correlation.py`
@@ -3216,7 +3216,7 @@ class BlueprintSemantic:
 - StackOBot relations already include `generated_class_of (export:1 → export:0)` and `default_object_of (export:2 → export:1)` (`tests/test_samples.py:814-817`).
 - Design gate 1 still requires: 31 exports addressable, 2 graphs, **3 Kismet functions**, **85 expressions**, CFG blocks/edges, call targets, variable reads/writes. Only the graph/exec portion is proven today.
 
-- [ ] **Step 1: Write static semantic tests**
+- [x] **Step 1: Write static semantic tests**
 
 ```python
 # tests/test_blueprint_correlation.py
@@ -3298,13 +3298,13 @@ def test_duplicate_function_names_keep_export_identity(stackobot_document, funct
     assert [fn.object_id for fn in semantic.functions] == ["export:9", "export:10"]
 ```
 
-- [ ] **Step 2: Run tests and confirm current output lacks the new contract**
+- [x] **Step 2: Run tests and confirm current output lacks the new contract**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_blueprint_correlation.py tests/test_blueprint_decode.py tests/test_size_baseline.py -q`
 
 Expected: missing call/variable/entrypoint correlation fields or incorrect execution metadata; StackOBot Kismet counts not yet 3/85.
 
-- [ ] **Step 3: Implement multi-level correlation**
+- [x] **Step 3: Implement multi-level correlation**
 
 Match priority:
 1. Export/Object ID (graph owner, function export index);
@@ -3348,7 +3348,7 @@ variable-event records. If any of these sources is absent, keep the record with
 the missing field set to `None` and a diagnostic; do not infer a constructor
 from the asset name alone.
 
-- [ ] **Step 4: Add Blueprint semantic output under each object**
+- [x] **Step 4: Add Blueprint semantic output under each object**
 
 Keep all functions, graphs, calls, and variable sets under the corresponding Blueprint/GeneratedClass object (`objects[].semantic`). Do not promote domain content to the document root.
 
@@ -3533,7 +3533,7 @@ def project_function_analysis(fn: FunctionAnalysis) -> dict[str, Any]:
 
 `tests/fixtures.find_function` and Task 12 `count_kismet_expressions` read `fn["expression_count"]` / `fn["function_name"]` from this dict. Do not store the live `FunctionAnalysis` dataclass under `semantic["functions"]`.
 
-- [ ] **Step 5: Run sample correlation tests and commit**
+- [x] **Step 5: Run sample correlation tests and commit**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_blueprint_correlation.py tests/test_blueprint_graph.py tests/test_blueprint_decode.py tests/test_core.py tests/test_samples.py tests/test_size_baseline.py -q`
 
@@ -3544,7 +3544,7 @@ git add src/uasset_read/parsers/blueprint/correlation.py src/uasset_read/parsers
 git commit -m "feat: correlate blueprint graphs and bytecode"
 ```
 
-### Task 9: Decode Material expression graphs
+### Task 9: Decode Material expression graphs — complete
 
 **Files:**
 - Create: `src/uasset_read/parsers/material/__init__.py`
@@ -3685,7 +3685,7 @@ material projector reads package bytes.
 - `TestMaterial.uasset` is the current editor-stripped/cooked candidate and must report `limited`/`unavailable` for the editor expression graph, not invent nodes. `MyProject_UE58_TestMaterial.uasset` contains editor-only material data and is not a valid cooked fixture.
 - This task depends on Task 4 preserving decoded `FExpressionInput` / `FMaterialAttributesInput` fields in normalized properties. `MaterialGraphDecoder` consumes those fields and object references; it never reopens the source archive or reparses raw property bytes.
 
-- [ ] **Step 1: Write StackOBot and cooked-material tests**
+- [x] **Step 1: Write StackOBot and cooked-material tests**
 
 ```python
 # tests/test_material_graph.py
@@ -3729,13 +3729,13 @@ def test_cooked_material_marks_editor_graph_unavailable(cooked_material):
     assert any(item.feature == "editor_expression_graph" for item in graph.coverage)
 ```
 
-- [ ] **Step 2: Run focused tests and confirm current Material summary is insufficient**
+- [x] **Step 2: Run focused tests and confirm current Material summary is insufficient**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_material_graph.py tests/test_samples.py tests/test_size_baseline.py -q`
 
 Expected: expression/link assertions fail against the current Material summary.
 
-- [ ] **Step 3: Implement expression and pin extraction**
+- [x] **Step 3: Implement expression and pin extraction**
 
 - resolve `MaterialExpression*` exports by object identity / outer chain from the Material export;
 - use a bounded material dependency closure so selecting only the Material
@@ -3750,7 +3750,7 @@ Expected: expression/link assertions fail against the current Material summary.
 - unknown expression fields stay opaque regions with offsets;
 - no graph evaluation and no HLSL generation.
 
-- [ ] **Step 4: Implement link reconstruction and capability reporting**
+- [x] **Step 4: Implement link reconstruction and capability reporting**
 
 - use serialized input/output pin references where present;
 - if the package has no editor expression graph (cooked/filtered), set `capability` to `limited` or `unavailable` and coverage feature `editor_expression_graph`;
@@ -3778,7 +3778,7 @@ projected dictionary under the owning Material object's
 the archive. The handler must preserve one owner identity and merge diagnostics
 without replacing the package envelope.
 
-- [ ] **Step 5: Run Material tests and commit**
+- [x] **Step 5: Run Material tests and commit**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_material_graph.py tests/test_capability_hardening.py tests/test_size_baseline.py -q`
 
@@ -3789,7 +3789,7 @@ git add src/uasset_read/parsers/material src/uasset_read/parsers/asset_types/han
 git commit -m "feat: decode material expression graphs"
 ```
 
-### Task 10: Build the Blueprint C++ declaration and migration projection
+### Task 10: Build the Blueprint C++ declaration and migration projection — complete
 
 **Files:**
 - Create: `src/uasset_read/projections/__init__.py`
@@ -3827,7 +3827,7 @@ must be covered by the source metadata retained in Tasks 3, 6, and 7.
 Translation statuses required by the design:
 `translated` | `represented` | `untranslated` | `unavailable`.
 
-- [ ] **Step 1: Commit a normalized declaration oracle and write C++ projection tests**
+- [x] **Step 1: Commit a normalized declaration oracle and write C++ projection tests**
 
 Create `tests/samples/golden/blueprint_header_view/MyProject_UE58_TestBlueprint.json`. It is a normalized semantic oracle for the user-owned UE5.8 fixture, not generated by this parser and not an exact-format snapshot:
 
@@ -3935,13 +3935,13 @@ semantic correctness. The normalized AST oracle and `json.dumps()`/token
 validity checks remain the blocking tests. A real UE compilation probe may be a
 separate evidence-backed follow-up with an actual generated prelude.
 
-- [ ] **Step 2: Run the tests and verify the projection is absent**
+- [x] **Step 2: Run the tests and verify the projection is absent**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_blueprint_cpp.py tests/test_size_baseline.py -q`
 
 Expected: missing renderer or projection fields.
 
-- [ ] **Step 3: Implement the C++ AST**
+- [x] **Step 3: Implement the C++ AST**
 
 `render_cpp` is the public document-boundary entry and accepts only the projected dictionary. Keep the typed implementation internal so CLI/Agent cannot bypass the stable v3 shape. Because Task 8 embeds all declaration/type/reflection context, neither entry point accepts a `PackageDocument` or reads source bytes:
 
@@ -4054,7 +4054,7 @@ class CppProjection:
 
 Do not concatenate arbitrary bytecode strings into C++ source. Every emitted statement is an AST node with a status.
 
-- [ ] **Step 4: Implement declaration rendering based on Blueprint Header View scope**
+- [x] **Step 4: Implement declaration rendering based on Blueprint Header View scope**
 
 Render:
 - `UCLASS` + parent;
@@ -4070,7 +4070,7 @@ Render:
 
 Unresolved types render as diagnostic-bearing names (`/* unresolved: Foo */ Foo`) and are never silently replaced with `void`.
 
-- [ ] **Step 5: Implement migration rendering and output accounting**
+- [x] **Step 5: Implement migration rendering and output accounting**
 
 Map known instructions to C++ AST nodes:
 - literals / pure operators → expressions (`translated`);
@@ -4080,7 +4080,7 @@ Map known instructions to C++ AST nodes:
 
 Every instruction in every function must appear in `translation_stats`. Output is an auditable migration projection, not a claim of binary/runtime equivalence. Native parent constructors, native function bodies, VM implementation details, and missing editor-only data remain explicit represented/unavailable boundaries.
 
-- [ ] **Step 6: Run C++ projection tests and commit**
+- [x] **Step 6: Run C++ projection tests and commit**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_blueprint_cpp.py tests/test_blueprint_cfg.py tests/test_blueprint_correlation.py tests/test_size_baseline.py -q`
 
@@ -4091,7 +4091,7 @@ git add src/uasset_read/projections src/uasset_read/models/analysis.py tests/sam
 git commit -m "feat: project blueprint semantics to auditable cpp"
 ```
 
-### Task 10A: Add the type-aware projection registry and non-Blueprint projections
+### Task 10A: Add the type-aware projection registry and non-Blueprint projections — complete
 
 **Files:**
 - Create: `src/uasset_read/projections/records.py`
@@ -4217,7 +4217,7 @@ The initial capability matrix is fixed as follows:
 
 Each embedded projection carries `source_object_id`, `kind`, `media_type`, `content`, `embedded`, `status`, `completeness`, `dependencies`, and diagnostics. Recognized but unsupported families still receive a capability descriptor with `unavailable`; they do not silently disappear. A completely unknown family may have no additional projection because its generic identity/properties/semantic record is already canonical in `PackageDocument.objects`. No projection gets a physical output path merely because it has a different media type.
 
-- [ ] **Step 1: Write registry and embedded-projection contract tests**
+- [x] **Step 1: Write registry and embedded-projection contract tests**
 
 ```python
 # tests/test_asset_projections.py
@@ -4275,13 +4275,13 @@ def test_writer_rejects_a_limit_below_the_mandatory_envelope(document, tmp_path)
         write_projected_document(document, tmp_path / "TooSmall.json", max_main_bytes=minimum - 1)
 ```
 
-- [ ] **Step 2: Run the focused tests and verify the registry is absent**
+- [x] **Step 2: Run the focused tests and verify the registry is absent**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_asset_projections.py tests/test_single_output.py tests/test_material_graph.py tests/test_size_baseline.py -q`
 
 Expected: import or registry assertions fail before the projection layer exists; existing material graph tests remain the decoder evidence.
 
-- [ ] **Step 3: Implement embedded projection records and deterministic dispatch**
+- [x] **Step 3: Implement embedded projection records and deterministic dispatch**
 
 Implement embedded `ProjectionRecord` records and `ProjectorRegistry` with these rules:
 
@@ -4346,7 +4346,7 @@ already in `objects[].semantic`. Register
 those semantic kinds; otherwise the registry must emit their explicit
 unavailable capability rather than treating them as ordinary Blueprints.
 
-- [ ] **Step 4: Implement material builder and structured-data projectors**
+- [x] **Step 4: Implement material builder and structured-data projectors**
 
 `material_builder.py` emits editor-only C++ that creates expressions and connects material properties through the equivalent `UMaterialEditingLibrary` operations. It must never emit HLSL, shader bytecode, or a normal runtime `UMaterial` subclass claim.
 
@@ -4386,7 +4386,7 @@ projection status vocabulary has no separate `partial` value.
 
 When the required semantic record is absent, emit an empty projection only with `unavailable` status and a diagnostic code; do not invent a field list or value from positional bytes.
 
-- [ ] **Step 5: Implement single-document materialization**
+- [x] **Step 5: Implement single-document materialization**
 
 `build_canonical_document(document) -> dict[str, Any]` materializes all object
 records and all registry projections with no selection or pagination. It is the
@@ -4407,7 +4407,7 @@ document exceeds an explicitly supplied limit. The writer uses UTF-8 byte
 length, not Python character count. No test uses an arbitrary limit to pretend
 that a sidecar was necessary.
 
-- [ ] **Step 6: Run projection tests and commit**
+- [x] **Step 6: Run projection tests and commit**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_asset_projections.py tests/test_single_output.py tests/test_material_graph.py tests/test_blueprint_cpp.py tests/test_size_baseline.py -q`
 
@@ -4418,7 +4418,7 @@ git add src/uasset_read/projections src/uasset_read/models/analysis.py src/uasse
 git commit -m "feat: add embedded type-aware asset projections"
 ```
 
-### Task 11: Replace output and CLI plumbing with projections
+### Task 11: Replace output and CLI plumbing with projections — complete
 
 **Files:**
 - Modify: `src/uasset_read/projection.py`
@@ -4443,7 +4443,7 @@ git commit -m "feat: add embedded type-aware asset projections"
 - Retired CLI flags stay retired (`cli.py` retired set`). C++ content is embedded in the canonical projection document, not exposed as a separate output mode or as a resurrection of Gate K `cpp_code` fields on Kismet results.
 - `cli.py:186-188` has a *separate* batch envelope (`format: uasset_read.batch`, `format_version: 1.0`). That is the multi-file batch wrapper, not the per-package projection document. Do **not** change the batch envelope's `format_version` in this task unless a written decision retires or renumbers it; each per-package entry inside `results[]` must carry the v3 canonical document produced by `build_canonical_document`.
 
-- [ ] **Step 1: Write projection consistency tests**
+- [x] **Step 1: Write projection consistency tests**
 
 ```python
 # tests/test_projection_v3.py
@@ -4478,17 +4478,17 @@ def test_projection_embeds_type_aware_content(document):
     assert all(item["embedded"] for item in output["projections"])
 ```
 
-- [ ] **Step 2: Run output tests and verify old plumbing fails the v3 assertions**
+- [x] **Step 2: Run output tests and verify old plumbing fails the v3 assertions**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_projection_v3.py tests/test_cli.py tests/test_payload_extraction.py tests/test_size_baseline.py -q`
 
 Expected: format version, projection, or C++ command assertions fail before migration.
 
-- [ ] **Step 3: Make `package.py` a thin orchestration entrypoint**
+- [x] **Step 3: Make `package.py` a thin orchestration entrypoint**
 
 Route source detection → layout → reader → property decode → domain registry → analysis → projection through the named modules. Cache keys must include source/container/mapping stats (path, size, layout kind, usmap id when present).
 
-- [ ] **Step 4: Wire the CLI to the canonical output writer and embedded projections**
+- [x] **Step 4: Wire the CLI to the canonical output writer and embedded projections**
 
 ```text
 python -m uasset_read <path> --depth decode --view semantic -o out/<package>.json
@@ -4503,11 +4503,11 @@ responses may continue to use the bounded `project_document()` API. Batch mode
 keeps its v1 wrapper while each `results[]` item is an independently complete
 v3 package document.
 
-- [ ] **Step 5: Update Agent tools to project the same document**
+- [x] **Step 5: Update Agent tools to project the same document**
 
 Keep the six tool purposes (`inspect_package`, `list_objects`, `get_object`, `list_dependencies`, `get_diagnostics`, `extract_payload`). Implement them by calling the v3 projection layer with selection/pagination/`max_bytes` applied after semantic projection. Expose embedded projection records and capabilities through `get_object`; sidecar materialization is outside this core task and is never an Agent transport. Do not reintroduce process-global logging.
 
-- [ ] **Step 6: Run CLI/Agent/projection tests and commit**
+- [x] **Step 6: Run CLI/Agent/projection tests and commit**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_projection_v3.py tests/test_cli.py tests/test_payload_extraction.py tests/test_core.py tests/test_size_baseline.py -q`
 
@@ -4518,7 +4518,7 @@ git add src/uasset_read/projection.py src/uasset_read/cli.py src/uasset_read/age
 git commit -m "refactor: route outputs through package document projections"
 ```
 
-### Task 12: Add sample quality gates and complete verification
+### Task 12: Add sample quality gates and complete verification — complete
 
 **Files:**
 - Create: `tests/test_complete_samples.py`
@@ -4546,7 +4546,7 @@ git commit -m "refactor: route outputs through package document projections"
 | 9 | byte accounting | every requested non-empty export scope has non-empty, contiguous, non-overlapping decoded/opaque/payload/unavailable leaves |
 | 10 | suite | full pytest + structure/size/quality baselines |
 
-- [ ] **Step 1: Write sample acceptance tests**
+- [x] **Step 1: Write sample acceptance tests**
 
 ```python
 # tests/test_complete_samples.py
@@ -4623,21 +4623,21 @@ def test_every_requested_export_is_fully_accounted(stackobot_document):
         scope.validate_full_coverage()
 ```
 
-- [ ] **Step 2: Run the sample tests and record real failures**
+- [x] **Step 2: Run the sample tests and record real failures**
 
 Run: `$env:PYTHONPATH='src'; python -m pytest tests/test_complete_samples.py tests/test_size_baseline.py -q`
 
 Expected: failures identify remaining parser gaps by sample and feature, not generic assertion noise.
 
-- [ ] **Step 3: Generate quality-v3 evidence under `temp/`**
+- [x] **Step 3: Generate quality-v3 evidence under `temp/`**
 
 Run the parser for StackOBot Blueprint, UE5.8 Blueprint, StackOBot Material, unversioned samples, and available container fixtures. Store one canonical JSON output per sample containing diagnostics, the complete Blueprint semantic trace, Blueprint C++ declaration/migration projections, Material graph/editor-builder projections, available DataTable/CurveTable/struct/enum projections, and the type capability matrix under `temp/quality-v3/`. Do not generate sidecars unless a measured hard safety/size failure is recorded and a follow-up boundary is explicitly enabled. Include a short README listing commands and git SHA. `temp/` outputs are investigation artifacts and are not staged; only fixtures, tests, manifest facts, and measured baselines are committed.
 
-- [ ] **Step 4: Update only measured baselines**
+- [x] **Step 4: Update only measured baselines**
 
 Update `tests/samples/quality_baseline.json` and `tests/size-baseline.json` from the generated evidence. Add the gate samples that are currently missing from the quality baseline (StackOBot BP, UE58 BP/Material, StackOBot material). Do not suppress a parser failure by widening a baseline or marking an unavailable feature complete.
 
-- [ ] **Step 5: Run all verification commands**
+- [x] **Step 5: Run all verification commands**
 
 Run:
 
@@ -4649,7 +4649,7 @@ python -m compileall -q src
 
 Expected: all tests pass, all baseline gates pass, every discovered Blueprint instruction has a translation status, every sampled non-Blueprint asset has either its best-fit embedded projection or an explicit capability/diagnostic outcome, and ordinary samples produce one canonical JSON file each.
 
-- [ ] **Step 6: Commit the acceptance gate and close the plan**
+- [x] **Step 6: Commit the acceptance gate and close the plan**
 
 Commit:
 
@@ -4660,29 +4660,29 @@ git commit -m "test: add complete parser quality gates"
 
 ## Final Review Checklist
 
-- [ ] `PackageDocument` is the only aggregate passed to JSON, CLI, Python, Agent, and C++ projections.
-- [ ] Edit Playbook E1: `objects[].semantic` is a dict at the document boundary; typed IR is not required by fixtures/CLI.
-- [ ] Edit Playbook E2: Legacy `PackageArchive` remains the reader owner; any temporary source adapter has one explicit consumer and is deleted with that migration, with no duplicate table-reader stack.
-- [ ] No reference project is imported, executed, spawned, or required at runtime.
-- [ ] Legacy and Zen readers have separate format-specific code paths; real Zen payload support remains `unverified` unless a committed fixture proves it.
-- [ ] Tagged and unversioned readers cannot silently substitute for each other.
-- [ ] `exec_chains` is documented and implemented as a derived direct-edge summary, not runtime simulation.
-- [ ] Blueprint functions expose instructions, CFG, calls, variable accesses, variable definitions, and unresolved records; declarations are not conflated with accesses.
-- [ ] Kismet `statement_index` is the UE logical `CodeOffset` coordinate, `statement_ordinal` is list order, and both logical and physical ranges are preserved.
-- [ ] Every correlated call, variable, and entrypoint carries `match_method`, bounded `confidence`, and truthful `unresolved` state.
-- [ ] Material expressions expose nodes and links when present.
-- [ ] C++ declaration AST matches the normalized UE5.8 declaration oracle and covers the Blueprint Header View scope.
-- [ ] C++ migration output is traceable, status-bearing, and never claims native-body equivalence.
-- [ ] Type-aware projection registry has one deterministic owner per proven asset family and does not duplicate the generic object/semantic trace or require every asset to produce C++.
-- [ ] Material output distinguishes graph JSON from editor-builder C++; it never claims shader/HLSL equivalence.
-- [ ] DataTable and CurveTable output uses stable CSV/JSON structures, with optional C++ initializers only when values are decoded.
-- [ ] UserDefinedStruct/Enum and MaterialInstance have explicit declaration/data capabilities; physical/binary assets use metadata/payload references unless an evidenced projector exists.
-- [ ] Every embedded projection has a source object ID, media type, content or explicit `unavailable` status, completeness, dependencies, and diagnostics.
-- [ ] One input package produces one canonical JSON document; ordinary asset, graph, function, and export boundaries never split it.
-- [ ] `build_canonical_document()`/`write_projected_document()` are separate from paginated `project_document()` responses; canonical files contain all object IDs.
-- [ ] The core writer keeps one canonical file and rejects an explicitly impossible size limit before writing; automatic sidecars remain a separately enabled, measured hard size/safety boundary with path, size, SHA-256, source range, and reason.
-- [ ] Cooked-away, encrypted, missing, and unknown data are reported as unavailable/opaque with reasons.
-- [ ] Full tests, quality baseline, size baseline, and compileall verification pass.
+- [x] `PackageDocument` is the only aggregate passed to JSON, CLI, Python, Agent, and C++ projections.
+- [x] Edit Playbook E1: `objects[].semantic` is a dict at the document boundary; typed IR is not required by fixtures/CLI.
+- [x] Edit Playbook E2: Legacy `PackageArchive` remains the reader owner; any temporary source adapter has one explicit consumer and is deleted with that migration, with no duplicate table-reader stack.
+- [x] No reference project is imported, executed, spawned, or required at runtime.
+- [x] Legacy and Zen readers have separate format-specific code paths; real Zen payload support remains `unverified` unless a committed fixture proves it.
+- [x] Tagged and unversioned readers cannot silently substitute for each other.
+- [x] `exec_chains` is documented and implemented as a derived direct-edge summary, not runtime simulation.
+- [x] Blueprint functions expose instructions, CFG, calls, variable accesses, variable definitions, and unresolved records; declarations are not conflated with accesses.
+- [x] Kismet `statement_index` is the UE logical `CodeOffset` coordinate, `statement_ordinal` is list order, and both logical and physical ranges are preserved.
+- [x] Every correlated call, variable, and entrypoint carries `match_method`, bounded `confidence`, and truthful `unresolved` state.
+- [x] Material expressions expose nodes and links when present.
+- [x] C++ declaration AST matches the normalized UE5.8 declaration oracle and covers the Blueprint Header View scope.
+- [x] C++ migration output is traceable, status-bearing, and never claims native-body equivalence.
+- [x] Type-aware projection registry has one deterministic owner per proven asset family and does not duplicate the generic object/semantic trace or require every asset to produce C++.
+- [x] Material output distinguishes graph JSON from editor-builder C++; it never claims shader/HLSL equivalence.
+- [x] DataTable and CurveTable output uses stable CSV/JSON structures, with optional C++ initializers only when values are decoded.
+- [x] UserDefinedStruct/Enum and MaterialInstance have explicit declaration/data capabilities; physical/binary assets use metadata/payload references unless an evidenced projector exists.
+- [x] Every embedded projection has a source object ID, media type, content or explicit `unavailable` status, completeness, dependencies, and diagnostics.
+- [x] One input package produces one canonical JSON document; ordinary asset, graph, function, and export boundaries never split it.
+- [x] `build_canonical_document()`/`write_projected_document()` are separate from paginated `project_document()` responses; canonical files contain all object IDs.
+- [x] The core writer keeps one canonical file and rejects an explicitly impossible size limit before writing; automatic sidecars remain a separately enabled, measured hard size/safety boundary with path, size, SHA-256, source range, and reason.
+- [x] Cooked-away, encrypted, missing, and unknown data are reported as unavailable/opaque with reasons.
+- [x] Full tests, quality baseline, size baseline, and compileall verification pass.
 
 ## Evidence Appendix (immutable citations for implementers)
 
