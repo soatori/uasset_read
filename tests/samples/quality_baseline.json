@@ -77,6 +77,63 @@
         }
       }
     },
+    "StackOBot_BP_Drone.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {
+        "EXPORT_TRAILING_BYTES_UNCONSUMED": {
+          "editor_only": {
+            "max": 19
+          }
+        }
+      }
+    },
+    "MyProject_UE58_TestBlueprint.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {
+        "EXPORT_TRAILING_BYTES_UNCONSUMED": {
+          "editor_only": {
+            "max": 14
+          }
+        }
+      }
+    },
+    "StackOBot_M_BotBase.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {}
+    },
+    "BP_UnversionedTest.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {}
+    },
+    "DA_UnversionedTest.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {}
+    },
     "ALS_AnimBP.uasset": {
       "depth": "asset",
       "forbidden_codes": [

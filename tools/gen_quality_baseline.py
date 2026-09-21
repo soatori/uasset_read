@@ -22,6 +22,12 @@ SEED = [
     "FirstPerson_BS_Idle_Walk_Run.uasset",
     "ALS_Mannequin_Skeleton.uasset",
     "BP_CombatCharacter.uasset",
+    # R5 gate samples (plan Task 12 acceptance table).
+    "StackOBot_BP_Drone.uasset",
+    "MyProject_UE58_TestBlueprint.uasset",
+    "StackOBot_M_BotBase.uasset",
+    "BP_UnversionedTest.uasset",
+    "DA_UnversionedTest.uasset",
 ]
 
 OPT_IN_SEED = [
