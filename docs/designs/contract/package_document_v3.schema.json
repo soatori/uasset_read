@@ -634,9 +634,10 @@
             "known_unimplemented",
             "recovered_corruption",
             "conservative_complete",
+            "schema_required",
             "unexpected"
           ],
-          "description": "Optional classification of why this diagnostic was emitted. Omitted when unset."
+          "description": "Optional classification of why this diagnostic was emitted. Omitted when unset. Mirrors models.diagnostics.DiagnosticReason."
         },
         "fallback": {
           "type": "string",

@@ -1,9 +1,11 @@
 """Canonical single-document materialization for type-aware projections (R3).
 
 ``build_canonical_document`` always includes every object id, semantic data,
-projection records, capabilities, diagnostics, and payload references.
-``write_projected_document`` serializes one UTF-8 JSON file and never
-implements automatic sidecars.
+projection records, diagnostics, payload references, and byte-accounting
+scopes in the v3 contract shape. ``write_projected_document`` serializes one
+UTF-8 JSON file and never implements automatic sidecars. Capability status
+rides each projection record (status/completeness); the matrix itself stays
+on ``uasset_read.projections.registry.CAPABILITY_MATRIX``.
 """
 
 from __future__ import annotations
@@ -12,7 +14,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from uasset_read.models.byte_ranges import project_region
 from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.models.document import PackageDocument
 from uasset_read.projection import (
@@ -21,8 +22,8 @@ from uasset_read.projection import (
     dependency_to_dict,
     obj_to_dict,
 )
-from uasset_read.projections.records import ProjectionRecord, projection_to_dict
-from uasset_read.projections.registry import CAPABILITY_MATRIX, ProjectorRegistry
+from uasset_read.projections.records import projection_to_dict
+from uasset_read.projections.registry import ProjectorRegistry
 
 
 class OutputBudgetError(ValueError):
@@ -37,7 +38,10 @@ def _diagnostic_dicts(items: list[Diagnostic]) -> list[dict[str, Any]]:
 
 
 def _payload_references(document: PackageDocument) -> list[dict[str, Any]]:
-    """Payload descriptors referenced by export serial regions (never embedded bytes)."""
+    """Payload descriptors referenced by export serial regions (never embedded bytes).
+
+    Keys match contract PayloadDescriptor: no extra ``payload_ref`` field.
+    """
     payloads: list[dict[str, Any]] = []
     for obj in document.objects:
         if not obj.id.startswith("export:"):
@@ -55,10 +59,43 @@ def _payload_references(document: PackageDocument) -> list[dict[str, Any]]:
                 "offset": region.start,
                 "stored_size": region.size,
                 "status": "available",
-                "payload_ref": payload_ref,
             }
         )
     return payloads
+
+
+def _byte_accounting_array(document: PackageDocument) -> list[dict[str, Any]]:
+    """Contract-shaped byte-accounting scopes (array of ByteAccountingScope)."""
+    objects_by_id = {obj.id: obj for obj in document.objects}
+    scopes: list[dict[str, Any]] = []
+    for scope_id, scope in document.byte_accounting.scopes.items():
+        obj = objects_by_id.get(scope_id)
+        if obj is not None and obj.serial_region is not None:
+            window = {"offset": obj.serial_region.start, "size": obj.serial_region.size}
+        elif scope.leaves:
+            window = {"offset": scope.leaves[0].start, "size": scope.size}
+        else:
+            window = {"offset": 0, "size": 0}
+        leaves = []
+        for leaf in scope.leaves:
+            entry: dict[str, Any] = {
+                "offset": leaf.start,
+                "size": leaf.size,
+                "status": leaf.status,
+            }
+            if leaf.reason:
+                entry["reason"] = leaf.reason
+            if leaf.payload_ref:
+                entry["payload_ref"] = leaf.payload_ref
+            leaves.append(entry)
+        scopes.append(
+            {
+                "object_id": scope_id,
+                "window": window,
+                "leaves": leaves,
+            }
+        )
+    return scopes
 
 
 def _object_entry(obj: Any) -> dict[str, Any]:
@@ -79,12 +116,14 @@ def build_canonical_document(
     projections = build_projection_records(document, registry=registry)
     package = document.package
     source = document.source
+    # Envelope keys match docs/designs/contract/package_document_v3.schema.json:
+    # no top-level layout/capabilities (layout lives on package; capability
+    # status rides each projection record via status/completeness).
     return {
         "format": "uasset_read.package",
         "format_version": FORMAT_VERSION,
         "view": "semantic",
         "depth": document.depth,
-        "layout": document.layout,
         "source": None
         if source is None
         else {"kind": source.kind, "name": source.name, "size": source.size},
@@ -108,7 +147,6 @@ def build_canonical_document(
         ],
         "dependencies": [dependency_to_dict(dep) for dep in document.dependencies],
         "projections": [projection_to_dict(item) for item in projections],
-        "capabilities": [dict(entry) for entry in CAPABILITY_MATRIX],
         "sidecars": [],
         "payloads": _payload_references(document),
         "diagnostics": _diagnostic_dicts(document.diagnostics + document.reader_diagnostics),
@@ -118,16 +156,7 @@ def build_canonical_document(
             "total_imports": document.summary.total_imports,
             "total_exports": document.summary.total_exports,
         },
-        "byte_accounting": {
-            "scopes": [
-                {
-                    "scope_id": scope_id,
-                    "object_id": scope_id,
-                    "leaves": [project_region(leaf) for leaf in scope.leaves],
-                }
-                for scope_id, scope in document.byte_accounting.scopes.items()
-            ]
-        },
+        "byte_accounting": _byte_accounting_array(document),
     }
 
 

@@ -321,10 +321,25 @@ def main():
         _handle_list_package_files(args.file)
         return
 
-    # Canonical file path: one complete format_version 3.0 document.
-    # Never paginated; --limit/--offset/object selection are usage errors.
+    # File output paths:
+    # - --max-bytes is a bounded-response contract ("truncates objects to fit"),
+    #   so -o + --max-bytes writes project_document(..., max_bytes=N) to the file.
+    # - -o without --max-bytes materializes the complete format_version 3.0
+    #   canonical document via write_projected_document.
+    # --limit is a usage error on either path: canonical docs never paginate,
+    # and the CLI does not expose object paging into files.
     if args.output:
         _reject_bounded_flags_for_canonical(args, context="-o/--output")
+        if args.max_bytes is not None:
+            try:
+                projected = _parse_and_project(file_path, args)
+                output_str = json.dumps(projected, ensure_ascii=False, separators=(",", ":"))
+                _write_output(output_str, args.output)
+            except Exception as e:
+                _logger.debug("Budgeted file write error (full): %s", e, exc_info=True)
+                print(f"Error: {_sanitize_error_message(e)}", file=sys.stderr)
+                sys.exit(EXIT_PARSE_ERROR)
+            sys.exit(EXIT_SUCCESS)
         try:
             path = _parse_and_write_canonical(file_path, args, Path(args.output))
             print(f"Output written to {path}", file=sys.stderr)

@@ -91,30 +91,68 @@ def matches_family(
     return (obj.class_name or "") in class_names
 
 
+def _completeness_label(status: str, completeness: float | None) -> str:
+    """Map internal completeness ratio to the v3 contract enum string.
+
+    Internal projectors keep a measured float|None; the document boundary
+    publishes the schema vocabulary: complete/partial/opaque/unavailable/failed.
+    """
+    if status == "unavailable":
+        return "unavailable"
+    if completeness is None:
+        # Represented/translated content without a measured ratio is complete
+        # for what the projector claims; untranslated without a ratio is not.
+        return "complete" if status in {"translated", "represented"} else "unavailable"
+    if completeness >= 1.0:
+        return "complete"
+    if completeness > 0:
+        return "partial"
+    return "unavailable"
+
+
 def projection_to_dict(record: ProjectionRecord) -> dict[str, Any]:
-    """JSON-safe projection record for the canonical document envelope."""
-    return {
+    """JSON-safe projection record for the v3 contract envelope.
+
+    Contract rules (package_document_v3.schema.json):
+    - ``completeness`` is the capability enum string, not a float.
+    - Embedded records carry ``content`` + ``provenance`` and omit ``external``.
+    - External records carry ``external`` and omit ``content``.
+    - Unknown keys (``source_range`` on ProjectionRecord) are never emitted.
+    """
+    out: dict[str, Any] = {
         "kind": record.kind,
         "source_object_id": record.source_object_id,
         "media_type": record.media_type,
-        "content": record.content,
         "embedded": record.embedded,
         "status": record.status,
-        "completeness": record.completeness,
+        "completeness": _completeness_label(record.status, record.completeness),
         "dependencies": list(record.dependencies),
         "diagnostics": [
             item.to_dict() if hasattr(item, "to_dict") else item for item in record.diagnostics
         ],
-        "source_range": project_region(record.source_range),
-        "external": None if record.external is None else {
-            "path": record.external.path,
-            "size": record.external.size,
-            "sha256": record.external.sha256,
-            "reason": record.external.reason,
-            "source_range": project_region(record.external.source_range),
-            "projection_kind": record.external.projection_kind,
-        },
     }
+    if record.embedded:
+        out["content"] = record.content
+        out["provenance"] = {
+            "derived_from": [record.source_object_id, *record.dependencies],
+            "generator": f"uasset_read.projections.{record.kind}",
+        }
+    else:
+        external = record.external
+        if external is None:
+            raise ValueError(
+                f"non-embedded projection {record.kind!r} for {record.source_object_id} "
+                "requires an external sidecar record"
+            )
+        out["external"] = {
+            "path": external.path,
+            "size": external.size,
+            "sha256": external.sha256,
+            "reason": external.reason,
+            "source_range": project_region(external.source_range),
+            "projection_kind": external.projection_kind,
+        }
+    return out
 
 
 def unavailable_records(
