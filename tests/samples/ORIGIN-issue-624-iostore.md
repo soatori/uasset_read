@@ -64,3 +64,37 @@ The `chunks_of_type(id)` method indexes into these by type id.
 - `.ucas`: Variable-size payload. Each chunk's offset/length pair in the TOC's entry-meta
   array points into the `.ucas` byte stream. The reader validates that
   `offset + length <= file_size` for every entry.
+
+## Fixture intake status — still blocked (plan Task 2, 2026-09-21)
+
+Candidate search and measurement via `read_toc()` / `inspect_container()`. No fixture was
+intaken; no manifest-integrity test was added.
+
+| Candidate | On disk | Commit status | Verdict |
+|-----------|---------|---------------|---------|
+| `MyProject-Windows.utoc` + `.ucas` | Yes (both; hashes above re-verified) | `.utoc` tracked; `.ucas` gitignored (`tests/samples/containers/MyProject-Windows.ucas`) and 259,193,536 B > GitHub 100 MB limit | Structurally valid but **not committable**; kept as historical evidence only |
+| `global.utoc` + `.ucas` | Yes (both) | Both tracked | **Rejected**: measured `entry_count=1`, the single chunk is type `ScriptObjects` (type id 5), `package_files()` is empty — no `ExportBundleData` package chunk, so no package bytes to decode |
+
+Measured primary-container facts (not in the tables above, from `read_toc()` on the hashed
+`.utoc`): `container_flags=0x9` (compressed | directory index; not signed, not encrypted),
+mount point `../../../`, 575 `ExportBundleData` chunks addressed by 575 directory-index
+package paths (e.g. `../../../MyProject/Content/Test/TestBlueprint.uasset` → chunk index
+2204, `ExportBundleData`, compressed, logical length 3204). Of the 575 package chunks,
+213 are uncompressed (method `None`, no codec required) and 362 are compressed; the block
+table uses methods `None` (5036 blocks), `Oodle` (1564), and method index 255 (94 blocks,
+not listed in the header method table — unverified). Expected per-package object counts
+are not measurable until a Zen decode path exists.
+
+**Still missing for fixture intake:**
+
+1. A committable (or in-repo-approved external-artifact) pair providing at least one
+   `ExportBundleData` package chunk's bytes — no `ZenFixture.utoc`/`.ucas` exists and no
+   approved external-artifact manifest path is documented in the repository.
+2. Consequently: no `test_iostore_fixture_manifest_matches_files()`, no provenance table
+   for an intaken fixture, and no skip/xfail placeholder. The historical 247 MB manifest
+   rows above remain the fixture-gap evidence, not a real-package decode fixture.
+
+Note: the `global.utoc` header table above (entry count 2 / `("None", "Oodle")` / 5
+blocks) disagrees with a fresh `read_toc()` of the hashed file (1 entry, `("None",)`,
+49 blocks); treat the fresh measurement as authoritative until re-measured otherwise.
+`global.ucas` is tracked in git despite the "not committed" annotation above.
