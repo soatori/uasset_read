@@ -10,10 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from uasset_read.kismet.native_fields import (
-    NativeFieldDeclaration,
-    build_native_function_signature,
-)
+from uasset_read.kismet.native_fields import NativeFieldDeclaration
 from uasset_read.models.analysis import (
     BlueprintDeclaration,
     BlueprintGraph,
@@ -495,8 +492,13 @@ def _function_signature_text(fn: CppFunctionDecl, *, annotate_unresolved: bool =
             prefix = "/* out */ "
         elif p.direction == "inout":
             prefix = "/* inout */ "
-        params.append(f"{prefix}{_render_type(p.type, annotate_unresolved=annotate_unresolved)} {p.name}")
+        type_text = _render_type(p.type, annotate_unresolved=annotate_unresolved)
+        if getattr(p.type, "is_reference", False) and not type_text.endswith("&"):
+            type_text = f"{type_text}&"
+        params.append(f"{prefix}{type_text} {p.name}")
     return_type = _render_type(fn.return_type, annotate_unresolved=annotate_unresolved)
+    if getattr(fn.return_type, "is_reference", False) and not return_type.endswith("&"):
+        return_type = f"{return_type}&"
     joined = ", ".join(params)
     return f"{return_type} {fn.name}({joined})"
 
@@ -544,6 +546,9 @@ def _render_header(decl: CppClassDecl, diagnostics: list[Diagnostic]) -> str:
     for fn in decl.functions:
         sig = _function_signature_text(fn, annotate_unresolved=True)
         lines.append("    UFUNCTION()")
+        native_sig = getattr(fn, "native_signature", None)
+        if native_sig:
+            lines.append(f"    // native: {native_sig}")
         lines.append(f"    {sig};")
         if not fn.return_type.resolved:
             diagnostics.append(
@@ -838,7 +843,12 @@ def _migration_statements(semantic: BlueprintSemantic) -> tuple[list[CppStmt], d
     return statements, stats
 
 
-def _render_source(decl: CppClassDecl, semantic: BlueprintSemantic, statements: list[CppStmt]) -> str:
+def _render_source(
+    decl: CppClassDecl,
+    semantic: BlueprintSemantic,
+    statements: list[CppStmt],
+    diagnostics: list[Diagnostic] | None = None,
+) -> str:
     lines: list[str] = []
     lines.append("// uasset_read C++ migration projection")
     lines.append("// Auditable static reconstruction only — not binary/runtime equivalence.")
@@ -853,11 +863,32 @@ def _render_source(decl: CppClassDecl, semantic: BlueprintSemantic, statements: 
     for name in sorted(n for n in fn_names if n):
         decl_fn = next((f for f in decl.functions if f.name == name), None)
         if decl_fn is not None:
-            sig = _function_signature_text(decl_fn, annotate_unresolved=False)
             if not decl_fn.return_type.resolved:
+                sig = _function_signature_text(decl_fn, annotate_unresolved=True)
                 lines.append(f"// unresolved return type for {name}")
+            else:
+                sig = _function_signature_text(decl_fn, annotate_unresolved=False)
+            native_sig = getattr(decl_fn, "native_signature", None)
+            if native_sig:
+                lines.append(f"// native: {native_sig}")
         else:
-            sig = f"void {name}()"
+            # Functions present only in instruction IR must not be typed silent void.
+            sig = f"/* unresolved: return_type */ return_type {name}()"
+            if diagnostics is not None:
+                diagnostics.append(
+                    Diagnostic(
+                        severity="warning",
+                        code="cpp_projection_unresolved_return",
+                        message=(
+                            f"migration function {name} absent from function_declarations; "
+                            "return type left unresolved"
+                        ),
+                        stage="projections.cpp.migration",
+                        effect="semantic_loss",
+                        recoverable=True,
+                        reason="schema_required",
+                    )
+                )
         owner = f"{decl.name}::{sig}"
         lines.append(owner)
         lines.append("{")
@@ -896,21 +927,6 @@ def _render_source(decl: CppClassDecl, semantic: BlueprintSemantic, statements: 
     return "\n".join(lines) + "\n"
 
 
-def _maybe_native_signature(fn: CppFunctionDecl, decl: FunctionDeclaration) -> None:
-    """Reuse in-tree native helpers when measured native fields exist."""
-    if not decl.native_fields:
-        return
-    try:
-        signature = build_native_function_signature(decl.name, list(decl.native_fields))
-    except Exception:
-        return
-    if not signature:
-        return
-    # Native signature is evidence for specifiers only; AST already carries types.
-    if "native" not in fn.specifiers:
-        fn.specifiers.append(f"native:{signature}")
-
-
 def render_cpp_ir(semantic: BlueprintSemantic, mode: Mode) -> CppProjection:
     """Internal typed-IR renderer used by build_cpp_ast consumers and tests."""
     if mode not in {"declaration", "migration"}:
@@ -918,8 +934,7 @@ def render_cpp_ir(semantic: BlueprintSemantic, mode: Mode) -> CppProjection:
 
     decl = build_cpp_ast(semantic)
     diagnostics: list[Diagnostic] = list(semantic.diagnostics)
-    for fd, fn_decl in zip(semantic.function_declarations, decl.functions):
-        _maybe_native_signature(fn_decl, fd)
+    # Native helper reuse lives in build_cpp_ast / CppFunctionDecl.native_signature.
 
     header = _render_header(decl, diagnostics)
     stats = _empty_stats()
@@ -933,6 +948,8 @@ def render_cpp_ir(semantic: BlueprintSemantic, mode: Mode) -> CppProjection:
         ]
         for fn in decl.functions:
             source_lines.append(f"// {_function_signature_text(fn)};")
+            if getattr(fn, "native_signature", None):
+                source_lines.append(f"// native: {fn.native_signature}")
         source = "\n".join(source_lines) + "\n"
         # Declaration mode does not walk instructions; invariant 0 == 0+0+0+0 holds.
         return CppProjection(
@@ -962,7 +979,7 @@ def render_cpp_ir(semantic: BlueprintSemantic, mode: Mode) -> CppProjection:
                     reason="known_unimplemented",
                 )
             )
-    source = _render_source(decl, semantic, statements)
+    source = _render_source(decl, semantic, statements, diagnostics)
     return CppProjection(
         header_text=header,
         source_text=source,

@@ -11,6 +11,15 @@ import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from uasset_read.kismet.native_fields import (
+    NativeFieldDeclaration,
+    _CPF_ConstParm,
+    _CPF_Parm,
+    _CPF_ReferenceParm,
+    _CPF_ReturnParm,
+    build_native_function_signature,
+    native_field_cpp_type,
+)
 from uasset_read.models.analysis import (
     BlueprintSemantic,
     FunctionDeclaration,
@@ -44,6 +53,8 @@ class CppFunctionDecl:
     params: list[CppParam]
     specifiers: list[str]
     is_const: bool = False
+    # Measured native reflection signature (kismet/native_fields helpers).
+    native_signature: str | None = None
 
 
 @dataclass
@@ -313,9 +324,54 @@ def _graph_signature(semantic: BlueprintSemantic, function_name: str) -> tuple[l
     return params, return_type, measured
 
 
+def _native_function_parts(
+    name: str, fields: list[NativeFieldDeclaration]
+) -> tuple[CppType, list[CppParam], str | None]:
+    """Structured signature from measured native fields via in-tree helpers.
+
+    Uses ``native_field_cpp_type`` for each reflected type and
+    ``build_native_function_signature`` for the auditable signature string.
+    """
+    params: list[CppParam] = []
+    ret = CppType(name="void", resolved=True)
+    for field in fields:
+        flags = field.property_flags or 0
+        if not (flags & _CPF_Parm):
+            continue
+        raw_cpp = native_field_cpp_type(field)
+        resolved = not raw_cpp.startswith("/*")
+        is_ref = bool(flags & _CPF_ReferenceParm)
+        is_const = bool(flags & _CPF_ConstParm)
+        ctype = CppType(name=raw_cpp, is_reference=is_ref, resolved=resolved)
+        if flags & _CPF_ReturnParm:
+            ret = ctype
+            continue
+        if is_ref and not is_const:
+            direction: Literal["in", "out", "inout"] = "out"
+        else:
+            direction = "in"
+        params.append(CppParam(name=field.name or "param", type=ctype, direction=direction))
+    signature: str | None
+    try:
+        signature = build_native_function_signature(name, list(fields))
+    except Exception:
+        signature = None
+    return ret, params, signature
+
+
 def _function_decl(semantic: BlueprintSemantic, fd: FunctionDeclaration) -> CppFunctionDecl:
+    native_params: list[CppParam] | None = None
+    native_ret: CppType | None = None
+    native_sig: str | None = None
+    if fd.native_fields:
+        native_ret, native_params, native_sig = _native_function_parts(fd.name, list(fd.native_fields))
+
     graph_params, graph_return, graph_measured = _graph_signature(semantic, fd.name)
-    if fd.parameters:
+    if native_sig and native_params is not None and native_ret is not None:
+        # Measured native reflection wins for signature fidelity.
+        params = native_params
+        ret = native_ret
+    elif fd.parameters:
         params = [
             CppParam(
                 name=p.name,
@@ -348,6 +404,7 @@ def _function_decl(semantic: BlueprintSemantic, fd: FunctionDeclaration) -> CppF
         params=params,
         specifiers=["UFUNCTION"],
         is_const=False,
+        native_signature=native_sig,
     )
 
 
