@@ -1,4 +1,4 @@
-# Static UAsset v3 Closeout: Review, Merge, and Status Update Implementation Plan
+﻿# Static UAsset v3 Closeout: Review, Merge, and Status Update Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -79,7 +79,7 @@ Do **not** reopen parser/projection source files in this plan unless the control
 - Consumes: HEAD `871ff296` (or later review-fix commits), R6 report 23/23, last full suite 442 passed.
 - Produces: written review verdict (pass / pass-with-fixes / blocked) in this plan file or a short review note under `.superpowers/sdd/.../controller-review.md` on the execution branch; any required fixes committed before Task 3.
 
-- [ ] **Step 1: Freeze the review baseline**
+- [x] **Step 1: Freeze the review baseline**
 
 Run:
 
@@ -93,7 +93,7 @@ git rev-list --count dev-0.6.0..HEAD
 
 Expected: branch `sdd/static-uasset-finish`; clean status; HEAD at `871ff296` or newer; ~30 commits not on `dev-0.6.0`. Record exact HEAD once in the review note.
 
-- [ ] **Step 2: Independent full-suite confirmation (once)**
+- [x] **Step 2: Independent full-suite confirmation (once)**
 
 Run:
 
@@ -106,7 +106,7 @@ Expected: all tests pass (baseline reference: 442 passed) and compileall silent.
 
 If the suite fails: treat as review fail; open a blocked status; do not proceed to merge.
 
-- [ ] **Step 3: Walk the binding invariants against source (not design prose)**
+- [x] **Step 3: Walk the binding invariants against source (not design prose)**
 
 Confirm each item with a concrete file/line or test id. Reject on any failure:
 
@@ -138,7 +138,7 @@ Select-String -Path src/uasset_read/projection.py -Pattern 'FORMAT_VERSION'
 
 Expected: first command prints no forbidden paths (or only historically explained paths — investigate any hit); cpp_render has no Gate K fields; `FORMAT_VERSION = "3.0"` present.
 
-- [ ] **Step 4: Sample-facing golden-path spot check**
+- [x] **Step 4: Sample-facing golden-path spot check**
 
 Run:
 
@@ -148,7 +148,7 @@ $env:PYTHONPATH='src'; python -m pytest tests/test_complete_samples.py tests/tes
 
 Expected: PASS. These are the acceptance surfaces for merge confidence (not a substitute for Task 2’s full suite if already run).
 
-- [ ] **Step 5: Write the review verdict**
+- [x] **Step 5: Write the review verdict**
 
 Create/update (on execution branch, commit only this note if the worktree policy allows committing docs notes):
 
@@ -164,7 +164,7 @@ Create/update (on execution branch, commit only this note if the worktree policy
 
 If defects exist: fix on `sdd/static-uasset-finish` with failing-test-first proof, re-run only the focused tests plus `tests/test_size_baseline.py`, commit, then re-walk only the broken invariant. Do **not** start a second full-suite storm unless the earlier run hung/timed out.
 
-- [ ] **Step 6: Mark this plan’s review checkboxes**
+- [x] **Step 6: Mark this plan’s review checkboxes**
 
 Update Task 1 boxes in this file only after the verdict is `pass`. Commit this plan file on the execution branch if it lives there, or leave for the docs commit in Task 5 — one concern per commit: **do not mix review note + merge + README**.
 
@@ -184,7 +184,7 @@ Update Task 1 boxes in this file only after the verdict is `pass`. Commit this p
 - Consumes: dirty main-checkout status; committed execution-branch doc versions at `871ff296`.
 - Produces: main checkout with a mergeable index/worktree for the three related docs (plus intentional `.gitignore` decision); ALS file left untracked/untouched.
 
-- [ ] **Step 1: Capture main checkout baseline**
+- [x] **Step 1: Capture main checkout baseline**
 
 Run:
 
@@ -199,7 +199,7 @@ git diff -- .gitignore
 
 Expected: branch `dev-0.6.0`; four modified paths + one untracked ALS plan. Record `.gitignore` diff content in the task note.
 
-- [ ] **Step 2: Decide per dirty path**
+- [x] **Step 2: Decide per dirty path**
 
 For each of the three related docs:
 
@@ -215,7 +215,7 @@ For `.gitignore`:
 
 Expected after Step 2: `git status --short` shows only the untracked ALS file (and nothing else, unless a deliberate pre-merge `.gitignore` commit was made).
 
-- [ ] **Step 3: Confirm merge is still conflict-free on the real trees**
+- [x] **Step 3: Confirm merge is still conflict-free on the real trees**
 
 Run:
 
@@ -225,7 +225,7 @@ git merge-tree --write-tree dev-0.6.0 sdd/static-uasset-finish
 
 Expected: a single tree object id, no `CONFLICT` lines. If conflicts appear, resolve them as **execution-branch versions win for the four related docs**, unless AGENTS.md rules are violated; never resolve by discarding implementation commits.
 
-- [ ] **Step 4: Reconfirm clean status**
+- [x] **Step 4: Reconfirm clean status**
 
 Run:
 
@@ -247,7 +247,7 @@ Expected: clean except untracked `docs/plans/2026-09-16-als-name-index-and-optin
 - Consumes: Task 1 verdict `pass`; Task 2 clean main checkout; committed-tree merge preview without conflicts.
 - Produces: `dev-0.6.0` containing Tasks 1–12 source/tests/docs; working tree clean; no push.
 
-- [ ] **Step 1: Create the merge commit**
+- [x] **Step 1: Create the merge commit**
 
 Run (main checkout, branch `dev-0.6.0`):
 
@@ -261,7 +261,7 @@ git log --oneline -3
 
 Expected: merge succeeds; status clean (ALS untracked remains); HEAD history includes `871ff296` as an ancestor (`git merge-base --is-ancestor sdd/static-uasset-finish HEAD` exits 0).
 
-- [ ] **Step 2: Abort/recover if merge fails**
+- [x] **Step 2: Abort/recover if merge fails**
 
 If git reports conflicts or refuses due to dirty files:
 
@@ -270,7 +270,7 @@ If git reports conflicts or refuses due to dirty files:
 3. Return to Task 2 and fix the dirty/conflicting path.
 4. Retry merge **once**. If the second attempt still fails: mark this plan `blocked`, list attempted commands, and stop (no third blind retry).
 
-- [ ] **Step 3: Verify ancestry and contents**
+- [x] **Step 3: Verify ancestry and contents**
 
 Run:
 
@@ -293,7 +293,7 @@ Expected: `ancestor_exit=0`; `src`/`tests` diff empty (merge landed implementati
 - Consumes: merged `dev-0.6.0` from Task 3.
 - Produces: green full suite + compileall on the user-facing branch; evidence line for Task 5 docs claims.
 
-- [ ] **Step 1: Run the full suite once on merged `dev-0.6.0`**
+- [x] **Step 1: Run the full suite once on merged `dev-0.6.0`**
 
 Run:
 
@@ -304,7 +304,7 @@ $env:PYTHONPATH='src'; python -m pytest -q
 
 Expected: all tests pass (expect 442 or a higher count if only additive). Per limits: **one** full run here; optional second run only if the first hangs/times out.
 
-- [ ] **Step 2: Run baseline gates and compileall**
+- [x] **Step 2: Run baseline gates and compileall**
 
 Run:
 
@@ -324,7 +324,7 @@ If only `tests/test_size_baseline.py` fails on `docs_markdown` growth:
 
 Do not widen any other baseline from estimates. Do not weaken sample/quality gates.
 
-- [ ] **Step 3: Record gate evidence**
+- [x] **Step 3: Record gate evidence**
 
 Write one short note (this plan checkbox text is enough if no review file is required):
 
@@ -352,7 +352,7 @@ Mark Task 4 steps complete only when all three are green.
 - Consumes: Task 4 green evidence; AGENTS.md documentation authority rules.
 - Produces: documented status that matches source+tests on `dev-0.6.0`; no premature feature claims; no machine-local UE paths.
 
-- [ ] **Step 1: Inventory stale claims**
+- [x] **Step 1: Inventory stale claims**
 
 Run:
 
@@ -363,7 +363,7 @@ rg -n "format_version.*2\.0|PackageDocument v2|S1, 2026-09-13|not started|unmerg
 
 List every hit that contradicts Task 4 evidence. Hits inside archive/ are historical — leave them.
 
-- [ ] **Step 2: Rewrite the README status banner**
+- [x] **Step 2: Rewrite the README status banner**
 
 Replace the v2 frozen-contract banner with claims supported by tests, including at least:
 
@@ -375,7 +375,7 @@ Replace the v2 frozen-contract banner with claims supported by tests, including 
 
 Do **not** claim: native C++ body equivalence, Blueprint VM execution, traditional FPak entry extraction, or real Zen package parse.
 
-- [ ] **Step 3: Update design index, spec marker, and plan status rows**
+- [x] **Step 3: Update design index, spec marker, and plan status rows**
 
 1. `docs/designs/README.md` — v3 row still binds as target architecture, but remove “planning status only until source tasks are executed” for the plan link; state Tasks 1–12 implemented on `dev-0.6.0` after gate `<sha>`.
 2. Spec implementation marker — Tasks 1–12 current on `dev-0.6.0`; point to this closeout plan’s gate evidence; keep excluded-scope language (no runtime exec, no native body recovery, Zen unverified).
@@ -383,7 +383,7 @@ Do **not** claim: native C++ body equivalence, Blueprint VM execution, tradition
 4. Remaining plan snapshot — R1–R6 landed via merge; no remaining implementation tasks.
 5. Do not edit `docs/designs/archive/**`.
 
-- [ ] **Step 4: Commit docs in one reviewable commit**
+- [x] **Step 4: Commit docs in one reviewable commit**
 
 Run:
 
@@ -396,7 +396,7 @@ git commit -m "docs: mark static uasset v3 landed on dev-0.6.0"
 
 Expected: only the listed docs (and wiki if needed) staged; ALS file and `reference/` absent.
 
-- [ ] **Step 5: Re-run size ratchet after docs growth**
+- [x] **Step 5: Re-run size ratchet after docs growth**
 
 Run:
 
@@ -406,7 +406,7 @@ $env:PYTHONPATH='src'; python -m pytest tests/test_size_baseline.py -q
 
 Expected: PASS, or FAIL with measured `docs_markdown` ceiling. On FAIL: raise only that measured value, amend **not** used — create a follow-up commit `test: raise docs_markdown ceiling for v3 status docs`, then re-run once.
 
-- [ ] **Step 6: Final verification snapshot**
+- [x] **Step 6: Final verification snapshot**
 
 Run:
 
@@ -421,7 +421,7 @@ Expected: all tests pass; compileall clean; status clean except unrelated ALS un
 
 This second full suite is allowed because Task 5 changed tracked docs/README and the plan requires green-before-done evidence after user-facing edits. If it fails only on size baseline, follow Step 5; if it fails anywhere else, mark Task 5 `blocked` with the failure list — do not claim completion.
 
-- [ ] **Step 7: Close this plan**
+- [x] **Step 7: Close this plan**
 
 Check off remaining boxes; record final HEAD once; state explicitly:
 
