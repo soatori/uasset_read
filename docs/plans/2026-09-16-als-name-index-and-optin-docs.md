@@ -14,6 +14,13 @@
 - Monkeypatch proof: `_TAGGED_FALLBACK_STRUCTS |= {"CachedPoseIndices"}` → 9 map entries with real keys (`AnimGraph`, `FootIK`, …), `OrderedSavedPoseNodeIndices` int arrays populated, **0** `name_index_out_of_range`, tell == map value end.
 - Prior plan residual: `docs/plans/2026-09-15-parser-quality-system.md` ALS AnimBP name_index row; opt-in baseline from `docs/plans/2026-09-16-als-animbp-opt-in-baseline.md`.
 
+## Execution status (2026-09-21, landed on dev-0.6.0)
+
+Commit 79ef692b added CachedPoseIndices to the tagged fallback set, added
+the two ALS regression tests, regenerated the opt-in baseline, documented the
+opt-in command, and recorded the changelog/residual-row updates. The focused ALS
+tests and both default/opt-in quality gates pass.
+
 ## Global Constraints
 
 - Python 3.10+; no new runtime dependencies.
@@ -107,7 +114,7 @@ Use system Python with pytest (e.g. `"C:\Program Files\Python314\python.exe"`).
 - Consumes: `parse_package_document`, fixture `tests/samples/ALS_AnimBP.uasset`
 - Produces: integration assertions for Task 2 and Task 3
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Append to `tests/test_diagnostics_reason.py`:
 
@@ -142,7 +149,7 @@ def test_als_animbp_ordered_saved_pose_indices_map_keys():
     assert "OrderedSavedPoseNodeIndices" in fields, fields
 ```
 
-- [ ] **Step 2: Run to verify FAIL**
+- [x] **Step 2: Run to verify FAIL**
 
 ```powershell
 $env:PYTHONPATH="src"
@@ -151,7 +158,7 @@ python -m pytest tests/test_diagnostics_reason.py -k "als_animbp" -v
 
 Expected: both tests FAIL (`name_index_out_of_range` present; map keys garbage / missing `OrderedSavedPoseNodeIndices` fields).
 
-- [ ] **Step 3: Commit tests only (optional RED commit)**
+- [x] **Step 3: Commit tests only (optional RED commit)**
 
 ```bash
 git add tests/test_diagnostics_reason.py
@@ -169,11 +176,11 @@ git commit -m "test: pin ALS AnimBP name_index residual and pose map keys"
 - Consumes: Task 1 tests
 - Produces: map values consume tagged struct body; OOR disappears
 
-- [ ] **Step 1: Locate `_TAGGED_FALLBACK_STRUCTS`**
+- [x] **Step 1: Locate `_TAGGED_FALLBACK_STRUCTS`**
 
 Open `src/uasset_read/parsers/property_types.py` near the set that already contains `"BPVariableDescription"`, `"EdGraphPinType"`, `"AnimNotifyTrack"`, etc.
 
-- [ ] **Step 2: Add one entry with a short comment**
+- [x] **Step 2: Add one entry with a short comment**
 
 ```python
     # AnimBlueprintGeneratedClass::OrderedSavedPoseIndicesMap values
@@ -183,7 +190,7 @@ Open `src/uasset_read/parsers/property_types.py` near the set that already conta
 
 Insert alphabetically or next to other Anim* entries (`AnimNotifyTrack` is a good neighbor). Do **not** remove any existing set members.
 
-- [ ] **Step 3: Run Task 1 tests to green**
+- [x] **Step 3: Run Task 1 tests to green**
 
 ```powershell
 $env:PYTHONPATH="src"
@@ -192,7 +199,7 @@ python -m pytest tests/test_diagnostics_reason.py -k "als_animbp" -v
 
 Expected: PASS.
 
-- [ ] **Step 4: Broader smoke**
+- [x] **Step 4: Broader smoke**
 
 ```powershell
 $env:PYTHONPATH="src"
@@ -201,7 +208,7 @@ python -m pytest -q tests/test_core.py tests/test_diagnostics_reason.py
 
 Expected: PASS (no parser regressions from a one-name fallback addition).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/uasset_read/parsers/property_types.py tests/test_diagnostics_reason.py
@@ -219,14 +226,14 @@ git commit -m "fix: parse CachedPoseIndices as tagged struct to stop ALS name_in
 - Consumes: Task 2 parse output; `tools/gen_quality_baseline.py` + `OPT_IN_SEED` from prior opt-in plan
 - Produces: ALS entry without `name_index_out_of_range`
 
-- [ ] **Step 1: Regenerate**
+- [x] **Step 1: Regenerate**
 
 ```powershell
 $env:PYTHONPATH="src"
 python tools/gen_quality_baseline.py
 ```
 
-- [ ] **Step 2: Inspect ALS entry**
+- [x] **Step 2: Inspect ALS entry**
 
 In `tests/samples/quality_baseline.json` under `ALS_AnimBP.uasset`:
 
@@ -234,7 +241,7 @@ In `tests/samples/quality_baseline.json` under `ALS_AnimBP.uasset`:
 - **No** `"name_index_out_of_range"` key
 - Trailing keys only (`EXPORT_TRAILING_BYTES_UNCONSUMED` reasons) — ceilings may differ slightly from 1251/577/3 if the fix changes trailing counts; **accept generator output** and note deltas in the report (do not hand-edit numbers)
 
-- [ ] **Step 3: Default gate excludes ALS; opt-in gate includes and passes**
+- [x] **Step 3: Default gate excludes ALS; opt-in gate includes and passes**
 
 ```powershell
 $env:PYTHONPATH="src"
@@ -247,7 +254,7 @@ python -m pytest -q tests/test_samples.py -k quality_baseline -v
 # expected: includes ALS_AnimBP.uasset; PASS
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/samples/quality_baseline.json
@@ -266,7 +273,7 @@ git commit -m "test: drop ALS_AnimBP name_index_out_of_range from quality baseli
 - Consumes: env flag already implemented in opt-in baseline work
 - Produces: discoverable run instructions
 
-- [ ] **Step 1: Add to README Testing section**
+- [x] **Step 1: Add to README Testing section**
 
 After the existing pytest lines, add:
 
@@ -287,11 +294,11 @@ python -m pytest tests/test_samples.py -k quality_baseline
 
 Match the README’s existing shell style (if the file uses bash-style examples, show both or the style already used).
 
-- [ ] **Step 2: Do not touch CI workflows**
+- [x] **Step 2: Do not touch CI workflows**
 
 Confirm `git status` shows no `.github/` changes.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add README.md
@@ -306,17 +313,17 @@ git commit -m "docs: document UASSET_QUALITY_OPT_IN quality baseline opt-in"
 - Modify: `docs/release-notes/changelog.md` (`### Improvements`)
 - Modify: `docs/plans/2026-09-15-parser-quality-system.md` residual table row for ALS name_index (mark fixed)
 
-- [ ] **Step 1: Changelog bullet**
+- [x] **Step 1: Changelog bullet**
 
 ```markdown
 - Parser: `CachedPoseIndices` (AnimBlueprint `OrderedSavedPoseIndicesMap` values) is parsed as a tagged struct. Removes the residual `name_index_out_of_range` on `tests/samples/ALS_AnimBP.uasset`; quality opt-in baseline regenerated.
 ```
 
-- [ ] **Step 2: Residual table**
+- [x] **Step 2: Residual table**
 
 Update the ALS_AnimBP name_index follow-up row so it records fixed-on date / this plan path (keep the row as history; do not delete the table).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/release-notes/changelog.md docs/plans/2026-09-15-parser-quality-system.md
