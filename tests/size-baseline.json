@@ -10,7 +10,7 @@
   },
   "docs_markdown": {
     "min_files": 158,
-    "max_lines": 58560
+    "max_lines": 58603
   },
   "wheel_bytes": {
     "max_bytes": 300000

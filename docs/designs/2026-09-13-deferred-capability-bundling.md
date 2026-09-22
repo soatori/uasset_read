@@ -15,8 +15,8 @@
 | D-PLA | Payload-only parse (route A) | [`2026-08-31-payload-extraction-path.md`](2026-08-31-payload-extraction-path.md) | target; gated on real descriptors, not on perf demand |
 | D-G2 | Shared `PackageDocument` cache | [`2026-08-31-agent-doc-cache-contract.md`](2026-08-31-agent-doc-cache-contract.md) (G2) | target; contract frozen; free-standing |
 | D-BATCH | CLI `--batch` | [`2026-08-31-v1-retirement-plan.md`](2026-08-31-v1-retirement-plan.md) §5 | **current (v2 live)** — directory walk + `uasset_read.batch` report; v1 `batch_worker` orchestration is not rebuilt |
-| D-DIFF | CLI `--diff` | same | deferred; awaits product decision |
-| D-CPP | Blueprint C++ skeleton | Gate K retired the C++ pseudocode chain; Phase 4.5 list keeps skeleton unmigrated | unmigrated; needs explicit product revival |
+| D-DIFF | CLI `--diff` | same | **decided 2026-09-22:** not a product CLI target (F-D); remains unsupported |
+| D-CPP | Blueprint C++ skeleton | Gate K retired the C++ pseudocode chain; Phase 4.5 list keeps skeleton unmigrated | **decided 2026-09-22:** old string-chain skeleton **permanently retired (C-A)**; v3 typed C++ projection is current; any future increment needs a **new** emission design |
 
 ## Edge table (verified against designs and README)
 
@@ -67,11 +67,27 @@ A new implementation plan is required before any Bundle N code lands, and it mus
 ## Open questions for the user
 
 1. ~~Is there a real multi-file orchestration consumer today for `--batch`?~~ Partially answered 2026-09-13: simple directory-walk `--batch` is **live**; the open question is only whether richer orchestration (isolation, resume, formats beyond jsonl) is ever wanted.
-2. What is `--diff`'s comparison target — two `PackageDocument`s, or document vs golden?
-3. Is the Blueprint C++ skeleton ever a wanted product feature, or permanently retired alongside Gate K?
+2. ~~What is `--diff`'s comparison target — two `PackageDocument`s, or document vs golden?~~ **Closed 2026-09-22:** `--diff` is **not** a product CLI target (permanent non-goal F-D). Do not implement.
+3. ~~Is the Blueprint C++ skeleton ever a wanted product feature, or permanently retired alongside Gate K?~~ **Closed 2026-09-22:** old skeleton **permanently retired**; see residual decisions.
 4. Should the known-missing `.ucas` gap (#624 test failures) become the formal Bundle 1 fixture goal, or wait for a separately redistributable Zen package?
 5. Is a loose-sidecar (legacy cooked, no Zen) variant of route A worth a small separate slice, or should route A fold entirely under "real descriptors + Zen"?
 
 **Residual note 2026-09-13:** product answers above remain open except batch live-mode. Residual plan executed Waves A–B only (S1 freeze, batch口径, wiki Gate C local commit, G2 cache); **Wave C/D (Zen/IoStore, SchemaProvider) deferred by user**; diff/Pak/C++ not implemented.
 
 **Out of product scope (2026-09-13):** MCP as an agent transport/server is **not** a repository target. Agent tools remain a bounded in-library API. G3’s trigger is generic multi-threaded registry concurrency, not MCP.
+
+## Residual product decisions (2026-09-22)
+
+Recorded after v3 Tasks 1–12 closeout. These decisions **do not authorize implementation** of deferred capabilities; any later code still requires a separate plan meeting “Next execution trigger”.
+
+| ID | Decision | Rationale |
+| --- | --- | --- |
+| D-SCHEMA | **S-B — continue defer.** No Bundle 2 start; cooked-unversioned fixtures acquisition not authorized this round. Production path stays mapping-driven usmap + opaque fallback. | Protocol/`UsmapSchemaProvider` exist but are not production-wired; no paired cooked fixtures → cannot accept cooked-complete claims. |
+| D-DIFF | **F-D — permanent non-goal.** CLI remains without `--diff`. | No live product need; comparison target never specified; Gate A already limits golden use to regression ID, not schema constraint. |
+| D-CPP (old skeleton) | **C-A — permanently retired.** Gate K string `cpp_code` chain stays retired. v3 typed C++ projection (`projections/`) is current and sufficient until a **new** emission design is explicitly requested. | Avoids second parallel C++ output path; bundling rule 4. |
+| Automatic output sidecar | **Keep single-file canonical writer** (`sidecars[]` empty; oversize → `OutputBudgetError`). Measured size/safety probe in `temp/` remains optional follow-up, **not** scheduled. | Plan invariant: physical sidecars only after a measured hard boundary. |
+| G3 handler registry concurrency | **G-B — remain deferred** until a quantified multi-threaded registry consumer exists (thread pool / async workers / long-lived concurrent service). Single-shot CLI/library use does not trigger. MCP is not in product scope. | Design README G3; no such consumer in-tree. |
+| Bundle 1 Zen/IoStore fixtures | Unchanged: **wait** for redistributable `.utoc/.ucas` (or an explicit acquisition decision). Open question #4 remains open. | Sample acquisition is outside implementation bundles (rule 5). |
+| `docs/superpowers/` / `docs/compose/` tracking | **Keep tracked** on `dev-0.6.0` for the v3 delivery push (planning materials already in history). | Delivery decision; untrack cleanup would be a separate explicit change. |
+
+**Delivery (2026-09-22):** package A design-status docs committed (`2f6aed8c`). Release strategy **A** selected — normal `git push origin dev-0.6.0` (no force; remote `origin` = soatori). Strategy analysis: `temp/C-release-strategy.md` (not committed; `temp/` is ignored). Decision brief evidence: `temp/B-product-decision-brief.md` (ignored).

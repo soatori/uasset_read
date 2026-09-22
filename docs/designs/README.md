@@ -21,19 +21,25 @@ These sit beside the canonical target on purpose. Each carries its own `status:`
 | S2 | [`2026-08-31-payload-extraction-path.md`](2026-08-31-payload-extraction-path.md) | implemented (partial) | Cooked sidecar extraction via BulkData mapping. Zen/`.ucas` and unresolvable `export_index` still return `PAYLOAD_EXTRACTION_DEFERRED`. |
 | S3 | [`2026-08-31-doc-status-marking-spec.md`](2026-08-31-doc-status-marking-spec.md) | current | The status-marking rules this index follows. |
 | — | [`2026-09-02-peer-corroboration-usage-scheme.md`](2026-09-02-peer-corroboration-usage-scheme.md) | current | How external parsers may be used as evidence. |
-| — | [`2026-09-13-deferred-capability-bundling.md`](2026-09-13-deferred-capability-bundling.md) | current | Bundle map for still-deferred work: Zen/IoStore chunk extract, SchemaProvider, `--diff`. Evaluation record only — no implementation. MCP transport is out of product scope. |
+| — | [`2026-09-13-deferred-capability-bundling.md`](2026-09-13-deferred-capability-bundling.md) | current | Bundle map for still-deferred work: Zen/IoStore chunk extract, SchemaProvider. Evaluation record + **2026-09-22 residual product decisions** (SchemaProvider remain defer; `--diff` permanent non-goal; old C++ skeleton permanently retired; sidecar single-file; G3 stay deferred). MCP transport is out of product scope. |
 | — | [`2026-09-13-t15-t13-research-decision.md`](2026-09-13-t15-t13-research-decision.md) | current | Research decision only (**no implementation**). Constrains future T15/T13 work. |
 | — | [`2026-09-15-parser-quality-system.md`](2026-09-15-parser-quality-system.md) | target | Diagnostic.reason taxonomy + sample quality baseline gates. |
-| — | [`../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md`](../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md) · [`../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md`](../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md) | target | Current target row for the intentional v3 break: complete static parsing, Blueprint instruction IR/CFG analysis, typed C++ projection; output schema major `format_version: "3.0"`. Supersedes the archived S1 v2 stable-envelope freeze. |
+| — | [`../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md`](../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md) | target | Current target for the intentional v3 break: complete static parsing, Blueprint instruction IR/CFG analysis, typed C++ projection; output schema major `format_version: "3.0"`. Supersedes the archived S1 v2 stable-envelope freeze. |
+| — | [`../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md`](../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md) | historical / executed | Tasks 1–12 landed on `dev-0.6.0`; this is execution evidence, not an active target or an executable plan. |
 
 ## Executed plans (archive)
 
 Ponytail / productize / byteswap / closeout plans that have already been executed live under [`archive/`](archive/README.md). They are historical evidence and must not be replayed as new work.
 
+Execution records retained under `../superpowers/plans/` are also evidence only when their header says `completed` or `historical`. Agents must not discover or replay them during ordinary implementation, diagnosis, or documentation work. A new execution requires a new plan or an exact path explicitly named by the user.
+
 ## Active v3 implementation target
 
 - [`../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md`](../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md) — target spec for complete static parsing, dual-offset Kismet analysis, and typed Blueprint C++ projection.
-- [`../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md`](../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md) — Tasks 1–12 implemented on `dev-0.6.0` after merge `8727b067` (controller review pass; local full suite 444 passed on this tree).
+
+## v3 Execution Evidence
+
+- [`../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md`](../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md) — Tasks 1–12 implemented on `dev-0.6.0` after merge `8727b067` (controller review pass; local full suite 444 passed on this tree); historical evidence only.
 
 ## Rules
 
@@ -43,3 +49,4 @@ Ponytail / productize / byteswap / closeout plans that have already been execute
 4. Superseded repository-wide designs and executed closeout plans move to `archive/`; they do not remain beside active designs.
 5. Do not add another repository-wide output architecture without updating the canonical target and this index.
 6. Wiki and README pages must distinguish implemented behavior from planned behavior.
+7. Do not use this index as a plan-discovery queue. Read one named document for the current request, then stop when its status is historical, executed, or complete.
