@@ -141,6 +141,13 @@ _KNOWN_UNIMPLEMENTED_PREFIXES = (
     "Anim",
 )
 
+_ANIM_GENERATED_DATA_OBJECTS = frozenset(
+    {
+        "AnimBlueprintGeneratedConstantData",
+        "AnimBlueprintGeneratedMutableData",
+    }
+)
+
 
 def classify_trailing_reason(context: TrailingContext | str) -> DiagnosticReason:
     """Map export trailing-bytes context to a closed reason value.
@@ -162,4 +169,12 @@ def classify_trailing_reason(context: TrailingContext | str) -> DiagnosticReason
         return "known_unimplemented"
     # Identity-rule slot: object_name / outer_name / roles evaluated here
     # (sibling AnimBlueprint plan). Empty by design in this plan.
+    if context.object_name.startswith("Default__") and context.class_name.endswith("_C"):
+        return "known_unimplemented"
+    if (
+        context.object_name in _ANIM_GENERATED_DATA_OBJECTS
+        and context.outer_name is not None
+        and context.outer_name.endswith("_C")
+    ):
+        return "known_unimplemented"
     return "unexpected"

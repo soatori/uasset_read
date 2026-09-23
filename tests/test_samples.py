@@ -1240,23 +1240,6 @@ def test_collision_and_enum_pose_movie_tails_known_unimplemented():
             assert d.size == size, f"{sample}:{name}: {d.size} != {size}"
 
 
-def test_abp_cdo_trailers_remain_unexpected_for_sibling_plan():
-    """Temporary scope fence (retired by sibling plan Task 1): ABP Default__*_C
-    trailers stay unexpected only until the sibling's object-keyed rules land."""
-    from uasset_read.package import parse_package_document
-
-    doc = parse_package_document(str(SAMPLES / "LevelDesign_ABP_Manny.uasset"), depth="asset")
-    by_id = {o.id: o for o in doc.objects}
-    cdo_trailing = [
-        d for d in doc.diagnostics
-        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"
-        and by_id[d.object_id].name.startswith("Default__")
-    ]
-    assert cdo_trailing, "expected the ABP CDO trailer"
-    assert all(d.reason == "unexpected" for d in cdo_trailing)
-    assert all(d.size is not None and d.size > 0 for d in cdo_trailing)
-
-
 def _assert_trailing_aggregate(actual: dict, baseline: dict) -> None:
     assert actual["sample_count"] == baseline["sample_count"], (
         f"aggregate sample_count {actual['sample_count']} != baseline {baseline['sample_count']}; "

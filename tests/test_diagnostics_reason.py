@@ -392,3 +392,109 @@ def test_true_gap_classes_classify_known_unimplemented():
     # Team-lead ruling 2026-09-23: bare ScriptStruct must NOT be class-blanketed —
     # the 5 corpus trailers are AnimBlueprint generated data (sibling plan keys them).
     assert classify_trailing_reason(TrailingContext(class_name="ScriptStruct")) == "unexpected"
+
+
+def test_classify_trailing_reason_native_cdo_and_generated_data():
+    from uasset_read.models.diagnostics import TrailingContext, classify_trailing_reason
+
+    # CDO: Default__ instance whose class is the *_C blueprint generated class
+    # (UBlueprint::GetBlueprintClassName naming; ALS_AnimBP fixture shape).
+    assert (
+        classify_trailing_reason(
+            TrailingContext(class_name="ALS_AnimBP_C", object_name="Default__ALS_AnimBP_C")
+        )
+        == "known_unimplemented"
+    )
+    assert (
+        classify_trailing_reason(
+            TrailingContext(class_name="BP_Foo_C", object_name="Default__BP_Foo_C")
+        )
+        == "known_unimplemented"
+    )
+    # Generated data: AnimBlueprint generated-data structs outered to the *_C class.
+    assert (
+        classify_trailing_reason(
+            TrailingContext(
+                class_name="ScriptStruct",
+                object_name="AnimBlueprintGeneratedConstantData",
+                outer_name="ALS_AnimBP_C",
+            )
+        )
+        == "known_unimplemented"
+    )
+    assert (
+        classify_trailing_reason(
+            TrailingContext(
+                class_name="ScriptStruct",
+                object_name="AnimBlueprintGeneratedMutableData",
+                outer_name="ABP_Manny_C",
+            )
+        )
+        == "known_unimplemented"
+    )
+    # Contract test (team-lead 2026-09-23 ruling): a class-name-alone ScriptStruct
+    # blanket must NOT classify generated data — keying is object name + Outer.
+    assert (
+        classify_trailing_reason(
+            TrailingContext(class_name="ScriptStruct", object_name="AnimBlueprintGeneratedConstantData")
+        )
+        == "unexpected"
+    )
+    # Outer that is not a *_C generated class does not fire the rule.
+    assert (
+        classify_trailing_reason(
+            TrailingContext(
+                class_name="ScriptStruct",
+                object_name="AnimBlueprintGeneratedConstantData",
+                outer_name="SomeActor",
+            )
+        )
+        == "unexpected"
+    )
+    # A *_C object that is not a Default__ instance is not a CDO.
+    assert (
+        classify_trailing_reason(
+            TrailingContext(class_name="ABP_Foo_C", object_name="ABP_Foo_C")
+        )
+        == "unexpected"
+    )
+    # str shorthand keeps class-name-only behavior (no object/outer context).
+    assert classify_trailing_reason("SomeUnknownClass") == "unexpected"
+    assert classify_trailing_reason("ALS_AnimBP_C") == "unexpected"
+
+
+def test_animbp_samples_reclassify_native_trailers_to_known_unimplemented():
+    from uasset_read.package import parse_package_document
+
+    expected = {
+        "ALS_AnimBP.uasset": ("export:0", "export:3393", "export:3394"),
+        "LevelDesign_ABP_Manny.uasset": ("export:0", "export:153", "export:154"),
+        "ABP_RifleAnimLayers.uasset": ("export:0", "export:9"),
+    }
+    for name, object_ids in expected.items():
+        doc = parse_package_document(f"tests/samples/{name}", depth="asset")
+        trailing = {
+            d.object_id: d
+            for d in doc.diagnostics
+            if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"
+        }
+        for oid in object_ids:
+            assert oid in trailing, f"{name}:{oid} missing EXPORT_TRAILING_BYTES_UNCONSUMED"
+            assert trailing[oid].reason == "known_unimplemented", (
+                f"{name}:{oid} reason={trailing[oid].reason}"
+            )
+        unexpected = [
+            d.object_id
+            for d in doc.diagnostics
+            if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.reason == "unexpected"
+        ]
+        assert unexpected == [], f"{name}: unexpected trailers remain {unexpected}"
+
+    # The largest native body keeps its disclosed byte count (reclassified, not suppressed).
+    als = parse_package_document("tests/samples/ALS_AnimBP.uasset", depth="asset")
+    cdo = next(
+        d
+        for d in als.diagnostics
+        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id == "export:0"
+    )
+    assert "leaves 605230 undecoded bytes" in (cdo.message or "")
