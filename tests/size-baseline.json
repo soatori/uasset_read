@@ -1,12 +1,12 @@
 {
-  "_note": "Ratchet ceilings. Raised 2026-09-21 R5 + fix round 1/5 from measured pytest size-baseline failure output: src_python 28913, tests_python 10852. Raised 2026-09-21 R6 docs_markdown 57766 (parent plan + remaining plan + spec marker; files=166). Raised 2026-09-21 post-merge docs_markdown 57766→58201 from measured pytest failure after README/spec/status updates + closeout plan (files=167). Raised 2026-09-21 docs_markdown 58201→58552 from measured pytest failure after committing the ALS AnimBP residual plan (files=168). Raise only as a deliberate reviewable diff. Raised 2026-09-21 ALS residual + plan checkbox sync from measured failure: src 28916, tests 10883, docs 58553. Raised 2026-09-21 docs_markdown 58553→58560 after ALS follow-up execution-status header closeout (files=168).",
+  "_note": "Ratchet ceilings. Raised 2026-09-21 R5 + fix round 1/5 from measured pytest size-baseline failure output: src_python 28913, tests_python 10852. Raised 2026-09-21 R6 docs_markdown 57766 (parent plan + remaining plan + spec marker; files=166). Raised 2026-09-21 post-merge docs_markdown 57766→58201 from measured pytest failure after README/spec/status updates + closeout plan (files=167). Raised 2026-09-21 docs_markdown 58201→58552 from measured pytest failure after committing the ALS AnimBP residual plan (files=168). Raise only as a deliberate reviewable diff. Raised 2026-09-21 ALS residual + plan checkbox sync from measured failure: src 28916, tests 10883, docs 58553. Raised 2026-09-21 docs_markdown 58553→58560 after ALS follow-up execution-status header closeout (files=168). Raised 2026-09-22 remediation tests and bounded property context from measured pytest failure: src 28936, tests 10986.",
   "src_python": {
     "min_files": 49,
-    "max_lines": 28916
+    "max_lines": 28936
   },
   "tests_python": {
     "min_files": 13,
-    "max_lines": 10883
+    "max_lines": 10986
   },
   "docs_markdown": {
     "min_files": 158,
