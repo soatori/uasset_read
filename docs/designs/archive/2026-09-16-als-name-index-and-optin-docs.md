@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status: completed / historical (2026-09-16).** All tasks landed on `dev-0.6.0`; checkbox state complete. This file is execution evidence. Do not invoke SDD or rerun its commands unless the user explicitly names this file and requests a new replay.
+
 **Goal:** Eliminate the last tracked `name_index_out_of_range` on `ALS_AnimBP.uasset` by teaching the tagged-struct fallback about `CachedPoseIndices`, then document how to run the opt-in quality baseline (`UASSET_QUALITY_OPT_IN=1`).
 
 **Architecture:** MapProperty values dispatch StructProperty with `tag.size=0`. `CachedPoseIndices` is a tagged FStructFallback payload but is not in `_TAGGED_FALLBACK_STRUCTS`, so `parse_struct_property` returns an empty opaque value **without consuming bytes**, desynchronizing subsequent map keys and emitting `name_index_out_of_range`. Adding `CachedPoseIndices` to that set restores the inner `OrderedSavedPoseNodeIndices` array walk (verified: 9 valid keys, map end exact, OOR=0). Docs task only adds user-facing instructions for the existing opt-in env flag — no CI workflow changes.

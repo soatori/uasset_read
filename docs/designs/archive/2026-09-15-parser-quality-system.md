@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status: historical (executed 2026-09-15).** Deliverables landed on `dev-0.6.0` (quality baseline + `Diagnostic.reason` live in `tests/`/`src/`); checkbox state was not maintained during execution. This file is execution evidence. Do not invoke SDD or rerun its commands unless the user explicitly names this file and requests a new replay.
+
 **Goal:** Add an optional `Diagnostic.reason` classification, wire it on high-volume diagnostic sites, and gate tracked sample fixtures with a quality baseline so unexpected recovery/semantic-loss is visible and regressive.
 
 **Architecture:** Runtime stays “structured diagnostics only” (no process-global logging). `reason` is an optional additive field on `Diagnostic` (stable envelope; schema `additionalProperties: false` must be updated in the same change). A thin classifier maps known trailing/recovery situations to closed reason values. Sample tests load `tests/samples/quality_baseline.json` and assert max counts / forbidden codes on a small seed set of tracked fixtures. Deep parser fixes (Niagara node bodies, BP name-index clusters, RefSkeleton) are **out of this plan** and become follow-up plans once reason data is measurable.

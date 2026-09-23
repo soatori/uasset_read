@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status: historical (executed 2026-09-15).** Deliverables landed on `dev-0.6.0`; checkbox state was not maintained during execution. This file is execution evidence. Do not invoke SDD or rerun its commands unless the user explicitly names this file and requests a new replay.
+
 **Goal:** Stop treating the valid empty-FText-namespace FString (`length=1` + single NUL) as `fstring_all_null` / `recovered_corruption`, so BP quality baselines can pin `recovered_corruption` to zero on tracked Blueprint seeds.
 
 **Architecture:** One narrow change in `FArchive.read_fstring`: when UTF-8 `length == 1` and the payload is a single `0x00`, return `""` with a debug log only (no structured diagnostic). Longer all-null runs keep the existing `fstring_all_null` path. Regenerate `tests/samples/quality_baseline.json` so `BP_CombatCharacter.uasset` no longer allows `fstring_all_null/recovered_corruption`. No `format_version` bump; no reason-taxonomy change.

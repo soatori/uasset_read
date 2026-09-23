@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status: completed / historical (2026-09-23).** Executed via Orca pi agents; landed on `dev-0.6.0` (merge `eb01e5dc`). This file is execution evidence. Do not invoke SDD or rerun its commands unless the user explicitly names this file and requests a new replay.
+
 **Goal:** Reclassify AnimBlueprint generated-class CDO and generated-data export trailers from `unexpected` to `known_unimplemented` by keying `classify_trailing_reason()` on object name + Outer/generated-class relationship via the shared `TrailingContext` API, so the CI "unexpected" signal only carries genuinely unknown trailers.
 
 **Architecture:** A sibling plan (plan-reason-quality) delivers the shared context-aware classifier in `src/uasset_read/models/diagnostics.py`: `TrailingContext(class_name, object_name, outer_name, roles, payload_kind)` plus `classify_trailing_reason(context: TrailingContext | str)` with class-name bucket rules (`SoundNode*` → `editor_only`; true-gap classes → `known_unimplemented`; `ScriptStruct` deliberately excluded per team-lead ruling), AND the emission-site wiring (`_resolve_outer_name` + full `TrailingContext` + `Diagnostic.size` — their Task 2; this plan does not touch `legacy_reader.py`). This plan layers the two object-keyed AnimBlueprint rules onto `classify_trailing_reason`, pins the three ABP fixtures, retires their temporary scope fence, then regenerates the one quality-baseline entry whose reason counts move. No new `DiagnosticReason` member, no schema change, no diagnostic suppression.

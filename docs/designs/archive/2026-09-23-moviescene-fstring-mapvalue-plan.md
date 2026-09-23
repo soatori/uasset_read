@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status: completed / historical (2026-09-23).** Executed via Orca pi agents; landed on `dev-0.6.0` (merge `eb01e5dc`). This file is execution evidence. Do not invoke SDD or rerun its commands unless the user explicitly names this file and requests a new replay.
+
 **Goal:** Fix the Lyra MovieScene `fstring_out_of_range` / false `fstring_all_null` cascade at its root — unknown size-0 map-value structs must parse as a bounded, validated tagged fallback instead of consuming zero bytes and desynchronizing the map loop — and correct `read_fstring()` all-null classification and `fstring_out_of_range` reason labeling.
 
 **Architecture:** Two independent single-site fixes in `archive.py` (all-null classification gate; OOR reason tag) plus one fix in `parse_struct_property` (property_types.py): for unknown structs with `tag.size <= 0` (the dummy tags `_dispatch_value_parse` builds for MapProperty values), replace the immediate opaque return with the existing None-terminated tagged loop, then **accept only a clean None stop with zero new diagnostics**, otherwise rewind cursor and diagnostics to the entry start (opaque fallback, byte-identical to today). This makes `FMovieSceneExpansionState` values parse as `bExpanded` fields while native-binary struct values (e.g. export:7 `BindingIdToReferences`) keep their current bounded/opaque behavior. The poison-stop (`_PROPERTY_STREAM_POISON_CODES`) is untouched.

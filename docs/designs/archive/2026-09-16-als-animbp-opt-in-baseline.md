@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status: historical (executed 2026-09-16).** Deliverables landed on `dev-0.6.0` (`UASSET_QUALITY_OPT_IN` gate live in `tests/test_samples.py`); checkbox state was not maintained during execution. This file is execution evidence. Do not invoke SDD or rerun its commands unless the user explicitly names this file and requests a new replay.
+
 **Goal:** Add `ALS_AnimBP.uasset` (10MB, ~4.2s parse) to `tests/samples/quality_baseline.json` behind an opt-in gate so default CI stays fast while large AnimBP regressions remain measurable.
 
 **Architecture:** Baseline entries gain an optional `"opt_in": true` flag. The generator always writes both default seeds and the opt-in seed (marked). `test_quality_baseline_diagnostics` keeps its parametrize over baseline keys but **skips** `opt_in` samples unless `UASSET_QUALITY_OPT_IN=1` is set in the environment. No parser changes; no change to default seed list used for non-opt-in ceilings.
