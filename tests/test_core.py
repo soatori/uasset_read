@@ -3360,3 +3360,93 @@ def test_fstring_all_zero_payload_still_records_all_null():
     assert arc.read_fstring() == ""
     codes = [d.code for d in arc.get_structured_diagnostics()]
     assert "fstring_all_null" in codes, codes
+
+
+def test_map_value_unknown_struct_parses_tagged_until_none():
+    """MapProperty struct values with no name in the tag parse as tagged fields.
+
+    Legacy tags carry only key/value type FNames (PropertyTag.cpp:357-371), so
+    value_type_struct is None; the dummy size=0 struct tag must still consume
+    the None-terminated field stream (Lyra MovieScene ExpansionStates).
+    """
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.models.properties import PropertyTag
+    from uasset_read.parsers.property_types import parse_map_property
+
+    def fname(idx: int, number: int = 0) -> bytes:
+        return struct.pack("<II", idx, number)
+
+    # name_map: 0=bExpanded, 1=BoolProperty, 2=None
+    name_map = ["bExpanded", "BoolProperty", "None"]
+    # Legacy inner tag: name + type + size + array_index + BoolVal + HasPropertyGuid
+    value = (
+        fname(0)
+        + fname(1)
+        + struct.pack("<ii", 0, 0)
+        + bytes([1, 0])  # bExpanded = true, no property guid
+        + fname(2)  # None terminator = value boundary
+    )
+    key = struct.pack("<i", 4) + b"key\x00"
+    payload = struct.pack("<ii", 0, 1) + key + value  # keys_to_remove=0, entries=1
+    tag = PropertyTag(
+        name="ExpansionStates",
+        type="MapProperty",
+        size=len(payload),
+        key_type="StrProperty",
+        value_type="StructProperty",
+        value_type_struct=None,
+    )
+    arc = ByteArchive(payload, tolerant=True)
+    arc._file_version_ue4 = 522
+    arc._file_version_ue5 = 1004  # legacy tag path, same gate as the Lyra sample
+    result = parse_map_property(tag, arc, name_map, export_map=[], summary=None)
+    assert result.key_type == "StrProperty"
+    assert result.value_type == "StructProperty"
+    assert len(result.entries) == 1
+    entry_value = result.entries[0]["value"]
+    assert entry_value.struct_type == "Unknown"  # honest: legacy tag has no name
+    assert entry_value.fields == {"bExpanded": True}
+    assert entry_value.parse_status == "success"
+    # Value boundary honored: cursor exactly at end, nothing spilled, no diagnostics.
+    assert arc.tell() == len(payload)
+    assert arc.get_structured_diagnostics() == []
+
+
+def test_map_value_unknown_struct_garbage_rolls_back_without_spill():
+    """A non-tagged (native/garbage) value must rewind to the entry start.
+
+    The rejected attempt's diagnostics are rolled back so a failed attempt is
+    byte- and diagnostic-identical to the old opaque behavior (export:7
+    BindingIdToReferences stays clean).
+    """
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.models.properties import PropertyTag
+    from uasset_read.parsers.property_types import parse_map_property
+
+    name_map = ["bExpanded", "BoolProperty", "None"]
+    key = struct.pack("<i", 4) + b"key\x00"
+    garbage_value = b"\xff\xff\xff\xff\x00\x00\x00\x00"  # FName index 0xFFFFFFFF -> name OOR
+    payload = struct.pack("<ii", 0, 1) + key + garbage_value
+    tag = PropertyTag(
+        name="BindingIdToReferences",
+        type="MapProperty",
+        size=len(payload),
+        key_type="StrProperty",
+        value_type="StructProperty",
+        value_type_struct=None,
+    )
+    arc = ByteArchive(payload, tolerant=True)
+    arc._file_version_ue4 = 522
+    arc._file_version_ue5 = 1004
+    result = parse_map_property(tag, arc, name_map, export_map=[], summary=None)
+    entry_value = result.entries[0]["value"]
+    assert entry_value.parse_status == "opaque"
+    assert entry_value.fields == {}
+    # Cursor never advanced into the value (no spill into the next segment).
+    assert arc.tell() == 8 + len(key)
+    # Diagnostics recorded by the rejected attempt were rolled back.
+    assert arc.get_structured_diagnostics() == []

@@ -256,6 +256,18 @@ class FArchive:
         """Return collected structured diagnostics."""
         return list(self._structured_diagnostics)
 
+    def rollback_structured_diagnostics(self, mark: int) -> None:
+        """Drop diagnostics recorded after *mark* (failed parse-attempt rewind).
+
+        Only the structured-diagnostics list is rewound. ``_name_warnings_seen``
+        dedup slots consumed by the failed attempt are kept, so a later genuine
+        ``name_index_out_of_range`` at the same (>= 2**24) index may be
+        suppressed once — an accepted ceiling of the validate-and-rollback
+        design (ponytail: dedup slot leak per rejected attempt; clear the slots
+        too if a real fixture ever hits the suppression).
+        """
+        del self._structured_diagnostics[mark:]
+
     # Type read methods
 
     def _read_le(self, fmt_char: str, size: int):
