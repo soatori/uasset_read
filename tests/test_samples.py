@@ -1154,3 +1154,179 @@ def test_quality_baseline_diagnostics(sample_name):
     page = project_document(doc)
     jsonschema.validate(page, SCHEMA)
     _assert_quality_baseline(doc, sample_name)
+
+
+def test_trailing_diagnostics_carry_structured_size():
+    """Trailing bytes must be machine-readable (Diagnostic.size), not message-only."""
+    from uasset_read.package import parse_package_document
+
+    doc = parse_package_document(str(SAMPLES / "StarterContent_Starter_Background_Cue.uasset"), depth="asset")
+    trailing = [d for d in doc.diagnostics if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"]
+    assert trailing, "fixture must emit trailing diagnostics"
+    for d in trailing:
+        assert d.size is not None and d.size > 0, f"{d.object_id}: missing structured size"
+        assert d.reason is not None
+        # Message and structured field must agree.
+        assert f"leaves {d.size} undecoded bytes" in d.message
+
+
+def test_background_cue_sound_node_tails_reclassified_editor_only():
+    """Starter_Background_Cue: 6 SoundNode trailers, 6 bytes each, now editor_only."""
+    from uasset_read.package import parse_package_document
+
+    doc = parse_package_document(str(SAMPLES / "StarterContent_Starter_Background_Cue.uasset"), depth="asset")
+    by_id = {o.id: o for o in doc.objects}
+    sound_trailing = [
+        d for d in doc.diagnostics
+        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"
+        and (by_id[d.object_id].class_name or "").startswith("SoundNode")
+    ]
+    assert len(sound_trailing) == 6
+    assert all(d.reason == "editor_only" for d in sound_trailing)
+    assert all(d.size == 6 for d in sound_trailing)
+    assert sum(d.size or 0 for d in sound_trailing) == 36  # d.size: int | None (type-checker)
+    # No SoundNode trailer may remain in the catch-all bucket.
+    assert not [d for d in sound_trailing if d.reason == "unexpected"]
+
+
+def test_level_geometry_tails_known_unimplemented_with_bytes():
+    """FirstPerson umap: Level/Model/Polys/World trailers keep bytes, lose unexpected."""
+    from uasset_read.package import parse_package_document
+
+    doc = parse_package_document(str(SAMPLES / "FirstPerson_Lvl_FirstPerson.umap"), depth="asset")
+    by_id = {o.id: o for o in doc.objects}
+    expected = {  # object_id -> (class, size)
+        "export:6": ("Level", 199),
+        "export:7": ("Model", 154),
+        "export:8": ("Model", 190),
+        "export:11": ("Polys", 1060),
+        "export:13": ("World", 12),
+    }
+    trailing = {
+        d.object_id: d for d in doc.diagnostics
+        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"
+    }
+    for oid, (cls, size) in expected.items():
+        d = trailing[oid]
+        assert by_id[oid].class_name == cls, oid
+        assert d.reason == "known_unimplemented", f"{oid}: {d.reason}"
+        assert d.size == size, f"{oid}: {d.size} != {size}"
+    assert not [
+        d for d in doc.diagnostics
+        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.reason == "unexpected"
+    ], "FirstPerson_Lvl must have zero unexpected after reclassification"
+
+
+def test_collision_and_enum_pose_movie_tails_known_unimplemented():
+    from uasset_read.package import parse_package_document
+
+    cases = {
+        "StarterContent_SM_Chair.uasset": {"BodySetup_13": 20, "NavCollision_9": 32},
+        "Lyra_Enum_PanelType.uasset": {"Enum_PanelType": 53},
+        "StackOBot_Enum_CameraState.uasset": {"Enum_CameraState": 85},
+        "Echo_calf_l_PoseAsset.uasset": {"calf_l_PoseAsset": 16},
+    }
+    for sample, expect in cases.items():
+        doc = parse_package_document(str(SAMPLES / sample), depth="asset")
+        by_id = {o.id: o for o in doc.objects}
+        found = {
+            by_id[d.object_id].name: d for d in doc.diagnostics
+            if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"
+        }
+        for name, size in expect.items():
+            d = found[name]
+            assert d.reason == "known_unimplemented", f"{sample}:{name}: {d.reason}"
+            assert d.size == size, f"{sample}:{name}: {d.size} != {size}"
+
+    # MovieScene_0 no longer trails at all: the validated map-value fallback
+    # (2026-09-23 moviescene plan) consumes ExpansionStates cleanly, so export:9
+    # ends with zero EXPORT_TRAILING_BYTES_UNCONSUMED — fixed, not classified.
+    lyra = parse_package_document(str(SAMPLES / "Lyra_SEQ_LobbyScreen_LevelSequence.uasset"), depth="asset")
+    lyra_trailing = [
+        d for d in lyra.diagnostics
+        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id == "export:9"
+    ]
+    assert not lyra_trailing, lyra_trailing
+
+
+def _assert_trailing_aggregate(actual: dict, baseline: dict) -> None:
+    assert actual["sample_count"] == baseline["sample_count"], (
+        f"aggregate sample_count {actual['sample_count']} != baseline {baseline['sample_count']}; "
+        "regenerate quality_baseline.json (manifest changed)"
+    )
+    assert actual["max_total_warnings"] == baseline["max_total_warnings"], (
+        f"trailing warnings {actual['max_total_warnings']} != baseline {baseline['max_total_warnings']} "
+        "(totals must match; regenerate the baseline to review the change)"
+    )
+    assert actual["max_total_bytes"] == baseline["max_total_bytes"], (
+        f"total bytes {actual['max_total_bytes']} != baseline {baseline['max_total_bytes']} "
+        "(totals must match; regenerate the baseline to review the change)"
+    )
+    for reason, stats in actual["by_reason"].items():
+        assert reason in baseline["by_reason"], f"reason mix: {reason} not in baseline"
+        limit = baseline["by_reason"][reason]
+        assert stats["max_count"] <= limit["max_count"], f"{reason}: count {stats['max_count']} > {limit['max_count']}"
+        assert stats["max_bytes"] <= limit["max_bytes"], f"{reason}: bytes {stats['max_bytes']} > {limit['max_bytes']}"
+    unlisted = sorted(set(actual["by_reason_class"]) - set(baseline["by_reason_class"]))
+    assert not unlisted, f"not in baseline (new reason/class pair): {unlisted}"
+    for key, stats in actual["by_reason_class"].items():
+        limit = baseline["by_reason_class"][key]
+        assert stats["max_count"] <= limit["max_count"], f"{key}: count {stats['max_count']} > {limit['max_count']}"
+        assert stats["max_bytes"] <= limit["max_bytes"], f"{key}: bytes {stats['max_bytes']} > {limit['max_bytes']}"
+
+
+def _aggregate_from_manifest():
+    from importlib.util import spec_from_file_location, module_from_spec
+
+    spec = spec_from_file_location("gen_quality_baseline", ROOT / "tools" / "gen_quality_baseline.py")
+    mod = module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    docs = [(entry["name"], _asset_document(entry["name"])) for entry in MANIFEST_SAMPLES]
+    return mod.aggregate_trailing_report(docs)
+
+
+def test_trailing_aggregate_report_within_baseline():
+    """Report-level gate: all 66 manifest samples, counts AND bytes, by reason and class."""
+    actual = _aggregate_from_manifest()
+    baseline = json.loads((SAMPLES / "quality_baseline.json").read_text(encoding="utf-8"))["aggregate"]
+    _assert_trailing_aggregate(actual, baseline)
+    assert actual["sample_count"] == 66
+
+
+def test_trailing_aggregate_gate_blocks_growth():
+    """Fail path: a synthetic report over ceiling in bytes or with a new class must fail."""
+    baseline = {
+        "scope": "manifest", "sample_count": 2,
+        "max_total_warnings": 3, "max_total_bytes": 40,
+        "by_reason": {"unexpected": {"max_count": 3, "max_bytes": 40}},
+        "by_reason_class": {"unexpected/ABP_X_C": {"max_count": 3, "max_bytes": 40}},
+    }
+
+    def _check(actual, match):
+        with pytest.raises(AssertionError, match=match):
+            _assert_trailing_aggregate(actual, baseline)
+
+    good = {
+        "scope": "manifest", "sample_count": 2,
+        "max_total_warnings": 3, "max_total_bytes": 40,
+        "by_reason": {"unexpected": {"max_count": 2, "max_bytes": 30}},
+        "by_reason_class": {"unexpected/ABP_X_C": {"max_count": 2, "max_bytes": 30}},
+    }
+    # Totals exactly at ceiling, detail under it: passes (called directly, no raise).
+    _assert_trailing_aggregate(good, baseline)
+
+    over_bytes = dict(good, max_total_bytes=41)
+    _check(over_bytes, "total bytes")
+    # Loss regressions: totals BELOW baseline must also fail (gate is exact on totals).
+    lost_warnings = dict(good, max_total_warnings=1)
+    _check(lost_warnings, "trailing warnings")
+    lost_bytes = dict(good, max_total_bytes=20)
+    _check(lost_bytes, "total bytes")
+    over_reason = {
+        **good,
+        "by_reason": {"unexpected": {"max_count": 2, "max_bytes": 30}, "editor_only": {"max_count": 1, "max_bytes": 5}},
+    }
+    _check(over_reason, "reason mix")
+    new_pair = {"max_count": 1, "max_bytes": 3}
+    new_class = dict(good, by_reason_class={**good["by_reason_class"], "unexpected/NewClass": new_pair})
+    _check(new_class, "not in baseline")

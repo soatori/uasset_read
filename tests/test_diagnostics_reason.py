@@ -57,6 +57,20 @@ def test_fname_out_of_range_carries_recovered_corruption_reason(tmp_path):
     assert diag.code == "name_index_out_of_range"
 
 
+def test_fstring_out_of_range_carries_recovered_corruption_reason():
+    import struct
+
+    from uasset_read.archive import ByteArchive
+
+    # Claims 1000 bytes, only 2 remain -> fstring_out_of_range (tolerant).
+    arc = ByteArchive(struct.pack("<i", 1000) + b"ab", tolerant=True)
+    assert arc.read_fstring() == ""
+    (diag,) = [d for d in arc.get_structured_diagnostics() if d.code == "fstring_out_of_range"]
+    assert diag.reason == "recovered_corruption"
+    assert diag.fallback == "used_empty_string"
+    assert diag.offset == 0
+
+
 def test_classify_trailing_reason_mapping():
     from uasset_read.models.diagnostics import classify_trailing_reason
 
@@ -103,7 +117,7 @@ def test_merge_archive_recoveries_forwards_reason_and_fallback():
     )
     archive = SimpleNamespace(get_structured_diagnostics=lambda: [sd])
     diagnostics: list[Diagnostic] = []
-    _merge_archive_recoveries(archive, [], diagnostics)
+    _merge_archive_recoveries(archive, [], diagnostics)  # type: ignore[arg-type]  # duck-typed stub
     (merged,) = diagnostics
     assert merged.code == "name_index_out_of_range"
     assert merged.reason == "recovered_corruption"
@@ -130,7 +144,7 @@ def test_merge_archive_recoveries_stop_table_keeps_reason():
     )
     archive = SimpleNamespace(get_structured_diagnostics=lambda: [sd])
     diagnostics: list[Diagnostic] = []
-    _merge_archive_recoveries(archive, [], diagnostics)
+    _merge_archive_recoveries(archive, [], diagnostics)  # type: ignore[arg-type]  # duck-typed stub
     (merged,) = diagnostics
     assert merged.reason == "recovered_corruption"
     assert merged.fallback == "stop_table"
@@ -154,7 +168,7 @@ def test_table_payload_residue_emits_conservative_complete_reason():
         name_map=["None", "RowA"],
         object_id="export:1",
         diagnostics=diags,
-    )
+    )  # type: ignore[arg-type]  # ByteArchive exercises the bounded reader directly
     residue_diags = [d for d in diags if d.code == "TABLE_PAYLOAD_RESIDUE"]
     assert residue_diags, f"expected TABLE_PAYLOAD_RESIDUE, got {[d.code for d in diags]}"
     assert all(d.reason == "conservative_complete" for d in residue_diags)
@@ -176,7 +190,7 @@ def test_table_rows_truncated_emits_conservative_complete_reason():
         name_map=["None", "A"],
         object_id="export:1",
         diagnostics=diags,
-    )
+    )  # type: ignore[arg-type]  # ByteArchive exercises the bounded reader directly
     truncated = [d for d in diags if d.code == "TABLE_ROWS_TRUNCATED"]
     assert truncated, f"expected TABLE_ROWS_TRUNCATED, got {[d.code for d in diags]}"
     assert all(d.reason == "conservative_complete" for d in truncated)
@@ -186,9 +200,7 @@ def test_datatable_table_diagnostics_marked_conservative_complete():
     from uasset_read.package import parse_package_document
 
     doc = parse_package_document("tests/samples/FirstPerson_DT_WeaponList.uasset")
-    table_diags = [
-        d for d in doc.diagnostics if d.code in {"TABLE_PAYLOAD_RESIDUE", "TABLE_ROWS_TRUNCATED"}
-    ]
+    table_diags = [d for d in doc.diagnostics if d.code in {"TABLE_PAYLOAD_RESIDUE", "TABLE_ROWS_TRUNCATED"}]
     # Fixture may or may not emit both; assert every emitted TABLE_* is classified.
     assert all(d.reason == "conservative_complete" for d in table_diags)
     if not table_diags:
@@ -206,9 +218,7 @@ def test_bp_combat_character_trailing_diagnostics_carry_reason():
     trailing = [d for d in doc.diagnostics if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"]
     assert trailing, "expected trailing diagnostics on this fixture"
     assert all(d.reason is not None for d in trailing)
-    assert {"editor_only", "bulk_expected", "known_unimplemented", "unexpected"} & {
-        d.reason for d in trailing
-    }
+    assert {"editor_only", "bulk_expected", "known_unimplemented", "unexpected"} & {d.reason for d in trailing}
 
 
 def test_bp_seeds_have_zero_fstring_all_null():
@@ -258,9 +268,9 @@ def test_als_animbp_has_no_name_index_out_of_range():
 
     doc = parse_package_document("tests/samples/ALS_AnimBP.uasset", depth="asset")
     codes = [d.code for d in doc.diagnostics]
-    assert "name_index_out_of_range" not in codes, (
-        [d.message for d in doc.diagnostics if d.code == "name_index_out_of_range"]
-    )
+    assert "name_index_out_of_range" not in codes, [
+        d.message for d in doc.diagnostics if d.code == "name_index_out_of_range"
+    ]
 
 
 def test_als_animbp_ordered_saved_pose_indices_map_keys():
@@ -282,3 +292,219 @@ def test_als_animbp_ordered_saved_pose_indices_map_keys():
     fields = value.get("fields") if isinstance(value, dict) else getattr(value, "fields", None)
     assert fields is not None, value
     assert "OrderedSavedPoseNodeIndices" in fields, fields
+
+
+def test_classify_trailing_reason_accepts_trailing_context():
+    from uasset_read.models.diagnostics import TrailingContext, classify_trailing_reason
+
+    ctx = TrailingContext(
+        class_name="FontFace",
+        object_name="MyFont",
+        outer_name="/Game/Fonts/F",
+        roles=("asset",),
+        payload_kind="native_serial",
+    )
+    assert classify_trailing_reason(ctx) == "bulk_expected"
+
+
+def test_classify_trailing_reason_context_defaults_match_class_name_shorthand():
+    from uasset_read.models.diagnostics import TrailingContext, classify_trailing_reason
+
+    for cls, expected in (
+        ("TextureCube", "bulk_expected"),
+        ("K2Node_CallFunction", "editor_only"),
+        ("Skeleton", "known_unimplemented"),
+        ("SomeUnknownClass", "unexpected"),
+    ):
+        assert classify_trailing_reason(TrailingContext(class_name=cls)) == expected
+        assert classify_trailing_reason(cls) == expected
+
+
+def test_resolve_outer_name_export_and_import_and_null():
+    from uasset_read.models.object_model import ObjectRecord, ObjectRef
+    from uasset_read.parsers.legacy_reader import _resolve_outer_name
+    from uasset_read.serializers.object_resources import ObjectImport, PackageIndex
+
+    objects = [
+        ObjectRecord(id="export:0", table_index=0, name="Root", roles=("asset",)),
+        ObjectRecord(
+            id="export:1", table_index=1, name="Child",
+            outer_ref=ObjectRef(table="export", index=0), roles=(),
+        ),
+    ]
+    imports = [
+        ObjectImport(
+            class_package="/Script/Engine", class_name="Class",
+            outer_index=PackageIndex(0), object_name="SomeClass",
+        )
+    ]
+    # Export Outer resolves through the objects list.
+    assert _resolve_outer_name(objects[1], objects, imports) == "Root"
+    # Import Outer resolves through the import map.
+    obj_import_outer = ObjectRecord(
+        id="export:2", table_index=2, name="Inst",
+        outer_ref=ObjectRef(table="import", index=0), roles=(),
+    )
+    assert _resolve_outer_name(obj_import_outer, objects, imports) == "SomeClass"
+    # Null Outer and out-of-range indexes stay None (bounded, no raise).
+    assert _resolve_outer_name(objects[0], objects, imports) is None
+    obj_oob = ObjectRecord(
+        id="export:3", table_index=3, name="OOB",
+        outer_ref=ObjectRef(table="export", index=99), roles=(),
+    )
+    assert _resolve_outer_name(obj_oob, objects, imports) is None
+
+
+def test_make_diagnostic_accepts_size():
+    from uasset_read.models.diagnostics import make_diagnostic
+
+    d = make_diagnostic(
+        "EXPORT_TRAILING_BYTES_UNCONSUMED", "leaves 6 bytes",
+        "objects.export", size=6, reason="editor_only",
+    )
+    assert d.size == 6
+    assert d.to_dict()["size"] == 6
+
+
+def test_sound_node_family_classifies_editor_only():
+    from uasset_read.models.diagnostics import TrailingContext, classify_trailing_reason
+
+    for cls in ("SoundNodeWavePlayer", "SoundNodeModulator", "SoundNodeMixer"):
+        ctx = TrailingContext(
+            class_name=cls,
+            object_name=f"{cls}_0",
+            outer_name="Starter_Background_Cue",
+            roles=(),
+            payload_kind="native_serial",
+        )
+        assert classify_trailing_reason(ctx) == "editor_only", cls
+
+
+def test_true_gap_classes_classify_known_unimplemented():
+    from uasset_read.models.diagnostics import TrailingContext, classify_trailing_reason
+
+    for cls in (
+        "Level", "Model", "Polys", "World", "BodySetup",
+        "NavCollision", "UserDefinedEnum", "PoseAsset",
+        "MovieScene",
+    ):
+        ctx = TrailingContext(
+            class_name=cls, object_name="X", outer_name="Y",
+            roles=(), payload_kind="native_serial",
+        )
+        assert classify_trailing_reason(ctx) == "known_unimplemented", cls
+
+    # Prefix safety: near-miss names must NOT be swept in.
+    assert classify_trailing_reason("LevelSequence") == "unexpected"
+    assert classify_trailing_reason("ModelComponent") == "unexpected"
+    assert classify_trailing_reason("WorldSettings") == "unexpected"
+
+    # Team-lead ruling 2026-09-23: bare ScriptStruct must NOT be class-blanketed —
+    # the 5 corpus trailers are AnimBlueprint generated data (sibling plan keys them).
+    assert classify_trailing_reason(TrailingContext(class_name="ScriptStruct")) == "unexpected"
+
+
+def test_classify_trailing_reason_native_cdo_and_generated_data():
+    from uasset_read.models.diagnostics import TrailingContext, classify_trailing_reason
+
+    # CDO: Default__ instance whose class is the *_C blueprint generated class
+    # (UBlueprint::GetBlueprintClassName naming; ALS_AnimBP fixture shape).
+    assert (
+        classify_trailing_reason(
+            TrailingContext(class_name="ALS_AnimBP_C", object_name="Default__ALS_AnimBP_C")
+        )
+        == "known_unimplemented"
+    )
+    assert (
+        classify_trailing_reason(
+            TrailingContext(class_name="BP_Foo_C", object_name="Default__BP_Foo_C")
+        )
+        == "known_unimplemented"
+    )
+    # Generated data: AnimBlueprint generated-data structs outered to the *_C class.
+    assert (
+        classify_trailing_reason(
+            TrailingContext(
+                class_name="ScriptStruct",
+                object_name="AnimBlueprintGeneratedConstantData",
+                outer_name="ALS_AnimBP_C",
+            )
+        )
+        == "known_unimplemented"
+    )
+    assert (
+        classify_trailing_reason(
+            TrailingContext(
+                class_name="ScriptStruct",
+                object_name="AnimBlueprintGeneratedMutableData",
+                outer_name="ABP_Manny_C",
+            )
+        )
+        == "known_unimplemented"
+    )
+    # Contract test (team-lead 2026-09-23 ruling): a class-name-alone ScriptStruct
+    # blanket must NOT classify generated data — keying is object name + Outer.
+    assert (
+        classify_trailing_reason(
+            TrailingContext(class_name="ScriptStruct", object_name="AnimBlueprintGeneratedConstantData")
+        )
+        == "unexpected"
+    )
+    # Outer that is not a *_C generated class does not fire the rule.
+    assert (
+        classify_trailing_reason(
+            TrailingContext(
+                class_name="ScriptStruct",
+                object_name="AnimBlueprintGeneratedConstantData",
+                outer_name="SomeActor",
+            )
+        )
+        == "unexpected"
+    )
+    # A *_C object that is not a Default__ instance is not a CDO.
+    assert (
+        classify_trailing_reason(
+            TrailingContext(class_name="ABP_Foo_C", object_name="ABP_Foo_C")
+        )
+        == "unexpected"
+    )
+    # str shorthand keeps class-name-only behavior (no object/outer context).
+    assert classify_trailing_reason("SomeUnknownClass") == "unexpected"
+    assert classify_trailing_reason("ALS_AnimBP_C") == "unexpected"
+
+
+def test_animbp_samples_reclassify_native_trailers_to_known_unimplemented():
+    from uasset_read.package import parse_package_document
+
+    expected = {
+        "ALS_AnimBP.uasset": ("export:0", "export:3393", "export:3394"),
+        "LevelDesign_ABP_Manny.uasset": ("export:0", "export:153", "export:154"),
+        "ABP_RifleAnimLayers.uasset": ("export:0", "export:9"),
+    }
+    for name, object_ids in expected.items():
+        doc = parse_package_document(f"tests/samples/{name}", depth="asset")
+        trailing = {
+            d.object_id: d
+            for d in doc.diagnostics
+            if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"
+        }
+        for oid in object_ids:
+            assert oid in trailing, f"{name}:{oid} missing EXPORT_TRAILING_BYTES_UNCONSUMED"
+            assert trailing[oid].reason == "known_unimplemented", (
+                f"{name}:{oid} reason={trailing[oid].reason}"
+            )
+        unexpected = [
+            d.object_id
+            for d in doc.diagnostics
+            if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.reason == "unexpected"
+        ]
+        assert unexpected == [], f"{name}: unexpected trailers remain {unexpected}"
+
+    # The largest native body keeps its disclosed byte count (reclassified, not suppressed).
+    als = parse_package_document("tests/samples/ALS_AnimBP.uasset", depth="asset")
+    cdo = next(
+        d
+        for d in als.diagnostics
+        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id == "export:0"
+    )
+    assert "leaves 605230 undecoded bytes" in (cdo.message or "")

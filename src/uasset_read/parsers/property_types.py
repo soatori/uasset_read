@@ -879,18 +879,19 @@ def parse_struct_property(
     if fast_result is not None:
         return fast_result
 
-    if declared_struct_type not in _TAGGED_FALLBACK_STRUCTS and tag.size <= 0:
-        return StructValue(
-            struct_type=declared_struct_type or "UnknownStruct",
-            fields={},
-            raw_size=tag.size,
-            parse_status="opaque",
-        )
+    # Unknown struct with no size (Map/Set dummy tags carry no per-value size;
+    # legacy tags do not serialize a map value struct name — PropertyTag.cpp
+    # 357-371). Attempt the tagged FStructFallback loop below and validate the
+    # result: a clean None stop with no new diagnostics is accepted, anything
+    # else rewinds to the entry start and stays opaque so the caller's cursor
+    # never spills into the next segment (Lyra MovieScene ExpansionStates;
+    # export:7 BindingIdToReferences native values keep old behavior).
+    validated_attempt = declared_struct_type not in _TAGGED_FALLBACK_STRUCTS and tag.size <= 0
 
     # Check BinaryOrNative handler registry for known struct types (e.g. NiagaraVariable).
     # These have custom hybrid layouts that the standard tagged loop cannot decode.
     # Try both with and without "F" prefix to handle UE naming inconsistencies.
-    if declared_struct_type:
+    if declared_struct_type and not validated_attempt:
         from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
 
         bn_handler = BINARY_OR_NATIVE_HANDLERS.get(declared_struct_type) or BINARY_OR_NATIVE_HANDLERS.get(
@@ -927,6 +928,12 @@ def parse_struct_property(
     _MAX_TAGGED_FALLBACK_BYTES = 4096
     tagged_byte_limit = struct_start + _MAX_TAGGED_FALLBACK_BYTES if struct_end is None else None
 
+    diag_mark = len(archive.get_structured_diagnostics())
+    clean_none_stop = False
+    # Hoisted out of the except body: `or` under an except_clause trips the
+    # no-boolean-in-except rule (S5714 port); value semantics are identical.
+    fallback_struct_type = declared_struct_type or "UnknownStruct"
+
     try:
         while property_count < MAX_PROPERTY_COUNT:
             property_count += 1
@@ -938,6 +945,7 @@ def parse_struct_property(
             inner_tag = read_property_tag(archive, name_map, struct_name=declared_struct_type)
 
             if inner_tag.name == UE_NONE_SENTINEL:
+                clean_none_stop = True
                 break
 
             if (
@@ -964,10 +972,26 @@ def parse_struct_property(
     except (struct.error, ParseError, OSError, ValueError):
         if declared_struct_type in _TAGGED_FALLBACK_STRUCTS:
             raise
-        if struct_end is not None:
+        if validated_attempt:
+            archive.rollback_structured_diagnostics(diag_mark)
+            archive.seek(struct_start)
+        elif struct_end is not None:
             archive.seek(struct_end)
         elif tag.size > 0:
             archive.seek(struct_start + tag.size)
+        return StructValue(
+            struct_type=fallback_struct_type,
+            fields={},
+            raw_size=tag.size,
+            parse_status="opaque",
+        )
+
+    if validated_attempt and (not clean_none_stop or len(archive.get_structured_diagnostics()) > diag_mark):
+        # Not a clean None-terminated tagged stream (or the attempt recorded
+        # recoveries): rewind exactly to the entry start — cursor and
+        # diagnostics — and report opaque, byte-identical to pre-fallback.
+        archive.rollback_structured_diagnostics(diag_mark)
+        archive.seek(struct_start)
         return StructValue(
             struct_type=declared_struct_type or "UnknownStruct",
             fields={},

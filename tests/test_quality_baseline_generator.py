@@ -69,3 +69,33 @@ def test_committed_quality_baseline_covers_gate_samples():
             "HANDLER_FAILURE",
         ]
         assert entry.get("forbid_unlisted") is True
+
+
+def test_aggregate_trailing_report_shape_and_limits():
+    from types import SimpleNamespace
+
+    def _doc(trailing):
+        objs = [SimpleNamespace(id=f"export:{i}", class_name=cls) for i, cls in enumerate({d[0] for d in trailing})]
+        by_name = {o.class_name: o.id for o in objs}
+        diags = [
+            SimpleNamespace(
+                code="EXPORT_TRAILING_BYTES_UNCONSUMED",
+                object_id=by_name[cls], reason=reason, size=size, message="",
+            )
+            for cls, reason, size in trailing
+        ]
+        return SimpleNamespace(objects=objs, diagnostics=diags)
+
+    docs = [
+        ("A.uasset", _doc([("Model", "known_unimplemented", 10), ("ABP_X_C", "unexpected", 5)])),
+        ("B.uasset", _doc([("Model", "known_unimplemented", 32)])),
+    ]
+    report = _mod.aggregate_trailing_report(docs)
+    assert report["scope"] == "manifest"
+    assert report["sample_count"] == 2
+    assert report["max_total_warnings"] == 3
+    assert report["max_total_bytes"] == 47
+    assert report["by_reason"]["known_unimplemented"] == {"max_count": 2, "max_bytes": 42}
+    assert report["by_reason"]["unexpected"] == {"max_count": 1, "max_bytes": 5}
+    assert report["by_reason_class"]["known_unimplemented/Model"] == {"max_count": 2, "max_bytes": 42}
+    assert report["by_reason_class"]["unexpected/ABP_X_C"] == {"max_count": 1, "max_bytes": 5}

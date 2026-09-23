@@ -23,6 +23,23 @@ DiagnosticReason = Literal[
 ]
 
 
+@dataclass(frozen=True)
+class TrailingContext:
+    """Identity context for trailing-reason classification.
+
+    class_name alone drives every current rule; object_name/outer_name/
+    roles/payload_kind exist so identity-sensitive rules (e.g. AnimBlueprint
+    CDO detection, owned by a sibling plan) can be added without another
+    signature change.
+    """
+
+    class_name: str
+    object_name: str = ""
+    outer_name: str | None = None
+    roles: tuple[str, ...] = ()
+    payload_kind: str = "native_serial"
+
+
 @dataclass
 class Diagnostic:
     """Structured diagnostic for the PackageDocument."""
@@ -54,6 +71,7 @@ def make_diagnostic(
     severity: Literal["info", "warning", "error", "critical"] = "warning",
     effect: Literal["semantic_loss", "data_loss", "parse_failure", "recovery"] | None = "semantic_loss",
     reason: DiagnosticReason | None = None,
+    size: int | None = None,
 ) -> Diagnostic:
     """Build a Diagnostic with common defaults."""
     return Diagnostic(
@@ -64,6 +82,7 @@ def make_diagnostic(
         object_id=object_id,
         effect=effect,
         reason=reason,
+        size=size,
     )
 
 
@@ -76,6 +95,7 @@ _EDITOR_ONLY_PREFIXES = (
     "WidgetBlueprint",
     "AnimBlueprint",
     "Function",
+    "SoundNode",
 )
 
 _BULK_CLASSES = frozenset(
@@ -98,6 +118,16 @@ _KNOWN_UNIMPLEMENTED_CLASSES = frozenset(
         "StaticMesh",
         "StaticMeshDescriptionBulkData",
         "UserDefinedStruct",
+        # Native-payload reader gaps disclosed as opaque (2026-09-23 plan).
+        "Level",
+        "Model",
+        "Polys",
+        "World",
+        "BodySetup",
+        "NavCollision",
+        "UserDefinedEnum",
+        "PoseAsset",
+        "MovieScene",
     }
 )
 
@@ -111,19 +141,40 @@ _KNOWN_UNIMPLEMENTED_PREFIXES = (
     "Anim",
 )
 
+_ANIM_GENERATED_DATA_OBJECTS = frozenset(
+    {
+        "AnimBlueprintGeneratedConstantData",
+        "AnimBlueprintGeneratedMutableData",
+    }
+)
 
-def classify_trailing_reason(class_name: str) -> DiagnosticReason:
+
+def classify_trailing_reason(context: TrailingContext | str) -> DiagnosticReason:
     """Map export trailing-bytes context to a closed reason value.
 
+    Accepts a bare class name (str) as shorthand for TrailingContext.
     Bulk-data classes are checked first so names such as ``FontFace`` are
-    never swallowed by a broader prefix rule.
+    never swallowed by a broader prefix rule. Identity rules keyed on
+    object_name/outer_name/roles slot in after the class-prefix tables,
+    immediately before the fallback return.
     """
-    if class_name in _BULK_CLASSES or any(class_name.startswith(p) for p in _BULK_PREFIXES):
+    if isinstance(context, str):
+        context = TrailingContext(class_name=context)
+    cn = context.class_name
+    if cn in _BULK_CLASSES or any(cn.startswith(p) for p in _BULK_PREFIXES):
         return "bulk_expected"
-    if any(class_name.startswith(p) for p in _EDITOR_ONLY_PREFIXES):
+    if any(cn.startswith(p) for p in _EDITOR_ONLY_PREFIXES):
         return "editor_only"
-    if class_name in _KNOWN_UNIMPLEMENTED_CLASSES or any(
-        class_name.startswith(p) for p in _KNOWN_UNIMPLEMENTED_PREFIXES
+    if cn in _KNOWN_UNIMPLEMENTED_CLASSES or any(cn.startswith(p) for p in _KNOWN_UNIMPLEMENTED_PREFIXES):
+        return "known_unimplemented"
+    # Identity-rule slot: object_name / outer_name / roles evaluated here
+    # (sibling AnimBlueprint plan). Empty by design in this plan.
+    if context.object_name.startswith("Default__") and context.class_name.endswith("_C"):
+        return "known_unimplemented"
+    if (
+        context.object_name in _ANIM_GENERATED_DATA_OBJECTS
+        and context.outer_name is not None
+        and context.outer_name.endswith("_C")
     ):
         return "known_unimplemented"
     return "unexpected"

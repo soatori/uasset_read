@@ -19,7 +19,7 @@ bulk_expected | editor_only | known_unimplemented | recovered_corruption | conse
 
 ## 3. 接线点
 
-- trailing: `legacy_reader` EXPORT_TRAILING_BYTES_UNCONSUMED + class 名分类
+- trailing: `legacy_reader` EXPORT_TRAILING_BYTES_UNCONSUMED + `TrailingContext` 上下文分类（class 桶规则 + `Default__*_C` CDO / AnimBlueprint generated-data 按 object name + Outer 归 known_unimplemented）
 - recovery: archive `fstring_all_null` / `name_index_out_of_range` / `fname_index_shift_recovered` → recovered_corruption
 - table: TABLE_PAYLOAD_RESIDUE / TABLE_ROWS_TRUNCATED → conservative_complete
 
