@@ -51,11 +51,6 @@ def cooked_material() -> PackageDocument:
 
 
 @pytest.fixture
-def unversioned_fixture():
-    return make_property_input("BP_UnversionedTest.uasset", object_name="Default__BP_UnversionedTest_C")
-
-
-@pytest.fixture
 def tagged_fixture():
     return make_property_input("TestBlueprint.uasset")
 

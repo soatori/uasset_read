@@ -7,7 +7,7 @@ never reopen package bytes and never invoke Unreal Editor.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Literal
 
 from uasset_read.models.byte_ranges import ByteRegion
 from uasset_read.models.diagnostics import Diagnostic
@@ -44,21 +44,6 @@ class ProjectionRecord:
     diagnostics: list[Diagnostic] = field(default_factory=list)
     source_range: ByteRegion | None = None
     external: SidecarRecord | None = None
-
-
-@runtime_checkable
-class AssetProjector(Protocol):
-    """Type-aware projector protocol. Match semantic kind, then class family."""
-
-    asset_kinds: tuple[str, ...]
-
-    def can_project(self, obj: ObjectRecord) -> bool: ...
-
-    def project(
-        self,
-        document: PackageDocument,
-        obj: ObjectRecord,
-    ) -> list[ProjectionRecord]: ...
 
 
 def dependency_ids(document: PackageDocument, object_id: str) -> list[str]:

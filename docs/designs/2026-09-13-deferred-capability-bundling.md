@@ -82,7 +82,7 @@ Recorded after v3 Tasks 1–12 closeout. These decisions **do not authorize impl
 
 | ID | Decision | Rationale |
 | --- | --- | --- |
-| D-SCHEMA | **S-B — continue defer.** No Bundle 2 start; cooked-unversioned fixtures acquisition not authorized this round. Production path stays mapping-driven usmap + opaque fallback. | Protocol/`UsmapSchemaProvider` exist but are not production-wired; no paired cooked fixtures → cannot accept cooked-complete claims. |
+| D-SCHEMA | **S-B — continue defer.** No Bundle 2 start; cooked-unversioned fixtures acquisition not authorized this round. Production path stays mapping-driven usmap + opaque fallback. | `SchemaProvider` scaffolding was never production-wired and has been removed (re-add at wiring time); no paired cooked fixtures → cannot accept cooked-complete claims. |
 | D-DIFF | **F-D — permanent non-goal.** CLI remains without `--diff`. | No live product need; comparison target never specified; Gate A already limits golden use to regression ID, not schema constraint. |
 | D-CPP (old skeleton) | **C-A — permanently retired.** Gate K string `cpp_code` chain stays retired. v3 typed C++ projection (`projections/`) is current and sufficient until a **new** emission design is explicitly requested. | Avoids second parallel C++ output path; bundling rule 4. |
 | Automatic output sidecar | **Keep single-file canonical writer** (`sidecars[]` empty; oversize → `OutputBudgetError`). Measured size/safety probe in `temp/` remains optional follow-up, **not** scheduled. | Plan invariant: physical sidecars only after a measured hard boundary. |

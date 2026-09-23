@@ -19,6 +19,7 @@ from uasset_read.constants import (
     MAX_EXPORT_COUNT,
     MAX_IMPORT_COUNT,
     MAX_NAME_COUNT,
+    MIN_UASSET_SIZE,
     PACKAGE_FILE_TAG,
     PACKAGE_FILE_TAG_SWAPPED,
 )
@@ -49,7 +50,7 @@ def _validated_legacy(source: ByteSource) -> bool:
     catalog maxima) reject the candidate instead of trusting the tag alone.
     """
     size = source.size()
-    if size is not None and size < 64:  # MIN_UASSET_SIZE
+    if size is not None and size < MIN_UASSET_SIZE:
         return False
     try:
         head = source.read_at(0, 4)

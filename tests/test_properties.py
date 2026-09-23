@@ -8,7 +8,7 @@ from tests.fixtures import make_property_input
 from uasset_read.models.byte_ranges import ByteRegion
 from uasset_read.models.properties import PropertyBag, PropertyEntry, project_property_bag, project_property_entries
 from uasset_read.parsers.properties.tagged import TaggedPropertyReader
-from uasset_read.parsers.properties.unversioned import UnversionedPropertyReader, parse_unversioned_header
+from uasset_read.parsers.properties.unversioned import parse_unversioned_header
 
 
 def test_tagged_reader_reports_consumed_boundary(tagged_fixture):
@@ -105,12 +105,6 @@ def test_tagged_reader_is_sole_production_entry():
     assert "TaggedPropertyReader" in legacy_source
     assert "parse_properties_from_export" not in legacy_source
     assert hasattr(TaggedPropertyReader, "read_export")
-
-
-def test_unversioned_reader_does_not_guess_without_schema(unversioned_fixture):
-    result = UnversionedPropertyReader(schema=None).read(unversioned_fixture)
-    assert result.status in {"opaque", "unavailable"}
-    assert result.diagnostics[0].reason == "schema_required"
 
 
 def test_unversioned_fragment_bit_layout_synthetic():

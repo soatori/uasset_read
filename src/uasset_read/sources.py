@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Protocol
 
 from uasset_read.archive import SourceInfo
 from uasset_read.exceptions import ParseError
 
 
-@runtime_checkable
 class ByteSource(Protocol):
     def read_at(self, offset: int, size: int) -> bytes: ...
     def size(self) -> int | None: ...

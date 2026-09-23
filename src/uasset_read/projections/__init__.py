@@ -33,7 +33,6 @@ from uasset_read.projections.bundle import (
     write_projected_document,
 )
 from uasset_read.projections.records import (
-    AssetProjector,
     ProjectionRecord,
     SidecarRecord,
     dependency_ids,
@@ -45,7 +44,6 @@ from uasset_read.projections.registry import (
 )
 
 __all__ = [
-    "AssetProjector",
     "BlueprintCppProjector",
     "CAPABILITY_MATRIX",
     "CppClassDecl",

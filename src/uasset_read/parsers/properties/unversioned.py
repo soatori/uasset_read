@@ -1,15 +1,9 @@
-"""Schema-backed unversioned property reader (never guesses field widths)."""
+"""Unversioned property header parsing (UE FUnversionedHeader)."""
 
 from __future__ import annotations
 
 import struct as _struct
 from dataclasses import dataclass, field
-
-from uasset_read.models.byte_ranges import region_from_source
-from uasset_read.models.diagnostics import Diagnostic
-from uasset_read.models.properties import PropertyBag
-from uasset_read.parsers.properties import PropertyInput, PropertyReadResult
-from uasset_read.parsers.properties.schema import SchemaProvider
 
 
 @dataclass(frozen=True)
@@ -90,117 +84,3 @@ def parse_unversioned_header(data: bytes) -> UnversionedHeader:
         zero_bits=tuple(zero_bits),
         header_size=cursor,
     )
-
-
-class UnversionedPropertyReader:
-    """Never infers field width without an explicit SchemaProvider."""
-
-    def __init__(self, schema: SchemaProvider | None) -> None:
-        self._schema = schema
-
-    def read(self, input: PropertyInput) -> PropertyReadResult:
-        region = region_from_source(
-            input.source,
-            input.start,
-            input.size,
-            status="opaque",
-            reason="schema_required",
-        )
-        if self._schema is None:
-            diag = Diagnostic(
-                severity="warning",
-                code="UNVERSIONED_SCHEMA_REQUIRED",
-                message=f"no schema for {input.class_name}",
-                stage="properties.unversioned",
-                object_id=input.object_id,
-                offset=input.start,
-                size=input.size,
-                effect="semantic_loss",
-                reason="schema_required",
-            )
-            return PropertyReadResult(
-                values=PropertyBag(),
-                consumed=input.size,
-                regions=[region],
-                diagnostics=[diag],
-                status="opaque",
-            )
-
-        fields = self._schema.fields_for(input.class_name, input.context)
-        if fields is None:
-            diag = Diagnostic(
-                severity="warning",
-                code="UNVERSIONED_SCHEMA_REQUIRED",
-                message=f"unmapped class {input.class_name}",
-                stage="properties.unversioned",
-                object_id=input.object_id,
-                offset=input.start,
-                size=input.size,
-                effect="semantic_loss",
-                reason="schema_required",
-            )
-            return PropertyReadResult(
-                values=PropertyBag(),
-                consumed=input.size,
-                regions=[region],
-                diagnostics=[diag],
-                status="opaque",
-            )
-
-        # Schema present: parse header (incl. zero-mask) to bound the stream.
-        # Full field walk remains in property_parser._parse_unversioned_properties_from_mapping
-        # (archive+export context); this reader never guesses field widths.
-        try:
-            raw = input.source.read_at(input.start, input.size)
-            header = parse_unversioned_header(raw)
-        except (ValueError, _struct.error, OSError) as exc:
-            diag = Diagnostic(
-                severity="warning",
-                code="UNVERSIONED_HEADER_INVALID",
-                message=str(exc),
-                stage="properties.unversioned",
-                object_id=input.object_id,
-                offset=input.start,
-                size=input.size,
-                effect="semantic_loss",
-                reason="unexpected",
-            )
-            return PropertyReadResult(
-                values=PropertyBag(),
-                consumed=input.size,
-                regions=[region],
-                diagnostics=[diag],
-                status="opaque",
-            )
-
-        # Header validated; field walk needs archive/export identity (production
-        # path). Without it, bound the stream as opaque rather than invent layout.
-        consumed = min(header.header_size, input.size)
-        walk_region = region_from_source(
-            input.source,
-            input.start,
-            input.size,
-            status="opaque",
-            reason="schema_walk_needs_export_context",
-        )
-        diag = Diagnostic(
-            severity="warning",
-            code="UNVERSIONED_SCHEMA_WALK_DEFERRED",
-            message=(
-                f"schema fields present for {input.class_name}; "
-                "byte walk runs via property_parser with export context"
-            ),
-            stage="properties.unversioned",
-            object_id=input.object_id,
-            offset=input.start,
-            size=input.size,
-            effect="semantic_loss",
-            reason="schema_required",
-        )
-        return PropertyReadResult(
-            values=PropertyBag(),
-            consumed=consumed,
-            regions=[walk_region],
-            diagnostics=[diag],
-            status="opaque",
-        )
