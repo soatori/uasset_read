@@ -156,5 +156,439 @@
       },
       "opt_in": true
     }
+  },
+  "aggregate": {
+    "scope": "manifest",
+    "sample_count": 66,
+    "max_total_warnings": 2772,
+    "max_total_bytes": 3317308,
+    "by_reason": {
+      "bulk_expected": {
+        "max_count": 5,
+        "max_bytes": 22306
+      },
+      "editor_only": {
+        "max_count": 1415,
+        "max_bytes": 1404713
+      },
+      "known_unimplemented": {
+        "max_count": 1344,
+        "max_bytes": 1198021
+      },
+      "unexpected": {
+        "max_count": 8,
+        "max_bytes": 692268
+      }
+    },
+    "by_reason_class": {
+      "bulk_expected/SoundCue": {
+        "max_count": 1,
+        "max_bytes": 6
+      },
+      "bulk_expected/SoundWave": {
+        "max_count": 1,
+        "max_bytes": 68
+      },
+      "bulk_expected/Texture2D": {
+        "max_count": 2,
+        "max_bytes": 22176
+      },
+      "bulk_expected/TextureCube": {
+        "max_count": 1,
+        "max_bytes": 56
+      },
+      "editor_only/AnimBlueprintGeneratedClass": {
+        "max_count": 3,
+        "max_bytes": 56153
+      },
+      "editor_only/Blueprint": {
+        "max_count": 1,
+        "max_bytes": 4
+      },
+      "editor_only/BlueprintGeneratedClass": {
+        "max_count": 13,
+        "max_bytes": 15798
+      },
+      "editor_only/Function": {
+        "max_count": 214,
+        "max_bytes": 126441
+      },
+      "editor_only/K2Node_AddDelegate": {
+        "max_count": 1,
+        "max_bytes": 978
+      },
+      "editor_only/K2Node_AnimGetter": {
+        "max_count": 34,
+        "max_bytes": 26138
+      },
+      "editor_only/K2Node_AsyncAction": {
+        "max_count": 1,
+        "max_bytes": 2016
+      },
+      "editor_only/K2Node_BreakStruct": {
+        "max_count": 82,
+        "max_bytes": 140658
+      },
+      "editor_only/K2Node_CallArrayFunction": {
+        "max_count": 2,
+        "max_bytes": 1350
+      },
+      "editor_only/K2Node_CallDelegate": {
+        "max_count": 4,
+        "max_bytes": 2996
+      },
+      "editor_only/K2Node_CallFunction": {
+        "max_count": 341,
+        "max_bytes": 368129
+      },
+      "editor_only/K2Node_CallMaterialParameterCollectionFunction": {
+        "max_count": 1,
+        "max_bytes": 1947
+      },
+      "editor_only/K2Node_CallParentFunction": {
+        "max_count": 2,
+        "max_bytes": 1530
+      },
+      "editor_only/K2Node_CommutativeAssociativeBinaryOperator": {
+        "max_count": 42,
+        "max_bytes": 40679
+      },
+      "editor_only/K2Node_CreateWidget": {
+        "max_count": 1,
+        "max_bytes": 1140
+      },
+      "editor_only/K2Node_CustomEvent": {
+        "max_count": 8,
+        "max_bytes": 3416
+      },
+      "editor_only/K2Node_DynamicCast": {
+        "max_count": 6,
+        "max_bytes": 7614
+      },
+      "editor_only/K2Node_EnhancedInputAction": {
+        "max_count": 12,
+        "max_bytes": 41302
+      },
+      "editor_only/K2Node_Event": {
+        "max_count": 68,
+        "max_bytes": 40962
+      },
+      "editor_only/K2Node_ExecutionSequence": {
+        "max_count": 4,
+        "max_bytes": 3536
+      },
+      "editor_only/K2Node_FunctionEntry": {
+        "max_count": 25,
+        "max_bytes": 9333
+      },
+      "editor_only/K2Node_FunctionResult": {
+        "max_count": 4,
+        "max_bytes": 1943
+      },
+      "editor_only/K2Node_GetArrayItem": {
+        "max_count": 2,
+        "max_bytes": 1336
+      },
+      "editor_only/K2Node_IfThenElse": {
+        "max_count": 32,
+        "max_bytes": 29952
+      },
+      "editor_only/K2Node_Knot": {
+        "max_count": 77,
+        "max_bytes": 34476
+      },
+      "editor_only/K2Node_MacroInstance": {
+        "max_count": 11,
+        "max_bytes": 13056
+      },
+      "editor_only/K2Node_MakeArray": {
+        "max_count": 3,
+        "max_bytes": 1737
+      },
+      "editor_only/K2Node_Message": {
+        "max_count": 3,
+        "max_bytes": 4335
+      },
+      "editor_only/K2Node_PlayMontage": {
+        "max_count": 4,
+        "max_bytes": 14136
+      },
+      "editor_only/K2Node_PromotableOperator": {
+        "max_count": 40,
+        "max_bytes": 29379
+      },
+      "editor_only/K2Node_Self": {
+        "max_count": 5,
+        "max_bytes": 1120
+      },
+      "editor_only/K2Node_SpawnActorFromClass": {
+        "max_count": 1,
+        "max_bytes": 1990
+      },
+      "editor_only/K2Node_Timeline": {
+        "max_count": 1,
+        "max_bytes": 2264
+      },
+      "editor_only/K2Node_Tunnel": {
+        "max_count": 2,
+        "max_bytes": 1550
+      },
+      "editor_only/K2Node_VariableGet": {
+        "max_count": 283,
+        "max_bytes": 278847
+      },
+      "editor_only/K2Node_VariableSet": {
+        "max_count": 47,
+        "max_bytes": 55195
+      },
+      "editor_only/MetaData": {
+        "max_count": 29,
+        "max_bytes": 41241
+      },
+      "editor_only/SoundNodeMixer": {
+        "max_count": 1,
+        "max_bytes": 6
+      },
+      "editor_only/SoundNodeModulator": {
+        "max_count": 2,
+        "max_bytes": 12
+      },
+      "editor_only/SoundNodeWavePlayer": {
+        "max_count": 3,
+        "max_bytes": 18
+      },
+      "known_unimplemented/AnimGraphNode_ApplyAdditive": {
+        "max_count": 34,
+        "max_bytes": 60912
+      },
+      "known_unimplemented/AnimGraphNode_ApplyMeshSpaceAdditive": {
+        "max_count": 18,
+        "max_bytes": 35460
+      },
+      "known_unimplemented/AnimGraphNode_BlendListByBool": {
+        "max_count": 1,
+        "max_bytes": 2156
+      },
+      "known_unimplemented/AnimGraphNode_BlendListByEnum": {
+        "max_count": 7,
+        "max_bytes": 15560
+      },
+      "known_unimplemented/AnimGraphNode_BlendListByInt": {
+        "max_count": 7,
+        "max_bytes": 26992
+      },
+      "known_unimplemented/AnimGraphNode_BlendSpaceEvaluator": {
+        "max_count": 5,
+        "max_bytes": 8723
+      },
+      "known_unimplemented/AnimGraphNode_BlendSpacePlayer": {
+        "max_count": 11,
+        "max_bytes": 12245
+      },
+      "known_unimplemented/AnimGraphNode_ComponentToLocalSpace": {
+        "max_count": 5,
+        "max_bytes": 3040
+      },
+      "known_unimplemented/AnimGraphNode_ControlRig": {
+        "max_count": 1,
+        "max_bytes": 1587
+      },
+      "known_unimplemented/AnimGraphNode_Inertialization": {
+        "max_count": 2,
+        "max_bytes": 1152
+      },
+      "known_unimplemented/AnimGraphNode_LayeredBoneBlend": {
+        "max_count": 13,
+        "max_bytes": 19605
+      },
+      "known_unimplemented/AnimGraphNode_LinkedAnimLayer": {
+        "max_count": 8,
+        "max_bytes": 6347
+      },
+      "known_unimplemented/AnimGraphNode_LinkedInputPose": {
+        "max_count": 17,
+        "max_bytes": 3808
+      },
+      "known_unimplemented/AnimGraphNode_LocalToComponentSpace": {
+        "max_count": 5,
+        "max_bytes": 2920
+      },
+      "known_unimplemented/AnimGraphNode_MakeDynamicAdditive": {
+        "max_count": 2,
+        "max_bytes": 1996
+      },
+      "known_unimplemented/AnimGraphNode_ModifyBone": {
+        "max_count": 13,
+        "max_bytes": 21984
+      },
+      "known_unimplemented/AnimGraphNode_ModifyCurve": {
+        "max_count": 37,
+        "max_bytes": 38662
+      },
+      "known_unimplemented/AnimGraphNode_MultiWayBlend": {
+        "max_count": 43,
+        "max_bytes": 110788
+      },
+      "known_unimplemented/AnimGraphNode_PoseSnapshot": {
+        "max_count": 1,
+        "max_bytes": 578
+      },
+      "known_unimplemented/AnimGraphNode_Root": {
+        "max_count": 10,
+        "max_bytes": 3522
+      },
+      "known_unimplemented/AnimGraphNode_SaveCachedPose": {
+        "max_count": 33,
+        "max_bytes": 11578
+      },
+      "known_unimplemented/AnimGraphNode_SequenceEvaluator": {
+        "max_count": 148,
+        "max_bytes": 87024
+      },
+      "known_unimplemented/AnimGraphNode_SequencePlayer": {
+        "max_count": 74,
+        "max_bytes": 42409
+      },
+      "known_unimplemented/AnimGraphNode_Slot": {
+        "max_count": 12,
+        "max_bytes": 8086
+      },
+      "known_unimplemented/AnimGraphNode_StateMachine": {
+        "max_count": 22,
+        "max_bytes": 4928
+      },
+      "known_unimplemented/AnimGraphNode_StateResult": {
+        "max_count": 93,
+        "max_bytes": 32832
+      },
+      "known_unimplemented/AnimGraphNode_TransitionResult": {
+        "max_count": 165,
+        "max_bytes": 53276
+      },
+      "known_unimplemented/AnimGraphNode_TwoBoneIK": {
+        "max_count": 4,
+        "max_bytes": 5769
+      },
+      "known_unimplemented/AnimGraphNode_TwoWayBlend": {
+        "max_count": 63,
+        "max_bytes": 143591
+      },
+      "known_unimplemented/AnimGraphNode_UseCachedPose": {
+        "max_count": 107,
+        "max_bytes": 23968
+      },
+      "known_unimplemented/AnimMontage": {
+        "max_count": 1,
+        "max_bytes": 16
+      },
+      "known_unimplemented/AnimSequence": {
+        "max_count": 1,
+        "max_bytes": 17846
+      },
+      "known_unimplemented/AnimStateAliasNode": {
+        "max_count": 2,
+        "max_bytes": 864
+      },
+      "known_unimplemented/AnimStateConduitNode": {
+        "max_count": 9,
+        "max_bytes": 4956
+      },
+      "known_unimplemented/AnimStateEntryNode": {
+        "max_count": 23,
+        "max_bytes": 5128
+      },
+      "known_unimplemented/AnimStateNode": {
+        "max_count": 93,
+        "max_bytes": 45924
+      },
+      "known_unimplemented/AnimStateTransitionNode": {
+        "max_count": 209,
+        "max_bytes": 92796
+      },
+      "known_unimplemented/BlendSpace": {
+        "max_count": 1,
+        "max_bytes": 16
+      },
+      "known_unimplemented/BodySetup": {
+        "max_count": 2,
+        "max_bytes": 40
+      },
+      "known_unimplemented/Level": {
+        "max_count": 1,
+        "max_bytes": 199
+      },
+      "known_unimplemented/Material": {
+        "max_count": 1,
+        "max_bytes": 124777
+      },
+      "known_unimplemented/Model": {
+        "max_count": 3,
+        "max_bytes": 3394
+      },
+      "known_unimplemented/MovieScene": {
+        "max_count": 1,
+        "max_bytes": 106
+      },
+      "known_unimplemented/NavCollision": {
+        "max_count": 1,
+        "max_bytes": 32
+      },
+      "known_unimplemented/PhysicsAsset": {
+        "max_count": 1,
+        "max_bytes": 544
+      },
+      "known_unimplemented/Polys": {
+        "max_count": 2,
+        "max_bytes": 2120
+      },
+      "known_unimplemented/PoseAsset": {
+        "max_count": 1,
+        "max_bytes": 16
+      },
+      "known_unimplemented/SkeletalBodySetup": {
+        "max_count": 19,
+        "max_bytes": 380
+      },
+      "known_unimplemented/Skeleton": {
+        "max_count": 3,
+        "max_bytes": 105569
+      },
+      "known_unimplemented/StaticMesh": {
+        "max_count": 1,
+        "max_bytes": 94
+      },
+      "known_unimplemented/StaticMeshDescriptionBulkData": {
+        "max_count": 2,
+        "max_bytes": 136
+      },
+      "known_unimplemented/UserDefinedEnum": {
+        "max_count": 2,
+        "max_bytes": 138
+      },
+      "known_unimplemented/UserDefinedStruct": {
+        "max_count": 3,
+        "max_bytes": 1420
+      },
+      "known_unimplemented/World": {
+        "max_count": 1,
+        "max_bytes": 12
+      },
+      "unexpected/ABP_Manny_C": {
+        "max_count": 1,
+        "max_bytes": 16494
+      },
+      "unexpected/ABP_RifleAnimLayers_C": {
+        "max_count": 1,
+        "max_bytes": 12
+      },
+      "unexpected/ALS_AnimBP_C": {
+        "max_count": 1,
+        "max_bytes": 605230
+      },
+      "unexpected/ScriptStruct": {
+        "max_count": 5,
+        "max_bytes": 70532
+      }
+    }
   }
 }

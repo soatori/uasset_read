@@ -1255,3 +1255,79 @@ def test_abp_cdo_trailers_remain_unexpected_for_sibling_plan():
     assert cdo_trailing, "expected the ABP CDO trailer"
     assert all(d.reason == "unexpected" for d in cdo_trailing)
     assert all(d.size is not None and d.size > 0 for d in cdo_trailing)
+
+
+def _assert_trailing_aggregate(actual: dict, baseline: dict) -> None:
+    assert actual["sample_count"] == baseline["sample_count"], (
+        f"aggregate sample_count {actual['sample_count']} != baseline {baseline['sample_count']}; "
+        "regenerate quality_baseline.json (manifest changed)"
+    )
+    assert actual["max_total_warnings"] <= baseline["max_total_warnings"], (
+        f"trailing warnings {actual['max_total_warnings']} > baseline {baseline['max_total_warnings']}"
+    )
+    assert actual["max_total_bytes"] <= baseline["max_total_bytes"], (
+        f"total bytes {actual['max_total_bytes']} > baseline {baseline['max_total_bytes']}"
+    )
+    for reason, stats in actual["by_reason"].items():
+        assert reason in baseline["by_reason"], f"reason mix: {reason} not in baseline"
+        limit = baseline["by_reason"][reason]
+        assert stats["max_count"] <= limit["max_count"], f"{reason}: count {stats['max_count']} > {limit['max_count']}"
+        assert stats["max_bytes"] <= limit["max_bytes"], f"{reason}: bytes {stats['max_bytes']} > {limit['max_bytes']}"
+    unlisted = sorted(set(actual["by_reason_class"]) - set(baseline["by_reason_class"]))
+    assert not unlisted, f"not in baseline (new reason/class pair): {unlisted}"
+    for key, stats in actual["by_reason_class"].items():
+        limit = baseline["by_reason_class"][key]
+        assert stats["max_count"] <= limit["max_count"], f"{key}: count {stats['max_count']} > {limit['max_count']}"
+        assert stats["max_bytes"] <= limit["max_bytes"], f"{key}: bytes {stats['max_bytes']} > {limit['max_bytes']}"
+
+
+def _aggregate_from_manifest():
+    from importlib.util import spec_from_file_location, module_from_spec
+
+    spec = spec_from_file_location("gen_quality_baseline", ROOT / "tools" / "gen_quality_baseline.py")
+    mod = module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    docs = [(entry["name"], _asset_document(entry["name"])) for entry in MANIFEST_SAMPLES]
+    return mod.aggregate_trailing_report(docs)
+
+
+def test_trailing_aggregate_report_within_baseline():
+    """Report-level gate: all 66 manifest samples, counts AND bytes, by reason and class."""
+    actual = _aggregate_from_manifest()
+    baseline = json.loads((SAMPLES / "quality_baseline.json").read_text(encoding="utf-8"))["aggregate"]
+    _assert_trailing_aggregate(actual, baseline)
+    assert actual["sample_count"] == 66
+
+
+def test_trailing_aggregate_gate_blocks_growth():
+    """Fail path: a synthetic report over ceiling in bytes or with a new class must fail."""
+    baseline = {
+        "scope": "manifest", "sample_count": 2,
+        "max_total_warnings": 3, "max_total_bytes": 40,
+        "by_reason": {"unexpected": {"max_count": 3, "max_bytes": 40}},
+        "by_reason_class": {"unexpected/ABP_X_C": {"max_count": 3, "max_bytes": 40}},
+    }
+
+    def _check(actual, match):
+        with pytest.raises(AssertionError, match=match):
+            _assert_trailing_aggregate(actual, baseline)
+
+    good = {
+        "scope": "manifest", "sample_count": 2,
+        "max_total_warnings": 2, "max_total_bytes": 30,
+        "by_reason": {"unexpected": {"max_count": 2, "max_bytes": 30}},
+        "by_reason_class": {"unexpected/ABP_X_C": {"max_count": 2, "max_bytes": 30}},
+    }
+    # Under ceiling passes (called directly, no raise).
+    _assert_trailing_aggregate(good, baseline)
+
+    over_bytes = dict(good, max_total_bytes=41)
+    _check(over_bytes, "total bytes")
+    over_reason = {
+        **good,
+        "by_reason": {"unexpected": {"max_count": 2, "max_bytes": 30}, "editor_only": {"max_count": 1, "max_bytes": 5}},
+    }
+    _check(over_reason, "reason mix")
+    new_pair = {"max_count": 1, "max_bytes": 3}
+    new_class = dict(good, by_reason_class={**good["by_reason_class"], "unexpected/NewClass": new_pair})
+    _check(new_class, "not in baseline")
