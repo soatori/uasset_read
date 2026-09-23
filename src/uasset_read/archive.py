@@ -256,6 +256,18 @@ class FArchive:
         """Return collected structured diagnostics."""
         return list(self._structured_diagnostics)
 
+    def rollback_structured_diagnostics(self, mark: int) -> None:
+        """Drop diagnostics recorded after *mark* (failed parse-attempt rewind).
+
+        Only the structured-diagnostics list is rewound. ``_name_warnings_seen``
+        dedup slots consumed by the failed attempt are kept, so a later genuine
+        ``name_index_out_of_range`` at the same (>= 2**24) index may be
+        suppressed once — an accepted ceiling of the validate-and-rollback
+        design (ponytail: dedup slot leak per rejected attempt; clear the slots
+        too if a real fixture ever hits the suppression).
+        """
+        del self._structured_diagnostics[mark:]
+
     # Type read methods
 
     def _read_le(self, fmt_char: str, size: int):
@@ -358,6 +370,7 @@ class FArchive:
                     fallback="used_empty_string",
                     message=f"FString at pos {pos_before}: {enc} expected {byte_len} bytes "
                     f"but only {self._file_size - pos_before - 4} remain",
+                    reason="recovered_corruption",
                 )
                 return ""
             raise ParseError(
@@ -430,32 +443,38 @@ class FArchive:
                     truncated,
                 )
                 return truncated
-            # All nulls from start — likely file tail padding (zero-filled region).
-            # Return empty string in both modes with diagnostic (#405).
-            # Check if remaining file data is also mostly zeros (padding zone).
-            # If so, advance to file end to prevent offset cascade (#138).
-            # Alignment padding noise reduction: common alignment sizes + 4-byte aligned positions → debug (#369)
-            if self._is_likely_alignment_padding(pos_before + 4, len(data)):
-                logger.debug(
-                    "FString at pos %d: length=%d, encoding=UTF-8, "
-                    "all nulls (likely alignment padding), "
-                    "consumed=%d bytes, end_pos=%d",
-                    pos_before,
-                    length,
-                    len(data),
-                    self.tell(),
-                )
+            # first_null_idx == 0: payload starts with a NUL. Classify as
+            # all-null ONLY when the entire payload is zero bytes — a leading
+            # NUL plus later non-zero bytes is not all-null and must not emit
+            # fstring_all_null (Lyra MovieScene pos 35269: 00 00 00 00 1d ...).
+            if not any(data):
+                # Alignment padding noise reduction: common alignment sizes + 4-byte aligned positions → debug (#369)
+                if self._is_likely_alignment_padding(pos_before + 4, len(data)):
+                    logger.debug(
+                        "FString at pos %d: length=%d, encoding=UTF-8, "
+                        "all nulls (likely alignment padding), "
+                        "consumed=%d bytes, end_pos=%d",
+                        pos_before,
+                        length,
+                        len(data),
+                        self.tell(),
+                    )
+                else:
+                    self._record_structured_diagnostic(
+                        code="fstring_all_null",
+                        stage="read_fstring",
+                        offset=pos_before,
+                        raw_value=length,
+                        fallback="used_empty_string",
+                        message=f"FString at pos {pos_before}: length={length}, encoding=UTF-8, all nulls (completely corrupted)",
+                        reason="recovered_corruption",
+                    )
             else:
-                self._record_structured_diagnostic(
-                    code="fstring_all_null",
-                    stage="read_fstring",
-                    offset=pos_before,
-                    raw_value=length,
-                    fallback="used_empty_string",
-                    message=f"FString at pos {pos_before}: length={length}, encoding=UTF-8, all nulls (completely corrupted)",
-                    reason="recovered_corruption",
+                logger.debug(
+                    "FString hex detail: pos=%d, hex=%s (leading NUL, non-zero content)",
+                    pos_before,
+                    data[:32].hex(),
                 )
-            logger.debug("FString hex detail: pos=%d, hex=%s", pos_before, data[:32].hex())
             # Padding zone detection: scan ahead up to 1KB for non-zero data
             current_pos = self.tell()
             remaining = self._file_size - current_pos
