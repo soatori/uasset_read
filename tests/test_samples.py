@@ -1245,11 +1245,13 @@ def _assert_trailing_aggregate(actual: dict, baseline: dict) -> None:
         f"aggregate sample_count {actual['sample_count']} != baseline {baseline['sample_count']}; "
         "regenerate quality_baseline.json (manifest changed)"
     )
-    assert actual["max_total_warnings"] <= baseline["max_total_warnings"], (
-        f"trailing warnings {actual['max_total_warnings']} > baseline {baseline['max_total_warnings']}"
+    assert actual["max_total_warnings"] == baseline["max_total_warnings"], (
+        f"trailing warnings {actual['max_total_warnings']} != baseline {baseline['max_total_warnings']} "
+        "(totals must match; regenerate the baseline to review the change)"
     )
-    assert actual["max_total_bytes"] <= baseline["max_total_bytes"], (
-        f"total bytes {actual['max_total_bytes']} > baseline {baseline['max_total_bytes']}"
+    assert actual["max_total_bytes"] == baseline["max_total_bytes"], (
+        f"total bytes {actual['max_total_bytes']} != baseline {baseline['max_total_bytes']} "
+        "(totals must match; regenerate the baseline to review the change)"
     )
     for reason, stats in actual["by_reason"].items():
         assert reason in baseline["by_reason"], f"reason mix: {reason} not in baseline"
@@ -1297,15 +1299,20 @@ def test_trailing_aggregate_gate_blocks_growth():
 
     good = {
         "scope": "manifest", "sample_count": 2,
-        "max_total_warnings": 2, "max_total_bytes": 30,
+        "max_total_warnings": 3, "max_total_bytes": 40,
         "by_reason": {"unexpected": {"max_count": 2, "max_bytes": 30}},
         "by_reason_class": {"unexpected/ABP_X_C": {"max_count": 2, "max_bytes": 30}},
     }
-    # Under ceiling passes (called directly, no raise).
+    # Totals exactly at ceiling, detail under it: passes (called directly, no raise).
     _assert_trailing_aggregate(good, baseline)
 
     over_bytes = dict(good, max_total_bytes=41)
     _check(over_bytes, "total bytes")
+    # Loss regressions: totals BELOW baseline must also fail (gate is exact on totals).
+    lost_warnings = dict(good, max_total_warnings=1)
+    _check(lost_warnings, "trailing warnings")
+    lost_bytes = dict(good, max_total_bytes=20)
+    _check(lost_bytes, "total bytes")
     over_reason = {
         **good,
         "by_reason": {"unexpected": {"max_count": 2, "max_bytes": 30}, "editor_only": {"max_count": 1, "max_bytes": 5}},
