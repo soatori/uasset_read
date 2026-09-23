@@ -308,3 +308,49 @@ def test_classify_trailing_reason_context_defaults_match_class_name_shorthand():
     ):
         assert classify_trailing_reason(TrailingContext(class_name=cls)) == expected
         assert classify_trailing_reason(cls) == expected
+
+
+def test_resolve_outer_name_export_and_import_and_null():
+    from uasset_read.models.object_model import ObjectRecord, ObjectRef
+    from uasset_read.parsers.legacy_reader import _resolve_outer_name
+    from uasset_read.serializers.object_resources import ObjectImport, PackageIndex
+
+    objects = [
+        ObjectRecord(id="export:0", table_index=0, name="Root", roles=("asset",)),
+        ObjectRecord(
+            id="export:1", table_index=1, name="Child",
+            outer_ref=ObjectRef(table="export", index=0), roles=(),
+        ),
+    ]
+    imports = [
+        ObjectImport(
+            class_package="/Script/Engine", class_name="Class",
+            outer_index=PackageIndex(0), object_name="SomeClass",
+        )
+    ]
+    # Export Outer resolves through the objects list.
+    assert _resolve_outer_name(objects[1], objects, imports) == "Root"
+    # Import Outer resolves through the import map.
+    obj_import_outer = ObjectRecord(
+        id="export:2", table_index=2, name="Inst",
+        outer_ref=ObjectRef(table="import", index=0), roles=(),
+    )
+    assert _resolve_outer_name(obj_import_outer, objects, imports) == "SomeClass"
+    # Null Outer and out-of-range indexes stay None (bounded, no raise).
+    assert _resolve_outer_name(objects[0], objects, imports) is None
+    obj_oob = ObjectRecord(
+        id="export:3", table_index=3, name="OOB",
+        outer_ref=ObjectRef(table="export", index=99), roles=(),
+    )
+    assert _resolve_outer_name(obj_oob, objects, imports) is None
+
+
+def test_make_diagnostic_accepts_size():
+    from uasset_read.models.diagnostics import make_diagnostic
+
+    d = make_diagnostic(
+        "EXPORT_TRAILING_BYTES_UNCONSUMED", "leaves 6 bytes",
+        "objects.export", size=6, reason="editor_only",
+    )
+    assert d.size == 6
+    assert d.to_dict()["size"] == 6

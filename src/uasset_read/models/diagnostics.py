@@ -71,6 +71,7 @@ def make_diagnostic(
     severity: Literal["info", "warning", "error", "critical"] = "warning",
     effect: Literal["semantic_loss", "data_loss", "parse_failure", "recovery"] | None = "semantic_loss",
     reason: DiagnosticReason | None = None,
+    size: int | None = None,
 ) -> Diagnostic:
     """Build a Diagnostic with common defaults."""
     return Diagnostic(
@@ -81,6 +82,7 @@ def make_diagnostic(
         object_id=object_id,
         effect=effect,
         reason=reason,
+        size=size,
     )
 
 

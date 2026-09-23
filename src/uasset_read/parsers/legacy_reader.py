@@ -37,6 +37,7 @@ from ..serializers.package_summary import (
 )
 from ..models.diagnostics import (
     Diagnostic,
+    TrailingContext,
     classify_trailing_reason,
     make_diagnostic as _diag,
 )
@@ -70,6 +71,24 @@ def _package_index_to_id(pi: PackageIndex) -> str | None:
     if pi.is_import:
         return f"import:{pi.to_import_index()}"
     return f"export:{pi.to_export_index()}"
+
+
+def _resolve_outer_name(
+    obj: ObjectRecord,
+    objects: list[ObjectRecord],
+    import_map: list[ObjectImport],
+) -> str | None:
+    """Resolve an object's Outer to its display name; None when absent or out of range."""
+    ref = obj.outer_ref
+    if ref is None:
+        return None
+    if ref.table == "export":
+        if 0 <= ref.index < len(objects):
+            return objects[ref.index].name
+        return None
+    if 0 <= ref.index < len(import_map):
+        return import_map[ref.index].object_name
+    return None
 
 
 def _build_preload_relations(
@@ -1342,7 +1361,16 @@ class LegacyPackageReader:
                                 ),
                                 "objects.export",
                                 object_id=obj.id,
-                                reason=classify_trailing_reason(cn),
+                                size=remaining,
+                                reason=classify_trailing_reason(
+                                    TrailingContext(
+                                        class_name=cn,
+                                        object_name=obj.name,
+                                        outer_name=_resolve_outer_name(obj, objects, import_map),
+                                        roles=obj.roles,
+                                        payload_kind="native_serial",
+                                    )
+                                ),
                             )
                         )
                 if overrun > 0:

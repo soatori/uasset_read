@@ -1154,3 +1154,17 @@ def test_quality_baseline_diagnostics(sample_name):
     page = project_document(doc)
     jsonschema.validate(page, SCHEMA)
     _assert_quality_baseline(doc, sample_name)
+
+
+def test_trailing_diagnostics_carry_structured_size():
+    """Trailing bytes must be machine-readable (Diagnostic.size), not message-only."""
+    from uasset_read.package import parse_package_document
+
+    doc = parse_package_document(str(SAMPLES / "StarterContent_Starter_Background_Cue.uasset"), depth="asset")
+    trailing = [d for d in doc.diagnostics if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"]
+    assert trailing, "fixture must emit trailing diagnostics"
+    for d in trailing:
+        assert d.size is not None and d.size > 0, f"{d.object_id}: missing structured size"
+        assert d.reason is not None
+        # Message and structured field must agree.
+        assert f"leaves {d.size} undecoded bytes" in d.message
