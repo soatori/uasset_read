@@ -1225,7 +1225,6 @@ def test_collision_and_enum_pose_movie_tails_known_unimplemented():
         "Lyra_Enum_PanelType.uasset": {"Enum_PanelType": 53},
         "StackOBot_Enum_CameraState.uasset": {"Enum_CameraState": 85},
         "Echo_calf_l_PoseAsset.uasset": {"calf_l_PoseAsset": 16},
-        "Lyra_SEQ_LobbyScreen_LevelSequence.uasset": {"MovieScene_0": 106},
     }
     for sample, expect in cases.items():
         doc = parse_package_document(str(SAMPLES / sample), depth="asset")
@@ -1238,6 +1237,16 @@ def test_collision_and_enum_pose_movie_tails_known_unimplemented():
             d = found[name]
             assert d.reason == "known_unimplemented", f"{sample}:{name}: {d.reason}"
             assert d.size == size, f"{sample}:{name}: {d.size} != {size}"
+
+    # MovieScene_0 no longer trails at all: the validated map-value fallback
+    # (2026-09-23 moviescene plan) consumes ExpansionStates cleanly, so export:9
+    # ends with zero EXPORT_TRAILING_BYTES_UNCONSUMED — fixed, not classified.
+    lyra = parse_package_document(str(SAMPLES / "Lyra_SEQ_LobbyScreen_LevelSequence.uasset"), depth="asset")
+    lyra_trailing = [
+        d for d in lyra.diagnostics
+        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id == "export:9"
+    ]
+    assert not lyra_trailing, lyra_trailing
 
 
 def _assert_trailing_aggregate(actual: dict, baseline: dict) -> None:

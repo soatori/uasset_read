@@ -157,8 +157,8 @@
   "aggregate": {
     "scope": "manifest",
     "sample_count": 66,
-    "max_total_warnings": 2772,
-    "max_total_bytes": 3317308,
+    "max_total_warnings": 2771,
+    "max_total_bytes": 3317202,
     "by_reason": {
       "bulk_expected": {
         "max_count": 5,
@@ -169,8 +169,8 @@
         "max_bytes": 1404713
       },
       "known_unimplemented": {
-        "max_count": 1352,
-        "max_bytes": 1890289
+        "max_count": 1351,
+        "max_bytes": 1890183
       }
     },
     "by_reason_class": {
@@ -529,10 +529,6 @@
       "known_unimplemented/Model": {
         "max_count": 3,
         "max_bytes": 3394
-      },
-      "known_unimplemented/MovieScene": {
-        "max_count": 1,
-        "max_bytes": 106
       },
       "known_unimplemented/NavCollision": {
         "max_count": 1,
