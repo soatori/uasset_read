@@ -147,10 +147,7 @@
             "max": 577
           },
           "known_unimplemented": {
-            "max": 1251
-          },
-          "unexpected": {
-            "max": 3
+            "max": 1254
           }
         }
       },
@@ -172,12 +169,8 @@
         "max_bytes": 1404713
       },
       "known_unimplemented": {
-        "max_count": 1344,
-        "max_bytes": 1198021
-      },
-      "unexpected": {
-        "max_count": 8,
-        "max_bytes": 692268
+        "max_count": 1352,
+        "max_bytes": 1890289
       }
     },
     "by_reason_class": {
@@ -356,6 +349,18 @@
       "editor_only/SoundNodeWavePlayer": {
         "max_count": 3,
         "max_bytes": 18
+      },
+      "known_unimplemented/ABP_Manny_C": {
+        "max_count": 1,
+        "max_bytes": 16494
+      },
+      "known_unimplemented/ABP_RifleAnimLayers_C": {
+        "max_count": 1,
+        "max_bytes": 12
+      },
+      "known_unimplemented/ALS_AnimBP_C": {
+        "max_count": 1,
+        "max_bytes": 605230
       },
       "known_unimplemented/AnimGraphNode_ApplyAdditive": {
         "max_count": 34,
@@ -545,6 +550,10 @@
         "max_count": 1,
         "max_bytes": 16
       },
+      "known_unimplemented/ScriptStruct": {
+        "max_count": 5,
+        "max_bytes": 70532
+      },
       "known_unimplemented/SkeletalBodySetup": {
         "max_count": 19,
         "max_bytes": 380
@@ -572,22 +581,6 @@
       "known_unimplemented/World": {
         "max_count": 1,
         "max_bytes": 12
-      },
-      "unexpected/ABP_Manny_C": {
-        "max_count": 1,
-        "max_bytes": 16494
-      },
-      "unexpected/ABP_RifleAnimLayers_C": {
-        "max_count": 1,
-        "max_bytes": 12
-      },
-      "unexpected/ALS_AnimBP_C": {
-        "max_count": 1,
-        "max_bytes": 605230
-      },
-      "unexpected/ScriptStruct": {
-        "max_count": 5,
-        "max_bytes": 70532
       }
     }
   }
