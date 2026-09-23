@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status: completed / historical (2026-09-21).** Controller review passed, the merge landed on `dev-0.6.0`, the post-merge suite passed, and all 23 task checkboxes are complete. This file is execution evidence. Do not invoke SDD or rerun its commands unless the user explicitly names this file and requests a new replay.
+
 **Goal:** Finish the remaining closeout work for the complete static UAsset v3 delivery: controller whole-branch review of `sdd/static-uasset-finish`, merge that branch into `dev-0.6.0`, re-run the full suite on the merged branch, and update user-facing docs/README so documented claims match source+tests on `dev-0.6.0`.
 
 **Architecture:** Tasks 1–12 of the static parsing/projection work are already implemented and green on execution branch `sdd/static-uasset-finish` (worktree `.worktrees/sdd-static-continue`). This plan does not reopen implementation. It (1) independently reviews that branch against the spec/AGENTS invariants, (2) lands the already-green commits on `dev-0.6.0`, (3) proves the merged tree with a full verification gate, then (4) updates README/spec/design index status only after source+tests support the claims on the user-facing branch.
@@ -16,7 +18,9 @@
 
 **R6 evidence:** `.superpowers/sdd/2026-09-21-remaining-static-uasset-v3-projection/task-R6-report.md` on the execution branch — 23/23 checklist pass; full suite **442 passed**; `compileall` clean; HEAD `871ff296`.
 
-## Progress snapshot (checked before this plan)
+## Historical Pre-Execution Snapshot (not current status)
+
+The following table records the inputs that existed before this plan ran. It is retained for auditability and must not be used as a current-task queue.
 
 | Branch / surface | State |
 | --- | --- |
@@ -27,6 +31,14 @@
 | Planned remaining actions | 1) Controller final review 2) merge into `dev-0.6.0` 3) post-merge full tests 4) update user branch docs/README. |
 
 Committed-tree merge preview: `git merge-tree --write-tree dev-0.6.0 sdd/static-uasset-finish` produced a single tree hash with **no conflict entries**. Real merge is still blocked until main-checkout dirty paths are resolved (Task 2).
+
+## Final Status
+
+- Controller review: pass.
+- Merge: landed on `dev-0.6.0`.
+- Full suite after merge: pass.
+- README/docs: updated to match source and tests.
+- Remaining work: none in this plan; create a new plan for any new scope.
 
 ## Global Constraints
 

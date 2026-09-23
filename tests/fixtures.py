@@ -64,14 +64,27 @@ def find_material_graph(document: PackageDocument) -> dict:
 def make_property_input(name: str, *, object_name: str | None = None):
     # Imports are lazy so Task 1 can create this helper before Tasks 2/4 add
     # the bounded source and property-input models.
-    from uasset_read.parsers.properties import PropertyInput
+    from uasset_read.parsers.properties import PropertyInput, PropertyPackageContext
     from uasset_read.sources import CompositeSource
     from uasset_read.versioning import VersionContext
+    from uasset_read.package import open_package_bundle
+    from uasset_read.serializers.object_resources import read_export_map, read_import_map
+    from uasset_read.serializers.package_summary import read_name_table, read_package_summary
 
     path = sample_path(name)
     document = parse_package_document(path, depth="package", tolerant=True)
     candidates = [obj for obj in document.objects if obj.serial_region and obj.serial_region.size > 0]
     obj = next((item for item in candidates if item.name == object_name), candidates[0])
+    archive = open_package_bundle(str(path)).open_archive(tolerant=True)
+    try:
+        summary, _ = read_package_summary(archive)
+        name_map = read_name_table(archive, summary)
+        archive.set_name_map(name_map)
+        import_map = read_import_map(archive, summary, name_map)
+        export_map = read_export_map(archive, summary, name_map)
+        package_context = PropertyPackageContext(summary, name_map, export_map, import_map)
+    finally:
+        archive.close()
     return PropertyInput(
         source=CompositeSource.from_package(path),
         object_id=obj.id,
@@ -79,4 +92,5 @@ def make_property_input(name: str, *, object_name: str | None = None):
         size=obj.serial_region.size,
         class_name=obj.class_name or "Unknown",
         context=VersionContext(depth="object"),
+        package_context=package_context,
     )

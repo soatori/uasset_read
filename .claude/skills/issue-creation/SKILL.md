@@ -1,10 +1,14 @@
 ---
 name: issue-creation
 description: Use when 用户需要创建 GitHub Issue、报告 bug、请求功能或提交增强建议
-trigger: true
+trigger: false
 ---
 
 # Issue Creation
+
+## Activation Boundary
+
+Use this skill only when the user explicitly asks to create, draft, or manage a GitHub Issue. Do not activate it for ordinary diagnosis, documentation review, status checks, or explanations. In particular, do not search existing issues or grep the repository merely because a task mentions a bug.
 
 ## 标题规范
 

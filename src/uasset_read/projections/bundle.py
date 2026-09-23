@@ -49,15 +49,32 @@ def _payload_references(document: PackageDocument) -> list[dict[str, Any]]:
         region = obj.serial_region
         if region is None or region.size <= 0:
             continue
+        if len(region.source_slices) != 1:
+            # A single PayloadDescriptor cannot represent a range split across
+            # physical files without inventing one source/offset pair.
+            continue
+        physical = region.source_slices[0]
+        source_id = physical.source_id.lower()
+        if source_id.endswith(".uexp"):
+            source_region = "uexp"
+        elif source_id.endswith(".ubulk"):
+            source_region = "ubulk"
+        elif source_id.endswith(".uptnl"):
+            source_region = "uptnl"
+        elif source_id.endswith((".uasset", ".umap")):
+            source_region = "main"
+        else:
+            # Memory/unknown sources have no contract-safe physical region.
+            continue
         payload_ref = region.payload_ref or f"payload:{obj.id}"
         payloads.append(
             {
                 "id": payload_ref,
                 "owner": obj.id,
                 "kind": "other",
-                "source_region": "main",
-                "offset": region.start,
-                "stored_size": region.size,
+                "source_region": source_region,
+                "offset": physical.source_start,
+                "stored_size": physical.size,
                 "status": "available",
             }
         )

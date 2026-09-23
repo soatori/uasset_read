@@ -33,9 +33,18 @@ The package-first design is not implemented merely because it is documented. Do 
 - Temporary scripts and generated investigation output belong under `temp/` and must not become runtime dependencies.
 - Preserve unrelated work in a dirty tree.
 
+## Agent Task Mode and Loop Boundaries
+
+- Classify the request before choosing a workflow. Read-only questions, diagnosis, audits, documentation/status checks, and explanations terminate with an evidence report; they are not implementation tasks.
+- In read-only mode, do not invoke writing-plans, subagent-driven-development, dispatching, branch-finishing, code-review, or full-suite verification workflows unless the user explicitly requests that workflow.
+- Plan discovery is opt-in. Inspect `.superpowers/sdd/` or `docs/superpowers/plans/` only when the user supplies an exact plan path or explicitly asks to execute/replay a plan. Never glob those directories to guess the active task.
+- A plan marked `completed`, `historical`, `superseded`, or having all task checkboxes checked is evidence, not executable work. Do not rerun its commands; create a new plan only for a new request.
+- An identical tool/query/path may not be repeated. After one changed, narrower retry produces no new evidence, stop and report the missing state or blocker instead of searching again.
+- For documentation-only changes, verify with `git diff --check` and targeted document assertions. Run the full test suite only when source/tests changed or the user explicitly requests it.
+
 ## Code Navigation
 
-When `.codegraph/` exists, use CodeGraph before broad text search to understand symbols, callers, and impact. Use `rg` for exact text, documentation, and non-indexed files.
+When `.codegraph/` exists, use CodeGraph before broad text search to understand symbols, callers, and impact. This is a code-understanding rule, not a reason to discover tools or plans during a documentation-only task. Use `rg` for exact text, documentation, and non-indexed files.
 
 ## Documentation Changes
 

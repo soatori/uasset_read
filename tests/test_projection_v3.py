@@ -117,3 +117,31 @@ def test_agent_get_object_exposes_projection_records():
     empty = get_object(path, plain.id)
     assert empty["id"] == plain.id
     assert empty["projections"] == []
+
+
+def test_canonical_payload_uses_physical_sidecar_slice():
+    """Canonical payload descriptors must not expose virtual offsets as main-file offsets."""
+    from uasset_read.projections.bundle import build_canonical_document
+
+    document = parse_sample("T_ParserBulk.uasset", depth="asset")
+    export = next(obj for obj in document.objects if obj.id == "export:0")
+    assert export.serial_region is not None
+    assert export.serial_region.source_slices
+
+    payload = next(
+        item for item in build_canonical_document(document)["payloads"] if item["owner"] == export.id
+    )
+    physical = export.serial_region.source_slices[0]
+    assert physical.source_id.endswith(".uexp")
+    assert payload["source_region"] == "uexp"
+    assert payload["offset"] == physical.source_start
+    assert payload["stored_size"] == physical.size
+
+
+def test_budget_truncation_actual_matches_final_serialized_response(stackobot_document):
+    from uasset_read.projection import json_byte_size
+
+    result = project_document(stackobot_document, depth="decode", max_bytes=500_000)
+    assert result["objects"]
+    assert result["truncation"]["actual"] == json_byte_size(result)
+    assert json_byte_size(result) <= 500_000

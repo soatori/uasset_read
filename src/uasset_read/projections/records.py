@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, runtime_checkable
 
-from uasset_read.models.byte_ranges import ByteRegion, project_region
+from uasset_read.models.byte_ranges import ByteRegion
 from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.models.document import PackageDocument
 from uasset_read.models.object_model import ObjectRecord
@@ -173,13 +173,20 @@ def projection_to_dict(record: ProjectionRecord) -> dict[str, Any]:
                 f"non-embedded projection {record.kind!r} for {record.source_object_id} "
                 "requires an external sidecar record"
             )
+        if external.source_range is None:
+            raise ValueError(
+                f"external projection {record.kind!r} for {record.source_object_id} "
+                "requires a source range"
+            )
         out["external"] = {
             "path": external.path,
             "size": external.size,
             "sha256": external.sha256,
             "reason": external.reason,
-            "source_range": project_region(external.source_range),
-            "projection_kind": external.projection_kind,
+            "source_range": {
+                "offset": external.source_range.start,
+                "size": external.source_range.size,
+            },
         }
     return out
 

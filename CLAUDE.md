@@ -12,7 +12,7 @@ Claude Code project specification for this repository. Repository-wide rules liv
 
 ## Code Understanding
 
-- CodeGraph (`.codegraph/`) is the primary tool for code exploration and call-path tracing. Source and tests override prose descriptions of current behavior.
+- CodeGraph (`.codegraph/`) is the primary tool for code exploration and call-path tracing. Source and tests override prose descriptions of current behavior. This applies only when the request requires code understanding; read-only documentation/status work must not discover CodeGraph, plans, or development workflows unless the user explicitly asks for them.
 
 ## Constraints
 

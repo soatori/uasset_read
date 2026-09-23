@@ -82,3 +82,35 @@ def test_projection_record_content_and_external_are_exclusive():
     record["embedded"] = False
     record["external"] = _sidecar_record()
     jsonschema.validate(external_only, schema)
+
+
+def test_projection_record_external_serialization_matches_sidecar_schema():
+    from uasset_read.models.byte_ranges import ByteRegion
+    from uasset_read.projections.records import (
+        ProjectionRecord,
+        SidecarRecord,
+        projection_to_dict,
+    )
+
+    schema, example = _v3_schema_and_example()
+    record = ProjectionRecord(
+        kind="test_sidecar",
+        source_object_id="export:0",
+        media_type="application/octet-stream",
+        content=None,
+        embedded=False,
+        status="represented",
+        completeness=None,
+        dependencies=[],
+        external=SidecarRecord(
+            path="projections/export_0.bin",
+            size=3,
+            sha256="a" * 64,
+            reason="size_limit",
+            source_range=ByteRegion(10, 3, "payload"),
+            projection_kind="test_sidecar",
+        ),
+    )
+    payload = copy.deepcopy(example)
+    payload["projections"] = [projection_to_dict(record)]
+    jsonschema.validate(payload, schema)

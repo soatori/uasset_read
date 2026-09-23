@@ -59,6 +59,35 @@ def test_tagged_reader_clean_stream_reports_complete():
     assert result.regions[-1].end == aligned.start + result.consumed
 
 
+def test_tagged_reader_with_context_reads_only_bounded_slice(tagged_fixture):
+    class NoWholeSource:
+        def __init__(self, source):
+            self._source = source
+
+        def read_at(self, offset, size):
+            if offset == 0 and size == self._source.size():
+                raise AssertionError("reader attempted an unbounded whole-source read")
+            return self._source.read_at(offset, size)
+
+        def size(self):
+            return self._source.size()
+
+        def describe(self):
+            return self._source.describe()
+
+        def map_range(self, offset, size):
+            return self._source.map_range(offset, size)
+
+    result = TaggedPropertyReader().read(replace(tagged_fixture, source=NoWholeSource(tagged_fixture.source)))
+    assert result.status in {"partial", "complete"}
+
+
+def test_tagged_reader_without_package_context_is_structured_unavailable(tagged_fixture):
+    result = TaggedPropertyReader().read(replace(tagged_fixture, package_context=None))
+    assert result.status == "unavailable"
+    assert result.diagnostics[0].code == "TAGGED_CONTEXT_REQUIRED"
+
+
 def test_tagged_reader_is_sole_production_entry():
     import inspect
 

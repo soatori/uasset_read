@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from uasset_read.models.byte_ranges import ByteRegion
 from uasset_read.models.diagnostics import Diagnostic
@@ -15,6 +15,16 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
+class PropertyPackageContext:
+    """Package tables already decoded by the package reader."""
+
+    summary: Any
+    name_map: list[str]
+    export_map: list[Any]
+    import_map: list[Any]
+
+
+@dataclass(frozen=True)
 class PropertyInput:
     source: ByteSource
     object_id: str
@@ -22,6 +32,7 @@ class PropertyInput:
     size: int
     class_name: str
     context: VersionContext
+    package_context: PropertyPackageContext | None = None
 
 
 @dataclass

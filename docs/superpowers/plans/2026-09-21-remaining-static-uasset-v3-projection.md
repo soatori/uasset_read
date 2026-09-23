@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status: completed / historical (2026-09-21).** R1–R6 were completed and landed through the closeout merge; all task checkboxes are complete. This file is execution evidence. Do not invoke SDD or rerun its commands unless the user explicitly names this file and requests a new replay.
+
 **Goal:** Land the unmerged Tasks 5–9 static Blueprint/Material IR on the execution branch, then implement the still-missing Tasks 10–12 (C++ projection, type-aware registry, canonical writer/CLI, sample acceptance gates) so each sampled package produces one complete `format_version: "3.0"` document.
 
 **Architecture:** Keep one package-first `PackageDocument`. Tasks 5–9 already build typed Blueprint graph/CFG/correlation IR and Material expression graphs on branch `sdd/static-uasset-finish`. Remaining work turns that IR into embedded projections (`render_cpp`, `ProjectorRegistry`, `write_projected_document`) and closes acceptance gates. C++ is a projection, never a second parser.
@@ -14,7 +16,9 @@
 
 This remaining plan does **not** re-open Tasks 1–4. Those foundations are already on `dev-0.6.0` and on this branch through the tasks 5–9 merge.
 
-## Remaining Progress Snapshot (updated 2026-09-21 R6)
+## Historical Pre-Merge Snapshot (updated 2026-09-21 R6; not current status)
+
+The table below records the state before the closeout merge. The final status immediately below is authoritative; do not use this historical table to rediscover work.
 
 | Tasks | Marker | Evidence |
 | --- | --- | --- |
@@ -29,6 +33,8 @@ This remaining plan does **not** re-open Tasks 1–4. Those foundations are alre
 Markers describe execution-branch and (after merge `8727b067`) `dev-0.6.0`
 current behavior. Controller review pass; post-merge suite 442 passed.
 README feature claims updated for the landing.
+
+**Final status:** complete on `dev-0.6.0`; controller review passed and the post-merge suite passed. No remaining task in this plan is active.
 
 **Samples present under `tests/samples/` (acceptance inputs):**
 

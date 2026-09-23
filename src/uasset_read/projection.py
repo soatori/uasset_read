@@ -405,9 +405,13 @@ def project_document(
             result["truncation"] = {
                 "reason": "max_bytes",
                 "budget": max_bytes,
-                "actual": json_byte_size(result),
+                "actual": 0,
                 "objects_dropped": objects_dropped,
             }
+            actual = json_byte_size(result)
+            while result["truncation"]["actual"] != actual:
+                result["truncation"]["actual"] = actual
+                actual = json_byte_size(result)
 
     return result
 

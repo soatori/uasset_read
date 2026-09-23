@@ -969,7 +969,6 @@ class TaggedPropertyReader:
         )
 
     def read(self, input: PropertyInput) -> PropertyReadResult:
-        end = input.start + input.size
         if input.size <= 0:
             empty = region_from_source(input.source, input.start, 0, status="decoded")
             return PropertyReadResult(
@@ -980,9 +979,31 @@ class TaggedPropertyReader:
                 status="complete",
             )
 
+        package_context = input.package_context
+        if package_context is None:
+            diag = Diagnostic(
+                severity="warning",
+                code="TAGGED_CONTEXT_REQUIRED",
+                message="TaggedPropertyReader.read requires preloaded package tables",
+                stage="properties.tagged",
+                object_id=input.object_id,
+                offset=input.start,
+                size=input.size,
+                effect="semantic_loss",
+                recoverable=True,
+            )
+            region = opaque_region(input.start, input.size, "package_context_required")
+            return PropertyReadResult(
+                values=PropertyBag(),
+                consumed=0,
+                regions=[region],
+                diagnostics=[diag],
+                status="unavailable",
+            )
+
         try:
-            package_bytes = input.source.read_at(0, input.source.size() or 0)
-        except Exception as exc:
+            package_bytes = input.source.read_at(input.start, input.size)
+        except BINARY_READ_ERRORS + (ParseError,) as exc:
             diag = Diagnostic(
                 severity="error",
                 code="TAGGED_SOURCE_UNREADABLE",
@@ -1003,39 +1024,11 @@ class TaggedPropertyReader:
                 status="failed",
             )
 
-        # Reconstruct package-level context so FName indices resolve.
-        try:
-            from uasset_read.serializers.package_summary import (
-                read_name_table,
-                read_package_summary,
-            )
-
-            header = ByteArchive(package_bytes, name="<property-input>", tolerant=True)
-            summary, _ = read_package_summary(header)
-            name_map = read_name_table(ByteArchive(package_bytes, name="<names>", tolerant=True), summary)
-            export_map, import_map = _load_tables(package_bytes, summary, name_map)
-        except Exception as exc:
-            diag = Diagnostic(
-                severity="warning",
-                code="TAGGED_CONTEXT_UNAVAILABLE",
-                message=str(exc),
-                stage="properties.tagged",
-                object_id=input.object_id,
-                offset=input.start,
-                size=input.size,
-                effect="semantic_loss",
-                reason="unexpected",
-            )
-            region = opaque_region(input.start, input.size, "tagged_context_unavailable")
-            return PropertyReadResult(
-                values=PropertyBag(),
-                consumed=0,
-                regions=[region],
-                diagnostics=[diag],
-                status="unavailable",
-            )
-
-        window = ByteArchive(package_bytes[input.start : end], name=input.object_id)
+        summary = package_context.summary
+        name_map = package_context.name_map
+        export_map = package_context.export_map
+        import_map = package_context.import_map
+        window = ByteArchive(package_bytes, name=input.object_id)
         window._name_map = name_map
         window._file_version_ue4 = summary.file_version_ue4
         window._file_version_ue5 = summary.file_version_ue5
@@ -1126,15 +1119,3 @@ class TaggedPropertyReader:
             diagnostics=diagnostics,
             status=status,
         )
-
-
-def _load_tables(package_bytes: bytes, summary: Any, name_map: list[str]):
-    from uasset_read.serializers.object_resources import read_export_map, read_import_map
-
-    ar = ByteArchive(package_bytes, name="<tables>", tolerant=True)
-    ar._name_map = name_map
-    ar.seek(int(summary.import_offset))
-    import_map = read_import_map(ar, summary, name_map)
-    ar.seek(int(summary.export_offset))
-    export_map = read_export_map(ar, summary, name_map)
-    return export_map, import_map

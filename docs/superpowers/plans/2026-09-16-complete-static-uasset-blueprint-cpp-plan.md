@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status: completed / historical (2026-09-21).** Tasks 1–12 landed on `dev-0.6.0`; all task checkboxes are complete. This file is execution evidence. Do not invoke SDD or rerun its commands unless the user explicitly names this file and requests a new replay.
+
 **Goal:** Replace the current mixed parsing/enrichment path with a modular pure-Python parser that statically reconstructs package and asset semantics, then emits the best available declaration, behavior, editor-builder, structured-data, and payload projections for each asset family.
 
 **Architecture:** Keep one package-first `PackageDocument`, but introduce only the boundaries needed by the core path: bounded source/layout, lossless properties and ranges, domain IR, static Blueprint/Kismet analysis, and projections. Legacy and Zen remain separate format boundaries; Blueprint graph and Kismet bytecode converge in one correlation layer; C++/CSV/JSON are derived artifacts in one canonical output document. C++ is a projection and never a second parser.
@@ -13,9 +15,9 @@
 ## Execution status (2026-09-21, landed on dev-0.6.0)
 
 Controller whole-branch review **pass**; merge `8727b067` landed
-`sdd/static-uasset-finish` into `dev-0.6.0`. Post-merge full pytest:
-**442 passed**; `python -m compileall -q src` clean. README/docs status
-updated for the v3 landing.
+`sdd/static-uasset-finish` into `dev-0.6.0`. Historical post-merge run: 442;
+current-tree verification: **449**; `python -m compileall -q src` clean.
+README/docs status updated for the v3 landing.
 
 | Tasks | Marker | Evidence |
 | --- | --- | --- |

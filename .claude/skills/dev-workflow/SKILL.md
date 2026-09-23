@@ -1,12 +1,20 @@
 ---
 name: dev-workflow
 description: Use when 用户需要执行开发任务、任务分解、并行开发、代码审查或分支合并
-trigger: true
+trigger: false
 ---
 
 # Dev Workflow
 
 本技能定义了完整的开发工作流程，涵盖任务规划、并行执行、代码审查和收尾合并的全流程。
+
+## Activation Boundary
+
+This skill is opt-in. Use it only when the user explicitly asks to implement, fix, refactor, test, review, merge, or otherwise execute a development workflow.
+
+Do not activate it for a read-only answer, diagnosis, audit, documentation review, status check, or explanation. Those tasks end with an evidence report and must not trigger plan discovery, SDD, subagents, branch finishing, or a full test suite.
+
+Do not search `docs/superpowers/plans/` or `.superpowers/sdd/` to guess a plan. Activate plan execution only when the user supplies the exact plan path or explicitly asks to execute a named plan. Never repeat an identical search or command; one narrower retry without new evidence is the terminal state.
 
 ## Orca 编排 Skills
 
