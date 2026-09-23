@@ -1376,7 +1376,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         UserDefinedEnumHandler,
         UserDefinedStructHandler,
     )
-    from uasset_read.parsers.asset_types.registry import _HANDLERS, get_handlers as _get_handlers
+    from uasset_read.parsers.asset_types.registry import _HANDLERS
     from uasset_read.models.object_model import ObjectRecord, ObjectStatus
 
     record = _object_record
@@ -3327,3 +3327,36 @@ def test_test_suite_structure_gate():
         if isinstance(t, ast.Name) and t.id.startswith("test_")
     }
     assert not assigned
+
+
+def test_fstring_leading_null_with_content_is_not_all_null():
+    """A leading NUL plus later non-zero bytes is NOT all-null (Lyra 35269)."""
+    import struct
+
+    from uasset_read.archive import ByteArchive
+
+    # The exact misread payload from Lyra MovieScene offset 35273: 16 bytes,
+    # first four zero, then 0x1d (BoolProperty name index), rest zero.
+    # Mirror Lyra pos 35269: the data starts at 35273 (35273 % 4 == 1), so the
+    # alignment-padding heuristic does not mask the false classification (a
+    # pos-0 read of this payload is suppressed as padding and the test would
+    # pass vacuously).
+    payload = b"\xff" + struct.pack("<i", 16) + bytes.fromhex("000000001d0000000000000000000000")
+    arc = ByteArchive(payload, tolerant=True)
+    arc.seek(1)
+    assert arc.read_fstring() == ""
+    codes = [d.code for d in arc.get_structured_diagnostics()]
+    assert "fstring_all_null" not in codes, codes
+
+
+def test_fstring_all_zero_payload_still_records_all_null():
+    """Entirely-zero payload keeps the existing fstring_all_null classification."""
+    import struct
+
+    from uasset_read.archive import ByteArchive
+
+    payload = struct.pack("<i", 8) + b"\x00" * 8
+    arc = ByteArchive(payload, tolerant=True)
+    assert arc.read_fstring() == ""
+    codes = [d.code for d in arc.get_structured_diagnostics()]
+    assert "fstring_all_null" in codes, codes
