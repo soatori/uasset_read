@@ -368,3 +368,27 @@ def test_sound_node_family_classifies_editor_only():
             payload_kind="native_serial",
         )
         assert classify_trailing_reason(ctx) == "editor_only", cls
+
+
+def test_true_gap_classes_classify_known_unimplemented():
+    from uasset_read.models.diagnostics import TrailingContext, classify_trailing_reason
+
+    for cls in (
+        "Level", "Model", "Polys", "World", "BodySetup",
+        "NavCollision", "UserDefinedEnum", "PoseAsset",
+        "MovieScene",
+    ):
+        ctx = TrailingContext(
+            class_name=cls, object_name="X", outer_name="Y",
+            roles=(), payload_kind="native_serial",
+        )
+        assert classify_trailing_reason(ctx) == "known_unimplemented", cls
+
+    # Prefix safety: near-miss names must NOT be swept in.
+    assert classify_trailing_reason("LevelSequence") == "unexpected"
+    assert classify_trailing_reason("ModelComponent") == "unexpected"
+    assert classify_trailing_reason("WorldSettings") == "unexpected"
+
+    # Team-lead ruling 2026-09-23: bare ScriptStruct must NOT be class-blanketed —
+    # the 5 corpus trailers are AnimBlueprint generated data (sibling plan keys them).
+    assert classify_trailing_reason(TrailingContext(class_name="ScriptStruct")) == "unexpected"

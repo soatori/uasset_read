@@ -118,6 +118,16 @@ _KNOWN_UNIMPLEMENTED_CLASSES = frozenset(
         "StaticMesh",
         "StaticMeshDescriptionBulkData",
         "UserDefinedStruct",
+        # Native-payload reader gaps disclosed as opaque (2026-09-23 plan).
+        "Level",
+        "Model",
+        "Polys",
+        "World",
+        "BodySetup",
+        "NavCollision",
+        "UserDefinedEnum",
+        "PoseAsset",
+        "MovieScene",
     }
 )
 

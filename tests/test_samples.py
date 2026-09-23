@@ -1187,3 +1187,71 @@ def test_background_cue_sound_node_tails_reclassified_editor_only():
     assert sum(d.size or 0 for d in sound_trailing) == 36  # d.size: int | None (type-checker)
     # No SoundNode trailer may remain in the catch-all bucket.
     assert not [d for d in sound_trailing if d.reason == "unexpected"]
+
+
+def test_level_geometry_tails_known_unimplemented_with_bytes():
+    """FirstPerson umap: Level/Model/Polys/World trailers keep bytes, lose unexpected."""
+    from uasset_read.package import parse_package_document
+
+    doc = parse_package_document(str(SAMPLES / "FirstPerson_Lvl_FirstPerson.umap"), depth="asset")
+    by_id = {o.id: o for o in doc.objects}
+    expected = {  # object_id -> (class, size)
+        "export:6": ("Level", 199),
+        "export:7": ("Model", 154),
+        "export:8": ("Model", 190),
+        "export:11": ("Polys", 1060),
+        "export:13": ("World", 12),
+    }
+    trailing = {
+        d.object_id: d for d in doc.diagnostics
+        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"
+    }
+    for oid, (cls, size) in expected.items():
+        d = trailing[oid]
+        assert by_id[oid].class_name == cls, oid
+        assert d.reason == "known_unimplemented", f"{oid}: {d.reason}"
+        assert d.size == size, f"{oid}: {d.size} != {size}"
+    assert not [
+        d for d in doc.diagnostics
+        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.reason == "unexpected"
+    ], "FirstPerson_Lvl must have zero unexpected after reclassification"
+
+
+def test_collision_and_enum_pose_movie_tails_known_unimplemented():
+    from uasset_read.package import parse_package_document
+
+    cases = {
+        "StarterContent_SM_Chair.uasset": {"BodySetup_13": 20, "NavCollision_9": 32},
+        "Lyra_Enum_PanelType.uasset": {"Enum_PanelType": 53},
+        "StackOBot_Enum_CameraState.uasset": {"Enum_CameraState": 85},
+        "Echo_calf_l_PoseAsset.uasset": {"calf_l_PoseAsset": 16},
+        "Lyra_SEQ_LobbyScreen_LevelSequence.uasset": {"MovieScene_0": 106},
+    }
+    for sample, expect in cases.items():
+        doc = parse_package_document(str(SAMPLES / sample), depth="asset")
+        by_id = {o.id: o for o in doc.objects}
+        found = {
+            by_id[d.object_id].name: d for d in doc.diagnostics
+            if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"
+        }
+        for name, size in expect.items():
+            d = found[name]
+            assert d.reason == "known_unimplemented", f"{sample}:{name}: {d.reason}"
+            assert d.size == size, f"{sample}:{name}: {d.size} != {size}"
+
+
+def test_abp_cdo_trailers_remain_unexpected_for_sibling_plan():
+    """Temporary scope fence (retired by sibling plan Task 1): ABP Default__*_C
+    trailers stay unexpected only until the sibling's object-keyed rules land."""
+    from uasset_read.package import parse_package_document
+
+    doc = parse_package_document(str(SAMPLES / "LevelDesign_ABP_Manny.uasset"), depth="asset")
+    by_id = {o.id: o for o in doc.objects}
+    cdo_trailing = [
+        d for d in doc.diagnostics
+        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"
+        and by_id[d.object_id].name.startswith("Default__")
+    ]
+    assert cdo_trailing, "expected the ABP CDO trailer"
+    assert all(d.reason == "unexpected" for d in cdo_trailing)
+    assert all(d.size is not None and d.size > 0 for d in cdo_trailing)
