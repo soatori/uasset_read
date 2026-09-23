@@ -12,7 +12,7 @@ status: current
 
 ## 清单
 
-pin commit 与日期于 2026-09-05 由 `git -C external/<peer> log -1` 实测取得，非文档抄录。
+pin commit 与日期由 `git -C external/<peer> log -1` 实测取得，非文档抄录（原 9 行 2026-09-05；FModel 行 2026-09-23）。
 
 | Peer | 语言 | commit | 日期 | 许可证 | 佐证覆盖域 |
 | --- | --- | --- | --- | --- | --- |
@@ -25,6 +25,7 @@ pin commit 与日期于 2026-09-05 由 `git -C external/<peer> log -1` 实测取
 | AssetToJson | — | `b71e2bd` | 2026-06-19 | **无 LICENSE 文件** | 资产 JSON 字段对照；仅供阅读，见下方红线 |
 | UE4TextExtractor | C++ | `37991af` | 2025-06-18 | **MIT NON-AI** | LocRes/文本历史类型（FText 旁证）；仅供阅读，见下方红线 |
 | UnrealBPInspect | — | `8436dca` | 2026-06-21 | Apache-2.0 | 蓝图字节码旁证 |
+| FModel | C#（WPF） | `a9386e9` | 2026-09-21 | GPL-3.0 | **无独立解析**：资产/容器解码全部委托内嵌 CUE4Parse 子模块（`.gitmodules` → `FabianFG/CUE4Parse`）；本体为 Archives Explorer GUI（`FModel/MainWindow.xaml.cs`、`Creator/` 导出器）。与 UAssetGUI 同理不构成独立实现计数。GPL-3.0 见再分发红线 |
 
 ## 再分发红线
 
@@ -32,6 +33,7 @@ pin commit 与日期于 2026-09-05 由 `git -C external/<peer> log -1` 实测取
 2. **UE4TextExtractor 是 MIT NON-AI License** → 该许可证显式限制 AI 相关使用。本项目的 CLI/Agent 工具链和 agent 工作流正落在其限制意图范围内：**只允许人类直接阅读其源码**，不得让 agent 把其内容转录进本仓库、也不得据此生成提交进仓库的代码或文档。若需 FText 旁证，改用 CUE4Parse/UAssetAPI。
 3. **Lyra / ALS 等 Epic EULA 资产**属 fixture 而非 peer，一律不得入仓库（先例 #619 备注）。
 4. 上述限制针对「把 peer 内容写进本仓库」。在本地 checkout 内阅读以形成判断，仍受各许可证约束。
+5. **FModel 是 GPL-3.0（copyleft）** → 允许本地阅读佐证，但任何代码、衍生内容不得转录入本仓库（GPL 传染性会强制改变本仓库授权条款）。其解析能力来自内嵌 CUE4Parse 子模块：引用解析结论时点名 **CUE4Parse** 而非 FModel。
 
 ## 维护规则
 

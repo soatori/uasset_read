@@ -49,7 +49,9 @@ status: current
 两条授权红线（详见 inventory）：**AssetToJson 无 LICENSE 文件** = 保留所有权利；
 **UE4TextExtractor 为 MIT NON-AI License**，而本项目主要消费者是 AI agent——二者只允许
 人类直接阅读，不得将内容转录进仓库或据此生成入库代码。Lyra/ALS 属 Epic EULA 的 fixture
-不得入仓库（先例 #619）。
+不得入仓库（先例 #619）。**FModel 为 GPL-3.0（copyleft）**：可本地阅读佐证，代码与衍生
+内容不得转录入仓库（inventory 红线 5）；其解析能力来自内嵌 CUE4Parse 子模块，解析结论
+点名 CUE4Parse。
 
 ## 5. 边界
 
