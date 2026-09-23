@@ -24,10 +24,53 @@ def test_lyra_seq_fstring_out_of_range_is_bounded():
     # Acceptance from the report: 0 or 1 after short-circuit (not 28).
     assert len(oor) <= 1, f"fstring_out_of_range={len(oor)}"
     movie = next(o for o in doc.objects if o.id == "export:9")
-    assert movie.status.parse == "partial"
+    # With the validated map-value struct fallback the stream is no longer
+    # poisoned at ExpansionStates, so the MovieScene now parses completely.
+    assert movie.status.parse == "complete"
     # Top-level MovieScene tags must still be present (not skipped wholesale).
     for key in ("Spawnables", "ObjectBindings", "PlaybackRange"):
         assert key in (movie.properties or {})
+
+
+def test_lyra_seq_expansion_states_parse_cleanly():
+    """MapValue struct fallback: ExpansionStates decodes with no FString fallout."""
+    doc = parse_package_document(
+        SAMPLES / "Lyra_SEQ_LobbyScreen_LevelSequence.uasset",
+        depth="asset",
+        tolerant=True,
+    )
+    codes = _codes(doc)
+    assert "fstring_out_of_range" not in codes, codes
+    assert "name_index_out_of_range" not in codes, codes  # export:7 rollback pin
+    movie_fstring = [
+        d
+        for d in doc.diagnostics
+        if d.code == "fstring_all_null" and d.object_id == "export:9"
+    ]
+    assert not movie_fstring, movie_fstring
+
+    movie = next(o for o in doc.objects if o.id == "export:9")
+    assert movie.status.parse == "complete"
+    for key in ("Spawnables", "ObjectBindings", "PlaybackRange", "EditorData", "Signature"):
+        assert key in (movie.properties or {})
+
+    editor_data = (movie.properties or {})["EditorData"]
+    assert editor_data["kind"] == "struct"
+    assert editor_data["struct_type"] == "MovieSceneEditorData"
+    expansion = editor_data["fields"]["ExpansionStates"]
+    assert expansion["kind"] == "map"
+    assert expansion["key_type"] == "StrProperty"
+    assert expansion["value_type"] == "StructProperty"
+    entries = expansion["entries"]
+    assert len(entries) == 31  # num_entries word at offset 35166
+    first = entries[0]
+    assert first["key"].endswith("MovieScene3DTransformTrack_1")
+    assert first["value"]["struct_type"] == "Unknown"  # legacy tag carries no name
+    assert first["value"]["fields"] == {"bExpanded": True}
+    assert all("bExpanded" in e["value"]["fields"] for e in entries)
+    # EditorData's other tagged fields came back too.
+    for field in ("ViewStart", "ViewEnd", "WorkStart", "WorkEnd"):
+        assert field in editor_data["fields"]
 
 
 def test_import_data_samples_have_no_name_index_out_of_range():
