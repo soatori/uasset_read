@@ -282,3 +282,29 @@ def test_als_animbp_ordered_saved_pose_indices_map_keys():
     fields = value.get("fields") if isinstance(value, dict) else getattr(value, "fields", None)
     assert fields is not None, value
     assert "OrderedSavedPoseNodeIndices" in fields, fields
+
+
+def test_classify_trailing_reason_accepts_trailing_context():
+    from uasset_read.models.diagnostics import TrailingContext, classify_trailing_reason
+
+    ctx = TrailingContext(
+        class_name="FontFace",
+        object_name="MyFont",
+        outer_name="/Game/Fonts/F",
+        roles=("asset",),
+        payload_kind="native_serial",
+    )
+    assert classify_trailing_reason(ctx) == "bulk_expected"
+
+
+def test_classify_trailing_reason_context_defaults_match_class_name_shorthand():
+    from uasset_read.models.diagnostics import TrailingContext, classify_trailing_reason
+
+    for cls, expected in (
+        ("TextureCube", "bulk_expected"),
+        ("K2Node_CallFunction", "editor_only"),
+        ("Skeleton", "known_unimplemented"),
+        ("SomeUnknownClass", "unexpected"),
+    ):
+        assert classify_trailing_reason(TrailingContext(class_name=cls)) == expected
+        assert classify_trailing_reason(cls) == expected
