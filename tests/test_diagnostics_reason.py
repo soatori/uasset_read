@@ -65,9 +65,7 @@ def test_fstring_out_of_range_carries_recovered_corruption_reason():
     # Claims 1000 bytes, only 2 remain -> fstring_out_of_range (tolerant).
     arc = ByteArchive(struct.pack("<i", 1000) + b"ab", tolerant=True)
     assert arc.read_fstring() == ""
-    (diag,) = [
-        d for d in arc.get_structured_diagnostics() if d.code == "fstring_out_of_range"
-    ]
+    (diag,) = [d for d in arc.get_structured_diagnostics() if d.code == "fstring_out_of_range"]
     assert diag.reason == "recovered_corruption"
     assert diag.fallback == "used_empty_string"
     assert diag.offset == 0
@@ -202,9 +200,7 @@ def test_datatable_table_diagnostics_marked_conservative_complete():
     from uasset_read.package import parse_package_document
 
     doc = parse_package_document("tests/samples/FirstPerson_DT_WeaponList.uasset")
-    table_diags = [
-        d for d in doc.diagnostics if d.code in {"TABLE_PAYLOAD_RESIDUE", "TABLE_ROWS_TRUNCATED"}
-    ]
+    table_diags = [d for d in doc.diagnostics if d.code in {"TABLE_PAYLOAD_RESIDUE", "TABLE_ROWS_TRUNCATED"}]
     # Fixture may or may not emit both; assert every emitted TABLE_* is classified.
     assert all(d.reason == "conservative_complete" for d in table_diags)
     if not table_diags:
@@ -222,9 +218,7 @@ def test_bp_combat_character_trailing_diagnostics_carry_reason():
     trailing = [d for d in doc.diagnostics if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"]
     assert trailing, "expected trailing diagnostics on this fixture"
     assert all(d.reason is not None for d in trailing)
-    assert {"editor_only", "bulk_expected", "known_unimplemented", "unexpected"} & {
-        d.reason for d in trailing
-    }
+    assert {"editor_only", "bulk_expected", "known_unimplemented", "unexpected"} & {d.reason for d in trailing}
 
 
 def test_bp_seeds_have_zero_fstring_all_null():
@@ -274,9 +268,9 @@ def test_als_animbp_has_no_name_index_out_of_range():
 
     doc = parse_package_document("tests/samples/ALS_AnimBP.uasset", depth="asset")
     codes = [d.code for d in doc.diagnostics]
-    assert "name_index_out_of_range" not in codes, (
-        [d.message for d in doc.diagnostics if d.code == "name_index_out_of_range"]
-    )
+    assert "name_index_out_of_range" not in codes, [
+        d.message for d in doc.diagnostics if d.code == "name_index_out_of_range"
+    ]
 
 
 def test_als_animbp_ordered_saved_pose_indices_map_keys():

@@ -986,9 +986,7 @@ def parse_struct_property(
             parse_status="opaque",
         )
 
-    if validated_attempt and (
-        not clean_none_stop or len(archive.get_structured_diagnostics()) > diag_mark
-    ):
+    if validated_attempt and (not clean_none_stop or len(archive.get_structured_diagnostics()) > diag_mark):
         # Not a clean None-terminated tagged stream (or the attempt recorded
         # recoveries): rewind exactly to the entry start — cursor and
         # diagnostics — and report opaque, byte-identical to pre-fallback.

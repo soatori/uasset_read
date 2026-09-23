@@ -308,9 +308,7 @@ def test_reader_boundaries_reject_malformed_access():
             patch.object(tagged, "read_tag_value_bounded", return_value="ok"),
         ):
             props = _read_property_loop(
-                export=SimpleNamespace(
-                    class_index=None, object_name="MovieScene_0", serial_offset=0, serial_size=1000
-                ),
+                export=SimpleNamespace(class_index=None, object_name="MovieScene_0", serial_offset=0, serial_size=1000),
                 archive=archive,
                 summary=SimpleNamespace(file_version_ue4=522, file_version_ue5=1018, package_flags=0),
                 name_map=["None", "Foo", "Bar"],
@@ -334,22 +332,15 @@ def test_reader_boundaries_reject_malformed_access():
         json_body = b'[{"RelativeFilename" : "x.wav"}]'
         blob = struct.pack("<i", len(json_body)) + json_body + b"\x00" * 8
         arc = ByteArchive(blob)
-        assert (
-            _maybe_skip_import_data_json_prelude(arc, class_name="AssetImportData", region_end=len(blob))
-            is True
-        )
+        assert _maybe_skip_import_data_json_prelude(arc, class_name="AssetImportData", region_end=len(blob)) is True
         assert arc.tell() == 4 + len(json_body)
 
         arc2 = ByteArchive(blob)
-        assert (
-            _maybe_skip_import_data_json_prelude(arc2, class_name="Material", region_end=len(blob)) is False
-        )
+        assert _maybe_skip_import_data_json_prelude(arc2, class_name="Material", region_end=len(blob)) is False
         assert arc2.tell() == 0
 
         arc3 = ByteArchive(struct.pack("<i", 0x01000000) + b"\xff" * 16)
-        assert (
-            _maybe_skip_import_data_json_prelude(arc3, class_name="AssetImportData", region_end=20) is False
-        )
+        assert _maybe_skip_import_data_json_prelude(arc3, class_name="AssetImportData", region_end=20) is False
 
     def export_map_recoveries_are_attributed_to_their_slot():
         import struct
@@ -864,7 +855,10 @@ def test_property_bag_normalization_is_bounded_lossless():
             ("property.fcolor_bgra_decode", test_fcolor_bgra_decode),
             ("property.unversioned_header_fragments_ue_format", test_unversioned_header_fragments_ue_format),
             ("property.scalar_material_input_full_layout", test_scalar_material_input_full_layout),
-            ("property.function_expression_output_maps_to_output_decoder", test_function_expression_output_maps_to_output_decoder),
+            (
+                "property.function_expression_output_maps_to_output_decoder",
+                test_function_expression_output_maps_to_output_decoder,
+            ),
         ]
     )
 
@@ -1190,6 +1184,7 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
         _parse_cached.cache_clear()
         try:
+
             def fake_overrun(**kwargs):
                 export = kwargs["export"]
                 kwargs["archive"].seek(export.serial_offset + export.serial_size + 8)
@@ -1469,6 +1464,7 @@ def test_handler_registry_supports_enriches_and_isolates():
     def test_handler_exception_becomes_object_diagnostic():
         import uasset_read.parsers.asset_types.registry as handlers_registry
         from uasset_read.package import parse_package_document
+
         class RaisingHandler:
             def supports(self, obj, context):
                 return True
@@ -1479,9 +1475,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         with _isolated_handlers():
             handlers_registry._HANDLERS.append(RaisingHandler())
             sample_doc = parse_package_document(str(DATA_SAMPLE), depth="object", object_ids=["export:0"])
-            _result = handlers_registry.run_handlers(
-                sample_doc.objects[0], "package", sample_doc.objects, None
-            )
+            _result = handlers_registry.run_handlers(sample_doc.objects[0], "package", sample_doc.objects, None)
             semantic = _result.semantic
             coverage = _result.coverage
             diagnostics = _result.diagnostics
@@ -1508,6 +1502,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             NiagaraHandler,
         )
         from uasset_read.parsers.asset_types.registry import _HANDLERS, run_handlers
+
         cases = [
             ("NiagaraScript", NiagaraHandler()),
             ("StaticMesh", MeshHandler()),
@@ -1532,6 +1527,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         """Only decoded-tier output (Blueprint graph at depth=decode) yields complete (#629)."""
         from uasset_read.parsers.asset_types.handlers_impl import BlueprintFamilyHandler
         from uasset_read.parsers.asset_types.registry import run_handlers
+
         bp = record("Blueprint")
         node = record("K2Node_CallFunction")
         node.id = "export:1"
@@ -1558,6 +1554,7 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_undeclared_handler_tier_defaults_to_summary():
         from uasset_read.parsers.asset_types.registry import run_handlers
+
         class Echo:
             def supports(self, obj, ctx):
                 return True
@@ -1574,6 +1571,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         """NameMap-regex bones are marked bone_source=name_guess and never complete (#630)."""
         from uasset_read.parsers.asset_types.handlers_impl import SkeletonHandler
         from uasset_read.parsers.asset_types.registry import run_handlers
+
         obj = record("Skeleton")
         name_map = ["None", "SomeWidget", "root", "pelvis", "spine_01"]
         with _isolated_handlers(SkeletonHandler()):
@@ -1593,6 +1591,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         """Decoded BoneTree names take precedence over the regex path (#630)."""
         from uasset_read.parsers.asset_types.handlers_impl import SkeletonHandler
         from uasset_read.parsers.asset_types.registry import run_handlers
+
         obj = record("Skeleton")
         obj.properties = {
             "BoneTree": {
@@ -1671,6 +1670,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         """#615: StringTable uses StringTableHandler and never claims complete."""
         from uasset_read.parsers.asset_types.handlers_impl import DataTableHandler, StringTableHandler
         from uasset_read.parsers.asset_types.registry import run_handlers
+
         assert not DataTableHandler().supports(record("StringTable"), "package")
         assert DataTableHandler().supports(record("DataTable"), "package")
         assert StringTableHandler().supports(record("StringTable"), "package")
@@ -1684,9 +1684,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             "complete": True,
         }
         with _isolated_handlers(DataTableHandler(), StringTableHandler()):
-            _result = run_handlers(
-                obj, "asset", [obj], (None, [], {obj.id: {"string_table": st}})
-            )
+            _result = run_handlers(obj, "asset", [obj], (None, [], {obj.id: {"string_table": st}}))
             semantic = _result.semantic
             _cov = _result.coverage
             _diags = _result.diagnostics
@@ -1698,6 +1696,7 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_string_table_handler_missing_trailer_reports_coverage():
         from uasset_read.parsers.asset_types.handlers_impl import StringTableHandler
+
         obj = record("StringTable")
         result = StringTableHandler().enrich(obj, "package", [], (None, [], {}))
         assert result["kind"] == "string_table"
@@ -1708,6 +1707,7 @@ def test_handler_registry_supports_enriches_and_isolates():
         """#619: physics handlers read real fields but never claim complete."""
         from uasset_read.parsers.asset_types.handlers_impl import PhysicsAssetHandler, PhysicalMaterialHandler
         from uasset_read.parsers.asset_types.registry import run_handlers
+
         pa = record("PhysicsAsset")
         pa.properties = {
             "SkeletalBodySetups": {"kind": "value", "type": "ArrayProperty", "value": ["ref0", "ref1"]},
@@ -1763,6 +1763,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             AnimLayerInterfaceHandler,
         )
         from uasset_read.parsers.asset_types.registry import run_handlers
+
         bs = record("BlendSpace")
         bs.properties = {
             "BlendParameters": {
@@ -1881,6 +1882,7 @@ def test_handler_registry_supports_enriches_and_isolates():
             MaterialParameterCollectionHandler,
         )
         from uasset_read.parsers.asset_types.registry import run_handlers
+
         fn = record("MaterialFunction")
         inp = record("MaterialExpressionFunctionInput")
         inp.id = "export:1"
@@ -3186,16 +3188,10 @@ def test_package_document_cache_is_process_local():
             assert doc_object is not doc_a
 
             # object_ids list order is normalized; None vs [] are distinct.
-            doc_ids_ab = parse_package_document(
-                str(sample), depth="package", object_ids=["export:1", "export:0"]
-            )
-            doc_ids_ba = parse_package_document(
-                str(sample), depth="package", object_ids=["export:0", "export:1"]
-            )
+            doc_ids_ab = parse_package_document(str(sample), depth="package", object_ids=["export:1", "export:0"])
+            doc_ids_ba = parse_package_document(str(sample), depth="package", object_ids=["export:0", "export:1"])
             assert doc_ids_ab is doc_ids_ba
-            doc_ids_empty = parse_package_document(
-                str(sample), depth="package", object_ids=[]
-            )
+            doc_ids_empty = parse_package_document(str(sample), depth="package", object_ids=[])
             assert doc_ids_empty is not doc_a
             assert doc_ids_empty is not doc_ids_ab
 
@@ -3216,13 +3212,9 @@ def test_package_document_cache_is_process_local():
             # Mappings file stat participates in the key.
             usmap = Path(tmp) / "cache_sample.usmap"
             usmap.write_bytes(b"\x00" * 32)
-            doc_m1 = parse_package_document(
-                str(sample), depth="package", mappings_path=str(usmap)
-            )
+            doc_m1 = parse_package_document(str(sample), depth="package", mappings_path=str(usmap))
             usmap.write_bytes(b"\x00" * 64)
-            doc_m2 = parse_package_document(
-                str(sample), depth="package", mappings_path=str(usmap)
-            )
+            doc_m2 = parse_package_document(str(sample), depth="package", mappings_path=str(usmap))
             assert doc_m1 is not doc_m2
     finally:
         _parse_cached.cache_clear()
@@ -3314,11 +3306,7 @@ def test_test_suite_structure_gate():
     # assignment.
     core = ast.parse((root / "test_core.py").read_text(encoding="utf-8"))
     assert not any(isinstance(n, ast.ClassDef) for n in core.body)
-    assert all(
-        not n.decorator_list
-        for n in core.body
-        if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")
-    )
+    assert all(not n.decorator_list for n in core.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_"))
     assigned = {
         t.id
         for n in core.body

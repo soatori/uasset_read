@@ -42,11 +42,7 @@ def test_lyra_seq_expansion_states_parse_cleanly():
     codes = _codes(doc)
     assert "fstring_out_of_range" not in codes, codes
     assert "name_index_out_of_range" not in codes, codes  # export:7 rollback pin
-    movie_fstring = [
-        d
-        for d in doc.diagnostics
-        if d.code == "fstring_all_null" and d.object_id == "export:9"
-    ]
+    movie_fstring = [d for d in doc.diagnostics if d.code == "fstring_all_null" and d.object_id == "export:9"]
     assert not movie_fstring, movie_fstring
 
     movie = next(o for o in doc.objects if o.id == "export:9")
@@ -173,12 +169,7 @@ def test_usmap_custom_version_count_exceeds_remaining_bytes():
     from uasset_read.mappings import UsmapParser
 
     # custom_count=1 but zero of the required 20-byte entries follow.
-    blob = (
-        (0x30C4).to_bytes(2, "little")
-        + bytes([1, 1])
-        + b"\x00" * 8
-        + (1).to_bytes(4, "little")
-    )
+    blob = (0x30C4).to_bytes(2, "little") + bytes([1, 1]) + b"\x00" * 8 + (1).to_bytes(4, "little")
     with pytest.raises(ParseError, match="CustomVersion count exceeds remaining bytes"):
         UsmapParser(blob)
 
