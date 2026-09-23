@@ -354,3 +354,17 @@ def test_make_diagnostic_accepts_size():
     )
     assert d.size == 6
     assert d.to_dict()["size"] == 6
+
+
+def test_sound_node_family_classifies_editor_only():
+    from uasset_read.models.diagnostics import TrailingContext, classify_trailing_reason
+
+    for cls in ("SoundNodeWavePlayer", "SoundNodeModulator", "SoundNodeMixer"):
+        ctx = TrailingContext(
+            class_name=cls,
+            object_name=f"{cls}_0",
+            outer_name="Starter_Background_Cue",
+            roles=(),
+            payload_kind="native_serial",
+        )
+        assert classify_trailing_reason(ctx) == "editor_only", cls

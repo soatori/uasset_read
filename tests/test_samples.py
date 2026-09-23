@@ -1168,3 +1168,22 @@ def test_trailing_diagnostics_carry_structured_size():
         assert d.reason is not None
         # Message and structured field must agree.
         assert f"leaves {d.size} undecoded bytes" in d.message
+
+
+def test_background_cue_sound_node_tails_reclassified_editor_only():
+    """Starter_Background_Cue: 6 SoundNode trailers, 6 bytes each, now editor_only."""
+    from uasset_read.package import parse_package_document
+
+    doc = parse_package_document(str(SAMPLES / "StarterContent_Starter_Background_Cue.uasset"), depth="asset")
+    by_id = {o.id: o for o in doc.objects}
+    sound_trailing = [
+        d for d in doc.diagnostics
+        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"
+        and (by_id[d.object_id].class_name or "").startswith("SoundNode")
+    ]
+    assert len(sound_trailing) == 6
+    assert all(d.reason == "editor_only" for d in sound_trailing)
+    assert all(d.size == 6 for d in sound_trailing)
+    assert sum(d.size or 0 for d in sound_trailing) == 36  # d.size: int | None (type-checker)
+    # No SoundNode trailer may remain in the catch-all bucket.
+    assert not [d for d in sound_trailing if d.reason == "unexpected"]

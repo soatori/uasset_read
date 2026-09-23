@@ -95,6 +95,7 @@ _EDITOR_ONLY_PREFIXES = (
     "WidgetBlueprint",
     "AnimBlueprint",
     "Function",
+    "SoundNode",
 )
 
 _BULK_CLASSES = frozenset(
