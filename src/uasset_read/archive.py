@@ -358,6 +358,7 @@ class FArchive:
                     fallback="used_empty_string",
                     message=f"FString at pos {pos_before}: {enc} expected {byte_len} bytes "
                     f"but only {self._file_size - pos_before - 4} remain",
+                    reason="recovered_corruption",
                 )
                 return ""
             raise ParseError(

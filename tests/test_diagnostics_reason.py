@@ -57,6 +57,22 @@ def test_fname_out_of_range_carries_recovered_corruption_reason(tmp_path):
     assert diag.code == "name_index_out_of_range"
 
 
+def test_fstring_out_of_range_carries_recovered_corruption_reason():
+    import struct
+
+    from uasset_read.archive import ByteArchive
+
+    # Claims 1000 bytes, only 2 remain -> fstring_out_of_range (tolerant).
+    arc = ByteArchive(struct.pack("<i", 1000) + b"ab", tolerant=True)
+    assert arc.read_fstring() == ""
+    (diag,) = [
+        d for d in arc.get_structured_diagnostics() if d.code == "fstring_out_of_range"
+    ]
+    assert diag.reason == "recovered_corruption"
+    assert diag.fallback == "used_empty_string"
+    assert diag.offset == 0
+
+
 def test_classify_trailing_reason_mapping():
     from uasset_read.models.diagnostics import classify_trailing_reason
 
@@ -103,7 +119,7 @@ def test_merge_archive_recoveries_forwards_reason_and_fallback():
     )
     archive = SimpleNamespace(get_structured_diagnostics=lambda: [sd])
     diagnostics: list[Diagnostic] = []
-    _merge_archive_recoveries(archive, [], diagnostics)
+    _merge_archive_recoveries(archive, [], diagnostics)  # type: ignore[arg-type]  # duck-typed stub
     (merged,) = diagnostics
     assert merged.code == "name_index_out_of_range"
     assert merged.reason == "recovered_corruption"
@@ -130,7 +146,7 @@ def test_merge_archive_recoveries_stop_table_keeps_reason():
     )
     archive = SimpleNamespace(get_structured_diagnostics=lambda: [sd])
     diagnostics: list[Diagnostic] = []
-    _merge_archive_recoveries(archive, [], diagnostics)
+    _merge_archive_recoveries(archive, [], diagnostics)  # type: ignore[arg-type]  # duck-typed stub
     (merged,) = diagnostics
     assert merged.reason == "recovered_corruption"
     assert merged.fallback == "stop_table"
@@ -154,7 +170,7 @@ def test_table_payload_residue_emits_conservative_complete_reason():
         name_map=["None", "RowA"],
         object_id="export:1",
         diagnostics=diags,
-    )
+    )  # type: ignore[arg-type]  # ByteArchive exercises the bounded reader directly
     residue_diags = [d for d in diags if d.code == "TABLE_PAYLOAD_RESIDUE"]
     assert residue_diags, f"expected TABLE_PAYLOAD_RESIDUE, got {[d.code for d in diags]}"
     assert all(d.reason == "conservative_complete" for d in residue_diags)
@@ -176,7 +192,7 @@ def test_table_rows_truncated_emits_conservative_complete_reason():
         name_map=["None", "A"],
         object_id="export:1",
         diagnostics=diags,
-    )
+    )  # type: ignore[arg-type]  # ByteArchive exercises the bounded reader directly
     truncated = [d for d in diags if d.code == "TABLE_ROWS_TRUNCATED"]
     assert truncated, f"expected TABLE_ROWS_TRUNCATED, got {[d.code for d in diags]}"
     assert all(d.reason == "conservative_complete" for d in truncated)
