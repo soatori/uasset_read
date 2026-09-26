@@ -28,6 +28,13 @@ def test_iostore_wrapper_is_not_treated_as_traditional_pak():
     assert report.capabilities["traditional_pak_entries"] == "unavailable"
 
 
+def test_parserfixtures_pak_is_a_traditional_pak_fixture():
+    report = inspect_container(CONTAINERS / "ParserFixturesLegacy-Windows.pak")
+    assert report.kind == "traditional_pak"
+    assert report.capabilities["traditional_pak_entries"] == "unavailable"
+    assert any(d.code == "TRADITIONAL_PAK_ENTRIES_UNAVAILABLE" for d in report.diagnostics)
+
+
 def test_container_input_is_refused_as_package():
     from uasset_read.exceptions import ParseError
     from uasset_read.package import parse_package_document
