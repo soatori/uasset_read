@@ -340,11 +340,3 @@ def project_property_bag(bag: PropertyBag) -> dict[str, Any]:
     for entry in bag.entries:
         out[entry.name] = project_property_value(entry.value)
     return out
-
-
-def project_properties_document(obj_properties: PropertyBag | dict[str, Any] | None) -> Any:
-    if obj_properties is None:
-        return None
-    if isinstance(obj_properties, PropertyBag):
-        return project_property_bag(obj_properties)
-    return obj_properties

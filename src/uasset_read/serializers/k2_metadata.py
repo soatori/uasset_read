@@ -9,7 +9,6 @@ custom versions — never a UE major-version shortcut.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from uasset_read.models.analysis import K2NodeMetadata
@@ -60,14 +59,6 @@ _IDENTITY_FIELD_NAMES = (
     "dispatcher_name",
     "member_parent",
 )
-
-
-@dataclass
-class K2NodeMetadataDecodeResult:
-    """Decode outcome for one node export."""
-
-    metadata: K2NodeMetadata
-    diagnostics: list[str] = field(default_factory=list)
 
 
 def _member_fields(value: Any) -> dict[str, Any] | None:

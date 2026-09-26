@@ -86,13 +86,6 @@ def _is_let_opcode(opcode: str) -> bool:
     return opcode.startswith("EX_Let")
 
 
-def _node_export_id(value: str | None) -> str:
-    """Last path segment of an owner-qualified id (``export:0/export:4``)."""
-    if not value:
-        return ""
-    return value.split("/")[-1]
-
-
 def _region_or_none(value: ByteRegion | None) -> ByteRegion | None:
     return value if isinstance(value, ByteRegion) else None
 
