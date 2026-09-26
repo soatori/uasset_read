@@ -366,7 +366,6 @@ def _enforce_budget(envelope: dict[str, Any], max_bytes: int, *, offset: int, pa
     base_relations = list(envelope.get("relations", []))
     base_dependencies = list(envelope.get("dependencies", []))
     base_projections = list(envelope.get("projections", []))
-    base_payloads = list(envelope.get("payloads", []))
     base_diagnostics = list(envelope["diagnostics"])
 
     trunc_diag = {
@@ -402,8 +401,6 @@ def _enforce_budget(envelope: dict[str, Any], max_bytes: int, *, offset: int, pa
             envelope["dependencies"] = [
                 d for d in base_dependencies if isinstance(d, dict) and f"import:{d.get('index')}" in visible_ids
             ]
-        if "payloads" in envelope:
-            envelope["payloads"] = [p for p in base_payloads if isinstance(p, dict) and p.get("owner") in remaining_ids]
         # Projection records follow the surviving page objects.
         envelope["projections"] = [
             item for item in base_projections if item.get("source_object_id") in remaining_ids
