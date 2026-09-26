@@ -39,7 +39,7 @@ Execution records retained under `../superpowers/plans/` are also evidence only 
 
 ## v3 Execution Evidence
 
-- [`../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md`](../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md) — Tasks 1–12 implemented on `dev-0.6.0` after merge `8727b067` (controller review pass; local full suite 444 passed on this tree); historical evidence only.
+- [`../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md`](../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md) — Tasks 1–12 implemented on `dev-0.6.0` after merge `8727b067` (controller review pass; the recorded 444-passed full suite is historical post-merge evidence, not the current count); historical evidence only.
 
 ## Rules
 

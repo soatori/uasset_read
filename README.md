@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 > 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 69 source files · 21 registered semantic asset handlers
 
-> **Refactor status:** package-first architecture with intentional v3 break: default CLI/API output is one canonical package document with envelope `format_version: "3.0"` (`projection.FORMAT_VERSION`; contract `docs/designs/contract/package_document_v3.schema.json`). Static Blueprint graph / Kismet instruction IR / CFG / correlation live under `objects[].semantic` (dict at the document boundary). Embedded type-aware `projections[]` cover Blueprint C++ declaration/migration, Material editor-builder, DataTable/CurveTable/struct/enum data, and physical asset metadata/payload references. Payload extraction from cooked sidecars remains available via `extract_payload`. Zen/IoStore package full decode stays unavailable/unverified without redistributable fixtures; unversioned-with-usmap is partial on editor samples (see `docs/designs/README.md`); Semantic 1.x JSON remains removed. Landed on `dev-0.6.0` @ merge `8727b067` after controller review (442 passed).
+> **Refactor status:** package-first architecture with intentional v3 break: default CLI/API output is one canonical package document with envelope `format_version: "3.0"` (`projection.FORMAT_VERSION`; contract `docs/designs/contract/package_document_v3.schema.json`). Static Blueprint graph / Kismet instruction IR / CFG / correlation live under `objects[].semantic` (dict at the document boundary). Embedded type-aware `projections[]` cover Blueprint C++ declaration/migration, Material editor-builder, DataTable/CurveTable/struct/enum data, and physical asset metadata/payload references. Payload extraction from cooked sidecars remains available via `extract_payload`. Zen/IoStore package full decode stays unavailable/unverified without redistributable fixtures; unversioned-with-usmap is partial on editor samples (see `docs/designs/README.md`); Semantic 1.x JSON remains removed. Landed on `dev-0.6.0` @ merge `8727b067` after controller review; the current full suite and the quality gates pass.
 
 ## Why uasset_read?
 
@@ -27,8 +27,8 @@ Whether you're auditing blueprint dependencies, building tooling for game develo
 | Version | v0.5.4.45 (last tagged) / 0.6.0-dev (v3 default) |
 | Source | Python parser for Unreal Engine .uasset files |
 | Modules | package-first modules incl. `kismet`, `models`, `parsers`, `projections`, `serializers` |
-| Tests | full suite green on `dev-0.6.0` @ `8727b067` (442 passed); structure/size/quality baselines gated |
-| Tracked samples | 54 legacy fixtures with manifest validation |
+| Tests | current full suite and quality gates pass; structure/size/quality baselines gated |
+| Tracked samples | 66 legacy fixtures with manifest validation |
 
 ## Features
 
@@ -48,7 +48,7 @@ Whether you're auditing blueprint dependencies, building tooling for game develo
 - **Handlers** — DataTable, UserDefinedEnum, UserDefinedStruct, Texture2D, TextureCube, SoundWave, Skeleton, StaticMesh, Material, Niagara, Blueprint/AnimBlueprint (graph/node/pin + declaration + SCS + VarType + Kismet IR/CFG on editor-saved fixtures; native C++ bodies are never recovered)
 - **Unversioned properties** — partial mapping-driven path: `LegacyPackageReader(mappings_path=...usmap)` plus editor unversioned fixtures (`BP_UnversionedTest` / `DA_UnversionedTest`). Unmapped or unreliable tails become explicit `UnversionedOpaque`; cooked/Zen unversioned remains deferred; there is no full `SchemaProvider` in `src/` (target — see the canonical design)
 
-**UE source-audit fixes (v0.6.0-dev):** 35 binary-format mismatches resolved against UE 5.8-dev C++ source — FString UTF-16 byte-swap, FColor B/G/R/A order, FRotator Pitch/Yaw/Roll, FName external number, unversioned header fragment decode, ELifetimeCondition table, mcdelegate PinCategory, FGuid display, dead CppType reads, ImportedSize X/Y, material input variants, anim node table verified against Engine/Source headers. StringTable (#615) partially fixed (FString keys + trailer). 118/118 tests passing.
+**UE source-audit fixes (v0.6.0-dev):** 35 binary-format mismatches resolved against UE 5.8-dev C++ source — FString UTF-16 byte-swap, FColor B/G/R/A order, FRotator Pitch/Yaw/Roll, FName external number, unversioned header fragment decode, ELifetimeCondition table, mcdelegate PinCategory, FGuid display, dead CppType reads, ImportedSize X/Y, material input variants, anim node table verified against Engine/Source headers. StringTable (#615) partially fixed (FString keys + trailer).
 
 ```python
 from uasset_read import parse_package_document
@@ -253,7 +253,7 @@ When Unreal Editor 5.8 is released, use the official Experimental Unreal MCP ser
 | Scenario | How uasset_read helps |
 | ---------- | ---------------------- |
 | **Programmatic blueprint analysis** | Parse blueprint data → extract structure → automate inspections |
-| **Blueprint → C++ migration** | *planned* — extract class structure, variables, functions; C++ skeleton generation is not yet implemented |
+| **Blueprint → C++ migration** | typed declaration and migration projections are available today (`cpp_declaration` / `cpp_migration` via `ProjectorRegistry`); the old string-based C++ skeleton generator is permanently retired |
 | **Dependency auditing** | v2 lists imports/exports per package (`list_dependencies`); cross-package cycle and orphan detection are *planned* |
 | **Mod development** | *planned* — reading assets from `.pak` is deferred to #625; today you must extract the `.uasset` first |
 | **Asset pipeline automation** | Use `--batch DIR` to parse all `.uasset` files in a directory; outputs JSONL (one JSON per line) or JSON array with `--batch-format json` |

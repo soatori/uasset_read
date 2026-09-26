@@ -20,7 +20,8 @@ status: target
 
 This is an implementation marker, not a change to the target architecture. On
 `dev-0.6.0` after merge `8727b067` (controller review pass); local verification
-on this tree: full suite **444 passed**, `compileall` clean:
+recorded at that time: full suite **444 passed**, `compileall` clean (a
+historical post-merge count, not the current suite total):
 
 - v3 contract envelope: `FORMAT_VERSION` / `projections` / `sidecars` in
   `src/uasset_read/projection.py`; contract

@@ -4,8 +4,9 @@ status: target
 
 > **2026-09-21 implementation marker (post-merge):** Tasks 1–12 are current
 > behavior on `dev-0.6.0` after merge `8727b067` from
-> `sdd/static-uasset-finish` (controller review pass; current-tree verification
-> **449 passed**, `compileall` clean). Envelope is `format_version: "3.0"`;
+> `sdd/static-uasset-finish` (controller review pass). That landing's own
+> verification was **449 passed** with `compileall` clean — a historical
+> post-merge record, not a current test count; the suite has grown since. Envelope is `format_version: "3.0"`;
 > static Blueprint IR/CFG/correlation, Material graph, C++/type-aware
 > projections, canonical writer, and sample acceptance gates are present.
 > This specification remains a design target for residual/deferred work only
