@@ -16,7 +16,7 @@ status: implemented
 2. **分页**：`paginate`（:35-61），语义正确。
 3. **max_bytes 截断**：:209-254。问题集中在这里：
    - 每弹出一个对象就全量重序列化测量一次（`_encoded()`，:211-213，在 :232 的 while 循环内），且每轮重跑 `_scope_to_page`——后者含关系可达性 BFS（:133-144）。总体 O(弹出数 × (全量 json.dumps + 全关系扫描))。
-   - 截断逻辑直接读写 `result` dict 的 5 个键（objects/relations/dependencies/payloads/diagnostics），与 envelope 构建互相依赖，无法单测"截断"本身。
+   - 截断逻辑直接读写 `result` dict 的 6 个键（objects/next_offset/relations/dependencies/projections/diagnostics），与 envelope 构建互相依赖，无法单测"截断"本身。
    - 唯一做对的一点：**测量在编码后**（量的是真正会发出的 UTF-8 字节数），这个原则保留。
 
 ## 目标分层
@@ -32,7 +32,7 @@ def project_document(doc, *, view, depth, ...) -> dict:
 ```
 
 - **层 1 投影**：现有 :101-206 的 envelope 构建 + `obj_to_dict`/`_package_to_dict`/`_scope_to_page` 原样进 `_project_envelope`。输入 document + 选择参数，输出完整 dict。唯一职责是结构转换。
-- **层 2 截断**：整体搬出为 `_enforce_budget(envelope, max_bytes, *, offset, page_total) -> dict`。签名上只依赖已投影的 dict，不摸 `PackageDocument`——截断决策因此可脱离解析路径单测（输入手工 dict，断言 `truncation`/`next_offset`/`TRUNCATED` 诊断）。保留现有最长前缀二分搜索（见顶部偏离说明），并在对象缩减后同步过滤 `relations.from`、可见 `dependencies` import、`projections.source_object_id`、`payloads.owner` 与 `diagnostics.object_id`。预算过小时的 `ValueError` 行为不变。
+- **层 2 截断**：整体搬出为 `_enforce_budget(envelope, max_bytes, *, offset, page_total) -> dict`。签名上只依赖已投影的 dict，不摸 `PackageDocument`——截断决策因此可脱离解析路径单测（输入手工 dict，断言 `truncation`/`next_offset`/`TRUNCATED` 诊断）。保留现有最长前缀二分搜索（见顶部偏离说明），并在对象缩减后同步过滤 `relations.from`、可见 `dependencies` import、`projections.source_object_id` 与 `diagnostics.object_id`。预算过小时的 `ValueError` 行为不变。`payloads` 不参与重定域：`_project_envelope` 恒写 `payloads: []`，唯一 `response_extras` 调用方也不提供 payloads，该键在生产路径始终为空；只有当它真的进入 envelope 后，才补上 `payloads.owner` 过滤。
 - **层 3 序列化**：CLI/Agent 层各一次 `json.dumps`。投影内部除 `_enforce_budget` 的测量外不再序列化。
 
 `next_offset`/`truncation` 的输出格式与现行为逐字节一致（schema `docs/designs/contract/package_document_v2.schema.json:71-90` 不动）。

@@ -169,7 +169,6 @@ def _budget_envelope(pad: int = 500) -> dict:
             {"index": 1, "class": "Class", "object_name": "Actor", "package_name": "Engine"},
         ],
         "projections": [{"source_object_id": oid, "kind": "cpp_declaration", "embedded": True} for oid in ids],
-        "payloads": [{"owner": oid, "source_region": "main"} for oid in ids],
         "diagnostics": [
             {"severity": "warning", "code": "PKG_NOTE", "message": "package-level", "stage": "package.summary"},
             {
@@ -227,7 +226,6 @@ def test_enforce_budget_rescopes_every_object_owned_list():
     targets = {r["to"] for r in result["relations"]}
     assert all(f"import:{d['index']}" in targets for d in result["dependencies"])
     assert {p["source_object_id"] for p in result["projections"]} <= kept
-    assert all(p["owner"] in kept for p in result["payloads"])
     kept_diags = [d for d in result["diagnostics"] if d["code"] == "OBJ_NOTE"]
     assert kept_diags and all(d["object_id"] in kept for d in kept_diags)
     assert any(d["code"] == "PKG_NOTE" for d in result["diagnostics"]), "package-level diagnostics survive"
