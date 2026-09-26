@@ -414,24 +414,28 @@ class BlueprintGraphDecoder:
             return [g for g in attached if isinstance(g, dict)]
         if source is None:
             return []
-        return self._read_from_source(source, obj, document)
+        return self._read_from_source(obj, document)
 
     def _read_from_source(
         self,
-        source: ByteSource,
         obj: ObjectRecord,
         document: PackageDocument,
     ) -> list[dict[str, Any]]:
-        """Open the package archive once and read graphs owned by ``obj``."""
+        """Open the package archive once and read graphs owned by ``obj``.
+
+        The package path comes from ``document.source.path`` only; a non-None
+        ``source`` on ``decode()`` merely gates this disk re-read.
+        """
         from uasset_read.package import open_package_bundle
         from uasset_read.serializers.blueprint_graph import read_blueprint_graphs
         from uasset_read.serializers.object_resources import read_export_map, read_import_map
         from uasset_read.serializers.package_summary import read_name_table, read_package_summary
 
-        path = self._package_path(source, document)
-        if path is None:
+        doc_path = getattr(document.source, "path", None) if document.source else None
+        candidate = Path(doc_path) if doc_path else None
+        if candidate is None or not candidate.exists():
             return []
-        archive = open_package_bundle(str(path)).open_archive(tolerant=True)
+        archive = open_package_bundle(str(candidate)).open_archive(tolerant=True)
         try:
             summary, _ = read_package_summary(archive)
             name_map = read_name_table(archive, summary)
@@ -468,24 +472,3 @@ class BlueprintGraphDecoder:
                 return False
             idx = outer_idx - 1
         return False
-
-    @staticmethod
-    def _package_path(source: ByteSource, document: PackageDocument) -> Path | None:
-        info = getattr(source, "describe", None)
-        described = info() if callable(info) else None
-        path_attr = getattr(described, "path", None) if described is not None else None
-        if path_attr:
-            candidate = Path(path_attr)
-            if candidate.exists():
-                return candidate
-        segments = getattr(source, "segments", None)
-        if callable(segments):
-            for name, _start, _size in segments():
-                # Prefer main package file name from document source.
-                break
-        doc_path = getattr(document.source, "path", None) if document.source else None
-        if doc_path:
-            candidate = Path(doc_path)
-            if candidate.exists():
-                return candidate
-        return None

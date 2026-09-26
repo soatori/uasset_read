@@ -1,8 +1,12 @@
 """Task 6: owner-aware Blueprint graph IR."""
 
-from tests.fixtures import parse_sample
+from tests.fixtures import parse_sample, sample_path
+from uasset_read.archive import SourceInfo
 from uasset_read.models.analysis import BlueprintNode, BlueprintPin, NodeId, PinLinkRef
+from uasset_read.models.document import PackageDocument
+from uasset_read.models.object_model import ObjectRecord
 from uasset_read.parsers.blueprint.graph import BlueprintGraphDecoder, resolve_pin_links
+from uasset_read.sources import MemorySource
 
 
 def test_graph_identity_includes_owner_for_duplicate_guids():
@@ -82,3 +86,21 @@ def test_selected_owner_uses_same_graph_dependency_closure_as_full_decode():
     assert (full_owner.semantic or {}).get("graphs") == (
         selected_owner.semantic or {}
     ).get("graphs")
+
+
+def test_source_read_falls_back_to_document_package_path():
+    path = sample_path("StackOBot_BP_Drone.uasset")
+    obj = ObjectRecord(id="export:0", table_index=0, name="BP_Drone")
+    document = PackageDocument(
+        objects=[obj],
+        source=SourceInfo(kind="loose", name=path.name, size=path.stat().st_size, path=str(path)),
+    )
+    graphs = BlueprintGraphDecoder().decode(obj, document, source=MemorySource(b"\x00"))
+    assert sorted(g.name for g in graphs) == ["EventGraph", "UserConstructionScript"]
+
+
+def test_source_read_without_package_path_returns_no_graphs():
+    obj = ObjectRecord(id="export:0", table_index=0, name="BP_Drone")
+    document = PackageDocument(objects=[obj])
+    assert BlueprintGraphDecoder().decode(obj, document, source=MemorySource(b"\x00")) == []
+    assert document.diagnostics == []
