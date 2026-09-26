@@ -22,7 +22,7 @@
 | File | Size | SHA-256 | Description |
 |------|------|---------|-------------|
 | `global.utoc` | 782 B | `97d7856030734fdff11bc4cddd2619c9142a693f0d37adc2ac3c59f4a4a9df3c` | IoStore TOC (global data) |
-| `global.ucas` | 3,209,824 B (3.1 MB) | `989837d42550dcccf3b7332c033f6de6ae4af256778011d9c04ecc71d8782fe8` | IoStore container (global data, **not committed**) |
+| `global.ucas` | 3,209,824 B (3.1 MB) | `989837d42550dcccf3b7332c033f6de6ae4af256778011d9c04ecc71d8782fe8` | IoStore container (global data, **tracked**) |
 
 ## IoStore TOC Header (MyProject-Windows.utoc)
 
@@ -67,8 +67,11 @@ The `chunks_of_type(id)` method indexes into these by type id.
 
 ## Fixture intake status — still blocked (plan Task 2, 2026-09-21)
 
-Candidate search and measurement via `read_toc()` / `inspect_container()`. No fixture was
-intaken; no manifest-integrity test was added.
+Candidate search and measurement via `read_toc()` / `inspect_container()`. No Zen package
+fixture was intaken. Container-file integrity is gated instead by
+`test_container_fixtures_match_manifest()` in `tests/test_samples.py`, which hash-checks
+every row of `manifest.json#containers` (including gitignored files when present on this
+machine), so `fixture_gaps.iostore_container` stays `partial`.
 
 | Candidate | On disk | Commit status | Verdict |
 |-----------|---------|---------------|---------|
@@ -90,11 +93,10 @@ are not measurable until a Zen decode path exists.
 1. A committable (or in-repo-approved external-artifact) pair providing at least one
    `ExportBundleData` package chunk's bytes — no `ZenFixture.utoc`/`.ucas` exists and no
    approved external-artifact manifest path is documented in the repository.
-2. Consequently: no `test_iostore_fixture_manifest_matches_files()`, no provenance table
-   for an intaken fixture, and no skip/xfail placeholder. The historical 247 MB manifest
+2. Consequently: no Zen package decode test, no provenance table for an intaken
+   fixture, and no skip/xfail placeholder. The historical 247 MB manifest
    rows above remain the fixture-gap evidence, not a real-package decode fixture.
 
 Note: the `global.utoc` header table above (entry count 2 / `("None", "Oodle")` / 5
 blocks) disagrees with a fresh `read_toc()` of the hashed file (1 entry, `("None",)`,
 49 blocks); treat the fresh measurement as authoritative until re-measured otherwise.
-`global.ucas` is tracked in git despite the "not committed" annotation above.

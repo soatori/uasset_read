@@ -23,6 +23,7 @@ from functools import lru_cache
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -361,6 +362,29 @@ def test_container_fixtures_match_manifest():
     utoc_bases = {entry["name"][: -len(".utoc")] for entry in containers if entry["container_kind"] == "iostore_toc"}
     ucas_bases = {entry["name"][: -len(".ucas")] for entry in containers if entry["container_kind"] == "iostore_data"}
     assert utoc_bases == ucas_bases, "every IoStore TOC needs its data archive"
+
+
+def test_fixture_gap_statuses_pin_the_capability_boundary():
+    """A gap status is a capability claim, not an aspiration (#621).
+
+    ``available`` means the capability is proven in CI from tracked files;
+    ``partial`` means usable evidence exists locally but no CI-completable
+    path; ``missing`` means nothing usable, including negative-only fixtures.
+    Drifting these upward is how "documented" quietly becomes "implemented".
+    """
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    gaps = manifest["fixture_gaps"]
+    assert gaps["zen_package"]["status"] == "missing"
+    assert gaps["iostore_container"]["status"] == "partial"
+    assert gaps["pak_container"]["status"] == "missing"
+    assert gaps["unversioned_properties"]["status"] == "partial"
+    assert gaps["sidecar_files"]["status"] == "available"
+    # Hand-written counts drift ("54 samples" survived a corpus of 66): gaps may
+    # only cite the manifest's own total, never a literal that ages.
+    total = manifest["summary"]["total_samples"]
+    for name, gap in gaps.items():
+        for count in re.findall(r"\b(\d+) samples\b", gap["description"]):
+            assert int(count) == total, name
 
 
 def _golden_mapped_ids(raws, export_count: int, import_count: int) -> list[str]:

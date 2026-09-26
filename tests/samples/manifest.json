@@ -791,7 +791,7 @@
   "fixture_gaps": {
     "zen_package": {
       "status": "missing",
-      "description": "No Zen package (.uasset with FZenPackageSummary) samples. All 54 samples use legacy FPackageFileSummary layout.",
+      "description": "No Zen package (.uasset with FZenPackageSummary) samples. Every sample listed in this manifest uses the legacy FPackageFileSummary layout.",
       "needed_for": "Phase 5 (Zen & Container Streaming) \u2014 ZenPackageReader implementation",
       "acquisition": "Request legitimate redistributable real samples with version info from the user: 3-5 Zen-layout .uasset files (file_version_ue5 >= 522, hash-based table layout) that may be committed to the repository.",
       "verification": "After copying, verify:\n- struct.unpack_from('<i', data, 4)[0] >= 0 (not legacy negative version)\n- struct.unpack_from('<i', data, 12)[0] >= 522 (UE5.1+)\n- parse_package_document() produces valid PackageDocument",
@@ -799,11 +799,11 @@
       "recommended_samples": "Blueprint, Material, DataTable (diverse types)"
     },
     "iostore_container": {
-      "status": "available",
-      "description": "Two UE 5.8 IoStore containers: MyProject-Windows (.utoc 222,772 B / 2,221 entries, Oodle, directory index; .ucas 259,193,536 B kept out of git) and the committed global.utoc/global.ucas pair.",
+      "status": "partial",
+      "description": "TOC/directory-index only: MyProject-Windows.utoc (222,772 B / 2,221 entries, Oodle, directory index) and the global.utoc/global.ucas pair are tracked, so read_toc() and directory-index listing are covered in CI. MyProject-Windows.ucas (259,193,536 B) is gitignored and does not count toward CI capability; no .ucas chunk body is decoded anywhere.",
       "needed_for": "Phase 5 \u2014 IoStore container parsing (target design, see docs/designs/)",
-      "acquisition": "Request legitimate redistributable real samples with version info from the user: an IoStore .utoc/.ucas pair (UE5.3+) plus a few contained .uasset files for cross-validation.",
-      "verification": "After copying, verify:\n- .utoc file starts with IoStore TOC magic bytes\n- the IoStore TOC header parses\n- Package names can be listed from directory index",
+      "acquisition": "Request a committable (<= 100 MB) IoStore .utoc/.ucas pair with ExportBundleData package chunks, plus a few contained .uasset files for cross-validation.",
+      "verification": "After copying, verify:\n- .utoc file starts with IoStore TOC magic bytes\n- the IoStore TOC header parses\n- Package names can be listed from directory index\n- At least one package chunk's bytes decode through a Zen path",
       "minimum_samples": 1,
       "recommended_samples": "1 .utoc + 1 .ucas pair with 5+ packages inside"
     },
@@ -826,10 +826,10 @@
       "recommended_samples": "1 cooked Blueprint with unversioned properties + matching .usmap"
     },
     "pak_container": {
-      "status": "available",
-      "description": "MyProject-Windows.pak (11,450,886 B), the pak written next to the cooked IoStore containers by the same build.",
+      "status": "missing",
+      "description": "MyProject-Windows.pak (11,450,886 B) is an IoStore-wrapper negative case only (zero-filled header, no FPak magic/index); it is the fixture for test_iostore_wrapper_is_not_treated_as_traditional_pak. No traditional FPakFile sample exists in the repository.",
       "needed_for": "Phase 5 (Container Streaming)",
-      "acquisition": "Request legitimate redistributable real samples with version info from the user: a .pak file (with partitions) plus a few .uasset files for cross-validation.",
+      "acquisition": "Request a traditional FPakFile (magic 5a6f12e1, version 11/12, embedded index), or cook a project with IoStore disabled, plus a few .uasset files for cross-validation.",
       "verification": "After copying, verify:\n- PakReader can parse the index\n- Individual .uasset files can be extracted\n- Extracted files parse correctly with PackageDocument",
       "minimum_samples": 1,
       "recommended_samples": "1 .pak with 10+ packages inside"

@@ -27,6 +27,11 @@ In UE5 with IoStore enabled (default in UE 5.4+), the `.pak` file is a container
 
 The actual asset data lives in the companion `.ucas` file (see `iostore/` directory). The `.pak` serves as a mountable container for backward compatibility.
 
+Because of that, `manifest.json#fixture_gaps.pak_container` records `status: "missing"`:
+this file is kept only as the IoStore-wrapper negative case asserted by
+`test_iostore_wrapper_is_not_treated_as_traditional_pak()`, and it is never counted as a
+FPak capability sample.
+
 ## Traditional Pak Format
 
 A traditional FPakFile (with magic `5a6f12e1`, version 11/12, embedded index) is **not available** from this project. UE 5.8 defaults to IoStore packaging.
