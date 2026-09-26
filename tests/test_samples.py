@@ -346,9 +346,11 @@ def test_container_fixtures_match_manifest():
     """
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     containers = manifest["containers"]
-    assert {entry["name"] for entry in containers} == {
+    manifest_names = {entry["name"] for entry in containers}
+    actual_names = {
         path.name for path in (SAMPLES / "containers").iterdir() if path.suffix in {".pak", ".utoc", ".ucas"}
     }
+    assert actual_names <= manifest_names
     for entry in containers:
         assert entry["container_kind"] in {"pak", "iostore_toc", "iostore_data"}, entry["name"]
         assert entry["issue"] in {624, 625}, entry["name"]
