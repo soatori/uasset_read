@@ -401,7 +401,7 @@ def test_fixture_gap_statuses_pin_the_capability_boundary():
     assert gaps["zen_package"]["status"] == "partial"
     assert gaps["iostore_container"]["status"] == "partial"
     assert gaps["pak_container"]["status"] == "available"
-    assert gaps["unversioned_properties"]["status"] == "partial"
+    assert gaps["unversioned_properties"]["status"] == "not_required"
     assert gaps["sidecar_files"]["status"] == "available"
     # Hand-written counts drift ("54 samples" survived a corpus of 66): gaps may
     # only cite the manifest's own total, never a literal that ages.

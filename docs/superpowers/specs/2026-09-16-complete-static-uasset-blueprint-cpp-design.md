@@ -17,6 +17,8 @@ status: target
 
 ## Decision
 
+> **2026-09-27 product decision:** cooked/Zen unversioned parsing and a general `SchemaProvider` are outside the product target. Existing editor `.usmap` fixtures remain supported only as a bounded partial path.
+
 Adopt an in-place, modular rewrite of the parser core. Keep `PackageDocument` as the only package-level document boundary, but replace the current monolithic read/enrich path with independent source, container, layout, property, object, Blueprint, Kismet, Material, analysis, and projection modules.
 
 The implementation is pure Python 3.10+ and has no runtime bridge to CUE4Parse, UAssetAPI, UAssetGUI, UnrealBPInspect, FModel, or Unreal Editor. Those projects remain external comparison evidence only.
@@ -250,7 +252,7 @@ Byte accounting is scoped. Every requested non-empty export window has a non-emp
 1. StackOBot Blueprint exposes all 31 exports, two graphs, three Kismet functions, 85 expressions, CFG blocks/edges, call targets, and variable reads/writes.
 2. UE5.8 Blueprint exposes `K2Node_IfThenElse`, `EX_JumpIfNot`, and explicit true/false control-flow edges.
 3. StackOBot Material exposes 42 exports, 39 material expressions, expression properties, and links where the package contains them.
-4. Unversioned samples either decode through schema or expose bounded opaque fields; no field is guessed from position alone.
+4. Existing editor `.usmap` samples preserve mapped values or bounded opaque fields; cooked/Zen unversioned completeness is outside the product target.
 5. Loose sidecars and committed IoStore fixtures prove metadata/classification and available chunk reads; extraction/reparse is required only where committed bytes and codecs exist. Traditional Pak and real Zen-package parsing remain explicitly unverified until redistributable fixtures are added.
 6. Generated declaration AST matches the normalized UE5.8 oracle for parent, variables/types, function signatures, components, and dispatchers; migration output contains a dual-offset traceable mapping for every top-level function instruction.
 7. Every requested non-empty export range is exactly tiled by decoded, opaque, payload-addressable, or unavailable leaves with reasons where required.

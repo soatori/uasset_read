@@ -397,6 +397,8 @@ worked example：`{"kind": "outer_of", "from": "export:5", "to": "export:2"}` �
 
 #### Unversioned
 
+> **2026-09-27 product decision:** the editor `.usmap` mapping path remains a bounded partial capability. Cooked/Zen unversioned parsing and a general `SchemaProvider` are outside the product target; the schema design below is retained as historical target context only.
+
 `UnversionedPropertyReader` 需要 `SchemaProvider`：
 
 ```python
@@ -727,7 +729,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 交付：
 
 - Tagged reader 迁移。
-- Unversioned reader + SchemaProvider。
+- ~~Unversioned reader + SchemaProvider。~~ Outside the current product target; retain the existing editor `.usmap` path and opaque fallback.
 - property range diagnostics。
 - opaque property/payload descriptor。
 

@@ -11,7 +11,7 @@
 | --- | --- | --- | --- |
 | D-ZEN | `ZenPackageReader` + IoStore package body | #624; canonical Phase 5 | target; `.utoc/.ucas` fixtures missing |
 | D-PAK | Pak container full product path | #625 | target; callers extract `.uasset` today |
-| D-SCHEMA | Full `SchemaProvider` / cooked unversioned | canonical Phase 2 / Property System | partial (editor `.usmap`); cooked deferred; no full `SchemaProvider` in `src/` |
+| D-SCHEMA | Full `SchemaProvider` / cooked unversioned | canonical Phase 2 / Property System | **not required (2026-09-27 product decision)**; editor `.usmap` path remains partial/current, cooked/Zen unversioned is outside the product target |
 | D-PLA | Payload-only parse (route A) | [`2026-08-31-payload-extraction-path.md`](2026-08-31-payload-extraction-path.md) | target; gated on real descriptors, not on perf demand |
 | D-G2 | Shared `PackageDocument` cache | [`2026-08-31-agent-doc-cache-contract.md`](2026-08-31-agent-doc-cache-contract.md) (G2) | target; contract frozen; free-standing |
 | D-BATCH | CLI `--batch` | [`2026-08-31-v1-retirement-plan.md`](2026-08-31-v1-retirement-plan.md) §5 | **current (v2 live)** — directory walk + `uasset_read.batch` report; v1 `batch_worker` orchestration is not rebuilt |
@@ -72,7 +72,7 @@ A new implementation plan is required before any Bundle N code lands, and it mus
 4. Should the known-missing `.ucas` gap (#624 test failures) become the formal Bundle 1 fixture goal, or wait for a separately redistributable Zen package?
 5. Is a loose-sidecar (legacy cooked, no Zen) variant of route A worth a small separate slice, or should route A fold entirely under "real descriptors + Zen"?
 
-**Residual note 2026-09-13:** product answers above remain open except batch live-mode. Residual plan executed Waves A–B only (S1 freeze, batch口径, wiki Gate C local commit, G2 cache); **Wave C/D (Zen/IoStore, SchemaProvider) deferred by user**; diff/Pak/C++ not implemented.
+**Residual note:** product answers are closed for the current scope: Zen/IoStore remains deferred pending its reader work, while cooked unversioned/SchemaProvider is outside the product target; diff is a permanent non-goal and the old C++ skeleton is retired.
 
 **Out of product scope (2026-09-13):** MCP as an agent transport/server is **not** a repository target. Agent tools remain a bounded in-library API. G3’s trigger is generic multi-threaded registry concurrency, not MCP.
 
@@ -82,7 +82,7 @@ Recorded after v3 Tasks 1–12 closeout. These decisions **do not authorize impl
 
 | ID | Decision | Rationale |
 | --- | --- | --- |
-| D-SCHEMA | **S-B — continue defer.** No Bundle 2 start; cooked-unversioned fixtures acquisition not authorized this round. Production path stays mapping-driven usmap + opaque fallback. | `SchemaProvider` scaffolding was never production-wired and has been removed (re-add at wiring time); no paired cooked fixtures → cannot accept cooked-complete claims. |
+| D-SCHEMA | **S-C — outside product target.** No Bundle 2 and no cooked-unversioned fixture acquisition. The editor `.usmap` mapping path remains supported as a bounded partial capability; cooked/Zen unversioned and a general `SchemaProvider` are not scheduled. | Avoids acquiring/installing mapping dumpers and maintaining a cooked schema contract that is not needed by the current product. Existing editor fixtures continue to protect the supported partial path. |
 | D-DIFF | **F-D — permanent non-goal.** CLI remains without `--diff`. | No live product need; comparison target never specified; Gate A already limits golden use to regression ID, not schema constraint. |
 | D-CPP (old skeleton) | **C-A — permanently retired.** Gate K string `cpp_code` chain stays retired. v3 typed C++ projection (`projections/`) is current and sufficient until a **new** emission design is explicitly requested. | Avoids second parallel C++ output path; bundling rule 4. |
 | Automatic output sidecar | **Keep single-file canonical writer** (`sidecars[]` empty; oversize → `OutputBudgetError`). Measured size/safety probe in `temp/` remains optional follow-up, **not** scheduled. | Plan invariant: physical sidecars only after a measured hard boundary. |
