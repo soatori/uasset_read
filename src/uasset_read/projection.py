@@ -151,6 +151,7 @@ def fit_list_response(response: dict, max_bytes: int, *, list_key: str, total_ke
     return response
 
 
+_VALID_VIEWS = {"semantic", "raw", "debug"}
 _VALID_DEPTHS = {"package", "object", "asset", "decode"}
 _DEPTH_ORDER = {"package": 0, "object": 1, "asset": 2, "decode": 3}
 
@@ -183,6 +184,11 @@ def project_document(
 ) -> dict[str, Any]:
     """Project a PackageDocument to a specific view/depth/selection/pagination.
 
+    Layer split (G4): this function validates, selects and paginates;
+    ``_project_envelope`` performs structure conversion (never truncates) and
+    ``_enforce_budget`` performs byte-budget truncation (never touches the
+    document). Serialization stays with the caller — CLI and Agent each dump once.
+
     Views:
       - semantic (default): object identity, roles, status, coverage
       - raw: adds flags, serial offsets, header details
@@ -193,7 +199,6 @@ def project_document(
     projection keys are overwritten by the extras) before ``max_bytes``
     trimming runs, so extras count against the byte budget like any envelope key.
     """
-    _VALID_VIEWS = {"semantic", "raw", "debug"}
     if view not in _VALID_VIEWS:
         raise ValueError(f"Invalid view: {view!r}. Expected one of {_VALID_VIEWS}")
     if depth not in _VALID_DEPTHS:
@@ -202,6 +207,43 @@ def project_document(
         raise ValueError("max_bytes must be non-negative")
     if _DEPTH_ORDER[depth] > _DEPTH_ORDER[doc.depth]:
         raise ValueError(f"cannot project at depth {depth!r}: document was parsed at depth {doc.depth!r}")
+
+    selected = select_objects(doc, object_ids=object_ids, roles=roles, classes=classes)
+    page, next_offset, truncation_info = paginate(
+        selected,
+        offset=offset,
+        limit=limit,
+    )
+    envelope = _project_envelope(
+        doc,
+        view=view,
+        depth=depth,
+        page=page,
+        next_offset=next_offset,
+        truncation_info=truncation_info,
+        response_extras=response_extras,
+    )
+    if max_bytes is not None:
+        page_total = max(0, len(selected) - offset)
+        if limit is not None:
+            page_total = min(limit, page_total)
+        envelope = _enforce_budget(envelope, max_bytes, offset=offset, page_total=page_total)
+    return envelope
+
+
+def _project_envelope(
+    doc: PackageDocument,
+    *,
+    view: str,
+    depth: str,
+    page: list[ObjectRecord],
+    next_offset: int | None,
+    truncation_info: dict[str, int],
+    response_extras: dict | None = None,
+) -> dict[str, Any]:
+    """Layer 1 (G4): structure conversion only — selection and pagination are
+    already applied; this layer never truncates.
+    """
 
     def _emit(o: ObjectRecord) -> dict[str, Any]:
         """Serialize one object, stripping fields the projection depth can't back."""
@@ -213,16 +255,6 @@ def project_document(
             d.pop("properties", None)
             d.pop("properties_summary", None)
         return d
-
-    # Select objects
-    selected = select_objects(doc, object_ids=object_ids, roles=roles, classes=classes)
-
-    # Paginate
-    page, next_offset, truncation_info = paginate(
-        selected,
-        offset=offset,
-        limit=limit,
-    )
 
     # Scope relations and diagnostics to the returned page
     page_ids = {o.id for o in page}
@@ -312,108 +344,136 @@ def project_document(
     if response_extras:
         result.update(response_extras)
 
-    # max_bytes enforcement — measure AFTER adding TRUNCATED diagnostic
-    if max_bytes is not None:
-        if json_byte_size(result) > max_bytes:
-            trunc_diag = {
+    return result
+
+
+def _enforce_budget(envelope: dict[str, Any], max_bytes: int, *, offset: int, page_total: int) -> dict[str, Any]:
+    """Layer 2 (G4): drop trailing page objects until the compact encoding fits.
+
+    Depends only on the already-projected dict, never on ``PackageDocument``,
+    so truncation decisions are unit-testable from a hand-built envelope.
+    Re-scoping after a drop filters the page-scoped lists captured on entry —
+    the same subsets ``_project_envelope`` would have produced for the
+    surviving ids. Measure AFTER adding the TRUNCATED diagnostic: the cap
+    must account for every byte the caller will serialize.
+    """
+    if json_byte_size(envelope) <= max_bytes:
+        return envelope
+
+    # Captured once: the binary search probes prefixes in arbitrary order, so
+    # each probe must re-derive from the page-scoped originals, not from the
+    # previous probe's residue.
+    base_relations = list(envelope.get("relations", []))
+    base_dependencies = list(envelope.get("dependencies", []))
+    base_projections = list(envelope.get("projections", []))
+    base_payloads = list(envelope.get("payloads", []))
+    base_diagnostics = list(envelope["diagnostics"])
+
+    trunc_diag = {
+        "severity": "warning",
+        "code": "TRUNCATED",
+        "message": f"Output truncated to fit {max_bytes}-byte budget",
+        "stage": "projection",
+        "recoverable": True,
+    }
+    envelope["diagnostics"].append(trunc_diag)
+    # Attach the truncation block BEFORE measuring, so the byte cap
+    # accounts for the block itself.
+    envelope["truncation"] = {
+        "reason": "max_bytes",
+        "budget": max_bytes,
+        "actual": json_byte_size(envelope),
+        "objects_dropped": 0,
+    }
+    envelope["next_offset"] = offset + len(envelope["objects"])
+    objects_snapshot = list(envelope["objects"])
+
+    def _apply_prefix(keep: int) -> None:
+        envelope["objects"] = objects_snapshot[:keep]
+        envelope["next_offset"] = offset + keep
+        remaining_ids = {o["id"] for o in envelope["objects"] if isinstance(o, dict) and "id" in o}
+        kept_relations = [r for r in base_relations if isinstance(r, dict) and r.get("from") in remaining_ids]
+        if "relations" in envelope:
+            envelope["relations"] = kept_relations
+        # Visible imports stay one hop out: the surviving objects plus whatever
+        # their surviving relations point at.
+        visible_ids = remaining_ids | {r["to"] for r in kept_relations}
+        if "dependencies" in envelope:
+            envelope["dependencies"] = [
+                d for d in base_dependencies if isinstance(d, dict) and f"import:{d.get('index')}" in visible_ids
+            ]
+        if "payloads" in envelope:
+            envelope["payloads"] = [p for p in base_payloads if isinstance(p, dict) and p.get("owner") in remaining_ids]
+        # Projection records follow the surviving page objects.
+        envelope["projections"] = [
+            item for item in base_projections if item.get("source_object_id") in remaining_ids
+        ]
+        envelope["diagnostics"] = [
+            d for d in base_diagnostics if isinstance(d, dict) and (d.get("object_id") is None or d["object_id"] in remaining_ids)
+        ] + [trunc_diag]
+
+    # Binary search the longest prefix that fits. Linear pop+re-encode
+    # is O(n) full dumps and stalls AnimBlueprint decode pages (~4MB).
+    lo, hi = 0, len(objects_snapshot)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        _apply_prefix(mid)
+        if json_byte_size(envelope) <= max_bytes:
+            lo = mid
+        else:
+            hi = mid - 1
+    _apply_prefix(lo)
+
+    if page_total == 0:
+        # Out-of-range empty page: never a cursor, never over budget.
+        envelope.pop("next_offset", None)
+        envelope["truncation"]["actual"] = json_byte_size(envelope)
+        if json_byte_size(envelope) > max_bytes:
+            raise ValueError(
+                f"Output budget {max_bytes} bytes too small for minimal envelope ({json_byte_size(envelope)} bytes)"
+            )
+        return envelope
+    if len(envelope["objects"]) == 0:
+        # Nothing fit: return the complete retry contract only if
+        # its diagnostics and truncation metadata fit the budget.
+        envelope.pop("next_offset", None)
+        envelope["truncation"] = {
+            "reason": "max_bytes",
+            "budget": max_bytes,
+            "actual": json_byte_size(envelope),
+            "objects_dropped": page_total,
+        }
+        envelope["diagnostics"].append(
+            {
                 "severity": "warning",
-                "code": "TRUNCATED",
-                "message": f"Output truncated to fit {max_bytes}-byte budget",
+                "code": "BUDGET_EXHAUSTED",
+                "message": f"Budget {max_bytes} fits 0 of {page_total} page objects; retry offset {offset} with a larger max_bytes",
                 "stage": "projection",
                 "recoverable": True,
             }
-            result["diagnostics"].append(trunc_diag)
-            # Attach the truncation block BEFORE measuring, so the byte cap
-            # accounts for the block itself.
-            result["truncation"] = {
-                "reason": "max_bytes",
-                "budget": max_bytes,
-                "actual": json_byte_size(result),
-                "objects_dropped": 0,
-            }
-            result["next_offset"] = offset + len(result["objects"])
-            objects_snapshot = list(result["objects"])
-            page_total = max(0, len(selected) - offset)
-            if limit is not None:
-                page_total = min(limit, page_total)
+        )
+        # The byte count includes its own digits, so stabilize it
+        # after all metadata has been added before checking the cap.
+        actual = json_byte_size(envelope)
+        while envelope["truncation"]["actual"] != actual:
+            envelope["truncation"]["actual"] = actual
+            actual = json_byte_size(envelope)
+        if actual > max_bytes:
+            raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({actual} bytes)")
+        return envelope
+    objects_dropped = page_total - len(envelope["objects"])
+    envelope["truncation"] = {
+        "reason": "max_bytes",
+        "budget": max_bytes,
+        "actual": 0,
+        "objects_dropped": objects_dropped,
+    }
+    actual = json_byte_size(envelope)
+    while envelope["truncation"]["actual"] != actual:
+        envelope["truncation"]["actual"] = actual
+        actual = json_byte_size(envelope)
 
-            def _apply_prefix(keep: int) -> None:
-                result["objects"] = objects_snapshot[:keep]
-                result["next_offset"] = offset + keep
-                remaining_ids = {o["id"] for o in result["objects"] if isinstance(o, dict) and "id" in o}
-                rels, diags, deps = _scope_to_page(remaining_ids)
-                if "relations" in result:
-                    result["relations"] = rels
-                if "dependencies" in result:
-                    result["dependencies"] = deps
-                # Projection records follow the surviving page objects.
-                result["projections"] = [
-                    item for item in page_projections if item.get("source_object_id") in remaining_ids
-                ]
-                result["diagnostics"] = [d.to_dict() for d in diags] + [trunc_diag]
-
-            # Binary search the longest prefix that fits. Linear pop+re-encode
-            # is O(n) full dumps and stalls AnimBlueprint decode pages (~4MB).
-            lo, hi = 0, len(objects_snapshot)
-            while lo < hi:
-                mid = (lo + hi + 1) // 2
-                _apply_prefix(mid)
-                if json_byte_size(result) <= max_bytes:
-                    lo = mid
-                else:
-                    hi = mid - 1
-            _apply_prefix(lo)
-
-            if page_total == 0:
-                # Out-of-range empty page: never a cursor, never over budget.
-                result.pop("next_offset", None)
-                result["truncation"]["actual"] = json_byte_size(result)
-                if json_byte_size(result) > max_bytes:
-                    raise ValueError(
-                        f"Output budget {max_bytes} bytes too small for minimal envelope ({json_byte_size(result)} bytes)"
-                    )
-                return result
-            if len(result["objects"]) == 0:
-                # Nothing fit: return the complete retry contract only if
-                # its diagnostics and truncation metadata fit the budget.
-                result.pop("next_offset", None)
-                result["truncation"] = {
-                    "reason": "max_bytes",
-                    "budget": max_bytes,
-                    "actual": json_byte_size(result),
-                    "objects_dropped": page_total,
-                }
-                result["diagnostics"].append(
-                    {
-                        "severity": "warning",
-                        "code": "BUDGET_EXHAUSTED",
-                        "message": f"Budget {max_bytes} fits 0 of {page_total} page objects; retry offset {offset} with a larger max_bytes",
-                        "stage": "projection",
-                        "recoverable": True,
-                    }
-                )
-                # The byte count includes its own digits, so stabilize it
-                # after all metadata has been added before checking the cap.
-                actual = json_byte_size(result)
-                while result["truncation"]["actual"] != actual:
-                    result["truncation"]["actual"] = actual
-                    actual = json_byte_size(result)
-                if actual > max_bytes:
-                    raise ValueError(f"Output budget {max_bytes} bytes too small for minimal envelope ({actual} bytes)")
-                return result
-            objects_dropped = page_total - len(result["objects"])
-            result["truncation"] = {
-                "reason": "max_bytes",
-                "budget": max_bytes,
-                "actual": 0,
-                "objects_dropped": objects_dropped,
-            }
-            actual = json_byte_size(result)
-            while result["truncation"]["actual"] != actual:
-                result["truncation"]["actual"] = actual
-                actual = json_byte_size(result)
-
-    return result
+    return envelope
 
 
 def _package_to_dict(doc: PackageDocument, *, view: str = "semantic") -> dict[str, Any]:

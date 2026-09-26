@@ -1,12 +1,16 @@
 # Projection 分层重构边界（G4）
 
-status: target
+status: implemented
 
 > 定义 `projection.py` 的可执行重构边界：投影 → 截断 → 序列化。纯代码搬移级重构，公开行为与签名不变。
+>
+> **实现记录（2026-09-26）：** `project_document` 已拆为参数验证/选择/分页 + `_project_envelope`（层1）+ `_enforce_budget`（层2），同文件内私有 helper，无新模块、无新类；`format_version` 仍为 `"3.0"`。层1 输出与层2 截断结果由 `tests/test_projection_v3.py`（含纯 envelope 单测）与 `tests/test_core.py` 的 max_bytes 契约回归覆盖。
+>
+> **与原设计的唯一偏离：** 层2 保留当前“最长前缀二分搜索”实现（每次探测一次全量 dumps，`O(log n)` 次测量），未实现“对每个对象单独 dumps 缓存字节数、最多两次全量 dumps”的估算器。理由：二分已在 AnimBlueprint decode 页（~4MB）实测可接受，而估算器要为字节边界逐位对齐（`truncation.actual` 自带位数、`next_offset` 位数变化）付额外复杂度，属于为一次微优化预付的机制。
 
-## 现状（基线 bd3309a7 核实）
+## 现状（重构前基线 bd3309a7 核实 — 已完成，仅作决策记录）
 
-`project_document`（`src/uasset_read/v2/projection.py:67-256`）一个函数混做三件事：
+`project_document`（当时位于 `src/uasset_read/v2/projection.py:67-256`）一个函数混做三件事：
 
 1. **结构转换**：`obj_to_dict`（`projection.py:276-308`）按 view 分支附加字段（`if view in ("raw","debug")`，:295-296；`_package_to_dict` 同样，:271-272）；`select_objects` 过滤（:14-32）；`fields` 白名单过滤（:119-124）。
 2. **分页**：`paginate`（:35-61），语义正确。
@@ -28,7 +32,7 @@ def project_document(doc, *, view, depth, ...) -> dict:
 ```
 
 - **层 1 投影**：现有 :101-206 的 envelope 构建 + `obj_to_dict`/`_package_to_dict`/`_scope_to_page` 原样进 `_project_envelope`。输入 document + 选择参数，输出完整 dict。唯一职责是结构转换。
-- **层 2 截断**：现有 :209-254 整体搬出为 `_enforce_budget(result, max_bytes, offset, total) -> result`。签名上只依赖已投影的 dict，不摸 `PackageDocument`——截断决策因此可脱离解析路径单测（输入手工 dict，断言 `truncation`/`next_offset`/`TRUNCATED` 诊断）。内部允许一次优化：对每个对象 dict 单独 `dumps` 缓存字节数，按累计值决定保留前缀，再对最终 envelope 验证一次；替代现在的逐弹逐测。预算过小时的 `ValueError`（:243）行为不变。
+- **层 2 截断**：整体搬出为 `_enforce_budget(envelope, max_bytes, *, offset, page_total) -> dict`。签名上只依赖已投影的 dict，不摸 `PackageDocument`——截断决策因此可脱离解析路径单测（输入手工 dict，断言 `truncation`/`next_offset`/`TRUNCATED` 诊断）。保留现有最长前缀二分搜索（见顶部偏离说明），并在对象缩减后同步过滤 `relations.from`、可见 `dependencies` import、`projections.source_object_id`、`payloads.owner` 与 `diagnostics.object_id`。预算过小时的 `ValueError` 行为不变。
 - **层 3 序列化**：CLI/Agent 层各一次 `json.dumps`。投影内部除 `_enforce_budget` 的测量外不再序列化。
 
 `next_offset`/`truncation` 的输出格式与现行为逐字节一致（schema `docs/designs/contract/package_document_v2.schema.json:71-90` 不动）。
@@ -42,5 +46,5 @@ def project_document(doc, *, view, depth, ...) -> dict:
 ## 验收
 
 - 现有 projection/agent/CLI 契约测试零修改通过（行为不变是本重构的验收线）。
-- 新增 `_enforce_budget` 独立测试：喂 20 行手工 dict 断言 dropped 数与 `next_offset`，不经过 parse。
-- O(n²) 序列化消失：`_enforce_budget` 每次调用最多 2 次全量 dumps（决策一次 + 验证一次）。
+- 新增 `_enforce_budget` 独立测试：喂手工 dict 断言最长前缀、重新定域、全丢弃与最终字节数，不经过 parse（`tests/test_projection_v3.py`）。
+- 序列化测量为二分的 `O(log n)` 次全量 dumps（见顶部偏离说明），不再是逐弹逐测的 O(n²)。
