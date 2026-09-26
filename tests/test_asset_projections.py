@@ -1,4 +1,6 @@
 # tests/test_asset_projections.py
+import pytest
+
 from uasset_read.models.document import PackageDocument, PackageInfo
 from uasset_read.models.object_model import ObjectRecord, Relation
 from uasset_read.projections.registry import CAPABILITY_MATRIX, ProjectorRegistry
@@ -168,3 +170,19 @@ def test_material_instance_and_physical_family_matrix_behavior():
     assert "asset_metadata" in kinds
     payload = next(item for item in tex_records if item.kind == "payload_reference")
     assert payload.status == "unavailable"
+
+
+def test_registry_rejects_two_matching_projectors():
+    class _Stub:
+        def can_project(self, obj):
+            return True
+
+        def project(self, document, obj):
+            return []
+
+    registry = ProjectorRegistry()
+    registry.register(_Stub())
+    registry.register(_Stub())
+    doc = _doc([_obj("export:0", class_name="StaticMesh")])
+    with pytest.raises(ValueError, match="ambiguous projector ownership"):
+        registry.project_object(doc, "export:0")

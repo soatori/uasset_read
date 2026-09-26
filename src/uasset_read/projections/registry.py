@@ -8,7 +8,6 @@ and are never copied into a generic ``object`` projection.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 from uasset_read.models.diagnostics import make_diagnostic
@@ -443,47 +442,35 @@ def _semantic_dict(obj: ObjectRecord) -> dict[str, Any]:
     return semantic if isinstance(semantic, dict) else {}
 
 
-@dataclass
-class _RegisteredProjector:
-    projector: Any
-    priority: int
-
-
 class ProjectorRegistry:
     """Deterministic type-aware projector dispatch."""
 
     def __init__(self) -> None:
-        self._entries: list[_RegisteredProjector] = []
+        self._entries: list[Any] = []
 
     @classmethod
     def default(cls) -> "ProjectorRegistry":
         registry = cls()
-        registry.register(BlueprintCppProjector(), priority=0)
-        registry.register(MaterialEditorBuilderProjector(), priority=0)
-        registry.register(MaterialInstanceProjector(), priority=0)
-        registry.register(DataTableProjector(), priority=0)
-        registry.register(CurveTableProjector(), priority=0)
-        registry.register(UserDefinedStructProjector(), priority=0)
-        registry.register(UserDefinedEnumProjector(), priority=0)
-        registry.register(PhysicalAssetProjector(), priority=0)
-        registry.register(GraphAssetProjector(), priority=0)
+        registry.register(BlueprintCppProjector())
+        registry.register(MaterialEditorBuilderProjector())
+        registry.register(MaterialInstanceProjector())
+        registry.register(DataTableProjector())
+        registry.register(CurveTableProjector())
+        registry.register(UserDefinedStructProjector())
+        registry.register(UserDefinedEnumProjector())
+        registry.register(PhysicalAssetProjector())
+        registry.register(GraphAssetProjector())
         return registry
 
-    def register(self, projector: Any, *, priority: int = 0) -> None:
-        self._entries.append(_RegisteredProjector(projector=projector, priority=priority))
+    def register(self, projector: Any) -> None:
+        self._entries.append(projector)
 
     def _owners(self, obj: ObjectRecord) -> list[Any]:
-        matches = [entry for entry in self._entries if entry.projector.can_project(obj)]
-        if not matches:
-            return []
-        highest = max(entry.priority for entry in matches)
-        winners = [entry for entry in matches if entry.priority == highest]
-        if len(winners) > 1:
-            names = sorted(type(entry.projector).__name__ for entry in winners)
-            raise ValueError(
-                f"ambiguous projector ownership for {obj.id} at priority {highest}: {names}"
-            )
-        return [winners[0].projector]
+        matches = [projector for projector in self._entries if projector.can_project(obj)]
+        if len(matches) > 1:
+            names = sorted(type(projector).__name__ for projector in matches)
+            raise ValueError(f"ambiguous projector ownership for {obj.id}: {names}")
+        return matches
 
     def project_object(self, document: PackageDocument, object_id: str) -> list[ProjectionRecord]:
         obj = next((item for item in document.objects if item.id == object_id), None)
