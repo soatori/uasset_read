@@ -273,7 +273,6 @@ def _raw_depends_map(sample: str):
 
 PACKAGE_SUFFIXES = {".uasset", ".umap", ".uexp", ".ubulk", ".uptnl"}
 ORIGIN_DOCS = {
-    "ORIGIN-parserfixtures-ue58.md",
     "ORIGIN-issue-516-plugin-mount.md",
     "ORIGIN-issue-521-niagara.md",
     "ORIGIN-issue-522-cube-builder.md",
@@ -302,7 +301,6 @@ def test_manifest_matches_every_real_sample():
             "README.md",
                 "golden",
                 "containers",
-                "zen",
                 "UnversionedTest.usmap",
             "UnversionedTest.provenance.md",
             "quality_baseline.json",
@@ -368,38 +366,19 @@ def test_container_fixtures_match_manifest():
     assert utoc_bases == ucas_bases, "every IoStore TOC needs its data archive"
 
 
-def test_zen_fixture_pairs_match_manifest():
-    """Extracted UE5.8 Zen header/export pairs stay hash-pinned."""
-    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    fixtures = manifest.get("zen_fixtures", [])
-    assert {item["header"] for item in fixtures} == {
-        path.name for path in (SAMPLES / "zen").glob("*.uheader")
-    }
-    assert {item["payload"] for item in fixtures} == {
-        path.name for path in (SAMPLES / "zen").glob("*.uexp")
-    }
-    assert len(fixtures) >= 3
-    for item in fixtures:
-        assert item["chunk_type"] == "ExportBundleData"
-        for role in ("header", "payload"):
-            path = SAMPLES / "zen" / item[role]
-            assert path.exists(), path
-            assert path.stat().st_size == item[f"{role}_size_bytes"], path.name
-            assert _sha256(path) == item[f"{role}_sha256"], path.name
-
-
 def test_fixture_gap_statuses_pin_the_capability_boundary():
     """A gap status is a capability claim, not an aspiration (#621).
 
     ``available`` means the capability is proven in CI from tracked files;
     ``partial`` means usable evidence exists locally but no CI-completable
-    path; ``missing`` means nothing usable, including negative-only fixtures.
+    path; ``missing`` means nothing usable, including negative-only fixtures;
+    ``not_required`` means the product explicitly excludes the capability.
     Drifting these upward is how "documented" quietly becomes "implemented".
     """
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     gaps = manifest["fixture_gaps"]
-    assert gaps["zen_package"]["status"] == "partial"
-    assert gaps["iostore_container"]["status"] == "partial"
+    assert gaps["zen_package"]["status"] == "not_required"
+    assert gaps["iostore_container"]["status"] == "not_required"
     assert gaps["pak_container"]["status"] == "available"
     assert gaps["unversioned_properties"]["status"] == "not_required"
     assert gaps["sidecar_files"]["status"] == "available"

@@ -34,7 +34,7 @@ reader 新增模式：读 summary/tables 定位目标 export 的 `serial_region`
 | 新代码量 | ≈0（依赖 G2） | reader 新模式 + 区间映射，且需 UE 源码证据链 |
 | 消除的成本 | 重复 parse | 首次 parse 的无关对象成本 |
 | 正确性风险 | 无新增 | descriptor 偏移必须溯源，做不干净就是二次 fabricate |
-| 前置 | G2 实现 | **#623–#627 fixture + trailer 证据** |
+| 前置 | G2 实现 | **loose sidecar fixture + trailer/descriptor evidence** |
 
 **决策**：B 先行，作为 G2 的免费收益；A **只与真实 descriptor 同期实现**——因为 A 的核心工作（trailer→区间映射）本来就与 #623–#627 落地时的 descriptor 重做是同一件事，提前单独做 A 只是给一个即将被替换的假 descriptor 铺性能。触发条件（确定性、非墙钟）：真实 fixture 中首次 decode parse 遍历了目标 payload 所属对象之外的多数 export 属性，即值得做 A。
 
@@ -47,8 +47,8 @@ reader 新增模式：读 summary/tables 定位目标 export 的 `serial_region`
   3. descriptor 字段（`offset/stored_size/logical_size/compression`）逐项有 UE 源码 `FBulkData`/trailer 写路径证据，`status` 用 `external`/`missing` 如实分层；
   4. 缺失 sidecar 文件 → 对象级 diagnostic + `status="missing"`，不静默降级为 `main`。
 
-Zen/IoStore 容器读取本身是 Phase 5 目标，不在 payload 路径上阻塞本决策：#627 落地前 ubulk sidecar（loose 包）即可先走条件 2 的最小子集。
+Zen/IoStore 容器读取已明确移出当前产品目标；loose `.ubulk/.uptnl` sidecars remain the only in-scope payload path.
 
 ## 本轮不做清单
 
-不改 `payloads.py`/`agent_tools.py`（撤回由另一工作区执行）；不预建 payload-only reader 骨架；不给无 fixture 的能力写 skip 测试——缺口记入 manifest 与 #623–#627。
+不改 `payloads.py`/`agent_tools.py`（撤回由另一工作区执行）；不预建 payload-only reader 骨架；不给无 fixture 的能力写 skip 测试——超出范围的 Zen/SchemaProvider 缺口记录为产品非目标。

@@ -5,7 +5,7 @@ status: target
 > **文档状态：target**（退役决策与门禁；文中"现状"段落为基线 `bd3309a7` 的 current 事实，引用 `file:line`）。
 > 关联：`docs/designs/2026-08-26-package-first-uasset-parser-refactor.md`（Phase 6 删除旧路径）；Issue #621；本文与 `2026-08-31-semantic-handlers-boundary.md`（D2）、`2026-08-31-version-context-field-contract.md`（G1）配套。
 > **2026-09-05 执行记录**：本文冻结的退役契约已执行——Phase 6（#621，`ae8027e1`）删除 v1 管线，`--legacy-json` 现为 explicit unsupported 报错退出（非静默降级），`semantic/`、`renderers/`、`pipeline/`、`ir_builder.py`、`core/`、`link/` 已从 `src/` 消失。因此 §1、§2、§4 中描述双轨并存与"本轮不删代码"的段落均为 **historical 快照**，不再反映现状；§3 门禁与 §5/§6 决策记录仍为指导性内容，不得归为 historical。
-> **Gate C “文档同步”项：已关闭（2026-09-13）。** wiki 内容已重写为 v2；Gate K/L 残留文案已入库并 **push 到 wiki remote**（`a10946b` + `8821779`）。Home/Sidebar 与 01-07 各目录页中的 Semantic 1.x、`run.py`、`parse_single`、renderer 系统、`--markdown`/`--legacy-json` 等均已降级为 historical/retired，PAK/IoStore/raw-file/C++ skeleton 降级为 target，VarType 与 Kismet 明确标为 current。
+> **Gate C “文档同步”项：已关闭（2026-09-13）。** wiki 内容已重写为 v2；Gate K/L 残留文案已入库并 **push 到 wiki remote**（`a10946b` + `8821779`）。Home/Sidebar 与 01-07 各目录页中的 Semantic 1.x、`run.py`、`parse_single`、renderer 系统、`--markdown`/`--legacy-json` 等均已降级为 historical/retired；Pak fixture intake 已完成，Zen/IoStore full decode 与 raw-file/C++ skeleton 已明确排除，VarType 与 Kismet 标为 current。
 > **Residual note 2026-09-13：** `--batch` 已在 v2 CLI 以 live 形态回归（目录遍历 + `uasset_read.batch` 报告；见 `cli.py` 与 `docs/reference/agent-dev-reference.md`）。§5 中 “batch 仍 deferred” 的历史表述只对 v1 `batch_worker` 编排成立；工作流对中的 **`--diff` 仍 deferred**。
 
 ## 1. 双轨现状（historical：基线 `bd3309a7` 快照，双轨已由 Phase 6 终结）
@@ -43,7 +43,7 @@ CLI 证据：默认走 v2 的判定在 `cli.py:420`（`if not args.legacy_json a
 | `semantic/` 整包（builder/projection/validator/render/canonical/coverage/diagnostics/references + 14 个 domain 包，18 处 `register_extension` 调用） | `semantic/__init__.py:12-31`；`semantic/builder.py:226` | `v2/handlers.py` Protocol + `run_handlers`；投影 `v2/projection.py` | 部分替代，见 D2 §3 域映射 |
 | `renderers/markdown_renderer.py`（渲染 PackageIR，已随 v1 删除） | `--markdown` | 无 v2 替代 | **wontfix**（产品决策已下，见 §5）：旧版输出格式不重建，v2 只投影 `PackageDocument` JSON |
 | `link/`（PackageLinker、parent asset 解析、`normalize_world_partition_path`，被 `ir_builder.py:1094,1514` 使用） | `--include-parent-assets` | ~~`src/uasset_read/parent_resolver.py`~~ | **retired**（2026-09-10 Gate G 产品决策放弃 parent-asset 解析；模块与 CLI/API 参数已删除，flag 进入 retired 显式拒绝集合） |
-| `graph/` + `kismet/` + `blueprint/`（约 30+ 文件，深度图/字节码/C++ skeleton） | 由 `semantic/{blueprint,anim_blueprint}` 与 `ir_builder.py:909,1293` 驱动 | v2 仅 `BlueprintFamilyHandler` 浅 summary + decode 级节点/边粗提取（`handlers.py:696-822`） | **deferred**：Blueprint v2 深解码属权威设计 Phase 4.5，不被 #623-#627 阻塞，属实现排期 |
+| `graph/` + `kismet/` + `blueprint/`（约 30+ 文件，深度图/字节码/C++ skeleton） | 由 `semantic/{blueprint,anim_blueprint}` 与 `ir_builder.py:909,1293` 驱动 | v2 仅 `BlueprintFamilyHandler` 浅 summary + decode 级节点/边粗提取（`handlers.py:696-822`） | **deferred**：Blueprint v2 深解码属权威设计 Phase 4.5，独立于已关闭/非目标的 fixture issue |
 | `versioning.py VersionContainer`（`versioning.py:24`；消费者 `link/linker.py`、`models/result.py`、`parsers/property_types.py`、`pipeline/stages.py`） | v1 版本容器 | `v2/version.py VersionContext`（G1 契约） | 替代（property_types/stages 属 v1 侧，随之退役） |
 | `serializers/graph*.py`（graph/graph_node/graph_pin/graph_helpers） | v1 图序列化 | 无（v2 handlers 不读 archive） | 随 graph/ 退役 |
 | `schemas/*_semantic.schema.json`（12 个 Semantic 1.x domain schema + 1 个 `semantic.schema.json` envelope，共 13 文件） | `src/uasset_read/schemas/` | `docs/designs/contract/package_document_v2.schema.json`（v2 envelope）；semantic 内容改用 `objects[].semantic.kind` discriminator | 随 Semantic 1.x 删除 |
@@ -73,7 +73,7 @@ v2 直接复用、删除 v1 时必须保留或收编：`serializers/{package_sum
 
 ### Gate C — Semantic 1.x 删除门禁
 
-- 18 处 `register_extension`（14 域）全部处于三态之一：v2 handler 已接管（含 fixture 测试）、明确放弃并记录、或标记 deferred 且挂具体 fixture issue（#623 unversioned/USMAP、#624 Zen/IoStore、#625 Pak、#626 CurveTable、#627 loose sidecar）。
+- 18 处 `register_extension`（14 域）全部处于三态之一：v2 handler 已接管（含 fixture 测试）、明确放弃并记录、或标记 deferred 且挂具体能力证据（#623 unversioned/USMAP 与 #624 Zen/IoStore 已列为产品非目标，#625 Pak fixture intake 已完成，#626 CurveTable 与 #627 loose sidecar 保留各自范围）。
 - `validate_semantic_document`（`semantic/validator.py:39`）与 domain validator 注册（`validator.py:31-36`）无任何非 `--legacy-json` 调用方（基线唯一调用点 `core/__init__.py:214`）。
 - 文档同步：README/wiki 中 Semantic 1.x 输出全部降级为 historical（AGENTS.md 文档权威规则）。
 

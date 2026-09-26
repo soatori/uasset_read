@@ -790,22 +790,22 @@
   },
   "fixture_gaps": {
     "zen_package": {
-      "status": "partial",
-      "description": "UE5.8.2 self-owned IoStore ParserFixtures were extracted as paired .uheader/.uexp Zen artifacts and pinned under zen/. The regular samples[] corpus remains legacy and ZenPackageReader is not implemented.",
+      "status": "not_required",
+      "description": "ZenPackageReader and full IoStore package-body decoding are outside the current product target. Existing IoStore TOC metadata remains only as a classification/unavailability regression.",
       "needed_for": "Phase 5 (Zen & Container Streaming) \u2014 ZenPackageReader implementation",
-      "acquisition": "Generated from the user-owned MyProject UE5.8.2 IoStoreTagged build with the native UnrealPak IoStore extractor; no third-party game assets.",
-      "verification": "Verify paired .uheader/.uexp hashes, source ExportBundleData package path, and the native IoStore container manifest; do not claim full Zen parsing until ZenPackageReader consumes the pair.",
-      "minimum_samples": 3,
-      "recommended_samples": "Blueprint, Material, DataTable (diverse types)"
+      "acquisition": "Not planned; do not acquire or maintain Zen package-body fixtures.",
+      "verification": "Run the existing IoStore metadata and truthful-unavailability tests.",
+      "minimum_samples": 0,
+      "recommended_samples": "None"
     },
     "iostore_container": {
-      "status": "partial",
-      "description": "UE5.8.2 ParserFixtures IoStore metadata and package body are available locally: ParserFixtures-Windows.utoc (103,802 B / 623 chunks / 503 packages) with a hash-pinned local-only ParserFixtures-Windows.ucas (201,912,080 B), plus a tracked global pair. Native extraction produced three Zen header/export pairs; full chunk decoding remains unimplemented.",
+      "status": "not_required",
+      "description": "IoStore TOC metadata remains available for truthful classification and unavailable-body behavior. Full Zen/IoStore package-body decoding is outside the current product target.",
       "needed_for": "Phase 5 \u2014 IoStore container parsing (target design, see docs/designs/)",
-      "acquisition": "Generated from the user-owned MyProject UE5.8.2 ParserFixtures IoStoreTagged archive; the .ucas is local-only because it exceeds the GitHub 100 MB limit.",
-      "verification": "Verify .utoc magic/header, directory index, 503 package entries, ExportBundleData rows, paired .ucas size/hash, and native extraction output.",
-      "minimum_samples": 1,
-      "recommended_samples": "1 .utoc + 1 .ucas pair with 5+ packages inside"
+      "acquisition": "Not planned; existing tracked metadata fixtures are sufficient for the retained regression.",
+      "verification": "Run the existing TOC metadata and truthful Zen-unavailability tests.",
+      "minimum_samples": 0,
+      "recommended_samples": "None"
     },
     "sidecar_files": {
       "status": "available",
@@ -928,74 +928,6 @@
       "size_bytes": 5745176,
       "committed": true,
       "issue": 625
-    },
-    {
-      "name": "ParserFixtures-Windows.utoc",
-      "container_kind": "iostore_toc",
-      "sha256": "6dfe225641c00b422ccfe952883cc54d7e805d73700610a6d2990c5bb11a0890",
-      "size_bytes": 103802,
-      "committed": true,
-      "issue": 624
-    },
-    {
-      "name": "ParserFixtures-Windows.ucas",
-      "container_kind": "iostore_data",
-      "sha256": "cb81dbd69aef940ae8a0caf9a6a3d6544ae255a8ac89a062a783da0f9a908818",
-      "size_bytes": 201912080,
-      "committed": false,
-      "issue": 624,
-      "local_only_reason": "201,912,080 bytes exceeds GitHub's 100 MB hard file limit. Generated from the user-owned UE5.8.2 ParserFixtures build and pinned for local Zen extraction tests."
-    },
-    {
-      "name": "ParserFixtures-global.utoc",
-      "container_kind": "iostore_toc",
-      "sha256": "33f7d769dc4cb8b0b05f74a014f112e9ee58849417fda6459729d42d186ed92d",
-      "size_bytes": 806,
-      "committed": true,
-      "issue": 624
-    },
-    {
-      "name": "ParserFixtures-global.ucas",
-      "container_kind": "iostore_data",
-      "sha256": "c3dc3e25c0b38d0b57adadc396da4c83edaa8078b8ca22a5fdf3fddc7e5e12f5",
-      "size_bytes": 3333776,
-      "committed": true,
-      "issue": 624
-    }
-  ],
-  "zen_fixtures": [
-    {
-      "package": "TestBlueprint.uasset",
-      "header": "ParserFixtures_TestBlueprint.uheader",
-      "payload": "ParserFixtures_TestBlueprint.uexp",
-      "source_container": "ParserFixtures-Windows",
-      "chunk_type": "ExportBundleData",
-      "header_size_bytes": 2394,
-      "header_sha256": "13b02e45b4d837824b098e4ec002ffece45b9df0a6cfa3cf6532fa5b81576280",
-      "payload_size_bytes": 1894,
-      "payload_sha256": "dda43e54fb72c0d7bc525ce4cb235782a2030d02649fa002fd67163b113bee76"
-    },
-    {
-      "package": "TestMaterial.uasset",
-      "header": "ParserFixtures_TestMaterial.uheader",
-      "payload": "ParserFixtures_TestMaterial.uexp",
-      "source_container": "ParserFixtures-Windows",
-      "chunk_type": "ExportBundleData",
-      "header_size_bytes": 2528,
-      "header_sha256": "099ce2dc374c9ecfe6dddcfd9584bff6367336b22886abdcc5ade0e29f6816bf",
-      "payload_size_bytes": 124909,
-      "payload_sha256": "0a8b81380608c5fe354c650f020e69069d822377c5029921c5b06929342dca88"
-    },
-    {
-      "package": "TestDataTable.uasset",
-      "header": "ParserFixtures_TestDataTable.uheader",
-      "payload": "ParserFixtures_TestDataTable.uexp",
-      "source_container": "ParserFixtures-Windows",
-      "chunk_type": "ExportBundleData",
-      "header_size_bytes": 504,
-      "header_sha256": "5366f03f0d767db06910cfe4ffbd24b391eb2a33d90a3b4f0284ab1ccaf89e9a",
-      "payload_size_bytes": 206,
-      "payload_sha256": "ac0621233b8417ea692e177634fee91c102b4479b263ce985280e898cdae7d6d"
     }
   ]
 }

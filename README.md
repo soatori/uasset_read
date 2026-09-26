@@ -6,7 +6,7 @@ A zero-dependency Python parser for Unreal Engine `.uasset` files that transform
 
 > 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 69 source files · 21 registered semantic asset handlers
 
-> **Refactor status:** package-first architecture with intentional v3 break: default CLI/API output is one canonical package document with envelope `format_version: "3.0"` (`projection.FORMAT_VERSION`; contract `docs/designs/contract/package_document_v3.schema.json`). Static Blueprint graph / Kismet instruction IR / CFG / correlation live under `objects[].semantic` (dict at the document boundary). Embedded type-aware `projections[]` cover Blueprint C++ declaration/migration, Material editor-builder, DataTable/CurveTable/struct/enum data, and physical asset metadata/payload references. Payload extraction from cooked sidecars remains available via `extract_payload`. Zen/IoStore package full decode stays unavailable/unverified without redistributable fixtures; unversioned-with-usmap is partial on editor samples (see `docs/designs/README.md`); Semantic 1.x JSON remains removed. Landed on `dev-0.6.0` @ merge `8727b067` after controller review; the current full suite and the quality gates pass.
+> **Refactor status:** package-first architecture with intentional v3 break: default CLI/API output is one canonical package document with envelope `format_version: "3.0"` (`projection.FORMAT_VERSION`; contract `docs/designs/contract/package_document_v3.schema.json`). Static Blueprint graph / Kismet instruction IR / CFG / correlation live under `objects[].semantic` (dict at the document boundary). Embedded type-aware `projections[]` cover Blueprint C++ declaration/migration, Material editor-builder, DataTable/CurveTable/struct/enum data, and physical asset metadata/payload references. Payload extraction from cooked sidecars remains available via `extract_payload`. Zen/IoStore full package decoding is outside the current product target; existing TOC metadata only reports the boundary truthfully. Editor `.usmap` unversioned fixtures remain a bounded partial path, while cooked/Zen unversioned is outside the product target. Semantic 1.x JSON remains removed. Landed on `dev-0.6.0` @ merge `8727b067` after controller review; the current full suite and the quality gates pass.
 
 ## Why uasset_read?
 
@@ -188,7 +188,7 @@ Full API list: see `src/uasset_read/__init__.py` and `wiki/07-Dev-Guide/Public-A
 Data flow is the v2 package-first pipeline defined in the [canonical refactor design](docs/designs/2026-08-26-package-first-uasset-parser-refactor.md):
 
 ```text
-.uasset → archive → parsers/legacy_reader (Legacy container reader; Zen deferred, #624)
+.uasset → archive → parsers/legacy_reader (Legacy container reader; Zen/IoStore full decode outside product target)
               → parsers (tagged properties; unversioned gated on #623)
               → models/object_model + parsers/asset_types/registry → PackageDocument
               → projection → JSON / CLI / Agent tools (same document)

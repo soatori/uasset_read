@@ -10,7 +10,7 @@ status: target
 > static Blueprint IR/CFG/correlation, Material graph, C++/type-aware
 > projections, canonical writer, and sample acceptance gates are present.
 > This specification remains a design target for residual/deferred work only
-> (e.g. real Zen package decode without redistributable fixtures). Do not read
+> (e.g. real Zen package decode, now outside the current product target). Do not read
 > excluded scope (runtime Blueprint execution, native C++ body recovery,
 > encryption without keys) as planned implementation. README feature claims
 > were updated for this landing.
@@ -253,7 +253,7 @@ Byte accounting is scoped. Every requested non-empty export window has a non-emp
 2. UE5.8 Blueprint exposes `K2Node_IfThenElse`, `EX_JumpIfNot`, and explicit true/false control-flow edges.
 3. StackOBot Material exposes 42 exports, 39 material expressions, expression properties, and links where the package contains them.
 4. Existing editor `.usmap` samples preserve mapped values or bounded opaque fields; cooked/Zen unversioned completeness is outside the product target.
-5. Loose sidecars and committed IoStore fixtures prove metadata/classification and available chunk reads; extraction/reparse is required only where committed bytes and codecs exist. Traditional Pak and real Zen-package parsing remain explicitly unverified until redistributable fixtures are added.
+5. Loose sidecars and retained IoStore metadata fixtures prove classification and truthful unavailable behavior. Zen package-body/chunk extraction is outside the current product target; traditional Pak fixture intake is complete but Pak range-read remains a separate unsupported capability.
 6. Generated declaration AST matches the normalized UE5.8 oracle for parent, variables/types, function signatures, components, and dispatchers; migration output contains a dual-offset traceable mapping for every top-level function instruction.
 7. Every requested non-empty export range is exactly tiled by decoded, opaque, payload-addressable, or unavailable leaves with reasons where required.
 8. Each sampled input package produces one canonical output document containing its package, object, semantic, projection, capability, and diagnostic data; no ordinary asset-family or graph boundary causes a split.

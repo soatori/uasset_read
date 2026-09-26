@@ -764,12 +764,14 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 
 ### Phase 5：Zen 与 Container Streaming
 
-交付：
+> **2026-09-27 product decision:** Zen/IoStore full package-body decoding and chunk extraction are outside the current product target. Existing IoStore metadata/classification behavior remains; no Zen reader implementation or further Zen fixture acquisition is scheduled.
 
-- `ZenPackageReader`。
-- IoStore chunk range source。
-- compression/encryption capability reporting。
-- package trailer 和 external payload 路由。
+交付（historical target; not scheduled for the current product）：
+
+- ~~`ZenPackageReader`。~~ Outside the current product target.
+- ~~IoStore chunk range source。~~ Outside the current product target.
+- ~~compression/encryption capability reporting。~~ Outside the current product target.
+- ~~package trailer 和 external payload 路由。~~ Outside the current product target; loose sidecars remain the supported path.
 
 退出条件：真实 `.utoc/.ucas` fixture 可列出 package objects；读取单对象不会把整个容器复制到内存。
 

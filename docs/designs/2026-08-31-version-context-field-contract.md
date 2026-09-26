@@ -51,13 +51,15 @@ status: target
 3. **handler 不得自行推导版本事实**：`AssetHandler` 的两个方法都以 `context: VersionContext` 为唯一版本输入（`handlers.py:21-28`）。handler 不接触 archive（基线已满足：`handlers.py` 全部 enrich 只读 `obj.properties`/`obj.coverage`/`package_data` tuple），不得重读 summary、不得按 `class_name` 之外的文件名/引擎大版本猜格式。游戏特殊分支必须是对 `context.game`/`context.custom_versions` 的显式查询，不允许散落字符串匹配（权威设计"解析器读取同一个不可变 context"一节）。
 4. **按消费者增删字段**（2026-09-13 修订，替代原"字段只增不减"）：字段集 = 存在生产读取点的字段（当前仅 `depth`）。新增字段必须带默认值且附真实消费者；无消费者的投机字段不进入契约（历史教训：`280b7e09` 裁剪被恢复，但冻结载荷始终无人读取——见修订注）。
 
-## 4. 扩展点（target，随 Zen reader 到来）
+## 4. 扩展点（historical target; outside current product scope）
 
-- `package_layout="zen"`：`ZenPackageReader` 构造同一 `VersionContext`，layout 字段成为 handler 分流依据；Legacy/Zen 不共享二进制布局代码，只共享本契约。
+> **2026-09-27 product decision:** Zen layout/container extensions and cooked-unversioned schema fields are not scheduled. Keep the current production-used `depth` contract and editor/legacy behavior only.
+
+- ~~`package_layout="zen"`：`ZenPackageReader` 构造同一 `VersionContext`，layout 字段成为 handler 分流依据；Legacy/Zen 不共享二进制布局代码，只共享本契约。~~ Outside product scope.
 - `cooked` / `editor_only_filtered`：当前恒 None。Legacy 侧可从 `summary.package_flags`（PKG_Cooked/PKG_FilterEditorOnly）填充；Zen 侧由 `FZenPackageSummary`/container metadata 填充。权威设计的 VersionContext 一节已列为必带信息。
-- `platform` / `byte_order`：IoStore/Pak 容器元数据与 trailer 是真实来源（#624/#625 fixture 前置）；在获得样本前保持 None，不猜。
+- `platform` / `byte_order`：IoStore/Pak metadata remains classification-only; no Zen reader fields are added under the current product scope.
 - `custom_versions`：当前是 `guid→version` 扁平映射；若出现第二个按自定义版本族分支的真实 handler，再考虑 Guid→名称解析表（不预建）。
-- `mappings`：unversioned property reader（#623 fixture 前置）将通过本字段取得 `.usmap` 来源描述，而不是 reader 参数旁路。
+- `mappings`：the existing editor `.usmap` path remains an explicit reader input; no cooked-unversioned `SchemaProvider` extension is scheduled.
 
 ## 5. 验收
 
