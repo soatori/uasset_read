@@ -159,11 +159,6 @@ def _error_graph(export_idx: int, class_name: str, reason: str) -> dict[str, Any
     }
 
 
-def _anim_node_data(node: Any) -> dict[str, Any] | None:
-    """Project node.node_data (Anim full-context or tag-derived allow-list)."""
-    return _project_node_data(getattr(node, "node_data", None))
-
-
 def _convert_nodes(graph: Any, nodes: list[dict[str, Any]], pin_count: int, node_limit: int) -> tuple[int, bool, bool]:
     """Convert nodes from a UEdGraph into dicts, appending to *nodes*.
 
@@ -226,16 +221,9 @@ def _convert_nodes(graph: Any, nodes: list[dict[str, Any]], pin_count: int, node
             },
             "pins": pins,
         }
-        anim_data = _anim_node_data(node)
+        anim_data = _project_node_data(getattr(node, "node_data", None))
         if anim_data is not None:
             node_dict["node_data"] = anim_data
-        elif isinstance(getattr(node, "node_data", None), dict) and node.node_data:
-            # K2 tag-derived identity (FunctionReference/MemberName/...).
-            from uasset_read.serializers.node_data_project import project_node_data
-
-            projected = project_node_data(node.node_data)
-            if projected:
-                node_dict["node_data"] = projected
         nodes.append(node_dict)
     return pin_count, node_truncated, pin_truncated
 
