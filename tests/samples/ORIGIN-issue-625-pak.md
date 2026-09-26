@@ -67,3 +67,13 @@ After parsing, verify:
 
 - Parent issue: #621 (Package-First UAsset Parser Refactor)
 - Companion IoStore fixture: `ORIGIN-issue-624-iostore.md`
+
+## 2026-09-27 intake update
+
+Issue #625 is closed as completed. UE4 legacy versions are not required for
+the fixture: the user-owned UE5.8.2 `ParserFixtures 02 Pak Tagged`/native
+UnrealPak route produced `ParserFixturesLegacy-Windows.pak`, a compact
+traditional FPak containing 25 ParserFixtures files. Its SHA-256 is
+`44a1a134aa515734f3d7cb6f7468e654c238d5c3036e1c24720a8abae1927518` and its
+footer contains `5a6f12e1`. This closes sample intake only; Pak range-read and
+container extraction remain separate implementation work.

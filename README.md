@@ -255,7 +255,7 @@ When Unreal Editor 5.8 is released, use the official Experimental Unreal MCP ser
 | **Programmatic blueprint analysis** | Parse blueprint data → extract structure → automate inspections |
 | **Blueprint → C++ migration** | typed declaration and migration projections are available today (`cpp_declaration` / `cpp_migration` via `ProjectorRegistry`); the old string-based C++ skeleton generator is permanently retired |
 | **Dependency auditing** | v2 lists imports/exports per package (`list_dependencies`); cross-package cycle and orphan detection are *planned* |
-| **Mod development** | *planned* — reading assets from `.pak` is deferred to #625; today you must extract the `.uasset` first |
+| **Mod development** | *planned* — #625 Pak fixture intake is complete, but container extraction remains a separate unsupported capability; today you must extract the `.uasset` first |
 | **Asset pipeline automation** | Use `--batch DIR` to parse all `.uasset` files in a directory; outputs JSONL (one JSON per line) or JSON array with `--batch-format json` |
 | **Technical debt analysis** | Trace execution flows → identify deeply nested logic → find dead code |
 
