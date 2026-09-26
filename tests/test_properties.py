@@ -72,9 +72,6 @@ def test_tagged_reader_with_context_reads_only_bounded_slice(tagged_fixture):
         def size(self):
             return self._source.size()
 
-        def describe(self):
-            return self._source.describe()
-
         def map_range(self, offset, size):
             return self._source.map_range(offset, size)
 

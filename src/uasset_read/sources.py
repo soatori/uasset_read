@@ -3,14 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
-from uasset_read.archive import SourceInfo
 from uasset_read.exceptions import ParseError
 
 
 class ByteSource(Protocol):
     def read_at(self, offset: int, size: int) -> bytes: ...
     def size(self) -> int | None: ...
-    def describe(self) -> SourceInfo: ...
     def map_range(self, offset: int, size: int) -> list[tuple[str, int, int]]: ...
 
 
@@ -33,9 +31,6 @@ class MemorySource:
     def size(self) -> int | None:
         return len(self._data)
 
-    def describe(self) -> SourceInfo:
-        return SourceInfo(kind="memory", name=self._name, size=len(self._data))
-
     def map_range(self, offset: int, size: int) -> list[tuple[str, int, int]]:
         _validate_range(offset, size, len(self._data))
         return [(self._name, offset, size)]
@@ -57,9 +52,6 @@ class FileSource:
     def size(self) -> int | None:
         return self._path.stat().st_size
 
-    def describe(self) -> SourceInfo:
-        return SourceInfo(kind="loose", name=self._path.name, size=self.size() or 0, path=str(self._path))
-
     def map_range(self, offset: int, size: int) -> list[tuple[str, int, int]]:
         _validate_range(offset, size, self.size())
         return [(self._path.name, offset, size)]
@@ -79,11 +71,9 @@ class CompositeSource:
         segments: list[tuple[str, ByteSource]],
         *,
         name: str = "package",
-        payloads: dict[str, ByteSource] | None = None,
     ):
         self._segments = segments
         self._name = name
-        self._payloads = payloads or {}
         self._sizes = [src.size() or 0 for _, src in segments]
         self._total = sum(self._sizes)
 
@@ -94,12 +84,7 @@ class CompositeSource:
         uexp = main_path.with_suffix(".uexp")
         if uexp.exists():
             segments.append((uexp.name, FileSource(uexp)))
-        payloads = {
-            ext: FileSource(candidate)
-            for ext in (".ubulk", ".uptnl")
-            if (candidate := main_path.with_suffix(ext)).exists()
-        }
-        return cls(segments, name=main_path.name, payloads=payloads)
+        return cls(segments, name=main_path.name)
 
     def read_at(self, offset: int, size: int) -> bytes:
         _validate_range(offset, size, self._total)
@@ -125,9 +110,6 @@ class CompositeSource:
 
     def size(self) -> int | None:
         return self._total
-
-    def payload(self, extension: str) -> ByteSource | None:
-        return self._payloads.get(extension)
 
     def segments(self) -> tuple[tuple[str, int, int], ...]:
         segs = []
@@ -160,6 +142,3 @@ class CompositeSource:
         if remaining:
             raise ParseError(f"composite range mapping incomplete at {offset}+{size}")
         return result
-
-    def describe(self) -> SourceInfo:
-        return SourceInfo(kind="loose", name=self._name, size=self._total)
