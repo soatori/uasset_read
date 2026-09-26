@@ -151,21 +151,6 @@ class ByteAccounting:
     scopes: dict[str, ByteScope] = field(default_factory=dict)
 
 
-def project_scope(scope: ByteScope) -> dict[str, Any]:
-    return {
-        "scope_id": scope.scope_id,
-        "start": scope.start,
-        "size": scope.size,
-        "leaves": [project_region(leaf) for leaf in scope.leaves],
-    }
-
-
-def project_byte_accounting(accounting: ByteAccounting) -> dict[str, Any]:
-    return {
-        "scopes": {key: project_scope(value) for key, value in accounting.scopes.items()},
-    }
-
-
 def split_region_at_physical(
     region: ByteRegion,
     source: Any,
