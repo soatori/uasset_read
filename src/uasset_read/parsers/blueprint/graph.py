@@ -26,7 +26,7 @@ from uasset_read.models.analysis import (
     project_pin_link,
 )
 from uasset_read.models.byte_ranges import ByteRegion, opaque_region
-from uasset_read.models.diagnostics import Diagnostic
+from uasset_read.models.diagnostics import Diagnostic, make_diagnostic
 
 if TYPE_CHECKING:
     from uasset_read.models.document import PackageDocument
@@ -434,6 +434,17 @@ class BlueprintGraphDecoder:
         doc_path = getattr(document.source, "path", None) if document.source else None
         candidate = Path(doc_path) if doc_path else None
         if candidate is None or not candidate.exists():
+            # A source was provided so a re-read was requested, but the only
+            # path carrier is document.source; say so instead of pretending
+            # this package has no graphs.
+            document.diagnostics.append(
+                make_diagnostic(
+                    code="graph_package_path_unresolved",
+                    message="graph re-read requested but document.source.path is missing or not on disk",
+                    stage="blueprint.graph",
+                    object_id=obj.id,
+                )
+            )
             return []
         archive = open_package_bundle(str(candidate)).open_archive(tolerant=True)
         try:

@@ -99,8 +99,16 @@ def test_source_read_falls_back_to_document_package_path():
     assert sorted(g.name for g in graphs) == ["EventGraph", "UserConstructionScript"]
 
 
-def test_source_read_without_package_path_returns_no_graphs():
+def test_source_read_without_package_path_is_explicit():
     obj = ObjectRecord(id="export:0", table_index=0, name="BP_Drone")
     document = PackageDocument(objects=[obj])
-    assert BlueprintGraphDecoder().decode(obj, document, source=MemorySource(b"\x00")) == []
+    graphs = BlueprintGraphDecoder().decode(obj, document, source=MemorySource(b"\x00"))
+    assert graphs == []
+    assert [d.code for d in document.diagnostics] == ["graph_package_path_unresolved"]
+
+
+def test_source_read_not_requested_stays_silent():
+    obj = ObjectRecord(id="export:0", table_index=0, name="BP_Drone")
+    document = PackageDocument(objects=[obj])
+    assert BlueprintGraphDecoder().decode(obj, document) == []
     assert document.diagnostics == []
