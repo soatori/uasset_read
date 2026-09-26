@@ -58,11 +58,12 @@ class FileSource:
 
 
 class CompositeSource:
-    """Virtual package address space over .uasset/.umap + sidecars.
+    """Virtual package address space over .uasset/.umap + .uexp.
 
-    Segment mapping lists main bytes first, then any present sidecar files
-    (.uexp/.ubulk/.uptnl). This class only maps physical segments; it does
-    not evaluate the UE split-file invariant. Legacy readers must still
+    Segment mapping lists main bytes first, then the .uexp sidecar when
+    present. Bulk sidecars (.ubulk/.uptnl) are handled by ``PackageBundle``
+    in ``uasset_read.package``. This class only maps physical segments; it
+    does not evaluate the UE split-file invariant. Legacy readers must still
     reject a .uexp splice when main_size != TotalHeaderSize.
     """
 
