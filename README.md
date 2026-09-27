@@ -189,7 +189,7 @@ Data flow is the v2 package-first pipeline defined in the [canonical refactor de
 
 ```text
 .uasset → archive → parsers/legacy_reader (Legacy container reader; Zen/IoStore full decode outside product target)
-              → parsers (tagged properties; unversioned gated on #623)
+              → parsers (tagged properties; editor usmap path only)
               → models/object_model + parsers/asset_types/registry → PackageDocument
               → projection → JSON / CLI / Agent tools (same document)
 ```
