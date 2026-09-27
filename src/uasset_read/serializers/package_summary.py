@@ -114,59 +114,25 @@ class CustomVersion:
 
 @dataclass
 class PackageFileSummary:
-    """PackageFileSummary file header."""
+    """PackageFileSummary file header (fields with live readers only)."""
 
-    tag: int
-    legacy_file_version: int
     file_version_ue4: int = 0
-    is_legacy: bool = False  # UE4 LegacyFileVersion (-3, -4, -5)
     file_version_ue5: int = 0
-    file_version_licensee: int = 0
-    saved_hash: bytes = field(default_factory=lambda: b"")
     total_header_size: int = 0
     custom_versions: list[CustomVersion] = field(default_factory=list)
     package_name: str = ""
     package_flags: int = 0
     name_count: int = 0
     name_offset: int = 0
-    soft_object_paths_count: int = 0
-    soft_object_paths_offset: int = 0
-    localization_id: str = ""
-    gatherable_text_data_count: int = 0
-    gatherable_text_data_offset: int = 0
     export_count: int = 0
     export_offset: int = 0
     import_count: int = 0
     import_offset: int = 0
-    cell_export_count: int = 0
-    cell_export_offset: int = 0
-    cell_import_count: int = 0
-    cell_import_offset: int = 0
-    metadata_offset: int = 0
     depends_offset: int = 0
-    soft_package_references_count: int = 0
-    soft_package_references_offset: int = 0
-    searchable_names_offset: int = 0
-    thumbnail_table_offset: int = 0
-    import_type_hierarchies_count: int = 0
-    import_type_hierarchies_offset: int = 0
-    persistent_guid: str = ""
-    generations: list[GenerationInfo] = field(default_factory=list)
     saved_by_engine_version: EngineVersion = field(default_factory=EngineVersion)
     compatible_with_engine_version: EngineVersion = field(default_factory=EngineVersion)
-    compression_flags: int = 0
-    package_source: int = 0
-    asset_registry_data_offset: int = 0
-    bulk_data_start_offset: int = 0
-    world_tile_info_data_offset: int = 0
-    chunk_ids: list[str] = field(default_factory=list)
     preload_dependency_count: int = 0
     preload_dependency_offset: int = 0
-    names_referenced_from_export_data_count: int = 0
-    payload_toc_offset: int = 0
-    data_resource_offset: int = 0
-    depends_map: list[list[int]] = field(default_factory=list)
-    preload_dependencies: list[int] = field(default_factory=list)
 
 
 def _read_custom_versions(archive: FArchive, with_names: bool = False) -> list:
@@ -536,12 +502,12 @@ def read_package_summary(
 
     # Step 1-3: Version + SavedHash + CustomVersions
     (
-        tag,
+        _,
         legacy_file_version,
         file_version_ue4,
         file_version_ue5,
         file_version_licensee,
-        saved_hash,
+        _,
         total_header_size,
         custom_versions,
     ) = _read_version_and_tag(archive)
@@ -578,24 +544,20 @@ def read_package_summary(
 
     # Step 6-8: SoftObjectPaths / Localization / GatherableText (between NameOffset and ExportCount)
     # SoftObjectPaths（UE5 >= 1011）
-    soft_object_paths_count = 0
-    soft_object_paths_offset = 0
     if file_version_ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
-        soft_object_paths_count = archive.read_i32()
+        archive.read_i32()  # SoftObjectPathsCount (write-only; cursor alignment)
         soft_object_paths_offset = archive.read_i32()
         if soft_object_paths_offset > 0:
             archive.validate_offset(soft_object_paths_offset, "SoftObjectPathsOffset")
 
     # LocalizationId (non FilterEditorOnly, UE4 >= 516)
-    localization_id = ""
     if not has_filter_editor_only and file_version_ue4 >= UE4_ADDED_PACKAGE_SUMMARY_LOCALIZATION_ID:
-        localization_id = archive.read_fstring()
+        archive.read_fstring()  # LocalizationId (write-only; cursor alignment)
 
     # GatherableTextData（UE4 >= 513）
-    gatherable_text_data_count = 0
     gatherable_text_data_offset = 0
     if file_version_ue4 >= UE4_SERIALIZE_TEXT_IN_PACKAGES:
-        gatherable_text_data_count = archive.read_i32()
+        archive.read_i32()  # GatherableTextDataCount (write-only; cursor alignment)
         gatherable_text_data_offset = archive.read_i32()
         if gatherable_text_data_offset > 0:
             archive.validate_offset(gatherable_text_data_offset, "GatherableTextDataOffset")
@@ -624,15 +586,10 @@ def read_package_summary(
 
     # Step 11-12: Cells / MetaData (between ImportOffset and DependsOffset)
     # CellExport/CellImport (UE5 >= cell version)
-    cell_export_count = 0
-    cell_export_offset = 0
-    cell_import_count = 0
-    cell_import_offset = 0
     if file_version_ue5 >= UE5_VERSE_CELLS:
-        cell_export_count, cell_export_offset, cell_import_count, cell_import_offset = _read_cell_counts(archive)
+        _read_cell_counts(archive)
 
     # MetaDataOffset (UE5 >= meta version)
-    metadata_offset = 0
     if file_version_ue5 >= UE5_METADATA_SERIALIZATION_OFFSET:
         metadata_offset = archive.read_i32()
         if metadata_offset > 0:
@@ -641,8 +598,6 @@ def read_package_summary(
     # Step 13-14: DependsOffset + SoftPackageRefs + SearchableNames + Thumbnail
     depends_offset = archive.read_i32()
 
-    soft_package_references_count = 0
-    soft_package_references_offset = 0
     if file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP:
         soft_package_references_count = archive.read_i32()
         _, total_decompressed = read_validated_count_strict(
@@ -653,22 +608,21 @@ def read_package_summary(
             total_decompressed=total_decompressed,
         )
         soft_package_references_offset = archive.read_i32()
+        if soft_package_references_offset > 0:
+            archive.validate_offset(soft_package_references_offset, "SoftPackageReferencesOffset")
 
-    searchable_names_offset = 0
     if file_version_ue4 >= UE4_ADDED_SEARCHABLE_NAMES:
-        searchable_names_offset = archive.read_i32()
+        archive.read_i32()  # SearchableNamesOffset (write-only; cursor alignment)
 
     thumbnail_table_offset = archive.read_i32()
     if thumbnail_table_offset > 0:
         archive.validate_offset(thumbnail_table_offset, "ThumbnailTableOffset")
 
     # Step 15: ImportTypeHierarchies
-    import_type_hierarchies_count, import_type_hierarchies_offset = _read_import_type_hierarchies(
-        archive, file_version_ue5
-    )
+    _read_import_type_hierarchies(archive, file_version_ue5)
 
     # Step 16: GUIDs
-    persistent_guid = _read_guids(
+    _read_guids(
         archive,
         file_version_ue4,
         file_version_ue5,
@@ -677,7 +631,7 @@ def read_package_summary(
 
     # Step 17-19: Generations + EngineVersions
     gates = summary_gate_modes(file_version_ue4)
-    generations, total_decompressed = _read_generations(archive, total_decompressed=total_decompressed)
+    _, total_decompressed = _read_generations(archive, total_decompressed=total_decompressed)
     if gates["engine_versions"] == "full":
         saved_by_engine_version = _read_engine_version(archive)
     else:
@@ -687,7 +641,7 @@ def read_package_summary(
     compatible_with_engine_version = _read_engine_version(archive) if gates["compatible"] else saved_by_engine_version
 
     # Step 20-22: Compression + PackageSource
-    compression_flags, package_source, total_decompressed = _read_compression_and_source(
+    _, _, total_decompressed = _read_compression_and_source(
         archive, total_decompressed=total_decompressed
     )
 
@@ -695,72 +649,35 @@ def read_package_summary(
     _read_additional_packages(archive, legacy_file_version)
 
     # Step 24-27: AssetRegistry/BulkData/WorldTile/ChunkIDs
-    (
-        asset_registry_data_offset,
-        bulk_data_start_offset,
-        world_tile_info_data_offset,
-        chunk_ids,
-    ) = _read_tail_offsets(archive, file_version_ue4)
+    _read_tail_offsets(archive, file_version_ue4)
 
     # Step 28-31: PreloadDeps / NamesReferenced / PayloadToc / DataResource
     (
         preload_dependency_count,
         preload_dependency_offset,
-        names_referenced_from_export_data_count,
-        payload_toc_offset,
-        data_resource_offset,
+        _,
+        _,
+        _,
     ) = _read_late_versioned_fields(archive, file_version_ue4, file_version_ue5)
 
     return PackageFileSummary(
-        tag=tag,
-        legacy_file_version=legacy_file_version,
         file_version_ue4=file_version_ue4,
         file_version_ue5=file_version_ue5,
-        file_version_licensee=file_version_licensee,
-        is_legacy=legacy_file_version in UE4_LEGACY_VERSIONS,
-        saved_hash=saved_hash,
         total_header_size=total_header_size,
         custom_versions=custom_versions,
         package_name=package_name,
         package_flags=package_flags,
         name_count=name_count,
         name_offset=name_offset,
-        soft_object_paths_count=soft_object_paths_count,
-        soft_object_paths_offset=soft_object_paths_offset,
-        localization_id=localization_id,
-        gatherable_text_data_count=gatherable_text_data_count,
-        gatherable_text_data_offset=gatherable_text_data_offset,
         export_count=export_count,
         export_offset=export_offset,
         import_count=import_count,
         import_offset=import_offset,
-        cell_export_count=cell_export_count,
-        cell_export_offset=cell_export_offset,
-        cell_import_count=cell_import_count,
-        cell_import_offset=cell_import_offset,
-        metadata_offset=metadata_offset,
         depends_offset=depends_offset,
-        soft_package_references_count=soft_package_references_count,
-        soft_package_references_offset=soft_package_references_offset,
-        searchable_names_offset=searchable_names_offset,
-        thumbnail_table_offset=thumbnail_table_offset,
-        import_type_hierarchies_count=import_type_hierarchies_count,
-        import_type_hierarchies_offset=import_type_hierarchies_offset,
-        persistent_guid=persistent_guid,
-        generations=generations,
         saved_by_engine_version=saved_by_engine_version or EngineVersion(),
         compatible_with_engine_version=compatible_with_engine_version or EngineVersion(),
-        compression_flags=compression_flags,
-        package_source=package_source,
-        asset_registry_data_offset=asset_registry_data_offset,
-        bulk_data_start_offset=bulk_data_start_offset,
-        world_tile_info_data_offset=world_tile_info_data_offset,
-        chunk_ids=chunk_ids,
         preload_dependency_count=preload_dependency_count,
         preload_dependency_offset=preload_dependency_offset,
-        names_referenced_from_export_data_count=names_referenced_from_export_data_count,
-        payload_toc_offset=payload_toc_offset,
-        data_resource_offset=data_resource_offset,
     ), total_decompressed
 
 

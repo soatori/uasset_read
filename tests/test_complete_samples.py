@@ -256,8 +256,13 @@ def test_unversioned_samples_schema_decode_or_bounded_opaque():
     assert cdo_props.get("ScriptBool", {}).get("value") is True
     class_obj = next(o for o in bp.objects if o.name == "BP_UnversionedTest_C")
     class_props = class_obj.properties or {}
+    class_values = (
+        list(class_props.values())
+        if isinstance(class_props, dict)
+        else [entry.value for entry in class_props.entries]
+    )
     assert any(
-        isinstance(v, dict) and v.get("kind") == "opaque" for v in class_props.values()
+        isinstance(v, dict) and v.get("kind") == "opaque" for v in class_values
     ), "unmapped class export must stay bounded opaque"
 
 
