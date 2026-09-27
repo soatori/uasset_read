@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-
-import pytest
+import struct
 
 from uasset_read.models.payloads import (
     PAYLOAD_EXTRACTION_DEFERRED,
@@ -14,11 +13,6 @@ from uasset_read.models.payloads import (
 
 FIXTURE_DIR = Path(__file__).parent / "samples"
 MAIN_PATH = FIXTURE_DIR / "T_ParserBulk.uasset"
-
-pytestmark = pytest.mark.skipif(
-    not (MAIN_PATH.exists() and MAIN_PATH.with_suffix(".uexp").exists()),
-    reason="T_ParserBulk fixture or its .uexp sidecar is missing",
-)
 
 
 def _desc(**overrides) -> PayloadDescriptor:
@@ -248,12 +242,7 @@ def test_extract_bulk_data_descriptors_basic():
 
     # Simulate a BulkData header at the end of an export
     # flags=0x01, element_count=4096, size_on_disk=8192, offset=0
-    bulk_data_header = bytes([
-        0x01, 0x00, 0x00, 0x00,  # flags = BULKDATA_None
-        0x00, 0x10, 0x00, 0x00,  # element_count = 4096
-        0x00, 0x20, 0x00, 0x00,  # size_on_disk = 8192
-        0x00, 0x00, 0x00, 0x00,  # offset = 0 (relative to ubulk)
-    ])
+    bulk_data_header = struct.pack("<IIII", 0x01, 4096, 8192, 0)
 
     # Use data that won't form false positive headers
     # Use 0xFF bytes which won't form valid headers when scanned
@@ -273,12 +262,7 @@ def test_extract_bulk_data_descriptors_compressed():
     from uasset_read.parsers.bulk_data import extract_bulk_data_descriptors
 
     # Compressed header: flags=0x02 (Zlib), element_count=2048, size_on_disk=4096, offset=1024
-    bulk_data_header = bytes([
-        0x02, 0x00, 0x00, 0x00,  # flags = BULKDATA_CompressedZlib
-        0x00, 0x08, 0x00, 0x00,  # element_count = 2048
-        0x00, 0x10, 0x00, 0x00,  # size_on_disk = 4096
-        0x00, 0x04, 0x00, 0x00,  # offset = 1024
-    ])
+    bulk_data_header = struct.pack("<IIII", 0x02, 2048, 4096, 1024)
 
     # Use data that won't form false positive headers
     serial_data = b"\xff" * 200 + bulk_data_header
@@ -297,18 +281,8 @@ def test_extract_bulk_data_descriptors_single_at_end():
     from uasset_read.parsers.bulk_data import extract_bulk_data_descriptors
 
     # Two BulkData headers back-to-back at the end
-    header1 = bytes([
-        0x01, 0x00, 0x00, 0x00,
-        0x00, 0x10, 0x00, 0x00,
-        0x00, 0x20, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00,
-    ])
-    header2 = bytes([
-        0x02, 0x00, 0x00, 0x00,
-        0x00, 0x08, 0x00, 0x00,
-        0x00, 0x10, 0x00, 0x00,
-        0x00, 0x04, 0x00, 0x00,
-    ])
+    header1 = struct.pack("<IIII", 0x01, 4096, 8192, 0)
+    header2 = struct.pack("<IIII", 0x02, 2048, 4096, 1024)
 
     # Use data that won't form false positive headers
     serial_data = b"\xff" * 50 + header1 + header2
@@ -349,12 +323,7 @@ def test_extract_bulk_data_descriptors_invalid_header():
     from uasset_read.parsers.bulk_data import extract_bulk_data_descriptors
 
     # Header with size_on_disk=0 (invalid)
-    invalid_header = bytes([
-        0x01, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00,  # element_count = 0
-        0x00, 0x00, 0x00, 0x00,  # size_on_disk = 0
-        0x00, 0x00, 0x00, 0x00,
-    ])
+    invalid_header = struct.pack("<IIII", 0x01, 0, 0, 0)
 
     # Use 0xFF bytes which won't form valid headers
     serial_data = b"\xff" * 50 + invalid_header
@@ -411,10 +380,8 @@ def test_end_to_end_payload_extraction():
             texture_export_index = i
             break
 
-    if texture_export_index is None:
-        pytest.skip("No Texture2D export found in T_ParserBulk.uasset")
-
-    # Verify export has serial region
+    # Verify export has serial region (fixtures are committed; the manifest gate
+    # fails loudly when the Texture2D export is absent).
     export = doc.objects[texture_export_index]
     assert export.serial_region is not None, "Texture2D export should have a serial region"
     assert export.serial_region.size > 0, "Serial region should have non-zero size"

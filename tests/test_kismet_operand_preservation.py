@@ -120,58 +120,25 @@ def _assert_fields(expr, expected: frozenset[str]) -> None:
 def test_matrix_from_archive_retains_payload_into_operands():
     archive = _ScriptedArchive()
     cases = [
-        (EX_Return.from_archive(archive), OPERAND_FIELD_MATRIX["EX_Return"]),
-        (
-            EX_Assert.from_archive(archive),
-            OPERAND_FIELD_MATRIX["EX_Assert"],
-        ),
-        (
-            EX_SwitchValue.from_archive(archive),
-            OPERAND_FIELD_MATRIX["EX_SwitchValue"],
-        ),
-        (
-            EX_Context.from_archive(archive),
-            OPERAND_FIELD_MATRIX["EX_Context"],
-        ),
-        (
-            EX_ClassContext.from_archive(archive),
-            OPERAND_FIELD_MATRIX["EX_ClassContext"],
-        ),
-        (
-            EX_InterfaceContext.from_archive(archive),
-            OPERAND_FIELD_MATRIX["EX_InterfaceContext"],
-        ),
-        (
-            EX_StructMemberContext.from_archive(archive),
-            OPERAND_FIELD_MATRIX["EX_StructMemberContext"],
-        ),
-        (
-            EX_SetArray.from_archive(archive),
-            OPERAND_FIELD_MATRIX["EX_SetArray"],
-        ),
-        (EX_SetMap.from_archive(archive), OPERAND_FIELD_MATRIX["EX_SetMap"]),
-        (EX_SetSet.from_archive(archive), OPERAND_FIELD_MATRIX["EX_SetSet"]),
-        (
-            EX_ArrayConst.from_archive(archive),
-            OPERAND_FIELD_MATRIX["EX_ArrayConst"],
-        ),
-        (EX_MapConst.from_archive(archive), OPERAND_FIELD_MATRIX["EX_MapConst"]),
-        (EX_SetConst.from_archive(archive), OPERAND_FIELD_MATRIX["EX_SetConst"]),
-        (
-            EX_DynamicCast.from_archive(archive),
-            OPERAND_FIELD_MATRIX["EX_DynamicCast"],
-        ),
-        (
-            EX_TransformConst.from_archive(archive),
-            OPERAND_FIELD_MATRIX["EX_TransformConst"],
-        ),
-        (
-            EX_ArrayGetByRef.from_archive(archive),
-            OPERAND_FIELD_MATRIX["EX_ArrayGetByRef"],
-        ),
+        EX_Return.from_archive(archive),
+        EX_Assert.from_archive(archive),
+        EX_SwitchValue.from_archive(archive),
+        EX_Context.from_archive(archive),
+        EX_ClassContext.from_archive(archive),
+        EX_InterfaceContext.from_archive(archive),
+        EX_StructMemberContext.from_archive(archive),
+        EX_SetArray.from_archive(archive),
+        EX_SetMap.from_archive(archive),
+        EX_SetSet.from_archive(archive),
+        EX_ArrayConst.from_archive(archive),
+        EX_MapConst.from_archive(archive),
+        EX_SetConst.from_archive(archive),
+        EX_DynamicCast.from_archive(archive),
+        EX_TransformConst.from_archive(archive),
+        EX_ArrayGetByRef.from_archive(archive),
     ]
-    for expr, expected in cases:
-        _assert_fields(expr, expected)
+    for expr in cases:
+        _assert_fields(expr, OPERAND_FIELD_MATRIX[expr.Token.name])
 
 
 def test_to_dict_emits_matrix_operand_fields():
@@ -234,7 +201,7 @@ def test_to_dict_emits_structured_unset_for_unfilled_dual_offsets():
 def test_matrix_is_json_projectable_without_discarding_payload():
     import json
 
-    from uasset_read.parsers.blueprint.bytecode import BytecodeInstruction, project_operand
+    from uasset_read.parsers.blueprint.bytecode import project_operand
 
     archive = _ScriptedArchive()
     exprs = [

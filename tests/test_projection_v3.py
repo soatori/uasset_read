@@ -2,9 +2,7 @@
 """v3 projection consistency: JSON/CLI/Agent share one PackageDocument path."""
 
 import copy
-import json
 
-import pytest
 
 from tests.fixtures import find_blueprint_object, parse_sample
 from uasset_read.projection import project_document
@@ -69,7 +67,6 @@ def test_build_projection_records_filters_object_and_kind(stackobot_document):
 
 
 def test_bounded_projection_scopes_records_to_page(document):
-    from uasset_read.projection import build_projection_records
 
     page = project_document(document, view="semantic", limit=3)
     page_ids = {item["id"] for item in page["objects"]}

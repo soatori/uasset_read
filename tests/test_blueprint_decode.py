@@ -612,20 +612,11 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
     from uasset_read.exceptions import ParseError
     from uasset_read.kismet import bytecode_extractor
     from uasset_read.kismet.decompile_bridge import extract_kismet_decompiled
-    from uasset_read.package import open_package_bundle
-    from uasset_read.serializers.object_resources import read_export_map, read_import_map
-    from uasset_read.serializers.package_summary import read_name_table, read_package_summary
+    from tests.fixtures import open_sample_archive
 
     sample = SAMPLES / "BP_CombatCharacter.uasset"
-    bundle = open_package_bundle(str(sample))
-    archive = bundle.open_archive(tolerant=True)
-    try:
-        summary, _ = read_package_summary(archive)
+    with open_sample_archive(sample) as (archive, summary, name_map, import_map, export_map):
         archive.set_property_version_gates(summary.file_version_ue4, summary.file_version_ue5)
-        name_map = read_name_table(archive, summary)
-        archive.set_name_map(name_map)
-        import_map = read_import_map(archive, summary, name_map)
-        export_map = read_export_map(archive, summary, name_map)
 
         real_parse = bytecode_extractor.parse_bytecode_stream
         calls = {"n": 0}
@@ -645,8 +636,6 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
             export_map,
             tolerant=True,
         )
-    finally:
-        archive.close()
 
     from uasset_read.kismet.bytecode_extractor import FUNCTION_EXPORT_CLASSES
     from uasset_read.serializers.object_resources import resolve_class_name
@@ -729,21 +718,17 @@ def test_generated_class_function_count_is_depth_independent():
 
 
 def _low_level_graphs(sample: str):
-    from uasset_read.package import open_package_bundle
-    from uasset_read.serializers.package_summary import read_package_summary, read_name_table
-    from uasset_read.serializers.object_resources import read_export_map, read_import_map
+    from tests.fixtures import open_sample_archive
     from uasset_read.serializers.blueprint_graph import read_blueprint_graphs
 
-    archive = open_package_bundle(str(SAMPLES / sample)).open_archive(tolerant=True)
-    try:
-        summary, _ = read_package_summary(archive)
-        name_map = read_name_table(archive, summary)
-        archive.set_name_map(name_map)
-        import_map = read_import_map(archive, summary, name_map)
-        export_map = read_export_map(archive, summary, name_map)
+    with open_sample_archive(SAMPLES / sample) as (
+        archive,
+        summary,
+        name_map,
+        import_map,
+        export_map,
+    ):
         return read_blueprint_graphs(archive, summary, name_map, import_map, export_map)
-    finally:
-        archive.close()
 
 
 def test_every_converted_node_id_is_addressable():
@@ -761,20 +746,11 @@ def test_node_reader_failure_keeps_fallback_export_id(monkeypatch):
     """A controlled node-reader failure yields an addressable fallback node
     plus a surfaced graph parse error — never an empty id."""
     from uasset_read.exceptions import ParseError
-    from uasset_read.package import open_package_bundle
-    from uasset_read.serializers.package_summary import read_package_summary, read_name_table
-    from uasset_read.serializers.object_resources import read_export_map, read_import_map
+    from tests.fixtures import open_sample_archive
     from uasset_read.serializers import graph_node
 
     sample = SAMPLES / "StackOBot_BP_Drone.uasset"
-    archive = open_package_bundle(str(sample)).open_archive(tolerant=True)
-    try:
-        summary, _ = read_package_summary(archive)
-        name_map = read_name_table(archive, summary)
-        archive.set_name_map(name_map)
-        import_map = read_import_map(archive, summary, name_map)
-        export_map = read_export_map(archive, summary, name_map)
-
+    with open_sample_archive(sample) as (archive, summary, name_map, import_map, export_map):
         real = graph_node.read_ue_graph_node
         calls = {"n": 0}
 
@@ -788,8 +764,6 @@ def test_node_reader_failure_keeps_fallback_export_id(monkeypatch):
         from uasset_read.serializers.blueprint_graph import read_blueprint_graphs
 
         graphs = read_blueprint_graphs(archive, summary, name_map, import_map, export_map)
-    finally:
-        archive.close()
 
     assert calls["n"] >= 1
     all_nodes = [n for g in graphs for n in g["nodes"]]

@@ -6,6 +6,7 @@ These are plain functions, not pytest fixtures: tests import them from
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 
 from uasset_read.models.document import PackageDocument
@@ -20,6 +21,33 @@ def sample_path(name: str) -> Path:
     if not path.exists():
         raise FileNotFoundError(f"missing fixture sample: {name}")
     return path
+
+
+@contextmanager
+def open_sample_archive(sample):
+    """Open a fixture archive and yield the standard 5-tuple, closing it after.
+
+    Yields ``(archive, summary, name_map, import_map, export_map)`` in the
+    reference order every low-level boilerplate site used (fixtures.py form).
+    """
+    from uasset_read.package import open_package_bundle
+    from uasset_read.serializers.object_resources import read_export_map, read_import_map
+    from uasset_read.serializers.package_summary import read_name_table, read_package_summary
+
+    archive = open_package_bundle(str(sample)).open_archive(tolerant=True)
+    try:
+        summary, _ = read_package_summary(archive)
+        name_map = read_name_table(archive, summary)
+        archive.set_name_map(name_map)
+        yield (
+            archive,
+            summary,
+            name_map,
+            read_import_map(archive, summary, name_map),
+            read_export_map(archive, summary, name_map),
+        )
+    finally:
+        archive.close()
 
 
 def parse_sample(

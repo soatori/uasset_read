@@ -13,21 +13,17 @@ SAMPLES = Path(__file__).parent / "samples"
 
 def _graphs_for(sample: str) -> list[dict]:
     """Open a fixture the way v2's decode pass does and return plain graph dicts."""
-    from uasset_read.package import open_package_bundle
-    from uasset_read.serializers.package_summary import read_package_summary, read_name_table
-    from uasset_read.serializers.object_resources import read_export_map, read_import_map
+    from tests.fixtures import open_sample_archive
     from uasset_read.serializers.blueprint_graph import read_blueprint_graphs
 
-    archive = open_package_bundle(str(SAMPLES / sample)).open_archive(tolerant=True)
-    try:
-        summary, _ = read_package_summary(archive)
-        name_map = read_name_table(archive, summary)
-        archive.set_name_map(name_map)
-        import_map = read_import_map(archive, summary, name_map)
-        export_map = read_export_map(archive, summary, name_map)
+    with open_sample_archive(SAMPLES / sample) as (
+        archive,
+        summary,
+        name_map,
+        import_map,
+        export_map,
+    ):
         return read_blueprint_graphs(archive, summary, name_map, import_map, export_map)
-    finally:
-        archive.close()
 
 
 def test_stackobot_graphs_convert_with_pins_and_links():
@@ -209,18 +205,17 @@ def _raw_graph_links(sample: str) -> list[dict]:
     serialized owning_node + pin GUID values via read_pin_reference — never
     from the current resolve_pin_links output.
     """
-    from uasset_read.package import open_package_bundle
-    from uasset_read.serializers.package_summary import read_package_summary, read_name_table
-    from uasset_read.serializers.object_resources import read_export_map, read_import_map, resolve_class_name
+    from tests.fixtures import open_sample_archive
+    from uasset_read.serializers.object_resources import resolve_class_name
     from uasset_read.serializers.graph_node import read_ue_graph_node
 
-    archive = open_package_bundle(str(SAMPLES / sample)).open_archive(tolerant=True)
-    try:
-        summary, _ = read_package_summary(archive)
-        name_map = read_name_table(archive, summary)
-        archive.set_name_map(name_map)
-        import_map = read_import_map(archive, summary, name_map)
-        export_map = read_export_map(archive, summary, name_map)
+    with open_sample_archive(SAMPLES / sample) as (
+        archive,
+        summary,
+        name_map,
+        import_map,
+        export_map,
+    ):
         records: list[dict] = []
         for exp_idx, exp in enumerate(export_map):
             cls = resolve_class_name(exp.class_index, import_map, export_map) or ""
@@ -243,8 +238,6 @@ def _raw_graph_links(sample: str) -> list[dict]:
                         }
                     )
         return records
-    finally:
-        archive.close()
 
 
 def test_stackobot_owner_aware_link_targets():

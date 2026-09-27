@@ -59,10 +59,8 @@ class TestUnversionedPropertySchema:
     def mappings(self):
         from uasset_read.mappings import UsmapParser
 
-        usmap_path = os.path.join(SAMPLES_DIR, "UnversionedTest.usmap")
-        if not os.path.isfile(usmap_path):
-            pytest.skip("USMAP file not present")
-        return UsmapParser(usmap_path)
+        # A missing fixture is a manifest gap — it must fail loudly, never skip.
+        return UsmapParser(os.path.join(SAMPLES_DIR, "UnversionedTest.usmap"))
 
     def test_has_target_structs(self, mappings):
         """Verify the target classes/structs exist in the schema."""
@@ -79,8 +77,7 @@ class TestUnversionedPropertySchema:
     def test_has_expected_property_types(self, mappings):
         """Verify at least 3 fields with distinct types exist in target struct."""
         struct = mappings.mappings.get_struct("BP_UnversionedTest_C")
-        if struct is None:
-            pytest.skip("BP_UnversionedTest_C not found in USMAP")
+        assert struct is not None, "BP_UnversionedTest_C not found in USMAP"
 
         type_names = {p.mapping_type.type for p in struct.properties.values()}
         assert len(type_names) >= 3, (
@@ -90,8 +87,7 @@ class TestUnversionedPropertySchema:
     def test_property_count_matches(self, mappings):
         """Verify property count in schema matches declared count."""
         struct = mappings.mappings.get_struct("BP_UnversionedTest_C")
-        if struct is None:
-            pytest.skip("BP_UnversionedTest_C not found in USMAP")
+        assert struct is not None, "BP_UnversionedTest_C not found in USMAP"
         assert len(struct.properties) == struct.property_count, (
             f"Property count mismatch: {len(struct.properties)} actual vs "
             f"{struct.property_count} declared"
@@ -100,8 +96,7 @@ class TestUnversionedPropertySchema:
     def test_struct_has_known_types(self, mappings):
         """Verify the schema contains expected UE property types."""
         struct = mappings.mappings.get_struct("BP_UnversionedTest_C")
-        if struct is None:
-            pytest.skip("BP_UnversionedTest_C not found in USMAP")
+        assert struct is not None, "BP_UnversionedTest_C not found in USMAP"
 
         type_names = {p.mapping_type.type for p in struct.properties.values()}
         # These are common types that should appear in a Blueprint
@@ -117,22 +112,9 @@ class TestUnversionedFixtureProvenance:
     """Verify provenance documentation exists and is complete."""
 
     def test_provenance_file_exists(self):
-        # Check for any provenance-related files
-        provenance_files = [
-            "UnversionedTest.provenance.md",
-            "unversioned-fixture-design.md",
-        ]
-        found = False
-        for pf in provenance_files:
-            path = os.path.join(SAMPLES_DIR, pf)
-            if os.path.isfile(path):
-                found = True
-                break
-        # Also check temp/ for design docs
-        temp_design = os.path.join(os.path.dirname(__file__), "..", "temp", "unversioned-fixture-design.md")
-        if os.path.isfile(temp_design):
-            found = True
-        assert found, "No provenance/documentation file found for unversioned fixtures"
+        # Committed fixture: the canonical provenance file is the one manifest-gated source.
+        path = os.path.join(SAMPLES_DIR, "UnversionedTest.provenance.md")
+        assert os.path.isfile(path), "No provenance/documentation file found for unversioned fixtures"
 
 
 class TestUnversionedBinaryHeader:
@@ -146,8 +128,7 @@ class TestUnversionedBinaryHeader:
         ]
         for name in asset_files:
             path = os.path.join(SAMPLES_DIR, name)
-            if not os.path.isfile(path):
-                continue
+            assert os.path.isfile(path), f"Unversioned fixture missing: {name}"
             with open(path, "rb") as f:
                 header = f.read(64)
             magic = struct.unpack_from("<I", header, 0)[0]
@@ -167,59 +148,43 @@ class TestUnversionedBinaryHeader:
             assert os.path.getsize(path) > 0, f"Sidecar file empty: {name}"
 
 
+def _parse(asset_name: str, *, depth: str = "asset"):
+    """Open + read one unversioned fixture with the committed usmap."""
+    from uasset_read.package import open_package_bundle
+    from uasset_read.parsers.legacy_reader import LegacyPackageReader
+
+    path = f"tests/samples/{asset_name}.uasset"
+    bundle = open_package_bundle(path)
+    archive = bundle.open_archive(tolerant=True)
+    try:
+        reader = LegacyPackageReader(mappings_path="tests/samples/UnversionedTest.usmap")
+        return reader.read(archive=archive, main_path=path, depth=depth)
+    finally:
+        archive.close()
+
+
 class TestUnversionedPackageParsing:
     """Verify unversioned packages can be parsed without VersionError."""
 
     def test_bp_unversioned_parses(self):
         """BP_UnversionedTest should parse without VersionError."""
-        from uasset_read.package import open_package_bundle
-        from uasset_read.parsers.legacy_reader import LegacyPackageReader
-
-        bundle = open_package_bundle("tests/samples/BP_UnversionedTest.uasset")
-        archive = bundle.open_archive(tolerant=True)
-        try:
-            reader = LegacyPackageReader(mappings_path="tests/samples/UnversionedTest.usmap")
-            doc = reader.read(archive=archive, main_path="tests/samples/BP_UnversionedTest.uasset")
-            assert doc is not None
-            assert len(doc.objects) >= 1
-        finally:
-            archive.close()
+        doc = _parse("BP_UnversionedTest")
+        assert doc is not None
+        assert len(doc.objects) >= 1
 
     def test_da_unversioned_parses(self):
         """DA_UnversionedTest should parse without VersionError."""
-        from uasset_read.package import open_package_bundle
-        from uasset_read.parsers.legacy_reader import LegacyPackageReader
-
-        bundle = open_package_bundle("tests/samples/DA_UnversionedTest.uasset")
-        archive = bundle.open_archive(tolerant=True)
-        try:
-            reader = LegacyPackageReader(mappings_path="tests/samples/UnversionedTest.usmap")
-            doc = reader.read(archive=archive, main_path="tests/samples/DA_UnversionedTest.uasset")
-            assert doc is not None
-        finally:
-            archive.close()
+        doc = _parse("DA_UnversionedTest")
+        assert doc is not None
         assert len(doc.objects) >= 1
 
 
 class TestUnversionedMappedProperties:
     """Wave B P6: usmap-driven unversioned parse must yield mapped values or opaque."""
 
-    def _parse(self, asset_name: str):
-        from uasset_read.package import open_package_bundle
-        from uasset_read.parsers.legacy_reader import LegacyPackageReader
-
-        path = f"tests/samples/{asset_name}.uasset"
-        bundle = open_package_bundle(path)
-        archive = bundle.open_archive(tolerant=True)
-        try:
-            reader = LegacyPackageReader(mappings_path="tests/samples/UnversionedTest.usmap")
-            return reader.read(archive=archive, main_path=path, depth="object")
-        finally:
-            archive.close()
-
     def test_da_unversioned_exposes_mapped_properties(self):
         """DA asset with usmap must produce a non-empty mapped bag."""
-        doc = self._parse("DA_UnversionedTest")
+        doc = _parse("DA_UnversionedTest", depth="object")
         assert doc is not None
         primary = next(o for o in doc.objects if o.name == "DA_UnversionedTest")
         props = primary.properties or {}
@@ -234,7 +199,7 @@ class TestUnversionedMappedProperties:
 
     def test_bp_unversioned_exposes_mapped_properties(self):
         """BP CDO with usmap must produce non-empty bag or explicit opaque; no name-index storm."""
-        doc = self._parse("BP_UnversionedTest")
+        doc = _parse("BP_UnversionedTest", depth="object")
         assert doc is not None
         # CDO has BP_UnversionedTest_C mapping in the usmap
         cdo = next(o for o in doc.objects if o.name == "Default__BP_UnversionedTest_C")

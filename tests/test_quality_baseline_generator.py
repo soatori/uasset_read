@@ -2,23 +2,13 @@
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-# ---------------------------------------------------------------------------
-# Import build_sample_entry via importlib (tools/ has no __init__.py).
-# ---------------------------------------------------------------------------
+import gen_quality_baseline
+from gen_quality_baseline import SEED, build_sample_entry
+
 _ROOT = Path(__file__).resolve().parents[1]
-_spec = importlib.util.spec_from_file_location(
-    "gen_quality_baseline", _ROOT / "tools" / "gen_quality_baseline.py"
-)
-_mod = importlib.util.module_from_spec(_spec)
-sys.modules["gen_quality_baseline"] = _mod
-_spec.loader.exec_module(_mod)  # type: ignore[union-attr]
-build_sample_entry = _mod.build_sample_entry
-SEED = _mod.SEED
 
 
 def test_build_sample_entry_marks_opt_in():
@@ -90,7 +80,7 @@ def test_aggregate_trailing_report_shape_and_limits():
         ("A.uasset", _doc([("Model", "known_unimplemented", 10), ("ABP_X_C", "unexpected", 5)])),
         ("B.uasset", _doc([("Model", "known_unimplemented", 32)])),
     ]
-    report = _mod.aggregate_trailing_report(docs)
+    report = gen_quality_baseline.aggregate_trailing_report(docs)
     assert report["scope"] == "manifest"
     assert report["sample_count"] == 2
     assert report["max_total_warnings"] == 3

@@ -1,4 +1,4 @@
-from tests.fixtures import find_function, parse_sample
+from tests.fixtures import find_function
 
 
 def test_jump_if_not_creates_true_and_false_edges(ue58_blueprint_document):

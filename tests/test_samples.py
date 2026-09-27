@@ -254,21 +254,11 @@ def _sha256(path: Path) -> str:
 
 def _raw_depends_map(sample: str):
     """Re-read ObjectDependsMap through the low-level archive, independent of v2."""
-    from uasset_read.serializers.package_summary import (
-        read_depends_map,
-        read_name_table,
-        read_package_summary,
-    )
-    from uasset_read.package import open_package_bundle
+    from tests.fixtures import open_sample_archive
+    from uasset_read.serializers.package_summary import read_depends_map
 
-    archive = open_package_bundle(str(SAMPLES / sample)).open_archive(tolerant=True)
-    try:
-        summary, _ = read_package_summary(archive)
-        name_map = read_name_table(archive, summary)
-        archive.set_name_map(name_map)
+    with open_sample_archive(SAMPLES / sample) as (archive, summary, _names, _imports, _exports):
         return read_depends_map(archive, summary)
-    finally:
-        archive.close()
 
 
 PACKAGE_SUFFIXES = {".uasset", ".umap", ".uexp", ".ubulk", ".uptnl"}
@@ -884,22 +874,19 @@ def test_als_graph_owners_resolve_beyond_eight_hops():
     Direct graph extraction stays at 275; the decode pass no longer reports
     the known BLUEPRINT_GRAPH_OWNER_UNRESOLVED owner-loss diagnostics.
     """
-    from uasset_read.package import open_package_bundle, parse_package_document
-    from uasset_read.serializers.package_summary import read_package_summary, read_name_table
-    from uasset_read.serializers.object_resources import read_export_map, read_import_map
+    from uasset_read.package import parse_package_document
+    from tests.fixtures import open_sample_archive
     from uasset_read.serializers.blueprint_graph import read_blueprint_graphs
 
     # Direct extraction: graph count is a fixture regression, owner-independent.
-    archive = open_package_bundle(str(SAMPLES / "ALS_AnimBP.uasset")).open_archive(tolerant=True)
-    try:
-        summary, _ = read_package_summary(archive)
-        name_map = read_name_table(archive, summary)
-        archive.set_name_map(name_map)
-        import_map = read_import_map(archive, summary, name_map)
-        export_map = read_export_map(archive, summary, name_map)
+    with open_sample_archive(SAMPLES / "ALS_AnimBP.uasset") as (
+        archive,
+        summary,
+        name_map,
+        import_map,
+        export_map,
+    ):
         graphs = read_blueprint_graphs(archive, summary, name_map, import_map, export_map)
-    finally:
-        archive.close()
     assert len(graphs) == 275, f"expected 275 direct graphs, got {len(graphs)}"
     for graph in graphs:
         for node in graph["nodes"]:
@@ -1303,13 +1290,10 @@ def _assert_trailing_aggregate(actual: dict, baseline: dict) -> None:
 
 
 def _aggregate_from_manifest():
-    from importlib.util import spec_from_file_location, module_from_spec
+    import gen_quality_baseline
 
-    spec = spec_from_file_location("gen_quality_baseline", ROOT / "tools" / "gen_quality_baseline.py")
-    mod = module_from_spec(spec)
-    spec.loader.exec_module(mod)
     docs = [(entry["name"], _asset_document(entry["name"])) for entry in MANIFEST_SAMPLES]
-    return mod.aggregate_trailing_report(docs)
+    return gen_quality_baseline.aggregate_trailing_report(docs)
 
 
 def test_trailing_aggregate_report_within_baseline():
