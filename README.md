@@ -37,7 +37,7 @@ Whether you're auditing blueprint dependencies, building tooling for game develo
 > Default output is the package document with `format_version: "3.0"`: `python -m uasset_read file.uasset` or `parse_package_document()`. The v1 pipeline (Semantic 1.x JSON, `--legacy-json`, `--markdown`, `--diff`, `--list-formats`) was removed; those flags are rejected as unsupported. Batch mode is available via `--batch`. See `tests/samples/manifest.json` for tracked fixtures.
 
 - **PackageDocument** — one document per .uasset, all exports as first-class objects
-- **Legacy / Zen readers** — separate format boundaries; Zen package full decode unavailable without a redistributable fixture
+- **Legacy / Zen readers** — separate format boundaries; Zen/IoStore package-body decoding is outside the current product target, while TOC metadata remains a truthful boundary check
 - **Multi-asset support** — all exports preserved, no `_select_primary_export()` filtering
 - **Tagged / unversioned properties** — separate sole-entry readers; unversioned is schema-backed / explicit opaque
 - **v3 JSON contract** — `uasset_read.package` envelope with `projections`/`sidecars`, view/depth/selection/pagination/byte-budget

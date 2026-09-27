@@ -4,7 +4,7 @@ status: target
 
 > **文档状态：目标架构基线（2026-08-26）。Legacy 主路径已实现**（package document 输出全部 exports；tagged properties 在 export 边界内解析；CLI/Python API/Agent 共用同一投影；语义不再依赖 Semantic 1.x handler；decode 不产出顶层 payload）。**payload 字节提取已实现（cooked 包 + sidecar）**。**2026-09-21 合并 `8727b067` 后，v3 路径为当前默认：`format_version: "3.0"`、静态 Blueprint IR/CFG、type-aware projections 与 canonical writer 见下方 Status audit。** 2026-09-02 顺序调整：实现按 UE 源码偏移证据推进（CUE4Parse/UAssetAPI 只作阅读参考）。
 >
-> **2026-09-05 后续状态更新（已实现，非目标）**：Semantic JSON 1.x 输出路径已删除（`--legacy-json` 等旧 CLI flag 进入 retired 集合，唯一顶层 format 为 `uasset_read.package`）；Blueprint VarType（`FEdGraphPinType`）类型解码与 Kismet 反编译已迁移到 v2 object model（`BlueprintFamilyHandler` decode 分支 + `kismet.decompile_bridge`，由 `tests/test_blueprint_decode.py` 覆盖）。**仍 partial/未验证（不得写成已实现）：Zen/IoStore 全量解码、USMAP/unversioned 的通用 cooked SchemaProvider 完整路径、外部容器 payload 提取、其余深层语义。Blueprint C++ skeleton / v3 未完成项已从本列表移除——2026-09-21 Status audit：v3 路径为当前默认（`format_version: "3.0"`），静态 Blueprint IR/CFG 与 typed C++ projection 为 current；旧字符串式 C++ 伪代码链仍保持退役。parent-asset 解析已于 2026-09-10 Gate G 产品决策放弃（D1 §7），不再列为 deferred gap。**
+> **2026-09-05 后续状态更新（已实现，非目标）**：Semantic JSON 1.x 输出路径已删除（`--legacy-json` 等旧 CLI flag 进入 retired 集合，唯一顶层 format 为 `uasset_read.package`）；Blueprint VarType（`FEdGraphPinType`）类型解码与 Kismet 反编译已迁移到 v2 object model（`BlueprintFamilyHandler` decode 分支 + `kismet.decompile_bridge`，由 `tests/test_blueprint_decode.py` 覆盖）。**当前产品非目标：Zen/IoStore 全量解码、cooked/Zen unversioned 的通用 SchemaProvider、外部容器 payload 提取和其余深层语义；编辑器 `.usmap` 路径仍是 bounded partial。** Blueprint C++ skeleton / v3 未完成项已从本列表移除——2026-09-21 Status audit：v3 路径为当前默认（`format_version: "3.0"`），静态 Blueprint IR/CFG 与 typed C++ projection 为 current；旧字符串式 C++ 伪代码链仍保持退役。parent-asset 解析已于 2026-09-10 Gate G 产品决策放弃（D1 §7），不再列为 deferred gap。**
 >
 > **2026-09-10 Gate K 状态更新**：C++ 伪代码文本生成链（`kismet/translator.py` / `body_builder.py` / `jump_analyzer.py`）已退役；公共函数逻辑表示为 `semantic.functions[]` 的 K0 expression 摘要（asset）与 decode 级 expression tree。`cpp_code` / `translation_status` / `structured_rate` 不再出现在 experimental semantic 输出中。
 
@@ -33,8 +33,9 @@ historical post-merge count, not the current suite total):
   (`write_projected_document`), and sample acceptance gates are current
   behavior on this branch.
 
-Zen package full decode and traditional FPak entry extraction remain
-explicitly unverified without redistributable fixtures.
+Zen package full decode remains outside the current product target. The UE5.8.2
+traditional FPak fixture is now available; Pak range-read and container extraction
+remain separate deferred implementation work.
 
 ## Executive Summary
 
@@ -773,7 +774,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - ~~compression/encryption capability reporting。~~ Outside the current product target.
 - ~~package trailer 和 external payload 路由。~~ Outside the current product target; loose sidecars remain the supported path.
 
-退出条件：真实 `.utoc/.ucas` fixture 可列出 package objects；读取单对象不会把整个容器复制到内存。
+历史退出条件（当前不适用）：真实 `.utoc/.ucas` fixture 可列出 package objects；读取单对象不会把整个容器复制到内存。当前范围只保留 IoStore 元数据分类和真实不可用边界测试。
 
 ### Phase 6：删除旧路径
 

@@ -65,18 +65,19 @@ The `chunks_of_type(id)` method indexes into these by type id.
   array points into the `.ucas` byte stream. The reader validates that
   `offset + length <= file_size` for every entry.
 
-## Fixture intake status — still blocked (plan Task 2, 2026-09-21)
+## Fixture intake status — closed as not required (2026-09-27)
 
-Candidate search and measurement via `read_toc()` / `inspect_container()`. No Zen package
-fixture was intaken. Container-file integrity is gated instead by
-`test_container_fixtures_match_manifest()` in `tests/test_samples.py`, which hash-checks
-every row of `manifest.json#containers` (including gitignored files when present on this
-machine), so `fixture_gaps.iostore_container` stays `partial`.
+Candidate search and measurement were performed with `read_toc()` / `inspect_container()`.
+The project produced valid IoStore metadata, but no Zen package-body fixture is maintained:
+Zen/IoStore body decoding and chunk extraction are outside the current product target.
+The tracked metadata remains useful for classification and truthful-unavailability
+regressions. `fixture_gaps.zen_package` and `fixture_gaps.iostore_container` are therefore
+`not_required`, not blocked.
 
 | Candidate | On disk | Commit status | Verdict |
 |-----------|---------|---------------|---------|
-| `MyProject-Windows.utoc` + `.ucas` | Yes (both; hashes above re-verified) | `.utoc` tracked; `.ucas` gitignored (`tests/samples/containers/MyProject-Windows.ucas`) and 259,193,536 B > GitHub 100 MB limit | Structurally valid but **not committable**; kept as historical evidence only |
-| `global.utoc` + `.ucas` | Yes (both) | Both tracked | **Rejected**: measured `entry_count=1`, the single chunk is type `ScriptObjects` (type id 5), `package_files()` is empty — no `ExportBundleData` package chunk, so no package bytes to decode |
+| `MyProject-Windows.utoc` + `.ucas` | Yes (both; hashes above re-verified) | `.utoc` tracked; `.ucas` local-only (`tests/samples/containers/MyProject-Windows.ucas`) and 259,193,536 B > GitHub 100 MB limit | Structurally valid metadata; retained as historical/local evidence, not a maintained Zen package-body fixture |
+| `global.utoc` + `.ucas` | Yes (both) | Both tracked | Metadata-only evidence: the single `ScriptObjects` chunk does not provide an `ExportBundleData` package body |
 
 Measured primary-container facts (not in the tables above, from `read_toc()` on the hashed
 `.utoc`): `container_flags=0x9` (compressed | directory index; not signed, not encrypted),
@@ -88,14 +89,10 @@ table uses methods `None` (5036 blocks), `Oodle` (1564), and method index 255 (9
 not listed in the header method table — unverified). Expected per-package object counts
 are not measurable until a Zen decode path exists.
 
-**Still missing for fixture intake:**
-
-1. A committable (or in-repo-approved external-artifact) pair providing at least one
-   `ExportBundleData` package chunk's bytes — no `ZenFixture.utoc`/`.ucas` exists and no
-   approved external-artifact manifest path is documented in the repository.
-2. Consequently: no Zen package decode test, no provenance table for an intaken
-   fixture, and no skip/xfail placeholder. The historical 247 MB manifest
-   rows above remain the fixture-gap evidence, not a real-package decode fixture.
+**No active sample gap remains:** a redistributable Zen package-body pair is intentionally
+not acquired or registered. There is no Zen package decode test because that reader is
+outside the current product scope; the retained tests cover TOC metadata and the honest
+unavailability boundary.
 
 Note: the `global.utoc` header table above (entry count 2 / `("None", "Oodle")` / 5
 blocks) disagrees with a fresh `read_toc()` of the hashed file (1 entry, `("None",)`,

@@ -27,19 +27,21 @@ In UE5 with IoStore enabled (default in UE 5.4+), the `.pak` file is a container
 
 The actual asset data lives in the companion `.ucas` file (see `iostore/` directory). The `.pak` serves as a mountable container for backward compatibility.
 
-Because of that, `manifest.json#fixture_gaps.pak_container` records `status: "missing"`:
-this file is kept only as the IoStore-wrapper negative case asserted by
-`test_iostore_wrapper_is_not_treated_as_traditional_pak()`, and it is never counted as a
-FPak capability sample.
+Because of that, this file is kept only as the IoStore-wrapper negative case asserted by
+`test_iostore_wrapper_is_not_treated_as_traditional_pak()`; it is never counted as the
+FPak capability sample. The current manifest marks `pak_container` as `available` because
+the compact traditional Pak below was added on 2026-09-27.
 
 ## Traditional Pak Format
 
-A traditional FPakFile (with magic `5a6f12e1`, version 11/12, embedded index) is **not available** from this project. UE 5.8 defaults to IoStore packaging.
+A traditional FPakFile was not available from the original default build; UE 5.8 defaults
+to IoStore packaging. The later UE5.8.2 native `UnrealPak` repack described below is the
+current FPak fixture.
 
-To obtain a traditional pak, one would need to:
-
-1. Build with `-iostore=0` flag (deprecated in UE 5.4+)
-2. Or use an older UE project (UE 4.x)
+Before the compact fixture was generated, the usual alternatives would have been a
+deprecated `-iostore=0` build or an older UE project. Neither is needed now: UE4 legacy
+versions are explicitly out of scope, and the current fixture was repacked from the
+user-owned UE5.8.2 `LooseTagged` ParserFixtures with the native `UnrealPak` tool.
 
 ## Mount Point
 
