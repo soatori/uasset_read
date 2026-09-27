@@ -40,6 +40,9 @@ class FArchive:
     # Version gates set by callers after summary read (not all code paths set these).
     _file_version_ue4: int
     _file_version_ue5: int
+    # Diagnostic marker set by the tagged property reader; declared only so the
+    # enrichment assignments type-check (getattr fall-through must stay intact).
+    _tag_stream_stop: str
 
     def _init_archive_attrs(self, path: str, tolerant: bool = False):
         """Initialize common archive attributes without opening a file.

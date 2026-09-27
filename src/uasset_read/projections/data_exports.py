@@ -15,6 +15,7 @@ from uasset_read.models.document import PackageDocument
 from uasset_read.models.object_model import ObjectRecord
 from uasset_read.projections.records import (
     ProjectionRecord,
+    ProjectionStatus,
     dependency_ids,
     matches_family,
     semantic_dict,
@@ -73,7 +74,7 @@ def _row_has_evidenced_fields(row: Any) -> bool:
     return isinstance(row, dict) and bool(row.get("fields"))
 
 
-def _data_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], str, float | None] | None:
+def _data_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], ProjectionStatus, float | None] | None:
     """Return (payload, status, completeness) or None when unavailable.
 
     Matrix rule: row struct + values decoded, else unavailable. Non-empty
@@ -111,7 +112,7 @@ def _data_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], str, 
         "values_decoded": any_cell_value,
     }
     # Evidenced field maps count as decoded schema; cell payloads upgrade status.
-    status = "translated" if any_cell_value else "represented"
+    status: ProjectionStatus = "translated" if any_cell_value else "represented"
     completeness = 1.0 if any_cell_value else 0.5
     return payload, status, completeness
 
@@ -150,7 +151,7 @@ def _explicit_curve_keys(row: Any) -> list[dict[str, Any]] | None:
     return None
 
 
-def _curve_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], str, float | None] | None:
+def _curve_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], ProjectionStatus, float | None] | None:
     """Return (payload, status, completeness) or None when unavailable.
 
     Matrix rule: keys/interp explicit; compressed-only unavailable unless decoded.

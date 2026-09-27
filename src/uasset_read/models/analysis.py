@@ -542,10 +542,8 @@ class FunctionAnalysis:
             name=str(data.get("name") or data.get("function_name") or ""),
             function_name=str(data.get("function_name") or ""),
             script_source_range=region_from_projected(data.get("source_range")),
-            expression_count=int(
-                data.get("expression_count")
-                if data.get("expression_count") is not None
-                else len(instructions)
+            expression_count=(
+                int(c) if (c := data.get("expression_count")) is not None else len(instructions)
             ),
             entrypoint=entrypoint,
             instructions=instructions,

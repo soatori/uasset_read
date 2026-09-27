@@ -6,7 +6,7 @@ EXPR_CLASS_MAP used by FKismetArchive.read_expression() to dispatch token parsin
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import fields, is_dataclass, dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -62,11 +62,10 @@ class KismetExpression(ABC):
     SerializedStart: int | None = -1
     SerializedEnd: int | None = -1
 
-    @property
-    @abstractmethod
-    def Token(self) -> EExprToken:
-        """Return the EExprToken value corresponding to this expression."""
-        ...
+    # Each EX_* subclass carries its concrete token: a class attribute on the
+    # dataclass constructors (``Token = EExprToken.X``) or a computed property
+    # on wrappers such as OpaqueExpression.
+    Token: EExprToken
 
     def to_dict(self) -> dict:
         """Serialize to dictionary format (for JSON output).

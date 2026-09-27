@@ -24,6 +24,7 @@ from uasset_read.projections.data_exports import (
 from uasset_read.projections.material_builder import MaterialEditorBuilderProjector
 from uasset_read.projections.records import (
     ProjectionRecord,
+    ProjectionStatus,
     dependency_ids,
     matches_family,
     semantic_dict,
@@ -102,7 +103,7 @@ _GRAPH_PAIRS = (
 )
 
 
-def _status_from_stats(stats: dict[str, int], *, mode: str) -> str:
+def _status_from_stats(stats: dict[str, int], *, mode: str) -> ProjectionStatus:
     declarations = int(stats.get("declarations") or 0)
     seen = int(stats.get("instructions_seen") or 0)
     translated = int(stats.get("translated") or 0)

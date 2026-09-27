@@ -375,7 +375,7 @@ def _merge_archive_recoveries(
     """
     objects_by_id = {obj.id: obj for obj in objects}
     for sd in archive.get_structured_diagnostics():
-        obj = objects_by_id.get(sd.object_id)
+        obj = objects_by_id.get(sd.object_id) if sd.object_id is not None else None
         if obj is not None and obj.status.parse == "complete":
             obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
         sev = sd.severity if sd.severity in ("info", "warning", "error", "critical") else "warning"

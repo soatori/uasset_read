@@ -13,6 +13,7 @@ from typing import Any
 
 from ...constants import format_guid_bytes, format_guid_fields
 from ...models.object_model import ObjectRecord, CoverageEntry
+from ...models.properties import PropertyBag
 from ...serializers.blueprint_graph import summarize_exec_edges
 from ..blueprint.correlation import _family_root_key
 from .registry import _SupportsClasses, register_handler
@@ -25,7 +26,7 @@ from .registry import _SupportsClasses, register_handler
 # ── Built-in handlers ──────────────────────────────────────────────
 
 
-def _prop_value(props: dict[str, Any], name: str) -> Any:
+def _prop_value(props: PropertyBag | dict[str, Any], name: str) -> Any:
     """Unwrap a tagged ``{"kind":"value", ...}`` bag entry."""
     val = props.get(name)
     if isinstance(val, dict) and val.get("kind") == "value":
@@ -33,7 +34,7 @@ def _prop_value(props: dict[str, Any], name: str) -> Any:
     return None
 
 
-def _array_value(props: dict[str, Any], name: str) -> list[Any] | None:
+def _array_value(props: PropertyBag | dict[str, Any], name: str) -> list[Any] | None:
     """Return a normalized array value, or None when absent/unreadable.
 
     Top-level tagged arrays arrive as ``{"kind":"value","value":[...]}``;
@@ -1113,7 +1114,7 @@ def _project_kismet_functions(kismet: list[dict[str, Any]], *, include_expressio
     return projected
 
 
-def _function_graph_ids(properties: dict[str, Any] | None) -> set[str]:
+def _function_graph_ids(properties: PropertyBag | dict[str, Any] | None) -> set[str]:
     """Export ids of the FunctionGraphs property (positive refs = export idx + 1)."""
     fg = properties.get("FunctionGraphs", {}).get("value") if properties else None
     ids: set[str] = set()

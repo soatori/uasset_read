@@ -6,6 +6,7 @@ Extracted from uasset_read.py (per D-13).
 """
 
 import struct
+from typing import Any
 
 
 # ============================================================================
@@ -23,6 +24,11 @@ class VersionError(UAssetError):
 
 class ParseError(UAssetError):
     """Parse error."""
+
+    # Attached by the layout-rejection path (package.py); declared so the
+    # dynamic enrichment type-checks while staying absent on ordinary raises.
+    code: str
+    diagnostics: list[Any]
 
 
 class StreamPoisonedError(ParseError):

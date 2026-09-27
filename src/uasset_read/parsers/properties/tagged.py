@@ -372,7 +372,7 @@ def _handle_property_parse_error(
 
 
 def _read_property_loop(
-    export: ObjectExport,
+    export: ObjectExport | SimpleNamespace,
     archive: "FArchive",
     summary: "PackageFileSummary",
     name_map: list[str],
