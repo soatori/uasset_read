@@ -12,6 +12,9 @@
 - Tightened the K0 `bytecode_status` vocabulary to `parsed`, `no_script`, or `failed`; internal results can no longer serialize an undocumented `unknown` status.
 - Retired log cleanup (Gate L): deleted `project_logging.py` and CLI `--clean-logs` / `--log-dir` / `--log-keep-latest` / `--log-max-total-mb` (explicit rejection, exit 2). Leftover `log/` directories from older releases are the user's responsibility.
 
+### Changed
+- decode-depth kismet JSON: removed dead keys `Value` (Vector/Rotation/Vector3f const), `Name`/`ParamCount`/`StackNode` (call expressions), and the duplicate lowercase `parameters` (use `Parameters`); `EX_TextConst` now retains `TableIdString`.
+
 ### Improvements
 - Parser: `CachedPoseIndices` (AnimBlueprint `OrderedSavedPoseIndicesMap` values) is parsed as a tagged struct. Removes the residual `name_index_out_of_range` on `tests/samples/ALS_AnimBP.uasset`; quality opt-in baseline regenerated.
 - Quality baseline: large fixture `ALS_AnimBP.uasset` (~10MB) is gated behind `UASSET_QUALITY_OPT_IN=1` (`"opt_in": true` in `quality_baseline.json`). Default sample quality tests stay fast; opt-in run pins known trailing/recovery ceilings for the AnimBP regression surface.
