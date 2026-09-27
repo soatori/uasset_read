@@ -21,10 +21,6 @@ from uasset_read.models.analysis import (
     NodeId,
     PinLink,
     PinLinkRef,
-    project_blueprint_graph,
-    project_k2_metadata,
-    project_opaque,
-    project_pin_link,
 )
 from uasset_read.models.diagnostics import Diagnostic, make_diagnostic
 
@@ -37,10 +33,6 @@ __all__ = [
     "BlueprintGraphDecoder",
     "LinkResolution",
     "resolve_pin_links",
-    "project_blueprint_graph",
-    "project_k2_metadata",
-    "project_opaque",
-    "project_pin_link",
 ]
 
 _K2_CLASSES = frozenset(

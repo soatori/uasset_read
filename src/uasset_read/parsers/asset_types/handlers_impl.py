@@ -12,9 +12,9 @@ import struct
 from typing import Any
 
 from ...constants import format_guid_bytes
-from ...models.diagnostics import Diagnostic, make_diagnostic
 from ...models.object_model import ObjectRecord, CoverageEntry
 from ...serializers.blueprint_graph import summarize_exec_edges
+from ..blueprint.correlation import _family_root_key
 from .registry import _SupportsClasses, register_handler
 
 
@@ -1216,39 +1216,16 @@ def _extract_variables(obj: ObjectRecord) -> list[dict[str, Any]]:
     return out
 
 
-_BLUEPRINT_FAMILY = frozenset({"Blueprint", "AnimBlueprint", "BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"})
-
-
-def _pair_key(name: str) -> str:
-    """Key joining a Blueprint asset export with its GeneratedClass export."""
-    return name[:-2] if name.endswith("_C") else name
-
-
-def _family_root_key(record: ObjectRecord | None, all_objects: list[ObjectRecord]) -> str | None:
-    """Pair key of the Blueprint-family root of record's outer chain."""
-    by_id = {o.id: o for o in all_objects}
-    cur = record
-    for _ in range(8):
-        if cur is None:
-            return None
-        if (cur.class_name or "") in _BLUEPRINT_FAMILY:
-            return _pair_key(cur.name)
-        outer = cur.outer_ref
-        if outer is None or outer.table != "export":
-            return None
-        cur = by_id.get(f"export:{outer.index}")
-    return None
-
-
 def _extract_components(obj: ObjectRecord, all_objects: list[ObjectRecord], package_data: Any) -> list[dict[str, Any]]:
     """SCS component tree from SCS_Node exports (UE: SimpleConstructionScript.cpp)."""
-    scope = _family_root_key(obj, all_objects)
+    by_id = {o.id: o for o in all_objects}
+    scope = _family_root_key(obj, by_id)
     if scope is None:
         return []
     nodes = [
         o
         for o in all_objects
-        if o.class_name == "SCS_Node" and o.properties and _family_root_key(o, all_objects) == scope
+        if o.class_name == "SCS_Node" and o.properties and _family_root_key(o, by_id) == scope
     ]
     export_map = package_data[0] if package_data else None
     out: list[dict[str, Any]] = []

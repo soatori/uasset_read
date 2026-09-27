@@ -11,12 +11,11 @@ from __future__ import annotations
 
 import base64
 import dataclasses
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal
 
 from uasset_read.kismet.expressions import (
-    EX_CallMath,
     EX_ComputedJump,
     EX_FinalFunction,
     EX_Jump,
@@ -24,7 +23,6 @@ from uasset_read.kismet.expressions import (
     EX_Let,
     EX_LetBase,
     EX_LetValueOnPersistentFrame,
-    EX_Return,
     EX_VirtualFunction,
     KismetExpression,
     OpaqueExpression,
@@ -91,8 +89,6 @@ def _variable_name(expr: Any) -> str | None:
 def _extract_operands(expr: KismetExpression) -> dict[str, Any]:
     """Collect known operand fields from an expression into a dict."""
     operands: dict[str, Any] = {}
-    token = getattr(expr, "Token", None)
-    opcode = token.name if token is not None else type(expr).__name__
 
     if isinstance(expr, OpaqueExpression):
         operands["raw_region"] = project_region(expr.raw_region)

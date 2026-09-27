@@ -8,7 +8,7 @@ serialized disk offsets or list ordinals.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from uasset_read.models.diagnostics import Diagnostic
@@ -101,6 +101,27 @@ def build_cfg(
     diags = diagnostics if diagnostics is not None else []
     index_to_pos = {instr.statement_index: pos for pos, instr in enumerate(instructions)}
 
+    def _jump_edge(source_block: int, target_stmt: int, kind: Literal["false", "jump"]) -> None:
+        """One unresolved jump: boundary diagnostic + never-guessed edge."""
+        diags.append(
+            Diagnostic(
+                code="CFG_JUMP_TARGET_UNRESOLVED",
+                message=(
+                    f"jump target {target_stmt} does not land on a top-level "
+                    f"instruction boundary"
+                ),
+                stage="semantic.functions.cfg",
+            )
+        )
+        edges.append(
+            ControlFlowEdge(
+                source_block=source_block,
+                target_block=-1,
+                kind=kind,
+                targets_known=False,
+            )
+        )
+
     # --- Leader collection (logical statement indexes) ---
     leaders: set[int] = {instructions[0].statement_index}
     for pos, instr in enumerate(instructions):
@@ -164,24 +185,7 @@ def build_cfg(
                     )
                 )
             else:
-                diags.append(
-                    Diagnostic(
-                        code="CFG_JUMP_TARGET_UNRESOLVED",
-                        message=(
-                            f"jump target {target_stmt} does not land on a top-level "
-                            f"instruction boundary"
-                        ),
-                        stage="semantic.functions.cfg",
-                    )
-                )
-                edges.append(
-                    ControlFlowEdge(
-                        source_block=bidx,
-                        target_block=-1,
-                        kind="false",
-                        targets_known=False,
-                    )
-                )
+                _jump_edge(bidx, target_stmt, "false")
             if bidx + 1 < len(blocks):
                 edges.append(
                     ControlFlowEdge(source_block=bidx, target_block=bidx + 1, kind="true")
@@ -195,24 +199,7 @@ def build_cfg(
                 kind = "loop_back" if tb <= bidx else "jump"
                 edges.append(ControlFlowEdge(source_block=bidx, target_block=tb, kind=kind))
             else:
-                diags.append(
-                    Diagnostic(
-                        code="CFG_JUMP_TARGET_UNRESOLVED",
-                        message=(
-                            f"jump target {target_stmt} does not land on a top-level "
-                            f"instruction boundary"
-                        ),
-                        stage="semantic.functions.cfg",
-                    )
-                )
-                edges.append(
-                    ControlFlowEdge(
-                        source_block=bidx,
-                        target_block=-1,
-                        kind="jump",
-                        targets_known=False,
-                    )
-                )
+                _jump_edge(bidx, target_stmt, "jump")
             continue
 
         if last.jump_kind == "computed":

@@ -30,7 +30,6 @@ from uasset_read.models.analysis import (
     ExecChainSummary,
     FunctionAnalysis,
     FunctionDeclaration,
-    FunctionParameter,
     VariableAccessRecord,
     VariableDefinition,
     VariableEventRecord,
@@ -40,11 +39,11 @@ from uasset_read.models.byte_ranges import ByteRegion, project_region
 from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.models.document import PackageDocument
 from uasset_read.models.object_model import ObjectRecord
-from uasset_read.parsers.blueprint.bytecode import project_instruction, project_operand
+from uasset_read.parsers.blueprint.bytecode import _CALL_OPCODES, project_instruction, project_operand
 from uasset_read.parsers.blueprint.control_flow import project_cfg, project_cfg_edge
 
 if TYPE_CHECKING:
-    from uasset_read.models.analysis import BlueprintNode, NodeId
+    from uasset_read.models.analysis import NodeId
 
 __all__ = [
     "BlueprintAnalysisContext",
@@ -54,15 +53,6 @@ __all__ = [
     "project_semantic_blueprint",
 ]
 
-_CALL_OPCODES = frozenset(
-    {
-        "EX_FinalFunction",
-        "EX_VirtualFunction",
-        "EX_CallMath",
-        "EX_LocalFinalFunction",
-        "EX_LocalVirtualFunction",
-    }
-)
 _VAR_OPCODES = frozenset(
     {
         "EX_LocalVariable",
@@ -80,6 +70,28 @@ _FAMILY_CLASSES = frozenset(
     {"Blueprint", "AnimBlueprint", "BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}
 )
 _KINDS = {"blueprint", "anim_blueprint"}
+
+
+def _pair_key(name: str) -> str:
+    """Key joining a Blueprint asset export with its GeneratedClass export."""
+    return name[:-2] if name.endswith("_C") else name
+
+
+def _family_root_key(
+    record: ObjectRecord | None, by_id: dict[str, ObjectRecord]
+) -> str | None:
+    """Pair key of the Blueprint-family root of record's outer chain."""
+    current = record
+    for _ in range(8):
+        if current is None:
+            return None
+        if (current.class_name or "") in _FAMILY_CLASSES:
+            return _pair_key(current.name)
+        outer = current.outer_ref
+        if outer is None or outer.table != "export":
+            return None
+        current = by_id.get(f"export:{outer.index}")
+    return None
 
 
 def _is_let_opcode(opcode: str) -> bool:
@@ -308,10 +320,7 @@ class BlueprintCorrelation:
                     fn.writes.add(access.name)
         diagnostics.extend(resolver.diagnostics)
 
-        dispatchers, variable_events, dispatcher_entrypoints = self._extract_dispatchers(
-            graphs
-        )
-        entrypoints.extend(dispatcher_entrypoints)
+        dispatchers, variable_events = self._extract_dispatchers(graphs)
 
         function_declarations = [
             FunctionDeclaration(
@@ -620,35 +629,18 @@ class BlueprintCorrelation:
             )
         return definitions
 
-    @staticmethod
-    def _pair_key(name: str) -> str:
-        return name[:-2] if name.endswith("_C") else name
-
-    def _family_root_key(self, record: ObjectRecord | None, by_id: dict[str, ObjectRecord]) -> str | None:
-        current = record
-        for _ in range(8):
-            if current is None:
-                return None
-            if (current.class_name or "") in _FAMILY_CLASSES:
-                return self._pair_key(current.name)
-            outer = current.outer_ref
-            if outer is None or outer.table != "export":
-                return None
-            current = by_id.get(f"export:{outer.index}")
-        return None
-
     def _extract_components(
         self, document: PackageDocument, owner: ObjectRecord
     ) -> list[ComponentRecord]:
         by_id = {o.id: o for o in document.objects}
-        scope = self._family_root_key(owner, by_id)
+        scope = _family_root_key(owner, by_id)
         if scope is None:
             return []
         records: list[ComponentRecord] = []
         for obj in document.objects:
             if obj.class_name != "SCS_Node" or not obj.properties:
                 continue
-            if self._family_root_key(obj, by_id) != scope:
+            if _family_root_key(obj, by_id) != scope:
                 continue
             props = obj.properties
             comp = props.get("ComponentTemplate")
@@ -747,7 +739,7 @@ class BlueprintCorrelation:
 
     def _extract_dispatchers(
         self, graphs: list[BlueprintGraph]
-    ) -> tuple[list[DispatcherRecord], list[VariableEventRecord], list[EntrypointRecord]]:
+    ) -> tuple[list[DispatcherRecord], list[VariableEventRecord]]:
         dispatchers: list[DispatcherRecord] = []
         events: list[VariableEventRecord] = []
         seen: set[str] = set()
@@ -779,7 +771,7 @@ class BlueprintCorrelation:
                             unresolved=not bool(dispatcher_name),
                         )
                     )
-        return dispatchers, events, []
+        return dispatchers, events
 
     def _extract_constructors(
         self,
@@ -903,7 +895,7 @@ class _InstructionWalker:
         self._current_source = _source_node(instruction)
         expression = instruction.expression
         if expression is not None and expression != {}:
-            self._visit(expression, root_opcode=instruction.opcode, in_write_position=False)
+            self._visit(expression, root_opcode=instruction.opcode)
         else:
             self._emit_from_operands(instruction)
         # Operand pass covers role-wrapped payloads the expression tree may
@@ -919,15 +911,10 @@ class _InstructionWalker:
                     value,
                     root_opcode=instruction.opcode
                     if key in {"assignment", "boolean_expression"}
-                    else None,
-                    in_write_position=False,
-                )
+                    else None)
 
     def _emit_from_operands(self, instruction: Any) -> None:
         opcode = instruction.opcode
-        stmt = instruction.statement_index
-        start = instruction.serialized_start if instruction.serialized_start >= 0 else None
-        end = instruction.serialized_end if instruction.serialized_end >= 0 else None
         source = None
         if instruction.source_node_id:
             from uasset_read.models.analysis import NodeId
@@ -955,37 +942,35 @@ class _InstructionWalker:
             assignment = instruction.operands.get("assignment")
             if assignment is None:
                 assignment = instruction.operands.get("assignment_expression")
-            self._visit(assignment, root_opcode=None, in_write_position=False)
+            self._visit(assignment, root_opcode=None)
 
-    def _visit(self, value: Any, *, root_opcode: str | None, in_write_position: bool) -> None:
+    def _visit(self, value: Any, *, root_opcode: str | None) -> None:
         if value is None:
             return
         if isinstance(value, (list, tuple)):
             for item in value:
-                self._visit(item, root_opcode=None, in_write_position=in_write_position)
+                self._visit(item, root_opcode=None)
             return
         if isinstance(value, (str, int, float, bool, bytes)):
-            if in_write_position and isinstance(value, str) and value:
-                pass  # scalar strings are not variable references
             return
         if isinstance(value, dict):
-            self._visit_dict(value, root_opcode=root_opcode, in_write_position=in_write_position)
+            self._visit_dict(value, root_opcode=root_opcode)
             return
         if dataclasses.is_dataclass(value) and not isinstance(value, type):
-            self._visit_dataclass(value, root_opcode=root_opcode, in_write_position=in_write_position)
+            self._visit_dataclass(value, root_opcode=root_opcode)
             return
         # Opaque non-dataclass object (e.g. property pointer leaf): ignore.
         return
 
     def _visit_dict(
-        self, value: dict[str, Any], *, root_opcode: str | None, in_write_position: bool
+        self, value: dict[str, Any], *, root_opcode: str | None
     ) -> None:
         opcode = _opcode_of(value) or root_opcode
         if opcode is not None and opcode in _CALL_OPCODES:
             name, stack = _call_parts(value, opcode)
             self._emit_call(name, stack, None, dict_operands=value)
             for param in value.get("Parameters") or []:
-                self._visit(param, root_opcode=None, in_write_position=False)
+                self._visit(param, root_opcode=None)
             return
         if opcode is not None and _is_let_opcode(opcode):
             dest = _extract_variable_name(value.get("Variable")) or _extract_variable_name(
@@ -995,17 +980,17 @@ class _InstructionWalker:
                 self._emit_access(dest, "write", None, dict_operands=value)
             for key in ("Assignment", "AssignmentExpression", "assignment", "assignment_expression"):
                 if key in value:
-                    self._visit(value.get(key), root_opcode=None, in_write_position=False)
+                    self._visit(value.get(key), root_opcode=None)
             for key in ("parameters", "Parameters", "boolean_expression", "BooleanExpression"):
                 if key in value:
-                    self._visit(value.get(key), root_opcode=None, in_write_position=False)
+                    self._visit(value.get(key), root_opcode=None)
             return
         if opcode is not None and opcode in _VAR_OPCODES:
             name = _extract_variable_name(value)
             if name:
                 self._emit_access(
                     name,
-                    "write" if in_write_position else "read",
+                    "read",
                     None,
                     dict_operands=value,
                 )
@@ -1014,17 +999,17 @@ class _InstructionWalker:
         for key, item in value.items():
             if key in {"raw_region", "StatementIndex", "SerializedStart", "SerializedEnd"}:
                 continue
-            self._visit(item, root_opcode=None, in_write_position=False)
+            self._visit(item, root_opcode=None)
 
     def _visit_dataclass(
-        self, value: Any, *, root_opcode: str | None, in_write_position: bool
+        self, value: Any, *, root_opcode: str | None
     ) -> None:
         opcode = _opcode_of(value) or root_opcode
         if opcode is not None and opcode in _CALL_OPCODES:
             name, stack = _call_parts(value, opcode)
             self._emit_call(name, stack, None, typed=value)
             for param in getattr(value, "Parameters", None) or []:
-                self._visit(param, root_opcode=None, in_write_position=False)
+                self._visit(param, root_opcode=None)
             return
         if opcode is not None and _is_let_opcode(opcode):
             dest = _extract_variable_name(getattr(value, "Variable", None)) or _extract_variable_name(
@@ -1034,16 +1019,16 @@ class _InstructionWalker:
                 self._emit_access(dest, "write", None, typed=value)
             for attr in ("Assignment", "AssignmentExpression"):
                 if hasattr(value, attr):
-                    self._visit(getattr(value, attr), root_opcode=None, in_write_position=False)
+                    self._visit(getattr(value, attr), root_opcode=None)
             for attr in ("Parameters", "BooleanExpression"):
                 if hasattr(value, attr):
-                    self._visit(getattr(value, attr), root_opcode=None, in_write_position=False)
+                    self._visit(getattr(value, attr), root_opcode=None)
             return
         if opcode is not None and opcode in _VAR_OPCODES:
             name = _extract_variable_name(value)
             if name:
                 self._emit_access(
-                    name, "write" if in_write_position else "read", None, typed=value
+                    name, "read", None, typed=value
                 )
             return
         if dataclasses.is_dataclass(value) and not isinstance(value, type):
@@ -1057,9 +1042,7 @@ class _InstructionWalker:
                     continue
                 self._visit(
                     getattr(value, field.name, None),
-                    root_opcode=None,
-                    in_write_position=False,
-                )
+                    root_opcode=None)
         return
 
     def _emit_call(
