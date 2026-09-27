@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import struct
+from typing import Literal
 
 import pytest
 
@@ -148,7 +149,7 @@ class TestUnversionedBinaryHeader:
             assert os.path.getsize(path) > 0, f"Sidecar file empty: {name}"
 
 
-def _parse(asset_name: str, *, depth: str = "asset"):
+def _parse(asset_name: str, *, depth: Literal["package", "object", "asset", "decode"] = "asset"):
     """Open + read one unversioned fixture with the committed usmap."""
     from uasset_read.package import open_package_bundle
     from uasset_read.parsers.legacy_reader import LegacyPackageReader
@@ -212,8 +213,13 @@ class TestUnversionedMappedProperties:
         class_obj = next(o for o in doc.objects if o.name == "BP_UnversionedTest_C")
         class_props = class_obj.properties or {}
         assert class_props, "unmapped class export must still yield explicit opaque"
+        class_values = (
+            list(class_props.values())
+            if isinstance(class_props, dict)
+            else [entry.value for entry in class_props.entries]
+        )
         class_is_opaque = any(
-            isinstance(v, dict) and v.get("kind") == "opaque" for v in class_props.values()
+            isinstance(v, dict) and v.get("kind") == "opaque" for v in class_values
         )
         assert class_is_opaque, "BlueprintGeneratedClass without usmap must be UnversionedOpaque"
         # Forbid tagged name-index misparse: zero name_index_out_of_range diagnostics.
