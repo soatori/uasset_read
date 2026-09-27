@@ -44,10 +44,11 @@ def test_canonical_file_api_is_not_paginated(stackobot_document, tmp_path):
 
 
 def test_project_cpp_loads_object_semantic_dict(stackobot_document):
-    from uasset_read.projection import project_cpp
+    from uasset_read.projections.cpp_render import render_cpp
 
     blueprint = find_blueprint_object(stackobot_document)
-    result = project_cpp(stackobot_document, object_id=blueprint.id, mode="declaration")
+    assert isinstance(blueprint.semantic, dict)
+    result = render_cpp(blueprint.semantic, mode="declaration")
     assert result.header_text
     assert result.translation_stats["declarations"] > 0
 
@@ -56,14 +57,13 @@ def test_build_projection_records_filters_object_and_kind(stackobot_document):
     from uasset_read.projection import build_projection_records
 
     blueprint = find_blueprint_object(stackobot_document)
-    records = build_projection_records(
-        stackobot_document,
-        object_ids=[blueprint.id],
-        kinds=["cpp_declaration"],
-    )
+    records = [
+        item
+        for item in build_projection_records(stackobot_document, object_ids=[blueprint.id])
+        if item.kind == "cpp_declaration"
+    ]
     assert records
     assert all(item.source_object_id == blueprint.id for item in records)
-    assert all(item.kind == "cpp_declaration" for item in records)
 
 
 def test_bounded_projection_scopes_records_to_page(document):

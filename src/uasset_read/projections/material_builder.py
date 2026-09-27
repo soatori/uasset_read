@@ -16,6 +16,7 @@ from uasset_read.projections.records import (
     ProjectionRecord,
     dependency_ids,
     matches_family,
+    semantic_dict,
     unavailable_records,
 )
 
@@ -29,11 +30,6 @@ _EDITOR_HEADER = (
     "// Editor-only reconstruction via UMaterialEditingLibrary-style operations.\n"
     "// Not HLSL/shader equivalence; cooked-away expressions are never invented.\n"
 )
-
-
-def _semantic(obj: ObjectRecord) -> dict[str, Any]:
-    semantic = obj.semantic
-    return semantic if isinstance(semantic, dict) else {}
 
 
 def _editor_graph(semantic: dict[str, Any]) -> dict[str, Any] | None:
@@ -88,7 +84,7 @@ class MaterialEditorBuilderProjector:
         return matches_family(obj, self.asset_kinds, _CLASS_NAMES)
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
-        semantic = _semantic(obj)
+        semantic = semantic_dict(obj)
         graph = _editor_graph(semantic)
         deps = dependency_ids(document, obj.id)
         if not isinstance(graph, dict):

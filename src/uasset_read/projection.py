@@ -21,14 +21,12 @@ def build_projection_records(
     document: PackageDocument,
     *,
     object_ids: list[str] | None = None,
-    kinds: list[str] | None = None,
     registry: Any | None = None,
 ) -> list[Any]:
     """Create embedded type-aware projection records for a PackageDocument.
 
     Sole API that produces type-specific embedded content. ``object_ids``
-    limits records to those sources; ``kinds`` filters by projection kind
-    (e.g. ``cpp_declaration``). Unknown families emit no records.
+    limits records to those sources. Unknown families emit no records.
     """
     from uasset_read.projections.records import ProjectionRecord
     from uasset_read.projections.registry import ProjectorRegistry
@@ -41,28 +39,7 @@ def build_projection_records(
         for object_id in object_ids:
             records.extend(active.project_object(document, object_id))
         records.sort(key=lambda item: (item.source_object_id, item.kind, item.media_type))
-    if kinds is not None:
-        kind_set = set(kinds)
-        records = [item for item in records if item.kind in kind_set]
     return records
-
-
-def project_cpp(document: PackageDocument, *, object_id: str, mode: str) -> Any:
-    """Render C++ for one object from its projected ``semantic`` dict (E1).
-
-    Loads ``object.semantic`` as dict and calls ``render_cpp(semantic_dict,
-    mode=...)``. Never accepts a live typed IR and never reopens package bytes.
-    """
-    from uasset_read.projections.cpp_render import CppProjection, render_cpp
-
-    obj = next((item for item in document.objects if item.id == object_id), None)
-    if obj is None:
-        raise KeyError(f"object not found: {object_id}")
-    semantic = obj.semantic
-    if not isinstance(semantic, dict):
-        raise ValueError(f"object {object_id} has no projected semantic dict")
-    result: CppProjection = render_cpp(semantic, mode=mode)
-    return result
 
 
 def select_objects(

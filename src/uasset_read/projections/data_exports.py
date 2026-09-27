@@ -7,6 +7,8 @@ projector invents field lists from positional package bytes.
 
 from __future__ import annotations
 
+import csv
+from io import StringIO
 from typing import Any
 
 from uasset_read.models.document import PackageDocument
@@ -15,6 +17,7 @@ from uasset_read.projections.records import (
     ProjectionRecord,
     dependency_ids,
     matches_family,
+    semantic_dict,
     unavailable_records,
 )
 
@@ -35,11 +38,6 @@ _CURVE_TABLE_PAIRS = (
 _STRUCT_PAIRS = (("cpp_declaration", _CPP), ("defaults_json", _JSON))
 _ENUM_PAIRS = (("cpp_declaration", _CPP), ("defaults_json", _JSON))
 _MATERIAL_INSTANCE_PAIRS = (("material_instance", _JSON), ("material_parameters", _JSON))
-
-
-def _semantic(obj: ObjectRecord) -> dict[str, Any]:
-    semantic = obj.semantic
-    return semantic if isinstance(semantic, dict) else {}
 
 
 def _field_columns(row: Any) -> list[dict[str, str]]:
@@ -86,8 +84,6 @@ def _data_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], str, 
         return None
     rows = [r for r in semantic.get("rows") or [] if isinstance(r, dict)]
     evidenced = [r for r in rows if _row_has_evidenced_fields(r)]
-    if not evidenced and not semantic.get("row_struct"):
-        return None
     if not evidenced:
         return None
     columns: list[dict[str, str]] = []
@@ -122,8 +118,9 @@ def _data_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], str, 
 
 def _csv_from_table(payload: dict[str, Any]) -> str:
     columns = payload.get("columns") or []
-    header = ["name"] + [str(c.get("name") or "") for c in columns]
-    lines = [",".join(header)]
+    buf = StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(["name"] + [str(c.get("name") or "") for c in columns])
     for row in payload.get("rows") or []:
         values = row.get("values") if isinstance(row, dict) else {}
         values = values if isinstance(values, dict) else {}
@@ -131,8 +128,8 @@ def _csv_from_table(payload: dict[str, Any]) -> str:
         for column in columns:
             raw = values.get(column.get("name"))
             cells.append("" if raw is None else str(raw))
-        lines.append(",".join(cells))
-    return "\n".join(lines) + "\n"
+        writer.writerow(cells)
+    return buf.getvalue()
 
 
 def _explicit_curve_keys(row: Any) -> list[dict[str, Any]] | None:
@@ -207,7 +204,7 @@ class DataTableProjector:
         return matches_family(obj, self.asset_kinds, self._CLASS_NAMES)
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
-        semantic = _semantic(obj)
+        semantic = semantic_dict(obj)
         deps = dependency_ids(document, obj.id)
         projected = _data_table_payload(semantic)
         if projected is None:
@@ -268,7 +265,7 @@ class CurveTableProjector:
         return matches_family(obj, self.asset_kinds, self._CLASS_NAMES)
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
-        semantic = _semantic(obj)
+        semantic = semantic_dict(obj)
         deps = dependency_ids(document, obj.id)
         projected = _curve_table_payload(semantic)
         if projected is None:
@@ -358,7 +355,7 @@ class UserDefinedStructProjector:
         return matches_family(obj, self.asset_kinds, self._CLASS_NAMES)
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
-        semantic = _semantic(obj)
+        semantic = semantic_dict(obj)
         deps = dependency_ids(document, obj.id)
         fields = [f for f in semantic.get("fields") or [] if isinstance(f, dict)]
         if semantic.get("kind") != "user_defined_struct" or not fields:
@@ -410,7 +407,7 @@ class UserDefinedEnumProjector:
         return matches_family(obj, self.asset_kinds, self._CLASS_NAMES)
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
-        semantic = _semantic(obj)
+        semantic = semantic_dict(obj)
         deps = dependency_ids(document, obj.id)
         entries = [e for e in semantic.get("entries") or [] if isinstance(e, dict)]
         if semantic.get("kind") != "user_defined_enum" or not entries:
@@ -462,7 +459,7 @@ class MaterialInstanceProjector:
         return matches_family(obj, self.asset_kinds, self._CLASS_NAMES)
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
-        semantic = _semantic(obj)
+        semantic = semantic_dict(obj)
         deps = dependency_ids(document, obj.id)
         if semantic.get("kind") != "material_instance":
             return unavailable_records(

@@ -20,7 +20,6 @@ from .package import parse_package_document
 from .projection import (
     FORMAT_VERSION,
     build_projection_records,
-    project_cpp,
     project_document,
 )
 from .projections import build_canonical_document, write_projected_document
@@ -35,7 +34,6 @@ __all__ = [
     "FORMAT_VERSION",
     "project_document",
     "build_projection_records",
-    "project_cpp",
     "build_canonical_document",
     "write_projected_document",
     # Exceptions

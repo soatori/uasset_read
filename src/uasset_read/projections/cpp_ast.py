@@ -27,8 +27,6 @@ from uasset_read.models.analysis import (
     VariableDefinition,
 )
 
-TranslationStatus = Literal["translated", "represented", "untranslated", "unavailable"]
-
 
 @dataclass
 class CppType:

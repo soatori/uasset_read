@@ -31,7 +31,11 @@ from uasset_read.models.analysis import (
     region_from_projected,
 )
 from uasset_read.models.diagnostics import Diagnostic
-from uasset_read.parsers.blueprint.control_flow import ControlFlowGraph
+from uasset_read.parsers.blueprint.control_flow import (
+    BasicBlock,
+    ControlFlowEdge,
+    ControlFlowGraph,
+)
 from uasset_read.projections.cpp_ast import (
     CppClassDecl,
     CppFunctionDecl,
@@ -381,7 +385,6 @@ def _coerce_semantic(semantic_dict: dict[str, Any]) -> BlueprintSemantic:
         )
 
     control_flow = []
-    from uasset_read.parsers.blueprint.control_flow import BasicBlock, ControlFlowEdge
 
     for cfg in semantic_dict.get("control_flow") or []:
         if not isinstance(cfg, dict):
@@ -403,21 +406,7 @@ def _coerce_semantic(semantic_dict: dict[str, Any]) -> BlueprintSemantic:
                     instructions=block_instructions,
                 )
             )
-        edges = []
-        for edge in cfg.get("edges") or []:
-            if not isinstance(edge, dict):
-                continue
-            kind = edge.get("kind") or "fallthrough"
-            if kind not in {"fallthrough", "true", "false", "jump", "loop_back", "computed_jump", "return"}:
-                kind = "fallthrough"
-            edges.append(
-                ControlFlowEdge(
-                    source_block=_offset_or_default(edge.get("source_block"), 0),
-                    target_block=_offset_or_default(edge.get("target_block"), 0),
-                    kind=kind,  # type: ignore[arg-type]
-                    targets_known=bool(edge.get("targets_known", True)),
-                )
-            )
+        edges = _coerce_edges(cfg.get("edges"))
         control_flow.append(
             ControlFlowGraph(
                 blocks=blocks,
@@ -432,21 +421,7 @@ def _coerce_semantic(semantic_dict: dict[str, Any]) -> BlueprintSemantic:
     exec_raw = semantic_dict.get("exec_chains") or {}
     if not isinstance(exec_raw, dict):
         exec_raw = {}
-    edges = []
-    for edge in exec_raw.get("edges") or []:
-        if not isinstance(edge, dict):
-            continue
-        kind = edge.get("kind") or "fallthrough"
-        if kind not in {"fallthrough", "true", "false", "jump", "loop_back", "computed_jump", "return"}:
-            kind = "fallthrough"
-        edges.append(
-            ControlFlowEdge(
-                source_block=_offset_or_default(edge.get("source_block"), 0),
-                target_block=_offset_or_default(edge.get("target_block"), 0),
-                kind=kind,  # type: ignore[arg-type]
-                targets_known=bool(edge.get("targets_known", True)),
-            )
-        )
+    edges = _coerce_edges(exec_raw.get("edges"))
     exec_chains = ExecChainSummary(metadata=dict(exec_raw.get("metadata") or {}), edges=edges)
 
     diagnostics: list[Diagnostic] = []
@@ -512,6 +487,37 @@ def _declaration_count(decl: CppClassDecl) -> int:
         + len(decl.dispatchers)
         + len(decl.constructors)
     )
+
+
+_EDGE_KINDS = {
+    "fallthrough",
+    "true",
+    "false",
+    "jump",
+    "loop_back",
+    "computed_jump",
+    "return",
+}
+
+
+def _coerce_edges(raw_edges: Any) -> list[ControlFlowEdge]:
+    """Projected CFG/exec edge dicts → typed edges, unknown kinds demoted."""
+    edges: list[ControlFlowEdge] = []
+    for edge in raw_edges or []:
+        if not isinstance(edge, dict):
+            continue
+        kind = edge.get("kind") or "fallthrough"
+        if kind not in _EDGE_KINDS:
+            kind = "fallthrough"
+        edges.append(
+            ControlFlowEdge(
+                source_block=_offset_or_default(edge.get("source_block"), 0),
+                target_block=_offset_or_default(edge.get("target_block"), 0),
+                kind=kind,  # type: ignore[arg-type]
+                targets_known=bool(edge.get("targets_known", True)),
+            )
+        )
+    return edges
 
 
 def _empty_stats() -> dict[str, int]:

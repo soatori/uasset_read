@@ -26,36 +26,9 @@ from uasset_read.projections.records import (
     ProjectionRecord,
     dependency_ids,
     matches_family,
+    semantic_dict,
     unavailable_records,
 )
-
-# Normalized semantic kind / class-name family → capability-matrix family key.
-_CLASS_NAME_FAMILY = {
-    "Blueprint": "blueprint",
-    "AnimBlueprint": "anim_blueprint",
-    "BlueprintGeneratedClass": "blueprint",
-    "AnimBlueprintGeneratedClass": "anim_blueprint",
-    "BlueprintFunctionLibrary": "blueprint_function_library",
-    "BlueprintInterface": "blueprint_interface",
-    "Material": "material",
-    "MaterialInstance": "material_instance",
-    "MaterialInstanceConstant": "material_instance",
-    "DataTable": "data_table",
-    "CurveTable": "curve_table",
-    "UserDefinedStruct": "user_defined_struct",
-    "UserDefinedEnum": "user_defined_enum",
-    "Texture2D": "physical_asset",
-    "TextureCube": "physical_asset",
-    "StaticMesh": "physical_asset",
-    "SkeletalMesh": "physical_asset",
-    "SoundWave": "physical_asset",
-    "NiagaraSystem": "graph_asset",
-    "NiagaraEmitter": "graph_asset",
-    "MaterialFunction": "graph_asset",
-    "MaterialParameterCollection": "graph_asset",
-    "AnimComposite": "graph_asset",
-    "BlendSpace": "graph_asset",
-}
 
 # Capability matrix published on the canonical document (R3 initial matrix).
 CAPABILITY_MATRIX: tuple[dict[str, Any], ...] = (
@@ -127,19 +100,6 @@ _GRAPH_PAIRS = (
     ("graph", "application/json"),
     ("asset_builder_cpp", "text/x-c++src"),
 )
-
-
-def semantic_family(obj: ObjectRecord) -> str | None:
-    """Match semantic ``kind`` first, then normalized ``class_name`` family."""
-    semantic = obj.semantic
-    if isinstance(semantic, dict):
-        kind = semantic.get("kind")
-        if isinstance(kind, str) and kind:
-            return kind
-    class_name = (obj.class_name or "").strip()
-    if not class_name:
-        return None
-    return _CLASS_NAME_FAMILY.get(class_name, class_name.lower())
 
 
 def _status_from_stats(stats: dict[str, int], *, mode: str) -> str:
@@ -231,11 +191,11 @@ class BlueprintCppProjector:
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
         semantic = obj.semantic
-        family = semantic_family(obj)
         dependencies = dependency_ids(document, obj.id)
         # Unproven family kinds without a projected semantic stay explicit unavailable.
-        if family in {"blueprint_function_library", "blueprint_interface"} and (
-            not isinstance(semantic, dict) or semantic.get("kind") != family
+        if (obj.class_name or "") in ("BlueprintFunctionLibrary", "BlueprintInterface") and (
+            not isinstance(semantic, dict)
+            or not (isinstance(semantic.get("kind"), str) and semantic.get("kind"))
         ):
             return _unavailable_blueprint_projections(
                 document, obj.id, "blueprint_family_semantic_unavailable"
@@ -305,7 +265,7 @@ class PhysicalAssetProjector:
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
         dependencies = dependency_ids(document, obj.id)
-        semantic = _semantic_dict(obj)
+        semantic = semantic_dict(obj)
         metadata = {
             "kind": "asset_metadata",
             "object_id": obj.id,
@@ -386,7 +346,7 @@ class GraphAssetProjector:
 
     def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
         dependencies = dependency_ids(document, obj.id)
-        semantic = _semantic_dict(obj)
+        semantic = semantic_dict(obj)
         graphs = semantic.get("graphs") or semantic.get("expressions")
         if not graphs:
             return unavailable_records(
@@ -435,11 +395,6 @@ class GraphAssetProjector:
                 ],
             ),
         ]
-
-
-def _semantic_dict(obj: ObjectRecord) -> dict[str, Any]:
-    semantic = obj.semantic
-    return semantic if isinstance(semantic, dict) else {}
 
 
 class ProjectorRegistry:
@@ -496,5 +451,4 @@ __all__ = [
     "GraphAssetProjector",
     "PhysicalAssetProjector",
     "ProjectorRegistry",
-    "semantic_family",
 ]

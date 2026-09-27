@@ -42,8 +42,13 @@ class ProjectionRecord:
     completeness: float | None
     dependencies: list[str]
     diagnostics: list[Diagnostic] = field(default_factory=list)
-    source_range: ByteRegion | None = None
     external: SidecarRecord | None = None
+
+
+def semantic_dict(obj: ObjectRecord) -> dict[str, Any]:
+    """The projected semantic dict for an object, or ``{}`` when absent."""
+    semantic = obj.semantic
+    return semantic if isinstance(semantic, dict) else {}
 
 
 def dependency_ids(document: PackageDocument, object_id: str) -> list[str]:

@@ -14,7 +14,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.models.document import PackageDocument
 from uasset_read.projection import (
     FORMAT_VERSION,
@@ -28,13 +27,6 @@ from uasset_read.projections.registry import ProjectorRegistry
 
 class OutputBudgetError(ValueError):
     """The requested main-document limit cannot fit the mandatory envelope."""
-
-
-def _diagnostic_dicts(items: list[Diagnostic]) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    for item in items:
-        out.append(item.to_dict() if hasattr(item, "to_dict") else item)
-    return out
 
 
 def _payload_references(document: PackageDocument) -> list[dict[str, Any]]:
@@ -115,10 +107,6 @@ def _byte_accounting_array(document: PackageDocument) -> list[dict[str, Any]]:
     return scopes
 
 
-def _object_entry(obj: Any) -> dict[str, Any]:
-    return obj_to_dict(obj, view="semantic")
-
-
 def build_canonical_document(
     document: PackageDocument,
     *,
@@ -157,7 +145,7 @@ def build_canonical_document(
             "import_count": package.import_count,
             "name_count": package.name_count,
         },
-        "objects": [_object_entry(obj) for obj in document.objects],
+        "objects": [obj_to_dict(obj, view="semantic") for obj in document.objects],
         "relations": [
             {"kind": rel.kind, "from": rel.from_id, "to": rel.to_id}
             for rel in document.relations
@@ -166,7 +154,10 @@ def build_canonical_document(
         "projections": [projection_to_dict(item) for item in projections],
         "sidecars": [],
         "payloads": _payload_references(document),
-        "diagnostics": _diagnostic_dicts(document.diagnostics + document.reader_diagnostics),
+        "diagnostics": [
+            item.to_dict() if hasattr(item, "to_dict") else item
+            for item in document.diagnostics + document.reader_diagnostics
+        ],
         "summary": {
             "object_count": document.summary.object_count,
             "asset_object_ids": list(document.summary.asset_object_ids),
@@ -209,19 +200,12 @@ def write_projected_document(
     """Write one UTF-8 canonical JSON document. Never writes sidecars.
 
     Raises OutputBudgetError before creating any file when ``max_main_bytes``
-    cannot fit the complete document or falls below
-    ``minimum_canonical_envelope_bytes(document, registry=registry)``.
+    cannot fit the complete document.
     """
     payload = build_canonical_document(document, registry=registry)
     text = _serialize_canonical(payload)
     size = len(text.encode("utf-8"))
     if max_main_bytes is not None:
-        minimum = minimum_canonical_envelope_bytes(document, registry=registry)
-        if max_main_bytes < minimum:
-            raise OutputBudgetError(
-                f"max_main_bytes={max_main_bytes} is below mandatory envelope "
-                f"{minimum} bytes"
-            )
         if size > max_main_bytes:
             raise OutputBudgetError(
                 f"complete canonical document is {size} bytes; "
