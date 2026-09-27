@@ -13,7 +13,7 @@ Design doc reference:
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from .exceptions import BINARY_READ_ERRORS, ParseError, VersionError
 from .models.document import PackageDocument
@@ -42,7 +42,7 @@ def _parse_payload_id(payload_id: str) -> tuple[Literal["export", "import"], int
     m = _PAYLOAD_ID_RE.match(payload_id.strip())
     if not m:
         return None
-    kind = m.group("p_kind") or m.group("s_kind")
+    kind = cast(Literal["export", "import"], m.group("p_kind") or m.group("s_kind"))
     raw = m.group("p_idx") if m.group("p_idx") is not None else m.group("s_idx")
     return (kind, int(raw))
 

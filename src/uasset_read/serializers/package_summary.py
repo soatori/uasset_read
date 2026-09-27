@@ -494,7 +494,7 @@ def read_package_summary(
     archive: FArchive,
     *,
     total_decompressed: int = 0,
-) -> PackageFileSummary:
+) -> tuple[PackageFileSummary, int]:
     """Read PackageFileSummary header (UE4 and UE5)."""
     _validate_file_size(archive)
 

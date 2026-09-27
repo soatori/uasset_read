@@ -97,7 +97,9 @@ def _data_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], Proje
     projected_rows = []
     any_cell_value = False
     for row in evidenced:
-        fields = row.get("fields") if isinstance(row.get("fields"), dict) else {}
+        fields = row.get("fields")
+        if not isinstance(fields, dict):
+            fields = {}
         values = {str(k): _projected_field_value(v) for k, v in fields.items()}
         if any(isinstance(v, dict) and "value" in v for v in fields.values()):
             any_cell_value = True
@@ -137,7 +139,9 @@ def _explicit_curve_keys(row: Any) -> list[dict[str, Any]] | None:
     """Return decoded curve keys when keys/interp are explicit; else None."""
     if not isinstance(row, dict):
         return None
-    fields = row.get("fields") if isinstance(row.get("fields"), dict) else {}
+    fields = row.get("fields")
+    if not isinstance(fields, dict):
+        fields = {}
     keys_raw = fields.get("Keys")
     if isinstance(keys_raw, dict):
         inner = keys_raw.get("value", keys_raw.get("keys"))
@@ -165,7 +169,9 @@ def _curve_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], Proj
         keys = _explicit_curve_keys(row)
         if keys:
             any_keys = True
-        fields = row.get("fields") if isinstance(row.get("fields"), dict) else {}
+        fields = row.get("fields")
+        if not isinstance(fields, dict):
+            fields = {}
         curves.append(
             {
                 "name": str(row.get("name") or ""),

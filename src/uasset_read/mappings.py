@@ -63,8 +63,8 @@ class PropertyType:
 
     type: str
     struct_type: str | None = None
-    inner_type: "PropertyType" | None = None
-    value_type: "PropertyType" | None = None
+    inner_type: PropertyType | None = None
+    value_type: PropertyType | None = None
     enum_name: str | None = None
 
 

@@ -280,6 +280,7 @@ def _project_envelope(
     page_projections = [projection_to_dict(item) for item in page_projection_records]
 
     # Build result
+    assert doc.source is not None
     result: dict[str, Any] = {
         "format": "uasset_read.package",
         "format_version": FORMAT_VERSION,
@@ -452,6 +453,7 @@ def _enforce_budget(envelope: dict[str, Any], max_bytes: int, *, offset: int, pa
 
 def _package_to_dict(doc: PackageDocument, *, view: str = "semantic") -> dict[str, Any]:
     """Convert PackageInfo to dict, with extra fields for raw/debug views."""
+    assert doc.package is not None
     d: dict[str, Any] = {
         "name": doc.package.name,
         "layout": doc.package.layout,

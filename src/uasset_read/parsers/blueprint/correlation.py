@@ -599,8 +599,9 @@ class BlueprintCorrelation:
             raw_type: dict[str, Any] = {"VarType": vt_fields, "VarGuid": guid}
             pin_category = (vt_fields or {}).get("pin_category")
             type_name = pin_category if isinstance(pin_category, str) and pin_category else None
-            if type_name and (vt_fields or {}).get("pin_subcategory"):
-                type_name = f"{type_name}:{vt_fields['pin_subcategory']}"
+            pin_sub = (vt_fields or {}).get("pin_subcategory")
+            if type_name and pin_sub:
+                type_name = f"{type_name}:{pin_sub}"
             property_flags = fields.get("PropertyFlags")
             definitions.append(
                 VariableDefinition(
@@ -904,16 +905,6 @@ class _InstructionWalker:
 
     def _emit_from_operands(self, instruction: Any) -> None:
         opcode = instruction.opcode
-        source = None
-        if instruction.source_node_id:
-            from uasset_read.models.analysis import NodeId
-
-            raw = str(instruction.source_node_id)
-            if "/" in raw:
-                owner, node = raw.split("/", 1)
-                source = NodeId(owner_object_id=owner, node_export_id=node)
-            else:
-                source = NodeId(owner_object_id=raw, node_export_id=raw)
         if opcode in _CALL_OPCODES:
             name = instruction.operands.get("name")
             stack = instruction.operands.get("stack_node")
@@ -927,7 +918,7 @@ class _InstructionWalker:
                 instruction.operands.get("destination_property")
             )
             if dest:
-                self._emit_access(dest, "write", instruction, source)
+                self._emit_access(dest, "write", instruction)
             assignment = instruction.operands.get("assignment")
             if assignment is None:
                 assignment = instruction.operands.get("assignment_expression")
