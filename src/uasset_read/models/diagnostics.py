@@ -27,17 +27,14 @@ DiagnosticReason = Literal[
 class TrailingContext:
     """Identity context for trailing-reason classification.
 
-    class_name alone drives every current rule; object_name/outer_name/
-    roles/payload_kind exist so identity-sensitive rules (e.g. AnimBlueprint
-    CDO detection, owned by a sibling plan) can be added without another
-    signature change.
+    class_name alone drives every current rule; object_name/outer_name
+    exist so identity-sensitive rules (e.g. AnimBlueprint CDO detection,
+    owned by a sibling plan) can be added without another signature change.
     """
 
     class_name: str
     object_name: str = ""
     outer_name: str | None = None
-    roles: tuple[str, ...] = ()
-    payload_kind: str = "native_serial"
 
 
 @dataclass

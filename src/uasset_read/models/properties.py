@@ -137,10 +137,6 @@ class PropertyEntry:
     value_region: ByteRegion | None
 
 
-def _project_entry_value(entry: PropertyEntry) -> Any:
-    return entry.value
-
-
 @dataclass
 class PropertyBag:
     """Ordered lossless occurrences; name lookup is only a derived view."""
@@ -151,35 +147,23 @@ class PropertyBag:
     def get(self, name: str, default: Any = None) -> Any:
         for entry in reversed(self.entries):
             if entry.name == name:
-                return _project_entry_value(entry)
+                return entry.value
         return default
 
-    def get_all(self, name: str) -> list[PropertyEntry]:
-        return [entry for entry in self.entries if entry.name == name]
-
+    # Real consumers of the name-view pair: handlers_impl MaterialHandler.enrich,
+    # material/graph.py expression decode (items + `in`), parse-hardening tests.
     def items(self):
         for entry in self.entries:
-            yield entry.name, _project_entry_value(entry)
+            yield entry.name, entry.value
 
-    def keys(self):
-        seen: set[str] = set()
-        for entry in self.entries:
-            if entry.name not in seen:
-                seen.add(entry.name)
-                yield entry.name
-
-    def values(self):
-        for _, value in self.items():
-            yield value
+    def __contains__(self, name: object) -> bool:
+        return any(entry.name == name for entry in self.entries)
 
     def __getitem__(self, name: str) -> Any:
         for entry in reversed(self.entries):
             if entry.name == name:
-                return _project_entry_value(entry)
+                return entry.value
         raise KeyError(name)
-
-    def __contains__(self, name: object) -> bool:
-        return any(entry.name == name for entry in self.entries)
 
     def __len__(self) -> int:
         return len(self.entries)
@@ -187,33 +171,10 @@ class PropertyBag:
     def __bool__(self) -> bool:
         return bool(self.entries)
 
-    def __iter__(self):
-        return iter(self.keys())
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, PropertyBag):
-            return self.entries == other.entries
-        if isinstance(other, dict):
-            return project_property_bag(self) == other
-        return NotImplemented
-
-    def __ne__(self, other: object) -> bool:
-        result = self.__eq__(other)
-        if result is NotImplemented:
-            return result
-        return not result
-
 
 def project_property_value(value: Any) -> Any:
     """JSON-safe projection of a property value (typed containers preserved)."""
     from uasset_read.models.fallback import PropertyFallback, StructFallback
-    from uasset_read.models.properties import (
-        EnumValue,
-        MapValue,
-        SetValue,
-        StructValue,
-        TextValue,
-    )
 
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
@@ -270,68 +231,6 @@ def project_property_value(value: Any) -> Any:
     if hasattr(value, "to_dict"):
         return value.to_dict()
     return str(value)
-
-
-def project_property_entries(bag: PropertyBag) -> list[dict[str, Any]]:
-    return [
-        {
-            "name": entry.name,
-            "type": entry.type_name,
-            "array_index": entry.array_index,
-            "value": project_property_value(entry.value),
-            "tag_region": (
-                None
-                if entry.tag_region is None
-                else {
-                    "start": entry.tag_region.start,
-                    "size": entry.tag_region.size,
-                    "end": entry.tag_region.end,
-                    "source_id": entry.tag_region.source_id,
-                    "source_start": entry.tag_region.source_start,
-                    "source_end": entry.tag_region.source_end,
-                    "status": entry.tag_region.status,
-                    "reason": entry.tag_region.reason,
-                    "feature": entry.tag_region.feature,
-                    "payload_ref": entry.tag_region.payload_ref,
-                    "source_slices": [
-                        {
-                            "source_id": s.source_id,
-                            "source_start": s.source_start,
-                            "size": s.size,
-                            "source_end": s.source_start + s.size,
-                        }
-                        for s in entry.tag_region.source_slices
-                    ],
-                }
-            ),
-            "value_region": (
-                None
-                if entry.value_region is None
-                else {
-                    "start": entry.value_region.start,
-                    "size": entry.value_region.size,
-                    "end": entry.value_region.end,
-                    "source_id": entry.value_region.source_id,
-                    "source_start": entry.value_region.source_start,
-                    "source_end": entry.value_region.source_end,
-                    "status": entry.value_region.status,
-                    "reason": entry.value_region.reason,
-                    "feature": entry.value_region.feature,
-                    "payload_ref": entry.value_region.payload_ref,
-                    "source_slices": [
-                        {
-                            "source_id": s.source_id,
-                            "source_start": s.source_start,
-                            "size": s.size,
-                            "source_end": s.source_start + s.size,
-                        }
-                        for s in entry.value_region.source_slices
-                    ],
-                }
-            ),
-        }
-        for entry in bag.entries
-    ]
 
 
 def project_property_bag(bag: PropertyBag) -> dict[str, Any]:

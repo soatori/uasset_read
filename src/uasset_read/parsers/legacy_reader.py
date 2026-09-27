@@ -11,7 +11,7 @@ import contextlib
 import struct
 from pathlib import Path
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from ..archive import ByteArchive, SourceInfo
 from ..constants import PKG_Cooked, PKG_FilterEditorOnly, PKG_UnversionedProperties
@@ -457,7 +457,7 @@ def normalize_property_bag(
     *,
     package_source: Any | None = None,
     object_id: str = "",
-) -> Any:
+) -> "PropertyBag":
     """Convert every parsed occurrence into a lossless ordered PropertyBag.
 
     Never keys the result by name. Presentation maps are built later by
@@ -1367,8 +1367,6 @@ class LegacyPackageReader:
                                         class_name=cn,
                                         object_name=obj.name,
                                         outer_name=_resolve_outer_name(obj, objects, import_map),
-                                        roles=obj.roles,
-                                        payload_kind="native_serial",
                                     )
                                 ),
                             )
@@ -1425,7 +1423,7 @@ class LegacyPackageReader:
             if not obj.serial_region or obj.serial_region.size <= 0:
                 continue
             decoded = []
-            if isinstance(obj.properties, PropertyBag):
+            if obj.properties:
                 for entry in obj.properties.entries:
                     for region in (entry.tag_region, entry.value_region):
                         if region is not None and region.size > 0:
@@ -1716,7 +1714,7 @@ def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
     the same normalize/CFG builders the bridge used, keeping the typed IR the
     correlation layer needs while the archive inputs are still open.
     """
-    from ..models.analysis import FunctionAnalysis
+    from ..models.analysis import BytecodeStatus, FunctionAnalysis
     from .blueprint.bytecode import normalize_instructions
     from .blueprint.control_flow import build_cfg
 
@@ -1734,7 +1732,7 @@ def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
         if item.call_target:
             calls.append(item.call_target)
     status = kr.bytecode_status
-    if status not in {"parsed", "partial", "unavailable"}:
+    if status not in get_args(BytecodeStatus):
         status = "unavailable"
     diagnostics = list(getattr(kr, "errors", None) or [])
     if status == "unavailable" and not diagnostics and getattr(kr, "error_code", None):

@@ -596,7 +596,7 @@ def test_property_bag_normalization_is_bounded_lossless():
 
     def test_empty_list_returns_empty_dict():
 
-        assert normalize_property_bag([]) == {}
+        assert normalize_property_bag([]).entries == []
         assert project_property_bag(normalize_property_bag([])) == {}
 
     def test_unknown_property_is_descriptor_not_blob():

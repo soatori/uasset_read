@@ -100,24 +100,13 @@ def region_from_source(
 ) -> ByteRegion:
     mapped = source.map_range(start, size)
     slices = tuple(SourceSlice(*item) for item in mapped)
-    if len(slices) == 1:
-        return ByteRegion(
-            start=start,
-            size=size,
-            status=status,
-            source_id=slices[0].source_id,
-            source_start=slices[0].source_start,
-            source_slices=slices,
-            reason=reason,
-            feature=feature,
-            payload_ref=payload_ref,
-        )
+    single = len(slices) == 1
     return ByteRegion(
         start=start,
         size=size,
         status=status,
-        source_id="composite",
-        source_start=None,
+        source_id=slices[0].source_id if single else "composite",
+        source_start=slices[0].source_start if single else None,
         source_slices=slices,
         reason=reason,
         feature=feature,

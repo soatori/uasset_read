@@ -679,9 +679,6 @@ def test_decode_pin_payload_key_set_is_frozen():
         "parent_pin_id",
         "reference_pass_through_pin_id",
         "is_const",
-        "is_weak_pointer",
-        "is_uobject_wrapper",
-        "unknown_properties",
     }
     for pin in pins:
         assert core <= set(pin), sorted(pin)

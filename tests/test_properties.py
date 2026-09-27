@@ -6,7 +6,7 @@ from dataclasses import replace
 
 from tests.fixtures import make_property_input
 from uasset_read.models.byte_ranges import ByteRegion
-from uasset_read.models.properties import PropertyBag, PropertyEntry, project_property_bag, project_property_entries
+from uasset_read.models.properties import PropertyBag, PropertyEntry, project_property_bag
 from uasset_read.parsers.properties.tagged import TaggedPropertyReader
 from uasset_read.parsers.properties.unversioned import parse_unversioned_header
 
@@ -140,7 +140,7 @@ def duplicate_bag():
 
 
 def test_property_bag_preserves_duplicate_names_and_array_indices():
-    entries = duplicate_bag().get_all("Tags")
+    entries = [entry for entry in duplicate_bag().entries if entry.name == "Tags"]
     assert [item.array_index for item in entries] == [0, 1]
     assert [item.value_region for item in entries]
 
@@ -168,9 +168,10 @@ def test_known_expression_input_does_not_fall_back_to_generic_struct_bytes(stack
 def test_projection_keeps_complete_entries_alongside_lookup_map():
     bag = duplicate_bag()
     projected = project_property_bag(bag)
-    entries = project_property_entries(bag)
-    assert projected["Tags"] == entries[-1]["value"]
-    assert len([item for item in entries if item["name"] == "Tags"]) == 2
+    tags = [entry for entry in bag.entries if entry.name == "Tags"]
+    assert len(tags) == 2
+    # The lookup map resolves to the last occurrence, matching PropertyBag.get.
+    assert projected["Tags"] == tags[-1].value
 
 
 def test_property_bag_get_item_compatibility():

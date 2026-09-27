@@ -1,6 +1,6 @@
 """Object model — types for package objects.
 
-ObjectRecord, ObjectStatus, Region, ObjectRef.
+ObjectRecord, ObjectStatus, ObjectRef.
 """
 
 from __future__ import annotations
@@ -13,14 +13,6 @@ from .properties import PropertyBag
 
 if TYPE_CHECKING:
     from .diagnostics import Diagnostic
-
-
-@dataclass(frozen=True)
-class Region:
-    """Legacy offset/size pair. Prefer ByteRegion for new lossless ranges."""
-
-    offset: int
-    size: int
 
 
 @dataclass(frozen=True)

@@ -301,8 +301,6 @@ def test_classify_trailing_reason_accepts_trailing_context():
         class_name="FontFace",
         object_name="MyFont",
         outer_name="/Game/Fonts/F",
-        roles=("asset",),
-        payload_kind="native_serial",
     )
     assert classify_trailing_reason(ctx) == "bulk_expected"
 
@@ -374,8 +372,6 @@ def test_sound_node_family_classifies_editor_only():
             class_name=cls,
             object_name=f"{cls}_0",
             outer_name="Starter_Background_Cue",
-            roles=(),
-            payload_kind="native_serial",
         )
         assert classify_trailing_reason(ctx) == "editor_only", cls
 
@@ -390,7 +386,6 @@ def test_true_gap_classes_classify_known_unimplemented():
     ):
         ctx = TrailingContext(
             class_name=cls, object_name="X", outer_name="Y",
-            roles=(), payload_kind="native_serial",
         )
         assert classify_trailing_reason(ctx) == "known_unimplemented", cls
 

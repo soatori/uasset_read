@@ -82,7 +82,7 @@ def read_ed_graph_pin_type(
 
     # bIsReference / bIsWeakPointer (UE5 FArchive bool = uint32, 4B)
     pin_type.is_reference = archive.read_bool()
-    pin_type.is_weak_pointer = archive.read_bool()
+    archive.read_bool()  # bIsWeakPointer (write-only; cursor alignment)
 
     # FSimpleMemberReference (UE5 always present) — parent/name/guid retained
     # on the pin type via subcategory slots already; consume exact fields.
@@ -92,8 +92,8 @@ def read_ed_graph_pin_type(
 
     # bIsConst / bIsUObjectWrapper / bSerializeAsSinglePrecisionFloat
     pin_type.is_const = archive.read_bool()
-    pin_type.is_uobject_wrapper = archive.read_bool()
-    pin_type.serialize_as_single_precision_float = archive.read_bool()
+    archive.read_bool()  # bIsUObjectWrapper (write-only; cursor alignment)
+    archive.read_bool()  # bSerializeAsSinglePrecisionFloat (write-only; cursor alignment)
 
     return pin_type
 
@@ -303,11 +303,5 @@ def read_ue_graph_pin(
         parent_pin_id=parent_pin_id,
         reference_pass_through_pin_id=pass_pin_id,
         sub_category=getattr(pin_type, "pin_subcategory", "") or "",
-        sub_category_object=getattr(pin_type, "pin_subcategory_object", None),
         is_const=getattr(pin_type, "is_const", False),
-        is_weak_pointer=getattr(pin_type, "is_weak_pointer", False),
-        is_uobject_wrapper=getattr(pin_type, "is_uobject_wrapper", False),
-        serialize_as_single_precision_float=getattr(
-            pin_type, "serialize_as_single_precision_float", False
-        ),
     )

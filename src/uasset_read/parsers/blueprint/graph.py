@@ -15,6 +15,7 @@ from uasset_read.models.analysis import (
     BlueprintNode,
     BlueprintPin,
     GraphId,
+    GraphKind,
     K2NodeMetadata,
     LinkResolution,
     NodeId,
@@ -25,7 +26,6 @@ from uasset_read.models.analysis import (
     project_opaque,
     project_pin_link,
 )
-from uasset_read.models.byte_ranges import ByteRegion
 from uasset_read.models.diagnostics import Diagnostic, make_diagnostic
 
 if TYPE_CHECKING:
@@ -159,21 +159,6 @@ def _pin_from_raw(node_id: NodeId, pin: dict[str, Any]) -> BlueprintPin:
                 raw_ref=raw,
             )
         )
-    unknown: list[ByteRegion] = []
-    for key in ("unknown_properties", "opaque"):
-        for item in pin.get(key) or []:
-            if isinstance(item, dict) and item.get("size") is not None:
-                unknown.append(
-                    ByteRegion(
-                        start=int(item.get("start") or 0),
-                        size=int(item.get("size") or 0),
-                        status="opaque",
-                        source_id=str(item.get("source_id") or "package"),
-                        source_start=item.get("source_start"),
-                        reason=item.get("reason") or "pin_unknown",
-                        feature=str(item.get("feature") or "pin"),
-                    )
-                )
     return BlueprintPin(
         id=str(pin.get("id") or ""),
         name=str(pin.get("name") or ""),
@@ -189,10 +174,7 @@ def _pin_from_raw(node_id: NodeId, pin: dict[str, Any]) -> BlueprintPin:
         linked=linked,
         owner_node_id=node_id,
         raw_region=None,
-        unknown_properties=unknown,
         is_const=bool(pin.get("is_const") or False),
-        is_weak_pointer=bool(pin.get("is_weak_pointer") or False),
-        is_uobject_wrapper=bool(pin.get("is_uobject_wrapper") or False),
     )
 
 
@@ -261,20 +243,6 @@ def _node_from_raw(
     node_id = NodeId(owner_object_id=owner_id.owner_object_id, node_export_id=node_export or "export:-1")
     class_name = str(node.get("type") or node.get("class_name") or "")
     pins = [_pin_from_raw(node_id, p) for p in node.get("pins") or []]
-    unknown: list[ByteRegion] = []
-    for item in node.get("unknown_properties") or []:
-        if isinstance(item, dict) and item.get("size") is not None:
-            unknown.append(
-                ByteRegion(
-                    start=int(item.get("start") or 0),
-                    size=int(item.get("size") or 0),
-                    status="opaque",
-                    source_id=str(item.get("source_id") or "package"),
-                    source_start=item.get("source_start"),
-                    reason=item.get("reason") or "node_unknown",
-                    feature=str(item.get("feature") or "node"),
-                )
-            )
     return BlueprintNode(
         id=node_id,
         guid=node.get("node_guid") or node.get("guid"),
@@ -283,7 +251,6 @@ def _node_from_raw(
         metadata=_metadata_for(class_name, node, objects_by_id),
         pins=pins,
         raw_region=None,
-        unknown_properties=unknown,
     )
 
 
@@ -296,7 +263,7 @@ def _parse_export_id(value: str) -> int | None:
         return None
 
 
-def _graph_kind(name: str, graph_id: str, function_graph_ids: set[str]) -> BlueprintGraph["kind"]:
+def _graph_kind(name: str, graph_id: str, function_graph_ids: set[str]) -> GraphKind:
     if name == "EventGraph":
         return "event_graph"
     if name == "UserConstructionScript":

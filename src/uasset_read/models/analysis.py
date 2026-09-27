@@ -6,8 +6,8 @@ internal to the parser/analysis layers.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal
+from dataclasses import dataclass, field, fields
+from typing import TYPE_CHECKING, Any, Literal, get_args
 
 from uasset_read.models.byte_ranges import (
     ByteRegion,
@@ -21,7 +21,22 @@ if TYPE_CHECKING:
     from uasset_read.kismet.native_fields import NativeFieldDeclaration
     from uasset_read.models.document import PackageDocument
     from uasset_read.parsers.blueprint.bytecode import BytecodeInstruction
-    from uasset_read.parsers.blueprint.control_flow import ControlFlowGraph
+    from uasset_read.parsers.blueprint.control_flow import ControlFlowEdge, ControlFlowGraph
+
+# Shared validation sets: defined once, checked via get_args(...) at the
+# from_dict/projected-dict trust boundaries (tagged/unversioned IR rebuilds).
+EntrypointKind = Literal["event", "function", "construction", "dispatcher"]
+MatchMethod = Literal["object_id", "function_identity", "source_node", "node_guid", "unresolved"]
+BytecodeStatus = Literal["parsed", "partial", "unavailable"]
+GraphKind = Literal[
+    "event_graph",
+    "function",
+    "construction_script",
+    "macro",
+    "ubergraph",
+    "state_machine",
+    "unknown",
+]
 
 
 @dataclass(frozen=True)
@@ -84,10 +99,7 @@ class BlueprintPin:
     linked: list[PinLink]
     owner_node_id: NodeId
     raw_region: ByteRegion | None
-    unknown_properties: list[OpaqueRegion]
     is_const: bool = False
-    is_weak_pointer: bool = False
-    is_uobject_wrapper: bool = False
 
 
 @dataclass
@@ -99,7 +111,6 @@ class BlueprintNode:
     metadata: K2NodeMetadata | None
     pins: list[BlueprintPin]
     raw_region: ByteRegion | None
-    unknown_properties: list[OpaqueRegion]
     # Retained serializer-side display fields (plan Task 8): tag-derived
     # node_data and the visual position stay on the typed node so the
     # projected graph keeps every consumed field (E1 lossless projection).
@@ -134,15 +145,7 @@ class LinkResolution:
 class BlueprintGraph:
     id: GraphId
     name: str
-    kind: Literal[
-        "event_graph",
-        "function",
-        "construction_script",
-        "macro",
-        "ubergraph",
-        "state_machine",
-        "unknown",
-    ]
+    kind: GraphKind
     nodes: list[BlueprintNode]
     parse_errors: list[str]
     raw_region: ByteRegion | None
@@ -187,11 +190,6 @@ class BlueprintGraph:
                             ),
                         )
                     )
-                unknown: list[ByteRegion] = []
-                for item in pin_raw.get("unknown_properties") or []:
-                    region = region_from_projected(item)
-                    if region is not None:
-                        unknown.append(region)
                 pins.append(
                     BlueprintPin(
                         id=str(pin_raw.get("id") or ""),
@@ -210,17 +208,9 @@ class BlueprintGraph:
                         linked=linked,
                         owner_node_id=node_id,
                         raw_region=None,
-                        unknown_properties=unknown,
                         is_const=bool(pin_raw.get("is_const") or False),
-                        is_weak_pointer=bool(pin_raw.get("is_weak_pointer") or False),
-                        is_uobject_wrapper=bool(pin_raw.get("is_uobject_wrapper") or False),
                     )
                 )
-            unknown_properties: list[ByteRegion] = []
-            for item in node_raw.get("unknown_properties") or []:
-                region = region_from_projected(item)
-                if region is not None:
-                    unknown_properties.append(region)
             nodes.append(
                 BlueprintNode(
                     id=node_id,
@@ -230,7 +220,6 @@ class BlueprintGraph:
                     metadata=k2_metadata_from_dict(node_raw.get("metadata")),
                     pins=pins,
                     raw_region=None,
-                    unknown_properties=unknown_properties,
                     node_data=(
                         dict(node_raw["node_data"])
                         if isinstance(node_raw.get("node_data"), dict)
@@ -310,14 +299,6 @@ def _project_pin(pin: BlueprintPin) -> dict[str, Any]:
         out["reference_pass_through_pin_id"] = pin.reference_pass_through_pin_id
     if pin.is_const:
         out["is_const"] = True
-    if pin.is_weak_pointer:
-        out["is_weak_pointer"] = True
-    if pin.is_uobject_wrapper:
-        out["is_uobject_wrapper"] = True
-    if pin.unknown_properties:
-        out["unknown_properties"] = [
-            project_opaque(region) for region in pin.unknown_properties
-        ]
     return out
 
 
@@ -338,10 +319,6 @@ def _project_node(node: BlueprintNode) -> dict[str, Any]:
         out["node_data"] = node.node_data
     if node.position is not None:
         out["position"] = node.position
-    if node.unknown_properties:
-        out["unknown_properties"] = [
-            project_opaque(region) for region in node.unknown_properties
-        ]
     return out
 
 
@@ -473,7 +450,7 @@ class FunctionAnalysis:
     reads: set[str]
     writes: set[str]
     calls: list[str]
-    bytecode_status: Literal["parsed", "partial", "unavailable"]
+    bytecode_status: BytecodeStatus
     diagnostics: list[Diagnostic]
 
     @classmethod
@@ -555,7 +532,7 @@ class FunctionAnalysis:
             if isinstance(raw, dict)
         ]
         status = data.get("bytecode_status")
-        if status not in {"parsed", "partial", "unavailable"}:
+        if status not in get_args(BytecodeStatus):
             status = "unavailable"
         entry_raw = data.get("entrypoint")
         entrypoint = EntrypointRecord.from_dict(entry_raw) if isinstance(entry_raw, dict) else None
@@ -581,21 +558,7 @@ class FunctionAnalysis:
         )
 
 
-_DIAGNOSTIC_FIELDS = frozenset(
-    {
-        "severity",
-        "code",
-        "message",
-        "stage",
-        "object_id",
-        "offset",
-        "size",
-        "effect",
-        "recoverable",
-        "fallback",
-        "reason",
-    }
-)
+_DIAGNOSTIC_FIELDS = frozenset(f.name for f in fields(Diagnostic))
 
 
 def _projected_offset_int(value: Any, default: int) -> int:
@@ -646,26 +609,13 @@ class BlueprintAnalysisEnvelope:
 
 @dataclass(frozen=True)
 class EntrypointRecord:
-    kind: Literal["event", "function", "construction", "dispatcher"]
+    kind: EntrypointKind
     name: str
     object_id: str
     source_node_id: NodeId | None = None
-    match_method: Literal[
-        "object_id", "function_identity", "source_node", "node_guid", "unresolved"
-    ] = "unresolved"
+    match_method: MatchMethod = "unresolved"
     confidence: float = 0.0
     unresolved: bool = True
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "kind": self.kind,
-            "name": self.name,
-            "object_id": self.object_id,
-            "source_node_id": str(self.source_node_id) if self.source_node_id else None,
-            "match_method": self.match_method,
-            "confidence": self.confidence,
-            "unresolved": self.unresolved,
-        }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> EntrypointRecord:
@@ -673,15 +623,12 @@ class EntrypointRecord:
         kind = data.get("kind")
         method = data.get("match_method")
         return cls(
-            kind=kind if kind in {"event", "function", "construction", "dispatcher"} else "event",  # type: ignore[arg-type]
+            kind=kind if kind in get_args(EntrypointKind) else "event",  # type: ignore[arg-type]
             name=str(data.get("name") or ""),
             object_id=str(data.get("object_id") or ""),
             source_node_id=_node_id_from_str(str(node_raw)) if node_raw else None,
             match_method=(
-                method
-                if method
-                in {"object_id", "function_identity", "source_node", "node_guid", "unresolved"}
-                else "unresolved"
+                method if method in get_args(MatchMethod) else "unresolved"
             ),  # type: ignore[arg-type]
             confidence=float(data.get("confidence") or 0.0),
             unresolved=bool(data.get("unresolved", True)),
@@ -697,9 +644,7 @@ class CallRecord:
     source_node_id: NodeId | None
     serialized_start: int | None = None
     serialized_end: int | None = None
-    match_method: Literal[
-        "object_id", "function_identity", "source_node", "node_guid", "unresolved"
-    ] = "unresolved"
+    match_method: MatchMethod = "unresolved"
     confidence: float = 0.0
     unresolved: bool = True
     execution_mode: Literal["static_reference"] = "static_reference"
@@ -715,9 +660,7 @@ class VariableAccessRecord:
     source_node_id: NodeId | None = None
     serialized_start: int | None = None
     serialized_end: int | None = None
-    match_method: Literal[
-        "object_id", "function_identity", "source_node", "node_guid", "unresolved"
-    ] = "unresolved"
+    match_method: MatchMethod = "unresolved"
     confidence: float = 0.0
     unresolved: bool = True
 

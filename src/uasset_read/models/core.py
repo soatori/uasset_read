@@ -28,9 +28,6 @@ class FEdGraphPinType:
     container_type: int = 0
     is_reference: bool = False
     is_const: bool = False
-    is_weak_pointer: bool = False
-    is_uobject_wrapper: bool = False
-    serialize_as_single_precision_float: bool = False
     # FEdGraphTerminalType trailing bools (EdGraphNode.cpp operator<<;
     # map-key terminal only — value terminal category reads stay cursor-only)
     map_key_terminal_is_const: bool = False
@@ -55,11 +52,7 @@ class UEdGraphPin:
     parent_pin_id: str | None = None
     reference_pass_through_pin_id: str | None = None
     sub_category: str = ""
-    sub_category_object: int | None = None
     is_const: bool = False
-    is_weak_pointer: bool = False
-    is_uobject_wrapper: bool = False
-    serialize_as_single_precision_float: bool = False
 
 
 @dataclass

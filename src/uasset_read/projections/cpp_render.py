@@ -8,7 +8,7 @@ mapper is the private ``_coerce_semantic`` helper. This module never accepts a
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from uasset_read.kismet.native_fields import NativeFieldDeclaration
 from uasset_read.models.analysis import (
@@ -17,6 +17,7 @@ from uasset_read.models.analysis import (
     BlueprintSemantic,
     CallRecord,
     ComponentRecord,
+    MatchMethod,
     ConstructorRecord,
     DispatcherRecord,
     EntrypointRecord,
@@ -276,7 +277,7 @@ def _coerce_semantic(semantic_dict: dict[str, Any]) -> BlueprintSemantic:
         if not isinstance(raw, dict):
             continue
         method = raw.get("match_method")
-        if method not in {"object_id", "function_identity", "source_node", "node_guid", "unresolved"}:
+        if method not in get_args(MatchMethod):
             method = "unresolved"
         calls.append(
             CallRecord(
@@ -301,7 +302,7 @@ def _coerce_semantic(semantic_dict: dict[str, Any]) -> BlueprintSemantic:
         if access not in {"read", "write", "read_write", "declaration"}:
             access = "read"
         method = raw.get("match_method")
-        if method not in {"object_id", "function_identity", "source_node", "node_guid", "unresolved"}:
+        if method not in get_args(MatchMethod):
             method = "unresolved"
         accesses.append(
             VariableAccessRecord(

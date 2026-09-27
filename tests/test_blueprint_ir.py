@@ -32,7 +32,6 @@ def _node(node_id: NodeId) -> BlueprintNode:
         linked=[],
         owner_node_id=node_id,
         raw_region=None,
-        unknown_properties=[],
         is_const=False,
     )
     return BlueprintNode(
@@ -43,7 +42,6 @@ def _node(node_id: NodeId) -> BlueprintNode:
         metadata=None,
         pins=[pin],
         raw_region=None,
-        unknown_properties=[],
     )
 
 

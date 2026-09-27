@@ -549,14 +549,10 @@ def _property_summary(bag: Any) -> dict[str, Any]:
     raw bytes. Truncation is explicit via ``property_count``; the full bag
     stays available in the raw/debug views.
     """
-    from uasset_read.models.properties import PropertyBag, project_property_value
+    from uasset_read.models.properties import project_property_value
 
-    if isinstance(bag, PropertyBag):
-        items = [(entry.name, project_property_value(entry.value)) for entry in bag.entries]
-        count = len(bag.entries)
-    else:
-        items = list(bag.items())
-        count = len(bag)
+    items = [(entry.name, project_property_value(entry.value)) for entry in bag.entries]
+    count = len(bag.entries)
     items = items[:_SUMMARY_MAX_NAMES]
     return {
         "properties": {name: _summary_value(v) for name, v in items},
@@ -586,12 +582,9 @@ def obj_to_dict(obj: ObjectRecord, *, view: str = "semantic") -> dict[str, Any]:
             {"offset": obj.serial_region.start, "size": obj.serial_region.size} if obj.serial_region else None
         )
         if obj.properties is not None:
-            from uasset_read.models.properties import PropertyBag, project_property_bag
+            from uasset_read.models.properties import project_property_bag
 
-            if isinstance(obj.properties, PropertyBag):
-                d["properties"] = project_property_bag(obj.properties)
-            else:
-                d["properties"] = obj.properties
+            d["properties"] = project_property_bag(obj.properties)
     elif view == "semantic" and obj.properties is not None:
         d["properties_summary"] = _property_summary(obj.properties)
     if obj.semantic is not None:

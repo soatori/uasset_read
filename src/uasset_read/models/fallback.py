@@ -30,10 +30,6 @@ class PropertyFallback(PropertyValue):
     size: int = 0
     reason: FallbackReason = FallbackReason.UNSUPPORTED_TYPE
 
-    @property
-    def kind(self) -> str:
-        return "unknown_property"
-
     @classmethod
     def from_tag(cls, tag, reason: "FallbackReason") -> "PropertyFallback":
         """Build a fallback from a property tag (shared name/type/size/array_index plumbing)."""
