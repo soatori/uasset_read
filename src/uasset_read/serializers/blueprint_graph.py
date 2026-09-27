@@ -94,8 +94,6 @@ def read_blueprint_graphs(
     name_map: list[str],
     import_map: list[Any],
     export_map: list[ObjectExport],
-    *,
-    max_graphs: int = MAX_GRAPHS_PER_PACKAGE,
 ) -> list[dict[str, Any]]:
     """Parse all graph exports in the package and return plain graph dicts.
 
@@ -121,7 +119,7 @@ def read_blueprint_graphs(
         class_name = resolve_class_name(export.class_index, import_map, export_map)
         if not class_name or not _is_graph_class(class_name):
             continue
-        if processed >= max_graphs:
+        if processed >= MAX_GRAPHS_PER_PACKAGE:
             break
         processed += 1
         try:
@@ -308,20 +306,6 @@ def _collect_pin_links(graph: Any) -> list[dict[str, Any]]:
     return links
 
 
-def _normalize_pin_owner(owning_node: Any) -> str | None:
-    """Translate a serialized PinReference owning_node into node identity.
-
-    FPackageIndex convention (ObjectResource.h): positive = export index + 1,
-    negative = import, 0 = null. Only positive export references name a node
-    in the converted graph projection. Callers must treat negative owners as
-    unresolved (never GUID-fallback); null/missing owners may use the unique
-    GUID fallback.
-    """
-    if isinstance(owning_node, int) and owning_node > 0:
-        return f"export:{owning_node - 1}"
-    return None
-
-
 def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:
     """Resolve every graph's GUID-keyed links to (to_node, to_pin), in place.
 
@@ -343,16 +327,15 @@ def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:
     # ``subgraphs`` key. The same physical node export can still appear in
     # several emitted graphs — dedupe candidates by (node id, pin id).
     all_nodes = [n for g in graphs for n in g.get("nodes", [])]
-    by_owner_guid: dict[tuple[str, str], list[tuple[str, str]]] = {}
+    owner_pins: set[tuple[str, str]] = set()
     by_guid: dict[str, list[tuple[str, str]]] = {}
     for node in all_nodes:
         for pin in node.get("pins", []):
             if pin["id"]:
                 entry = (node["id"], pin["id"])
-                by_owner_guid.setdefault((node["id"], pin["id"]), []).append(entry)
+                owner_pins.add(entry)
                 by_guid.setdefault(pin["id"], []).append(entry)
     # Flatten repeated (node, pin) entries from multi-graph appearances.
-    by_owner_guid = {k: list(dict.fromkeys(v)) for k, v in by_owner_guid.items()}
     by_guid = {k: list(dict.fromkeys(v)) for k, v in by_guid.items()}
 
     for graph in graphs:
@@ -367,19 +350,21 @@ def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:
             if isinstance(raw_owner, int) and raw_owner < 0:
                 graph["unresolved_links"] += 1
                 continue
-            owner = _normalize_pin_owner(raw_owner)
+            owner = (
+                f"export:{raw_owner - 1}"
+                if isinstance(raw_owner, int) and raw_owner > 0
+                else None
+            )
             target: tuple[str, str] | None = None
             if owner is not None:
-                candidates = by_owner_guid.get((owner, guid), [])
-                if len(candidates) == 1:
-                    target = candidates[0]
+                # The owner key names at most one (node, pin) entry — the map
+                # is keyed by exactly that tuple.
+                if (owner, guid) in owner_pins:
+                    target = (owner, guid)
                 else:
                     # Zero candidates: the owner names a node the projection
-                    # does not carry. Multiple distinct candidates under one
-                    # owner key should not occur; treat both as unresolved.
+                    # does not carry.
                     graph["unresolved_links"] += 1
-                    if len(candidates) > 1:
-                        graph["ambiguous_links"] += 1
                     continue
             else:
                 candidates = by_guid.get(guid, [])

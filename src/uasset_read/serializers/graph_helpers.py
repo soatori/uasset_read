@@ -12,12 +12,10 @@ instead of from graph.py, eliminating the cycle:
 from __future__ import annotations
 
 import logging
-import struct
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
-    from uasset_read.serializers.object_resources import ObjectExport, ObjectImport
 
 from uasset_read.constants import (
     MAX_SAFE_COUNT,
@@ -26,7 +24,6 @@ from uasset_read.constants import (
 )
 from uasset_read.exceptions import ParseError
 from uasset_read.versioning import FORTNITE_GUID, get_custom_version
-from uasset_read.serializers.property_tags import read_tag_value_bounded
 
 logger = logging.getLogger(__name__)
 
@@ -54,67 +51,13 @@ def _read_guid(archive: FArchive, uppercase: bool = True) -> str:
 # ============================================================================
 
 
-def _read_tag_bool(archive: FArchive, tag) -> bool:
-    """Read bool value from PropertyTag.
-
-    Handles both inline bool and value body forms:
-    - tag.size > 0: read i32 from value body (UE5 bool serialization)
-    - tag.size == 0: use tag.bool_val (inline bool)
-
-    Args:
-        archive: FArchive instance
-        tag: PropertyTag instance
-
-    Returns:
-        bool value
-    """
-
-    def _reader() -> bool:
-        if tag.size > 0:
-            return archive.read_i32() != 0
-        return tag.bool_val != 0
-
-    return read_tag_value_bounded(archive, tag, _reader)
-
-
-def _read_tag_i32(archive: FArchive, tag) -> int:
-    """Read int32 value from PropertyTag and seek to value_end_offset.
-
-    Standardizes int property reading flow.
-
-    Args:
-        archive: FArchive instance
-        tag: PropertyTag instance
-
-    Returns:
-        int32 value
-    """
-    return read_tag_value_bounded(archive, tag, archive.read_i32)
-
-
-def _read_tag_fname(archive: FArchive, tag, name_map: list[str]) -> str:
-    """Read FName value from PropertyTag and seek to value_end_offset.
-
-    Standardizes FName property reading flow.
-
-    Args:
-        archive: FArchive instance
-        tag: PropertyTag instance
-        name_map: name mapping list
-
-    Returns:
-        FName string
-    """
-    return read_tag_value_bounded(archive, tag, lambda: archive.read_name(name_map))
-
-
 # ============================================================================
 # FText reading (UE5 multi history_type support)
 # ============================================================================
 
 
-def _read_fstring_safe(archive: FArchive, max_length: int = MAX_SAFE_COUNT) -> str:
-    """Read FString with tolerance for abnormal lengths.
+def _read_fstring(archive: FArchive, max_length: int = MAX_SAFE_COUNT, *, tolerant: bool) -> str:
+    """Read FString with explicit abnormal-length policy.
 
     References UE C++ FArchive& operator<<(FString&) implementation.
 
@@ -123,45 +66,22 @@ def _read_fstring_safe(archive: FArchive, max_length: int = MAX_SAFE_COUNT) -> s
     - length > 0: ANSI string, read length bytes
     - length < 0: UTF-16 string, read (-length * 2) bytes; -1 is a 2-byte NUL, never "no data"
 
-    Fixes length == -1 boundary condition (common in SubPin PinToolTip).
+    ``tolerant=True`` rewinds to the length prefix and returns "" on an
+    abnormal length (pin-field fallback); ``tolerant=False`` raises so the
+    upper layer aborts the whole FText instead of silently misaligning.
     """
     length = archive.read_i32()
     if length == 0:
         return ""
     if abs(length) > max_length:
-        # Abnormal length, fall back to empty string
+        if not tolerant:
+            raise ParseError(f"Invalid FText FString length: {length}")
         if archive.tell() >= 4:
             archive.seek(archive.tell() - 4)
         return ""
     if length < 0:
         data = archive.read(-length * 2)
-        encoding = "utf-16-le"
-        return data.decode(encoding, errors="replace").rstrip("\x00")
-    data = archive.read(length)
-    return data.decode("utf-8", errors="replace").rstrip("\x00")
-
-
-def read_ftext_fstring(archive: FArchive) -> str:
-    """Read FText internal FString.
-
-    Unlike _read_fstring_safe, this function raises on abnormal length,
-    letting the upper layer decide whether to fall back the entire FText.
-    This avoids "read partial body but continue forward" silent misalignment.
-    """
-    length = archive.read_i32()
-    if length == 0:
-        return ""
-    if length < 0:
-        # String.cpp.inl:1810-1904: negative length reads abs(len)*2 UTF-16 bytes;
-        # -1 is a 2-byte NUL, never "no data". (archive.py read_fstring already follows UE.)
-        utf16_len = -length * 2
-        if utf16_len > MAX_SAFE_COUNT * 2:
-            raise ParseError(f"Invalid FText FString length: {length}")
-        data = archive.read(utf16_len)
-        encoding = "utf-16-le"
-        return data.decode(encoding, errors="replace").rstrip("\x00")
-    if length > MAX_SAFE_COUNT:
-        raise ParseError(f"Invalid FText FString length: {length}")
+        return data.decode("utf-16-le", errors="replace").rstrip("\x00")
     data = archive.read(length)
     return data.decode("utf-8", errors="replace").rstrip("\x00")
 
@@ -247,14 +167,14 @@ def read_ftext_with_history(
     if history_type in (-1, 255):
         b_has_culture = archive.read_bool()
         if b_has_culture:
-            value = read_ftext_fstring(archive)
+            value = _read_fstring(archive, tolerant=False)
     elif history_type == 0:
-        _namespace = read_ftext_fstring(archive)
-        _key = read_ftext_fstring(archive)
-        value = read_ftext_fstring(archive)
+        _namespace = _read_fstring(archive, tolerant=False)
+        _key = _read_fstring(archive, tolerant=False)
+        value = _read_fstring(archive, tolerant=False)
         if dev_notes:
             # TextHistory.cpp:915-937: the gated 4th DevNotes FString follows SourceString.
-            read_ftext_fstring(archive)
+            _read_fstring(archive, tolerant=False)
     elif history_type == 1:
         format_text, _, _, _ = _read_ftext_value(archive, tolerant=tolerant, dev_notes=dev_notes, summary=summary)
         arg_count = archive.read_i32()
@@ -265,7 +185,7 @@ def read_ftext_with_history(
             arg_count = 0  # Skip subsequent argument reading
         format_args: dict[str, str] = {}
         for _ in range(arg_count):
-            arg_name = read_ftext_fstring(archive)
+            arg_name = _read_fstring(archive, tolerant=False)
             arg_type = archive.read_u8()
             arg_value = ""
             if arg_type == 0:
@@ -328,7 +248,7 @@ def read_ftext_with_history(
             archive.read_i32()  # MaximumFractionalDigits
 
         # CultureName FString (formatting culture; empty in cooked/editor data)
-        read_ftext_fstring(archive)
+        _read_fstring(archive, tolerant=False)
         value = source_value
     else:
         # Unsupported history: stop at the field boundary. No guessed byte
@@ -337,86 +257,3 @@ def read_ftext_with_history(
 
     consumed = archive.tell() - start_pos
     return value, consumed
-
-
-# ============================================================================
-# Pin reference validation helper
-# ============================================================================
-
-
-def validate_pin_reference_at(
-    archive: FArchive,
-    pos: int,
-    export_map: list[ObjectExport],
-    import_map: list[ObjectImport] | None = None,
-) -> tuple[bool, str] | None:
-    """Validate PinReference structure at given position.
-
-    Does not move pointer; only checks if the position conforms to PinReference format:
-    - b_null (i32): 0 means normal ref, non-0 means null ref (4 bytes only)
-    - owning_node (i32): within import/export range (only when b_null == 0)
-    - pin_guid (16 bytes): non-zero (unless ParentPin null ref)
-
-    Supports 4-byte null PinReference (only 4 bytes when b_null != 0).
-
-    Returns:
-        None: invalid structure / not enough bytes
-        (valid, reason): validation outcome
-    """
-    current_pos = archive.tell()
-
-    file_size = getattr(archive, "_file_size", getattr(archive, "file_size", 0))
-
-    # At least 4 bytes needed to read b_null
-    if file_size and pos + 4 > file_size:
-        archive.seek(current_pos)
-        return None
-
-    fmt = "<"
-
-    archive.seek(pos)
-    header_bytes = archive.read(4)
-    b_null = struct.unpack(f"{fmt}i", header_bytes[0:4])[0]
-
-    if b_null != 0:
-        # Null PinReference: only consumes 4 bytes
-        archive.seek(current_pos)
-        return True, "valid null ref (b_null!=0, no actual pin)"
-
-    # b_null == 0: needs full 24 bytes
-    if file_size and pos + 24 > file_size:
-        archive.seek(current_pos)
-        return None
-
-    archive.seek(pos)
-    header_bytes = archive.read(24)
-    archive.seek(current_pos)
-
-    owning_node = struct.unpack(f"{fmt}i", header_bytes[4:8])[0]
-    guid_bytes = header_bytes[8:24]
-    guid_nonzero = any(b != 0 for b in guid_bytes)
-
-    # Validate owning_node range
-    owning_node_abs = abs(owning_node)
-    export_count = len(export_map)
-    import_count = len(import_map) if import_map else 0
-    max_valid_index = export_count + import_count + 50  # Allow some margin
-
-    owning_node_valid = (
-        owning_node == 0  # 0 means no ref
-        or owning_node_abs < max_valid_index
-    )
-
-    # Validate b_null semantics
-    if not owning_node_valid:
-        valid = False
-        reason = f"owning_node {owning_node} exceeds range 0..{max_valid_index}"
-    elif not guid_nonzero:
-        # b_null == 0 but GUID all-zero: possibly ParentPin null ref or uninitialized
-        valid = True
-        reason = "valid ref with zero guid (parent pin empty)"
-    else:
-        valid = True
-        reason = "valid pin reference"
-
-    return valid, reason

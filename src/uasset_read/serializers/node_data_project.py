@@ -15,20 +15,10 @@ from typing import Any
 # ({size, offset} only) are never emitted under these keys.
 NODE_DATA_ALLOW = frozenset(
     {
-        "FunctionReference",
-        "EventReference",
-        "MemberName",
-        "MemberParent",
-        "VariableReference",
-        "SelfContextInfo",
-        "FunctionName",
         "CustomFunctionName",
         "subgraph_references",
-        "bDefaultsToPure",
         "bDefaultsToPureFunc",
         "InputActionShortName",
-        "OperationName",
-        "TimelineName",
     }
 )
 

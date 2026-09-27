@@ -26,10 +26,9 @@ from uasset_read.models.core import UEdGraphPin, FEdGraphPinType
 
 from uasset_read.serializers.graph_helpers import (
     _read_guid,
-    _read_fstring_safe,
     _read_ftext_value,
+    _read_fstring,
     ftext_dev_notes_enabled,
-    validate_pin_reference_at,
 )
 
 logger = logging.getLogger(__name__)
@@ -144,13 +143,17 @@ def read_pin_array(
     pins: list[dict] = []
     for _ in range(array_count):
         ref_pos = archive.tell()
-        ref_validation = validate_pin_reference_at(archive, ref_pos, export_map, import_map)
-        if ref_validation is None or not ref_validation[0]:
-            reason = ref_validation[1] if ref_validation else "not enough bytes"
-            raise ParseError(f"Invalid pin reference at pos {ref_pos}: {reason}")
         pin_ref = read_pin_reference(archive)
-        if pin_ref is not None:
-            pins.append(pin_ref)
+        if pin_ref is None:
+            continue  # null marker consumed its 4-byte header only
+        owning_node = pin_ref["owning_node"]
+        max_valid_index = len(export_map) + (len(import_map) if import_map else 0) + 50  # Allow some margin
+        if owning_node != 0 and abs(owning_node) >= max_valid_index:
+            raise ParseError(
+                f"Invalid pin reference at pos {ref_pos}: "
+                f"owning_node {owning_node} exceeds range 0..{max_valid_index}"
+            )
+        pins.append(pin_ref)
     return pins
 
 
@@ -166,8 +169,8 @@ def _read_pin_fstring_field(
     from uasset_read.archive import _contains_binary_data
 
     try:
-        # 4096 is the pin-field ceiling; _read_fstring_safe's default is MAX_SAFE_COUNT.
-        value = _read_fstring_safe(archive, max_length=4096)
+        # 4096 is the pin-field ceiling; _read_fstring's default is MAX_SAFE_COUNT.
+        value = _read_fstring(archive, max_length=4096, tolerant=True)
         if _contains_binary_data(value):
             logger.debug(
                 "Binary %s at pos %d for pin '%s' — returning empty", field_name, archive.tell() - len(value), pin_name

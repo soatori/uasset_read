@@ -19,15 +19,11 @@ from uasset_read.constants import (
     UE_NONE_SENTINEL,
 )
 from uasset_read.exceptions import ParseError
-from uasset_read.serializers.object_resources import PackageIndex
-from uasset_read.serializers.property_tags import read_property_tag
+from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.models.core import UEdGraphNode, UEdGraphPin
 from uasset_read.serializers.object_resources import resolve_class_name
 
 from uasset_read.serializers.graph_helpers import (
-    _read_tag_bool,
-    _read_tag_i32,
-    _read_tag_fname,
     seek_to_tag_end,
 )
 from uasset_read.serializers.graph_pin import read_ue_graph_pin
@@ -45,12 +41,8 @@ logger = logging.getLogger(__name__)
 
 
 def _read_anim_graph_node(
-    archive: FArchive,
-    name_map: list[str],
-    summary: PackageFileSummary,
     export_map: list[ObjectExport],
     import_map: list[ObjectImport],
-    class_name: str,
     raw_properties: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Read AnimGraphNode type node data.
@@ -58,11 +50,8 @@ def _read_anim_graph_node(
     Key properties:
     - EditorStateMachineGraph: state machine subgraph (UAnimationStateMachineGraph)
     - BoundGraph: state subgraph (UEdGraph)
-    - Node: animation node runtime data (FAnimNode_StateMachine, etc.)
     """
-    result: dict[str, Any] = {
-        "node_type": class_name,
-    }
+    result: dict[str, Any] = {}
 
     if not raw_properties:
         return result
@@ -88,15 +77,6 @@ def _read_anim_graph_node(
     if subgraph_refs:
         result["subgraph_references"] = subgraph_refs
 
-    # Extract other AnimGraphNode specific properties
-    node_data = raw_properties.get("Node")
-    if node_data and isinstance(node_data, dict):
-        result["anim_node_data"] = node_data
-
-    # State machine specific properties
-    if "StateMachineIndexInClass" in raw_properties:
-        result["state_machine_index"] = raw_properties["StateMachineIndexInClass"]
-
     return result
 
 
@@ -111,7 +91,6 @@ def create_node_from_archive(
     summary: PackageFileSummary,
     export_map: list[ObjectExport],
     import_map: list[ObjectImport],
-    node_export: ObjectExport,
     base_node: UEdGraphNode,
     raw_properties: dict[str, Any] | None = None,
 ) -> UEdGraphNode:
@@ -130,12 +109,8 @@ def create_node_from_archive(
     # else tag-derived allow-list projection.
     if class_name.startswith("AnimGraphNode_") or class_name.startswith("AnimState"):
         base_node.node_data = _read_anim_graph_node(
-            archive,
-            name_map,
-            summary,
             export_map,
             import_map,
-            class_name,
             raw_properties,
         )
     elif raw_properties:
@@ -160,64 +135,12 @@ def create_node_from_archive(
 # ============================================================================
 
 
-def _handle_node_guid(archive, tag, name_map, import_map, export_map, raw_properties):
-    """Handle NodeGuid tag."""
-    if tag.size > 0:
-        try:
-            data = archive.read_bytes(16)
-            if len(data) < 16:
-                logger.warning(
-                    "NodeGuid: expected 16 bytes, got %d at offset %d",
-                    len(data),
-                    archive.tell() - len(data),
-                )
-                val = data.hex().ljust(32, "0")
-            else:
-                val = data.hex()
-        except Exception:
-            logger.warning(
-                "NodeGuid: failed to read 16 bytes at offset %d, using zero GUID",
-                archive.tell(),
-            )
-            val = "0" * 32
-        seek_to_tag_end(archive, tag)
-        return {"node_guid": val}
-    return {}
-
-
 def _handle_node_comment(archive, tag, name_map, import_map, export_map, raw_properties):
     """Handle NodeComment tag."""
     if tag.size > 0:
         val = archive.read_fstring()
         seek_to_tag_end(archive, tag)
         return {"node_comment": val}
-    return {}
-
-
-def _handle_input_action(archive, tag, name_map, import_map, export_map, raw_properties):
-    """Handle InputAction tag."""
-    if tag.size > 0:
-        pkg_idx = archive.read_i32()
-        input_action_path = resolve_class_name(PackageIndex(pkg_idx), import_map, export_map) if pkg_idx != 0 else ""
-        raw_properties[tag.name] = input_action_path
-        raw_properties["InputActionShortName"] = (
-            input_action_path.split(".")[-1].split("'")[0] if input_action_path else ""
-        )
-        raw_properties["InputActionPackageIndex"] = pkg_idx
-        seek_to_tag_end(archive, tag)
-    return {}
-
-
-def _handle_comment_color(archive, tag, name_map, import_map, export_map, raw_properties):
-    """Handle CommentColor tag (RGBA four-component float)."""
-    if tag.size >= 16:
-        raw_properties[tag.name] = (
-            archive.read_f32(),
-            archive.read_f32(),
-            archive.read_f32(),
-            archive.read_f32(),
-        )
-        seek_to_tag_end(archive, tag)
     return {}
 
 
@@ -249,7 +172,6 @@ def _handle_package_index(archive, tag, name_map, import_map, export_map, raw_pr
     if tag.size > 0:
         pkg_idx = archive.read_i32()
         raw_properties[tag.name] = pkg_idx
-        raw_properties[f"{tag.name}PackageIndex"] = pkg_idx
         seek_to_tag_end(archive, tag)
     return {}
 
@@ -259,14 +181,6 @@ def _handle_move_mode(archive, tag, name_map, import_map, export_map, raw_proper
     (comment-node TEnumAsByte<ECommentBoxMode>, PropertyByte.cpp SerializeItem)."""
     enum_name = _read_byte_enum_tag_name(archive, tag, name_map)
     raw_properties[tag.name] = enum_name
-    return {}
-
-
-def _handle_node_details(archive, tag, name_map, import_map, export_map, raw_properties):
-    """Handle NodeDetails tag (FText): value is discarded, only the tag span is consumed."""
-    if tag.size > 0:
-        archive.seek(tag.value_end_offset)
-        raw_properties[tag.name] = {"size": tag.size, "type": "FText"}
     return {}
 
 
@@ -292,15 +206,11 @@ _NODE_SIMPLE_TAGS: dict[str, tuple[str, str | None, bool]] = {
 
 # Tag name -> handler function dispatch dictionary
 _NODE_TAG_HANDLERS: dict[str, Any] = {
-    "NodeGuid": _handle_node_guid,
     "NodeComment": _handle_node_comment,
-    "InputAction": _handle_input_action,
-    "CommentColor": _handle_comment_color,
     "AdvancedPinDisplay": _handle_advanced_pin_display,
     "EditorStateMachineGraph": _handle_package_index,
     "BoundGraph": _handle_package_index,
     "MoveMode": _handle_move_mode,
-    "NodeDetails": _handle_node_details,
 }
 
 
@@ -319,11 +229,15 @@ def _read_node_property_tag(
         if skip_when_empty and tag.size <= 0:
             return {}
         if kind == "i32":
-            val = _read_tag_i32(archive, tag)
+            val = read_tag_value_bounded(archive, tag, archive.read_i32)
         elif kind == "bool":
-            val = _read_tag_bool(archive, tag)
+            val = read_tag_value_bounded(
+                archive,
+                tag,
+                lambda: archive.read_i32() != 0 if tag.size > 0 else tag.bool_val != 0,
+            )
         else:
-            val = _read_tag_fname(archive, tag, name_map)
+            val = read_tag_value_bounded(archive, tag, lambda: archive.read_name(name_map))
         raw_properties[tag.name] = val
         return {} if out_key is None else {out_key: val}
 
@@ -348,7 +262,6 @@ def _read_node_pins(
     import_map: list[ObjectImport],
     node_export: ObjectExport,
     node_name: str,
-    node_guid: str,
 ) -> list[UEdGraphPin]:
     """Read the Pins array of a node."""
     pins_offset = node_export.script_serialization_end_offset + 4  # Skip end marker
@@ -409,7 +322,6 @@ def _read_node_script_serial(
     result: dict[str, Any] = {
         "node_pos_x": 0,
         "node_pos_y": 0,
-        "node_guid": "",
         "node_comment": "",
         "raw_properties": {},
     }
@@ -490,7 +402,6 @@ def read_ue_graph_node(
         import_map,
         node_export,
         node_name,
-        serial["node_guid"],
     )
 
     class_name = resolve_class_name(node_export.class_index, import_map, export_map) or ""
@@ -509,7 +420,6 @@ def read_ue_graph_node(
         summary,
         export_map,
         import_map,
-        node_export,
         base_node,
         raw_properties=raw_properties if raw_properties else None,
     )

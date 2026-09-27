@@ -73,16 +73,15 @@ def resolve_pin_links(nodes: list[BlueprintNode], refs: list[PinLinkRef]) -> Lin
     GUID. Ambiguous/unresolved refs become diagnostics — never an arbitrary
     last duplicate.
     """
-    by_owner_guid: dict[tuple[str, str], list[tuple[str, str]]] = {}
+    owner_pins: set[tuple[str, str]] = set()
     by_guid: dict[str, list[tuple[str, str]]] = {}
     for node in nodes:
         for pin in node.pins:
             if not pin.id:
                 continue
             entry = (str(node.id), pin.id)
-            by_owner_guid.setdefault((str(node.id), pin.id), []).append(entry)
+            owner_pins.add(entry)
             by_guid.setdefault(pin.id, []).append(entry)
-    by_owner_guid = {k: list(dict.fromkeys(v)) for k, v in by_owner_guid.items()}
     by_guid = {k: list(dict.fromkeys(v)) for k, v in by_guid.items()}
 
     links: list[PinLink] = []
@@ -91,9 +90,9 @@ def resolve_pin_links(nodes: list[BlueprintNode], refs: list[PinLinkRef]) -> Lin
         owner_key = str(ref.to_owner_node_id) if ref.to_owner_node_id else None
         target: tuple[str, str] | None = None
         if owner_key is not None:
-            candidates = by_owner_guid.get((owner_key, ref.to_pin_guid), [])
-            if len(candidates) == 1:
-                target = candidates[0]
+            # The owner key names at most one (node, pin) entry.
+            if (owner_key, ref.to_pin_guid) in owner_pins:
+                target = (owner_key, ref.to_pin_guid)
             else:
                 diagnostics.append(
                     Diagnostic(
@@ -101,7 +100,7 @@ def resolve_pin_links(nodes: list[BlueprintNode], refs: list[PinLinkRef]) -> Lin
                         code="BLUEPRINT_PIN_LINK_UNRESOLVED",
                         message=(
                             f"pin link target {owner_key}/{ref.to_pin_guid} "
-                            f"({len(candidates)} candidate(s))"
+                            "(0 candidate(s))"
                         ),
                         stage="semantic.blueprint",
                     )

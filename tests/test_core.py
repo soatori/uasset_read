@@ -113,7 +113,7 @@ from uasset_read.parsers.property_parser import _try_read_unversioned_header, _f
 from uasset_read.mappings import TypeMappings
 from uasset_read.kismet.expressions import FScriptText, EX_Assert, EX_SetSet
 from uasset_read.kismet.tokens import EBlueprintTextLiteralType as T
-from uasset_read.serializers.graph_helpers import read_ftext_fstring
+from uasset_read.serializers.graph_helpers import _read_fstring
 from uasset_read.kismet.ufunction_reader import RELEASE_GUID
 from uasset_read.serializers.graph_pin import read_ed_graph_pin_type, read_pin_array
 from uasset_read.serializers.graph_node import _handle_advanced_pin_display, _handle_move_mode
@@ -1900,9 +1900,9 @@ def test_handler_registry_supports_enriches_and_isolates():
         import struct
 
         arc = ByteArchive(struct.pack("<i", -1) + b"\x00\x00" + struct.pack("<i", 3) + b"abc\x00")
-        assert read_ftext_fstring(arc) == ""
+        assert _read_fstring(arc, tolerant=False) == ""
         assert arc.tell() == 6  # consumed the 2-byte UTF-16 NUL, not skipped it
-        assert read_ftext_fstring(arc) == "abc"
+        assert _read_fstring(arc, tolerant=False) == "abc"
 
     def test_map_pin_terminal_reads_trailing_bools():
         """G1: FEdGraphTerminalType reads const/weak/gated-wrapper bools (EdGraphNode.cpp)."""
