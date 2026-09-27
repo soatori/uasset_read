@@ -120,12 +120,10 @@ def run_handlers(
             reason="no_domain_decoder",
         )
 
-    obj.status.semantic = "complete" if (decoded and not failed) else "partial"
     status: Literal["complete", "partial", "unavailable", "not_requested"] = (
         "complete" if (decoded and not failed) else "partial"
     )
-    if failed and not decoded:
-        status = "partial"
+    obj.status.semantic = status
     return DomainResult(
         status=status,
         semantic=semantic or None,

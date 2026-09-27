@@ -549,8 +549,6 @@ class MaterialHandler(_SupportsClasses):
         graph = result.get("material_graph")
         if isinstance(graph, dict) and graph.get("capability") in {"complete", "partial"}:
             return "decoded"
-        if any(k in result for k in ("parent", "blend_mode", "shading_model")):
-            return "decoded"
         return "summary"
 
 
@@ -609,7 +607,6 @@ class MaterialInstanceHandler(_SupportsClasses):
         if (
             (result.get("scalar_param_count") or 0) > 0
             or (result.get("vector_param_count") or 0) > 0
-            or (result.get("texture_param_count") or 0) > 0
         ):
             return "decoded"
         return "summary"
