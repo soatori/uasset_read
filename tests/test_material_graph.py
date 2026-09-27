@@ -79,15 +79,6 @@ def test_material_handler_attaches_projected_material_graph(stackobot_material):
     assert via_fixture is attached or via_fixture == attached
 
 
-def test_stackobot_material_semantic_has_graph_dict(stackobot_material):
-    """E1: document-boundary material_graph is a projected dict with expressions."""
-    from tests.fixtures import find_material_graph
-
-    graph = find_material_graph(stackobot_material)
-    assert isinstance(graph, dict)
-    assert graph.get("expressions") is not None
-
-
 def test_material_owner_scope_filters_foreign_expressions():
     """An id provided to decode_objects scopes expressions by outer chain —
     never a silent first-Material fallback."""

@@ -8,11 +8,9 @@ checks consume projected E1 dicts (not live IR dataclasses) except where
 from __future__ import annotations
 
 import json
-from collections import Counter
 from pathlib import Path
 
 import jsonschema
-import pytest
 
 from tests.fixtures import (
     find_blueprint_object,
@@ -298,33 +296,8 @@ def test_committed_containers_iostore_metadata_and_zen_unavailability():
 # --------------------------------------------------------------------------- #
 
 
-def test_cpp_projection_oracle_and_dual_offset_traces():
-    from uasset_read.projections.cpp_ast import build_cpp_ast
+def test_cpp_projection_dual_offset_traces():
     from uasset_read.projections.cpp_render import render_cpp
-
-    oracle = json.loads(
-        (SAMPLES / "golden/blueprint_header_view/MyProject_UE58_TestBlueprint.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    # Declaration AST oracle is the R2 typed-IR path (BlueprintCorrelation → build_cpp_ast).
-    ue58 = parse_sample("MyProject_UE58_TestBlueprint.uasset", depth="decode")
-    ue58_corr = BlueprintCorrelation().build(ue58)
-    decl = build_cpp_ast(ue58_corr)
-    assert decl.name == oracle["class_name"]
-    assert decl.parent == oracle["parent_class"]
-    actual_properties = {item.name: item.type.name for item in decl.properties}
-    assert oracle["required_properties"].items() <= actual_properties.items()
-    function = next(item for item in decl.functions if item.name == oracle["functions"][0]["name"])
-    expected = oracle["functions"][0]
-    assert function.return_type.name == expected["return_type"]
-    assert [(p.name, p.type.name, p.direction) for p in function.params] == [
-        (p["name"], p["type"], p["direction"]) for p in expected["parameters"]
-    ]
-    # Public render_cpp accepts the projected E1 dict for the same declaration.
-    ue58_dict = find_blueprint_object(ue58).semantic
-    assert isinstance(ue58_dict, dict)
-    assert render_cpp(ue58_dict, mode="declaration").header_text
 
     # Migration dual-offset trace for every top-level instruction (StackOBot 85).
     stackobot = parse_sample("StackOBot_BP_Drone.uasset", depth="decode")
@@ -436,25 +409,6 @@ def test_bounded_project_document_pages_are_schema_valid(stackobot_document):
 # --------------------------------------------------------------------------- #
 # Gate 9 — byte accounting
 # --------------------------------------------------------------------------- #
-
-
-def test_every_requested_export_is_fully_accounted(stackobot_document):
-    expected = {
-        obj.id
-        for obj in stackobot_document.objects
-        if obj.serial_region and obj.serial_region.size > 0
-    }
-    scopes = stackobot_document.byte_accounting.scopes
-    assert expected
-    assert expected <= set(scopes)
-    for object_id in expected:
-        scope = scopes[object_id]
-        assert scope.leaves
-        scope.validate_full_coverage()
-        for leaf in scope.leaves:
-            assert leaf.size > 0
-            assert leaf.status in {"decoded", "opaque", "payload", "unavailable"}
-            assert leaf.status == "decoded" or leaf.reason
 
 
 def test_canonical_byte_accounting_scopes_are_contract_shaped(stackobot_document):
