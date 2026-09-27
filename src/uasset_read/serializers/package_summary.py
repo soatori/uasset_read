@@ -607,9 +607,7 @@ def read_package_summary(
             4,
             total_decompressed=total_decompressed,
         )
-        soft_package_references_offset = archive.read_i32()
-        if soft_package_references_offset > 0:
-            archive.validate_offset(soft_package_references_offset, "SoftPackageReferencesOffset")
+        archive.read_i32()  # SoftPackageReferencesOffset (write-only; cursor alignment)
 
     if file_version_ue4 >= UE4_ADDED_SEARCHABLE_NAMES:
         archive.read_i32()  # SearchableNamesOffset (write-only; cursor alignment)
