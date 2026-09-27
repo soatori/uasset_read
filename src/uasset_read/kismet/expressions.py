@@ -68,16 +68,6 @@ class KismetExpression(ABC):
         """Return the EExprToken value corresponding to this expression."""
         ...
 
-    def __init__(
-        self,
-        statement_index: int | None = 0,
-        serialized_start: int | None = -1,
-        serialized_end: int | None = -1,
-    ) -> None:
-        self.StatementIndex = statement_index
-        self.SerializedStart = serialized_start
-        self.SerializedEnd = serialized_end
-
     def to_dict(self) -> dict:
         """Serialize to dictionary format (for JSON output).
 
@@ -134,23 +124,9 @@ class OpaqueExpression(KismetExpression):
             return EExprToken.EX_Nothing
 
     def to_dict(self) -> dict:
-        from uasset_read.models.byte_ranges import project_region
-
-        return {
-            "Inst": "Opaque",
-            "StatementIndex": _project_dual_offset(
-                "StatementIndex", getattr(self, "StatementIndex", None)
-            ),
-            "SerializedStart": _project_dual_offset(
-                "SerializedStart", getattr(self, "SerializedStart", None)
-            ),
-            "SerializedEnd": _project_dual_offset(
-                "SerializedEnd", getattr(self, "SerializedEnd", None)
-            ),
-            "token": self.token,
-            "reason": self.reason,
-            "raw_region": project_region(self.raw_region),
-        }
+        d = super().to_dict()
+        d["Inst"] = "Opaque"  # handlers_impl discriminates on this tag
+        return d
 
 @dataclass(kw_only=True)
 class KismetExpressionT(KismetExpression):
@@ -164,11 +140,6 @@ class KismetExpressionT(KismetExpression):
     """
 
     Value: Any = None
-
-    def to_dict(self) -> dict:
-        result = super().to_dict()
-        result["Value"] = self.Value
-        return result
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} token={self.Token.name} value={self.Value!r}>"
@@ -363,18 +334,6 @@ class EX_TextConst(KismetExpression):
         text = FScriptText.from_archive(archive)
         return cls(Text=text)
 
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        if self.Text:
-            d["Text"] = {
-                "TextLiteralType": self.Text.TextLiteralType.name,
-                "SourceString": self.Text.SourceString,
-                "KeyString": self.Text.KeyString,
-                "Namespace": self.Text.Namespace,
-                "DevNotes": self.Text.DevNotes,
-            }
-        return d
-
 @dataclass
 class EX_SoftObjectConst(KismetExpression):
     """Soft object constant expression (EX_SoftObjectConst, 0x67)."""
@@ -421,11 +380,6 @@ class EX_VectorConst(KismetExpression):
             z = archive.read_f32()
         return cls(X=x, Y=y, Z=z)
 
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["Value"] = f"({self.X}, {self.Y}, {self.Z})"
-        return d
-
 @dataclass
 class EX_RotationConst(KismetExpression):
     """Rotation constant expression (EX_RotationConst, 0x22).
@@ -450,11 +404,6 @@ class EX_RotationConst(KismetExpression):
             y = archive.read_f32()
             r = archive.read_f32()
         return cls(Pitch=p, Yaw=y, Roll=r)
-
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["Value"] = f"(Pitch={self.Pitch}, Yaw={self.Yaw}, Roll={self.Roll})"
-        return d
 
 @dataclass
 class EX_TransformConst(KismetExpression):
@@ -498,11 +447,6 @@ class EX_Vector3fConst(KismetExpression):
         z = archive.read_f32()
         return cls(X=x, Y=y, Z=z)
 
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["Value"] = f"({self.X}, {self.Y}, {self.Z})"
-        return d
-
 # === Control flow (from control_flow.py) ===
 
 @dataclass
@@ -518,11 +462,6 @@ class EX_Jump(KismetExpression):
         offset = archive.read_u32()
         return cls(CodeOffset=offset)
 
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["CodeOffset"] = self.CodeOffset
-        return d
-
 @dataclass
 class EX_JumpIfNot(EX_Jump):
     """Conditional jump: jump if the boolean expression is false."""
@@ -536,11 +475,6 @@ class EX_JumpIfNot(EX_Jump):
         offset = archive.read_u32()
         expr = archive.read_expression()
         return cls(CodeOffset=offset, BooleanExpression=expr)
-
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["BooleanExpression"] = self.BooleanExpression.to_dict() if self.BooleanExpression else None
-        return d
 
 @dataclass
 class EX_Skip(EX_Jump):
@@ -556,11 +490,6 @@ class EX_Skip(EX_Jump):
         expr = archive.read_expression()
         return cls(CodeOffset=offset, SkipExpression=expr)
 
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["SkipExpression"] = self.SkipExpression.to_dict() if self.SkipExpression else None
-        return d
-
 @dataclass
 class EX_ComputedJump(KismetExpression):
     """Dynamically computed jump target offset."""
@@ -574,11 +503,6 @@ class EX_ComputedJump(KismetExpression):
         expr = archive.read_expression()
         return cls(CodeOffsetExpression=expr)
 
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["CodeOffsetExpression"] = self.CodeOffsetExpression.to_dict() if self.CodeOffsetExpression else None
-        return d
-
 @dataclass
 class EX_PushExecutionFlow(KismetExpression):
     """Push the return address onto the execution flow stack."""
@@ -591,11 +515,6 @@ class EX_PushExecutionFlow(KismetExpression):
     def from_archive(cls, archive: FKismetArchive) -> EX_PushExecutionFlow:
         addr = archive.read_u32()
         return cls(PushingAddress=addr)
-
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["PushingAddress"] = self.PushingAddress
-        return d
 
 # Data-free expression: returns Token only
 EX_PopExecutionFlow = make_simple_expression(EExprToken.EX_PopExecutionFlow)
@@ -612,11 +531,6 @@ class EX_PopExecutionFlowIfNot(KismetExpression):
     def from_archive(cls, archive: FKismetArchive) -> EX_PopExecutionFlowIfNot:
         expr = archive.read_expression()
         return cls(BooleanExpression=expr)
-
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["BooleanExpression"] = self.BooleanExpression.to_dict() if self.BooleanExpression else None
-        return d
 
 # Data-free expression: returns Token only
 EX_EndOfScript = make_simple_expression(EExprToken.EX_EndOfScript)
@@ -646,12 +560,6 @@ class EX_LetBase(KismetExpression):
         assign = archive.read_expression()
         return cls(Variable=var, Assignment=assign)
 
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["Variable"] = self.Variable.to_dict() if self.Variable else None
-        d["Assignment"] = self.Assignment.to_dict() if self.Assignment else None
-        return d
-
 @dataclass
 class EX_Let(KismetExpression):
     """Standard assignment expression with a property pointer."""
@@ -670,13 +578,6 @@ class EX_Let(KismetExpression):
         var = archive.read_expression()
         assign = archive.read_expression()
         return cls(Property=prop, Variable=var, Assignment=assign)
-
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["Property"] = self.Property.to_dict() if self.Property else None
-        d["Variable"] = self.Variable.to_dict() if self.Variable else None
-        d["Assignment"] = self.Assignment.to_dict() if self.Assignment else None
-        return d
 
 # Token-only EX_Let variants — share EX_LetBase serialization exactly.
 EX_LetBool = make_token_subclass(EX_LetBase, EExprToken.EX_LetBool)
@@ -702,12 +603,6 @@ class EX_LetValueOnPersistentFrame(KismetExpression):
         expr = archive.read_expression()
         return cls(DestinationProperty=prop, AssignmentExpression=expr)
 
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["DestinationProperty"] = self.DestinationProperty.to_dict() if self.DestinationProperty else None
-        d["AssignmentExpression"] = self.AssignmentExpression.to_dict() if self.AssignmentExpression else None
-        return d
-
 # === Function calls (from functions.py) ===
 
 # Data-free expression: returns Token only
@@ -728,13 +623,6 @@ class EX_FinalFunction(KismetExpression):
         stack_ref = archive.xfer_object_pointer()
         params = archive.read_expression_array(EExprToken.EX_EndFunctionParms)
         return cls(StackNode=stack_ref.index, Parameters=params)
-
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["StackNode"] = self.StackNode
-        d["ParamCount"] = len(self.Parameters) if self.Parameters else 0
-        d["parameters"] = [p.to_dict() if hasattr(p, "to_dict") else p for p in self.Parameters]
-        return d
 
 # Token-only EX_FinalFunction variants — share its serialization exactly.
 EX_CallMath = make_token_subclass(EX_FinalFunction, EExprToken.EX_CallMath)
@@ -762,13 +650,6 @@ class EX_VirtualFunction(KismetExpression):
             VirtualFunctionName=full_name,
             Parameters=params,
         )
-
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["Name"] = self.VirtualFunctionName
-        d["ParamCount"] = len(self.Parameters) if self.Parameters else 0
-        d["parameters"] = [p.to_dict() if hasattr(p, "to_dict") else p for p in self.Parameters]
-        return d
 
 EX_LocalVirtualFunction = make_token_subclass(EX_VirtualFunction, EExprToken.EX_LocalVirtualFunction)
 
@@ -818,12 +699,6 @@ class EX_Cast(KismetExpression):
         conv = ECastToken(archive.read_u8())
         target = archive.read_expression()
         return cls(ConversionType=conv, TargetExpression=target)
-
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["ConversionType"] = self.ConversionType.name
-        d["TargetExpression"] = self.TargetExpression.to_dict() if self.TargetExpression else None
-        return d
 
 # Token-only cast variants — share EX_CastBase serialization exactly.
 EX_MetaCast = make_token_subclass(EX_CastBase, EExprToken.EX_MetaCast)
@@ -1039,13 +914,6 @@ class EX_StructConst(KismetExpression):
         props = archive.read_expression_array(EExprToken.EX_EndStructConst)
         return cls(Struct=struct_ref.index, StructSize=size, Properties=props)
 
-    def to_dict(self) -> dict:
-        result = super().to_dict()
-        result["Struct"] = self.Struct
-        result["StructSize"] = self.StructSize
-        result["Properties"] = [p.to_dict() for p in self.Properties]
-        return result
-
 @dataclass
 class EX_EndStructConst(KismetExpression):
     """End of UStruct constant (EX_EndStructConst, 0x30)."""
@@ -1067,11 +935,6 @@ class EX_PropertyConst(KismetExpression):
         prop = FKismetPropertyPointer.from_archive(archive)
         return cls(Property=prop)
 
-    def to_dict(self) -> dict:
-        result = super().to_dict()
-        result["Property"] = str(self.Property) if self.Property else None
-        return result
-
 @dataclass
 class EX_BitFieldConst(KismetExpression):
     """Assign to a single bit, defined by an FProperty (EX_BitFieldConst, 0x11)."""
@@ -1088,12 +951,6 @@ class EX_BitFieldConst(KismetExpression):
         prop = FKismetPropertyPointer.from_archive(archive)
         val = archive.read_u8()
         return cls(InnerProperty=prop, ConstValue=val)
-
-    def to_dict(self) -> dict:
-        result = super().to_dict()
-        result["InnerProperty"] = str(self.InnerProperty) if self.InnerProperty else None
-        result["ConstValue"] = self.ConstValue
-        return result
 
 # === Delegate expressions (from delegates.py) ===
 
@@ -1112,12 +969,6 @@ class EX_AddMulticastDelegate(KismetExpression):
         d_add = archive.read_expression()
         return cls(Delegate=d, DelegateToAdd=d_add)
 
-    def to_dict(self) -> dict:
-        result = super().to_dict()
-        result["Delegate"] = self.Delegate.to_dict() if self.Delegate else None
-        result["DelegateToAdd"] = self.DelegateToAdd.to_dict() if self.DelegateToAdd else None
-        return result
-
 @dataclass
 class EX_ClearMulticastDelegate(KismetExpression):
     """Clears all delegates in a multicast target (EX_ClearMulticastDelegate, 0x5D)."""
@@ -1130,11 +981,6 @@ class EX_ClearMulticastDelegate(KismetExpression):
     def from_archive(cls, archive: FKismetArchive) -> EX_ClearMulticastDelegate:
         d = archive.read_expression()
         return cls(DelegateToClear=d)
-
-    def to_dict(self) -> dict:
-        result = super().to_dict()
-        result["DelegateToClear"] = self.DelegateToClear.to_dict() if self.DelegateToClear else None
-        return result
 
 @dataclass
 class EX_BindDelegate(KismetExpression):
@@ -1157,13 +1003,6 @@ class EX_BindDelegate(KismetExpression):
             ObjectTerm=obj,
         )
 
-    def to_dict(self) -> dict:
-        result = super().to_dict()
-        result["FunctionName"] = self.FunctionName
-        result["Delegate"] = self.Delegate.to_dict() if self.Delegate else None
-        result["ObjectTerm"] = self.ObjectTerm.to_dict() if self.ObjectTerm else None
-        return result
-
 @dataclass
 class EX_RemoveMulticastDelegate(KismetExpression):
     """Remove a delegate from a multicast delegate's targets (EX_RemoveMulticastDelegate, 0x62)."""
@@ -1179,12 +1018,6 @@ class EX_RemoveMulticastDelegate(KismetExpression):
         d_remove = archive.read_expression()
         return cls(Delegate=d, DelegateToRemove=d_remove)
 
-    def to_dict(self) -> dict:
-        result = super().to_dict()
-        result["Delegate"] = self.Delegate.to_dict() if self.Delegate else None
-        result["DelegateToRemove"] = self.DelegateToRemove.to_dict() if self.DelegateToRemove else None
-        return result
-
 @dataclass
 class EX_InstanceDelegate(KismetExpression):
     """Const reference to a delegate or normal function object (EX_InstanceDelegate, 0x4B)."""
@@ -1197,11 +1030,6 @@ class EX_InstanceDelegate(KismetExpression):
     def from_archive(cls, archive: FKismetArchive) -> EX_InstanceDelegate:
         fname_ref = archive.xfer_fname()
         return cls(FunctionName=fname_ref.base_name or "")
-
-    def to_dict(self) -> dict:
-        result = super().to_dict()
-        result["FunctionName"] = self.FunctionName
-        return result
 
 # === Special expressions (from special.py) ===
 

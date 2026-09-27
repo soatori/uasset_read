@@ -984,7 +984,7 @@ class _InstructionWalker:
         if opcode is not None and opcode in _CALL_OPCODES:
             name, stack = _call_parts(value, opcode)
             self._emit_call(name, stack, None, dict_operands=value)
-            for param in value.get("parameters") or []:
+            for param in value.get("Parameters") or []:
                 self._visit(param, root_opcode=None, in_write_position=False)
             return
         if opcode is not None and _is_let_opcode(opcode):

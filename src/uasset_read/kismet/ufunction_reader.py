@@ -115,10 +115,8 @@ class FunctionScriptReadResult:
     """Result of reading a native UFunction script.
 
     Identity fields are populated from the export table before parsing.
-    ``script_local_start``/``script_local_end`` are local physical offsets
-    into the copied export script buffer; ``script_source_range`` carries the
-    package-source coordinate range separately. ``status`` stays in the
-    read-phase vocabulary (extracted|no_script|failed).
+    ``script_source_range`` carries the package-source coordinate range.
+    ``status`` stays in the read-phase vocabulary (extracted|no_script|failed).
     """
 
     status: Literal["extracted", "no_script", "failed"]
@@ -129,8 +127,6 @@ class FunctionScriptReadResult:
     bytecode_buffer_size: int = 0
     serialized_script_size: int = 0
     native_fields: list[NativeFieldDeclaration] = field(default_factory=list)
-    script_local_start: int = 0
-    script_local_end: int = 0
     script_source_range: ByteRegion | None = None
     failure: FunctionScriptFailure | None = None
 
@@ -405,7 +401,6 @@ def _read_ustruct_prefix_and_script(
         # copied export buffer and the package-source range separately.
         script_local_start = window.tell()
         script = window.read(serialized_script_size)
-        script_local_end = window.tell()
         script_source_range = ByteRegion(
             export.serial_offset + script_local_start,
             serialized_script_size,
@@ -421,8 +416,6 @@ def _read_ustruct_prefix_and_script(
             bytecode_buffer_size=bytecode_buffer_size,
             serialized_script_size=serialized_script_size,
             native_fields=native_fields,
-            script_local_start=script_local_start,
-            script_local_end=script_local_end,
             script_source_range=script_source_range,
         )
 

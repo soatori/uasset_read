@@ -11,7 +11,6 @@ from dataclasses import dataclass, field, asdict
 from typing import Any
 
 from uasset_read.models.byte_ranges import ByteRegion, project_region
-from uasset_read.models.diagnostics import Diagnostic
 
 # status -> public confidence (analysis vocabulary: parsed|partial|unavailable)
 BYTECODE_CONFIDENCE: dict[str, str] = {
@@ -70,7 +69,6 @@ class KismetDecompiledResult:
     error_context: dict[str, Any] | None = None
     script_metrics: dict[str, Any] | None = None
     fallback_reasons: list[str] = field(default_factory=list)
-    errors: list[Diagnostic] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         infer_bytecode_confidence(self.bytecode_status)  # validates
@@ -78,10 +76,7 @@ class KismetDecompiledResult:
     def to_dict(self) -> dict:
         d = asdict(self)
         d["bytecode_confidence"] = infer_bytecode_confidence(self.bytecode_status)
-        d["expressions"] = [
-            e.to_dict() if hasattr(e, "to_dict") else str(e) for e in self.expressions
-        ]
-        d["errors"] = [e.to_dict() if hasattr(e, "to_dict") else e for e in self.errors]
+        d["expressions"] = [e.to_dict() for e in self.expressions]
         if self.script_source_range is not None:
             d["script_source_range"] = project_region(self.script_source_range)
         return {k: v for k, v in d.items() if v is not None}
