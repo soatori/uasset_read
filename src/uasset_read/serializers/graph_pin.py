@@ -21,14 +21,13 @@ from uasset_read.constants import (
     MAX_FTEXT_CONSUMPTION,
 )
 from uasset_read.exceptions import ParseError
-from uasset_read.versioning import RELEASE_GUID, get_custom_version
+from uasset_read.versioning import RELEASE_GUID, ftext_dev_notes_enabled, get_custom_version
 from uasset_read.models.core import UEdGraphPin, FEdGraphPinType
 
 from uasset_read.serializers.graph_helpers import (
     _read_guid,
     _read_ftext_value,
     _read_fstring,
-    ftext_dev_notes_enabled,
 )
 
 logger = logging.getLogger(__name__)

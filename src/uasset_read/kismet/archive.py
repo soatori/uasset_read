@@ -38,7 +38,6 @@ class FKismetArchive(FArchive):
 
     def read_expression(self) -> KismetExpression:
         """Read one byte token → look up in EXPR_CLASS_MAP → construct expression → set StatementIndex."""
-        from uasset_read.exceptions import StreamPoisonedError
         from uasset_read.models.byte_ranges import ByteRegion
 
         if self._expression_depth >= MAX_EXPRESSION_RECURSION_DEPTH:
@@ -61,7 +60,7 @@ class FKismetArchive(FArchive):
                     # Unknown token: preserve the token start plus the bounded
                     # remaining function bytes as one opaque tail and stop
                     # parsing this function. Never skip the payload silently.
-                    end = self.consume_remaining_function()
+                    self.consume_remaining_function()
                     serialized_end = self.tell()
                     expr: KismetExpression = OpaqueExpression(
                         token=token_byte,
@@ -75,19 +74,14 @@ class FKismetArchive(FArchive):
                 token_name = token.name if token is not None else "<unknown>"
                 raise ParseError(f"Unknown EExprToken {token_name} (0x{token_byte:02X}) at offset {stmt_index}")
 
+            self._expression_depth += 1
             try:
-                self._expression_depth += 1
-                try:
-                    if hasattr(expr_class, "from_archive"):
-                        expr = expr_class.from_archive(self)  # type: ignore[reportAttributeAccessIssue]
-                    else:
-                        expr = expr_class()
-                finally:
-                    self._expression_depth -= 1
-            except StreamPoisonedError:
-                raise
-            except ParseError:
-                raise
+                if hasattr(expr_class, "from_archive"):
+                    expr = expr_class.from_archive(self)  # type: ignore[reportAttributeAccessIssue]
+                else:
+                    expr = expr_class()
+            finally:
+                self._expression_depth -= 1
 
             serialized_end = self.tell()
             if serialized_end <= serialized_start:

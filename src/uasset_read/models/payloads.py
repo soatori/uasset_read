@@ -141,11 +141,8 @@ def discover_payload_descriptor(
 
         if serial_data:
             try:
-                bulk_headers = extract_bulk_data_descriptors(serial_data)
-                if bulk_headers:
-                    # Use the first (last in serial data) BulkData header
-                    header = bulk_headers[0]
-
+                header = extract_bulk_data_descriptors(serial_data)
+                if header is not None:
                     if header.flags & (BULKDATA_CompressedZlib | BULKDATA_CompressedOodle):
                         source_region = "ubulk"
                     elif "uexp" in sidecar_paths:

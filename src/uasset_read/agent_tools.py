@@ -310,6 +310,26 @@ def extract_payload(
     )
     from .package import open_package_bundle
 
+    def _unavailable(
+        message: str,
+        code: str = PAYLOAD_EXTRACTION_DEFERRED,
+        stage: str | None = None,
+    ) -> dict[str, Any]:
+        """Bounded deferred/unavailable envelope, fitted to the list budget."""
+        response: dict[str, Any] = {
+            "id": payload_id,
+            "error": message,
+            "code": code,
+            "available_ids": [],
+            "offset": 0,
+            "returned": 0,
+            "total": 0,
+        }
+        if stage is not None:
+            response["stage"] = stage
+            response["recoverable"] = True
+        return fit_list_response(response, max_bytes, list_key="available_ids")
+
     main_path = Path(file_path)
     if not main_path.exists():
         return _err(
@@ -344,31 +364,19 @@ def extract_payload(
     # never treated as exports.
     parsed = _parse_payload_id(payload_id)
     if parsed is not None and parsed[0] == "import":
-        response = {
-            "id": payload_id,
-            "error": "Payload extraction is deferred: real payloads require per-export BulkData mapping from cooked fixtures (issue #627)",
-            "code": PAYLOAD_EXTRACTION_DEFERRED,
-            "available_ids": [],
-            "offset": 0,
-            "returned": 0,
-            "total": 0,
-        }
-        return fit_list_response(response, max_bytes, list_key="available_ids")
+        return _unavailable(
+            "Payload extraction is deferred: real payloads require per-export "
+            "BulkData mapping from cooked fixtures (issue #627)"
+        )
 
     if export_index is None:
         export_index = _parse_export_index(payload_id)
 
     if export_index is None:
-        response = {
-            "id": payload_id,
-            "error": "Payload extraction is deferred: real payloads require per-export BulkData mapping from cooked fixtures (issue #627)",
-            "code": PAYLOAD_EXTRACTION_DEFERRED,
-            "available_ids": [],
-            "offset": 0,
-            "returned": 0,
-            "total": 0,
-        }
-        return fit_list_response(response, max_bytes, list_key="available_ids")
+        return _unavailable(
+            "Payload extraction is deferred: real payloads require per-export "
+            "BulkData mapping from cooked fixtures (issue #627)"
+        )
 
     # Discovery: BulkData header scan with serial-region fallback.
     descriptor = discover_payload_descriptor(
@@ -379,16 +387,7 @@ def extract_payload(
     )
 
     if descriptor.status == "missing" or descriptor.stored_size <= 0:
-        response = {
-            "id": payload_id,
-            "error": "Payload not available for this export index",
-            "code": PAYLOAD_EXTRACTION_DEFERRED,
-            "available_ids": [],
-            "offset": 0,
-            "returned": 0,
-            "total": 0,
-        }
-        return fit_list_response(response, max_bytes, list_key="available_ids")
+        return _unavailable("Payload not available for this export index")
 
     # Estimate the complete JSON response before opening the payload file.
     # Base64 has an exact 4 * ceil(n / 3) expansion; the empty-data envelope
@@ -436,18 +435,11 @@ def extract_payload(
 
     if error is not None:
         # Return structured error
-        response = {
-            "id": payload_id,
-            "error": error,
-            "code": PAYLOAD_EXTRACTION_DEFERRED if error == PAYLOAD_EXTRACTION_DEFERRED else "EXTRACTION_FAILED",
-            "stage": "agent.extract_payload",
-            "recoverable": True,
-            "available_ids": [],
-            "offset": 0,
-            "returned": 0,
-            "total": 0,
-        }
-        return fit_list_response(response, max_bytes, list_key="available_ids")
+        return _unavailable(
+            error,
+            code=PAYLOAD_EXTRACTION_DEFERRED if error == PAYLOAD_EXTRACTION_DEFERRED else "EXTRACTION_FAILED",
+            stage="agent.extract_payload",
+        )
 
     # Encode as base64 for JSON serialization
     encoded_data = base64.b64encode(data).decode("ascii")

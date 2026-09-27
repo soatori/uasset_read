@@ -1,6 +1,6 @@
 """Package layout detection — validated legacy vs zen vs unknown.
 
-``PackageLayoutDetector.detect`` inspects a ``ByteSource`` and returns a
+``detect_layout`` inspects a ``ByteSource`` and returns a
 ``PackageLayout`` describing which reader the bytes justify. Detection never
 guesses from UE major version or file name (controller ruling: Zen has no
 ``PACKAGE_FILE_TAG``-style magic; container/package-store context is used when
@@ -50,7 +50,7 @@ def _validated_legacy(source: ByteSource) -> bool:
     catalog maxima) reject the candidate instead of trusting the tag alone.
     """
     size = source.size()
-    if size is not None and size < MIN_UASSET_SIZE:
+    if size < MIN_UASSET_SIZE:
         return False
     try:
         head = source.read_at(0, 4)
@@ -78,11 +78,11 @@ def _validated_legacy(source: ByteSource) -> bool:
     from uasset_read.serializers.package_summary import read_package_summary
 
     caps = [65536]
-    if size is not None and size > 65536:
+    if size > 65536:
         caps.append(size)
     summary = None
     for cap in caps:
-        read_len = cap if size is None else min(size, cap)
+        read_len = min(size, cap)
         try:
             data = source.read_at(0, read_len)
             summary, _total_decompressed = read_package_summary(ByteArchive(data))
@@ -102,7 +102,7 @@ def _validated_legacy(source: ByteSource) -> bool:
         return False
     if summary.export_count < 0 or summary.export_count > MAX_EXPORT_COUNT:
         return False
-    if size is not None and summary.total_header_size > size:
+    if summary.total_header_size > size:
         return False
     return True
 
@@ -114,7 +114,7 @@ def _validated_zen(source: ByteSource) -> bool:
     fields must be monotonic and inside HeaderSize (controller ruling 1).
     """
     size = source.size()
-    if size is None or size < _ZEN_SUMMARY_MIN_SIZE:
+    if size < _ZEN_SUMMARY_MIN_SIZE:
         return False
     try:
         blob = source.read_at(0, _ZEN_SUMMARY_MIN_SIZE)
@@ -146,24 +146,22 @@ def _validated_zen(source: ByteSource) -> bool:
     return True
 
 
-class PackageLayoutDetector:
+def detect_layout(source: ByteSource) -> PackageLayout:
     """Validate which reader the source bytes justify."""
-
-    def detect(self, source: ByteSource) -> PackageLayout:
-        try:
-            head = source.read_at(0, 4)
-        except Exception:
-            return PackageLayout(kind="unknown", detection_reason="unknown")
-        if len(head) < 4:
-            return PackageLayout(kind="unknown", detection_reason="unknown")
-
-        tag = struct.unpack_from("<I", head, 0)[0]
-        if tag in (PACKAGE_FILE_TAG, PACKAGE_FILE_TAG_SWAPPED):
-            if _validated_legacy(source):
-                return PackageLayout(kind="legacy", detection_reason="validated_legacy")
-            # Swapped tag or failed validation: not a readable legacy package.
-            return PackageLayout(kind="unknown", detection_reason="unknown")
-
-        if _validated_zen(source):
-            return PackageLayout(kind="zen", detection_reason="validated_zen")
+    try:
+        head = source.read_at(0, 4)
+    except Exception:
         return PackageLayout(kind="unknown", detection_reason="unknown")
+    if len(head) < 4:
+        return PackageLayout(kind="unknown", detection_reason="unknown")
+
+    tag = struct.unpack_from("<I", head, 0)[0]
+    if tag in (PACKAGE_FILE_TAG, PACKAGE_FILE_TAG_SWAPPED):
+        if _validated_legacy(source):
+            return PackageLayout(kind="legacy", detection_reason="validated_legacy")
+        # Swapped tag or failed validation: not a readable legacy package.
+        return PackageLayout(kind="unknown", detection_reason="unknown")
+
+    if _validated_zen(source):
+        return PackageLayout(kind="zen", detection_reason="validated_zen")
+    return PackageLayout(kind="unknown", detection_reason="unknown")

@@ -248,13 +248,13 @@ def test_extract_bulk_data_descriptors_basic():
     # Use 0xFF bytes which won't form valid headers when scanned
     serial_data = b"\xff" * 100 + bulk_data_header
 
-    descriptors = extract_bulk_data_descriptors(serial_data)
+    header = extract_bulk_data_descriptors(serial_data)
 
-    assert len(descriptors) == 1
-    assert descriptors[0].size_on_disk == 8192
-    assert descriptors[0].element_count == 4096
-    assert descriptors[0].offset == 0
-    assert descriptors[0].compression_type is None
+    assert header is not None
+    assert header.size_on_disk == 8192
+    assert header.element_count == 4096
+    assert header.offset == 0
+    assert header.compression_type is None
 
 
 def test_extract_bulk_data_descriptors_compressed():
@@ -267,13 +267,13 @@ def test_extract_bulk_data_descriptors_compressed():
     # Use data that won't form false positive headers
     serial_data = b"\xff" * 200 + bulk_data_header
 
-    descriptors = extract_bulk_data_descriptors(serial_data)
+    header = extract_bulk_data_descriptors(serial_data)
 
-    assert len(descriptors) == 1
-    assert descriptors[0].size_on_disk == 4096
-    assert descriptors[0].element_count == 2048
-    assert descriptors[0].offset == 1024
-    assert descriptors[0].compression_type == "zlib"
+    assert header is not None
+    assert header.size_on_disk == 4096
+    assert header.element_count == 2048
+    assert header.offset == 1024
+    assert header.compression_type == "zlib"
 
 
 def test_extract_bulk_data_descriptors_single_at_end():
@@ -287,12 +287,12 @@ def test_extract_bulk_data_descriptors_single_at_end():
     # Use data that won't form false positive headers
     serial_data = b"\xff" * 50 + header1 + header2
 
-    descriptors = extract_bulk_data_descriptors(serial_data)
+    header = extract_bulk_data_descriptors(serial_data)
 
     # Conservative heuristic: only finds the last header
-    assert len(descriptors) == 1
-    assert descriptors[0].compression_type == "zlib"
-    assert descriptors[0].size_on_disk == 4096
+    assert header is not None
+    assert header.compression_type == "zlib"
+    assert header.size_on_disk == 4096
 
 
 def test_extract_bulk_data_descriptors_empty():
@@ -302,9 +302,9 @@ def test_extract_bulk_data_descriptors_empty():
     # Use 0xFF bytes which won't form valid headers when scanned
     serial_data = b"\xff" * 100
 
-    descriptors = extract_bulk_data_descriptors(serial_data)
+    header = extract_bulk_data_descriptors(serial_data)
 
-    assert len(descriptors) == 0
+    assert header is None
 
 
 def test_extract_bulk_data_descriptors_too_short():
@@ -313,9 +313,9 @@ def test_extract_bulk_data_descriptors_too_short():
 
     serial_data = b"\x01\x02\x03\x04" * 2
 
-    descriptors = extract_bulk_data_descriptors(serial_data)
+    header = extract_bulk_data_descriptors(serial_data)
 
-    assert len(descriptors) == 0
+    assert header is None
 
 
 def test_extract_bulk_data_descriptors_invalid_header():
@@ -328,10 +328,10 @@ def test_extract_bulk_data_descriptors_invalid_header():
     # Use 0xFF bytes which won't form valid headers
     serial_data = b"\xff" * 50 + invalid_header
 
-    descriptors = extract_bulk_data_descriptors(serial_data)
+    header = extract_bulk_data_descriptors(serial_data)
 
     # Invalid headers are skipped
-    assert len(descriptors) == 0
+    assert header is None
 
 
 def test_extract_bulk_data_from_real_uexp():
@@ -340,18 +340,11 @@ def test_extract_bulk_data_from_real_uexp():
 
     uexp_data = (FIXTURE_DIR / "T_ParserBulk.uexp").read_bytes()
 
-    # The uexp file contains export serial data
-    # Scan for BulkData headers in the last 32 bytes
-    descriptors = extract_bulk_data_descriptors(uexp_data)
-
-    # We expect to find at least one BulkData descriptor
-    # (the texture mip data in T_ParserBulk)
-    # Note: This is a heuristic scan, so results may vary
-    # The test verifies the function runs without error
-    assert isinstance(descriptors, list)
-    for desc in descriptors:
-        assert desc.size_on_disk > 0
-        assert desc.element_count > 0
+    # The committed fixture's tail is header-shaped but has size_on_disk == 0,
+    # so validation must reject it (None) rather than emit an invalid descriptor.
+    # This replaces the old vacuous isinstance(list) smoke check.
+    header = extract_bulk_data_descriptors(uexp_data)
+    assert header is None
 
 
 def test_end_to_end_payload_extraction():

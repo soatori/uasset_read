@@ -634,7 +634,6 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
             name_map,
             import_map,
             export_map,
-            tolerant=True,
         )
 
     from uasset_read.kismet.bytecode_extractor import FUNCTION_EXPORT_CLASSES

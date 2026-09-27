@@ -11,7 +11,7 @@ import re
 import struct
 from typing import Any
 
-from ...constants import format_guid_bytes
+from ...constants import format_guid_bytes, format_guid_fields
 from ...models.object_model import ObjectRecord, CoverageEntry
 from ...serializers.blueprint_graph import summarize_exec_edges
 from ..blueprint.correlation import _family_root_key
@@ -1159,21 +1159,6 @@ def _extract_declaration(
     }
 
 
-def _as_int(value: Any) -> int:
-    """Coerce a decoded numeric field without ever raising out of a handler."""
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return 0
-
-
-def _guid_hex(guid_fields: Any) -> str:
-    """Serialize a decoded Guid struct fields dict (A/B/C/D int32) to 32 hex."""
-    if not isinstance(guid_fields, dict):
-        return ""
-    return "".join(f"{_as_int(guid_fields.get(k, 0)) & 0xFFFFFFFF:08x}" for k in ("A", "B", "C", "D"))
-
-
 def _extract_variables(obj: ObjectRecord) -> list[dict[str, Any]]:
     """NewVariables (BPVariableDescription) with decoded VarType (FEdGraphPinType)."""
     props = obj.properties or {}
@@ -1207,7 +1192,7 @@ def _extract_variables(obj: ObjectRecord) -> list[dict[str, Any]]:
         out.append(
             {
                 "name": fields.get("VarName"),
-                "guid": _guid_hex(fields.get("VarGuid", {}).get("fields"))
+                "guid": format_guid_fields(fields.get("VarGuid", {}).get("fields"))
                 if isinstance(fields.get("VarGuid"), dict)
                 else "",
                 **({"type": vt_info} if vt_info else {}),

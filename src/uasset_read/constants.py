@@ -6,6 +6,7 @@ Extracted from uasset_read.py (per D-11).
 CLI exit codes live in cli.py, their only consumer.
 """
 
+import struct
 import uuid
 
 # ============================================================================
@@ -187,6 +188,25 @@ def format_guid_bytes(data: bytes, uppercase: bool = True) -> str:
         )
     text = str(uuid.UUID(bytes=bytes(data[:16])))
     return text.upper() if uppercase else text
+
+
+def format_guid_fields(guid_fields: object) -> str:
+    """Decoded FGuid ``{A,B,C,D}`` dict → 32-char lowercase hex (UE display order).
+
+    Shared by the Blueprint variable, correlation, and material-expression
+    guid projections; non-dict input yields ``""`` and non-int fields yield
+    zero words.
+    """
+    if not isinstance(guid_fields, dict):
+        return ""
+    words: list[int] = []
+    for key in ("A", "B", "C", "D"):
+        try:
+            words.append(int(guid_fields.get(key, 0)) & 0xFFFFFFFF)
+        except (TypeError, ValueError):
+            words.append(0)
+    packed = struct.pack(">IIII", *words)
+    return format_guid_bytes(packed, uppercase=False).replace("-", "")
 
 
 # ============================================================================

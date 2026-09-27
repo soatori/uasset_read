@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import struct as _struct
+from functools import cache
 from typing import TYPE_CHECKING, Any
 from collections.abc import Callable
 
@@ -25,9 +26,9 @@ from uasset_read.exceptions import ParseError, StreamPoisonedError
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
     PKG_UnversionedProperties,
-    PKG_FilterEditorOnly,
     FIXED_UNVERSIONED_SIZES,
 )
+from uasset_read.versioning import ftext_dev_notes_enabled
 from uasset_read.serializers.object_resources import ObjectExport
 
 logger = logging.getLogger(__name__)
@@ -127,15 +128,9 @@ def _stream_is_poisoned(archive: "FArchive", diag_mark: int) -> bool:
 # Shared control-flow exception (also re-raised by parse_struct_property).
 
 
-# Lazy import + cache: avoid circular dependency + avoid rebuilding dict per property parse
-_TYPE_HANDLER_MAP: dict | None = None
-
-
+@cache
 def _get_parse_functions():
-    """Get property type -> parse function mapping（module-level cache, not rebuilt after first call）。"""
-    global _TYPE_HANDLER_MAP
-    if _TYPE_HANDLER_MAP is not None:
-        return _TYPE_HANDLER_MAP
+    """Property type -> parse function mapping (cached; avoids circular import at module load)."""
     from uasset_read.parsers.property_types import (
         parse_bool_property,
         parse_int_property,
@@ -167,7 +162,7 @@ def _get_parse_functions():
 
     # Type strings map straight to base functions; aliases like
     # parse_utf8_str_property / parse_class_property were removed with T12.
-    _TYPE_HANDLER_MAP = {
+    return {
         "BoolProperty": parse_bool_property,
         "IntProperty": parse_int_property,
         "Int64Property": parse_int_property,
@@ -212,7 +207,6 @@ def _get_parse_functions():
         "AnsiStrProperty": parse_str_property,
         "GuidProperty": parse_guid_property,
     }
-    return _TYPE_HANDLER_MAP
 
 
 # Positional args parse_property_value passes each handler. Only the deviations from
@@ -316,27 +310,29 @@ def parse_property_value(
             "raw_data": raw_data,
         }
     if getattr(tag, "serialize_type", "Property") == "BinaryOrNative":
+        from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
+
+        def _native_handler(key: str):
+            """struct_type handler with the F-prefix fallback, looked up once per key."""
+            handler = BINARY_OR_NATIVE_HANDLERS.get(key)
+            if handler is None and not key.startswith("F"):
+                handler = BINARY_OR_NATIVE_HANDLERS.get(f"F{key}")
+            return handler
+
         # Prefer concrete struct_type handlers before generic StructProperty
         # raw fallback so known natives (ExpressionInput family) stay structured.
         struct_type = getattr(tag, "struct_type", None)
         if tag.type == "StructProperty" and struct_type:
-            for candidate in (struct_type, f"F{struct_type}" if not struct_type.startswith("F") else None):
-                if not candidate:
-                    continue
-                from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
-
-                handler = BINARY_OR_NATIVE_HANDLERS.get(candidate)
-                if handler is not None:
-                    try:
-                        result = handler(tag, archive, name_map, export_map, summary)
-                        if result is not None:
-                            return result
-                    except BINARY_READ_ERRORS as e:
-                        logger.debug("BinaryOrNative struct_type handler failed for %s: %s", candidate, e)
+            handler = _native_handler(struct_type)
+            if handler is not None:
+                try:
+                    result = handler(tag, archive, name_map, export_map, summary)
+                    if result is not None:
+                        return result
+                except BINARY_READ_ERRORS as e:
+                    logger.debug("BinaryOrNative struct_type handler failed for %s: %s", struct_type, e)
 
         # Try to use a known type parser
-        from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
-
         handler = BINARY_OR_NATIVE_HANDLERS.get(tag.type)
         if handler is not None:
             try:
@@ -346,11 +342,10 @@ def parse_property_value(
                 # Handler returned None (unknown type/parse failed), continue falling back to raw_data
             except BINARY_READ_ERRORS as e:
                 logger.debug("BinaryOrNative handler failed for %s: %s", tag.type, e)
-        # Also try by struct_type (with F-prefix fallback) for struct-specific handlers
-        if struct_type:
-            handler = BINARY_OR_NATIVE_HANDLERS.get(struct_type)
-            if handler is None and not struct_type.startswith("F"):
-                handler = BINARY_OR_NATIVE_HANDLERS.get(f"F{struct_type}")
+        # Also try by struct_type (with F-prefix fallback) for struct-specific
+        # handlers — skipped when the struct-native pass above already ran.
+        if struct_type and tag.type != "StructProperty":
+            handler = _native_handler(struct_type)
             if handler is not None:
                 try:
                     result = handler(tag, archive, name_map, export_map, summary)
@@ -406,13 +401,9 @@ def parse_property_value(
         if tag.type == "ByteProperty" and tag.enum_type is not None:
             result = handler(tag, archive, name_map)
         else:
-            dev_notes = False
-            if summary is not None and (getattr(summary, "package_flags", 0) & PKG_FilterEditorOnly) == 0:
-                # FText Base appends DevNotes when FortniteMainBranch >= AddDevNotesToFText=260
-                # and the package was not filtered for editor-only data (TextHistory.cpp:917).
-                from uasset_read.versioning import FORTNITE_GUID, get_custom_version
-
-                dev_notes = get_custom_version(summary, FORTNITE_GUID) >= 260
+            # FText Base appends DevNotes when FortniteMainBranch >= AddDevNotesToFText=260
+            # and the package was not filtered for editor-only data (TextHistory.cpp:917).
+            dev_notes = ftext_dev_notes_enabled(summary)
             values = {
                 "tag": tag,
                 "archive": archive,
@@ -623,7 +614,7 @@ def _parse_unversioned_properties_from_mapping(
                             nvalue = parse_property_value(
                                 ntag, archive, name_map, export_map, summary, tolerant=tolerant
                             )
-                        except (ParseError, BINARY_READ_ERRORS):
+                        except (ParseError, *BINARY_READ_ERRORS):
                             fields = None
                             archive.seek(nested_start)
                             break
@@ -708,7 +699,7 @@ def _parse_unversioned_properties_from_mapping(
         diag_mark = len(archive.get_structured_diagnostics())
         try:
             value = parse_property_value(tag, archive, name_map, export_map, summary, tolerant=tolerant)
-        except ParseError as exc:
+        except ParseError:
             if not tolerant:
                 raise
             if tag.size > 0:
@@ -809,7 +800,7 @@ def _read_unversioned_ftext(archive: FArchive, property_end: int) -> Any | None:
         # the caller can opaque the remainder instead of inventing empty text.
         archive.seek(start)
         return None
-    except (BINARY_READ_ERRORS, ValueError, _struct.error):
+    except (*BINARY_READ_ERRORS, ValueError, _struct.error):
         archive.seek(start)
         return None
 
@@ -818,7 +809,7 @@ def _try_read_unversioned_header(
     archive: FArchive,
     property_end: int,
     property_count: int,
-) -> list[tuple[int, bool | None]]:
+) -> list[tuple[int, bool | None]] | None:
     """Try UE FUnversionedHeader fragments; return None for legacy fixture streams.
 
     Byte-level fragment + zero-mask parsing is delegated to
@@ -851,7 +842,7 @@ def _try_read_unversioned_header(
         archive.seek(start)
         return None
 
-    selected: list[tuple[int, bool]] = []
+    selected: list[tuple[int, bool | None]] = []
     bit_offset = 0
     schema_cursor = 0
     for frag in header.fragments:

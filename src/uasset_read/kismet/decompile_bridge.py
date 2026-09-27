@@ -24,13 +24,53 @@ from uasset_read.exceptions import ParseError, StreamPoisonedError
 logger = logging.getLogger(__name__)
 
 
+def _unavailable(
+    export,
+    idx: int,
+    class_name: str | None,
+    code: str,
+    message: str,
+    *,
+    source_range=None,
+    context: bool = True,
+    metrics: dict | None = None,
+    fallback: str | None = None,
+):
+    """One structured unavailable result for a failed Function export."""
+    from uasset_read.kismet.result import KismetDecompiledResult
+
+    return KismetDecompiledResult(
+        function_name=export.object_name,
+        signature=f"void {export.object_name}()",
+        bytecode_status="unavailable",
+        export_index=idx,
+        object_id=f"export:{idx}",
+        class_name=class_name or "Unknown",
+        script_source_range=source_range,
+        error_code=code,
+        error_message=message,
+        error_context=(
+            {
+                "function_name": export.object_name,
+                "export_index": idx,
+                "class_name": class_name,
+                "package_offset": export.serial_offset,
+                "export_offset": export.serial_offset,
+            }
+            if context
+            else None
+        ),
+        script_metrics=metrics,
+        fallback_reasons=[fallback] if fallback else [],
+    )
+
+
 def extract_kismet_decompiled(
     archive: "FArchive",
     summary,
     name_map: list[str],
     import_map,
     export_map,
-    tolerant: bool = True,
 ) -> list:
     """Extract Kismet bytecode from Blueprint UStruct Function/UFunction exports.
 
@@ -64,24 +104,14 @@ def extract_kismet_decompiled(
 
             if script_result.status == "no_script":
                 results.append(
-                    KismetDecompiledResult(
-                        function_name=export.object_name,
-                        signature=f"void {export.object_name}()",
-                        bytecode_status="unavailable",
-                        export_index=export_idx,
-                        object_id=f"export:{export_idx}",
-                        class_name=class_name or "Unknown",
-                        script_source_range=script_result.script_source_range,
-                        error_code="confirmed_no_script",
-                        error_message="UFunction Script header declares no bytecode",
-                        error_context={
-                            "function_name": export.object_name,
-                            "export_index": export_idx,
-                            "class_name": class_name,
-                            "package_offset": export.serial_offset,
-                            "export_offset": export.serial_offset,
-                        },
-                        script_metrics={
+                    _unavailable(
+                        export,
+                        export_idx,
+                        class_name,
+                        "confirmed_no_script",
+                        "UFunction Script header declares no bytecode",
+                        source_range=script_result.script_source_range,
+                        metrics={
                             "bytecode_buffer_size": 0,
                             "serialized_script_size": 0,
                             "serialized_bytes_consumed": 0,
@@ -95,27 +125,14 @@ def extract_kismet_decompiled(
                 failure = script_result.failure
                 reason = failure.error_message if failure else "unknown"
                 results.append(
-                    KismetDecompiledResult(
-                        function_name=export.object_name,
-                        signature=f"void {export.object_name}()",
-                        bytecode_status="unavailable",
-                        export_index=export_idx,
-                        object_id=f"export:{export_idx}",
-                        class_name=class_name or "Unknown",
-                        error_code=failure.error_code if failure else "ufunction_script_read_error",
-                        error_message=reason,
-                        error_context=(
-                            {
-                                "function_name": failure.function_name,
-                                "export_index": failure.export_index,
-                                "class_name": failure.class_name,
-                                "package_offset": failure.package_offset,
-                                "export_offset": failure.export_offset,
-                            }
-                            if failure
-                            else None
-                        ),
-                        script_metrics=(
+                    _unavailable(
+                        export,
+                        export_idx,
+                        class_name,
+                        failure.error_code if failure else "ufunction_script_read_error",
+                        reason,
+                        context=failure is not None,
+                        metrics=(
                             {
                                 "bytecode_buffer_size": failure.bytecode_buffer_size,
                                 "serialized_script_size": failure.serialized_script_size,
@@ -125,7 +142,7 @@ def extract_kismet_decompiled(
                             if failure
                             else None
                         ),
-                        fallback_reasons=[f"UFunction script read failed: {reason}"],
+                        fallback=f"UFunction script read failed: {reason}",
                     )
                 )
                 continue
@@ -139,7 +156,7 @@ def extract_kismet_decompiled(
                         name_map,
                         summary,
                         bytecode_buffer_size=script_result.bytecode_buffer_size,
-                        tolerant=tolerant,
+                        tolerant=True,
                     )
                 except StreamPoisonedError:
                     raise
@@ -149,30 +166,20 @@ def extract_kismet_decompiled(
             if parse_error or not expressions:
                 reason = str(parse_error) if parse_error else "no bytecode expressions extracted"
                 results.append(
-                    KismetDecompiledResult(
-                        function_name=export.object_name,
-                        signature=f"void {export.object_name}()",
-                        bytecode_status="unavailable",
-                        export_index=export_idx,
-                        object_id=f"export:{export_idx}",
-                        class_name=class_name or "Unknown",
-                        script_source_range=script_result.script_source_range,
-                        error_code="bytecode_decode_error",
-                        error_message=reason,
-                        error_context={
-                            "function_name": export.object_name,
-                            "export_index": export_idx,
-                            "class_name": class_name,
-                            "package_offset": export.serial_offset,
-                            "export_offset": export.serial_offset,
-                        },
-                        script_metrics={
+                    _unavailable(
+                        export,
+                        export_idx,
+                        class_name,
+                        "bytecode_decode_error",
+                        reason,
+                        source_range=script_result.script_source_range,
+                        metrics={
                             "bytecode_buffer_size": script_result.bytecode_buffer_size,
                             "serialized_script_size": script_result.serialized_script_size,
                             "serialized_bytes_consumed": len(script_result.serialized_script),
                             "bytecode_bytes_consumed": 0,
                         },
-                        fallback_reasons=[f"bytecode extraction error: {reason}"],
+                        fallback=f"bytecode extraction error: {reason}",
                     )
                 )
                 continue
@@ -222,38 +229,26 @@ def extract_kismet_decompiled(
             # function; surface it as unavailable and keep sibling exports.
             logger.debug("Kismet stream poisoned for export '%s': %s", export.object_name, e)
             results.append(
-                KismetDecompiledResult(
-                    function_name=export.object_name,
-                    signature=f"void {export.object_name}()",
-                    bytecode_status="unavailable",
-                    export_index=export_idx,
-                    object_id=f"export:{export_idx}",
-                    class_name=class_name or "Unknown",
-                    error_code="stream_poisoned",
-                    error_message=str(e),
-                    fallback_reasons=[f"stream poisoned: {e}"],
+                _unavailable(
+                    export,
+                    export_idx,
+                    class_name,
+                    "stream_poisoned",
+                    str(e),
+                    context=False,
+                    fallback=f"stream poisoned: {e}",
                 )
             )
         except (ParseError, OSError, struct.error, ValueError, KeyError, AttributeError) as e:
             logger.debug("Kismet decompile failed for export '%s': %s", export.object_name, e)
             results.append(
-                KismetDecompiledResult(
-                    function_name=export.object_name,
-                    signature=f"void {export.object_name}()",
-                    bytecode_status="unavailable",
-                    export_index=export_idx,
-                    object_id=f"export:{export_idx}",
-                    class_name=class_name or "Unknown",
-                    error_code="function_processing_error",
-                    error_message=str(e),
-                    error_context={
-                        "function_name": export.object_name,
-                        "export_index": export_idx,
-                        "class_name": class_name,
-                        "package_offset": export.serial_offset,
-                        "export_offset": export.serial_offset,
-                    },
-                    fallback_reasons=[f"function processing error: {e}"],
+                _unavailable(
+                    export,
+                    export_idx,
+                    class_name,
+                    "function_processing_error",
+                    str(e),
+                    fallback=f"function processing error: {e}",
                 )
             )
     return results

@@ -94,15 +94,23 @@ class FArchive:
         if pos + size > end:
             raise ExportBoundsExceeded(f"Read of {size} bytes at position {pos} exceeds export read range end {end}")
 
-    def read(self, size: int) -> bytes:
-        """Base read method — does not swap raw bytes."""
-        if size < 0:
-            raise ParseError(f"read() received negative size ({size}) at position {self.tell()}")
+    def _begin_read(self, size: int) -> int:
+        """Shared read preamble: reject negative size, range escapes, EOF overruns.
+
+        Returns the validated current position for the concrete read.
+        """
         current_pos = self.tell()
+        if size < 0:
+            raise ParseError(f"read() received negative size ({size}) at position {current_pos}")
         self._check_read_range(current_pos, size)
         remaining = self._file_size - current_pos
         if size > remaining:
             raise ParseError(f"Cannot read {size} bytes at position {current_pos}, only {remaining} bytes remaining")
+        return current_pos
+
+    def read(self, size: int) -> bytes:
+        """Base read method — does not swap raw bytes."""
+        self._begin_read(size)
         if self._use_mmap and self._mmap:
             data = self._mmap.read(size)
             if len(data) < size:
@@ -660,13 +668,7 @@ class ByteArchive(FArchive):
 
     def read(self, size: int) -> bytes:
         """Read specified number of bytes from in-memory buffer."""
-        if size < 0:
-            raise ParseError(f"read() received negative size ({size}) at position {self._pos}")
-        current_pos = self._pos
-        self._check_read_range(current_pos, size)
-        remaining = self._file_size - current_pos
-        if size > remaining:
-            raise ParseError(f"Cannot read {size} bytes at position {current_pos}, only {remaining} bytes remaining")
+        current_pos = self._begin_read(size)
         data = bytes(self._buffer[current_pos : current_pos + size])
         self._pos = current_pos + size
         return data

@@ -35,6 +35,7 @@ from uasset_read.models.analysis import (
     VariableEventRecord,
     project_blueprint_graph,
 )
+from uasset_read.constants import format_guid_fields
 from uasset_read.models.byte_ranges import ByteRegion, project_region
 from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.models.document import PackageDocument
@@ -572,18 +573,6 @@ class BlueprintCorrelation:
             fields = item.get("fields")
             yield fields if isinstance(fields, dict) else item
 
-    @staticmethod
-    def _guid_hex(guid_fields: Any) -> str:
-        if not isinstance(guid_fields, dict):
-            return ""
-        parts = []
-        for key in ("A", "B", "C", "D"):
-            try:
-                parts.append(f"{int(guid_fields.get(key, 0)) & 0xFFFFFFFF:08x}")
-            except (TypeError, ValueError):
-                parts.append("00000000")
-        return "".join(parts)
-
     def _extract_variable_definitions(self, owner: ObjectRecord) -> list[VariableDefinition]:
         props = owner.properties
         if props is None:
@@ -606,7 +595,7 @@ class BlueprintCorrelation:
                 )
                 if isinstance(candidate, dict):
                     vt_fields = dict(candidate)
-            guid = self._guid_hex((fields.get("VarGuid") or {}).get("fields"))
+            guid = format_guid_fields((fields.get("VarGuid") or {}).get("fields"))
             raw_type: dict[str, Any] = {"VarType": vt_fields, "VarGuid": guid}
             pin_category = (vt_fields or {}).get("pin_category")
             type_name = pin_category if isinstance(pin_category, str) and pin_category else None

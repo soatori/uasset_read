@@ -63,7 +63,6 @@ def parse_bytecode_stream(
         ParseError: On closure invariant violations or invalid jump targets
     """
     from uasset_read.kismet.tokens import EExprToken as _EExprToken
-    from uasset_read.exceptions import StreamPoisonedError
     from uasset_read.kismet.expressions import OpaqueExpression
 
     if not bytecode_bytes:
@@ -86,10 +85,7 @@ def parse_bytecode_stream(
     opaque_tail = False
 
     while archive.tell() < len(bytecode_bytes):
-        try:
-            expr = archive.read_expression()
-        except StreamPoisonedError:
-            raise
+        expr = archive.read_expression()
         expressions.append(expr)
         if isinstance(expr, OpaqueExpression):
             # Unknown token consumed the remaining function bytes; stop.

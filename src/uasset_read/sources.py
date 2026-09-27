@@ -8,7 +8,7 @@ from uasset_read.exceptions import ParseError
 
 class ByteSource(Protocol):
     def read_at(self, offset: int, size: int) -> bytes: ...
-    def size(self) -> int | None: ...
+    def size(self) -> int: ...
     def map_range(self, offset: int, size: int) -> list[tuple[str, int, int]]: ...
 
 
@@ -28,7 +28,7 @@ class MemorySource:
         _validate_range(offset, size, len(self._data))
         return self._data[offset : offset + size]
 
-    def size(self) -> int | None:
+    def size(self) -> int:
         return len(self._data)
 
     def map_range(self, offset: int, size: int) -> list[tuple[str, int, int]]:
@@ -49,7 +49,7 @@ class FileSource:
             raise ParseError(f"short read from {self._path}: wanted {size}, got {len(data)}")
         return data
 
-    def size(self) -> int | None:
+    def size(self) -> int:
         return self._path.stat().st_size
 
     def map_range(self, offset: int, size: int) -> list[tuple[str, int, int]]:
@@ -75,7 +75,7 @@ class CompositeSource:
     ):
         self._segments = segments
         self._name = name
-        self._sizes = [src.size() or 0 for _, src in segments]
+        self._sizes = [src.size() for _, src in segments]
         self._total = sum(self._sizes)
 
     @classmethod
@@ -109,14 +109,14 @@ class CompositeSource:
             raise ParseError(f"composite short read at {offset}+{size}")
         return b"".join(chunks)
 
-    def size(self) -> int | None:
+    def size(self) -> int:
         return self._total
 
     def segments(self) -> tuple[tuple[str, int, int], ...]:
         segs = []
         acc = 0
         for name, src in self._segments:
-            n = src.size() or 0
+            n = src.size()
             segs.append((name, acc, n))
             acc += n
         return tuple(segs)

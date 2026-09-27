@@ -18,7 +18,7 @@ import logging
 from uasset_read.archive import FArchive
 from uasset_read.containers import inspect_container
 from uasset_read.exceptions import ParseError
-from uasset_read.layout import PackageLayoutDetector
+from uasset_read.layout import detect_layout
 from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.models.document import PackageDocument
 from uasset_read.sources import FileSource
@@ -55,13 +55,7 @@ class PackageArchive(FArchive):
         self._pos = 0
 
     def read(self, size: int) -> bytes:
-        if size < 0:
-            raise ParseError(f"read() received negative size ({size}) at position {self.tell()}")
-        current_pos = self.tell()
-        self._check_read_range(current_pos, size)
-        remaining = self._file_size - current_pos
-        if size > remaining:
-            raise ParseError(f"Cannot read {size} bytes at position {current_pos}, only {remaining} bytes remaining")
+        self._begin_read(size)
         chunks: list[bytes] = []
         to_read = size
         while to_read:
@@ -144,7 +138,6 @@ class PackageBundle:
 
     main_path: str
     package_kind: str
-    container: str = "filesystem"
     files: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -204,7 +197,6 @@ def open_package_bundle(path: str) -> PackageBundle:
     return PackageBundle(
         main_path=str(main),
         package_kind=package_kind,
-        container="filesystem",
         files=files,
     )
 
@@ -254,7 +246,7 @@ def _parse_cached(
     # bytes before the Legacy reader is opened or run — never a post-read
     # stamp. Probe the main file only; summary fields never live in .uexp.
     main_source = FileSource(Path(bundle.main_path))
-    layout = PackageLayoutDetector().detect(main_source)
+    layout = detect_layout(main_source)
     if layout.kind != "legacy":
         # Structured refusal (BaseException rejects kwargs, so code and
         # diagnostics ride as attributes — CONTAINER_PACKAGE_UNSUPPORTED

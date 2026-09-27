@@ -19,6 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from ...constants import format_guid_fields
 from ...models.document import PackageDocument
 from ...models.object_model import CoverageEntry, ObjectRecord
 
@@ -141,12 +142,7 @@ def _guid_hex(value: Any) -> str:
     if not isinstance(value, dict):
         return ""
     fields = value.get("fields") if value.get("kind") == "struct" else value
-    if not isinstance(fields, dict):
-        return ""
-    try:
-        return "".join(f"{int(fields.get(k, 0)) & 0xFFFFFFFF:08x}" for k in ("A", "B", "C", "D"))
-    except (TypeError, ValueError):
-        return ""
+    return format_guid_fields(fields)
 
 
 def _as_int(value: Any, default: int = 0) -> int:

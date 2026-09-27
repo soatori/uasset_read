@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from typing import Any, Literal, get_args
 
 from ..archive import ByteArchive, SourceInfo
-from ..constants import PKG_Cooked, PKG_FilterEditorOnly, PKG_UnversionedProperties
+from ..constants import PKG_Cooked, PKG_UnversionedProperties
 from ..exceptions import ParseError, ExportBoundsExceeded
 
 from ..package import PackageArchive
@@ -52,7 +52,7 @@ from ..models.object_model import (
     Relation,
 )
 from ..models.properties import PropertyBag
-from ..versioning import FORTNITE_GUID, get_custom_version
+from ..versioning import ftext_dev_notes_enabled
 
 
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:
@@ -636,56 +636,6 @@ def _normalize_structured_dict(inner: dict[str, Any]) -> dict[str, Any]:
     if "InputName" in out and "input_name" not in out:
         out["input_name"] = out["InputName"]
     return out
-
-
-def _serialize_value(value: Any) -> Any:
-    """Recursively serialize a property value to JSON-safe form."""
-    from ..models.fallback import PropertyFallback, StructFallback
-    from ..models.properties import (
-        StructValue,
-        SetValue,
-        MapValue,
-        TextValue,
-    )
-
-    if value is None or isinstance(value, (bool, int, float, str, bytes)):
-        if isinstance(value, bytes):
-            return {"kind": "bytes", "length": len(value)}
-        return value
-    if isinstance(value, PropertyFallback):
-        return {
-            "kind": "opaque",
-            "type": value.type,
-            "size": value.size,
-            "reason": value.reason.value,
-        }
-    if isinstance(value, StructValue):
-        inner: dict[str, Any] = {}
-        for k, v in value.fields.items():
-            inner[k] = _serialize_value(v)
-        return {"kind": "struct", "struct_type": value.struct_type, "fields": inner}
-    if isinstance(value, StructFallback):
-        return value.to_dict()
-    if isinstance(value, TextValue):
-        return {
-            "kind": "text",
-            "namespace": value.namespace,
-            "key": value.key,
-            "source_string": value.source_string,
-            "property_type": value.property_type,
-        }
-    if isinstance(value, SetValue):
-        return [_serialize_value(elem) for elem in value.elements]
-    if isinstance(value, MapValue):
-        return [
-            {"key": _serialize_value(e.get("key")), "value": _serialize_value(e.get("value"))} for e in value.entries
-        ]
-    if isinstance(value, list):
-        return [_serialize_value(elem) for elem in value]
-    if isinstance(value, dict):
-        return {k: _serialize_value(v) for k, v in value.items()}
-    # ObjectRef, other objects — repr as string
-    return str(value)
 
 
 class LegacyPackageReader:
@@ -1796,7 +1746,6 @@ def _attach_kismet_extras(
             name_map,
             import_map,
             export_map,
-            tolerant=True,
         )
         if kismet_results:
             # Identity-first attachment: use the bridge's export_index
@@ -2035,10 +1984,11 @@ def _read_table_rows(
 
 
 def _string_table_has_dev_notes(summary: PackageFileSummary) -> bool:
-    """True when the editor-saved trailer wrote per-entry DevNotes strings."""
-    if summary.package_flags & PKG_FilterEditorOnly:
-        return False
-    return get_custom_version(summary, FORTNITE_GUID) >= 260
+    """True when the editor-saved trailer wrote per-entry DevNotes strings.
+
+    Delegates to the shared AddDevNotesToFText gate (uasset_read.versioning).
+    """
+    return ftext_dev_notes_enabled(summary)
 
 
 def _read_string_table(

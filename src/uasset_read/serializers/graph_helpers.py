@@ -19,11 +19,10 @@ if TYPE_CHECKING:
 
 from uasset_read.constants import (
     MAX_SAFE_COUNT,
-    PKG_FilterEditorOnly,
     format_guid_bytes,
 )
 from uasset_read.exceptions import ParseError
-from uasset_read.versioning import FORTNITE_GUID, get_custom_version
+from uasset_read.versioning import get_custom_version
 
 logger = logging.getLogger(__name__)
 
@@ -84,13 +83,6 @@ def _read_fstring(archive: FArchive, max_length: int = MAX_SAFE_COUNT, *, tolera
         return data.decode("utf-16-le", errors="replace").rstrip("\x00")
     data = archive.read(length)
     return data.decode("utf-8", errors="replace").rstrip("\x00")
-
-
-def ftext_dev_notes_enabled(summary) -> bool:
-    """TextHistory.cpp:915-937 — editor UE5 FText Base appends a gated DevNotes FString."""
-    if summary is None or (summary.package_flags & PKG_FilterEditorOnly):
-        return False
-    return get_custom_version(summary, FORTNITE_GUID) >= 260  # AddDevNotesToFText
 
 
 # FEditorObjectVersion::GUID (Engine/Source/Runtime/Core/Private/UObject/DevObjectVersion.cpp

@@ -129,6 +129,19 @@ def _write_output(output_str: str, output_path: str | None) -> None:
         print(output_str)
 
 
+def _load_document(file_path: Path, args):
+    """Parse one package under the CLI's strict/mappings/game/depth flags."""
+    from uasset_read.package import parse_package_document
+
+    return parse_package_document(
+        str(file_path),
+        tolerant=not args.strict,
+        mappings_path=args.mappings,
+        game=args.game,
+        depth=args.depth,
+    )
+
+
 def _parse_and_project(file_path: Path, args) -> dict:
     """Parse one package and project it under the CLI's depth/limit/budget flags.
 
@@ -136,16 +149,9 @@ def _parse_and_project(file_path: Path, args) -> dict:
     Canonical file/batch materialization uses write_projected_document /
     build_canonical_document instead.
     """
-    from uasset_read.package import parse_package_document
     from uasset_read.projection import project_document
 
-    doc = parse_package_document(
-        str(file_path),
-        tolerant=not args.strict,
-        mappings_path=args.mappings,
-        game=args.game,
-        depth=args.depth,
-    )
+    doc = _load_document(file_path, args)
     return project_document(doc, depth=args.depth, limit=args.limit, max_bytes=args.max_bytes)
 
 
@@ -167,31 +173,17 @@ def _parse_and_write_canonical(file_path: Path, args, output_path: Path) -> Path
     file writes use the bounded ``project_document`` path instead; this
     writer never receives ``max_main_bytes`` from the CLI.
     """
-    from uasset_read.package import parse_package_document
     from uasset_read.projections.bundle import write_projected_document
 
-    doc = parse_package_document(
-        str(file_path),
-        tolerant=not args.strict,
-        mappings_path=args.mappings,
-        game=args.game,
-        depth=args.depth,
-    )
+    doc = _load_document(file_path, args)
     return write_projected_document(doc, output_path)
 
 
 def _build_canonical_result(file_path: Path, args) -> dict:
     """Parse one package and return its complete v3 canonical document dict."""
-    from uasset_read.package import parse_package_document
     from uasset_read.projections.bundle import build_canonical_document
 
-    doc = parse_package_document(
-        str(file_path),
-        tolerant=not args.strict,
-        mappings_path=args.mappings,
-        game=args.game,
-        depth=args.depth,
-    )
+    doc = _load_document(file_path, args)
     return build_canonical_document(doc)
 
 
@@ -282,7 +274,7 @@ def _handle_list_package_files(file_path: str) -> None:
         json.dumps(
             {
                 "package_kind": bundle.package_kind,
-                "container": bundle.container,
+                "container": "filesystem",
                 "files": bundle.files,
             },
             indent=2,

@@ -10,8 +10,21 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, Mapping
 
+from uasset_read.constants import PKG_FilterEditorOnly
+
 if TYPE_CHECKING:
     from uasset_read.serializers.package_summary import PackageFileSummary
+
+
+def ftext_dev_notes_enabled(summary) -> bool:
+    """TextHistory.cpp:915-937 — editor UE5 FText Base appends a gated DevNotes FString.
+
+    Single home for the AddDevNotesToFText (260) + FilterEditorOnly gate;
+    the FText reader, property parser, and StringTable trailer share it.
+    """
+    if summary is None or (summary.package_flags & PKG_FilterEditorOnly):
+        return False
+    return get_custom_version(summary, FORTNITE_GUID) >= 260  # AddDevNotesToFText
 
 
 # ============================================================================
@@ -51,9 +64,6 @@ class EngineVersion:
     patch: int = 0
     changelist: int = 0
     branch: str = ""
-
-    def __str__(self) -> str:
-        return f"{self.major}.{self.minor}.{self.patch}.{self.changelist}"
 
 
 @dataclass(frozen=True)

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Literal
 
 from uasset_read.archive import ByteArchive
 from uasset_read.constants import MAX_SAFE_COUNT
+from uasset_read.kismet.bytecode_extractor import FUNCTION_EXPORT_CLASSES
 from uasset_read.kismet.native_fields import (
     NativeFieldContext,
     NativeFieldDeclaration,
@@ -71,16 +72,8 @@ class FunctionScriptFailure:
 # ---------------------------------------------------------------------------
 
 
-class UnsupportedSerializationVersion(Exception):
-    """Raised when the serialization-control byte contains unknown bits."""
-
-    def __init__(self, failure: FunctionScriptFailure):
-        self.failure = failure
-        super().__init__(failure.error_message)
-
-
-class InvalidScriptPropertyRange(Exception):
-    """Raised when script serialization offsets are mismatched."""
+class _ScriptPrefixError(Exception):
+    """UFunction script prefix/offset failure carrying a FunctionScriptFailure."""
 
     def __init__(self, failure: FunctionScriptFailure):
         self.failure = failure
@@ -154,8 +147,7 @@ def _read_native_payload_start(
         native UStruct payload.
 
     Raises:
-        UnsupportedSerializationVersion: if control bits are unknown.
-        InvalidScriptPropertyRange: if script_serialization offsets are mismatched.
+        _ScriptPrefixError: on unknown control bits or mismatched offsets.
     """
     # Copy exactly the export's serial range into a bounded archive
     archive.seek(export.serial_offset)
@@ -172,7 +164,7 @@ def _read_native_payload_start(
         ctrl_byte = window.read_u8()
         if ctrl_byte & ~_SER_CTRL_OVERRIDE_OPERATION:
             # Unknown bits set — reject
-            raise UnsupportedSerializationVersion(
+            raise _ScriptPrefixError(
                 _make_failure(
                     export,
                     export_index,
@@ -193,7 +185,7 @@ def _read_native_payload_start(
         measured_end = pos_after_tags
 
         if declared_end != measured_end:
-            raise InvalidScriptPropertyRange(
+            raise _ScriptPrefixError(
                 _make_failure(
                     export,
                     export_index,
@@ -498,7 +490,7 @@ def read_ufunction_script(
     """
     # Validate that this is a Function export
     class_name = resolve_class_name(export.class_index, import_map, export_map)
-    if class_name not in ("Function", "UFunction"):
+    if class_name not in FUNCTION_EXPORT_CLASSES:
         return FunctionScriptReadResult(
             status="no_script",
             failure=_make_failure(
@@ -528,5 +520,5 @@ def read_ufunction_script(
             export_map=export_map,
             package_flags=summary.package_flags,
         )
-    except (UnsupportedSerializationVersion, InvalidScriptPropertyRange) as exc:
+    except _ScriptPrefixError as exc:
         return FunctionScriptReadResult(status="failed", failure=exc.failure)

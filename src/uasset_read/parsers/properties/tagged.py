@@ -425,7 +425,7 @@ def _read_property_loop(
                 tag = read_property_tag(
                     archive, name_map, tolerant=tolerant, mappings=mappings, struct_name=struct_name
                 )
-            except ParseError as e:
+            except ParseError:
                 # #341: PropertyTag read failed — try recovery scan for next valid tag
                 remaining = property_end - archive.tell()
                 if remaining < 32:

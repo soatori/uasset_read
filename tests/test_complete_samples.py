@@ -284,7 +284,6 @@ def test_committed_containers_iostore_metadata_and_zen_unavailability():
     result = ZenPackageReader().read_from_container(
         report,
         package_id="<fixture-package-not-provided>",
-        depth="package",
     )
     assert result.document is None
     assert result.status == "unavailable"

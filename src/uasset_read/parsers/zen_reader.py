@@ -20,7 +20,6 @@ from typing import Literal
 from uasset_read.containers import ContainerReport
 from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.models.document import PackageDocument
-from uasset_read.versioning import VersionContext
 
 
 @dataclass
@@ -31,15 +30,6 @@ class ZenReadResult:
     reason: str | None = None
 
 
-def _diag(code: str, message: str) -> Diagnostic:
-    return Diagnostic(
-        severity="warning",
-        code=code,
-        message=message,
-        stage="zen.read",
-    )
-
-
 class ZenPackageReader:
     """Reader entry for Zen packages; currently the explicit unavailable boundary."""
 
@@ -47,10 +37,6 @@ class ZenPackageReader:
         self,
         report: ContainerReport,
         package_id: str,
-        *,
-        depth: str = "package",
-        chunk_source=None,
-        context: VersionContext | None = None,
     ) -> ZenReadResult:
         """Attempt a Zen package read from container metadata.
 
@@ -58,7 +44,6 @@ class ZenPackageReader:
         bytes (or a committed Zen package fixture) there is nothing honest to
         decode. Never fabricates a document.
         """
-        _ = depth, context  # reserved for the follow-up real-fixture task
         diagnostics: list[Diagnostic] = [
             Diagnostic(
                 severity="warning",
@@ -70,20 +55,20 @@ class ZenPackageReader:
                 stage="zen.read",
             )
         ]
-        reason = "zen_package_fixture_unavailable"
-        if chunk_source is None:
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="ZEN_CHUNK_BYTES_UNAVAILABLE",
-                    message=(
-                        f"chunk bytes for package_id={package_id!r} are not available; "
-                        "IoStore chunk extraction is not implemented"
-                    ),
-                    stage="zen.read",
-                )
+        # Chunk extraction is never available at this boundary, so the chunk
+        # diagnostic (and reason) is unconditional.
+        reason = "chunk_bytes_unavailable"
+        diagnostics.append(
+            Diagnostic(
+                severity="warning",
+                code="ZEN_CHUNK_BYTES_UNAVAILABLE",
+                message=(
+                    f"chunk bytes for package_id={package_id!r} are not available; "
+                    "IoStore chunk extraction is not implemented"
+                ),
+                stage="zen.read",
             )
-            reason = "chunk_bytes_unavailable"
+        )
         if not package_id:
             diagnostics.append(
                 Diagnostic(
