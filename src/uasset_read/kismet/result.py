@@ -30,8 +30,7 @@ def infer_bytecode_confidence(bytecode_status: str) -> str:
         return BYTECODE_CONFIDENCE[bytecode_status]
     except KeyError:
         raise ValueError(
-            f"disallowed bytecode_status: {bytecode_status!r}; "
-            f"allowed: {sorted(BYTECODE_CONFIDENCE)}"
+            f"disallowed bytecode_status: {bytecode_status!r}; allowed: {sorted(BYTECODE_CONFIDENCE)}"
         ) from None
 
 

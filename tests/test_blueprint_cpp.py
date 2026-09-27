@@ -6,8 +6,9 @@ from uasset_read.projections.cpp_ast import build_cpp_ast
 from uasset_read.projections.cpp_render import render_cpp
 
 ORACLE = json.loads(
-    (Path(__file__).parent / "samples/golden/blueprint_header_view/MyProject_UE58_TestBlueprint.json")
-    .read_text(encoding="utf-8")
+    (Path(__file__).parent / "samples/golden/blueprint_header_view/MyProject_UE58_TestBlueprint.json").read_text(
+        encoding="utf-8"
+    )
 )
 
 
@@ -43,10 +44,7 @@ def test_migration_mode_reports_each_untranslated_instruction(ue58_semantic):
     stats = result.translation_stats
     assert stats["instructions_seen"] > 0
     assert stats["instructions_seen"] == (
-        stats["translated"]
-        + stats["represented"]
-        + stats["untranslated"]
-        + stats["unavailable"]
+        stats["translated"] + stats["represented"] + stats["untranslated"] + stats["unavailable"]
     )
 
 
@@ -93,10 +91,7 @@ def test_dual_offset_accepts_structured_unset_and_raw_int():
     stats = result.translation_stats
     assert stats["instructions_seen"] > 0
     assert stats["instructions_seen"] == (
-        stats["translated"]
-        + stats["represented"]
-        + stats["untranslated"]
-        + stats["unavailable"]
+        stats["translated"] + stats["represented"] + stats["untranslated"] + stats["unavailable"]
     )
 
 
@@ -118,9 +113,7 @@ def test_no_silent_void_and_native_helpers_reach_output():
     # CPF_Parm=0x80, CPF_ReturnParm=0x400 (native_fields.py mirrors).
     native_fields = [
         NativeFieldDeclaration(type_name="BoolProperty", name="NewParam", property_flags=0x80),
-        NativeFieldDeclaration(
-            type_name="FloatProperty", name="ReturnValue", property_flags=0x80 | 0x400
-        ),
+        NativeFieldDeclaration(type_name="FloatProperty", name="ReturnValue", property_flags=0x80 | 0x400),
     ]
     fn_decl = FunctionDeclaration(
         name="NativeFn",
@@ -194,9 +187,7 @@ def test_no_silent_void_and_native_helpers_reach_output():
     decl = build_cpp_ast(semantic)
     native_fn = next(f for f in decl.functions if f.name == "NativeFn")
     assert native_fn.return_type.name == "float"
-    assert [(p.name, p.type.name, p.direction) for p in native_fn.params] == [
-        ("NewParam", "bool", "in")
-    ]
+    assert [(p.name, p.type.name, p.direction) for p in native_fn.params] == [("NewParam", "bool", "in")]
     assert native_fn.native_signature and "NativeFn" in native_fn.native_signature
 
     result = render_cpp_ir(semantic, mode="migration")
@@ -208,4 +199,3 @@ def test_no_silent_void_and_native_helpers_reach_output():
     assert native_fn.native_signature in result.header_text
     assert "native:" in result.header_text
     assert "float NativeFn(bool NewParam)" in result.header_text.replace("/* out */ ", "")
-

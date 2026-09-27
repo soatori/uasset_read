@@ -207,7 +207,11 @@ def project_property_value(value: Any) -> Any:
     if isinstance(value, EnumValue):
         return {"kind": "enum", "enum_type": value.enum_type, "value": value.value_name}
     if isinstance(value, SetValue):
-        return {"kind": "set", "element_type": value.element_type, "elements": [project_property_value(e) for e in value.elements]}
+        return {
+            "kind": "set",
+            "element_type": value.element_type,
+            "elements": [project_property_value(e) for e in value.elements],
+        }
     if isinstance(value, MapValue):
         return {
             "kind": "map",

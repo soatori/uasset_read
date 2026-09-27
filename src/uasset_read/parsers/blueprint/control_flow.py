@@ -106,10 +106,7 @@ def build_cfg(
         diags.append(
             Diagnostic(
                 code="CFG_JUMP_TARGET_UNRESOLVED",
-                message=(
-                    f"jump target {target_stmt} does not land on a top-level "
-                    f"instruction boundary"
-                ),
+                message=(f"jump target {target_stmt} does not land on a top-level instruction boundary"),
                 stage="semantic.functions.cfg",
             )
         )
@@ -187,9 +184,7 @@ def build_cfg(
             else:
                 _jump_edge(bidx, target_stmt, "false")
             if bidx + 1 < len(blocks):
-                edges.append(
-                    ControlFlowEdge(source_block=bidx, target_block=bidx + 1, kind="true")
-                )
+                edges.append(ControlFlowEdge(source_block=bidx, target_block=bidx + 1, kind="true"))
             continue
 
         if last.jump_kind == "unconditional" and last.jump_target_statement_index is not None:
@@ -229,9 +224,7 @@ def build_cfg(
             continue
 
         if bidx + 1 < len(blocks):
-            edges.append(
-                ControlFlowEdge(source_block=bidx, target_block=bidx + 1, kind="fallthrough")
-            )
+            edges.append(ControlFlowEdge(source_block=bidx, target_block=bidx + 1, kind="fallthrough"))
 
     return ControlFlowGraph(
         blocks=blocks,

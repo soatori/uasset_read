@@ -195,16 +195,11 @@ class BlueprintCppProjector:
         dependencies = dependency_ids(document, obj.id)
         # Unproven family kinds without a projected semantic stay explicit unavailable.
         if (obj.class_name or "") in ("BlueprintFunctionLibrary", "BlueprintInterface") and (
-            not isinstance(semantic, dict)
-            or not (isinstance(semantic.get("kind"), str) and semantic.get("kind"))
+            not isinstance(semantic, dict) or not (isinstance(semantic.get("kind"), str) and semantic.get("kind"))
         ):
-            return _unavailable_blueprint_projections(
-                document, obj.id, "blueprint_family_semantic_unavailable"
-            )
+            return _unavailable_blueprint_projections(document, obj.id, "blueprint_family_semantic_unavailable")
         if not isinstance(semantic, dict) or semantic.get("kind") not in self.asset_kinds:
-            return _unavailable_blueprint_projections(
-                document, obj.id, "blueprint_semantic_unavailable"
-            )
+            return _unavailable_blueprint_projections(document, obj.id, "blueprint_semantic_unavailable")
         try:
             decl = render_cpp(semantic, mode="declaration")
             mig = render_cpp(semantic, mode="migration")

@@ -605,10 +605,7 @@ class MaterialInstanceHandler(_SupportsClasses):
         # only when the instance actually carries parameter values.
         if not result.get("has_parent"):
             return "summary"
-        if (
-            (result.get("scalar_param_count") or 0) > 0
-            or (result.get("vector_param_count") or 0) > 0
-        ):
+        if (result.get("scalar_param_count") or 0) > 0 or (result.get("vector_param_count") or 0) > 0:
             return "decoded"
         return "summary"
 
@@ -997,11 +994,7 @@ class BlueprintFamilyHandler:
         for graph in graphs:
             if graph.get("kind") == "state_machine" and graph.get("node_count", 0) > 1:
                 nodes = graph.get("nodes", [])
-                states = sum(
-                    1
-                    for n in nodes
-                    if (n.get("node_data") or {}).get("subgraph_references")
-                )
+                states = sum(1 for n in nodes if (n.get("node_data") or {}).get("subgraph_references"))
                 state_machines.append(
                     {
                         "name": graph["name"],
@@ -1206,9 +1199,7 @@ def _extract_components(obj: ObjectRecord, all_objects: list[ObjectRecord], pack
     if scope is None:
         return []
     nodes = [
-        o
-        for o in all_objects
-        if o.class_name == "SCS_Node" and o.properties and _family_root_key(o, by_id) == scope
+        o for o in all_objects if o.class_name == "SCS_Node" and o.properties and _family_root_key(o, by_id) == scope
     ]
     export_map = package_data[0] if package_data else None
     out: list[dict[str, Any]] = []

@@ -142,13 +142,9 @@ def projection_to_dict(record: ProjectionRecord) -> dict[str, Any]:
         "media_type": record.media_type,
         "embedded": record.embedded,
         "status": record.status,
-        "completeness": _completeness_label(
-            record.status, record.completeness, record.diagnostics
-        ),
+        "completeness": _completeness_label(record.status, record.completeness, record.diagnostics),
         "dependencies": list(record.dependencies),
-        "diagnostics": [
-            item.to_dict() if hasattr(item, "to_dict") else item for item in record.diagnostics
-        ],
+        "diagnostics": [item.to_dict() if hasattr(item, "to_dict") else item for item in record.diagnostics],
     }
     if record.embedded:
         out["content"] = record.content
@@ -165,8 +161,7 @@ def projection_to_dict(record: ProjectionRecord) -> dict[str, Any]:
             )
         if external.source_range is None:
             raise ValueError(
-                f"external projection {record.kind!r} for {record.source_object_id} "
-                "requires a source range"
+                f"external projection {record.kind!r} for {record.source_object_id} requires a source range"
             )
         out["external"] = {
             "path": external.path,

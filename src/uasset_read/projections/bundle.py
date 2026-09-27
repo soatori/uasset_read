@@ -129,9 +129,7 @@ def build_canonical_document(
         "format_version": FORMAT_VERSION,
         "view": "semantic",
         "depth": document.depth,
-        "source": None
-        if source is None
-        else {"kind": source.kind, "name": source.name, "size": source.size},
+        "source": None if source is None else {"kind": source.kind, "name": source.name, "size": source.size},
         "package": None
         if package is None
         else {
@@ -146,10 +144,7 @@ def build_canonical_document(
             "name_count": package.name_count,
         },
         "objects": [obj_to_dict(obj, view="semantic") for obj in document.objects],
-        "relations": [
-            {"kind": rel.kind, "from": rel.from_id, "to": rel.to_id}
-            for rel in document.relations
-        ],
+        "relations": [{"kind": rel.kind, "from": rel.from_id, "to": rel.to_id} for rel in document.relations],
         "dependencies": [dependency_to_dict(dep) for dep in document.dependencies],
         "projections": [projection_to_dict(item) for item in projections],
         "sidecars": [],
@@ -208,8 +203,7 @@ def write_projected_document(
     if max_main_bytes is not None:
         if size > max_main_bytes:
             raise OutputBudgetError(
-                f"complete canonical document is {size} bytes; "
-                f"max_main_bytes={max_main_bytes} cannot fit it"
+                f"complete canonical document is {size} bytes; max_main_bytes={max_main_bytes} cannot fit it"
             )
     output_path = Path(output_path)
     output_path.write_text(text, encoding="utf-8")

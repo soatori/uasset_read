@@ -62,10 +62,7 @@ def test_duplicate_pin_guid_resolves_by_owner():
 
 def test_stackobot_graph_names_and_kinds(stackobot_document, stackobot_source):
     obj = next(o for o in stackobot_document.objects if o.id == "export:0")
-    graphs = {
-        g.name: g
-        for g in BlueprintGraphDecoder().decode(obj, stackobot_document, source=stackobot_source)
-    }
+    graphs = {g.name: g for g in BlueprintGraphDecoder().decode(obj, stackobot_document, source=stackobot_source)}
     assert set(graphs) == {"EventGraph", "UserConstructionScript"}
     assert graphs["EventGraph"].kind == "event_graph"
     assert graphs["UserConstructionScript"].kind == "construction_script"
@@ -81,9 +78,7 @@ def test_selected_owner_uses_same_graph_dependency_closure_as_full_decode():
     )
     full_owner = next(obj for obj in full.objects if obj.id == "export:0")
     selected_owner = next(obj for obj in selected.objects if obj.id == "export:0")
-    assert (full_owner.semantic or {}).get("graphs") == (
-        selected_owner.semantic or {}
-    ).get("graphs")
+    assert (full_owner.semantic or {}).get("graphs") == (selected_owner.semantic or {}).get("graphs")
 
 
 def test_source_read_falls_back_to_document_package_path():

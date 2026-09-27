@@ -41,9 +41,7 @@ def test_quality_baseline_seed_includes_r5_gate_samples():
 def test_committed_quality_baseline_covers_gate_samples():
     import json
 
-    baseline = json.loads(
-        (_ROOT / "tests" / "samples" / "quality_baseline.json").read_text(encoding="utf-8")
-    )
+    baseline = json.loads((_ROOT / "tests" / "samples" / "quality_baseline.json").read_text(encoding="utf-8"))
     samples = baseline["samples"]
     for name in (
         "StackOBot_BP_Drone.uasset",
@@ -70,7 +68,10 @@ def test_aggregate_trailing_report_shape_and_limits():
         diags = [
             SimpleNamespace(
                 code="EXPORT_TRAILING_BYTES_UNCONSUMED",
-                object_id=by_name[cls], reason=reason, size=size, message="",
+                object_id=by_name[cls],
+                reason=reason,
+                size=size,
+                message="",
             )
             for cls, reason, size in trailing
         ]

@@ -33,15 +33,9 @@ from uasset_read.parsers.blueprint.bytecode import _extract_operands
 OPERAND_FIELD_MATRIX: dict[str, frozenset[str]] = {
     "EX_Return": frozenset({"ReturnValue"}),
     "EX_Assert": frozenset({"LineNumber", "DebugMode", "AssertExpression"}),
-    "EX_SwitchValue": frozenset(
-        {"EndGotoOffset", "IndexExpression", "Cases", "DefaultExpression"}
-    ),
-    "EX_Context": frozenset(
-        {"ContextExpression", "ContextualOffset", "ContextualProperty", "MemberExpression"}
-    ),
-    "EX_ClassContext": frozenset(
-        {"ContextExpression", "ContextualOffset", "ContextualProperty", "MemberExpression"}
-    ),
+    "EX_SwitchValue": frozenset({"EndGotoOffset", "IndexExpression", "Cases", "DefaultExpression"}),
+    "EX_Context": frozenset({"ContextExpression", "ContextualOffset", "ContextualProperty", "MemberExpression"}),
+    "EX_ClassContext": frozenset({"ContextExpression", "ContextualOffset", "ContextualProperty", "MemberExpression"}),
     "EX_InterfaceContext": frozenset({"InterfaceExpression"}),
     "EX_StructMemberContext": frozenset({"MemberProperty", "StructExpression"}),
     "EX_SetArray": frozenset({"TargetExpression", "InitializingList"}),
@@ -223,14 +217,12 @@ def test_matrix_is_json_projectable_without_discarding_payload():
             assert field_name in projected
 
 
-def test_real_sample_top_level_opcodes_project_required_fields(
-    ue58_blueprint_document, stackobot_document
-):
+def test_real_sample_top_level_opcodes_project_required_fields(ue58_blueprint_document, stackobot_document):
     """Prefer real sample opcodes: EX_Return / jumps must keep their payload."""
     checked: set[str] = set()
     for document in (ue58_blueprint_document, stackobot_document):
         for obj in document.objects:
-            for fn in ((obj.semantic or {}).get("functions") or []):
+            for fn in (obj.semantic or {}).get("functions") or []:
                 for item in fn.get("instructions") or []:
                     opcode = item.get("opcode")
                     required = SAMPLE_OPERAND_FIELDS.get(opcode)
@@ -266,6 +258,7 @@ def test_nested_operands_are_projectable_without_repr(function_analysis_ir):
         assert "0x" not in str(projected["expression"])
         assert projected["parse_status"] in {"parsed", "partial", "unavailable"}
         import json
+
         json.dumps(projected)
 
 

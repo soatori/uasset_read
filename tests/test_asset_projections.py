@@ -29,9 +29,7 @@ def test_registry_selects_one_owner_for_each_asset_family(document):
     for obj in document.objects:
         projections = registry.project_object(document, obj.id)
         assert all(item.source_object_id == obj.id for item in projections)
-        assert all(item.status in {
-            "translated", "represented", "untranslated", "unavailable"
-        } for item in projections)
+        assert all(item.status in {"translated", "represented", "untranslated", "unavailable"} for item in projections)
     assert any(item.kind == "cpp_declaration" for item in registry.project_document(document))
 
 
@@ -44,21 +42,13 @@ def test_cooked_material_builder_is_not_reported_as_complete(cooked_material):
 
 def test_capability_matrix_declares_required_families_and_kinds():
     by_family = {entry["family"]: entry for entry in CAPABILITY_MATRIX}
-    assert by_family["data_table"]["kinds"] == [
-        "data_table", "data_table_csv", "data_table_json"
-    ]
+    assert by_family["data_table"]["kinds"] == ["data_table", "data_table_csv", "data_table_json"]
     assert "values decoded" in by_family["data_table"]["rule"]
-    assert by_family["curve_table"]["kinds"] == [
-        "curve_table", "curve_table_csv", "curve_table_json"
-    ]
+    assert by_family["curve_table"]["kinds"] == ["curve_table", "curve_table_csv", "curve_table_json"]
     assert "keys" in by_family["curve_table"]["rule"]
-    assert by_family["material_instance"]["kinds"] == [
-        "material_instance", "material_parameters"
-    ]
+    assert by_family["material_instance"]["kinds"] == ["material_instance", "material_parameters"]
     assert by_family["other_graph_assets"]["kinds"] == ["graph", "asset_builder_cpp"]
-    assert by_family["physical_binary_assets"]["kinds"] == [
-        "asset_metadata", "payload_reference"
-    ]
+    assert by_family["physical_binary_assets"]["kinds"] == ["asset_metadata", "payload_reference"]
 
 
 def test_datatable_projector_copies_evidenced_fields_or_unavailable():

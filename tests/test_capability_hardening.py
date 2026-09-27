@@ -22,9 +22,7 @@ SAMPLES = Path(__file__).parent / "samples"
 
 
 def test_material_flags_only_is_not_semantic_complete():
-    doc = parse_package_document(
-        SAMPLES / "MyProject_UE58_TestMaterial.uasset", depth="asset", tolerant=True
-    )
+    doc = parse_package_document(SAMPLES / "MyProject_UE58_TestMaterial.uasset", depth="asset", tolerant=True)
     mat = next(o for o in doc.objects if o.class_name == "Material")
     assert mat.status.semantic == "partial"
 
@@ -86,9 +84,7 @@ def test_datatable_capability_requires_non_empty_field_maps():
 
 
 def test_datatable_with_field_names_projects_rows():
-    doc = parse_package_document(
-        SAMPLES / "ALS_FootstepDataTable.uasset", depth="asset", tolerant=True
-    )
+    doc = parse_package_document(SAMPLES / "ALS_FootstepDataTable.uasset", depth="asset", tolerant=True)
     dt = next(o for o in doc.objects if o.class_name == "DataTable")
     assert dt.status.semantic == "complete"
     rows = dt.semantic.get("rows")
@@ -103,9 +99,7 @@ def test_datatable_parser_weapon_projects_field_maps():
     # Measured: DT_ParserWeapon rows carry SoftObjectProperty/ObjectProperty
     # field tags (not None-only), so the stricter gate legitimately yields
     # complete — the earlier row-names-only claim is gone, rows carry fields.
-    doc = parse_package_document(
-        SAMPLES / "DT_ParserWeapon.uasset", depth="asset", tolerant=True
-    )
+    doc = parse_package_document(SAMPLES / "DT_ParserWeapon.uasset", depth="asset", tolerant=True)
     dt = next(o for o in doc.objects if o.class_name == "DataTable")
     assert dt.semantic.get("row_names") == ["EmptyWeaponA", "EmptyWeaponB"]
     rows = dt.semantic.get("rows")

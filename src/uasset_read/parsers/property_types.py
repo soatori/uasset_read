@@ -1039,6 +1039,7 @@ def parse_set_property(
     )
     # Skip elements to remove (serialized by element_type)
     from uasset_read.parsers.property_parser import parse_property_value
+
     for _ in range(num_elements_to_remove):
         if element_type == "BoolProperty":
             archive.read_u8()  # inline 1-byte bool (PropertyBool.cpp)
@@ -1184,6 +1185,7 @@ def parse_optional_property(
     has_value = archive.read_bool()
     if has_value:
         from uasset_read.parsers.property_parser import parse_property_value
+
         inner_type = getattr(tag, "inner_type", None) or "Unknown"
         inner_tag = PropertyTag(
             name=f"{tag.name}.Value",
@@ -1341,6 +1343,7 @@ def _dispatch_key_parse(
     if key_type in basic_types:
         dummy_tag = PropertyTag(name="Key", type=key_type, size=0)
         from uasset_read.parsers.property_parser import parse_property_value
+
         return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
 
     if key_type == "ObjectProperty":
@@ -1359,6 +1362,7 @@ def _dispatch_key_parse(
         # Route through parse_property_value so poison diagnostics abort the
         # multi-entry map loop instead of opaque-swallowing inside the struct.
         from uasset_read.parsers.property_parser import parse_property_value
+
         return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
 
     return None
@@ -1385,8 +1389,10 @@ def _dispatch_value_parse(
         dummy_tag = PropertyTag(name="Value", type="StructProperty", size=0, struct_type=struct_type or "Unknown")
         # Same as keys: poison must abort the map entry loop, not become opaque.
         from uasset_read.parsers.property_parser import parse_property_value
+
         return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
 
     dummy_tag = PropertyTag(name="Value", type=value_type, size=0)
     from uasset_read.parsers.property_parser import parse_property_value
+
     return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)

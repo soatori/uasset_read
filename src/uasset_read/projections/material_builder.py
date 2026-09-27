@@ -102,10 +102,7 @@ class MaterialEditorBuilderProjector:
                 obj.id,
                 _BUILDER_PAIR,
                 code="material_editor_graph_unavailable",
-                message=(
-                    "Material editor expression graph is unavailable "
-                    f"(capability={capability or 'unknown'})"
-                ),
+                message=(f"Material editor expression graph is unavailable (capability={capability or 'unknown'})"),
                 stage="projection.material_builder",
                 dependencies=deps,
             )

@@ -8,51 +8,108 @@ real v1 semantics (five property-projections, one binary reader); porting them
 to v2 handlers is deferred to the handler-semantic-tiers work and requires
 real fixtures first (see tests/samples/manifest.json fixture gaps).
 """
+
 from tests.test_core import _object_record as _record
 from uasset_read.parsers.asset_types import handlers_impl as _hi  # noqa: F401 — registration
 from uasset_read.parsers.asset_types.registry import get_handlers
 
 HANDLER_CLASSES = (
-    "AnimBlueprintGeneratedClass", "AnimComposite", "AnimLayerInterface",
-    "CurveTable", "DataTable", "Material", "MaterialFunction",
-    "MaterialInstance", "MaterialInstanceConstant",
-    "MaterialParameterCollection", "NiagaraGraph", "NiagaraNodeFunctionCall",
-    "NiagaraNodeInput", "NiagaraNodeOp", "NiagaraNodeOutput",
-    "NiagaraNodeParameterMapGet", "NiagaraNodeParameterMapSet",
-    "NiagaraNodeReroute", "NiagaraNodeSelect", "NiagaraNodeStaticSwitch",
-    "NiagaraScript", "NiagaraScriptVariable", "PhysicalMaterial",
-    "PhysicsAsset", "Skeleton", "SkeletalMesh", "SoundAttenuation",
-    "SoundCue", "SoundWave", "StaticMesh", "StringTable", "Texture2D",
-    "TextureCube", "UserDefinedEnum", "UserDefinedStruct",
+    "AnimBlueprintGeneratedClass",
+    "AnimComposite",
+    "AnimLayerInterface",
+    "CurveTable",
+    "DataTable",
+    "Material",
+    "MaterialFunction",
+    "MaterialInstance",
+    "MaterialInstanceConstant",
+    "MaterialParameterCollection",
+    "NiagaraGraph",
+    "NiagaraNodeFunctionCall",
+    "NiagaraNodeInput",
+    "NiagaraNodeOp",
+    "NiagaraNodeOutput",
+    "NiagaraNodeParameterMapGet",
+    "NiagaraNodeParameterMapSet",
+    "NiagaraNodeReroute",
+    "NiagaraNodeSelect",
+    "NiagaraNodeStaticSwitch",
+    "NiagaraScript",
+    "NiagaraScriptVariable",
+    "PhysicalMaterial",
+    "PhysicsAsset",
+    "Skeleton",
+    "SkeletalMesh",
+    "SoundAttenuation",
+    "SoundCue",
+    "SoundWave",
+    "StaticMesh",
+    "StringTable",
+    "Texture2D",
+    "TextureCube",
+    "UserDefinedEnum",
+    "UserDefinedStruct",
 )
 FALLBACK_CLASSES = (
-    "AimOffsetBlendSpace", "AimOffsetBlendSpace1D", "AnimBlendSpace",
-    "AnimBlendSpace1D", "AnimBoneCompressionSettings",
-    "AnimCurveCompressionCodec", "AnimMontage",  # former v1 extractor
+    "AimOffsetBlendSpace",
+    "AimOffsetBlendSpace1D",
+    "AnimBlendSpace",
+    "AnimBlendSpace1D",
+    "AnimBoneCompressionSettings",
+    "AnimCurveCompressionCodec",
+    "AnimMontage",  # former v1 extractor
     "AnimSequence",  # former v1 extractor
-    "AnimationDataModel", "BehaviorTree", "BlackboardData", "ClothAsset",
-    "CubeBuilder", "CurveFloat", "CurveLinearColor", "CurveVector",
-    "DataAsset", "DialogueVoice", "DialogueWave", "FoliageType",
-    "GroomAsset", "Landscape", "LandscapeGrassType",
-    "LandscapeLayerInfoObject", "Level",
+    "AnimationDataModel",
+    "BehaviorTree",
+    "BlackboardData",
+    "ClothAsset",
+    "CubeBuilder",
+    "CurveFloat",
+    "CurveLinearColor",
+    "CurveVector",
+    "DataAsset",
+    "DialogueVoice",
+    "DialogueWave",
+    "FoliageType",
+    "GroomAsset",
+    "Landscape",
+    "LandscapeGrassType",
+    "LandscapeLayerInfoObject",
+    "Level",
     "LevelSequence",  # former v1 extractor (binary); generic parse verified richer on Lyra sample
-    "MediaPlayer", "MediaSource", "MediaTexture",
+    "MediaPlayer",
+    "MediaSource",
+    "MediaTexture",
     "MovieScene",  # former v1 extractor
     "MovieSceneControlRigParameterSection",  # former v1 extractor
     "MovieSceneControlRigParameterTrack",  # former v1 extractor
-    "ParticleSystem", "PoseAsset", "PrimaryDataAsset", "ReverbEffect",
-    "SkeletalMeshLODSettings", "SoundClass", "SoundConcurrency",
-    "SoundMix", "SoundSubmix", "SparseVolumeTexture", "SubsurfaceProfile",
-    "Texture2DArray", "TextureRenderTarget2D", "TextureRenderTargetCube",
-    "VolumeTexture", "WidgetBlueprint", "WidgetBlueprintGeneratedClass",
+    "ParticleSystem",
+    "PoseAsset",
+    "PrimaryDataAsset",
+    "ReverbEffect",
+    "SkeletalMeshLODSettings",
+    "SoundClass",
+    "SoundConcurrency",
+    "SoundMix",
+    "SoundSubmix",
+    "SparseVolumeTexture",
+    "SubsurfaceProfile",
+    "Texture2DArray",
+    "TextureRenderTarget2D",
+    "TextureRenderTargetCube",
+    "VolumeTexture",
+    "WidgetBlueprint",
+    "WidgetBlueprintGeneratedClass",
     "World",
 )
+
 
 def test_handler_classes_still_claimed():
     handlers = list(get_handlers())
     ctx = "package"
     for name in HANDLER_CLASSES:
         assert any(h.supports(_record(name), ctx) for h in handlers), name
+
 
 def test_fallback_classes_stay_unclaimed():
     handlers = list(get_handlers())

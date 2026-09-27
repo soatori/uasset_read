@@ -15,9 +15,7 @@ def reserve_memory(
 ) -> int:
     """Validate one reserve; return updated total_decompressed. Raise MemoryLimitExceeded."""
     if bytes_needed < 0:
-        raise MemoryLimitExceeded(
-            f"Memory limit exceeded for {asset} at {stage}: negative request {bytes_needed}"
-        )
+        raise MemoryLimitExceeded(f"Memory limit exceeded for {asset} at {stage}: negative request {bytes_needed}")
     if bytes_needed > MAX_SINGLE_READ_BYTES:
         raise MemoryLimitExceeded(
             f"Memory limit exceeded for {asset} at {stage}: "

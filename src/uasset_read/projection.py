@@ -132,6 +132,7 @@ _VALID_VIEWS = {"semantic", "raw", "debug"}
 _VALID_DEPTHS = {"package", "object", "asset", "decode"}
 _DEPTH_ORDER = {"package": 0, "object": 1, "asset": 2, "decode": 3}
 
+
 def dependency_to_dict(dep: Dependency) -> dict[str, Any]:
     """Serialize one import-dependency entry (#632).
 
@@ -380,11 +381,11 @@ def _enforce_budget(envelope: dict[str, Any], max_bytes: int, *, offset: int, pa
                 d for d in base_dependencies if isinstance(d, dict) and f"import:{d.get('index')}" in visible_ids
             ]
         # Projection records follow the surviving page objects.
-        envelope["projections"] = [
-            item for item in base_projections if item.get("source_object_id") in remaining_ids
-        ]
+        envelope["projections"] = [item for item in base_projections if item.get("source_object_id") in remaining_ids]
         envelope["diagnostics"] = [
-            d for d in base_diagnostics if isinstance(d, dict) and (d.get("object_id") is None or d["object_id"] in remaining_ids)
+            d
+            for d in base_diagnostics
+            if isinstance(d, dict) and (d.get("object_id") is None or d["object_id"] in remaining_ids)
         ] + [trunc_diag]
 
     # Binary search the longest prefix that fits. Linear pop+re-encode

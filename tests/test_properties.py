@@ -155,9 +155,7 @@ def test_known_expression_input_does_not_fall_back_to_generic_struct_bytes(stack
         for entry in obj.properties.entries
     ]
     entry = next(
-        item
-        for item in entries
-        if isinstance(item.value, dict) and item.value.get("expression_ref") is not None
+        item for item in entries if isinstance(item.value, dict) and item.value.get("expression_ref") is not None
     )
     expression_input = entry.value
     assert expression_input["expression_ref"] is not None

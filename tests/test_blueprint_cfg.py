@@ -15,7 +15,7 @@ def test_jump_if_not_creates_true_and_false_edges(ue58_blueprint_document):
 
 def test_instruction_ranges_are_monotonic(stackobot_document):
     for obj in stackobot_document.objects:
-        for fn in ((obj.semantic or {}).get("functions") or []):
+        for fn in (obj.semantic or {}).get("functions") or []:
             instrs = fn["instructions"]
             statement_indexes = [item["statement_index"] for item in instrs]
             serialized_starts = [item["serialized_start"] for item in instrs]
@@ -35,7 +35,7 @@ def test_jump_targets_use_statement_index_not_serialized_offset(ue58_blueprint_d
 
 def test_computed_jump_is_marked_not_enumerated(stackobot_document):
     for obj in stackobot_document.objects:
-        for fn in ((obj.semantic or {}).get("functions") or []):
+        for fn in (obj.semantic or {}).get("functions") or []:
             for edge in fn["cfg"]["edges"]:
                 if edge["kind"] == "computed_jump":
                     assert edge["targets_known"] is False
@@ -44,7 +44,7 @@ def test_computed_jump_is_marked_not_enumerated(stackobot_document):
 def test_cfg_blocks_carry_instructions_matching_ordinals(stackobot_document):
     """blocks[].instructions is the brief projection; ordinals stay in sync."""
     for obj in stackobot_document.objects:
-        for fn in ((obj.semantic or {}).get("functions") or []):
+        for fn in (obj.semantic or {}).get("functions") or []:
             instrs = fn.get("instructions") or []
             blocks = (fn.get("cfg") or {}).get("blocks") or []
             if not instrs:

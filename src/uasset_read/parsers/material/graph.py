@@ -237,9 +237,7 @@ class MaterialGraphDecoder:
                     )
                 )
                 graph.diagnostics.append(f"material_not_found:{material_object_id}")
-                graph.diagnostics.extend(
-                    f"{entry.feature}:{entry.status}:{entry.detail}" for entry in graph.coverage
-                )
+                graph.diagnostics.extend(f"{entry.feature}:{entry.status}:{entry.detail}" for entry in graph.coverage)
                 return graph
         else:
             material = next((o for o in objects if (o.class_name or "") == "Material"), None)
@@ -255,18 +253,11 @@ class MaterialGraphDecoder:
             return _outer_chain_reaches(objects_by_id, obj.id, material_id)
 
         editor_only = next(
-            (
-                o
-                for o in objects
-                if (o.class_name or "") == "MaterialEditorOnlyData"
-                and owned_by_material(o)
-            ),
+            (o for o in objects if (o.class_name or "") == "MaterialEditorOnlyData" and owned_by_material(o)),
             None,
         )
         expression_objs = [
-            o
-            for o in objects
-            if (o.class_name or "").startswith("MaterialExpression") and owned_by_material(o)
+            o for o in objects if (o.class_name or "").startswith("MaterialExpression") and owned_by_material(o)
         ]
 
         graph = MaterialGraph(object_id=material_id or "", name=material_name)
@@ -290,9 +281,7 @@ class MaterialGraphDecoder:
                         detail="no Material export and no MaterialExpression* exports",
                     )
                 )
-            graph.diagnostics = [
-                f"{entry.feature}:{entry.status}:{entry.detail}" for entry in graph.coverage
-            ]
+            graph.diagnostics = [f"{entry.feature}:{entry.status}:{entry.detail}" for entry in graph.coverage]
             return graph
 
         def resolve(ref: int) -> str | None:
@@ -359,9 +348,7 @@ class MaterialGraphDecoder:
             status = "partial"
             detail = f"{bags_present}/{len(expression_objs)} expression property bags parsed"
 
-        graph.coverage.append(
-            CoverageEntry(feature="editor_expression_graph", status=status, detail=detail)
-        )
+        graph.coverage.append(CoverageEntry(feature="editor_expression_graph", status=status, detail=detail))
         graph.diagnostics = [
             f"{entry.feature}:{entry.status}:{entry.detail}"
             for entry in graph.coverage
@@ -513,8 +500,5 @@ def project_semantic_material(graph: MaterialGraph) -> dict[str, Any]:
             }
             for fc in graph.function_calls
         ],
-        "coverage": [
-            {"feature": c.feature, "status": c.status, "detail": c.detail}
-            for c in graph.coverage
-        ],
+        "coverage": [{"feature": c.feature, "status": c.status, "detail": c.detail} for c in graph.coverage],
     }

@@ -149,8 +149,7 @@ def read_pin_array(
         max_valid_index = len(export_map) + (len(import_map) if import_map else 0) + 50  # Allow some margin
         if owning_node != 0 and abs(owning_node) >= max_valid_index:
             raise ParseError(
-                f"Invalid pin reference at pos {ref_pos}: "
-                f"owning_node {owning_node} exceeds range 0..{max_valid_index}"
+                f"Invalid pin reference at pos {ref_pos}: owning_node {owning_node} exceeds range 0..{max_valid_index}"
             )
         pins.append(pin_ref)
     return pins
@@ -189,9 +188,7 @@ def _read_pin_ftext_field(
     """Read Pin FText field (PinFriendlyName / DefaultTextValue)."""
     _start = archive.tell()
     try:
-        value, flags, history_type, _ = _read_ftext_value(
-            archive, tolerant=True, dev_notes=dev_notes, summary=summary
-        )
+        value, flags, history_type, _ = _read_ftext_value(archive, tolerant=True, dev_notes=dev_notes, summary=summary)
         consumed = archive.tell() - _start
         if consumed > MAX_FTEXT_CONSUMPTION:
             logger.debug(

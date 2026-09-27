@@ -228,9 +228,7 @@ def _state_machines_from_semantic(semantic: dict) -> list[dict]:
         nodes = graph.get("nodes") or []
         if len(nodes) <= 1:
             continue
-        state_count = sum(
-            1 for n in nodes if (n.get("node_data") or {}).get("subgraph_references")
-        )
+        state_count = sum(1 for n in nodes if (n.get("node_data") or {}).get("subgraph_references"))
         machines.append(
             {
                 "name": graph.get("name"),
@@ -347,9 +345,7 @@ def _exec_pin_edges_from_graphs(graphs: list[dict], graph_name: str | None = Non
                         if pin_direction.get((edge_to_node, edge_to_pin)) == "output":
                             edge_from_node, edge_to_node = edge_to_node, edge_from_node
                             edge_from_pin, edge_to_pin = edge_to_pin, edge_from_pin
-                    pair = frozenset(
-                        {(edge_from_node, edge_from_pin), (edge_to_node, edge_to_pin)}
-                    )
+                    pair = frozenset({(edge_from_node, edge_from_pin), (edge_to_node, edge_to_pin)})
                     if pair in seen:
                         continue
                     seen.add(pair)
@@ -369,9 +365,7 @@ def test_exec_edges_available_for_event_graph():
     from uasset_read import parse_package_document
     from uasset_read.projection import project_document
 
-    doc = parse_package_document(
-        SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True
-    )
+    doc = parse_package_document(SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True)
     page = project_document(doc, depth="decode", max_bytes=2_000_000)
     summaries = []
     graphs = []
@@ -400,9 +394,7 @@ def test_node_name_is_not_graph_name_for_multi_node_graphs():
     from uasset_read import parse_package_document
     from uasset_read.projection import project_document
 
-    doc = parse_package_document(
-        SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True
-    )
+    doc = parse_package_document(SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True)
     page = project_document(doc, depth="decode", max_bytes=2_000_000)
     for o in page.get("objects") or []:
         for g in (o.get("semantic") or {}).get("graphs") or []:
@@ -418,9 +410,7 @@ def test_call_function_raw_properties_reach_node_data():
     from uasset_read import parse_package_document
     from uasset_read.projection import project_document
 
-    doc = parse_package_document(
-        SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True
-    )
+    doc = parse_package_document(SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True)
     page = project_document(doc, depth="decode", max_bytes=2_000_000)
     nodes = [
         n
@@ -517,7 +507,9 @@ def test_project_document_decode_max_bytes_keeps_k0_functions():
     assert objs, "budget must leave at least one object"
     bp = next((o for o in objs if o.get("id") == "export:1"), objs[0])
     fns = (bp.get("semantic") or {}).get("functions")
-    assert fns, f"projected decode page must include functions; got semantic keys {list((bp.get('semantic') or {}).keys())}"
+    assert fns, (
+        f"projected decode page must include functions; got semantic keys {list((bp.get('semantic') or {}).keys())}"
+    )
     for fn in fns:
         assert "expression_count" in fn
         assert "bytecode_status" in fn
@@ -640,9 +632,7 @@ def test_extract_bridge_one_failure_keeps_sibling_functions(monkeypatch):
     from uasset_read.serializers.object_resources import resolve_class_name
 
     function_exports = [
-        e
-        for e in export_map
-        if resolve_class_name(e.class_index, import_map, export_map) in FUNCTION_EXPORT_CLASSES
+        e for e in export_map if resolve_class_name(e.class_index, import_map, export_map) in FUNCTION_EXPORT_CLASSES
     ]
     assert len(results) == len(function_exports) > 2
     by_status = {s: [r for r in results if r.bytecode_status == s] for s in ("parsed", "unavailable")}
@@ -700,9 +690,7 @@ def test_generated_class_kismet_functions_survive_decode():
 def test_generated_class_function_count_is_depth_independent():
     counts = {}
     for depth in ("asset", "decode"):
-        doc = parse_package_document(
-            SAMPLES / "BP_CombatCharacter.uasset", depth=depth, object_ids=["export:2"]
-        )
+        doc = parse_package_document(SAMPLES / "BP_CombatCharacter.uasset", depth=depth, object_ids=["export:2"])
         bpgc = next(o for o in doc.objects if o.id == "export:2")
         counts[depth] = len(((bpgc.semantic or {}).get("functions") or []))
     assert counts["decode"] == counts["asset"] == 45, counts
@@ -784,9 +772,7 @@ def test_exec_edges_are_oriented_unique_and_graph_local():
     from uasset_read import parse_package_document
     from uasset_read.projection import project_document
 
-    doc = parse_package_document(
-        SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True
-    )
+    doc = parse_package_document(SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True)
     page = project_document(doc, depth="decode", max_bytes=2_000_000)
     graphs = []
     for o in page.get("objects") or []:

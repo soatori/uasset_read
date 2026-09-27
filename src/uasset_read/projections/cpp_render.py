@@ -169,24 +169,15 @@ def _coerce_semantic(semantic_dict: dict[str, Any]) -> BlueprintSemantic:
     """Private projected-dict → typed IR mapper (sole dict boundary)."""
     if not isinstance(semantic_dict, dict):
         raise TypeError(
-            "render_cpp accepts only an ObjectRecord.semantic dict (E1); "
-            f"got {type(semantic_dict).__name__}"
+            f"render_cpp accepts only an ObjectRecord.semantic dict (E1); got {type(semantic_dict).__name__}"
         )
 
     declaration_raw = semantic_dict.get("declaration") or {}
     if not isinstance(declaration_raw, dict):
         declaration_raw = {}
     declaration = BlueprintDeclaration(
-        class_name=str(
-            declaration_raw.get("class_name")
-            or semantic_dict.get("name")
-            or ""
-        ),
-        parent_class=(
-            declaration_raw.get("parent_class")
-            or semantic_dict.get("parent_class")
-            or None
-        ),
+        class_name=str(declaration_raw.get("class_name") or semantic_dict.get("name") or ""),
+        parent_class=(declaration_raw.get("parent_class") or semantic_dict.get("parent_class") or None),
         class_flags=declaration_raw.get("class_flags"),
         metadata=dict(declaration_raw.get("metadata") or {}),
         source_range=region_from_projected(declaration_raw.get("source_range")),
@@ -238,11 +229,7 @@ def _coerce_semantic(semantic_dict: dict[str, Any]) -> BlueprintSemantic:
         if isinstance(raw, dict):
             entrypoints.append(EntrypointRecord.from_dict(raw))
 
-    graphs = [
-        BlueprintGraph.from_dict(g)
-        for g in semantic_dict.get("graphs") or []
-        if isinstance(g, dict)
-    ]
+    graphs = [BlueprintGraph.from_dict(g) for g in semantic_dict.get("graphs") or [] if isinstance(g, dict)]
 
     functions: list[FunctionAnalysis] = []
     for raw in semantic_dict.get("functions") or []:
@@ -251,10 +238,7 @@ def _coerce_semantic(semantic_dict: dict[str, Any]) -> BlueprintSemantic:
         normalized = dict(raw)
         if isinstance(raw.get("instructions"), list):
             normalized["instructions"] = [
-                _normalize_instruction_dict(ins)
-                if isinstance(ins, dict)
-                else ins
-                for ins in raw["instructions"]
+                _normalize_instruction_dict(ins) if isinstance(ins, dict) else ins for ins in raw["instructions"]
             ]
         cfg_raw = raw.get("cfg")
         if isinstance(cfg_raw, dict):
@@ -266,9 +250,7 @@ def _coerce_semantic(semantic_dict: dict[str, Any]) -> BlueprintSemantic:
                 block_out = dict(block)
                 if isinstance(block.get("instructions"), list):
                     block_out["instructions"] = [
-                        _normalize_instruction_dict(ins)
-                        if isinstance(ins, dict)
-                        else ins
+                        _normalize_instruction_dict(ins) if isinstance(ins, dict) else ins
                         for ins in block["instructions"]
                     ]
                 blocks.append(block_out)
@@ -587,8 +569,7 @@ def _render_header(decl: CppClassDecl, diagnostics: list[Diagnostic]) -> str:
         lines.append("    // constructor record (declaration input from construction graph)")
         if ctor.parent_call:
             lines.append(
-                f"    {decl.name}(); // parent_call={ctor.parent_call}; "
-                f"components={ctor.component_initializers}"
+                f"    {decl.name}(); // parent_call={ctor.parent_call}; components={ctor.component_initializers}"
             )
         else:
             lines.append(f"    {decl.name}(); // parent_call=unresolved; components={ctor.component_initializers}")
@@ -626,9 +607,9 @@ def _variable_ref_text(value: Any) -> tuple[str | None, str | None]:
         if inst == "EX_FloatConst":
             return str(value.get("value", value.get("Value", "0.0"))), None
         if inst == "EX_StringConst":
-            return f"TEXT(\"{value.get('value', value.get('Value', ''))}\")", None
+            return f'TEXT("{value.get("value", value.get("Value", ""))}")', None
         if inst == "EX_NameConst":
-            return f"FName(TEXT(\"{value.get('value', value.get('Value', ''))}\"))", None
+            return f'FName(TEXT("{value.get("value", value.get("Value", ""))}"))', None
         if inst:
             return f"/* unresolved: {inst} */", f"unsupported expression {inst}"
         return "/* opaque expression */", "expression missing Inst"
@@ -887,8 +868,7 @@ def _render_source(
                         severity="warning",
                         code="cpp_projection_unresolved_return",
                         message=(
-                            f"migration function {name} absent from function_declarations; "
-                            "return type left unresolved"
+                            f"migration function {name} absent from function_declarations; return type left unresolved"
                         ),
                         stage="projections.cpp.migration",
                         effect="semantic_loss",
@@ -906,9 +886,7 @@ def _render_source(
             idx = stmt.statement_index if stmt.statement_index is not None else "unset"
             start = stmt.serialized_start if stmt.serialized_start is not None else "unset"
             end = stmt.serialized_end if stmt.serialized_end is not None else "unset"
-            lines.append(
-                f"    // stmt={idx} serialized=[{start},{end}) status={stmt.status} object={stmt.object_id}"
-            )
+            lines.append(f"    // stmt={idx} serialized=[{start},{end}) status={stmt.status} object={stmt.object_id}")
             if stmt.diagnostic:
                 lines.append(f"    // diagnostic: {stmt.diagnostic}")
             lines.append(f"    {stmt.text}")

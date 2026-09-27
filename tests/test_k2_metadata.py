@@ -34,27 +34,20 @@ def _assert_identity(node) -> None:
         return
     value = getattr(node.metadata, field_name, None)
     assert value, (
-        f"{node.class_name} {node.id}: metadata.{field_name} must be non-empty, "
-        f"got metadata={node.metadata!r}"
+        f"{node.class_name} {node.id}: metadata.{field_name} must be non-empty, got metadata={node.metadata!r}"
     )
 
 
 def test_ue58_k2_event_identity_is_non_empty(ue58_blueprint_document, ue58_source):
     """UE5.8 sample: K2Node_Event nodes expose Receive* from EventReference."""
-    nodes = [
-        n
-        for n in _identity_nodes(ue58_blueprint_document, ue58_source)
-        if n.class_name == "K2Node_Event"
-    ]
+    nodes = [n for n in _identity_nodes(ue58_blueprint_document, ue58_source) if n.class_name == "K2Node_Event"]
     assert nodes, "UE5.8 sample must decode K2Node_Event nodes"
     for node in nodes:
         _assert_identity(node)
         assert node.metadata.event_name.startswith("Receive"), node.metadata.event_name
 
 
-def test_ue58_k2_metadata_is_not_only_an_allowlisted_tag(
-    ue58_blueprint_document, ue58_source
-):
+def test_ue58_k2_metadata_is_not_only_an_allowlisted_tag(ue58_blueprint_document, ue58_source):
     nodes = [
         node
         for obj in ue58_blueprint_document.objects
@@ -76,11 +69,7 @@ def test_ue58_k2_metadata_is_not_only_an_allowlisted_tag(
 
 def test_stackobot_k2_call_function_identity_is_non_empty(stackobot_document, stackobot_source):
     """StackOBot sample: K2Node_CallFunction nodes expose FunctionReference.MemberName."""
-    nodes = [
-        n
-        for n in _identity_nodes(stackobot_document, stackobot_source)
-        if n.class_name == "K2Node_CallFunction"
-    ]
+    nodes = [n for n in _identity_nodes(stackobot_document, stackobot_source) if n.class_name == "K2Node_CallFunction"]
     assert nodes, "StackOBot sample must decode K2Node_CallFunction nodes"
     for node in nodes:
         _assert_identity(node)
@@ -94,7 +83,9 @@ def test_stackobot_k2_call_function_identity_is_non_empty(stackobot_document, st
         }
 
 
-def test_identity_matrix_covers_six_k2_node_types(ue58_blueprint_document, ue58_source, stackobot_document, stackobot_source):
+def test_identity_matrix_covers_six_k2_node_types(
+    ue58_blueprint_document, ue58_source, stackobot_document, stackobot_source
+):
     """Inventory + identity matrix over the six reviewed K2 node types.
 
     Types absent from today's samples are recorded (count == 0) so a future

@@ -326,29 +326,40 @@ def test_resolve_outer_name_export_and_import_and_null():
     objects = [
         ObjectRecord(id="export:0", table_index=0, name="Root", roles=("asset",)),
         ObjectRecord(
-            id="export:1", table_index=1, name="Child",
-            outer_ref=ObjectRef(table="export", index=0), roles=(),
+            id="export:1",
+            table_index=1,
+            name="Child",
+            outer_ref=ObjectRef(table="export", index=0),
+            roles=(),
         ),
     ]
     imports = [
         ObjectImport(
-            class_package="/Script/Engine", class_name="Class",
-            outer_index=PackageIndex(0), object_name="SomeClass",
+            class_package="/Script/Engine",
+            class_name="Class",
+            outer_index=PackageIndex(0),
+            object_name="SomeClass",
         )
     ]
     # Export Outer resolves through the objects list.
     assert _resolve_outer_name(objects[1], objects, imports) == "Root"
     # Import Outer resolves through the import map.
     obj_import_outer = ObjectRecord(
-        id="export:2", table_index=2, name="Inst",
-        outer_ref=ObjectRef(table="import", index=0), roles=(),
+        id="export:2",
+        table_index=2,
+        name="Inst",
+        outer_ref=ObjectRef(table="import", index=0),
+        roles=(),
     )
     assert _resolve_outer_name(obj_import_outer, objects, imports) == "SomeClass"
     # Null Outer and out-of-range indexes stay None (bounded, no raise).
     assert _resolve_outer_name(objects[0], objects, imports) is None
     obj_oob = ObjectRecord(
-        id="export:3", table_index=3, name="OOB",
-        outer_ref=ObjectRef(table="export", index=99), roles=(),
+        id="export:3",
+        table_index=3,
+        name="OOB",
+        outer_ref=ObjectRef(table="export", index=99),
+        roles=(),
     )
     assert _resolve_outer_name(obj_oob, objects, imports) is None
 
@@ -357,8 +368,11 @@ def test_make_diagnostic_accepts_size():
     from uasset_read.models.diagnostics import make_diagnostic
 
     d = make_diagnostic(
-        "EXPORT_TRAILING_BYTES_UNCONSUMED", "leaves 6 bytes",
-        "objects.export", size=6, reason="editor_only",
+        "EXPORT_TRAILING_BYTES_UNCONSUMED",
+        "leaves 6 bytes",
+        "objects.export",
+        size=6,
+        reason="editor_only",
     )
     assert d.size == 6
     assert d.to_dict()["size"] == 6
@@ -380,12 +394,20 @@ def test_true_gap_classes_classify_known_unimplemented():
     from uasset_read.models.diagnostics import TrailingContext, classify_trailing_reason
 
     for cls in (
-        "Level", "Model", "Polys", "World", "BodySetup",
-        "NavCollision", "UserDefinedEnum", "PoseAsset",
+        "Level",
+        "Model",
+        "Polys",
+        "World",
+        "BodySetup",
+        "NavCollision",
+        "UserDefinedEnum",
+        "PoseAsset",
         "MovieScene",
     ):
         ctx = TrailingContext(
-            class_name=cls, object_name="X", outer_name="Y",
+            class_name=cls,
+            object_name="X",
+            outer_name="Y",
         )
         assert classify_trailing_reason(ctx) == "known_unimplemented", cls
 
@@ -405,15 +427,11 @@ def test_classify_trailing_reason_native_cdo_and_generated_data():
     # CDO: Default__ instance whose class is the *_C blueprint generated class
     # (UBlueprint::GetBlueprintClassName naming; ALS_AnimBP fixture shape).
     assert (
-        classify_trailing_reason(
-            TrailingContext(class_name="ALS_AnimBP_C", object_name="Default__ALS_AnimBP_C")
-        )
+        classify_trailing_reason(TrailingContext(class_name="ALS_AnimBP_C", object_name="Default__ALS_AnimBP_C"))
         == "known_unimplemented"
     )
     assert (
-        classify_trailing_reason(
-            TrailingContext(class_name="BP_Foo_C", object_name="Default__BP_Foo_C")
-        )
+        classify_trailing_reason(TrailingContext(class_name="BP_Foo_C", object_name="Default__BP_Foo_C"))
         == "known_unimplemented"
     )
     # Generated data: AnimBlueprint generated-data structs outered to the *_C class.
@@ -457,12 +475,7 @@ def test_classify_trailing_reason_native_cdo_and_generated_data():
         == "unexpected"
     )
     # A *_C object that is not a Default__ instance is not a CDO.
-    assert (
-        classify_trailing_reason(
-            TrailingContext(class_name="ABP_Foo_C", object_name="ABP_Foo_C")
-        )
-        == "unexpected"
-    )
+    assert classify_trailing_reason(TrailingContext(class_name="ABP_Foo_C", object_name="ABP_Foo_C")) == "unexpected"
     # str shorthand keeps class-name-only behavior (no object/outer context).
     assert classify_trailing_reason("SomeUnknownClass") == "unexpected"
     assert classify_trailing_reason("ALS_AnimBP_C") == "unexpected"
@@ -478,16 +491,10 @@ def test_animbp_samples_reclassify_native_trailers_to_known_unimplemented():
     }
     for name, object_ids in expected.items():
         doc = parse_package_document(f"tests/samples/{name}", depth="asset")
-        trailing = {
-            d.object_id: d
-            for d in doc.diagnostics
-            if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"
-        }
+        trailing = {d.object_id: d for d in doc.diagnostics if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"}
         for oid in object_ids:
             assert oid in trailing, f"{name}:{oid} missing EXPORT_TRAILING_BYTES_UNCONSUMED"
-            assert trailing[oid].reason == "known_unimplemented", (
-                f"{name}:{oid} reason={trailing[oid].reason}"
-            )
+            assert trailing[oid].reason == "known_unimplemented", f"{name}:{oid} reason={trailing[oid].reason}"
         unexpected = [
             d.object_id
             for d in doc.diagnostics
@@ -497,9 +504,5 @@ def test_animbp_samples_reclassify_native_trailers_to_known_unimplemented():
 
     # The largest native body keeps its disclosed byte count (reclassified, not suppressed).
     als = parse_package_document("tests/samples/ALS_AnimBP.uasset", depth="asset")
-    cdo = next(
-        d
-        for d in als.diagnostics
-        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id == "export:0"
-    )
+    cdo = next(d for d in als.diagnostics if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id == "export:0")
     assert "leaves 605230 undecoded bytes" in (cdo.message or "")

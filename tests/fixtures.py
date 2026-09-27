@@ -67,7 +67,7 @@ def parse_sample(
 def find_function(document: PackageDocument, name: str):
     """Return the projected function dict for `name` (E1: dicts, not dataclasses)."""
     for obj in document.objects:
-        for fn in ((obj.semantic or {}).get("functions") or []):
+        for fn in (obj.semantic or {}).get("functions") or []:
             if fn.get("function_name") == name:
                 return fn
     raise KeyError(f"function not found: {name}")

@@ -141,11 +141,7 @@ def _enrich_identity(
         if parent and not meta.member_parent:
             meta.member_parent = parent
         if meta.member_reference is None:
-            prims = {
-                str(k): v
-                for k, v in fields.items()
-                if isinstance(v, (str, int, float, bool, type(None)))
-            }
+            prims = {str(k): v for k, v in fields.items() if isinstance(v, (str, int, float, bool, type(None)))}
             if prims:
                 meta.member_reference = prims
 

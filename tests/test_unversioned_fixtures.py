@@ -1,4 +1,5 @@
 """Structural assertions for unversioned property fixtures."""
+
 from __future__ import annotations
 
 import json
@@ -23,13 +24,10 @@ class TestUnversionedFixtureIntegrity:
 
     def test_version_zero_indicates_unversioned(self, unversioned_entries):
         """FileVersionUE4 == 0 is the detection signal for unversioned properties."""
-        assert len(unversioned_entries) >= 2, (
-            f"Expected >=2 unversioned fixtures, got {len(unversioned_entries)}"
-        )
+        assert len(unversioned_entries) >= 2, f"Expected >=2 unversioned fixtures, got {len(unversioned_entries)}"
         for entry in unversioned_entries:
             assert entry.get("file_version_ue4") == 0, (
-                f"{entry['name']}: expected file_version_ue4=0 for unversioned, "
-                f"got {entry.get('file_version_ue4')}"
+                f"{entry['name']}: expected file_version_ue4=0 for unversioned, got {entry.get('file_version_ue4')}"
             )
 
     def test_usmap_file_exists(self, unversioned_entries):
@@ -48,9 +46,7 @@ class TestUnversionedFixtureIntegrity:
                 continue
             path = os.path.join(SAMPLES_DIR, usmap_name)
             mappings = UsmapParser(path)
-            assert len(mappings.mappings.types) > 0, (
-                f"USMAP {usmap_name} parsed but contains no struct definitions"
-            )
+            assert len(mappings.mappings.types) > 0, f"USMAP {usmap_name} parsed but contains no struct definitions"
 
 
 class TestUnversionedPropertySchema:
@@ -81,17 +77,14 @@ class TestUnversionedPropertySchema:
         assert struct is not None, "BP_UnversionedTest_C not found in USMAP"
 
         type_names = {p.mapping_type.type for p in struct.properties.values()}
-        assert len(type_names) >= 3, (
-            f"Expected >=3 distinct property types, got {len(type_names)}: {type_names}"
-        )
+        assert len(type_names) >= 3, f"Expected >=3 distinct property types, got {len(type_names)}: {type_names}"
 
     def test_property_count_matches(self, mappings):
         """Verify property count in schema matches declared count."""
         struct = mappings.mappings.get_struct("BP_UnversionedTest_C")
         assert struct is not None, "BP_UnversionedTest_C not found in USMAP"
         assert len(struct.properties) == struct.property_count, (
-            f"Property count mismatch: {len(struct.properties)} actual vs "
-            f"{struct.property_count} declared"
+            f"Property count mismatch: {len(struct.properties)} actual vs {struct.property_count} declared"
         )
 
     def test_struct_has_known_types(self, mappings):
@@ -103,10 +96,7 @@ class TestUnversionedPropertySchema:
         # These are common types that should appear in a Blueprint
         expected_types = {"IntProperty", "DoubleProperty", "BoolProperty", "ObjectProperty"}
         found = type_names & expected_types
-        assert len(found) >= 2, (
-            f"Expected >=2 of {expected_types} in schema, found {found}. "
-            f"All types: {type_names}"
-        )
+        assert len(found) >= 2, f"Expected >=2 of {expected_types} in schema, found {found}. All types: {type_names}"
 
 
 class TestUnversionedFixtureProvenance:
@@ -133,9 +123,7 @@ class TestUnversionedBinaryHeader:
             with open(path, "rb") as f:
                 header = f.read(64)
             magic = struct.unpack_from("<I", header, 0)[0]
-            assert magic in (0x9E2A83C1, 0x00690083), (
-                f"{name}: unexpected package magic 0x{magic:08X}"
-            )
+            assert magic in (0x9E2A83C1, 0x00690083), f"{name}: unexpected package magic 0x{magic:08X}"
 
     def test_sidecar_files_exist(self):
         """Verify .uexp sidecar files exist for unversioned fixtures."""
@@ -218,9 +206,7 @@ class TestUnversionedMappedProperties:
             if isinstance(class_props, dict)
             else [entry.value for entry in class_props.entries]
         )
-        class_is_opaque = any(
-            isinstance(v, dict) and v.get("kind") == "opaque" for v in class_values
-        )
+        class_is_opaque = any(isinstance(v, dict) and v.get("kind") == "opaque" for v in class_values)
         assert class_is_opaque, "BlueprintGeneratedClass without usmap must be UnversionedOpaque"
         # Forbid tagged name-index misparse: zero name_index_out_of_range diagnostics.
         # The mapping path stops and opaques the remainder instead of falling back

@@ -64,7 +64,12 @@ class FKismetArchive(FArchive):
                     serialized_end = self.tell()
                     expr: KismetExpression = OpaqueExpression(
                         token=token_byte,
-                        raw_region=ByteRegion(serialized_start, serialized_end - serialized_start, "opaque", reason="unknown_expression_token"),
+                        raw_region=ByteRegion(
+                            serialized_start,
+                            serialized_end - serialized_start,
+                            "opaque",
+                            reason="unknown_expression_token",
+                        ),
                         reason="unknown_expression_token",
                     )
                     expr.StatementIndex = stmt_index
@@ -104,9 +109,7 @@ class FKismetArchive(FArchive):
         """
         remaining = self._file_size - self.tell()
         if remaining < 0:
-            raise ParseError(
-                f"Kismet cursor past function end: tell={self.tell()} size={self._file_size}"
-            )
+            raise ParseError(f"Kismet cursor past function end: tell={self.tell()} size={self._file_size}")
         if remaining == 0:
             return b""
         data = self.read(remaining)

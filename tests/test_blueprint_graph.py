@@ -85,9 +85,7 @@ def test_resolve_pin_links_prefers_owner_over_duplicate_guid():
     def _node(node_id, pin_id):
         return {
             "id": node_id,
-            "pins": [
-                {"id": pin_id, "name": "then", "direction": "output", "category": "exec", "linked": []}
-            ],
+            "pins": [{"id": pin_id, "name": "then", "direction": "output", "category": "exec", "linked": []}],
         }
 
     shared = "a" * 32
@@ -304,7 +302,11 @@ def test_combat_character_owner_aware_exec_link():
                 for link in p["linked"]:
                     resolved.setdefault((n["id"], p["id"]), set()).add(link["to_node"])
 
-    exec_links = [r for r in raw if r["src_category"] == "exec" and isinstance(r["target_owning_node"], int) and r["target_owning_node"] > 0]
+    exec_links = [
+        r
+        for r in raw
+        if r["src_category"] == "exec" and isinstance(r["target_owning_node"], int) and r["target_owning_node"] > 0
+    ]
     assert exec_links, "fixture must expose exec raw links with owners"
 
     # Every owner-resolvable exec link must land on its serialized owner.
@@ -515,15 +517,11 @@ def test_summarize_exec_edges_keeps_owner_aware_to_node():
                 {"id": "export:0", "pins": [out_pin]},
                 {
                     "id": "export:1",
-                    "pins": [
-                        {"id": shared, "name": "execute", "direction": "input", "category": "exec", "linked": []}
-                    ],
+                    "pins": [{"id": shared, "name": "execute", "direction": "input", "category": "exec", "linked": []}],
                 },
                 {
                     "id": "export:2",
-                    "pins": [
-                        {"id": shared, "name": "execute", "direction": "input", "category": "exec", "linked": []}
-                    ],
+                    "pins": [{"id": shared, "name": "execute", "direction": "input", "category": "exec", "linked": []}],
                 },
             ],
         }
@@ -573,15 +571,11 @@ def test_summarize_exec_edges_duplicate_guid_nodes_stay_distinct():
                 },
                 {
                     "id": "export:1",
-                    "pins": [
-                        {"id": shared, "name": "execute", "direction": "input", "category": "exec", "linked": []}
-                    ],
+                    "pins": [{"id": shared, "name": "execute", "direction": "input", "category": "exec", "linked": []}],
                 },
                 {
                     "id": "export:2",
-                    "pins": [
-                        {"id": shared, "name": "execute", "direction": "input", "category": "exec", "linked": []}
-                    ],
+                    "pins": [{"id": shared, "name": "execute", "direction": "input", "category": "exec", "linked": []}],
                 },
             ],
         }

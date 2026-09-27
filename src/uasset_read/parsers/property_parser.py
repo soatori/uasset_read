@@ -99,9 +99,7 @@ def handle_custom_property(
     keys are registered; an unhandled slot raw-skips ``tag.size`` bytes.
     """
     game_key = game.lower() if game else None
-    handler = CUSTOM_PROPERTY_HANDLERS.get((game_key, type_id)) or CUSTOM_PROPERTY_HANDLERS.get(
-        (game_key, tag.type)
-    )
+    handler = CUSTOM_PROPERTY_HANDLERS.get((game_key, type_id)) or CUSTOM_PROPERTY_HANDLERS.get((game_key, tag.type))
     if handler is None:
         logger.debug(
             "CustomProperty 0x%02X: no handler registered, skipping %d bytes",
@@ -374,17 +372,13 @@ def parse_property_value(
             custom_id = custom_id_map.get(first_node_name)
             if custom_id is not None:
                 try:
-                    return handle_custom_property(
-                        custom_id, tag, archive, name_map, game=game
-                    )
+                    return handle_custom_property(custom_id, tag, archive, name_map, game=game)
                 except BINARY_READ_ERRORS as e:
                     logger.debug("Custom property handler (0x%02X) failed for %s: %s", custom_id, tag.type, e)
         game_key = game.lower() if game else None
         if (game_key, tag.type) in CUSTOM_PROPERTY_HANDLERS:
             try:
-                return handle_custom_property(
-                    0xFF, tag, archive, name_map, game=game
-                )
+                return handle_custom_property(0xFF, tag, archive, name_map, game=game)
             except BINARY_READ_ERRORS as e:
                 logger.debug("Game-specific custom property handler failed for %s (game=%s): %s", tag.type, game, e)
 
@@ -542,9 +536,7 @@ def _parse_unversioned_properties_from_mapping(
         is_last = position == len(selected_properties) - 1
         fixed_size = _fixed_unversioned_size(info.mapping_type)
         estimated_size = (
-            0
-            if fixed_size > 0
-            else _estimate_unversioned_variable_size(info.mapping_type, archive, remaining)
+            0 if fixed_size > 0 else _estimate_unversioned_variable_size(info.mapping_type, archive, remaining)
         )
         # Unversioned bool is a raw uint8; the tagged handler reads tag.bool_val.
         if info.mapping_type.type == "BoolProperty" and not is_zero:

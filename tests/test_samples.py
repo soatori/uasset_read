@@ -289,9 +289,9 @@ def test_manifest_matches_every_real_sample():
         | {
             "manifest.json",
             "README.md",
-                "golden",
-                "containers",
-                "UnversionedTest.usmap",
+            "golden",
+            "containers",
+            "UnversionedTest.usmap",
             "UnversionedTest.provenance.md",
             "quality_baseline.json",
         }
@@ -502,6 +502,7 @@ def test_real_sample_proves_claimed_capability(
             assert feature in feature_names, f"{sample}:{class_name} missing coverage {feature}"
         twin = copy.deepcopy(obj)
         from uasset_read.parsers.asset_types.handlers_impl import TexturePayloadHandler
+
         result = TexturePayloadHandler().enrich(twin, "package", doc.objects, None)
         if class_name == "TextureCube":
             # TextureCube doesn't have ImportedSize property, so result is None
@@ -1048,9 +1049,7 @@ def _assert_quality_baseline(doc, name: str) -> None:
         for reason_key, rule in by_reason.items():
             reason = None if reason_key == "_" else reason_key
             actual = _count(code, reason)
-            assert actual <= rule["max"], (
-                f"{name}: {code}/{reason_key} count {actual} > baseline max {rule['max']}"
-            )
+            assert actual <= rule["max"], f"{name}: {code}/{reason_key} count {actual} > baseline max {rule['max']}"
 
     if entry.get("forbid_unlisted"):
         known = {
@@ -1059,16 +1058,11 @@ def _assert_quality_baseline(doc, name: str) -> None:
             for rk in by_reason
         }
         unlisted = sorted(
-            {
-                (d.code, d.reason)
-                for d in doc.diagnostics
-                if (d.code, d.reason) not in known
-            },
+            {(d.code, d.reason) for d in doc.diagnostics if (d.code, d.reason) not in known},
             key=lambda pair: (pair[0], pair[1] or ""),
         )
         assert not unlisted, (
-            f"{name}: unlisted (code, reason) pairs {unlisted}; "
-            "regenerate baseline or classify the diagnostic"
+            f"{name}: unlisted (code, reason) pairs {unlisted}; regenerate baseline or classify the diagnostic"
         )
 
 
@@ -1191,7 +1185,8 @@ def test_background_cue_sound_node_tails_reclassified_editor_only():
     doc = parse_package_document(str(SAMPLES / "StarterContent_Starter_Background_Cue.uasset"), depth="asset")
     by_id = {o.id: o for o in doc.objects}
     sound_trailing = [
-        d for d in doc.diagnostics
+        d
+        for d in doc.diagnostics
         if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"
         and (by_id[d.object_id].class_name or "").startswith("SoundNode")
     ]
@@ -1216,18 +1211,14 @@ def test_level_geometry_tails_known_unimplemented_with_bytes():
         "export:11": ("Polys", 1060),
         "export:13": ("World", 12),
     }
-    trailing = {
-        d.object_id: d for d in doc.diagnostics
-        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"
-    }
+    trailing = {d.object_id: d for d in doc.diagnostics if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"}
     for oid, (cls, size) in expected.items():
         d = trailing[oid]
         assert by_id[oid].class_name == cls, oid
         assert d.reason == "known_unimplemented", f"{oid}: {d.reason}"
         assert d.size == size, f"{oid}: {d.size} != {size}"
     assert not [
-        d for d in doc.diagnostics
-        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.reason == "unexpected"
+        d for d in doc.diagnostics if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.reason == "unexpected"
     ], "FirstPerson_Lvl must have zero unexpected after reclassification"
 
 
@@ -1243,10 +1234,7 @@ def test_collision_and_enum_pose_movie_tails_known_unimplemented():
     for sample, expect in cases.items():
         doc = parse_package_document(str(SAMPLES / sample), depth="asset")
         by_id = {o.id: o for o in doc.objects}
-        found = {
-            by_id[d.object_id].name: d for d in doc.diagnostics
-            if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"
-        }
+        found = {by_id[d.object_id].name: d for d in doc.diagnostics if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED"}
         for name, size in expect.items():
             d = found[name]
             assert d.reason == "known_unimplemented", f"{sample}:{name}: {d.reason}"
@@ -1257,8 +1245,7 @@ def test_collision_and_enum_pose_movie_tails_known_unimplemented():
     # ends with zero EXPORT_TRAILING_BYTES_UNCONSUMED — fixed, not classified.
     lyra = parse_package_document(str(SAMPLES / "Lyra_SEQ_LobbyScreen_LevelSequence.uasset"), depth="asset")
     lyra_trailing = [
-        d for d in lyra.diagnostics
-        if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id == "export:9"
+        d for d in lyra.diagnostics if d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id == "export:9"
     ]
     assert not lyra_trailing, lyra_trailing
 
@@ -1307,8 +1294,10 @@ def test_trailing_aggregate_report_within_baseline():
 def test_trailing_aggregate_gate_blocks_growth():
     """Fail path: a synthetic report over ceiling in bytes or with a new class must fail."""
     baseline = {
-        "scope": "manifest", "sample_count": 2,
-        "max_total_warnings": 3, "max_total_bytes": 40,
+        "scope": "manifest",
+        "sample_count": 2,
+        "max_total_warnings": 3,
+        "max_total_bytes": 40,
         "by_reason": {"unexpected": {"max_count": 3, "max_bytes": 40}},
         "by_reason_class": {"unexpected/ABP_X_C": {"max_count": 3, "max_bytes": 40}},
     }
@@ -1318,8 +1307,10 @@ def test_trailing_aggregate_gate_blocks_growth():
             _assert_trailing_aggregate(actual, baseline)
 
     good = {
-        "scope": "manifest", "sample_count": 2,
-        "max_total_warnings": 3, "max_total_bytes": 40,
+        "scope": "manifest",
+        "sample_count": 2,
+        "max_total_warnings": 3,
+        "max_total_bytes": 40,
         "by_reason": {"unexpected": {"max_count": 2, "max_bytes": 30}},
         "by_reason_class": {"unexpected/ABP_X_C": {"max_count": 2, "max_bytes": 30}},
     }

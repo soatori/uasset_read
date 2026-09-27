@@ -159,8 +159,7 @@ def _reject_bounded_flags_for_canonical(args, *, context: str) -> None:
     """Canonical output never paginates; --limit is a usage error with it."""
     if args.limit is not None:
         print(
-            f"Error: --limit cannot be combined with {context} "
-            f"(canonical v3 documents are never paginated)",
+            f"Error: --limit cannot be combined with {context} (canonical v3 documents are never paginated)",
             file=sys.stderr,
         )
         sys.exit(EXIT_ARGUMENT_ERROR)

@@ -90,10 +90,7 @@ def resolve_pin_links(nodes: list[BlueprintNode], refs: list[PinLinkRef]) -> Lin
                     Diagnostic(
                         severity="warning",
                         code="BLUEPRINT_PIN_LINK_UNRESOLVED",
-                        message=(
-                            f"pin link target {owner_key}/{ref.to_pin_guid} "
-                            "(0 candidate(s))"
-                        ),
+                        message=(f"pin link target {owner_key}/{ref.to_pin_guid} (0 candidate(s))"),
                         stage="semantic.blueprint",
                     )
                 )
@@ -108,8 +105,7 @@ def resolve_pin_links(nodes: list[BlueprintNode], refs: list[PinLinkRef]) -> Lin
                         severity="warning",
                         code="BLUEPRINT_PIN_LINK_AMBIGUOUS" if len(candidates) > 1 else "BLUEPRINT_PIN_LINK_UNRESOLVED",
                         message=(
-                            f"pin link guid {ref.to_pin_guid} has {len(candidates)} candidate(s) "
-                            "without owner identity"
+                            f"pin link guid {ref.to_pin_guid} has {len(candidates)} candidate(s) without owner identity"
                         ),
                         stage="semantic.blueprint",
                         effect="semantic_loss",
@@ -185,9 +181,7 @@ def _object_name_index(objects_by_id: dict[str, Any] | None) -> dict[str, str]:
     if not objects_by_id:
         return {}
     return {
-        obj_id: str(obj.name)
-        for obj_id, obj in objects_by_id.items()
-        if obj is not None and getattr(obj, "name", None)
+        obj_id: str(obj.name) for obj_id, obj in objects_by_id.items() if obj is not None and getattr(obj, "name", None)
     }
 
 

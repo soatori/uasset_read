@@ -92,7 +92,7 @@ def test_completeness_label_mapping_contract():
 def count_kismet_expressions(semantic_dict) -> int:
     """Sum expression_count over projected function dicts on one semantic."""
     total = 0
-    for fn in (semantic_dict.get("functions") or []):
+    for fn in semantic_dict.get("functions") or []:
         total += fn.get("expression_count") or 0
     return total
 
@@ -100,7 +100,7 @@ def count_kismet_expressions(semantic_dict) -> int:
 def _function_dicts(document) -> list[dict]:
     out: list[dict] = []
     for obj in document.objects:
-        for fn in ((obj.semantic or {}).get("functions") or []):
+        for fn in (obj.semantic or {}).get("functions") or []:
             out.append(fn)
     return out
 
@@ -257,13 +257,11 @@ def test_unversioned_samples_schema_decode_or_bounded_opaque():
     class_obj = next(o for o in bp.objects if o.name == "BP_UnversionedTest_C")
     class_props = class_obj.properties or {}
     class_values = (
-        list(class_props.values())
-        if isinstance(class_props, dict)
-        else [entry.value for entry in class_props.entries]
+        list(class_props.values()) if isinstance(class_props, dict) else [entry.value for entry in class_props.entries]
     )
-    assert any(
-        isinstance(v, dict) and v.get("kind") == "opaque" for v in class_values
-    ), "unmapped class export must stay bounded opaque"
+    assert any(isinstance(v, dict) and v.get("kind") == "opaque" for v in class_values), (
+        "unmapped class export must stay bounded opaque"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -290,9 +288,7 @@ def test_committed_containers_iostore_metadata_and_zen_unavailability():
     assert result.reason in {"chunk_bytes_unavailable", "zen_package_fixture_unavailable"}
     assert result.diagnostics
     # Real Zen package parsing stays deferred until redistributable fixtures exist.
-    assert all(
-        d.stage.startswith("zen") or d.stage.startswith("container") for d in result.diagnostics
-    )
+    assert all(d.stage.startswith("zen") or d.stage.startswith("container") for d in result.diagnostics)
 
 
 # --------------------------------------------------------------------------- #
@@ -313,11 +309,7 @@ def test_cpp_projection_dual_offset_traces():
     assert stats["instructions_seen"] == (
         stats["translated"] + stats["represented"] + stats["untranslated"] + stats["unavailable"]
     )
-    traces = [
-        line
-        for line in migration.source_text.splitlines()
-        if line.strip().startswith("// stmt=")
-    ]
+    traces = [line for line in migration.source_text.splitlines() if line.strip().startswith("// stmt=")]
     assert len(traces) == stats["instructions_seen"]
     for line in traces:
         # Dual-offset envelope: logical statement_index + serialized range.
@@ -347,9 +339,7 @@ def test_type_aware_projection_acceptance():
 
     # Cooked material: explicit unavailable, never a complete fake builder.
     cooked = parse_sample("TestMaterial.uasset", depth="decode")
-    cooked_builder = [
-        item for item in registry.project_document(cooked) if item.kind == "material_editor_builder"
-    ]
+    cooked_builder = [item for item in registry.project_document(cooked) if item.kind == "material_editor_builder"]
     assert cooked_builder
     assert cooked_builder[0].status == "unavailable"
 
@@ -390,9 +380,7 @@ def test_single_document_contains_all_projection_sections(stackobot_document):
     assert all("provenance" in item for item in output["projections"])
     # Ordinary asset/graph boundaries do not split the document.
     assert len(output["objects"]) == len(stackobot_document.objects)
-    assert {item["id"] for item in output["objects"]} == {
-        obj.id for obj in stackobot_document.objects
-    }
+    assert {item["id"] for item in output["objects"]} == {obj.id for obj in stackobot_document.objects}
 
     # Canonical envelope must satisfy the committed v3 contract schema.
     jsonschema.validate(output, SCHEMA)

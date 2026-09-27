@@ -370,9 +370,7 @@ def _read_node_script_serial(
         if tag.name == UE_NONE_SENTINEL:
             break
 
-        result.update(
-            _read_node_property_tag(archive, tag, name_map, import_map, export_map, result["raw_properties"])
-        )
+        result.update(_read_node_property_tag(archive, tag, name_map, import_map, export_map, result["raw_properties"]))
 
     return result
 

@@ -62,11 +62,7 @@ def _projected_field_value(raw: Any) -> Any:
         if "value" in raw:
             return raw["value"]
         # Handler-decoded field maps carry type/size descriptors — copy them.
-        return {
-            key: raw[key]
-            for key in ("type", "size", "struct_type", "name")
-            if key in raw
-        } or raw
+        return {key: raw[key] for key in ("type", "size", "struct_type", "name") if key in raw} or raw
     return raw
 
 
@@ -175,10 +171,7 @@ def _curve_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], Proj
         curves.append(
             {
                 "name": str(row.get("name") or ""),
-                "field_types": {
-                    str(k): (v.get("type") if isinstance(v, dict) else None)
-                    for k, v in fields.items()
-                },
+                "field_types": {str(k): (v.get("type") if isinstance(v, dict) else None) for k, v in fields.items()},
                 "keys": keys or [],
             }
         )

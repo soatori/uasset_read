@@ -18,7 +18,14 @@ from typing import Any, Literal, cast
 from .exceptions import BINARY_READ_ERRORS, ParseError, VersionError
 from .models.document import PackageDocument
 from .package import parse_package_document
-from .projection import dependency_to_dict, fit_list_response, json_byte_size, paginate, project_document, select_objects
+from .projection import (
+    dependency_to_dict,
+    fit_list_response,
+    json_byte_size,
+    paginate,
+    project_document,
+    select_objects,
+)
 
 # Max response sizes per tool (bytes)
 _MAX_BYTES_INSPECT = 4096

@@ -1,4 +1,5 @@
 """Magic-number acceptance tests for the package summary header."""
+
 import struct
 
 import pytest

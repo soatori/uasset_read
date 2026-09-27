@@ -16,9 +16,7 @@ def test_unknown_handler_is_not_applicable_not_failed(unknown_object_record, pac
     assert result.reason == "no_domain_decoder"
 
 
-def test_one_handler_failure_records_diagnostic_and_continues(
-    unknown_object_record, package_context, monkeypatch
-):
+def test_one_handler_failure_records_diagnostic_and_continues(unknown_object_record, package_context, monkeypatch):
     class Failing:
         def supports(self, obj, depth):
             return True

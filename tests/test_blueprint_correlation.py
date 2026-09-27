@@ -70,8 +70,6 @@ def test_duplicate_function_names_keep_export_identity(stackobot_document, funct
     second = replace(function_analysis_ir, object_id="export:10", name="Same", function_name="Same")
     semantic = BlueprintCorrelation().build(
         stackobot_document,
-        analysis_context=BlueprintAnalysisContext(
-            owner_object_id="export:0", graphs=[], functions=[first, second]
-        ),
+        analysis_context=BlueprintAnalysisContext(owner_object_id="export:0", graphs=[], functions=[first, second]),
     )
     assert [fn.object_id for fn in semantic.functions] == ["export:9", "export:10"]

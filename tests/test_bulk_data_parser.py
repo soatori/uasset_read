@@ -60,5 +60,3 @@ def test_bulk_data_header_too_short():
     """Test that a too-short buffer raises ValueError."""
     with pytest.raises(ValueError, match="requires 16 bytes"):
         parse_bulk_data_header(b"\x00" * 10)
-
-

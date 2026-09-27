@@ -629,9 +629,7 @@ def should_skip_export_for_tolerant_parsing(
     class_name: str | None = None,
 ) -> bool:
     """True when the export should bypass the generic property parser."""
-    return str(export.object_name).startswith(SKIP_CLASS_PREFIXES) or (
-        class_name or ""
-    ).startswith(SKIP_CLASS_PREFIXES)
+    return str(export.object_name).startswith(SKIP_CLASS_PREFIXES) or (class_name or "").startswith(SKIP_CLASS_PREFIXES)
 
 
 def skip_export_payload(
@@ -902,9 +900,7 @@ def _loop_recovery_diagnostics(
 
         # Tag-level failures (corrupted-tag placeholder, invalid tag size) keep the
         # old PROPERTY_TAG_READ_FAILED code; value dispatch/unsupported keep VALUE.
-        tag_level = pv.name == "Corrupted" or fallback.reason in (
-            FallbackReason.SIZE_EXCEEDED,
-        )
+        tag_level = pv.name == "Corrupted" or fallback.reason in (FallbackReason.SIZE_EXCEEDED,)
         code = "PROPERTY_TAG_READ_FAILED" if tag_level else "PROPERTY_VALUE_READ_FAILED"
         reason_value = getattr(fallback.reason, "value", str(fallback.reason))
         if fallback.reason in (FallbackReason.UNSUPPORTED_TYPE, FallbackReason.UNSUPPORTED_STRUCT):
@@ -919,10 +915,7 @@ def _loop_recovery_diagnostics(
             Diagnostic(
                 severity="warning",
                 code=code,
-                message=(
-                    f"Property {pv.name!r} ({pv.type}) recovered via fallback: "
-                    f"{reason_value}"
-                ),
+                message=(f"Property {pv.name!r} ({pv.type}) recovered via fallback: {reason_value}"),
                 stage="properties.tagged",
                 object_id=input.object_id,
                 offset=offset,

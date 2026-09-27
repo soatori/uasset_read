@@ -302,9 +302,7 @@ def _graph_signature(semantic: BlueprintSemantic, function_name: str) -> tuple[l
                         continue
                     if str(pin.direction or "").lower() != "input":
                         continue
-                    ctype = cpp_type_from_pin(
-                        {"pin_category": pin.category, "pin_subcategory": pin.subcategory}
-                    )
+                    ctype = cpp_type_from_pin({"pin_category": pin.category, "pin_subcategory": pin.subcategory})
                     if pin.name == "ReturnValue":
                         return_type = ctype
                     else:
@@ -439,9 +437,7 @@ def build_cpp_ast(semantic: BlueprintSemantic) -> CppClassDecl:
                 dispatchers.append(CppDispatcherDecl(name=var.name, params=[]))
                 dispatcher_names.add(var.name)
             continue
-        properties.append(
-            CppPropertyDecl(name=var.name, type=ctype, specifiers=["UPROPERTY"])
-        )
+        properties.append(CppPropertyDecl(name=var.name, type=ctype, specifiers=["UPROPERTY"]))
 
     functions = [_function_decl(semantic, fd) for fd in semantic.function_declarations]
 

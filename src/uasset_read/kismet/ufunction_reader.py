@@ -367,9 +367,7 @@ def _read_ustruct_prefix_and_script(
 
         # Check remaining bytes vs declared size
         remaining_after_header = window.total_size() - window.tell()
-        resolved_class = resolve_class_name(
-            export.class_index, import_map or [], export_map or []
-        ) or "Unknown"
+        resolved_class = resolve_class_name(export.class_index, import_map or [], export_map or []) or "Unknown"
         if serialized_script_size > remaining_after_header:
             return FunctionScriptReadResult(
                 status="failed",

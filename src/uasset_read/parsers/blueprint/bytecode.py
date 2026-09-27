@@ -150,9 +150,7 @@ def _derive_reads_writes(opcode: str, operands: dict[str, Any]) -> tuple[list[st
     reads: list[str] = []
     writes: list[str] = []
     if opcode in _LET_BASE_NAMES or opcode.startswith("EX_Let"):
-        dest = _variable_name(operands.get("variable")) or _variable_name(
-            operands.get("destination_property")
-        )
+        dest = _variable_name(operands.get("variable")) or _variable_name(operands.get("destination_property"))
         if dest:
             writes.append(dest)
         assign = operands.get("assignment")

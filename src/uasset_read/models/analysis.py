@@ -202,9 +202,7 @@ class BlueprintGraph:
                         default_text=pin_raw.get("default_text"),
                         sub_pin_ids=[str(x) for x in pin_raw.get("sub_pin_ids") or []],
                         parent_pin_id=pin_raw.get("parent_pin_id"),
-                        reference_pass_through_pin_id=pin_raw.get(
-                            "reference_pass_through_pin_id"
-                        ),
+                        reference_pass_through_pin_id=pin_raw.get("reference_pass_through_pin_id"),
                         linked=linked,
                         owner_node_id=node_id,
                         raw_region=None,
@@ -220,16 +218,8 @@ class BlueprintGraph:
                     metadata=k2_metadata_from_dict(node_raw.get("metadata")),
                     pins=pins,
                     raw_region=None,
-                    node_data=(
-                        dict(node_raw["node_data"])
-                        if isinstance(node_raw.get("node_data"), dict)
-                        else None
-                    ),
-                    position=(
-                        dict(node_raw["position"])
-                        if isinstance(node_raw.get("position"), dict)
-                        else None
-                    ),
+                    node_data=(dict(node_raw["node_data"]) if isinstance(node_raw.get("node_data"), dict) else None),
+                    position=(dict(node_raw["position"]) if isinstance(node_raw.get("position"), dict) else None),
                 )
             )
         kind = data.get("kind") or "unknown"
@@ -349,10 +339,7 @@ def project_blueprint_graph(graph: BlueprintGraph) -> dict[str, Any]:
         "node_count": node_count,
         "pin_count": pin_count,
         "edge_count": edge_count,
-        "nodes": [
-            _project_node(node)
-            for node in graph.nodes
-        ],
+        "nodes": [_project_node(node) for node in graph.nodes],
         "parse_errors": list(graph.parse_errors),
         "truncated": graph.truncated,
         "source_range": project_region(graph.raw_region),
@@ -499,9 +486,7 @@ class FunctionAnalysis:
         blocks: list[BasicBlock] = []
         for block_raw in cfg_raw.get("blocks") or []:
             block_instructions = [
-                by_ordinal[ord_]
-                for ord_ in block_raw.get("instruction_ordinals") or []
-                if ord_ in by_ordinal
+                by_ordinal[ord_] for ord_ in block_raw.get("instruction_ordinals") or [] if ord_ in by_ordinal
             ]
             blocks.append(
                 BasicBlock(
@@ -542,9 +527,7 @@ class FunctionAnalysis:
             name=str(data.get("name") or data.get("function_name") or ""),
             function_name=str(data.get("function_name") or ""),
             script_source_range=region_from_projected(data.get("source_range")),
-            expression_count=(
-                int(c) if (c := data.get("expression_count")) is not None else len(instructions)
-            ),
+            expression_count=(int(c) if (c := data.get("expression_count")) is not None else len(instructions)),
             entrypoint=entrypoint,
             instructions=instructions,
             cfg=cfg,
@@ -625,9 +608,7 @@ class EntrypointRecord:
             name=str(data.get("name") or ""),
             object_id=str(data.get("object_id") or ""),
             source_node_id=_node_id_from_str(str(node_raw)) if node_raw else None,
-            match_method=(
-                method if method in get_args(MatchMethod) else "unresolved"
-            ),  # type: ignore[arg-type]
+            match_method=(method if method in get_args(MatchMethod) else "unresolved"),  # type: ignore[arg-type]
             confidence=float(data.get("confidence") or 0.0),
             unresolved=bool(data.get("unresolved", True)),
         )
@@ -774,4 +755,3 @@ class BlueprintSemantic:
     control_flow: list[ControlFlowGraph]
     exec_chains: ExecChainSummary
     diagnostics: list[Diagnostic]
-

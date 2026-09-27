@@ -207,9 +207,7 @@ class UsmapParser:
             mappings.types[struct.name] = struct
         return mappings
 
-    def _decompress(
-        self, payload: bytes, method: int, comp_size: int, decomp_size: int
-    ) -> bytes:
+    def _decompress(self, payload: bytes, method: int, comp_size: int, decomp_size: int) -> bytes:
         if method == 0:
             if comp_size != decomp_size:
                 raise ParseError(f"Usmap uncompressed size mismatch: {comp_size} != {decomp_size}")
@@ -281,4 +279,3 @@ class UsmapParser:
                 value_type=self._parse_property_type(ar, lut, depth + 1),
             )
         return PropertyType(type_name)
-

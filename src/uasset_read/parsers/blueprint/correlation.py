@@ -64,12 +64,8 @@ _VAR_OPCODES = frozenset(
     }
 )
 _EVENT_NODE_CLASSES = frozenset({"K2Node_Event", "K2Node_CustomEvent"})
-_DISPATCHER_NODE_CLASSES = frozenset(
-    {"K2Node_AddDelegate", "K2Node_RemoveDelegate", "K2Node_CallDelegate"}
-)
-_FAMILY_CLASSES = frozenset(
-    {"Blueprint", "AnimBlueprint", "BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}
-)
+_DISPATCHER_NODE_CLASSES = frozenset({"K2Node_AddDelegate", "K2Node_RemoveDelegate", "K2Node_CallDelegate"})
+_FAMILY_CLASSES = frozenset({"Blueprint", "AnimBlueprint", "BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"})
 _KINDS = {"blueprint", "anim_blueprint"}
 
 
@@ -78,9 +74,7 @@ def _pair_key(name: str) -> str:
     return name[:-2] if name.endswith("_C") else name
 
 
-def _family_root_key(
-    record: ObjectRecord | None, by_id: dict[str, ObjectRecord]
-) -> str | None:
+def _family_root_key(record: ObjectRecord | None, by_id: dict[str, ObjectRecord]) -> str | None:
     """Pair key of the Blueprint-family root of record's outer chain."""
     current = record
     for _ in range(8):
@@ -233,9 +227,7 @@ class _CallResolver:
                 object_id = f"export:{stack_node - 1}"
             else:
                 object_id = f"import:{-stack_node - 1}"
-            display = (
-                self.export_names.get(object_id) or self.import_names.get(object_id) or name
-            )
+            display = self.export_names.get(object_id) or self.import_names.get(object_id) or name
             return (
                 object_id,
                 display or name or object_id,
@@ -338,9 +330,7 @@ class BlueprintCorrelation:
             if fn.function_name
         ]
 
-        constructors, constructor_diags = self._extract_constructors(
-            document, owner, graphs, parent_class, components
-        )
+        constructors, constructor_diags = self._extract_constructors(document, owner, graphs, parent_class, components)
         diagnostics.extend(constructor_diags)
 
         control_flow = [fn.cfg for fn in functions if fn.cfg.blocks]
@@ -388,9 +378,7 @@ class BlueprintCorrelation:
                 None,
             )
             if owner is None:
-                raise KeyError(
-                    f"analysis context owner not in document: {analysis_context.owner_object_id}"
-                )
+                raise KeyError(f"analysis context owner not in document: {analysis_context.owner_object_id}")
             return (
                 owner,
                 list(analysis_context.graphs),
@@ -399,16 +387,8 @@ class BlueprintCorrelation:
             )
         owner = self._pick_owner(document)
         semantic = owner.semantic if isinstance(owner.semantic, dict) else {}
-        graphs = [
-            BlueprintGraph.from_dict(g)
-            for g in semantic.get("graphs") or []
-            if isinstance(g, dict)
-        ]
-        functions = [
-            FunctionAnalysis.from_dict(fn)
-            for fn in semantic.get("functions") or []
-            if isinstance(fn, dict)
-        ]
+        graphs = [BlueprintGraph.from_dict(g) for g in semantic.get("graphs") or [] if isinstance(g, dict)]
+        functions = [FunctionAnalysis.from_dict(fn) for fn in semantic.get("functions") or [] if isinstance(fn, dict)]
         return owner, graphs, functions, semantic
 
     @staticmethod
@@ -422,9 +402,7 @@ class BlueprintCorrelation:
             and (o.class_name or "") in _FAMILY_CLASSES
         ]
         if not candidates:
-            candidates = [
-                o for o in document.objects if (o.class_name or "") in _FAMILY_CLASSES
-            ]
+            candidates = [o for o in document.objects if (o.class_name or "") in _FAMILY_CLASSES]
         if not candidates:
             raise KeyError("no Blueprint-family object in document")
 
@@ -465,9 +443,7 @@ class BlueprintCorrelation:
         never the graph's own parse_errors).
         """
         for graph in graphs:
-            graph.parse_errors = [
-                str(e) for e in graph.parse_errors if not str(e).startswith("pin link ")
-            ]
+            graph.parse_errors = [str(e) for e in graph.parse_errors if not str(e).startswith("pin link ")]
 
         seed = owner.semantic if isinstance(owner.semantic, dict) else {}
         raw_by_index: dict[int, dict[str, Any]] = {}
@@ -490,9 +466,7 @@ class BlueprintCorrelation:
                 graph.kind = kind  # type: ignore[assignment]
             if raw.get("graph_class"):
                 graph.graph_class = str(raw["graph_class"])
-            raw_nodes = {
-                str(n.get("id") or ""): n for n in raw.get("nodes") or [] if isinstance(n, dict)
-            }
+            raw_nodes = {str(n.get("id") or ""): n for n in raw.get("nodes") or [] if isinstance(n, dict)}
             for node in graph.nodes:
                 raw_node = raw_nodes.get(node.id.node_export_id)
                 if raw_node is None:
@@ -505,9 +479,7 @@ class BlueprintCorrelation:
     # ------------------------------------------------------------ declarations
 
     @staticmethod
-    def _parent_class_from_properties(
-        document: PackageDocument, owner: ObjectRecord
-    ) -> str | None:
+    def _parent_class_from_properties(document: PackageDocument, owner: ObjectRecord) -> str | None:
         props = owner.properties
         if props is None:
             return None
@@ -588,11 +560,7 @@ class BlueprintCorrelation:
             vt_raw = fields.get("VarType")
             vt_fields: dict[str, Any] | None = None
             if isinstance(vt_raw, dict):
-                candidate = (
-                    vt_raw.get("fields")
-                    if vt_raw.get("kind") == "struct_binary_decoded"
-                    else vt_raw
-                )
+                candidate = vt_raw.get("fields") if vt_raw.get("kind") == "struct_binary_decoded" else vt_raw
                 if isinstance(candidate, dict):
                     vt_fields = dict(candidate)
             guid = format_guid_fields((fields.get("VarGuid") or {}).get("fields"))
@@ -619,9 +587,7 @@ class BlueprintCorrelation:
             )
         return definitions
 
-    def _extract_components(
-        self, document: PackageDocument, owner: ObjectRecord
-    ) -> list[ComponentRecord]:
+    def _extract_components(self, document: PackageDocument, owner: ObjectRecord) -> list[ComponentRecord]:
         by_id = {o.id: o for o in document.objects}
         scope = _family_root_key(owner, by_id)
         if scope is None:
@@ -649,16 +615,8 @@ class BlueprintCorrelation:
                 name = obj.name
             cclass = props.get("ComponentClass")
             cclass_value = cclass.get("value") if isinstance(cclass, dict) else None
-            type_name = (
-                cclass_value.get("object_name", "")
-                if isinstance(cclass_value, dict)
-                else ""
-            )
-            records.append(
-                ComponentRecord(
-                    name=str(name), class_name=str(type_name), object_id=obj.id
-                )
-            )
+            type_name = cclass_value.get("object_name", "") if isinstance(cclass_value, dict) else ""
+            records.append(ComponentRecord(name=str(name), class_name=str(type_name), object_id=obj.id))
         records.sort(key=lambda item: item.object_id)
         return records
 
@@ -696,9 +654,7 @@ class BlueprintCorrelation:
                 )
             for node in graph.nodes:
                 meta = node.metadata
-                is_event = node.class_name in _EVENT_NODE_CLASSES or (
-                    meta is not None and bool(meta.event_name)
-                )
+                is_event = node.class_name in _EVENT_NODE_CLASSES or (meta is not None and bool(meta.event_name))
                 if is_event:
                     name = (meta.event_name if meta else None) or node.title
                     entrypoints.append(
@@ -773,19 +729,14 @@ class BlueprintCorrelation:
     ) -> tuple[list[ConstructorRecord], list[Diagnostic]]:
         diagnostics: list[Diagnostic] = []
         generated_class = next(
-            (
-                rel.from_id
-                for rel in document.relations
-                if rel.kind == "generated_class_of" and rel.to_id == owner.id
-            ),
+            (rel.from_id for rel in document.relations if rel.kind == "generated_class_of" and rel.to_id == owner.id),
             None,
         )
         ucs = next(
             (
                 graph
                 for graph in graphs
-                if graph.kind == "construction_script"
-                or graph.name == "UserConstructionScript"
+                if graph.kind == "construction_script" or graph.name == "UserConstructionScript"
             ),
             None,
         )
@@ -793,20 +744,12 @@ class BlueprintCorrelation:
             return [], diagnostics
         target_id = generated_class or owner.id
         super_rel = next(
-            (
-                rel
-                for rel in document.relations
-                if rel.kind == "super_of" and rel.from_id == target_id
-            ),
+            (rel for rel in document.relations if rel.kind == "super_of" and rel.from_id == target_id),
             None,
         )
         if super_rel is None and generated_class is not None:
             super_rel = next(
-                (
-                    rel
-                    for rel in document.relations
-                    if rel.kind == "super_of" and rel.from_id == owner.id
-                ),
+                (rel for rel in document.relations if rel.kind == "super_of" and rel.from_id == owner.id),
                 None,
             )
         parent_call = parent_class
@@ -876,12 +819,8 @@ class _InstructionWalker:
 
     def visit_instruction(self, instruction: Any) -> None:
         self._current_statement = instruction.statement_index
-        self._current_start = (
-            instruction.serialized_start if instruction.serialized_start >= 0 else None
-        )
-        self._current_end = (
-            instruction.serialized_end if instruction.serialized_end >= 0 else None
-        )
+        self._current_start = instruction.serialized_start if instruction.serialized_start >= 0 else None
+        self._current_end = instruction.serialized_end if instruction.serialized_end >= 0 else None
         self._current_source = _source_node(instruction)
         expression = instruction.expression
         if expression is not None and expression != {}:
@@ -898,10 +837,8 @@ class _InstructionWalker:
                     # expression tree; visiting standalone would fake a read.
                     continue
                 self._visit(
-                    value,
-                    root_opcode=instruction.opcode
-                    if key in {"assignment", "boolean_expression"}
-                    else None)
+                    value, root_opcode=instruction.opcode if key in {"assignment", "boolean_expression"} else None
+                )
 
     def _emit_from_operands(self, instruction: Any) -> None:
         opcode = instruction.opcode
@@ -942,9 +879,7 @@ class _InstructionWalker:
         # Opaque non-dataclass object (e.g. property pointer leaf): ignore.
         return
 
-    def _visit_dict(
-        self, value: dict[str, Any], *, root_opcode: str | None
-    ) -> None:
+    def _visit_dict(self, value: dict[str, Any], *, root_opcode: str | None) -> None:
         opcode = _opcode_of(value) or root_opcode
         if opcode is not None and opcode in _CALL_OPCODES:
             name, stack = _call_parts(value, opcode)
@@ -981,9 +916,7 @@ class _InstructionWalker:
                 continue
             self._visit(item, root_opcode=None)
 
-    def _visit_dataclass(
-        self, value: Any, *, root_opcode: str | None
-    ) -> None:
+    def _visit_dataclass(self, value: Any, *, root_opcode: str | None) -> None:
         opcode = _opcode_of(value) or root_opcode
         if opcode is not None and opcode in _CALL_OPCODES:
             name, stack = _call_parts(value, opcode)
@@ -1007,9 +940,7 @@ class _InstructionWalker:
         if opcode is not None and opcode in _VAR_OPCODES:
             name = _extract_variable_name(value)
             if name:
-                self._emit_access(
-                    name, "read", None, typed=value
-                )
+                self._emit_access(name, "read", None, typed=value)
             return
         if dataclasses.is_dataclass(value) and not isinstance(value, type):
             for field in dataclasses.fields(value):
@@ -1020,9 +951,7 @@ class _InstructionWalker:
                     "Token",
                 }:
                     continue
-                self._visit(
-                    getattr(value, field.name, None),
-                    root_opcode=None)
+                self._visit(getattr(value, field.name, None), root_opcode=None)
         return
 
     def _emit_call(
@@ -1040,9 +969,7 @@ class _InstructionWalker:
             end = instruction.serialized_end if instruction.serialized_end >= 0 else None
             source = _source_node(instruction)
             fallback_name = instruction.call_target
-            stack = stack if stack is not None else _int_or_none(
-                (instruction.operands or {}).get("stack_node")
-            )
+            stack = stack if stack is not None else _int_or_none((instruction.operands or {}).get("stack_node"))
             name = name or _str_or_none((instruction.operands or {}).get("name"))
         else:
             stmt = self._current_statement
@@ -1055,18 +982,14 @@ class _InstructionWalker:
                 name = name or _str_or_none(getattr(typed, "VirtualFunctionName", None))
             if dict_operands is not None:
                 stack = stack if stack is not None else _int_or_none(dict_operands.get("StackNode"))
-                name = name or _str_or_none(
-                    dict_operands.get("VirtualFunctionName") or dict_operands.get("Name")
-                )
+                name = name or _str_or_none(dict_operands.get("VirtualFunctionName") or dict_operands.get("Name"))
         # A name-shaped call_target (not an export/import id) is a usable
         # fallback for name-based resolution.
         target_name = name
         if target_name is None and isinstance(fallback_name, str):
             if not fallback_name.startswith(("export:", "import:", "unresolved:")):
                 target_name = fallback_name
-        object_id, resolved_name, method, confidence, unresolved = self.resolver.resolve_call(
-            target_name, stack
-        )
+        object_id, resolved_name, method, confidence, unresolved = self.resolver.resolve_call(target_name, stack)
         function_name = resolved_name or name or fallback_name
         if not function_name:
             function_name = f"{self.fn.function_name}@{stmt}"
@@ -1108,9 +1031,7 @@ class _InstructionWalker:
             start = self._current_start
             end = self._current_end
             source = self._current_source
-        object_id, method, confidence, unresolved = self.resolver.resolve_variable(
-            name, self.fn
-        )
+        object_id, method, confidence, unresolved = self.resolver.resolve_variable(name, self.fn)
         key = (stmt, name, access)
         if key in self._access_keys:
             return
@@ -1172,9 +1093,7 @@ def project_function_analysis(fn: FunctionAnalysis) -> dict[str, Any]:
                 "kind": fn.entrypoint.kind,
                 "name": fn.entrypoint.name,
                 "object_id": fn.entrypoint.object_id,
-                "source_node_id": (
-                    str(fn.entrypoint.source_node_id) if fn.entrypoint.source_node_id else None
-                ),
+                "source_node_id": (str(fn.entrypoint.source_node_id) if fn.entrypoint.source_node_id else None),
                 "match_method": fn.entrypoint.match_method,
                 "confidence": fn.entrypoint.confidence,
                 "unresolved": fn.entrypoint.unresolved,
@@ -1293,8 +1212,7 @@ def project_semantic_blueprint(
             for v in semantic.variable_accesses
         ],
         "components": [
-            {"name": c.name, "class_name": c.class_name, "object_id": c.object_id}
-            for c in semantic.components
+            {"name": c.name, "class_name": c.class_name, "object_id": c.object_id} for c in semantic.components
         ],
         "dispatchers": [
             {

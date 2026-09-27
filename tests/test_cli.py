@@ -139,9 +139,7 @@ def test_cli_output_max_bytes_does_not_call_canonical_writer(monkeypatch, tmp_pa
     monkeypatch.setattr(bundle, "write_projected_document", fail_writer)
     sample = sample_path("StackOBot_BP_Drone.uasset")
     out = tmp_path / "bounded.json"
-    code = _run_cli(
-        monkeypatch, str(sample), "-o", str(out), "--depth", "asset", "--max-bytes", "300000"
-    )
+    code = _run_cli(monkeypatch, str(sample), "-o", str(out), "--depth", "asset", "--max-bytes", "300000")
     assert code == 0
     assert out.exists()
     payload = json.loads(out.read_text(encoding="utf-8"))

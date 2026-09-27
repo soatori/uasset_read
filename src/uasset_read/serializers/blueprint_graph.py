@@ -350,11 +350,7 @@ def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:
             if isinstance(raw_owner, int) and raw_owner < 0:
                 graph["unresolved_links"] += 1
                 continue
-            owner = (
-                f"export:{raw_owner - 1}"
-                if isinstance(raw_owner, int) and raw_owner > 0
-                else None
-            )
+            owner = f"export:{raw_owner - 1}" if isinstance(raw_owner, int) and raw_owner > 0 else None
             target: tuple[str, str] | None = None
             if owner is not None:
                 # The owner key names at most one (node, pin) entry — the map

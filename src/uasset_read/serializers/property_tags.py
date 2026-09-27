@@ -39,6 +39,7 @@ UE4_STRUCT_GUID_IN_PROPERTY_TAG = 441
 UE4_PROPERTY_GUID_IN_PROPERTY_TAG = 503
 UE4_PROPERTY_TAG_SET_MAP_SUPPORT = 509
 
+
 def _read_property_type_name(
     archive: FArchive,
     name_map: list[str],
@@ -69,9 +70,7 @@ def _read_property_type_name(
         pending = pending - 1 + max(inner_count, 0)
 
     if pending > 0 and len(parts) >= MAX_PROPERTY_TYPE_NODES:
-        raise ParseError(
-            f"FPropertyTypeName truncated: {len(parts)} nodes with pending={pending}"
-        )
+        raise ParseError(f"FPropertyTypeName truncated: {len(parts)} nodes with pending={pending}")
 
     def build(index: int) -> tuple[PropertyTypeName, int]:
         name, count = parts[index]
@@ -312,9 +311,7 @@ def _read_property_tag_legacy(
                 tag.enum_type = enum_name
         elif tag.type in ("ArrayProperty", "SetProperty", "OptionalProperty"):
             min_version = (
-                UE4_ARRAY_PROPERTY_INNER_TAGS
-                if tag.type == "ArrayProperty"
-                else UE4_PROPERTY_TAG_SET_MAP_SUPPORT
+                UE4_ARRAY_PROPERTY_INNER_TAGS if tag.type == "ArrayProperty" else UE4_PROPERTY_TAG_SET_MAP_SUPPORT
             )
             if file_version_ue4 >= min_version:
                 # InnerType (FName) — Reference: PropertyTag.cpp:318-355

@@ -414,9 +414,7 @@ def test_end_to_end_payload_extraction():
     assert len(decoded_data) > 0, "Decoded data should be non-empty"
 
     # Verify the payload_id in result matches what we requested
-    assert result["id"] == payload_id, (
-        f"Result payload_id should match request: {result.get('id')} != {payload_id}"
-    )
+    assert result["id"] == payload_id, f"Result payload_id should match request: {result.get('id')} != {payload_id}"
 
 
 def test_end_to_end_payload_extraction_auto_index():
@@ -573,9 +571,7 @@ def test_agent_rejects_payload_before_reading_bytes(monkeypatch):
         raise AssertionError("payload bytes were read before the budget check")
 
     monkeypatch.setattr(payloads, "extract_payload_bytes", fail_if_called)
-    result = extract_payload(
-        str(sample), "payload:(export:0)", export_index=0, max_bytes=64
-    )
+    result = extract_payload(str(sample), "payload:(export:0)", export_index=0, max_bytes=64)
     assert result["code"] == "BUDGET_EXHAUSTED"
 
 

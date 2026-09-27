@@ -405,9 +405,7 @@ def _read_additional_packages(archive: FArchive, legacy_file_version: int) -> No
     # Each entry is at least an empty FString (4 bytes). Cap by remaining bytes and MAX_SAFE_COUNT.
     max_count = min(MAX_SAFE_COUNT, max(remaining - trailer, 0) // 4)
     if additional_packages_count > max_count:
-        raise ParseError(
-            f"Additional packages count {additional_packages_count} exceeds feasible {max_count}"
-        )
+        raise ParseError(f"Additional packages count {additional_packages_count} exceeds feasible {max_count}")
     for _ in range(additional_packages_count):
         archive.read_fstring()
 
@@ -639,9 +637,7 @@ def read_package_summary(
     compatible_with_engine_version = _read_engine_version(archive) if gates["compatible"] else saved_by_engine_version
 
     # Step 20-22: Compression + PackageSource
-    _, _, total_decompressed = _read_compression_and_source(
-        archive, total_decompressed=total_decompressed
-    )
+    _, _, total_decompressed = _read_compression_and_source(archive, total_decompressed=total_decompressed)
 
     # Step 23: AdditionalPackages + TextureAllocations
     _read_additional_packages(archive, legacy_file_version)

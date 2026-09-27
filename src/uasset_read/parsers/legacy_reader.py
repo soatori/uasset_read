@@ -993,9 +993,7 @@ class LegacyPackageReader:
             if depth in ("asset", "decode"):
                 for obj in objects:
                     try:
-                        handler_result = run_handlers(
-                            obj, depth, objects, (export_map, name_map, extras, envelope)
-                        )
+                        handler_result = run_handlers(obj, depth, objects, (export_map, name_map, extras, envelope))
                         semantic = handler_result.semantic
                         if semantic is not None:
                             obj.semantic = semantic
@@ -1138,7 +1136,8 @@ class LegacyPackageReader:
                 continue
             parent = outer_idx - 1
             if parent in graph_containers or (
-                parent in selected and _is_graph_like((objects[parent].class_name if parent < len(objects) else "") or "")
+                parent in selected
+                and _is_graph_like((objects[parent].class_name if parent < len(objects) else "") or "")
             ):
                 selected.add(i)
                 added += 1
@@ -1208,9 +1207,7 @@ class LegacyPackageReader:
             # parse its MaterialExpression* / MaterialEditorOnlyData bags so the
             # expression graph is available without selecting every export.
             material_roots = {
-                i
-                for i in target_indices
-                if i < len(objects) and (objects[i].class_name or "") == "Material"
+                i for i in target_indices if i < len(objects) and (objects[i].class_name or "") == "Material"
             }
             if material_roots:
                 for j, child in enumerate(objects):
@@ -1696,9 +1693,7 @@ def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
             )
         )
     base = FunctionAnalysis(
-        object_id=kr.object_id or (
-            f"export:{kr.export_index}" if getattr(kr, "export_index", -1) >= 0 else ""
-        ),
+        object_id=kr.object_id or (f"export:{kr.export_index}" if getattr(kr, "export_index", -1) >= 0 else ""),
         owner_object_id=owner_object_id,
         name=kr.function_name,
         function_name=kr.function_name,
@@ -1788,9 +1783,7 @@ def _attach_kismet_extras(
                     if owner is not None:
                         kismet_by_export.setdefault(owner, []).append(payload)
                         if base_ir is not None:
-                            kismet_ir_by_export.setdefault(owner, []).append(
-                                _replace(base_ir, owner_object_id=owner)
-                            )
+                            kismet_ir_by_export.setdefault(owner, []).append(_replace(base_ir, owner_object_id=owner))
             for owner_id, funcs in kismet_by_export.items():
                 entry = extras.setdefault(owner_id, {})
                 entry["kismet"] = funcs
@@ -1819,9 +1812,7 @@ def _attach_kismet_extras(
                         mirror["kismet"] = funcs
                         source_ir = kismet_ir_by_export.get(owner_id) or []
                         if source_ir:
-                            mirror["kismet_ir"] = [
-                                _replace(item, owner_object_id=obj.id) for item in source_ir
-                            ]
+                            mirror["kismet_ir"] = [_replace(item, owner_object_id=obj.id) for item in source_ir]
     except Exception as exc:
         diagnostics.append(
             _diag("KISMET_DECOMPILE_FAILED", f"Kismet decompile pass failed: {exc}", "semantic.kismet", effect=None)

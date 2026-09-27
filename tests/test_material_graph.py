@@ -34,14 +34,10 @@ def test_selected_material_export_still_decodes_expression_set():
     the selected document yields the same expression set and links as the
     full decode."""
     full_doc = parse_sample("StackOBot_M_BotBase.uasset", depth="decode")
-    selected_doc = parse_sample(
-        "StackOBot_M_BotBase.uasset", depth="decode", object_ids=["export:0"]
-    )
+    selected_doc = parse_sample("StackOBot_M_BotBase.uasset", depth="decode", object_ids=["export:0"])
 
     expression_objects = [
-        obj
-        for obj in selected_doc.objects
-        if (obj.class_name or "").startswith("MaterialExpression")
+        obj for obj in selected_doc.objects if (obj.class_name or "").startswith("MaterialExpression")
     ]
     assert len(expression_objects) == 39
     assert all(obj.properties for obj in expression_objects), (

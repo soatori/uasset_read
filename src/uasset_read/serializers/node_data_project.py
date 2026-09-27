@@ -54,19 +54,13 @@ def project_node_data(node_data: Any) -> dict[str, Any] | None:
             compact: dict[str, Any] = {}
             for ref_key, info in value.items():
                 if isinstance(info, dict):
-                    prims = {
-                        k: v
-                        for k, v in info.items()
-                        if isinstance(v, (str, int, float, bool, type(None)))
-                    }
+                    prims = {k: v for k, v in info.items() if isinstance(v, (str, int, float, bool, type(None)))}
                     if prims:
                         compact[str(ref_key)] = prims
             if compact:
                 out[key] = compact
         elif isinstance(value, dict):
-            prims = {
-                k: v for k, v in value.items() if isinstance(v, (str, int, float, bool, type(None)))
-            }
+            prims = {k: v for k, v in value.items() if isinstance(v, (str, int, float, bool, type(None)))}
             if prims:
                 out[key] = prims
     return out or None

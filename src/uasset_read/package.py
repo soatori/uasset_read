@@ -260,8 +260,7 @@ def _parse_cached(
             diag_reason = "known_unimplemented"
         else:
             error = ParseError(
-                f"unknown package layout (reason={layout.detection_reason}); "
-                f"refusing Legacy parse: {bundle.main_path}"
+                f"unknown package layout (reason={layout.detection_reason}); refusing Legacy parse: {bundle.main_path}"
             )
             error.code = "LAYOUT_UNKNOWN_UNSUPPORTED"
             diag_reason = "unexpected"

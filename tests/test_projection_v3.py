@@ -126,9 +126,7 @@ def test_canonical_payload_uses_physical_sidecar_slice():
     assert export.serial_region is not None
     assert export.serial_region.source_slices
 
-    payload = next(
-        item for item in build_canonical_document(document)["payloads"] if item["owner"] == export.id
-    )
+    payload = next(item for item in build_canonical_document(document)["payloads"] if item["owner"] == export.id)
     physical = export.serial_region.source_slices[0]
     assert physical.source_id.endswith(".uexp")
     assert payload["source_region"] == "uexp"
