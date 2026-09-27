@@ -14,6 +14,7 @@
 
 ### Changed
 - decode-depth kismet JSON: removed dead keys `Value` (Vector/Rotation/Vector3f const), `Name`/`ParamCount`/`StackNode` (call expressions), and the duplicate lowercase `parameters` (use `Parameters`); `EX_TextConst` now retains `TableIdString`.
+- material_parameters projection content: removed the always-null `texture_parameters` key (no handler ever wrote `texture_param_count`); `scalar_parameters` / `vector_parameters` are unchanged.
 
 ### Improvements
 - Parser: `CachedPoseIndices` (AnimBlueprint `OrderedSavedPoseIndicesMap` values) is parsed as a tagged struct. Removes the residual `name_index_out_of_range` on `tests/samples/ALS_AnimBP.uasset`; quality opt-in baseline regenerated.

@@ -488,7 +488,6 @@ class MaterialInstanceProjector:
             "kind": "material_parameters",
             "scalar_parameters": semantic.get("scalar_param_count"),
             "vector_parameters": semantic.get("vector_param_count"),
-            "texture_parameters": semantic.get("texture_param_count"),
             "resolved": parent_resolved,
         }
         status = "represented" if parent_resolved else "untranslated"
