@@ -25,7 +25,7 @@ from uasset_read.models.analysis import (
     project_opaque,
     project_pin_link,
 )
-from uasset_read.models.byte_ranges import ByteRegion, opaque_region
+from uasset_read.models.byte_ranges import ByteRegion
 from uasset_read.models.diagnostics import Diagnostic, make_diagnostic
 
 if TYPE_CHECKING:
@@ -229,7 +229,7 @@ def _metadata_for(
         if class_name not in _K2_CLASSES:
             return None
     from uasset_read.models.analysis import k2_metadata_from_dict
-    from uasset_read.serializers.k2_metadata import K2MetadataDecoder
+    from uasset_read.serializers.k2_metadata import decode_k2_metadata
 
     existing = None
     raw_meta = node.get("metadata")
@@ -243,9 +243,7 @@ def _metadata_for(
             node_record = objects_by_id.get(export_id)
     node_properties = getattr(node_record, "properties", None) if node_record is not None else None
 
-    return K2MetadataDecoder().decode(
-        None,
-        None,
+    return decode_k2_metadata(
         node_class=class_name,
         node_data=node.get("node_data"),
         node_properties=node_properties,
