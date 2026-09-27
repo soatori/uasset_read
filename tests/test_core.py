@@ -30,6 +30,95 @@ import sys
 
 import jsonschema
 import pytest
+from uasset_read.package import parse_package_document, open_package_bundle, _parse_cached
+from uasset_read.models.object_model import ObjectRecord, ObjectStatus
+from uasset_read.models.fallback import FallbackReason, PropertyFallback
+from uasset_read.models.properties import PropertyValue, StructValue, PropertyTag, project_property_bag
+from uasset_read.parsers.legacy_reader import (
+    normalize_property_bag,
+    resolve_import_dependencies,
+    LegacyPackageReader,
+    _read_table_rows,
+    _merge_archive_recoveries,
+    _read_string_table,
+)
+from uasset_read.exceptions import ParseError, VersionError
+from uasset_read.parsers.asset_types.handlers_impl import (
+    AnimBlendSpaceHandler,
+    AnimCompositeHandler,
+    AnimLayerInterfaceHandler,
+    BlueprintFamilyHandler,
+    DataTableHandler,
+    MaterialHandler,
+    MaterialInstanceHandler,
+    MaterialFunctionHandler,
+    MaterialParameterCollectionHandler,
+    MeshHandler,
+    PhysicalMaterialHandler,
+    PhysicsAssetHandler,
+    SkeletonHandler,
+    StringTableHandler,
+    TextureHandler,
+    UserDefinedEnumHandler,
+    UserDefinedStructHandler,
+    NiagaraHandler,
+)
+from uasset_read.parsers.asset_types.registry import _HANDLERS, register_handler, run_handlers
+from uasset_read.projection import paginate, project_document, select_objects, dependency_to_dict, json_byte_size
+from uasset_read.agent_tools import (
+    extract_payload,
+    get_diagnostics,
+    get_object,
+    inspect_package,
+    list_dependencies,
+    list_objects,
+)
+from uasset_read.serializers.object_resources import ObjectImport, PackageIndex, read_export_map
+from uasset_read.serializers.package_summary import (
+    read_package_summary,
+    read_name_table,
+    read_depends_map,
+    _read_tail_offsets,
+    read_preload_dependencies,
+    _read_compression_and_source,
+    summary_gate_modes,
+)
+from uasset_read.parsers.property_types import (
+    get_struct_size,
+    parse_map_property,
+    _LWC_TYPE_MAP,
+    parse_struct_property,
+    parse_array_property,
+    parse_soft_object_property,
+    parse_text_property,
+)
+from uasset_read.archive import ByteArchive, ExportBoundsExceeded
+from uasset_read.constants import (
+    MAX_FSTRING_LENGTH,
+    PROP_EXT_HAS_EXTERNAL_OBJECTS,
+    FIXED_UNVERSIONED_SIZES,
+    format_guid_bytes,
+)
+from uasset_read.models.diagnostics import Diagnostic
+from uasset_read.parsers.properties import tagged
+from uasset_read.parsers.properties.tagged import _read_property_loop, _maybe_skip_import_data_json_prelude
+from uasset_read.iostore import IoStoreTocError, read_toc
+from uasset_read.serializers.property_tags import read_property_tag
+from uasset_read.parsers.binary_or_native_handlers import (
+    _decode_color,
+    BINARY_OR_NATIVE_HANDLERS,
+    _parse_expression_output,
+)
+from uasset_read.parsers.property_parser import _try_read_unversioned_header, _fixed_unversioned_size
+from uasset_read.mappings import TypeMappings
+from uasset_read.kismet.expressions import FScriptText, EX_Assert, EX_SetSet
+from uasset_read.kismet.tokens import EBlueprintTextLiteralType as T
+from uasset_read.serializers.graph_helpers import read_ftext_fstring
+from uasset_read.kismet.ufunction_reader import RELEASE_GUID
+from uasset_read.serializers.graph_pin import read_ed_graph_pin_type, read_pin_array
+from uasset_read.serializers.graph_node import _handle_advanced_pin_display, _handle_move_mode
+from uasset_read import constants as K
+from uasset_read.models.payloads import PayloadDescriptor
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,17 +135,16 @@ from typing import Literal
 
 @lru_cache(maxsize=None)
 def _document(sample: str = str(PACKAGE_SAMPLE), depth: Literal["package", "object", "asset", "decode"] = "package"):
-    from uasset_read.package import parse_package_document
 
     return parse_package_document(sample, depth=depth)
 
 
 def _run_cases(cases) -> None:
-    for case_name, check in cases:
+    for check in cases:
         try:
             check()
         except (AssertionError, pytest.fail.Exception) as exc:
-            raise AssertionError(f"{case_name}: {exc}") from exc
+            raise AssertionError(f"{check.__name__}: {exc}") from exc
 
 
 @contextmanager
@@ -82,13 +170,8 @@ def _isolated_handlers(*handlers):
 
 
 def _object_record(class_name: str, *, id: str = "export:0"):
-    from uasset_read.models.object_model import ObjectRecord, ObjectStatus
 
     return ObjectRecord(id=id, table_index=0, name="X", class_name=class_name, status=ObjectStatus())
-
-
-def _json_bytes(value: object) -> int:
-    return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
 def test_reader_boundaries_reject_malformed_access():
@@ -96,7 +179,6 @@ def test_reader_boundaries_reject_malformed_access():
 
     def test_export_read_within_range_succeeds():
         """Reading within (50, 100) from pos 80 must return data and advance."""
-        from uasset_read.archive import ByteArchive
 
         archive = ByteArchive(b"\x00" * 256)
         archive._read_range = (50, 100)
@@ -106,7 +188,6 @@ def test_reader_boundaries_reject_malformed_access():
         assert archive._pos == 100
 
     def test_export_read_past_upper_bound_fails():
-        from uasset_read.archive import ByteArchive, ExportBoundsExceeded
 
         archive = ByteArchive(b"\x00" * 256)
         archive._read_range = (50, 100)
@@ -115,7 +196,6 @@ def test_reader_boundaries_reject_malformed_access():
             archive.read(50)
 
     def test_export_seek_past_lower_bound_fails():
-        from uasset_read.archive import ByteArchive, ExportBoundsExceeded
 
         archive = ByteArchive(b"\x00" * 256)
         archive._read_range = (50, 100)
@@ -123,7 +203,6 @@ def test_reader_boundaries_reject_malformed_access():
             archive.validate_offset(10, "test_seek")
 
     def test_export_seek_past_upper_bound_fails():
-        from uasset_read.archive import ByteArchive, ExportBoundsExceeded
 
         archive = ByteArchive(b"\x00" * 256)
         archive._read_range = (50, 100)
@@ -133,8 +212,6 @@ def test_reader_boundaries_reject_malformed_access():
     def depends_map_stops_at_unsized_count():
         import struct
         from types import SimpleNamespace
-        from uasset_read.archive import ByteArchive
-        from uasset_read.serializers.package_summary import read_depends_map
 
         # Leading filler int32 so depends_offset=4 is a positive, in-bounds table start.
         data = struct.pack("<iiii", 0, 10_001, 1, 1)
@@ -148,9 +225,6 @@ def test_reader_boundaries_reject_malformed_access():
 
     def chunk_ids_count_beyond_file_rejected_immediately():
         import struct
-        from uasset_read.archive import ByteArchive
-        from uasset_read.exceptions import ParseError
-        from uasset_read.serializers.package_summary import _read_tail_offsets
 
         data = struct.pack("<iqii", 0, 0, 0, 10_000_000)
         with pytest.raises(ParseError, match="ChunkIDs"):
@@ -159,9 +233,6 @@ def test_reader_boundaries_reject_malformed_access():
     def preload_count_beyond_file_rejected_immediately():
         import struct
         from types import SimpleNamespace
-        from uasset_read.archive import ByteArchive
-        from uasset_read.exceptions import ParseError
-        from uasset_read.serializers.package_summary import read_preload_dependencies
 
         # offset 4 is a positive, in-bounds table start in the 8-byte payload.
         data = struct.pack("<ii", 7, 9)
@@ -171,8 +242,6 @@ def test_reader_boundaries_reject_malformed_access():
 
     def tolerant_fstring_overrun_records_recovery_not_just_a_log():
         import struct
-        from uasset_read.archive import ByteArchive
-        from uasset_read.exceptions import ParseError
 
         for header, enc in ((6, "UTF-8"), (-6, "UTF-16")):  # claims 6/12 bytes, 2 remain
             arc = ByteArchive(struct.pack("<i", header) + b"ab", tolerant=True)
@@ -184,7 +253,6 @@ def test_reader_boundaries_reject_malformed_access():
 
     def fstring_internal_null_truncation_is_recorded():
         import struct
-        from uasset_read.archive import ByteArchive
 
         arc = ByteArchive(struct.pack("<i", 4) + b"ab\x00c", tolerant=True)
         assert arc.read_fstring() == "ab"
@@ -193,8 +261,6 @@ def test_reader_boundaries_reject_malformed_access():
 
     def fstring_length_cap_recorded_both_encodings():
         import struct
-        from uasset_read.archive import ByteArchive
-        from uasset_read.constants import MAX_FSTRING_LENGTH
 
         for header in (MAX_FSTRING_LENGTH + 1, -(MAX_FSTRING_LENGTH + 1) // 2):  # UTF-8 / UTF-16 both over cap
             arc = ByteArchive(struct.pack("<i", header) + b"ab", tolerant=True)
@@ -204,7 +270,6 @@ def test_reader_boundaries_reject_malformed_access():
 
     def fstring_all_null_recorded_both_encodings():
         import struct
-        from uasset_read.archive import ByteArchive
 
         # UTF-8: 4 null bytes. UTF-16: 3 chars (6 bytes) — a padding-sized 4-byte
         # UTF-16 run at an aligned position is #369 alignment padding (debug-only,
@@ -217,7 +282,6 @@ def test_reader_boundaries_reject_malformed_access():
 
     def fstring_empty_ftext_namespace_is_silent():
         import struct
-        from uasset_read.archive import ByteArchive
 
         # UE empty FText namespace/key: ANSI length=1 + single NUL (#405).
         # Valid in BPVariableDescription.Category — must not be recovered_corruption.
@@ -227,7 +291,6 @@ def test_reader_boundaries_reject_malformed_access():
 
     def fstring_all_null_longer_run_still_recorded():
         import struct
-        from uasset_read.archive import ByteArchive
 
         arc = ByteArchive(struct.pack("<i", 4) + b"\x00" * 4, tolerant=True)
         assert arc.read_fstring() == ""
@@ -236,7 +299,6 @@ def test_reader_boundaries_reject_malformed_access():
 
     def fname_shift_recovery_is_recorded():
         import struct
-        from uasset_read.archive import ByteArchive
 
         # Garbage FName at pos 4 (index 2**24); a shifted view of the same bytes
         # carries a valid (index, number) pair, so recovery must fire and report.
@@ -253,11 +315,6 @@ def test_reader_boundaries_reject_malformed_access():
         """A misaligned FString length must stop the export property stream (P0 Lyra)."""
         from types import SimpleNamespace
         from unittest.mock import patch
-
-        from uasset_read.models.diagnostics import Diagnostic
-        from uasset_read.models.properties import PropertyTag
-        from uasset_read.parsers.properties import tagged
-        from uasset_read.parsers.properties.tagged import _read_property_loop
 
         tag_calls = {"n": 0}
 
@@ -324,11 +381,6 @@ def test_reader_boundaries_reject_malformed_access():
     def import_data_json_prelude_is_skipped_before_tagged_stream():
         import struct
 
-        from uasset_read.archive import ByteArchive
-        from uasset_read.parsers.properties.tagged import (
-            _maybe_skip_import_data_json_prelude,
-        )
-
         json_body = b'[{"RelativeFilename" : "x.wav"}]'
         blob = struct.pack("<i", len(json_body)) + json_body + b"\x00" * 8
         arc = ByteArchive(blob)
@@ -345,8 +397,6 @@ def test_reader_boundaries_reject_malformed_access():
     def export_map_recoveries_are_attributed_to_their_slot():
         import struct
         from types import SimpleNamespace
-        from uasset_read.archive import ByteArchive
-        from uasset_read.serializers.object_resources import read_export_map
 
         # One FObjectExport entry (UE4.5-era version gates: no TemplateIndex,
         # preload or script-serialization fields) whose ObjectName carries
@@ -365,7 +415,6 @@ def test_reader_boundaries_reject_malformed_access():
 
     def test_fname_display_uses_external_number():
         import struct
-        from uasset_read.archive import ByteArchive
 
         arc = ByteArchive(struct.pack("<ii", 0, 3))
         name = arc.read_name(["None", "Test"])
@@ -437,7 +486,6 @@ def test_reader_boundaries_reject_malformed_access():
         return path, tmp
 
     def test_iostore_rejects_non_toc_input():
-        from uasset_read.iostore import IoStoreTocError, read_toc
 
         path, tmp = _synthetic_toc()
         try:
@@ -452,7 +500,6 @@ def test_reader_boundaries_reject_malformed_access():
             tmp.cleanup()
 
     def test_iostore_rejects_unsupported_shapes():
-        from uasset_read.iostore import IoStoreTocError, read_toc
 
         checks = [
             ({"version": 9}, "unsupported TOC version"),
@@ -490,7 +537,6 @@ def test_reader_boundaries_reject_malformed_access():
             tmp.cleanup()
 
     def test_iostore_parses_supported_layouts():
-        from uasset_read.iostore import read_toc
 
         # v8 with 24-byte FIoHash metas, and v7 with 33-byte legacy metas.
         for version, entry_count in ((8, 3), (7, 2)):
@@ -505,7 +551,6 @@ def test_reader_boundaries_reject_malformed_access():
             assert toc.data_path is None and toc.files == ()
 
     def test_iostore_rejects_directory_index_escape():
-        from uasset_read.iostore import IoStoreTocError, read_toc
 
         import struct
 
@@ -520,52 +565,41 @@ def test_reader_boundaries_reject_malformed_access():
 
     _run_cases(
         [
-            ("export_bounds.read_within_range_succeeds", test_export_read_within_range_succeeds),
-            ("export_bounds.read_past_upper_bound_fails", test_export_read_past_upper_bound_fails),
-            ("export_bounds.seek_past_lower_bound_fails", test_export_seek_past_lower_bound_fails),
-            ("export_bounds.seek_past_upper_bound_fails", test_export_seek_past_upper_bound_fails),
-            ("depends_map.stops_at_unsized_count", depends_map_stops_at_unsized_count),
-            ("chunk_ids.count_beyond_file_rejected", chunk_ids_count_beyond_file_rejected_immediately),
-            ("preload.count_beyond_file_rejected", preload_count_beyond_file_rejected_immediately),
-            ("recovery.fstring_overrun_recorded", tolerant_fstring_overrun_records_recovery_not_just_a_log),
-            ("recovery.fstring_null_truncation_recorded", fstring_internal_null_truncation_is_recorded),
-            ("recovery.fstring_length_cap_recorded", fstring_length_cap_recorded_both_encodings),
-            ("recovery.fstring_all_null_recorded", fstring_all_null_recorded_both_encodings),
-            ("recovery.fstring_empty_namespace_silent", fstring_empty_ftext_namespace_is_silent),
-            ("recovery.fstring_all_null_longer_run", fstring_all_null_longer_run_still_recorded),
-            ("recovery.fname_shift_recorded", fname_shift_recovery_is_recorded),
-            ("recovery.export_map_attribution", export_map_recoveries_are_attributed_to_their_slot),
-            (
-                "recovery.property_loop_aborts_on_fstring_oor",
-                property_loop_aborts_on_fstring_out_of_range,
-            ),
-            (
-                "recovery.import_data_json_prelude_skipped",
-                import_data_json_prelude_is_skipped_before_tagged_stream,
-            ),
-            ("fname.display_external_number", test_fname_display_uses_external_number),
-            ("iostore.rejects_non_toc_input", test_iostore_rejects_non_toc_input),
-            ("iostore.rejects_unsupported_shapes", test_iostore_rejects_unsupported_shapes),
-            ("iostore.parses_supported_layouts", test_iostore_parses_supported_layouts),
-            ("iostore.rejects_directory_index_escape", test_iostore_rejects_directory_index_escape),
+            test_export_read_within_range_succeeds,
+            test_export_read_past_upper_bound_fails,
+            test_export_seek_past_lower_bound_fails,
+            test_export_seek_past_upper_bound_fails,
+            depends_map_stops_at_unsized_count,
+            chunk_ids_count_beyond_file_rejected_immediately,
+            preload_count_beyond_file_rejected_immediately,
+            tolerant_fstring_overrun_records_recovery_not_just_a_log,
+            fstring_internal_null_truncation_is_recorded,
+            fstring_length_cap_recorded_both_encodings,
+            fstring_all_null_recorded_both_encodings,
+            fstring_empty_ftext_namespace_is_silent,
+            fstring_all_null_longer_run_still_recorded,
+            fname_shift_recovery_is_recorded,
+            export_map_recoveries_are_attributed_to_their_slot,
+            property_loop_aborts_on_fstring_out_of_range,
+            import_data_json_prelude_is_skipped_before_tagged_stream,
+            test_fname_display_uses_external_number,
+            test_iostore_rejects_non_toc_input,
+            test_iostore_rejects_unsupported_shapes,
+            test_iostore_parses_supported_layouts,
+            test_iostore_rejects_directory_index_escape,
         ]
     )
 
 
 def test_property_bag_normalization_is_bounded_lossless():
     """normalize_property_bag must bound, describe, and never embed raw bytes."""
-    from uasset_read.models.fallback import FallbackReason, PropertyFallback
-    from uasset_read.models.properties import PropertyValue, StructValue
-    from uasset_read.parsers.legacy_reader import normalize_property_bag
 
     def test_empty_list_returns_empty_dict():
-        from uasset_read.models.properties import project_property_bag
 
         assert normalize_property_bag([]) == {}
         assert project_property_bag(normalize_property_bag([])) == {}
 
     def test_unknown_property_is_descriptor_not_blob():
-        from uasset_read.models.properties import project_property_bag
 
         prop = PropertyFallback(
             name="Mystery",
@@ -584,7 +618,6 @@ def test_property_bag_normalization_is_bounded_lossless():
         json.dumps(bag)
 
     def test_known_property_preserves_value():
-        from uasset_read.models.properties import project_property_bag
 
         bag = project_property_bag(
             normalize_property_bag([PropertyValue(name="Health", type="FloatProperty", value=100.0)])
@@ -594,7 +627,6 @@ def test_property_bag_normalization_is_bounded_lossless():
         json.dumps(bag)
 
     def test_struct_property_normalizes():
-        from uasset_read.models.properties import project_property_bag
 
         sv = StructValue(struct_type="Vector", fields={"X": 1.0, "Y": 2.0, "Z": 3.0})
         prop = PropertyValue(name="Location", type="StructProperty", value=sv)
@@ -605,7 +637,6 @@ def test_property_bag_normalization_is_bounded_lossless():
         json.dumps(bag)
 
     def test_bytes_value_serializes():
-        from uasset_read.models.properties import project_property_bag
 
         bag = project_property_bag(
             normalize_property_bag([PropertyValue(name="Data", type="BlobProperty", value=b"\x00\x01")])
@@ -617,9 +648,6 @@ def test_property_bag_normalization_is_bounded_lossless():
 
     def test_lwc_box_size_52_and_double_read():
         import struct
-        from uasset_read.archive import ByteArchive
-        from uasset_read.models.properties import PropertyTag
-        from uasset_read.parsers.property_types import _LWC_TYPE_MAP, parse_struct_property
 
         assert _LWC_TYPE_MAP["Box"] == (28, 52)
         payload = struct.pack("<ddddddi", 1, 2, 3, 4, 5, 6, 1)  # Min 3xd + Max 3xd + IsValid i32 = 52
@@ -635,9 +663,6 @@ def test_property_bag_normalization_is_bounded_lossless():
 
     def test_property_tag_extension_external_objects():
         import struct
-        from uasset_read.archive import ByteArchive
-        from uasset_read.constants import PROP_EXT_HAS_EXTERNAL_OBJECTS
-        from uasset_read.serializers.property_tags import read_property_tag
 
         assert PROP_EXT_HAS_EXTERNAL_OBJECTS == 0x04
         # Legacy header (routes via archive._file_version_ue5 < 1012):
@@ -663,9 +688,6 @@ def test_property_bag_normalization_is_bounded_lossless():
 
     def test_array_of_bools_consumes_one_byte_per_element():
         import struct
-        from uasset_read.archive import ByteArchive
-        from uasset_read.models.properties import PropertyTag
-        from uasset_read.parsers.property_types import parse_array_property
 
         data = struct.pack("<i", 3) + bytes([1, 0, 1]) + b"X"
         arc = ByteArchive(data)
@@ -677,9 +699,6 @@ def test_property_bag_normalization_is_bounded_lossless():
 
     def test_legacy_struct_array_reads_single_inner_tag():
         import struct
-        from uasset_read.archive import ByteArchive
-        from uasset_read.models.properties import PropertyTag
-        from uasset_read.parsers.property_types import parse_array_property
 
         # The inner struct is one of the tagged-fallback structs so a size-0 inner
         # tag parses as a tagged-field stream instead of returning opaque (a plain
@@ -714,9 +733,6 @@ def test_property_bag_normalization_is_bounded_lossless():
     def test_soft_object_path_inline_is_fname_based():
         import struct
         from types import SimpleNamespace
-        from uasset_read.archive import ByteArchive
-        from uasset_read.models.properties import PropertyTag
-        from uasset_read.parsers.property_types import parse_soft_object_property
 
         names = ["None", "Game/Foo/Bar", "Bar", "SubPath"]
         # UE5 < 1007 legacy inline: FName(index+number) + FString (SerializePathWithoutFixup)
@@ -738,9 +754,6 @@ def test_property_bag_normalization_is_bounded_lossless():
 
     def test_ftext_history_demoted_and_base_reads_dev_notes():
         import struct
-        from uasset_read.archive import ByteArchive
-        from uasset_read.models.properties import PropertyTag
-        from uasset_read.parsers.property_types import parse_text_property
 
         def ft_body(hist, strings=(), extra=b""):
             tail = extra
@@ -764,15 +777,12 @@ def test_property_bag_normalization_is_bounded_lossless():
         assert v1.source_string == "" and getattr(v1, "history_type", None) == 1
 
     def test_fcolor_bgra_decode():
-        from uasset_read.parsers.binary_or_native_handlers import _decode_color
 
         out = _decode_color(bytes([10, 20, 30, 40]), 4)
         assert out == {"R": 30, "G": 20, "B": 10, "A": 40}
 
     def test_unversioned_header_fragments_ue_format():
         import struct
-        from uasset_read.archive import ByteArchive
-        from uasset_read.parsers.property_parser import _try_read_unversioned_header
 
         # One fragment: SkipNum=0, HasZeroes=1, IsLast=1, ValueNum=3 ->
         # packed = (3<<9) | 0x100 | 0x80 = 0x0780
@@ -785,8 +795,6 @@ def test_property_bag_normalization_is_bounded_lossless():
     def test_scalar_material_input_full_layout():
         import struct
         from types import SimpleNamespace
-        from uasset_read.archive import ByteArchive
-        from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
 
         # Expression(4) + OutputIndex(4) + InputName(8) + Mask(4) + RGBA(16) + UseConstant(1) + Constant(f32=4) = 41
         # Pad to 44 to align. Expression=101, InputName=index 7 ("X"), UseConstant=1, Constant=0.5f
@@ -818,11 +826,6 @@ def test_property_bag_normalization_is_bounded_lossless():
     def test_function_expression_output_maps_to_output_decoder():
         import struct
         from types import SimpleNamespace
-        from uasset_read.archive import ByteArchive
-        from uasset_read.parsers.binary_or_native_handlers import (
-            BINARY_OR_NATIVE_HANDLERS,
-            _parse_expression_output,
-        )
 
         assert BINARY_OR_NATIVE_HANDLERS["FunctionExpressionOutput"] is _parse_expression_output
         assert BINARY_OR_NATIVE_HANDLERS["FFunctionExpressionOutput"] is _parse_expression_output
@@ -841,24 +844,21 @@ def test_property_bag_normalization_is_bounded_lossless():
 
     _run_cases(
         [
-            ("property.test_empty_list_returns_empty_dict", test_empty_list_returns_empty_dict),
-            ("property.test_unknown_property_is_descriptor_not_blob", test_unknown_property_is_descriptor_not_blob),
-            ("property.test_known_property_preserves_value", test_known_property_preserves_value),
-            ("property.test_struct_property_normalizes", test_struct_property_normalizes),
-            ("property.test_bytes_value_serializes", test_bytes_value_serializes),
-            ("property.lwc_box_size_52_and_double_read", test_lwc_box_size_52_and_double_read),
-            ("property.tag_extension_external_objects", test_property_tag_extension_external_objects),
-            ("property.array_of_bools_inline_bytes", test_array_of_bools_consumes_one_byte_per_element),
-            ("property.legacy_struct_array_single_inner_tag", test_legacy_struct_array_reads_single_inner_tag),
-            ("property.soft_object_path_inline_fname_based", test_soft_object_path_inline_is_fname_based),
-            ("property.ftext_base_dev_notes_and_demotion", test_ftext_history_demoted_and_base_reads_dev_notes),
-            ("property.fcolor_bgra_decode", test_fcolor_bgra_decode),
-            ("property.unversioned_header_fragments_ue_format", test_unversioned_header_fragments_ue_format),
-            ("property.scalar_material_input_full_layout", test_scalar_material_input_full_layout),
-            (
-                "property.function_expression_output_maps_to_output_decoder",
-                test_function_expression_output_maps_to_output_decoder,
-            ),
+            test_empty_list_returns_empty_dict,
+            test_unknown_property_is_descriptor_not_blob,
+            test_known_property_preserves_value,
+            test_struct_property_normalizes,
+            test_bytes_value_serializes,
+            test_lwc_box_size_52_and_double_read,
+            test_property_tag_extension_external_objects,
+            test_array_of_bools_consumes_one_byte_per_element,
+            test_legacy_struct_array_reads_single_inner_tag,
+            test_soft_object_path_inline_is_fname_based,
+            test_ftext_history_demoted_and_base_reads_dev_notes,
+            test_fcolor_bgra_decode,
+            test_unversioned_header_fragments_ue_format,
+            test_scalar_material_input_full_layout,
+            test_function_expression_output_maps_to_output_decoder,
         ]
     )
 
@@ -880,7 +880,6 @@ def test_package_document_preserves_every_export_and_role():
             assert idx == obj.table_index
 
     def test_stable_id_across_calls():
-        from uasset_read.package import parse_package_document
 
         doc1 = parse_package_document(str(PACKAGE_SAMPLE))
         doc2 = parse_package_document(str(PACKAGE_SAMPLE))
@@ -891,9 +890,6 @@ def test_package_document_preserves_every_export_and_role():
     def test_unversioned_bool_one_byte_enum_fname():
         from types import SimpleNamespace
 
-        from uasset_read.constants import FIXED_UNVERSIONED_SIZES
-        from uasset_read.parsers.property_parser import _fixed_unversioned_size
-
         assert FIXED_UNVERSIONED_SIZES["BoolProperty"] == 1
         # Enum with byte inner must report FName width 8, not the inner's 1
         assert _fixed_unversioned_size(SimpleNamespace(type="EnumProperty", inner_type="ByteProperty")) == 8
@@ -902,9 +898,6 @@ def test_package_document_preserves_every_export_and_role():
     def test_compressed_chunks_skipped_as_16_bytes():
         import struct
 
-        from uasset_read.archive import ByteArchive
-        from uasset_read.serializers.package_summary import _read_compression_and_source
-
         data = struct.pack("<ii", 0, 1) + struct.pack("<iiii", 40, 8, 48, 8) + struct.pack("<i", 0x11223344)
         arc = ByteArchive(data)
         flags, source, _ = _read_compression_and_source(arc)
@@ -912,9 +905,6 @@ def test_package_document_preserves_every_export_and_role():
 
     def test_table_rows_skip_tagged_stream_not_size_prefix():
         import struct
-
-        from uasset_read.archive import ByteArchive
-        from uasset_read.parsers.legacy_reader import _read_table_rows
 
         # A None-terminator tagged property tag is exactly its 8-byte name FName
         # (read_property_tag early-returns at UE_NONE_SENTINEL). Two empty rows:
@@ -943,9 +933,6 @@ def test_package_document_preserves_every_export_and_role():
         """
         import struct
 
-        from uasset_read.archive import ByteArchive
-        from uasset_read.parsers.legacy_reader import _read_table_rows
-
         data = (
             struct.pack("<iB", 1, 1) + struct.pack("<ii", 1, 0) + struct.pack("<ii", 0, 0)  # None tag
         )
@@ -965,9 +952,6 @@ def test_package_document_preserves_every_export_and_role():
         """Undecoded bytes after the last row must downgrade coverage, never claim rows."""
         import struct
 
-        from uasset_read.archive import ByteArchive
-        from uasset_read.parsers.legacy_reader import _read_table_rows
-
         data = struct.pack("<i", 1) + struct.pack("<ii", 1, 0) + struct.pack("<ii", 0, 0) + b"\x7f\x7f"
         diags: list = []
         result = _read_table_rows(
@@ -983,9 +967,6 @@ def test_package_document_preserves_every_export_and_role():
     def test_fname_instance_number_renders_in_row_name():
         """Row names are FNames: Number 2 displays as ``Base_1`` (NAME_INTERNAL_TO_EXTERNAL)."""
         import struct
-
-        from uasset_read.archive import ByteArchive
-        from uasset_read.parsers.legacy_reader import _read_table_rows
 
         data = (
             struct.pack("<i", 2)
@@ -1005,7 +986,6 @@ def test_package_document_preserves_every_export_and_role():
         assert result["complete"] is True
 
     def test_summary_gate_modes_are_versioned():
-        from uasset_read.serializers.package_summary import summary_gate_modes
 
         assert summary_gate_modes(214) == {
             "engine_versions": "legacy",
@@ -1034,22 +1014,16 @@ def test_package_document_preserves_every_export_and_role():
 
     _run_cases(
         [
-            ("document.test_all_exports_present", test_all_exports_present),
-            ("document.test_ids_are_export_prefix", test_ids_are_export_prefix),
-            ("document.test_stable_id_across_calls", test_stable_id_across_calls),
-            ("property.test_unversioned_bool_one_byte_enum_fname", test_unversioned_bool_one_byte_enum_fname),
-            ("summary.test_compressed_chunks_skipped_as_16_bytes", test_compressed_chunks_skipped_as_16_bytes),
-            ("summary.test_summary_gate_modes_are_versioned", test_summary_gate_modes_are_versioned),
-            (
-                "table.test_table_rows_skip_tagged_stream_not_size_prefix",
-                test_table_rows_skip_tagged_stream_not_size_prefix,
-            ),
-            ("table.test_curve_table_mode_byte_is_consumed", test_curve_table_mode_byte_is_consumed),
-            (
-                "table.test_table_payload_residue_is_disclosed_not_complete",
-                test_table_payload_residue_is_disclosed_not_complete,
-            ),
-            ("table.test_fname_instance_number_renders_in_row_name", test_fname_instance_number_renders_in_row_name),
+            test_all_exports_present,
+            test_ids_are_export_prefix,
+            test_stable_id_across_calls,
+            test_unversioned_bool_one_byte_enum_fname,
+            test_compressed_chunks_skipped_as_16_bytes,
+            test_summary_gate_modes_are_versioned,
+            test_table_rows_skip_tagged_stream_not_size_prefix,
+            test_curve_table_mode_byte_is_consumed,
+            test_table_payload_residue_is_disclosed_not_complete,
+            test_fname_instance_number_renders_in_row_name,
         ]
     )
 
@@ -1061,8 +1035,6 @@ def test_package_document_preserves_every_export_and_role():
 def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
     """A malformed export must produce an attributable diagnostic without deleting siblings."""
     import uasset_read.parsers.properties.tagged as tagged
-    from uasset_read.exceptions import ParseError
-    from uasset_read.package import parse_package_document
 
     real = tagged.parse_properties_from_export
     calls = {"n": 0}
@@ -1145,7 +1117,6 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         with _isolated_handlers(Boom(), Ok()):
             _result = H.run_handlers(obj, "package", [], None)
             semantic = _result.semantic
-            _cov = _result.coverage
             diags = _result.diagnostics
         assert semantic == {"kind": "ok"}
         assert obj.status.semantic == "partial"
@@ -1173,14 +1144,11 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         with _isolated_handlers(Decliner()):
             _result = H.run_handlers(obj, "package", [], None)
             semantic = _result.semantic
-            _cov = _result.coverage
-            _diags = _result.diagnostics
         assert semantic is None
         assert obj.status.semantic == "partial"
 
     def test_parse_past_serial_end_is_flagged_not_silent():
         import uasset_read.parsers.properties.tagged as tagged
-        from uasset_read.package import _parse_cached, parse_package_document
 
         _parse_cached.cache_clear()
         try:
@@ -1200,7 +1168,6 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
     def test_export_table_failure_preserves_slot_identity():
         import uasset_read.serializers.object_resources as orm
-        from uasset_read.package import _parse_cached
 
         healthy = _document(str(PACKAGE_SAMPLE), depth="package")
         first_name = healthy.objects[0].name
@@ -1234,8 +1201,6 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
     def test_v2_mappings_object_on_successful_load():
         import tempfile
 
-        from uasset_read.mappings import TypeMappings
-
         # Minimal uncompressed version-0 .usmap: empty name/enum/struct tables.
         payload = b"\x00" * 12  # name_count=0, enum_count=0, struct_count=0
         blob = (
@@ -1257,8 +1222,6 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
         assert isinstance(mappings_calls.get("mappings"), TypeMappings)
 
     def test_silent_recovery_downgrades_object_and_reaches_document():
-        from uasset_read.models.diagnostics import Diagnostic
-        from uasset_read.parsers.legacy_reader import _merge_archive_recoveries
 
         class _RecoveringArchive:
             """Plain bounded fake — no MagicMock for UE structures."""
@@ -1306,73 +1269,25 @@ def test_export_failure_isolated_and_diagnostics_typed(monkeypatch):
 
     _run_cases(
         [
-            ("document.test_no_critical_on_healthy", test_no_critical_on_healthy),
-            ("document.test_diagnostics_have_stage", test_diagnostics_have_stage),
-            (
-                "diagnostics.test_failed_export_does_not_remove_later_objects",
-                test_failed_export_does_not_remove_later_objects,
-            ),
-            (
-                "diagnostics.test_partial_status_on_bad_export_preserves_document",
-                test_partial_status_on_bad_export_preserves_document,
-            ),
-            ("diagnostics.test_parse_failure_diagnostic_has_object_id", test_parse_failure_diagnostic_has_object_id),
-            (
-                "handler.test_later_success_does_not_mask_earlier_failure",
-                test_later_success_does_not_mask_earlier_failure,
-            ),
-            ("handler.test_clean_success_still_marks_complete", test_clean_success_still_marks_complete),
-            (
-                "handler.test_matched_handler_returning_none_is_not_complete",
-                test_matched_handler_returning_none_is_not_complete,
-            ),
-            (
-                "property.test_parse_past_serial_end_is_flagged_not_silent",
-                test_parse_past_serial_end_is_flagged_not_silent,
-            ),
-            (
-                "document.test_export_table_failure_preserves_slot_identity",
-                test_export_table_failure_preserves_slot_identity,
-            ),
-            (
-                "mappings.test_v2_mappings_never_passes_raw_path_string",
-                test_v2_mappings_never_passes_raw_path_string,
-            ),
-            (
-                "recovery.test_silent_recovery_downgrades_object_and_reaches_document",
-                test_silent_recovery_downgrades_object_and_reaches_document,
-            ),
-            (
-                "mappings.test_v2_mappings_object_on_successful_load",
-                test_v2_mappings_object_on_successful_load,
-            ),
+            test_no_critical_on_healthy,
+            test_diagnostics_have_stage,
+            test_failed_export_does_not_remove_later_objects,
+            test_partial_status_on_bad_export_preserves_document,
+            test_parse_failure_diagnostic_has_object_id,
+            test_later_success_does_not_mask_earlier_failure,
+            test_clean_success_still_marks_complete,
+            test_matched_handler_returning_none_is_not_complete,
+            test_parse_past_serial_end_is_flagged_not_silent,
+            test_export_table_failure_preserves_slot_identity,
+            test_v2_mappings_never_passes_raw_path_string,
+            test_silent_recovery_downgrades_object_and_reaches_document,
+            test_v2_mappings_object_on_successful_load,
         ]
     )
 
 
 def test_handler_registry_supports_enriches_and_isolates():
     """Every registered handler must accept its class, reject others, and isolate failures."""
-    from uasset_read.parsers.asset_types.handlers_impl import (
-        AnimBlendSpaceHandler,
-        AnimCompositeHandler,
-        AnimLayerInterfaceHandler,
-        BlueprintFamilyHandler,
-        DataTableHandler,
-        MaterialHandler,
-        MaterialInstanceHandler,
-        MaterialFunctionHandler,
-        MaterialParameterCollectionHandler,
-        MeshHandler,
-        PhysicalMaterialHandler,
-        PhysicsAssetHandler,
-        SkeletonHandler,
-        StringTableHandler,
-        TextureHandler,
-        UserDefinedEnumHandler,
-        UserDefinedStructHandler,
-    )
-    from uasset_read.parsers.asset_types.registry import _HANDLERS
-    from uasset_read.models.object_model import ObjectRecord, ObjectStatus
 
     record = _object_record
 
@@ -1441,7 +1356,6 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert TextureHandler().enrich(obj, "package", [], None) is None
 
     def test_handler_exception_doesnt_crash():
-        from uasset_read.parsers.asset_types.registry import register_handler, run_handlers
 
         class BadHandler:
             def supports(self, obj, context):
@@ -1463,7 +1377,6 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_handler_exception_becomes_object_diagnostic():
         import uasset_read.parsers.asset_types.registry as handlers_registry
-        from uasset_read.package import parse_package_document
 
         class RaisingHandler:
             def supports(self, obj, context):
@@ -1486,7 +1399,6 @@ def test_handler_registry_supports_enriches_and_isolates():
             assert handler_diags[0].object_id == sample_doc.objects[0].id
 
     def test_niagara_handler_supports_all_declared_classes():
-        from uasset_read.parsers.asset_types.handlers_impl import NiagaraHandler
 
         handler = NiagaraHandler()
         assert len(handler.classes) == 13
@@ -1496,12 +1408,6 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_summary_tier_handlers_never_claim_complete():
         """Niagara/Mesh/Blueprint-summary results are partial with coverage (#629)."""
-        from uasset_read.parsers.asset_types.handlers_impl import (
-            BlueprintFamilyHandler,
-            MeshHandler,
-            NiagaraHandler,
-        )
-        from uasset_read.parsers.asset_types.registry import _HANDLERS, run_handlers
 
         cases = [
             ("NiagaraScript", NiagaraHandler()),
@@ -1517,16 +1423,12 @@ def test_handler_registry_supports_enriches_and_isolates():
                 obj = record(class_name)
                 _result = run_handlers(obj, "asset", [obj], None)
                 semantic = _result.semantic
-                _cov = _result.coverage
-                _diags = _result.diagnostics
                 assert semantic, class_name
                 assert obj.status.semantic == "partial", class_name
                 assert obj.coverage, class_name
 
     def test_decode_tier_blueprint_graph_marks_complete():
         """Only decoded-tier output (Blueprint graph at depth=decode) yields complete (#629)."""
-        from uasset_read.parsers.asset_types.handlers_impl import BlueprintFamilyHandler
-        from uasset_read.parsers.asset_types.registry import run_handlers
 
         bp = record("Blueprint")
         node = record("K2Node_CallFunction")
@@ -1547,13 +1449,10 @@ def test_handler_registry_supports_enriches_and_isolates():
         with _isolated_handlers(handler):
             _result = run_handlers(bp, "decode", [bp, node], (None, [], extras))
             semantic = _result.semantic
-            _cov = _result.coverage
-            _diags = _result.diagnostics
         assert "graphs" in semantic
         assert bp.status.semantic == "complete"
 
     def test_undeclared_handler_tier_defaults_to_summary():
-        from uasset_read.parsers.asset_types.registry import run_handlers
 
         class Echo:
             def supports(self, obj, ctx):
@@ -1569,16 +1468,12 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_skeleton_name_guess_is_marked_heuristic():
         """NameMap-regex bones are marked bone_source=name_guess and never complete (#630)."""
-        from uasset_read.parsers.asset_types.handlers_impl import SkeletonHandler
-        from uasset_read.parsers.asset_types.registry import run_handlers
 
         obj = record("Skeleton")
         name_map = ["None", "SomeWidget", "root", "pelvis", "spine_01"]
         with _isolated_handlers(SkeletonHandler()):
             _result = run_handlers(obj, "asset", [obj], (None, name_map, None))
             semantic = _result.semantic
-            _cov = _result.coverage
-            _diags = _result.diagnostics
         assert semantic["bone_source"] == "name_guess"
         assert [b["name"] for b in semantic["bones"]] == ["root", "pelvis", "spine_01"]
         assert semantic["bone_count"] == 3
@@ -1589,8 +1484,6 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_skeleton_bone_tree_wins_over_name_guess():
         """Decoded BoneTree names take precedence over the regex path (#630)."""
-        from uasset_read.parsers.asset_types.handlers_impl import SkeletonHandler
-        from uasset_read.parsers.asset_types.registry import run_handlers
 
         obj = record("Skeleton")
         obj.properties = {
@@ -1610,8 +1503,6 @@ def test_handler_registry_supports_enriches_and_isolates():
         with _isolated_handlers(SkeletonHandler()):
             _result = run_handlers(obj, "asset", [obj], (None, name_map, None))
             semantic = _result.semantic
-            _cov = _result.coverage
-            _diags = _result.diagnostics
         assert semantic["bone_source"] == "bone_tree"
         assert [b["name"] for b in semantic["bones"]] == ["root", "pelvis"]
         assert obj.status.semantic == "complete"
@@ -1619,9 +1510,6 @@ def test_handler_registry_supports_enriches_and_isolates():
     def test_string_table_reader_synthetic_bytes():
         """#615: the FStringTable trailer parses namespace + key/value entries."""
         import struct
-
-        from uasset_read.archive import ByteArchive
-        from uasset_read.parsers.legacy_reader import _read_string_table
 
         def fstring(s: str) -> bytes:
             data = s.encode("utf-8") + b"\x00"
@@ -1668,8 +1556,6 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_string_table_handler_is_summary_and_not_table():
         """#615: StringTable uses StringTableHandler and never claims complete."""
-        from uasset_read.parsers.asset_types.handlers_impl import DataTableHandler, StringTableHandler
-        from uasset_read.parsers.asset_types.registry import run_handlers
 
         assert not DataTableHandler().supports(record("StringTable"), "package")
         assert DataTableHandler().supports(record("DataTable"), "package")
@@ -1686,8 +1572,6 @@ def test_handler_registry_supports_enriches_and_isolates():
         with _isolated_handlers(DataTableHandler(), StringTableHandler()):
             _result = run_handlers(obj, "asset", [obj], (None, [], {obj.id: {"string_table": st}}))
             semantic = _result.semantic
-            _cov = _result.coverage
-            _diags = _result.diagnostics
         assert semantic["kind"] == "string_table"
         assert semantic["namespace"] == "MyNS"
         assert semantic["entry_count"] == 1
@@ -1695,7 +1579,6 @@ def test_handler_registry_supports_enriches_and_isolates():
         assert obj.status.semantic == "partial", "StringTable must not claim semantic=complete (#615)"
 
     def test_string_table_handler_missing_trailer_reports_coverage():
-        from uasset_read.parsers.asset_types.handlers_impl import StringTableHandler
 
         obj = record("StringTable")
         result = StringTableHandler().enrich(obj, "package", [], (None, [], {}))
@@ -1705,8 +1588,6 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_physics_handlers_summary_tier_synthetic():
         """#619: physics handlers read real fields but never claim complete."""
-        from uasset_read.parsers.asset_types.handlers_impl import PhysicsAssetHandler, PhysicalMaterialHandler
-        from uasset_read.parsers.asset_types.registry import run_handlers
 
         pa = record("PhysicsAsset")
         pa.properties = {
@@ -1726,18 +1607,12 @@ def test_handler_registry_supports_enriches_and_isolates():
         with _isolated_handlers(PhysicsAssetHandler(), PhysicalMaterialHandler()):
             _result = run_handlers(pa, "asset", [pa, body], None)
             sem_pa = _result.semantic
-            _c = _result.coverage
-            _d = _result.diagnostics
             _result = run_handlers(pm, "asset", [pm], None)
             sem_pm = _result.semantic
-            _c = _result.coverage
-            _d = _result.diagnostics
             empty_pm = record("PhysicalMaterial")
             empty_pm.properties = {}
             _result = run_handlers(empty_pm, "asset", [empty_pm], None)
             sem_empty = _result.semantic
-            _c = _result.coverage
-            _d = _result.diagnostics
 
         assert sem_pa["kind"] == "physics_asset"
         assert sem_pa["body_count"] == 2
@@ -1757,12 +1632,6 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_anim_handlers_summary_tier_synthetic():
         """#618: blend space axes/samples, composite track, ALI missing-function state."""
-        from uasset_read.parsers.asset_types.handlers_impl import (
-            AnimBlendSpaceHandler,
-            AnimCompositeHandler,
-            AnimLayerInterfaceHandler,
-        )
-        from uasset_read.parsers.asset_types.registry import run_handlers
 
         bs = record("BlendSpace")
         bs.properties = {
@@ -1835,20 +1704,12 @@ def test_handler_registry_supports_enriches_and_isolates():
         with _isolated_handlers(AnimBlendSpaceHandler(), AnimCompositeHandler(), AnimLayerInterfaceHandler()):
             _result = run_handlers(bs, "asset", [bs], None)
             sem_bs = _result.semantic
-            _c = _result.coverage
-            _d = _result.diagnostics
             _result = run_handlers(comp, "asset", [comp], None)
             sem_comp = _result.semantic
-            _c = _result.coverage
-            _d = _result.diagnostics
             _result = run_handlers(ali, "asset", [ali], None)
             sem_ali = _result.semantic
-            _c = _result.coverage
-            _d = _result.diagnostics
             _result = run_handlers(bare, "asset", [bare], None)
             sem_bare = _result.semantic
-            _c = _result.coverage
-            _d = _result.diagnostics
 
         assert sem_bs["kind"] == "anim_blend_space"
         assert sem_bs["dimension"] == 2, "unconfigured BlendParameters slot must not count as an axis"
@@ -1877,11 +1738,6 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     def test_material_family_handlers_summary_tier_synthetic():
         """#620: function I/O from expression exports; MPC scalar/vector params."""
-        from uasset_read.parsers.asset_types.handlers_impl import (
-            MaterialFunctionHandler,
-            MaterialParameterCollectionHandler,
-        )
-        from uasset_read.parsers.asset_types.registry import run_handlers
 
         fn = record("MaterialFunction")
         inp = record("MaterialExpressionFunctionInput")
@@ -1933,16 +1789,10 @@ def test_handler_registry_supports_enriches_and_isolates():
         with _isolated_handlers(MaterialFunctionHandler(), MaterialParameterCollectionHandler()):
             _result = run_handlers(fn, "asset", [fn, inp, out, call, add], None)
             sem_fn = _result.semantic
-            _c = _result.coverage
-            _d = _result.diagnostics
             _result = run_handlers(mpc, "asset", [mpc], None)
             sem_mpc = _result.semantic
-            _c = _result.coverage
-            _d = _result.diagnostics
             _result = run_handlers(bare_fn, "asset", [bare_fn], None)
             sem_bfn = _result.semantic
-            _c = _result.coverage
-            _d = _result.diagnostics
 
         assert sem_fn["kind"] == "material_function"
         assert sem_fn["input_names"] == ["Speed"]
@@ -1970,10 +1820,6 @@ def test_handler_registry_supports_enriches_and_isolates():
     def test_ex_text_const_operand_layouts():
         """K1/K2: UE5 literal-type numbering; operands are nested string expressions."""
         import struct
-
-        from uasset_read.archive import ByteArchive
-        from uasset_read.kismet.expressions import FScriptText
-        from uasset_read.kismet.tokens import EBlueprintTextLiteralType as T
 
         assert T.LocalizedTextWithNotes == 2 and T.InvariantText == 3
         assert T.LiteralString == 4 and T.StringTableEntry == 5
@@ -2016,9 +1862,6 @@ def test_handler_registry_supports_enriches_and_isolates():
         """K3/K4: EX_Assert flag is uint8; set/map/array consts carry int32 counts."""
         import struct
 
-        from uasset_read.archive import ByteArchive
-        from uasset_read.kismet.expressions import EX_Assert, EX_SetSet
-
         class _WidthProbe:  # forwards the width-sensitive reads, stubs expression dispatch
             def __init__(self, data):
                 self._arc = ByteArchive(data)
@@ -2056,9 +1899,6 @@ def test_handler_registry_supports_enriches_and_isolates():
         """G3: negative FString length always reads abs(len)*2 UTF-16 bytes (String.cpp.inl)."""
         import struct
 
-        from uasset_read.archive import ByteArchive
-        from uasset_read.serializers.graph_helpers import read_ftext_fstring
-
         arc = ByteArchive(struct.pack("<i", -1) + b"\x00\x00" + struct.pack("<i", 3) + b"abc\x00")
         assert read_ftext_fstring(arc) == ""
         assert arc.tell() == 6  # consumed the 2-byte UTF-16 NUL, not skipped it
@@ -2069,10 +1909,6 @@ def test_handler_registry_supports_enriches_and_isolates():
         import struct
 
         from types import SimpleNamespace
-
-        from uasset_read.archive import ByteArchive
-        from uasset_read.kismet.ufunction_reader import RELEASE_GUID
-        from uasset_read.serializers.graph_pin import read_ed_graph_pin_type
 
         fname = struct.pack("<ii", 0, 0)  # "None"
         data = (
@@ -2108,10 +1944,6 @@ def test_handler_registry_supports_enriches_and_isolates():
         """T6: corrupt pin-array count raises ParseError (no sliding-window salvage)."""
         import struct
 
-        from uasset_read.archive import ByteArchive
-        from uasset_read.exceptions import ParseError
-        from uasset_read.serializers.graph_pin import read_pin_array
-
         # count=999 exceeds MAX_LINKEDTO_PER_PIN; the trailing bytes mimic a
         # "recoverable" pin ref that the deleted sliding-window salvage sought.
         data = struct.pack("<i", 999) + struct.pack("<i", 1) + bytes(20) + bytes(32)
@@ -2129,9 +1961,6 @@ def test_handler_registry_supports_enriches_and_isolates():
         import struct
 
         from types import SimpleNamespace
-
-        from uasset_read.archive import ByteArchive
-        from uasset_read.serializers.graph_node import _handle_advanced_pin_display, _handle_move_mode
 
         names = ["None", "Hidden", "Copy"]
         payload = struct.pack("<ii", 1, 0)  # FName pointing at name "Hidden", number 0
@@ -2157,7 +1986,6 @@ def test_handler_registry_supports_enriches_and_isolates():
     def test_guid_display_is_36_chars():
         """O1: FGuid display uses format_guid_bytes (8-4-4-4-12 = 36 chars)."""
         import struct
-        from uasset_read.constants import format_guid_bytes
 
         a, b, c, d = 0x01020304, 0x05060708, 0x090A0B0C, 0x0D0E0F10
         s = format_guid_bytes(struct.pack("<IIII", a, b, c, d))
@@ -2165,67 +1993,39 @@ def test_handler_registry_supports_enriches_and_isolates():
 
     _run_cases(
         [
-            ("handler.test_handlers_registered", test_handlers_registered),
-            ("handler.test_expected_handlers", test_expected_handlers),
-            ("handler.test_supports_and_rejects", test_supports_and_rejects),
-            ("handler.test_texture_no_properties_returns_none", test_texture_no_properties_returns_none),
-            ("handler.test_handler_exception_doesnt_crash", test_handler_exception_doesnt_crash),
-            (
-                "handler.test_handler_exception_becomes_object_diagnostic",
-                test_handler_exception_becomes_object_diagnostic,
-            ),
-            (
-                "handler.test_niagara_handler_supports_all_declared_classes",
-                test_niagara_handler_supports_all_declared_classes,
-            ),
-            (
-                "handler.test_summary_tier_handlers_never_claim_complete",
-                test_summary_tier_handlers_never_claim_complete,
-            ),
-            (
-                "handler.test_decode_tier_blueprint_graph_marks_complete",
-                test_decode_tier_blueprint_graph_marks_complete,
-            ),
-            (
-                "handler.test_undeclared_handler_tier_defaults_to_summary",
-                test_undeclared_handler_tier_defaults_to_summary,
-            ),
-            ("handler.test_skeleton_name_guess_is_marked_heuristic", test_skeleton_name_guess_is_marked_heuristic),
-            ("handler.test_skeleton_bone_tree_wins_over_name_guess", test_skeleton_bone_tree_wins_over_name_guess),
-            ("handler.test_string_table_reader_synthetic_bytes", test_string_table_reader_synthetic_bytes),
-            (
-                "handler.test_string_table_handler_is_summary_and_not_table",
-                test_string_table_handler_is_summary_and_not_table,
-            ),
-            (
-                "handler.test_string_table_handler_missing_trailer_reports_coverage",
-                test_string_table_handler_missing_trailer_reports_coverage,
-            ),
-            ("handler.test_physics_handlers_summary_tier_synthetic", test_physics_handlers_summary_tier_synthetic),
-            ("handler.test_anim_handlers_summary_tier_synthetic", test_anim_handlers_summary_tier_synthetic),
-            (
-                "handler.test_material_family_handlers_summary_tier_synthetic",
-                test_material_family_handlers_summary_tier_synthetic,
-            ),
-            (
-                "handler.test_native_fields_delegate_type_name",
-                test_native_fields_delegate_type_name,
-            ),
-            ("handler.test_ex_text_const_operand_layouts", test_ex_text_const_operand_layouts),
-            ("handler.test_ex_assert_u8_and_container_counts", test_ex_assert_u8_and_container_counts),
-            ("handler.test_fstring_negative_one_consumes_two_bytes", test_fstring_negative_one_consumes_two_bytes),
-            ("handler.test_map_pin_terminal_reads_trailing_bools", test_map_pin_terminal_reads_trailing_bools),
-            ("handler.test_pin_array_bad_count_fails_closed", test_pin_array_bad_count_fails_closed),
-            ("handler.test_byte_enum_node_tag_decodes_fname", test_byte_enum_node_tag_decodes_fname),
-            ("handler.test_no_invented_k2node_tails", test_no_invented_k2node_tails),
-            ("handler.test_guid_display_is_36_chars", test_guid_display_is_36_chars),
+            test_handlers_registered,
+            test_expected_handlers,
+            test_supports_and_rejects,
+            test_texture_no_properties_returns_none,
+            test_handler_exception_doesnt_crash,
+            test_handler_exception_becomes_object_diagnostic,
+            test_niagara_handler_supports_all_declared_classes,
+            test_summary_tier_handlers_never_claim_complete,
+            test_decode_tier_blueprint_graph_marks_complete,
+            test_undeclared_handler_tier_defaults_to_summary,
+            test_skeleton_name_guess_is_marked_heuristic,
+            test_skeleton_bone_tree_wins_over_name_guess,
+            test_string_table_reader_synthetic_bytes,
+            test_string_table_handler_is_summary_and_not_table,
+            test_string_table_handler_missing_trailer_reports_coverage,
+            test_physics_handlers_summary_tier_synthetic,
+            test_anim_handlers_summary_tier_synthetic,
+            test_material_family_handlers_summary_tier_synthetic,
+            test_native_fields_delegate_type_name,
+            test_ex_text_const_operand_layouts,
+            test_ex_assert_u8_and_container_counts,
+            test_fstring_negative_one_consumes_two_bytes,
+            test_map_pin_terminal_reads_trailing_bools,
+            test_pin_array_bad_count_fails_closed,
+            test_byte_enum_node_tag_decodes_fname,
+            test_no_invented_k2node_tails,
+            test_guid_display_is_36_chars,
         ]
     )
 
 
 def test_projection_views_depths_pagination_table():
     """View shape, pagination, and selection contracts on one synthetic-parse document."""
-    from uasset_read.projection import paginate, project_document, select_objects
 
     doc = _document(depth="asset")
 
@@ -2300,7 +2100,6 @@ def test_projection_views_depths_pagination_table():
     def dependencies_carry_package_name():
         # #632: the model carries package_name from the import map; no
         # projection path may drop it.
-        from uasset_read.projection import dependency_to_dict
 
         page = project_document(doc, limit=100)
         assert page["dependencies"], "fixture must expose page-reachable imports"
@@ -2355,12 +2154,12 @@ def test_projection_views_depths_pagination_table():
 
         # Pagination and byte budget
         full = project_document(pkg_doc, depth="package", limit=100)
-        full_size = len(json.dumps(full, separators=(",", ":")).encode())
+        full_size = json_byte_size(full)
         # budget must exceed minimal reachable envelope (depends_on imports)
         # but be less than the full page to trigger truncation
         budget = full_size - 1000
         page = project_document(pkg_doc, depth="package", limit=100, max_bytes=budget)
-        assert len(json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode()) <= budget
+        assert json_byte_size(page) <= budget
         assert page["next_offset"] > 0
         assert page["truncation"]["reason"] == "max_bytes"
 
@@ -2404,36 +2203,32 @@ def test_projection_views_depths_pagination_table():
 
     _run_cases(
         [
-            ("projection.test_semantic_default", test_semantic_default),
-            ("projection.test_raw_has_flags", test_raw_has_flags),
-            ("projection.test_debug_has_stats", test_debug_has_stats),
-            ("projection.test_invalid_view_raises", test_invalid_view_raises),
-            ("projection.test_semantic_no_raw_fields", test_semantic_no_raw_fields),
-            ("projection.test_limit_truncates", test_limit_truncates),
-            ("projection.test_offset_skips", test_offset_skips),
-            ("projection.test_no_limit_returns_all", test_no_limit_returns_all),
-            ("projection.test_page_through_all", test_page_through_all),
-            ("projection.test_select_by_role", test_select_by_role),
-            ("projection.test_select_by_id", test_select_by_id),
-            ("projection.test_select_all_when_no_filters", test_select_all_when_no_filters),
-            ("projection.dependencies_carry_package_name", dependencies_carry_package_name),
-            (
-                "projection.semantic_object_depth_carries_properties_summary",
-                semantic_object_depth_carries_properties_summary,
-            ),
-            ("projection.package_depth_document_has_no_summary", package_depth_document_has_no_summary),
-            ("projection.test_all_views_json", test_all_views_json),
-            ("core.test_projection_honors_views_pagination_and_byte_budget", core_projection_honors_views),
-            ("projection.depth_beyond_parsed_document_raises", depth_beyond_parsed_document_raises),
-            ("projection.shallower_depth_caps_content", shallower_depth_caps_content),
-            ("projection.relations_carry_optional_target_path", relations_carry_optional_target_path),
+            test_semantic_default,
+            test_raw_has_flags,
+            test_debug_has_stats,
+            test_invalid_view_raises,
+            test_semantic_no_raw_fields,
+            test_limit_truncates,
+            test_offset_skips,
+            test_no_limit_returns_all,
+            test_page_through_all,
+            test_select_by_role,
+            test_select_by_id,
+            test_select_all_when_no_filters,
+            dependencies_carry_package_name,
+            semantic_object_depth_carries_properties_summary,
+            package_depth_document_has_no_summary,
+            test_all_views_json,
+            core_projection_honors_views,
+            depth_beyond_parsed_document_raises,
+            shallower_depth_caps_content,
+            relations_carry_optional_target_path,
         ]
     )
 
 
 def test_projection_byte_budget_and_fields_filter():
     """The encoded page must respect max_bytes and re-scope relations/diagnostics."""
-    from uasset_read.projection import project_document
 
     doc = _document(depth="asset")
 
@@ -2443,30 +2238,29 @@ def test_projection_byte_budget_and_fields_filter():
         Derived from the sample instead of a hand-tuned slack constant: a fixed
         extra went stale the moment dependency package paths got longer (#645).
         """
-        one = _json_bytes(project_document(doc, limit=1))
-        two = _json_bytes(project_document(doc, limit=2))
+        one = json_byte_size(project_document(doc, limit=1))
+        two = json_byte_size(project_document(doc, limit=2))
         assert one < two, "the second object must cost bytes for this budget to mean anything"
         return one + (two - one) // 2
 
     def test_max_bytes_is_enforced_and_continuable():
         budget = partial_page_budget()
         page = project_document(doc, limit=100, max_bytes=budget)
-        encoded = json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        assert len(encoded) <= budget
+        assert json_byte_size(page) <= budget
         assert page["truncation"]["reason"] == "max_bytes"
         assert page["next_offset"] > 0
         assert any(d["code"] == "TRUNCATED" for d in page["diagnostics"])
 
     def all_objects_dropped_yields_no_cursor():
         empty = project_document(doc, limit=0)
-        envelope = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        envelope = json_byte_size(empty)
         budget = envelope + 500
         page = project_document(doc, limit=100, max_bytes=budget)
         assert page["objects"] == []
         assert "next_offset" not in page, "all-dropped page must not hand out a cursor"
         assert page["truncation"]["objects_dropped"] == 10
         assert any(d["code"] == "BUDGET_EXHAUSTED" for d in page["diagnostics"])
-        actual = len(json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        actual = json_byte_size(page)
         assert page["truncation"]["actual"] == actual <= budget
         with pytest.raises(ValueError, match="too small for minimal envelope"):
             project_document(doc, limit=100, max_bytes=envelope + 1)
@@ -2486,7 +2280,7 @@ def test_projection_byte_budget_and_fields_filter():
 
     def dropped_count_is_page_relative():
         empty = project_document(doc, limit=0)
-        envelope = len(json.dumps(empty, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        envelope = json_byte_size(empty)
         page = project_document(doc, offset=5, limit=100, max_bytes=envelope + 500)
         assert page["truncation"]["objects_dropped"] == 5
 
@@ -2494,7 +2288,7 @@ def test_projection_byte_budget_and_fields_filter():
         # With limit=2 only min(limit, len(selected)-offset)=2 objects are in
         # play; the dropped count must stay page-relative, not 10-kept.
         one = project_document(doc, limit=1, max_bytes=1_000_000)
-        one_size = len(json.dumps(one, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        one_size = json_byte_size(one)
         page = project_document(doc, offset=0, limit=2, max_bytes=one_size + 500)
         assert len(page["objects"]) == 1, "budget should keep exactly one of the two page objects"
         assert page["truncation"]["objects_dropped"] == 1
@@ -2544,37 +2338,28 @@ def test_projection_byte_budget_and_fields_filter():
     def core_max_bytes_caps_final_output():
         pkg_doc = _document()
         full = project_document(pkg_doc, depth="package", limit=100)
-        full_size = len(json.dumps(full, separators=(",", ":")).encode())
+        full_size = json_byte_size(full)
         budget = full_size - 1000  # strictly less than full page
         page = project_document(pkg_doc, depth="package", limit=100, max_bytes=budget)
-        final = len(json.dumps(page, ensure_ascii=False, separators=(",", ":")).encode())
+        final = json_byte_size(page)
         assert final <= budget
         assert page["truncation"]["reason"] == "max_bytes"
         assert page["next_offset"] > 0
 
     _run_cases(
         [
-            ("projection.test_max_bytes_is_enforced_and_continuable", test_max_bytes_is_enforced_and_continuable),
-            ("projection.all_objects_dropped_yields_no_cursor", all_objects_dropped_yields_no_cursor),
-            (
-                "projection.every_object_returned_exactly_once_under_budget",
-                every_object_returned_exactly_once_under_budget,
-            ),
-            ("projection.dropped_count_is_page_relative", dropped_count_is_page_relative),
-            ("projection.limit_and_budget_compose_page_relative", limit_and_budget_compose_page_relative),
-            (
-                "projection.out_of_range_empty_page_never_stalls_or_overshoots",
-                out_of_range_empty_page_never_stalls_or_overshoots,
-            ),
-            (
-                "projection.test_truncated_page_rescopes_relations_and_dependencies",
-                test_truncated_page_rescopes_relations_and_dependencies,
-            ),
-            ("projection.test_relations_scoped_to_returned_page", test_relations_scoped_to_returned_page),
-            ("projection.test_object_diagnostics_scoped_to_page", test_object_diagnostics_scoped_to_page),
-            ("projection.test_budget_too_small_raises", test_budget_too_small_raises),
-            ("projection.test_no_truncation_when_budget_generous", test_no_truncation_when_budget_generous),
-            ("core.test_max_bytes_caps_final_output_including_truncation_block", core_max_bytes_caps_final_output),
+            test_max_bytes_is_enforced_and_continuable,
+            all_objects_dropped_yields_no_cursor,
+            every_object_returned_exactly_once_under_budget,
+            dropped_count_is_page_relative,
+            limit_and_budget_compose_page_relative,
+            out_of_range_empty_page_never_stalls_or_overshoots,
+            test_truncated_page_rescopes_relations_and_dependencies,
+            test_relations_scoped_to_returned_page,
+            test_object_diagnostics_scoped_to_page,
+            test_budget_too_small_raises,
+            test_no_truncation_when_budget_generous,
+            core_max_bytes_caps_final_output,
         ]
     )
 
@@ -2616,7 +2401,6 @@ def test_schema_contract_statics():
         """UE4 file versions carry 4.x-era ordinals; newer UE5 headers renumbered -1
         (Epic's 'version clash'). Values below match CUE4Parse/UAssetAPI/uasset-rs
         mirrors; changing them without a real boundary-version fixture is forbidden."""
-        from uasset_read import constants as K
 
         expected = {
             "UE4_LOAD_FOR_EDITOR_GAME": 365,
@@ -2640,8 +2424,6 @@ def test_schema_contract_statics():
         (the old kind Literal['ubulk','uexp',...] was exactly such a drift)."""
         import dataclasses
         import typing
-
-        from uasset_read.models.payloads import PayloadDescriptor
 
         spec = schema["$defs"]["PayloadDescriptor"]
         assert spec["additionalProperties"] is False
@@ -2677,29 +2459,17 @@ def test_schema_contract_statics():
 
     _run_cases(
         [
-            ("schema.test_example_validates_against_schema", test_example_validates_against_schema),
-            ("schema.test_schema_has_required_fields", test_schema_has_required_fields),
-            ("schema.test_schema_enums_match_code", test_schema_enums_match_code),
-            (
-                "schema.ue4_version_constants_are_pinned_to_peer_numbering",
-                ue4_version_constants_are_pinned_to_peer_numbering,
-            ),
-            ("schema.payload_descriptor_model_matches_schema", payload_descriptor_model_matches_schema),
+            test_example_validates_against_schema,
+            test_schema_has_required_fields,
+            test_schema_enums_match_code,
+            ue4_version_constants_are_pinned_to_peer_numbering,
+            payload_descriptor_model_matches_schema,
         ]
     )
 
 
 def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, monkeypatch):
     """CLI (default v2), Python API, and agent tools must agree; parsing must be side-effect free."""
-    from uasset_read.agent_tools import (
-        extract_payload,
-        get_diagnostics,
-        get_object,
-        inspect_package,
-        list_dependencies,
-        list_objects,
-    )
-    from uasset_read.projection import project_document
 
     _env = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
 
@@ -2753,11 +2523,11 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     # respects max_bytes; budgets below the empty-list envelope raise.
     for budget in (2048, 4096, 8192):
         r = list_objects(str(PACKAGE_SAMPLE), max_bytes=budget)
-        assert len(json.dumps(r, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) <= budget
+        assert json_byte_size(r) <= budget
         d = get_diagnostics(str(PACKAGE_SAMPLE), max_bytes=budget)
-        assert len(json.dumps(d, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) <= budget
+        assert json_byte_size(d) <= budget
         insp = inspect_package(str(PACKAGE_SAMPLE), max_bytes=budget)
-        assert len(json.dumps(insp, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) <= budget
+        assert json_byte_size(insp) <= budget
     with pytest.raises(ValueError, match="too small"):
         # Healthy samples carry 0 diagnostics, so get_diagnostics' minimal
         # envelope is the fixed 52-byte empty-list form; 48 < 52 must raise.
@@ -2821,8 +2591,6 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert logging.root.level == level
     assert list(tmp_path.iterdir()) == []
 
-    from uasset_read.package import parse_package_document
-
     pkg_handlers = tuple(logging.getLogger("uasset_read").handlers)
     parse_package_document(str(DATA_SAMPLE))
     assert tuple(logging.root.handlers) == handlers
@@ -2831,7 +2599,6 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     old_level = logging.root.level
     try:
         logging.root.setLevel(logging.WARNING)
-        from uasset_read.package import parse_package_document
 
         parse_package_document(str(DATA_SAMPLE))
     finally:
@@ -2860,7 +2627,6 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     # A recognized canonical id whose export index is out of range must return
     # the deferred envelope (no data keys); valid exports may now extract real
     # bytes since the id contract accepts canonical payload:export:N.
-    from uasset_read.package import parse_package_document
 
     decode_doc = parse_package_document(
         str(SAMPLES / "FirstPerson_T_GridChecker_A.uasset"),
@@ -2878,13 +2644,6 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
 
 
 def test_agent_tools_missing_file_return_structured_errors(tmp_path):
-    from uasset_read.agent_tools import (
-        get_diagnostics,
-        get_object,
-        inspect_package,
-        list_dependencies,
-        list_objects,
-    )
 
     missing = str(tmp_path / "missing.uasset")
     calls = [
@@ -2903,7 +2662,6 @@ def test_agent_tools_missing_file_return_structured_errors(tmp_path):
 
 def test_agent_tools_parse_error_return_structured_errors(monkeypatch, tmp_path):
     import uasset_read.agent_tools as tools
-    from uasset_read.exceptions import ParseError
 
     def fail_parse(*args, **kwargs):
         raise ParseError("injected parse failure")
@@ -2922,8 +2680,6 @@ def test_agent_tools_parse_error_return_structured_errors(monkeypatch, tmp_path)
         assert result["code"] == "PACKAGE_PARSE_FAILED"
         assert result["recoverable"] is True
 
-    from uasset_read.exceptions import VersionError
-
     def fail_version(*args, **kwargs):
         raise VersionError("injected unsupported package version")
 
@@ -2940,16 +2696,6 @@ def test_agent_tool_queries_distinguish_budget_and_reject_negative_paging():
     """#644: budget exhaustion must not read as a missing object, and every
     paging entry point must reject negative offset/limit while keeping the
     legal zero values. Triggered through the public agent tools only."""
-    from uasset_read.agent_tools import (
-        get_diagnostics,
-        get_object,
-        inspect_package,
-        list_dependencies,
-        list_objects,
-    )
-
-    def encoded(value: object) -> int:
-        return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
     # export:0 exists on this fixture, proven by the unbounded fetch.
     assert get_object(str(DATA_SAMPLE), "export:0")["id"] == "export:0"
@@ -2960,7 +2706,7 @@ def test_agent_tool_queries_distinguish_budget_and_reject_negative_paging():
     assert squeezed["stage"] == "agent.get_object"
     assert squeezed["recoverable"] is True
     assert squeezed["min_bytes"] > 1000
-    assert encoded(squeezed) <= 1000, "the failure contract must obey the budget it reports"
+    assert json_byte_size(squeezed) <= 1000, "the failure contract must obey the budget it reports"
     # The advertised budget is enough on retry, so the contract is actionable.
     assert get_object(str(DATA_SAMPLE), "export:0", max_bytes=squeezed["min_bytes"])["id"] == "export:0"
 
@@ -2994,10 +2740,6 @@ def test_import_dependency_package_is_the_outer_owner_not_the_class_package():
     null outer is the UPackage, so its ObjectName is the package path,
     LinkerLoad.cpp:2402).
     """
-    from uasset_read.serializers.object_resources import ObjectImport, PackageIndex
-    from uasset_read.agent_tools import list_dependencies
-    from uasset_read.parsers.legacy_reader import resolve_import_dependencies
-    from uasset_read.projection import project_document
 
     CUE = "Footstep_Cue"
     OWNER = "/ALSV4_CPP/AdvancedLocomotionV4/Audio/Footsteps/Footstep_Cue"
@@ -3044,7 +2786,7 @@ def test_import_dependency_package_is_the_outer_owner_not_the_class_package():
         assert unresolved == {f"import:{i}" for i, o in enumerate(owners) if not o}, label
 
 
-def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
+def test_uexp_address_space_guard_and_bundle_routing(tmp_path, monkeypatch):
     """UE source guard: .uexp concatenated only when main_size == TotalHeaderSize.
 
     Proves the splice works by:
@@ -3054,9 +2796,6 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     """
     import shutil
     import uasset_read.parsers.legacy_reader as lr
-    from uasset_read.package import open_package_bundle
-    from uasset_read.parsers.legacy_reader import LegacyPackageReader
-    from uasset_read.serializers.package_summary import read_package_summary
 
     # --- setup: copy a real sample + create a dummy .uexp with a marker ---
     sample = tmp_path / "Test.uasset"
@@ -3072,7 +2811,6 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
     uexp_head = eexp_data[:2]
 
     real_read_summary = read_package_summary
-    lr_real_fn = lr.read_package_summary
 
     # === Refusal path: main_size != TotalHeaderSize ===
     def patched_wrong(archive, *, total_decompressed=0):
@@ -3080,13 +2818,10 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
         s.total_header_size = main_size - 1
         return s, total
 
-    lr.read_package_summary = patched_wrong  # type: ignore[assignment]
+    monkeypatch.setattr(lr, "read_package_summary", patched_wrong)
     bundle = open_package_bundle(str(sample))
     arc = bundle.open_archive(tolerant=True)
-    try:
-        doc = LegacyPackageReader(tolerant=True).read(archive=arc, main_path=str(sample))
-    finally:
-        lr.read_package_summary = lr_real_fn  # type: ignore[assignment]
+    doc = LegacyPackageReader(tolerant=True).read(archive=arc, main_path=str(sample))
 
     guard_diags = [d for d in doc.diagnostics if d.code == "UEXP_SPLIT_GUARD_FAILED"]
     assert len(guard_diags) == 1
@@ -3101,13 +2836,10 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
         s.total_header_size = 0
         return s, total
 
-    lr.read_package_summary = patched_zero  # type: ignore[assignment]
+    monkeypatch.setattr(lr, "read_package_summary", patched_zero)
     bundle0 = open_package_bundle(str(sample))
     arc0 = bundle0.open_archive(tolerant=True)
-    try:
-        doc0 = LegacyPackageReader(tolerant=True).read(archive=arc0, main_path=str(sample))
-    finally:
-        lr.read_package_summary = lr_real_fn  # type: ignore[assignment]
+    doc0 = LegacyPackageReader(tolerant=True).read(archive=arc0, main_path=str(sample))
 
     guard0 = [d for d in doc0.diagnostics if d.code == "UEXP_SPLIT_GUARD_FAILED"]
     assert len(guard0) == 1, "total_header_size==0 must refuse, not skip"
@@ -3120,13 +2852,10 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
         s.total_header_size = main_size
         return s, total
 
-    lr.read_package_summary = patched_ok  # type: ignore[assignment]
+    monkeypatch.setattr(lr, "read_package_summary", patched_ok)
     bundle_ok = open_package_bundle(str(sample))
     arc_ok = bundle_ok.open_archive(tolerant=True)
-    try:
-        doc_ok = LegacyPackageReader(tolerant=True).read(archive=arc_ok, main_path=str(sample))
-    finally:
-        lr.read_package_summary = lr_real_fn  # type: ignore[assignment]
+    doc_ok = LegacyPackageReader(tolerant=True).read(archive=arc_ok, main_path=str(sample))
 
     guard_ok = [d for d in doc_ok.diagnostics if d.code == "UEXP_SPLIT_GUARD_FAILED"]
     assert not guard_ok, "guard must not fire when main_size == TotalHeaderSize"
@@ -3143,7 +2872,6 @@ def test_uexp_address_space_guard_and_bundle_routing(tmp_path):
 def test_get_struct_size_matches_lwc_tables_for_shadowed_names():
     """Names present in the LWC tables are served by the LWC branch, never by the
     _EXPECTED_STRUCT_SIZES fallback. Pins the values the subtraction wave relies on."""
-    from uasset_read.parsers.property_types import get_struct_size
 
     expected = {
         "Vector": (12, 24),
@@ -3170,8 +2898,6 @@ def test_package_document_cache_is_process_local():
     import os
     import shutil
     import tempfile
-
-    from uasset_read.package import parse_package_document, _parse_cached
 
     _parse_cached.cache_clear()
     try:
@@ -3222,8 +2948,6 @@ def test_package_document_cache_is_process_local():
 
 def test_export_map_parse_error_is_truncated_not_fatal(monkeypatch):
     import uasset_read.serializers.object_resources as orm
-    from uasset_read.exceptions import ParseError
-    from uasset_read.package import _parse_cached, parse_package_document
 
     real = orm.ObjectExport
     calls = {"n": 0}
@@ -3246,9 +2970,6 @@ def test_export_map_parse_error_is_truncated_not_fatal(monkeypatch):
 
 def test_read_name_table_returns_partial_on_parse_error():
     from types import SimpleNamespace
-
-    from uasset_read.exceptions import ParseError
-    from uasset_read.serializers.package_summary import read_name_table
 
     summary = SimpleNamespace(
         name_count=4,
@@ -3321,8 +3042,6 @@ def test_fstring_leading_null_with_content_is_not_all_null():
     """A leading NUL plus later non-zero bytes is NOT all-null (Lyra 35269)."""
     import struct
 
-    from uasset_read.archive import ByteArchive
-
     # The exact misread payload from Lyra MovieScene offset 35273: 16 bytes,
     # first four zero, then 0x1d (BoolProperty name index), rest zero.
     # Mirror Lyra pos 35269: the data starts at 35273 (35273 % 4 == 1), so the
@@ -3341,8 +3060,6 @@ def test_fstring_all_zero_payload_still_records_all_null():
     """Entirely-zero payload keeps the existing fstring_all_null classification."""
     import struct
 
-    from uasset_read.archive import ByteArchive
-
     payload = struct.pack("<i", 8) + b"\x00" * 8
     arc = ByteArchive(payload, tolerant=True)
     assert arc.read_fstring() == ""
@@ -3358,10 +3075,6 @@ def test_map_value_unknown_struct_parses_tagged_until_none():
     the None-terminated field stream (Lyra MovieScene ExpansionStates).
     """
     import struct
-
-    from uasset_read.archive import ByteArchive
-    from uasset_read.models.properties import PropertyTag
-    from uasset_read.parsers.property_types import parse_map_property
 
     def fname(idx: int, number: int = 0) -> bytes:
         return struct.pack("<II", idx, number)
@@ -3410,10 +3123,6 @@ def test_map_value_unknown_struct_garbage_rolls_back_without_spill():
     BindingIdToReferences stays clean).
     """
     import struct
-
-    from uasset_read.archive import ByteArchive
-    from uasset_read.models.properties import PropertyTag
-    from uasset_read.parsers.property_types import parse_map_property
 
     name_map = ["bExpanded", "BoolProperty", "None"]
     key = struct.pack("<i", 4) + b"key\x00"
