@@ -1441,7 +1441,7 @@
     },
     "PayloadSourceEntry": {
       "type": "object",
-      "description": "offset is relative to the source_region.source_id file (sidecar-relative for external payloads, export-window-relative for inline payloads), never whole-package.",
+      "description": "offset is file-relative within the source_region.source_id file for both external and inline payloads, never a whole-package offset.",
       "required": ["payload_id", "source_region", "offset"],
       "properties": {
         "payload_id": {

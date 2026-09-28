@@ -478,7 +478,7 @@ def test_matrix_material_fixture_acceptance():
 
 
 def test_matrix_datatable_fixture_acceptance():
-    """Matrix: DataTable decoded values plus JSON/CSV consistency."""
+    """Matrix: DataTable represented tier (type/size cells) plus JSON/CSV consistency."""
     import csv
     from io import StringIO
 
@@ -488,11 +488,18 @@ def test_matrix_datatable_fixture_acceptance():
     assert {"data_table", "data_table_csv", "data_table_json"} <= set(records)
 
     data = records["data_table"]["content"]
+    # Honest represented tier: row struct schema evidenced, cell values not decoded.
+    assert data["values_decoded"] is False
+    assert records["data_table"]["status"] == "represented"
+    assert records["data_table"]["completeness"] == "partial"
     assert data["row_names"] == ["GrenadeLauncher", "Pistol", "Rifle"]
     assert data["row_count"] == 3
     assert len(data["rows"]) == 3
     for row in data["rows"]:
-        # Decoded values section: every row carries its field values map.
+        # Row cells are {type, size} descriptors, not decoded values: table row
+        # value bytes are not decoded by any current reader (legacy_reader.py:
+        # "values not decoded yet"). JSON/CSV consistency below is what this
+        # cell verifies; decoded cell values are a future reader task.
         assert row["values"], row["name"]
         assert set(row["values"]) == {column["name"] for column in data["columns"]}
 

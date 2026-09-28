@@ -434,7 +434,7 @@ class AssetHandler(Protocol):
 
 ## Output Contract
 
-（目标契约；v4 生产者尚未落地，当前源码仍输出 v3 信封。以 2026-09-28 v4 amendment 为准。）
+（当前契约：v4 生产者已落地，源码默认输出 v4 信封 `format_version: "4.0"`（normal/debug 双模式），源码与测试均以此为准。以 2026-09-28 v4 amendment 为准。）
 
 ### 顶层规则
 
