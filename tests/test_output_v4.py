@@ -346,6 +346,46 @@ def test_property_evidence_serializes_regions_only_through_project_region():
     assert raw == {"encoding": "hex", "data": "0102", "total_size": 2, "truncated": False}
 
 
+def test_property_evidence_raw_unwraps_production_value_wrapper():
+    """Raw evidence must fire on normalize_property_bag entries (real shape).
+
+    The production bag builder wraps entry values in ``{"kind":"value",...}``
+    dicts; a bare-model bag (the tagged reader's internal shape) never reaches
+    ObjectRecord.properties, so raw evidence must unwrap that wrapper.
+    """
+    from tests.test_properties import typed_property_document
+    from uasset_read.models.fallback import FallbackReason, StructFallback
+    from uasset_read.models.properties import PropertyValue
+    from uasset_read.parsers.legacy_reader import normalize_property_bag
+
+    document = typed_property_document()
+    document.objects[0].properties = normalize_property_bag(
+        [
+            PropertyValue(name="Bytes", type="BlobProperty", value=b"\x00\x01"),
+            PropertyValue(
+                name="SF",
+                type="StructProperty",
+                value=StructFallback(
+                    struct_type="Weird",
+                    size=8,
+                    raw_bytes=b"",
+                    reason=FallbackReason.UNSUPPORTED_STRUCT,
+                ),
+            ),
+            PropertyValue(name="Big", type="BlobProperty", value=b"\x00" * 300),
+        ]
+    )
+    debug = project_document(document, mode="debug")
+    raws = {item["property_index"]: item["raw"] for item in debug["debug"]["property_evidence"] if "raw" in item}
+    assert raws == {
+        0: {"encoding": "hex", "data": "0001", "total_size": 2, "truncated": False},
+        1: {"encoding": "hex", "data": "0102", "total_size": 2, "truncated": False},
+        2: {"encoding": "hex", "data": "00" * 256, "total_size": 300, "truncated": True},
+    }
+    # Debug-only evidence: the raw hex never reaches common output.
+    assert '"raw"' not in json.dumps(project_document(document))
+
+
 def test_typed_semantic_source_ranges_are_json_pointer_sorted():
     from tests.test_properties import typed_property_document
 

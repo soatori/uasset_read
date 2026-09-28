@@ -138,6 +138,11 @@ def _entry_raw_bytes(value: Any) -> bytes | None:
     from uasset_read.models.fallback import PropertyFallback, StructFallback
     from uasset_read.models.properties import PropertyValue
 
+    # Production bag entries wrap values in {"kind":"value", ...} dicts
+    # (normalize_property_bag); bare PropertyValue is the tagged reader's
+    # internal shape. Unwrap both before looking for raw bytes.
+    if isinstance(value, dict) and value.get("kind") == "value":
+        value = value.get("value")
     if isinstance(value, PropertyValue) and not isinstance(value, PropertyFallback):
         value = value.value
     if isinstance(value, (bytes, bytearray)):
