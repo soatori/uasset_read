@@ -35,6 +35,7 @@ def _unavailable(
     context: bool = True,
     metrics: dict | None = None,
     fallback: str | None = None,
+    native_fields: list | None = None,
 ):
     """One structured unavailable result for a failed Function export."""
     from uasset_read.kismet.result import KismetDecompiledResult
@@ -62,6 +63,7 @@ def _unavailable(
         ),
         script_metrics=metrics,
         fallback_reasons=[fallback] if fallback else [],
+        native_fields=list(native_fields or []),
     )
 
 
@@ -117,6 +119,7 @@ def extract_kismet_decompiled(
                             "serialized_bytes_consumed": 0,
                             "bytecode_bytes_consumed": 0,
                         },
+                        native_fields=script_result.native_fields,
                     )
                 )
                 continue
@@ -143,6 +146,7 @@ def extract_kismet_decompiled(
                             else None
                         ),
                         fallback=f"UFunction script read failed: {reason}",
+                        native_fields=script_result.native_fields,
                     )
                 )
                 continue
@@ -180,6 +184,7 @@ def extract_kismet_decompiled(
                             "bytecode_bytes_consumed": 0,
                         },
                         fallback=f"bytecode extraction error: {reason}",
+                        native_fields=script_result.native_fields,
                     )
                 )
                 continue
@@ -221,6 +226,7 @@ def extract_kismet_decompiled(
                     bytecode_status=bytecode_status,
                     instructions=[project_instruction(i) for i in instructions],
                     cfg=project_cfg(cfg),
+                    native_fields=list(script_result.native_fields),
                 )
             )
 

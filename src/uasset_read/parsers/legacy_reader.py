@@ -1754,6 +1754,7 @@ def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
         calls=calls,
         bytecode_status=status,  # type: ignore[arg-type]
         diagnostics=diagnostics,
+        native_fields=list(getattr(kr, "native_fields", None) or []),
     )
     return base
 

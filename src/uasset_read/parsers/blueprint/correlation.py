@@ -28,8 +28,10 @@ from uasset_read.models.analysis import (
     DispatcherRecord,
     EntrypointRecord,
     ExecChainSummary,
+    ExternalReferenceRecord,
     FunctionAnalysis,
     FunctionDeclaration,
+    FunctionParameter,
     VariableAccessRecord,
     VariableDefinition,
     VariableEventRecord,
@@ -40,7 +42,12 @@ from uasset_read.models.byte_ranges import ByteRegion, project_region
 from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.models.document import PackageDocument
 from uasset_read.models.object_model import ObjectRecord
-from uasset_read.parsers.blueprint.bytecode import _CALL_OPCODES, project_instruction, project_operand
+from uasset_read.parsers.blueprint.bytecode import (
+    _CALL_OPCODES,
+    DEBUG_MAPPING_UNAVAILABLE,
+    project_instruction,
+    project_operand,
+)
 from uasset_read.parsers.blueprint.control_flow import project_cfg, project_cfg_edge
 
 if TYPE_CHECKING:
@@ -186,6 +193,82 @@ def _call_parts(value: Any, opcode: str) -> tuple[str | None, int | None]:
     return None, None
 
 
+_CPF_PARM = 0x0000000000000080  # ufunction_reader/native_fields mirror of UE CPF_Parm
+_CPF_RETURN_PARM = 0x0000000000000400  # same table: CPF_ReturnParm
+_CPF_OUT_PARM = 0x0000000000000100  # docs/formats/uasset/serialization/uproperty-specifiers.md
+
+
+def external_ref_record(
+    *,
+    query: str | None,
+    object_id: str,
+    match_method: str,
+    function_ids_by_name: dict[str, list[str]],
+    import_ids_by_name: dict[str, list[str]],
+    dep_by_index: dict[int, Any],
+    class_by_id: dict[str, str | None],
+) -> tuple[ExternalReferenceRecord | None, str | None]:
+    """Conservative external-reference record for one resolved call.
+
+    Recomputes candidates from the same tables ``resolve_call`` uses, so a
+    name-only first match never hides ambiguity. Same-package exact export
+    targets are not external: no record, ``target_ref_key=None``.
+    """
+    if match_method == "object_id" and object_id.startswith("export:"):
+        return None, None
+    if match_method == "object_id" and object_id.startswith("import:"):
+        index = int(object_id.split(":", 1)[1])
+        dep = dep_by_index.get(index)
+        package = dep.package_name if dep is not None else None
+        class_name = dep.class_name if dep is not None else None
+        symbol = (dep.object_name if dep is not None else None) or query or object_id
+        local_id: str | None = object_id
+        status, reason = "resolved", "exact_package_index"
+        candidates = [object_id]
+        evidence: list[dict[str, Any]] = [{"kind": "stack_node_package_index", "value": -index - 1}]
+    else:
+        name = query or ""
+        if not name:
+            return None, None
+        candidates = sorted(set(function_ids_by_name.get(name, []) + import_ids_by_name.get(name, [])))
+        if not candidates:
+            local_id, status, reason = None, "unresolved", "no_name_match"
+        elif len(candidates) == 1:
+            local_id, status, reason = candidates[0], "resolved", "unique_name_match"
+        else:
+            local_id, status, reason = None, "ambiguous", f"{len(candidates)}_name_candidates"
+        symbol = name
+        dep = dep_by_index.get(int(local_id.split(":", 1)[1])) if local_id and local_id.startswith("import:") else None
+        package = dep.package_name if dep is not None else None
+        class_name = (dep.class_name if dep is not None else None) or class_by_id.get(local_id or "")
+        evidence = [{"kind": "name_query", "value": name}]
+
+    if package and class_name and symbol:
+        qualified_key = f"{package}::{class_name}::{symbol}"
+    elif local_id and symbol:
+        qualified_key = f"{local_id}::{symbol}"
+    else:
+        qualified_key = f"unresolved::{symbol}"
+    origin: str = "project_asset" if (package and package.startswith("/Game/")) or (
+        local_id and local_id.startswith("export:")
+    ) else "unknown_origin"
+    return (
+        ExternalReferenceRecord(
+            local_id=local_id,
+            package=package,
+            class_name=class_name,
+            symbol=symbol,
+            qualified_key=qualified_key,
+            origin=origin,  # type: ignore[arg-type]
+            source_evidence=evidence,
+            status=status,  # type: ignore[arg-type]
+            reason=reason,
+            candidate_local_ids=list(candidates),
+        ),
+        qualified_key,
+    )
+
+
 class _CallResolver:
     """Identity-first target resolution for call and variable records."""
 
@@ -217,6 +300,30 @@ class _CallResolver:
             if fn.function_name:
                 self.function_ids_by_name.setdefault(fn.function_name, []).append(fn.object_id)
         self.diagnostics: list[Diagnostic] = []
+        self.dep_by_index: dict[int, Any] = {dep.index: dep for dep in document.dependencies}
+        self.class_by_id: dict[str, str | None] = {obj.id: obj.class_name for obj in document.objects}
+        self._ref_records: dict[tuple[str | None, str], ExternalReferenceRecord] = {}
+
+    def external_ref(
+        self, *, query: str | None, object_id: str, match_method: str
+    ) -> tuple[ExternalReferenceRecord | None, str | None]:
+        """Deduplicated external-reference record + its stable qualified_key."""
+        record, key = external_ref_record(
+            query=query,
+            object_id=object_id,
+            match_method=match_method,
+            function_ids_by_name=self.function_ids_by_name,
+            import_ids_by_name=self.import_ids_by_name,
+            dep_by_index=self.dep_by_index,
+            class_by_id=self.class_by_id,
+        )
+        if record is None or key is None:
+            return None, None
+        kept = self._ref_records.setdefault((record.local_id, record.qualified_key), record)
+        return kept, kept.qualified_key
+
+    def external_refs(self) -> list[ExternalReferenceRecord]:
+        return list(self._ref_records.values())
 
     def resolve_call(
         self, name: str | None, stack_node: int | None
@@ -273,6 +380,45 @@ class _CallResolver:
         return "", "unresolved", 0.0, True
 
 
+def _function_flags(document: PackageDocument, fn: FunctionAnalysis) -> int | None:
+    """FunctionFlags from the function export's tagged property bag, if carried."""
+    if not fn.object_id.startswith("export:"):
+        return None
+    record = next((o for o in document.objects if o.id == fn.object_id), None)
+    props = record.properties if record is not None else None
+    if props is None:
+        return None
+    entry = props.get("FunctionFlags")
+    value = entry.get("value") if isinstance(entry, dict) else entry
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _signature_from_native_fields(
+    fields: list[Any],
+) -> tuple[str | None, str | None, list[FunctionParameter]]:
+    """Return type + parameters from already-decoded native FProperty declarations."""
+    from uasset_read.kismet.native_fields import native_field_cpp_type
+
+    if not fields:
+        return None, None, []
+    return_field = next((f for f in fields if (f.property_flags or 0) & _CPF_RETURN_PARM), None)
+    return_type = return_field.type_name if return_field is not None else None
+    cpp_return_type = native_field_cpp_type(return_field) if return_field is not None else "void"
+    parameters = [
+        FunctionParameter(
+            name=f.name,
+            type_name=f.type_name,
+            cpp_type=native_field_cpp_type(f),
+            direction=("out" if (f.property_flags or 0) & _CPF_OUT_PARM else "in"),
+            default_value=None,
+            source_range=None,
+        )
+        for f in fields
+        if (f.property_flags or 0) & _CPF_PARM and not (f.property_flags or 0) & _CPF_RETURN_PARM
+    ]
+    return return_type, cpp_return_type, parameters
+
+
 class BlueprintCorrelation:
     """Multi-level correlation over graphs, bytecode, calls, and variables."""
 
@@ -312,23 +458,28 @@ class BlueprintCorrelation:
                 if access.access in {"write", "read_write"}:
                     fn.writes.add(access.name)
         diagnostics.extend(resolver.diagnostics)
+        external_refs = resolver.external_refs()
 
         dispatchers, variable_events = self._extract_dispatchers(graphs)
 
-        function_declarations = [
-            FunctionDeclaration(
-                name=fn.function_name,
-                return_type=None,
-                cpp_return_type=None,
-                parameters=[],
-                flags=None,
-                native_fields=[],
-                source_range=_region_or_none(fn.script_source_range),
-                unresolved=fn.script_source_range is None,
+        function_declarations = []
+        for fn in functions:
+            if not fn.function_name:
+                continue
+            flags = _function_flags(document, fn)
+            return_type, cpp_return_type, parameters = _signature_from_native_fields(fn.native_fields)
+            function_declarations.append(
+                FunctionDeclaration(
+                    name=fn.function_name,
+                    return_type=return_type,
+                    cpp_return_type=cpp_return_type,
+                    parameters=parameters,
+                    flags=flags,
+                    native_fields=list(fn.native_fields),
+                    source_range=_region_or_none(fn.script_source_range),
+                    unresolved=not fn.native_fields and flags is None,
+                )
             )
-            for fn in functions
-            if fn.function_name
-        ]
 
         constructors, constructor_diags = self._extract_constructors(document, owner, graphs, parent_class, components)
         diagnostics.extend(constructor_diags)
@@ -363,6 +514,7 @@ class BlueprintCorrelation:
             control_flow=control_flow,
             exec_chains=exec_chains,
             diagnostics=diagnostics,
+            external_refs=external_refs,
         )
 
     # ------------------------------------------------------------------ inputs
@@ -990,6 +1142,7 @@ class _InstructionWalker:
             if not fallback_name.startswith(("export:", "import:", "unresolved:")):
                 target_name = fallback_name
         object_id, resolved_name, method, confidence, unresolved = self.resolver.resolve_call(target_name, stack)
+        _ref, ref_key = self.resolver.external_ref(query=target_name, object_id=object_id, match_method=method)
         function_name = resolved_name or name or fallback_name
         if not function_name:
             function_name = f"{self.fn.function_name}@{stmt}"
@@ -1009,6 +1162,8 @@ class _InstructionWalker:
                 match_method=method,
                 confidence=confidence,
                 unresolved=unresolved,
+                target_ref_key=ref_key,
+                source_node_reason=(None if source is not None else DEBUG_MAPPING_UNAVAILABLE),
             )
         )
 
@@ -1049,6 +1204,7 @@ class _InstructionWalker:
                 match_method=method,
                 confidence=confidence,
                 unresolved=unresolved,
+                source_node_reason=(None if source is not None else DEBUG_MAPPING_UNAVAILABLE),
             )
         )
 
@@ -1178,6 +1334,7 @@ def project_semantic_blueprint(
             for e in semantic.entrypoints
         ],
         "graphs": [project_blueprint_graph(g) for g in semantic.graphs],
+        "external_refs": [item.to_dict() for item in semantic.external_refs],
         "functions": [project_function_analysis(fn) for fn in semantic.functions],
         "calls": [
             {
@@ -1186,11 +1343,13 @@ def project_semantic_blueprint(
                 "owner_object_id": c.owner_object_id,
                 "statement_index": c.statement_index,
                 "source_node_id": str(c.source_node_id) if c.source_node_id else None,
+                "source_node_reason": c.source_node_reason,
                 "serialized_start": c.serialized_start,
                 "serialized_end": c.serialized_end,
                 "match_method": c.match_method,
                 "confidence": c.confidence,
                 "unresolved": c.unresolved,
+                "target_ref_key": c.target_ref_key,
                 "execution_mode": c.execution_mode,
             }
             for c in semantic.calls
@@ -1203,6 +1362,7 @@ def project_semantic_blueprint(
                 "owner_object_id": v.owner_object_id,
                 "statement_index": v.statement_index,
                 "source_node_id": str(v.source_node_id) if v.source_node_id else None,
+                "source_node_reason": v.source_node_reason,
                 "serialized_start": v.serialized_start,
                 "serialized_end": v.serialized_end,
                 "match_method": v.match_method,
