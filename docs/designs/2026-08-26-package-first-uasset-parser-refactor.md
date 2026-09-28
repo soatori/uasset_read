@@ -98,7 +98,7 @@ remain separate deferred implementation work.
 - `.uasset` 写回或二进制等价重建。
 - UE1/UE2/UE3 通用兼容承诺。
 - 默认内嵌纹理、音频或任意大型 BulkData。
-- 把 Blueprint/Kismet 分析或 C++ projection 作为核心 package 读取成功的前置条件。旧 v2 C++ 伪代码链保持退役；v3 typed projection 是后置、可选、可诊断的输出能力。
+- 把 Blueprint/Kismet 分析或 C++ projection 作为核心 package 读取成功的前置条件。旧 v2 C++ 伪代码链保持退役；typed C++ projection 已随 2026-09-28 v4 amendment 退役（不再是输出能力），Blueprint 静态 IR/CFG/correlation 仍是当前语义输出。
 - 为每个资产类预先建立独立接口、工厂和目录。
 - 为尚无真实样本或 UE 源码证据的格式建立猜测性解析器。
 
