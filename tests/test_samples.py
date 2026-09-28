@@ -6,8 +6,8 @@ ceilings, containers, and sidecars. The collection budget (<=100 suite-wide
 items) lives in tests/conftest.py; size and module-count ratchets live in
 tests/test_size_baseline.py.
 
-This file deliberately feeds duck-typed stub archives/exports to internal helpers, so the
-strict-object rules are off here; ``src/uasset_read`` remains the pyright gate (ci.yml).
+Only SimpleNamespace diagnostics stubs reach internal helpers now (no duck-typed
+archives/exports), so strict-object rules are off; ``src/uasset_read`` is the pyright gate (ci.yml).
 """
 
 # pyright: reportArgumentType=false, reportAttributeAccessIssue=false
@@ -56,11 +56,7 @@ CAPABILITIES = (
     (
         "FirstPerson_DT_WeaponList.uasset",
         "DataTable",
-        {
-            "kind": "data_table",
-            "row_count": 3,
-            "row_names": ["GrenadeLauncher", "Pistol", "Rifle"],
-        },
+        {"kind": "data_table", "row_count": 3, "row_names": ["GrenadeLauncher", "Pistol", "Rifle"]},
         "complete",
     ),
     (
@@ -996,7 +992,8 @@ def test_quality_baseline_gate_behavior():
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv("UASSET_QUALITY_OPT_IN", "1")
         assert _quality_baseline_include_opt_in() is True
-    assert _quality_baseline_include_opt_in() is False
+        mp.delenv("UASSET_QUALITY_OPT_IN", raising=False)
+        assert _quality_baseline_include_opt_in() is False
 
 
 def _quality_baseline_include_opt_in() -> bool:
@@ -1023,9 +1020,11 @@ def test_quality_baseline_diagnostics():
     names = _quality_baseline_sample_names(_quality_baseline_include_opt_in())
     assert names, "quality_baseline.json must list at least one default sample"
     for sample_name in names:
-        doc = parse_package_document(str(SAMPLES / sample_name), depth="asset")
-        page = project_document(doc)
-        jsonschema.validate(page, SCHEMA)
+        try:
+            doc = parse_package_document(str(SAMPLES / sample_name), depth="asset")
+            jsonschema.validate(project_document(doc), SCHEMA)
+        except Exception as exc:
+            raise AssertionError(f"{sample_name}: quality baseline parse/schema failed: {exc}") from exc
         _assert_quality_baseline(doc, sample_name)
 
 
