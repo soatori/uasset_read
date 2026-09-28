@@ -12,7 +12,7 @@
 | 已归档仓库级方案 | [`docs/designs/archive/README.md`](../designs/archive/README.md)，仅用于历史追溯 |
 | 当前用户能力 | [`README.md`](../../README.md)，随后核对源码与测试 |
 | UE 格式事实 | [`docs/formats/uasset/Index.md`](../formats/uasset/Index.md) 和 UE 源码 |
-| 当前公共 API（v2） | [`src/uasset_read/__init__.py`](../../src/uasset_read/__init__.py)（`__all__`）与 `src/uasset_read/package.py`（`parse_package_document`） |
+| 当前公共 API（v4） | [`src/uasset_read/__init__.py`](../../src/uasset_read/__init__.py)（`__all__`）与 `src/uasset_read/package.py`（`parse_package_document`） |
 
 ## 判断顺序
 
@@ -24,25 +24,25 @@
 
 ## 当前与目标边界
 
-- 三个入口（CLI 默认、Python API、Agent tool）的输出均为 PackageDocument v2，唯一顶层 format 为 `uasset_read.package`；legacy Semantic 1.x JSON 与 v1 pipeline 已删除，`--legacy-json`/`--markdown`/`--diff`/`--list-formats` 作为 retired flag 直接报错退出（见 `cli.py` retired 集合与 Issue #643）。`--batch` 仍然有效（`cli.py:151` 解析，`:387` 分派）。
+- 三个入口（CLI 默认、Python API、Agent tool）的输出均为 PackageDocument v4（`format_version: "4.0"`，恰好 `normal`/`debug` 两种模式，单包单完整文档），唯一顶层 format 为 `uasset_read.package`；legacy Semantic 1.x JSON 与 v1 pipeline 已删除，`--legacy-json`/`--markdown`/`--diff`/`--list-formats` 作为 retired flag 直接报错退出（见 `cli.py` retired 集合与 Issue #643）。`--batch`/`--batch-format` 已随 2026-09-28 v4 输出修正退役（CLI 显式拒绝）。
 - `extract_payload` 对带 sidecar（`.uexp`/`.ubulk`）的 cooked 包执行真实字节提取（BulkData header 解析 + 结构化错误）。无 sidecar 的包返回 `PAYLOAD_EXTRACTION_DEFERRED`（见 `docs/designs/2026-08-31-payload-extraction-path.md`）。
-- 默认 `semantic` 视图不携带 `serial_region`/`properties`（归 `raw`/`debug`）；depth >= object 时 semantic 携带紧凑的 `properties_summary`（names + 标量，容器仅保留长度，无 raw 字节，#636）。`project_document` 默认 envelope 始终包含 `relations`/`dependencies`（无 `sections=`/`fields=` 参数；依赖条目携带 `package_name`，#632）。
-- 正式测试契约为 sample-first 两文件基线：`tests/test_samples.py`（manifest 驱动的真实样本驱动：manifest 闭合、66 项样本 parse、golden、capability、quality、容器与 sidecar 聚合检查）与 `tests/test_size_baseline.py`（体积 + 2 模块上限门禁）；全树收集项至多 100（`tests/conftest.py` 收集预算 hook）。无 `tests/contract/`、`tests/serialization/` 与其他测试模块；临时调查走未跟踪 `temp/`。
-- 当前 v2 使用 package-first `PackageDocument`（legacy + tagged properties + sample-backed handlers 已实现；Zen/IoStore deferred；unversioned 为 usmap 驱动的 partial 路径，未映射尾部显式 opaque，payload extraction 已实现，见 docs/designs/README.md），输出所有 objects。
+- v4 没有 view/depth 公共输出模式：`project_document(document, *, mode=...)` 是唯一信封生产者（`normal` 含全部有序属性与安全解码值；`debug` 增加证据块，剥离证据并归一 `mode` 后与 `normal` 逐字节等价）。envelope 始终包含 `relations`/`dependencies`（依赖条目携带 `package_name`，#632）。parse 深度是 `parse_package_document(depth=...)` 的解析输入，不是输出面。
+- 正式测试契约为 sample-first 两文件基线：`tests/test_samples.py`（manifest 驱动的真实样本驱动：manifest 闭合、66 项样本 parse、raw version/layout、v4 normal/debug schema/parity、golden、capability、quality、容器、sidecar 与最小边界聚合检查）与 `tests/test_size_baseline.py`（体积 + 2 模块上限门禁）；全树收集项至多 100（`tests/conftest.py` 收集预算 hook）。无 `tests/contract/`、`tests/serialization/` 与其他测试模块；广泛临时调查走未跟踪 `temp/`。
+- 当前 v4 使用 package-first `PackageDocument`（legacy + tagged properties + sample-backed handlers 已实现；Zen/IoStore deferred；unversioned 为 usmap 驱动的 partial 路径，未映射尾部显式 opaque，payload extraction 已实现，见 docs/designs/README.md），输出所有 objects。
 - 当前 Pak/IoStore、日志和 Agent 能力不得按目标设计提前宣称完成。
-- **契约稳定性（S1，2026-09-13）：** `format_version: "2.0"` 对 stable 域已冻结；破坏性变更才 bump major。`objects[].properties` / `semantic` / `coverage` 与顶层 `payloads` 为 experimental（schema `x-stability`）——**不得**作为跨版本 golden 的稳定断言面。
+- **契约稳定性：** 当前冻结契约为 `docs/designs/contract/package_document_v4.schema.json`（`format_version: "4.0"`，2026-09-28 冻结；S1 的 `"2.0"` 与 v3 的 `"3.0"` 均已淘汰）；破坏性变更才 bump major。诊断与 experimental 字段**不得**作为跨版本 golden 的稳定断言面。
 - 旧领域 Semantic 文档可用于理解 v0.5.5，但不得继续扩展为新的顶层 format。
 
 ## 按任务定位
 
 | 任务 | 入口 |
 | --- | --- |
-| 当前解析管线（v2 package document） | `src/uasset_read/package.py`（`parse_package_document`）, `src/uasset_read/parsers/legacy_reader.py` |
-| 当前 v2 语义 handler | `src/uasset_read/parsers/asset_types/handlers_impl.py`, `src/uasset_read/parsers/asset_types/`；1.x 格式页 [`semantic-json.md`](../formats/uasset/semantic-json.md) 仅供 historical 参考 |
+| 当前解析管线（v4 package document） | `src/uasset_read/package.py`（`parse_package_document`）, `src/uasset_read/parsers/legacy_reader.py` |
+| 当前语义 handler | `src/uasset_read/parsers/asset_types/handlers_impl.py`, `src/uasset_read/parsers/asset_types/`；1.x 格式页 [`semantic-json.md`](../formats/uasset/semantic-json.md) 仅供 historical 参考 |
 | Package/sidecar/provider | `src/uasset_read/package.py` |
 | 版本上下文 | `src/uasset_read/versioning.py`, `src/uasset_read/serializers/package_summary.py` |
 | 属性解析 | `src/uasset_read/serializers/property_tags.py`, `src/uasset_read/parsers/` |
-| Blueprint/Kismet | `src/uasset_read/kismet/`（#642 永久内部化：v2 实现细节，不承诺公共 API）, `src/uasset_read/serializers/graph*.py` |
+| Blueprint/Kismet | `src/uasset_read/kismet/`（#642 永久内部化：内部实现细节，不承诺公共 API）, `src/uasset_read/serializers/graph*.py` |
 | Archive / SourceInfo | `src/uasset_read/archive.py`（`FArchive`, `ByteArchive`, `SourceInfo`；Source/FileSource/SliceReader 协议族已于 2026-09-10 删除） |
 | Pak / IoStore 读取 | **未实现**（deferred：Zen/IoStore #624，`.pak` #625） |
 | 日志 | 无（Gate L 2026-09-10 退役：project_logging.py 已删除；库只返回 structured diagnostics） |

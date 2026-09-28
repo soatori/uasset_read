@@ -2,16 +2,15 @@
 
 > **状态：路由页。** 此处原先描述的旧 JSON renderer 与 package schema 已不是当前实现，也不是目标架构，因此旧字段说明已移除。
 
-## 当前（v3）
+## 当前（v4）
 
-三个入口（CLI 默认、Python API、Agent tool）共用同一 package-first `PackageDocument`，唯一顶层 format 为 `uasset_read.package`，`format_version: 3.0`（有意的 breaking rewrite，契约见 [`package_document_v3.schema.json`](../../designs/contract/package_document_v3.schema.json)）：
+三个入口（CLI 默认、Python API、Agent tool）共用同一 package-first `PackageDocument`，唯一顶层 format 为 `uasset_read.package`，`format_version: 4.0`（2026-09-28 v4 amendment，冻结契约见 [`package_document_v4.schema.json`](../../designs/contract/package_document_v4.schema.json)）：
 
-- [Package-first UAsset parser refactor](../../designs/2026-08-26-package-first-uasset-parser-refactor.md) — Output Contract 以 `format_version: "3.0"` 为唯一目标
-- [Complete static UAsset parsing and Blueprint C++ projection](../../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md) — v3 spec（单文档输出、内嵌 `projections[]` 与硬边界 `sidecars[]`）
-- 实现：`projection.py` 决定顶层字段与 view/depth（`FORMAT_VERSION = "3.0"`），`models/document.py` 定义 `PackageDocument`，`models/object_model.py` 定义 `ObjectRecord`/`ObjectStatus`，`parsers/legacy_reader.py` 为 Legacy reader
+- [Package-first UAsset parser refactor](../../designs/2026-08-26-package-first-uasset-parser-refactor.md) — Output Contract 以 `format_version: "4.0"` 为唯一目标；恰好 `normal`/`debug` 两个模式，每输入包一份完整文档，无分页/字节预算层
+- 实现：`projection.py` 决定顶层字段与 `mode`（`FORMAT_VERSION = "4.0"`），`models/document.py` 定义 `PackageDocument`，`models/object_model.py` 定义 `ObjectRecord`/`ObjectStatus`，`parsers/legacy_reader.py` 为 Legacy reader
 - 每个 export 都保留在 `objects[]` 中，不存在单 primary export 选择。
 
-历史：`format_version: "2.0"` 的 stable-envelope 冻结（S1）已被 v3 取代，归档于 [`docs/designs/archive/2026-08-31-v2-contract-stability.md`](../../designs/archive/2026-08-31-v2-contract-stability.md)；v2 契约文件已删除。
+历史：`format_version: "2.0"` 的 stable-envelope 冻结（S1）与 v3 契约均已淘汰（v3 契约文件已在 v4 冻结时删除），归档于 [`docs/designs/archive/2026-08-31-v2-contract-stability.md`](../../designs/archive/2026-08-31-v2-contract-stability.md)。
 
 ## 已删除
 

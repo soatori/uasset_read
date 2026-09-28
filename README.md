@@ -4,9 +4,9 @@
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
-> 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 69 source files · 21 registered semantic asset handlers
+> 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 72 source files · 21 registered semantic asset handlers
 
-> **Refactor status:** package-first architecture with intentional v3 break: default CLI/API output is one canonical package document with envelope `format_version: "3.0"` (`projection.FORMAT_VERSION`; contract `docs/designs/contract/package_document_v3.schema.json`). Static Blueprint graph / Kismet instruction IR / CFG / correlation live under `objects[].semantic` (dict at the document boundary). Embedded type-aware `projections[]` cover Blueprint C++ declaration/migration, Material editor-builder, DataTable/CurveTable/struct/enum data, and physical asset metadata/payload references. Payload extraction from cooked sidecars remains available via `extract_payload`. Zen/IoStore full package decoding is outside the current product target; existing TOC metadata only reports the boundary truthfully. Editor `.usmap` unversioned fixtures remain a bounded partial path, while cooked/Zen unversioned is outside the product target. Semantic 1.x JSON remains removed. Landed on `dev-0.6.0` @ merge `8727b067` after controller review; the current full suite and the quality gates pass.
+> **Refactor status:** package-first architecture; current output is the v4 package document — one canonical envelope with `format_version: "4.0"` (`projection.FORMAT_VERSION`; frozen contract `docs/designs/contract/package_document_v4.schema.json`), exactly two modes (`normal` default, `debug` adds evidence only), one full document per package with no pagination or byte budget. Static Blueprint graph / Kismet instruction IR / CFG / correlation live under `objects[].semantic` (dict at the document boundary). Embedded type-aware `projections[]` cover Material editor-builder, DataTable/CurveTable/struct/enum data, and physical asset metadata/payload references (typed Blueprint C++ projection was retired by the 2026-09-28 v4 amendment). Payload extraction from cooked sidecars remains available via `extract_payload`. Zen/IoStore full package decoding is outside the current product target; existing TOC metadata only reports the boundary truthfully. Editor `.usmap` unversioned fixtures remain a bounded partial path, while cooked/Zen unversioned is outside the product target. Semantic 1.x JSON remains removed. The structure/size/quality baselines are gated by `tests/`.
 
 ## Why uasset_read?
 
@@ -24,7 +24,7 @@ Whether you're auditing blueprint dependencies, building tooling for game develo
 
 | Metric | Value |
 | -------- | ------- |
-| Version | v0.5.4.45 (last tagged) / 0.6.0-dev (v3 default) |
+| Version | v0.5.4.45 (last tagged) / 0.6.0-dev (v4 default) |
 | Source | Python parser for Unreal Engine .uasset files |
 | Modules | package-first modules incl. `kismet`, `models`, `parsers`, `projections`, `serializers` |
 | Tests | current full suite and quality gates pass; structure/size/quality baselines gated |
@@ -32,19 +32,19 @@ Whether you're auditing blueprint dependencies, building tooling for game develo
 
 ## Features
 
-### v3 Architecture (package-first)
+### v4 Architecture (package-first)
 
-> Default output is the package document with `format_version: "3.0"`: `python -m uasset_read file.uasset` or `parse_package_document()`. The v1 pipeline (Semantic 1.x JSON, `--legacy-json`, `--markdown`, `--diff`, `--list-formats`) was removed; those flags are rejected as unsupported. Batch mode is available via `--batch`. See `tests/samples/manifest.json` for tracked fixtures.
+> Default output is the package document with `format_version: "4.0"`: `python -m uasset_read file.uasset` or `parse_package_document()`. The v1 pipeline (Semantic 1.x JSON, `--legacy-json`, `--markdown`, `--diff`, `--list-formats`) was removed; those flags are rejected as unsupported. Output has exactly two modes: `normal` (default) and `--debug`. See `tests/samples/manifest.json` for tracked fixtures.
 
 - **PackageDocument** — one document per .uasset, all exports as first-class objects
 - **Legacy / Zen readers** — separate format boundaries; Zen/IoStore package-body decoding is outside the current product target, while TOC metadata remains a truthful boundary check
 - **Multi-asset support** — all exports preserved, no `_select_primary_export()` filtering
 - **Tagged / unversioned properties** — separate sole-entry readers; unversioned is schema-backed / explicit opaque
-- **v3 JSON contract** — `uasset_read.package` envelope with `projections`/`sidecars`, view/depth/selection/pagination/byte-budget
+- **v4 JSON contract** — `uasset_read.package` envelope with `format_version: "4.0"`, exactly `normal`/`debug` modes, one full document per package (no pagination or byte budget)
 - **Static Blueprint analysis** — graph IR, Kismet instruction IR + CFG, correlation (`entrypoints`/`calls`/`variable_accesses`/`control_flow`) under `objects[].semantic` (dict)
-- **Type-aware projections** — embedded `cpp_declaration`/`cpp_migration`, material editor-builder, table/curve/struct/enum data, asset metadata/payload refs via `ProjectorRegistry`
-- **Agent tools** — `inspect_package`, `list_objects`, `get_object`, `list_dependencies`, `get_diagnostics`, `extract_payload`
-- **Projection** — semantic/raw/debug views, depth filtering, max_bytes enforcement; canonical file API is `write_projected_document`
+- **Type-aware projections** — embedded material editor-builder, table/curve/struct/enum data, asset metadata/payload refs via `ProjectorRegistry`
+- **Agent tools** — `inspect_package`, `extract_payload`
+- **Projection** — `project_document(document, mode=...)` is the sole envelope producer (`normal` / `debug`); `write_projected_document` writes it to disk; parse depth is a `parse_package_document(depth=...)` input, not an output surface
 - **Handlers** — DataTable, UserDefinedEnum, UserDefinedStruct, Texture2D, TextureCube, SoundWave, Skeleton, StaticMesh, Material, Niagara, Blueprint/AnimBlueprint (graph/node/pin + declaration + SCS + VarType + Kismet IR/CFG on editor-saved fixtures; native C++ bodies are never recovered)
 - **Unversioned properties** — editor-only mapping-driven path: `LegacyPackageReader(mappings_path=...usmap)` plus `BP_UnversionedTest` / `DA_UnversionedTest`. Unmapped or unreliable tails become explicit `UnversionedOpaque`; cooked/Zen unversioned and a general `SchemaProvider` are outside the product target.
 
@@ -93,7 +93,7 @@ print(project_document(doc))  # PackageDocument JSON dict
 
 ### Output Formats
 
-- **Package document JSON (`format_version: "3.0"`)** — one document per package covering every export, projected to a bounded page by `--depth` / `--limit` / `--max-bytes`. Embedded type-aware `projections[]` ride in the same document. The Python API, CLI and Agent tools all project from this same `PackageDocument`.
+- **Package document JSON (`format_version: "4.0"`)** — one document per package covering every export, produced in exactly two modes: `normal` (default) and `debug` (adds an evidence block; stripping it reproduces `normal`). Embedded type-aware `projections[]` ride in the same document. The Python API, CLI and Agent tools all project from this same `PackageDocument`.
 
 Markdown output and Semantic 1.x JSON went away with the v1 pipeline and are **wontfix** (issue #643): the package document schema replaces the old format, and with one format there is nothing for a format registry to list.
 
@@ -110,27 +110,17 @@ This is required for `python -m uasset_read` to resolve the package entry point.
 ### CLI
 
 ```bash
-python -m uasset_read path/to/file.uasset              # package document JSON (format_version 3.0) to stdout
-python -m uasset_read path/to/file.uasset --output output.json   # canonical file via write_projected_document
-
-# Depth control
-python -m uasset_read path/to/file.uasset --depth package   # Headers only
-python -m uasset_read path/to/file.uasset --depth object    # With properties
-python -m uasset_read path/to/file.uasset --depth asset     # Semantic view (default)
-python -m uasset_read path/to/file.uasset --depth decode     # Full decode
+python -m uasset_read path/to/file.uasset              # package document JSON (format_version 4.0) to stdout
+python -m uasset_read path/to/file.uasset -o out.json  # canonical file via write_projected_document
+python -m uasset_read path/to/file.uasset --debug      # debug evidence mode (normal + evidence block)
 
 # Strictness
 python -m uasset_read path/to/file.uasset                # Continue on recoverable errors (default)
 python -m uasset_read path/to/file.uasset --strict       # Stop on warnings
 
-# Result budgeting (applies at any depth)
-python -m uasset_read path/to/file.uasset --depth decode --limit 20         # Cap objects returned
-python -m uasset_read path/to/file.uasset --depth decode --max-bytes 4096   # Cap the serialized response
-
-# Advanced options
+# Parse controls (not output surfaces)
 python -m uasset_read path/to/file.uasset --mappings path/to/usmap  # Load .usmap type mappings
 python -m uasset_read path/to/file.uasset --game NAME               # Enable game-specific property readers
-python -m uasset_read path/to/file.uasset --list-package-files      # List the package files discovered
 ```
 
 ### Logging Parameters
@@ -144,7 +134,7 @@ The package-document API is the only parse entry point (v1 pipeline was removed)
 ```python
 from uasset_read import parse_package_document
 
-# Parse a .uasset file → PackageDocument (format_version 3.0 envelope)
+# Parse a .uasset file → PackageDocument (format_version 4.0 envelope)
 doc = parse_package_document("path/to/file.uasset")
 
 # With options
@@ -161,9 +151,9 @@ import json
 from uasset_read.projection import project_document
 print(json.dumps(project_document(doc), indent=2))
 
-# CLI usage
+# CLI usage (the CLI always parses at depth="decode")
 # python -m uasset_read file.uasset
-# python -m uasset_read file.uasset --depth decode
+# python -m uasset_read file.uasset --debug
 ```
 
 ### Module-level API
@@ -185,7 +175,7 @@ Full API list: see `src/uasset_read/__init__.py` and `wiki/07-Dev-Guide/Public-A
 
 ## Architecture
 
-Data flow is the v2 package-first pipeline defined in the [canonical refactor design](docs/designs/2026-08-26-package-first-uasset-parser-refactor.md):
+Data flow is the package-first pipeline defined in the [canonical refactor design](docs/designs/2026-08-26-package-first-uasset-parser-refactor.md):
 
 ```text
 .uasset → archive → parsers/legacy_reader (Legacy container reader; Zen/IoStore full decode outside product target)
@@ -205,7 +195,7 @@ Shared readers behind that document: `kismet/` (bytecode → expressions + diagn
 | Constants | `constants.py` | Version numbers, property type thresholds, PropertyTag flags |
 | Exceptions | `exceptions.py` | UAssetError, VersionError, ParseError, ErrorContext |
 | Package Mgmt | `package.py` | `PackageBundle`, `FileSystemPackageProvider`, `PackageArchive`, `open_package_bundle` |
-| CLI | `cli.py` | argparse entry point; emits the v2 document page, or the retired-flag error |
+| CLI | `cli.py` | argparse entry point; emits the v4 package document (`normal`/`debug`), or the retired-flag error |
 | Versioning | `versioning.py` | `VersionContext`, `build_version_context_from_summary` |
 | Mappings | `mappings.py` | UE type mappings (`.usmap` parsing; `.jmap` removed 2026-09-10) |
 | Memory Safety | `memory_safety.py` | `ResourceBudget` read/decompress checkpoints, `MemoryLimitExceeded` |
@@ -215,13 +205,16 @@ Shared readers behind that document: `kismet/` (bytecode → expressions + diagn
 | ├ Asset Types | `parsers/asset_types/` | `handlers_impl.py` — 21 registered semantic handler instances |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → expressions, decompile bridge, BPGC fallback, UFunction script reader (C++ translator retired 2026-09-10) |
 | ├ Expressions | `kismet/expressions/` | 15 expression types (assignments, control flow, function calls, literals, casts, delegates, etc.) |
-| **Package Document** | `package.py`, `models/`, `projection.py`, `agent_tools.py` | `parse_package_document` entry, `PackageDocument` / `ObjectRecord`, view/depth projection, agent tools (no `v2/` subpackage — flattened) |
+| **Package Document** | `package.py`, `models/`, `projection.py`, `agent_tools.py` | `parse_package_document` entry, `PackageDocument` / `ObjectRecord`, `normal`/`debug` mode projection, agent tools (no `v2/` subpackage — flattened) |
 
 ## Testing
 
 The tracked baseline is intentionally small: two test modules
 (`tests/test_samples.py`, `tests/test_size_baseline.py`) and at most 100
 collected pytest items (enforced during collection by `tests/conftest.py`).
+The sample driver also gates the v4 normal/debug public contract, manifest raw
+version/layout metadata, and the mandatory bounded-reader/error paths; broader
+experiments remain untracked under `temp/`.
 
 ```bash
 python -m pytest tests/ -v           # Run all tests
@@ -257,10 +250,10 @@ When Unreal Editor 5.8 is released, use the official Experimental Unreal MCP ser
 | Scenario | How uasset_read helps |
 | ---------- | ---------------------- |
 | **Programmatic blueprint analysis** | Parse blueprint data → extract structure → automate inspections |
-| **Blueprint → C++ migration** | typed declaration and migration projections are available today (`cpp_declaration` / `cpp_migration` via `ProjectorRegistry`); the old string-based C++ skeleton generator is permanently retired |
-| **Dependency auditing** | v2 lists imports/exports per package (`list_dependencies`); cross-package cycle and orphan detection are *planned* |
+| **Blueprint → C++ migration** | typed declaration/migration projections were retired by the 2026-09-28 v4 amendment; the old string-based C++ skeleton generator remains permanently retired |
+| **Dependency auditing** | each package document lists its imports/exports (`objects[]` + `dependencies`); cross-package cycle and orphan detection are *planned* |
 | **Mod development** | *planned* — #625 Pak fixture intake is complete, but container extraction remains a separate unsupported capability; today you must extract the `.uasset` first |
-| **Asset pipeline automation** | Use `--batch DIR` to parse all `.uasset` files in a directory; outputs JSONL (one JSON per line) or JSON array with `--batch-format json` |
+| **Asset pipeline automation** | *planned* — the v4 CLI parses one package per invocation; loop over files yourself (e.g. over `tests/samples/manifest.json`) |
 | **Technical debt analysis** | Trace execution flows → identify deeply nested logic → find dead code |
 
 ## Current Limitations
@@ -271,6 +264,6 @@ When Unreal Editor 5.8 is released, use the official Experimental Unreal MCP ser
 - **Read-only**: Parsing only, no modification
 - **UE source reference required**: No official .uasset format documentation
 
-The v2 target removes “editor-saved only” as an architectural assumption, but it cannot restore graph data stripped during cooking. Cooked/Zen support must report the data that actually remains and mark unavailable semantics honestly.
+The package-first target removes “editor-saved only” as an architectural assumption, but it cannot restore graph data stripped during cooking. Cooked/Zen support must report the data that actually remains and mark unavailable semantics honestly.
 
 ---

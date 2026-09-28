@@ -30,7 +30,7 @@ Coupling values: `hard` (same fixtures, same trust boundary), `soft` (shared pro
 | D-SCHEMA ↔ D-PAK | none | Property schema vs pack index. **Seed confirmed.** |
 | D-G2 ↔ D-PLA | soft | S2 Route B: G2 accelerates repeat `extract_payload` calls with zero new parser code; does not create descriptors; key includes `depth`/`object_ids`, so no first-parse speedup. **Seed confirmed.** |
 | D-G2 ↔ all | soft | Pure parse-layer performance contract; no API change; no fixtures. **Seed confirmed.** |
-| D-BATCH ↔ D-DIFF | soft | CLI surface adjacency only. **2026-09-13 correction:** D-BATCH is live on the v2 CLI (`cli.py` `--batch`/`--batch-format`); only D-DIFF remains deferred. No shared orchestration module. |
+| D-BATCH ↔ D-DIFF | soft | CLI surface adjacency only. **2026-09-13 correction:** D-BATCH went live on the then-current CLI (`--batch`/`--batch-format`); only D-DIFF remains deferred. **2026-09-28 v4 correction:** D-BATCH is retired again — the v4 CLI rejects batch flags (see the D-BATCH row above). No shared orchestration module. |
 | D-CPP ↔ D-ZEN | none | Rule 4. **Seed confirmed.** |
 | D-CPP ↔ Wave B blueprint work | soft | Consumes the existing `BlueprintFamilyHandler` object model; because Gate K retired the pseudocode chain, D-CPP would be a new emission design, not a migration. **Seed confirmed.** |
 | D-PLA ↔ D-SCHEMA | none | Route A maps trailer/BulkData byte regions; unversioned field schemas would change which bytes are properties, a different trust boundary. (Not in seed; added for completeness.) |
@@ -42,7 +42,7 @@ Coupling values: `hard` (same fixtures, same trust boundary), `soft` (shared pro
 | 1 — Container body | D-ZEN; D-PLA **only** the Zen/IoStore-descriptor variant | **Not scheduled.** Existing TOC metadata remains a truthful boundary; no Zen package-body or chunk decoder will be developed in the current product scope. | None | No further Zen/IoStore body acquisition | Closed |
 | 2 — Property schema | D-SCHEMA alone | **Not scheduled.** Editor-`.usmap` path remains partial/current; cooked-unversioned and generic `SchemaProvider` are outside the product target. | None | No further cooked-unversioned fixture acquisition | Closed |
 | 3 — Workflow CLI | D-DIFF only (D-BATCH is already current) | Pure workflow; never blocks format work (rule 2). | Explicit user product need for schema-compare diff | None (works on existing loose fixtures) | Whenever product asks |
-| 4 — Perf | D-G2 | Free-standing cheap win (rule 3); S2 Route B rides it for free; contract already frozen with no API change. | A real multi-extract consumer path (long-lived process or multi-file session; already present via G2 + `--batch`) | None | Anytime; may land before or after Bundle 1 |
+| 4 — Perf | D-G2 | Free-standing cheap win (rule 3); S2 Route B rides it for free; contract already frozen with no API change. | A real multi-extract consumer path (long-lived process or multi-file session; G2 cache exists, and multi-file sessions must loop the one-package CLI — `--batch` retired 2026-09-28) | None | Anytime; may land before or after Bundle 1 |
 | 5 — Blueprint depth | D-CPP — only on explicit product revival | Rule 4: bundles only with Blueprint semantic-depth work, never with containers or schema. Gate K already retired the C++ pseudocode chain, so revival means a new design. | Explicit product request; a separate emission design | Blueprint fixtures already exist; the missing input is the design, not samples | Lowest priority |
 | Own project | D-PAK | Pack-index trust path ≠ package-body trust path; different fixtures; no shared IoStore trust path appears in docs. Revisit only if a Pak source review finds one. | Pak format source review; `PakEntrySource` implementation; compression/encryption capability reporting | Redistributable `.pak` fixtures | After or independent of Bundle 1 |
 
@@ -66,7 +66,7 @@ A new implementation plan is required before any Bundle N code lands, and it mus
 
 ## Open questions for the user
 
-1. ~~Is there a real multi-file orchestration consumer today for `--batch`?~~ Partially answered 2026-09-13: simple directory-walk `--batch` is **live**; the open question is only whether richer orchestration (isolation, resume, formats beyond jsonl) is ever wanted.
+1. ~~Is there a real multi-file orchestration consumer today for `--batch`?~~ Partially answered 2026-09-13: a simple directory-walk `--batch` was briefly live; **2026-09-28 v4 correction:** the batch output surface is retired, so the question is moot until batch is reconsidered as a workflow feature (richer orchestration — isolation, resume, formats beyond jsonl — remains open if ever wanted).
 2. ~~What is `--diff`'s comparison target — two `PackageDocument`s, or document vs golden?~~ **Closed 2026-09-22:** `--diff` is **not** a product CLI target (permanent non-goal F-D). Do not implement.
 3. ~~Is the Blueprint C++ skeleton ever a wanted product feature, or permanently retired alongside Gate K?~~ **Closed 2026-09-22:** old skeleton **permanently retired**; see residual decisions.
 4. ~~Should the known-missing `.ucas` gap (#624 test failures) become the formal Bundle 1 fixture goal, or wait for a separately redistributable Zen package?~~ **Closed 2026-09-27:** Zen/IoStore package-body work is outside the product target.

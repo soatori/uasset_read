@@ -10,8 +10,9 @@ Use this page to avoid mixing current implementation documentation with the targ
 | Target parser architecture | [`designs/2026-08-26-package-first-uasset-parser-refactor.md`](designs/2026-08-26-package-first-uasset-parser-refactor.md) |
 | Active design status | [`designs/README.md`](designs/README.md) |
 | Archived designs and executed plans | [`designs/archive/README.md`](designs/archive/README.md) |
-| Current output contract (v2 `uasset_read.package`) | [`formats/output/README.md`](formats/output/README.md) |
+| Current output contract (v4 `uasset_read.package`) | [`formats/output/README.md`](formats/output/README.md) |
 | Agent development rules | [`AGENTS.md`](../AGENTS.md) and [`reference/agent-dev-reference.md`](reference/agent-dev-reference.md) |
+| Issue tracking / triage conventions | [`reference/issue-tracker.md`](reference/issue-tracker.md), [`reference/triage-labels.md`](reference/triage-labels.md), [`reference/domain.md`](reference/domain.md) |
 | Unreal package format facts | [`formats/uasset/Index.md`](formats/uasset/Index.md) plus UE source |
 | Historical Semantic JSON 1.x format record | [`formats/uasset/semantic-json.md`](formats/uasset/semantic-json.md) — **not current**; v1 pipeline removed |
 | Release history | [`release-notes/`](release-notes/) |

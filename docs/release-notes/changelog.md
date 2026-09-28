@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Contract
-- **`format_version: "3.0"` is the current package-document envelope** (landed on `dev-0.6.0` via merge `8727b067`, 2026-09-21). Contract: `docs/designs/contract/package_document_v3.schema.json`. Prior S1 freeze of `"2.0"` (2026-09-13) is superseded by the intentional v3 break: one canonical document per package with embedded type-aware `projections[]` and optional `sidecars[]` schema. Breaking changes to the envelope bump major again.
+- **`format_version: "4.0"` is the current package-document envelope** (v4 amendment, 2026-09-28; contract `docs/designs/contract/package_document_v4.schema.json`). Exactly two output modes (`normal`, `debug`), one full document per package parsed at `depth="decode"`, no pagination/byte-budget output surface, C++ projection retired. Supersedes the intentional v3 break (`"3.0"`, merge `8727b067`, 2026-09-21 — its contract file was deleted at the v4 freeze), which itself superseded the S1 freeze of `"2.0"` (2026-09-13). Breaking changes to the envelope bump major again.
 
 ### Breaking Changes
 - Removed five CLI flags that argparse accepted but no code read: `--log-level`, `--log-cleanup` / `--no-log-cleanup`, `--log-max-bytes`, `--log-backup-count`, `--log-format`. (The then-remaining `--clean-logs` chain was later retired in Gate L below.)
