@@ -17,6 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from uasset_read.models.byte_ranges import ByteRegion
+
 
 @dataclass
 class FEdGraphPinType:
@@ -44,6 +46,9 @@ class UEdGraphPin:
     direction: int = 0
     pin_type: FEdGraphPinType | None = None
     linked_to_raw: list[dict] = field(default_factory=list)
+    # Package-virtual serialization span of this pin (header + body); evidence
+    # only — never projected onto pin dicts (v4 normal carries no offsets).
+    serial_range: ByteRegion | None = None
     # Retained non-write-only identity fields (Task 6 losslessness).
     default_value: str | None = None
     default_object_ref: int | None = None

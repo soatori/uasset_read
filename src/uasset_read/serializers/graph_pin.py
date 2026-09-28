@@ -23,6 +23,7 @@ from uasset_read.constants import (
 from uasset_read.exceptions import ParseError
 from uasset_read.versioning import RELEASE_GUID, ftext_dev_notes_enabled, get_custom_version
 from uasset_read.models.core import UEdGraphPin, FEdGraphPinType
+from uasset_read.models.byte_ranges import ByteRegion
 
 from uasset_read.serializers.graph_helpers import (
     _read_guid,
@@ -126,11 +127,15 @@ def read_pin_array(
     archive: FArchive,
     export_map: list[ObjectExport],
     import_map: list[ObjectImport],
+    *,
+    retain_nulls: bool = False,
 ) -> list[dict]:
     """Read Pin reference array (SerializePinArray format).
 
     Corrupt or out-of-range counts fail closed with ParseError — no
-    sliding-window salvage of a misaligned stream.
+    sliding-window salvage of a misaligned stream. ``retain_nulls`` keeps
+    serialized null slots (LinkedTo path only) as ``{"null": True, ...}``
+    records with their byte range; every entry carries ``ref_range``.
     """
     array_count = archive.read_i32()
 
@@ -143,8 +148,16 @@ def read_pin_array(
     for _ in range(array_count):
         ref_pos = archive.tell()
         pin_ref = read_pin_reference(archive)
+        ref_end = archive.tell()
         if pin_ref is None:
+            if retain_nulls:
+                pins.append(
+                    {"owning_node": None, "pin_guid": None, "null": True, "ref_range": (ref_pos, ref_end)}
+                )
             continue  # null marker consumed its 4-byte header only
+        pin_ref["ref_range"] = (ref_pos, ref_end)
+        if retain_nulls:
+            pin_ref["null"] = False
         owning_node = pin_ref["owning_node"]
         max_valid_index = len(export_map) + (len(import_map) if import_map else 0) + 50  # Allow some margin
         if owning_node != 0 and abs(owning_node) >= max_valid_index:
@@ -214,6 +227,7 @@ def read_ue_graph_pin(
     import_map: list[ObjectImport],
     header_owning_node: int | None = None,
     header_pin_id: str | None = None,
+    serial_start: int | None = None,
 ) -> UEdGraphPin:
     """Read UEdGraphPin full serialization format (UE5.7 specific).
 
@@ -225,6 +239,8 @@ def read_ue_graph_pin(
     Write-only UEdGraphPin fields keep their archive.read_*() cursor steps but
     are not stored on the model.
     """
+    start = archive.tell() if serial_start is None else serial_start
+
     # 1. OwningNode - D-12: internal duplicate; header path reads the same 4 bytes
     archive.read_i32()
 
@@ -266,7 +282,7 @@ def read_ue_graph_pin(
     default_text = _read_pin_ftext_field(archive, "DefaultTextValue", dev_notes=dev_notes, summary=summary)
 
     # 13. LinkedTo array
-    linked_to = read_pin_array(archive, export_map, import_map)
+    linked_to = read_pin_array(archive, export_map, import_map, retain_nulls=True)
 
     # 14. SubPins array
     sub_pins_raw = read_pin_array(archive, export_map, import_map)
@@ -289,12 +305,14 @@ def read_ue_graph_pin(
     # 18. BitField (EditorOnly) — uint32 in both UE4 and UE5 (EdGraphPin.cpp L1902)
     archive.read_u32()
 
+    end = archive.tell()
     return UEdGraphPin(
         pin_id=pin_id,
         pin_name=pin_name,
         direction=direction,
         pin_type=pin_type,
         linked_to_raw=linked_to,
+        serial_range=ByteRegion(start, max(end - start, 0), "decoded", feature="blueprint.pin"),
         default_value=default_value,
         default_object_ref=default_object_ref if default_object_ref else None,
         default_text=default_text,

@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from uasset_read.models.byte_ranges import ByteRegion, project_region
 from uasset_read.serializers.node_data_project import project_node_data as _project_node_data
 
 if TYPE_CHECKING:
@@ -279,7 +280,49 @@ def _graph_to_dict(graph: Any, export_idx: int, class_name: str) -> dict[str, An
         "truncated": {"nodes": node_truncated, "pins": pin_truncated},
         "parse_errors": parse_errors,
         "_pin_links": _collect_pin_links_recursive(graph),
+        "_pin_ranges": _pin_ranges_of(graph),
     }
+
+
+def _pin_ranges_of(graph: Any) -> dict[tuple[str, str], ByteRegion]:
+    """(node id, pin id) -> serialization span, for target_pin_range lookups."""
+    out: dict[tuple[str, str], ByteRegion] = {}
+    for container in (graph, *graph.subgraphs):
+        for node in container.nodes:
+            node_id = f"export:{node._export_index - 1}" if getattr(node, "_export_index", 0) else ""
+            for pin in node.pins:
+                if node_id and pin.pin_id and pin.serial_range is not None:
+                    out[(node_id, str(pin.pin_id))] = pin.serial_range
+    return out
+
+
+def _owner_object_id(raw_owner: Any) -> str | None:
+    """Serialized FPackageIndex -> stable object id (positive export, negative import)."""
+    if isinstance(raw_owner, int) and raw_owner > 0:
+        return f"export:{raw_owner - 1}"
+    if isinstance(raw_owner, int) and raw_owner < 0:
+        return f"import:{-raw_owner - 1}"
+    return None
+
+
+def _connection_type(category: Any) -> str:
+    """Source-pin category -> connection_type enum (source side only)."""
+    text = str(category or "")
+    if text == "exec":
+        return "exec"
+    if text in {"delegate", "mcdelegate"}:
+        return "delegate"
+    if text:
+        return "data"
+    return "unknown"
+
+
+def _ref_region(bounds: Any) -> ByteRegion | None:
+    if isinstance(bounds, tuple) and len(bounds) == 2 and all(isinstance(v, int) for v in bounds):
+        start, end = bounds
+        if end >= start:
+            return ByteRegion(start, end - start, "decoded", feature="blueprint.pin_reference")
+    return None
 
 
 def _collect_pin_links(graph: Any) -> list[dict[str, Any]]:
@@ -289,38 +332,41 @@ def _collect_pin_links(graph: Any) -> list[dict[str, Any]]:
     ``{"owning_node": <raw FPackageIndex int>, "pin_guid": <target 32-hex>}``
     — the *target's* owning node and GUID (verified on the tracked fixtures);
     the source is the pin owning the list. Each record carries the owning
-    pin's own id (``from_pin``) plus the target identity fields.
+    pin's own id (``from_pin``) plus the target identity fields, the source
+    pin category, and the raw byte ranges needed for GraphLinkDebugEvidence.
     """
     links: list[dict[str, Any]] = []
     for node in graph.nodes:
         for pin in node.pins:
+            category = str(pin.pin_type.pin_category) if pin.pin_type else ""
             for entry in pin.linked_to_raw:
                 links.append(
                     {
                         "from_node": getattr(node, "_export_index", 0),  # 1-based
                         "from_pin": str(pin.pin_id),
-                        "to_pin": str(entry.get("pin_guid", "")),
+                        "to_pin": str(entry["pin_guid"]) if entry.get("pin_guid") else None,
                         "to_owning_node": entry.get("owning_node"),
+                        "null": bool(entry.get("null")),
+                        "source_category": category,
+                        "source_pin_range": pin.serial_range,
+                        "ref_range": entry.get("ref_range"),
                     }
                 )
     return links
 
 
 def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:
-    """Resolve every graph's GUID-keyed links to (to_node, to_pin), in place.
+    """Resolve every graph's GUID-keyed links and retain one record per slot.
 
-    Target lookup uses the (owning_node, pin_guid) key first. Because
-    ``_graph_to_dict`` flattens subgraphs, the same pin GUID can legitimately
-    appear under several node ids package-wide; the owner key disambiguates
-    those duplicates. A GUID-only fallback runs only when the owner is
-    unavailable *and* exactly one candidate carries the GUID. Zero candidates
-    or multiple candidates without an owner are unresolved: they increment
-    ``unresolved_links`` (and ``ambiguous_links`` for the multi-candidate
-    case) — never resolved to an arbitrary last duplicate. The reader pass
-    turns those counters into diagnostics. Consumes and deletes
-    ``_pin_links``; sets ``edge_count`` to the number of resolved *link
-    records* (bidirectional pairs count twice). That is not the same as
-    ``summarize_exec_edges``'s unique undirected exec-only ``edges`` list.
+    Emits ``graph["links"]``: exactly one raw record per serialized
+    ``LinkedTo`` slot — resolved, unresolved, ambiguous, import-owned, or
+    null. Target lookup and the counters keep their historical semantics
+    (owner key first; GUID-only fallback only when the owner is unavailable
+    and exactly one candidate carries the GUID); pin ``linked`` adjacency,
+    ``edge_count``, ``unresolved_links`` and ``ambiguous_links`` stay derived
+    views of the same walk. Raw records carry bare export ids; the typed
+    decoder adds the owner prefix required by the schema GraphId/NodeId
+    patterns. Consumes and deletes ``_pin_links`` and ``_pin_ranges``.
     """
     # The emitter inlines subgraph nodes into their owning graph's ``nodes``
     # list (see ``_graph_to_dict``), so an emitted graph dict carries no
@@ -338,49 +384,87 @@ def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:
     # Flatten repeated (node, pin) entries from multi-graph appearances.
     by_guid = {k: list(dict.fromkeys(v)) for k, v in by_guid.items()}
 
+    pin_ranges: dict[tuple[str, str], ByteRegion] = {}
+    for graph in graphs:
+        pin_ranges.update(graph.pop("_pin_ranges", None) or {})
+
     for graph in graphs:
         graph["unresolved_links"] = 0
         graph["ambiguous_links"] = 0
         edge_count = 0
+        records: list[dict[str, Any]] = []
         for rec in graph.pop("_pin_links", []):
-            guid = rec["to_pin"]
+            guid = rec.get("to_pin")
             raw_owner = rec.get("to_owning_node")
-            # Negative FPackageIndex = import. The target is outside this
-            # package's export table — never resolve it to a local GUID match.
-            if isinstance(raw_owner, int) and raw_owner < 0:
-                graph["unresolved_links"] += 1
-                continue
-            owner = f"export:{raw_owner - 1}" if isinstance(raw_owner, int) and raw_owner > 0 else None
+            source_node_export = f"export:{rec['from_node'] - 1}"
+            source_pin_guid = str(rec.get("from_pin") or "")
             target: tuple[str, str] | None = None
-            if owner is not None:
-                # The owner key names at most one (node, pin) entry — the map
-                # is keyed by exactly that tuple.
+            target_node_export: str | None = None
+
+            if rec.get("null"):
+                status, reason = "unresolved", "null_link_reference"
+            elif isinstance(raw_owner, int) and raw_owner < 0:
+                # Negative FPackageIndex = import: outside this package's
+                # export table — never resolve it to a local GUID match.
+                status, reason = "unresolved", "target_owner_is_import"
+            elif isinstance(raw_owner, int) and raw_owner > 0:
+                owner = f"export:{raw_owner - 1}"
+                target_node_export = owner
                 if (owner, guid) in owner_pins:
                     target = (owner, guid)
+                    status, reason = "resolved", "owner_and_guid_match"
                 else:
-                    # Zero candidates: the owner names a node the projection
-                    # does not carry.
-                    graph["unresolved_links"] += 1
-                    continue
+                    status, reason = "unresolved", "target_pin_not_found"
             else:
                 candidates = by_guid.get(guid, [])
                 if len(candidates) == 1:
                     target = candidates[0]
+                    target_node_export = target[0]
+                    status, reason = "resolved", "unique_guid_without_owner"
                 elif len(candidates) > 1:
-                    graph["unresolved_links"] += 1
-                    graph["ambiguous_links"] += 1
-                    continue
+                    status, reason = "ambiguous", "multiple_guid_candidates_without_owner"
                 else:
-                    graph["unresolved_links"] += 1
-                    continue
-            edge_count += 1
-            source_node_id = f"export:{rec['from_node'] - 1}"
+                    status, reason = "unresolved", "no_candidate_for_guid"
+
+            records.append(
+                {
+                    "_source_node_export": source_node_export,
+                    "source_pin_guid": source_pin_guid,
+                    "target_owner_id": _owner_object_id(raw_owner),
+                    "_target_node_export": target_node_export,
+                    "target_pin_guid": str(guid) if guid else None,
+                    "connection_type": _connection_type(rec.get("source_category")),
+                    "status": status,
+                    "reason": reason,
+                    "debug_evidence": {
+                        "raw_source_owner_package_index": rec["from_node"],
+                        "raw_target_owner_package_index": raw_owner if isinstance(raw_owner, int) else None,
+                        "raw_source_pin_guid": source_pin_guid,
+                        "raw_target_pin_guid": str(guid) if guid else None,
+                        "source_pin_range": project_region(rec.get("source_pin_range")),
+                        "target_reference_range": project_region(_ref_region(rec.get("ref_range"))),
+                        "target_pin_range": (
+                            project_region(pin_ranges.get(target)) if target is not None else None
+                        ),
+                    },
+                }
+            )
+
+            if status == "resolved":
+                edge_count += 1
+            else:
+                graph["unresolved_links"] += 1
+                if status == "ambiguous":
+                    graph["ambiguous_links"] += 1
+            if target is None:
+                continue
             for node in graph["nodes"]:
-                if node["id"] != source_node_id:
+                if node["id"] != source_node_export:
                     continue
                 for pin in node["pins"]:
                     if pin["id"] == rec["from_pin"]:
                         pin["linked"].append({"to_node": target[0], "to_pin": target[1]})
+        graph["links"] = records
         graph["edge_count"] = edge_count
 
 

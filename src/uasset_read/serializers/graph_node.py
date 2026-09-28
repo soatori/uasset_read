@@ -276,6 +276,7 @@ def _read_node_pins(
 
     pins: list[UEdGraphPin] = []
     for _ in range(pins_count):
+        pin_start = archive.tell()
         b_null_ptr = archive.read_i32()
 
         if b_null_ptr != 0:
@@ -296,6 +297,7 @@ def _read_node_pins(
                 import_map,
                 header_owning_node=header_owning,
                 header_pin_id=header_pin_id,
+                serial_start=pin_start,
             )
         except (ParseError, struct.error, OSError, ValueError, KeyError) as exc:
             # A mid-array pin failure leaves the cursor untrusted: fail the
