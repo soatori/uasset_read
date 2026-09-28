@@ -2,6 +2,8 @@
 
 status: superseded (historical)
 
+> **Archive banner（2026-09-29）：** 本设计已从 `docs/designs/` 移入 `archive/`（status: superseded）。历史证据，不得指导新实现；冲突时以[权威 package-first 设计](../2026-08-26-package-first-uasset-parser-refactor.md)及其 2026-09-28 v4 output amendment 为准。
+>
 > **2026-09-28 superseded notice:** the v4 output amendment retired this whole
 > layering. The single v4 producer (`project_document(document, *, mode=...)`)
 > has no pagination, byte-budget, or truncation layer; `_project_envelope` /

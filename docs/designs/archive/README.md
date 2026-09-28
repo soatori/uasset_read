@@ -20,7 +20,8 @@ Source code and tests determine current behavior. The package-first report is th
 | `2026-08-15-material-semantic-json-plan.md` | Material Semantic 1.x implementation plan | Current source/tests for v0.5.5; canonical report for v2 |
 | `2026-08-17-datatable-semantic-json-design.md` | DataTable Semantic 1.x design | Current source/tests for v0.5.5; canonical report for v2 |
 | `2026-08-17-remaining-uasset-semantic-design.md` | Remaining Semantic 1.x domain design | Current source/tests for v0.5.5; canonical report for v2 |
-| `2026-08-31-v2-contract-stability.md` | S1 stable-envelope freeze of `format_version: "2.0"` (executed 2026-09-13) | Intentional v3 break: canonical report Output Contract + `../contract/package_document_v3.schema.json` (`format_version: "3.0"`) |
+| `2026-08-31-v2-contract-stability.md` | S1 stable-envelope freeze of `format_version: "2.0"` (executed 2026-09-13) | Intentional v3 break, itself superseded by the 2026-09-28 v4 amendment: canonical report Output Contract + `../contract/package_document_v4.schema.json` (`format_version: "4.0"`) |
+| `2026-08-31-projection-layering.md` | G4 projection → truncation → serialization layering of the v3 envelope (implemented 2026-09-26, historical record only) | Retired by the 2026-09-28 v4 amendment: single v4 `project_document(document, *, mode=...)` producer has no pagination, byte-budget, or truncation layer; canonical report Output Contract |
 | `core-extras-layering.md` | Earlier Core/Extras lazy-import boundary | Canonical report: Asset Handlers and dependency boundaries |
 | `output-refactor.md` | Earlier monolithic JSON output proposal | Canonical report: package envelope, views, depth, and pagination |
 | `2026-09-08-ponytail-audit-cleanup-plan.md` | Executed whole-repo ponytail cleanup plan | Source/tests; residual notes in 2026-09-12/13 archived records |

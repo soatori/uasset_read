@@ -140,7 +140,7 @@ wheel 干净构建实测为 224,983 bytes，CI ceiling 为 300,000 bytes。
 1. **Canonical**：任何改变 repository-wide target 的决策先改 canonical design，再改实现。本计划不能用“产品决策”一句话覆盖 canonical。
 2. **Logging**：canonical 当前要求显式文件日志能力与 dry-run 清理。Gate L 若批准，必须更新其 Logging and Debugging、Decisions、测试策略和 Source Pointers，不只是删一个文件名。
 3. **Kismet/C++**：Gate K 已先修改 canonical 的 Decision、Phase 4/迁移完成条件和 README 当前能力说明；bytes → expressions + diagnostics 仍是可选扩展，C++ 文本生成器已 retired。
-4. **G4** [`../2026-08-31-projection-layering.md`](../2026-08-31-projection-layering.md)：projection 的 view/depth/selection/pagination/max_bytes/truncation 行为不变。
+4. **G4** [`2026-08-31-projection-layering.md`](2026-08-31-projection-layering.md)：projection 的 view/depth/selection/pagination/max_bytes/truncation 行为不变。（2026-09-29 归档路径修正：该设计现位于同目录 `archive/`。）
 5. **S1** [`2026-08-31-v2-contract-stability.md`](2026-08-31-v2-contract-stability.md)：`objects[].semantic` 是 experimental。其内部字段删除 **不 bump `format_version`**，但必须记录 breaking note 并同步消费者文档。
 6. **G2/S2**：Agent cache 与 payload extraction 契约在 Agent 产品面退役前仍绑定。
 7. **#623/#624/#625**：deferred 不等于 canceled。mappings/IoStore/Pak 前置 issue 与 fixture/manifest 声明必须同步处置。
