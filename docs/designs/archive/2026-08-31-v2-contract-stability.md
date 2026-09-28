@@ -34,7 +34,7 @@ status: superseded
 | `diagnostics`（条目结构） | stable | 必填四键定型（schema `:305-351`）；`code` 取值集合是开放集，**新增 code 不算破坏** |
 | `summary` | stable | 键定型（schema `:365-393`） |
 | `next_offset` / `truncation` / `debug` | stable | 截断可发现性契约（canonical §Selection 与 Pagination） |
-| `payloads` | **experimental** | Descriptor 来源与 `status` 语义仍可演进（cooked sidecar 提取已实现，见 [`2026-08-31-payload-extraction-path.md`](2026-08-31-payload-extraction-path.md)）；schema 已标 `x-stability` |
+| `payloads` | **experimental** | Descriptor 来源与 `status` 语义仍可演进（cooked sidecar 提取已实现，见 [`../2026-08-31-payload-extraction-path.md`](../2026-08-31-payload-extraction-path.md)）；schema 已标 `x-stability` |
 
 ### `objects[]`（schema `:162-224`）
 

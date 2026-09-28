@@ -25,7 +25,7 @@ These sit beside the canonical target on purpose. Each carries its own `status:`
 | — | [`2026-09-13-t15-t13-research-decision.md`](2026-09-13-t15-t13-research-decision.md) | current | Research decision only (**no implementation**). Constrains future T15/T13 work. |
 | — | [`2026-09-15-parser-quality-system.md`](2026-09-15-parser-quality-system.md) | target | Diagnostic.reason taxonomy + sample quality baseline gates. |
 | — | [`../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md`](../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md) | superseded (typed C++ target / v3 envelope) + current (static Blueprint IR/CFG scope) | Typed C++ projection and `format_version: "3.0"` are retired targets (2026-09-28 v4 amendment). Static Blueprint IR/CFG/correlation requirements remain current and bind the companion Blueprint plan. Supersedes the archived S1 v2 stable-envelope freeze. |
-| — | [`../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md`](../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md) | historical / executed | Tasks 1–12 landed on `dev-0.6.0`; this is execution evidence, not an active target or an executable plan. |
+| — | [`../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md`](../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md) (plan `../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md` was local-only and no longer exists) | historical / executed | Tasks 1–12 landed on `dev-0.6.0`; this is execution evidence, not an active target or an executable plan. |
 
 ## Executed plans (archive)
 
@@ -41,7 +41,7 @@ Execution records retained under `../superpowers/plans/` are also evidence only 
 
 ## v3 Execution Evidence
 
-- [`../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md`](../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md) — Tasks 1–12 implemented on `dev-0.6.0` after merge `8727b067` (controller review pass; the recorded 444-passed full suite is historical post-merge evidence, not the current count); historical evidence only.
+- `../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md` (local-only plan, no longer present; surviving record is [`../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md`](../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md)) — Tasks 1–12 implemented on `dev-0.6.0` after merge `8727b067` (controller review pass; the recorded 444-passed full suite is historical post-merge evidence, not the current count); historical evidence only.
 
 ## Rules
 

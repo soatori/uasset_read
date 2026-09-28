@@ -31,4 +31,4 @@ See `AGENTS.md` and `.claude/rules/constraints.md`. Key points: package-first ar
 - `docs/designs/`, `docs/reference/`, `docs/release-notes/`: Design, reference, and release documentation
 - `docs/designs/2026-08-26-package-first-uasset-parser-refactor.md`: authoritative target architecture
 - `docs/designs/README.md`: status of active designs; executed plans live under `docs/designs/archive/`
-- Issue tracking: GitHub Issues (`gh` CLI); see `docs/agents/issue-tracker.md`
+- Issue tracking: GitHub Issues (`gh` CLI); see `docs/reference/issue-tracker.md`

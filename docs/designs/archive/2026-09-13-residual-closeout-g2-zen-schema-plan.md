@@ -62,7 +62,7 @@
 3. **S1 三项落地动作：**
    - schema payload id 漂移**已修**（`^payload:(export|import):[0-9]+$`）；
    - `x-stability: experimental` 标注**未做**；
-   - `docs/agents/` experimental 消费指引**未做**；
+   - `docs/reference/`（原 `docs/agents/`，2026-09-28 归整移入）experimental 消费指引**未做**；
    - Phase 6 后 **`format_version: 2.0` 冻结声明未发出**。
 4. **batch 口径漂移：** `cli.py` live `--batch`/`--batch-format`；README / agent-dev-reference / wiki CLI 页已正确；`2026-08-31-v1-retirement-plan.md` §5 与 `2026-09-13-deferred-capability-bundling.md` D-BATCH 仍写 deferred。
 5. **G2：** 契约已冻结；`parse_package_document` 仍无缓存；六工具各自重 parse。
@@ -85,7 +85,7 @@
 - Modify: `docs/designs/contract/package_document_v2.schema.json`（experimental `$defs` 加 `x-stability`）
 - Modify: `docs/designs/2026-08-31-v2-contract-stability.md`（status、落地动作勾选、payload 漂移注记为已修）
 - Modify: `docs/designs/README.md`（S1 行 status → current；仍 bind 的规则）
-- Modify: `docs/agents/issue-tracker.md` 或新建短节：experimental 键不得进跨版本 golden
+- Modify: `docs/reference/issue-tracker.md`（原 `docs/agents/issue-tracker.md`）或新建短节：experimental 键不得进跨版本 golden
 - Modify: `README.md`（Refactor status 补一句 format_version 冻结）
 - Modify: `docs/release-notes/changelog.md`（Unreleased 段记 freeze）
 
@@ -118,14 +118,14 @@
 
 - [x] **Step A1.3: 消费方指引**
 
-在 `docs/agents/issue-tracker.md`（或 `agent-dev-reference.md` 的工作规范节）增加一条：
+在 `docs/reference/issue-tracker.md`（原 `docs/agents/issue-tracker.md`；或 `agent-dev-reference.md` 的工作规范节）增加一条：
 
 > `objects[].properties` / `semantic` / `coverage` 与顶层 `payloads` 是 experimental：不得作为跨版本 golden 的稳定断言面；stable 信封字段见 S1。
 
 - [x] **Step A1.4: Commit A1**
 
 ```powershell
-git add docs/designs/contract/package_document_v2.schema.json docs/designs/2026-08-31-v2-contract-stability.md docs/designs/README.md docs/agents/ README.md docs/release-notes/changelog.md
+git add docs/designs/contract/package_document_v2.schema.json docs/designs/2026-08-31-v2-contract-stability.md docs/designs/README.md docs/reference/ README.md docs/release-notes/changelog.md
 git commit -m "docs: freeze PackageDocument 2.0 stable contract and annotate experimental fields"
 ```
 

@@ -31,6 +31,7 @@ Source code and tests determine current behavior. The package-first report is th
 | `2026-09-13-next-phase-closeout-and-deferred-gates.md` | Executed A1–D1 closeout (merged to `dev-0.6.0`) | Deferred work: `../2026-09-13-deferred-capability-bundling.md` |
 | `2026-09-13-residual-closeout-g2-zen-schema-plan.md` | Executed Wave A/B residual closeout (G2 cache, S1 freeze, wiki Gate C local) | Deferred work: `../2026-09-13-deferred-capability-bundling.md` |
 | `2026-09-13-ponytail-byteswap-thin-wrappers.md` | Executed byteswap / thin-wrapper residual wave | Source/tests; BE packages remain rejected |
+| `issue-305-dead-code-cleanup.md` | Closed-issue dead-code cleanup and `--tolerant` removal migration notes (2026-07-27; moved from `docs/release-notes/`) | Source/tests; v1 renderer/CLI paths deleted |
 
 ## Archive Rules
 
