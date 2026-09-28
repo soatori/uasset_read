@@ -819,10 +819,10 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - manifest 不能由测试自动改写。新增或修改预期值必须先核对样本与 UE 源码，再由评审确认。
 - 不提交墙钟耗时阈值。性能门禁只使用确定性的 bytes、count、range、pagination 和 resource budget。
 - 测试代码只放在 `tests/`；根目录和 `scripts/` 不增加独立验证程序。一次性调查使用命令行或未跟踪的 `temp/` 输出。
-- 标准库 AST 门禁要求（策略门禁，2026-09-16 Task 1 起替代旧的精确清单/计数锁定）：
-  - `tests/` 根目录的正式 Python 测试文件由 `tests/test_core.py::test_test_suite_structure_gate` 以策略检查锁定：至少存在根目录 `test_*.py` 文件，且必须包含 `test_core.py`（核心单元与结构门禁）、`test_samples.py`（manifest 驱动的真实样本）、`test_size_baseline.py`（体积门禁）；每个根测试文件必须至少收集到一个 `test_*` 函数。不再锁定精确文件清单或精确函数计数，新增测试文件无需改门禁。
-  - 允许的永久子目录为 `tests/samples/` 与 `tests/serialization/`（门禁断言 `{samples, serialization}`，忽略 `__pycache__`）。
-  - `test_core.py` 只能使用顶层 `test_*` 函数；拒绝测试类、参数化 decorator、动态 `test_*` 赋值，从而使 AST 数量等于 pytest 收集项；样本文件的参数化项不设上限。
+- sample-first 两文件基线（2026-09-28，spec：`docs/superpowers/specs/2026-09-28-sample-first-test-baseline-design.md`）：
+  - 正式测试模块至多两个：`tests/test_samples.py`（manifest 驱动的真实样本驱动）与 `tests/test_size_baseline.py`（体积 + 测试文件数门禁）。计数命令为 `git ls-files 'tests/test_*.py' 'tests/**/test_*.py'`（两个 pathspec 都要，顶层模式不匹配嵌套目录），`tests/test_size_baseline.py` 断言结果至多 2 个文件。
+  - pytest 收集项（含参数化）至多 100，由 `tests/conftest.py` 的 collection-budget hook 在收集阶段强制；`python -m pytest -q` 与 CI 走同一命令，无需第二个 runner。
+  - 永久子树仅 `tests/samples/`；不再有 `tests/serialization/` 或其他 `test_*.py`。`tests/conftest.py` 只含收集预算 hook，不承载 fixture。合成字节、malformed 实验与一次性 CLI 检查走未跟踪 `temp/`，不进入基线与 CI。
 - pytest cache、`__pycache__`、日志、golden 调试转储和本机路径不得进入版本控制。
 
 ### 必须存在的回归

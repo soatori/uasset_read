@@ -1,2 +1,2 @@
-# Make ``tests.fixtures`` resolve to this repository when pytest imports
-# ``tests`` as a package (plan File Map: tests/__init__.py).
+# Package marker so ``tests`` resolves as an importable package under
+# pytest's importlib import mode (sample-first baseline).

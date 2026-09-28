@@ -22,8 +22,9 @@ The checkout currently has:
 - `tests/test_core.py` and `tests/test_samples.py` as large mixed test homes.
 - Synthetic byte fixtures, direct parser unit tests, CLI tests, contract tests,
   and real-sample tests mixed across the tree.
-- A size baseline that limits source, test, and documentation lines, but does
-  not enforce a maximum number of test files or collected items.
+- A size baseline that limits source, test, and documentation lines and sets a
+  `tests_python.min_files` floor of 13, but does not enforce a maximum number
+  of test files or collected items.
 - A canonical design rule that requires `test_core.py`, `test_samples.py`, and
   `test_size_baseline.py`, and explicitly allows a serialization test subtree.
 
@@ -37,9 +38,11 @@ The tracked test tree will contain only these pytest test modules:
 
 ```text
 tests/
+  __init__.py                 # package marker for tests.* imports
   conftest.py                 # collection-budget hook only
   test_samples.py             # manifest-driven real-sample baseline
   test_size_baseline.py       # repository and test-suite budget baseline
+  size-baseline.json          # measured ratchet limits
   samples/                    # existing samples and sample metadata
 ```
 
@@ -50,11 +53,16 @@ library is retained.
 
 The hard limits are:
 
-- At most 2 tracked `tests/test_*.py` files.
+- At most 2 tracked test modules, counted with both pathspecs —
+  `git ls-files 'tests/test_*.py' 'tests/**/test_*.py'` — because the
+  top-level-only pattern does not match nested directories.
 - At most 100 collected pytest items, including parameterized items.
 - Existing source, documentation, wheel, and test-tree size ceilings remain
   active; the test-tree ceiling is tightened to the measured post-cleanup
-  value rather than carrying the old 11k-line allowance.
+  value rather than carrying the old 11k-line allowance, and
+  `tests_python.min_files` is lowered from 13 to the measured post-cleanup
+  file count (the floor asserts `count >= min_files`, so the current 13
+  would fail once only four test-tree `.py` files remain).
 - No permanent pytest test subtree other than `tests/samples/`.
 
 The collection budget is enforced during pytest collection so `python -m
@@ -97,8 +105,11 @@ permanent test module merely to preserve a historical unit-test shape.
 ## Baseline and temporary probes
 
 `tests/test_size_baseline.py` retains the existing source/test/docs line and
-tracked-file ratchets and adds the two test-suite limits. It does not parse
-synthetic package bytes or duplicate sample assertions.
+tracked-file ratchet mechanisms with post-cleanup values (including the
+lowered `tests_python.min_files` floor) and adds the tracked test-file limit,
+counted across both `test_*.py` pathspecs. The 100-item budget is enforced
+only by the collection hook, not duplicated here. It does not parse synthetic
+package bytes or duplicate sample assertions.
 
 `tests/conftest.py` contains only the collection-budget hook. It must not grow
 domain fixtures, sample parsers, or compatibility aliases.
@@ -123,7 +134,12 @@ The implementation must update the canonical and user-facing rules together:
 - Keep `.github/workflows/ci.yml` running the normal pytest command; the
   collection hook makes the item limit apply in CI without a second test
   runner. Ruff continues to lint the reduced `tests/` tree.
-- Update `tests/size-baseline.json` with the measured post-cleanup ceilings.
+- Update `tests/size-baseline.json` with the measured post-cleanup ceilings
+  and floors: tighten `tests_python.max_lines` and lower
+  `tests_python.min_files` to the post-cleanup file count.
+- This spec lives under `docs/superpowers/`, which
+  `.github/workflows/ci.yml` forbids on `master`; it is a dev-branch-only
+  document and is not part of the master merge surface.
 
 No production source file is changed as part of this migration. The sample
 files, manifest hashes, golden files, and quality baseline are preserved unless
@@ -157,7 +173,8 @@ The migration is complete when all of the following are true:
 
 - `tests/samples/` sample and metadata files remain present and unchanged in
   content unless an explicitly reviewed expectation update is required.
-- `git ls-files 'tests/test_*.py'` reports exactly two files.
+- `git ls-files 'tests/test_*.py' 'tests/**/test_*.py'` reports exactly two
+  files.
 - `python -m pytest --collect-only -q` collects no more than 100 items and the
   collection hook fails if the limit is exceeded.
 - `python -m pytest -q` passes using only the sample driver and necessary

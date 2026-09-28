@@ -1,16 +1,13 @@
-"""Real-sample contract home: every fixture-touching check lives here.
+"""Sample-first behavior baseline: every tracked check is driven by real samples.
 
-The 64-fixture matrix is manifest-driven and uncapped by design; shared
-parse results are cached per sample so each fixture is parsed once per
-depth. Case bodies folded from the former ``tests/contract/`` layer are
-kept verbatim with the case/sample name in the failure message.
+Manifest-driven parse items (one per package) plus a small set of aggregate
+checks for manifest closure, golden references, capability claims, quality
+ceilings, containers, and sidecars. The collection budget (<=100 suite-wide
+items) lives in tests/conftest.py; size and module-count ratchets live in
+tests/test_size_baseline.py.
 
-Container fixtures (.pak/.utoc/.ucas) are registered under ``containers``
-instead of ``samples`` because they are not PackageDocuments; they get
-their own integrity gate below.
-
-This file deliberately feeds duck-typed stub archives/exports to internal helpers, so the
-strict-object rules are off here; ``src/uasset_read`` remains the pyright gate (ci.yml).
+Only SimpleNamespace diagnostics stubs reach internal helpers now (no duck-typed
+archives/exports), so strict-object rules are off; ``src/uasset_read`` is the pyright gate (ci.yml).
 """
 
 # pyright: reportArgumentType=false, reportAttributeAccessIssue=false
@@ -18,6 +15,7 @@ strict-object rules are off here; ``src/uasset_read`` remains the pyright gate (
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import copy
 from functools import lru_cache
 import hashlib
@@ -58,11 +56,7 @@ CAPABILITIES = (
     (
         "FirstPerson_DT_WeaponList.uasset",
         "DataTable",
-        {
-            "kind": "data_table",
-            "row_count": 3,
-            "row_names": ["GrenadeLauncher", "Pistol", "Rifle"],
-        },
+        {"kind": "data_table", "row_count": 3, "row_names": ["GrenadeLauncher", "Pistol", "Rifle"]},
         "complete",
     ),
     (
@@ -252,12 +246,34 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+@contextmanager
+def _open_sample_archive(sample):
+    """Open a fixture archive and yield (archive, summary, name_map, import_map, export_map)."""
+    from uasset_read.package import open_package_bundle
+    from uasset_read.serializers.object_resources import read_export_map, read_import_map
+    from uasset_read.serializers.package_summary import read_name_table, read_package_summary
+
+    archive = open_package_bundle(str(sample)).open_archive(tolerant=True)
+    try:
+        summary, _ = read_package_summary(archive)
+        name_map = read_name_table(archive, summary)
+        archive.set_name_map(name_map)
+        yield (
+            archive,
+            summary,
+            name_map,
+            read_import_map(archive, summary, name_map),
+            read_export_map(archive, summary, name_map),
+        )
+    finally:
+        archive.close()
+
+
 def _raw_depends_map(sample: str):
     """Re-read ObjectDependsMap through the low-level archive, independent of v2."""
-    from tests.fixtures import open_sample_archive
     from uasset_read.serializers.package_summary import read_depends_map
 
-    with open_sample_archive(SAMPLES / sample) as (archive, summary, _names, _imports, _exports):
+    with _open_sample_archive(SAMPLES / sample) as (archive, summary, _names, _imports, _exports):
         return read_depends_map(archive, summary)
 
 
@@ -323,6 +339,13 @@ def test_manifest_matches_every_real_sample():
         path = SAMPLES / "golden" / entry["name"]
         assert path.stat().st_size == entry["size_bytes"], entry["name"]
         assert _sha256(path) == entry["sha256"], entry["name"]
+    # Zero-asset-role fixture is part of the pinned manifest contract
+    # (was tests/test_samples.py::test_zero_asset_role_fixture_is_manifested).
+    zero = MANIFEST_BY_NAME["uasset_rs_UE410_SimpleRefsSoftRef.uasset"]
+    assert zero["size_bytes"] == 4037
+    assert zero["engine_layout"] == "legacy"
+    assert zero["export_count"] == 6
+    assert zero["b_is_asset_count"] == 0
 
 
 def test_container_fixtures_match_manifest():
@@ -433,115 +456,113 @@ def test_v2_tables_match_independent_golden_reference(entry):
         assert golden["preload"]["total_entries"] == 0, entry["name"]
 
 
-@pytest.mark.parametrize(
-    ("sample", "class_name", "expected", "expected_semantic"),
-    CAPABILITIES,
-    ids=[f"{item[1]}-{item[3]}" for item in CAPABILITIES],
-)
-def test_real_sample_proves_claimed_capability(
-    sample: str, class_name: str, expected: dict[str, object], expected_semantic: str
-):
+def test_real_sample_proves_claimed_capability():
     """Each claimed capability must produce stable semantics from a real fixture.
 
     The status column pins the #629 tier contract: decoded-tier fixtures are
     ``complete``; summary-tier fixtures prove ``partial`` with coverage.
+    Loops the CAPABILITIES table so 27 claims cost one collected item; every
+    assertion message carries ``sample:class_name``.
     """
-    doc = _asset_document(sample)
-    obj = next(item for item in doc.objects if item.class_name == class_name)
-    assert obj.status.semantic == expected_semantic, f"{sample}:{class_name}"
-    assert obj.coverage, f"{sample}:{class_name}"
-    assert {key: obj.semantic[key] for key in expected} == expected, f"{sample}:{class_name}"
+    for sample, class_name, expected, expected_semantic in CAPABILITIES:
+        doc = _asset_document(sample)
+        obj = next(item for item in doc.objects if item.class_name == class_name)
+        assert obj.status.semantic == expected_semantic, f"{sample}:{class_name}"
+        assert obj.coverage, f"{sample}:{class_name}"
+        assert {key: obj.semantic[key] for key in expected} == expected, f"{sample}:{class_name}"
 
-    if class_name == "DataTable":
-        assert obj.semantic["row_count"] == len(obj.semantic["row_names"]) > 0, f"{sample}:{class_name}"
-    elif class_name == "CurveTable":
-        sem = obj.semantic
-        assert sem["row_count"] == len(sem["row_names"]) > 0, f"{sample}:{class_name}"
-        assert sem["curve_table_mode"] in ("SimpleCurves", "RichCurves"), f"{sample}:{class_name}"
-        # complete coverage requires the row block to have been exhausted: residue
-        # would mean an anchor or row-walk drift, which the reader discloses instead.
-        table_cov = next(c for c in obj.coverage if c.feature == "handler.DataTableHandler")
-        assert table_cov.status == "present", f"{sample}:{class_name} table payload not fully decoded"
-    elif class_name == "Skeleton":
-        assert obj.semantic["bone_count"] == len(obj.semantic["bones"]) > 0
-        # ALS_Mannequin_Skeleton's BoneTree is a UE4-era struct array: ONE inner
-        # FPropertyTag then per-element tagged streams (PropertyArray.cpp). Its
-        # FBoneNode element streams carry only the retargeting mode; the actual
-        # bone names live outside the property region (native payload), so the
-        # NameMap regex guess is the honest source and stays summary-tier (#630).
-        assert obj.semantic["bone_source"] == "name_guess"
-        names = {b["name"] for b in obj.semantic["bones"]}
-        assert "spine_01" in names and "clavicle_l" in names
-    elif class_name == "StaticMesh":
-        assert obj.semantic["lod_count"] == len(obj.semantic["lods"])
-    elif class_name in {"BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}:
-        assert not {"nodes", "bytecode", "graph", "graphs"} & obj.semantic.keys()
-        if class_name == "AnimBlueprintGeneratedClass":
-            owner = _graph_owner_id(doc)
-            assert owner is not None, f"{sample}:{class_name} graph owner not found"
-            dec = _decode_document(sample, (owner,))
-            abp = next(o for o in dec.objects if o.id == owner)
-            assert abp.semantic is not None, f"{sample}:{class_name} decode"
-            assert abp.semantic["kind"] == "anim_blueprint"
-            assert abp.semantic.get("graphs"), f"{sample}:{class_name} graphs missing"
-            assert abp.status.semantic == "complete", f"{sample}:{class_name} decode tier"
-            node_ids = {n["id"].split("/")[-1] for g in abp.semantic["graphs"] for n in g["nodes"]}
-            for graph in abp.semantic["graphs"]:
-                for node in graph["nodes"]:
-                    for pin in node["pins"]:
-                        for link in pin["links"]:
-                            # E1 flip: link endpoints are NodeId strings that may
-                            # qualify the node export alone; join on that suffix.
-                            target = link["to_node_id"].split("/")[-1]
-                            assert target in node_ids, f"{sample} dangling link"
-    elif class_name in {"Texture2D", "TextureCube"}:
-        assert isinstance(obj.semantic["srgb"], bool), f"{sample}:{class_name}"
-        assert "compression_settings" in obj.semantic, f"{sample}:{class_name}"
-        feature_names = [c.feature for c in obj.coverage]
-        for feature in ("texture.kind", "texture.texture_type", "texture.srgb", "texture.compression_settings"):
-            assert feature in feature_names, f"{sample}:{class_name} missing coverage {feature}"
-        twin = copy.deepcopy(obj)
-        from uasset_read.parsers.asset_types.handlers_impl import TexturePayloadHandler
+        if class_name == "DataTable":
+            assert obj.semantic["row_count"] == len(obj.semantic["row_names"]) > 0, f"{sample}:{class_name}"
+        elif class_name == "CurveTable":
+            sem = obj.semantic
+            assert sem["row_count"] == len(sem["row_names"]) > 0, f"{sample}:{class_name}"
+            assert sem["curve_table_mode"] in ("SimpleCurves", "RichCurves"), f"{sample}:{class_name}"
+            # complete coverage requires the row block to have been exhausted: residue
+            # would mean an anchor or row-walk drift, which the reader discloses instead.
+            table_cov = next(c for c in obj.coverage if c.feature == "handler.DataTableHandler")
+            assert table_cov.status == "present", f"{sample}:{class_name} table payload not fully decoded"
+        elif class_name == "Skeleton":
+            assert obj.semantic["bone_count"] == len(obj.semantic["bones"]) > 0, f"{sample}:{class_name}"
+            # ALS_Mannequin_Skeleton's BoneTree is a UE4-era struct array: ONE inner
+            # FPropertyTag then per-element tagged streams (PropertyArray.cpp). Its
+            # FBoneNode element streams carry only the retargeting mode; the actual
+            # bone names live outside the property region (native payload), so the
+            # NameMap regex guess is the honest source and stays summary-tier (#630).
+            assert obj.semantic["bone_source"] == "name_guess", f"{sample}:{class_name}"
+            names = {b["name"] for b in obj.semantic["bones"]}
+            assert "spine_01" in names and "clavicle_l" in names, f"{sample}:{class_name}"
+        elif class_name == "StaticMesh":
+            assert obj.semantic["lod_count"] == len(obj.semantic["lods"]), f"{sample}:{class_name}"
+        elif class_name in {"BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}:
+            assert not {"nodes", "bytecode", "graph", "graphs"} & obj.semantic.keys(), f"{sample}:{class_name}"
+            if class_name == "AnimBlueprintGeneratedClass":
+                owner = _graph_owner_id(doc)
+                assert owner is not None, f"{sample}:{class_name} graph owner not found"
+                dec = _decode_document(sample, (owner,))
+                abp = next(o for o in dec.objects if o.id == owner)
+                assert abp.semantic is not None, f"{sample}:{class_name} decode"
+                assert abp.semantic["kind"] == "anim_blueprint", f"{sample}:{class_name}"
+                assert abp.semantic.get("graphs"), f"{sample}:{class_name} graphs missing"
+                assert abp.status.semantic == "complete", f"{sample}:{class_name} decode tier"
+                node_ids = {n["id"].split("/")[-1] for g in abp.semantic["graphs"] for n in g["nodes"]}
+                for graph in abp.semantic["graphs"]:
+                    for node in graph["nodes"]:
+                        for pin in node["pins"]:
+                            for link in pin["links"]:
+                                # E1 flip: link endpoints are NodeId strings that may
+                                # qualify the node export alone; join on that suffix.
+                                target = link["to_node_id"].split("/")[-1]
+                                assert target in node_ids, f"{sample} dangling link"
+        elif class_name in {"Texture2D", "TextureCube"}:
+            assert isinstance(obj.semantic["srgb"], bool), f"{sample}:{class_name}"
+            assert "compression_settings" in obj.semantic, f"{sample}:{class_name}"
+            feature_names = [c.feature for c in obj.coverage]
+            for feature in ("texture.kind", "texture.texture_type", "texture.srgb", "texture.compression_settings"):
+                assert feature in feature_names, f"{sample}:{class_name} missing coverage {feature}"
+            twin = copy.deepcopy(obj)
+            from uasset_read.parsers.asset_types.handlers_impl import TexturePayloadHandler
 
-        result = TexturePayloadHandler().enrich(twin, "package", doc.objects, None)
-        if class_name == "TextureCube":
-            # TextureCube doesn't have ImportedSize property, so result is None
-            assert result is None, f"{sample}:{class_name}"
-        else:
-            # May be None if ImportedSize is absent or empty
-            if result is not None:
-                payload = result["payload"]
-                assert payload["kind"] == "texture_mip"
-                assert payload["source_region"] == "main"
-                assert isinstance(payload["width"], int) and isinstance(payload["height"], int)
-                # Payload must never contain raw bytes
-                assert "raw_bytes" not in payload
-            payload_features = [c for c in obj.coverage if c.feature == "texture.payload"]
-            assert len(payload_features) == 1, f"{sample}:{class_name}"
-            assert payload_features[0].status in ("present", "partial")
-    elif class_name == "SoundWave":
-        handler_features = [c for c in obj.coverage if c.feature == "handler.SoundHandler"]
-        assert len(handler_features) == 1, f"{sample}:{class_name}"
-    elif class_name == "PhysicsAsset":
-        # Instanced bodies are real package exports; raw CollisionDisableTable
-        # trailer stays a disclosed gap at the parse layer too (#638).
-        assert len(obj.semantic["bodies"]) == obj.semantic["body_count"] == 19, f"{sample}:{class_name}"
-        features = {c.feature: c.status for c in obj.coverage}
-        assert features["physics_asset.bodies"] == "present", f"{sample}:{class_name}"
-        assert features["physics_asset.collision_disable_table"] == "missing", f"{sample}:{class_name}"
-        assert any(d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" for d in doc.diagnostics), (
-            f"{sample}:{class_name} must disclose the undecoded raw trailer"
-        )
-    elif class_name == "PhysicalMaterial":
-        # Editor defaulted the four floats out of the tag stream: "missing"
-        # coverage is correct UE behavior, not a parser failure.
-        features = {c.feature: c.status for c in obj.coverage}
-        for key in ("friction", "static_friction", "restitution", "density"):
-            assert features[f"physical_material.{key}"] == "missing", f"{sample}:{class_name}"
-            assert f"physical_material.{key}" not in obj.semantic, f"{sample}:{class_name}"
-        assert not any(
-            d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id != "export:0" for d in doc.diagnostics
-        ), f"{sample}:{class_name} has no raw trailer by design (export:0 MetaData excluded)"
+            result = TexturePayloadHandler().enrich(twin, "package", doc.objects, None)
+            if class_name == "TextureCube":
+                # TextureCube doesn't have ImportedSize property, so result is None
+                assert result is None, f"{sample}:{class_name}"
+            else:
+                # May be None if ImportedSize is absent or empty
+                if result is not None:
+                    payload = result["payload"]
+                    assert payload["kind"] == "texture_mip", f"{sample}:{class_name}"
+                    assert payload["source_region"] == "main", f"{sample}:{class_name}"
+                    assert isinstance(payload["width"], int) and isinstance(payload["height"], int), (
+                        f"{sample}:{class_name}"
+                    )
+                    # Payload must never contain raw bytes
+                    assert "raw_bytes" not in payload, f"{sample}:{class_name}"
+                payload_features = [c for c in obj.coverage if c.feature == "texture.payload"]
+                assert len(payload_features) == 1, f"{sample}:{class_name}"
+                assert payload_features[0].status in ("present", "partial"), f"{sample}:{class_name}"
+        elif class_name == "SoundWave":
+            handler_features = [c for c in obj.coverage if c.feature == "handler.SoundHandler"]
+            assert len(handler_features) == 1, f"{sample}:{class_name}"
+        elif class_name == "PhysicsAsset":
+            # Instanced bodies are real package exports; raw CollisionDisableTable
+            # trailer stays a disclosed gap at the parse layer too (#638).
+            assert len(obj.semantic["bodies"]) == obj.semantic["body_count"] == 19, f"{sample}:{class_name}"
+            features = {c.feature: c.status for c in obj.coverage}
+            assert features["physics_asset.bodies"] == "present", f"{sample}:{class_name}"
+            assert features["physics_asset.collision_disable_table"] == "missing", f"{sample}:{class_name}"
+            assert any(d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" for d in doc.diagnostics), (
+                f"{sample}:{class_name} must disclose the undecoded raw trailer"
+            )
+        elif class_name == "PhysicalMaterial":
+            # Editor defaulted the four floats out of the tag stream: "missing"
+            # coverage is correct UE behavior, not a parser failure.
+            features = {c.feature: c.status for c in obj.coverage}
+            for key in ("friction", "static_friction", "restitution", "density"):
+                assert features[f"physical_material.{key}"] == "missing", f"{sample}:{class_name}"
+                assert f"physical_material.{key}" not in obj.semantic, f"{sample}:{class_name}"
+            assert not any(
+                d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id != "export:0" for d in doc.diagnostics
+            ), f"{sample}:{class_name} has no raw trailer by design (export:0 MetaData excluded)"
 
 
 @pytest.mark.parametrize("sample", [entry["name"] for entry in MANIFEST_SAMPLES])
@@ -677,14 +698,6 @@ def test_large_sample_all_exports():
     jsonschema.validate(page, SCHEMA)
 
 
-def test_zero_asset_role_fixture_is_manifested():
-    entry = MANIFEST_BY_NAME["uasset_rs_UE410_SimpleRefsSoftRef.uasset"]
-    assert entry["size_bytes"] == 4037
-    assert entry["engine_layout"] == "legacy"
-    assert entry["export_count"] == 6
-    assert entry["b_is_asset_count"] == 0
-
-
 def test_niagara_fixture_enriched_at_summary_tier():
     """Every Niagara-class object is enriched, but the summary tier stays partial (#629).
 
@@ -700,128 +713,6 @@ def test_niagara_fixture_enriched_at_summary_tier():
         assert o.semantic and o.semantic["kind"] == "niagara", o.id
         assert o.coverage, o.id
         assert o.status.semantic == "partial", (o.id, o.class_name, o.status.semantic)
-
-
-def _synthetic_export(**kwargs):
-    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
-
-    base = dict(
-        class_index=PackageIndex(-1),
-        super_index=PackageIndex(0),
-        outer_index=PackageIndex(0),
-        object_name="Test",
-        object_flags=0,
-        serial_size=0,
-        serial_offset=0,
-    )
-    base.update(kwargs)
-    return ObjectExport(**base)
-
-
-def test_preload_relations_use_ue_ranges_and_sign_semantics():
-    """Per-export preload ranges index the flat summary array; sign maps like FPackageIndex."""
-    from uasset_read.parsers.legacy_reader import _build_preload_relations
-
-    exports = [
-        _synthetic_export(
-            first_export_dependency=0,
-            serialization_before_serialization_dependencies=2,
-            create_before_create_dependencies=1,
-        ),
-        _synthetic_export(first_export_dependency=-1),
-        _synthetic_export(
-            first_export_dependency=3,
-            serialization_before_serialization_dependencies=2,
-        ),
-    ]
-    # raw values: +2 -> export:1, -4 -> import:3, 0 -> null, -1 -> import:0, +1 -> export:0
-    preload = [2, -4, 0, -1, 1]
-
-    relations, diagnostics = _build_preload_relations(preload, exports)
-    edges = {(r.kind, r.from_id, r.to_id) for r in relations}
-    assert edges == {
-        ("preload_of", "export:0", "export:1"),
-        ("preload_of", "export:0", "import:3"),
-        ("preload_of", "export:2", "import:0"),
-        ("preload_of", "export:2", "export:0"),
-    }
-    assert diagnostics == []
-
-
-def test_relation_targets_out_of_range_are_dropped_with_diagnostic():
-    """A relation whose target exceeds the table size is corrupt data, not an edge."""
-    from uasset_read.models.object_model import Relation
-    from uasset_read.parsers.legacy_reader import _validate_relation_targets
-
-    relations = [
-        Relation(kind="outer_of", from_id="export:0", to_id="export:1"),
-        Relation(kind="outer_of", from_id="export:1", to_id="export:67108864"),
-        Relation(kind="class_of", from_id="export:2", to_id="import:5"),
-        Relation(kind="class_of", from_id="export:3", to_id="import:999"),
-    ]
-    kept, diagnostics = _validate_relation_targets(relations, export_count=2, import_count=6)
-    assert [(r.kind, r.from_id, r.to_id) for r in kept] == [
-        ("outer_of", "export:0", "export:1"),
-        ("class_of", "export:2", "import:5"),
-    ]
-    assert len(diagnostics) == 2
-    assert {d.code for d in diagnostics} == {"RELATION_TARGET_OUT_OF_RANGE"}
-    assert {d.object_id for d in diagnostics} == {"export:1", "export:3"}
-    assert all(d.recoverable for d in diagnostics)
-
-
-def test_depends_map_validates_package_index_sign_per_ue_convention():
-    """read_depends_map must range-check positives against exports, negatives against imports."""
-
-    class _StubArchive:
-        def __init__(self, values):
-            self._values = list(values)
-            self._pos = 0
-
-        def seek(self, offset):
-            self._pos = 0
-
-        def read_i32(self):
-            value = self._values[self._pos]
-            self._pos += 1
-            return value
-
-    from types import SimpleNamespace
-
-    from uasset_read.serializers.package_summary import read_depends_map
-
-    summary = SimpleNamespace(depends_offset=1, export_count=3, import_count=5)
-    # export 0 list: +2 -> export:1 (valid), -2 -> import:1 (valid),
-    # +4 -> export:3 (missing, export_count=3), -99 -> import:98 (missing)
-    archive = _StubArchive([4, 2, -2, 4, -99, 0, 0])
-    warnings: list[str] = []
-    result = read_depends_map(archive, summary, warnings=warnings)
-    assert result == [[2, -2, 4, -99], [], []]
-    invalid = [w for w in warnings if "non-existent" in w]
-    assert len(invalid) == 1
-    assert "2 PackageIndex value(s)" in invalid[0]
-
-
-def test_preload_relations_report_invalid_ranges_without_crashing():
-    """Out-of-range preload spans produce a structured diagnostic and are skipped."""
-    from uasset_read.parsers.legacy_reader import _build_preload_relations
-
-    exports = [
-        _synthetic_export(
-            first_export_dependency=2,
-            serialization_before_serialization_dependencies=5,
-        ),
-        _synthetic_export(
-            first_export_dependency=0,
-            serialization_before_serialization_dependencies=1,
-        ),
-    ]
-    relations, diagnostics = _build_preload_relations([3, -2], exports)
-    assert [(r.from_id, r.to_id) for r in relations] == [("export:1", "export:2")]
-    assert len(diagnostics) == 1
-    assert diagnostics[0].code == "PRELOAD_DEPENDENCY_RANGE_INVALID"
-    assert diagnostics[0].object_id == "export:0"
-    assert diagnostics[0].recoverable is True
 
 
 def test_blueprint_fixtures_carry_generated_and_cdo_relations():
@@ -876,11 +767,10 @@ def test_als_graph_owners_resolve_beyond_eight_hops():
     the known BLUEPRINT_GRAPH_OWNER_UNRESOLVED owner-loss diagnostics.
     """
     from uasset_read.package import parse_package_document
-    from tests.fixtures import open_sample_archive
     from uasset_read.serializers.blueprint_graph import read_blueprint_graphs
 
     # Direct extraction: graph count is a fixture regression, owner-independent.
-    with open_sample_archive(SAMPLES / "ALS_AnimBP.uasset") as (
+    with _open_sample_archive(SAMPLES / "ALS_AnimBP.uasset") as (
         archive,
         summary,
         name_map,
@@ -1006,28 +896,24 @@ _UE5_SPLIT_SAMPLES = [
 ]
 
 
-@pytest.mark.parametrize(
-    "sample_entry",
-    _UE5_SPLIT_SAMPLES,
-    ids=[s["name"] for s in _UE5_SPLIT_SAMPLES],
-)
-def test_missing_sidecar_diagnostic(sample_entry):
+def test_missing_sidecar_diagnostic():
     """A split package without its .uexp emits PACKAGE_SIDECAR_MISSING."""
     import shutil
     import tempfile
 
     from uasset_read.package import parse_package_document
 
-    main_path = SAMPLES / sample_entry["name"]
-    with tempfile.TemporaryDirectory() as tmp:
-        dst = Path(tmp) / main_path.name
-        shutil.copy2(main_path, dst)
-        # Do NOT copy the .uexp — simulate missing sidecar.
-        doc = parse_package_document(dst, depth="package")
-        codes = [d.code for d in doc.diagnostics]
-        assert "PACKAGE_SIDECAR_MISSING" in codes, (
-            f"expected PACKAGE_SIDECAR_MISSING for {sample_entry['name']}, got: {codes}"
-        )
+    for sample_entry in _UE5_SPLIT_SAMPLES:
+        main_path = SAMPLES / sample_entry["name"]
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = Path(tmp) / main_path.name
+            shutil.copy2(main_path, dst)
+            # Do NOT copy the .uexp — simulate missing sidecar.
+            doc = parse_package_document(dst, depth="package")
+            codes = [d.code for d in doc.diagnostics]
+            assert "PACKAGE_SIDECAR_MISSING" in codes, (
+                f"expected PACKAGE_SIDECAR_MISSING for {sample_entry['name']}, got: {codes}"
+            )
 
 
 def _assert_quality_baseline(doc, name: str) -> None:
@@ -1066,10 +952,14 @@ def _assert_quality_baseline(doc, name: str) -> None:
         )
 
 
-@pytest.mark.parametrize(
-    ("entry", "diags", "match"),
-    [
-        pytest.param(
+def test_quality_baseline_gate_behavior():
+    """Fail paths and opt-in plumbing of the quality gate itself (was 5 items).
+
+    forbid_unlisted rejects new (code, reason) pairs; max_total_diagnostics
+    rejects overflow; opt-in entries stay out of the default sample set.
+    """
+    cases = [
+        (
             {
                 "forbid_unlisted": True,
                 "max_by_code_reason": {"EXPORT_TRAILING_BYTES_UNCONSUMED": {"editor_only": {"max": 1}}},
@@ -1079,22 +969,31 @@ def _assert_quality_baseline(doc, name: str) -> None:
                 SimpleNamespace(code="NAME_INDEX_OUT_OF_RANGE", reason="recovered_corruption"),
             ],
             "unlisted",
-            id="forbid_unlisted",
         ),
-        pytest.param(
+        (
             {"max_total_diagnostics": 0, "max_by_code_reason": {}},
             [SimpleNamespace(code="EXPORT_TRAILING_BYTES_UNCONSUMED", reason="editor_only")],
             "total diagnostics",
-            id="max_total",
         ),
-    ],
-)
-def test_quality_baseline_fail_paths(monkeypatch, entry, diags, match):
-    """Fail path: forbid_unlisted rejects new pairs; max_total_diagnostics rejects overflow."""
-    name = "__fail_path__"
-    monkeypatch.setitem(QUALITY_BASELINE["samples"], name, {**entry, "forbidden_codes": []})
-    with pytest.raises(AssertionError, match=match):
-        _assert_quality_baseline(SimpleNamespace(diagnostics=diags), name)
+    ]
+    for entry, diags, match in cases:
+        name = "__fail_path__"
+        QUALITY_BASELINE["samples"][name] = {**entry, "forbidden_codes": []}
+        try:
+            with pytest.raises(AssertionError, match=match):
+                _assert_quality_baseline(SimpleNamespace(diagnostics=diags), name)
+        finally:
+            QUALITY_BASELINE["samples"].pop(name, None)
+
+    default_only = {"A.uasset": {"opt_in": False}, "B.uasset": {"opt_in": True}, "C.uasset": {}}
+    assert _quality_baseline_sample_names(False, samples=default_only) == ["A.uasset", "C.uasset"]
+    assert _quality_baseline_sample_names(True, samples=default_only) == ["A.uasset", "B.uasset", "C.uasset"]
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("UASSET_QUALITY_OPT_IN", "1")
+        assert _quality_baseline_include_opt_in() is True
+        mp.delenv("UASSET_QUALITY_OPT_IN", raising=False)
+        assert _quality_baseline_include_opt_in() is False
 
 
 def _quality_baseline_include_opt_in() -> bool:
@@ -1114,54 +1013,19 @@ def _quality_baseline_sample_names(
     return sorted(names)
 
 
-def test_quality_baseline_sample_names_excludes_opt_in_by_default():
-    baseline = {
-        "samples": {
-            "A.uasset": {"opt_in": False},
-            "B.uasset": {"opt_in": True},
-            "C.uasset": {},
-        }
-    }
-    names = _quality_baseline_sample_names(
-        False,
-        samples=baseline["samples"],
-    )
-    assert names == ["A.uasset", "C.uasset"]
-
-
-def test_quality_baseline_sample_names_includes_opt_in_when_enabled():
-    baseline = {
-        "samples": {
-            "A.uasset": {"opt_in": False},
-            "B.uasset": {"opt_in": True},
-        }
-    }
-    names = _quality_baseline_sample_names(
-        True,
-        samples=baseline["samples"],
-    )
-    assert names == ["A.uasset", "B.uasset"]
-
-
-def test_quality_baseline_opt_in_env_flag(monkeypatch):
-    monkeypatch.setenv("UASSET_QUALITY_OPT_IN", "1")
-    assert _quality_baseline_include_opt_in() is True
-    monkeypatch.delenv("UASSET_QUALITY_OPT_IN", raising=False)
-    assert _quality_baseline_include_opt_in() is False
-
-
-@pytest.mark.parametrize(
-    "sample_name",
-    _quality_baseline_sample_names(_quality_baseline_include_opt_in()),
-)
-def test_quality_baseline_diagnostics(sample_name):
+def test_quality_baseline_diagnostics():
     from uasset_read.package import parse_package_document
     from uasset_read.projection import project_document
 
-    doc = parse_package_document(str(SAMPLES / sample_name), depth="asset")
-    page = project_document(doc)
-    jsonschema.validate(page, SCHEMA)
-    _assert_quality_baseline(doc, sample_name)
+    names = _quality_baseline_sample_names(_quality_baseline_include_opt_in())
+    assert names, "quality_baseline.json must list at least one default sample"
+    for sample_name in names:
+        try:
+            doc = parse_package_document(str(SAMPLES / sample_name), depth="asset")
+            jsonschema.validate(project_document(doc), SCHEMA)
+        except Exception as exc:
+            raise AssertionError(f"{sample_name}: quality baseline parse/schema failed: {exc}") from exc
+        _assert_quality_baseline(doc, sample_name)
 
 
 def test_trailing_diagnostics_carry_structured_size():
