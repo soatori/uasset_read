@@ -30,14 +30,18 @@ def test_registry_selects_one_owner_for_each_asset_family(document):
         projections = registry.project_object(document, obj.id)
         assert all(item.source_object_id == obj.id for item in projections)
         assert all(item.status in {"translated", "represented", "untranslated", "unavailable"} for item in projections)
-    assert any(item.kind == "cpp_declaration" for item in registry.project_document(document))
+    for item in registry.project_document(document):
+        assert "cpp" not in item.kind
+        assert "editor_builder" not in item.kind
+        assert not item.media_type.startswith("text/x-c")
 
 
-def test_cooked_material_builder_is_not_reported_as_complete(cooked_material):
+def test_cooked_material_has_no_builder_projection(cooked_material):
+    # Cooked/editor-stripped materials keep their semantic; the retired
+    # editor-builder projection family is gone rather than faked unavailable.
     projections = ProjectorRegistry.default().project_document(cooked_material)
-    builders = [item for item in projections if item.kind == "material_editor_builder"]
-    assert builders
-    assert builders[0].status == "unavailable"
+    assert all("editor_builder" not in item.kind for item in projections)
+    assert all(not item.media_type.startswith("text/x-c") for item in projections)
 
 
 def test_capability_matrix_declares_required_families_and_kinds():
@@ -47,8 +51,13 @@ def test_capability_matrix_declares_required_families_and_kinds():
     assert by_family["curve_table"]["kinds"] == ["curve_table", "curve_table_csv", "curve_table_json"]
     assert "keys" in by_family["curve_table"]["rule"]
     assert by_family["material_instance"]["kinds"] == ["material_instance", "material_parameters"]
-    assert by_family["other_graph_assets"]["kinds"] == ["graph", "asset_builder_cpp"]
+    assert by_family["other_graph_assets"]["kinds"] == ["graph"]
     assert by_family["physical_binary_assets"]["kinds"] == ["asset_metadata", "payload_reference"]
+    assert by_family["user_defined_struct_enum"]["kinds"] == ["defaults_json"]
+    for entry in CAPABILITY_MATRIX:
+        for kind in entry["kinds"]:
+            assert "cpp" not in kind
+            assert "editor_builder" not in kind
 
 
 def test_datatable_projector_copies_evidenced_fields_or_unavailable():
@@ -126,21 +135,20 @@ def test_kind_first_dispatch_does_not_dual_claim_by_class_name():
     )
     records = registry.project_object(_doc([obj]), obj.id)
     assert records
-    assert not any(item.kind == "material_editor_builder" for item in records)
+    assert not any("editor_builder" in item.kind for item in records)
     assert any(item.kind.startswith("data_table") for item in records)
 
 
-def test_blueprint_unavailable_records_keep_relation_dependencies():
+def test_blueprint_family_has_no_dedicated_projection_record():
+    # Blueprint static semantics (IR/CFG/calls/reads/writes) live on
+    # objects[].semantic; the family emits no projection record at all.
     registry = ProjectorRegistry.default()
     obj = _obj("export:0", class_name="Blueprint", semantic=None)
     doc = _doc(
         [obj],
         relations=[Relation(kind="depends_on", from_id="export:0", to_id="import:3")],
     )
-    records = registry.project_object(doc, obj.id)
-    assert records
-    assert all(item.status == "unavailable" for item in records)
-    assert all("import:3" in item.dependencies for item in records)
+    assert registry.project_object(doc, obj.id) == []
 
 
 def test_material_instance_and_physical_family_matrix_behavior():

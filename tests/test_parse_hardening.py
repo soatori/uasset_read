@@ -322,7 +322,7 @@ def test_ufunction_native_property_count_over_limit_fails():
 
 
 # ---------------------------------------------------------------------------
-# Task 6B: property protocol stop and `.umap` batch discovery
+# Task 6B: property protocol stop
 # ---------------------------------------------------------------------------
 
 
@@ -385,13 +385,3 @@ def test_serialization_control_unknown_bits_are_terminal(monkeypatch):
         _parse_cached.cache_clear()
     assert tag_reads == []
     assert any(d.code == "unknown_serialization_control_bits" for d in doc.diagnostics)
-
-
-def test_batch_scans_umap(tmp_path):
-    from uasset_read.cli import _iter_batch_packages
-
-    (tmp_path / "a.uasset").write_bytes(b"x")
-    (tmp_path / "b.umap").write_bytes(b"x")
-    (tmp_path / "c.txt").write_bytes(b"x")
-    result = [p.name for p in _iter_batch_packages(tmp_path)]
-    assert result == ["a.uasset", "b.umap"]

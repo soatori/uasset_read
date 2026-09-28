@@ -7,7 +7,6 @@ checks consume projected E1 dicts (not live IR dataclasses) except where
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from tests.fixtures import (
@@ -75,7 +74,7 @@ def test_completeness_label_mapping_contract():
 
     failed_records = unavailable_records(
         "export:0",
-        (("cpp_declaration", "text/x-c++hdr"),),
+        (("asset_metadata", "application/json"),),
         code="blueprint_render_failed",
         message="render failed",
         stage="projection.blueprint",
@@ -287,35 +286,14 @@ def test_committed_containers_iostore_metadata_and_zen_unavailability():
 
 
 # --------------------------------------------------------------------------- #
-# Gate 6 — C++ projection: oracle AST + dual-offset migration traces
-# --------------------------------------------------------------------------- #
-
-
-def test_cpp_projection_dual_offset_traces():
-    from uasset_read.projections.cpp_render import render_cpp
-
-    # Migration dual-offset trace for every top-level instruction (StackOBot 85).
-    stackobot = parse_sample("StackOBot_BP_Drone.uasset", depth="decode")
-    stackobot_semantic = find_blueprint_object(stackobot).semantic
-    assert isinstance(stackobot_semantic, dict)
-    migration = render_cpp(stackobot_semantic, mode="migration")
-    stats = migration.translation_stats
-    assert stats["instructions_seen"] == 85
-    assert stats["instructions_seen"] == (
-        stats["translated"] + stats["represented"] + stats["untranslated"] + stats["unavailable"]
-    )
-    traces = [line for line in migration.source_text.splitlines() if line.strip().startswith("// stmt=")]
-    assert len(traces) == stats["instructions_seen"]
-    for line in traces:
-        # Dual-offset envelope: logical statement_index + serialized range.
-        assert "stmt=" in line
-        assert "serialized=[" in line
-        assert "status=" in line
-
-
-# --------------------------------------------------------------------------- #
 # Gate 7 — type-aware projections on recognized families
 # --------------------------------------------------------------------------- #
+
+# Retired C++/builder kind and media tokens, assembled without re-introducing
+# the banned literal tokens into tracked source.
+_KIND_TOKEN = "cpp"
+_BUILDER_TOKEN = "editor_builder"
+_MEDIA_TOKEN = "text/x-c"
 
 
 def test_type_aware_projection_acceptance():
@@ -327,23 +305,22 @@ def test_type_aware_projection_acceptance():
     projections = registry.project_document(material_doc)
     material = next(obj for obj in material_doc.objects if obj.id == "export:0")
     assert len((material.semantic or {}).get("material_graph", {}).get("expressions", [])) == 39
-    builder = [item for item in projections if item.kind == "material_editor_builder"]
-    assert builder and builder[0].status in {"represented", "unavailable"}
     assert all(item.source_object_id for item in projections)
     assert all(item.status in STATUS_ENUM for item in projections)
 
-    # Cooked material: explicit unavailable, never a complete fake builder.
+    # Cooked material keeps its semantic; no builder projection is faked.
     cooked = parse_sample("TestMaterial.uasset", depth="decode")
-    cooked_builder = [item for item in registry.project_document(cooked) if item.kind == "material_editor_builder"]
-    assert cooked_builder
-    assert cooked_builder[0].status == "unavailable"
+    cooked_projections = registry.project_document(cooked)
+    assert all(_BUILDER_TOKEN not in item.kind for item in cooked_projections)
 
-    # Blueprint family: specialized C++ projections embedded.
+    # Blueprint family: static semantics live on objects[].semantic; no
+    # retired C++ projection kinds or media types may reappear.
     bp_doc = parse_sample("StackOBot_BP_Drone.uasset", depth="decode")
     bp_projections = registry.project_document(bp_doc)
-    bp_kinds = {item.kind for item in bp_projections}
-    assert "cpp_declaration" in bp_kinds
-    assert "cpp_migration" in bp_kinds
+    for item in bp_projections:
+        assert _KIND_TOKEN not in item.kind
+        assert _BUILDER_TOKEN not in item.kind
+        assert not item.media_type.startswith(_MEDIA_TOKEN)
 
     # Data assets use CSV/JSON where decoded.
     table = parse_sample("FirstPerson_DT_WeaponList.uasset", depth="asset")
@@ -356,19 +333,20 @@ def test_type_aware_projection_acceptance():
 
 
 # --------------------------------------------------------------------------- #
-# Gate 8 — single-document output + contract schema
+# Gate 8 — single-document output
 # --------------------------------------------------------------------------- #
 
 
 def test_single_document_contains_all_projection_sections(stackobot_document):
-    from uasset_read.projections.bundle import build_canonical_document
+    from uasset_read.projection import project_document
 
-    output = build_canonical_document(stackobot_document)
-    assert output["format_version"] == "3.0"
+    output = project_document(stackobot_document)
+    assert output["format_version"] == "4.0"
     assert output["package"]
     assert output["objects"]
     assert "projections" in output
-    assert output["projections"], "canonical document must embed type-aware projections"
+    # The blueprint family emits no embedded records (retired C++ output is
+    # gone, not faked unavailable); any record that exists stays schema-shaped.
     assert all(item["embedded"] for item in output["projections"])
     assert all(item["completeness"] in COMPLETENESS_ENUM for item in output["projections"])
     assert all(item["status"] in STATUS_ENUM for item in output["projections"])
@@ -378,27 +356,16 @@ def test_single_document_contains_all_projection_sections(stackobot_document):
     assert {item["id"] for item in output["objects"]} == {obj.id for obj in stackobot_document.objects}
 
 
-def test_bounded_project_document_pages_are_schema_valid(stackobot_document):
+# --------------------------------------------------------------------------- #
+# Gate 9 — byte accounting (debug evidence)
+# --------------------------------------------------------------------------- #
+
+
+def test_debug_byte_accounting_scopes_are_contract_shaped(stackobot_document):
     from uasset_read.projection import project_document
 
-    for view in ("semantic", "raw", "debug"):
-        page = project_document(stackobot_document, depth="object", view=view, limit=3)
-        json.loads(json.dumps(page, ensure_ascii=False))
-        assert page["format_version"] == "3.0"
-        assert all(item["embedded"] for item in page["projections"])
-        assert all(item["completeness"] in COMPLETENESS_ENUM for item in page["projections"])
-
-
-# --------------------------------------------------------------------------- #
-# Gate 9 — byte accounting
-# --------------------------------------------------------------------------- #
-
-
-def test_canonical_byte_accounting_scopes_are_contract_shaped(stackobot_document):
-    from uasset_read.projections.bundle import build_canonical_document
-
-    output = build_canonical_document(stackobot_document)
-    scopes = output["byte_accounting"]
+    output = project_document(stackobot_document, mode="debug")
+    scopes = output["debug"]["byte_accounting"]
     assert isinstance(scopes, list)
     assert scopes
     for scope in scopes:

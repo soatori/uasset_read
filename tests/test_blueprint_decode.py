@@ -278,7 +278,6 @@ def test_als_animbp_state_machines():
 def test_state_machine_state_count_not_node_count():
     """state_count comes from node_data.subgraph_references, never node_count."""
     from uasset_read import parse_package_document
-    from uasset_read.projection import project_document
 
     doc = parse_package_document(
         SAMPLES / "ALS_AnimBP.uasset",
@@ -286,10 +285,9 @@ def test_state_machine_state_count_not_node_count():
         object_ids=["export:274"],
         tolerant=True,
     )
-    page = project_document(doc, depth="decode", max_bytes=4_000_000)
     machines = []
-    for o in page.get("objects") or []:
-        machines.extend(_state_machines_from_semantic(o.get("semantic") or {}))
+    for obj in doc.objects:
+        machines.extend(_state_machines_from_semantic(obj.semantic or {}))
     assert machines
     for sm in machines:
         assert sm["state_count"] <= sm["node_count"]
@@ -366,7 +364,7 @@ def test_exec_edges_available_for_event_graph():
     from uasset_read.projection import project_document
 
     doc = parse_package_document(SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True)
-    page = project_document(doc, depth="decode", max_bytes=2_000_000)
+    page = project_document(doc)
     summaries = []
     graphs = []
     for o in page.get("objects") or []:
@@ -395,7 +393,7 @@ def test_node_name_is_not_graph_name_for_multi_node_graphs():
     from uasset_read.projection import project_document
 
     doc = parse_package_document(SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True)
-    page = project_document(doc, depth="decode", max_bytes=2_000_000)
+    page = project_document(doc)
     for o in page.get("objects") or []:
         for g in (o.get("semantic") or {}).get("graphs") or []:
             nodes = g.get("nodes") or []
@@ -411,7 +409,7 @@ def test_call_function_raw_properties_reach_node_data():
     from uasset_read.projection import project_document
 
     doc = parse_package_document(SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True)
-    page = project_document(doc, depth="decode", max_bytes=2_000_000)
+    page = project_document(doc)
     nodes = [
         n
         for o in page.get("objects") or []
@@ -454,21 +452,16 @@ def test_variable_nodes_do_not_fake_member_reference():
     real member tags, without inventing data today.
     """
     from uasset_read import parse_package_document
-    from uasset_read.projection import project_document
 
     doc = parse_package_document(
         SAMPLES / "BP_CombatCharacter.uasset",
         depth="decode",
         object_ids=["export:1"],
     )
-    # Task 7 dual-offset instructions + CFG per function push the decode page
-    # past the old 3 MB default; select the blueprint export like the sibling
-    # K0-function gate and keep a measured budget that retains graph nodes.
-    page = project_document(doc, depth="decode", max_bytes=5_000_000)
     nodes = [
         n
-        for o in page.get("objects") or []
-        for g in (o.get("semantic") or {}).get("graphs") or []
+        for o in doc.objects
+        for g in (o.semantic or {}).get("graphs") or []
         for n in g.get("nodes") or []
         if "Variable" in (n.get("class_name") or "")
     ]
@@ -490,25 +483,20 @@ def test_variable_nodes_do_not_fake_member_reference():
     assert member_names == []
 
 
-def test_project_document_decode_max_bytes_keeps_k0_functions():
-    """K3: decode + max_bytes still yields the function contract fields when the page fits."""
+def test_project_document_normal_keeps_k0_functions():
+    """K3: the normal envelope yields the function contract fields."""
     from uasset_read.projection import project_document
 
-    doc = parse_package_document(
-        SAMPLES / "BP_CombatCharacter.uasset",
-        depth="decode",
-        object_ids=["export:1"],
-    )
-    # Budget large enough that the selected blueprint export is retained.
-    # Task 7 adds dual-offset instructions + CFG per function (~4 MB page).
-    projected = project_document(doc, depth="decode", max_bytes=5_000_000)
+    doc = parse_package_document(SAMPLES / "BP_CombatCharacter.uasset", depth="decode")
+    projected = project_document(doc)
     assert projected.get("format") == "uasset_read.package"
+    assert projected.get("mode") == "normal"
     objs = projected.get("objects") or []
-    assert objs, "budget must leave at least one object"
+    assert objs
     bp = next((o for o in objs if o.get("id") == "export:1"), objs[0])
     fns = (bp.get("semantic") or {}).get("functions")
     assert fns, (
-        f"projected decode page must include functions; got semantic keys {list((bp.get('semantic') or {}).keys())}"
+        f"projected document must include functions; got semantic keys {list((bp.get('semantic') or {}).keys())}"
     )
     for fn in fns:
         assert "expression_count" in fn
@@ -546,20 +534,17 @@ def test_kismet_one_failed_function_keeps_others():
     assert projected[1]["bytecode_status"] == "parsed"
 
 
-def test_cli_decode_max_bytes_keeps_k0_functions(tmp_path, monkeypatch):
-    """K3: CLI --depth decode --max-bytes still yields K0 function fields.
+def test_cli_normal_keeps_k0_functions(tmp_path, monkeypatch):
+    """K3: the default CLI output yields K0 function fields.
 
     Joint regression for the public Blueprint JSON path (CLI), not just
-    project_document: budget mode must keep expression summaries on the page.
+    project_document.
     """
     import json
     import sys
 
     from uasset_read import cli
 
-    # Compact decode of this sample is now multi-MB after Task 7 added
-    # dual-offset instructions + CFG; 6 MB retains the full page.
-    budget = 6_000_000
     sample = SAMPLES / "BP_CombatCharacter.uasset"
     out_path = tmp_path / "combat.json"
     monkeypatch.setattr(
@@ -568,10 +553,6 @@ def test_cli_decode_max_bytes_keeps_k0_functions(tmp_path, monkeypatch):
         [
             "uasset_read",
             str(sample),
-            "--depth",
-            "decode",
-            "--max-bytes",
-            str(budget),
             "--output",
             str(out_path),
         ],
@@ -580,13 +561,12 @@ def test_cli_decode_max_bytes_keeps_k0_functions(tmp_path, monkeypatch):
         cli.main()
     assert excinfo.value.code == 0
 
-    raw = out_path.read_text(encoding="utf-8")
-    assert len(raw.encode("utf-8")) <= budget
-    projected = json.loads(raw)
+    projected = json.loads(out_path.read_text(encoding="utf-8"))
     assert projected.get("format") == "uasset_read.package"
+    assert projected.get("mode") == "normal"
     bp = next(o for o in projected.get("objects") or [] if o.get("id") == "export:1")
     fns = (bp.get("semantic") or {}).get("functions")
-    assert fns, "CLI decode page must include semantic.functions"
+    assert fns, "CLI document must include semantic.functions"
     for fn in fns:
         assert "expression_count" in fn
         assert "bytecode_status" in fn
@@ -773,7 +753,7 @@ def test_exec_edges_are_oriented_unique_and_graph_local():
     from uasset_read.projection import project_document
 
     doc = parse_package_document(SAMPLES / "StackOBot_BP_Drone.uasset", depth="decode", tolerant=True)
-    page = project_document(doc, depth="decode", max_bytes=2_000_000)
+    page = project_document(doc)
     graphs = []
     for o in page.get("objects") or []:
         graphs.extend((o.get("semantic") or {}).get("graphs") or [])

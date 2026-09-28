@@ -1,19 +1,21 @@
 """Type-aware projection registry and deterministic family dispatch (R3).
 
 Registry ``project_document()`` means all objects of the supplied
-PackageDocument. It is not the bounded ``uasset_read.projection.project_document``
-response API. Generic object identity/properties stay in PackageDocument.objects
+PackageDocument. It is not the ``uasset_read.projection.project_document``
+envelope API. Generic object identity/properties stay in PackageDocument.objects
 and are never copied into a generic ``object`` projection.
+
+Blueprint and material families emit no embedded records: their IR/CFG and
+static semantics live under ``objects[].semantic`` (v4). Families with no
+registered projector likewise emit nothing.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from uasset_read.models.diagnostics import make_diagnostic
 from uasset_read.models.document import PackageDocument
 from uasset_read.models.object_model import ObjectRecord
-from uasset_read.projections.cpp_render import CppProjection, render_cpp
 from uasset_read.projections.data_exports import (
     CurveTableProjector,
     DataTableProjector,
@@ -21,10 +23,8 @@ from uasset_read.projections.data_exports import (
     UserDefinedEnumProjector,
     UserDefinedStructProjector,
 )
-from uasset_read.projections.material_builder import MaterialEditorBuilderProjector
 from uasset_read.projections.records import (
     ProjectionRecord,
-    ProjectionStatus,
     dependency_ids,
     matches_family,
     semantic_dict,
@@ -36,14 +36,14 @@ CAPABILITY_MATRIX: tuple[dict[str, Any], ...] = (
     {
         "family": "blueprint_family",
         "asset_kinds": ["blueprint", "anim_blueprint", "blueprint_function_library", "blueprint_interface"],
-        "kinds": ["cpp_declaration", "cpp_migration"],
-        "rule": "from R2 render_cpp; full trace remains in objects[].semantic",
+        "kinds": [],
+        "rule": "no embedded projections; IR/CFG/static semantics stay in objects[].semantic",
     },
     {
         "family": "material",
         "asset_kinds": ["material"],
-        "kinds": ["material_editor_builder"],
-        "rule": "represented when editor graph exists, else unavailable + diagnostic",
+        "kinds": [],
+        "rule": "no embedded projections; material graph semantics stay in objects[].semantic",
     },
     {
         "family": "material_instance",
@@ -66,14 +66,14 @@ CAPABILITY_MATRIX: tuple[dict[str, Any], ...] = (
     {
         "family": "user_defined_struct_enum",
         "asset_kinds": ["user_defined_struct", "user_defined_enum"],
-        "kinds": ["cpp_declaration", "defaults_json"],
+        "kinds": ["defaults_json"],
         "rule": "fields/enumerators + defaults when reflected data exists",
     },
     {
         "family": "other_graph_assets",
         "asset_kinds": ["graph_asset"],
-        "kinds": ["graph", "asset_builder_cpp"],
-        "rule": "no generic fake C++ body",
+        "kinds": ["graph"],
+        "rule": "graph summary only; never a generated source body",
     },
     {
         "family": "physical_binary_assets",
@@ -83,153 +83,7 @@ CAPABILITY_MATRIX: tuple[dict[str, Any], ...] = (
     },
 )
 
-_BLUEPRINT_KINDS = (
-    "blueprint",
-    "anim_blueprint",
-    "blueprint_function_library",
-    "blueprint_interface",
-)
-_BLUEPRINT_PAIRS = (
-    ("cpp_declaration", "text/x-c++hdr"),
-    ("cpp_migration", "text/x-c++src"),
-)
-_PHYSICAL_PAIRS = (
-    ("asset_metadata", "application/json"),
-    ("payload_reference", "application/json"),
-)
-_GRAPH_PAIRS = (
-    ("graph", "application/json"),
-    ("asset_builder_cpp", "text/x-c++src"),
-)
-
-
-def _status_from_stats(stats: dict[str, int], *, mode: str) -> ProjectionStatus:
-    declarations = int(stats.get("declarations") or 0)
-    seen = int(stats.get("instructions_seen") or 0)
-    translated = int(stats.get("translated") or 0)
-    represented = int(stats.get("represented") or 0)
-    untranslated = int(stats.get("untranslated") or 0)
-    unavailable = int(stats.get("unavailable") or 0)
-    if mode == "declaration":
-        return "translated" if declarations > 0 else "unavailable"
-    if seen <= 0:
-        return "translated" if declarations > 0 else "unavailable"
-    if untranslated > 0 or unavailable > 0:
-        return "represented" if (translated + represented) > 0 else "untranslated"
-    if translated > 0:
-        return "translated"
-    if represented > 0:
-        return "represented"
-    return "unavailable"
-
-
-def _completeness(stats: dict[str, int], *, mode: str) -> float | None:
-    declarations = int(stats.get("declarations") or 0)
-    seen = int(stats.get("instructions_seen") or 0)
-    if mode == "declaration":
-        return 1.0 if declarations > 0 else None
-    if seen <= 0:
-        return None
-    mapped = int(stats.get("translated") or 0) + int(stats.get("represented") or 0)
-    return mapped / seen
-
-
-def _unavailable_blueprint_projections(
-    document: PackageDocument,
-    object_id: str,
-    reason: str,
-) -> list[ProjectionRecord]:
-    return unavailable_records(
-        object_id,
-        _BLUEPRINT_PAIRS,
-        code=reason,
-        message="Blueprint semantic input is unavailable",
-        stage="projection.blueprint",
-        dependencies=dependency_ids(document, object_id),
-    )
-
-
-def _projection_record_from_cpp(
-    *,
-    kind: str,
-    object_id: str,
-    media_type: str,
-    mode: str,
-    result: CppProjection,
-    dependencies: list[str],
-) -> ProjectionRecord:
-    return ProjectionRecord(
-        kind=kind,
-        source_object_id=object_id,
-        media_type=media_type,
-        content=result.header_text if mode == "declaration" else result.source_text,
-        embedded=True,
-        status=_status_from_stats(result.translation_stats, mode=mode),
-        completeness=_completeness(result.translation_stats, mode=mode),
-        dependencies=dependencies,
-        diagnostics=list(result.diagnostics),
-    )
-
-
-class BlueprintCppProjector:
-    """Blueprint family: cpp_declaration + cpp_migration via R2 render_cpp."""
-
-    asset_kinds = _BLUEPRINT_KINDS
-
-    _CLASS_NAMES = frozenset(
-        {
-            "Blueprint",
-            "AnimBlueprint",
-            "BlueprintGeneratedClass",
-            "AnimBlueprintGeneratedClass",
-            "BlueprintFunctionLibrary",
-            "BlueprintInterface",
-        }
-    )
-
-    def can_project(self, obj: ObjectRecord) -> bool:
-        return matches_family(obj, self.asset_kinds, self._CLASS_NAMES)
-
-    def project(self, document: PackageDocument, obj: ObjectRecord) -> list[ProjectionRecord]:
-        semantic = obj.semantic
-        dependencies = dependency_ids(document, obj.id)
-        # Unproven family kinds without a projected semantic stay explicit unavailable.
-        if (obj.class_name or "") in ("BlueprintFunctionLibrary", "BlueprintInterface") and (
-            not isinstance(semantic, dict) or not (isinstance(semantic.get("kind"), str) and semantic.get("kind"))
-        ):
-            return _unavailable_blueprint_projections(document, obj.id, "blueprint_family_semantic_unavailable")
-        if not isinstance(semantic, dict) or semantic.get("kind") not in self.asset_kinds:
-            return _unavailable_blueprint_projections(document, obj.id, "blueprint_semantic_unavailable")
-        try:
-            decl = render_cpp(semantic, mode="declaration")
-            mig = render_cpp(semantic, mode="migration")
-        except Exception:
-            return unavailable_records(
-                obj.id,
-                _BLUEPRINT_PAIRS,
-                code="blueprint_render_failed",
-                message="Blueprint C++ projection failed for projected semantic dict",
-                stage="projection.blueprint",
-                dependencies=dependencies,
-            )
-        return [
-            _projection_record_from_cpp(
-                kind="cpp_declaration",
-                object_id=obj.id,
-                media_type="text/x-c++hdr",
-                mode="declaration",
-                result=decl,
-                dependencies=dependencies,
-            ),
-            _projection_record_from_cpp(
-                kind="cpp_migration",
-                object_id=obj.id,
-                media_type="text/x-c++src",
-                mode="migration",
-                result=mig,
-                dependencies=dependencies,
-            ),
-        ]
+_GRAPH_PAIRS = (("graph", "application/json"),)
 
 
 class PhysicalAssetProjector:
@@ -315,7 +169,7 @@ class PhysicalAssetProjector:
 
 
 class GraphAssetProjector:
-    """Other registered graph assets: graph summary only; never a fake C++ body."""
+    """Other registered graph assets: graph summary only."""
 
     asset_kinds = (
         "graph_asset",
@@ -372,24 +226,6 @@ class GraphAssetProjector:
                 dependencies=dependencies,
                 diagnostics=[],
             ),
-            ProjectionRecord(
-                kind="asset_builder_cpp",
-                source_object_id=obj.id,
-                media_type="text/x-c++src",
-                content=None,
-                embedded=True,
-                status="unavailable",
-                completeness=None,
-                dependencies=dependencies,
-                diagnostics=[
-                    make_diagnostic(
-                        "asset_builder_cpp_unavailable",
-                        "No evidenced asset-builder C++ projector for this graph asset family",
-                        "projection.graph_asset",
-                        object_id=obj.id,
-                    )
-                ],
-            ),
         ]
 
 
@@ -402,8 +238,6 @@ class ProjectorRegistry:
     @classmethod
     def default(cls) -> "ProjectorRegistry":
         registry = cls()
-        registry.register(BlueprintCppProjector())
-        registry.register(MaterialEditorBuilderProjector())
         registry.register(MaterialInstanceProjector())
         registry.register(DataTableProjector())
         registry.register(CurveTableProjector())
@@ -443,7 +277,6 @@ class ProjectorRegistry:
 
 __all__ = [
     "CAPABILITY_MATRIX",
-    "BlueprintCppProjector",
     "GraphAssetProjector",
     "PhysicalAssetProjector",
     "ProjectorRegistry",

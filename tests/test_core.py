@@ -63,14 +63,10 @@ from uasset_read.parsers.asset_types.handlers_impl import (
     NiagaraHandler,
 )
 from uasset_read.parsers.asset_types.registry import _HANDLERS, register_handler, run_handlers
-from uasset_read.projection import paginate, project_document, select_objects, dependency_to_dict, json_byte_size
+from uasset_read.projection import project_document
 from uasset_read.agent_tools import (
     extract_payload,
-    get_diagnostics,
-    get_object,
     inspect_package,
-    list_dependencies,
-    list_objects,
 )
 from uasset_read.serializers.object_resources import ObjectImport, PackageIndex, read_export_map
 from uasset_read.serializers.package_summary import (
@@ -117,7 +113,6 @@ from uasset_read.kismet.ufunction_reader import RELEASE_GUID
 from uasset_read.serializers.graph_pin import read_ed_graph_pin_type, read_pin_array
 from uasset_read.serializers.graph_node import _handle_advanced_pin_display, _handle_move_mode
 from uasset_read import constants as K
-from uasset_read.models.payloads import PayloadDescriptor
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -2021,166 +2016,67 @@ def test_handler_registry_supports_enriches_and_isolates():
     )
 
 
-def test_projection_views_depths_pagination_table():
-    """View shape, pagination, and selection contracts on one synthetic-parse document."""
+def test_projection_envelope_is_the_v4_document():
+    """v4 envelope: one full decode document, normal/debug modes only."""
 
-    doc = _document(depth="asset")
+    doc = _document(depth="decode")
 
-    def test_semantic_default():
-        assert project_document(doc)["view"] == "semantic"
+    def test_normal_is_default():
+        result = project_document(doc)
+        assert result["mode"] == "normal"
+        assert "view" not in result and "depth" not in result
+        assert "debug" not in result
 
-    def test_raw_has_flags():
-        result = project_document(doc, view="raw", limit=2)
-        for obj in result["objects"]:
-            assert "flags" in obj
-            assert "serial_region" in obj
+    def test_debug_adds_the_evidence_block():
+        result = project_document(doc, mode="debug")
+        assert result["mode"] == "debug"
+        assert set(result["debug"]) == {
+            "object_regions",
+            "property_evidence",
+            "semantic_source_ranges",
+            "payload_sources",
+            "sidecar_sources",
+            "diagnostic_details",
+            "byte_accounting",
+        }
 
-    def test_debug_has_stats():
-        result = project_document(doc, view="debug")
-        assert "debug" in result
-        assert "total_objects" in result["debug"]
+    def test_invalid_mode_raises():
+        for mode in ("agent", "raw", "semantic", "view"):
+            with pytest.raises(ValueError, match="mode"):
+                project_document(doc, mode=mode)
 
-    def test_invalid_view_raises():
-        with pytest.raises(ValueError, match="Invalid view"):
-            project_document(doc, view="invalid")
-
-    def test_semantic_no_raw_fields():
-        result = project_document(doc, view="semantic", limit=2)
+    def test_objects_carry_ordered_properties():
+        result = project_document(doc)
         for obj in result["objects"]:
             assert "flags" not in obj
             assert "serial_region" not in obj
-            assert "properties" not in obj
-
-    def test_limit_truncates():
-        items = list(range(10))
-        page, next_offset, info = paginate(items, offset=0, limit=3)
-        assert len(page) == 3
-        assert next_offset == 3
-        assert info["truncated"] == 1
-
-    def test_offset_skips():
-        items = list(range(10))
-        page, next_offset, info = paginate(items, offset=5, limit=3)
-        assert page == [5, 6, 7]
-        assert next_offset == 8
-
-    def test_no_limit_returns_all():
-        items = list(range(10))
-        page, next_offset, info = paginate(items, offset=0)
-        assert len(page) == 10
-        assert next_offset is None
-        assert info["truncated"] == 0
-
-    def test_page_through_all():
-        all_objects = []
-        offset = 0
-        while True:
-            result = project_document(doc, limit=3, offset=offset)
-            all_objects.extend(result["objects"])
-            if "next_offset" not in result:
-                break
-            offset = result["next_offset"]
-        assert len(all_objects) == len(doc.objects)
-
-    def test_select_by_role():
-        asset_objs = select_objects(doc, roles=["asset"])
-        assert len(asset_objs) >= 2
-
-    def test_select_by_id():
-        result = select_objects(doc, object_ids=["export:0", "export:1"])
-        assert len(result) == 2
-
-    def test_select_all_when_no_filters():
-        result = select_objects(doc)
-        assert len(result) == len(doc.objects)
+            assert "properties_summary" not in obj
+            assert isinstance(obj["properties"], list)
+            for prop in obj["properties"]:
+                assert set(prop) == {"name", "type", "occurrence", "array_index", "value"}
 
     def dependencies_carry_package_name():
         # #632: the model carries package_name from the import map; no
         # projection path may drop it.
-
-        page = project_document(doc, limit=100)
-        assert page["dependencies"], "fixture must expose page-reachable imports"
+        page = project_document(doc)
+        assert page["dependencies"], "fixture must expose imports"
         model = {d.index: d for d in doc.dependencies}
         for entry in page["dependencies"]:
             assert set(entry) == {"index", "class", "object_name", "package_name"}
-            assert entry == dependency_to_dict(model[entry["index"]])
+            assert entry["package_name"] == model[entry["index"]].package_name
 
-    def semantic_object_depth_carries_properties_summary():
-        # #636: bounded compact property view replaces the raw bag in semantic.
-        obj_doc = _document(str(PACKAGE_SAMPLE), depth="object")
-        page = project_document(obj_doc, depth="object", view="semantic")
-        with_props = [o for o in page["objects"] if "properties_summary" in o]
-        assert with_props, "object-depth fixture must produce at least one summary"
-        for o in with_props:
-            assert "properties" not in o, "full bag stays raw/debug-only"
-            summary = o["properties_summary"]
-            assert set(summary) == {"properties", "property_count"}
-            assert summary["property_count"] >= len(summary["properties"])
-            blob = json.dumps(summary, separators=(",", ":"))
-            assert '"fields":' not in blob, "structs must be length-elided"
-            assert '"raw_data' not in blob, "raw bytes must not ride along"
-            assert '"value":[' not in blob, "array values must be length-elided"
-        raw_page = project_document(obj_doc, depth="object", view="raw", limit=5)
-        for o in raw_page["objects"]:
-            assert "properties_summary" not in o, "raw view carries the full bag, not the summary"
+    def test_all_objects_present():
+        result = project_document(doc)
+        assert {o["id"] for o in result["objects"]} == {o.id for o in doc.objects}
 
-    def package_depth_document_has_no_summary():
+    def shallow_depth_document_raises():
         pkg_doc = _document(str(PACKAGE_SAMPLE), depth="package")
-        page = project_document(pkg_doc, depth="package", view="semantic")
-        for o in page["objects"]:
-            assert "properties_summary" not in o
-
-    def test_all_views_json():
-        for view in ("semantic", "raw", "debug"):
-            result = project_document(doc, view=view, limit=3)
-            json_str = json.dumps(result, ensure_ascii=False)
-            parsed = json.loads(json_str)
-            assert parsed["view"] == view
-
-    def core_projection_honors_views():
-        # View shape: semantic omits raw fields, raw includes them
-        pkg_doc = _document()
-        sem_obj = project_document(pkg_doc, depth="package", view="semantic", limit=2)["objects"][0]
-        raw_obj = project_document(pkg_doc, depth="package", view="raw", limit=2)["objects"][0]
-        assert "flags" not in sem_obj
-        assert "serial_region" not in sem_obj
-        assert "properties" not in sem_obj
-        assert "flags" in raw_obj
-        assert "serial_region" in raw_obj
-        assert "debug" in project_document(pkg_doc, depth="package", view="debug", limit=2)
-
-        # Pagination and byte budget
-        full = project_document(pkg_doc, depth="package", limit=100)
-        full_size = json_byte_size(full)
-        # budget must exceed minimal reachable envelope (depends_on imports)
-        # but be less than the full page to trigger truncation
-        budget = full_size - 1000
-        page = project_document(pkg_doc, depth="package", limit=100, max_bytes=budget)
-        assert json_byte_size(page) <= budget
-        assert page["next_offset"] > 0
-        assert page["truncation"]["reason"] == "max_bytes"
-
-    def depth_beyond_parsed_document_raises():
-        pkg_doc = _document(str(PACKAGE_SAMPLE), depth="package")
-        with pytest.raises(ValueError, match="cannot project"):
-            project_document(pkg_doc, depth="asset")
-
-    def shallower_depth_caps_content():
-        asset_doc = _document(str(PACKAGE_SAMPLE), depth="asset")
-        page = project_document(asset_doc, depth="package", view="raw")
-        for o in page["objects"]:
-            assert "semantic" not in o and "coverage" not in o and "properties" not in o
-        obj_page = project_document(asset_doc, depth="object")
-        for o in obj_page["objects"]:
-            assert "semantic" not in o
-        sem_pkg = project_document(asset_doc, depth="package", view="semantic")
-        for o in sem_pkg["objects"]:
-            assert "properties_summary" not in o, "summary needs depth >= object"
-        assert project_document(asset_doc, depth="asset")["depth"] == "asset"
+        with pytest.raises(ValueError, match="depth"):
+            project_document(pkg_doc)
 
     def relations_carry_optional_target_path():
-        pkg_doc = _document(str(PACKAGE_SAMPLE), depth="asset")
-        page = project_document(pkg_doc, depth="package")
+        pkg_doc = _document(str(PACKAGE_SAMPLE), depth="decode")
+        page = project_document(pkg_doc)
         display = {o.id: o.name for o in pkg_doc.objects}
         for d in pkg_doc.dependencies:
             display[f"import:{d.index}"] = f"{d.package_name}.{d.object_name}" if d.package_name else d.object_name
@@ -2192,173 +2088,34 @@ def test_projection_views_depths_pagination_table():
                 assert rel.get("target_path") == display[rel["to"]]
             else:
                 assert "target_path" not in rel
-        # from/kind/to themselves are untouched
         base = {(r.kind, r.from_id, r.to_id) for r in pkg_doc.relations}
         for rel in rels:
             assert (rel["kind"], rel["from"], rel["to"]) in base
             assert set(rel) <= {"kind", "from", "to", "target_path"}
 
+    def test_envelope_is_json_safe():
+        result = project_document(doc)
+        assert json.loads(json.dumps(result, ensure_ascii=False))
+
     _run_cases(
         [
-            test_semantic_default,
-            test_raw_has_flags,
-            test_debug_has_stats,
-            test_invalid_view_raises,
-            test_semantic_no_raw_fields,
-            test_limit_truncates,
-            test_offset_skips,
-            test_no_limit_returns_all,
-            test_page_through_all,
-            test_select_by_role,
-            test_select_by_id,
-            test_select_all_when_no_filters,
+            test_normal_is_default,
+            test_debug_adds_the_evidence_block,
+            test_invalid_mode_raises,
+            test_objects_carry_ordered_properties,
             dependencies_carry_package_name,
-            semantic_object_depth_carries_properties_summary,
-            package_depth_document_has_no_summary,
-            test_all_views_json,
-            core_projection_honors_views,
-            depth_beyond_parsed_document_raises,
-            shallower_depth_caps_content,
+            test_all_objects_present,
+            shallow_depth_document_raises,
             relations_carry_optional_target_path,
+            test_envelope_is_json_safe,
         ]
     )
 
 
-def test_projection_byte_budget_and_fields_filter():
-    """The encoded page must respect max_bytes and re-scope relations/diagnostics."""
-
-    doc = _document(depth="asset")
-
-    def partial_page_budget() -> int:
-        """Halfway between a 1-object and a 2-object page.
-
-        Derived from the sample instead of a hand-tuned slack constant: a fixed
-        extra went stale the moment dependency package paths got longer (#645).
-        """
-        one = json_byte_size(project_document(doc, limit=1))
-        two = json_byte_size(project_document(doc, limit=2))
-        assert one < two, "the second object must cost bytes for this budget to mean anything"
-        return one + (two - one) // 2
-
-    def test_max_bytes_is_enforced_and_continuable():
-        budget = partial_page_budget()
-        page = project_document(doc, limit=100, max_bytes=budget)
-        assert json_byte_size(page) <= budget
-        assert page["truncation"]["reason"] == "max_bytes"
-        assert page["next_offset"] > 0
-        assert any(d["code"] == "TRUNCATED" for d in page["diagnostics"])
-
-    def all_objects_dropped_yields_no_cursor():
-        empty = project_document(doc, limit=0)
-        envelope = json_byte_size(empty)
-        budget = envelope + 500
-        page = project_document(doc, limit=100, max_bytes=budget)
-        assert page["objects"] == []
-        assert "next_offset" not in page, "all-dropped page must not hand out a cursor"
-        assert page["truncation"]["objects_dropped"] == 10
-        assert any(d["code"] == "BUDGET_EXHAUSTED" for d in page["diagnostics"])
-        actual = json_byte_size(page)
-        assert page["truncation"]["actual"] == actual <= budget
-        with pytest.raises(ValueError, match="too small for minimal envelope"):
-            project_document(doc, limit=100, max_bytes=envelope + 1)
-
-    def every_object_returned_exactly_once_under_budget():
-        budget = partial_page_budget()
-        seen = []
-        offset = 0
-        while True:
-            page = project_document(doc, offset=offset, limit=100, max_bytes=budget)
-            seen += [o["id"] for o in page["objects"]]
-            if "next_offset" not in page:
-                break
-            assert page["next_offset"] > offset, "cursor must be strictly monotonic"
-            offset = page["next_offset"]
-        assert sorted(seen) == sorted(f"export:{i}" for i in range(10))
-
-    def dropped_count_is_page_relative():
-        empty = project_document(doc, limit=0)
-        envelope = json_byte_size(empty)
-        page = project_document(doc, offset=5, limit=100, max_bytes=envelope + 500)
-        assert page["truncation"]["objects_dropped"] == 5
-
-    def limit_and_budget_compose_page_relative():
-        # With limit=2 only min(limit, len(selected)-offset)=2 objects are in
-        # play; the dropped count must stay page-relative, not 10-kept.
-        one = project_document(doc, limit=1, max_bytes=1_000_000)
-        one_size = json_byte_size(one)
-        page = project_document(doc, offset=0, limit=2, max_bytes=one_size + 500)
-        assert len(page["objects"]) == 1, "budget should keep exactly one of the two page objects"
-        assert page["truncation"]["objects_dropped"] == 1
-
-    def out_of_range_empty_page_never_stalls_or_overshoots():
-        with pytest.raises(ValueError, match="too small"):
-            project_document(doc, offset=10, limit=100, max_bytes=64)
-        page = project_document(doc, offset=10, limit=100, max_bytes=1000)
-        assert page["objects"] == []
-        assert "next_offset" not in page, "empty page must not hand out a self-pointing cursor"
-
-    def test_truncated_page_rescopes_relations_and_dependencies():
-        """Popping objects for max_bytes must re-scope relations and dependencies."""
-        budget = partial_page_budget()  # a genuine partial page, not an all-drop
-        page = project_document(doc, limit=100, max_bytes=budget)
-        page_ids = {o["id"] for o in page["objects"]}
-        assert len(page_ids) > 0, "page must keep at least one object for the re-scope checks to mean anything"
-        assert len(page_ids) < 10, "budget should force dropping at least one object"
-        for rel in page["relations"]:
-            assert rel["from"] in page_ids, f"relation kept for dropped object: {rel}"
-        targets = {rel["to"] for rel in page["relations"]}
-        for dep in page["dependencies"]:
-            assert f"import:{dep['index']}" in targets, f"dependency not reachable from page: {dep}"
-
-    def test_relations_scoped_to_returned_page():
-        page = project_document(doc, limit=2)
-        page_ids = {o["id"] for o in page["objects"]}
-        assert len(page_ids) == 2
-        for r in page["relations"]:
-            assert r["from"] in page_ids
-
-    def test_object_diagnostics_scoped_to_page():
-        page = project_document(doc, limit=2)
-        page_ids = {o["id"] for o in page["objects"]}
-        for d in page["diagnostics"]:
-            oid = d.get("object_id")
-            assert oid is None or oid in page_ids
-
-    def test_budget_too_small_raises():
-        with pytest.raises(ValueError, match="too small"):
-            project_document(doc, max_bytes=64)
-
-    def test_no_truncation_when_budget_generous():
-        page = project_document(doc, limit=2, max_bytes=1_000_000)
-        assert page.get("truncation") is None or page["truncation"].get("reason") != "max_bytes"
-
-    def core_max_bytes_caps_final_output():
-        pkg_doc = _document()
-        full = project_document(pkg_doc, depth="package", limit=100)
-        full_size = json_byte_size(full)
-        budget = full_size - 1000  # strictly less than full page
-        page = project_document(pkg_doc, depth="package", limit=100, max_bytes=budget)
-        final = json_byte_size(page)
-        assert final <= budget
-        assert page["truncation"]["reason"] == "max_bytes"
-        assert page["next_offset"] > 0
-
-    _run_cases(
-        [
-            test_max_bytes_is_enforced_and_continuable,
-            all_objects_dropped_yields_no_cursor,
-            every_object_returned_exactly_once_under_budget,
-            dropped_count_is_page_relative,
-            limit_and_budget_compose_page_relative,
-            out_of_range_empty_page_never_stalls_or_overshoots,
-            test_truncated_page_rescopes_relations_and_dependencies,
-            test_relations_scoped_to_returned_page,
-            test_object_diagnostics_scoped_to_page,
-            test_budget_too_small_raises,
-            test_no_truncation_when_budget_generous,
-            core_max_bytes_caps_final_output,
-        ]
-    )
+def test_projection_rejects_partial_documents():
+    partial = parse_package_document(str(PACKAGE_SAMPLE), depth="decode", object_ids=["export:0"])
+    with pytest.raises(ValueError, match="all exports"):
+        project_document(partial)
 
 
 def test_schema_contract_statics():
@@ -2390,45 +2147,6 @@ def test_schema_contract_statics():
         for name, value in expected.items():
             assert getattr(K, name) == value, f"{name} drifted: {getattr(K, name)} != {value}"
 
-    def payload_descriptor_model_matches_schema():
-        """#621: PayloadDescriptor has zero emitters today, so nothing but this gate
-        stops it drifting back out of sync with the contract it claims to mirror
-        (the old kind Literal['ubulk','uexp',...] was exactly such a drift)."""
-        import dataclasses
-        import typing
-
-        spec = schema["$defs"]["PayloadDescriptor"]
-        assert spec["additionalProperties"] is False
-
-        fields = {f.name: f for f in dataclasses.fields(PayloadDescriptor)}
-        assert set(spec["properties"]) == set(fields), (
-            f"PayloadDescriptor drifted from $defs.PayloadDescriptor: "
-            f"model-only={sorted(set(fields) - set(spec['properties']))} "
-            f"schema-only={sorted(set(spec['properties']) - set(fields))}"
-        )
-
-        required = set(spec["required"])
-        for name, field in fields.items():
-            optional_in_model = (
-                field.default is not dataclasses.MISSING or field.default_factory is not dataclasses.MISSING
-            )
-            assert optional_in_model == (name not in required), (
-                f"{name}: schema-required={name in required} but model-optional={optional_in_model}"
-            )
-
-        hints = typing.get_type_hints(PayloadDescriptor)
-        for name, prop in spec["properties"].items():
-            ann = hints[name]
-            args = typing.get_args(ann)
-            if typing.get_origin(ann) is typing.Literal:
-                assert set(args) == set(prop["enum"]), f"{name} enum drifted: {sorted(args)} != {prop['enum']}"
-            else:
-                schema_types = prop["type"] if isinstance(prop["type"], list) else [prop["type"]]
-                model_nullable = type(None) in args
-                assert model_nullable == ("null" in schema_types), (
-                    f"{name} nullability mismatch: model={ann} schema={schema_types}"
-                )
-
     _run_cases(
         [
             ue4_version_constants_are_pinned_to_peer_numbering,
@@ -2437,7 +2155,7 @@ def test_schema_contract_statics():
 
 
 def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, monkeypatch):
-    """CLI (default v2), Python API, and agent tools must agree; parsing must be side-effect free."""
+    """CLI (default normal), Python API, and agent tools must agree; parsing must be side-effect free."""
 
     _env = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
 
@@ -2453,23 +2171,22 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
         assert result.returncode == 0, f"CLI failed: {result.stderr[:500]}"
         return json.loads(result.stdout)
 
-    # CLI default output is the v2 package document; the package assertion is
-    # presence-only because package.name is legitimately "" on real fixtures
-    # (follow-up #621).
+    # CLI default output is the v4 package document in normal mode.
     plain = run_cli_json(str(DATA_SAMPLE))
     assert plain["format"] == "uasset_read.package"
+    assert plain["format_version"] == "4.0"
+    assert plain["mode"] == "normal"
+    assert "view" not in plain and "depth" not in plain
     assert "objects" in plain and plain["package"]
     assert len(plain["objects"]) > 0
 
-    # All public entry points project the same page.
-    expected = project_document(_document(str(DATA_SAMPLE)), depth="package", limit=2, max_bytes=4096)
-    cli = run_cli_json("--depth", "package", "--limit", "2", "--max-bytes", "4096", str(DATA_SAMPLE))
-    assert cli["depth"] == "package"
-    assert len(cli["objects"]) <= 2
-    agent = inspect_package(str(DATA_SAMPLE), depth="package", limit=2, max_bytes=4096)
-    for actual in (cli, agent):
-        assert [item["id"] for item in actual["objects"]] == [item["id"] for item in expected["objects"]]
-        assert actual["diagnostics"] == expected["diagnostics"]
+    # All public entry points project the same document per mode.
+    for mode, extra in (("normal", ()), ("debug", ("--debug",))):
+        expected = project_document(_document(str(DATA_SAMPLE), depth="decode"), mode=mode)
+        cli = run_cli_json(*extra, str(DATA_SAMPLE))
+        agent = inspect_package(str(DATA_SAMPLE), mode=mode)
+        assert cli == expected
+        assert agent == expected
 
     # Agent tool shapes.
     inspected = inspect_package(str(DATA_SAMPLE))
@@ -2479,61 +2196,11 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     parsed = json.loads(json.dumps(inspected))
     assert "source" in parsed and "package" in parsed and "summary" in parsed
 
-    listed = list_objects(str(DATA_SAMPLE))
-    assert listed["total"] > 0
-    assert len(listed["objects"]) > 0
-
-    paged = list_objects(str(PACKAGE_SAMPLE), limit=3, max_bytes=65536)
-    assert len(paged["objects"]) == 3
-    assert paged["next_offset"] == 3
-
-    # G7 terminal predicate: every bounded tool's FINAL compact response
-    # respects max_bytes; budgets below the empty-list envelope raise.
-    for budget in (2048, 4096, 8192):
-        r = list_objects(str(PACKAGE_SAMPLE), max_bytes=budget)
-        assert json_byte_size(r) <= budget
-        d = get_diagnostics(str(PACKAGE_SAMPLE), max_bytes=budget)
-        assert json_byte_size(d) <= budget
-        insp = inspect_package(str(PACKAGE_SAMPLE), max_bytes=budget)
-        assert json_byte_size(insp) <= budget
-    with pytest.raises(ValueError, match="too small"):
-        # Healthy samples carry 0 diagnostics, so get_diagnostics' minimal
-        # envelope is the fixed 52-byte empty-list form; 48 < 52 must raise.
-        get_diagnostics(str(PACKAGE_SAMPLE), max_bytes=48)
-    # extract_payload now returns structured error instead of raising on budget exceeded
+    # extract_payload stays a separate explicit binary operation with budgets.
     result = extract_payload(str(DATA_SAMPLE), "payload:(export:0)", max_bytes=16)
     assert isinstance(result, dict)
     assert result.get("code") == "BUDGET_EXHAUSTED"
     assert result.get("recoverable") is True
-    with pytest.raises(ValueError, match="too small"):
-        inspect_package(str(PACKAGE_SAMPLE), max_bytes=64)
-
-    fetched = get_object(str(DATA_SAMPLE), "export:0")
-    assert fetched["id"] == "export:0"
-    assert "name" in fetched
-
-    # Agent Gate: a missing object is a structured diagnostic, not a bare string.
-    missing = get_object(str(DATA_SAMPLE), "export:999999")
-    assert missing["error"] == "Object 'export:999999' not found"
-    assert missing["code"] == "OBJECT_NOT_FOUND"
-    assert missing["stage"] == "agent.get_object"
-    assert missing["recoverable"] is True
-    assert missing["available_ids"] and all(i.startswith("export:") for i in missing["available_ids"])
-
-    full_deps = _document(str(DATA_SAMPLE), depth="package").dependencies
-    deps = list_dependencies(str(DATA_SAMPLE))
-    assert deps["total_dependencies"] == len(full_deps)
-    assert [d["index"] for d in deps["dependencies"]] == [d.index for d in full_deps][:50]
-    abp = _document(str(PACKAGE_SAMPLE), depth="package").dependencies
-    paged = list_dependencies(str(PACKAGE_SAMPLE), limit=25)
-    assert paged["total_dependencies"] == len(abp)
-    assert len(paged["dependencies"]) == 25 and paged["next_offset"] == 25
-    with pytest.raises(ValueError, match="too small"):
-        list_dependencies(str(DATA_SAMPLE), max_bytes=64)
-
-    diags = get_diagnostics(str(DATA_SAMPLE))
-    assert "diagnostics" in diags
-    assert "total" in diags
 
     # extract_payload for package with sidecar returns real data or DEFERRED.
     extracted = extract_payload(str(DATA_SAMPLE), "payload:(export:0)")
@@ -2574,28 +2241,9 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert len(logging.root.handlers) == len(handlers)
     assert logging.root.level == level
 
-    # --- CLI budget regression: compact JSON respects max_bytes ---
-    BUDGET_SAMPLE = str(SAMPLES / "FirstPerson_T_GridChecker_A.uasset")
-    budget = 1500
-    budget_result = subprocess.run(
-        [sys.executable, "-m", "uasset_read", "--depth", "decode", "--max-bytes", str(budget), BUDGET_SAMPLE],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
-        env=_env,
-    )
-    assert budget_result.returncode == 0, f"CLI budget failed: {budget_result.stderr[:500]}"
-    stdout_bytes = budget_result.stdout.encode("utf-8")
-    assert len(stdout_bytes.rstrip()) <= budget
-    budget_doc = json.loads(budget_result.stdout)
-    assert budget_doc["truncation"]["reason"] == "max_bytes"
-
     # --- Unavailable payload is fully deferred (merged from test_samples) ---
     # A recognized canonical id whose export index is out of range must return
-    # the deferred envelope (no data keys); valid exports may now extract real
-    # bytes since the id contract accepts canonical payload:export:N.
-
+    # the deferred envelope (no data keys).
     decode_doc = parse_package_document(
         str(SAMPLES / "FirstPerson_T_GridChecker_A.uasset"),
         depth="decode",
@@ -2616,10 +2264,7 @@ def test_agent_tools_missing_file_return_structured_errors(tmp_path):
     missing = str(tmp_path / "missing.uasset")
     calls = [
         lambda: inspect_package(missing),
-        lambda: list_objects(missing),
-        lambda: get_object(missing, "export:0"),
-        lambda: list_dependencies(missing),
-        lambda: get_diagnostics(missing),
+        lambda: extract_payload(missing, "payload:export:0"),
     ]
     for call in calls:
         result = call()
@@ -2638,10 +2283,6 @@ def test_agent_tools_parse_error_return_structured_errors(monkeypatch, tmp_path)
     path = str(tmp_path / "parse-fails.uasset")
     calls = [
         lambda: tools.inspect_package(path),
-        lambda: tools.list_objects(path),
-        lambda: tools.get_object(path, "export:0"),
-        lambda: tools.list_dependencies(path),
-        lambda: tools.get_diagnostics(path),
     ]
     for call in calls:
         result = call()
@@ -2660,45 +2301,6 @@ def test_agent_tools_parse_error_return_structured_errors(monkeypatch, tmp_path)
         assert "VersionError" in result["error"]
 
 
-def test_agent_tool_queries_distinguish_budget_and_reject_negative_paging():
-    """#644: budget exhaustion must not read as a missing object, and every
-    paging entry point must reject negative offset/limit while keeping the
-    legal zero values. Triggered through the public agent tools only."""
-
-    # export:0 exists on this fixture, proven by the unbounded fetch.
-    assert get_object(str(DATA_SAMPLE), "export:0")["id"] == "export:0"
-
-    # Same id, too little budget: a retry contract, never OBJECT_NOT_FOUND.
-    squeezed = get_object(str(DATA_SAMPLE), "export:0", max_bytes=1000)
-    assert squeezed["code"] == "BUDGET_EXHAUSTED"
-    assert squeezed["stage"] == "agent.get_object"
-    assert squeezed["recoverable"] is True
-    assert squeezed["min_bytes"] > 1000
-    assert json_byte_size(squeezed) <= 1000, "the failure contract must obey the budget it reports"
-    # The advertised budget is enough on retry, so the contract is actionable.
-    assert get_object(str(DATA_SAMPLE), "export:0", max_bytes=squeezed["min_bytes"])["id"] == "export:0"
-
-    # A genuinely absent object keeps its own code, even under the same budget.
-    missing = get_object(str(DATA_SAMPLE), "export:999999", max_bytes=1000)
-    assert missing["code"] == "OBJECT_NOT_FOUND"
-
-    for tool, args in (
-        (list_dependencies, ("offset", "limit")),
-        (get_diagnostics, ("offset", "limit")),
-        (list_objects, ("offset", "limit")),
-        (inspect_package, ("limit",)),
-    ):
-        for name in args:
-            with pytest.raises(ValueError, match="non-negative"):
-                tool(str(PACKAGE_SAMPLE), **{name: -1})
-
-    # Zero stays legal: an empty page is a page, not a bad argument.
-    assert list_dependencies(str(PACKAGE_SAMPLE), offset=0, limit=0)["dependencies"] == []
-    assert get_diagnostics(str(PACKAGE_SAMPLE), offset=0, limit=0)["diagnostics"] == []
-    assert list_objects(str(PACKAGE_SAMPLE), offset=0, limit=0)["objects"] == []
-    assert inspect_package(str(PACKAGE_SAMPLE), limit=0)["objects"] == []
-
-
 def test_import_dependency_package_is_the_outer_owner_not_the_class_package():
     """#645: Dependency.package_name is the package an import belongs to.
 
@@ -2713,16 +2315,16 @@ def test_import_dependency_package_is_the_outer_owner_not_the_class_package():
     OWNER = "/ALSV4_CPP/AdvancedLocomotionV4/Audio/Footsteps/Footstep_Cue"
     MAT = "/ALSV4_CPP/AdvancedLocomotionV4/CharacterAssets/MannequinSkeleton/Materials/M_DecalFootprint"
 
-    doc = _document(str(DATA_SAMPLE))
+    doc = _document(str(DATA_SAMPLE), depth="decode")
     cue = next(d for d in doc.dependencies if d.object_name == CUE and d.class_name == "SoundCue")
     assert cue.package_name == OWNER, "ClassPackage (/Script/Engine) must not stand in for the owner"
     mat = next(d for d in doc.dependencies if d.object_name == "M_DecalFootprint" and d.class_name == "Material")
     assert mat.package_name == MAT and mat.class_name == "Material"
 
     # Same fact at every public boundary.
-    agent = next(d for d in list_dependencies(str(DATA_SAMPLE))["dependencies"] if d["object_name"] == CUE)
+    agent = next(d for d in project_document(doc)["dependencies"] if d["object_name"] == CUE)
     assert agent["package_name"] == OWNER
-    rel = next(r for r in project_document(doc, depth="package")["relations"] if r["to"] == f"import:{cue.index}")
+    rel = next(r for r in project_document(doc)["relations"] if r["to"] == f"import:{cue.index}")
     assert rel["target_path"] == f"{OWNER}.{CUE}"
 
     def row(cls, outer, name, pkg=None):
