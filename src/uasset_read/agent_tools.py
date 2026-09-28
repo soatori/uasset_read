@@ -1,38 +1,26 @@
-"""Agent tools — 6 bounded library tools for programmatic consumers.
+"""Agent tools — two library tools for programmatic consumers.
 
-Each tool directly calls the v2 Python API and returns structured JSON.
+``inspect_package(file_path, *, mode=...)`` returns the same v4 package
+document as ``project_document(parse_package_document(...))``. ``extract_payload``
+stays a separate explicit binary operation with its own byte budget.
 In-library API only; no MCP server/SDK or other agent transport here.
 
-Design doc reference:
-- Agent Gate: 6 tools sharing Python API
-- Each tool has max response bytes, supports selection/pagination
-- Returns stable ids, distinguishes not_requested vs unavailable
-- Errors are structured diagnostics, not log stacks
+Errors are structured diagnostics, not log stacks; tools call the Python
+document API directly.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any, Literal, cast
 
 from .exceptions import BINARY_READ_ERRORS, ParseError, VersionError
 from .models.document import PackageDocument
 from .package import parse_package_document
-from .projection import (
-    dependency_to_dict,
-    fit_list_response,
-    json_byte_size,
-    paginate,
-    project_document,
-    select_objects,
-)
+from .projection import project_document
 
-# Max response sizes per tool (bytes)
-_MAX_BYTES_INSPECT = 4096
-_MAX_BYTES_LIST_OBJECTS = 16384
-_MAX_BYTES_GET_OBJECT = 32768
-_MAX_BYTES_LIST_DEPS = 8192
-_MAX_BYTES_GET_DIAG = 8192
+# Max response size for extract_payload (bytes)
 _MAX_BYTES_EXTRACT_PAYLOAD = 65536
 
 # Canonical schema spelling is payload:export:N / payload:import:N; the
@@ -42,6 +30,34 @@ _PAYLOAD_ID_RE = re.compile(
     r"^payload:(?:\((?P<p_kind>export|import):(?P<p_idx>\d+)\)"
     r"|(?P<s_kind>export|import):(?P<s_idx>\d+))$"
 )
+
+
+def json_byte_size(payload: Any) -> int:
+    """Compact-JSON UTF-8 byte length — the single measure every byte-budget check shares."""
+    return len(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+
+
+def fit_list_response(response: dict, max_bytes: int, *, list_key: str, total_key: str = "total") -> dict:
+    """Drop trailing items from response[list_key] until the compact encoding fits max_bytes.
+
+    Mutates ``response`` in place; it must carry {list_key (a list), "offset",
+    "returned", total_key}. Raises ValueError when max_bytes cannot hold even
+    the empty-list envelope.
+    """
+    items = response[list_key]
+    while json_byte_size(response) > max_bytes and items:
+        items.pop()
+        n = len(items)
+        response["returned"] = n
+        response["next_offset"] = response["offset"] + n
+    if not items:
+        response.pop("next_offset", None)  # a cursor that doesn't advance ends nothing
+    size = json_byte_size(response)  # one measure serves both the test and the message
+    if size > max_bytes:
+        raise ValueError(f"Response budget {max_bytes} bytes too small for minimal envelope ({size} bytes)")
+    if items and response["offset"] + len(items) >= response[total_key]:
+        response.pop("next_offset", None)  # a cursor past the real end is a lie
+    return response
 
 
 def _parse_payload_id(payload_id: str) -> tuple[Literal["export", "import"], int] | None:
@@ -110,176 +126,18 @@ def _parse_or_error(
 def inspect_package(
     file_path: str,
     *,
-    max_bytes: int = _MAX_BYTES_INSPECT,
-    depth: Literal["package", "object", "asset", "decode"] = "package",
-    limit: int = 0,
+    mode: Literal["normal", "debug"] = "normal",
 ) -> dict[str, Any]:
-    """Tool: inspect_package — source/package/summary/diagnostic overview.
+    """Tool: inspect_package — the v4 package document for one package.
 
-    Returns a concise summary of the package without listing all objects.
-    Default limit=0 gives "package envelope + diagnostics summary" semantics.
+    Parses the full document at decode depth and returns exactly
+    ``project_document(document, mode=mode)``.
     """
-    doc, error = _parse_or_error(file_path, stage="agent.inspect_package", depth=depth)
+    doc, error = _parse_or_error(file_path, stage="agent.inspect_package", depth="decode")
     if error is not None:
         return error
     assert doc is not None
-    return project_document(doc, depth=depth, limit=limit, max_bytes=max_bytes)
-
-
-def list_objects(
-    file_path: str,
-    *,
-    object_ids: list[str] | None = None,
-    roles: list[str] | None = None,
-    classes: list[str] | None = None,
-    offset: int = 0,
-    limit: int = 50,
-    max_bytes: int = _MAX_BYTES_LIST_OBJECTS,
-) -> dict[str, Any]:
-    """Tool: list_objects — paginated object identity, class, roles, status.
-
-    Returns object list with pagination info.
-    """
-    doc, error = _parse_or_error(file_path, stage="agent.list_objects")
-    if error is not None:
-        return error
-    assert doc is not None
-    selected = select_objects(doc, object_ids=object_ids, roles=roles, classes=classes)
-    return project_document(
-        doc,
-        object_ids=object_ids,
-        roles=roles,
-        classes=classes,
-        offset=offset,
-        limit=limit,
-        max_bytes=max_bytes,
-        response_extras={"total": len(selected), "offset": offset},
-    )
-
-
-def get_object(
-    file_path: str,
-    object_id: str,
-    *,
-    max_bytes: int = _MAX_BYTES_GET_OBJECT,
-) -> dict[str, Any]:
-    """Tool: get_object — single object properties and optional semantic.
-
-    Returns full object detail including serial region and diagnostics.
-
-    Existence is decided on the parsed document before the byte budget is
-    applied (#644): the old order trimmed the whole envelope first and then
-    read the resulting empty page as a missing object.
-    """
-    doc, error = _parse_or_error(file_path, stage="agent.get_object")
-    if error is not None:
-        return error
-    assert doc is not None
-
-    if not any(o.id == object_id for o in doc.objects):
-        # Stable structured-diagnostic shape (cf. extract_payload's deferred code):
-        # consumers branch on code/stage/recoverable, not on message text.
-        return _err(
-            "OBJECT_NOT_FOUND",
-            "agent.get_object",
-            recoverable=True,
-            message=f"Object '{object_id}' not found",
-            available_ids=[o.id for o in doc.objects[:20]],
-        )
-
-    full = project_document(doc, object_ids=[object_id], view="raw")
-    # The whole response is what the budget has to cover; the object alone is
-    # never returned over cap, and 'too small' is never dressed up as 'missing'.
-    size = json_byte_size(full)
-    if size <= max_bytes:
-        # R4: always expose embedded type-aware projection records through
-        # get_object (empty list when the family has none). Records already
-        # rode in the bounded envelope measured above.
-        matching = [
-            item
-            for item in (full.get("projections") or [])
-            if isinstance(item, dict) and item.get("source_object_id") == object_id
-        ]
-        return {**full["objects"][0], "projections": matching}
-    return _err(
-        "BUDGET_EXHAUSTED",
-        "agent.get_object",
-        recoverable=True,
-        message=f"Object '{object_id}' exists but needs {size} bytes, over the {max_bytes}-byte budget",
-        object_id=object_id,
-        max_bytes=max_bytes,
-        min_bytes=size,
-    )
-
-
-def list_dependencies(
-    file_path: str,
-    *,
-    offset: int = 0,
-    limit: int = 50,
-    max_bytes: int = _MAX_BYTES_LIST_DEPS,
-) -> dict[str, Any]:
-    """Tool: list_dependencies — paginated full import dependency set.
-
-    Pages the complete `doc.dependencies` import set; the response is bounded
-    to `max_bytes` by dropping trailing items (adjust `next_offset` accordingly).
-    """
-    doc, error = _parse_or_error(file_path, stage="agent.list_dependencies")
-    if error is not None:
-        return error
-    assert doc is not None
-    deps = [dependency_to_dict(d) for d in doc.dependencies]
-    page, next_offset, _trunc = paginate(deps, offset=offset, limit=limit)
-    response: dict[str, Any] = {
-        "dependencies": page,
-        "total_dependencies": len(deps),
-        "offset": offset,
-        "returned": len(page),
-    }
-    if next_offset is not None:
-        response["next_offset"] = next_offset
-    return fit_list_response(response, max_bytes, list_key="dependencies", total_key="total_dependencies")
-
-
-def get_diagnostics(
-    file_path: str,
-    *,
-    stage: str | None = None,
-    severity: str | None = None,
-    object_id: str | None = None,
-    offset: int = 0,
-    limit: int = 50,
-    max_bytes: int = _MAX_BYTES_GET_DIAG,
-) -> dict[str, Any]:
-    """Tool: get_diagnostics — filtered diagnostic list.
-
-    Filters by stage, severity, and/or object_id.
-    """
-    doc, error = _parse_or_error(file_path, stage="agent.get_diagnostics")
-    if error is not None:
-        return error
-    assert doc is not None
-
-    # Apply filters
-    filtered = list(doc.diagnostics)
-    if stage:
-        filtered = [d for d in filtered if d.stage == stage]
-    if severity:
-        filtered = [d for d in filtered if d.severity == severity]
-    if object_id:
-        filtered = [d for d in filtered if d.object_id == object_id]
-
-    # Paginate
-    page, next_offset, _truncation = paginate(filtered, offset=offset, limit=limit)
-
-    response: dict[str, Any] = {
-        "diagnostics": [d.to_dict() for d in page],
-        "total": len(filtered),
-        "offset": offset,
-        "returned": len(page),
-        **({"next_offset": next_offset} if next_offset is not None else {}),
-    }
-    return fit_list_response(response, max_bytes, list_key="diagnostics")
+    return project_document(doc, mode=mode)
 
 
 def extract_payload(

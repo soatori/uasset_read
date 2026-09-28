@@ -1,6 +1,12 @@
 # Projection 分层重构边界（G4）
 
-status: implemented
+status: superseded (historical)
+
+> **2026-09-28 superseded notice:** the v4 output amendment retired this whole
+> layering. The single v4 producer (`project_document(document, *, mode=...)`)
+> has no pagination, byte-budget, or truncation layer; `_project_envelope` /
+> `_enforce_budget` and their tests are gone. Everything below is a historical
+> record of the v3-era refactor and must not be read as current behavior.
 
 > 定义 `projection.py` 的可执行重构边界：投影 → 截断 → 序列化。纯代码搬移级重构，公开行为与签名不变。
 >

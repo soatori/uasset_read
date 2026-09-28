@@ -2,36 +2,43 @@
 
 status: target
 
-> **文档状态：目标架构基线（2026-08-26）。Legacy 主路径已实现**（package document 输出全部 exports；tagged properties 在 export 边界内解析；CLI/Python API/Agent 共用同一投影；语义不再依赖 Semantic 1.x handler；decode 不产出顶层 payload）。**payload 字节提取已实现（cooked 包 + sidecar）**。**2026-09-21 合并 `8727b067` 后，v3 路径为当前默认：`format_version: "3.0"`、静态 Blueprint IR/CFG、type-aware projections 与 canonical writer 见下方 Status audit。** 2026-09-02 顺序调整：实现按 UE 源码偏移证据推进（CUE4Parse/UAssetAPI 只作阅读参考）。
+> **文档状态：目标架构基线（2026-08-26）。Legacy 主路径已实现**（package document 输出全部 exports；tagged properties 在 export 边界内解析；CLI/Python API/Agent 共用同一投影；语义不再依赖 Semantic 1.x handler；decode 不产出顶层 payload）。**payload 字节提取已实现（cooked 包 + sidecar）**。**当前默认输出是 2026-09-28 v4 amendment 的 `format_version: "4.0"`（normal/debug 双模式；历史记录：2026-09-21 合并 `8727b067` 后曾以 v3 `"3.0"` 信封为默认）。**静态 Blueprint IR/CFG、type-aware projections 与 canonical writer 见下方 Status audit。 2026-09-02 顺序调整：实现按 UE 源码偏移证据推进（CUE4Parse/UAssetAPI 只作阅读参考）。
 >
-> **2026-09-05 后续状态更新（已实现，非目标）**：Semantic JSON 1.x 输出路径已删除（`--legacy-json` 等旧 CLI flag 进入 retired 集合，唯一顶层 format 为 `uasset_read.package`）；Blueprint VarType（`FEdGraphPinType`）类型解码与 Kismet 反编译已迁移到 v2 object model（`BlueprintFamilyHandler` decode 分支 + `kismet.decompile_bridge`，由 `tests/test_blueprint_decode.py` 覆盖）。**当前产品非目标：Zen/IoStore 全量解码、cooked/Zen unversioned 的通用 SchemaProvider、外部容器 payload 提取和其余深层语义；编辑器 `.usmap` 路径仍是 bounded partial。** Blueprint C++ skeleton / v3 未完成项已从本列表移除——2026-09-21 Status audit：v3 路径为当前默认（`format_version: "3.0"`），静态 Blueprint IR/CFG 与 typed C++ projection 为 current；旧字符串式 C++ 伪代码链仍保持退役。parent-asset 解析已于 2026-09-10 Gate G 产品决策放弃（D1 §7），不再列为 deferred gap。**
+> **2026-09-05 后续状态更新（已实现，非目标）**：Semantic JSON 1.x 输出路径已删除（`--legacy-json` 等旧 CLI flag 进入 retired 集合，唯一顶层 format 为 `uasset_read.package`）；Blueprint VarType（`FEdGraphPinType`）类型解码与 Kismet 反编译已迁移到 v2 object model（`BlueprintFamilyHandler` decode 分支 + `kismet.decompile_bridge`，由 `tests/test_blueprint_decode.py` 覆盖）。**当前产品非目标：Zen/IoStore 全量解码、cooked/Zen unversioned 的通用 SchemaProvider、外部容器 payload 提取和其余深层语义；编辑器 `.usmap` 路径仍是 bounded partial。**（historical）2026-09-21 Status audit 曾记录 v3 路径为默认且 typed C++ projection 为 current；该表述已随 2026-09-28 v4 amendment 作废——当前默认是 v4 `format_version: "4.0"`，typed C++ projection 与旧字符串式 C++ 伪代码链均保持退役。parent-asset 解析已于 2026-09-10 Gate G 产品决策放弃（D1 §7），不再列为 deferred gap。**
 >
 > **2026-09-10 Gate K 状态更新**：C++ 伪代码文本生成链（`kismet/translator.py` / `body_builder.py` / `jump_analyzer.py`）已退役；公共函数逻辑表示为 `semantic.functions[]` 的 K0 expression 摘要（asset）与 decode 级 expression tree。`cpp_code` / `translation_status` / `structured_rate` 不再出现在 experimental semantic 输出中。
 
-> **2026-09-16 approved target amendment**：在保留 package-first、统一对象模型和结构化诊断原则的前提下，下一轮允许进行不保证旧输出兼容性的纯 Python 模块化重构。目标输出可升级为 `format_version: "3.0"`；Blueprint/Kismet 目标由 expression 摘要扩展为指令 IR、CFG、静态调用/变量读写分析，并增加从同一语义 IR 投影 C++ 声明和迁移代码的能力。该 C++ 投影不执行 Blueprint、不恢复 native C++ 函数体，也不伪造 cooking、加密或缺失数据。Epic Blueprint Header View 仅作为声明范围参考，不作为运行时依赖或实现桥接。
+> **2026-09-16 approved target amendment（historical；envelope 目标已被 2026-09-28 v4 amendment 取代）**：在保留 package-first、统一对象模型和结构化诊断原则的前提下，下一轮允许进行不保证旧输出兼容性的纯 Python 模块化重构。目标输出曾计划升级为 `format_version: "3.0"`；Blueprint/Kismet 目标由 expression 摘要扩展为指令 IR、CFG、静态调用/变量读写分析，并曾计划从同一语义 IR 投影 C++ 声明和迁移代码。该 C++ 投影已随 v4 amendment 退役。Epic Blueprint Header View 仅作为声明范围参考，不作为运行时依赖或实现桥接。
 >
 > **2026-09-17 clarification**：2026-09-10 Gate K 退役的是旧的字符串拼接式 `cpp_code`/伪代码链；它仍是 v2 当前状态的历史事实，但不禁止 2026-09-16 批准的 v3 typed IR → C++ projection。后文提到“C++ 已退役/非迁移目标”时，除非明确写为 v3 target，均应理解为旧 v2 链的历史状态。v3 `format_version` 仍属于投影信封，不向 `PackageDocument` 增加展示层版本状态。
 >
-> **2026-09-16 v3 contract freeze（Task 1）**：(1) 下一实现波是纯 Python 模块化重写；(2) 输出 schema major 固定为 `format_version: "3.0"`（信封字段，由 `projection.py` 的 `FORMAT_VERSION` 注入，不落到 `PackageDocument`；契约文件为 `docs/designs/contract/package_document_v3.schema.json`，v2 契约文件已删除）；(3) Blueprint/Kismet 公共逻辑目标为 instruction IR + CFG + 静态调用/变量读写分析；(4) C++ declaration/migration projection 从同一语义 IR 派生，不是第二解析器；(5) Gate K 只退役旧字符串伪代码链，不禁止新的 typed v3 projection；(6) Epic Blueprint Header View（`Engine/Plugins/Editor/BlueprintHeaderView/`）仅作 declaration-scope 参考——它在编辑器 UI 预览 C++ header，不导出 `.h`/`.cpp` 文件，也不是运行时依赖；(7) type-aware projection 是 v3 公共目标：Blueprint declaration/migration、Material graph/editor-builder、table/curve/struct/enum data、physical asset 的 metadata/payload 引用；没有任何资产族被要求产出 C++；(8) 每个内嵌 projection 都带显式 capability/status 与 provenance；不可用或低置信信息不得用伪造源码填补。
+> **2026-09-16 v3 contract freeze（Task 1）（historical：v3 契约与 C++ projection 目标均已被 2026-09-28 v4 amendment 取代，契约文件 `package_document_v3.schema.json` 已删除）**：(1) 下一实现波是纯 Python 模块化重写；(2) 当时输出 schema major 固定为 `format_version: "3.0"`（信封字段，由 `projection.py` 的 `FORMAT_VERSION` 注入，不落到 `PackageDocument`；契约文件为 `docs/designs/contract/package_document_v3.schema.json`，v2 契约文件已删除）；(3) Blueprint/Kismet 公共逻辑目标为 instruction IR + CFG + 静态调用/变量读写分析；(4) C++ declaration/migration projection 从同一语义 IR 派生，不是第二解析器；(5) Gate K 只退役旧字符串伪代码链，不禁止新的 typed v3 projection；(6) Epic Blueprint Header View（`Engine/Plugins/Editor/BlueprintHeaderView/`）仅作 declaration-scope 参考——它在编辑器 UI 预览 C++ header，不导出 `.h`/`.cpp` 文件，也不是运行时依赖；(7) type-aware projection 是 v3 公共目标：Blueprint declaration/migration、Material graph/editor-builder、table/curve/struct/enum data、physical asset 的 metadata/payload 引用；没有任何资产族被要求产出 C++；(8) 每个内嵌 projection 都带显式 capability/status 与 provenance；不可用或低置信信息不得用伪造源码填补。
+>
+> **2026-09-28 approved v4 output amendment（Task 1 contract freeze）**：包输出升级为 `format_version: "4.0"`，公共输出模式恰好为 `normal` 与 `debug` 两种（不存在 `agent`/`raw`/`semantic`/`view`/`depth` 等公共输出模式）。产品是单包单输出解析器：两种模式都输出在 `depth="decode"` 下解析的完整文档，不做对象选择、分页或输出字节预算。`normal` 包含全部有序属性与安全解码值以及静态 Blueprint IR/CFG/调用/变量读写语义，不含偏移、物理区间、原始字节、解析 trace、byte accounting 与详细诊断证据；`debug` 在 `normal` 之上增加证据（顶层 `debug` 对象的七个数组 + 嵌套 `debug_evidence`），剥离这些证据并把 `mode` 归一为 `normal` 后必须与 `normal` 输出逐字节等价。C++ projection/rendering 面退役（不再实施 C++ 声明/迁移输出）；Blueprint 指令 IR、CFG、相关性、函数/变量/调用分析与非 C++ 语义投影保留。契约文件为 `docs/designs/contract/package_document_v4.schema.json`（Draft 2020-12）；v3 契约文件（`package_document_v3.schema.json`及示例）随本次冻结删除，v3 的 view/depth/selection/pagination/max_bytes 公共输出面不再是目标。公共签名目标：`parse_package_document(file_path, *, tolerant=True, mappings_path=None, game=None, depth="decode", object_ids=None)`、`project_document(document, *, mode="normal")`（唯一信封生产者）、`write_projected_document(document, output_path, *, mode="normal")`、`inspect_package(file_path, *, mode="normal")`；`extract_payload()` 保留为独立二进制操作。与本 amendment 冲突的 v3 契约、view/depth/selection/pagination/max_bytes 与 typed C++ projection 表述均以本 amendment 为准。本冻结只记录目标与契约，不表示源码已实现 v4。
 >
 > 本文是当前项目唯一权威的重构目标。源码与测试仍是“当前已经实现什么”的唯一依据；本文只定义“接下来要实现什么”。旧版输出、Semantic JSON 1.x 和单资产设计文档均为历史资料，不得继续作为新功能的目标架构。
 
-## Status audit (2026-09-21, post-merge)
+## Status audit (2026-09-21, post-merge) — historical snapshot
 
-This is an implementation marker, not a change to the target architecture. On
-`dev-0.6.0` after merge `8727b067` (controller review pass); local verification
+This is a dated implementation marker, not a change to the target architecture.
+On `dev-0.6.0` after merge `8727b067` (controller review pass); local verification
 recorded at that time: full suite **444 passed**, `compileall` clean (a
-historical post-merge count, not the current suite total):
+historical post-merge count, not the current suite total). The v3-envelope and
+typed C++ lines below describe that 2026-09-21 state only; the 2026-09-28 v4
+amendment superseded them (contract file `package_document_v3.schema.json`
+deleted, C++ projection retired, default output is `format_version: "4.0"`):
 
-- v3 contract envelope: `FORMAT_VERSION` / `projections` / `sidecars` in
-  `src/uasset_read/projection.py`; contract
+- v3 contract envelope (historical): `FORMAT_VERSION` / `projections` / `sidecars` in
+  `src/uasset_read/projection.py`; contract then was
   `docs/designs/contract/package_document_v3.schema.json`.
 - Bounded sources/containers, layout/Zen availability boundary, separate
   tagged/unversioned property readers, and byte accounting are present.
 - Static Blueprint IR/CFG/correlation, Material graph, C++/type-aware
   projections (`src/uasset_read/projections/`), canonical writer
-  (`write_projected_document`), and sample acceptance gates are current
-  behavior on this branch.
+  (`write_projected_document`), and sample acceptance gates were current
+  behavior on this branch (the typed C++ projection half is retired by the v4
+  amendment; Blueprint IR/CFG/correlation, Material graph, non-C++ projections
+  and the writer remain current).
 
 Zen package full decode remains outside the current product target. The UE5.8.2
 traditional FPak fixture is now available; Pak range-read and container extraction
@@ -51,7 +58,7 @@ remain separate deferred implementation work.
 6. 默认输出面向检查与 Agent；raw/debug/decode 通过投影和深度参数按需展开。
 7. 大型 payload 永不默认内嵌 JSON，只返回可定位、可提取的描述符。
 8. 解析核心产生结构化 diagnostics，不配置全局日志；CLI 决定是否写日志。
-9. 当前 v2 的 Blueprint/Kismet 能力是 bytes → expressions + 结构化诊断；旧 C++ 伪代码文本链已于 2026-09-10 Gate K 退役。v3 目标改为 top-level instruction IR + 双偏移 provenance + CFG，并从 typed semantic IR 生成独立 C++ projection；不得复活旧 `cpp_code` 字段或字符串拼接链。
+9. 当前 v2 的 Blueprint/Kismet 能力是 bytes → expressions + 结构化诊断；旧 C++ 伪代码文本链已于 2026-09-10 Gate K 退役。v3 目标改为 top-level instruction IR + 双偏移 provenance + CFG；typed C++ projection 已随 2026-09-28 v4 amendment 退役，不再是迁移目标。不得复活旧 `cpp_code` 字段或字符串拼接链。
 
 ## Authority and Reading Rules
 
@@ -372,7 +379,7 @@ class ObjectRecord:
 
 契约保留、当前读取器尚未发射的 kind（方向以契约示例为准，从主语侧表述）：
 
-- `generated_class_of` — `from` 是 `to` 的生成类（见 `package_document_v3.example.json`：`export:2`（`ABP_RifleAnimLayers_C`）→ `export:1`（`ABP_RifleAnimLayers`））
+- `generated_class_of` — `from` 是 `to` 的生成类（历史示例（已删除的 v3 example 文件）：`export:2`（`ABP_RifleAnimLayers_C`）→ `export:1`（`ABP_RifleAnimLayers`））
 - `default_object_of` — `from` 是 `to` 的默认对象
 - `references` — `from` 引用 `to`
 
@@ -427,39 +434,41 @@ class AssetHandler(Protocol):
 
 ## Output Contract
 
+（当前契约：v4 生产者已落地，源码默认输出 v4 信封 `format_version: "4.0"`（normal/debug 双模式），源码与测试均以此为准。以 2026-09-28 v4 amendment 为准。）
+
 ### 顶层规则
 
-目标公共格式固定为 `uasset_read.package`，当前目标 schema major 为 `format_version: "3.0"`（v2 的 `"2.0"` 已随 S1 归档，见 `docs/designs/archive/2026-08-31-v2-contract-stability.md`）：
+目标公共格式固定为 `uasset_read.package`，目标 schema major 为 `format_version: "4.0"`（v3 `"3.0"` 契约已随 2026-09-28 amendment 删除；v2 `"2.0"` 已随 S1 归档，见 `docs/designs/archive/2026-08-31-v2-contract-stability.md`）：
 
 ```json
 {
   "format": "uasset_read.package",
-  "format_version": "3.0",
-  "view": "semantic",
-  "depth": "asset",
+  "format_version": "4.0",
+  "mode": "normal",
   "source": {},
   "package": {},
+  "summary": {},
   "objects": [],
   "relations": [],
   "dependencies": [],
   "projections": [],
-  "sidecars": [],
   "payloads": [],
-  "diagnostics": [],
-  "summary": {}
+  "sidecars": [],
+  "diagnostics": []
 }
 ```
 
 领域数据只能出现在 `objects[].semantic`，不得提升到顶层。`objects` 表达全部 exports；imports 通过 `dependencies` 或 raw table 查询，不伪装成导出对象。
+
+公共输出模式恰好两种：`normal` 与 `debug`。单包单输出：两种模式都输出 `depth="decode"` 解析的完整文档，没有对象选择、分页、截断或输出字节预算。`debug` 在顶层多出一个 `debug` 证据对象（`object_regions`/`property_evidence`/`semantic_source_ranges`/`payload_sources`/`sidecar_sources`/`diagnostic_details`/`byte_accounting` 七个数组，`additionalProperties: false`），并在语义记录内保留嵌套 `debug_evidence`。parity 规则：剥离顶层 `debug` 与全部嵌套 `debug_evidence` 键并把 `mode` 归一为 `normal` 后，剩余文档必须与 normal 输出逐字节等价。公共语义值在任意深度禁止证据键 `source_range`、`script_source_range`、`raw_region`、`tag_range`、`value_range`、`raw_data`（对应物理证据移入 debug 块的 `semantic_source_ranges` 等条目）。所有 debug 区间统一使用 `project_region()` 形状，不新增第二套 region 序列化器。
 
 ### 示例
 
 ```json
 {
   "format": "uasset_read.package",
-  "format_version": "3.0",
-  "view": "semantic",
-  "depth": "asset",
+  "format_version": "4.0",
+  "mode": "normal",
   "source": {
     "kind": "loose",
     "name": "BP_Light.uasset",
@@ -471,13 +480,27 @@ class AssetHandler(Protocol):
     "engine_version": "5.4.4",
     "package_flags": 16448
   },
+  "summary": {
+    "object_count": 2,
+    "asset_object_ids": ["export:0"]
+  },
   "objects": [
     {
       "id": "export:0",
+      "table_index": 0,
       "name": "BP_Light",
       "class": "Blueprint",
       "roles": ["asset"],
       "status": {"parse": "complete", "semantic": "complete"},
+      "properties": [
+        {
+          "name": "DisplayName",
+          "type": "StrProperty",
+          "occurrence": 0,
+          "array_index": null,
+          "value": "Light"
+        }
+      ],
       "semantic": {
         "kind": "blueprint",
         "graphs": [],
@@ -488,10 +511,12 @@ class AssetHandler(Protocol):
     },
     {
       "id": "export:1",
+      "table_index": 1,
       "name": "BP_Light_C",
       "class": "BlueprintGeneratedClass",
       "roles": ["generated_class"],
       "status": {"parse": "complete", "semantic": "partial"},
+      "properties": [],
       "semantic": {
         "kind": "class",
         "defaults": {}
@@ -507,47 +532,22 @@ class AssetHandler(Protocol):
   ],
   "dependencies": [],
   "projections": [],
-  "sidecars": [],
   "payloads": [],
-  "diagnostics": [],
-  "summary": {
-    "object_count": 2,
-    "asset_object_ids": ["export:0"]
-  }
+  "sidecars": [],
+  "diagnostics": []
 }
 ```
 
-`projections[]` 承载 type-aware 内嵌投影记录（Blueprint declaration/migration、Material graph、table data、metadata 引用；每条带 `status`/`completeness` 与 provenance），`sidecars[]` 只在 payload 或体积硬边界迫使物理拆分时出现并记录相对路径、大小、SHA-256、原因与序列化源区间。`next_offset`/`truncation` 只对有界分页响应有效，canonical writer 不输出它们。
+`objects[].properties` 是有序 occurrence 数组（元素为 `{name, type, occurrence, array_index, value}`），不是 name-keyed 公共 map；重复名和数组元素保留序列化顺序。`projections[]` 承载非 C++ type-aware 投影记录（table data、material/graph/physical JSON 等；每条带严格 `status`/`completeness` 与必填 `provenance: {derived_from: [...], generator: ...}`，provenance 不携带字节区间），`sidecars[]` 只在 payload 或体积硬边界迫使物理拆分时出现并记录相对路径、大小、SHA-256、原因；序列化源区间是 debug 证据（`debug.sidecar_sources`）。v4 输出没有分页或截断面——退役的分页/截断字段名不再出现在公共包输出契约中。
 
-### View 与 Depth
+### Normal 与 Debug
 
-View 决定字段用途，Depth 决定解析成本：
-
-| 参数 | 含义 |
+| 模式 | 内容 |
 | --- | --- |
-| `view=semantic` | 默认；对象身份、关系、业务摘要、coverage 和必要诊断 |
-| `view=raw` | Header/tables、flags、offsets、完整属性树和未知字段描述符 |
-| `view=debug` | raw 加读取分支、offset evidence、恢复信息和解析统计 |
-| `depth=package` | 只读 summary 与 tables，不解析对象 payload |
-| `depth=object` | 解析请求对象的通用属性 |
-| `depth=asset` | 运行轻量领域 handler |
-| `depth=decode` | 运行显式请求的重型 graph/bytecode/media 解码 |
+| `normal` | 有序属性与安全解码值、静态 Blueprint IR/CFG/调用/变量读写语义、summary 诊断；禁止偏移、物理区间、原始字节、trace、byte accounting 与详细诊断证据 |
+| `debug` | normal 全量 + 顶层 `debug` 证据块 + 嵌套 `debug_evidence`；满足 parity 规则 |
 
-默认 `semantic + asset` 不包含完整 name map、所有 raw property、HexView 或 blob bytes。
-
-### Selection 与 Pagination
-
-所有 API 和 Agent tool 统一支持：
-
-- `object_ids`
-- `roles`
-- `classes`
-- `fields`
-- `offset`
-- `limit`
-- `max_bytes`
-
-排序固定使用 table index。截断必须返回 `next_offset` 和结构化 `TRUNCATED` 诊断，不能静默省略。
+属性值只经 `project_property_value()` 投影：标量保持标量；typed 值带 `kind` 判别（`soft_object_path`/`object_ref`/`delegate`/`value`/`struct`/`array`/`map`/`set`/`enum`/`text`/`opaque`）；multicast delegate 是 delegate 条目的裸数组；`PropertyFallback`/`StructFallback`/bytes/不支持对象一律 `{kind: "opaque", type, size, reason}`（可带 `struct_type`），不存在 `str()`/`repr()` 兜底。view/depth/selection/pagination/max_bytes 不再是公共输出面（v3 面退役；低层 `depth`/`object_ids` 仍是解析器内部参数，v4 输出恒为 `depth="decode"` 全 exports）。
 
 ### Status
 
@@ -557,12 +557,16 @@ View 决定字段用途，Depth 决定解析成本：
 - object parse：`complete | partial | opaque | failed`
 - object semantic：`complete | partial | unavailable | not_requested`
 - payload：`available | external | missing | unsupported`
+- projection status：`translated | represented | untranslated | unavailable`
+- projection completeness：`complete | partial | opaque | unavailable | failed`
 
 `coverage` 表达“预期语义中已输出多少”；它不能替代 parse status，也不能仅通过字段数量推导。
 
-object semantic 的 `complete` 绑定到 handler 声明的能力层级（#629）：handler 声明 `summary` 或 `decoded`，只有 decoded 层级产出语义时才能记 `complete`；summary 层级（kind/name 回显、light digest，如 Niagara、mesh 概要、depth=asset 的 Blueprint 概要）一律 `partial`，coverage 条目照常输出。
+object semantic 的 `complete` 绑定到 handler 声明的能力层级（#629）：handler 声明 `summary` 或 `decoded`，只有 decoded 层级产出语义时才能记 `complete`；summary 层级（kind/name 回显、light digest，如 Niagara、mesh 概要的 Blueprint 概要）一律 `partial`，coverage 条目照常输出。
 
 ### Diagnostics
+
+公共列表是有序 summary，示例：
 
 ```json
 {
@@ -572,25 +576,20 @@ object semantic 的 `complete` 绑定到 handler 声明的能力层级（#629）
   "stage": "properties.tagged",
   "object_id": "export:3",
   "property_path": "Root.ComponentTemplate",
-  "offset": 4096,
-  "size": 8,
   "effect": "semantic_loss",
-  "recoverable": true,
   "count": 1
 }
 ```
 
-必填：`severity/code/message/stage`。其余按证据提供。相同 code、对象、路径和效果可以聚合 count；不同 offset 的首次与末次位置要保留。
+必填：`severity/code/message/stage/count`。可选：`object_id`/`property_path`/`effect`。`offset`/`size`/`reason`/`fallback`/`recoverable` 细节不在公共列表：它们是 debug 证据，放在 `debug.diagnostic_details` 并以零基 `index` 引用公共 `diagnostics` 条目。相同 code、对象、路径和效果可以聚合 count。
 
 ### Payloads
 
 ```json
 {
-  "id": "payload:0",
+  "id": "payload:export:7",
   "owner": "export:7",
   "kind": "texture_mip",
-  "source_region": "ubulk",
-  "offset": 1024,
   "stored_size": 65536,
   "logical_size": 262144,
   "compression": "oodle",
@@ -599,14 +598,15 @@ object semantic 的 `complete` 绑定到 handler 声明的能力层级（#629）
 }
 ```
 
-payload 提取使用单独 API/tool（当前恒返回 `PAYLOAD_EXTRACTION_DEFERRED`，`payloads[]` 为空数组）。JSON 默认不含 Base64。extraction 恢复后，调用方显式请求且 `max_bytes` 允许时才返回 bytes 或写入目标文件；`max_bytes` 须限制序列化后的工具响应整体（base64 + JSON envelope），而非仅原始 payload 字节。
+公共 payload 只有身份、owner、kind、状态、stored/logical size、compression、hash；物理 `source_region` 与 offset 是 debug 证据（`debug.payload_sources`，offset 相对 `source_region.source_id` 文件，不是整包偏移）。payload 提取使用单独 API/tool（`extract_payload`，显式请求并带字节上限）。JSON 默认不含 Base64。
 
 ### Schema 策略
 
-- 一个 package envelope schema（`docs/designs/contract/package_document_v3.schema.json`，`format_version` const `"3.0"`）。
-- `objects[].semantic.kind` 使用 discriminator 选择可选领域定义。
+- 一个 package envelope schema（`docs/designs/contract/package_document_v4.schema.json`，Draft 2020-12，`format_version` const `"4.0"`）。
+- schema 用 `if`/`then` 限制 `mode` 分支；`additionalProperties: false` 覆盖每个契约对象；公共语义值递归定义并拒绝证据键。
+- `objects[].semantic` 是递归 JSON 值；Blueprint 形状（`GraphLinkRecord`/`ExternalReferenceRecord`/`source_node_reason`/嵌套 `debug_evidence`）由 companion plan 定义并在 schema 中类型化。
 - 领域 schema 不能重新定义 package 公共字段。
-- Schema 版本只在不兼容公共契约变化时升级；v3 是有意的 breaking rewrite，v2 冻结已归档为 historical。
+- Schema 版本只在不兼容公共契约变化时升级；v4 是有意的 breaking rewrite，v3 契约文件已删除，v2 冻结已归档为 historical。
 - Semantic JSON 1.x 已删除，不再是任何投影的 output adapter；`uasset_read.package` 是唯一顶层 format，新功能不再新增 1.x 顶层 format。
 
 ## Multi-Asset Rules
@@ -621,24 +621,20 @@ payload 提取使用单独 API/tool（当前恒返回 `PAYLOAD_EXTRACTION_DEFERR
 
 ## Agent Tool Design
 
-首批工具保持小而稳定：
+v4 Agent 面只有两个工具（`agent` 不是输出模式）：
 
 | Tool | 返回 |
 | --- | --- |
-| `inspect_package` | source/package/summary/diagnostic 摘要 |
-| `list_objects` | 分页对象身份、class、roles、status |
-| `get_object` | 单对象属性与可选 semantic |
-| `list_dependencies` | 分页依赖和关系 |
-| `get_diagnostics` | 按 stage/severity/object 过滤 |
+| `inspect_package(file_path, *, mode="normal")` | 与 Python parse/project 相同的完整 package document |
 | `extract_payload` | 当前恒返回 `PAYLOAD_EXTRACTION_DEFERRED`；extraction 恢复后在大小上限内返回或写出指定 payload |
+
+v3 的 list/get/paging 文档工具与响应预算 helper 已随 2026-09-28 v4 amendment 退役。
 
 工具直接调用 Python document API，不通过 CLI 文本反序列化。本仓库不实现任何外部 agent transport（含 MCP server/SDK）；若将来需要适配层，它必须落在本仓库之外，不得把 transport 依赖引入核心包。
 
 每个工具必须：
 
-- 有明确最大响应 bytes。
-- 支持分页或 selection。
-- 返回稳定 id。
+- 返回稳定 id（table kind + index）。
 - 区分 `not_requested` 与 `unavailable`。
 - 不在错误信息中泄漏无关绝对路径或密钥。
 
@@ -755,11 +751,11 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 2. Texture/Sound metadata 与 payload descriptors。
 3. Skeleton/Mesh summary。
 4. Material/Niagara graph summary。
-5. Blueprint/AnimBlueprint/Kismet 扩展迁移。旧字符串式 C++ 伪代码链不在此列；v3 typed C++ projection 按 2026-09-16/17 amendment 作为新的后置 projection 实施。
+5. Blueprint/AnimBlueprint/Kismet 扩展迁移。旧字符串式 C++ 伪代码链不在此列；v3 typed C++ projection 已随 2026-09-28 v4 amendment 退役，不再实施。
 
     - Phase 4.5：graph/node/pin 解码 + declaration（parent_class/interfaces/functions）+ SCS components + NewVariables names 已迁移到 v2 `BlueprintFamilyHandler` decode 分支。fixture 测试覆盖 StackOBot/BP_CombatCharacter/ABP_RifleAnimLayers/ALS_AnimBP。
     - 已迁移（2026-09-05 核对源码与测试）：VarType（`FEdGraphPinType`）类型解码、Kismet 反编译（`blueprint.kismet` coverage）。
-    - v2 路径上旧字符串式 C++ skeleton 未迁移（历史状态）。parent-asset 解析已放弃（2026-09-10 Gate G，D1 §7）。旧 C++ 伪代码生成链保持退役；v3 typed C++ projection 以 instruction/CFG semantic IR 为唯一输入，2026-09-21 Status audit 记为 current（见上文）。
+    - v2 路径上旧字符串式 C++ skeleton 未迁移（历史状态）。parent-asset 解析已放弃（2026-09-10 Gate G，D1 §7）。旧 C++ 伪代码生成链保持退役；v3 typed C++ projection 曾于 2026-09-21 Status audit 记为 current，现随 2026-09-28 v4 amendment 退役。
 
 退出条件：每个 handler 至少有一个真实样本、一个缺失/partial 样本和明确 coverage；handler 失败不影响同包其他对象。
 
@@ -808,8 +804,8 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - Property contract：tagged/unversioned/unknown。
 - Real sample：按 layout 和资产族参数化。
 - Container integration：Pak/IoStore range 读取。
-- Output schema：同一 document 的不同 view/depth。
-- Agent contract：分页、max_bytes、稳定 id、错误边界。
+- Output schema：同一 document 的 normal/debug 两种模式与 parity 规则。
+- Agent contract：稳定 id、错误边界、mode 一致性。
 
 ### 测试组织约束
 
@@ -864,16 +860,15 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 ### Output v2 Gate
 
 - 唯一顶层 format：`uasset_read.package`。
-- semantic/raw/debug 与 depth 正交。
+- 公共输出模式恰好 normal/debug；debug 只增加证据并满足 parity 规则。
 - 多资产、GeneratedClass、CDO 关系可表达。
-- 默认输出无 blob、无完整 HexView、无无界数组。
-- 所有截断可发现并可继续分页。
+- normal 输出无 blob、无完整 HexView、无无界数组、无偏移/区间/原始字节。
 - schema 与示例由同一模型生成或严格验证。
 
 ### Agent Gate
 
-- 六个工具共享 Python API。
-- 工具调用可限定对象、字段、条数和 bytes。
+- Agent 面共享 Python API（`inspect_package` + `extract_payload`）。
+- `inspect_package(..., mode=...)` 与 Python parse/project 结果一致。
 - 错误为结构化 diagnostics，不返回日志堆栈作为正常数据。
 - 本仓库不提供 MCP server；Agent tools 仅为库内有界 API，CLI 与核心导入不依赖任何 agent transport。
 
@@ -881,7 +876,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 
 - 旧 Semantic 1.x 不再是默认 JSON。（已满足：1.x 输出路径已删除。）
 - 所有公开文档只把旧契约描述为 legacy/current historical。
-- v2 migration completion（历史 gate）：Blueprint/Kismet 扩展在 v2 object model 上运行，旧 C++ 伪代码链保持退役并由 expression 公共输出替代。v3 typed C++ projection 属于 2026-09-16 后续目标，不改变此历史 gate 的完成结论。
+- v2 migration completion（历史 gate）：Blueprint/Kismet 扩展在 v2 object model 上运行，旧 C++ 伪代码链保持退役并由 expression 公共输出替代。v3 typed C++ projection 曾属 2026-09-16 后续目标（现随 2026-09-28 v4 amendment 退役），不改变此历史 gate 的完成结论。
 - 旧 builder/projection/promotion 路径已删除，而不是永久并行。
 - 发行包、源码树和文档树的体积基线已记录并进入 CI/发布检查。
 - 根目录独立 Python 入口已删除，公开命令统一为 `python -m uasset_read`。
@@ -893,7 +888,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 | --- | --- |
 | 把 UE5 都当 Zen | 独立 layout detector + 真实 container metadata |
 | 一次性重写导致样本能力回退 | 原地纵向迁移，按 phase 保留旧 reader 作为对照 |
-| v2 输出无限膨胀 | view/depth/selection/pagination/max_bytes |
+| v2 输出无限膨胀 | 单包单输出；normal/debug 两模式；证据进 debug 块（v4，取代 view/depth/selection/pagination/max_bytes） |
 | 领域 handler 再次侵入 core | handler 只消费 document/object，不读取全局 archive |
 | Unknown 数据静默丢失 | opaque region + diagnostic + payload descriptor |
 | optional codec 破坏跨平台安装 | capability boundary，缺失时 metadata-only |
@@ -910,7 +905,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - Legacy 与 Zen 使用独立 reader。
 - Tagged 与 Unversioned 使用独立 property reader。
 - Writer 延后，第一阶段保持只读。
-- v2 当前：Blueprint/Kismet 字节码反编译是可选 expressions + diagnostics。v3 目标：增加 instruction IR/CFG，并在 core package 读取之后提供 typed C++ declaration/migration projection。
+- v2 当前：Blueprint/Kismet 字节码反编译是可选 expressions + diagnostics。v3 目标曾含 typed C++ declaration/migration projection；2026-09-28 v4 amendment 取消 C++ projection，保留 instruction IR/CFG 与静态语义作为目标。
 - Agent tool 是正式的有界库接口；本仓库不实现 MCP 或其他 agent transport。
 - 默认不写文件日志，不提供 CLI 日志清理；不内嵌大型 payload。
 - 最小依赖优先，但不把零依赖作为不可改变的架构限制。
@@ -927,7 +922,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - `src/uasset_read/package.py` — `parse_package_document` 与 `PackageArchive`
 - `src/uasset_read/models/document.py` — `PackageDocument`
 - `src/uasset_read/models/object_model.py` — `ObjectRecord` / `ObjectStatus`
-- `src/uasset_read/projection.py` — 顶层 `format` / `format_version` 与 view/depth 投影
+- `src/uasset_read/projection.py` — 顶层 `format` / `format_version` 与投影（v4 目标：`project_document(document, *, mode)` 唯一信封生产者）
 - `src/uasset_read/parsers/asset_types/handlers.py` / `handlers_impl.py` — handler registry 与语义 handler（`NewVariables` VarType 解码）
 - `src/uasset_read/parsers/legacy_reader.py` — Legacy reader，含 Kismet 反编译桥接
 - `src/uasset_read/kismet/decompile_bridge.py` — `extract_kismet_decompiled`

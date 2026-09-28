@@ -25,16 +25,12 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
-import jsonschema
 import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = Path(__file__).parent / "samples"
 MANIFEST = SAMPLES / "manifest.json"
-SCHEMA = json.loads(
-    (ROOT / "docs" / "designs" / "contract" / "package_document_v3.schema.json").read_text(encoding="utf-8")
-)
 
 _MANIFEST_DATA = json.loads(MANIFEST.read_text(encoding="utf-8"))
 MANIFEST_SAMPLES = _MANIFEST_DATA["samples"]
@@ -611,9 +607,15 @@ def test_every_real_sample_forms_a_valid_package_document(sample: str):
             from uasset_read.models.properties import PropertyBag, project_property_bag
 
             if isinstance(o.properties, PropertyBag):
-                json.dumps(project_property_bag(o.properties))
+                blob = json.dumps(project_property_bag(o.properties))
             else:
-                json.dumps(o.properties)
+                blob = json.dumps(o.properties)
+            # raw_data legitimately appears as a length-only {"kind": "bytes", ...}
+            # descriptor for struct fallbacks; the contract is that it never
+            # carries inline bytes, and any truncation marker wins.
+            assert "raw_data_truncated" in blob or '"raw_data": "' not in blob, f"{sample}:{o.id}"
+        if o.semantic is not None:
+            json.dumps(o.semantic)
 
     bounds = [d for d in doc.diagnostics if d.code == "EXPORT_PROPERTY_BOUNDS_EXCEEDED"]
     failed = [d for d in doc.diagnostics if d.code == "EXPORT_PROPERTY_PARSE_FAILED"]
@@ -621,32 +623,6 @@ def test_every_real_sample_forms_a_valid_package_document(sample: str):
     assert not bounds and not failed and not oob, (
         f"{sample}: unexpected diagnostics {[d.code for d in bounds + failed + oob]}"
     )
-
-    from uasset_read.projection import project_document
-
-    # Schema validation runs for every fixture. The shipped schema must accept
-    # all legitimate projection values; mismatches are contract bugs, not
-    # test-fold decisions. Every fixture's bounded page must still round-trip
-    # and echo its view.
-    for view in ("semantic", "raw", "debug"):
-        page = project_document(doc, depth="object", view=view, limit=3)
-        parsed = json.loads(json.dumps(page, ensure_ascii=False))
-        assert parsed["view"] == view, sample
-        jsonschema.validate(page, SCHEMA)
-        for dep in page["dependencies"]:
-            assert set(dep) == {"index", "class", "object_name", "package_name"}, f"{sample}: {dep}"
-        for o in page["objects"]:
-            if view == "semantic":
-                assert "properties" not in o, sample
-                if "properties_summary" in o:
-                    assert set(o["properties_summary"]) == {"properties", "property_count"}, sample
-            else:
-                assert "properties_summary" not in o, sample
-    # raw_data legitimately appears as a length-only {"kind": "bytes", ...}
-    # descriptor for struct fallbacks; the contract is that it never carries
-    # inline bytes, and any truncation marker wins.
-    blob_free = json.dumps(project_document(doc, depth="object", view="semantic", limit=3))
-    assert "raw_data_truncated" in blob_free or '"raw_data": "' not in blob_free, sample
 
 
 def test_v2_path_emits_no_handler_warnings(capfd, caplog):
@@ -685,17 +661,10 @@ def test_package_depth_has_no_properties():
 
 def test_large_sample_all_exports():
     """ALS_AnimBP — 3395 exports, 2 asset roles (shares the matrix parse via cache)."""
-    from uasset_read.projection import project_document
 
     doc = _object_document("ALS_AnimBP.uasset")
     assert len(doc.objects) == 3395
-
-    # Default envelope: both relations and dependencies always included;
-    # 25-object page stays schema-valid.
-    page = project_document(doc, depth="package", limit=25)
-    assert len(page["objects"]) == 25, page.get("truncation")
-    assert "relations" in page and "dependencies" in page
-    jsonschema.validate(page, SCHEMA)
+    assert doc.relations and doc.dependencies
 
 
 def test_niagara_fixture_enriched_at_summary_tier():
@@ -1015,16 +984,11 @@ def _quality_baseline_sample_names(
 
 def test_quality_baseline_diagnostics():
     from uasset_read.package import parse_package_document
-    from uasset_read.projection import project_document
 
     names = _quality_baseline_sample_names(_quality_baseline_include_opt_in())
     assert names, "quality_baseline.json must list at least one default sample"
     for sample_name in names:
-        try:
-            doc = parse_package_document(str(SAMPLES / sample_name), depth="asset")
-            jsonschema.validate(project_document(doc), SCHEMA)
-        except Exception as exc:
-            raise AssertionError(f"{sample_name}: quality baseline parse/schema failed: {exc}") from exc
+        doc = parse_package_document(str(SAMPLES / sample_name), depth="asset")
         _assert_quality_baseline(doc, sample_name)
 
 

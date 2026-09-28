@@ -1,14 +1,30 @@
 # Complete Static UAsset Parsing and Blueprint C++ Projection
 
-status: target
+status: superseded (typed C++ projection target and v3 envelope) + current (static Blueprint IR/CFG scope)
+
+> **2026-09-28 superseded notice:** the typed C++ projection target and the
+> v3 output envelope (`format_version: "3.0"`, view/depth/pagination surfaces)
+> in this document are superseded by the 2026-09-28 v4 output amendment in
+> `docs/designs/2026-08-26-package-first-uasset-parser-refactor.md`. C++
+> declaration/migration output is retired and is not a repository target; the
+> frozen contract is `docs/designs/contract/package_document_v4.schema.json`.
+> The static Blueprint IR/CFG/correlation requirements in this document remain
+> current and bind the companion plan
+> `docs/superpowers/plans/2026-09-28-blueprint-static-parsing-completion-plan.md`.
+> Do not read the C++ projection sections as active work.
 
 > **2026-09-21 implementation marker (post-merge):** Tasks 1–12 are current
 > behavior on `dev-0.6.0` after merge `8727b067` from
 > `sdd/static-uasset-finish` (controller review pass). That landing's own
 > verification was **449 passed** with `compileall` clean — a historical
-> post-merge record, not a current test count; the suite has grown since. Envelope is `format_version: "3.0"`;
+> post-merge record, not a current test count; the suite has grown since.
+> Historical envelope state at that landing: `format_version: "3.0"` (retired
+> by the 2026-09-28 v4 amendment, which froze `format_version: "4.0"`).
 > static Blueprint IR/CFG/correlation, Material graph, C++/type-aware
-> projections, canonical writer, and sample acceptance gates are present.
+> projections, canonical writer, and sample acceptance gates were present at
+> that landing (the typed C++ projection half is now retired; Blueprint
+> IR/CFG/correlation, Material graph, non-C++ projections and the writer remain
+> current).
 > This specification remains a design target for residual/deferred work only
 > (e.g. real Zen package decode, now outside the current product target). Do not read
 > excluded scope (runtime Blueprint execution, native C++ body recovery,
@@ -23,7 +39,7 @@ Adopt an in-place, modular rewrite of the parser core. Keep `PackageDocument` as
 
 The implementation is pure Python 3.10+ and has no runtime bridge to CUE4Parse, UAssetAPI, UAssetGUI, UnrealBPInspect, FModel, or Unreal Editor. Those projects remain external comparison evidence only.
 
-Backward compatibility is not a requirement for the refactored output. The package document moves to the new major format version `format_version: "3.0"` (an envelope field, not state on `PackageDocument`) while retaining the package-first model and explicit capability states. One input package has one canonical serialized output document; type-specific projections are embedded in that document as `projections[]` records with explicit status/completeness and provenance, physical `sidecars[]` are created only when a payload or size boundary makes a single physical file unsafe, and the committed contract is `docs/designs/contract/package_document_v3.schema.json`.
+Backward compatibility is not a requirement for the refactored output. (Historical decision text; the envelope target below was replaced by the 2026-09-28 v4 amendment.) The package document was to move to the major format version `format_version: "3.0"` (an envelope field, not state on `PackageDocument`) while retaining the package-first model and explicit capability states. One input package has one canonical serialized output document; type-specific projections are embedded in that document as `projections[]` records with explicit status/completeness and provenance, physical `sidecars[]` are created only when a payload or size boundary makes a single physical file unsafe, and the contract of that era was `docs/designs/contract/package_document_v3.schema.json` (deleted by the v4 freeze; the committed contract is now `docs/designs/contract/package_document_v4.schema.json`).
 
 ## Goal
 

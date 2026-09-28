@@ -32,11 +32,12 @@ The authoritative target is `docs/designs/2026-08-26-package-first-uasset-parser
 
 ## Output and Agent Constraints
 
-- Default output is bounded and excludes raw blobs, full HexView data, and unlimited arrays.
-- Raw/debug/decode data is selected explicitly through view, depth, object filters, pagination, and `max_bytes`.
-- Agent tools call the Python document API directly; they do not parse CLI output.
+- Public package output is a single full document per input package with exactly the `normal` and `debug` modes (v4 target, `format_version: "4.0"`; contract `docs/designs/contract/package_document_v4.schema.json`). Both modes parse at `depth="decode"` with no object selection.
+- `normal` carries decoded values and static semantics only. `debug` adds evidence (top-level `debug` block plus nested `debug_evidence`); stripping that evidence and normalizing `mode` reproduces `normal` exactly. Raw blobs, full HexView data, offsets, and physical ranges are debug evidence, not normal content.
+- View/depth/selection/pagination/`max_bytes` are not public output surfaces (retired with the v3 envelope). Low-level parser depth/object selection stays internal for parser tests and non-output analysis.
+- Agent tools call the Python document API directly; they do not parse CLI output. The v4 Agent surface is `inspect_package(file_path, *, mode=...)` plus the separate `extract_payload` operation; `agent` is not an output mode.
 - Stable ids use table kind and index. Display names and GUIDs are not guaranteed unique.
-- Truncation and unsupported capabilities must be explicit and resumable.
+- Unsupported capabilities must be explicit through status and structured diagnostics.
 
 ## Peer corroboration constraints
 

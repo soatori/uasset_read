@@ -14,9 +14,9 @@
 | D-SCHEMA | Full `SchemaProvider` / cooked unversioned | canonical Phase 2 / Property System | **not required (2026-09-27 product decision)**; editor `.usmap` path remains partial/current, cooked/Zen unversioned is outside the product target |
 | D-PLA | Payload-only parse (route A) | [`2026-08-31-payload-extraction-path.md`](2026-08-31-payload-extraction-path.md) | target; gated on real descriptors, not on perf demand |
 | D-G2 | Shared `PackageDocument` cache | [`2026-08-31-agent-doc-cache-contract.md`](2026-08-31-agent-doc-cache-contract.md) (G2) | target; contract frozen; free-standing |
-| D-BATCH | CLI `--batch` | [`2026-08-31-v1-retirement-plan.md`](2026-08-31-v1-retirement-plan.md) §5 | **current (v2 live)** — directory walk + `uasset_read.batch` report; v1 `batch_worker` orchestration is not rebuilt |
+| D-BATCH | CLI `--batch` | [`2026-08-31-v1-retirement-plan.md`](2026-08-31-v1-retirement-plan.md) §5 | **retired (2026-09-28 v4 output amendment)** — the v4 CLI rejects `--batch`/`--batch-format` (historical note: v2 briefly carried a directory-walk batch report; v1 `batch_worker` orchestration was never rebuilt) |
 | D-DIFF | CLI `--diff` | same | **decided 2026-09-22:** not a product CLI target (F-D); remains unsupported |
-| D-CPP | Blueprint C++ skeleton | Gate K retired the C++ pseudocode chain; Phase 4.5 list keeps skeleton unmigrated | **decided 2026-09-22:** old string-chain skeleton **permanently retired (C-A)**; v3 typed C++ projection is current; any future increment needs a **new** emission design |
+| D-CPP | Blueprint C++ skeleton | Gate K retired the C++ pseudocode chain; Phase 4.5 list keeps skeleton unmigrated | **permanently retired:** old string-chain skeleton (C-A, 2026-09-22) and the typed C++ projection target (2026-09-28 v4 amendment) are both out; any future increment needs a **new** emission design |
 
 ## Edge table (verified against designs and README)
 

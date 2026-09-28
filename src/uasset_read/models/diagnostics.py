@@ -59,6 +59,42 @@ class Diagnostic:
         return {k: v for k, v in d.items() if v is not None and (k == "recoverable" or (not isinstance(v, bool) or v))}
 
 
+def diagnostic_summary(item: Diagnostic) -> dict[str, Any]:
+    """Common summary diagnostic (v4): detailed fields never ride along.
+
+    ``count`` is the number of summarized occurrences; current producers emit
+    one Diagnostic per occurrence, so it is always 1. Detail fields live in
+    ``debug.diagnostic_details`` keyed by the summary's index.
+    """
+    out: dict[str, Any] = {
+        "severity": item.severity,
+        "code": item.code,
+        "message": item.message,
+        "stage": item.stage,
+        "count": 1,
+    }
+    if item.object_id is not None:
+        out["object_id"] = item.object_id
+    if item.effect is not None:
+        out["effect"] = item.effect
+    return out
+
+
+def diagnostic_detail(item: Diagnostic, index: int) -> dict[str, Any]:
+    """Debug evidence for ``diagnostics[index]``: offset/size/reason/fallback."""
+    out: dict[str, Any] = {"index": index}
+    if item.offset is not None:
+        out["offset"] = item.offset
+    if item.size is not None:
+        out["size"] = item.size
+    if item.reason is not None:
+        out["reason"] = item.reason
+    if item.fallback is not None:
+        out["fallback"] = item.fallback
+    out["recoverable"] = item.recoverable
+    return out
+
+
 def make_diagnostic(
     code: str,
     message: str,

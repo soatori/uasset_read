@@ -6,7 +6,7 @@ status: target
 > 关联：`docs/designs/2026-08-26-package-first-uasset-parser-refactor.md`（Phase 6 删除旧路径）；Issue #621；本文与 `2026-08-31-semantic-handlers-boundary.md`（D2）、`2026-08-31-version-context-field-contract.md`（G1）配套。
 > **2026-09-05 执行记录**：本文冻结的退役契约已执行——Phase 6（#621，`ae8027e1`）删除 v1 管线，`--legacy-json` 现为 explicit unsupported 报错退出（非静默降级），`semantic/`、`renderers/`、`pipeline/`、`ir_builder.py`、`core/`、`link/` 已从 `src/` 消失。因此 §1、§2、§4 中描述双轨并存与"本轮不删代码"的段落均为 **historical 快照**，不再反映现状；§3 门禁与 §5/§6 决策记录仍为指导性内容，不得归为 historical。
 > **Gate C “文档同步”项：已关闭（2026-09-13）。** wiki 内容已重写为 v2；Gate K/L 残留文案已入库并 **push 到 wiki remote**（`a10946b` + `8821779`）。Home/Sidebar 与 01-07 各目录页中的 Semantic 1.x、`run.py`、`parse_single`、renderer 系统、`--markdown`/`--legacy-json` 等均已降级为 historical/retired；Pak fixture intake 已完成，Zen/IoStore full decode 与 raw-file/C++ skeleton 已明确排除，VarType 与 Kismet 标为 current。
-> **Residual note 2026-09-13：** `--batch` 已在 v2 CLI 以 live 形态回归（目录遍历 + `uasset_read.batch` 报告；见 `cli.py` 与 `docs/reference/agent-dev-reference.md`）。§5 中 “batch 仍 deferred” 的历史表述只对 v1 `batch_worker` 编排成立；工作流对中的 **`--diff` 仍 deferred**。
+> **Residual note 2026-09-13（historical）：** `--batch` 曾在 v2 CLI 以 live 形态回归（目录遍历 + batch 报告；见 `cli.py` 与 `docs/reference/agent-dev-reference.md`）。§5 中 “batch 仍 deferred” 的历史表述只对 v1 `batch_worker` 编排成立。**2026-09-28 v4 correction：** 该 batch 输出面已随 v4 输出修正退役（v4 CLI 显式拒绝 batch 相关 flag）；工作流对中的 **`--diff` 仍 deferred**。
 
 ## 1. 双轨现状（historical：基线 `bd3309a7` 快照，双轨已由 Phase 6 终结）
 

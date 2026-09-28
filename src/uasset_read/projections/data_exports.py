@@ -8,6 +8,7 @@ projector invents field lists from positional package bytes.
 from __future__ import annotations
 
 import csv
+import json
 from io import StringIO
 from typing import Any
 
@@ -24,7 +25,6 @@ from uasset_read.projections.records import (
 
 _JSON = "application/json"
 _CSV = "text/csv"
-_CPP = "text/x-c++hdr"
 
 _DATA_TABLE_PAIRS = (
     ("data_table", _JSON),
@@ -36,8 +36,8 @@ _CURVE_TABLE_PAIRS = (
     ("curve_table_csv", _CSV),
     ("curve_table_json", _JSON),
 )
-_STRUCT_PAIRS = (("cpp_declaration", _CPP), ("defaults_json", _JSON))
-_ENUM_PAIRS = (("cpp_declaration", _CPP), ("defaults_json", _JSON))
+_STRUCT_PAIRS = (("defaults_json", _JSON),)
+_ENUM_PAIRS = (("defaults_json", _JSON),)
 _MATERIAL_INSTANCE_PAIRS = (("material_instance", _JSON), ("material_parameters", _JSON))
 
 
@@ -115,18 +115,26 @@ def _data_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], Proje
     return payload, status, completeness
 
 
+def _csv_cell(value: Any) -> str:
+    """One CSV cell: strings pass through, None becomes empty, the rest compact JSON."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
 def _csv_from_table(payload: dict[str, Any]) -> str:
     columns = payload.get("columns") or []
     buf = StringIO()
     writer = csv.writer(buf, lineterminator="\n")
-    writer.writerow(["name"] + [str(c.get("name") or "") for c in columns])
+    writer.writerow(["name"] + [_csv_cell(str(c.get("name") or "")) for c in columns])
     for row in payload.get("rows") or []:
         values = row.get("values") if isinstance(row, dict) else {}
         values = values if isinstance(values, dict) else {}
-        cells = [str(row.get("name") or "")]
+        cells = [_csv_cell(row.get("name") if isinstance(row, dict) else None)]
         for column in columns:
-            raw = values.get(column.get("name"))
-            cells.append("" if raw is None else str(raw))
+            cells.append(_csv_cell(values.get(column.get("name"))))
         writer.writerow(cells)
     return buf.getvalue()
 
@@ -190,10 +198,21 @@ def _curve_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], Proj
 
 
 def _csv_from_curves(payload: dict[str, Any]) -> str:
-    lines = ["name,key_count"]
+    buf = StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(["name", "key_count", "field_types", "keys"])
     for curve in payload.get("curves") or []:
-        lines.append(f"{curve.get('name')},{len(curve.get('keys') or [])}")
-    return "\n".join(lines) + "\n"
+        keys = curve.get("keys") if isinstance(curve, dict) else None
+        keys = keys if isinstance(keys, list) else []
+        writer.writerow(
+            [
+                _csv_cell(curve.get("name") if isinstance(curve, dict) else None),
+                _csv_cell(len(keys)),
+                _csv_cell(curve.get("field_types") if isinstance(curve, dict) else None),
+                _csv_cell(keys),
+            ]
+        )
+    return buf.getvalue()
 
 
 class DataTableProjector:
@@ -318,35 +337,6 @@ class CurveTableProjector:
         ]
 
 
-def _cpp_from_fields(name: str, fields: list[dict[str, Any]]) -> str:
-    lines = [
-        f"// uasset_read user-defined struct projection: {name}",
-        f"struct {name}",
-        "{",
-    ]
-    for field in fields:
-        type_name = str(field.get("type") or "FString")
-        field_name = str(field.get("name") or "")
-        default = field.get("default_value")
-        suffix = f" = {default}" if default is not None else ""
-        lines.append(f"    {type_name} {field_name}{suffix};")
-    lines.append("};")
-    return "\n".join(lines) + "\n"
-
-
-def _cpp_from_entries(name: str, entries: list[dict[str, Any]]) -> str:
-    lines = [
-        f"// uasset_read user-defined enum projection: {name}",
-        f"enum class {name}",
-        "{",
-    ]
-    for index, entry in enumerate(entries):
-        entry_name = str(entry.get("name") or f"Value{index}")
-        lines.append(f"    {entry_name} = {index},")
-    lines.append("};")
-    return "\n".join(lines) + "\n"
-
-
 class UserDefinedStructProjector:
     asset_kinds = ("user_defined_struct",)
     _CLASS_NAMES = ("UserDefinedStruct",)
@@ -374,17 +364,6 @@ class UserDefinedStructProjector:
             "fields": fields,
         }
         return [
-            ProjectionRecord(
-                kind="cpp_declaration",
-                source_object_id=obj.id,
-                media_type=_CPP,
-                content=_cpp_from_fields(name, fields),
-                embedded=True,
-                status="translated",
-                completeness=1.0,
-                dependencies=deps,
-                diagnostics=[],
-            ),
             ProjectionRecord(
                 kind="defaults_json",
                 source_object_id=obj.id,
@@ -426,17 +405,6 @@ class UserDefinedEnumProjector:
             "enumerators": entries,
         }
         return [
-            ProjectionRecord(
-                kind="cpp_declaration",
-                source_object_id=obj.id,
-                media_type=_CPP,
-                content=_cpp_from_entries(name, entries),
-                embedded=True,
-                status="translated",
-                completeness=1.0,
-                dependencies=deps,
-                diagnostics=[],
-            ),
             ProjectionRecord(
                 kind="defaults_json",
                 source_object_id=obj.id,

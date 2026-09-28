@@ -304,7 +304,7 @@ def parse_package_document(
     tolerant: bool = True,
     mappings_path: str | None = None,
     game: str | None = None,
-    depth: Literal["package", "object", "asset", "decode"] = "asset",
+    depth: Literal["package", "object", "asset", "decode"] = "decode",
     object_ids: list[str] | None = None,
 ) -> PackageDocument:
     """Parse a .uasset/.umap and return a PackageDocument.
@@ -312,6 +312,11 @@ def parse_package_document(
     Reads the binary format directly using LegacyPackageReader.
     Discovers sidecar files (.uexp, .ubulk, .uptnl) via PackageBundle
     so that the reader receives an archive spanning main + .uexp.
+
+    ``depth``/``object_ids`` remain low-level parse controls for parser tests
+    and targeted analysis. v4 package output requires a full ``depth="decode"``
+    document with every export decoded; ``project_document`` rejects anything
+    else.
 
     Repeated calls with the same resolved path, mtime_ns, size, per-sidecar
     (exists, mtime_ns, size) stats for .uexp/.ubulk/.uptnl, mappings-file

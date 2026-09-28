@@ -1114,7 +1114,7 @@ def project_function_analysis(fn: FunctionAnalysis) -> dict[str, Any]:
 def project_semantic_blueprint(
     semantic: BlueprintSemantic, *, kind: Literal["blueprint", "anim_blueprint"] = "blueprint"
 ) -> dict[str, Any]:
-    """Typed IR → document-boundary dict. Frozen key set for format_version 3.0."""
+    """Typed IR → document-boundary dict. Frozen key set for format_version 4.0."""
     return {
         "kind": kind,
         "object_id": semantic.object_id,

@@ -22,6 +22,7 @@ The package-first design is not implemented merely because it is documented. Do 
 - JSON, CLI, Python, and Agent tools project from the same `PackageDocument`.
 - Large payloads are referenced and extracted on demand, not embedded by default.
 - Library code returns structured diagnostics and does not configure process-global logging.
+- Public package output (v4, `format_version: "4.0"`, frozen contract `docs/designs/contract/package_document_v4.schema.json`) is one full document per input package with exactly the `normal` and `debug` modes. Debug adds evidence only; after stripping that evidence and normalizing `mode`, it equals normal. View/depth/selection/pagination/`max_bytes` are not public output surfaces. C++ projection is retired; Blueprint instruction IR/CFG and static semantics remain targets. Public signatures: `parse_package_document(file_path, *, tolerant=True, mappings_path=None, game=None, depth="decode", object_ids=None)`, `project_document(document, *, mode="normal")` (sole envelope producer), `write_projected_document(document, output_path, *, mode="normal")`, `inspect_package(file_path, *, mode="normal")`; `extract_payload()` stays a separate binary operation. Implemented — source and tests produce this v4 envelope in both modes. Deferred gaps (Zen body extract, full `SchemaProvider`, Pak product path) remain deferred and must not be described as implemented.
 
 ## Development Rules
 

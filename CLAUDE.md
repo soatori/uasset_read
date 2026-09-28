@@ -7,7 +7,7 @@ Claude Code project specification for this repository. Repository-wide rules liv
 - Code, comments, and error messages use English. Documentation follows the language of the document; repository-wide design reports may be Chinese when requested. Agent summaries and user replies may be Chinese.
 - Implement code in the simplest way possible; avoid over-abstraction, redundant wrappers, and unnecessary complexity.
 - Current overview: v0.6.0-dev is a Python 3.10+ read-only parser whose default path is the package-first v2 document (`parse_package_document` / `python -m uasset_read`). Strongest path: classic editor-saved packages and Blueprint decode.
-- Target overview: remaining deferred gaps are Zen body extract, full `SchemaProvider`, Pak product path — see `docs/designs/2026-08-26-package-first-uasset-parser-refactor.md` and `docs/designs/2026-09-13-deferred-capability-bundling.md`. Do not describe deferred gaps as implemented.
+- Current v4 package output: the v4 package-output contract is implemented in source and tests — `format_version: "4.0"` with exactly `normal`/`debug` modes (single full document per package, C++ projection retired, Blueprint IR/CFG/static semantics preserved; contract `docs/designs/contract/package_document_v4.schema.json`, 2026-09-28 amendment in the canonical design). Remaining deferred gaps are Zen body extract, full `SchemaProvider`, Pak product path — see `docs/designs/2026-08-26-package-first-uasset-parser-refactor.md` and `docs/designs/2026-09-13-deferred-capability-bundling.md`. Do not describe deferred gaps as implemented.
 - Windows paths use `E:/Develop/...` or double backslashes; test samples are in `tests/samples/`.
 
 ## Code Understanding

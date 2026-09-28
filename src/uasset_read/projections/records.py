@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from uasset_read.models.byte_ranges import ByteRegion
-from uasset_read.models.diagnostics import Diagnostic
+from uasset_read.models.diagnostics import Diagnostic, diagnostic_summary
 from uasset_read.models.document import PackageDocument
 from uasset_read.models.object_model import ObjectRecord
 
@@ -96,7 +96,7 @@ def _completeness_label(
     completeness: float | None,
     diagnostics: list[Any] | None = None,
 ) -> str:
-    """Map internal completeness ratio + status to the v3 contract enum.
+    """Map internal completeness ratio + status to the v4 contract enum.
 
     Schema values: complete | partial | opaque | unavailable | failed.
     Independent of migration ``status``; never overclaims ``complete`` when
@@ -128,13 +128,16 @@ def _completeness_label(
 
 
 def projection_to_dict(record: ProjectionRecord) -> dict[str, Any]:
-    """JSON-safe projection record for the v3 contract envelope.
+    """JSON-safe projection record for the v4 contract envelope.
 
-    Contract rules (package_document_v3.schema.json):
+    Contract rules (package_document_v4.schema.json):
     - ``completeness`` is the capability enum string, not a float.
-    - Embedded records carry ``content`` + ``provenance`` and omit ``external``.
-    - External records carry ``external`` and omit ``content``.
-    - Unknown keys (``source_range`` on ProjectionRecord) are never emitted.
+    - Embedded records carry ``content`` and omit ``external``.
+    - External records carry ``external`` (path/size/sha256/reason) and omit
+      ``content``; the sidecar source range is debug evidence only.
+    - ``diagnostics`` items are summary diagnostics (detail rides
+      ``debug.diagnostic_details``).
+    - Unknown keys are never emitted.
     """
     out: dict[str, Any] = {
         "kind": record.kind,
@@ -144,14 +147,16 @@ def projection_to_dict(record: ProjectionRecord) -> dict[str, Any]:
         "status": record.status,
         "completeness": _completeness_label(record.status, record.completeness, record.diagnostics),
         "dependencies": list(record.dependencies),
-        "diagnostics": [item.to_dict() if hasattr(item, "to_dict") else item for item in record.diagnostics],
+        "diagnostics": [
+            diagnostic_summary(item) if isinstance(item, Diagnostic) else item for item in record.diagnostics
+        ],
+        "provenance": {
+            "derived_from": [record.source_object_id, *record.dependencies],
+            "generator": f"uasset_read.projections.{record.kind}",
+        },
     }
     if record.embedded:
         out["content"] = record.content
-        out["provenance"] = {
-            "derived_from": [record.source_object_id, *record.dependencies],
-            "generator": f"uasset_read.projections.{record.kind}",
-        }
     else:
         external = record.external
         if external is None:
@@ -159,19 +164,11 @@ def projection_to_dict(record: ProjectionRecord) -> dict[str, Any]:
                 f"non-embedded projection {record.kind!r} for {record.source_object_id} "
                 "requires an external sidecar record"
             )
-        if external.source_range is None:
-            raise ValueError(
-                f"external projection {record.kind!r} for {record.source_object_id} requires a source range"
-            )
         out["external"] = {
             "path": external.path,
             "size": external.size,
             "sha256": external.sha256,
             "reason": external.reason,
-            "source_range": {
-                "offset": external.source_range.start,
-                "size": external.source_range.size,
-            },
         }
     return out
 
