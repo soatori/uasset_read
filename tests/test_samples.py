@@ -793,6 +793,8 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
         "StackOBot_BP_Drone.uasset",
         "T_ParserBulk.uasset",
         "FirstPerson_DT_WeaponList.uasset",
+        "BP_CombatCharacter.uasset",
+        "MyProject_UE58_TestBlueprint.uasset",
     )
     projected = {}
     for name in samples:
@@ -843,7 +845,7 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     for entry in normal_instructions:
         assert "serialized_start" not in entry and "serialized_end" not in entry, entry["opcode"]
         assert "debug_evidence" not in entry
-    # source_node_reason asserts belong to T5 cross-task acceptance (branch is pre-T2).
+    # source_node_reason cross-fixture asserts live in the T5 block below.
     for key in ("calls", "variable_accesses"):
         for entry in normal_owner["semantic"][key]:
             assert "serialized_start" not in entry and "serialized_end" not in entry
@@ -861,6 +863,98 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
             assert span["start"] >= 0 and span["end"] == span["start"] + span["size"]
             assert span["status"] in {"decoded", "opaque", "payload", "unavailable"}
 
+    # Audit item 5: three-fixture Blueprint acceptance (T5).
+    combat = projected["BP_CombatCharacter.uasset"]
+    combat_owner = next(item for item in combat["normal"]["objects"] if item["id"] == "export:1")
+    combat_graphs = combat_owner["semantic"]["graphs"]
+    assert len(combat_graphs) == 4
+    combat_links = [link for graph in combat_graphs for link in graph["links"]]
+    assert len(combat_links) == 610
+    assert all(link["status"] == "resolved" for link in combat_links)
+    assert all("debug_evidence" not in link for link in combat_links), "normal strips nested evidence"
+    assert "debug_evidence" not in json.dumps(combat_owner["semantic"])
+
+    test_bp = projected["MyProject_UE58_TestBlueprint.uasset"]
+    test_owner = next(item for item in test_bp["normal"]["objects"] if item["id"] == "export:0")
+    test_links = [link for graph in test_owner["semantic"]["graphs"] for link in graph["links"]]
+    assert len(test_links) == 20
+    new_function_graph = next(graph for graph in test_owner["semantic"]["graphs"] if graph["name"] == "NewFunction")
+    assert (new_function_graph["node_count"], new_function_graph["pin_count"], len(new_function_graph["links"])) == (
+        3,
+        8,
+        10,
+    )
+    assert test_owner["semantic"]["external_refs"] == []
+    test_decls = {item["name"]: item for item in test_owner["semantic"]["function_declarations"]}
+    new_function = test_decls["NewFunction"]
+    assert [(p["name"], p["type_name"], p["direction"]) for p in new_function["parameters"]] == [
+        ("NewParam", "BoolProperty", "in"),
+        ("NewParam1", "BoolProperty", "out"),
+    ]
+    assert new_function["unresolved"] is False
+    test_instructions = [entry for fn in test_owner["semantic"]["functions"] for entry in fn["instructions"]]
+    assert len([entry for entry in test_instructions if entry["opcode"] == "EX_JumpIfNot"]) == 1
+
+    # StackOBot: debug is an evidence-only superset of the link records too.
+    stack_links_normal = [
+        link for graph in normal_owner["semantic"]["graphs"] for link in graph["links"]
+    ]
+    assert len(stack_links_normal) == 26
+    stack_links_debug = [
+        link
+        for graph in next(
+            item for item in stack["debug"]["objects"] if item["id"] == "export:0"
+        )["semantic"]["graphs"]
+        for link in graph["links"]
+    ]
+    assert len(stack_links_debug) == 26
+    assert all(link["debug_evidence"] is not None for link in stack_links_debug)
+    assert all("debug_evidence" not in link for link in stack_links_normal)
+
+    # source_node_reason is normal-mode content: present and identical in BOTH
+    # modes on every Blueprint fixture entry (no None-in-debug/absent-in-normal
+    # asymmetry); measured 2026-09-28: no bytecode<->graph mapping exists on any
+    # of these fixtures, so every value is debug_mapping_unavailable.
+    for blueprint_name in (
+        "StackOBot_BP_Drone.uasset",
+        "BP_CombatCharacter.uasset",
+        "MyProject_UE58_TestBlueprint.uasset",
+    ):
+        debug_objects = {item["id"]: item for item in projected[blueprint_name]["debug"]["objects"]}
+        for normal_obj in projected[blueprint_name]["normal"]["objects"]:
+            debug_semantic = debug_objects[normal_obj["id"]].get("semantic") or {}
+            normal_semantic = normal_obj.get("semantic") or {}
+            entry_pairs = {
+                "instructions": (
+                    [
+                        entry
+                        for fn in normal_semantic.get("functions") or []
+                        for entry in fn["instructions"]
+                    ],
+                    [
+                        entry
+                        for fn in debug_semantic.get("functions") or []
+                        for entry in fn["instructions"]
+                    ],
+                ),
+                "calls": (normal_semantic.get("calls") or [], debug_semantic.get("calls") or []),
+                "variable_accesses": (
+                    normal_semantic.get("variable_accesses") or [],
+                    debug_semantic.get("variable_accesses") or [],
+                ),
+            }
+            for entry_key, (normal_entries, debug_entries) in entry_pairs.items():
+                assert len(normal_entries) == len(debug_entries), (blueprint_name, entry_key)
+                for normal_entry, debug_entry in zip(normal_entries, debug_entries):
+                    assert "source_node_reason" in normal_entry, (blueprint_name, entry_key)
+                    assert "source_node_reason" in debug_entry, (blueprint_name, entry_key)
+                    assert (
+                        normal_entry["source_node_reason"]
+                        == debug_entry["source_node_reason"]
+                        == "debug_mapping_unavailable"
+                    ), (blueprint_name, entry_key, normal_obj["id"])
+                    assert normal_entry["source_node_id"] is None, (blueprint_name, entry_key)
+
     bulk = projected["T_ParserBulk.uasset"]
     payload = next(item for item in bulk["normal"]["payloads"] if item["owner"] == "export:0")
     assert set(payload) <= {"id", "owner", "kind", "stored_size", "status", "logical_size", "compression", "hash"}
@@ -875,6 +969,16 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
 
     output_path = write_projected_document(document, tmp_path / "v4-public-output.json")
     assert json.loads(output_path.read_text(encoding="utf-8")) == projected[sample.name]["normal"]
+
+    # Default Python path (no depth override) == CLI == project_document.
+    default_doc = parse_package_document(SAMPLES / "StackOBot_BP_Drone.uasset")
+    default_owner = next(
+        item
+        for item in project_document(default_doc, mode="normal")["objects"]
+        if item["id"] == "export:0"
+    )
+    assert sum(len(entry["instructions"]) for entry in default_owner["semantic"]["functions"]) == 85
+    assert len([link for graph in default_owner["semantic"]["graphs"] for link in graph["links"]]) == 26
 
     from uasset_read.cli import main
 
