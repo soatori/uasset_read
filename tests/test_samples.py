@@ -1036,6 +1036,112 @@ def test_critical_boundary_guards(monkeypatch):
     with pytest.raises(ParseError, match="CustomVersion"):
         UsmapParser(usmap)
 
+    # T5 addendum (1): projected-dict roundtrip keeps the T2/T3 instruction
+    # fields — from_dict must restore what the producers emit (analysis.py
+    # is a declared from_dict/projected-dict trust boundary).
+    from uasset_read.models.analysis import FunctionAnalysis, GraphLinkRecord
+    from uasset_read.package import parse_package_document
+    from uasset_read.parsers.blueprint.correlation import (
+        BlueprintCorrelation,
+        external_ref_record,
+        project_function_analysis,
+        project_semantic_blueprint,
+    )
+    from uasset_read.parsers.blueprint.graph import _link_record_from_raw
+    from uasset_read.projection import project_document
+    from uasset_read.serializers.blueprint_graph import resolve_pin_links
+
+    ue58_document = parse_package_document(
+        str(SAMPLES / "MyProject_UE58_TestBlueprint.uasset"), depth="decode"
+    )
+    debug_document = project_document(ue58_document, mode="debug")
+    debug_function = next(
+        fn
+        for obj in debug_document["objects"]
+        if obj["id"] == "export:0"
+        for fn in obj["semantic"]["functions"]
+        if fn["function_name"] == "NewFunction"
+    )
+    reemitted = project_function_analysis(FunctionAnalysis.from_dict(debug_function))
+    assert reemitted["instructions"] == debug_function["instructions"]
+    assert all(
+        entry["source_node_reason"] == "debug_mapping_unavailable"
+        for entry in reemitted["instructions"]
+    )
+    assert reemitted["instructions"][0]["debug_evidence"] is not None
+
+    # Declaration survival through build() over the projected semantic dict
+    # (the _inputs from_dict path): params count, return_type, flags,
+    # unresolved and the native-field lists all come back identical — nothing
+    # re-declares as unresolved. Measured 2026-09-28: UE58 NewFunction 2
+    # params / resolved; StackOBot declarations 1/4/4 params / resolved.
+    ue58_live = next(o for o in ue58_document.objects if o.id == "export:0").semantic
+    ue58_restored = project_semantic_blueprint(BlueprintCorrelation().build(ue58_document))[
+        "function_declarations"
+    ]
+    assert ue58_restored == ue58_live["function_declarations"]
+    new_function = next(d for d in ue58_restored if d["name"] == "NewFunction")
+    assert len(new_function["parameters"]) == 2
+    assert new_function["unresolved"] is False
+    signature = next(d for d in ue58_restored if d["name"].startswith("NewEventDispatcher"))
+    assert signature["native_fields"] == [] and signature["unresolved"] is True
+
+    stack_document = parse_package_document(
+        str(SAMPLES / "StackOBot_BP_Drone.uasset"), depth="decode"
+    )
+    stack_live = next(o for o in stack_document.objects if o.id == "export:0").semantic
+    stack_restored = project_semantic_blueprint(BlueprintCorrelation().build(stack_document))[
+        "function_declarations"
+    ]
+    assert stack_restored == stack_live["function_declarations"]
+    assert [len(d["parameters"]) for d in stack_restored] == [1, 4, 4]
+    assert [d["unresolved"] for d in stack_restored] == [False, False, False]
+    assert [len(d["native_fields"]) for d in stack_restored] == [36, 4, 4]
+
+    # T5 addendum (3i): a null LinkedTo slot reaches the public record layer
+    # as unresolved/null_link_reference (no real fixture contains null slots).
+    synthetic_graph = {
+        "id": "export:4",
+        "nodes": [{"id": "export:0", "pins": [{"id": "ab" * 16, "linked": []}]}],
+        "_pin_links": [
+            {
+                "from_node": 1,
+                "from_pin": "ab" * 16,
+                "to_owning_node": None,
+                "to_pin": None,
+                "null": True,
+                "source_category": "exec",
+            }
+        ],
+    }
+    resolve_pin_links([synthetic_graph])
+    (null_raw,) = synthetic_graph["links"]
+    null_record = _link_record_from_raw(null_raw, "export:0", "export:4")
+    assert isinstance(null_record, GraphLinkRecord)
+    assert (null_record.status, null_record.reason) == ("unresolved", "null_link_reference")
+    assert null_record.target_node_id is None and null_record.target_pin_guid is None
+    assert null_record.debug_evidence is not None
+
+    # T5 addendum (3ii): a name-only query with 2+ candidates stays ambiguous
+    # at the builder (D8) — never silently first-matched.
+    ambiguous, ambiguous_key = external_ref_record(
+        query="SharedName",
+        object_id="export:2",
+        match_method="function_identity",
+        function_ids_by_name={"SharedName": ["export:2", "export:5"]},
+        import_ids_by_name={},
+        dep_by_index={},
+        class_by_id={},
+    )
+    assert ambiguous is not None
+    assert (ambiguous.status, ambiguous.local_id, ambiguous.reason) == (
+        "ambiguous",
+        None,
+        "2_name_candidates",
+    )
+    assert ambiguous.candidate_local_ids == ["export:2", "export:5"]
+    assert ambiguous.qualified_key == ambiguous_key == "unresolved::SharedName"
+
     import uasset_read.serializers.object_resources as object_resources
 
     from uasset_read.package import _parse_cached, parse_package_document

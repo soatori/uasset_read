@@ -469,6 +469,61 @@ def _node_id_from_str(value: str) -> NodeId:
     return NodeId(owner_object_id=value, node_export_id=value)
 
 
+def _int_or_none(value: Any) -> int | None:
+    """Validated optional int; bool is not a flags/int stand-in."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def native_field_from_dict(data: Any) -> NativeFieldDeclaration | None:
+    """Rebuild one native FProperty declaration from its projected dict.
+
+    The input is exactly ``project_operand(NativeFieldDeclaration)`` (the
+    ``functions[]``/``function_declarations[]`` emission). Missing or
+    ill-typed keys keep dataclass defaults so older or partial dicts still
+    load — same discipline as ``region_from_projected``.
+    """
+    from uasset_read.kismet.native_fields import NativeFieldDeclaration
+
+    if not isinstance(data, dict) or not isinstance(data.get("type_name"), str):
+        return None
+    metadata = data.get("metadata")
+    rep_notify = data.get("rep_notify_func")
+    opaque: list[OpaqueOperand] = []
+    for item in data.get("opaque_metadata") or []:
+        if isinstance(item, dict):
+            payload_ref = item.get("payload_ref")
+            opaque.append(
+                OpaqueOperand(
+                    role=str(item.get("role") or ""),
+                    source_range=region_from_projected(item.get("source_range")),
+                    payload_ref=payload_ref if isinstance(payload_ref, str) else None,
+                    reason=str(item.get("reason") or ""),
+                )
+            )
+    return NativeFieldDeclaration(
+        type_name=data["type_name"],
+        name=str(data.get("name") or ""),
+        property_flags=_int_or_none(data.get("property_flags")),
+        metadata=dict(metadata) if isinstance(metadata, dict) else None,
+        array_dim=_int_or_none(data.get("array_dim")),
+        element_size=_int_or_none(data.get("element_size")),
+        rep_index=_int_or_none(data.get("rep_index")),
+        rep_notify_func=rep_notify if isinstance(rep_notify, str) else None,
+        replication_condition=_int_or_none(data.get("replication_condition")),
+        references=[
+            n for n in data.get("references") or [] if isinstance(n, int) and not isinstance(n, bool)
+        ],
+        reference_names=[n if isinstance(n, str) or n is None else None for n in data.get("reference_names") or []],
+        inner_fields=[
+            inner
+            for inner in (native_field_from_dict(item) for item in data.get("inner_fields") or [])
+            if inner is not None
+        ],
+        opaque_metadata=opaque,
+        source_range=region_from_projected(data.get("source_range")),
+    )
+
+
 def _graph_id_from_str(value: str) -> GraphId:
     # Projected form is "export:{owner}/export:{graph}"; tolerate bare ids.
     try:
@@ -572,6 +627,9 @@ class FunctionAnalysis:
                     ),
                     jump_kind=raw.get("jump_kind") or "none",
                     source_node_id=raw.get("source_node_id"),
+                    # T2 wave field: normal-mode content in both modes; absent
+                    # keys (pre-T2 dicts) keep the dataclass default None.
+                    source_node_reason=raw.get("source_node_reason"),
                     parse_status=raw.get("parse_status") or "parsed",
                 )
             )
@@ -630,6 +688,14 @@ class FunctionAnalysis:
             calls=list(data.get("calls") or []),
             bytecode_status=status,  # type: ignore[arg-type]
             diagnostics=diagnostics,
+            # T2 wave field: absent key (pre-T2 dicts) keeps the default [].
+            native_fields=[
+                item
+                for item in (
+                    native_field_from_dict(raw) for raw in data.get("native_fields") or []
+                )
+                if item is not None
+            ],
         )
 
 

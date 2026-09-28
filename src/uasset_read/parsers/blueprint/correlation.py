@@ -1262,6 +1262,9 @@ def project_function_analysis(fn: FunctionAnalysis) -> dict[str, Any]:
         "reads": sorted(fn.reads),
         "writes": sorted(fn.writes),
         "calls": list(fn.calls),
+        # Same static-content emission as function_declarations[].native_fields:
+        # normal-mode signature evidence, never debug evidence.
+        "native_fields": [project_operand(field) for field in fn.native_fields],
         "bytecode_status": fn.bytecode_status,
         "diagnostics": [d.to_dict() for d in fn.diagnostics],
     }
