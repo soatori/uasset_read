@@ -551,8 +551,14 @@ class FunctionAnalysis:
                     statement_index=_projected_offset_int(raw.get("statement_index"), 0),
                     statement_ordinal=_projected_offset_int(raw.get("statement_ordinal"), 0),
                     logical_end=_projected_offset_int(raw.get("logical_end"), 0),
-                    serialized_start=_projected_offset_int(raw.get("serialized_start"), -1),
-                    serialized_end=_projected_offset_int(raw.get("serialized_end"), -1),
+                    serialized_start=_evidence_offsets(raw.get("debug_evidence"))[0],
+                    serialized_end=_evidence_offsets(raw.get("debug_evidence"))[1],
+                    raw_opcode=(
+                        raw["debug_evidence"].get("raw_opcode")
+                        if isinstance(raw.get("debug_evidence"), dict)
+                        and isinstance(raw["debug_evidence"].get("raw_opcode"), int)
+                        else None
+                    ),
                     opcode=str(raw.get("opcode") or ""),
                     operands=dict(raw.get("operands") or {}),
                     expression=raw.get("expression"),
@@ -649,6 +655,23 @@ def _projected_offset_int(value: Any, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _evidence_offsets(evidence: Any) -> tuple[int, int]:
+    """Restore (serialized_start, serialized_end) from nested debug evidence.
+
+    Absent evidence (normal-mode dicts) restores the historical -1 sentinels;
+    logical statement coordinates never come from here.
+    """
+    if not isinstance(evidence, dict):
+        return -1, -1
+    span = evidence.get("serialized_range")
+    if not isinstance(span, dict):
+        return -1, -1
+    start, size = span.get("start"), span.get("size")
+    if not isinstance(start, int) or not isinstance(size, int) or size < 0:
+        return -1, -1
+    return start, start + size
 
 
 @dataclass(frozen=True)

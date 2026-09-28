@@ -78,6 +78,7 @@ class BytecodeInstruction:
     source_node_id: str | None
     parse_status: Literal["parsed", "partial", "unavailable"] = "parsed"
     source_node_reason: str | None = None
+    raw_opcode: int | None = None
 
 
 def _variable_name(expr: Any) -> str | None:
@@ -193,9 +194,11 @@ def normalize_instructions(expressions: list[KismetExpression]) -> list[Bytecode
         token = getattr(expr, "Token", None)
         if isinstance(expr, OpaqueExpression):
             opcode = f"Opaque_0x{expr.token:02X}"
+            raw_opcode = int(expr.token) if isinstance(expr.token, int) else None
             parse_status: Literal["parsed", "partial", "unavailable"] = "unavailable"
         else:
             opcode = token.name if token is not None else type(expr).__name__
+            raw_opcode = int(token) if isinstance(token, int) else None
             parse_status = "parsed"
 
         operands = _extract_operands(expr)
@@ -235,6 +238,7 @@ def normalize_instructions(expressions: list[KismetExpression]) -> list[Bytecode
                 source_node_id=source_node_id,
                 parse_status=parse_status,
                 source_node_reason=DEBUG_MAPPING_UNAVAILABLE if source_node_id is None else None,
+                raw_opcode=raw_opcode,
             )
         )
     return instructions
@@ -282,14 +286,32 @@ def project_operand(value: Any) -> Any:
     }
 
 
+def instruction_debug_evidence(instruction: BytecodeInstruction) -> dict[str, Any] | None:
+    """Debug-only byte provenance for one instruction ($defs/InstructionDebugEvidence).
+
+    ``None`` when no numeric token was parsed — the schema requires an
+    integer raw_opcode, so absent evidence stays absent instead of 0.
+    """
+    if instruction.raw_opcode is None:
+        return None
+    span: ByteRegion | None = None
+    start, end = instruction.serialized_start, instruction.serialized_end
+    if start >= 0 and end >= start:
+        span = ByteRegion(start, end - start, "decoded", feature="kismet.instruction")
+    return {
+        "raw_opcode": instruction.raw_opcode,
+        "serialized_range": project_region(span),
+        "source_node_evidence": None,
+        "diagnostics": [],
+    }
+
+
 def project_instruction(instruction: BytecodeInstruction) -> dict[str, Any]:
     """Project one instruction to a JSON-safe dict."""
     return {
         "statement_index": instruction.statement_index,
         "statement_ordinal": instruction.statement_ordinal,
         "logical_end": instruction.logical_end,
-        "serialized_start": instruction.serialized_start,
-        "serialized_end": instruction.serialized_end,
         "opcode": instruction.opcode,
         "operands": project_operand(instruction.operands),
         "expression": project_operand(instruction.expression),
@@ -301,4 +323,5 @@ def project_instruction(instruction: BytecodeInstruction) -> dict[str, Any]:
         "source_node_id": instruction.source_node_id,
         "source_node_reason": instruction.source_node_reason,
         "parse_status": instruction.parse_status,
+        "debug_evidence": instruction_debug_evidence(instruction),
     }
