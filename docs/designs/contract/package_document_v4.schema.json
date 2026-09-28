@@ -710,6 +710,9 @@
                   },
                   {
                     "$ref": "#/$defs/PinLinkProjection"
+                  },
+                  {
+                    "$ref": "#/$defs/MaterialGraphLinkRecord"
                   }
                 ]
               }
@@ -953,6 +956,29 @@
         },
         "to_pin_id": {
           "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MaterialGraphLinkRecord": {
+      "type": "object",
+      "description": "Material expression edge: source expression output -> target expression input (MaterialLink). Disjoint from the Blueprint link shapes.",
+      "required": ["source", "source_output", "target", "target_input", "mask"],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "source_output": {
+          "type": "integer"
+        },
+        "target": {
+          "type": "string"
+        },
+        "target_input": {
+          "type": "string"
+        },
+        "mask": {
+          "type": "integer"
         }
       },
       "additionalProperties": false

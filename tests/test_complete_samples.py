@@ -1,13 +1,19 @@
-"""Sample quality gates for the v3 package-first projection path (Task R5).
+"""Sample quality gates for the v4 package-output path (normal/debug modes).
 
 Acceptance numbers are locked to the plan/spec/manifest table. Sample-facing
-checks consume projected E1 dicts (not live IR dataclasses) except where
-``BlueprintCorrelation`` itself is the named semantic trace API.
+checks consume projected document dicts (not live IR dataclasses) except where
+``BlueprintCorrelation`` itself is the named semantic trace API. The
+real-fixture matrix at the bottom accepts the named tracked samples in both
+output modes against the frozen v4 contract.
 """
 
 from __future__ import annotations
 
+import copy
+import json
 from pathlib import Path
+
+import jsonschema
 
 from tests.fixtures import (
     find_blueprint_object,
@@ -15,8 +21,10 @@ from tests.fixtures import (
     find_material_graph,
     parse_sample,
 )
+from tests.test_contract_v4 import _schema
 from uasset_read.parsers.blueprint.correlation import BlueprintCorrelation
 from uasset_read.package import parse_package_document
+from uasset_read.projection import project_document
 
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = Path(__file__).parent / "samples"
@@ -28,7 +36,7 @@ STATUS_ENUM = {"translated", "represented", "untranslated", "unavailable"}
 
 
 def test_completeness_label_mapping_contract():
-    """v3 completeness enum: never overclaim complete; opaque/failed when warranted."""
+    """Projection completeness enum: never overclaim complete; opaque/failed when warranted."""
     from types import SimpleNamespace
 
     from uasset_read.projections.records import (
@@ -338,8 +346,6 @@ def test_type_aware_projection_acceptance():
 
 
 def test_single_document_contains_all_projection_sections(stackobot_document):
-    from uasset_read.projection import project_document
-
     output = project_document(stackobot_document)
     assert output["format_version"] == "4.0"
     assert output["package"]
@@ -362,8 +368,6 @@ def test_single_document_contains_all_projection_sections(stackobot_document):
 
 
 def test_debug_byte_accounting_scopes_are_contract_shaped(stackobot_document):
-    from uasset_read.projection import project_document
-
     output = project_document(stackobot_document, mode="debug")
     scopes = output["debug"]["byte_accounting"]
     assert isinstance(scopes, list)
@@ -375,3 +379,216 @@ def test_debug_byte_accounting_scopes_are_contract_shaped(stackobot_document):
         for leaf in scope["leaves"]:
             assert leaf["size"] > 0
             assert leaf["status"] in {"decoded", "opaque", "payload", "unavailable"}
+
+
+# --------------------------------------------------------------------------- #
+# v4 real-fixture matrix — normal/debug acceptance for named tracked samples
+# --------------------------------------------------------------------------- #
+
+
+def _strip_debug_evidence(value) -> None:
+    """Recursively remove nested ``debug_evidence`` keys (plan strip rule)."""
+    if isinstance(value, dict):
+        value.pop("debug_evidence", None)
+        for item in value.values():
+            _strip_debug_evidence(item)
+    elif isinstance(value, list):
+        for item in value:
+            _strip_debug_evidence(item)
+
+
+def _accepted_pair(document):
+    """Produce normal+debug via the public producer, validate both, assert parity.
+
+    The debug-strip comparison is exact: deepcopy debug, pop the top-level
+    ``debug`` object, remove nested ``debug_evidence`` keys, normalize ``mode``
+    to ``normal``, and require equality with the normal document (ordered
+    properties and decoded values included).
+    """
+    normal = project_document(document)
+    debug = project_document(document, mode="debug")
+    schema = _schema()
+    jsonschema.validate(normal, schema)
+    jsonschema.validate(debug, schema)
+    stripped = copy.deepcopy(debug)
+    stripped.pop("debug")
+    _strip_debug_evidence(stripped)
+    stripped["mode"] = "normal"
+    assert stripped == normal
+    return normal, debug
+
+
+def test_matrix_blueprint_fixture_acceptance():
+    """Matrix: all exports; ordered properties; IR/CFG/calls/reads/writes; no C++ kinds; parity."""
+    document = parse_sample("StackOBot_BP_Drone.uasset", depth="decode")
+    normal, debug = _accepted_pair(document)
+
+    # All exports, in table-index order.
+    assert len(normal["objects"]) == 31
+    assert [item["id"] for item in normal["objects"]] == [f"export:{i}" for i in range(31)]
+
+    # Ordered properties: occurrence restarts per name and preserves order.
+    for item in normal["objects"]:
+        occurrences: dict[str, int] = {}
+        for prop in item["properties"]:
+            assert prop["occurrence"] == occurrences.get(prop["name"], 0)
+            occurrences[prop["name"]] = prop["occurrence"] + 1
+
+    # Blueprint instructions, CFG, calls, reads, writes on the projected semantic.
+    bp = find_blueprint_object(document)
+    entry = next(item for item in normal["objects"] if item["id"] == bp.id)
+    functions = entry["semantic"]["functions"]
+    assert functions
+    assert any(fn.get("instructions") for fn in functions)
+    assert any((fn.get("cfg") or {}).get("blocks") for fn in functions)
+    assert any((fn.get("cfg") or {}).get("edges") for fn in functions)
+    assert any(fn.get("calls") for fn in functions)
+    assert any(fn.get("reads") for fn in functions)
+    assert any(fn.get("writes") for fn in functions)
+
+    # No C++ projection kinds or media types in either mode.
+    for mode, projected in (("normal", normal), ("debug", debug)):
+        for record in projected["projections"]:
+            assert _KIND_TOKEN not in record["kind"], mode
+            assert _BUILDER_TOKEN not in record["kind"], mode
+            assert not record["media_type"].startswith(_MEDIA_TOKEN), mode
+
+
+def test_matrix_material_fixture_acceptance():
+    """Matrix: decoded material graph/static semantics and parity."""
+    document = parse_sample("StackOBot_M_BotBase.uasset", depth="decode")
+    normal, _debug = _accepted_pair(document)
+
+    entry = next(item for item in normal["objects"] if item["id"] == "export:0")
+    semantic = entry["semantic"]
+    assert semantic["kind"] == "material"
+    graph = semantic["material_graph"]
+    assert len(graph["expressions"]) == 39
+    assert graph["links"]
+    assert graph["parameters"]
+    for expression in graph["expressions"]:
+        assert expression.get("object_id")
+        assert expression.get("class_name")
+        assert "inputs" in expression
+        assert "constants" in expression
+    # Static semantics decoded alongside the graph (Nanite usage + editor pins).
+    assert semantic["bUsedWithNanite"] is True
+    assert semantic["EditorX"] == 1232
+    assert semantic["EditorY"] == -64
+
+
+def test_matrix_datatable_fixture_acceptance():
+    """Matrix: DataTable decoded values plus JSON/CSV consistency."""
+    import csv
+    from io import StringIO
+
+    document = parse_sample("FirstPerson_DT_WeaponList.uasset", depth="decode")
+    normal, _debug = _accepted_pair(document)
+    records = {item["kind"]: item for item in normal["projections"]}
+    assert {"data_table", "data_table_csv", "data_table_json"} <= set(records)
+
+    data = records["data_table"]["content"]
+    assert data["row_names"] == ["GrenadeLauncher", "Pistol", "Rifle"]
+    assert data["row_count"] == 3
+    assert len(data["rows"]) == 3
+    for row in data["rows"]:
+        # Decoded values section: every row carries its field values map.
+        assert row["values"], row["name"]
+        assert set(row["values"]) == {column["name"] for column in data["columns"]}
+
+    # JSON/CSV consistency: data_table_json embeds the same content dict, and
+    # every CSV cell is exactly the shared serializer form of that value.
+    assert records["data_table_json"]["content"] == data
+    rows = list(csv.reader(StringIO(records["data_table_csv"]["content"])))
+    assert rows[0] == ["name"] + [column["name"] for column in data["columns"]]
+    assert all(len(cells) == len(rows[0]) for cells in rows)
+    assert [cells[0] for cells in rows[1:]] == data["row_names"]
+    for cells, row in zip(rows[1:], data["rows"]):
+        for cell, column in zip(cells[1:], data["columns"]):
+            value = row["values"][column["name"]]
+            if value is None:
+                assert cell == ""
+            elif isinstance(value, str):
+                assert cell == value
+            else:
+                assert cell == json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def test_matrix_curve_table_fixtures_acceptance():
+    """Matrix: CurveTable keys/mode plus valid stable CSV rows.
+
+    Keys/mode are the decoded TMap row keys and ECurveTableMode byte (pinned by
+    ORIGIN-issue-626). The rows are valid (one entry per key, field schema
+    decoded) and stable (deterministic across projections). Key *points* stay at
+    the reader's explicit ``values not decoded`` tier, so the curve projection
+    trio takes its rule-prescribed explicit-unavailable branch instead of
+    inventing rows; the CSV row contract (columns ``name, key_count,
+    field_types, keys`` through the shared stdlib serializer) is pinned in
+    ``tests/test_asset_projections.py`` and exercised end to end on the DataTable
+    fixture above.
+    """
+    for name, mode in (
+        ("TestSimpleCurveTable.uasset", "SimpleCurves"),
+        ("TestRichCurveTable.uasset", "RichCurves"),
+    ):
+        document = parse_sample(name, depth="decode")
+        normal, _debug = _accepted_pair(document)
+        entry = next(
+            item for item in normal["objects"] if (item.get("semantic") or {}).get("kind") == "curve_table"
+        )
+        semantic = entry["semantic"]
+        assert semantic["row_names"] == ["RowA", "RowB"]
+        assert semantic["row_count"] == 2
+        assert semantic["curve_table_mode"] == mode
+
+        # Valid rows: one row per key, names aligned, field schema decoded.
+        rows = semantic["rows"]
+        assert [row["name"] for row in rows] == semantic["row_names"]
+        for row in rows:
+            keys_field = row["fields"]["Keys"]
+            assert keys_field["type"] == "ArrayProperty"
+            assert keys_field["size"] > 0
+
+        records = {item["kind"]: item for item in normal["projections"] if item["kind"].startswith("curve_table")}
+        assert set(records) == {"curve_table", "curve_table_csv", "curve_table_json"}
+        # Matrix rule ("keys/interp explicit; compressed-only unavailable unless
+        # decoded"): undecoded key points take the explicit unavailable branch.
+        for record in records.values():
+            assert record["status"] == "unavailable"
+            assert record["content"] is None
+            assert [diag["code"] for diag in record["diagnostics"]] == ["curve_table_keys_unavailable"]
+
+        # Stable rows: a second projection is identical.
+        assert project_document(document)["projections"] == normal["projections"]
+
+
+def test_matrix_sidecar_payload_fixture_acceptance():
+    """Matrix: no embedded payload bytes; debug physical mapping names the sidecar and offset."""
+    document = parse_sample("T_ParserBulk.uasset", depth="decode")
+    normal, debug = _accepted_pair(document)
+
+    # Tracked sidecars accompany the cooked main file.
+    assert (SAMPLES / "T_ParserBulk.uexp").is_file()
+    assert (SAMPLES / "T_ParserBulk.ubulk").is_file()
+
+    # No embedded payload bytes: descriptors only.
+    assert normal["payloads"]
+    for payload in normal["payloads"]:
+        assert set(payload) <= {"id", "owner", "kind", "stored_size", "status", "logical_size", "compression", "hash"}
+        assert payload["stored_size"] > 0
+        assert payload["status"] in {"available", "unavailable"}
+    blob = json.dumps(normal)
+    assert "T_ParserBulk.ubulk" not in blob  # bulk bytes never embed in the document
+
+    # Debug physical mapping names the actual sidecar and the physical offset.
+    sources = debug["debug"]["payload_sources"]
+    assert sources
+    named = {source["source_region"]["source_id"] for source in sources}
+    assert named == {"T_ParserBulk.uexp"}
+    for source in sources:
+        slices = source["source_region"]["source_slices"]
+        assert slices
+        for slice_ in slices:
+            assert slice_["source_id"] == "T_ParserBulk.uexp"
+            assert slice_["size"] > 0
+        assert source["offset"] == slices[0]["source_start"]

@@ -2,38 +2,43 @@
 
 status: target
 
-> **文档状态：目标架构基线（2026-08-26）。Legacy 主路径已实现**（package document 输出全部 exports；tagged properties 在 export 边界内解析；CLI/Python API/Agent 共用同一投影；语义不再依赖 Semantic 1.x handler；decode 不产出顶层 payload）。**payload 字节提取已实现（cooked 包 + sidecar）**。**2026-09-21 合并 `8727b067` 后，v3 路径为当前默认：`format_version: "3.0"`、静态 Blueprint IR/CFG、type-aware projections 与 canonical writer 见下方 Status audit。** 2026-09-02 顺序调整：实现按 UE 源码偏移证据推进（CUE4Parse/UAssetAPI 只作阅读参考）。
+> **文档状态：目标架构基线（2026-08-26）。Legacy 主路径已实现**（package document 输出全部 exports；tagged properties 在 export 边界内解析；CLI/Python API/Agent 共用同一投影；语义不再依赖 Semantic 1.x handler；decode 不产出顶层 payload）。**payload 字节提取已实现（cooked 包 + sidecar）**。**当前默认输出是 2026-09-28 v4 amendment 的 `format_version: "4.0"`（normal/debug 双模式；历史记录：2026-09-21 合并 `8727b067` 后曾以 v3 `"3.0"` 信封为默认）。**静态 Blueprint IR/CFG、type-aware projections 与 canonical writer 见下方 Status audit。 2026-09-02 顺序调整：实现按 UE 源码偏移证据推进（CUE4Parse/UAssetAPI 只作阅读参考）。
 >
-> **2026-09-05 后续状态更新（已实现，非目标）**：Semantic JSON 1.x 输出路径已删除（`--legacy-json` 等旧 CLI flag 进入 retired 集合，唯一顶层 format 为 `uasset_read.package`）；Blueprint VarType（`FEdGraphPinType`）类型解码与 Kismet 反编译已迁移到 v2 object model（`BlueprintFamilyHandler` decode 分支 + `kismet.decompile_bridge`，由 `tests/test_blueprint_decode.py` 覆盖）。**当前产品非目标：Zen/IoStore 全量解码、cooked/Zen unversioned 的通用 SchemaProvider、外部容器 payload 提取和其余深层语义；编辑器 `.usmap` 路径仍是 bounded partial。** Blueprint C++ skeleton / v3 未完成项已从本列表移除——2026-09-21 Status audit：v3 路径为当前默认（`format_version: "3.0"`），静态 Blueprint IR/CFG 与 typed C++ projection 为 current；旧字符串式 C++ 伪代码链仍保持退役。parent-asset 解析已于 2026-09-10 Gate G 产品决策放弃（D1 §7），不再列为 deferred gap。**
+> **2026-09-05 后续状态更新（已实现，非目标）**：Semantic JSON 1.x 输出路径已删除（`--legacy-json` 等旧 CLI flag 进入 retired 集合，唯一顶层 format 为 `uasset_read.package`）；Blueprint VarType（`FEdGraphPinType`）类型解码与 Kismet 反编译已迁移到 v2 object model（`BlueprintFamilyHandler` decode 分支 + `kismet.decompile_bridge`，由 `tests/test_blueprint_decode.py` 覆盖）。**当前产品非目标：Zen/IoStore 全量解码、cooked/Zen unversioned 的通用 SchemaProvider、外部容器 payload 提取和其余深层语义；编辑器 `.usmap` 路径仍是 bounded partial。**（historical）2026-09-21 Status audit 曾记录 v3 路径为默认且 typed C++ projection 为 current；该表述已随 2026-09-28 v4 amendment 作废——当前默认是 v4 `format_version: "4.0"`，typed C++ projection 与旧字符串式 C++ 伪代码链均保持退役。parent-asset 解析已于 2026-09-10 Gate G 产品决策放弃（D1 §7），不再列为 deferred gap。**
 >
 > **2026-09-10 Gate K 状态更新**：C++ 伪代码文本生成链（`kismet/translator.py` / `body_builder.py` / `jump_analyzer.py`）已退役；公共函数逻辑表示为 `semantic.functions[]` 的 K0 expression 摘要（asset）与 decode 级 expression tree。`cpp_code` / `translation_status` / `structured_rate` 不再出现在 experimental semantic 输出中。
 
-> **2026-09-16 approved target amendment**：在保留 package-first、统一对象模型和结构化诊断原则的前提下，下一轮允许进行不保证旧输出兼容性的纯 Python 模块化重构。目标输出可升级为 `format_version: "3.0"`；Blueprint/Kismet 目标由 expression 摘要扩展为指令 IR、CFG、静态调用/变量读写分析，并增加从同一语义 IR 投影 C++ 声明和迁移代码的能力。该 C++ 投影不执行 Blueprint、不恢复 native C++ 函数体，也不伪造 cooking、加密或缺失数据。Epic Blueprint Header View 仅作为声明范围参考，不作为运行时依赖或实现桥接。
+> **2026-09-16 approved target amendment（historical；envelope 目标已被 2026-09-28 v4 amendment 取代）**：在保留 package-first、统一对象模型和结构化诊断原则的前提下，下一轮允许进行不保证旧输出兼容性的纯 Python 模块化重构。目标输出曾计划升级为 `format_version: "3.0"`；Blueprint/Kismet 目标由 expression 摘要扩展为指令 IR、CFG、静态调用/变量读写分析，并曾计划从同一语义 IR 投影 C++ 声明和迁移代码。该 C++ 投影已随 v4 amendment 退役。Epic Blueprint Header View 仅作为声明范围参考，不作为运行时依赖或实现桥接。
 >
 > **2026-09-17 clarification**：2026-09-10 Gate K 退役的是旧的字符串拼接式 `cpp_code`/伪代码链；它仍是 v2 当前状态的历史事实，但不禁止 2026-09-16 批准的 v3 typed IR → C++ projection。后文提到“C++ 已退役/非迁移目标”时，除非明确写为 v3 target，均应理解为旧 v2 链的历史状态。v3 `format_version` 仍属于投影信封，不向 `PackageDocument` 增加展示层版本状态。
 >
-> **2026-09-16 v3 contract freeze（Task 1）**：(1) 下一实现波是纯 Python 模块化重写；(2) 输出 schema major 固定为 `format_version: "3.0"`（信封字段，由 `projection.py` 的 `FORMAT_VERSION` 注入，不落到 `PackageDocument`；契约文件为 `docs/designs/contract/package_document_v3.schema.json`，v2 契约文件已删除）；(3) Blueprint/Kismet 公共逻辑目标为 instruction IR + CFG + 静态调用/变量读写分析；(4) C++ declaration/migration projection 从同一语义 IR 派生，不是第二解析器；(5) Gate K 只退役旧字符串伪代码链，不禁止新的 typed v3 projection；(6) Epic Blueprint Header View（`Engine/Plugins/Editor/BlueprintHeaderView/`）仅作 declaration-scope 参考——它在编辑器 UI 预览 C++ header，不导出 `.h`/`.cpp` 文件，也不是运行时依赖；(7) type-aware projection 是 v3 公共目标：Blueprint declaration/migration、Material graph/editor-builder、table/curve/struct/enum data、physical asset 的 metadata/payload 引用；没有任何资产族被要求产出 C++；(8) 每个内嵌 projection 都带显式 capability/status 与 provenance；不可用或低置信信息不得用伪造源码填补。
+> **2026-09-16 v3 contract freeze（Task 1）（historical：v3 契约与 C++ projection 目标均已被 2026-09-28 v4 amendment 取代，契约文件 `package_document_v3.schema.json` 已删除）**：(1) 下一实现波是纯 Python 模块化重写；(2) 当时输出 schema major 固定为 `format_version: "3.0"`（信封字段，由 `projection.py` 的 `FORMAT_VERSION` 注入，不落到 `PackageDocument`；契约文件为 `docs/designs/contract/package_document_v3.schema.json`，v2 契约文件已删除）；(3) Blueprint/Kismet 公共逻辑目标为 instruction IR + CFG + 静态调用/变量读写分析；(4) C++ declaration/migration projection 从同一语义 IR 派生，不是第二解析器；(5) Gate K 只退役旧字符串伪代码链，不禁止新的 typed v3 projection；(6) Epic Blueprint Header View（`Engine/Plugins/Editor/BlueprintHeaderView/`）仅作 declaration-scope 参考——它在编辑器 UI 预览 C++ header，不导出 `.h`/`.cpp` 文件，也不是运行时依赖；(7) type-aware projection 是 v3 公共目标：Blueprint declaration/migration、Material graph/editor-builder、table/curve/struct/enum data、physical asset 的 metadata/payload 引用；没有任何资产族被要求产出 C++；(8) 每个内嵌 projection 都带显式 capability/status 与 provenance；不可用或低置信信息不得用伪造源码填补。
 >
 > **2026-09-28 approved v4 output amendment（Task 1 contract freeze）**：包输出升级为 `format_version: "4.0"`，公共输出模式恰好为 `normal` 与 `debug` 两种（不存在 `agent`/`raw`/`semantic`/`view`/`depth` 等公共输出模式）。产品是单包单输出解析器：两种模式都输出在 `depth="decode"` 下解析的完整文档，不做对象选择、分页或输出字节预算。`normal` 包含全部有序属性与安全解码值以及静态 Blueprint IR/CFG/调用/变量读写语义，不含偏移、物理区间、原始字节、解析 trace、byte accounting 与详细诊断证据；`debug` 在 `normal` 之上增加证据（顶层 `debug` 对象的七个数组 + 嵌套 `debug_evidence`），剥离这些证据并把 `mode` 归一为 `normal` 后必须与 `normal` 输出逐字节等价。C++ projection/rendering 面退役（不再实施 C++ 声明/迁移输出）；Blueprint 指令 IR、CFG、相关性、函数/变量/调用分析与非 C++ 语义投影保留。契约文件为 `docs/designs/contract/package_document_v4.schema.json`（Draft 2020-12）；v3 契约文件（`package_document_v3.schema.json`及示例）随本次冻结删除，v3 的 view/depth/selection/pagination/max_bytes 公共输出面不再是目标。公共签名目标：`parse_package_document(file_path, *, tolerant=True, mappings_path=None, game=None, depth="decode", object_ids=None)`、`project_document(document, *, mode="normal")`（唯一信封生产者）、`write_projected_document(document, output_path, *, mode="normal")`、`inspect_package(file_path, *, mode="normal")`；`extract_payload()` 保留为独立二进制操作。与本 amendment 冲突的 v3 契约、view/depth/selection/pagination/max_bytes 与 typed C++ projection 表述均以本 amendment 为准。本冻结只记录目标与契约，不表示源码已实现 v4。
 >
 > 本文是当前项目唯一权威的重构目标。源码与测试仍是“当前已经实现什么”的唯一依据；本文只定义“接下来要实现什么”。旧版输出、Semantic JSON 1.x 和单资产设计文档均为历史资料，不得继续作为新功能的目标架构。
 
-## Status audit (2026-09-21, post-merge)
+## Status audit (2026-09-21, post-merge) — historical snapshot
 
-This is an implementation marker, not a change to the target architecture. On
-`dev-0.6.0` after merge `8727b067` (controller review pass); local verification
+This is a dated implementation marker, not a change to the target architecture.
+On `dev-0.6.0` after merge `8727b067` (controller review pass); local verification
 recorded at that time: full suite **444 passed**, `compileall` clean (a
-historical post-merge count, not the current suite total):
+historical post-merge count, not the current suite total). The v3-envelope and
+typed C++ lines below describe that 2026-09-21 state only; the 2026-09-28 v4
+amendment superseded them (contract file `package_document_v3.schema.json`
+deleted, C++ projection retired, default output is `format_version: "4.0"`):
 
-- v3 contract envelope: `FORMAT_VERSION` / `projections` / `sidecars` in
-  `src/uasset_read/projection.py`; contract
+- v3 contract envelope (historical): `FORMAT_VERSION` / `projections` / `sidecars` in
+  `src/uasset_read/projection.py`; contract then was
   `docs/designs/contract/package_document_v3.schema.json`.
 - Bounded sources/containers, layout/Zen availability boundary, separate
   tagged/unversioned property readers, and byte accounting are present.
 - Static Blueprint IR/CFG/correlation, Material graph, C++/type-aware
   projections (`src/uasset_read/projections/`), canonical writer
-  (`write_projected_document`), and sample acceptance gates are current
-  behavior on this branch.
+  (`write_projected_document`), and sample acceptance gates were current
+  behavior on this branch (the typed C++ projection half is retired by the v4
+  amendment; Blueprint IR/CFG/correlation, Material graph, non-C++ projections
+  and the writer remain current).
 
 Zen package full decode remains outside the current product target. The UE5.8.2
 traditional FPak fixture is now available; Pak range-read and container extraction
@@ -374,7 +379,7 @@ class ObjectRecord:
 
 契约保留、当前读取器尚未发射的 kind（方向以契约示例为准，从主语侧表述）：
 
-- `generated_class_of` — `from` 是 `to` 的生成类（见 `package_document_v3.example.json`：`export:2`（`ABP_RifleAnimLayers_C`）→ `export:1`（`ABP_RifleAnimLayers`））
+- `generated_class_of` — `from` 是 `to` 的生成类（历史示例（已删除的 v3 example 文件）：`export:2`（`ABP_RifleAnimLayers_C`）→ `export:1`（`ABP_RifleAnimLayers`））
 - `default_object_of` — `from` 是 `to` 的默认对象
 - `references` — `from` 引用 `to`
 
@@ -533,7 +538,7 @@ class AssetHandler(Protocol):
 }
 ```
 
-`objects[].properties` 是有序 occurrence 数组（元素为 `{name, type, occurrence, array_index, value}`），不是 name-keyed 公共 map；重复名和数组元素保留序列化顺序。`projections[]` 承载非 C++ type-aware 投影记录（table data、material/graph/physical JSON 等；每条带严格 `status`/`completeness` 与必填 `provenance: {derived_from: [...], generator: ...}`，provenance 不携带字节区间），`sidecars[]` 只在 payload 或体积硬边界迫使物理拆分时出现并记录相对路径、大小、SHA-256、原因；序列化源区间是 debug 证据（`debug.sidecar_sources`）。不存在 `next_offset`/`truncation`——v4 没有分页或截断。
+`objects[].properties` 是有序 occurrence 数组（元素为 `{name, type, occurrence, array_index, value}`），不是 name-keyed 公共 map；重复名和数组元素保留序列化顺序。`projections[]` 承载非 C++ type-aware 投影记录（table data、material/graph/physical JSON 等；每条带严格 `status`/`completeness` 与必填 `provenance: {derived_from: [...], generator: ...}`，provenance 不携带字节区间），`sidecars[]` 只在 payload 或体积硬边界迫使物理拆分时出现并记录相对路径、大小、SHA-256、原因；序列化源区间是 debug 证据（`debug.sidecar_sources`）。v4 输出没有分页或截断面——退役的分页/截断字段名不再出现在公共包输出契约中。
 
 ### Normal 与 Debug
 

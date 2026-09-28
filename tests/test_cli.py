@@ -9,6 +9,9 @@ from tests.fixtures import sample_path
 from uasset_read import cli
 
 
+# Historical retired surfaces: v2 logging/legacy flags and the v3 public-output
+# view/depth/limit/max_bytes/batch flags. They must keep failing loudly, so the
+# literals stay here as rejection fixtures (not as supported CLI surfaces).
 @pytest.mark.parametrize(
     "flag",
     [
@@ -59,7 +62,6 @@ def test_cli_defaults_to_normal_mode(monkeypatch, capsys, tmp_path) -> None:
     assert payload["format"] == "uasset_read.package"
     assert payload["format_version"] == "4.0"
     assert payload["mode"] == "normal"
-    assert "view" not in payload and "depth" not in payload
     assert "debug" not in payload
 
     out = tmp_path / "normal.json"

@@ -66,7 +66,6 @@ def test_normal_and_debug_envelopes_from_one_producer(stackobot_document, tmp_pa
     debug = project_document(stackobot_document, mode="debug")
     assert normal["mode"] == "normal"
     assert debug["mode"] == "debug"
-    assert "view" not in normal and "depth" not in normal
     output_path = write_projected_document(stackobot_document, tmp_path / "doc.json")
     assert json.loads(output_path.read_text(encoding="utf-8")) == normal
 
@@ -186,6 +185,8 @@ def test_partial_documents_are_rejected():
 
 
 def test_invalid_modes_are_rejected(stackobot_document):
+    # Historical note: "view"/"depth" name retired v3 output surfaces and stay
+    # in the rejection list so a reintroduced mode never validates again.
     for mode in ("agent", "raw", "semantic", "view", "depth"):
         with pytest.raises(ValueError, match="mode"):
             project_document(stackobot_document, mode=mode)

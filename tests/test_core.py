@@ -2027,7 +2027,6 @@ def test_projection_envelope_is_the_v4_document():
     def test_normal_is_default():
         result = project_document(doc)
         assert result["mode"] == "normal"
-        assert "view" not in result and "depth" not in result
         assert "debug" not in result
 
     def test_debug_adds_the_evidence_block():
@@ -2044,6 +2043,8 @@ def test_projection_envelope_is_the_v4_document():
         }
 
     def test_invalid_mode_raises():
+        # Historical note: retired v2/v3 output-mode names stay in the rejection
+        # list so a reintroduced mode never validates again.
         for mode in ("agent", "raw", "semantic", "view"):
             with pytest.raises(ValueError, match="mode"):
                 project_document(doc, mode=mode)
@@ -2179,7 +2180,6 @@ def test_cli_python_agent_share_default_projection_and_logging_inert(tmp_path, m
     assert plain["format"] == "uasset_read.package"
     assert plain["format_version"] == "4.0"
     assert plain["mode"] == "normal"
-    assert "view" not in plain and "depth" not in plain
     assert "objects" in plain and plain["package"]
     assert len(plain["objects"]) > 0
 

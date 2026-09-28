@@ -268,6 +268,8 @@ def test_envelope_fields() -> None:
 
 
 def test_unsupported_modes_rejected() -> None:
+    # Historical note: these names are retired v2/v3 output surfaces kept in the
+    # rejection list so a reintroduced mode name never validates again.
     for mode in ("agent", "raw", "semantic", "view"):
         document = _normal_document()
         document["mode"] = mode
@@ -316,3 +318,24 @@ def test_empty_byte_accounting_leaves_for_non_empty_window_rejected() -> None:
     document = _debug_document()
     document["debug"]["byte_accounting"][0]["leaves"] = []
     _rejects(document)
+
+
+def test_graph_link_shapes_are_the_producer_unions() -> None:
+    # Blueprint GraphLinkRecord (in the base fixture), PinLinkProjection, and
+    # the MaterialLink edge record all belong to semantic links; a partial or
+    # extra-key material edge is not a valid link.
+    document = _normal_document()
+    document["objects"][0]["semantic"]["material_graph"] = {
+        "kind": "material_graph",
+        "links": [
+            {"source": "export:30", "source_output": 1, "target": "export:13", "target_input": "A", "mask": 1},
+            {"to_node_id": "export:0/export:2", "to_pin_id": "Then"},
+        ],
+    }
+    jsonschema.validate(document, _schema())
+    bad = copy.deepcopy(document)
+    bad["objects"][0]["semantic"]["material_graph"]["links"][0] = {
+        "source": "export:30",
+        "target": "export:13",
+    }
+    _rejects(bad)
