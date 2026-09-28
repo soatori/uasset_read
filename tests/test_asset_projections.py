@@ -184,3 +184,79 @@ def test_registry_rejects_two_matching_projectors():
     doc = _doc([_obj("export:0", class_name="StaticMesh")])
     with pytest.raises(ValueError, match="ambiguous projector ownership"):
         registry.project_object(doc, "export:0")
+
+
+def _csv_rows(record) -> list[list[str]]:
+    import csv
+    from io import StringIO
+
+    return list(csv.reader(StringIO(record.content)))
+
+
+def test_datatable_csv_cells_survive_commas_quotes_newlines_and_structure():
+    registry = ProjectorRegistry.default()
+    obj = _obj(
+        "export:0",
+        class_name="DataTable",
+        semantic={
+            "kind": "data_table",
+            "row_struct": "/Script/Game.MyRow",
+            "row_count": 2,
+            "rows": [
+                {
+                    "name": 'Row, "A"\nB',
+                    "fields": {
+                        "Text": {"type": "StrProperty", "value": 'has, "quotes"\nnewline'},
+                        "Struct": {"type": "StructProperty", "size": 8, "struct_type": "Vector"},
+                    },
+                },
+                {"name": "RowB", "fields": {"Text": {"type": "StrProperty", "value": "plain"}}},
+            ],
+        },
+    )
+    records = registry.project_object(_doc([obj]), obj.id)
+    rows = _csv_rows(next(item for item in records if item.kind == "data_table_csv"))
+    header = rows[0]
+    assert header == ["name", "Text", "Struct"]
+    assert all(len(row) == len(header) for row in rows)
+    assert rows[1][0] == 'Row, "A"\nB'
+    assert rows[1][1] == 'has, "quotes"\nnewline'
+    assert rows[1][2] == '{"size":8,"struct_type":"Vector","type":"StructProperty"}'
+    assert rows[2][0] == "RowB"
+    assert rows[2][1] == "plain"
+    assert rows[2][2] == ""
+
+
+def test_curve_table_csv_pins_columns_and_compact_json_cells():
+    import json
+
+    registry = ProjectorRegistry.default()
+    obj = _obj(
+        "export:0",
+        class_name="CurveTable",
+        semantic={
+            "kind": "curve_table",
+            "curve_table_mode": "RichCurves",
+            "rows": [
+                {
+                    "name": 'Curve, "X"\nY',
+                    "fields": {
+                        "Keys": {
+                            "type": "ArrayProperty",
+                            "value": [{"time": 1.0, "value": 2.0, "interp": "linear"}],
+                        },
+                        "Other": {"type": "FloatProperty", "size": 4},
+                    },
+                }
+            ],
+        },
+    )
+    records = registry.project_object(_doc([obj]), obj.id)
+    rows = _csv_rows(next(item for item in records if item.kind == "curve_table_csv"))
+    assert rows[0] == ["name", "key_count", "field_types", "keys"]
+    assert all(len(row) == 4 for row in rows)
+    compact = {"ensure_ascii": False, "separators": (",", ":"), "sort_keys": True}
+    assert rows[1][0] == 'Curve, "X"\nY'
+    assert rows[1][1] == "1"
+    assert rows[1][2] == json.dumps({"Keys": "ArrayProperty", "Other": "FloatProperty"}, **compact)
+    assert rows[1][3] == json.dumps([{"interp": "linear", "time": 1.0, "value": 2.0}], **compact)

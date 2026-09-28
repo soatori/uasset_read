@@ -8,6 +8,7 @@ projector invents field lists from positional package bytes.
 from __future__ import annotations
 
 import csv
+import json
 from io import StringIO
 from typing import Any
 
@@ -114,18 +115,26 @@ def _data_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], Proje
     return payload, status, completeness
 
 
+def _csv_cell(value: Any) -> str:
+    """One CSV cell: strings pass through, None becomes empty, the rest compact JSON."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
 def _csv_from_table(payload: dict[str, Any]) -> str:
     columns = payload.get("columns") or []
     buf = StringIO()
     writer = csv.writer(buf, lineterminator="\n")
-    writer.writerow(["name"] + [str(c.get("name") or "") for c in columns])
+    writer.writerow(["name"] + [_csv_cell(str(c.get("name") or "")) for c in columns])
     for row in payload.get("rows") or []:
         values = row.get("values") if isinstance(row, dict) else {}
         values = values if isinstance(values, dict) else {}
-        cells = [str(row.get("name") or "")]
+        cells = [_csv_cell(row.get("name") if isinstance(row, dict) else None)]
         for column in columns:
-            raw = values.get(column.get("name"))
-            cells.append("" if raw is None else str(raw))
+            cells.append(_csv_cell(values.get(column.get("name"))))
         writer.writerow(cells)
     return buf.getvalue()
 
@@ -189,10 +198,21 @@ def _curve_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], Proj
 
 
 def _csv_from_curves(payload: dict[str, Any]) -> str:
-    lines = ["name,key_count"]
+    buf = StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(["name", "key_count", "field_types", "keys"])
     for curve in payload.get("curves") or []:
-        lines.append(f"{curve.get('name')},{len(curve.get('keys') or [])}")
-    return "\n".join(lines) + "\n"
+        keys = curve.get("keys") if isinstance(curve, dict) else None
+        keys = keys if isinstance(keys, list) else []
+        writer.writerow(
+            [
+                _csv_cell(curve.get("name") if isinstance(curve, dict) else None),
+                _csv_cell(len(keys)),
+                _csv_cell(curve.get("field_types") if isinstance(curve, dict) else None),
+                _csv_cell(keys),
+            ]
+        )
+    return buf.getvalue()
 
 
 class DataTableProjector:

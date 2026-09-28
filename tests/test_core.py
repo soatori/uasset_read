@@ -586,10 +586,13 @@ def test_reader_boundaries_reject_malformed_access():
 def test_property_bag_normalization_is_bounded_lossless():
     """normalize_property_bag must bound, describe, and never embed raw bytes."""
 
-    def test_empty_list_returns_empty_dict():
+    def projected(properties):
+        return {entry["name"]: entry["value"] for entry in project_property_bag(normalize_property_bag(properties))}
+
+    def test_empty_list_returns_empty_array():
 
         assert normalize_property_bag([]).entries == []
-        assert project_property_bag(normalize_property_bag([])) == {}
+        assert project_property_bag(normalize_property_bag([])) == []
 
     def test_unknown_property_is_descriptor_not_blob():
 
@@ -599,7 +602,7 @@ def test_property_bag_normalization_is_bounded_lossless():
             size=4,
             reason=FallbackReason.UNSUPPORTED_TYPE,
         )
-        bag = project_property_bag(normalize_property_bag([prop]))
+        bag = projected([prop])
         assert bag["Mystery"] == {
             "kind": "opaque",
             "type": "UnknownProperty",
@@ -611,9 +614,7 @@ def test_property_bag_normalization_is_bounded_lossless():
 
     def test_known_property_preserves_value():
 
-        bag = project_property_bag(
-            normalize_property_bag([PropertyValue(name="Health", type="FloatProperty", value=100.0)])
-        )
+        bag = projected([PropertyValue(name="Health", type="FloatProperty", value=100.0)])
         assert bag["Health"]["kind"] == "value"
         assert bag["Health"]["value"] == 100.0
         json.dumps(bag)
@@ -622,7 +623,7 @@ def test_property_bag_normalization_is_bounded_lossless():
 
         sv = StructValue(struct_type="Vector", fields={"X": 1.0, "Y": 2.0, "Z": 3.0})
         prop = PropertyValue(name="Location", type="StructProperty", value=sv)
-        bag = project_property_bag(normalize_property_bag([prop]))
+        bag = projected([prop])
         assert bag["Location"]["kind"] == "struct"
         assert bag["Location"]["struct_type"] == "Vector"
         assert bag["Location"]["fields"]["X"] == 1.0
@@ -630,12 +631,14 @@ def test_property_bag_normalization_is_bounded_lossless():
 
     def test_bytes_value_serializes():
 
-        bag = project_property_bag(
-            normalize_property_bag([PropertyValue(name="Data", type="BlobProperty", value=b"\x00\x01")])
-        )
+        bag = projected([PropertyValue(name="Data", type="BlobProperty", value=b"\x00\x01")])
         assert bag["Data"]["kind"] == "value"
-        assert bag["Data"]["value"]["kind"] == "bytes"
-        assert bag["Data"]["value"]["length"] == 2
+        assert bag["Data"]["value"] == {
+            "kind": "opaque",
+            "type": "bytes",
+            "size": 2,
+            "reason": "raw_bytes",
+        }
         json.dumps(bag)
 
     def test_lwc_box_size_52_and_double_read():
@@ -836,7 +839,7 @@ def test_property_bag_normalization_is_bounded_lossless():
 
     _run_cases(
         [
-            test_empty_list_returns_empty_dict,
+            test_empty_list_returns_empty_array,
             test_unknown_property_is_descriptor_not_blob,
             test_known_property_preserves_value,
             test_struct_property_normalizes,

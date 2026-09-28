@@ -471,7 +471,6 @@ def normalize_property_bag(
         PropertyEntry,
         StructValue,
         PropertyValue,
-        project_property_value,
     )
 
     bag = PropertyBag()
@@ -526,11 +525,7 @@ def normalize_property_bag(
             continue
 
         if isinstance(prop, StructValue):
-            entry_value: Any = {
-                "kind": "struct",
-                "struct_type": prop.struct_type,
-                "fields": {k: project_property_value(v) for k, v in prop.fields.items()},
-            }
+            entry_value: Any = _normalize_value(prop)
         elif isinstance(prop, PropertyValue):
             inner = prop.value
             if isinstance(inner, dict) and (
@@ -540,21 +535,17 @@ def normalize_property_bag(
             ):
                 entry_value = _normalize_structured_dict(inner)
             elif isinstance(inner, StructValue):
-                entry_value = {
-                    "kind": "struct",
-                    "struct_type": inner.struct_type,
-                    "fields": {k: project_property_value(v) for k, v in inner.fields.items()},
-                }
+                entry_value = _normalize_value(inner)
             else:
                 entry_value = {
                     "kind": "value",
                     "type": prop.type,
-                    "value": project_property_value(inner),
+                    "value": _normalize_value(inner),
                 }
         elif isinstance(prop, dict):
             entry_value = _normalize_structured_dict(prop)
         else:
-            entry_value = project_property_value(prop)
+            entry_value = _normalize_value(prop)
 
         tag_region = None
         value_region = None
@@ -613,6 +604,62 @@ def normalize_property_bag(
     if range_diags:
         bag.diagnostics.extend(range_diags)
     return bag
+
+
+def _normalize_value(value: Any) -> Any:
+    """Lossless bag-model shape for one parsed value (handler vocabulary).
+
+    This is PropertyBag normalization, not output projection: typed containers
+    become the dict forms semantic handlers already read (bare lists, struct
+    dicts, parser dicts untouched), while ``project_property_value()`` remains
+    the sole projector to the frozen v4 output shapes. No str()/repr()
+    fallback: unknown objects stay as-is and the projector reports them opaque.
+    """
+    from ..models.properties import EnumValue, MapValue, SetValue, StructValue, TextValue
+
+    if isinstance(value, StructValue):
+        return {
+            "kind": "struct",
+            "struct_type": value.struct_type,
+            "fields": {k: _normalize_value(v) for k, v in value.fields.items()},
+        }
+    if isinstance(value, MapValue):
+        return {
+            "kind": "map",
+            "key_type": value.key_type,
+            "value_type": value.value_type,
+            "entries": [
+                {"key": _normalize_value(e.get("key")), "value": _normalize_value(e.get("value"))} for e in value.entries
+            ],
+        }
+    if isinstance(value, SetValue):
+        return {
+            "kind": "set",
+            "element_type": value.element_type,
+            "elements": [_normalize_value(e) for e in value.elements],
+        }
+    if isinstance(value, EnumValue):
+        return {"kind": "enum", "enum_type": value.enum_type, "value": value.value_name}
+    if isinstance(value, TextValue):
+        return {
+            "kind": "text",
+            "namespace": value.namespace,
+            "key": value.key,
+            "source_string": value.source_string,
+            "history_type": value.history_type,
+            "property_type": value.property_type,
+        }
+    if isinstance(value, list):
+        return [_normalize_value(v) for v in value]
+    if isinstance(value, dict):
+        if "kind" in value:
+            out = dict(value)
+            for key in ("value", "fields", "raw_data"):
+                if key in out:
+                    out[key] = _normalize_value(out[key])
+            return out
+        return {k: _normalize_value(v) for k, v in value.items()}
+    return value
 
 
 def _normalize_structured_dict(inner: dict[str, Any]) -> dict[str, Any]:

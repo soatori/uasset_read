@@ -25,7 +25,8 @@ _VALID_MODES = ("normal", "debug")
 # Contract-banned evidence keys (SemanticValue.propertyNames): physical
 # evidence never rides common semantic output in either mode. Removed
 # region-shaped values are re-emitted as debug.semantic_source_ranges; other
-# evidence values (e.g. raw_data) are dropped here and stay Task 3's concern.
+# evidence values (e.g. raw_data) are dropped here — property tag/value regions
+# and raw fallback bytes live in debug.property_evidence instead.
 _BANNED_SEMANTIC_EVIDENCE_KEYS = frozenset(
     {"source_range", "script_source_range", "raw_region", "tag_range", "value_range", "raw_data"}
 )
@@ -111,24 +112,62 @@ def _require_full_decode(document: PackageDocument) -> None:
 
 def _property_entries(obj: ObjectRecord) -> list[dict[str, Any]]:
     """Ordered property occurrences with per-name occurrence numbers."""
-    from uasset_read.models.properties import project_property_value
+    from uasset_read.models.properties import project_property_bag
 
     if obj.properties is None:
         return []
-    occurrences: dict[str, int] = {}
+    return project_property_bag(obj.properties)
+
+
+# Raw fallback bytes stay debug evidence only, capped so evidence stays bounded.
+_RAW_EVIDENCE_CAP = 256
+
+
+def _raw_evidence(data: bytes) -> dict[str, Any]:
+    truncated = len(data) > _RAW_EVIDENCE_CAP
+    return {
+        "encoding": "hex",
+        "data": data[:_RAW_EVIDENCE_CAP].hex(),
+        "total_size": len(data),
+        "truncated": truncated,
+    }
+
+
+def _entry_raw_bytes(value: Any) -> bytes | None:
+    """Top-level raw bytes a property entry still carries, if any."""
+    from uasset_read.models.fallback import PropertyFallback, StructFallback
+    from uasset_read.models.properties import PropertyValue
+
+    if isinstance(value, PropertyValue) and not isinstance(value, PropertyFallback):
+        value = value.value
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value)
+    if isinstance(value, StructFallback) and value.raw_bytes:
+        return bytes(value.raw_bytes)
+    return None
+
+
+def _property_evidence(document: PackageDocument) -> list[dict[str, Any]]:
+    """Debug-only per-property evidence; every region goes through project_region()."""
     out: list[dict[str, Any]] = []
-    for entry in obj.properties.entries:
-        occurrence = occurrences.get(entry.name, 0)
-        occurrences[entry.name] = occurrence + 1
-        out.append(
-            {
-                "name": entry.name,
-                "type": entry.type_name,
-                "occurrence": occurrence,
-                "array_index": entry.array_index,
-                "value": project_property_value(entry.value),
-            }
-        )
+    for obj in document.objects:
+        if obj.properties is None:
+            continue
+        for index, entry in enumerate(obj.properties.entries):
+            item: dict[str, Any] = {"object_id": obj.id, "property_index": index}
+            has_evidence = False
+            if entry.tag_region is not None:
+                item["tag_region"] = project_region(entry.tag_region)
+                has_evidence = True
+            if entry.value_region is not None:
+                item["value_region"] = project_region(entry.value_region)
+                has_evidence = True
+            raw = _entry_raw_bytes(entry.value)
+            if raw is not None:
+                item["raw"] = _raw_evidence(raw)
+                has_evidence = True
+            if has_evidence:
+                out.append(item)
     return out
 
 
@@ -315,7 +354,7 @@ def project_document(
     if mode == "debug":
         result["debug"] = {
             "object_regions": _object_regions(document),
-            "property_evidence": [],
+            "property_evidence": _property_evidence(document),
             "semantic_source_ranges": sorted(
                 semantic_evidence,
                 key=lambda entry: (entry["json_pointer"], entry["object_id"]),

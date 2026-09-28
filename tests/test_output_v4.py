@@ -282,3 +282,75 @@ def test_inspect_package_matches_python_parse_and_project():
     for mode in ("normal", "debug"):
         expected = project_document(parse_package_document(str(path), depth="decode"), mode=mode)
         assert inspect_package(str(path), mode=mode) == expected
+
+
+def test_typed_properties_debug_is_normal_plus_evidence():
+    from tests.test_properties import typed_property_document
+
+    document = typed_property_document()
+    normal = project_document(document)
+    debug = project_document(document, mode="debug")
+    stripped = copy.deepcopy(debug)
+    stripped.pop("debug")
+    stripped["mode"] = "normal"
+    assert stripped == normal
+    # Duplicate occurrences survive in order in both modes.
+    props = normal["objects"][0]["properties"]
+    assert [item["name"] for item in props[:2]] == ["Tags", "Tags"]
+    assert [item["occurrence"] for item in props[:2]] == [0, 1]
+    for mode_props in (props, debug["objects"][0]["properties"]):
+        for item in mode_props:
+            assert set(item) == {"name", "type", "occurrence", "array_index", "value"}
+
+
+def test_property_evidence_serializes_regions_only_through_project_region():
+    from tests.test_properties import typed_property_document
+    from uasset_read.models.byte_ranges import project_region
+
+    document = typed_property_document()
+    normal = project_document(document)
+    debug = project_document(document, mode="debug")
+    # Regions and raw bytes never reach common output ("raw_bytes" appears only
+    # as an opaque reason string; the forbidden *keys* are checked in
+    # test_projected_entries_carry_no_ranges_or_raw_data).
+    normal_blob = json.dumps(normal)
+    for banned in ("tag_region", "value_region", "raw_data", "package_index"):
+        assert f'"{banned}"' not in normal_blob
+    assert "0102" not in normal_blob
+
+    evidence = debug["debug"]["property_evidence"]
+    assert evidence
+    bag = document.objects[0].properties
+    by_index = {item["property_index"]: item for item in evidence}
+    assert sorted(by_index) == [item["property_index"] for item in evidence]
+    from uasset_read.models.fallback import StructFallback
+
+    for index, entry in enumerate(bag.entries):
+        value = entry.value
+        has_raw = isinstance(value, (bytes, bytearray)) or (
+            isinstance(value, StructFallback) and bool(value.raw_bytes)
+        )
+        item = by_index.get(index)
+        if entry.tag_region is None and entry.value_region is None and not has_raw:
+            assert item is None, f"property {index} must have no evidence entry"
+            continue
+        assert item is not None, f"property {index} missing evidence"
+        assert set(item) <= {"object_id", "property_index", "tag_region", "value_region", "raw"}
+        assert item["object_id"] == "export:0"
+        if entry.tag_region is not None:
+            assert item["tag_region"] == project_region(entry.tag_region)
+        if entry.value_region is not None:
+            assert item["value_region"] == project_region(entry.value_region)
+    # Raw fallback bytes are capped debug evidence only.
+    raw = next(item["raw"] for item in evidence if "raw" in item and item["raw"]["data"] == "0102")
+    assert raw == {"encoding": "hex", "data": "0102", "total_size": 2, "truncated": False}
+
+
+def test_typed_semantic_source_ranges_are_json_pointer_sorted():
+    from tests.test_properties import typed_property_document
+
+    debug = project_document(typed_property_document(), mode="debug")
+    entries = debug["debug"]["semantic_source_ranges"]
+    assert [entry["json_pointer"] for entry in entries] == ["/source_range"]
+    assert entries[0]["region"]["source_slices"][0]["source_id"] == "typed.uasset"
+    assert entries[0]["object_id"] == "export:0"
