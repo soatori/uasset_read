@@ -563,16 +563,23 @@ def test_real_sample_proves_claimed_capability():
 
 @pytest.mark.parametrize("sample", [entry["name"] for entry in MANIFEST_SAMPLES])
 def test_every_real_sample_forms_a_valid_package_document(sample: str):
-    """Every tracked fixture must form a schema-valid, complete, blob-free document."""
+    """Every tracked fixture must form a complete, relation-valid, blob-free document."""
     doc = _object_document(sample)
     entry = MANIFEST_BY_NAME[sample]
+    from uasset_read.serializers.package_summary import _read_version_and_tag
 
     ids = [o.id for o in doc.objects]
     assert ids == [f"export:{i}" for i in range(len(ids))], sample
     assert len(ids) == entry["export_count"], sample
-    assert doc.package.layout == "legacy", sample
+    assert doc.package.layout == entry["engine_layout"], sample
     assert doc.package.export_count == entry["export_count"], sample
     assert len(doc.summary.asset_object_ids) == entry["b_is_asset_count"], sample
+
+    with _open_sample_archive(SAMPLES / sample) as (archive, _summary, _names, _imports, _exports):
+        archive.seek(0)
+        _, _legacy_version, raw_ue4, raw_ue5, *_ = _read_version_and_tag(archive)
+        assert raw_ue4 == entry["file_version_ue4"], sample
+        assert raw_ue5 == entry["file_version_ue5"], sample
 
     valid = set(ids) | {f"import:{i}" for i in range(len(doc.dependencies))}
     assert doc.relations, sample
@@ -625,7 +632,7 @@ def test_every_real_sample_forms_a_valid_package_document(sample: str):
     )
 
 
-def test_v2_path_emits_no_handler_warnings(capfd, caplog):
+def test_v2_path_emits_no_handler_warnings(capfd, caplog, tmp_path):
     # capfd alone cannot catch the leak under pytest: the logging plugin
     # installs a root handler, which suppresses logging.lastResort. Assert
     # on captured WARNING records too — the real contract is "no warning
@@ -634,12 +641,224 @@ def test_v2_path_emits_no_handler_warnings(capfd, caplog):
 
     from uasset_read.package import parse_package_document
 
+    root = logging.getLogger()
+    handlers_before = tuple(root.handlers)
+    files_before = set(tmp_path.iterdir())
     with caplog.at_level(logging.WARNING):
         parse_package_document(SAMPLES / "NM_BPSystemEvent.uasset", depth="object")
     captured = capfd.readouterr()
     assert captured.err == "", f"v2 parse leaked stderr: {captured.err[:200]}"
     warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
     assert warnings == [], f"v2 parse emitted warning logs: {[r.getMessage()[:120] for r in warnings]}"
+    assert tuple(root.handlers) == handlers_before
+    assert set(tmp_path.iterdir()) == files_before
+
+
+def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
+    """Real samples exercise both v4 modes and every public producer route."""
+    import sys
+
+    import jsonschema
+
+    from uasset_read.agent_tools import inspect_package
+    from uasset_read.package import parse_package_document
+    from uasset_read.projection import project_document
+    from uasset_read.projections.bundle import write_projected_document
+
+    schema = json.loads(
+        (ROOT / "docs" / "designs" / "contract" / "package_document_v4.schema.json").read_text(encoding="utf-8")
+    )
+    top_level = {
+        "format",
+        "format_version",
+        "mode",
+        "source",
+        "package",
+        "summary",
+        "objects",
+        "relations",
+        "dependencies",
+        "projections",
+        "payloads",
+        "sidecars",
+        "diagnostics",
+    }
+    debug_keys = {
+        "object_regions",
+        "property_evidence",
+        "semantic_source_ranges",
+        "payload_sources",
+        "sidecar_sources",
+        "diagnostic_details",
+        "byte_accounting",
+    }
+    banned_semantic_keys = {
+        "source_range",
+        "script_source_range",
+        "raw_region",
+        "tag_range",
+        "value_range",
+        "raw_data",
+    }
+
+    def evidence_key_hits(value, path=""):
+        if isinstance(value, dict):
+            hits = []
+            for key, item in value.items():
+                child = f"{path}/{key}"
+                if key in banned_semantic_keys:
+                    hits.append(child)
+                hits.extend(evidence_key_hits(item, child))
+            return hits
+        if isinstance(value, list):
+            return [hit for index, item in enumerate(value) for hit in evidence_key_hits(item, f"{path}/{index}")]
+        return []
+
+    def strip_debug(value, *, top_level=False):
+        if isinstance(value, dict):
+            return {
+                key: strip_debug(item)
+                for key, item in value.items()
+                if key != "debug_evidence" and not (top_level and key == "debug")
+            }
+        if isinstance(value, list):
+            return [strip_debug(item) for item in value]
+        return value
+
+    samples = (
+        "StackOBot_BP_Drone.uasset",
+        "T_ParserBulk.uasset",
+        "FirstPerson_DT_WeaponList.uasset",
+    )
+    projected = {}
+    for name in samples:
+        document = parse_package_document(SAMPLES / name, depth="decode")
+        normal = project_document(document, mode="normal")
+        debug = project_document(document, mode="debug")
+        projected[name] = {"normal": normal, "debug": debug}
+
+        jsonschema.validate(normal, schema)
+        jsonschema.validate(debug, schema)
+        assert set(normal) == top_level, name
+        assert set(debug) == top_level | {"debug"}, name
+        assert set(debug["debug"]) == debug_keys, name
+        assert all(isinstance(debug["debug"][key], list) for key in debug_keys), name
+        stripped = strip_debug(copy.deepcopy(debug), top_level=True)
+        stripped["mode"] = "normal"
+        assert stripped == normal, name
+        for obj in normal["objects"]:
+            assert evidence_key_hits(obj.get("semantic")) == [], f"{name}:{obj['id']}"
+
+    bulk = projected["T_ParserBulk.uasset"]
+    payload = next(item for item in bulk["normal"]["payloads"] if item["owner"] == "export:0")
+    assert set(payload) <= {"id", "owner", "kind", "stored_size", "status", "logical_size", "compression", "hash"}
+    source = next(item for item in bulk["debug"]["debug"]["payload_sources"] if item["payload_id"] == payload["id"])
+    assert source["source_region"]["source_id"].endswith(".uexp")
+    assert "data" not in payload and "raw_bytes" not in payload
+
+    sample = SAMPLES / "StackOBot_BP_Drone.uasset"
+    document = parse_package_document(sample, depth="decode")
+    for mode in ("normal", "debug"):
+        assert inspect_package(str(sample), mode=mode) == projected[sample.name][mode]
+
+    output_path = write_projected_document(document, tmp_path / "v4-public-output.json")
+    assert json.loads(output_path.read_text(encoding="utf-8")) == projected[sample.name]["normal"]
+
+    from uasset_read.cli import main
+
+    for args, mode in (([], "normal"), (["--debug"], "debug")):
+        monkeypatch.setattr(sys, "argv", ["uasset_read", *args, str(sample)])
+        with pytest.raises(SystemExit) as exit_info:
+            main()
+        assert exit_info.value.code == 0
+        captured = capsys.readouterr()
+        assert captured.err == ""
+        output = json.loads(captured.out)
+        assert output == projected[sample.name][mode]
+
+
+def test_critical_boundary_guards(monkeypatch):
+    """Keep the mandatory trust-boundary checks in one bounded aggregate item."""
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.constants import MAX_SAFE_COUNT
+    from uasset_read.exceptions import ExportBoundsExceeded, ParseError
+    from uasset_read.kismet.native_fields import NativeFieldContext, read_native_fields
+    from uasset_read.kismet.archive import FKismetArchive
+    from uasset_read.mappings import UsmapParser
+    from uasset_read.memory_safety import MemoryLimitExceeded, reserve_memory
+
+    archive = ByteArchive(b"\x00" * 256)
+    archive._read_range = (50, 100)
+    archive._pos = 80
+    assert archive.read(20) == b"\x00" * 20
+    with pytest.raises(ExportBoundsExceeded):
+        archive.read(1)
+    with pytest.raises(ExportBoundsExceeded):
+        archive.validate_offset(10, "test_seek")
+    with pytest.raises(ExportBoundsExceeded):
+        archive.validate_offset(150, "test_seek")
+
+    with pytest.raises(MemoryLimitExceeded, match="negative"):
+        reserve_memory(-100, "unit")
+    with pytest.raises(MemoryLimitExceeded):
+        reserve_memory(17 * 1024 * 1024, "unit")
+
+    context = NativeFieldContext(name_map=[], import_map=[], export_map=[])
+    with pytest.raises(ParseError, match="native field count"):
+        read_native_fields(ByteArchive(b""), MAX_SAFE_COUNT + 1, context)
+    with pytest.raises(ParseError, match="FFieldPath count"):
+        FKismetArchive(struct.pack("<i", -1), "test", []).xfer_field_pointer()
+
+    usmap = (
+        (0x30C4).to_bytes(2, "little")
+        + bytes([1, 1])
+        + b"\x00" * 8
+        + (-1).to_bytes(4, "little", signed=True)
+    )
+    with pytest.raises(ParseError, match="CustomVersion"):
+        UsmapParser(usmap)
+
+    import uasset_read.serializers.object_resources as object_resources
+
+    from uasset_read.package import _parse_cached, parse_package_document
+
+    original_export = object_resources.ObjectExport
+    calls = {"count": 0}
+
+    def fail_second_export(**kwargs):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise ValueError("injected export table entry failure")
+        return original_export(**kwargs)
+
+    _parse_cached.cache_clear()
+    try:
+        monkeypatch.setattr(object_resources, "ObjectExport", fail_second_export)
+        document = parse_package_document(str(SAMPLES / "FirstPerson_DT_WeaponList.uasset"), depth="package")
+    finally:
+        _parse_cached.cache_clear()
+    assert document.objects[0].id == "export:0"
+    assert any(d.code == "EXPORT_TABLE_TRUNCATED" for d in document.diagnostics)
+
+    import uasset_read.mappings as mappings
+
+    def missing_codec(*args, **kwargs):
+        raise ImportError("optional codec unavailable")
+
+    monkeypatch.setattr(mappings, "UsmapParser", missing_codec)
+    _parse_cached.cache_clear()
+    try:
+        document = parse_package_document(
+            str(SAMPLES / "BP_UnversionedTest.uasset"),
+            depth="package",
+            mappings_path=str(SAMPLES / "UnversionedTest.usmap"),
+        )
+    finally:
+        _parse_cached.cache_clear()
+    assert document.package.export_count == MANIFEST_BY_NAME["BP_UnversionedTest.uasset"]["export_count"]
+    assert any(d.code == "MAPPINGS_LOAD_FAILED" for d in document.diagnostics)
 
 
 def test_object_depth_parses_only_requested_export():

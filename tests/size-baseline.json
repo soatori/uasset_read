@@ -6,11 +6,11 @@
   },
   "tests_python": {
     "min_files": 4,
-    "max_lines": 1316
+    "max_lines": 1498
   },
   "docs_markdown": {
     "min_files": 158,
-    "max_lines": 61217
+    "max_lines": 61227
   },
   "wheel_bytes": {
     "max_bytes": 300000
