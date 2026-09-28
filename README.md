@@ -219,6 +219,10 @@ Shared readers behind that document: `kismet/` (bytecode → expressions + diagn
 
 ## Testing
 
+The tracked baseline is intentionally small: two test modules
+(`tests/test_samples.py`, `tests/test_size_baseline.py`) and at most 100
+collected pytest items (enforced during collection by `tests/conftest.py`).
+
 ```bash
 python -m pytest tests/ -v           # Run all tests
 python -m pytest tests/ -v --cov=uasset_read  # With coverage

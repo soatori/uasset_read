@@ -27,7 +27,7 @@
 - 三个入口（CLI 默认、Python API、Agent tool）的输出均为 PackageDocument v2，唯一顶层 format 为 `uasset_read.package`；legacy Semantic 1.x JSON 与 v1 pipeline 已删除，`--legacy-json`/`--markdown`/`--diff`/`--list-formats` 作为 retired flag 直接报错退出（见 `cli.py` retired 集合与 Issue #643）。`--batch` 仍然有效（`cli.py:151` 解析，`:387` 分派）。
 - `extract_payload` 对带 sidecar（`.uexp`/`.ubulk`）的 cooked 包执行真实字节提取（BulkData header 解析 + 结构化错误）。无 sidecar 的包返回 `PAYLOAD_EXTRACTION_DEFERRED`（见 `docs/designs/2026-08-31-payload-extraction-path.md`）。
 - 默认 `semantic` 视图不携带 `serial_region`/`properties`（归 `raw`/`debug`）；depth >= object 时 semantic 携带紧凑的 `properties_summary`（names + 标量，容器仅保留长度，无 raw 字节，#636）。`project_document` 默认 envelope 始终包含 `relations`/`dependencies`（无 `sections=`/`fields=` 参数；依赖条目携带 `package_name`，#632）。
-- 正式测试契约层为 `tests/test_core.py`（核心单元 + 结构门禁）与 `tests/test_samples.py`（manifest 驱动的真实样本），加上 `test_size_baseline.py`（体积门禁）。无 `tests/contract/` 目录。
+- 正式测试契约为 sample-first 两文件基线：`tests/test_samples.py`（manifest 驱动的真实样本驱动：manifest 闭合、66 项样本 parse、golden、capability、quality、容器与 sidecar 聚合检查）与 `tests/test_size_baseline.py`（体积 + 2 模块上限门禁）；全树收集项至多 100（`tests/conftest.py` 收集预算 hook）。无 `tests/contract/`、`tests/serialization/` 与其他测试模块；临时调查走未跟踪 `temp/`。
 - 当前 v2 使用 package-first `PackageDocument`（legacy + tagged properties + sample-backed handlers 已实现；Zen/IoStore deferred；unversioned 为 usmap 驱动的 partial 路径，未映射尾部显式 opaque，payload extraction 已实现，见 docs/designs/README.md），输出所有 objects。
 - 当前 Pak/IoStore、日志和 Agent 能力不得按目标设计提前宣称完成。
 - **契约稳定性（S1，2026-09-13）：** `format_version: "2.0"` 对 stable 域已冻结；破坏性变更才 bump major。`objects[].properties` / `semantic` / `coverage` 与顶层 `payloads` 为 experimental（schema `x-stability`）——**不得**作为跨版本 golden 的稳定断言面。
