@@ -770,6 +770,33 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     assert debug_semantic["debug_evidence"] is None
     assert debug_semantic["links"][0]["debug_evidence"] == {"raw_source_pin_guid": "aa"}
 
+    stack = projected["StackOBot_BP_Drone.uasset"]
+    normal_owner = next(item for item in stack["normal"]["objects"] if item["id"] == "export:0")
+    normal_instructions = [
+        entry for fn in normal_owner["semantic"]["functions"] for entry in fn["instructions"]
+    ]
+    assert len(normal_instructions) == 85
+    for entry in normal_instructions:
+        assert "serialized_start" not in entry and "serialized_end" not in entry, entry["opcode"]
+        assert "debug_evidence" not in entry
+    # source_node_reason asserts belong to T5 cross-task acceptance (branch is pre-T2).
+    for key in ("calls", "variable_accesses"):
+        for entry in normal_owner["semantic"][key]:
+            assert "serialized_start" not in entry and "serialized_end" not in entry
+
+    debug_owner = next(item for item in stack["debug"]["objects"] if item["id"] == "export:0")
+    debug_instructions = [entry for fn in debug_owner["semantic"]["functions"] for entry in fn["instructions"]]
+    assert len(debug_instructions) == len(normal_instructions)
+    for entry in debug_instructions:
+        evidence = entry["debug_evidence"]
+        assert evidence is not None and 0 <= evidence["raw_opcode"] <= 255
+        assert evidence["source_node_evidence"] is None
+        assert evidence["diagnostics"] == []
+        span = evidence["serialized_range"]
+        if span is not None:
+            assert span["start"] >= 0 and span["end"] == span["start"] + span["size"]
+            assert span["status"] in {"decoded", "opaque", "payload", "unavailable"}
+
     bulk = projected["T_ParserBulk.uasset"]
     payload = next(item for item in bulk["normal"]["payloads"] if item["owner"] == "export:0")
     assert set(payload) <= {"id", "owner", "kind", "stored_size", "status", "logical_size", "compression", "hash"}
