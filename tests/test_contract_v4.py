@@ -305,6 +305,11 @@ def test_semantic_source_range_in_common_output_rejected() -> None:
     debug_document = copy.deepcopy(_debug_document())
     debug_document["objects"][0]["semantic"]["graphs"][0]["source_range"] = _region(0, 64)
     _rejects(debug_document)
+    nested = _normal_document()
+    nested["objects"][0]["semantic"]["external_refs"][0]["source_evidence"][0]["value"] = {
+        "source_range": _region(0, 64)
+    }
+    _rejects(nested)
 
 
 def test_empty_byte_accounting_leaves_for_non_empty_window_rejected() -> None:
