@@ -90,8 +90,10 @@ The checks are:
 3. Selected depth/semantic checks: only checks backed by real samples and
    existing sample metadata remain. They are aggregate checks over the
    selected samples, not a new per-function unit-test matrix.
-4. Output checks: existing golden files and the package-document schema are
-   validated from the sample directory.
+4. Output checks: existing golden files and the v4 package-document schema are
+   validated from representative real samples in both `normal` and `debug`
+   modes. The aggregate also checks debug parity and that Python, Agent, writer,
+   and CLI producers expose the same document.
 5. Quality checks: `quality_baseline.json` remains the source of diagnostic
    ceilings, forbidden codes, and aggregate trailing-byte limits.
 6. Container and sidecar checks: committed `.pak`/`.utoc` metadata and package
@@ -99,8 +101,10 @@ The checks are:
 
 If a semantic expectation is not already represented by manifest, quality, or
 golden metadata, it must either be reduced to a sample-backed aggregate
-assertion or be treated as a temporary probe. It must not create another
-permanent test module merely to preserve a historical unit-test shape.
+assertion or, when it protects a mandatory trust boundary, a small controlled-
+bytes assertion inside `test_samples.py`. Broad malformed experiments and
+one-off probes remain temporary; no additional permanent test module is
+created merely to preserve a historical unit-test shape.
 
 ## Baseline and temporary probes
 
@@ -114,10 +118,12 @@ package bytes or duplicate sample assertions.
 `tests/conftest.py` contains only the collection-budget hook. It must not grow
 domain fixtures, sample parsers, or compatibility aliases.
 
-Temporary investigations, malformed-byte experiments, one-off CLI checks,
-performance probes, and regression reproductions go under untracked `temp/`.
-They may import the package and use real samples, but they are not collected by
-pytest, are not included in `tests/size-baseline.json`, and are not run by CI.
+Temporary investigations, broad malformed-byte experiments, one-off CLI checks,
+performance probes, and exploratory regression reproductions go under
+untracked `temp/`. They may import the package and use real samples, but they
+are not collected by pytest, are not included in `tests/size-baseline.json`,
+and are not run by CI. The small mandatory boundary aggregate and v4 public
+contract aggregate remain in `tests/test_samples.py` and are run by CI.
 The existing CI directory-compliance rule continues to keep `temp/` out of the
 tracked default branch.
 
@@ -162,10 +168,9 @@ file move.
 
 ### Sample baseline plus a permanent critical-unit module
 
-Not selected for this migration. It would protect more malformed-input and CLI
-contracts, but it conflicts with the approved sample-first scope and leaves a
-second permanent behavior suite. A later request can add a narrowly defined
-critical gate with a separate item budget.
+Not selected for this migration. The required critical checks live as one
+bounded aggregate inside `tests/test_samples.py`; a second permanent behavior
+suite is still not introduced.
 
 ## Acceptance criteria
 
@@ -183,6 +188,8 @@ The migration is complete when all of the following are true:
   helper, marker, or hidden collection path.
 - `python -m ruff check src/uasset_read tests/` passes.
 - `git diff --check` passes.
+- The sample driver validates v4 normal/debug schema and parity, raw manifest
+  versions/layout, and the mandatory bounded-reader/error-boundary aggregate.
 - The canonical design, Agent reference, README, and size baseline describe
   the same current target.
 - `src/` has no diff from this migration.

@@ -818,7 +818,7 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - sample-first 两文件基线（2026-09-28，spec：`docs/superpowers/specs/2026-09-28-sample-first-test-baseline-design.md`）：
   - 正式测试模块至多两个：`tests/test_samples.py`（manifest 驱动的真实样本驱动）与 `tests/test_size_baseline.py`（体积 + 测试文件数门禁）。计数命令为 `git ls-files 'tests/test_*.py' 'tests/**/test_*.py'`（两个 pathspec 都要，顶层模式不匹配嵌套目录），`tests/test_size_baseline.py` 断言结果至多 2 个文件。
   - pytest 收集项（含参数化）至多 100，由 `tests/conftest.py` 的 collection-budget hook 在收集阶段强制；`python -m pytest -q` 与 CI 走同一命令，无需第二个 runner。
-  - 永久子树仅 `tests/samples/`；不再有 `tests/serialization/` 或其他 `test_*.py`。`tests/conftest.py` 只含收集预算 hook，不承载 fixture。合成字节、malformed 实验与一次性 CLI 检查走未跟踪 `temp/`，不进入基线与 CI。
+  - 永久子树仅 `tests/samples/`；不再有 `tests/serialization/` 或其他 `test_*.py`。`tests/conftest.py` 只含收集预算 hook，不承载 fixture。`test_samples.py` 可以保留少量、明确对应必测回归的受控 bytes、public v4 contract 和边界检查；广泛 malformed 实验、一次性 CLI 检查与调查探针仍走未跟踪 `temp/`，不进入基线与 CI。
 - pytest cache、`__pycache__`、日志、golden 调试转储和本机路径不得进入版本控制。
 
 ### 必须存在的回归
@@ -831,6 +831,8 @@ debug view 是结构化事实，不是日志镜像。它包含 reader 分支、r
 - disabled logging 不创建文件、不向 root logger 泄漏。
 - malformed count/offset 不进行超大分配或越界 seek。
 - 缺少 optional codec 时 package metadata 仍可检查。
+
+`test_samples.py` 的聚合门禁还必须覆盖 v4 normal/debug schema、debug evidence parity、CLI/Python/Agent producer 一致性，以及 manifest 声明的 raw `FileVersionUE4/UE5` 与 layout。受控 bytes 只用于验证 bounded reader、count、offset、memory 和结构化失败边界，不恢复旧 unit-test 矩阵。
 
 ### 验证原则
 
