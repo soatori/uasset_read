@@ -53,6 +53,10 @@ _LET_BASE_NAMES = frozenset(
     }
 )
 
+# Why a record has no source_node_id: no bytecode<->graph mapping exists.
+# Never guessed (audit item 3); normal-mode content, not evidence.
+DEBUG_MAPPING_UNAVAILABLE = "debug_mapping_unavailable"
+
 
 @dataclass
 class BytecodeInstruction:
@@ -73,6 +77,7 @@ class BytecodeInstruction:
     jump_kind: Literal["unconditional", "conditional_false", "computed", "none"]
     source_node_id: str | None
     parse_status: Literal["parsed", "partial", "unavailable"] = "parsed"
+    source_node_reason: str | None = None
 
 
 def _variable_name(expr: Any) -> str | None:
@@ -211,6 +216,7 @@ def normalize_instructions(expressions: list[KismetExpression]) -> list[Bytecode
         call_target = _derive_call_target(opcode, operands)
         reads, writes = _derive_reads_writes(opcode, operands)
 
+        source_node_id: str | None = None
         instructions.append(
             BytecodeInstruction(
                 statement_index=statement_index,
@@ -226,8 +232,9 @@ def normalize_instructions(expressions: list[KismetExpression]) -> list[Bytecode
                 call_target=call_target,
                 jump_target_statement_index=jump_target,
                 jump_kind=jump_kind,
-                source_node_id=None,
+                source_node_id=source_node_id,
                 parse_status=parse_status,
+                source_node_reason=DEBUG_MAPPING_UNAVAILABLE if source_node_id is None else None,
             )
         )
     return instructions
@@ -256,7 +263,10 @@ def project_operand(value: Any) -> Any:
     if hasattr(value, "to_dict"):
         return project_operand(value.to_dict())
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        return project_operand(dataclasses.asdict(value))
+        # Route each field VALUE through project_operand before recursing:
+        # dataclasses.asdict() would pre-flatten ByteRegion/OpaqueOperand
+        # fields into raw dicts that are not schema-shaped Regions.
+        return project_operand({f.name: getattr(value, f.name) for f in dataclasses.fields(value)})
     if isinstance(value, (list, tuple)):
         return [project_operand(item) for item in value]
     if isinstance(value, dict):
@@ -289,5 +299,6 @@ def project_instruction(instruction: BytecodeInstruction) -> dict[str, Any]:
         "jump_target_statement_index": instruction.jump_target_statement_index,
         "jump_kind": instruction.jump_kind,
         "source_node_id": instruction.source_node_id,
+        "source_node_reason": instruction.source_node_reason,
         "parse_status": instruction.parse_status,
     }

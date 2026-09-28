@@ -142,6 +142,36 @@ class LinkResolution:
 
 
 @dataclass
+class ExternalReferenceRecord:
+    """External (non-package-local) call target with conservative resolution."""
+
+    local_id: str | None
+    package: str | None
+    class_name: str | None
+    symbol: str
+    qualified_key: str
+    origin: Literal["unreal_engine", "plugin", "project_asset", "unknown_origin"]
+    source_evidence: list[dict[str, Any]]
+    status: Literal["resolved", "unresolved", "ambiguous"]
+    reason: str
+    candidate_local_ids: list[str]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "local_id": self.local_id,
+            "package": self.package,
+            "class_name": self.class_name,
+            "symbol": self.symbol,
+            "qualified_key": self.qualified_key,
+            "origin": self.origin,
+            "source_evidence": [dict(item) for item in self.source_evidence],
+            "status": self.status,
+            "reason": self.reason,
+            "candidate_local_ids": list(self.candidate_local_ids),
+        }
+
+
+@dataclass
 class BlueprintGraph:
     id: GraphId
     name: str
@@ -439,6 +469,9 @@ class FunctionAnalysis:
     calls: list[str]
     bytecode_status: BytecodeStatus
     diagnostics: list[Diagnostic]
+    # Signature evidence (already-decoded native FProperty declarations); the
+    # correlation layer projects FunctionDeclaration from these.
+    native_fields: list[NativeFieldDeclaration] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> FunctionAnalysis:
@@ -627,6 +660,8 @@ class CallRecord:
     confidence: float = 0.0
     unresolved: bool = True
     execution_mode: Literal["static_reference"] = "static_reference"
+    target_ref_key: str | None = None
+    source_node_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -642,6 +677,7 @@ class VariableAccessRecord:
     match_method: MatchMethod = "unresolved"
     confidence: float = 0.0
     unresolved: bool = True
+    source_node_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -755,3 +791,4 @@ class BlueprintSemantic:
     control_flow: list[ControlFlowGraph]
     exec_chains: ExecChainSummary
     diagnostics: list[Diagnostic]
+    external_refs: list[ExternalReferenceRecord] = field(default_factory=list)

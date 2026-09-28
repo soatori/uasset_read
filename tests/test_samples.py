@@ -491,17 +491,20 @@ def test_real_sample_proves_claimed_capability():
             assert obj.semantic["lod_count"] == len(obj.semantic["lods"]), f"{sample}:{class_name}"
         elif class_name in {"BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}:
             assert not {"nodes", "bytecode", "graph", "graphs"} & obj.semantic.keys(), f"{sample}:{class_name}"
-            if class_name == "AnimBlueprintGeneratedClass":
+            if class_name == "AnimBlueprintGeneratedClass" or sample == "StackOBot_BP_Drone.uasset":
                 owner = _graph_owner_id(doc)
                 assert owner is not None, f"{sample}:{class_name} graph owner not found"
                 dec = _decode_document(sample, (owner,))
-                abp = next(o for o in dec.objects if o.id == owner)
-                assert abp.semantic is not None, f"{sample}:{class_name} decode"
-                assert abp.semantic["kind"] == "anim_blueprint", f"{sample}:{class_name}"
-                assert abp.semantic.get("graphs"), f"{sample}:{class_name} graphs missing"
-                assert abp.status.semantic == "complete", f"{sample}:{class_name} decode tier"
-                node_ids = {n["id"].split("/")[-1] for g in abp.semantic["graphs"] for n in g["nodes"]}
-                for graph in abp.semantic["graphs"]:
+                bp = next(o for o in dec.objects if o.id == owner)
+                assert bp.semantic is not None, f"{sample}:{class_name} decode"
+                if class_name == "AnimBlueprintGeneratedClass":
+                    assert bp.semantic["kind"] == "anim_blueprint", f"{sample}:{class_name}"
+                    assert bp.status.semantic == "complete", f"{sample}:{class_name} decode tier"
+                else:
+                    assert bp.semantic["kind"] == "blueprint", f"{sample}:{class_name}"
+                assert bp.semantic.get("graphs"), f"{sample}:{class_name} graphs missing"
+                node_ids = {n["id"].split("/")[-1] for g in bp.semantic["graphs"] for n in g["nodes"]}
+                for graph in bp.semantic["graphs"]:
                     for node in graph["nodes"]:
                         for pin in node["pins"]:
                             for link in pin["links"]:
@@ -509,6 +512,67 @@ def test_real_sample_proves_claimed_capability():
                                 # qualify the node export alone; join on that suffix.
                                 target = link["to_node_id"].split("/")[-1]
                                 assert target in node_ids, f"{sample} dangling link"
+                if sample == "StackOBot_BP_Drone.uasset":
+                    # Audit items 2+3: external references and complete signatures.
+                    decls = {item["name"]: item for item in bp.semantic["function_declarations"]}
+                    uber = decls["ExecuteUbergraph_BP_Drone"]
+                    assert [(p["name"], p["type_name"], p["direction"]) for p in uber["parameters"]] == [
+                        ("EntryPoint", "IntProperty", "in")
+                    ]
+                    assert uber["return_type"] is None and uber["cpp_return_type"] == "void"
+                    assert uber["flags"] is None and uber["unresolved"] is False
+                    look = decls["InpActEvt_IA_Look_K2Node_EnhancedInputActionEvent_0"]
+                    assert [(p["name"], p["type_name"], p["direction"]) for p in look["parameters"]] == [
+                        ("ActionValue", "StructProperty", "in"),
+                        ("ElapsedTime", "FloatProperty", "in"),
+                        ("TriggeredTime", "FloatProperty", "in"),
+                        ("SourceAction", "ObjectProperty", "in"),
+                    ]
+                    assert all(p["cpp_type"] for p in look["parameters"])
+                    assert all(p["source_range"] is None and p["default_value"] is None for p in look["parameters"])
+
+                    refs = bp.semantic["external_refs"]
+                    assert len(refs) == 10, f"got {len(refs)} external refs"
+                    conv = next(item for item in refs if item["symbol"] == "Conv_InputActionValueToAxis2D")
+                    assert conv["local_id"] == "import:28"
+                    assert conv["package"] == "/Script/EnhancedInput"
+                    assert conv["class_name"] == "Function"
+                    assert conv["qualified_key"] == "/Script/EnhancedInput::Function::Conv_InputActionValueToAxis2D"
+                    assert conv["origin"] == "unknown_origin"
+                    assert conv["status"] == "resolved" and conv["reason"] == "exact_package_index"
+                    assert conv["candidate_local_ids"] == ["import:28"]
+                    assert conv["source_evidence"] == [
+                        {"kind": "stack_node_package_index", "value": -29}
+                    ]
+                    unresolved_refs = [item for item in refs if item["status"] == "unresolved"]
+                    assert {item["symbol"] for item in unresolved_refs} == {
+                        "AddMovementInput",
+                        "AddControllerYawInput",
+                        "AddControllerPitchInput",
+                    }
+                    assert all(item["local_id"] is None for item in unresolved_refs)
+                    assert all(item["reason"] == "no_name_match" for item in unresolved_refs)
+                    assert all(item["qualified_key"].startswith("unresolved::") for item in unresolved_refs)
+                    assert all(item["origin"] == "unknown_origin" for item in refs)
+                    assert all(set(item) == {
+                        "local_id", "package", "class_name", "symbol", "qualified_key", "origin",
+                        "source_evidence", "status", "reason", "candidate_local_ids",
+                    } for item in refs)
+
+                    calls = bp.semantic["calls"]
+                    assert len(calls) == 17
+                    assert sum(1 for item in calls if item["target_ref_key"] is None) == 2
+                    assert sum(1 for item in calls if item["target_ref_key"] is not None) == 15
+                    assert all(item["source_node_reason"] == "debug_mapping_unavailable" for item in calls)
+                    assert all(
+                        entry["source_node_reason"] == "debug_mapping_unavailable"
+                        for fn in bp.semantic["functions"]
+                        for entry in fn["instructions"]
+                    )
+                    assert all(
+                        item["source_node_reason"] == "debug_mapping_unavailable"
+                        for item in bp.semantic["variable_accesses"]
+                    )
         elif class_name in {"Texture2D", "TextureCube"}:
             assert isinstance(obj.semantic["srgb"], bool), f"{sample}:{class_name}"
             assert "compression_settings" in obj.semantic, f"{sample}:{class_name}"

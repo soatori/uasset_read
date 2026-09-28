@@ -8,9 +8,12 @@ C++ pseudocode generation was retired 2026-09-10 (Gate K).
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from uasset_read.models.byte_ranges import ByteRegion, project_region
+
+if TYPE_CHECKING:
+    from uasset_read.kismet.native_fields import NativeFieldDeclaration
 
 # status -> public confidence (analysis vocabulary: parsed|partial|unavailable)
 BYTECODE_CONFIDENCE: dict[str, str] = {
@@ -68,6 +71,9 @@ class KismetDecompiledResult:
     error_context: dict[str, Any] | None = None
     script_metrics: dict[str, Any] | None = None
     fallback_reasons: list[str] = field(default_factory=list)
+    # Native FProperty declarations already decoded by ufunction_reader
+    # (native_property_count > 0). Empty means "no signature evidence".
+    native_fields: list[NativeFieldDeclaration] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         infer_bytecode_confidence(self.bytecode_status)  # validates
