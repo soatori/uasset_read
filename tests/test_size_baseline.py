@@ -40,6 +40,18 @@ def _tracked_files() -> list[str]:
     return [entry for entry in out.stdout.decode("utf-8").split("\0") if entry]
 
 
+def _test_modules() -> list[str]:
+    # Both pathspecs: the acceptance command counts top-level and nested modules,
+    # and neither pattern alone matches the other's directories.
+    out = subprocess.run(
+        ["git", "ls-files", "-z", "tests/test_*.py", "tests/**/test_*.py"],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+    )
+    return [entry for entry in out.stdout.decode("utf-8").split("\0") if entry]
+
+
 def _line_count(relpath: str) -> int:
     path = ROOT / relpath
     try:
@@ -61,6 +73,11 @@ def test_source_tree_within_baseline():
 
 def test_test_tree_within_baseline():
     _assert_area("tests_python", "tests/", ".py")
+    modules = _test_modules()
+    assert len(modules) <= 2, (
+        f"tracked test modules {modules} exceed the sample-first limit of 2 "
+        "(docs/superpowers/specs/2026-09-28-sample-first-test-baseline-design.md)"
+    )
 
 
 def test_docs_tree_within_baseline():
