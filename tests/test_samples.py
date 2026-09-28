@@ -749,6 +749,27 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
         for obj in normal["objects"]:
             assert evidence_key_hits(obj.get("semantic")) == [], f"{name}:{obj['id']}"
 
+    # T0: nested debug_evidence is mode-filtered at the semantic boundary.
+    from uasset_read.projection import _sanitize_semantic
+
+    sample_semantic = {
+        "links": [{"graph_id": "export:0/export:4", "debug_evidence": {"raw_source_pin_guid": "aa"}}],
+        "debug_evidence": None,
+        "keep": "x",
+    }
+    hits: list[dict] = []
+    normal_semantic = _sanitize_semantic(
+        copy.deepcopy(sample_semantic), "export:0", "", hits, strip_debug_evidence=True
+    )
+    assert "debug_evidence" not in normal_semantic
+    assert "debug_evidence" not in normal_semantic["links"][0]
+    assert normal_semantic["keep"] == "x"
+    debug_semantic = _sanitize_semantic(
+        copy.deepcopy(sample_semantic), "export:0", "", hits, strip_debug_evidence=False
+    )
+    assert debug_semantic["debug_evidence"] is None
+    assert debug_semantic["links"][0]["debug_evidence"] == {"raw_source_pin_guid": "aa"}
+
     bulk = projected["T_ParserBulk.uasset"]
     payload = next(item for item in bulk["normal"]["payloads"] if item["owner"] == "export:0")
     assert set(payload) <= {"id", "owner", "kind", "stored_size", "status", "logical_size", "compression", "hash"}

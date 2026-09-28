@@ -42,26 +42,35 @@ def _sanitize_semantic(
     object_id: str,
     pointer: str,
     entries: list[dict[str, Any]],
+    *,
+    strip_debug_evidence: bool,
 ) -> Any:
     """Copy one semantic value without banned evidence keys.
 
     ``pointer`` is relative to the object's semantic value. A region-shaped
     dict under a banned key becomes a ``debug.semantic_source_ranges`` entry
     at that pointer; any other value under a banned key is dropped.
+    ``strip_debug_evidence`` (normal mode) drops nested ``debug_evidence``
+    keys at any depth; debug mode keeps them verbatim — the parity rule.
     """
     if isinstance(value, dict):
         out: dict[str, Any] = {}
         for key, item in value.items():
             child = f"{pointer}/{_pointer_token(str(key))}"
+            if key == "debug_evidence" and strip_debug_evidence:
+                continue
             if key in _BANNED_SEMANTIC_EVIDENCE_KEYS:
                 if isinstance(item, dict):
                     entries.append({"object_id": object_id, "json_pointer": child, "region": item})
                 continue
-            out[key] = _sanitize_semantic(item, object_id, child, entries)
+            out[key] = _sanitize_semantic(
+                item, object_id, child, entries, strip_debug_evidence=strip_debug_evidence
+            )
         return out
     if isinstance(value, list):
         return [
-            _sanitize_semantic(item, object_id, f"{pointer}/{index}", entries) for index, item in enumerate(value)
+            _sanitize_semantic(item, object_id, f"{pointer}/{index}", entries, strip_debug_evidence=strip_debug_evidence)
+            for index, item in enumerate(value)
         ]
     return value
 
@@ -176,7 +185,12 @@ def _property_evidence(document: PackageDocument) -> list[dict[str, Any]]:
     return out
 
 
-def obj_to_dict(obj: ObjectRecord, evidence_out: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def obj_to_dict(
+    obj: ObjectRecord,
+    evidence_out: list[dict[str, Any]] | None = None,
+    *,
+    strip_debug_evidence: bool = False,
+) -> dict[str, Any]:
     """Serialize one ObjectRecord to the v4 ObjectEntry shape.
 
     The semantic copy never carries contract-banned evidence keys; when
@@ -194,7 +208,9 @@ def obj_to_dict(obj: ObjectRecord, evidence_out: list[dict[str, Any]] | None = N
     }
     if obj.semantic is not None:
         entries: list[dict[str, Any]] = []
-        d["semantic"] = _sanitize_semantic(obj.semantic, obj.id, "", entries)
+        d["semantic"] = _sanitize_semantic(
+            obj.semantic, obj.id, "", entries, strip_debug_evidence=strip_debug_evidence
+        )
         if evidence_out is not None:
             evidence_out.extend(entries)
     if obj.coverage:
@@ -339,7 +355,10 @@ def project_document(
             "total_imports": document.summary.total_imports,
             "total_exports": document.summary.total_exports,
         },
-        "objects": [obj_to_dict(obj, semantic_evidence) for obj in document.objects],
+        "objects": [
+            obj_to_dict(obj, semantic_evidence, strip_debug_evidence=(mode == "normal"))
+            for obj in document.objects
+        ],
         "relations": [
             {
                 "kind": rel.kind,
