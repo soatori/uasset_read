@@ -16,11 +16,14 @@ from uasset_read.models.analysis import (
     BlueprintPin,
     GraphId,
     GraphKind,
+    GraphLinkRecord,
     K2NodeMetadata,
     LinkResolution,
     NodeId,
     PinLink,
     PinLinkRef,
+    _graph_id_from_str,
+    _node_id_from_str,
 )
 from uasset_read.models.diagnostics import Diagnostic, make_diagnostic
 
@@ -175,6 +178,23 @@ def _node_export_object_id(raw_id: Any) -> str:
         return ""
     part = raw_id.rsplit("/", 1)[-1]
     return part if part.startswith("export:") or part.startswith("import:") else ""
+
+
+def _link_record_from_raw(raw: dict[str, Any], owner_id: str, graph_export_id: str) -> GraphLinkRecord:
+    """Raw resolver record -> typed GraphLinkRecord with owner-qualified ids."""
+    target_node = raw.get("_target_node_export")
+    return GraphLinkRecord(
+        graph_id=_graph_id_from_str(f"{owner_id}/{graph_export_id}"),
+        source_node_id=_node_id_from_str(f"{owner_id}/{raw['_source_node_export']}"),
+        source_pin_guid=str(raw.get("source_pin_guid") or ""),
+        target_owner_id=raw.get("target_owner_id"),
+        target_node_id=_node_id_from_str(f"{owner_id}/{target_node}") if target_node else None,
+        target_pin_guid=raw.get("target_pin_guid"),
+        connection_type=raw.get("connection_type") or "unknown",  # type: ignore[arg-type]
+        status=raw.get("status") or "unresolved",  # type: ignore[arg-type]
+        reason=str(raw.get("reason") or ""),
+        debug_evidence=(dict(raw["debug_evidence"]) if isinstance(raw.get("debug_evidence"), dict) else None),
+    )
 
 
 def _object_name_index(objects_by_id: dict[str, Any] | None) -> dict[str, str]:
@@ -334,6 +354,12 @@ class BlueprintGraphDecoder:
             # Re-attach resolved links (already on pins) and keep diagnostics.
             parse_errors = [str(e) for e in raw.get("parse_errors") or []]
             truncated = bool((raw.get("truncated") or {}).get("nodes") or (raw.get("truncated") or {}).get("pins"))
+            raw_links = raw.pop("links", [])
+            links = [
+                _link_record_from_raw(item, obj.id, str(raw.get("id") or ""))
+                for item in raw_links
+                if isinstance(item, dict)
+            ]
             kind = _graph_kind(str(raw.get("name") or ""), str(raw.get("id") or ""), function_ids)
             graphs.append(
                 BlueprintGraph(
@@ -347,6 +373,7 @@ class BlueprintGraphDecoder:
                     parse_errors=parse_errors + [d.message for d in resolution.diagnostics],
                     raw_region=None,
                     truncated=truncated,
+                    links=links,
                 )
             )
         return graphs

@@ -142,6 +142,54 @@ class LinkResolution:
 
 
 @dataclass
+class GraphLinkRecord:
+    """One serialized pin-link slot (v4 contract $defs/GraphLinkRecord)."""
+
+    graph_id: GraphId
+    source_node_id: NodeId
+    source_pin_guid: str
+    target_owner_id: str | None
+    target_node_id: NodeId | None
+    target_pin_guid: str | None
+    connection_type: Literal["exec", "data", "delegate", "unknown"]
+    status: Literal["resolved", "unresolved", "ambiguous"]
+    reason: str
+    debug_evidence: dict[str, Any] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "graph_id": str(self.graph_id),
+            "source_node_id": str(self.source_node_id),
+            "source_pin_guid": self.source_pin_guid,
+            "target_owner_id": self.target_owner_id,
+            "target_node_id": str(self.target_node_id) if self.target_node_id else None,
+            "target_pin_guid": self.target_pin_guid,
+            "connection_type": self.connection_type,
+            "status": self.status,
+            "reason": self.reason,
+        }
+        if self.debug_evidence is not None:
+            out["debug_evidence"] = dict(self.debug_evidence)
+        return out
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> GraphLinkRecord:
+        target_node = data.get("target_node_id")
+        return cls(
+            graph_id=_graph_id_from_str(str(data.get("graph_id") or "")),
+            source_node_id=_node_id_from_str(str(data.get("source_node_id") or "")),
+            source_pin_guid=str(data.get("source_pin_guid") or ""),
+            target_owner_id=data.get("target_owner_id"),
+            target_node_id=_node_id_from_str(str(target_node)) if target_node else None,
+            target_pin_guid=data.get("target_pin_guid"),
+            connection_type=data.get("connection_type") or "unknown",  # type: ignore[arg-type]
+            status=data.get("status") or "unresolved",  # type: ignore[arg-type]
+            reason=str(data.get("reason") or ""),
+            debug_evidence=(dict(data["debug_evidence"]) if isinstance(data.get("debug_evidence"), dict) else None),
+        )
+
+
+@dataclass
 class BlueprintGraph:
     id: GraphId
     name: str
@@ -152,6 +200,9 @@ class BlueprintGraph:
     truncated: bool = False
     # Serializer-side provenance retained for the projected graph dict.
     graph_class: str = ""
+    # One record per serialized LinkedTo slot (v4 GraphLinkRecord); empty on
+    # the standalone rebuild path when the source dict carried no records.
+    links: list[GraphLinkRecord] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> BlueprintGraph:
@@ -241,6 +292,9 @@ class BlueprintGraph:
             raw_region=region_from_projected(data.get("source_range")),
             truncated=bool(data.get("truncated") or False),
             graph_class=str(data.get("graph_class") or ""),
+            links=[
+                GraphLinkRecord.from_dict(item) for item in data.get("links") or [] if isinstance(item, dict)
+            ],
         )
 
 
@@ -340,6 +394,7 @@ def project_blueprint_graph(graph: BlueprintGraph) -> dict[str, Any]:
         "pin_count": pin_count,
         "edge_count": edge_count,
         "nodes": [_project_node(node) for node in graph.nodes],
+        "links": [link.to_dict() for link in graph.links],
         "parse_errors": list(graph.parse_errors),
         "truncated": graph.truncated,
         "source_range": project_region(graph.raw_region),

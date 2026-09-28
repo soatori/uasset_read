@@ -881,6 +881,19 @@ def test_critical_boundary_guards(monkeypatch):
     assert document.package.export_count == MANIFEST_BY_NAME["BP_UnversionedTest.uasset"]["export_count"]
     assert any(d.code == "MAPPINGS_LOAD_FAILED" for d in document.diagnostics)
 
+    from uasset_read.serializers.graph_pin import read_pin_array
+
+    # T1: LinkedTo retains serialized null slots + per-reference byte ranges;
+    # other pin arrays (SubPins) keep the historical skip-null behavior.
+    payload = struct.pack("<ii", 2, 1) + struct.pack("<ii", 0, 3) + b"\x11" * 16
+    kept = read_pin_array(ByteArchive(payload), [], [], retain_nulls=True)
+    assert [entry.get("null") for entry in kept] == [True, False]
+    assert kept[0]["owning_node"] is None and kept[0]["pin_guid"] is None
+    assert kept[1]["owning_node"] == 3 and kept[1]["pin_guid"] == "11" * 16
+    assert kept[0]["ref_range"] == (4, 8) and kept[1]["ref_range"] == (8, 32)
+    skipped = read_pin_array(ByteArchive(payload), [], [])
+    assert len(skipped) == 1 and "null" not in skipped[0]
+
 
 def test_object_depth_parses_only_requested_export():
     from uasset_read.package import parse_package_document
@@ -967,6 +980,22 @@ def test_blueprint_graph_decodes_without_parse_errors():
     assert len(graphs) == 4 and len(nodes) == 370, f"got {len(graphs)} graphs / {len(nodes)} nodes"
     assert not [g for g in graphs if g.get("parse_errors")], "graph-level parse errors"
     assert not [d for d in doc.diagnostics if d.code.startswith("BLUEPRINT_GRAPH")], "graph diagnostics"
+
+    # Audit item 1: one GraphLinkRecord per serialized LinkedTo slot (T1).
+    links = [link for g in graphs for link in g.get("links") or []]
+    assert len(links) == 610, f"got {len(links)} link records for {len(graphs)} graphs"
+    assert sum(1 for link in links if link["status"] == "resolved") == 610
+    assert all(link["reason"] for link in links)
+    assert all(link["graph_id"].startswith("export:1/export:") for link in links)
+    assert all(link["source_node_id"].startswith("export:1/export:") for link in links)
+    assert all(link["source_pin_guid"] for link in links)
+    assert {link["connection_type"] for link in links} <= {"exec", "data", "delegate", "unknown"}
+    evidence = [link["debug_evidence"] for link in links]
+    assert all(isinstance(item, dict) for item in evidence)
+    assert all(isinstance(item["raw_source_owner_package_index"], int) and item["raw_source_owner_package_index"] > 0 for item in evidence)
+    assert all(isinstance(item["source_pin_range"], dict) for item in evidence)
+    linked_total = sum(len(pin.get("links") or []) for g in graphs for n in g["nodes"] for pin in n["pins"])
+    assert linked_total == 610, "pin adjacency must stay a derived view of the records"
 
 
 def test_als_graph_owners_resolve_beyond_eight_hops():
