@@ -22,6 +22,48 @@ FORMAT_VERSION = "4.0"
 
 _VALID_MODES = ("normal", "debug")
 
+# Contract-banned evidence keys (SemanticValue.propertyNames): physical
+# evidence never rides common semantic output in either mode. Removed
+# region-shaped values are re-emitted as debug.semantic_source_ranges; other
+# evidence values (e.g. raw_data) are dropped here and stay Task 3's concern.
+_BANNED_SEMANTIC_EVIDENCE_KEYS = frozenset(
+    {"source_range", "script_source_range", "raw_region", "tag_range", "value_range", "raw_data"}
+)
+
+
+def _pointer_token(key: str) -> str:
+    """JSON Pointer escape for one path token (RFC 6901)."""
+    return key.replace("~", "~0").replace("/", "~1")
+
+
+def _sanitize_semantic(
+    value: Any,
+    object_id: str,
+    pointer: str,
+    entries: list[dict[str, Any]],
+) -> Any:
+    """Copy one semantic value without banned evidence keys.
+
+    ``pointer`` is relative to the object's semantic value. A region-shaped
+    dict under a banned key becomes a ``debug.semantic_source_ranges`` entry
+    at that pointer; any other value under a banned key is dropped.
+    """
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for key, item in value.items():
+            child = f"{pointer}/{_pointer_token(str(key))}"
+            if key in _BANNED_SEMANTIC_EVIDENCE_KEYS:
+                if isinstance(item, dict):
+                    entries.append({"object_id": object_id, "json_pointer": child, "region": item})
+                continue
+            out[key] = _sanitize_semantic(item, object_id, child, entries)
+        return out
+    if isinstance(value, list):
+        return [
+            _sanitize_semantic(item, object_id, f"{pointer}/{index}", entries) for index, item in enumerate(value)
+        ]
+    return value
+
 
 def build_projection_records(
     document: PackageDocument,
@@ -90,8 +132,13 @@ def _property_entries(obj: ObjectRecord) -> list[dict[str, Any]]:
     return out
 
 
-def obj_to_dict(obj: ObjectRecord) -> dict[str, Any]:
-    """Serialize one ObjectRecord to the v4 ObjectEntry shape."""
+def obj_to_dict(obj: ObjectRecord, evidence_out: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Serialize one ObjectRecord to the v4 ObjectEntry shape.
+
+    The semantic copy never carries contract-banned evidence keys; when
+    ``evidence_out`` is given, removed region values are appended to it as
+    ``debug.semantic_source_ranges`` candidates.
+    """
     d: dict[str, Any] = {
         "id": obj.id,
         "table_index": obj.table_index,
@@ -102,7 +149,10 @@ def obj_to_dict(obj: ObjectRecord) -> dict[str, Any]:
         "properties": _property_entries(obj),
     }
     if obj.semantic is not None:
-        d["semantic"] = obj.semantic
+        entries: list[dict[str, Any]] = []
+        d["semantic"] = _sanitize_semantic(obj.semantic, obj.id, "", entries)
+        if evidence_out is not None:
+            evidence_out.extend(entries)
     if obj.coverage:
         d["coverage"] = [
             {"feature": c.feature, "status": c.status, **({"detail": c.detail} if c.detail else {})}
@@ -232,6 +282,7 @@ def project_document(
 
     from uasset_read.projections.records import projection_to_dict
 
+    semantic_evidence: list[dict[str, Any]] = []
     result: dict[str, Any] = {
         "format": "uasset_read.package",
         "format_version": FORMAT_VERSION,
@@ -244,7 +295,7 @@ def project_document(
             "total_imports": document.summary.total_imports,
             "total_exports": document.summary.total_exports,
         },
-        "objects": [obj_to_dict(obj) for obj in document.objects],
+        "objects": [obj_to_dict(obj, semantic_evidence) for obj in document.objects],
         "relations": [
             {
                 "kind": rel.kind,
@@ -265,7 +316,10 @@ def project_document(
         result["debug"] = {
             "object_regions": _object_regions(document),
             "property_evidence": [],
-            "semantic_source_ranges": [],
+            "semantic_source_ranges": sorted(
+                semantic_evidence,
+                key=lambda entry: (entry["json_pointer"], entry["object_id"]),
+            ),
             "payload_sources": payload_sources,
             "sidecar_sources": [],
             "diagnostic_details": [diagnostic_detail(d, i) for i, d in enumerate(diagnostics)],

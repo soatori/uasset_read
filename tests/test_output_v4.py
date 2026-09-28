@@ -23,6 +23,17 @@ _CPP_KIND_TOKEN = "cpp"
 _EDITOR_BUILDER_TOKEN = "editor_builder"
 _CPP_MEDIA_PREFIX = "text/x-c"
 
+# Contract-banned evidence key names (SemanticValue.propertyNames): never
+# under objects[].semantic in either mode.
+_BANNED_SEMANTIC_EVIDENCE_KEYS = (
+    "source_range",
+    "script_source_range",
+    "raw_region",
+    "tag_range",
+    "value_range",
+    "raw_data",
+)
+
 _TOP_LEVEL_KEYS = {
     "format",
     "format_version",
@@ -216,6 +227,51 @@ def test_projections_are_embedded_with_provenance():
         assert record["completeness"] in {"complete", "partial", "opaque", "unavailable", "failed"}
         assert record["provenance"]["derived_from"]
         assert record["provenance"]["generator"]
+
+
+def _evidence_key_hits(value, hits: list[str], pointer: str = "") -> None:
+    """Record JSON pointers of contract-banned evidence keys at any depth."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            child = f"{pointer}/{key}"
+            if key in _BANNED_SEMANTIC_EVIDENCE_KEYS:
+                hits.append(child)
+            _evidence_key_hits(item, hits, child)
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            _evidence_key_hits(item, hits, f"{pointer}/{index}")
+
+
+def test_semantic_carries_no_evidence_keys_in_either_mode(stackobot_document):
+    for mode in ("normal", "debug"):
+        projected = project_document(stackobot_document, mode=mode)
+        for obj in projected["objects"]:
+            semantic = obj.get("semantic")
+            if semantic is None:
+                continue
+            hits: list[str] = []
+            _evidence_key_hits(semantic, hits)
+            assert hits == [], f"{mode}:{obj['id']} semantic still carries evidence keys: {hits}"
+
+
+def test_removed_semantic_ranges_land_in_debug_semantic_source_ranges(stackobot_document):
+    debug = project_document(stackobot_document, mode="debug")
+    entries = debug["debug"]["semantic_source_ranges"]
+    assert entries, "decoded Blueprint ranges must be relocated, not dropped"
+    pointers = [entry["json_pointer"] for entry in entries]
+    assert pointers == sorted(pointers), "semantic_source_ranges must be ordered by json_pointer"
+    for entry in entries:
+        assert set(entry) == {"object_id", "json_pointer", "region"}
+        assert entry["json_pointer"].startswith("/")
+        region = entry["region"]
+        assert region["size"] >= 0
+        assert region["source_id"]
+    assert any(entry["region"]["size"] > 0 for entry in entries)
+    # Parity: debug is normal plus the evidence block.
+    stripped = copy.deepcopy(debug)
+    stripped.pop("debug")
+    stripped["mode"] = "normal"
+    assert stripped == project_document(stackobot_document)
 
 
 def test_inspect_package_matches_python_parse_and_project():
