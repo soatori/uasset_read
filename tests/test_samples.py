@@ -27,16 +27,12 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
-import jsonschema
 import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = Path(__file__).parent / "samples"
 MANIFEST = SAMPLES / "manifest.json"
-SCHEMA = json.loads(
-    (ROOT / "docs" / "designs" / "contract" / "package_document_v3.schema.json").read_text(encoding="utf-8")
-)
 
 _MANIFEST_DATA = json.loads(MANIFEST.read_text(encoding="utf-8"))
 MANIFEST_SAMPLES = _MANIFEST_DATA["samples"]
@@ -603,15 +599,14 @@ def test_every_real_sample_forms_a_valid_package_document(sample: str):
 
     from uasset_read.projection import project_document
 
-    # Schema validation runs for every fixture. The shipped schema must accept
-    # all legitimate projection values; mismatches are contract bugs, not
-    # test-fold decisions. Every fixture's bounded page must still round-trip
-    # and echo its view.
+    # Every fixture's bounded page must still round-trip and echo its view.
+    # (v3 schema validation is retired with the v3 contract; the v4 contract
+    # gate lives in tests/test_contract_v4.py and real-output assertions land
+    # with the v4 producer migration.)
     for view in ("semantic", "raw", "debug"):
         page = project_document(doc, depth="object", view=view, limit=3)
         parsed = json.loads(json.dumps(page, ensure_ascii=False))
         assert parsed["view"] == view, sample
-        jsonschema.validate(page, SCHEMA)
         for dep in page["dependencies"]:
             assert set(dep) == {"index", "class", "object_name", "package_name"}, f"{sample}: {dep}"
         for o in page["objects"]:
@@ -669,12 +664,10 @@ def test_large_sample_all_exports():
     doc = _object_document("ALS_AnimBP.uasset")
     assert len(doc.objects) == 3395
 
-    # Default envelope: both relations and dependencies always included;
-    # 25-object page stays schema-valid.
+    # Default envelope: both relations and dependencies always included.
     page = project_document(doc, depth="package", limit=25)
     assert len(page["objects"]) == 25, page.get("truncation")
     assert "relations" in page and "dependencies" in page
-    jsonschema.validate(page, SCHEMA)
 
 
 def test_zero_asset_role_fixture_is_manifested():
@@ -1156,11 +1149,8 @@ def test_quality_baseline_opt_in_env_flag(monkeypatch):
 )
 def test_quality_baseline_diagnostics(sample_name):
     from uasset_read.package import parse_package_document
-    from uasset_read.projection import project_document
 
     doc = parse_package_document(str(SAMPLES / sample_name), depth="asset")
-    page = project_document(doc)
-    jsonschema.validate(page, SCHEMA)
     _assert_quality_baseline(doc, sample_name)
 
 

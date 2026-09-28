@@ -1,6 +1,17 @@
 # Complete Static UAsset Parsing and Blueprint C++ Projection
 
-status: target
+status: superseded (typed C++ projection target and v3 envelope) + current (static Blueprint IR/CFG scope)
+
+> **2026-09-28 superseded notice:** the typed C++ projection target and the
+> v3 output envelope (`format_version: "3.0"`, view/depth/pagination surfaces)
+> in this document are superseded by the 2026-09-28 v4 output amendment in
+> `docs/designs/2026-08-26-package-first-uasset-parser-refactor.md`. C++
+> declaration/migration output is retired and is not a repository target; the
+> frozen contract is `docs/designs/contract/package_document_v4.schema.json`.
+> The static Blueprint IR/CFG/correlation requirements in this document remain
+> current and bind the companion plan
+> `docs/superpowers/plans/2026-09-28-blueprint-static-parsing-completion-plan.md`.
+> Do not read the C++ projection sections as active work.
 
 > **2026-09-21 implementation marker (post-merge):** Tasks 1–12 are current
 > behavior on `dev-0.6.0` after merge `8727b067` from

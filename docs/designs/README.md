@@ -24,7 +24,7 @@ These sit beside the canonical target on purpose. Each carries its own `status:`
 | — | [`2026-09-13-deferred-capability-bundling.md`](2026-09-13-deferred-capability-bundling.md) | current | Product decision record: Zen/IoStore full decode and cooked unversioned/SchemaProvider are outside the product target; `--diff` remains a permanent non-goal; old C++ skeleton is retired; sidecar remains single-file; G3 stays deferred. MCP transport is out of product scope. |
 | — | [`2026-09-13-t15-t13-research-decision.md`](2026-09-13-t15-t13-research-decision.md) | current | Research decision only (**no implementation**). Constrains future T15/T13 work. |
 | — | [`2026-09-15-parser-quality-system.md`](2026-09-15-parser-quality-system.md) | target | Diagnostic.reason taxonomy + sample quality baseline gates. |
-| — | [`../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md`](../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md) | target | Current target for the intentional v3 break: complete static parsing, Blueprint instruction IR/CFG analysis, typed C++ projection; output schema major `format_version: "3.0"`. Supersedes the archived S1 v2 stable-envelope freeze. |
+| — | [`../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md`](../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md) | superseded (typed C++ target / v3 envelope) + current (static Blueprint IR/CFG scope) | Typed C++ projection and `format_version: "3.0"` are retired targets (2026-09-28 v4 amendment). Static Blueprint IR/CFG/correlation requirements remain current and bind the companion Blueprint plan. Supersedes the archived S1 v2 stable-envelope freeze. |
 | — | [`../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md`](../superpowers/plans/2026-09-16-complete-static-uasset-blueprint-cpp-plan.md) | historical / executed | Tasks 1–12 landed on `dev-0.6.0`; this is execution evidence, not an active target or an executable plan. |
 
 ## Executed plans (archive)
@@ -33,9 +33,11 @@ Ponytail / productize / byteswap / closeout plans that have already been execute
 
 Execution records retained under `../superpowers/plans/` are also evidence only when their header says `completed` or `historical`. Agents must not discover or replay them during ordinary implementation, diagnosis, or documentation work. A new execution requires a new plan or an exact path explicitly named by the user.
 
-## Active v3 implementation target
+## Active v4 implementation target
 
-- [`../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md`](../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md) — target spec for complete static parsing, dual-offset Kismet analysis, and typed Blueprint C++ projection.
+- [`2026-08-26-package-first-uasset-parser-refactor.md`](2026-08-26-package-first-uasset-parser-refactor.md) — canonical target, 2026-09-28 v4 output amendment: package output `format_version: "4.0"`, exactly `normal`/`debug` modes, single full document per package, C++ projection retired, Blueprint IR/CFG/static semantics preserved.
+- [`contract/package_document_v4.schema.json`](contract/package_document_v4.schema.json) — frozen v4 output contract (Draft 2020-12). The v3 contract files were deleted at the freeze.
+- [`../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md`](../superpowers/specs/2026-09-16-complete-static-uasset-blueprint-cpp-design.md) — static Blueprint IR/CFG/correlation scope only (its typed C++ and v3 envelope sections are superseded).
 
 ## v3 Execution Evidence
 

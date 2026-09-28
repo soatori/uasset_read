@@ -10,8 +10,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import jsonschema
-
 from tests.fixtures import (
     find_blueprint_object,
     find_function,
@@ -23,9 +21,6 @@ from uasset_read.package import parse_package_document
 
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = Path(__file__).parent / "samples"
-SCHEMA = json.loads(
-    (ROOT / "docs" / "designs" / "contract" / "package_document_v3.schema.json").read_text(encoding="utf-8")
-)
 USMAP = SAMPLES / "UnversionedTest.usmap"
 CONTAINERS = SAMPLES / "containers"
 
@@ -382,9 +377,6 @@ def test_single_document_contains_all_projection_sections(stackobot_document):
     assert len(output["objects"]) == len(stackobot_document.objects)
     assert {item["id"] for item in output["objects"]} == {obj.id for obj in stackobot_document.objects}
 
-    # Canonical envelope must satisfy the committed v3 contract schema.
-    jsonschema.validate(output, SCHEMA)
-
 
 def test_bounded_project_document_pages_are_schema_valid(stackobot_document):
     from uasset_read.projection import project_document
@@ -392,7 +384,6 @@ def test_bounded_project_document_pages_are_schema_valid(stackobot_document):
     for view in ("semantic", "raw", "debug"):
         page = project_document(stackobot_document, depth="object", view=view, limit=3)
         json.loads(json.dumps(page, ensure_ascii=False))
-        jsonschema.validate(page, SCHEMA)
         assert page["format_version"] == "3.0"
         assert all(item["embedded"] for item in page["projections"])
         assert all(item["completeness"] in COMPLETENESS_ENUM for item in page["projections"])

@@ -28,7 +28,6 @@ import os
 import subprocess
 import sys
 
-import jsonschema
 import pytest
 from uasset_read.package import parse_package_document, open_package_bundle, _parse_cached
 from uasset_read.models.object_model import ObjectRecord, ObjectStatus
@@ -125,8 +124,6 @@ ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = Path(__file__).parent / "samples"
 PACKAGE_SAMPLE = SAMPLES / "ABP_RifleAnimLayers.uasset"
 DATA_SAMPLE = SAMPLES / "ALS_FootstepDataTable.uasset"
-SCHEMA = ROOT / "docs/designs/contract/package_document_v3.schema.json"
-EXAMPLE = ROOT / "docs/designs/contract/package_document_v3.example.json"
 SRC = ROOT / "src"
 
 
@@ -2365,37 +2362,12 @@ def test_projection_byte_budget_and_fields_filter():
 
 
 def test_schema_contract_statics():
-    """The shipped schema must validate the example and match code enumerations."""
-    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+    """Static contract gates.
 
-    def test_example_validates_against_schema():
-        """The checked contract example must validate against the schema."""
-        jsonschema.validate(json.loads(EXAMPLE.read_text(encoding="utf-8")), schema)
-
-    def test_schema_has_required_fields():
-        required = set(schema.get("required", []))
-        assert "format" in required
-        assert "format_version" in required
-        assert "view" in required
-        assert "depth" in required
-        assert "source" in required
-        assert "package" in required
-        assert "objects" in required
-        assert "projections" in required
-        assert "payloads" in required
-        assert "diagnostics" in required
-        assert "summary" in required
-        # #631: these ride along unless the requester opts the section out,
-        # so they are properties but not required keys.
-        assert "relations" in schema["properties"] and "relations" not in required
-        assert "dependencies" in schema["properties"] and "dependencies" not in required
-
-    def test_schema_enums_match_code():
-        view_enum = schema["properties"]["view"]["enum"]
-        assert set(view_enum) == {"semantic", "raw", "debug"}
-
-        depth_enum = schema["properties"]["depth"]["enum"]
-        assert set(depth_enum) == {"package", "object", "asset", "decode"}
+    The v3 schema/example checks are retired with the deleted v3 contract
+    files; the v4 contract gate lives in tests/test_contract_v4.py. What
+    remains here is the UE4 version-numbering pin.
+    """
 
     def ue4_version_constants_are_pinned_to_peer_numbering():
         """UE4 file versions carry 4.x-era ordinals; newer UE5 headers renumbered -1
@@ -2459,11 +2431,7 @@ def test_schema_contract_statics():
 
     _run_cases(
         [
-            test_example_validates_against_schema,
-            test_schema_has_required_fields,
-            test_schema_enums_match_code,
             ue4_version_constants_are_pinned_to_peer_numbering,
-            payload_descriptor_model_matches_schema,
         ]
     )
 
