@@ -712,10 +712,20 @@ class BlueprintCorrelation:
             vt_raw = fields.get("VarType")
             vt_fields: dict[str, Any] | None = None
             if isinstance(vt_raw, dict):
-                candidate = vt_raw.get("fields") if vt_raw.get("kind") == "struct_binary_decoded" else vt_raw
-                if isinstance(candidate, dict):
-                    vt_fields = dict(candidate)
+                # #654 four-shape matrix: flat pin dict (A) and the
+                # kind="struct" / "struct_binary_decoded" wrappers (B/C) all
+                # resolve to pin fields here (a wrapper contributes its nested
+                # "fields", a flat dict is used as-is). A PropertyFallback
+                # model object never reaches this branch — isinstance dict is
+                # False and vt_fields stays None, so only type_name is None.
+                nested = vt_raw.get("fields")
+                candidate = nested if isinstance(nested, dict) else vt_raw
+                vt_fields = dict(candidate)
             guid = format_guid_fields((fields.get("VarGuid") or {}).get("fields"))
+            # N4 (#654 review): raw_type carries the unwrapped pin fields;
+            # wrapper evidence (kind/struct_type/size) is intentionally not
+            # duplicated — type_name already holds the resolved answer, and
+            # raw_type leaves must stay JSON-projectable for the v4 envelope.
             raw_type: dict[str, Any] = {"VarType": vt_fields, "VarGuid": guid}
             pin_category = (vt_fields or {}).get("pin_category")
             type_name = pin_category if isinstance(pin_category, str) and pin_category else None
@@ -734,7 +744,9 @@ class BlueprintCorrelation:
                     default_value=fields.get("DefaultValue"),
                     object_id=owner.id,
                     source_range=None,
-                    unresolved=False,
+                    # #654: unresolved must cover the type, not just name/guid —
+                    # a definition whose VarType never decoded claims nothing.
+                    unresolved=type_name is None,
                 )
             )
         return definitions

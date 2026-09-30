@@ -1299,6 +1299,87 @@ def test_blueprint_graph_decodes_without_parse_errors():
     assert linked_total == 610, "pin adjacency must stay a derived view of the records"
 
 
+def test_variable_definitions_resolve_or_report_unresolved_654():
+    """#654: tracked-sample honesty — a definition has a type or unresolved=true.
+
+    Sample-backed aggregate over the eight manifest packages that carry
+    NewVariables (83 definitions; verified count 2026-09-30): none may claim
+    ``unresolved is False`` while ``type_name`` is null — the VarType:null +
+    unresolved:false contradiction from #654. Two trust-boundary pins follow
+    for the shapes no tracked fixture carries (sample-first spec, "small ...
+    assertion ... mandatory trust boundary" clause): a kind="struct" wrapper
+    must unwrap to its pin fields, and a PropertyFallback must report
+    unresolved.
+    """
+    from uasset_read.models.fallback import FallbackReason, PropertyFallback
+    from uasset_read.models.object_model import ObjectRecord
+    from uasset_read.models.properties import PropertyBag, PropertyEntry
+    from uasset_read.package import parse_package_document
+    from uasset_read.parsers.blueprint.correlation import BlueprintCorrelation
+
+    samples = [
+        "BP_CombatCharacter.uasset",
+        "BP_CombatEnemy.uasset",
+        "FirstPerson_BP_FirstPersonCharacter.uasset",
+        "IntroToUnreal_BP_Light.uasset",
+        "IntroToUnreal_BP_SaveData.uasset",
+        "LevelDesign_ABP_Manny.uasset",
+        "MyProject_UE58_TestBlueprint.uasset",
+        "StackOBot_GI_StackOBot.uasset",
+    ]
+    total = 0
+    for name in samples:
+        document = parse_package_document(SAMPLES / name, depth="object")
+        for owner in document.objects:
+            for definition in BlueprintCorrelation()._extract_variable_definitions(owner):
+                total += 1
+                assert definition.type_name or definition.unresolved, (name, definition.name)
+    assert total == 83
+
+    bag = PropertyBag(
+        entries=[
+            PropertyEntry(
+                name="NewVariables",
+                type_name="ArrayProperty",
+                value={
+                    "value": [
+                        {
+                            "fields": {
+                                "VarName": "Wrapped",
+                                "VarType": {
+                                    "kind": "struct",
+                                    "struct_type": "EdGraphPinType",
+                                    "fields": {"pin_category": "byte", "pin_subcategory": "None"},
+                                },
+                            }
+                        },
+                        {
+                            "fields": {
+                                "VarName": "Opaque",
+                                "VarType": PropertyFallback(
+                                    name="VarType",
+                                    type="StructProperty",
+                                    size=69,
+                                    reason=FallbackReason.PARSE_ERROR,
+                                ),
+                            }
+                        },
+                    ]
+                },
+                array_index=None,
+                tag_region=None,
+                value_region=None,
+            )
+        ]
+    )
+    owner = ObjectRecord(id="export:0", table_index=0, name="BP_Issue654", properties=bag)
+    definitions = {d.name: d for d in BlueprintCorrelation()._extract_variable_definitions(owner)}
+    assert definitions["Wrapped"].type_name == "byte:None"
+    assert definitions["Wrapped"].unresolved is False
+    assert definitions["Opaque"].type_name is None
+    assert definitions["Opaque"].unresolved is True
+
+
 def test_als_graph_owners_resolve_beyond_eight_hops():
     """Task 7: ALS's 74 nine-hop outer chains must attach, not go unresolved.
 
