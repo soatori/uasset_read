@@ -508,6 +508,17 @@
       "b_is_asset_count": 1
     },
     {
+      "name": "B_ControlPointScoring.uasset",
+      "sha256": "ad48ba28ca4af52d9b3b68848023b1a9085773482ea71dc292d672abfb466fba",
+      "size_bytes": 375203,
+      "engine_layout": "legacy",
+      "file_version_ue4": 522,
+      "file_version_ue5": 1004,
+      "sidecars": [],
+      "export_count": 174,
+      "b_is_asset_count": 2
+    },
+    {
       "name": "BP_CombatCharacter.uasset",
       "sha256": "68eff3b247280ef01b0fb7a2dec4af05e4c102506eb3b92746ad130d81524d6d",
       "size_bytes": 891534,
@@ -786,7 +797,7 @@
     }
   ],
   "summary": {
-    "total_samples": 66
+    "total_samples": 67
   },
   "fixture_gaps": {
     "zen_package": {

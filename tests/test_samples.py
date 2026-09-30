@@ -295,7 +295,7 @@ def test_manifest_matches_every_real_sample():
     for entry in manifest["samples"]:
         expected_files |= {side["name"] for side in entry["sidecars"]}
     actual_files = {path.name for path in SAMPLES.iterdir() if path.suffix in PACKAGE_SUFFIXES}
-    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 66
+    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 67
     assert actual_files == expected_files
     allowed = (
         expected_files
@@ -806,6 +806,9 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
         "FirstPerson_DT_WeaponList.uasset",
         "BP_CombatCharacter.uasset",
         "MyProject_UE58_TestBlueprint.uasset",
+        # B_ControlPointScoring pins decode-mode JSON safety: its VarType fallback
+        # values used to reach the envelope as raw PropertyFallback dataclasses.
+        "B_ControlPointScoring.uasset",
     )
     projected = {}
     for name in samples:
@@ -1835,16 +1838,21 @@ def _aggregate_from_manifest():
     return gen_quality_baseline.aggregate_trailing_report(docs)
 
 
-def test_trailing_aggregate_report_within_baseline():
-    """Report-level gate: all 66 manifest samples, counts AND bytes, by reason and class."""
+def test_trailing_aggregate_report_and_gate():
+    """Report gate on all 67 manifest samples, plus the aggregate's fail paths.
+
+    Report half: counts AND bytes by reason and class must sit within the
+    quality baseline. Fail half: a synthetic report over ceiling in bytes,
+    with a new reason/class, or below baseline (loss regression) must fail.
+    Folded from test_trailing_aggregate_report_within_baseline +
+    test_trailing_aggregate_gate_blocks_growth to hold the 100-item budget
+    after the 67th manifest sample.
+    """
     actual = _aggregate_from_manifest()
-    baseline = json.loads((SAMPLES / "quality_baseline.json").read_text(encoding="utf-8"))["aggregate"]
-    _assert_trailing_aggregate(actual, baseline)
-    assert actual["sample_count"] == 66
+    report_baseline = json.loads((SAMPLES / "quality_baseline.json").read_text(encoding="utf-8"))["aggregate"]
+    _assert_trailing_aggregate(actual, report_baseline)
+    assert actual["sample_count"] == 67
 
-
-def test_trailing_aggregate_gate_blocks_growth():
-    """Fail path: a synthetic report over ceiling in bytes or with a new class must fail."""
     baseline = {
         "scope": "manifest",
         "sample_count": 2,

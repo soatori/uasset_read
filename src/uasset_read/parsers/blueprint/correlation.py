@@ -249,9 +249,11 @@ def external_ref_record(
         qualified_key = f"{local_id}::{symbol}"
     else:
         qualified_key = f"unresolved::{symbol}"
-    origin: str = "project_asset" if (package and package.startswith("/Game/")) or (
-        local_id and local_id.startswith("export:")
-    ) else "unknown_origin"
+    origin: str = (
+        "project_asset"
+        if (package and package.startswith("/Game/")) or (local_id and local_id.startswith("export:"))
+        else "unknown_origin"
+    )
     return (
         ExternalReferenceRecord(
             local_id=local_id,
@@ -417,6 +419,23 @@ def _signature_from_native_fields(
         if (f.property_flags or 0) & _CPF_PARM and not (f.property_flags or 0) & _CPF_RETURN_PARM
     ]
     return return_type, cpp_return_type, parameters
+
+
+def _json_safe(value: Any) -> Any:
+    """Preserve dict/list structure; project model leaves through the frozen v4 shapes.
+
+    ``raw_type`` is copied straight out of the property bag, so its leaves can be
+    PropertyValue/PropertyFallback dataclasses that json.dumps and jsonschema reject.
+    """
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    from uasset_read.models.properties import project_property_value
+
+    return project_property_value(value)
 
 
 class BlueprintCorrelation:
@@ -725,8 +744,10 @@ class BlueprintCorrelation:
             # N4 (#654 review): raw_type carries the unwrapped pin fields;
             # wrapper evidence (kind/struct_type/size) is intentionally not
             # duplicated — type_name already holds the resolved answer, and
-            # raw_type leaves must stay JSON-projectable for the v4 envelope.
-            raw_type: dict[str, Any] = {"VarType": vt_fields, "VarGuid": guid}
+            # _json_safe keeps raw_type leaves JSON-projectable for the v4
+            # envelope (PropertyValue/PropertyFallback dataclasses project
+            # through the frozen v4 shapes).
+            raw_type: dict[str, Any] = {"VarType": _json_safe(vt_fields), "VarGuid": guid}
             pin_category = (vt_fields or {}).get("pin_category")
             type_name = pin_category if isinstance(pin_category, str) and pin_category else None
             pin_sub = (vt_fields or {}).get("pin_subcategory")
