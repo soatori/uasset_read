@@ -294,7 +294,7 @@ def test_manifest_matches_every_real_sample():
     for entry in manifest["samples"]:
         expected_files |= {side["name"] for side in entry["sidecars"]}
     actual_files = {path.name for path in SAMPLES.iterdir() if path.suffix in PACKAGE_SUFFIXES}
-    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 66
+    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 67
     assert actual_files == expected_files
     allowed = (
         expected_files
@@ -541,9 +541,7 @@ def test_real_sample_proves_claimed_capability():
                     assert conv["origin"] == "unknown_origin"
                     assert conv["status"] == "resolved" and conv["reason"] == "exact_package_index"
                     assert conv["candidate_local_ids"] == ["import:28"]
-                    assert conv["source_evidence"] == [
-                        {"kind": "stack_node_package_index", "value": -29}
-                    ]
+                    assert conv["source_evidence"] == [{"kind": "stack_node_package_index", "value": -29}]
                     unresolved_refs = [item for item in refs if item["status"] == "unresolved"]
                     assert {item["symbol"] for item in unresolved_refs} == {
                         "AddMovementInput",
@@ -554,10 +552,22 @@ def test_real_sample_proves_claimed_capability():
                     assert all(item["reason"] == "no_name_match" for item in unresolved_refs)
                     assert all(item["qualified_key"].startswith("unresolved::") for item in unresolved_refs)
                     assert all(item["origin"] == "unknown_origin" for item in refs)
-                    assert all(set(item) == {
-                        "local_id", "package", "class_name", "symbol", "qualified_key", "origin",
-                        "source_evidence", "status", "reason", "candidate_local_ids",
-                    } for item in refs)
+                    assert all(
+                        set(item)
+                        == {
+                            "local_id",
+                            "package",
+                            "class_name",
+                            "symbol",
+                            "qualified_key",
+                            "origin",
+                            "source_evidence",
+                            "status",
+                            "reason",
+                            "candidate_local_ids",
+                        }
+                        for item in refs
+                    )
 
                     calls = bp.semantic["calls"]
                     assert len(calls) == 17
@@ -795,6 +805,9 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
         "FirstPerson_DT_WeaponList.uasset",
         "BP_CombatCharacter.uasset",
         "MyProject_UE58_TestBlueprint.uasset",
+        # B_ControlPointScoring pins decode-mode JSON safety: its VarType fallback
+        # values used to reach the envelope as raw PropertyFallback dataclasses.
+        "B_ControlPointScoring.uasset",
     )
     projected = {}
     for name in samples:
@@ -838,9 +851,7 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
 
     stack = projected["StackOBot_BP_Drone.uasset"]
     normal_owner = next(item for item in stack["normal"]["objects"] if item["id"] == "export:0")
-    normal_instructions = [
-        entry for fn in normal_owner["semantic"]["functions"] for entry in fn["instructions"]
-    ]
+    normal_instructions = [entry for fn in normal_owner["semantic"]["functions"] for entry in fn["instructions"]]
     assert len(normal_instructions) == 85
     for entry in normal_instructions:
         assert "serialized_start" not in entry and "serialized_end" not in entry, entry["opcode"]
@@ -896,15 +907,11 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     assert len([entry for entry in test_instructions if entry["opcode"] == "EX_JumpIfNot"]) == 1
 
     # StackOBot: debug is an evidence-only superset of the link records too.
-    stack_links_normal = [
-        link for graph in normal_owner["semantic"]["graphs"] for link in graph["links"]
-    ]
+    stack_links_normal = [link for graph in normal_owner["semantic"]["graphs"] for link in graph["links"]]
     assert len(stack_links_normal) == 26
     stack_links_debug = [
         link
-        for graph in next(
-            item for item in stack["debug"]["objects"] if item["id"] == "export:0"
-        )["semantic"]["graphs"]
+        for graph in next(item for item in stack["debug"]["objects"] if item["id"] == "export:0")["semantic"]["graphs"]
         for link in graph["links"]
     ]
     assert len(stack_links_debug) == 26
@@ -926,16 +933,8 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
             normal_semantic = normal_obj.get("semantic") or {}
             entry_pairs = {
                 "instructions": (
-                    [
-                        entry
-                        for fn in normal_semantic.get("functions") or []
-                        for entry in fn["instructions"]
-                    ],
-                    [
-                        entry
-                        for fn in debug_semantic.get("functions") or []
-                        for entry in fn["instructions"]
-                    ],
+                    [entry for fn in normal_semantic.get("functions") or [] for entry in fn["instructions"]],
+                    [entry for fn in debug_semantic.get("functions") or [] for entry in fn["instructions"]],
                 ),
                 "calls": (normal_semantic.get("calls") or [], debug_semantic.get("calls") or []),
                 "variable_accesses": (
@@ -973,9 +972,7 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     # Default Python path (no depth override) == CLI == project_document.
     default_doc = parse_package_document(SAMPLES / "StackOBot_BP_Drone.uasset")
     default_owner = next(
-        item
-        for item in project_document(default_doc, mode="normal")["objects"]
-        if item["id"] == "export:0"
+        item for item in project_document(default_doc, mode="normal")["objects"] if item["id"] == "export:0"
     )
     assert sum(len(entry["instructions"]) for entry in default_owner["semantic"]["functions"]) == 85
     assert len([link for graph in default_owner["semantic"]["graphs"] for link in graph["links"]]) == 26
@@ -1027,12 +1024,7 @@ def test_critical_boundary_guards(monkeypatch):
     with pytest.raises(ParseError, match="FFieldPath count"):
         FKismetArchive(struct.pack("<i", -1), "test", []).xfer_field_pointer()
 
-    usmap = (
-        (0x30C4).to_bytes(2, "little")
-        + bytes([1, 1])
-        + b"\x00" * 8
-        + (-1).to_bytes(4, "little", signed=True)
-    )
+    usmap = (0x30C4).to_bytes(2, "little") + bytes([1, 1]) + b"\x00" * 8 + (-1).to_bytes(4, "little", signed=True)
     with pytest.raises(ParseError, match="CustomVersion"):
         UsmapParser(usmap)
 
@@ -1051,9 +1043,7 @@ def test_critical_boundary_guards(monkeypatch):
     from uasset_read.projection import project_document
     from uasset_read.serializers.blueprint_graph import resolve_pin_links
 
-    ue58_document = parse_package_document(
-        str(SAMPLES / "MyProject_UE58_TestBlueprint.uasset"), depth="decode"
-    )
+    ue58_document = parse_package_document(str(SAMPLES / "MyProject_UE58_TestBlueprint.uasset"), depth="decode")
     debug_document = project_document(ue58_document, mode="debug")
     debug_function = next(
         fn
@@ -1064,10 +1054,7 @@ def test_critical_boundary_guards(monkeypatch):
     )
     reemitted = project_function_analysis(FunctionAnalysis.from_dict(debug_function))
     assert reemitted["instructions"] == debug_function["instructions"]
-    assert all(
-        entry["source_node_reason"] == "debug_mapping_unavailable"
-        for entry in reemitted["instructions"]
-    )
+    assert all(entry["source_node_reason"] == "debug_mapping_unavailable" for entry in reemitted["instructions"])
     assert reemitted["instructions"][0]["debug_evidence"] is not None
 
     # Declaration survival through build() over the projected semantic dict
@@ -1076,9 +1063,7 @@ def test_critical_boundary_guards(monkeypatch):
     # re-declares as unresolved. Measured 2026-09-28: UE58 NewFunction 2
     # params / resolved; StackOBot declarations 1/4/4 params / resolved.
     ue58_live = next(o for o in ue58_document.objects if o.id == "export:0").semantic
-    ue58_restored = project_semantic_blueprint(BlueprintCorrelation().build(ue58_document))[
-        "function_declarations"
-    ]
+    ue58_restored = project_semantic_blueprint(BlueprintCorrelation().build(ue58_document))["function_declarations"]
     assert ue58_restored == ue58_live["function_declarations"]
     new_function = next(d for d in ue58_restored if d["name"] == "NewFunction")
     assert len(new_function["parameters"]) == 2
@@ -1086,13 +1071,9 @@ def test_critical_boundary_guards(monkeypatch):
     signature = next(d for d in ue58_restored if d["name"].startswith("NewEventDispatcher"))
     assert signature["native_fields"] == [] and signature["unresolved"] is True
 
-    stack_document = parse_package_document(
-        str(SAMPLES / "StackOBot_BP_Drone.uasset"), depth="decode"
-    )
+    stack_document = parse_package_document(str(SAMPLES / "StackOBot_BP_Drone.uasset"), depth="decode")
     stack_live = next(o for o in stack_document.objects if o.id == "export:0").semantic
-    stack_restored = project_semantic_blueprint(BlueprintCorrelation().build(stack_document))[
-        "function_declarations"
-    ]
+    stack_restored = project_semantic_blueprint(BlueprintCorrelation().build(stack_document))["function_declarations"]
     assert stack_restored == stack_live["function_declarations"]
     assert [len(d["parameters"]) for d in stack_restored] == [1, 4, 4]
     assert [d["unresolved"] for d in stack_restored] == [False, False, False]
@@ -1293,7 +1274,10 @@ def test_blueprint_graph_decodes_without_parse_errors():
     assert {link["connection_type"] for link in links} <= {"exec", "data", "delegate", "unknown"}
     evidence = [link["debug_evidence"] for link in links]
     assert all(isinstance(item, dict) for item in evidence)
-    assert all(isinstance(item["raw_source_owner_package_index"], int) and item["raw_source_owner_package_index"] > 0 for item in evidence)
+    assert all(
+        isinstance(item["raw_source_owner_package_index"], int) and item["raw_source_owner_package_index"] > 0
+        for item in evidence
+    )
     assert all(isinstance(item["source_pin_range"], dict) for item in evidence)
     linked_total = sum(len(pin.get("links") or []) for g in graphs for n in g["nodes"] for pin in n["pins"])
     assert linked_total == 610, "pin adjacency must stay a derived view of the records"
@@ -1682,11 +1666,11 @@ def _aggregate_from_manifest():
 
 
 def test_trailing_aggregate_report_within_baseline():
-    """Report-level gate: all 66 manifest samples, counts AND bytes, by reason and class."""
+    """Report-level gate: all 67 manifest samples, counts AND bytes, by reason and class."""
     actual = _aggregate_from_manifest()
     baseline = json.loads((SAMPLES / "quality_baseline.json").read_text(encoding="utf-8"))["aggregate"]
     _assert_trailing_aggregate(actual, baseline)
-    assert actual["sample_count"] == 66
+    assert actual["sample_count"] == 67
 
 
 def test_trailing_aggregate_gate_blocks_growth():
