@@ -1576,6 +1576,107 @@ def test_trailing_diagnostics_carry_structured_size():
         assert f"leaves {d.size} undecoded bytes" in d.message
 
 
+def test_byte_accounting_registers_reader_consumed_structural_bytes():
+    """#653: reader-consumed structural bytes decode as structural, never unconsumed."""
+    from uasset_read.package import parse_package_document
+    from uasset_read.projection import project_document
+
+    def _debug(sample: str):
+        return project_document(parse_package_document(SAMPLES / sample, depth="decode"), mode="debug")
+
+    def _scopes(projection):
+        return {s["object_id"]: s for s in projection["debug"]["byte_accounting"]}
+
+    # UE 5.4+ save: control byte (1B) + None terminator (8B) + GUID step (4B).
+    proj54 = _debug("ThirtPerson_M_PrototypeGrid.uasset")
+    scopes54 = _scopes(proj54)
+    zero_prop = scopes54["export:112"]
+    # Zero-property export: the whole 13-byte window is reader-consumed structure.
+    assert zero_prop["window"]["size"] == 13
+    assert [(leaf["size"], leaf["status"], leaf["feature"]) for leaf in zero_prop["leaves"]] == [
+        (13, "decoded", "structural")
+    ]
+    # Export with properties: control byte and None+GUID tail are decoded as well.
+    assert not [leaf for leaf in scopes54["export:76"]["leaves"] if leaf["reason"] == "unconsumed"]
+
+    # Pre-5.4 save: None terminator (8B) + GUID step (4B) are structural; the
+    # genuinely unread trailer stays unconsumed with its diagnostic's exact size.
+    proj410 = _debug("uasset_rs_UE410_SimpleRefsSoftRef.uasset")
+    scopes410 = _scopes(proj410)
+    export0_leaves = scopes410["export:0"]["leaves"]
+    assert sum(leaf["size"] for leaf in export0_leaves if leaf["feature"] == "structural") == 12
+    assert sum(leaf["size"] for leaf in export0_leaves if leaf["reason"] == "unconsumed") == 68
+
+    # Pin fixture trailing-diagnostic counts so the reconciliation loop below
+    # cannot silently go vacuous when fixtures are swapped.
+    assert [d["object_id"] for d in proj54["diagnostics"] if d["code"] == "EXPORT_TRAILING_BYTES_UNCONSUMED"] == []
+    assert [d["object_id"] for d in proj410["diagnostics"] if d["code"] == "EXPORT_TRAILING_BYTES_UNCONSUMED"] == [
+        "export:0",
+        "export:2",
+        "export:4",
+    ]
+
+    for projection in (proj54, proj410):
+        scopes = _scopes(projection)
+        details = {e["index"]: e for e in projection["debug"]["diagnostic_details"]}
+        # Reconciliation (diagnostic -> bytes): each trailing diagnostic's size
+        # equals its object's total unconsumed bytes. The converse (bytes ->
+        # diagnostic) is asserted next; it holds on these two fixtures but is
+        # not a repo-wide invariant (table tails and pre-stream preludes may
+        # stay unconsumed without one).
+        for index, diag in enumerate(projection["diagnostics"]):
+            if diag["code"] != "EXPORT_TRAILING_BYTES_UNCONSUMED":
+                continue
+            unconsumed = sum(
+                leaf["size"] for leaf in scopes[diag["object_id"]]["leaves"] if leaf["reason"] == "unconsumed"
+            )
+            assert unconsumed == details[index]["size"], f"{diag['object_id']}: {unconsumed} != diagnostic"
+        trailing_ids = {
+            d["object_id"] for d in projection["diagnostics"] if d["code"] == "EXPORT_TRAILING_BYTES_UNCONSUMED"
+        }
+        for scope in projection["debug"]["byte_accounting"]:
+            unconsumed = sum(leaf["size"] for leaf in scope["leaves"] if leaf["reason"] == "unconsumed")
+            assert unconsumed == 0 or scope["object_id"] in trailing_ids, scope["object_id"]
+        # Coverage: leaves tile each window exactly, no gaps or overlaps.
+        for scope in projection["debug"]["byte_accounting"]:
+            window = scope["window"]
+            cursor = window["start"]
+            for leaf in sorted(scope["leaves"], key=lambda item: item["start"]):
+                assert leaf["size"] > 0 and leaf["start"] == cursor, scope["object_id"]
+                cursor = leaf["end"]
+            assert cursor == window["end"], scope["object_id"]
+
+
+def test_tolerant_skipped_payloads_stay_unconsumed():
+    """#653 F1: tolerant-skip payloads are seeked, never decoded/structural."""
+    from uasset_read.package import parse_package_document
+    from uasset_read.projection import project_document
+
+    proj = project_document(
+        parse_package_document(SAMPLES / "NM_BPSystemEvent.uasset", depth="decode"),
+        mode="debug",
+    )
+    scopes = {s["object_id"]: s for s in proj["debug"]["byte_accounting"]}
+    # NiagaraNode* exports match SKIP_CLASS_PREFIXES: seeked, never parsed.
+    for oid in ("export:5", "export:15", "export:29"):
+        scope = scopes[oid]
+        window = scope["window"]
+        assert window["size"] > 500, oid  # a real payload, not a trivial window
+        assert not [leaf for leaf in scope["leaves"] if leaf["status"] == "decoded"], oid
+        unconsumed = sum(leaf["size"] for leaf in scope["leaves"] if leaf["reason"] == "unconsumed")
+        assert unconsumed == window["size"], oid
+    # One structured diagnostic owns each skipped window byte-for-byte.
+    details = {e["index"]: e for e in proj["debug"]["diagnostic_details"]}
+    skips = [
+        (index, diag)
+        for index, diag in enumerate(proj["diagnostics"])
+        if diag["code"] == "EXPORT_PAYLOAD_SKIPPED"
+    ]
+    assert [diag["object_id"] for _, diag in skips] == [f"export:{i}" for i in range(5, 30)]
+    for index, diag in skips:
+        assert details[index]["size"] == scopes[diag["object_id"]]["window"]["size"], diag["object_id"]
+
+
 def test_background_cue_sound_node_tails_reclassified_editor_only():
     """Starter_Background_Cue: 6 SoundNode trailers, 6 bytes each, now editor_only."""
     from uasset_read.package import parse_package_document

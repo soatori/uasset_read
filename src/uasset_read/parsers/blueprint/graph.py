@@ -23,7 +23,6 @@ from uasset_read.models.analysis import (
     PinLink,
     PinLinkRef,
     _graph_id_from_str,
-    _node_id_from_str,
 )
 from uasset_read.models.diagnostics import Diagnostic, make_diagnostic
 

@@ -936,7 +936,7 @@ class LegacyPackageReader:
             # 16. Parse properties for requested objects at depth >= object
             extras: dict[str, dict[str, Any]] = {}
             if depth in ("object", "asset", "decode"):
-                extras = self._parse_requested_object_properties(
+                extras, consumed_spans = self._parse_requested_object_properties(
                     archive=archive,
                     objects=objects,
                     export_map=export_map,
@@ -948,7 +948,7 @@ class LegacyPackageReader:
                     mappings=mappings_provider,
                     depth=depth,
                 )
-                byte_accounting = self._attach_byte_accounting(objects, diagnostics)
+                byte_accounting = self._attach_byte_accounting(objects, diagnostics, consumed_spans)
             else:
                 from ..models.byte_ranges import ByteAccounting
 
@@ -1214,22 +1214,29 @@ class LegacyPackageReader:
         diagnostics: list[Diagnostic],
         mappings: Any | None = None,
         depth: Literal["package", "object", "asset", "decode"] = "object",
-    ) -> dict[str, dict[str, Any]]:
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, tuple[int, int]]]:
         """Parse properties for requested objects at depth >= object.
 
         No v1 class-handler dispatch happens here: v2 handlers consume the
         normalized property bag plus the bounded extras this method slices
         out itself.
 
-        Returns ``extras``: maps object id to per-class bounded data
-        (currently ``table_rows`` for DataTable/CurveTable/StringTable).
+        Returns ``(extras, consumed)``: ``extras`` maps object id to per-class
+        bounded data (currently ``table_rows`` for DataTable/CurveTable/
+        StringTable); ``consumed`` maps object id to the absolute
+        ``[start, end)`` span the reader actually consumed beyond property
+        tag/value regions (control byte, ``None`` terminator, GUID step,
+        ``#626`` prelude on non-authoritative regions, DataTable/CurveTable/
+        StringTable row reads, zero padding), for byte accounting (#653).
+        Tolerant-skipped exports register no span -- their payload was
+        seeked, not read (#653 F1).
 
         If object_ids is None, parses ALL objects.
         Each export's serial region is bounded via _read_range enforced inside PackageArchive reads.
         Caught property-parse errors (bounded exception set) on one export do
         not prevent parsing of others; unexpected exception types propagate.
         """
-        from .properties.tagged import TaggedPropertyReader
+        from .properties.tagged import TOLERANT_SKIP, TaggedPropertyReader
 
         # Determine which exports to parse
         target_indices: set[int] | None = None
@@ -1268,6 +1275,7 @@ class LegacyPackageReader:
                         target_indices.add(j)
 
         extras: dict[str, dict[str, Any]] = {}
+        consumed: dict[str, tuple[int, int]] = {}
         tagged_reader = TaggedPropertyReader()
 
         for i, obj in enumerate(objects):
@@ -1297,6 +1305,12 @@ class LegacyPackageReader:
                     game=self._game,
                     tolerant=self._tolerant,
                 )
+                # Tolerant skip: the payload was seeked, not decoded, so the
+                # marker (not a property) tells byte accounting to register
+                # nothing structural for this export (#653 F1).
+                tolerant_skip = any(item is TOLERANT_SKIP for item in raw_props)
+                if tolerant_skip:
+                    raw_props = [item for item in raw_props if item is not TOLERANT_SKIP]
                 overrun = archive.tell() - prop_range_end
                 obj.properties = normalize_property_bag(
                     raw_props,
@@ -1318,6 +1332,14 @@ class LegacyPackageReader:
                         archive.seek(script_end)
                     payload_start = _skip_optional_object_guid(archive, serial_end)
                     archive.set_read_range((payload_start, serial_end))
+                # consumed_end tracks reader-consumed structural byte area up
+                # to the payload start (control byte, None terminator, GUID
+                # step, #626 prelude on non-authoritative regions, trusted
+                # script-region padding); later branches extend it only for
+                # bytes actually read without a trailing diagnostic (#653).
+                # Unused for tolerant-skipped exports: no span is registered
+                # for a seeked payload (#653 F1).
+                consumed_end = payload_start
                 if overrun <= 0 and cn in _TABLE_CLASSES:
                     extras[obj.id] = {
                         "table_rows": _read_table_rows(
@@ -1329,12 +1351,14 @@ class LegacyPackageReader:
                             curve_table=cn == "CurveTable",
                         )
                     }
+                    consumed_end = archive.tell()
                 elif overrun <= 0 and cn == "StringTable":
                     extras[obj.id] = {
                         "string_table": _read_string_table(
                             archive, obj.id, diagnostics, _string_table_has_dev_notes(summary)
                         )
                     }
+                    consumed_end = archive.tell()
                 elif overrun <= 0 and cn not in _TABLE_CLASSES and cn != "StringTable" and archive.tell() < serial_end:
                     # Properties ended early but the export still has bytes: a
                     # class raw trailer (e.g. UPhysicsAsset::Serialize writes
@@ -1345,7 +1369,10 @@ class LegacyPackageReader:
                     # trailer worth reporting.
                     remaining = serial_end - archive.tell()
                     padded = remaining <= 16 and not any(archive.read(remaining))
-                    if not padded:
+                    if padded:
+                        # All-zero alignment pad: consumed by the read above.
+                        consumed_end = archive.tell()
+                    else:
                         diagnostics.append(
                             _diag(
                                 "EXPORT_TRAILING_BYTES_UNCONSUMED",
@@ -1379,6 +1406,34 @@ class LegacyPackageReader:
                         )
                     )
 
+                # Register the consumed structural span for byte accounting.
+                # Bytes after it stay ``unconsumed``; when the trailer branch
+                # fires, its diagnostic owns that residue byte-for-byte (#653).
+                # Table tails and pre-stream preludes may stay unconsumed
+                # without one -- never claimed decoded.
+                window = obj.serial_region
+                if tolerant_skip:
+                    # Seeked payload: no structural span was read, and one
+                    # structured diagnostic owns the whole opaque window (#653 F1).
+                    diagnostics.append(
+                        _diag(
+                            "EXPORT_PAYLOAD_SKIPPED",
+                            (
+                                f"Export {i} ({obj.name}) class {cn} payload seeked "
+                                f"without decoding ({window.size} bytes)"
+                            ),
+                            "properties.tagged",
+                            object_id=obj.id,
+                            size=window.size,
+                            reason="known_unimplemented",
+                        )
+                    )
+                else:
+                    span_start = max(script_start, window.start)
+                    span_end = min(consumed_end, window.end)
+                    if span_end > span_start:
+                        consumed[obj.id] = (span_start, span_end)
+
             except ExportBoundsExceeded as e:
                 obj.properties = PropertyBag()
                 obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
@@ -1405,11 +1460,23 @@ class LegacyPackageReader:
                 archive._current_object_id = ""
                 archive.set_read_range(prev_range)
 
-        return extras
+        return extras, consumed
 
-    def _attach_byte_accounting(self, objects: Sequence[ObjectRecord], diagnostics: list[Diagnostic]) -> Any:
-        """Tile every requested export serial range with non-overlapping leaves."""
-        from ..models.byte_ranges import ByteAccounting, tile_export_scope
+    def _attach_byte_accounting(
+        self,
+        objects: Sequence[ObjectRecord],
+        diagnostics: list[Diagnostic],
+        consumed_spans: dict[str, tuple[int, int]] | None = None,
+    ) -> Any:
+        """Tile every requested export serial range with non-overlapping leaves.
+
+        Property tag/value regions are decoded; ``consumed_spans`` add the
+        structural bytes the reader consumed without producing an entry
+        (control byte, ``None`` terminator, GUID step, ``#626`` prelude on
+        non-authoritative regions, zero padding) so they are not reported as
+        ``unconsumed`` (#653). Tolerant-skipped exports contribute no span.
+        """
+        from ..models.byte_ranges import ByteAccounting, region_from_source, tile_export_scope
 
         accounting = ByteAccounting()
         source = self._package_source
@@ -1435,6 +1502,37 @@ class LegacyPackageReader:
                         return [(_sid or self._sid, offset, size)]
 
                 active_source = _Identity(source_id)
+            span = (consumed_spans or {}).get(obj.id)
+            if span is not None:
+                span_start, span_end = span
+                cursor = span_start
+                # Subtract property-entry regions from the consumed span so
+                # structural fragments never overlap an entry leaf.
+                for region in sorted(
+                    (r for r in decoded if r.start < span_end and r.end > span_start),
+                    key=lambda r: r.start,
+                ):
+                    if region.start > cursor:
+                        decoded.append(
+                            region_from_source(
+                                active_source,
+                                cursor,
+                                region.start - cursor,
+                                status="decoded",
+                                feature="structural",
+                            )
+                        )
+                    cursor = max(cursor, region.end)
+                if cursor < span_end:
+                    decoded.append(
+                        region_from_source(
+                            active_source,
+                            cursor,
+                            span_end - cursor,
+                            status="decoded",
+                            feature="structural",
+                        )
+                    )
             try:
                 scope = tile_export_scope(
                     obj.id,

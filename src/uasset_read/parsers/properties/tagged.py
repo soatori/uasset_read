@@ -624,6 +624,16 @@ SKIP_CLASS_PREFIXES = (
 )
 
 
+class _TolerantSkip:
+    """Marker for read_export's return list: payload seeked, not decoded."""
+
+
+# Sole-element return when should_skip_export_for_tolerant_parsing fires. The
+# caller must not register byte accounting for it -- no structural byte was
+# read (#653).
+TOLERANT_SKIP = _TolerantSkip()
+
+
 def should_skip_export_for_tolerant_parsing(
     export: ObjectExport,
     class_name: str | None = None,
@@ -682,7 +692,7 @@ def parse_properties_from_export(
     mappings: Any | None = None,
     game: str | None = None,
     tolerant: bool = True,
-) -> list[PropertyValue]:
+) -> list[Any]:
     """Read all properties from an export entry (PROP-01).
 
     The production export-level tagged stream; the tag loop lives in
@@ -737,7 +747,7 @@ def parse_properties_from_export(
             skip_export_payload(archive, export, summary)
         except BINARY_READ_ERRORS as e:
             logger.debug("Failed to skip export '%s' payload: %s", export.object_name, e)
-        return []
+        return [TOLERANT_SKIP]
 
     # D-02: SerializationControlExtensions header handling.
     # UE source: SerializeVersionedTaggedProperties writes this byte (Class.cpp);
@@ -947,7 +957,9 @@ class TaggedPropertyReader:
         """Production export-level tagged/unversioned stream.
 
         The tag loop lives in this module (``_read_property_loop``); value
-        dispatch stays in ``property_parser.parse_property_value``.
+        dispatch stays in ``property_parser.parse_property_value``. Returns
+        ``[TOLERANT_SKIP]`` instead of properties when the export payload was
+        seeked without decoding.
         """
         return parse_properties_from_export(
             export=export,
