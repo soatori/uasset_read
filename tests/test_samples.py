@@ -1246,11 +1246,19 @@ def test_blueprint_fixtures_carry_generated_and_cdo_relations():
             assert edge in actual, f"{sample}: missing {edge}"
 
 
-def test_blueprint_graph_decodes_without_parse_errors():
+def test_blueprint_graph_decodes_and_definitions_stay_honest():
     """G2 regression (2026-09-02 ue-source audit): editor FText Base carries gated DevNotes.
 
     v2 decode contract: BP_CombatCharacter exposes all 4 graphs (370 nodes)
     on the owning export and emits no graph-failure diagnostics.
+
+    Folded (#654, collection budget): a tracked-sample honesty aggregate over
+    the eight manifest packages that carry NewVariables — none may claim
+    ``unresolved is False`` while ``type_name`` is null — plus two
+    trust-boundary pins for the shapes no tracked fixture carries (sample-first
+    spec, "small ... assertion ... mandatory trust boundary" clause): a
+    kind="struct" wrapper must unwrap to its pin fields, and a
+    PropertyFallback must report unresolved.
     """
     from uasset_read.package import parse_package_document
 
@@ -1280,23 +1288,12 @@ def test_blueprint_graph_decodes_without_parse_errors():
     linked_total = sum(len(pin.get("links") or []) for g in graphs for n in g["nodes"] for pin in n["pins"])
     assert linked_total == 610, "pin adjacency must stay a derived view of the records"
 
-
-def test_variable_definitions_resolve_or_report_unresolved_654():
-    """#654: tracked-sample honesty — a definition has a type or unresolved=true.
-
-    Sample-backed aggregate over the eight manifest packages that carry
-    NewVariables (83 definitions; verified count 2026-09-30): none may claim
-    ``unresolved is False`` while ``type_name`` is null — the VarType:null +
-    unresolved:false contradiction from #654. Two trust-boundary pins follow
-    for the shapes no tracked fixture carries (sample-first spec, "small ...
-    assertion ... mandatory trust boundary" clause): a kind="struct" wrapper
-    must unwrap to its pin fields, and a PropertyFallback must report
-    unresolved.
-    """
+    # #654 folded here (collection budget): tracked-sample honesty aggregate
+    # (83 definitions across the eight NewVariables packages; verified count
+    # 2026-09-30) plus trust-boundary pins for shapes no fixture carries.
     from uasset_read.models.fallback import FallbackReason, PropertyFallback
     from uasset_read.models.object_model import ObjectRecord
     from uasset_read.models.properties import PropertyBag, PropertyEntry
-    from uasset_read.package import parse_package_document
     from uasset_read.parsers.blueprint.correlation import BlueprintCorrelation
 
     samples = [
@@ -1709,16 +1706,9 @@ def test_byte_accounting_registers_reader_consumed_structural_bytes():
                 cursor = leaf["end"]
             assert cursor == window["end"], scope["object_id"]
 
-
-def test_tolerant_skipped_payloads_stay_unconsumed():
-    """#653 F1: tolerant-skip payloads are seeked, never decoded/structural."""
-    from uasset_read.package import parse_package_document
-    from uasset_read.projection import project_document
-
-    proj = project_document(
-        parse_package_document(SAMPLES / "NM_BPSystemEvent.uasset", depth="decode"),
-        mode="debug",
-    )
+    # Folded #653 F1 (collection budget): tolerant-skip payloads are seeked,
+    # never decoded/structural.
+    proj = _debug("NM_BPSystemEvent.uasset")
     scopes = {s["object_id"]: s for s in proj["debug"]["byte_accounting"]}
     # NiagaraNode* exports match SKIP_CLASS_PREFIXES: seeked, never parsed.
     for oid in ("export:5", "export:15", "export:29"):
@@ -2021,19 +2011,15 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
     assert _refused(scalar[:65], struct_type="FEdGraphPinType")
     assert not _refused(scalar, struct_type="FEdGraphPinType")
 
-
-def test_edgraphpin_type_undecodable_payload_is_opaque_and_diagnosed():
-    """#655: an undecodable PinType payload is opaque + diagnosed, never silent or fabricated.
-
-    ``StarterContent_Starter_Background_Cue`` (UE 4.11) carries 11 x 66-byte and
-    1 x 71-byte ``EdGraphPinType`` tags in the pre-PinsStoreFName FString layout
-    (FString "SoundNode"/"Root" category names, so byte 20 falls inside a string
-    on the 71-byte one and reads as container_type 111). Neither size is the
-    modern 69/101 layout, so the decoder refuses both: the guard must consume the
-    payload, report an opaque struct with no fields, and emit one structured
-    diagnostic per payload carrying offset + size — the constraint "unknown data
-    is preserved as an opaque region plus a diagnostic".
-    """
+    # Folded #655 (collection budget): an undecodable PinType payload is
+    # opaque + diagnosed, never silent or fabricated. UE 4.11
+    # StarterContent_Starter_Background_Cue carries 11 x 66-byte and 1 x
+    # 71-byte EdGraphPinType tags in the pre-PinsStoreFName FString layout
+    # (FString category names, so byte 20 falls inside a string on the
+    # 71-byte one and reads as container_type 111); neither size is the
+    # modern 69/101 layout, so the decoder refuses both: the guard consumes
+    # the payload, reports an opaque struct with no fields, and emits one
+    # structured diagnostic per payload carrying offset + size.
     from uasset_read.package import parse_package_document
 
     doc = parse_package_document(str(SAMPLES / "StarterContent_Starter_Background_Cue.uasset"), depth="asset")
