@@ -1163,12 +1163,15 @@ def _extract_variables(obj: ObjectRecord) -> list[dict[str, Any]]:
         fields = desc.get("fields", {})
         if not isinstance(fields, dict):
             continue
-        # VarType is now decoded by binary_or_native_handlers (struct_binary_decoded)
+        # VarType unwrap mirrors correlation._extract_variable_definitions (#654 N2):
+        # flat pin dict or kind="struct"/"struct_binary_decoded" wrapper -> pin fields.
         vt_raw = fields.get("VarType")
         vt_info: dict[str, Any] | None = None
         if isinstance(vt_raw, dict):
-            vt_fields = vt_raw.get("fields") if vt_raw.get("kind") == "struct_binary_decoded" else None
-            if isinstance(vt_fields, dict):
+            nested = vt_raw.get("fields")
+            candidate = nested if isinstance(nested, dict) else vt_raw
+            vt_fields = dict(candidate)
+            if True:
                 container = {0: None, 1: "array", 2: "set", 3: "map"}.get(vt_fields.get("container_type", -1))
                 vt_info = {
                     "pin_category": vt_fields.get("pin_category", ""),
