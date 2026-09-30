@@ -29,7 +29,7 @@ The checkout currently has:
   `test_size_baseline.py`, and explicitly allows a serialization test subtree.
 
 The existing `tests/samples/` corpus is the authoritative tracked fixture set:
-its manifest has 66 package samples plus container metadata, sidecars,
+its manifest has 67 package samples plus container metadata, sidecars,
 quality limits, and golden references.
 
 ## Target structure
@@ -77,7 +77,7 @@ it does not manufacture UE package bytes or use mocks to stand in for package
 objects.
 
 The driver contains a small number of aggregate checks plus one parameterized
-parse item per manifest package. The intended budget is 66 parse items and
+parse item per manifest package. The intended budget is 67 parse items and
 fewer than 34 aggregate items.
 
 The checks are:

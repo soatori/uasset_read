@@ -28,7 +28,7 @@ Whether you're auditing blueprint dependencies, building tooling for game develo
 | Source | Python parser for Unreal Engine .uasset files |
 | Modules | package-first modules incl. `kismet`, `models`, `parsers`, `projections`, `serializers` |
 | Tests | current full suite and quality gates pass; structure/size/quality baselines gated |
-| Tracked samples | 66 legacy fixtures with manifest validation |
+| Tracked samples | 67 legacy fixtures with manifest validation |
 
 ## Features
 
