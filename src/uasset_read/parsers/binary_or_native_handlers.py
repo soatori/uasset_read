@@ -271,18 +271,45 @@ def _decode_sphere(raw: bytes, size: int) -> dict[str, Any]:
 def _decode_ed_graph_pin_type(raw: bytes, size: int, name_map: list[str]) -> dict[str, Any] | None:
     """Decode FEdGraphPinType from raw binary.
 
-    Binary layout (UE5):
+    FEdGraphPinType is native-serialized, never written as an inner property-tag
+    loop: `TStructOpsTypeTraits<FEdGraphPinType>::WithSerializer = true`
+    (EdGraphPin.h) sets STRUCT_SerializeNative, so UScriptStruct::SerializeItem
+    calls FEdGraphPinType::Serialize (EdGraphPin.cpp) and only falls back to
+    SerializeTaggedProperties when that declines.
+
+    Binary layout — the *fully-gated modern* form of FEdGraphPinType::Serialize:
         PinCategory (FName: 8) + PinSubCategory (FName: 8) +
         PinSubCategoryObject (int32: 4) + ContainerType (uint8: 1) +
-        [if Map (3): TerminalCategory (FName: 8) + TerminalSubCategory (FName: 8) +
-         TerminalSubCategoryObject (int32: 4)] +
+        [if Map (3): FEdGraphTerminalType (32) = TerminalCategory (FName: 8) +
+         TerminalSubCategory (FName: 8) + TerminalSubCategoryObject (int32: 4) +
+         bTerminalIsConst (uint32: 4) + bTerminalIsWeakPointer (uint32: 4) +
+         bTerminalIsUObjectWrapper (uint32: 4)] +
         bIsReference (uint32: 4) + bIsWeakPointer (uint32: 4) +
         MemberParent (int32: 4) + MemberName (FName: 8) +
         MemberGuid (bytes: 16) + bIsConst (uint32: 4) +
         bIsUObjectWrapper (uint32: 4) + bSerializeAsSinglePrecisionFloat (uint32: 4)
-    Size: 69 bytes (non-map) or 89 bytes (map, +20 for FEdGraphTerminalType).
+    Size: 69 bytes (non-map) or 101 bytes (map, +32 for FEdGraphTerminalType).
+
+    Those two sizes are the *gated* shapes, not a universal layout: the trailing
+    bSerializeAsSinglePrecisionFloat is written only at
+    FUE5ReleaseStreamObjectVersion >= SerializeFloatPinDefaultValuesAsSinglePrecision
+    (= 36; UE5ReleaseStreamObjectVersions.inl, EdGraphPin.cpp:330-333) and the map
+    terminal's bTerminalIsUObjectWrapper only at FReleaseObjectVersion >=
+    PinTypeIncludesUObjectWrapperFlag (= 31; EdGraphNode.cpp:99-101,
+    ReleaseObjectVersion.h:110). Below those gates the payload is shorter —
+    65/97 bytes (69−4 / 101−4) at UE5ReleaseStream 33. The gate booleans'
+    presence is byte-walked on a stream-33 fixture in
+    docs/designs/archive/issue-521-b0-gate-decision.md; that document does
+    not itself print 65/97.
+
+    Tracked samples carry PinType tags only on UE 4.11 (66/71-byte legacy
+    layouts, rejected here) and UE 5.4-5.8 saves, where the sizes are exactly
+    69/101 (e.g. ALS_AnimBP 494x69, BP_CombatCharacter 29x69,
+    MyProject_UE58_TestBlueprint 9x69 + 1x101). No *tracked* PinType evidence
+    covers UE 5.0-5.3 or a pre-31 terminal, so anything outside {69, 101} is
+    rejected to the opaque path rather than decoded on a guess.
     """
-    if size < 69 or len(raw) < 69:
+    if size not in (69, 101) or len(raw) < size:
         return None
     try:
         off = 0
@@ -298,12 +325,20 @@ def _decode_ed_graph_pin_type(raw: bytes, size: int, name_map: list[str]) -> dic
         # PinSubCategoryObject: int32 FPackageIndex
         pco = struct.unpack_from("<i", raw, off)[0]
         off += 4
-        # ContainerType: uint8
+        # ContainerType: uint8 (EPinContainerType None/Array/Set/Map = 0..3).
+        # The terminal block is written only for ct==3, so a conforming payload
+        # pairs 101 bytes with ct==3 and 69 with anything else; anything else is
+        # non-conforming and must not decode as success.
         ct = raw[off]
+        if ct > 3 or (ct == 3) != (size == 101):
+            return None
         off += 1
-        # Map (3) has extra FEdGraphTerminalType: 2 FNames + int32 = 20 bytes
+        # Map (3) carries an FEdGraphTerminalType: 2 FNames + int32 + 3 bools = 32
+        # bytes (operator<<(FArchive&, FEdGraphTerminalType&), EdGraphNode.cpp).
+        # The third bool is gated on FRelease >= 31 (EdGraphNode.cpp:99-101); the
+        # size==101 gate above only admits payloads where that gate already held.
         term_cat_idx = term_sub_idx = term_pco = None
-        if ct == 3 and len(raw) >= off + 20:
+        if ct == 3 and len(raw) >= off + 32:
             term_cat_idx = struct.unpack_from("<I", raw, off)[0]
             off += 4
             _ = struct.unpack_from("<I", raw, off)[0]
@@ -314,6 +349,8 @@ def _decode_ed_graph_pin_type(raw: bytes, size: int, name_map: list[str]) -> dic
             off += 4  # term_sub_num
             term_pco = struct.unpack_from("<i", raw, off)[0]
             off += 4
+            # bTerminalIsConst / bTerminalIsWeakPointer / bTerminalIsUObjectWrapper
+            off += 12
         # bIsReference / bIsWeakPointer: uint32 (FArchive bool)
         is_ref = struct.unpack_from("<I", raw, off)[0]
         off += 4
@@ -457,6 +494,31 @@ def _parse_struct_binary(
     }
 
 
+def _parse_ed_graph_pin_type(
+    tag: "PropertyTag",
+    archive: "FArchive",
+    name_map: list[str],
+    export_map: list[Any],
+    summary: Any,
+) -> dict[str, Any] | None:
+    """Parse the native FEdGraphPinType payload of a StructProperty tag.
+
+    The payload is FEdGraphPinType::Serialize output (see
+    _decode_ed_graph_pin_type), not an inner property-tag loop, so this handler
+    consumes exactly tag.size bytes. On an undecodable payload it rewinds and
+    returns None, keeping the "None leaves the stream untouched" contract the
+    BinaryOrNative dispatcher relies on.
+    """
+    if tag.size is None or tag.size <= 0:
+        return None
+    start = archive.tell()
+    raw = archive.read(tag.size)
+    decoded = _decode_ed_graph_pin_type(raw, tag.size, name_map)
+    if decoded is None:
+        archive.seek(start)
+    return decoded
+
+
 def _parse_niagara_variable(
     tag: "PropertyTag",
     archive: "FArchive",
@@ -542,6 +604,11 @@ BINARY_OR_NATIVE_HANDLERS: dict[str, Callable[..., dict[str, Any] | None]] = {
     "FInstancedStruct": _parse_instanced_struct,
     # Niagara structs
     "NiagaraVariable": _parse_niagara_variable,
+    # Native-serialized structs whose payload is not a property-tag loop.
+    # Both spellings: UE writes USTRUCT names without the F prefix, but a tag
+    # may declare either, and each lookup path only tries one extra "F" form.
+    "EdGraphPinType": _parse_ed_graph_pin_type,
+    "FEdGraphPinType": _parse_ed_graph_pin_type,
     # StructProperty binary decode (dispatched by struct_type + size)
     "StructProperty": _parse_struct_binary,
 }

@@ -883,6 +883,34 @@ def parse_struct_property(
                         raw_size=tag.size,
                         parse_status="success",
                     )
+                # UE writes USTRUCT names without the F prefix; the F form is a
+                # defensive alias (see BINARY_OR_NATIVE_HANDLERS).
+                if declared_struct_type in ("EdGraphPinType", "FEdGraphPinType"):
+                    # Native-serialized only (WithSerializer = true, EdGraphPin.h):
+                    # no tagged loop exists for it, so falling through would read
+                    # payload bytes as field-name/type FNames and invent garbage.
+                    # Constraints require an opaque region plus a diagnostic —
+                    # never a silent empty struct that reads as a decoded value.
+                    payload_offset = archive.tell()
+                    payload = archive.read(tag.size) if tag.size and tag.size > 0 else b""
+                    archive._record_structured_diagnostic(
+                        code="edgraphpin_type_undecodable",
+                        stage="parse_properties",
+                        offset=payload_offset,
+                        size=len(payload),
+                        fallback="consumed_as_opaque",
+                        reason="known_unimplemented",
+                        message=(
+                            f"StructProperty '{declared_struct_type}' payload of {len(payload)} "
+                            "bytes is not a decodable native layout"
+                        ),
+                    )
+                    return StructValue(
+                        struct_type=declared_struct_type,
+                        fields={},
+                        raw_size=tag.size,
+                        parse_status="opaque",
+                    )
             except BINARY_READ_ERRORS:
                 pass  # Fall through to tagged loop
 
