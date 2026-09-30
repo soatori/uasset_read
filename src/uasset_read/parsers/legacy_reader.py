@@ -389,6 +389,7 @@ def _merge_archive_recoveries(
                 stage=sd.stage,
                 object_id=sd.object_id or None,
                 offset=sd.offset,
+                size=sd.size,
                 effect="recovery" if recovered else "data_loss",
                 recoverable=recovered,
                 fallback=getattr(sd, "fallback", None),

@@ -24,6 +24,7 @@ import os
 import re
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -541,9 +542,7 @@ def test_real_sample_proves_claimed_capability():
                     assert conv["origin"] == "unknown_origin"
                     assert conv["status"] == "resolved" and conv["reason"] == "exact_package_index"
                     assert conv["candidate_local_ids"] == ["import:28"]
-                    assert conv["source_evidence"] == [
-                        {"kind": "stack_node_package_index", "value": -29}
-                    ]
+                    assert conv["source_evidence"] == [{"kind": "stack_node_package_index", "value": -29}]
                     unresolved_refs = [item for item in refs if item["status"] == "unresolved"]
                     assert {item["symbol"] for item in unresolved_refs} == {
                         "AddMovementInput",
@@ -554,10 +553,22 @@ def test_real_sample_proves_claimed_capability():
                     assert all(item["reason"] == "no_name_match" for item in unresolved_refs)
                     assert all(item["qualified_key"].startswith("unresolved::") for item in unresolved_refs)
                     assert all(item["origin"] == "unknown_origin" for item in refs)
-                    assert all(set(item) == {
-                        "local_id", "package", "class_name", "symbol", "qualified_key", "origin",
-                        "source_evidence", "status", "reason", "candidate_local_ids",
-                    } for item in refs)
+                    assert all(
+                        set(item)
+                        == {
+                            "local_id",
+                            "package",
+                            "class_name",
+                            "symbol",
+                            "qualified_key",
+                            "origin",
+                            "source_evidence",
+                            "status",
+                            "reason",
+                            "candidate_local_ids",
+                        }
+                        for item in refs
+                    )
 
                     calls = bp.semantic["calls"]
                     assert len(calls) == 17
@@ -778,7 +789,7 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
             return [hit for index, item in enumerate(value) for hit in evidence_key_hits(item, f"{path}/{index}")]
         return []
 
-    def strip_debug(value, *, top_level=False):
+    def strip_debug(value: Any, *, top_level: bool = False) -> Any:
         if isinstance(value, dict):
             return {
                 key: strip_debug(item)
@@ -838,9 +849,7 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
 
     stack = projected["StackOBot_BP_Drone.uasset"]
     normal_owner = next(item for item in stack["normal"]["objects"] if item["id"] == "export:0")
-    normal_instructions = [
-        entry for fn in normal_owner["semantic"]["functions"] for entry in fn["instructions"]
-    ]
+    normal_instructions = [entry for fn in normal_owner["semantic"]["functions"] for entry in fn["instructions"]]
     assert len(normal_instructions) == 85
     for entry in normal_instructions:
         assert "serialized_start" not in entry and "serialized_end" not in entry, entry["opcode"]
@@ -896,15 +905,11 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     assert len([entry for entry in test_instructions if entry["opcode"] == "EX_JumpIfNot"]) == 1
 
     # StackOBot: debug is an evidence-only superset of the link records too.
-    stack_links_normal = [
-        link for graph in normal_owner["semantic"]["graphs"] for link in graph["links"]
-    ]
+    stack_links_normal = [link for graph in normal_owner["semantic"]["graphs"] for link in graph["links"]]
     assert len(stack_links_normal) == 26
     stack_links_debug = [
         link
-        for graph in next(
-            item for item in stack["debug"]["objects"] if item["id"] == "export:0"
-        )["semantic"]["graphs"]
+        for graph in next(item for item in stack["debug"]["objects"] if item["id"] == "export:0")["semantic"]["graphs"]
         for link in graph["links"]
     ]
     assert len(stack_links_debug) == 26
@@ -926,16 +931,8 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
             normal_semantic = normal_obj.get("semantic") or {}
             entry_pairs = {
                 "instructions": (
-                    [
-                        entry
-                        for fn in normal_semantic.get("functions") or []
-                        for entry in fn["instructions"]
-                    ],
-                    [
-                        entry
-                        for fn in debug_semantic.get("functions") or []
-                        for entry in fn["instructions"]
-                    ],
+                    [entry for fn in normal_semantic.get("functions") or [] for entry in fn["instructions"]],
+                    [entry for fn in debug_semantic.get("functions") or [] for entry in fn["instructions"]],
                 ),
                 "calls": (normal_semantic.get("calls") or [], debug_semantic.get("calls") or []),
                 "variable_accesses": (
@@ -973,9 +970,7 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     # Default Python path (no depth override) == CLI == project_document.
     default_doc = parse_package_document(SAMPLES / "StackOBot_BP_Drone.uasset")
     default_owner = next(
-        item
-        for item in project_document(default_doc, mode="normal")["objects"]
-        if item["id"] == "export:0"
+        item for item in project_document(default_doc, mode="normal")["objects"] if item["id"] == "export:0"
     )
     assert sum(len(entry["instructions"]) for entry in default_owner["semantic"]["functions"]) == 85
     assert len([link for graph in default_owner["semantic"]["graphs"] for link in graph["links"]]) == 26
@@ -1027,12 +1022,7 @@ def test_critical_boundary_guards(monkeypatch):
     with pytest.raises(ParseError, match="FFieldPath count"):
         FKismetArchive(struct.pack("<i", -1), "test", []).xfer_field_pointer()
 
-    usmap = (
-        (0x30C4).to_bytes(2, "little")
-        + bytes([1, 1])
-        + b"\x00" * 8
-        + (-1).to_bytes(4, "little", signed=True)
-    )
+    usmap = (0x30C4).to_bytes(2, "little") + bytes([1, 1]) + b"\x00" * 8 + (-1).to_bytes(4, "little", signed=True)
     with pytest.raises(ParseError, match="CustomVersion"):
         UsmapParser(usmap)
 
@@ -1051,9 +1041,7 @@ def test_critical_boundary_guards(monkeypatch):
     from uasset_read.projection import project_document
     from uasset_read.serializers.blueprint_graph import resolve_pin_links
 
-    ue58_document = parse_package_document(
-        str(SAMPLES / "MyProject_UE58_TestBlueprint.uasset"), depth="decode"
-    )
+    ue58_document = parse_package_document(str(SAMPLES / "MyProject_UE58_TestBlueprint.uasset"), depth="decode")
     debug_document = project_document(ue58_document, mode="debug")
     debug_function = next(
         fn
@@ -1064,10 +1052,7 @@ def test_critical_boundary_guards(monkeypatch):
     )
     reemitted = project_function_analysis(FunctionAnalysis.from_dict(debug_function))
     assert reemitted["instructions"] == debug_function["instructions"]
-    assert all(
-        entry["source_node_reason"] == "debug_mapping_unavailable"
-        for entry in reemitted["instructions"]
-    )
+    assert all(entry["source_node_reason"] == "debug_mapping_unavailable" for entry in reemitted["instructions"])
     assert reemitted["instructions"][0]["debug_evidence"] is not None
 
     # Declaration survival through build() over the projected semantic dict
@@ -1076,9 +1061,7 @@ def test_critical_boundary_guards(monkeypatch):
     # re-declares as unresolved. Measured 2026-09-28: UE58 NewFunction 2
     # params / resolved; StackOBot declarations 1/4/4 params / resolved.
     ue58_live = next(o for o in ue58_document.objects if o.id == "export:0").semantic
-    ue58_restored = project_semantic_blueprint(BlueprintCorrelation().build(ue58_document))[
-        "function_declarations"
-    ]
+    ue58_restored = project_semantic_blueprint(BlueprintCorrelation().build(ue58_document))["function_declarations"]
     assert ue58_restored == ue58_live["function_declarations"]
     new_function = next(d for d in ue58_restored if d["name"] == "NewFunction")
     assert len(new_function["parameters"]) == 2
@@ -1086,13 +1069,9 @@ def test_critical_boundary_guards(monkeypatch):
     signature = next(d for d in ue58_restored if d["name"].startswith("NewEventDispatcher"))
     assert signature["native_fields"] == [] and signature["unresolved"] is True
 
-    stack_document = parse_package_document(
-        str(SAMPLES / "StackOBot_BP_Drone.uasset"), depth="decode"
-    )
+    stack_document = parse_package_document(str(SAMPLES / "StackOBot_BP_Drone.uasset"), depth="decode")
     stack_live = next(o for o in stack_document.objects if o.id == "export:0").semantic
-    stack_restored = project_semantic_blueprint(BlueprintCorrelation().build(stack_document))[
-        "function_declarations"
-    ]
+    stack_restored = project_semantic_blueprint(BlueprintCorrelation().build(stack_document))["function_declarations"]
     assert stack_restored == stack_live["function_declarations"]
     assert [len(d["parameters"]) for d in stack_restored] == [1, 4, 4]
     assert [d["unresolved"] for d in stack_restored] == [False, False, False]
@@ -1293,7 +1272,10 @@ def test_blueprint_graph_decodes_without_parse_errors():
     assert {link["connection_type"] for link in links} <= {"exec", "data", "delegate", "unknown"}
     evidence = [link["debug_evidence"] for link in links]
     assert all(isinstance(item, dict) for item in evidence)
-    assert all(isinstance(item["raw_source_owner_package_index"], int) and item["raw_source_owner_package_index"] > 0 for item in evidence)
+    assert all(
+        isinstance(item["raw_source_owner_package_index"], int) and item["raw_source_owner_package_index"] > 0
+        for item in evidence
+    )
     assert all(isinstance(item["source_pin_range"], dict) for item in evidence)
     linked_total = sum(len(pin.get("links") or []) for g in graphs for n in g["nodes"] for pin in n["pins"])
     assert linked_total == 610, "pin adjacency must stay a derived view of the records"
@@ -1675,7 +1657,7 @@ def _assert_trailing_aggregate(actual: dict, baseline: dict) -> None:
 
 
 def _aggregate_from_manifest():
-    import gen_quality_baseline
+    import gen_quality_baseline  # pyright: ignore[reportMissingImports] -- pytest adds tools/ via pythonpath
 
     docs = [(entry["name"], _asset_document(entry["name"])) for entry in MANIFEST_SAMPLES]
     return gen_quality_baseline.aggregate_trailing_report(docs)
@@ -1730,3 +1712,167 @@ def test_trailing_aggregate_gate_blocks_growth():
     new_pair = {"max_count": 1, "max_bytes": 3}
     new_class = dict(good, by_reason_class={**good["by_reason_class"], "unexpected/NewClass": new_pair})
     _check(new_class, "not in baseline")
+
+
+def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
+    """#655: an FEdGraphPinType tag payload is native bytes, never an inner tag loop.
+
+    ``TStructOpsTypeTraits<FEdGraphPinType>::WithSerializer = true`` (EdGraphPin.h)
+    sets STRUCT_SerializeNative, so ``UScriptStruct::SerializeItem`` calls
+    ``FEdGraphPinType::Serialize`` (EdGraphPin.cpp) and only reaches
+    ``SerializeTaggedProperties`` when that declines. Reading the payload as an
+    inner property-tag loop instead reads payload FNames as field names and
+    types, inventing keys (a category FName such as "int" becomes a field, and a
+    raw package index comes back numericized rather than resolved).
+
+    Both payloads below are fixed hex fixtures, not bytes lifted from a tracked
+    sample: the sizes they exercise (69 scalar / 101 map) are proven only by
+    tracked UE 5.4-5.8 saves — ALS_AnimBP (5.4, 494 x 69), BP_CombatCharacter
+    (5.8, 29 x 69), StackOBot_GI_StackOBot (5.6, 11 x 69),
+    LevelDesign_ABP_Manny (5.7, 6 x 69), MyProject_UE58_TestBlueprint (5.8,
+    9 x 69 + 1 x 101). Every tracked sample that carries a PinType tag is either
+    UE 4.11 (legacy 66/71-byte layouts, rejected) or UE 5.4-5.8 — no tracked
+    PinType evidence covers UE 5.0-5.3 or a pre-31 terminal, so those layouts are
+    deliberately unproven here.
+
+    The two sizes are UE-source gated, not universal: the trailing
+    ``bSerializeAsSinglePrecisionFloat`` is written only at
+    ``FUE5ReleaseStreamObjectVersion >= 36`` (EdGraphPin.cpp:330-333) and the
+    map terminal's ``bTerminalIsUObjectWrapper`` only at
+    ``FReleaseObjectVersion >= 31`` (EdGraphNode.cpp:99-101,
+    ReleaseObjectVersion.h:110). Below those gates the payload is 65/97 bytes
+    (docs/designs/archive/issue-521-b0-gate-decision.md byte-walks a
+    UE5ReleaseStream 33 fixture) and the decoder rejects it to opaque.
+
+    The map payload is the layout pin — its FEdGraphTerminalType is 32 bytes
+    (EdGraphNode.cpp, operator<<(FArchive&, FEdGraphTerminalType&)), so a 20-byte
+    terminal read shifts member_name and member_guid onto payload bytes.
+    """
+    from uasset_read.archive import ByteArchive
+    from uasset_read.models.properties import PropertyTag
+    from uasset_read.parsers.property_types import parse_struct_property
+
+    name_map = ["None"] * 400
+    name_map[188] = "int"
+    name_map[306] = "struct"
+
+    scalar = bytes.fromhex(
+        "bc00000000000000f3000000000000000000000000000000000000000000000000f30000000000000000000000000000000000000000000000000000000000000000000000"
+    )
+    map_pin = bytes.fromhex(
+        "bc00000000000000f30000000000000000000000033201000000000000f30000000000000088ffffff000000000000000000000000000000000000000000000000f30000000000000000000000000000000000000000000000000000000000000000000000"
+    )
+    assert (len(scalar), len(map_pin)) == (69, 101)
+
+    scalar_fields = {
+        "pin_category",
+        "pin_subcategory",
+        "pin_subcategory_object",
+        "container_type",
+        "is_reference",
+        "is_weak_pointer",
+        "member_parent",
+        "member_name",
+        "member_guid",
+        "is_const",
+        "is_uobject_wrapper",
+        "b_serialize_as_single_precision_float",
+    }
+    map_fields = scalar_fields | {
+        "map_terminal_category",
+        "map_terminal_subcategory",
+        "map_terminal_subcategory_object",
+    }
+
+    scalar_value = parse_struct_property(
+        PropertyTag(name="VarType", type="StructProperty", size=len(scalar), struct_type="EdGraphPinType"),
+        ByteArchive(scalar),
+        name_map,
+        [],
+    )
+    assert scalar_value.parse_status == "success"
+    assert set(scalar_value.fields) == scalar_fields
+    assert scalar_value.fields["pin_category"] == "int"
+    assert scalar_value.fields["container_type"] == 0
+    assert scalar_value.fields["member_name"] == "None"
+
+    map_archive = ByteArchive(map_pin)
+    map_value = parse_struct_property(
+        PropertyTag(name="VarType", type="StructProperty", size=len(map_pin), struct_type="EdGraphPinType"),
+        map_archive,
+        name_map,
+        [],
+    )
+    # Exactly the payload is consumed: no decode may spill into the next property.
+    assert map_archive.tell() == len(map_pin)
+    assert map_value.parse_status == "success"
+    assert set(map_value.fields) == map_fields
+    assert map_value.fields["container_type"] == 3
+    assert map_value.fields["map_terminal_category"] == "struct"
+    assert map_value.fields["map_terminal_subcategory_object"] == -120
+    # A 20-byte terminal read lands both of these on raw payload bytes instead.
+    assert map_value.fields["member_name"] == "None"
+    assert map_value.fields["member_guid"] == "0" * 32
+
+    # Refusal matrix (#655 review F2/F5, folded here to hold the 100-item
+    # collection budget): any size outside {69,101}, container_type outside
+    # 0..3, a ct/size pairing violation, or a short raw payload must refuse
+    # to the opaque path — never decode fabricated values. The F-form alias
+    # routes through the same handler and the same refusals.
+    def _refused(raw: bytes, struct_type: str = "EdGraphPinType") -> bool:
+        archive = ByteArchive(raw)
+        value = parse_struct_property(
+            PropertyTag(name="VarType", type="StructProperty", size=len(raw), struct_type=struct_type),
+            archive,
+            name_map,
+            [],
+        )
+        return value.parse_status != "success"
+
+    assert _refused(scalar[:65])  # pre-36 gate shape (69−4)
+    assert _refused(scalar + b"\x00")  # 70 B
+    assert _refused(scalar[:20] + bytes([111]) + scalar[21:])  # FString-era ct=111
+    assert _refused(scalar[:20] + bytes([4]) + scalar[21:])  # ct outside 0..3
+    assert _refused(scalar[:20] + bytes([3]) + scalar[21:])  # scalar payload must not claim map
+    assert _refused(map_pin[:20] + bytes([0]) + map_pin[21:])  # map payload must not claim scalar
+    assert _refused(scalar[:60])  # raw shorter than declared size
+    assert _refused(scalar[:65], struct_type="FEdGraphPinType")
+    assert not _refused(scalar, struct_type="FEdGraphPinType")
+
+
+def test_edgraphpin_type_undecodable_payload_is_opaque_and_diagnosed():
+    """#655: an undecodable PinType payload is opaque + diagnosed, never silent or fabricated.
+
+    ``StarterContent_Starter_Background_Cue`` (UE 4.11) carries 11 x 66-byte and
+    1 x 71-byte ``EdGraphPinType`` tags in the pre-PinsStoreFName FString layout
+    (FString "SoundNode"/"Root" category names, so byte 20 falls inside a string
+    on the 71-byte one and reads as container_type 111). Neither size is the
+    modern 69/101 layout, so the decoder refuses both: the guard must consume the
+    payload, report an opaque struct with no fields, and emit one structured
+    diagnostic per payload carrying offset + size — the constraint "unknown data
+    is preserved as an opaque region plus a diagnostic".
+    """
+    from uasset_read.package import parse_package_document
+
+    doc = parse_package_document(str(SAMPLES / "StarterContent_Starter_Background_Cue.uasset"), depth="asset")
+
+    pin_diags = [d for d in doc.diagnostics if d.code == "edgraphpin_type_undecodable"]
+    assert sorted(d.size for d in pin_diags) == [66] * 11 + [71], [d.size for d in pin_diags]
+    assert all(d.offset is not None for d in pin_diags), "diagnostic must carry the payload offset"
+    assert all(d.stage == "parse_properties" and d.reason == "known_unimplemented" for d in pin_diags)
+    # One diagnostic per payload, attributed to the owning export — never swallowed.
+    assert len({d.object_id for d in pin_diags}) == 12
+
+    pin_values = [
+        entry.value
+        for obj in doc.objects
+        for entry in getattr(obj.properties, "entries", None) or []
+        if entry.name == "PinType"
+    ]
+    assert len(pin_values) == 12
+    for value in pin_values:
+        inner = value.get("value") if isinstance(value, dict) and value.get("kind") == "value" else value
+        assert isinstance(inner, dict) and inner["kind"] == "struct" and inner["fields"] == {}, (
+            "undecodable payload must stay an empty opaque struct, not fabricated fields",
+            inner,
+        )

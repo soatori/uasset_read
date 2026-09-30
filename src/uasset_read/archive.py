@@ -239,6 +239,7 @@ class FArchive:
         message: str = "",
         severity: Literal["info", "warning", "error", "critical"] = "warning",
         reason: DiagnosticReason | None = None,
+        size: int | None = None,
     ) -> None:
         """Record a structured diagnostic with stable code."""
         # Build enriched message from legacy fields
@@ -257,6 +258,7 @@ class FArchive:
                 stage=stage,
                 object_id=self._current_object_id,
                 offset=offset,
+                size=size,
                 message=enriched,
                 fallback=fallback or None,
                 reason=reason,
