@@ -1,6 +1,6 @@
 # Project Constraints
 
-The authoritative target is `docs/designs/2026-08-26-package-first-uasset-parser-refactor.md`. These constraints govern new work; source and tests remain authoritative for current behavior.
+The authoritative target is `docs/designs/2026-08-26-package-first-uasset-parser-refactor.md` (lives in the independent docs repository nested at `docs/`; a fresh clone of this repo has no `docs/`). These constraints govern new work; source and tests remain authoritative for current behavior.
 
 ## Core Constraints
 
@@ -41,7 +41,7 @@ The authoritative target is `docs/designs/2026-08-26-package-first-uasset-parser
 
 ## Peer corroboration constraints
 
-Operational sub-rules for "UE source reference required" above. Full scheme: `docs/designs/2026-09-02-peer-corroboration-usage-scheme.md`. Tracked inventory (pin commits, licenses, verified coverage): `docs/reference/external-peer-inventory.md`.
+Operational sub-rules for "UE source reference required" above. Full scheme: `docs/designs/2026-09-02-peer-corroboration-usage-scheme.md`. Tracked inventory (pin commits, licenses, verified coverage): `docs/reference/external-peer-inventory.md`. Both files live in the docs repository (nested at `docs/`).
 
 - **Named peers only** — write `Corroborated (not proof): <Peer> <symbol>`. The bare plural `corroborated by peers` is banned and rejected by the CI `peer-evidence-hygiene` step.
 - **Independence counts** — a consensus claim needs at least two independent implementations. UAssetGUI delegates to UAssetAPI, so the pair counts as one implementation.

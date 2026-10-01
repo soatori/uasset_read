@@ -4,6 +4,8 @@ These rules apply to every human or agent working in this repository.
 
 ## Documentation Authority
 
+> `docs/` is an independent local git repository nested in this checkout; docs paths below resolve only where `docs/` is present (a fresh clone of this repository has no `docs/`).
+
 - **Implemented behavior:** inspect `src/`, `tests/`, and real sample results. Do not infer implementation from a design document.
 - **Target architecture:** [`docs/designs/2026-08-26-package-first-uasset-parser-refactor.md`](docs/designs/2026-08-26-package-first-uasset-parser-refactor.md) is the only authoritative repository-wide refactor design.
 - **Design status index:** read [`docs/designs/README.md`](docs/designs/README.md) before using an older design.

@@ -28,9 +28,9 @@ BASELINE = json.loads((Path(__file__).parent / "size-baseline.json").read_text(e
 
 
 def _tracked_files() -> list[str]:
-    # -z, not plain ls-files: the default core.quotePath escapes non-ASCII paths
-    # (docs/reference has a CJK filename), which would silently drop ~4.7k lines
-    # from the count depending on the caller's git config.
+    # -z, not plain ls-files: the default core.quotePath escapes non-ASCII
+    # paths, which would silently drop files from the count depending on the
+    # caller's git config.
     out = subprocess.run(
         ["git", "ls-files", "-z"],
         cwd=ROOT,
@@ -76,7 +76,7 @@ def test_test_tree_within_baseline():
     modules = _test_modules()
     assert len(modules) <= 2, (
         f"tracked test modules {modules} exceed the sample-first limit of 2 "
-        "(docs/superpowers/specs/2026-09-28-sample-first-test-baseline-design.md)"
+        "(docs repo: superpowers/specs/2026-09-28-sample-first-test-baseline-design.md)"
     )
 
 

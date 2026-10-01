@@ -1,7 +1,7 @@
 """Payload models and discovery for large binary data.
 
 PayloadDescriptor matches the v2 contract schema
-(docs/designs/contract/package_document_v2.schema.json $defs.PayloadDescriptor).
+(tests/package_document_v4.schema.json $defs.PayloadDescriptor).
 kind and source_region are schema-enums.  discover_payload_descriptor is the
 payload-discovery engine (serial-region seek + BulkData header scan with a
 bounded fallback); agent_tools is a thin parse→extract→budget wrapper over it.

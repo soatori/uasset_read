@@ -175,7 +175,7 @@ Full API list: see `src/uasset_read/__init__.py` and `wiki/07-Dev-Guide/Public-A
 
 ## Architecture
 
-Data flow is the package-first pipeline defined in the [canonical refactor design](docs/designs/2026-08-26-package-first-uasset-parser-refactor.md):
+Data flow is the package-first pipeline defined in the canonical refactor design (`docs/designs/2026-08-26-package-first-uasset-parser-refactor.md` in the independent `docs/` repository):
 
 ```text
 .uasset → archive → parsers/legacy_reader (Legacy container reader; Zen/IoStore full decode outside product target)
