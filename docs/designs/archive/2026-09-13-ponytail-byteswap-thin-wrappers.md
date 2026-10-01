@@ -1,5 +1,7 @@
 ﻿# Ponytail Byte-Swap & Thin Wrappers Residual
 
+status: historical
+
 > **ARCHIVED (2026-09-26):** Executed closeout / plan-of-record. Historical evidence only — do not re-execute. Binding contracts and the canonical target remain under [`docs/designs/`](../README.md).
 
 

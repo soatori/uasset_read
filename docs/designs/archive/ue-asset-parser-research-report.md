@@ -1,5 +1,7 @@
 # Unreal Engine UAsset 通用解析器技术研究与系统设计报告
 
+status: historical
+
 **文档性质：** 技术研究 / 架构设计 / 开发规范  
 **目标范围：** Unreal Engine 4 / Unreal Engine 5 资产解析  
 **建议首期支持：** UE4.27、UE5.0–UE5.8 架构兼容  

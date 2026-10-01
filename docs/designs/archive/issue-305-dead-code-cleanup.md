@@ -1,5 +1,7 @@
 # Issue #305 Dead-Code Cleanup and Migration Notes
 
+status: historical
+
 **Date:** 2026-07-27
 
 **Scope:** Verified unreachable definitions remaining after the earlier #305 cleanup commits

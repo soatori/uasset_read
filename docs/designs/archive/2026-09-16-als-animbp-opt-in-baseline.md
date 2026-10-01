@@ -1,5 +1,7 @@
 # ALS_AnimBP Opt-In Quality Baseline Implementation Plan
 
+status: historical
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **Status: historical (executed 2026-09-16).** Deliverables landed on `dev-0.6.0` (`UASSET_QUALITY_OPT_IN` gate live in `tests/test_samples.py`); checkbox state was not maintained during execution. This file is execution evidence. Do not invoke SDD or rerun its commands unless the user explicitly names this file and requests a new replay.

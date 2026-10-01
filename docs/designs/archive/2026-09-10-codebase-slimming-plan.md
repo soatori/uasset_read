@@ -1,5 +1,7 @@
 ﻿# 代码库精简计划
 
+status: historical
+
 > **ARCHIVED (2026-09-26):** Executed closeout / plan-of-record. Historical evidence only — do not re-execute. Binding contracts and the canonical target remain under [`docs/designs/`](../README.md).
 
 

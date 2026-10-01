@@ -1,6 +1,7 @@
 # v4 Package Output and Blueprint Static IR Current-State Audit
 
-status: current audit (not a target design and not an implementation claim)
+status: current
+Audit record: not a target design and not an implementation claim.
 
 Date: 2026-09-28
 

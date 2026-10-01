@@ -1,6 +1,6 @@
 # Agent 工具 PackageDocument 缓存契约（G2）
 
-status: implemented
+status: current
 
 > **范围说明（2026-09-13）：** 「Agent 工具」指 `agent_tools.py` 六个有界库 API。本仓库不实现 MCP server/SDK。
 

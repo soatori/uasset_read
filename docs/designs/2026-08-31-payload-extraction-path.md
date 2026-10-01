@@ -1,6 +1,7 @@
 # Payload 提取路径（S2）
 
-status: implemented (partial — cooked packages with sidecars)
+status: current
+Scope: partial — cooked packages with sidecars.
 
 > 本文写于撤回决策**刚生效**之时：以基线 bd3309a7 的现状为对照，定义撤回后的稳定形态与未来两条优化路线。非本轮实现。
 
