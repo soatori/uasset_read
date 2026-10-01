@@ -90,9 +90,8 @@ tests/*
 !tests/size-baseline.json
 !tests/samples/
 
-# AI agent reports (local only)
-docs/firstperson_blueprint_test_report.md
-docs/reference/refactor-reference.md
+# Independent documentation repository (own git; not tracked here)
+/docs/
 
 # Accidentally added submodule (no .gitmodules mapping)
 .claude/skills/unreal-mcp-skills
@@ -105,9 +104,7 @@ skills-lock.json
 .worktrees/
 worktrees/
 
-# Documentation build artifacts
-docs/superpowers/
-docs/compose/
+# Local agent metadata
 .mimocode/
 
 # Wiki submodule (external)

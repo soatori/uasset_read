@@ -80,10 +80,6 @@ def test_test_tree_within_baseline():
     )
 
 
-def test_docs_tree_within_baseline():
-    _assert_area("docs_markdown", "docs/", ".md")
-
-
 def _assert_area(key: str, prefix: str, suffix: str) -> None:
     limit = BASELINE[key]
     count, lines = _area_lines(prefix, suffix)
