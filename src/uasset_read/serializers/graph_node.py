@@ -342,6 +342,15 @@ def _read_node_script_serial(
             archive.read_u8()
         # Unknown high-bit handling: stop parsing script_serial to prevent cascading offset misalignment
         if ctrl & ~0x03:
+            archive._record_structured_diagnostic(
+                code="BLUEPRINT_NODE_CONTROL_FLAGS_UNSUPPORTED",
+                stage="semantic.blueprint",
+                offset=script_start,
+                raw_value=ctrl,
+                fallback="skipped_node_properties",
+                reason="known_unimplemented",
+                message=f"Node {node_name!r} has unsupported SerializationControlExtensions bits 0x{ctrl:02X}",
+            )
             logger.debug(
                 "Node script_serial: unknown SerializationControlExtensions bits 0x%02X, skipping remaining properties, node=%s",
                 ctrl,
@@ -355,6 +364,15 @@ def _read_node_script_serial(
     while archive.tell() < script_end:
         _property_iterations += 1
         if _property_iterations > max_property_iterations:
+            archive._record_structured_diagnostic(
+                code="BLUEPRINT_NODE_PROPERTY_LIMIT",
+                stage="semantic.blueprint",
+                offset=archive.tell(),
+                raw_value=_property_iterations,
+                fallback="stopped_property_loop",
+                reason="recovered_corruption",
+                message=f"Node {node_name!r} exceeded the property iteration limit",
+            )
             logger.debug(
                 "read_ue_graph_node: exceeded max_property_iterations (%d) at node %s, breaking loop",
                 max_property_iterations,
@@ -366,6 +384,14 @@ def _read_node_script_serial(
         try:
             tag = read_property_tag(archive, name_map, tolerant=getattr(archive, "_tolerant", False))
         except ParseError as e:
+            archive._record_structured_diagnostic(
+                code="BLUEPRINT_NODE_PROPERTY_TAG_FAILED",
+                stage="semantic.blueprint",
+                offset=tag_pos,
+                fallback="stopped_property_loop",
+                reason="recovered_corruption",
+                message=f"Node {node_name!r} property tag read failed: {e}",
+            )
             logger.debug("read_ue_graph_node: failed to read PropertyTag at pos %d, node=%s: %s", tag_pos, node_name, e)
             break
 

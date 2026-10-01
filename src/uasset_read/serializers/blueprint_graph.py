@@ -16,18 +16,16 @@ UEdGraphPin::Serialize in Engine/Source/Runtime/Engine/Classes/EdGraph/EdGraph*.
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
 
 from uasset_read.models.byte_ranges import ByteRegion, project_region
+from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.serializers.node_data_project import project_node_data as _project_node_data
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
     from uasset_read.serializers.object_resources import ObjectExport
     from uasset_read.serializers.package_summary import PackageFileSummary
-
-logger = logging.getLogger(__name__)
 
 # Hard caps on converted output. Values chosen so the largest tracked package
 # (ALS_AnimBP: 275 graphs, ~2,700 node exports) passes without cap engagement
@@ -51,32 +49,14 @@ def _validate_graph_export_offset(export, archive_size: int) -> bool:
 
     # Check for negative values
     if serial_offset < 0 or serial_size < 0:
-        logger.warning(
-            "Graph export '%s' offset abnormal: offset=%d, size=%d",
-            export.object_name,
-            serial_offset,
-            serial_size,
-        )
         return False
 
     # Offset should not be 0 (unless it is a special Default__ export)
     if serial_offset == 0 and not str(getattr(export, "object_name", "")).startswith("Default__"):
-        logger.warning(
-            "Graph export '%s' serial_offset=0 and serial_size=%d, offset abnormal",
-            export.object_name,
-            serial_size,
-        )
         return False
 
     # Check if exceeding archive boundary
     if archive_size > 0 and serial_offset + serial_size > archive_size:
-        logger.warning(
-            "Graph export '%s' offset out of bounds: offset=%d + size=%d > archive_size=%d",
-            export.object_name,
-            serial_offset,
-            serial_size,
-            archive_size,
-        )
         return False
 
     return True
@@ -95,14 +75,15 @@ def read_blueprint_graphs(
     name_map: list[str],
     import_map: list[Any],
     export_map: list[ObjectExport],
+    diagnostics: list[Diagnostic] | None = None,
 ) -> list[dict[str, Any]]:
     """Parse all graph exports in the package and return plain graph dicts.
 
     Runs the shared binary readers (serializers/graph.read_ue_graph per graph
     export) and converts the resulting UEdGraph trees. Never raises on a
     single bad graph: failures produce a dict-level ``parse_errors`` count and
-    the caller's diagnostics cover it. The archive must be open on the full
-    package (decode pass restores the full read range before calling).
+    the caller's diagnostics cover it when supplied. The archive must be open
+    on the full package (decode pass restores the full read range before calling).
     """
     from uasset_read.serializers.graph import read_ue_graph
     from uasset_read.serializers.object_resources import resolve_class_name
@@ -121,8 +102,27 @@ def read_blueprint_graphs(
         if not class_name or not _is_graph_class(class_name):
             continue
         if processed >= MAX_GRAPHS_PER_PACKAGE:
+            if diagnostics is not None:
+                diagnostics.append(
+                    Diagnostic(
+                        severity="warning",
+                        code="BLUEPRINT_GRAPH_LIMIT",
+                        message=(
+                            f"Graph parsing stopped after {MAX_GRAPHS_PER_PACKAGE}; "
+                            "additional graph exports were skipped"
+                        ),
+                        stage="semantic.blueprint",
+                        object_id=f"export:{export_idx}",
+                        offset=getattr(export, "serial_offset", None),
+                        size=getattr(export, "serial_size", None),
+                        effect="data_loss",
+                        recoverable=False,
+                    )
+                )
             break
         processed += 1
+        previous_object_id = getattr(archive, "_current_object_id", "")
+        archive._current_object_id = f"export:{export_idx}"
         try:
             if not _validate_graph_export_offset(export, archive_size):
                 graphs.append(_error_graph(export_idx, class_name, "offset validation failed"))
@@ -139,6 +139,8 @@ def read_blueprint_graphs(
             graphs.append(_graph_to_dict(graph, export_idx, class_name))
         except Exception as exc:  # one bad graph must not kill the decode pass
             graphs.append(_error_graph(export_idx, class_name, f"{type(exc).__name__}: {exc}"))
+        finally:
+            archive._current_object_id = previous_object_id
     resolve_pin_links(graphs)
     return graphs
 

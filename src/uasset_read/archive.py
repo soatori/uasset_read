@@ -10,7 +10,7 @@ import mmap
 import os
 import struct
 from dataclasses import dataclass
-from typing import BinaryIO, Any, Literal
+from typing import BinaryIO, Any, Iterator, Literal
 
 from uasset_read.exceptions import ParseError, ExportBoundsExceeded
 from uasset_read.constants import (
@@ -268,6 +268,14 @@ class FArchive:
     def get_structured_diagnostics(self) -> list[Diagnostic]:
         """Return collected structured diagnostics."""
         return list(self._structured_diagnostics)
+
+    def _diagnostic_mark(self) -> int:
+        return len(self._structured_diagnostics)
+
+    def _diagnostics_since(self, mark: int) -> Iterator[Diagnostic]:
+        diagnostics = self._structured_diagnostics
+        for index in range(mark, len(diagnostics)):
+            yield diagnostics[index]
 
     def rollback_structured_diagnostics(self, mark: int) -> None:
         """Drop diagnostics recorded after *mark* (failed parse-attempt rewind).

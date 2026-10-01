@@ -11,6 +11,7 @@ from typing import Any, Literal
 # Stable diagnostic codes for structured warnings
 DIAGNOSTIC_CODE_INVALID_SERIAL_SIZE = "invalid_serial_size"
 DIAGNOSTIC_CODE_INVALID_SERIAL_OFFSET = "invalid_serial_offset"
+DIAGNOSTIC_CODE_INVALID_SCRIPT_SERIALIZATION_OFFSET = "invalid_script_serialization_offset"
 
 DiagnosticReason = Literal[
     "bulk_expected",

@@ -7,7 +7,6 @@ export-boundary cross-checking.
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
@@ -36,8 +35,6 @@ from uasset_read.versioning import (
 
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
-
-logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # UE5 version threshold for serialization-control byte

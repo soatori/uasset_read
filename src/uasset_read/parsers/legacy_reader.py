@@ -730,8 +730,20 @@ class LegacyPackageReader:
             from ..sources import CompositeSource
 
             self._package_source = CompositeSource.from_package(Path(main_path))
-        except Exception:
+        except Exception as exc:
             self._package_source = None
+            diagnostics.append(
+                Diagnostic(
+                    severity="warning",
+                    code="PACKAGE_SOURCE_MAP_UNAVAILABLE",
+                    message=(
+                        "Package byte-source mapping is unavailable "
+                        f"({type(exc).__name__}); source ranges may be incomplete"
+                    ),
+                    stage="package.source_map",
+                    effect="recovery",
+                )
+            )
 
         try:
             # 0. Load the mappings provider once per document (mirrors v1
@@ -1293,6 +1305,7 @@ class LegacyPackageReader:
             prev_range = archive.set_read_range((script_start, prop_range_end))
             archive._current_object_id = obj.id
             try:
+                property_diagnostic_mark = len(diagnostics)
                 # Sole public tagged entry: TaggedPropertyReader owns the
                 # export-level stream; value dispatch stays in property_parser.
                 raw_props = tagged_reader.read_export(
@@ -1305,7 +1318,12 @@ class LegacyPackageReader:
                     mappings=mappings,
                     game=self._game,
                     tolerant=self._tolerant,
+                    diagnostics=diagnostics,
+                    object_id=obj.id,
+                    diagnostic_offset=script_start,
                 )
+                if len(diagnostics) > property_diagnostic_mark and obj.status.parse == "complete":
+                    obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
                 # Tolerant skip: the payload was seeked, not decoded, so the
                 # marker (not a property) tells byte accounting to register
                 # nothing structural for this export (#653 F1).
@@ -1691,7 +1709,7 @@ def _attach_blueprint_graph_extras(
         return
     if object_ids is not None and not family.intersection(object_ids):
         return
-    graphs = read_blueprint_graphs(archive, summary, name_map, import_map, export_map)
+    graphs = read_blueprint_graphs(archive, summary, name_map, import_map, export_map, diagnostics)
     owners: dict[str, list[dict]] = {}
     for graph in graphs:
         parse_errors = graph.get("parse_errors") or []
@@ -1901,6 +1919,55 @@ def _attach_kismet_extras(
                 exp_idx = getattr(kr, "export_index", -1)
                 if exp_idx is None or exp_idx < 0 or exp_idx >= len(export_map):
                     continue
+                native_fields = list(getattr(kr, "native_fields", None) or [])
+                unsupported = [
+                    (field, operand)
+                    for field in native_fields
+                    for operand in getattr(field, "opaque_metadata", ())
+                    if str(getattr(operand, "reason", "")).startswith("unsupported_native_field:")
+                ]
+                error_code = getattr(kr, "error_code", None)
+                if error_code and error_code != "confirmed_no_script":
+                    source_range = getattr(kr, "script_source_range", None)
+                    error_context = getattr(kr, "error_context", None) or {}
+                    diagnostics.append(
+                        Diagnostic(
+                            severity="warning",
+                            code="KISMET_FUNCTION_UNAVAILABLE",
+                            message=(
+                                f"Function {getattr(kr, 'function_name', exp_idx)} could not be decoded "
+                                f"({error_code}): {getattr(kr, 'error_message', '')}"
+                            ),
+                            stage="semantic.kismet",
+                            object_id=getattr(kr, "object_id", "") or f"export:{exp_idx}",
+                            offset=(
+                                source_range.start
+                                if source_range is not None
+                                else error_context.get("package_offset")
+                            ),
+                            size=source_range.size if source_range is not None else None,
+                            effect="semantic_loss",
+                        )
+                    )
+                if unsupported:
+                    field, operand = unsupported[0]
+                    source_range = getattr(operand, "source_range", None) or getattr(field, "source_range", None)
+                    diagnostics.append(
+                        Diagnostic(
+                            severity="warning",
+                            code="UNSUPPORTED_NATIVE_FIELD",
+                            message=(
+                                f"Function export:{exp_idx} has {len(unsupported)} unsupported native field(s); "
+                                f"first: {field.name or field.type_name}"
+                            ),
+                            stage="semantic.kismet",
+                            object_id=getattr(kr, "object_id", "") or f"export:{exp_idx}",
+                            offset=source_range.start if source_range is not None else None,
+                            size=source_range.size if source_range is not None else None,
+                            effect="semantic_loss",
+                            reason="known_unimplemented",
+                        )
+                    )
                 payload = kr.to_dict()
                 base_ir = _function_analysis_from_result(kr, "") if include_ir else None
                 recorded = False

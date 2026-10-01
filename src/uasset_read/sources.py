@@ -39,9 +39,10 @@ class MemorySource:
 class FileSource:
     def __init__(self, path: Path):
         self._path = Path(path)
+        self._size = self._path.stat().st_size
 
     def read_at(self, offset: int, size: int) -> bytes:
-        _validate_range(offset, size, self._path.stat().st_size)
+        _validate_range(offset, size, self._size)
         with self._path.open("rb") as fh:
             fh.seek(offset)
             data = fh.read(size)
@@ -50,10 +51,10 @@ class FileSource:
         return data
 
     def size(self) -> int:
-        return self._path.stat().st_size
+        return self._size
 
     def map_range(self, offset: int, size: int) -> list[tuple[str, int, int]]:
-        _validate_range(offset, size, self.size())
+        _validate_range(offset, size, self._size)
         return [(self._path.name, offset, size)]
 
 
@@ -115,8 +116,7 @@ class CompositeSource:
     def segments(self) -> tuple[tuple[str, int, int], ...]:
         segs = []
         acc = 0
-        for name, src in self._segments:
-            n = src.size()
+        for (name, _src), n in zip(self._segments, self._sizes):
             segs.append((name, acc, n))
             acc += n
         return tuple(segs)

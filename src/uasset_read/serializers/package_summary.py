@@ -213,13 +213,32 @@ def _read_cell_counts(archive: FArchive) -> tuple:
 
 def _read_payload_toc_offset(archive: FArchive) -> int:
     """Read PayloadTocOffset and validate reasonableness."""
+    offset = archive.tell()
     payload_toc_offset = archive.read_i64()
     if payload_toc_offset < 0:
+        archive._record_structured_diagnostic(
+            code="PAYLOAD_TOC_OFFSET_INVALID",
+            stage="read_package_summary",
+            offset=offset,
+            raw_value=payload_toc_offset,
+            fallback="used_zero_offset",
+            reason="recovered_corruption",
+            message="PayloadTocOffset is negative; using 0",
+        )
         logger.debug("PayloadTocOffset is negative: %d, setting to 0", payload_toc_offset)
         payload_toc_offset = 0
     elif payload_toc_offset > 0:
         file_size = archive.total_size()
         if file_size > 0 and payload_toc_offset > file_size * 10:
+            archive._record_structured_diagnostic(
+                code="PAYLOAD_TOC_OFFSET_INVALID",
+                stage="read_package_summary",
+                offset=offset,
+                raw_value=payload_toc_offset,
+                fallback="used_zero_offset",
+                reason="recovered_corruption",
+                message=f"PayloadTocOffset exceeds the plausible file range ({file_size} bytes); using 0",
+            )
             logger.debug(
                 "PayloadTocOffset %d clearly out of bounds (file size %d), setting to 0",
                 payload_toc_offset,
@@ -712,6 +731,7 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> list[str]
 
     name_map: list[str] = []
     for i in range(summary.name_count):
+        entry_start = archive.tell()
         try:
             name = archive.read_fstring()
             name_map.append(name)
@@ -727,6 +747,15 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> list[str]
             # map already read is invalid for continued property decoding.
             raise
         except RECOVERY_READ_ERRORS as e:
+            archive._record_structured_diagnostic(
+                code="NAME_TABLE_TRUNCATED",
+                stage="read_name_table",
+                offset=entry_start,
+                raw_value=i,
+                fallback="stop_table",
+                reason="recovered_corruption",
+                message=f"Name table stopped at entry {i}/{summary.name_count}: {type(e).__name__}: {e}",
+            )
             logger.debug(
                 "read_name_table: failed to read name entry %d/%d: %s (read %d names so far)",
                 i,

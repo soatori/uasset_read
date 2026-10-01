@@ -33,6 +33,7 @@ from uasset_read.exceptions import RECOVERY_READ_ERRORS, ParseError, StreamPoiso
 from uasset_read.models.diagnostics import (
     DIAGNOSTIC_CODE_INVALID_SERIAL_OFFSET,
     DIAGNOSTIC_CODE_INVALID_SERIAL_SIZE,
+    DIAGNOSTIC_CODE_INVALID_SCRIPT_SERIALIZATION_OFFSET,
 )
 
 
@@ -230,7 +231,7 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: li
                 serial_offset = archive.read_i64()
 
             # CR-05: validate serial_size/serial_offset non-negative
-            # Tolerant: set to 0 and log warning on negative values, subsequent property parsing will be skipped due to size=0
+            # Tolerant: record a structured diagnostic and set invalid values to 0.
             if serial_size < 0:
                 archive._record_structured_diagnostic(
                     code=DIAGNOSTIC_CODE_INVALID_SERIAL_SIZE,
@@ -302,10 +303,21 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: li
             script_serialization_end_offset = 0
             uses_unversioned = (summary.package_flags & PKG_UnversionedProperties) != 0
             if not uses_unversioned and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+                script_start_offset = archive.tell()
                 script_serialization_start_offset = archive.read_i64()
+                script_end_offset = archive.tell()
                 script_serialization_end_offset = archive.read_i64()
-                # CR-05: validate non-negative (Tolerant: set to 0 and log warning on negative values)
+                # Invalid script ranges cannot be used to bound property reads.
                 if script_serialization_start_offset < 0:
+                    archive._record_structured_diagnostic(
+                        code=DIAGNOSTIC_CODE_INVALID_SCRIPT_SERIALIZATION_OFFSET,
+                        stage="read_export_map",
+                        offset=script_start_offset,
+                        raw_value=script_serialization_start_offset,
+                        fallback="set_to_zero",
+                        reason="recovered_corruption",
+                        message=f"Export #{export_idx} ScriptSerializationStartOffset is negative; set to 0",
+                    )
                     logger.debug(
                         "Export #%d ScriptSerializationStartOffset is negative: %d, set to 0",
                         export_idx,
@@ -313,6 +325,15 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: li
                     )
                     script_serialization_start_offset = 0
                 if script_serialization_end_offset < 0:
+                    archive._record_structured_diagnostic(
+                        code=DIAGNOSTIC_CODE_INVALID_SCRIPT_SERIALIZATION_OFFSET,
+                        stage="read_export_map",
+                        offset=script_end_offset,
+                        raw_value=script_serialization_end_offset,
+                        fallback="set_to_zero",
+                        reason="recovered_corruption",
+                        message=f"Export #{export_idx} ScriptSerializationEndOffset is negative; set to 0",
+                    )
                     logger.debug(
                         "Export #%d ScriptSerializationEndOffset is negative: %d, set to 0",
                         export_idx,
@@ -359,7 +380,6 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: li
                     f"stopped export table read with {len(export_map)}/{summary.export_count} entries"
                 ),
             )
-            logger.warning("Export #%d parse failed (%s); stopping export table read", export_idx, e)
             break
     archive._current_object_id = ""
     return export_map

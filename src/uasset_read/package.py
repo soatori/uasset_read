@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
-import logging
 
 from uasset_read.archive import FArchive
 from uasset_read.containers import inspect_container
@@ -22,9 +21,6 @@ from uasset_read.layout import detect_layout
 from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.models.document import PackageDocument
 from uasset_read.sources import FileSource
-
-logger = logging.getLogger(__name__)
-
 
 PACKAGE_EXTENSIONS = (".uasset", ".umap")
 PACKAGE_PAYLOAD_EXTENSIONS = (".uexp", ".ubulk", ".uptnl")
@@ -45,6 +41,8 @@ class PackageArchive(FArchive):
         try:
             self._main_size = main_archive.total_size()
             uexp_size = uexp_archive.total_size() if uexp_archive else 0
+            main_archive_pos = main_archive.tell()
+            uexp_archive_pos = uexp_archive.tell() if uexp_archive is not None else None
         except Exception:
             # Close all opened archives on initialization failure (#464)
             if uexp_archive is not None:
@@ -53,6 +51,8 @@ class PackageArchive(FArchive):
             raise
         self._file_size = self._main_size + uexp_size
         self._pos = 0
+        self._main_archive_pos: int | None = main_archive_pos
+        self._uexp_archive_pos: int | None = uexp_archive_pos
 
     def read(self, size: int) -> bytes:
         self._begin_read(size)
@@ -71,12 +71,31 @@ class PackageArchive(FArchive):
                 raise ParseError(f"No payload archive available at position {self._pos}")
 
             take = min(to_read, segment_remaining)
-            segment.seek(segment_pos)
-            chunk = segment.read(take)
+            current_segment_pos = (
+                self._main_archive_pos if segment is self._main_archive else self._uexp_archive_pos
+            )
+            try:
+                if current_segment_pos != segment_pos:
+                    segment.seek(segment_pos)
+                chunk = segment.read(take)
+            except Exception:
+                if segment is self._main_archive:
+                    self._main_archive_pos = None
+                else:
+                    self._uexp_archive_pos = None
+                raise
             if len(chunk) < take:
+                if segment is self._main_archive:
+                    self._main_archive_pos = None
+                else:
+                    self._uexp_archive_pos = None
                 raise ParseError(
                     f"short read: requested {take} bytes at segment offset {segment_pos}, got {len(chunk)} bytes"
                 )
+            if segment is self._main_archive:
+                self._main_archive_pos = segment_pos + len(chunk)
+            else:
+                self._uexp_archive_pos = segment_pos + len(chunk)
             chunks.append(chunk)
             self._pos += take
             to_read -= take
@@ -93,6 +112,8 @@ class PackageArchive(FArchive):
         self._main_archive.close()
         if self._uexp_archive is not None:
             self._uexp_archive.close()
+        self._main_archive_pos = None
+        self._uexp_archive_pos = None
         self._use_mmap = False
 
     def total_size(self) -> int:
@@ -124,6 +145,7 @@ class PackageArchive(FArchive):
         if self._uexp_archive is not None:
             self._uexp_archive.close()
             self._uexp_archive = None
+        self._uexp_archive_pos = None
         self._file_size = self._main_size
 
     def set_property_version_gates(self, ue4: int, ue5: int) -> None:

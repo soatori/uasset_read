@@ -169,9 +169,19 @@ def read_ftext_with_history(
             _read_fstring(archive, tolerant=False)
     elif history_type == 1:
         format_text, _, _, _ = _read_ftext_value(archive, tolerant=tolerant, dev_notes=dev_notes, summary=summary)
+        arg_count_offset = archive.tell()
         arg_count = archive.read_i32()
         if arg_count < 0 or arg_count > MAX_SAFE_COUNT:
-            # Design decision: from raise ParseError to warning+skip,
+            archive._record_structured_diagnostic(
+                code="FTEXT_NAMED_FORMAT_COUNT_INVALID",
+                stage="serialize_ftext",
+                offset=arg_count_offset,
+                raw_value=arg_count,
+                fallback="skipped_format_arguments",
+                reason="recovered_corruption",
+                message=f"FText NamedFormat argument count {arg_count} exceeds limit {MAX_SAFE_COUNT}",
+            )
+            # Tolerant mode records the malformed count and skips arguments,
             # aligned with project tolerant mode, avoiding parse interruption from corrupt data
             logger.debug("FText NamedFormat arg_count=%d exceeds limit %d, skipping args", arg_count, MAX_SAFE_COUNT)
             arg_count = 0  # Skip subsequent argument reading

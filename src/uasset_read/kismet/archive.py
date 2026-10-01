@@ -1,7 +1,6 @@
 """FKismetArchive — Kismet bytecode reader, inherits FArchive for in-memory byte stream parsing."""
 
 import io
-import logging
 
 from uasset_read.archive import FArchive
 from uasset_read.constants import MAX_SAFE_COUNT
@@ -11,8 +10,6 @@ from uasset_read.kismet.expressions import EXPR_CLASS_MAP, KismetExpression, Opa
 from uasset_read.kismet.property_pointer import FFieldPath, FFieldPathSegment, FNameRef
 from uasset_read.serializers.package_summary import PackageFileSummary
 from uasset_read.serializers.object_resources import PackageIndex
-
-logger = logging.getLogger(__name__)
 
 MAX_EXPRESSION_RECURSION_DEPTH = 256
 

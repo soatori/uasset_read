@@ -421,7 +421,7 @@ def _read_single_field(
         # Unknown property class — no generic length; retain a ranged opaque
         # marker over the bytes already consumed for this field's known
         # prefix and emit unsupported_native_field. Never invent defaults.
-        logger.warning(
+        logger.debug(
             "Unsupported native field type: %s at offset %d",
             type_name,
             archive.tell(),

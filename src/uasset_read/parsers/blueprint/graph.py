@@ -429,7 +429,9 @@ class BlueprintGraphDecoder:
             archive.set_name_map(name_map)
             import_map = read_import_map(archive, summary, name_map)
             export_map = read_export_map(archive, summary, name_map)
-            graphs = read_blueprint_graphs(archive, summary, name_map, import_map, export_map)
+            graphs = read_blueprint_graphs(
+                archive, summary, name_map, import_map, export_map, document.diagnostics
+            )
         finally:
             archive.close()
         # Filter to graphs whose outer chain reaches this owner (best effort).

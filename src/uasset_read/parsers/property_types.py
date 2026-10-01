@@ -25,7 +25,7 @@ from uasset_read.models.properties import (
     SoftObjectPathValue,
 )
 from uasset_read.exceptions import BINARY_READ_ERRORS
-from uasset_read.exceptions import ParseError, StreamPoisonedError
+from uasset_read.exceptions import ExportBoundsExceeded, ParseError, StreamPoisonedError
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
     MAX_ARRAY_COUNT,
@@ -62,6 +62,15 @@ def read_validated_count_tolerant(
     # Check whether the value read by struct.unpack is within i32 range（Python automatically handles big integers,
     # but read_i32 uses signed format, so negative values are correctly represented)
     if count < 0:
+        archive._record_structured_diagnostic(
+            code="INVALID_COLLECTION_COUNT",
+            stage="parse_properties",
+            offset=offset,
+            raw_value=count,
+            fallback="used_empty_collection",
+            reason="recovered_corruption",
+            message=f"{label} count is negative; collection skipped",
+        )
         logger.debug(
             "%s: count is negative (%d)，skipping | pos=0x%X, limit=%d",
             label,
@@ -71,6 +80,15 @@ def read_validated_count_tolerant(
         )
         return 0
     if count > max_count:
+        archive._record_structured_diagnostic(
+            code="INVALID_COLLECTION_COUNT",
+            stage="parse_properties",
+            offset=offset,
+            raw_value=count,
+            fallback="used_empty_collection",
+            reason="recovered_corruption",
+            message=f"{label} count exceeds maximum {max_count}; collection skipped",
+        )
         logger.debug(
             "%s: count exceeds maximum (%d > %d)，skipping | pos=0x%X",
             label,
@@ -485,6 +503,32 @@ def parse_array_property(
             elements.append(archive.read_u8() != 0)
         return elements
 
+    if inner_type == "FloatProperty" and count:
+        byte_count = count * 4
+        if (
+            tag.size >= 4 + byte_count
+            and archive.validate_size(
+                byte_count,
+                context=f"{tag.name} float array",
+                tolerant=True,
+                property_type="FloatProperty",
+            )
+        ):
+            try:
+                archive._check_read_range(archive.tell(), byte_count)
+            except ExportBoundsExceeded:
+                pass
+            else:
+                payload_start = archive.tell()
+                try:
+                    raw = archive.read(byte_count)
+                except BINARY_READ_ERRORS + (ParseError,):
+                    archive.seek(payload_start)
+                else:
+                    if len(raw) == byte_count:
+                        return [value for (value,) in struct.iter_unpack("<f", raw)]
+                    archive.seek(payload_start)
+
     # For StructProperty array elements, UE uses complete PropertyTag serialization
     # For other types, serialized natively by type (each element size determined by type)
     inner_type_struct = getattr(tag, "inner_type_struct", None) if inner_type == "StructProperty" else None
@@ -659,12 +703,19 @@ def _try_fast_path_struct(
             # Unknown size: likely corrupted data, refuse to parse
             if not archive._tolerant:
                 raise ParseError(f"Transform: unexpected size {tag.size} (expected 40 or 80)")
-            logger.warning("Transform: unexpected size %d, skipping (likely corrupted)", tag.size)
+            archive._record_structured_diagnostic(
+                code="TRANSFORM_SIZE_INVALID",
+                stage="parse_properties",
+                offset=archive.tell(),
+                raw_value=tag.size,
+                size=max(tag.size, 0),
+                fallback="opaque_value",
+                reason="recovered_corruption",
+                message=f"Transform has unexpected size {tag.size}; value kept opaque",
+            )
             return StructValue(
                 struct_type="Transform",
-                fields={
-                    "_warning": f"unexpected size {tag.size}",
-                },
+                fields={"_warning": f"unexpected size {tag.size}"},
             )
         return StructValue(
             struct_type="Transform",
@@ -806,6 +857,17 @@ def parse_struct_property(
         if declared_struct_type in _TAGGED_FALLBACK_STRUCTS:
             struct_type = None  # Skip all fast-path branches
         else:
+            if declared_struct_type == "Transform" and tag.size not in (40, 80):
+                archive._record_structured_diagnostic(
+                    code="TRANSFORM_SIZE_INVALID",
+                    stage="parse_properties",
+                    offset=archive.tell(),
+                    raw_value=tag.size,
+                    size=max(tag.size, 0),
+                    fallback="opaque_value",
+                    reason="recovered_corruption",
+                    message=f"Transform has unexpected size {tag.size}; value kept opaque",
+                )
             # For LWC types, check whether tag.size matches the other precision
             lwc_entry = _LWC_TYPE_MAP.get(struct_type)
             if lwc_entry is not None:
@@ -830,15 +892,20 @@ def parse_struct_property(
 
     # Handle negative size values gracefully
     if tag.size is not None and tag.size < 0:
-        logger.warning(
-            "StructProperty '%s': negative size %d, treating as unsigned",
-            declared_struct_type,
-            tag.size,
-        )
-        unsigned_size = tag.size & 0xFFFFFFFF
         total = archive.total_size()
         remaining = max(0, total - archive.tell())
+        unsigned_size = tag.size & 0xFFFFFFFF
         skip_bytes = min(unsigned_size, remaining) if remaining > 0 else 0
+        archive._record_structured_diagnostic(
+            code="STRUCT_PROPERTY_NEGATIVE_SIZE",
+            stage="parse_properties",
+            offset=archive.tell(),
+            raw_value=tag.size,
+            size=skip_bytes,
+            fallback="skipped_as_opaque",
+            reason="recovered_corruption",
+            message=f"StructProperty {declared_struct_type!r} has negative size; bounded bytes skipped",
+        )
         if skip_bytes > 0:
             archive.seek(archive.tell() + skip_bytes)
         return StructValue(
@@ -931,7 +998,7 @@ def parse_struct_property(
     _MAX_TAGGED_FALLBACK_BYTES = 4096
     tagged_byte_limit = struct_start + _MAX_TAGGED_FALLBACK_BYTES if struct_end is None else None
 
-    diag_mark = len(archive.get_structured_diagnostics())
+    diag_mark = archive._diagnostic_mark()
     clean_none_stop = False
     # Hoisted out of the except body: `or` under an except_clause trips the
     # no-boolean-in-except rule (S5714 port); value semantics are identical.
@@ -989,7 +1056,7 @@ def parse_struct_property(
             parse_status="opaque",
         )
 
-    if validated_attempt and (not clean_none_stop or len(archive.get_structured_diagnostics()) > diag_mark):
+    if validated_attempt and (not clean_none_stop or archive._diagnostic_mark() > diag_mark):
         # Not a clean None-terminated tagged stream (or the attempt recorded
         # recoveries): rewind exactly to the entry start — cursor and
         # diagnostics — and report opaque, byte-identical to pre-fallback.

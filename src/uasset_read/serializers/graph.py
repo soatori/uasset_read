@@ -130,6 +130,16 @@ def read_ue_graph(
                     subgraph.graph_name = f"{node.node_comment or node.class_name}.{ref_key}"
                     subgraphs.append(subgraph)
             except (struct.error, OSError, ValueError, KeyError) as e:
+                archive._record_structured_diagnostic(
+                    code="BLUEPRINT_SUBGRAPH_PARSE_FAILED",
+                    stage="semantic.blueprint",
+                    offset=archive.tell(),
+                    fallback="omitted_subgraph",
+                    reason="recovered_corruption",
+                    message=(
+                        f"Subgraph {ref_info.get('object_name', '')!r} failed: {type(e).__name__}: {e}"
+                    ),
+                )
                 logger.debug("Failed to parse subgraph %s: %s", ref_info.get("object_name", ""), e)
 
     return UEdGraph(

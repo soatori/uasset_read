@@ -729,6 +729,396 @@ def test_v2_path_emits_no_handler_warnings(capfd, caplog, tmp_path):
     assert set(tmp_path.iterdir()) == files_before
 
 
+def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
+    import logging
+    import struct
+    from types import SimpleNamespace
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.models.fallback import FallbackReason, PropertyFallback
+    from uasset_read.models.properties import PropertyTag
+    from uasset_read.package import _parse_cached, parse_package_document
+    from uasset_read.parsers.property_parser import parse_property_value
+    from uasset_read.parsers.property_types import parse_struct_property, read_validated_count_tolerant
+    from uasset_read.serializers.blueprint_graph import _validate_graph_export_offset
+    from uasset_read.serializers.package_summary import _read_payload_toc_offset
+    import uasset_read.parsers.properties.tagged as tagged
+
+    archive = ByteArchive(struct.pack("<i", -1), tolerant=True)
+    assert read_validated_count_tolerant(archive, 8, "Array") == 0
+    diagnostic, = archive.get_structured_diagnostics()
+    assert diagnostic.code == "INVALID_COLLECTION_COUNT"
+    assert diagnostic.offset == 0 and "raw_value=-1" in diagnostic.message
+    archive = ByteArchive(struct.pack("<i", 9), tolerant=True)
+    assert read_validated_count_tolerant(archive, 8, "Array") == 0
+    diagnostic, = archive.get_structured_diagnostics()
+    assert diagnostic.code == "INVALID_COLLECTION_COUNT" and "raw_value=9" in diagnostic.message
+
+    archive = ByteArchive(b"\0" * 4, tolerant=True)
+    value = parse_struct_property(
+        PropertyTag(name="Transform", type="StructProperty", size=4, struct_type="Transform"),
+        archive,
+        [],
+        [],
+    )
+    diagnostic, = archive.get_structured_diagnostics()
+    assert diagnostic.code == "TRANSFORM_SIZE_INVALID"
+    assert value.struct_type == "Transform"
+
+    archive = ByteArchive(b"data", tolerant=True)
+    value = parse_struct_property(
+        PropertyTag(name="Struct", type="StructProperty", size=-1, struct_type="Unknown"),
+        archive,
+        [],
+        [],
+    )
+    diagnostic, = archive.get_structured_diagnostics()
+    assert diagnostic.code == "STRUCT_PROPERTY_NEGATIVE_SIZE"
+    assert value.parse_status == "opaque" and archive.tell() == 4
+
+    archive = ByteArchive(struct.pack("<q", -1), tolerant=True)
+    assert _read_payload_toc_offset(archive) == 0
+    diagnostic, = archive.get_structured_diagnostics()
+    assert diagnostic.code == "PAYLOAD_TOC_OFFSET_INVALID" and "raw_value=-1" in diagnostic.message
+
+    archive = ByteArchive(b"data", tolerant=True)
+    tag = PropertyTag(name="Native", type="UnknownNative", size=4, serialize_type="BinaryOrNative")
+    value = parse_property_value(tag, archive, [], [], tolerant=True)
+    diagnostic, = archive.get_structured_diagnostics()
+    assert diagnostic.code == "BINARY_OR_NATIVE_PROPERTY_OPAQUE"
+    assert value["raw_data"] == b"data"
+
+    with caplog.at_level(logging.WARNING):
+        assert not _validate_graph_export_offset(
+            SimpleNamespace(object_name="Graph", serial_offset=-1, serial_size=8), 32
+        )
+    assert not [record for record in caplog.records if record.levelno >= logging.WARNING]
+
+    monkeypatch.setattr(
+        tagged,
+        "parse_property_value",
+        lambda tag, *args, **kwargs: PropertyFallback.from_tag(tag, FallbackReason.PARSE_ERROR),
+    )
+    _parse_cached.cache_clear()
+    try:
+        document = parse_package_document(
+            SAMPLES / "FirstPerson_DT_WeaponList.uasset", depth="object", object_ids=["export:1"]
+        )
+    finally:
+        _parse_cached.cache_clear()
+    obj = next(obj for obj in document.objects if obj.id == "export:1")
+    fallback_diags = [
+        d for d in document.diagnostics if d.code == "PROPERTY_VALUE_READ_FAILED" and d.object_id == obj.id
+    ]
+    assert fallback_diags and obj.status.parse == "partial"
+    assert any(
+        entry.tag_region is not None and entry.tag_region.start == diagnostic.offset
+        for entry in obj.properties.entries
+        for diagnostic in fallback_diags
+    )
+
+
+def _check_file_source_and_composite_source_reuse_cached_sizes(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    import pytest
+
+    from uasset_read.exceptions import ParseError
+    from uasset_read.sources import CompositeSource, FileSource
+
+    path = tmp_path / "main.uasset"
+    path.write_bytes(b"abcd")
+    source = FileSource(path)
+    original_stat = Path.stat
+
+    def reject_restat(self, *args, **kwargs):
+        if self == path:
+            raise AssertionError("FileSource queried the file size again")
+        return original_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", reject_restat)
+    assert source.size() == 4
+    assert source.read_at(0, 2) == b"ab"
+    assert source.map_range(1, 2) == [(path.name, 1, 2)]
+
+    class CountingSource:
+        calls = 0
+
+        def size(self):
+            self.calls += 1
+            return 4
+
+    counted = CountingSource()
+    composite = CompositeSource([("counted", counted)])
+    assert counted.calls == 1
+    assert composite.segments() == (("counted", 0, 4),)
+    assert counted.calls == 1
+
+    path.write_bytes(b"ab")
+    with pytest.raises(ParseError, match="short read"):
+        source.read_at(0, 4)
+
+
+def _check_farchive_uses_one_mib_mmap_threshold_and_keeps_buffered_fallback(tmp_path, monkeypatch):
+    import pytest
+
+    import uasset_read.archive as archive_module
+    from uasset_read.archive import FArchive
+    from uasset_read.constants import MMAP_THRESHOLD
+    from uasset_read.exceptions import ParseError
+
+    assert MMAP_THRESHOLD == 1024 * 1024
+    path = tmp_path / "small.uasset"
+    path.write_bytes(b"data")
+    monkeypatch.setattr(archive_module, "MMAP_THRESHOLD", 1)
+    def fail_mmap(*args, **kwargs):
+        raise OSError("mmap unavailable")
+
+    monkeypatch.setattr(archive_module.mmap, "mmap", fail_mmap)
+    with FArchive(str(path)) as archive:
+        assert not archive._use_mmap
+        assert archive.read(4) == b"data"
+        with pytest.raises(ParseError):
+            archive.read(1)
+
+
+def _check_archive_internal_diagnostic_marks_scan_only_new_entries(monkeypatch):
+    import pytest
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.parsers.property_parser import _stream_is_poisoned
+
+    archive = ByteArchive(b"")
+    archive._record_structured_diagnostic(code="old", stage="test", offset=0)
+    mark = archive._diagnostic_mark()
+    archive._record_structured_diagnostic(
+        code="fstring_out_of_range", stage="test", offset=0
+    )
+    assert [item.code for item in archive._diagnostics_since(mark)] == ["fstring_out_of_range"]
+    history = archive.get_structured_diagnostics()
+    returned = archive.get_structured_diagnostics()
+    returned.clear()
+    assert archive._diagnostic_mark() == 2
+
+    class IndexedSuffix:
+        def __len__(self):
+            return len(history)
+
+        def __iter__(self):
+            raise AssertionError("diagnostic scan traversed the historical prefix")
+
+        def __getitem__(self, index):
+            if not isinstance(index, int) or index < mark:
+                raise AssertionError(f"diagnostic scan reached historical index {index}")
+            return history[index]
+
+    archive._structured_diagnostics = IndexedSuffix()
+
+    def reject_snapshot():
+        pytest.fail("hot-path check copied the complete diagnostics list")
+
+    monkeypatch.setattr(archive, "get_structured_diagnostics", reject_snapshot)
+    assert _stream_is_poisoned(archive, mark)
+
+
+def _check_package_archive_reuses_known_segment_positions(tmp_path, monkeypatch):
+    import pytest
+
+    from uasset_read.archive import FArchive
+    from uasset_read.exceptions import ExportBoundsExceeded, ParseError
+    from uasset_read.package import PackageArchive
+
+    main_path = tmp_path / "pkg.uasset"
+    uexp_path = tmp_path / "pkg.uexp"
+    main_path.write_bytes(b"abcd")
+    uexp_path.write_bytes(b"EFGH")
+    archive = PackageArchive(FArchive(str(main_path)), FArchive(str(uexp_path)))
+    main_seeks = []
+    uexp_seeks = []
+    main_seek = archive._main_archive.seek
+    uexp_seek = archive._uexp_archive.seek
+
+    def counted_main_seek(position):
+        main_seeks.append(position)
+        return main_seek(position)
+
+    def counted_uexp_seek(position):
+        uexp_seeks.append(position)
+        return uexp_seek(position)
+
+    monkeypatch.setattr(archive._main_archive, "seek", counted_main_seek)
+    monkeypatch.setattr(archive._uexp_archive, "seek", counted_uexp_seek)
+    try:
+        assert archive.read(2) == b"ab"
+        assert archive.read(2) == b"cd"
+        assert archive.read(4) == b"EFGH"
+        assert main_seeks == [] and uexp_seeks == []
+
+        archive.seek(1)
+        assert archive.read(1) == b"b"
+        assert main_seeks == [1]
+
+        archive.seek(2)
+        original_read = archive._main_archive.read
+
+        def consume_then_fail(size):
+            original_read(1)
+            raise ParseError("injected segment read failure")
+
+        monkeypatch.setattr(archive._main_archive, "read", consume_then_fail)
+        with pytest.raises(ParseError, match="injected segment read failure"):
+            archive.read(1)
+        monkeypatch.setattr(archive._main_archive, "read", original_read)
+        assert archive.read(1) == b"c"
+        assert main_seeks == [1, 2]
+
+        archive.seek(3)
+        assert archive.read(3) == b"dEF"
+        assert uexp_seeks == [0]
+        archive.set_read_range((0, archive.total_size()))
+        archive.seek(7)
+        with pytest.raises(ExportBoundsExceeded):
+            archive.read(2)
+        assert main_seeks == [1, 2]
+    finally:
+        archive.close()
+
+
+def _check_float_array_bulk_decode_matches_scalar_bits_with_one_payload_read():
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.models.properties import PropertyTag
+    from uasset_read.parsers.property_types import parse_array_property, parse_float_property
+
+    class CountingArchive(ByteArchive):
+        def __init__(self, data):
+            super().__init__(data)
+            self.read_sizes = []
+
+        def read(self, size):
+            self.read_sizes.append(size)
+            return super().read(size)
+
+    values = (1.25, -0.0, float("nan"), -17.5)
+    payload = b"".join(struct.pack("<f", value) for value in values)
+    raw = struct.pack("<i", len(values)) + payload
+    tag = PropertyTag(name="Samples", type="ArrayProperty", size=len(raw))
+    tag.inner_type = "FloatProperty"
+    archive = CountingArchive(raw)
+    actual = parse_array_property(tag, archive, [], [])
+
+    scalar_archive = ByteArchive(payload)
+    scalar_tag = PropertyTag(name="Sample", type="FloatProperty", size=4)
+    expected = [parse_float_property(scalar_tag, scalar_archive) for _ in values]
+    assert [struct.pack("<f", value) for value in actual] == [struct.pack("<f", value) for value in expected]
+    assert archive.read_sizes == [4, len(payload)]
+    assert archive.tell() == len(raw)
+
+
+def _check_float_array_bulk_decode_falls_back_at_export_boundary():
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.models.fallback import PropertyFallback
+    from uasset_read.models.properties import PropertyTag
+    from uasset_read.parsers.property_types import parse_array_property
+
+    class CountingArchive(ByteArchive):
+        def __init__(self, data):
+            super().__init__(data)
+            self.read_sizes = []
+
+        def read(self, size):
+            self.read_sizes.append(size)
+            return super().read(size)
+
+    raw = struct.pack("<i3f", 3, 1.0, 2.0, 3.0)
+    tag = PropertyTag(name="Samples", type="ArrayProperty", size=len(raw))
+    tag.inner_type = "FloatProperty"
+    archive = CountingArchive(raw)
+    archive.set_read_range((0, len(raw) - 1))
+    values = parse_array_property(tag, archive, [], [])
+    assert values[:2] == [1.0, 2.0]
+    assert isinstance(values[2], PropertyFallback)
+    assert archive.tell() == len(raw) - 4
+    assert archive.read_sizes == [4, 4, 4, 4]
+
+
+def _check_float_array_bulk_decode_recovers_after_physical_short_read():
+    import io
+    import struct
+
+    from uasset_read.archive import ByteArchive, FArchive
+    from uasset_read.models.fallback import PropertyFallback
+    from uasset_read.models.properties import PropertyTag
+    from uasset_read.package import PackageArchive
+    from uasset_read.parsers.property_types import parse_array_property
+
+    raw = struct.pack("<i2f", 3, 1.0, 2.0)
+    reported_size = 16
+
+    def tag():
+        result = PropertyTag(name="Samples", type="ArrayProperty", size=reported_size)
+        result.inner_type = "FloatProperty"
+        return result
+
+    def assert_recovered(archive, expected_position):
+        values = parse_array_property(tag(), archive, [], [])
+        assert values[:2] == [1.0, 2.0]
+        assert len(values) == 3 and isinstance(values[2], PropertyFallback)
+        assert archive.tell() == expected_position
+
+    class ShortByteArchive(ByteArchive):
+        def __init__(self):
+            super().__init__(raw)
+            self._file_size = reported_size
+            self.read_sizes = []
+
+        def read(self, size):
+            self.read_sizes.append(size)
+            return super().read(size)
+
+    byte_archive = ShortByteArchive()
+    assert_recovered(byte_archive, reported_size)
+    assert byte_archive.read_sizes == [4, 12, 4, 4, 4]
+
+    file_archive = FArchive.__new__(FArchive)
+    file_archive._init_archive_attrs("<short-read>")
+    file_archive._file = io.BytesIO(raw)
+    file_archive._file_size = reported_size
+    file_sizes = []
+    original_file_read = file_archive.read
+
+    def counted_file_read(size):
+        file_sizes.append(size)
+        return original_file_read(size)
+
+    file_archive.read = counted_file_read
+    assert_recovered(file_archive, len(raw))
+    assert file_sizes == [4, 12, 4, 4, 4]
+    file_archive.close()
+
+    main_archive = FArchive.__new__(FArchive)
+    main_archive._init_archive_attrs("<short-package>")
+    main_archive._file = io.BytesIO(raw)
+    main_archive._file_size = reported_size
+    package = PackageArchive(main_archive)
+    package_sizes = []
+    original_package_read = package.read
+
+    def counted_package_read(size):
+        package_sizes.append(size)
+        return original_package_read(size)
+
+    package.read = counted_package_read
+    try:
+        assert_recovered(package, len(raw))
+        assert package_sizes == [4, 12, 4, 4, 4]
+    finally:
+        package.close()
+
+
 def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     """Real samples exercise both v4 modes and every public producer route."""
     import sys
@@ -991,8 +1381,9 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
         assert output == projected[sample.name][mode]
 
 
-def test_critical_boundary_guards(monkeypatch):
+def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     """Keep the mandatory trust-boundary checks in one bounded aggregate item."""
+    import logging
     import struct
 
     from uasset_read.archive import ByteArchive
@@ -1140,11 +1531,14 @@ def test_critical_boundary_guards(monkeypatch):
     _parse_cached.cache_clear()
     try:
         monkeypatch.setattr(object_resources, "ObjectExport", fail_second_export)
-        document = parse_package_document(str(SAMPLES / "FirstPerson_DT_WeaponList.uasset"), depth="package")
+        caplog.clear()
+        with caplog.at_level(logging.WARNING):
+            document = parse_package_document(str(SAMPLES / "FirstPerson_DT_WeaponList.uasset"), depth="package")
     finally:
         _parse_cached.cache_clear()
     assert document.objects[0].id == "export:0"
     assert any(d.code == "EXPORT_TABLE_TRUNCATED" for d in document.diagnostics)
+    assert not [record for record in caplog.records if record.levelno >= logging.WARNING]
 
     import uasset_read.mappings as mappings
 
@@ -1176,6 +1570,18 @@ def test_critical_boundary_guards(monkeypatch):
     assert kept[0]["ref_range"] == (4, 8) and kept[1]["ref_range"] == (8, 32)
     skipped = read_pin_array(ByteArchive(payload), [], [])
     assert len(skipped) == 1 and "null" not in skipped[0]
+
+    with pytest.MonkeyPatch.context() as mp:
+        _check_file_source_and_composite_source_reuse_cached_sizes(tmp_path, mp)
+    with pytest.MonkeyPatch.context() as mp:
+        _check_farchive_uses_one_mib_mmap_threshold_and_keeps_buffered_fallback(tmp_path, mp)
+    _check_float_array_bulk_decode_recovers_after_physical_short_read()
+    with pytest.MonkeyPatch.context() as mp:
+        _check_archive_internal_diagnostic_marks_scan_only_new_entries(mp)
+    with pytest.MonkeyPatch.context() as mp:
+        _check_package_archive_reuses_known_segment_positions(tmp_path, mp)
+    _check_float_array_bulk_decode_matches_scalar_bits_with_one_payload_read()
+    _check_float_array_bulk_decode_falls_back_at_export_boundary()
 
 
 def test_object_depth_parses_only_requested_export():

@@ -46,7 +46,7 @@ MAX_CUSTOM_VERSIONS = 10_000  # Maximum custom version entries
 MAX_GENERATIONS = 10_000  # Maximum Generations table entries
 MAX_COMPRESSED_CHUNKS = 100_000  # Maximum CompressedChunks entries
 MAX_SOFT_PACKAGE_REFS = 1_000_000  # Maximum SoftPackageReferences entries
-MMAP_THRESHOLD = 10 * 1024 * 1024  # 10MB - switch to mmap above this (lower threshold to reduce memory peak)
+MMAP_THRESHOLD = 1 * 1024 * 1024  # 1 MiB - switch to mmap above this
 MAX_PROPERTY_COUNT = 10_000  # Property loop limit
 MIN_UASSET_SIZE = 64  # Minimum legal .uasset file size (bytes)
 # Contains minimum of Tag(4) + version fields(16~20) + LicenseeVer(4) + Hash(20) + HeaderSize(4)

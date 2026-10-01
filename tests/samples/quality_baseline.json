@@ -26,6 +26,11 @@
           "editor_only": {
             "max": 1
           }
+        },
+        "PAYLOAD_TOC_OFFSET_INVALID": {
+          "recovered_corruption": {
+            "max": 1
+          }
         }
       }
     },
@@ -70,6 +75,11 @@
       ],
       "forbid_unlisted": true,
       "max_by_code_reason": {
+        "BINARY_OR_NATIVE_PROPERTY_OPAQUE": {
+          "known_unimplemented": {
+            "max": 2
+          }
+        },
         "EXPORT_TRAILING_BYTES_UNCONSUMED": {
           "editor_only": {
             "max": 324
@@ -100,6 +110,11 @@
       ],
       "forbid_unlisted": true,
       "max_by_code_reason": {
+        "BINARY_OR_NATIVE_PROPERTY_OPAQUE": {
+          "known_unimplemented": {
+            "max": 1
+          }
+        },
         "EXPORT_TRAILING_BYTES_UNCONSUMED": {
           "editor_only": {
             "max": 14
@@ -114,7 +129,13 @@
         "HANDLER_FAILURE"
       ],
       "forbid_unlisted": true,
-      "max_by_code_reason": {}
+      "max_by_code_reason": {
+        "BINARY_OR_NATIVE_PROPERTY_OPAQUE": {
+          "known_unimplemented": {
+            "max": 1
+          }
+        }
+      }
     },
     "BP_UnversionedTest.uasset": {
       "depth": "asset",
@@ -123,7 +144,18 @@
         "HANDLER_FAILURE"
       ],
       "forbid_unlisted": true,
-      "max_by_code_reason": {}
+      "max_by_code_reason": {
+        "PAYLOAD_TOC_OFFSET_INVALID": {
+          "recovered_corruption": {
+            "max": 1
+          }
+        },
+        "PROPERTY_VALUE_READ_FAILED": {
+          "schema_required": {
+            "max": 5
+          }
+        }
+      }
     },
     "DA_UnversionedTest.uasset": {
       "depth": "asset",
@@ -132,7 +164,18 @@
         "HANDLER_FAILURE"
       ],
       "forbid_unlisted": true,
-      "max_by_code_reason": {}
+      "max_by_code_reason": {
+        "PAYLOAD_TOC_OFFSET_INVALID": {
+          "recovered_corruption": {
+            "max": 1
+          }
+        },
+        "PROPERTY_VALUE_READ_FAILED": {
+          "schema_required": {
+            "max": 1
+          }
+        }
+      }
     },
     "ALS_AnimBP.uasset": {
       "depth": "asset",
@@ -142,6 +185,11 @@
       ],
       "forbid_unlisted": true,
       "max_by_code_reason": {
+        "BINARY_OR_NATIVE_PROPERTY_OPAQUE": {
+          "known_unimplemented": {
+            "max": 1
+          }
+        },
         "EXPORT_TRAILING_BYTES_UNCONSUMED": {
           "editor_only": {
             "max": 577

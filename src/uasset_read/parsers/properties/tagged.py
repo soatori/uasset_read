@@ -368,6 +368,8 @@ def _handle_property_parse_error(
         type="Warning",
         value=fb,
         array_index=fb.array_index,
+        tag_start_offset=getattr(tag, "tag_start_offset", None),
+        value_start_offset=start_pos,
     )
 
 
@@ -398,7 +400,7 @@ def _read_property_loop(
 
         tag = None
         start_pos = None
-        diag_mark = len(archive.get_structured_diagnostics())
+        diag_mark = archive._diagnostic_mark()
 
         try:
             # Boundary check: current position should not exceed property data range
@@ -430,6 +432,7 @@ def _read_property_loop(
                 remaining = property_end - archive.tell()
                 if remaining < 32:
                     archive._tag_stream_stop = "tag_failed"
+                    archive._tag_stream_stop_offset = current_pos
                     break
                 if not tolerant:
                     raise
@@ -457,6 +460,7 @@ def _read_property_loop(
                                 size=0,
                                 reason=FallbackReason.PARSE_ERROR,
                             ),
+                            tag_start_offset=current_pos,
                         )
                     )
                     if _stream_is_poisoned(archive, diag_mark):
@@ -465,6 +469,7 @@ def _read_property_loop(
                     continue
                 # Recovery failed — break to avoid infinite loop
                 archive._tag_stream_stop = "tag_failed"
+                archive._tag_stream_stop_offset = current_pos
                 break
 
             # Record current position after tag read (for size_exceeded recovery and boundary verification)
@@ -507,6 +512,7 @@ def _read_property_loop(
                                     size=tag.size,
                                     reason=FallbackReason.SIZE_EXCEEDED,
                                 ),
+                                tag_start_offset=tag.tag_start_offset,
                             )
                         )
                         if _stream_is_poisoned(archive, diag_mark):
@@ -523,6 +529,7 @@ def _read_property_loop(
                             FallbackReason.SIZE_EXCEEDED,
                         ),
                         array_index=tag.array_index,
+                        tag_start_offset=tag.tag_start_offset,
                     )
                 )
                 archive._tag_stream_stop = "size_exceeded"
@@ -746,6 +753,14 @@ def parse_properties_from_export(
         try:
             skip_export_payload(archive, export, summary)
         except BINARY_READ_ERRORS as e:
+            archive._record_structured_diagnostic(
+                code="TOLERANT_EXPORT_SKIP_FAILED",
+                stage="parse_properties",
+                offset=archive.tell(),
+                fallback="stopped_export_parse",
+                reason="unexpected",
+                message=f"Failed to skip class-specific export {export.object_name!r}: {e}",
+            )
             logger.debug("Failed to skip export '%s' payload: %s", export.object_name, e)
         return [TOLERANT_SKIP]
 
@@ -863,42 +878,11 @@ def _property_values_to_bag(
     return bag, regions
 
 
-def _loop_recovery_diagnostics(
-    properties: list[PropertyValue],
-    window: ByteArchive,
-    input: PropertyInput,
-    diag_mark: int,
+def _property_fallback_diagnostics(
+    properties: list[PropertyValue], *, object_id: str, default_offset: int, offset_base: int = 0
 ) -> list[Diagnostic]:
-    """Derive PropertyReadResult diagnostics from unified-loop recovery signals.
-
-    Two sources, matching what the pre-unification ``read()`` reported:
-
-    * Structured diagnostics the loop (and the value parsers it drives) recorded
-      on the bounded window after ``diag_mark`` — fstring/name recoveries etc.
-    * ``PropertyFallback`` values the loop appended instead of raising, mapped
-      back to the PROPERTY_TAG_READ_FAILED / PROPERTY_VALUE_READ_FAILED codes.
-    """
+    """Convert property fallback values into caller-facing diagnostics."""
     diagnostics: list[Diagnostic] = []
-
-    for sd in window.get_structured_diagnostics()[diag_mark:]:
-        offset = input.start + sd.offset if sd.offset is not None else None
-        recovered = sd.fallback != "stop_table"
-        diagnostics.append(
-            Diagnostic(
-                severity=sd.severity,
-                code=sd.code,
-                message=sd.message,
-                stage=sd.stage or "properties.tagged",
-                object_id=input.object_id,
-                offset=offset,
-                size=sd.size,
-                effect="recovery" if recovered else "data_loss",
-                recoverable=recovered,
-                fallback=sd.fallback,
-                reason=sd.reason,
-            )
-        )
-
     for pv in properties:
         fallback = None
         if isinstance(pv, PropertyFallback):
@@ -920,14 +904,14 @@ def _loop_recovery_diagnostics(
         else:
             diag_reason = "recovered_corruption"
         tag_start = getattr(pv, "tag_start_offset", None)
-        offset = input.start + tag_start if tag_start is not None else input.start
+        offset = offset_base + tag_start if tag_start is not None else default_offset
         diagnostics.append(
             Diagnostic(
                 severity="warning",
                 code=code,
                 message=(f"Property {pv.name!r} ({pv.type}) recovered via fallback: {reason_value}"),
                 stage="properties.tagged",
-                object_id=input.object_id,
+                object_id=object_id,
                 offset=offset,
                 size=fallback.size if fallback.size > 0 else None,
                 effect="semantic_loss",
@@ -935,6 +919,43 @@ def _loop_recovery_diagnostics(
             )
         )
 
+    return diagnostics
+
+
+def _loop_recovery_diagnostics(
+    properties: list[PropertyValue],
+    window: ByteArchive,
+    input: PropertyInput,
+    diag_mark: int,
+) -> list[Diagnostic]:
+    """Derive bounded-reader diagnostics from loop recoveries and fallbacks."""
+    diagnostics: list[Diagnostic] = []
+    for sd in window._diagnostics_since(diag_mark):
+        offset = input.start + sd.offset if sd.offset is not None else None
+        recovered = sd.fallback != "stop_table"
+        diagnostics.append(
+            Diagnostic(
+                severity=sd.severity,
+                code=sd.code,
+                message=sd.message,
+                stage=sd.stage or "properties.tagged",
+                object_id=input.object_id,
+                offset=offset,
+                size=sd.size,
+                effect="recovery" if recovered else "data_loss",
+                recoverable=recovered,
+                fallback=sd.fallback,
+                reason=sd.reason,
+            )
+        )
+    diagnostics.extend(
+        _property_fallback_diagnostics(
+            properties,
+            object_id=input.object_id,
+            default_offset=input.start,
+            offset_base=input.start,
+        )
+    )
     return diagnostics
 
 
@@ -953,6 +974,9 @@ class TaggedPropertyReader:
         mappings: Any | None = None,
         game: str | None = None,
         tolerant: bool = True,
+        diagnostics: list[Diagnostic] | None = None,
+        object_id: str = "",
+        diagnostic_offset: int = 0,
     ) -> list[Any]:
         """Production export-level tagged/unversioned stream.
 
@@ -961,7 +985,7 @@ class TaggedPropertyReader:
         ``[TOLERANT_SKIP]`` instead of properties when the export payload was
         seeked without decoding.
         """
-        return parse_properties_from_export(
+        properties = parse_properties_from_export(
             export=export,
             archive=archive,
             summary=summary,
@@ -972,6 +996,31 @@ class TaggedPropertyReader:
             game=game,
             tolerant=tolerant,
         )
+        if diagnostics is not None:
+            diagnostic_mark = len(diagnostics)
+            diagnostics.extend(
+                _property_fallback_diagnostics(
+                    properties, object_id=object_id, default_offset=diagnostic_offset
+                )
+            )
+            if getattr(archive, "_tag_stream_stop", "running") == "tag_failed" and not any(
+                item.code in ("PROPERTY_TAG_READ_FAILED", "PROPERTY_VALUE_READ_FAILED")
+                and item.object_id == object_id
+                for item in diagnostics[diagnostic_mark:]
+            ):
+                diagnostics.append(
+                    Diagnostic(
+                        severity="warning",
+                        code="PROPERTY_TAG_READ_FAILED",
+                        message="PropertyTag read failed and recovery scan did not find a next tag",
+                        stage="properties.tagged",
+                        object_id=object_id,
+                        offset=getattr(archive, "_tag_stream_stop_offset", archive.tell()),
+                        effect="semantic_loss",
+                        reason="recovered_corruption",
+                    )
+                )
+        return properties
 
     def read(self, input: PropertyInput) -> PropertyReadResult:
         if input.size <= 0:
@@ -1045,7 +1094,7 @@ class TaggedPropertyReader:
             serial_offset=input.start,
             serial_size=input.size,
         )
-        diag_mark = len(window.get_structured_diagnostics())
+        diag_mark = window._diagnostic_mark()
         try:
             properties = _read_property_loop(
                 export=synthetic_export,
@@ -1108,7 +1157,7 @@ class TaggedPropertyReader:
                     message="PropertyTag read failed and recovery scan did not find a next tag",
                     stage="properties.tagged",
                     object_id=input.object_id,
-                    offset=input.start + consumed,
+                    offset=input.start + getattr(window, "_tag_stream_stop_offset", consumed),
                     size=input.size - consumed if input.size > consumed else None,
                     effect="semantic_loss",
                     reason="recovered_corruption",

@@ -101,12 +101,22 @@ def handle_custom_property(
     game_key = game.lower() if game else None
     handler = CUSTOM_PROPERTY_HANDLERS.get((game_key, type_id)) or CUSTOM_PROPERTY_HANDLERS.get((game_key, tag.type))
     if handler is None:
+        payload_offset = archive.tell()
         logger.debug(
             "CustomProperty 0x%02X: no handler registered, skipping %d bytes",
             type_id,
             tag.size,
         )
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
+        archive._record_structured_diagnostic(
+            code="CUSTOM_PROPERTY_UNHANDLED",
+            stage="parse_properties",
+            offset=payload_offset,
+            size=len(raw_data),
+            fallback="retained_as_raw_bytes",
+            reason="known_unimplemented",
+            message=f"Custom property 0x{type_id:02X} ({tag.type}) has no registered handler",
+        )
         return {
             "kind": "custom_property_unhandled",
             "type_id": type_id,
@@ -119,8 +129,7 @@ def handle_custom_property(
 
 def _stream_is_poisoned(archive: "FArchive", diag_mark: int) -> bool:
     """True if a poison diagnostic was recorded since diag_mark."""
-    new_diags = archive.get_structured_diagnostics()[diag_mark:]
-    return any(d.code in _PROPERTY_STREAM_POISON_CODES for d in new_diags)
+    return any(d.code in _PROPERTY_STREAM_POISON_CODES for d in archive._diagnostics_since(diag_mark))
 
 
 # Shared control-flow exception (also re-raised by parse_struct_property).
@@ -310,6 +319,7 @@ def parse_property_value(
     if getattr(tag, "serialize_type", "Property") == "BinaryOrNative":
         from uasset_read.parsers.binary_or_native_handlers import BINARY_OR_NATIVE_HANDLERS
 
+        payload_offset = archive.tell()
         def _native_handler(key: str):
             """struct_type handler with the F-prefix fallback, looked up once per key."""
             handler = BINARY_OR_NATIVE_HANDLERS.get(key)
@@ -353,6 +363,15 @@ def parse_property_value(
                     logger.debug("BinaryOrNative struct_type handler failed for %s: %s", struct_type, e)
 
         raw_data = archive.read(tag.size) if tag.size > 0 else b""
+        archive._record_structured_diagnostic(
+            code="BINARY_OR_NATIVE_PROPERTY_OPAQUE",
+            stage="parse_properties",
+            offset=payload_offset,
+            size=len(raw_data),
+            fallback="retained_as_raw_bytes",
+            reason="known_unimplemented",
+            message=f"BinaryOrNative property {tag.name!r} ({tag.type}) could not be decoded",
+        )
         return {
             "kind": "binary_or_native_property",
             "type": tag.type,
@@ -391,7 +410,7 @@ def parse_property_value(
         # Dispatch based on handler signature
         # Special case: ByteProperty with enum backing needs name_map (reads FName);
         # bypasses the arg table below.
-        diag_mark = len(archive.get_structured_diagnostics())
+        diag_mark = archive._diagnostic_mark()
         if tag.type == "ByteProperty" and tag.enum_type is not None:
             result = handler(tag, archive, name_map)
         else:
@@ -688,7 +707,7 @@ def _parse_unversioned_properties_from_mapping(
             out.append(PropertyValue(info.name, tag.type, _unversioned_zero_value(info.mapping_type)))
             continue
         start = archive.tell()
-        diag_mark = len(archive.get_structured_diagnostics())
+        diag_mark = archive._diagnostic_mark()
         try:
             value = parse_property_value(tag, archive, name_map, export_map, summary, tolerant=tolerant)
         except ParseError:
@@ -707,7 +726,7 @@ def _parse_unversioned_properties_from_mapping(
             out.append(PropertyValue(info.name, "Warning", fb))
             continue
         # Name-index diagnostics mean the stream is misaligned; stop and opaque.
-        new_diags = archive.get_structured_diagnostics()[diag_mark:]
+        new_diags = archive._diagnostics_since(diag_mark)
         if any(d.code == "name_index_out_of_range" for d in new_diags):
             archive.seek(start)
             tail_start = archive.tell()

@@ -17,7 +17,7 @@ EXIT_PARSE_ERROR = 1
 EXIT_FILE_NOT_FOUND = 2
 EXIT_ARGUMENT_ERROR = 3
 
-_logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def _sanitize_error_message(message: object) -> str:
@@ -25,7 +25,7 @@ def _sanitize_error_message(message: object) -> str:
 
     Only tokens with a file extension are reduced — avoids mangling type or
     attribute paths such as ``/defs/PayloadDescriptor``. Full messages stay
-    available at DEBUG.
+    available with ``--verbose``.
     """
     return re.sub(
         r"(?:(?:[A-Za-z]:)?(?:[/\\][^\s:;\"']+)+|(?:[^\s:;\"'\\/]+[/\\])+[^\s:;\"'\\/]+)\.[A-Za-z0-9_]{1,16}\b",
@@ -58,6 +58,7 @@ def create_parser():
         action="store_true",
         help="Emit the debug evidence block (default: normal)",
     )
+    parser.add_argument("--verbose", action="store_true", help="Show detailed parser logs on stderr")
     parser.add_argument(
         "-o",
         "--output",
@@ -108,6 +109,9 @@ def main():
             sys.exit(EXIT_SUCCESS)
         sys.exit(EXIT_ARGUMENT_ERROR)
 
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")
+
     # Validate positional arg
     if args.file is None:
         print("Error: file argument is required", file=sys.stderr)
@@ -134,7 +138,7 @@ def main():
             projected = project_document(doc, mode=mode)
             _write_stdout(json.dumps(projected, ensure_ascii=False, indent=2))
     except Exception as e:
-        _logger.debug("Parse/project error (full): %s", e, exc_info=True)
+        logger.debug("Parse/project error (full): %s", e, exc_info=True)
         print(f"Error: {_sanitize_error_message(e)}", file=sys.stderr)
         sys.exit(EXIT_ARGUMENT_ERROR if isinstance(e, ValueError) else EXIT_PARSE_ERROR)
     sys.exit(EXIT_SUCCESS)
