@@ -1,0 +1,1591 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PackageDocument v4",
+  "description": "Frozen v4 public package-output contract (format_version 4.0). Exactly two modes: normal (decoded values and static semantics only) and debug (normal plus evidence). Parity rule: stripping the top-level debug block and every nested debug_evidence key from a debug document, then normalizing mode to normal, must reproduce the normal document exactly. Physical evidence (offsets, ranges, raw bytes) never appears in common output; it lives in the debug block. Evidence-only keys banned in common semantic values at any depth: source_range, script_source_range, raw_region, tag_range, value_range, raw_data.",
+  "type": "object",
+  "required": [
+    "format",
+    "format_version",
+    "mode",
+    "source",
+    "package",
+    "summary",
+    "objects",
+    "relations",
+    "dependencies",
+    "projections",
+    "payloads",
+    "sidecars",
+    "diagnostics"
+  ],
+  "properties": {
+    "format": {
+      "const": "uasset_read.package",
+      "description": "Envelope discriminator."
+    },
+    "format_version": {
+      "const": "4.0",
+      "description": "Contract major version. v3 (3.0) is retired."
+    },
+    "mode": {
+      "enum": ["normal", "debug"],
+      "description": "Public output mode. No agent/raw/semantic/view/depth modes exist."
+    },
+    "source": {
+      "$ref": "#/$defs/SourceInfo"
+    },
+    "package": {
+      "$ref": "#/$defs/PackageInfo"
+    },
+    "summary": {
+      "$ref": "#/$defs/Summary"
+    },
+    "objects": {
+      "type": "array",
+      "description": "Every export of the package, in table order. Imports are not objects; they surface through dependencies or semantic references.",
+      "items": {
+        "$ref": "#/$defs/ObjectEntry"
+      }
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Relation"
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Dependency"
+      }
+    },
+    "projections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ProjectionRecord"
+      }
+    },
+    "payloads": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PayloadDescriptor"
+      }
+    },
+    "sidecars": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SidecarRecord"
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "description": "Summary diagnostics only. Detailed evidence (offset, size, reason, fallback, recoverable) lives in debug.diagnostic_details and is referenced by zero-based index into this list.",
+      "items": {
+        "$ref": "#/$defs/Diagnostic"
+      }
+    },
+    "debug": {
+      "$ref": "#/$defs/DebugBlock",
+      "description": "Debug mode only."
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "normal"
+          }
+        },
+        "required": ["mode"]
+      },
+      "then": {
+        "description": "Normal mode: no top-level debug block and no nested debug_evidence keys.",
+        "not": {
+          "required": ["debug"]
+        },
+        "properties": {
+          "objects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "semantic": {
+                  "$ref": "#/$defs/NormalSemanticValue"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "debug"
+          }
+        },
+        "required": ["mode"]
+      },
+      "then": {
+        "description": "Debug mode: the top-level debug evidence block is required.",
+        "required": ["debug"]
+      }
+    }
+  ],
+  "$defs": {
+    "ObjectId": {
+      "type": "string",
+      "pattern": "^(export|import):[0-9]+$",
+      "description": "Stable object id: table kind plus zero-based index."
+    },
+    "GraphId": {
+      "type": "string",
+      "pattern": "^export:[0-9]+/export:[0-9]+$",
+      "description": "Graph id: owning export id plus graph export id."
+    },
+    "NodeId": {
+      "type": "string",
+      "pattern": "^(export|import):[0-9]+/export:[0-9]+$",
+      "description": "Node id: owning object id plus node export id."
+    },
+    "SourceInfo": {
+      "type": "object",
+      "required": ["kind", "name", "size"],
+      "properties": {
+        "kind": {
+          "enum": ["loose", "pak", "iostore", "memory"]
+        },
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PackageInfo": {
+      "type": "object",
+      "required": ["name", "layout", "package_flags"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "layout": {
+          "enum": ["legacy", "zen"]
+        },
+        "package_flags": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "engine_version": {
+          "type": "string"
+        },
+        "compatible_engine_version": {
+          "type": "string"
+        },
+        "total_header_size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "export_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "import_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "name_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "Summary": {
+      "type": "object",
+      "required": ["object_count", "asset_object_ids"],
+      "properties": {
+        "object_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "asset_object_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObjectId"
+          }
+        },
+        "total_imports": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_exports": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "diagnostic_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ObjectStatus": {
+      "type": "object",
+      "required": ["parse", "semantic"],
+      "properties": {
+        "parse": {
+          "enum": ["complete", "partial", "opaque", "failed"]
+        },
+        "semantic": {
+          "enum": ["complete", "partial", "unavailable", "not_requested"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "CoverageEntry": {
+      "type": "object",
+      "required": ["feature", "status"],
+      "properties": {
+        "feature": {
+          "type": "string"
+        },
+        "status": {
+          "enum": ["present", "partial", "missing", "unsupported"]
+        },
+        "detail": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Region": {
+      "type": "object",
+      "description": "The single region serializer shape (project_region). Used for every debug region; never emitted in common output.",
+      "required": [
+        "start",
+        "size",
+        "end",
+        "source_id",
+        "source_start",
+        "source_end",
+        "source_slices",
+        "status",
+        "reason",
+        "feature",
+        "payload_ref"
+      ],
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "source_start": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "source_end": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "source_slices": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceSlice"
+          }
+        },
+        "status": {
+          "enum": ["decoded", "opaque", "payload", "unavailable"]
+        },
+        "reason": {
+          "type": ["string", "null"]
+        },
+        "feature": {
+          "type": "string"
+        },
+        "payload_ref": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "SourceSlice": {
+      "type": "object",
+      "required": ["source_id", "source_start", "size", "source_end"],
+      "properties": {
+        "source_id": {
+          "type": "string"
+        },
+        "source_start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_end": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "PropertyEntry": {
+      "type": "object",
+      "description": "One ordered property occurrence. Duplicates keep their occurrences; there is no name-keyed map and no tag_range/value_range in common output.",
+      "required": ["name", "type", "occurrence", "array_index", "value"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "occurrence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "array_index": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "value": {
+          "$ref": "#/$defs/PropertyValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PropertyValue": {
+      "description": "project_property_value is the only projector. Scalars stay scalars; typed values carry a kind discriminator. PropertyFallback, StructFallback, bytes and unsupported values all become opaque. Multicast delegates are bare arrays of delegate entries. There is no str()/repr() fallback.",
+      "oneOf": [
+        {
+          "type": ["null", "boolean", "integer", "number", "string"]
+        },
+        {
+          "$ref": "#/$defs/SoftObjectPathValue"
+        },
+        {
+          "$ref": "#/$defs/ObjectRefValue"
+        },
+        {
+          "$ref": "#/$defs/DelegateValue"
+        },
+        {
+          "$ref": "#/$defs/WrappedValue"
+        },
+        {
+          "$ref": "#/$defs/StructValue"
+        },
+        {
+          "$ref": "#/$defs/ArrayValue"
+        },
+        {
+          "$ref": "#/$defs/MapValue"
+        },
+        {
+          "$ref": "#/$defs/SetValue"
+        },
+        {
+          "$ref": "#/$defs/EnumValue"
+        },
+        {
+          "$ref": "#/$defs/TextValue"
+        },
+        {
+          "$ref": "#/$defs/OpaqueValue"
+        },
+        {
+          "type": "array",
+          "description": "Multicast delegate: a bare JSON array of delegate entries.",
+          "items": {
+            "$ref": "#/$defs/DelegateValue"
+          }
+        }
+      ]
+    },
+    "SoftObjectPathValue": {
+      "type": "object",
+      "required": ["kind", "raw_kind", "asset_path", "sub_path"],
+      "properties": {
+        "kind": {
+          "const": "soft_object_path"
+        },
+        "raw_kind": {
+          "type": "string",
+          "description": "Original property kind (for example SoftObjectProperty or LazyObjectProperty)."
+        },
+        "asset_path": {
+          "type": ["string", "null"]
+        },
+        "sub_path": {
+          "type": ["string", "null"]
+        },
+        "guid": {
+          "type": "string",
+          "description": "LazyObjectProperty only: raw GUID bytes as hex. Never a package_index, index, or error field."
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "raw_kind": {
+                "const": "LazyObjectProperty"
+              }
+            },
+            "required": ["raw_kind"]
+          },
+          "then": {
+            "required": ["guid"]
+          },
+          "else": {
+            "not": {
+              "required": ["guid"]
+            }
+          }
+        }
+      ]
+    },
+    "ObjectRefValue": {
+      "type": "object",
+      "required": ["kind", "table", "index", "id"],
+      "properties": {
+        "kind": {
+          "const": "object_ref"
+        },
+        "table": {
+          "enum": ["import", "export"]
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "id": {
+          "$ref": "#/$defs/ObjectId"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DelegateValue": {
+      "type": "object",
+      "required": ["kind", "object_ref", "function_name"],
+      "properties": {
+        "kind": {
+          "const": "delegate"
+        },
+        "object_ref": {
+          "type": "integer",
+          "description": "Serialized package index as written in the property stream (not resolved to an ObjectId)."
+        },
+        "function_name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WrappedValue": {
+      "type": "object",
+      "description": "A non-fallback PropertyValue wrapper; the child is recursively projected.",
+      "required": ["kind", "type", "value"],
+      "properties": {
+        "kind": {
+          "const": "value"
+        },
+        "type": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/PropertyValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StructValue": {
+      "type": "object",
+      "required": ["kind", "struct_type", "fields"],
+      "properties": {
+        "kind": {
+          "const": "struct"
+        },
+        "struct_type": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/PropertyValue"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ArrayValue": {
+      "type": "object",
+      "required": ["kind", "elements"],
+      "properties": {
+        "kind": {
+          "const": "array"
+        },
+        "elements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PropertyValue"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "MapValue": {
+      "type": "object",
+      "required": ["kind", "key_type", "value_type", "entries"],
+      "properties": {
+        "kind": {
+          "const": "map"
+        },
+        "key_type": {
+          "type": "string"
+        },
+        "value_type": {
+          "type": "string"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key", "value"],
+            "properties": {
+              "key": {
+                "$ref": "#/$defs/PropertyValue"
+              },
+              "value": {
+                "$ref": "#/$defs/PropertyValue"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "SetValue": {
+      "type": "object",
+      "required": ["kind", "element_type", "elements"],
+      "properties": {
+        "kind": {
+          "const": "set"
+        },
+        "element_type": {
+          "type": "string"
+        },
+        "elements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PropertyValue"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "EnumValue": {
+      "type": "object",
+      "required": ["kind", "enum_type", "value"],
+      "properties": {
+        "kind": {
+          "const": "enum"
+        },
+        "enum_type": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TextValue": {
+      "type": "object",
+      "description": "FText coverage is namespace/key/source_string/history_type only. Nested history payloads (format arguments, nested texts) are not decoded; that fidelity gap is identical in both modes.",
+      "required": ["kind", "namespace", "key", "source_string", "history_type"],
+      "properties": {
+        "kind": {
+          "const": "text"
+        },
+        "namespace": {
+          "type": ["string", "null"]
+        },
+        "key": {
+          "type": ["string", "null"]
+        },
+        "source_string": {
+          "type": ["string", "null"]
+        },
+        "history_type": {
+          "type": ["integer", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "OpaqueValue": {
+      "type": "object",
+      "description": "PropertyFallback, StructFallback, bytes and unsupported values. No str()/repr() fallback exists.",
+      "required": ["kind", "type", "size", "reason"],
+      "properties": {
+        "kind": {
+          "const": "opaque"
+        },
+        "type": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "type": "string"
+        },
+        "struct_type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SemanticValue": {
+      "description": "Recursive common JSON value for objects[].semantic. Evidence-only keys (source_range, script_source_range, raw_region, tag_range, value_range, raw_data) are rejected at any depth; their physical evidence moves to debug.semantic_source_ranges and the other debug arrays. Nested debug_evidence is allowed here (debug mode); NormalSemanticValue strips it.",
+      "oneOf": [
+        {
+          "type": ["null", "boolean", "integer", "number", "string"]
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SemanticValue"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "not": {
+              "enum": [
+                "source_range",
+                "script_source_range",
+                "raw_region",
+                "tag_range",
+                "value_range",
+                "raw_data"
+              ]
+            }
+          },
+          "properties": {
+            "links": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/GraphLinkRecord"
+                  },
+                  {
+                    "$ref": "#/$defs/PinLinkProjection"
+                  },
+                  {
+                    "$ref": "#/$defs/MaterialGraphLinkRecord"
+                  }
+                ]
+              }
+            },
+            "external_refs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ExternalReferenceRecord"
+              }
+            },
+            "source_node_reason": {
+              "type": ["string", "null"]
+            },
+            "debug_evidence": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/GraphLinkDebugEvidence"
+                },
+                {
+                  "$ref": "#/$defs/InstructionDebugEvidence"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/SemanticValue"
+          }
+        }
+      ]
+    },
+    "NoDebugEvidence": {
+      "description": "Matches any JSON value that contains no debug_evidence key at any depth. Combined with SemanticValue this is the normal-mode semantic constraint.",
+      "oneOf": [
+        {
+          "type": ["null", "boolean", "integer", "number", "string"]
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NoDebugEvidence"
+          }
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "not": {
+              "const": "debug_evidence"
+            }
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/NoDebugEvidence"
+          }
+        }
+      ]
+    },
+    "NormalSemanticValue": {
+      "description": "Normal-mode semantic value: SemanticValue minus any nested debug_evidence key.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/SemanticValue"
+        },
+        {
+          "$ref": "#/$defs/NoDebugEvidence"
+        }
+      ]
+    },
+    "GraphLinkRecord": {
+      "type": "object",
+      "description": "Graph-level link record (Blueprint companion plan Task 1). One record per serialized link reference. debug_evidence is debug-mode only: present (or null) in debug output, absent in normal output.",
+      "required": [
+        "graph_id",
+        "source_node_id",
+        "source_pin_guid",
+        "target_owner_id",
+        "target_node_id",
+        "target_pin_guid",
+        "connection_type",
+        "status",
+        "reason"
+      ],
+      "properties": {
+        "graph_id": {
+          "$ref": "#/$defs/GraphId"
+        },
+        "source_node_id": {
+          "$ref": "#/$defs/NodeId"
+        },
+        "source_pin_guid": {
+          "type": "string"
+        },
+        "target_owner_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ObjectId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_node_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/NodeId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_pin_guid": {
+          "type": ["string", "null"]
+        },
+        "connection_type": {
+          "enum": ["exec", "data", "delegate", "unknown"]
+        },
+        "status": {
+          "enum": ["resolved", "unresolved", "ambiguous"]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "debug_evidence": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/GraphLinkDebugEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "GraphLinkDebugEvidence": {
+      "type": "object",
+      "description": "Fixed-key raw evidence for one GraphLinkRecord (Blueprint companion plan Task 1). Ranges use the Region shape and are null only when the bytes were not available.",
+      "required": [
+        "raw_source_owner_package_index",
+        "raw_target_owner_package_index",
+        "raw_source_pin_guid",
+        "raw_target_pin_guid",
+        "source_pin_range",
+        "target_reference_range",
+        "target_pin_range"
+      ],
+      "properties": {
+        "raw_source_owner_package_index": {
+          "type": ["integer", "null"]
+        },
+        "raw_target_owner_package_index": {
+          "type": ["integer", "null"]
+        },
+        "raw_source_pin_guid": {
+          "type": ["string", "null"]
+        },
+        "raw_target_pin_guid": {
+          "type": ["string", "null"]
+        },
+        "source_pin_range": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Region"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_reference_range": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Region"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_pin_range": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Region"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "InstructionDebugEvidence": {
+      "type": "object",
+      "description": "Fixed-key raw evidence for one instruction (Blueprint companion plan Task 3).",
+      "required": [
+        "raw_opcode",
+        "serialized_range",
+        "source_node_evidence",
+        "diagnostics"
+      ],
+      "properties": {
+        "raw_opcode": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "serialized_range": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Region"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_node_evidence": {
+          "type": ["object", "null"]
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "PinLinkProjection": {
+      "type": "object",
+      "description": "Pin-level adjacency projection (two-key form). Disjoint from GraphLinkRecord.",
+      "required": ["to_node_id", "to_pin_id"],
+      "properties": {
+        "to_node_id": {
+          "type": "string"
+        },
+        "to_pin_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MaterialGraphLinkRecord": {
+      "type": "object",
+      "description": "Material expression edge: source expression output -> target expression input (MaterialLink). Disjoint from the Blueprint link shapes.",
+      "required": ["source", "source_output", "target", "target_input", "mask"],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "source_output": {
+          "type": "integer"
+        },
+        "target": {
+          "type": "string"
+        },
+        "target_input": {
+          "type": "string"
+        },
+        "mask": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SourceEvidenceEntry": {
+      "type": "object",
+      "description": "One external-reference evidence fact (kind + value only). Any byte range belongs to debug.semantic_source_ranges, not here.",
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/SemanticValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExternalReferenceRecord": {
+      "type": "object",
+      "description": "External (non-package) reference record (Blueprint companion plan Task 2).",
+      "required": [
+        "local_id",
+        "package",
+        "class_name",
+        "symbol",
+        "qualified_key",
+        "origin",
+        "source_evidence",
+        "status",
+        "reason",
+        "candidate_local_ids"
+      ],
+      "properties": {
+        "local_id": {
+          "type": ["string", "null"]
+        },
+        "package": {
+          "type": ["string", "null"]
+        },
+        "class_name": {
+          "type": ["string", "null"]
+        },
+        "symbol": {
+          "type": "string"
+        },
+        "qualified_key": {
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "unreal_engine",
+            "plugin",
+            "project_asset",
+            "unknown_origin"
+          ]
+        },
+        "source_evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceEvidenceEntry"
+          }
+        },
+        "status": {
+          "enum": ["resolved", "unresolved", "ambiguous"]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "candidate_local_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ObjectEntry": {
+      "type": "object",
+      "required": [
+        "id",
+        "table_index",
+        "name",
+        "class",
+        "roles",
+        "status",
+        "properties"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ObjectId"
+        },
+        "table_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "class": {
+          "type": ["string", "null"]
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "asset",
+              "generated_class",
+              "class_default_object",
+              "metadata",
+              "subobject",
+              "graph",
+              "payload_owner"
+            ]
+          }
+        },
+        "status": {
+          "$ref": "#/$defs/ObjectStatus"
+        },
+        "properties": {
+          "type": "array",
+          "description": "Ordered property occurrences (empty allowed).",
+          "items": {
+            "$ref": "#/$defs/PropertyEntry"
+          }
+        },
+        "semantic": {
+          "$ref": "#/$defs/SemanticValue"
+        },
+        "coverage": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CoverageEntry"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "Relation": {
+      "type": "object",
+      "description": "Directed edge read as 'from relates-to to'. See the v3-era kind meanings: outer_of, class_of, super_of, template_of, depends_on, preload_of; reserved kinds generated_class_of, default_object_of, references.",
+      "required": ["kind", "from", "to"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "outer_of",
+            "class_of",
+            "generated_class_of",
+            "default_object_of",
+            "template_of",
+            "super_of",
+            "depends_on",
+            "preload_of",
+            "references"
+          ]
+        },
+        "from": {
+          "$ref": "#/$defs/ObjectId"
+        },
+        "to": {
+          "$ref": "#/$defs/ObjectId"
+        },
+        "target_path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Dependency": {
+      "type": "object",
+      "required": ["index", "class", "object_name"],
+      "properties": {
+        "index": {
+          "type": "integer"
+        },
+        "class": {
+          "type": "string"
+        },
+        "object_name": {
+          "type": "string"
+        },
+        "package_name": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProjectionProvenance": {
+      "type": "object",
+      "description": "Required on every projection record. Carries no byte ranges.",
+      "required": ["derived_from", "generator"],
+      "properties": {
+        "derived_from": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "generator": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProjectionRecord": {
+      "type": "object",
+      "description": "Non-C++ projections only: C++ declaration/migration projections are retired. Exactly one of content (embedded) or external (sidecar reference).",
+      "required": [
+        "source_object_id",
+        "kind",
+        "media_type",
+        "embedded",
+        "status",
+        "completeness",
+        "dependencies",
+        "diagnostics",
+        "provenance"
+      ],
+      "properties": {
+        "source_object_id": {
+          "$ref": "#/$defs/ObjectId"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "embedded": {
+          "type": "boolean"
+        },
+        "status": {
+          "enum": ["translated", "represented", "untranslated", "unavailable"]
+        },
+        "completeness": {
+          "enum": ["complete", "partial", "opaque", "unavailable", "failed"]
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObjectId"
+          }
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Diagnostic"
+          }
+        },
+        "provenance": {
+          "$ref": "#/$defs/ProjectionProvenance"
+        },
+        "content": {
+          "description": "Embedded JSON projection payload when embedded=true."
+        },
+        "external": {
+          "$ref": "#/$defs/SidecarRecord",
+          "description": "Sidecar reference when embedded=false. Its source range is debug evidence (debug.sidecar_sources)."
+        }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": ["content"],
+          "properties": {
+            "embedded": {
+              "const": true
+            }
+          },
+          "not": {
+            "required": ["external"]
+          }
+        },
+        {
+          "required": ["external"],
+          "properties": {
+            "embedded": {
+              "const": false
+            }
+          },
+          "not": {
+            "required": ["content"]
+          }
+        }
+      ]
+    },
+    "PayloadDescriptor": {
+      "type": "object",
+      "description": "Common payload identity only. source_region and offset are debug evidence (debug.payload_sources), never common output.",
+      "required": ["id", "owner", "kind", "stored_size", "status"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^payload:(export|import):[0-9]+$"
+        },
+        "owner": {
+          "$ref": "#/$defs/ObjectId"
+        },
+        "kind": {
+          "enum": [
+            "texture_mip",
+            "audio",
+            "mesh_vertex",
+            "mesh_index",
+            "bulk_data",
+            "other"
+          ]
+        },
+        "stored_size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "status": {
+          "enum": ["available", "external", "missing", "unsupported"]
+        },
+        "logical_size": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "compression": {
+          "type": ["string", "null"]
+        },
+        "hash": {
+          "type": ["string", "null"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "SidecarRecord": {
+      "type": "object",
+      "description": "Common sidecar identity only. The source region is debug evidence (debug.sidecar_sources).",
+      "required": ["path", "size", "sha256", "reason"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path relative to the canonical document's directory; never absolute, never escaping via '..'."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Diagnostic": {
+      "type": "object",
+      "description": "Common summary diagnostic. Detailed fields (offset, size, reason, fallback, recoverable) live in debug.diagnostic_details and reference this entry by zero-based index.",
+      "required": ["severity", "code", "message", "stage", "count"],
+      "properties": {
+        "severity": {
+          "enum": ["info", "warning", "error", "critical"]
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "object_id": {
+          "$ref": "#/$defs/ObjectId"
+        },
+        "property_path": {
+          "type": "string"
+        },
+        "effect": {
+          "enum": ["semantic_loss", "data_loss", "parse_failure", "recovery"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ObjectRegionEntry": {
+      "type": "object",
+      "required": ["object_id", "region"],
+      "properties": {
+        "object_id": {
+          "$ref": "#/$defs/ObjectId"
+        },
+        "region": {
+          "$ref": "#/$defs/Region"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RawEvidence": {
+      "type": "object",
+      "required": ["encoding", "data", "total_size", "truncated"],
+      "properties": {
+        "encoding": {
+          "const": "hex"
+        },
+        "data": {
+          "type": "string"
+        },
+        "total_size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PropertyEvidenceEntry": {
+      "type": "object",
+      "required": ["object_id", "property_index"],
+      "properties": {
+        "object_id": {
+          "$ref": "#/$defs/ObjectId"
+        },
+        "property_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-based index into the object's ordered properties array."
+        },
+        "tag_region": {
+          "$ref": "#/$defs/Region"
+        },
+        "value_region": {
+          "$ref": "#/$defs/Region"
+        },
+        "raw": {
+          "$ref": "#/$defs/RawEvidence"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SemanticSourceRangeEntry": {
+      "type": "object",
+      "description": "Physical evidence for one common semantic location. json_pointer is relative to the object's semantic value (or the object entry itself).",
+      "required": ["object_id", "json_pointer", "region"],
+      "properties": {
+        "object_id": {
+          "$ref": "#/$defs/ObjectId"
+        },
+        "json_pointer": {
+          "type": "string"
+        },
+        "region": {
+          "$ref": "#/$defs/Region"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PayloadSourceEntry": {
+      "type": "object",
+      "description": "offset is file-relative within the source_region.source_id file for both external and inline payloads, never a whole-package offset.",
+      "required": ["payload_id", "source_region", "offset"],
+      "properties": {
+        "payload_id": {
+          "type": "string",
+          "pattern": "^payload:(export|import):[0-9]+$"
+        },
+        "source_region": {
+          "$ref": "#/$defs/Region"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "SidecarSourceEntry": {
+      "type": "object",
+      "required": ["path", "region"],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "region": {
+          "$ref": "#/$defs/Region"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DiagnosticDetailEntry": {
+      "type": "object",
+      "description": "Detailed diagnostic evidence referencing diagnostics[index] (zero-based) in the common list.",
+      "required": ["index"],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "enum": [
+            "bulk_expected",
+            "editor_only",
+            "known_unimplemented",
+            "recovered_corruption",
+            "conservative_complete",
+            "unexpected",
+            "schema_required"
+          ]
+        },
+        "fallback": {
+          "type": "string"
+        },
+        "recoverable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ByteAccountingScope": {
+      "type": "object",
+      "description": "One scope per non-empty export. The window is tiled exactly by leaves: no gaps, no overlaps (producer contract; not expressible in JSON Schema).",
+      "required": ["object_id", "window", "leaves"],
+      "properties": {
+        "object_id": {
+          "$ref": "#/$defs/ObjectId"
+        },
+        "window": {
+          "$ref": "#/$defs/Region"
+        },
+        "leaves": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/Region"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "DebugBlock": {
+      "type": "object",
+      "description": "Debug-mode evidence block. Exactly these seven arrays; no other keys.",
+      "required": [
+        "object_regions",
+        "property_evidence",
+        "semantic_source_ranges",
+        "payload_sources",
+        "sidecar_sources",
+        "diagnostic_details",
+        "byte_accounting"
+      ],
+      "properties": {
+        "object_regions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObjectRegionEntry"
+          }
+        },
+        "property_evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PropertyEvidenceEntry"
+          }
+        },
+        "semantic_source_ranges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SemanticSourceRangeEntry"
+          }
+        },
+        "payload_sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PayloadSourceEntry"
+          }
+        },
+        "sidecar_sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SidecarSourceEntry"
+          }
+        },
+        "diagnostic_details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DiagnosticDetailEntry"
+          }
+        },
+        "byte_accounting": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ByteAccountingScope"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

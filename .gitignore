@@ -89,6 +89,8 @@ tests/*
 # Size ratchet baseline read by tests/test_size_baseline.py and CI package-smoke
 !tests/size-baseline.json
 !tests/samples/
+# Frozen v4 output contract (design prose lives in the docs repo; schema travels with the tests)
+!tests/package_document_v4.schema.json
 
 # Independent documentation repository (own git; not tracked here)
 /docs/

@@ -741,7 +741,7 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     from uasset_read.projections.bundle import write_projected_document
 
     schema = json.loads(
-        (ROOT / "docs" / "designs" / "contract" / "package_document_v4.schema.json").read_text(encoding="utf-8")
+        (ROOT / "tests" / "package_document_v4.schema.json").read_text(encoding="utf-8")
     )
     top_level = {
         "format",

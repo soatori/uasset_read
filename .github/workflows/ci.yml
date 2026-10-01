@@ -36,6 +36,7 @@ jobs:
           # 禁止出现在 master 的目录
           FORBIDDEN_PATTERNS=(
             "^wiki/"
+            "^docs/"
             "^scripts/"
             "^temp/"
             "^\.claude/workflows/"
@@ -143,7 +144,8 @@ jobs:
           pyright src/uasset_read
 
   # peer 佐证措辞门禁（方案 §3 规则 1）：只扫 src/，不读 docs。
-  # docs 已是独立仓库，inventory 校验（marker 是否点名 peer）随 docs 一起移出本仓库 CI。
+  # docs 已是独立仓库：inventory 交叉校验（marker 是否点名 peer）已随拆分删除，
+  # 尚未在 docs 侧重建；恢复该门禁需在 docs 仓库自行建设 CI。
   peer-evidence-hygiene:
     runs-on: ubuntu-latest
     steps:
