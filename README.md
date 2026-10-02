@@ -125,7 +125,7 @@ python -m uasset_read path/to/file.uasset --game NAME               # Enable gam
 
 ### Logging Parameters
 
-The library never configures process-global logging, and the CLI neither writes per-run log files nor cleans up leftover `log/` directories (file logging left with the v1 pipeline; cleanup was retired 2026-09-10, Gate L). Delete old `log/` directories yourself if they remain from earlier releases.
+After argument parsing succeeds, the CLI writes a DEBUG text log for each invocation to the project-root `log/` directory. Files use the `uasset_read-{timestamp}-pid{pid}-{run_id}.log` convention and rotate at 10 MB with five backups per run. `--verbose` also mirrors log records to stderr. Logs are not cleaned up across runs; manage their retention as needed. Python API calls still return structured diagnostics without configuring process-global logging.
 
 ## Core API
 

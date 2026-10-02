@@ -707,17 +707,20 @@ def test_every_real_sample_forms_a_valid_package_document(sample: str):
     )
 
 
-def test_v2_path_emits_no_handler_warnings(capfd, caplog, tmp_path):
+def test_logging_boundaries_and_cli_file_logs(capfd, caplog, tmp_path, monkeypatch):
     # capfd alone cannot catch the leak under pytest: the logging plugin
     # installs a root handler, which suppresses logging.lastResort. Assert
-    # on captured WARNING records too — the real contract is "no warning
-    # logs on the v2 parse path".
+    # on captured WARNING records too. The API stays silent and leaves logger
+    # state alone; the CLI owns its short-lived file handler.
     import logging
+    import sys
 
+    from uasset_read import cli
     from uasset_read.package import parse_package_document
 
     root = logging.getLogger()
     handlers_before = tuple(root.handlers)
+    root_level_before = root.level
     files_before = set(tmp_path.iterdir())
     with caplog.at_level(logging.WARNING):
         parse_package_document(SAMPLES / "NM_BPSystemEvent.uasset", depth="object")
@@ -727,6 +730,74 @@ def test_v2_path_emits_no_handler_warnings(capfd, caplog, tmp_path):
     assert warnings == [], f"v2 parse emitted warning logs: {[r.getMessage()[:120] for r in warnings]}"
     assert tuple(root.handlers) == handlers_before
     assert set(tmp_path.iterdir()) == files_before
+
+    monkeypatch.setattr(cli, "__file__", str(tmp_path / "repo" / "src" / "uasset_read" / "cli.py"))
+    log_dir = tmp_path / "repo" / "log"
+    package_logger = logging.getLogger("uasset_read")
+    package_handlers = tuple(package_logger.handlers)
+    package_level = package_logger.level
+
+    for argv, expected_code in (
+        (["uasset_read", "--help"], cli.EXIT_SUCCESS),
+        (["uasset_read", "--not-a-cli-option"], cli.EXIT_ARGUMENT_ERROR),
+    ):
+        monkeypatch.setattr(sys, "argv", argv)
+        with pytest.raises(SystemExit) as exit_info:
+            cli.main()
+        assert exit_info.value.code == expected_code
+        assert not log_dir.exists()
+        capfd.readouterr()
+
+    monkeypatch.setattr(sys, "argv", ["uasset_read", "missing.uasset"])
+    for _ in range(2):
+        with pytest.raises(SystemExit) as missing_exit:
+            cli.main()
+        assert missing_exit.value.code == cli.EXIT_FILE_NOT_FOUND
+        assert tuple(root.handlers) == handlers_before and root.level == root_level_before
+        assert tuple(package_logger.handlers) == package_handlers and package_logger.level == package_level
+
+    files = sorted(log_dir.glob("uasset_read-*.log"))
+    assert len(files) == 2
+    for path in files:
+        assert re.fullmatch(r"uasset_read-\d{8}-\d{6}-\d{6}-pid\d+-[0-9a-f]{12}\.log", path.name)
+        log_text = path.read_text(encoding="utf-8")
+        assert "asset=missing.uasset stage=parse" in log_text
+        assert "File not found: missing.uasset" in log_text
+    capfd.readouterr()
+
+    def fail_to_open(*args, **kwargs):
+        raise OSError("disk unavailable")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(cli, "RotatingFileHandler", fail_to_open, raising=False)
+        with pytest.raises(SystemExit) as setup_failure_exit:
+            cli.main()
+        setup_failure = capfd.readouterr()
+        assert setup_failure_exit.value.code == cli.EXIT_FILE_NOT_FOUND
+        assert "Warning: could not write parser log file" in setup_failure.err
+        assert "Error: File not found: missing.uasset" in setup_failure.err
+
+    output_path = tmp_path / "result.json"
+    sample = SAMPLES / "NM_BPSystemEvent.uasset"
+    root.handlers.clear()
+    try:
+        monkeypatch.setattr(cli, "__file__", str(tmp_path / "repo" / "src" / "uasset_read" / "cli.py"))
+        monkeypatch.setattr(sys, "argv", ["uasset_read", str(sample), "--verbose", "-o", str(output_path)])
+        with pytest.raises(SystemExit) as parse_exit:
+            cli.main()
+        verbose = capfd.readouterr()
+    finally:
+        root.handlers.clear()
+        root.handlers.extend(handlers_before)
+        root.setLevel(root_level_before)
+
+    assert parse_exit.value.code == cli.EXIT_SUCCESS
+    document = json.loads(output_path.read_text(encoding="utf-8"))
+    assert document["format_version"] == "4.0"
+    assert "DEBUG: Parsing package: NM_BPSystemEvent.uasset" in verbose.err
+    sample_logs = sorted(log_dir.glob("uasset_read-*.log"))
+    assert len(sample_logs) == 3
+    assert "asset=NM_BPSystemEvent.uasset stage=parse" in sample_logs[-1].read_text(encoding="utf-8")
 
 
 def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
@@ -2444,6 +2515,7 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
     assert all(d.stage == "parse_properties" and d.reason == "known_unimplemented" for d in pin_diags)
     # One diagnostic per payload, attributed to the owning export — never swallowed.
     assert len({d.object_id for d in pin_diags}) == 12
+
 
     pin_values = [
         entry.value
