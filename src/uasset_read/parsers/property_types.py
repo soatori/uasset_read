@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import struct
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
@@ -426,13 +427,13 @@ def parse_soft_object_property(
     """
     ue5 = getattr(summary, "file_version_ue5", 0) if summary is not None else 0
     paths = getattr(archive, "_soft_object_paths", None)
-    if tag.type == "SoftObjectProperty" and tag.size == 4 and ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
+    if tag.type in ("SoftObjectProperty", "SoftClassProperty") and tag.size == 4 and ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
         offset = archive.tell()
         index = archive.read_i32()
         if index == -1:
             return SoftObjectPathValue(raw_kind=tag.type, asset_path="", sub_path="")
         if paths is not None and 0 <= index < len(paths):
-            return paths[index]
+            return replace(paths[index], raw_kind=tag.type)
         archive._record_structured_diagnostic(
             code="SOFT_OBJECT_PATH_INDEX_INVALID",
             stage="parse_properties",

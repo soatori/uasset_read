@@ -617,6 +617,28 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
     diagnostic = next(d for d in invalid.diagnostics if d.code == "SOFT_OBJECT_PATH_INDEX_INVALID")
     assert diagnostic.offset == 36
 
+    for raw, asset_path in (
+        (struct.pack("<i", 0), "/Game/Test.Asset"),
+        (struct.pack("<IIIII", 1, 0, 2, 0, 0), "RowA.Path"),
+        (struct.pack("<i", -1), ""),
+    ):
+        _, soft_class = _tagged_data_table_document(
+            [("Path", "SoftClassProperty", raw)], summary=summary, soft_paths=paths,
+        )
+        table = next(p for p in project_document(soft_class)["projections"] if p["kind"] == "data_table")
+        assert table["content"]["rows"][0]["values"]["Path"] == {
+            "kind": "soft_object_path", "raw_kind": "SoftClassProperty", "asset_path": asset_path, "sub_path": "",
+        }
+        assert table["content"]["values_decoded"] is True
+    _, invalid_class = _tagged_data_table_document(
+        [("Path", "SoftClassProperty", struct.pack("<i", 9))], summary=summary, soft_paths=paths,
+    )
+    table = next(p for p in project_document(invalid_class)["projections"] if p["kind"] == "data_table")
+    assert table["content"]["rows"][0]["values"]["Path"]["kind"] == "opaque"
+    assert table["content"]["values_decoded"] is False
+    assert table["completeness"] == "partial"
+    assert any(d.code == "SOFT_OBJECT_PATH_INDEX_INVALID" and d.offset == 36 for d in invalid_class.diagnostics)
+
     # The existing handler cap must not upgrade 50 of 51 rows to complete.
     from uasset_read.parsers.asset_types.handlers_impl import DataTableHandler
 
