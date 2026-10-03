@@ -498,6 +498,10 @@ def _assert_data_table_row_values_decode_tagged_scalars():
     import struct
 
     from uasset_read.projection import project_document
+    from uasset_read.parsers.property_types import make_enum_value
+
+    assert make_enum_value("EAttachLocation", "KeepRelativeOffset")["value_name"] == "EAttachLocation::KeepRelativeOffset"
+    assert make_enum_value("EAttachLocation", "EAttachLocation::KeepRelativeOffset")["value_name"] == "EAttachLocation::KeepRelativeOffset"
 
     rows, document = _tagged_data_table_document([("Count", "IntProperty", struct.pack("<i", 42))])
     assert rows["complete"] is True
@@ -702,6 +706,13 @@ def test_real_sample_proves_claimed_capability():
                         },
                     }
                 json.dumps(projected)
+            elif sample == "ALS_FootstepDataTable.uasset":
+                value = obj.semantic["rows"][0]["fields"]["SoundAttachmentType"]["value"]
+                assert value == {
+                    "kind": "enum",
+                    "enum_type": "EAttachLocation",
+                    "value": "EAttachLocation::KeepRelativeOffset",
+                }
         elif class_name == "CurveTable":
             sem = obj.semantic
             assert sem["row_count"] == len(sem["row_names"]) > 0, f"{sample}:{class_name}"

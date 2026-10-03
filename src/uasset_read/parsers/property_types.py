@@ -112,8 +112,14 @@ def make_enum_value(enum_type: str, value_name: str) -> dict:
     Returns:
         EnumValue dictionary
     """
-    # #143: When enum_type is unknown, do not add "UnknownEnum::" prefix
-    full_name = f"{enum_type}::{value_name}" if enum_type and enum_type != "UnknownEnum" else value_name
+    # #143: When enum_type is unknown, do not add "UnknownEnum::" prefix.
+    # Some serialized FName values are already fully qualified.
+    prefix = f"{enum_type}::"
+    full_name = (
+        value_name
+        if not enum_type or enum_type == "UnknownEnum" or value_name.startswith(prefix)
+        else f"{prefix}{value_name}"
+    )
     return {
         "enum_type": enum_type,
         "value_name": full_name,
