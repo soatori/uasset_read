@@ -453,6 +453,177 @@ def test_v2_tables_match_independent_golden_reference(entry):
         assert golden["preload"]["total_entries"] == 0, entry["name"]
 
 
+def _tagged_data_table_document(cells, *, prefix_size=0, terminated=True, summary=None, soft_paths=None):
+    """One bounded legacy row, with hand-written tag/value bytes."""
+    import struct
+
+    from uasset_read.archive import ByteArchive, SourceInfo
+    from uasset_read.models.document import PackageDocument, PackageInfo
+    from uasset_read.models.object_model import ObjectRecord
+    from uasset_read.models.properties import PropertyBag
+    from uasset_read.parsers.asset_types.handlers_impl import DataTableHandler
+    from uasset_read.parsers.legacy_reader import _read_table_rows
+
+    names = ["None", "RowA"]
+    row = b""
+    for name, type_name, value in cells:
+        names.extend([name, type_name])
+        if type_name == "BoolProperty":
+            row += struct.pack("<IIIIiiB", len(names) - 2, 0, len(names) - 1, 0, 0, 0, value)
+        else:
+            row += struct.pack("<IIIIii", len(names) - 2, 0, len(names) - 1, 0, len(value), 0) + value
+    blob = b"\0" * prefix_size + struct.pack("<iII", 1, 1, 0) + row
+    if terminated:
+        blob += struct.pack("<II", 0, 0)
+    archive = ByteArchive(blob)
+    archive.seek(prefix_size)
+    archive.set_read_range((prefix_size, len(blob)))
+    if soft_paths is not None:
+        archive._soft_object_paths = soft_paths
+    diagnostics = []
+    rows = _read_table_rows(archive, len(blob), names, "export:0", diagnostics, summary=summary)
+    obj = ObjectRecord("export:0", 0, "Table", class_name="DataTable", properties=PropertyBag())
+    obj.semantic = DataTableHandler().enrich(obj, "decode", [obj], ([], names, {obj.id: {"table_rows": rows}}))
+    document = PackageDocument(
+        source=SourceInfo("memory", "Table", len(blob)),
+        package=PackageInfo("Table", "legacy"),
+        objects=[obj],
+        diagnostics=diagnostics,
+        depth="decode",
+    )
+    return rows, document
+
+
+def _assert_data_table_row_values_decode_tagged_scalars():
+    import struct
+
+    from uasset_read.projection import project_document
+
+    rows, document = _tagged_data_table_document([("Count", "IntProperty", struct.pack("<i", 42))])
+    assert rows["complete"] is True
+
+    assert rows["row_names"] == ["RowA"]
+    assert rows["rows"][0]["fields"]["Count"]["value"] == 42
+    normal = project_document(document, mode="normal")
+    table = next(p for p in normal["projections"] if p["kind"] == "data_table")
+    assert table["content"]["rows"] == [{"name": "RowA", "values": {"Count": 42}}]
+    assert table["content"]["values_decoded"] is True
+    assert table["status"] == "translated"
+    assert table["completeness"] == "complete"
+    json.dumps(normal)
+
+    # A one-byte IntProperty must stay opaque rather than read the next tag.
+    rows, document = _tagged_data_table_document([
+        ("ShortCount", "IntProperty", b"\x2a"),
+        ("Count", "IntProperty", struct.pack("<i", 42)),
+    ])
+    normal = project_document(document, mode="normal")
+    table = next(p for p in normal["projections"] if p["kind"] == "data_table")
+    assert table["content"]["rows"][0]["values"] == {
+        "ShortCount": {"kind": "opaque", "type": "IntProperty", "size": 1, "reason": "parse_error"},
+        "Count": 42,
+    }
+    assert rows["complete"] is True
+    assert table["content"]["values_decoded"] is False
+    assert table["completeness"] == "partial"
+
+    rows, document = _tagged_data_table_document([
+        ("Enabled", "BoolProperty", True),
+        ("Count", "IntProperty", struct.pack("<i", 42)),
+    ])
+    assert rows["rows"][0]["fields"]["Enabled"]["value"] is True
+    assert rows["rows"][0]["fields"]["Count"]["value"] == 42
+    assert rows["complete"] is True
+
+    rows, document = _tagged_data_table_document(
+        [("InvalidName", "NameProperty", struct.pack("<II", 99, 0))], prefix_size=16,
+    )
+    diagnostic = next(d for d in document.diagnostics if d.code == "name_index_out_of_range")
+    assert diagnostic.offset == 52  # prefix + row count + row FName + legacy tag
+    assert diagnostic.object_id == "export:0"
+
+    rows, document = _tagged_data_table_document([("Count", "IntProperty", struct.pack("<i", 42))], terminated=False)
+    assert rows["complete"] is False
+    assert any(d.code == "TABLE_ROWS_TRUNCATED" for d in document.diagnostics)
+    for projection in project_document(document)["projections"]:
+        assert projection["completeness"] == "partial"
+
+
+def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
+    import struct
+
+    from uasset_read.projection import project_document
+
+    rows, document = _tagged_data_table_document([
+        ("Count", "IntProperty", struct.pack("<i", 42)),
+        ("Mystery", "UnsupportedProperty", b"\x01\x02"),
+    ])
+    assert rows["rows"][0]["fields"]["Count"]["value"] == 42
+    normal = project_document(document, mode="normal")
+    table = next(p for p in normal["projections"] if p["kind"] == "data_table")
+    assert table["content"]["rows"][0]["values"] == {
+        "Count": 42,
+        "Mystery": {"kind": "opaque", "type": "UnsupportedProperty", "size": 2, "reason": "unsupported_type"},
+    }
+    assert table["content"]["values_decoded"] is False
+    for projection in normal["projections"]:
+        assert projection["status"] == "represented"
+        assert projection["completeness"] == "partial"
+    json.dumps(normal)
+
+    from uasset_read.models.properties import SoftObjectPathValue
+
+    paths = [SoftObjectPathValue("SoftObjectProperty", "/Game/Test.Asset", "")]
+    summary = SimpleNamespace(file_version_ue5=1008, package_flags=0)
+    _, indexed = _tagged_data_table_document(
+        [("Path", "SoftObjectProperty", struct.pack("<i", 0))], summary=summary, soft_paths=paths,
+    )
+    table = next(p for p in project_document(indexed)["projections"] if p["kind"] == "data_table")
+    assert table["content"]["rows"][0]["values"]["Path"] == {
+        "kind": "soft_object_path", "raw_kind": "SoftObjectProperty", "asset_path": "/Game/Test.Asset", "sub_path": "",
+    }
+    _, inline = _tagged_data_table_document(
+        [("Path", "SoftObjectProperty", struct.pack("<IIIII", 1, 0, 2, 0, 0))], summary=summary, soft_paths=paths,
+    )
+    table = next(p for p in project_document(inline)["projections"] if p["kind"] == "data_table")
+    assert table["content"]["rows"][0]["values"]["Path"]["asset_path"] == "RowA.Path"
+    _, null = _tagged_data_table_document(
+        [("Path", "SoftObjectProperty", struct.pack("<i", -1))], summary=summary, soft_paths=paths,
+    )
+    table = next(p for p in project_document(null)["projections"] if p["kind"] == "data_table")
+    assert table["content"]["rows"][0]["values"]["Path"]["asset_path"] == ""
+    _, invalid = _tagged_data_table_document(
+        [("Path", "SoftObjectProperty", struct.pack("<i", 9))], summary=summary, soft_paths=paths,
+    )
+    table = next(p for p in project_document(invalid)["projections"] if p["kind"] == "data_table")
+    assert table["content"]["rows"][0]["values"]["Path"]["kind"] == "opaque"
+    assert table["content"]["values_decoded"] is False
+    assert table["completeness"] == "partial"
+    diagnostic = next(d for d in invalid.diagnostics if d.code == "SOFT_OBJECT_PATH_INDEX_INVALID")
+    assert diagnostic.offset == 36
+
+    # The existing handler cap must not upgrade 50 of 51 rows to complete.
+    from uasset_read.parsers.asset_types.handlers_impl import DataTableHandler
+
+    obj = document.objects[0]
+    capped_rows = {
+        "row_count": 51,
+        "row_names": [f"Row{i}" for i in range(51)],
+        "rows": [{"name": f"Row{i}", "fields": {"Count": {"type": "IntProperty", "size": 4, "value": 42}}}
+                 for i in range(51)],
+        "complete": True,
+    }
+    obj.semantic = DataTableHandler().enrich(obj, "decode", [obj], ([], [], {obj.id: {"table_rows": capped_rows}}))
+    assert len(obj.semantic["rows"]) == 50
+    assert obj.semantic["row_count"] == 51
+    capped = project_document(document, mode="normal")
+    for projection in capped["projections"]:
+        assert projection["status"] == "represented"
+        assert projection["completeness"] == "partial"
+    table = next(p for p in capped["projections"] if p["kind"] == "data_table")
+    assert table["content"]["values_decoded"] is False
+
+
 def test_real_sample_proves_claimed_capability():
     """Each claimed capability must produce stable semantics from a real fixture.
 
@@ -470,6 +641,30 @@ def test_real_sample_proves_claimed_capability():
 
         if class_name == "DataTable":
             assert obj.semantic["row_count"] == len(obj.semantic["row_names"]) > 0, f"{sample}:{class_name}"
+            if sample == "FirstPerson_DT_WeaponList.uasset":
+                from uasset_read.projection import project_document
+                from uasset_read.package import parse_package_document
+
+                projected = project_document(parse_package_document(SAMPLES / sample, depth="decode"), mode="normal")
+                table = next(p for p in projected["projections"] if p["kind"] == "data_table")
+                assert table["content"]["row_names"] == ["GrenadeLauncher", "Pistol", "Rifle"]
+                assert table["content"]["values_decoded"] is True
+                assert table["status"] == "translated"
+                assert table["completeness"] == "complete"
+                for row in table["content"]["rows"]:
+                    assert len(row["values"]) == 2
+                    mesh = f"/Game/Weapons/{row['name']}/Meshes/SM_{row['name']}.SM_{row['name']}"
+                    actor = (f"/Game/Variant_Shooter/Blueprints/Pickups/Weapons/BP_ShooterWeapon_{row['name']}"
+                             f".BP_ShooterWeapon_{row['name']}_C")
+                    assert row["values"] == {
+                        "StaticMesh_10_8456479142D90AC54009A190C6522528": {
+                            "kind": "soft_object_path", "raw_kind": "SoftObjectProperty", "asset_path": mesh, "sub_path": "",
+                        },
+                        "SpawnActor_13_12829FCF4BC69EE56781F8AEEB1A9DD8": {
+                            "kind": "soft_object_path", "raw_kind": "SoftObjectProperty", "asset_path": actor, "sub_path": "",
+                        },
+                    }
+                json.dumps(projected)
         elif class_name == "CurveTable":
             sem = obj.semantic
             assert sem["row_count"] == len(sem["row_names"]) > 0, f"{sample}:{class_name}"
@@ -801,6 +996,9 @@ def test_logging_boundaries_and_cli_file_logs(capfd, caplog, tmp_path, monkeypat
 
 
 def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
+    _assert_data_table_row_values_decode_tagged_scalars()
+    _assert_data_table_projection_stays_partial_when_any_cell_is_opaque()
+
     import logging
     import struct
     from types import SimpleNamespace

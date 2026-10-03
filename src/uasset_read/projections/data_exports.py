@@ -70,12 +70,19 @@ def _row_has_evidenced_fields(row: Any) -> bool:
     return isinstance(row, dict) and bool(row.get("fields"))
 
 
+def _value_is_decoded(value: Any) -> bool:
+    if isinstance(value, dict):
+        return value.get("kind") != "opaque" and all(_value_is_decoded(v) for v in value.values())
+    if isinstance(value, list):
+        return all(_value_is_decoded(v) for v in value)
+    return True
+
+
 def _data_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], ProjectionStatus, float | None] | None:
     """Return (payload, status, completeness) or None when unavailable.
 
-    Matrix rule: row struct + values decoded, else unavailable. Non-empty
-    field maps are the handler's decoded evidence and are copied verbatim;
-    empty/missing field maps never claim a represented projection.
+    Field descriptors support a partial representation. Only a value for
+    every expected cell, without opaque descendants, supports completeness.
     """
     if semantic.get("kind") != "data_table":
         return None
@@ -91,14 +98,16 @@ def _data_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], Proje
                 seen.add(column["name"])
                 columns.append(column)
     projected_rows = []
-    any_cell_value = False
+    all_cells_decoded = len(evidenced) == len(rows) == semantic.get("row_count", len(rows))
     for row in evidenced:
         fields = row.get("fields")
         if not isinstance(fields, dict):
             fields = {}
         values = {str(k): _projected_field_value(v) for k, v in fields.items()}
-        if any(isinstance(v, dict) and "value" in v for v in fields.values()):
-            any_cell_value = True
+        all_cells_decoded = all_cells_decoded and set(values) == seen and all(
+            isinstance(raw, dict) and "value" in raw and _value_is_decoded(values[str(name)])
+            for name, raw in fields.items()
+        )
         projected_rows.append({"name": str(row.get("name") or ""), "values": values})
     payload = {
         "kind": "data_table",
@@ -107,11 +116,10 @@ def _data_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], Proje
         "rows": projected_rows,
         "row_count": semantic.get("row_count", len(projected_rows)),
         "row_names": list(semantic.get("row_names") or []),
-        "values_decoded": any_cell_value,
+        "values_decoded": all_cells_decoded,
     }
-    # Evidenced field maps count as decoded schema; cell payloads upgrade status.
-    status: ProjectionStatus = "translated" if any_cell_value else "represented"
-    completeness = 1.0 if any_cell_value else 0.5
+    status: ProjectionStatus = "translated" if all_cells_decoded else "represented"
+    completeness = 1.0 if all_cells_decoded else 0.5
     return payload, status, completeness
 
 
@@ -239,6 +247,9 @@ class DataTableProjector:
                 dependencies=deps,
             )
         payload, status, completeness = projected
+        if any(c.feature == "handler.DataTableHandler" and c.status != "present" for c in obj.coverage):
+            payload["values_decoded"] = False
+            status, completeness = "represented", 0.5
         return [
             ProjectionRecord(
                 kind="data_table",

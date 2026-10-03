@@ -13,7 +13,7 @@ from typing import Any
 
 from ...constants import format_guid_bytes, format_guid_fields
 from ...models.object_model import ObjectRecord, CoverageEntry
-from ...models.properties import PropertyBag
+from ...models.properties import PropertyBag, project_property_value
 from ...serializers.blueprint_graph import summarize_exec_edges
 from ..blueprint.correlation import _family_root_key
 from .registry import _SupportsClasses, register_handler
@@ -255,6 +255,20 @@ class DataTableHandler(_SupportsClasses):
                 result["row_names"] = rows["row_names"][:100]
             if rows.get("rows"):
                 result["rows"] = rows["rows"][:50]
+                if not is_curve:
+                    # Normalize parser models at the semantic boundary once;
+                    # object semantics and all DataTable projections share them.
+                    result["rows"] = [
+                        {
+                            **row,
+                            "fields": {
+                                name: {**field, "value": project_property_value(field["value"])}
+                                if isinstance(field, dict) and "value" in field else field
+                                for name, field in row.get("fields", {}).items()
+                            },
+                        }
+                        for row in result["rows"]
+                    ]
             if is_curve:
                 result["curve_table_mode"] = rows.get("curve_table_mode")
             status = "present" if rows["complete"] else "partial"

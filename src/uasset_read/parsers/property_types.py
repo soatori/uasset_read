@@ -31,6 +31,7 @@ from uasset_read.constants import (
     MAX_ARRAY_COUNT,
     UE5_LARGE_WORLD_COORDINATES,
     UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES,
+    UE5_ADD_SOFTOBJECTPATH_LIST,
     MAX_SAFE_COUNT,
     UE_NONE_SENTINEL,
     format_guid_bytes,
@@ -423,13 +424,32 @@ def parse_soft_object_property(
 
     Inline FSoftObjectPath layout (FName-based).
     """
+    ue5 = getattr(summary, "file_version_ue5", 0) if summary is not None else 0
+    paths = getattr(archive, "_soft_object_paths", None)
+    if tag.type == "SoftObjectProperty" and tag.size == 4 and ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
+        offset = archive.tell()
+        index = archive.read_i32()
+        if index == -1:
+            return SoftObjectPathValue(raw_kind=tag.type, asset_path="", sub_path="")
+        if paths is not None and 0 <= index < len(paths):
+            return paths[index]
+        archive._record_structured_diagnostic(
+            code="SOFT_OBJECT_PATH_INDEX_INVALID",
+            stage="parse_properties",
+            offset=offset,
+            raw_value=index,
+            fallback="retained_as_opaque",
+            reason="recovered_corruption",
+            message=f"SoftObjectPath index {index} has no decoded package path",
+        )
+        raise ParseError(f"Invalid SoftObjectPath index {index}")
+
     # FSoftObjectPath inline. A two-FString layout never existed in UE
     # (SoftObjectPath.cpp SerializePathWithoutFixup). UE5 >= 1007:
     # FTopLevelAssetPath = PackageName FName + AssetName FName, then subpath FString.
     # Older: one FName + subpath FString. The pre-4.19 single-FString form is outside
     # this project's supported window; such a package hits the tolerant skip, not a
     # fabricated decode.
-    ue5 = getattr(summary, "file_version_ue5", 0) if summary is not None else 0
     package_name = ""
     if ue5 >= UE5_FSOFTOBJECTPATH_REMOVE_ASSET_PATH_FNAMES:
         package_name = archive.read_name(name_map)

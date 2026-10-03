@@ -14,11 +14,11 @@ from collections.abc import Sequence
 from typing import Any, Literal, get_args
 
 from ..archive import ByteArchive, SourceInfo
-from ..constants import PKG_Cooked, PKG_UnversionedProperties
+from ..constants import PKG_Cooked, PKG_UnversionedProperties, UE5_ADD_SOFTOBJECTPATH_LIST, MAX_SAFE_COUNT
 from ..exceptions import ParseError, ExportBoundsExceeded
 
 from ..package import PackageArchive
-from ..serializers.property_tags import read_property_tag
+from ..serializers.property_tags import read_property_tag, read_tag_value_bounded
 from ..serializers.object_resources import (
     ObjectExport,
     ObjectImport,
@@ -803,6 +803,8 @@ class LegacyPackageReader:
             # 3. Read name table
             name_map = read_name_table(archive, summary)
             archive.set_name_map(name_map)
+            if summary.file_version_ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
+                archive._soft_object_paths = _read_soft_object_paths(archive, summary, name_map, diagnostics)
 
             # 4. Read import map
             import_map = read_import_map(archive, summary, name_map)
@@ -1367,6 +1369,8 @@ class LegacyPackageReader:
                             name_map,
                             obj.id,
                             diagnostics,
+                            summary=summary,
+                            export_map=export_map,
                             curve_table=cn == "CurveTable",
                         )
                     }
@@ -2033,6 +2037,52 @@ def _attach_kismet_extras(
         )
 
 
+def _read_soft_object_paths(
+    archive: PackageArchive,
+    summary: PackageFileSummary,
+    name_map: list[str],
+    diagnostics: list[Diagnostic],
+) -> list[Any]:
+    """Load the package's inline FSoftObjectPath list inside its header table."""
+    from .property_types import parse_soft_object_property
+    from ..models.properties import PropertyTag
+
+    count, start = summary.soft_object_paths_count, summary.soft_object_paths_offset
+    if count == 0:
+        return []
+    end = min(
+        [archive.total_size(), summary.total_header_size]
+        + [offset for offset in (summary.name_offset, summary.import_offset, summary.export_offset, summary.depends_offset)
+           if offset > start]
+    )
+    if not 0 < count <= MAX_SAFE_COUNT or not 0 < start < end or count > (end - start) // 20:
+        diagnostics.append(_diag(
+            "SOFT_OBJECT_PATH_TABLE_INVALID", "SoftObjectPaths count/offset exceeds its header table bounds",
+            "package.soft_object_paths", reason="recovered_corruption",
+        ))
+        return []
+    previous_position = archive.tell()
+    previous_range = archive.set_read_range((start, end))
+    paths = []
+    try:
+        archive.seek(start)
+        for _ in range(count):
+            mark = archive._diagnostic_mark()
+            path = parse_soft_object_property(PropertyTag("", "SoftObjectProperty", 0), archive, name_map, summary)
+            if archive._diagnostic_mark() != mark:
+                raise ParseError("SoftObjectPaths entry contains an invalid name")
+            paths.append(path)
+    except ParseError as exc:
+        diagnostics.append(_diag(
+            "SOFT_OBJECT_PATH_TABLE_TRUNCATED", f"Decoded {len(paths)}/{count} SoftObjectPaths: {exc}",
+            "package.soft_object_paths", reason="recovered_corruption",
+        ))
+    finally:
+        archive.set_read_range(previous_range)
+        archive.seek(previous_position)
+    return paths
+
+
 def _read_table_rows(
     archive: PackageArchive,
     serial_end: int,
@@ -2040,6 +2090,8 @@ def _read_table_rows(
     object_id: str,
     diagnostics: list[Diagnostic],
     *,
+    summary: PackageFileSummary | None = None,
+    export_map: list[ObjectExport] | None = None,
     curve_table: bool = False,
 ) -> dict[str, Any]:
     """Parse NumRows + row names from the bounded payload after properties.
@@ -2067,6 +2119,7 @@ def _read_table_rows(
     remaining = serial_end - archive.tell()
     if remaining < 4:
         return result
+    payload_start = archive.tell()
     blob = archive.read(min(remaining, _MAX_TABLE_BLOB))
     (row_count,) = struct.unpack_from("<i", blob, 0)
     if row_count < 0 or row_count > _MAX_TABLE_ROWS:
@@ -2093,6 +2146,14 @@ def _read_table_rows(
     payload._file_version_ue4 = getattr(archive, "_file_version_ue4", 0)
     payload._file_version_ue5 = getattr(archive, "_file_version_ue5", 0)
     limit = len(blob) - header
+    payload.set_read_range((0, limit))
+    payload._current_object_id = object_id
+    payload._soft_object_paths = getattr(archive, "_soft_object_paths", None)
+    from .property_parser import parse_property_value
+    from ..models.fallback import FallbackReason, PropertyFallback
+
+    decode_values = not curve_table and not (getattr(summary, "package_flags", 0) & PKG_UnversionedProperties)
+    terminated_rows = 0
     for _ in range(row_count):
         if payload.tell() + 8 > limit:
             break
@@ -2109,8 +2170,8 @@ def _read_table_rows(
         names.append(display_name)
         # Each row is a tagged property stream terminated by the None tag (DataTable.cpp
         # LoadStructData -> SerializeItem; versioned path = SerializeTaggedProperties,
-        # CurveTable.cpp:112-171 same). Collect field name/type/size descriptors
-        # (values not decoded yet); stop at None.
+        # CurveTable.cpp:112-171 same). DataTable cells reuse property dispatch;
+        # CurveTable and unversioned row handling retain their separate paths.
         row_fields: dict[str, Any] = {}
         while payload.tell() < limit:
             header_pos = payload.tell()
@@ -2120,16 +2181,34 @@ def _read_table_rows(
                 payload.seek(header_pos)
                 break
             if t.name == "None":
+                terminated_rows += 1
                 break
-            if t.value_end_offset is None or t.value_end_offset <= payload.tell():
-                # Non-advancing or size-less tag: malformed row. Stop rather than seek()
+            if t.value_end_offset is None or not payload.tell() <= t.value_end_offset <= limit:
+                # Missing, backwards, or out-of-payload boundary: malformed row. Stop rather than seek()
                 # on None, which would raise out of a recoverable parse path.
                 payload.seek(header_pos)
                 break
             row_fields[t.name] = {"type": t.type, "size": int(getattr(t, "size", 0) or 0)}
-            payload.seek(t.value_end_offset)
+            if decode_values:
+                # Cursor restoration alone cannot stop reads into the next tag.
+                previous_range = payload.set_read_range((payload.tell(), t.value_end_offset))
+                try:
+                    value = read_tag_value_bounded(
+                        payload,
+                        t,
+                        lambda t=t: parse_property_value(t, payload, name_map, export_map or [], summary),
+                    )
+                except ParseError:
+                    value = PropertyFallback.from_tag(t, FallbackReason.PARSE_ERROR)
+                finally:
+                    payload.set_read_range(previous_range)
+                if value is None:
+                    value = PropertyFallback.from_tag(t, FallbackReason.UNSUPPORTED_TYPE)
+                row_fields[t.name]["value"] = value
+            else:
+                payload.seek(t.value_end_offset)
         rows_out.append({"name": display_name, "fields": row_fields})
-    complete = len(names) == row_count
+    complete = len(names) == terminated_rows == row_count
     # The row block is the whole payload: NumRows followed by exactly that many
     # (FName + tagged row stream) records, each ending on its own None tag. Bytes
     # left over mean the anchor or a row walk drifted, which is never reportable
@@ -2167,6 +2246,13 @@ def _read_table_rows(
     result["rows"] = rows_out[:row_count]
     result["row_bytes_consumed"] = payload.tell()
     result["complete"] = complete
+    # The row archive uses local offsets; document diagnostics use package offsets.
+    from dataclasses import replace
+
+    diagnostics.extend(
+        replace(d, offset=payload_start + header + d.offset if d.offset is not None else None)
+        for d in payload.get_structured_diagnostics()
+    )
     return result
 
 

@@ -124,6 +124,8 @@ class PackageFileSummary:
     package_flags: int = 0
     name_count: int = 0
     name_offset: int = 0
+    soft_object_paths_count: int = 0
+    soft_object_paths_offset: int = 0
     export_count: int = 0
     export_offset: int = 0
     import_count: int = 0
@@ -560,9 +562,11 @@ def read_package_summary(
     archive.validate_offset(name_offset, "NameOffset")
 
     # Step 6-8: SoftObjectPaths / Localization / GatherableText (between NameOffset and ExportCount)
-    # SoftObjectPaths（UE5 >= 1011）
+    # SoftObjectPaths (UE5 ADD_SOFTOBJECTPATH_LIST)
+    soft_object_paths_count = 0
+    soft_object_paths_offset = 0
     if file_version_ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
-        archive.read_i32()  # SoftObjectPathsCount (write-only; cursor alignment)
+        soft_object_paths_count = archive.read_i32()
         soft_object_paths_offset = archive.read_i32()
         if soft_object_paths_offset > 0:
             archive.validate_offset(soft_object_paths_offset, "SoftObjectPathsOffset")
@@ -682,6 +686,8 @@ def read_package_summary(
         package_flags=package_flags,
         name_count=name_count,
         name_offset=name_offset,
+        soft_object_paths_count=soft_object_paths_count,
+        soft_object_paths_offset=soft_object_paths_offset,
         export_count=export_count,
         export_offset=export_offset,
         import_count=import_count,
