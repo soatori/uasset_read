@@ -453,7 +453,7 @@ def test_v2_tables_match_independent_golden_reference(entry):
         assert golden["preload"]["total_entries"] == 0, entry["name"]
 
 
-def _tagged_data_table_document(cells, *, prefix_size=0, terminated=True, summary=None, soft_paths=None):
+def _tagged_data_table_document(cells, *, prefix_size=0, terminated=True, terminator_index=0, summary=None, soft_paths=None):
     """One bounded legacy row, with hand-written tag/value bytes."""
     import struct
 
@@ -474,7 +474,7 @@ def _tagged_data_table_document(cells, *, prefix_size=0, terminated=True, summar
             row += struct.pack("<IIIIii", len(names) - 2, 0, len(names) - 1, 0, len(value), 0) + value
     blob = b"\0" * prefix_size + struct.pack("<iII", 1, 1, 0) + row
     if terminated:
-        blob += struct.pack("<II", 0, 0)
+        blob += struct.pack("<II", terminator_index, 0)
     archive = ByteArchive(blob)
     archive.seek(prefix_size)
     archive.set_read_range((prefix_size, len(blob)))
@@ -541,6 +541,21 @@ def _assert_data_table_row_values_decode_tagged_scalars():
     diagnostic = next(d for d in document.diagnostics if d.code == "name_index_out_of_range")
     assert diagnostic.offset == 52  # prefix + row count + row FName + legacy tag
     assert diagnostic.object_id == "export:0"
+    table = next(p for p in project_document(document)["projections"] if p["kind"] == "data_table")
+    assert table["content"]["rows"][0]["values"]["InvalidName"] == {
+        "kind": "opaque", "type": "NameProperty", "size": 8, "reason": "parse_error",
+    }
+    assert table["content"]["values_decoded"] is False
+    assert table["completeness"] == "partial"
+
+    rows, document = _tagged_data_table_document(
+        [("Count", "IntProperty", struct.pack("<i", 42))], terminator_index=99,
+    )
+    assert rows["complete"] is False
+    assert any(d.code == "name_index_out_of_range" and d.offset == 40 for d in document.diagnostics)
+    assert any(d.code == "TABLE_ROWS_TRUNCATED" for d in document.diagnostics)
+    for projection in project_document(document)["projections"]:
+        assert projection["completeness"] == "partial"
 
     rows, document = _tagged_data_table_document([("Count", "IntProperty", struct.pack("<i", 42))], terminated=False)
     assert rows["complete"] is False
