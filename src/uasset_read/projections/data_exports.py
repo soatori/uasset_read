@@ -14,6 +14,7 @@ from typing import Any
 
 from uasset_read.models.document import PackageDocument
 from uasset_read.models.object_model import ObjectRecord
+from uasset_read.models.properties import property_value_is_decoded
 from uasset_read.projections.records import (
     ProjectionRecord,
     ProjectionStatus,
@@ -70,14 +71,6 @@ def _row_has_evidenced_fields(row: Any) -> bool:
     return isinstance(row, dict) and bool(row.get("fields"))
 
 
-def _value_is_decoded(value: Any) -> bool:
-    if isinstance(value, dict):
-        return value.get("kind") != "opaque" and all(_value_is_decoded(v) for v in value.values())
-    if isinstance(value, list):
-        return all(_value_is_decoded(v) for v in value)
-    return True
-
-
 def _data_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], ProjectionStatus, float | None] | None:
     """Return (payload, status, completeness) or None when unavailable.
 
@@ -105,7 +98,7 @@ def _data_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], Proje
             fields = {}
         values = {str(k): _projected_field_value(v) for k, v in fields.items()}
         all_cells_decoded = all_cells_decoded and set(values) == seen and all(
-            isinstance(raw, dict) and "value" in raw and _value_is_decoded(values[str(name)])
+            isinstance(raw, dict) and "value" in raw and property_value_is_decoded(values[str(name)])
             for name, raw in fields.items()
         )
         projected_rows.append({"name": str(row.get("name") or ""), "values": values})

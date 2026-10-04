@@ -453,7 +453,10 @@ def test_v2_tables_match_independent_golden_reference(entry):
         assert golden["preload"]["total_entries"] == 0, entry["name"]
 
 
-def _tagged_data_table_document(cells, *, prefix_size=0, terminated=True, terminator_index=0, summary=None, soft_paths=None):
+def _tagged_data_table_document(
+    cells, *, prefix_size=0, terminated=True, terminator_index=0, summary=None, soft_paths=None,
+    import_map=None, export_map=None,
+):
     """One bounded legacy row, with hand-written tag/value bytes."""
     import struct
 
@@ -461,7 +464,7 @@ def _tagged_data_table_document(cells, *, prefix_size=0, terminated=True, termin
     from uasset_read.models.document import PackageDocument, PackageInfo
     from uasset_read.models.object_model import ObjectRecord
     from uasset_read.models.properties import PropertyBag
-    from uasset_read.parsers.asset_types.handlers_impl import DataTableHandler
+    from uasset_read.parsers.asset_types.registry import run_handlers
     from uasset_read.parsers.legacy_reader import _read_table_rows
 
     names = ["None", "RowA"]
@@ -481,9 +484,13 @@ def _tagged_data_table_document(cells, *, prefix_size=0, terminated=True, termin
     if soft_paths is not None:
         archive._soft_object_paths = soft_paths
     diagnostics = []
-    rows = _read_table_rows(archive, len(blob), names, "export:0", diagnostics, summary=summary)
+    rows = _read_table_rows(
+        archive, len(blob), names, "export:0", diagnostics, summary=summary,
+        import_map=import_map or [], export_map=export_map or [],
+    )
     obj = ObjectRecord("export:0", 0, "Table", class_name="DataTable", properties=PropertyBag())
-    obj.semantic = DataTableHandler().enrich(obj, "decode", [obj], ([], names, {obj.id: {"table_rows": rows}}))
+    result = run_handlers(obj, "decode", [obj], ([], names, {obj.id: {"table_rows": rows}}, None))
+    obj.semantic = result.semantic
     document = PackageDocument(
         source=SourceInfo("memory", "Table", len(blob)),
         package=PackageInfo("Table", "legacy"),
@@ -497,8 +504,66 @@ def _tagged_data_table_document(cells, *, prefix_size=0, terminated=True, termin
 def _assert_data_table_row_values_decode_tagged_scalars():
     import struct
 
+    from uasset_read.archive import ByteArchive
+    from uasset_read.exceptions import ParseError
+    from uasset_read.models.properties import PropertyTag, project_property_value
     from uasset_read.projection import project_document
     from uasset_read.parsers.property_types import make_enum_value
+    from uasset_read.parsers.property_types import parse_enum_property, parse_object_property
+    from uasset_read.parsers.property_parser import parse_property_value
+
+    enum = parse_enum_property(
+        PropertyTag(name="Mode", type="EnumProperty", size=8, enum_type="EALSSpawnType"),
+        ByteArchive(struct.pack("<II", 0, 0)),
+        ["Location"],
+    )
+    assert project_property_value(enum) == {
+        "kind": "enum", "enum_type": "EALSSpawnType", "value": "EALSSpawnType::Location",
+    }
+    unknown_enum = parse_enum_property(
+        PropertyTag(name="Mode", type="EnumProperty", size=8),
+        ByteArchive(struct.pack("<II", 0, 0)),
+        ["Location"],
+    )
+    assert project_property_value(unknown_enum) == {
+        "kind": "enum", "enum_type": "UnknownEnum", "value": "Location",
+    }
+
+    maps = ([object() for _ in range(11)], [object(), object()])
+    for raw, expected in (
+        (-11, {"kind": "object_ref", "table": "import", "index": 10, "id": "import:10"}),
+        (2, {"kind": "object_ref", "table": "export", "index": 1, "id": "export:1"}),
+        (0, None),
+    ):
+        archive = ByteArchive(struct.pack("<i", raw))
+        archive._object_reference_maps = maps
+        value = parse_object_property(PropertyTag(name="Target", type="ObjectProperty", size=4), archive)
+        assert project_property_value(value) == expected
+    map_archive = ByteArchive(struct.pack("<iiii", 0, 1, -11, 42))
+    map_archive._object_reference_maps = maps
+    map_value = parse_property_value(
+        PropertyTag(name="Lookup", type="MapProperty", size=16, inner_type="ObjectProperty", value_type="IntProperty"),
+        map_archive,
+        [],
+        [],
+    )
+    assert project_property_value(map_value) == {
+        "kind": "map",
+        "key_type": "ObjectProperty",
+        "value_type": "IntProperty",
+        "entries": [{
+            "key": {"kind": "object_ref", "table": "import", "index": 10, "id": "import:10"},
+            "value": 42,
+        }],
+    }
+    invalid_archive = ByteArchive(struct.pack("<i", -12))
+    invalid_archive._object_reference_maps = maps
+    invalid_archive._current_object_id = "export:0"
+    with pytest.raises(ParseError):
+        parse_object_property(PropertyTag(name="Target", type="ObjectProperty", size=4), invalid_archive)
+    diagnostic, = invalid_archive.get_structured_diagnostics()
+    assert diagnostic.code == "OBJECT_PROPERTY_INDEX_INVALID"
+    assert diagnostic.object_id == "export:0" and diagnostic.offset == 0
 
     assert make_enum_value("EAttachLocation", "KeepRelativeOffset")["value_name"] == "EAttachLocation::KeepRelativeOffset"
     assert make_enum_value("EAttachLocation", "EAttachLocation::KeepRelativeOffset")["value_name"] == "EAttachLocation::KeepRelativeOffset"
@@ -514,6 +579,7 @@ def _assert_data_table_row_values_decode_tagged_scalars():
     assert table["content"]["values_decoded"] is True
     assert table["status"] == "translated"
     assert table["completeness"] == "complete"
+    assert document.objects[0].status.semantic == "complete"
     json.dumps(normal)
 
     # A one-byte IntProperty must stay opaque rather than read the next tag.
@@ -530,6 +596,7 @@ def _assert_data_table_row_values_decode_tagged_scalars():
     assert rows["complete"] is True
     assert table["content"]["values_decoded"] is False
     assert table["completeness"] == "partial"
+    assert document.objects[0].status.semantic == "partial"
 
     rows, document = _tagged_data_table_document([
         ("Enabled", "BoolProperty", True),
@@ -558,12 +625,14 @@ def _assert_data_table_row_values_decode_tagged_scalars():
     assert rows["complete"] is False
     assert any(d.code == "name_index_out_of_range" and d.offset == 40 for d in document.diagnostics)
     assert any(d.code == "TABLE_ROWS_TRUNCATED" for d in document.diagnostics)
+    assert document.objects[0].status.semantic == "partial"
     for projection in project_document(document)["projections"]:
         assert projection["completeness"] == "partial"
 
     rows, document = _tagged_data_table_document([("Count", "IntProperty", struct.pack("<i", 42))], terminated=False)
     assert rows["complete"] is False
     assert any(d.code == "TABLE_ROWS_TRUNCATED" for d in document.diagnostics)
+    assert document.objects[0].status.semantic == "partial"
     for projection in project_document(document)["projections"]:
         assert projection["completeness"] == "partial"
 
@@ -588,7 +657,38 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
     for projection in normal["projections"]:
         assert projection["status"] == "represented"
         assert projection["completeness"] == "partial"
+    assert document.objects[0].status.semantic == "partial"
     json.dumps(normal)
+
+    _, references = _tagged_data_table_document(
+        [
+            ("Imported", "ObjectProperty", struct.pack("<i", -11)),
+            ("Exported", "ObjectProperty", struct.pack("<i", 2)),
+            ("Null", "ObjectProperty", struct.pack("<i", 0)),
+        ],
+        import_map=[object() for _ in range(11)], export_map=[object(), object()],
+    )
+    table = next(p for p in project_document(references)["projections"] if p["kind"] == "data_table")
+    assert table["content"]["rows"][0]["values"] == {
+        "Imported": {"kind": "object_ref", "table": "import", "index": 10, "id": "import:10"},
+        "Exported": {"kind": "object_ref", "table": "export", "index": 1, "id": "export:1"},
+        "Null": None,
+    }
+    assert table["content"]["values_decoded"] is True
+    assert references.objects[0].status.semantic == "complete"
+
+    _, invalid_reference = _tagged_data_table_document(
+        [("Target", "ObjectProperty", struct.pack("<i", -2))], import_map=[object()],
+    )
+    table = next(p for p in project_document(invalid_reference)["projections"] if p["kind"] == "data_table")
+    assert table["content"]["rows"][0]["values"]["Target"] == {
+        "kind": "opaque", "type": "ObjectProperty", "size": 4, "reason": "parse_error",
+    }
+    assert table["content"]["values_decoded"] is False
+    assert table["completeness"] == "partial"
+    diagnostic = next(d for d in invalid_reference.diagnostics if d.code == "OBJECT_PROPERTY_INDEX_INVALID")
+    assert diagnostic.object_id == "export:0" and diagnostic.offset == 36
+    assert invalid_reference.objects[0].status.semantic == "partial"
 
     from uasset_read.models.properties import SoftObjectPathValue
 
@@ -644,7 +744,7 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
     assert any(d.code == "SOFT_OBJECT_PATH_INDEX_INVALID" and d.offset == 36 for d in invalid_class.diagnostics)
 
     # The existing handler cap must not upgrade 50 of 51 rows to complete.
-    from uasset_read.parsers.asset_types.handlers_impl import DataTableHandler
+    from uasset_read.parsers.asset_types.registry import run_handlers
 
     obj = document.objects[0]
     capped_rows = {
@@ -654,7 +754,12 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
                  for i in range(51)],
         "complete": True,
     }
-    obj.semantic = DataTableHandler().enrich(obj, "decode", [obj], ([], [], {obj.id: {"table_rows": capped_rows}}))
+    obj.coverage.clear()
+    obj.semantic = None
+    obj.status.semantic = "not_requested"
+    capped_result = run_handlers(obj, "decode", [obj], ([], [], {obj.id: {"table_rows": capped_rows}}, None))
+    obj.semantic = capped_result.semantic
+    assert obj.status.semantic == "partial"
     assert len(obj.semantic["rows"]) == 50
     assert obj.semantic["row_count"] == 51
     capped = project_document(document, mode="normal")
@@ -707,12 +812,30 @@ def test_real_sample_proves_claimed_capability():
                     }
                 json.dumps(projected)
             elif sample == "ALS_FootstepDataTable.uasset":
-                value = obj.semantic["rows"][0]["fields"]["SoundAttachmentType"]["value"]
-                assert value == {
+                fields = obj.semantic["rows"][0]["fields"]
+                assert fields["SoundAttachmentType"]["value"] == {
                     "kind": "enum",
                     "enum_type": "EAttachLocation",
                     "value": "EAttachLocation::KeepRelativeOffset",
                 }
+                assert fields["Sound"]["value"] == {
+                    "kind": "object_ref", "table": "import", "index": 10, "id": "import:10",
+                }
+                assert fields["DecalMaterial"]["value"] == {
+                    "kind": "object_ref", "table": "import", "index": 3, "id": "import:3",
+                }
+                assert fields["NiagaraSystem"]["value"] is None
+                from uasset_read.package import parse_package_document
+                from uasset_read.projection import project_document
+
+                projected = project_document(parse_package_document(SAMPLES / sample, depth="decode"), mode="normal")
+                table = next(p for p in projected["projections"] if p["kind"] == "data_table")
+                assert table["content"]["values_decoded"] is True
+                assert table["status"] == "translated"
+                assert table["completeness"] == "complete"
+                dependencies = {item["index"]: item for item in projected["dependencies"]}
+                assert dependencies[10]["object_name"] == "Footstep_Cue"
+                assert dependencies[3]["object_name"] == "M_DecalFootprint"
         elif class_name == "CurveTable":
             sem = obj.semantic
             assert sem["row_count"] == len(sem["row_names"]) > 0, f"{sample}:{class_name}"

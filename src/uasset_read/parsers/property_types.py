@@ -413,12 +413,38 @@ def parse_name_property(tag: PropertyTag, archive: FArchive, name_map: list[str]
     return archive.read_name(name_map)
 
 
-def parse_object_property(tag: PropertyTag, archive: FArchive) -> int:
-    """Parse ObjectProperty (PROP-07). Returns raw FPackageIndex.
+def parse_object_property(tag: PropertyTag, archive: FArchive) -> Any:
+    """Parse ObjectProperty (PROP-07), resolving indices in bounded table rows."""
+    offset = archive.tell()
+    value = archive.read_i32()
+    maps = getattr(archive, "_object_reference_maps", None)
+    if tag.type != "ObjectProperty" or maps is None:
+        return value
 
-    Canonical reader for all single-int32-reference property types.
-    """
-    return archive.read_i32()
+    from uasset_read.models.object_model import ObjectRef
+    from uasset_read.serializers.object_resources import PackageIndex
+
+    imports, exports = maps
+    package_index = PackageIndex(value)
+    if package_index.is_null:
+        return None
+    if package_index.is_import:
+        table, index, count = "import", package_index.to_import_index(), len(imports)
+    else:
+        table, index, count = "export", package_index.to_export_index(), len(exports)
+    if 0 <= index < count:
+        return ObjectRef(table=table, index=index)
+
+    archive._record_structured_diagnostic(
+        code="OBJECT_PROPERTY_INDEX_INVALID",
+        stage="parse_properties",
+        offset=offset,
+        raw_value=value,
+        fallback="retained_as_opaque",
+        reason="recovered_corruption",
+        message=f"ObjectProperty PackageIndex {value} has no matching {table}",
+    )
+    raise ParseError(f"Invalid ObjectProperty PackageIndex {value}")
 
 
 def parse_soft_object_property(
@@ -1189,7 +1215,7 @@ def parse_enum_property(
     tag: PropertyTag, archive: FArchive, name_map: list[str], summary: Any | None = None
 ) -> EnumValue:
     """Parse EnumProperty (ADVP-04)."""
-    enum_type = _extract_enum_type_from_tag(tag)
+    enum_type = tag.enum_type or _extract_enum_type_from_tag(tag)
     enum_value_name = archive.read_name(name_map)
     result = make_enum_value(enum_type, enum_value_name)
     return EnumValue(enum_type=result["enum_type"], value_name=result["value_name"])
@@ -1469,7 +1495,7 @@ def _dispatch_key_parse(
         return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
 
     if key_type == "ObjectProperty":
-        return archive.read_i32()
+        return parse_object_property(PropertyTag(name="Key", type=key_type, size=4), archive)
 
     if key_type == "EnumProperty":
         return archive.read_name(name_map)

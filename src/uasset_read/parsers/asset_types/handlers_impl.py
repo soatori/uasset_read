@@ -13,7 +13,7 @@ from typing import Any
 
 from ...constants import format_guid_bytes, format_guid_fields
 from ...models.object_model import ObjectRecord, CoverageEntry
-from ...models.properties import PropertyBag, project_property_value
+from ...models.properties import PropertyBag, project_property_value, property_value_is_decoded
 from ...serializers.blueprint_graph import summarize_exec_edges
 from ..blueprint.correlation import _family_root_key
 from .registry import _SupportsClasses, register_handler
@@ -220,6 +220,7 @@ class DataTableHandler(_SupportsClasses):
     """
 
     classes = ("DataTable", "CurveTable")
+    requires_complete_coverage = True
 
     def enrich(
         self,
@@ -280,10 +281,26 @@ class DataTableHandler(_SupportsClasses):
         return result
 
     def capability(self, result: dict[str, Any]) -> str:
-        # Decoded only when at least one row carries a non-empty field map;
-        # row-names-only tables stay a summary projection.
         rows = result.get("rows") or []
-        if any((r.get("fields") or {}) for r in rows):
+        if result.get("kind") == "curve_table":
+            return "decoded" if any((r.get("fields") or {}) for r in rows) else "summary"
+        row_count = result.get("row_count", len(rows))
+        if not rows or len(rows) != row_count:
+            return "summary"
+        fields_by_row = [row.get("fields") for row in rows if isinstance(row, dict)]
+        if len(fields_by_row) != len(rows) or any(not isinstance(fields, dict) or not fields for fields in fields_by_row):
+            return "summary"
+        columns = set().union(*(set(fields) for fields in fields_by_row))
+        if all(
+            set(fields) == columns
+            and all(
+                isinstance(field, dict)
+                and "value" in field
+                and property_value_is_decoded(field["value"])
+                for field in fields.values()
+            )
+            for fields in fields_by_row
+        ):
             return "decoded"
         return "summary"
 

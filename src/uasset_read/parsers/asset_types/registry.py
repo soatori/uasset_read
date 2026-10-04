@@ -89,6 +89,11 @@ def run_handlers(
                     semantic.update(result)
                     cap = getattr(handler, "capability", "summary")
                     tier = str(cap(result)) if callable(cap) else str(cap)
+                    if tier == "decoded" and getattr(handler, "requires_complete_coverage", False):
+                        feature = f"handler.{type(handler).__name__}"
+                        entries = [item for item in obj.coverage if item.feature == feature]
+                        if not entries or any(item.status != "present" for item in entries):
+                            tier = "summary"
                     if tier == "decoded":
                         decoded = True
         except Exception as e:

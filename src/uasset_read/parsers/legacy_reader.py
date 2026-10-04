@@ -1370,6 +1370,7 @@ class LegacyPackageReader:
                             obj.id,
                             diagnostics,
                             summary=summary,
+                            import_map=import_map,
                             export_map=export_map,
                             curve_table=cn == "CurveTable",
                         )
@@ -2091,6 +2092,7 @@ def _read_table_rows(
     diagnostics: list[Diagnostic],
     *,
     summary: PackageFileSummary | None = None,
+    import_map: list[ObjectImport] | None = None,
     export_map: list[ObjectExport] | None = None,
     curve_table: bool = False,
 ) -> dict[str, Any]:
@@ -2149,6 +2151,7 @@ def _read_table_rows(
     payload.set_read_range((0, limit))
     payload._current_object_id = object_id
     payload._soft_object_paths = getattr(archive, "_soft_object_paths", None)
+    payload._object_reference_maps = (import_map or [], export_map or [])
     from .property_parser import parse_property_value
     from ..models.fallback import FallbackReason, PropertyFallback
 
@@ -2202,7 +2205,7 @@ def _read_table_rows(
                     value = PropertyFallback.from_tag(t, FallbackReason.PARSE_ERROR)
                 finally:
                     payload.set_read_range(previous_range)
-                if value is None:
+                if value is None and t.type != "ObjectProperty":
                     value = PropertyFallback.from_tag(t, FallbackReason.UNSUPPORTED_TYPE)
                 row_fields[t.name]["value"] = value
             else:

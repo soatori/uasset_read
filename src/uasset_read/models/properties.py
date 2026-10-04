@@ -388,6 +388,15 @@ def project_property_value(value: Any) -> Any:
     return _project(value, frozenset())
 
 
+def property_value_is_decoded(value: Any) -> bool:
+    """Whether a projected property value contains no opaque descendants."""
+    if isinstance(value, dict):
+        return value.get("kind") != "opaque" and all(property_value_is_decoded(v) for v in value.values())
+    if isinstance(value, list):
+        return all(property_value_is_decoded(v) for v in value)
+    return True
+
+
 def project_property_bag(bag: PropertyBag) -> list[dict[str, Any]]:
     """Ordered occurrence array: every entry keeps its name, order and duplicates."""
     occurrences: dict[str, int] = {}
