@@ -429,11 +429,15 @@ def parse_object_property(tag: PropertyTag, archive: FArchive) -> Any:
     if package_index.is_null:
         return None
     if package_index.is_import:
-        table, index, count = "import", package_index.to_import_index(), len(imports)
+        index = package_index.to_import_index()
+        if 0 <= index < len(imports):
+            return ObjectRef(table="import", index=index)
+        table = "import"
     else:
-        table, index, count = "export", package_index.to_export_index(), len(exports)
-    if 0 <= index < count:
-        return ObjectRef(table=table, index=index)
+        index = package_index.to_export_index()
+        if 0 <= index < len(exports):
+            return ObjectRef(table="export", index=index)
+        table = "export"
 
     archive._record_structured_diagnostic(
         code="OBJECT_PROPERTY_INDEX_INVALID",
