@@ -455,7 +455,7 @@ def test_v2_tables_match_independent_golden_reference(entry):
 
 def _tagged_data_table_document(
     cells, *, prefix_size=0, terminated=True, terminator_index=0, summary=None, soft_paths=None,
-    import_map=None, export_map=None,
+    import_map=None, export_map=None, row_name_index=1,
 ):
     """One bounded legacy row, with hand-written tag/value bytes."""
     import struct
@@ -475,7 +475,7 @@ def _tagged_data_table_document(
             row += struct.pack("<IIIIiiB", len(names) - 2, 0, len(names) - 1, 0, 0, 0, value)
         else:
             row += struct.pack("<IIIIii", len(names) - 2, 0, len(names) - 1, 0, len(value), 0) + value
-    blob = b"\0" * prefix_size + struct.pack("<iII", 1, 1, 0) + row
+    blob = b"\0" * prefix_size + struct.pack("<iII", 1, row_name_index, 0) + row
     if terminated:
         blob += struct.pack("<II", terminator_index, 0)
     archive = ByteArchive(blob)
@@ -605,6 +605,19 @@ def _assert_data_table_row_values_decode_tagged_scalars():
     assert rows["rows"][0]["fields"]["Enabled"]["value"] is True
     assert rows["rows"][0]["fields"]["Count"]["value"] == 42
     assert rows["complete"] is True
+
+    rows, document = _tagged_data_table_document(
+        [("Count", "IntProperty", struct.pack("<i", 42))], row_name_index=99,
+    )
+    assert rows["row_names"] == ["<row:99>"]
+    assert rows["complete"] is False
+    diagnostic = next(d for d in document.diagnostics if d.code == "TABLE_ROW_NAME_INDEX_INVALID")
+    assert diagnostic.object_id == "export:0" and diagnostic.offset == 4
+    assert any(d.code == "TABLE_ROWS_TRUNCATED" for d in document.diagnostics)
+    assert document.objects[0].status.semantic == "partial"
+    for projection in project_document(document)["projections"]:
+        assert projection["status"] == "represented"
+        assert projection["completeness"] == "partial"
 
     rows, document = _tagged_data_table_document(
         [("InvalidName", "NameProperty", struct.pack("<II", 99, 0))], prefix_size=16,

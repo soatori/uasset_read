@@ -2143,6 +2143,7 @@ def _read_table_rows(
         header = 5
     names: list[str] = []
     rows_out: list[dict[str, Any]] = []
+    row_names_valid = True
     payload = ByteArchive(blob[header:])
     # Tag reads must use the real package layout version, not a fresh default.
     payload._file_version_ue4 = getattr(archive, "_file_version_ue4", 0)
@@ -2160,10 +2161,22 @@ def _read_table_rows(
     for _ in range(row_count):
         if payload.tell() + 8 > limit:
             break
+        row_name_offset = payload.tell()
         idx, number = struct.unpack_from("<II", blob, header + payload.tell())
         payload.seek(payload.tell() + 8)
         if not 0 <= idx < len(name_map):
             display_name = f"<row:{idx}>"
+            row_names_valid = False
+            payload._record_structured_diagnostic(
+                code="TABLE_ROW_NAME_INDEX_INVALID",
+                stage="payload.table",
+                offset=row_name_offset,
+                raw_value=idx,
+                fallback="retained_as_placeholder",
+                reason="recovered_corruption",
+                message=f"{object_id}: row name index {idx} outside name map",
+                size=8,
+            )
         elif number > 0:
             # NAME_INTERNAL_TO_EXTERNAL: the on-disk Number is internal, so the
             # display instance is Number-1 (LinkerLoad.h, same rule as FArchive.read_name).
@@ -2211,7 +2224,7 @@ def _read_table_rows(
             else:
                 payload.seek(t.value_end_offset)
         rows_out.append({"name": display_name, "fields": row_fields})
-    complete = len(names) == terminated_rows == row_count
+    complete = row_names_valid and len(names) == terminated_rows == row_count
     # The row block is the whole payload: NumRows followed by exactly that many
     # (FName + tagged row stream) records, each ending on its own None tag. Bytes
     # left over mean the anchor or a row walk drifted, which is never reportable
