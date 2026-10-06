@@ -106,6 +106,7 @@ def make_diagnostic(
     effect: Literal["semantic_loss", "data_loss", "parse_failure", "recovery"] | None = "semantic_loss",
     reason: DiagnosticReason | None = None,
     size: int | None = None,
+    offset: int | None = None,
 ) -> Diagnostic:
     """Build a Diagnostic with common defaults."""
     return Diagnostic(
@@ -117,6 +118,7 @@ def make_diagnostic(
         effect=effect,
         reason=reason,
         size=size,
+        offset=offset,
     )
 
 
