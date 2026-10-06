@@ -126,12 +126,19 @@ CAPABILITIES = (
     ),
     # Flags/editor-position only — not enough core fields for decoded tier (#629 hardening).
     ("FirstPerson_M_PrototypeGrid.uasset", "Material", {"kind": "material"}, "partial"),
-    # Real fixture carries 3 scalar + 1 vector parameters (normalized arrays);
-    # decoded tier per audit-remediation Task 5.
+    # Task 1.0 measured: 3 scalar + 1 vector parameters (normalized arrays) and
+    # a Parent whose import map resolves to M_Template_Master_Copy — every
+    # promised field of the complete contract is asserted (Appendix B row 3).
     (
         "CassiniSample_MI_Template_BaseGray_Metal.uasset",
         "MaterialInstanceConstant",
-        {"kind": "material_instance"},
+        {
+            "kind": "material_instance",
+            "name": "MI_Template_BaseGray_Metal",
+            "has_parent": True,
+            "scalar_param_count": 3,
+            "vector_param_count": 1,
+        },
         "complete",
     ),
     (
@@ -1036,6 +1043,29 @@ def test_real_sample_proves_claimed_capability():
             assert not any(
                 d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id != "export:0" for d in doc.diagnostics
             ), f"{sample}:{class_name} has no raw trailer by design (export:0 MetaData excluded)"
+        elif class_name == "MaterialInstanceConstant":
+            # Envelope-layer assertions (coordinator ruling): the v4 completeness
+            # enum string is the acceptance form of the internal 0.5 ratio, and
+            # parent_resolved/parent must never contradict each other.
+            from uasset_read.package import parse_package_document
+            from uasset_read.projection import project_document
+
+            projected = project_document(parse_package_document(SAMPLES / sample, depth="decode"), mode="normal")
+            instance = next(p for p in projected["projections"] if p["kind"] == "material_instance")
+            assert instance["status"] == "represented", f"{sample}:{class_name}"
+            assert instance["completeness"] == "partial", f"{sample}:{class_name}"
+            assert instance["content"]["parent_resolved"] is True, f"{sample}:{class_name}"
+            assert instance["content"]["parent"] == "M_Template_Master_Copy", (
+                f"{sample}:{class_name} parent_resolved/parent contradict"
+            )
+            parameters = next(p for p in projected["projections"] if p["kind"] == "material_parameters")
+            assert parameters["content"]["scalar_parameters"] == obj.semantic["scalar_param_count"], (
+                f"{sample}:{class_name} scalar count drift"
+            )
+            assert parameters["content"]["vector_parameters"] == obj.semantic["vector_param_count"], (
+                f"{sample}:{class_name} vector count drift"
+            )
+            json.dumps(projected)
 
 
 @pytest.mark.parametrize("sample", [entry["name"] for entry in MANIFEST_SAMPLES])

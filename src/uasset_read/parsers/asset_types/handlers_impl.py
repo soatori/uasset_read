@@ -605,6 +605,14 @@ class MaterialInstanceHandler(_SupportsClasses):
         if parent is not None:
             result["has_parent"] = True
             coverage.append(CoverageEntry(feature="material_instance.parent", status="present"))
+            # Design option (a): surface the parent name whenever the reference
+            # resolves (import/export-map entry or plain name), so the
+            # projection's parent_resolved/parent pair can never contradict.
+            ref = parent.get("value") if isinstance(parent, dict) else None
+            if isinstance(ref, dict):
+                ref = ref.get("object_name")
+            if isinstance(ref, str) and ref and ref != "None":
+                result["parent"] = ref
 
         # Scalar parameters — normalized arrays first; legacy fields dict fallback.
         scalar_params = _array_value(props, "ScalarParameterValues")
