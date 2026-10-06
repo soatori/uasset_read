@@ -11,6 +11,7 @@ from dataclasses import dataclass, field, asdict
 from typing import TYPE_CHECKING, Any
 
 from uasset_read.models.byte_ranges import ByteRegion, project_region
+from uasset_read.models.diagnostics import Diagnostic
 
 if TYPE_CHECKING:
     from uasset_read.kismet.native_fields import NativeFieldDeclaration
@@ -74,6 +75,10 @@ class KismetDecompiledResult:
     # Native FProperty declarations already decoded by ufunction_reader
     # (native_property_count > 0). Empty means "no signature evidence".
     native_fields: list[NativeFieldDeclaration] = field(default_factory=list)
+    # Structured CFG/diagnostics from the decompile pass (plan C1):
+    # CFG_JUMP_TARGET_UNRESOLVED reaches semantic.functions[].diagnostics
+    # through legacy_reader's FunctionAnalysis seeding from this field.
+    errors: list[Diagnostic] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         infer_bytecode_confidence(self.bytecode_status)  # validates

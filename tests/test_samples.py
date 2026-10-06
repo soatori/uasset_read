@@ -2018,6 +2018,71 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
         codes = [d.code for d in archive.get_structured_diagnostics()]
         assert "BLUEPRINT_NODE_PINS_LOCATE_FAILED" in codes, (label, codes)
 
+    # C1 unit (plan blueprint-semantics): a jump target that misses every
+    # instruction boundary yields CFG_JUMP_TARGET_UNRESOLVED in the caller's
+    # diagnostics list AND an edge with targets_known=False (never a guess).
+    from uasset_read.models.diagnostics import Diagnostic
+    from uasset_read.parsers.blueprint.bytecode import BytecodeInstruction
+    from uasset_read.parsers.blueprint.control_flow import build_cfg
+
+    def _instr(stmt: int, opcode: str, jump_kind: str = "none", target: int | None = None):
+        return BytecodeInstruction(
+            statement_index=stmt,
+            statement_ordinal=stmt,
+            logical_end=stmt + 1,
+            serialized_start=0,
+            serialized_end=0,
+            opcode=opcode,
+            operands={},
+            expression=None,
+            reads=[],
+            writes=[],
+            call_target=None,
+            jump_target_statement_index=target,
+            jump_kind=jump_kind,  # type: ignore[arg-type]
+            source_node_id=None,
+        )
+
+    cfg_diags: list[Diagnostic] = []
+    cfg = build_cfg(
+        [_instr(0, "EX_JumpIfNot", "conditional_false", 99), _instr(1, "EX_Return")],
+        diagnostics=cfg_diags,
+    )
+    assert [d.code for d in cfg_diags] == ["CFG_JUMP_TARGET_UNRESOLVED"], cfg_diags
+    unresolved = [e for e in cfg.edges if not e.targets_known]
+    assert len(unresolved) == 1 and unresolved[0].kind == "false", cfg.edges
+
+    # C1 wiring: monkeypatched build_cfg appends a marker only when the call
+    # site forwards a diagnostics list; the marker must surface in the public
+    # semantic.functions[].diagnostics projection (was unreachable before C1).
+    import uasset_read.parsers.blueprint.control_flow as _control_flow
+
+    _real_build_cfg = _control_flow.build_cfg
+
+    def _marked_build_cfg(instructions, *, diagnostics=None):
+        graph = _real_build_cfg(instructions, diagnostics=diagnostics)
+        if diagnostics is not None:
+            diagnostics.append(
+                Diagnostic(code="CFG_WIRING_MARKER", message="marker", stage="semantic.functions.cfg")
+            )
+        return graph
+
+    monkeypatch.setattr(_control_flow, "build_cfg", _marked_build_cfg)
+    from uasset_read.package import _parse_cached as _ue58_cache
+
+    _ue58_cache.cache_clear()  # a cached document would skip build_cfg entirely
+    try:
+        wiring_doc = parse_package_document(str(SAMPLES / "MyProject_UE58_TestBlueprint.uasset"), depth="decode")
+        wiring_owner = next(o for o in wiring_doc.objects if o.id == "export:0")
+        wiring_fn_diags = [d for fn in wiring_owner.semantic["functions"] for d in fn["diagnostics"]]
+        assert any(d["code"] == "CFG_WIRING_MARKER" for d in wiring_fn_diags), (
+            "build_cfg diagnostics must reach semantic.functions[].diagnostics",
+            [d["code"] for d in wiring_fn_diags],
+        )
+    finally:
+        _ue58_cache.cache_clear()  # never leak marker-bearing documents to later tests
+    monkeypatch.undo()
+
     import uasset_read.serializers.object_resources as object_resources
 
     from uasset_read.package import _parse_cached, parse_package_document

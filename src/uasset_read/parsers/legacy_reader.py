@@ -1834,11 +1834,15 @@ def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
     from .blueprint.bytecode import normalize_instructions
     from .blueprint.control_flow import build_cfg
 
+    # CFG diagnostics ride on the bridge result's errors field; seed the list
+    # before build_cfg so CFG_JUMP_TARGET_UNRESOLVED reaches the public
+    # FunctionAnalysis.diagnostics projection (plan C1).
+    diagnostics = list(getattr(kr, "errors", None) or [])
     instructions = []
-    cfg = build_cfg([])
+    cfg = build_cfg([], diagnostics=diagnostics)
     if kr.expressions:
         instructions = normalize_instructions(kr.expressions)
-        cfg = build_cfg(instructions)
+        cfg = build_cfg(instructions, diagnostics=diagnostics)
     reads: set[str] = set()
     writes: set[str] = set()
     calls: list[str] = []
@@ -1850,7 +1854,6 @@ def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
     status = kr.bytecode_status
     if status not in get_args(BytecodeStatus):
         status = "unavailable"
-    diagnostics = list(getattr(kr, "errors", None) or [])
     if status == "unavailable" and not diagnostics and getattr(kr, "error_code", None):
         diagnostics.append(
             _diag(

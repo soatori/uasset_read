@@ -212,7 +212,10 @@ def extract_kismet_decompiled(
             from uasset_read.parsers.blueprint.control_flow import build_cfg, project_cfg
 
             instructions = normalize_instructions(expressions)
-            cfg = build_cfg(instructions)
+            # CFG diagnostics attach to the result (errors field) so the
+            # downstream FunctionAnalysis projection can carry them (plan C1).
+            cfg_diagnostics: list = []
+            cfg = build_cfg(instructions, diagnostics=cfg_diagnostics)
 
             results.append(
                 KismetDecompiledResult(
@@ -227,6 +230,7 @@ def extract_kismet_decompiled(
                     instructions=[project_instruction(i) for i in instructions],
                     cfg=project_cfg(cfg),
                     native_fields=list(script_result.native_fields),
+                    errors=cfg_diagnostics,
                 )
             )
 
