@@ -407,6 +407,14 @@ def test_fixture_gap_statuses_pin_the_capability_boundary():
     assert gaps["pak_container"]["status"] == "available"
     assert gaps["unversioned_properties"]["status"] == "not_required"
     assert gaps["sidecar_files"]["status"] == "available"
+    # Topic 2 Phase 1 (#657): five registered handler classes have no carrier in
+    # any tracked package (Task 1.0 carriage confirmation), so their real-sample
+    # CAPABILITIES row is absent by evidence — this pin is the assertion.
+    assert gaps["skeletal_mesh"]["status"] == "missing"
+    assert gaps["anim_composite"]["status"] == "missing"
+    assert gaps["anim_layer_interface"]["status"] == "missing"
+    assert gaps["material_function"]["status"] == "missing"
+    assert gaps["material_parameter_collection"]["status"] == "missing"
     # Hand-written counts drift ("54 samples" survived a corpus of 66): gaps may
     # only cite the manifest's own total, never a literal that ages.
     total = manifest["summary"]["total_samples"]
