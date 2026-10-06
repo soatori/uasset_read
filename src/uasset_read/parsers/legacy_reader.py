@@ -2153,6 +2153,8 @@ def _read_table_rows(
     # Tag reads must use the real package layout version, not a fresh default.
     payload._file_version_ue4 = getattr(archive, "_file_version_ue4", 0)
     payload._file_version_ue5 = getattr(archive, "_file_version_ue5", 0)
+    # 方案甲 (G1): same mounted VersionContext instance as the source archive.
+    payload.version_context = archive.version_context
     limit = len(blob) - header
     payload.set_read_range((0, limit))
     payload._current_object_id = object_id

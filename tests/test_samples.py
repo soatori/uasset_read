@@ -466,6 +466,7 @@ def _tagged_data_table_document(
     from uasset_read.models.properties import PropertyBag
     from uasset_read.parsers.asset_types.registry import run_handlers
     from uasset_read.parsers.legacy_reader import _read_table_rows
+    from uasset_read.versioning import VersionContext
 
     names = ["None", "RowA"]
     row = b""
@@ -483,6 +484,13 @@ def _tagged_data_table_document(
     archive.set_read_range((prefix_size, len(blob)))
     if soft_paths is not None:
         archive._soft_object_paths = soft_paths
+    # Synthetic caller outside the production chains (Step 0): mount the
+    # context explicitly — mirrors the old getattr-0 defaults of the
+    # payload._file_version_* copy for this bare archive.
+    archive.version_context = VersionContext(
+        file_version_ue4=getattr(summary, "file_version_ue4", 0),
+        file_version_ue5=getattr(summary, "file_version_ue5", 0),
+    )
     diagnostics = []
     rows = _read_table_rows(
         archive, len(blob), names, "export:0", diagnostics, summary=summary,
