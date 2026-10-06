@@ -96,6 +96,27 @@ def test_ftext_dev_notes_filter_editor_only_gate():
     assert ftext_dev_notes_enabled(plain, ctx259) is False
 
 
+def test_is_lwc_requires_mounted_context():
+    """Step 5: the LWC gate on FKismetArchive reads the mounted context."""
+    from uasset_read.constants import UE5_LARGE_WORLD_COORDINATES
+    from uasset_read.kismet.archive import FKismetArchive
+    from uasset_read.kismet.expressions import _is_lwc
+
+    bare = FKismetArchive(struct.pack("<i", 0), "t", [])
+    with pytest.raises(ParseError) as exc_info:
+        _is_lwc(bare)
+    assert exc_info.value.code == "VERSION_CONTEXT_MISSING"
+
+    mounted = FKismetArchive(struct.pack("<i", 0), "t", [])
+    mounted.version_context = VersionContext(
+        file_version_ue4=522,
+        file_version_ue5=UE5_LARGE_WORLD_COORDINATES,
+    )
+    assert _is_lwc(mounted) is True
+    mounted.version_context = VersionContext(file_version_ue4=522, file_version_ue5=0)
+    assert _is_lwc(mounted) is False
+
+
 def _stub_summary(*, ue4=522, ue5=1018, custom_versions=()):
     return SimpleNamespace(
         file_version_ue4=ue4,

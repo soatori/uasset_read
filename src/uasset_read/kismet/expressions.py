@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from uasset_read.constants import UE5_LARGE_WORLD_COORDINATES
 from uasset_read.exceptions import ParseError
+from uasset_read.versioning import require_version_context
 from uasset_read.models.byte_ranges import ByteRegion
 from uasset_read.kismet.tokens import (
     EAutoRtfmStopTransactMode,
@@ -355,18 +356,19 @@ class EX_SoftObjectConst(KismetExpression):
 
 
 def _is_lwc(archive: "FKismetArchive") -> bool:
-    """Check if Large World Coordinates (double-width vectors) are enabled."""
-    summary = getattr(archive, "summary", None)
-    if summary is None:
-        return False
-    return getattr(summary, "file_version_ue5", 0) >= UE5_LARGE_WORLD_COORDINATES
+    """Check if Large World Coordinates (double-width vectors) are enabled.
+
+    G1: version comes from the mounted VersionContext; a missing mount is a
+    structured failure instead of the old silent `summary is None -> False`.
+    """
+    return require_version_context(archive).file_version_ue5 >= UE5_LARGE_WORLD_COORDINATES
 
 
 @dataclass
 class EX_VectorConst(KismetExpression):
     """Vector constant (X, Y, Z).
 
-    Reads doubles when summary.file_version_ue5 >= UE5_LARGE_WORLD_COORDINATES,
+    Reads doubles when version_context.file_version_ue5 >= UE5_LARGE_WORLD_COORDINATES,
     otherwise reads floats.
     """
 
@@ -393,7 +395,7 @@ class EX_VectorConst(KismetExpression):
 class EX_RotationConst(KismetExpression):
     """Rotation constant expression (EX_RotationConst, 0x22).
 
-    Reads doubles when summary.file_version_ue5 >= UE5_LARGE_WORLD_COORDINATES.
+    Reads doubles when version_context.file_version_ue5 >= UE5_LARGE_WORLD_COORDINATES.
     """
 
     Pitch: float = 0.0
@@ -420,7 +422,7 @@ class EX_TransformConst(KismetExpression):
     """Transform constant expression (EX_TransformConst, 0x2B).
 
     UE FTransform serialization order: quaternion rotation (XYZW) -> translation (XYZ) -> scale (XYZ).
-    Reads doubles when summary.file_version_ue5 >= UE5_LARGE_WORLD_COORDINATES.
+    Reads doubles when version_context.file_version_ue5 >= UE5_LARGE_WORLD_COORDINATES.
     """
 
     Rotation: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
