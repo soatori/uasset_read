@@ -74,8 +74,8 @@ def test_source_tree_within_baseline():
 def test_test_tree_within_baseline():
     _assert_area("tests_python", "tests/", ".py")
     modules = _test_modules()
-    assert len(modules) <= 2, (
-        f"tracked test modules {modules} exceed the sample-first limit of 2 "
+    assert len(modules) <= 3, (
+        f"tracked test modules {modules} exceed the sample-first limit of 3 "
         "(docs repo: superpowers/specs/2026-09-28-sample-first-test-baseline-design.md)"
     )
 

@@ -117,6 +117,47 @@ def test_is_lwc_requires_mounted_context():
     assert _is_lwc(mounted) is False
 
 
+def test_property_tag_threshold_both_sides():
+    """A5-5: tag format flips exactly at PROPERTY_TAG_COMPLETE_TYPE_NAME."""
+    from uasset_read.constants import PROPERTY_TAG_COMPLETE_TYPE_NAME
+    from uasset_read.serializers.property_tags import read_property_tag
+
+    name_map = ["None", "Foo", "IntProperty"]
+
+    def _mount(data: bytes, ue5: int) -> ByteArchive:
+        archive = ByteArchive(data)
+        archive.version_context = VersionContext(file_version_ue4=522, file_version_ue5=ue5)
+        return archive
+
+    # Legacy side (threshold - 1): name FName, type FName, size, arrayIndex,
+    # hasPropertyGuid u8, propertyExtensions u8 (ue5 >= 1011), 4 value bytes.
+    legacy_bytes = (
+        struct.pack("<II", 1, 0)
+        + struct.pack("<II", 2, 0)
+        + struct.pack("<ii", 4, 0)
+        + b"\x00"
+        + b"\x00"
+        + b"\x00\x00\x00\x00"
+    )
+    legacy_tag = read_property_tag(_mount(legacy_bytes, PROPERTY_TAG_COMPLETE_TYPE_NAME - 1), name_map)
+    assert legacy_tag.type == "IntProperty"  # plain type-name string path
+    assert legacy_tag.type_parts == []  # no FPropertyTypeName tree
+
+    # New side (threshold + 1): name FName, FPropertyTypeName node (name +
+    # inner_count), size, flags u8, 4 value bytes.
+    modern_bytes = (
+        struct.pack("<II", 1, 0)
+        + struct.pack("<II", 2, 0)
+        + struct.pack("<i", 0)
+        + struct.pack("<i", 4)
+        + b"\x00"
+        + b"\x00\x00\x00\x00"
+    )
+    modern_tag = read_property_tag(_mount(modern_bytes, PROPERTY_TAG_COMPLETE_TYPE_NAME + 1), name_map)
+    assert modern_tag.type_parts  # FPropertyTypeName tree path
+    assert modern_tag.type == "IntProperty"
+
+
 def _stub_summary(*, ue4=522, ue5=1018, custom_versions=()):
     return SimpleNamespace(
         file_version_ue4=ue4,
