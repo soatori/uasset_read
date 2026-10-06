@@ -392,6 +392,14 @@ def test_fixture_gap_statuses_pin_the_capability_boundary():
     assert gaps["pak_container"]["status"] == "available"
     assert gaps["unversioned_properties"]["status"] == "not_required"
     assert gaps["sidecar_files"]["status"] == "available"
+    # D1 (plan blueprint-semantics): UE4 graph node/pin decoding stays an
+    # explicit gap — no fixture exists and nothing is promised until the user
+    # supplies a node-bearing UE4 Blueprint and the phase-A path plus the
+    # PinsStoreFName/legacy pin-name gates are verified case by case.
+    ue4_gap = gaps["ue4_graph_nodes"]
+    assert ue4_gap["status"] == "missing"
+    assert "用户" in ue4_gap["acquisition"] or "user" in ue4_gap["acquisition"].lower()
+    assert "PinsStoreFName" in ue4_gap["verification"]
     # Hand-written counts drift ("54 samples" survived a corpus of 66): gaps may
     # only cite the manifest's own total, never a literal that ages.
     total = manifest["summary"]["total_samples"]
