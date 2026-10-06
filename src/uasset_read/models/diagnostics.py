@@ -133,7 +133,7 @@ _EDITOR_ONLY_PREFIXES = (
     "Blueprint",  # [engine] UBlueprint carries WITH_EDITORONLY_DATA regions (Engine/.../Engine/Blueprint.h:430ff); prefix also matches BlueprintGeneratedClass.
     "WidgetBlueprint",  # [heur] UMG blueprint subclass; same editor-graph semantics as "Blueprint".
     "AnimBlueprint",  # [heur] anim blueprint subclass; prefix also matches AnimBlueprintGeneratedClass (identity rules below).
-    "Function",  # [heur] blueprint graph/library object prefix. TODO(T2): locate corpus classes that match and pin the semantics.
+    "Function",  # [heur] corpus class is literally "Function" (BP function/graph exports; T2 inventory: 230 / 141,400 B across 11 samples, every outer an export); prefix semantics = blueprint graph/library objects.
     "SoundNode",  # [engine] USoundNode::Serialize reads FStripDataFlags + GraphNode under WITH_EDITORONLY_DATA, stripped when editor data is stripped (SoundNode.cpp:44-52; peer corroboration: 2026-09-23 trailer-reason plan Peer coverage table).
 )
 
