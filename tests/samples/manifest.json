@@ -858,8 +858,8 @@
       "status": "available",
       "description": "4 editor-saved MyProject UE 5.8 fixtures: TestSimpleCurveTable (SimpleCurve), TestRichCurveTable (RichCurve), testrCurveTable (RichCurve rows) and testCurveBase (CurveFloat, registered as the negative control: it is not a CurveTable).",
       "needed_for": "Phase 4.1 CurveTable AssetHandler (#626)",
-      "acquisition": "Generate a CurveTable in a project we own (>= 2 rows, >= 2 keys, SimpleCurve or RichCurve) or obtain a redistributable one; record UE version, creation steps, row names, mode, and deterministic expected values.",
-      "verification": "After copying, verify:\n- main export class is CurveTable\n- row/key values match the recorded expected values\n- manifest hash check passes",
+      "acquisition": "Acquired: 4 editor-saved MyProject UE 5.8 fixtures created in our own project and saved under Content/ParserFixtures/ (editor build EngineVersion 5.8.2-56702186, recorded inside each package), copied into tests/samples/ - TestSimpleCurveTable, TestRichCurveTable and testrCurveTable as the positive CurveTable fixtures, testCurveBase as the negative control (CurveFloat, not a CurveTable). Per-file source, size, SHA-256, export class and row-block expectations are recorded in tests/samples/ORIGIN-issue-626-curve-table.md.",
+      "verification": "Verified as of 2026-10-05 against the fixtures on disk:\n- main export class is CurveTable for the three positive fixtures (testCurveBase is CurveFloat), as recorded in tests/samples/ORIGIN-issue-626-curve-table.md\n- manifest hash check passes: SHA-256 for all 4 fixtures matches tests/samples/manifest.json samples[]\nNo per-key numeric values and no CSV export results are recorded here; row/mode expectations live in tests/test_samples.py assertions (source present, not re-run this round).",
       "minimum_samples": 1,
       "recommended_samples": "1 SimpleCurve table and 1 RichCurve table"
     }
