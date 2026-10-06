@@ -29,6 +29,7 @@ from uasset_read.constants import (
 )
 from uasset_read.exceptions import ParseError
 from uasset_read.models.properties import PropertyTag, PropertyTypeName
+from uasset_read.versioning import require_version_context
 
 T = TypeVar("T")
 
@@ -177,9 +178,12 @@ def read_property_tag(
     if tag.name == UE_NONE_SENTINEL:
         return tag
 
-    # Versions are set after PackageFileSummary parsing.
-    file_version_ue5 = getattr(archive, "_file_version_ue5", PROPERTY_TAG_COMPLETE_TYPE_NAME)
-    file_version_ue4 = getattr(archive, "_file_version_ue4", 0)
+    # G1: versions come from the single mounted VersionContext; a missing
+    # mount is a structured failure (the old silent "new format" default
+    # via getattr is gone).
+    ctx = require_version_context(archive)
+    file_version_ue5 = ctx.file_version_ue5
+    file_version_ue4 = ctx.file_version_ue4
 
     if file_version_ue5 < PROPERTY_TAG_COMPLETE_TYPE_NAME:
         return _read_property_tag_legacy(

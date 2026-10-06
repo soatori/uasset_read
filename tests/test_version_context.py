@@ -1,6 +1,7 @@
 """VersionContext binding-contract tests (G1 §2 target, PR1 A0)."""
 
 import dataclasses
+import struct
 from types import SimpleNamespace
 
 import pytest
@@ -28,6 +29,19 @@ def test_require_version_context_missing_raises():
     bare = ByteArchive(b"\x00" * 8)
     with pytest.raises(ParseError) as exc_info:
         require_version_context(bare)
+    err = exc_info.value
+    assert err.code == "VERSION_CONTEXT_MISSING"
+    assert err.diagnostics[0].stage == "package.version_context"
+
+
+def test_read_property_tag_unmounted_fails_structurally():
+    """Step 1: read_property_tag no longer falls back to a silent default."""
+    from uasset_read.serializers.property_tags import read_property_tag
+
+    # name index 1, instance 0 -> name_map[1] = "Foo"; no bytes for the tag body.
+    archive = ByteArchive(struct.pack("<ii", 1, 0))
+    with pytest.raises(ParseError) as exc_info:
+        read_property_tag(archive, ["None", "Foo"])
     err = exc_info.value
     assert err.code == "VERSION_CONTEXT_MISSING"
     assert err.diagnostics[0].stage == "package.version_context"
