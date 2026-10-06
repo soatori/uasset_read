@@ -40,9 +40,6 @@ class FArchive:
     Little-endian only; supports boundary validation.
     """
 
-    # Version gates set by callers after summary read (not all code paths set these).
-    _file_version_ue4: int
-    _file_version_ue5: int
     # Immutable per-document VersionContext (G1); mounted once by
     # LegacyPackageReader.read() after summary bootstrap; windows
     # (ByteArchive/FKismetArchive) reference the same instance.

@@ -20,11 +20,9 @@ from uasset_read.constants import (
     UE_NONE_SENTINEL,
 )
 from uasset_read.exceptions import BINARY_READ_ERRORS, REFERENCE_RESOLVE_ERRORS, ParseError
-from uasset_read.models.byte_ranges import opaque_region, region_from_source
 from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.models.fallback import FallbackReason, PropertyFallback
-from uasset_read.models.properties import PropertyBag, PropertyEntry, PropertyValue
-from uasset_read.parsers.properties import PropertyInput, PropertyReadResult
+from uasset_read.models.properties import PropertyValue
 from uasset_read.serializers.object_resources import ObjectExport, PackageIndex, script_property_region
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.versioning import require_version_context
@@ -390,9 +388,6 @@ def _read_property_loop(
     """Main property reading loop."""
     properties: list[PropertyValue] = []
     property_count = 0
-    # Stop reason for the bounded PropertyInput reader: "none" only when the
-    # None terminator was consumed; "tag_failed"/"size_exceeded"/"bound"/
-    # "poison" mark abnormal exits. Production read_export ignores this.
     archive._tag_stream_stop = "running"
 
     while True:
@@ -829,58 +824,6 @@ def parse_properties_from_export(
     return properties
 
 
-def _property_values_to_bag(
-    properties: list[PropertyValue],
-    input: PropertyInput,
-) -> tuple[PropertyBag, list]:
-    """Convert loop PropertyValues into a lossless bag + decoded byte regions."""
-    bag = PropertyBag()
-    regions: list = []
-    for pv in properties:
-        name = getattr(pv, "name", None)
-        if not name:
-            continue
-        array_index = getattr(pv, "array_index", None)
-        if isinstance(array_index, int) and array_index < 0:
-            array_index = None
-        type_name = getattr(pv, "type", "") or ""
-        value = getattr(pv, "value", None)
-        tag_start = getattr(pv, "tag_start_offset", None)
-        value_start = getattr(pv, "value_start_offset", None)
-        value_end = getattr(pv, "value_end_offset", None)
-        tag_region = None
-        value_region = None
-        if tag_start is not None and value_start is not None and value_start >= tag_start:
-            tag_region = region_from_source(
-                input.source,
-                input.start + tag_start,
-                value_start - tag_start,
-                status="decoded",
-                feature="property_tag",
-            )
-            regions.append(tag_region)
-            if value_end is not None and value_end > value_start:
-                value_region = region_from_source(
-                    input.source,
-                    input.start + value_start,
-                    value_end - value_start,
-                    status="decoded",
-                    feature="property_value",
-                )
-                regions.append(value_region)
-        bag.entries.append(
-            PropertyEntry(
-                name=str(name),
-                type_name=type_name,
-                value=value,
-                array_index=array_index,
-                tag_region=tag_region,
-                value_region=value_region,
-            )
-        )
-    return bag, regions
-
-
 def _property_fallback_diagnostics(
     properties: list[PropertyValue], *, object_id: str, default_offset: int, offset_base: int = 0
 ) -> list[Diagnostic]:
@@ -922,43 +865,6 @@ def _property_fallback_diagnostics(
             )
         )
 
-    return diagnostics
-
-
-def _loop_recovery_diagnostics(
-    properties: list[PropertyValue],
-    window: ByteArchive,
-    input: PropertyInput,
-    diag_mark: int,
-) -> list[Diagnostic]:
-    """Derive bounded-reader diagnostics from loop recoveries and fallbacks."""
-    diagnostics: list[Diagnostic] = []
-    for sd in window._diagnostics_since(diag_mark):
-        offset = input.start + sd.offset if sd.offset is not None else None
-        recovered = sd.fallback != "stop_table"
-        diagnostics.append(
-            Diagnostic(
-                severity=sd.severity,
-                code=sd.code,
-                message=sd.message,
-                stage=sd.stage or "properties.tagged",
-                object_id=input.object_id,
-                offset=offset,
-                size=sd.size,
-                effect="recovery" if recovered else "data_loss",
-                recoverable=recovered,
-                fallback=sd.fallback,
-                reason=sd.reason,
-            )
-        )
-    diagnostics.extend(
-        _property_fallback_diagnostics(
-            properties,
-            object_id=input.object_id,
-            default_offset=input.start,
-            offset_base=input.start,
-        )
-    )
     return diagnostics
 
 
@@ -1024,155 +930,3 @@ class TaggedPropertyReader:
                     )
                 )
         return properties
-
-    def read(self, input: PropertyInput) -> PropertyReadResult:
-        if input.size <= 0:
-            empty = region_from_source(input.source, input.start, 0, status="decoded")
-            return PropertyReadResult(
-                values=PropertyBag(),
-                consumed=0,
-                regions=[empty],
-                diagnostics=[],
-                status="complete",
-            )
-
-        package_context = input.package_context
-        if package_context is None:
-            diag = Diagnostic(
-                severity="warning",
-                code="TAGGED_CONTEXT_REQUIRED",
-                message="TaggedPropertyReader.read requires preloaded package tables",
-                stage="properties.tagged",
-                object_id=input.object_id,
-                offset=input.start,
-                size=input.size,
-                effect="semantic_loss",
-                recoverable=True,
-            )
-            region = opaque_region(input.start, input.size, "package_context_required")
-            return PropertyReadResult(
-                values=PropertyBag(),
-                consumed=0,
-                regions=[region],
-                diagnostics=[diag],
-                status="unavailable",
-            )
-
-        try:
-            package_bytes = input.source.read_at(input.start, input.size)
-        except BINARY_READ_ERRORS + (ParseError,) as exc:
-            diag = Diagnostic(
-                severity="error",
-                code="TAGGED_SOURCE_UNREADABLE",
-                message=str(exc),
-                stage="properties.tagged",
-                object_id=input.object_id,
-                offset=input.start,
-                size=input.size,
-                effect="parse_failure",
-                reason="unexpected",
-            )
-            region = opaque_region(input.start, input.size, "source_unreadable")
-            return PropertyReadResult(
-                values=PropertyBag(),
-                consumed=0,
-                regions=[region],
-                diagnostics=[diag],
-                status="failed",
-            )
-
-        summary = package_context.summary
-        name_map = package_context.name_map
-        export_map = package_context.export_map
-        import_map = package_context.import_map
-        window = ByteArchive(package_bytes, name=input.object_id)
-        window._name_map = name_map
-        window._file_version_ue4 = summary.file_version_ue4
-        window._file_version_ue5 = summary.file_version_ue5
-        window._tolerant = True
-
-        synthetic_export = SimpleNamespace(
-            object_name=input.class_name,
-            class_index=None,
-            serial_offset=input.start,
-            serial_size=input.size,
-        )
-        diag_mark = window._diagnostic_mark()
-        try:
-            properties = _read_property_loop(
-                export=synthetic_export,
-                archive=window,
-                summary=summary,
-                name_map=name_map,
-                export_map=export_map,
-                import_map=import_map,
-                mappings=None,
-                property_end=input.size,
-                tolerant=True,
-            )
-        except Exception as exc:
-            diag = Diagnostic(
-                severity="warning",
-                code="TAGGED_PROPERTY_LOOP_FAILED",
-                message=str(exc),
-                stage="properties.tagged",
-                object_id=input.object_id,
-                offset=input.start,
-                size=input.size,
-                effect="semantic_loss",
-                reason="unexpected",
-            )
-            region = opaque_region(input.start, input.size, "tagged_loop_failed")
-            return PropertyReadResult(
-                values=PropertyBag(),
-                consumed=0,
-                regions=[region],
-                diagnostics=[diag],
-                status="failed",
-            )
-
-        consumed = min(window.tell(), input.size)
-        bag, regions = _property_values_to_bag(properties, input)
-        if not regions:
-            regions.append(region_from_source(input.source, input.start, consumed, status="decoded"))
-        if input.start + consumed > regions[-1].end:
-            regions.append(
-                region_from_source(
-                    input.source,
-                    regions[-1].end,
-                    input.start + consumed - regions[-1].end,
-                    status="decoded",
-                    feature="terminator",
-                )
-            )
-        diagnostics = _loop_recovery_diagnostics(properties, window, input, diag_mark)
-        stop = getattr(window, "_tag_stream_stop", "running")
-        # Silent tag-failure breaks (recovery scan failed or <32 bytes left)
-        # append no PropertyFallback — synthesize the old PROPERTY_TAG_READ_FAILED
-        # contract so those stops still report partial + a diagnostic.
-        if stop == "tag_failed" and not any(
-            d.code in ("PROPERTY_TAG_READ_FAILED", "PROPERTY_VALUE_READ_FAILED") for d in diagnostics
-        ):
-            diagnostics.append(
-                Diagnostic(
-                    severity="warning",
-                    code="PROPERTY_TAG_READ_FAILED",
-                    message="PropertyTag read failed and recovery scan did not find a next tag",
-                    stage="properties.tagged",
-                    object_id=input.object_id,
-                    offset=input.start + getattr(window, "_tag_stream_stop_offset", consumed),
-                    size=input.size - consumed if input.size > consumed else None,
-                    effect="semantic_loss",
-                    reason="recovered_corruption",
-                )
-            )
-        # complete only when the stream ended on the None terminator and no
-        # recovery (fallback or structured diagnostic) occurred in the loop.
-        status = "complete" if stop == "none" and not diagnostics else "partial"
-        return PropertyReadResult(
-            values=bag,
-            consumed=consumed,
-            regions=regions,
-            diagnostics=diagnostics,
-            status=status,
-        )

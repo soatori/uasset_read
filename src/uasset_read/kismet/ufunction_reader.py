@@ -150,8 +150,6 @@ def _read_native_payload_start(
     archive.seek(export.serial_offset)
     payload = archive.read(export.serial_size)
     window = ByteArchive(payload, name=f"export_{export.object_name}")
-    window._file_version_ue4 = summary.file_version_ue4
-    window._file_version_ue5 = summary.file_version_ue5
     # 方案甲 (G1): the window references the SAME mounted VersionContext
     # instance as the source archive (reference copy, one instance per document).
     window.version_context = archive.version_context

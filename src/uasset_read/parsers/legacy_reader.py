@@ -782,15 +782,11 @@ class LegacyPackageReader:
                     )
                 )
 
-            # Property tag format is version-gated; set the gates the same
-            # way pipeline/stages.py does so UE5.0-5.2 tags don't fall into
-            # the UE5.3+ FPropertyTypeName path (mirrors v1 behavior).
-            # 方案甲 (G1): mount the one per-document VersionContext at the
-            # same point; everything above this line is bootstrap on local
-            # variables (contractual exemption) — consumers below read
+            # 方案甲 (G1): mount the one per-document VersionContext after
+            # summary bootstrap; everything above this line is bootstrap on
+            # local variables (contractual exemption) — consumers below read
             # archive.version_context.
             archive.version_context = build_version_context(summary)
-            archive.set_property_version_gates(summary.file_version_ue4, summary.file_version_ue5)
 
             # 2. Validate name table
             if summary.name_count <= 0:
@@ -2152,9 +2148,6 @@ def _read_table_rows(
     rows_out: list[dict[str, Any]] = []
     row_names_valid = True
     payload = ByteArchive(blob[header:])
-    # Tag reads must use the real package layout version, not a fresh default.
-    payload._file_version_ue4 = getattr(archive, "_file_version_ue4", 0)
-    payload._file_version_ue5 = getattr(archive, "_file_version_ue5", 0)
     # 方案甲 (G1): same mounted VersionContext instance as the source archive.
     payload.version_context = archive.version_context
     limit = len(blob) - header

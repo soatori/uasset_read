@@ -45,18 +45,6 @@ FORTNITE_GUID = "86181d60844f64acded316aad6c7ea0d"
 RELEASE_GUID = "22d5549cbe4f26a846072194d082b461"
 
 
-def get_custom_version(summary: PackageFileSummary, serialized_guid: str) -> int:
-    """Look up a custom version by serialized GUID.
-
-    Returns the version number if found, or -1 if the GUID is not present
-    in the summary's custom version table.
-    """
-    for cv in getattr(summary, "custom_versions", ()):
-        if cv.guid == serialized_guid:
-            return cv.version
-    return -1
-
-
 # ============================================================================
 # v2 Version classes (package-first refactor)
 # ============================================================================
