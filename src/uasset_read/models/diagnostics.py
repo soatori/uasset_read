@@ -120,63 +120,80 @@ def make_diagnostic(
     )
 
 
+# Trailing-classifier provenance annotations (rules:
+# docs/designs/2026-10-05-undecoded-classification-rules.md §4). Tags per table entry:
+#   [engine] engine basis (UE source class/mechanism); [gap] gap record (design doc /
+#   manifest fixture_gaps key); [heur] heuristic (prefix/identity semantics).
+#   TODO(T2) = provenance still to confirm in the T2 audit; backfill lands with T4.
 _EDITOR_ONLY_PREFIXES = (
-    "MetaData",
-    "PackageMetaData",
-    "K2Node_",
-    "EdGraph",
-    "Blueprint",
-    "WidgetBlueprint",
-    "AnimBlueprint",
-    "Function",
-    "SoundNode",
+    "MetaData",  # [heur] package metadata = editor annotation semantics (2026-09-15 plan seed sweep).
+    "PackageMetaData",  # [heur] metadata container export (2026-09-15 plan seed sweep).
+    "K2Node_",  # [engine] blueprint graph nodes; BlueprintGraph module is editor-only (Engine/Source/Editor/BlueprintGraph).
+    "EdGraph",  # [engine] graph/pin serialization is WITH_EDITOR / !IsFilterEditorOnly; cooked builds drop it (issue-521-b0-gate-decision.md: EdGraphNode.cpp:214, EdGraphPin.cpp:1859).
+    "Blueprint",  # [engine] UBlueprint carries WITH_EDITORONLY_DATA regions (Engine/.../Engine/Blueprint.h:430ff); prefix also matches BlueprintGeneratedClass.
+    "WidgetBlueprint",  # [heur] UMG blueprint subclass; same editor-graph semantics as "Blueprint".
+    "AnimBlueprint",  # [heur] anim blueprint subclass; prefix also matches AnimBlueprintGeneratedClass (identity rules below).
+    "Function",  # [heur] blueprint graph/library object prefix. TODO(T2): locate corpus classes that match and pin the semantics.
+    "SoundNode",  # [engine] USoundNode::Serialize reads FStripDataFlags + GraphNode under WITH_EDITORONLY_DATA, stripped when editor data is stripped (SoundNode.cpp:44-52; peer corroboration: 2026-09-23 trailer-reason plan Peer coverage table).
 )
 
 _BULK_CLASSES = frozenset(
     {
-        "FontFace",
-        "Font",
-        "SoundWave",
-        "SoundCue",
-        "RawAudio",
+        "FontFace",  # [engine] face bytes live in FFontFaceData/bulk data, not property serialization (Engine/.../Engine/FontFace.h:134).
+        "Font",  # [gap] bulk/stream payload class (2026-09-15 plan: bulk_expected taxonomy + seed sweep).
+        "SoundWave",  # [engine] raw-audio payload rides BulkData buffers (Engine/.../SoundWave.h includes Serialization/BulkData.h, FBulkDataBuffer).
+        "SoundCue",  # [gap] bulk/stream payload class (2026-09-15 plan seed sweep).
+        "RawAudio",  # [heur] name semantics: raw audio bytes = bulk stream, not properties.
     }
 )
 
-_BULK_PREFIXES = ("Texture",)
+_BULK_PREFIXES = (
+    # [engine] UTexture family stores bulk mip payloads outside properties (Engine/.../Texture2D.h includes BulkData.h);
+    # rationale recorded in docs/compose/spec/quality-review-fixes.md (commit a00a0bcb, main-repo history).
+    "Texture",
+)
 
 _KNOWN_UNIMPLEMENTED_CLASSES = frozenset(
     {
-        "Skeleton",
-        "PhysicsAsset",
-        "SkeletalBodySetup",
-        "StaticMesh",
-        "StaticMeshDescriptionBulkData",
-        "UserDefinedStruct",
-        # Native-payload reader gaps disclosed as opaque (2026-09-23 plan).
-        "Level",
-        "Model",
-        "Polys",
-        "World",
-        "BodySetup",
-        "NavCollision",
-        "UserDefinedEnum",
-        "PoseAsset",
-        "MovieScene",
+        "Skeleton",  # [gap] 2026-09-15 plan: ALS_Mannequin_Skeleton seed; RefSkeleton deep parse deferred to backlog.
+        "PhysicsAsset",  # [gap] 2026-09-15 plan: seed sweep; deep parse out of scope.
+        "SkeletalBodySetup",  # [gap] 2026-09-15 plan: seed sweep; deep parse out of scope.
+        "StaticMesh",  # [gap] 2026-09-15 plan: seed sweep; deep parse out of scope.
+        "StaticMeshDescriptionBulkData",  # [gap] 2026-09-15 plan: seed sweep; deep parse out of scope.
+        "UserDefinedStruct",  # [gap] 2026-09-15 plan: seed sweep; deep parse out of scope.
+        # Native-payload reader gaps disclosed as opaque ([gap] 2026-09-23 trailer-reason
+        # plan, docs/designs/archive/2026-09-23-trailer-reason-quality-gate-plan.md,
+        # team-lead ruling 2026-09-23; per-entry peers in its Peer coverage table):
+        "Level",  # [gap] peer corroboration: UAssetAPI LevelExport (native tail then explicit TODO).
+        "Model",  # [gap] peer corroboration: CUE4Parse UModel native Deserialize tail.
+        "Polys",  # [gap] peer corroboration: CUE4Parse UPolys native Deserialize tail.
+        "World",  # [gap] peer corroboration: CUE4Parse UWorld native Deserialize tail.
+        "BodySetup",  # [gap] peer corroboration: CUE4Parse UBodySetup (BodySetupGuid + cooked flag tail).
+        "NavCollision",  # [gap] peer corroboration: CUE4Parse UNavCollision (magic/version/guid/cooked header).
+        "UserDefinedEnum",  # [gap] peer corroboration: UAssetAPI EnumExport; CUE4Parse leaves DisplayNameMap undecoded.
+        "PoseAsset",  # [gap] no peer parser decodes this type (2026-09-23 trailer-reason plan).
+        "MovieScene",  # [gap] no peer parser decodes this type (2026-09-23 trailer-reason plan).
     }
 )
 
 _KNOWN_UNIMPLEMENTED_PREFIXES = (
+    # [gap] Niagara family: deep Niagara parse deferred by the 2026-09-15 plan backlog;
+    # native pin-tail layout audited against UE source in issue-521-b0-gate-decision.md
+    # (UNiagaraNode : UEdGraphNode; pin path WITH_EDITOR, dropped when cooked):
     "NiagaraNode",
     "NiagaraScript",
     "NiagaraEmitter",
     "NiagaraSystem",
-    "BlendSpace",
-    "Material",
-    "Anim",
+    # [gap] quality-review-fixes spec (docs/compose/spec/quality-review-fixes.md, commit a00a0bcb):
+    "BlendSpace",  # trailing sample data / axes not specialized.
+    "Material",  # expression graph / instance params not deeply decoded (MaterialInstance* folded here by 4a4628ac).
+    "Anim",  # short fixed tails, body not specialized (AnimSequence/AnimMontage/AnimComposite folded into this prefix by 4a4628ac).
 )
 
 _ANIM_GENERATED_DATA_OBJECTS = frozenset(
     {
+        # [gap] object names fixed by the 2026-09-23 AnimBlueprint trailer plan
+        # (docs/designs/archive/2026-09-23-animblueprint-native-trailer-plan.md evidence table).
         "AnimBlueprintGeneratedConstantData",
         "AnimBlueprintGeneratedMutableData",
     }
@@ -201,14 +218,19 @@ def classify_trailing_reason(context: TrailingContext | str) -> DiagnosticReason
         return "editor_only"
     if cn in _KNOWN_UNIMPLEMENTED_CLASSES or any(cn.startswith(p) for p in _KNOWN_UNIMPLEMENTED_PREFIXES):
         return "known_unimplemented"
-    # Identity-rule slot: object_name / outer_name / roles evaluated here
-    # (sibling AnimBlueprint plan). Empty by design in this plan.
+    # Identity-rule slot: object_name / outer_name / roles evaluated here.
+    # [gap] Both rules are fixed by the 2026-09-23 AnimBlueprint trailer plan
+    # (docs/designs/archive/2026-09-23-animblueprint-native-trailer-plan.md):
     if context.object_name.startswith("Default__") and context.class_name.endswith("_C"):
+        # [gap] CDO identity: Default__ instance of a *_C generated class (3 fixtures / 621,736 B).
         return "known_unimplemented"
     if (
         context.object_name in _ANIM_GENERATED_DATA_OBJECTS
         and context.outer_name is not None
         and context.outer_name.endswith("_C")
     ):
+        # [gap] generated-data identity: named object outered to the *_C class (5 ScriptStruct trailers / 70,532 B).
         return "known_unimplemented"
+    # [heur] closed-set fallback: anything unmatched stays the CI attention signal
+    # (2026-09-15 plan taxonomy: "unexpected = does not fit the above — CI attention").
     return "unexpected"
