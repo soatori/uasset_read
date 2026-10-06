@@ -11,8 +11,11 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, Mapping
 
 from uasset_read.constants import PKG_FilterEditorOnly
+from uasset_read.exceptions import ParseError
+from uasset_read.models.diagnostics import Diagnostic
 
 if TYPE_CHECKING:
+    from uasset_read.archive import FArchive
     from uasset_read.serializers.package_summary import PackageFileSummary
 
 
@@ -90,3 +93,48 @@ class VersionContext:
             "custom_versions",
             MappingProxyType(dict(self.custom_versions)),
         )
+
+
+def build_version_context(
+    summary: PackageFileSummary,
+    *,
+    package_layout: Literal["legacy", "zen", "unknown"] = "legacy",
+) -> VersionContext:
+    """Construct the one per-document VersionContext from a read summary.
+
+    方案甲 / G1: called once by ``LegacyPackageReader.read()`` right after
+    summary bootstrap and mounted as ``archive.version_context``. Field
+    population rules (normalized ue4/ue5, first-wins custom_versions,
+    layout) follow the G1 contract.
+    """
+    return VersionContext(
+        file_version_ue4=0,
+        file_version_ue5=0,
+        package_layout=package_layout,
+    )
+
+
+def require_version_context(archive: FArchive) -> VersionContext:
+    """Return the mounted VersionContext; missing mount fails structurally.
+
+    G1 §3: consumers never fall back to derived/defaults — a pre-bootstrap
+    or bypassing caller raises ``ParseError(code="VERSION_CONTEXT_MISSING")``
+    carrying a ``Diagnostic(stage="package.version_context")`` (same pattern
+    as the package.py layout rejection).
+    """
+    context = getattr(archive, "version_context", None)
+    if context is None:
+        error = ParseError("archive has no VersionContext mounted (pre-bootstrap access)")
+        error.code = "VERSION_CONTEXT_MISSING"
+        error.diagnostics = [
+            Diagnostic(
+                severity="error",
+                code=error.code,
+                message=str(error),
+                stage="package.version_context",
+                effect="parse_failure",
+                reason="unexpected",
+            )
+        ]
+        raise error
+    return context

@@ -52,7 +52,7 @@ from ..models.object_model import (
     Relation,
 )
 from ..models.properties import PropertyBag
-from ..versioning import ftext_dev_notes_enabled
+from ..versioning import build_version_context, ftext_dev_notes_enabled
 
 
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:
@@ -785,6 +785,11 @@ class LegacyPackageReader:
             # Property tag format is version-gated; set the gates the same
             # way pipeline/stages.py does so UE5.0-5.2 tags don't fall into
             # the UE5.3+ FPropertyTypeName path (mirrors v1 behavior).
+            # 方案甲 (G1): mount the one per-document VersionContext at the
+            # same point; everything above this line is bootstrap on local
+            # variables (contractual exemption) — consumers below read
+            # archive.version_context.
+            archive.version_context = build_version_context(summary)
             archive.set_property_version_gates(summary.file_version_ue4, summary.file_version_ue5)
 
             # 2. Validate name table
