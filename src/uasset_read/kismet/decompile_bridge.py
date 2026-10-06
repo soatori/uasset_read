@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from uasset_read.archive import FArchive
 
 from uasset_read.exceptions import ParseError, StreamPoisonedError
+from uasset_read.versioning import require_version_context
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +160,7 @@ def extract_kismet_decompiled(
                         script_result.serialized_script,
                         name_map,
                         summary,
+                        version_context=require_version_context(archive),
                         bytecode_buffer_size=script_result.bytecode_buffer_size,
                         tolerant=True,
                     )

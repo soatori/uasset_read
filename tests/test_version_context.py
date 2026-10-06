@@ -8,6 +8,7 @@ from typing import cast
 import pytest
 
 from uasset_read.archive import ByteArchive
+from uasset_read.constants import PKG_FilterEditorOnly
 from uasset_read.exceptions import ParseError
 from uasset_read.serializers.package_summary import CustomVersion, PackageFileSummary
 from uasset_read.versioning import VersionContext, build_version_context, require_version_context
@@ -76,6 +77,23 @@ def test_read_import_map_unmounted_fails_structurally():
     err = exc_info.value
     assert err.code == "VERSION_CONTEXT_MISSING"
     assert err.diagnostics[0].stage == "package.version_context"
+
+
+def test_ftext_dev_notes_filter_editor_only_gate():
+    """Step 4/A5-9: dev-notes gate reads Fortnite GUID from the context."""
+    from uasset_read.versioning import FORTNITE_GUID, ftext_dev_notes_enabled
+
+    plain = SimpleNamespace(package_flags=0)
+    filtered = SimpleNamespace(package_flags=PKG_FilterEditorOnly)
+    ctx260 = VersionContext(
+        file_version_ue4=522, file_version_ue5=1018, custom_versions={FORTNITE_GUID: 260}
+    )
+    ctx259 = VersionContext(
+        file_version_ue4=522, file_version_ue5=1018, custom_versions={FORTNITE_GUID: 259}
+    )
+    assert ftext_dev_notes_enabled(filtered, ctx260) is False
+    assert ftext_dev_notes_enabled(plain, ctx260) is True
+    assert ftext_dev_notes_enabled(plain, ctx259) is False
 
 
 def _stub_summary(*, ue4=522, ue5=1018, custom_versions=()):

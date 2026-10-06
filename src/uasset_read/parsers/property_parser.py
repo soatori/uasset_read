@@ -416,13 +416,14 @@ def parse_property_value(
         else:
             # FText Base appends DevNotes when FortniteMainBranch >= AddDevNotesToFText=260
             # and the package was not filtered for editor-only data (TextHistory.cpp:917).
-            dev_notes = ftext_dev_notes_enabled(summary)
+            ctx = require_version_context(archive)
+            dev_notes = ftext_dev_notes_enabled(summary, ctx)
             values = {
                 "tag": tag,
                 "archive": archive,
                 "name_map": name_map,
                 "export_map": export_map,
-                "file_version_ue5": require_version_context(archive).file_version_ue5,
+                "file_version_ue5": ctx.file_version_ue5,
                 "summary": summary,
                 "depth": depth,
                 "dev_notes": dev_notes,

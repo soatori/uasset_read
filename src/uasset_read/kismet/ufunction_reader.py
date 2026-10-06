@@ -30,7 +30,6 @@ from uasset_read.versioning import (
     CORE_GUID,
     FRAMEWORK_GUID,
     RELEASE_GUID,
-    get_custom_version,
     require_version_context,
 )
 
@@ -260,9 +259,10 @@ def _read_ustruct_prefix_and_script(
 
     Returns FunctionScriptReadResult with status "extracted", "no_script", or "failed".
     """
-    # Look up custom versions
-    framework_version = get_custom_version(summary, FRAMEWORK_GUID)
-    core_version = get_custom_version(summary, CORE_GUID)
+    # Look up custom versions from the window's mounted VersionContext (G1).
+    _ctx = require_version_context(window)
+    framework_version = _ctx.custom_versions.get(FRAMEWORK_GUID, -1)
+    core_version = _ctx.custom_versions.get(CORE_GUID, -1)
 
     # Check remaining capacity
     remaining_bytes = window.total_size() - window.tell()
@@ -330,7 +330,7 @@ def _read_ustruct_prefix_and_script(
         # 3a. Read native field declarations when count > 0
         native_fields: list[NativeFieldDeclaration] = []
         if native_property_count > 0:
-            release_version = get_custom_version(summary, RELEASE_GUID)
+            release_version = _ctx.custom_versions.get(RELEASE_GUID, -1)
             ctx = NativeFieldContext(
                 name_map=name_map or [],
                 import_map=import_map or [],

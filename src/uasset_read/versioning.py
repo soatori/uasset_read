@@ -19,15 +19,17 @@ if TYPE_CHECKING:
     from uasset_read.serializers.package_summary import PackageFileSummary
 
 
-def ftext_dev_notes_enabled(summary) -> bool:
+def ftext_dev_notes_enabled(summary, context: "VersionContext") -> bool:
     """TextHistory.cpp:915-937 — editor UE5 FText Base appends a gated DevNotes FString.
 
     Single home for the AddDevNotesToFText (260) + FilterEditorOnly gate;
     the FText reader, property parser, and StringTable trailer share it.
+    ``summary`` feeds the PKG_FilterEditorOnly gate; ``context`` feeds the
+    custom-version lookup (G1: GUID queries go through VersionContext).
     """
     if summary is None or (summary.package_flags & PKG_FilterEditorOnly):
         return False
-    return get_custom_version(summary, FORTNITE_GUID) >= 260  # AddDevNotesToFText
+    return context.custom_versions.get(FORTNITE_GUID, -1) >= 260  # AddDevNotesToFText
 
 
 # ============================================================================

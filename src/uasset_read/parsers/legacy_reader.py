@@ -52,7 +52,7 @@ from ..models.object_model import (
     Relation,
 )
 from ..models.properties import PropertyBag
-from ..versioning import build_version_context, ftext_dev_notes_enabled, require_version_context
+from ..versioning import VersionContext, build_version_context, ftext_dev_notes_enabled, require_version_context
 
 
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:
@@ -1384,7 +1384,7 @@ class LegacyPackageReader:
                 elif overrun <= 0 and cn == "StringTable":
                     extras[obj.id] = {
                         "string_table": _read_string_table(
-                            archive, obj.id, diagnostics, _string_table_has_dev_notes(summary)
+                            archive, obj.id, diagnostics, _string_table_has_dev_notes(summary, require_version_context(archive))
                         )
                     }
                     consumed_end = archive.tell()
@@ -2299,12 +2299,12 @@ def _read_table_rows(
 # CUE4Parse FStringTable ctor.
 
 
-def _string_table_has_dev_notes(summary: PackageFileSummary) -> bool:
+def _string_table_has_dev_notes(summary: PackageFileSummary, context: "VersionContext") -> bool:
     """True when the editor-saved trailer wrote per-entry DevNotes strings.
 
     Delegates to the shared AddDevNotesToFText gate (uasset_read.versioning).
     """
-    return ftext_dev_notes_enabled(summary)
+    return ftext_dev_notes_enabled(summary, context)
 
 
 def _read_string_table(

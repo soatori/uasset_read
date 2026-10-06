@@ -21,7 +21,7 @@ from uasset_read.constants import (
     MAX_FTEXT_CONSUMPTION,
 )
 from uasset_read.exceptions import ParseError
-from uasset_read.versioning import RELEASE_GUID, ftext_dev_notes_enabled, get_custom_version
+from uasset_read.versioning import RELEASE_GUID, ftext_dev_notes_enabled, require_version_context
 from uasset_read.models.core import UEdGraphPin, FEdGraphPinType
 from uasset_read.models.byte_ranges import ByteRegion
 
@@ -74,7 +74,9 @@ def read_ed_graph_pin_type(
         # FReleaseObjectVersion >= PinTypeIncludesUObjectWrapperFlag (=31).
         pin_type.map_key_terminal_is_const = archive.read_bool()
         pin_type.map_key_terminal_is_weak_pointer = archive.read_bool()
-        if summary is not None and get_custom_version(summary, RELEASE_GUID) >= 31:
+        # G1: the old `summary is not None` silent default is replaced by the
+        # structural missing-context failure; the GUID query reads the context.
+        if require_version_context(archive).custom_versions.get(RELEASE_GUID, -1) >= 31:
             pin_type.map_key_terminal_is_uobject_wrapper = archive.read_bool()
         else:
             pin_type.map_key_terminal_is_uobject_wrapper = False
@@ -291,7 +293,7 @@ def read_ue_graph_pin(
     pin_name = archive.read_name(name_map)
 
     # 4. PinFriendlyName (FText) — DevNotes gated per package custom version; write-only
-    dev_notes = ftext_dev_notes_enabled(summary)
+    dev_notes = ftext_dev_notes_enabled(summary, require_version_context(archive))
     _read_pin_ftext_field(archive, "PinFriendlyName", dev_notes=dev_notes, summary=summary)
 
     # 5. SourceIndex (UE5 always present, write-only)
