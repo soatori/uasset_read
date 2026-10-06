@@ -1066,6 +1066,16 @@ def test_real_sample_proves_claimed_capability():
                 f"{sample}:{class_name} vector count drift"
             )
             json.dumps(projected)
+        elif class_name == "StringTable":
+            # Task 1.4 option (i): the zero-projection absence is declared as a
+            # capability-matrix row (semantics stay in objects[].semantic), and
+            # the promised entries field is asserted against the measured count.
+            from uasset_read.projections.registry import CAPABILITY_MATRIX
+
+            row = next(r for r in CAPABILITY_MATRIX if r["family"] == "string_table")
+            assert row["asset_kinds"] == ["string_table"] and row["kinds"] == [], f"{sample}:{class_name}"
+            assert row["rule"].startswith("no embedded projections"), f"{sample}:{class_name}"
+            assert len(obj.semantic["entries"]) == obj.semantic["entry_count"] == 16, f"{sample}:{class_name}"
 
 
 @pytest.mark.parametrize("sample", [entry["name"] for entry in MANIFEST_SAMPLES])
