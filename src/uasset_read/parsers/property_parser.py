@@ -28,7 +28,7 @@ from uasset_read.constants import (
     PKG_UnversionedProperties,
     FIXED_UNVERSIONED_SIZES,
 )
-from uasset_read.versioning import ftext_dev_notes_enabled
+from uasset_read.versioning import ftext_dev_notes_enabled, require_version_context
 from uasset_read.serializers.object_resources import ObjectExport
 
 logger = logging.getLogger(__name__)
@@ -228,13 +228,13 @@ _ARGS_OVERRIDES: dict[str, tuple[str, ...]] = {
     "MulticastSparseDelegateProperty": ("tag", "archive", "name_map"),
     "FieldPathProperty": ("tag", "archive", "name_map"),
     "EnumProperty": ("tag", "archive", "name_map", "summary"),
-    "SoftObjectProperty": ("tag", "archive", "name_map", "summary"),
-    "SoftClassProperty": ("tag", "archive", "name_map", "summary"),
+    "SoftObjectProperty": ("tag", "archive", "name_map", "file_version_ue5"),
+    "SoftClassProperty": ("tag", "archive", "name_map", "file_version_ue5"),
     "MapProperty": ("tag", "archive", "name_map", "export_map", "summary"),
     "SetProperty": ("tag", "archive", "name_map", "export_map", "summary"),
     "OptionalProperty": ("tag", "archive", "name_map", "export_map", "summary"),
     "ArrayProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth"),
-    "StructProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth"),
+    "StructProperty": ("tag", "archive", "name_map", "export_map", "file_version_ue5", "summary", "depth"),
 }
 
 
@@ -422,6 +422,7 @@ def parse_property_value(
                 "archive": archive,
                 "name_map": name_map,
                 "export_map": export_map,
+                "file_version_ue5": require_version_context(archive).file_version_ue5,
                 "summary": summary,
                 "depth": depth,
                 "dev_notes": dev_notes,

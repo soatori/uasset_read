@@ -31,6 +31,7 @@ from uasset_read.versioning import (
     FRAMEWORK_GUID,
     RELEASE_GUID,
     get_custom_version,
+    require_version_context,
 )
 
 if TYPE_CHECKING:
@@ -159,8 +160,9 @@ def _read_native_payload_start(
     # Position at the start of the payload
     window.seek(0)
 
-    # UE5 version 1011+: consume serialization-control prefix
-    if summary.file_version_ue5 >= UE5_SERIALIZATION_CONTROL_VERSION:
+    # UE5 version 1011+: consume serialization-control prefix — version comes
+    # from the single mounted VersionContext (G1), summary keeps other uses.
+    if require_version_context(archive).file_version_ue5 >= UE5_SERIALIZATION_CONTROL_VERSION:
         ctrl_byte = window.read_u8()
         if ctrl_byte & ~_SER_CTRL_OVERRIDE_OPERATION:
             # Unknown bits set — reject

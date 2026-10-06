@@ -253,6 +253,11 @@ def _open_sample_archive(sample):
     archive = open_package_bundle(str(sample)).open_archive(tolerant=True)
     try:
         summary, _ = read_package_summary(archive)
+        # Mirror the production mount point (LegacyPackageReader.read): the
+        # threshold readers below consume archive.version_context (G1).
+        from uasset_read.versioning import build_version_context
+
+        archive.version_context = build_version_context(summary)
         name_map = read_name_table(archive, summary)
         archive.set_name_map(name_map)
         yield (
@@ -519,6 +524,7 @@ def _assert_data_table_row_values_decode_tagged_scalars():
     from uasset_read.parsers.property_types import make_enum_value
     from uasset_read.parsers.property_types import parse_enum_property, parse_object_property
     from uasset_read.parsers.property_parser import parse_property_value
+    from uasset_read.versioning import VersionContext
 
     enum = parse_enum_property(
         PropertyTag(name="Mode", type="EnumProperty", size=8, enum_type="EALSSpawnType"),
@@ -549,6 +555,7 @@ def _assert_data_table_row_values_decode_tagged_scalars():
         assert project_property_value(value) == expected
     map_archive = ByteArchive(struct.pack("<iiii", 0, 1, -11, 42))
     map_archive._object_reference_maps = maps
+    map_archive.version_context = VersionContext(file_version_ue4=0, file_version_ue5=0)
     map_value = parse_property_value(
         PropertyTag(name="Lookup", type="MapProperty", size=16, inner_type="ObjectProperty", value_type="IntProperty"),
         map_archive,
@@ -1221,6 +1228,7 @@ def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
         archive,
         [],
         [],
+        file_version_ue5=0,
     )
     diagnostic, = archive.get_structured_diagnostics()
     assert diagnostic.code == "TRANSFORM_SIZE_INVALID"
@@ -1232,6 +1240,7 @@ def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
         archive,
         [],
         [],
+        file_version_ue5=0,
     )
     diagnostic, = archive.get_structured_diagnostics()
     assert diagnostic.code == "STRUCT_PROPERTY_NEGATIVE_SIZE"
@@ -2836,6 +2845,7 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
         ByteArchive(scalar),
         name_map,
         [],
+        file_version_ue5=0,
     )
     assert scalar_value.parse_status == "success"
     assert set(scalar_value.fields) == scalar_fields
@@ -2849,6 +2859,7 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
         map_archive,
         name_map,
         [],
+        file_version_ue5=0,
     )
     # Exactly the payload is consumed: no decode may spill into the next property.
     assert map_archive.tell() == len(map_pin)
@@ -2873,6 +2884,7 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
             archive,
             name_map,
             [],
+            file_version_ue5=0,
         )
         return value.parse_status != "success"
 

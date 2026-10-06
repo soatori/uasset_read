@@ -60,6 +60,24 @@ def test_try_recover_property_tag_unmounted_fails_structurally():
     assert err.diagnostics[0].stage == "package.version_context"
 
 
+def test_read_import_map_unmounted_fails_structurally():
+    """Step 3: threshold readers take versions from the context, not summary."""
+    from uasset_read.serializers.object_resources import read_import_map
+
+    summary = SimpleNamespace(
+        import_count=0,
+        import_offset=0,
+        file_version_ue4=522,
+        file_version_ue5=1018,
+    )
+    bare = ByteArchive(b"")
+    with pytest.raises(ParseError) as exc_info:
+        read_import_map(bare, summary, ["None"])
+    err = exc_info.value
+    assert err.code == "VERSION_CONTEXT_MISSING"
+    assert err.diagnostics[0].stage == "package.version_context"
+
+
 def _stub_summary(*, ue4=522, ue5=1018, custom_versions=()):
     return SimpleNamespace(
         file_version_ue4=ue4,

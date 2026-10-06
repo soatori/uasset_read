@@ -52,7 +52,7 @@ from ..models.object_model import (
     Relation,
 )
 from ..models.properties import PropertyBag
-from ..versioning import build_version_context, ftext_dev_notes_enabled
+from ..versioning import build_version_context, ftext_dev_notes_enabled, require_version_context
 
 
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:
@@ -808,7 +808,7 @@ class LegacyPackageReader:
             # 3. Read name table
             name_map = read_name_table(archive, summary)
             archive.set_name_map(name_map)
-            if summary.file_version_ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
+            if require_version_context(archive).file_version_ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
                 archive._soft_object_paths = _read_soft_object_paths(archive, summary, name_map, diagnostics)
 
             # 4. Read import map
@@ -2070,11 +2070,13 @@ def _read_soft_object_paths(
     previous_position = archive.tell()
     previous_range = archive.set_read_range((start, end))
     paths = []
+    # Version for the inline soft-path read comes from the mounted context (G1).
+    file_version_ue5 = require_version_context(archive).file_version_ue5
     try:
         archive.seek(start)
         for _ in range(count):
             mark = archive._diagnostic_mark()
-            path = parse_soft_object_property(PropertyTag("", "SoftObjectProperty", 0), archive, name_map, summary)
+            path = parse_soft_object_property(PropertyTag("", "SoftObjectProperty", 0), archive, name_map, file_version_ue5)
             if archive._diagnostic_mark() != mark:
                 raise ParseError("SoftObjectPaths entry contains an invalid name")
             paths.append(path)

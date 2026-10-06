@@ -668,7 +668,7 @@ def skip_export_payload(
     """
     from uasset_read.constants import UE5_SCRIPT_SERIALIZATION_OFFSET
 
-    if summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+    if require_version_context(archive).file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
         # Use getattr for safe fallback to prevent AttributeError when attribute does not exist
         script_serial_end = getattr(export, "script_serialization_end_offset", None)
         if script_serial_end is None:
@@ -772,7 +772,7 @@ def parse_properties_from_export(
     # SerializeUnversionedProperties starts directly with FUnversionedHeader and
     # never emits the control byte — consuming it here would desync the fragment.
     uses_unversioned = bool(getattr(summary, "package_flags", 0) & PKG_UnversionedProperties)
-    if summary.file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION and not uses_unversioned:
+    if require_version_context(archive).file_version_ue5 >= UE5_PROPERTY_TAG_EXTENSION and not uses_unversioned:
         if not _handle_serialization_control(archive, summary, export):
             return [
                 PropertyFallback(
