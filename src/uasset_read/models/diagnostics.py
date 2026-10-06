@@ -148,9 +148,7 @@ _BULK_CLASSES = frozenset(
 )
 
 _BULK_PREFIXES = (
-    # [engine] UTexture family stores bulk mip payloads outside properties (Engine/.../Texture2D.h includes BulkData.h);
-    # rationale recorded in docs/compose/spec/quality-review-fixes.md (commit a00a0bcb, main-repo history).
-    "Texture",
+    "Texture",  # [engine] UTexture family stores bulk mip payloads outside properties (Engine/.../Texture2D.h includes BulkData.h; rationale: quality-review-fixes spec, commit a00a0bcb).
 )
 
 _KNOWN_UNIMPLEMENTED_CLASSES = frozenset(
@@ -163,7 +161,7 @@ _KNOWN_UNIMPLEMENTED_CLASSES = frozenset(
         "UserDefinedStruct",  # [gap] 2026-09-15 plan: seed sweep; deep parse out of scope.
         # Native-payload reader gaps disclosed as opaque ([gap] 2026-09-23 trailer-reason
         # plan, docs/designs/archive/2026-09-23-trailer-reason-quality-gate-plan.md,
-        # team-lead ruling 2026-09-23; per-entry peers in its Peer coverage table):
+        # team-lead ruling 2026-09-23; per-entry peers below):
         "Level",  # [gap] peer corroboration: UAssetAPI LevelExport (native tail then explicit TODO).
         "Model",  # [gap] peer corroboration: CUE4Parse UModel native Deserialize tail.
         "Polys",  # [gap] peer corroboration: CUE4Parse UPolys native Deserialize tail.
@@ -180,14 +178,14 @@ _KNOWN_UNIMPLEMENTED_PREFIXES = (
     # [gap] Niagara family: deep Niagara parse deferred by the 2026-09-15 plan backlog;
     # native pin-tail layout audited against UE source in issue-521-b0-gate-decision.md
     # (UNiagaraNode : UEdGraphNode; pin path WITH_EDITOR, dropped when cooked):
-    "NiagaraNode",
-    "NiagaraScript",
-    "NiagaraEmitter",
-    "NiagaraSystem",
+    "NiagaraNode",  # [gap] 2026-09-15 plan backlog; UE audit: issue-521-b0-gate-decision.md.
+    "NiagaraScript",  # [gap] 2026-09-15 plan backlog; UE audit: issue-521-b0-gate-decision.md.
+    "NiagaraEmitter",  # [gap] 2026-09-15 plan backlog; UE audit: issue-521-b0-gate-decision.md.
+    "NiagaraSystem",  # [gap] 2026-09-15 plan backlog; UE audit: issue-521-b0-gate-decision.md.
     # [gap] quality-review-fixes spec (docs/compose/spec/quality-review-fixes.md, commit a00a0bcb):
-    "BlendSpace",  # trailing sample data / axes not specialized.
-    "Material",  # expression graph / instance params not deeply decoded (MaterialInstance* folded here by 4a4628ac).
-    "Anim",  # short fixed tails, body not specialized (AnimSequence/AnimMontage/AnimComposite folded into this prefix by 4a4628ac).
+    "BlendSpace",  # [gap] trailing sample data / axes not specialized (quality-review-fixes spec).
+    "Material",  # [gap] expression graph / instance params not deeply decoded (MaterialInstance* folded here by 4a4628ac; quality-review-fixes spec).
+    "Anim",  # [gap] short fixed tails, body not specialized (AnimSequence/AnimMontage/AnimComposite folded into this prefix by 4a4628ac; quality-review-fixes spec; prefix also catches AnimGraphNode_*).
 )
 
 _ANIM_GENERATED_DATA_OBJECTS = frozenset(
