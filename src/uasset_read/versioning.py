@@ -68,21 +68,21 @@ class EngineVersion:
 
 @dataclass(frozen=True)
 class VersionContext:
-    """Per-read version bundle passed to readers and handlers.
+    """Immutable per-document version context (方案甲 / G1 binding contract).
 
-    Not a replacement for the summary/custom-version system: a small frozen
-    value carrying the fields the current plan's readers consume.
+    Constructed once by ``LegacyPackageReader.read()`` immediately after
+    summary bootstrap and mounted as ``archive.version_context``; windows
+    (``ByteArchive``/``FKismetArchive``) reference the same instance.
+    Consumers read the mounted context; pre-mount access is a structured
+    failure. Contract: ``docs/designs/2026-08-31-version-context-field-contract.md``.
     ``custom_versions`` is copied into a MappingProxyType so the context is
     immutable after construction.
     """
 
-    depth: Literal["package", "object", "asset", "decode"]
-    file_version_ue: int | None = None
-    file_version_licensee_ue: int | None = None
+    file_version_ue4: int
+    file_version_ue5: int
     custom_versions: Mapping[str, int] = field(default_factory=dict)
     package_layout: Literal["legacy", "zen", "unknown"] = "legacy"
-    cooked: bool | None = None
-    editor_only_filtered: bool | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
