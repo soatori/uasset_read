@@ -50,6 +50,7 @@ class FArchive:
     # Diagnostic marker set by the tagged property reader; declared only so the
     # enrichment assignments type-check (getattr fall-through must stay intact).
     _tag_stream_stop: str
+    _tag_stream_stop_offset: int
 
     def _init_archive_attrs(self, path: str, tolerant: bool = False):
         """Initialize common archive attributes without opening a file.

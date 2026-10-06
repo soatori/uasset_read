@@ -27,6 +27,7 @@ from uasset_read.models.properties import PropertyBag, PropertyEntry, PropertyVa
 from uasset_read.parsers.properties import PropertyInput, PropertyReadResult
 from uasset_read.serializers.object_resources import ObjectExport, PackageIndex, script_property_region
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
+from uasset_read.versioning import require_version_context
 
 from uasset_read.parsers.property_parser import (
     _get_parse_functions,
@@ -141,7 +142,9 @@ def _try_recover_property_tag(
     # Get UE5 version number to determine PropertyTag type field format
     from uasset_read.constants import PROPERTY_TAG_COMPLETE_TYPE_NAME
 
-    file_version_ue5 = getattr(archive, "_file_version_ue5", PROPERTY_TAG_COMPLETE_TYPE_NAME)
+    # G1: version comes from the mounted VersionContext; missing mount is a
+    # structured failure (no silent new-format default).
+    file_version_ue5 = require_version_context(archive).file_version_ue5
 
     # #341: Use file_size for size validation (not property_end) to avoid rejecting
     # valid candidates whose size spans beyond property_end but within file.

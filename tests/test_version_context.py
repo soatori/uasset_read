@@ -3,12 +3,13 @@
 import dataclasses
 import struct
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
 from uasset_read.archive import ByteArchive
 from uasset_read.exceptions import ParseError
-from uasset_read.serializers.package_summary import CustomVersion
+from uasset_read.serializers.package_summary import CustomVersion, PackageFileSummary
 from uasset_read.versioning import VersionContext, build_version_context, require_version_context
 
 
@@ -20,9 +21,9 @@ def test_version_context_field_set_exact():
 def test_version_context_frozen():
     ctx = VersionContext(file_version_ue4=522, file_version_ue5=1018)
     with pytest.raises(dataclasses.FrozenInstanceError):
-        ctx.file_version_ue4 = 0
+        ctx.file_version_ue4 = 0  # pyright: ignore[reportAttributeAccessIssue] -- the frozen violation IS the assertion
     with pytest.raises(TypeError):
-        ctx.custom_versions["k"] = 1
+        ctx.custom_versions["k"] = 1  # pyright: ignore -- MappingProxyType immutability IS the assertion
 
 
 def test_require_version_context_missing_raises():
@@ -47,6 +48,18 @@ def test_read_property_tag_unmounted_fails_structurally():
     assert err.diagnostics[0].stage == "package.version_context"
 
 
+def test_try_recover_property_tag_unmounted_fails_structurally():
+    """Step 2: the recovery scanner also requires a mounted context."""
+    from uasset_read.parsers.properties.tagged import _try_recover_property_tag
+
+    bare = ByteArchive(b"\x01\x00\x00\x00\x00\x00\x00\x00" * 4)
+    with pytest.raises(ParseError) as exc_info:
+        _try_recover_property_tag(bare, ["None", "Foo"])
+    err = exc_info.value
+    assert err.code == "VERSION_CONTEXT_MISSING"
+    assert err.diagnostics[0].stage == "package.version_context"
+
+
 def _stub_summary(*, ue4=522, ue5=1018, custom_versions=()):
     return SimpleNamespace(
         file_version_ue4=ue4,
@@ -56,7 +69,7 @@ def _stub_summary(*, ue4=522, ue5=1018, custom_versions=()):
 
 
 def test_build_context_fills_from_summary():
-    ctx = build_version_context(_stub_summary(ue4=522, ue5=1018))
+    ctx = build_version_context(cast(PackageFileSummary, _stub_summary(ue4=522, ue5=1018)))
     assert ctx.file_version_ue4 == 522
     assert ctx.file_version_ue5 == 1018
     assert ctx.package_layout == "legacy"
@@ -71,5 +84,5 @@ def test_build_duplicate_guid_first_wins():
             CustomVersion(guid=guid, version=2),
         ]
     )
-    ctx = build_version_context(summary)
+    ctx = build_version_context(cast(PackageFileSummary, summary))
     assert ctx.custom_versions[guid] == 1
