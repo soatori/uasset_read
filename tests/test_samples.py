@@ -186,6 +186,21 @@ CAPABILITIES = (
         {"kind": "physical_material", "surface_type": "EPhysicalSurface::SurfaceType2"},
         "partial",  # float defaults omitted by the editor; SurfaceType is real data
     ),
+    # Task 1.0 carriage confirmation (temp/carriage_report.md) over the full
+    # manifest: these two are the only BlendSpace/StringTable carriers, so the
+    # zero-assertion classes each anchor on their measured values.
+    (
+        "FirstPerson_BS_Idle_Walk_Run.uasset",
+        "BlendSpace",
+        {"kind": "anim_blend_space", "blend_space_type": "BlendSpace", "sample_count": 27},
+        "partial",  # summary tier: BlendParameters absent here, so axes coverage is missing (#618/#629)
+    ),
+    (
+        "IntroToUnreal_StrT_Titles.uasset",
+        "StringTable",
+        {"kind": "string_table", "table_type": "StringTable", "namespace": "StrT_Titles", "entry_count": 16},
+        "partial",  # summary tier: trailer per-key metadata unparsed (#615/#629)
+    ),
 )
 
 
@@ -788,7 +803,7 @@ def test_real_sample_proves_claimed_capability():
 
     The status column pins the #629 tier contract: decoded-tier fixtures are
     ``complete``; summary-tier fixtures prove ``partial`` with coverage.
-    Loops the CAPABILITIES table so 27 claims cost one collected item; every
+    Loops the CAPABILITIES table so 29 claims cost one collected item; every
     assertion message carries ``sample:class_name``.
     """
     for sample, class_name, expected, expected_semantic in CAPABILITIES:
