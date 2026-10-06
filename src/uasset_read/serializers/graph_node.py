@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
 from uasset_read.constants import (
     MAX_PINS_PER_NODE,
+    PKG_UnversionedProperties,
+    UE5_SCRIPT_SERIALIZATION_OFFSET,
     UE_NONE_SENTINEL,
 )
 from uasset_read.exceptions import ParseError
@@ -262,17 +264,66 @@ def _read_node_pins(
     import_map: list[ObjectImport],
     node_export: ObjectExport,
     node_name: str,
+    property_stream_end: int | None = None,
 ) -> list[UEdGraphPin]:
-    """Read the Pins array of a node."""
-    pins_offset = node_export.script_serialization_end_offset + 4  # Skip end marker
-    archive.seek(node_export.serial_offset + pins_offset)
+    """Read the Pins array of a node.
 
+    Locate failure (no recorded tag-scan tail on a pre-1010 export, count
+    negative/over the cap, or the count field past the export end) emits
+    ``BLUEPRINT_NODE_PINS_LOCATE_FAILED`` and returns ``[]`` — never a silent
+    zero (plan A2). A locate that succeeds but whose array read fails keeps the
+    whole-node raise below (unchanged :302-308 semantics).
+    """
+    export_end = node_export.serial_offset + node_export.serial_size
+    if node_export.has_script_serialization:
+        # 1010+ authoritative offsets — locate path unchanged (plan A2).
+        locate = node_export.serial_offset + node_export.script_serialization_end_offset + 4  # Skip end marker
+    elif property_stream_end is not None:
+        # Pre-1010: A0 probe confirmed the same [None][4B][count] layout, so
+        # the tag-scan tail plus the 4-byte end marker lands on pins_count.
+        locate = property_stream_end + 4
+    else:
+        archive._record_structured_diagnostic(
+            code="BLUEPRINT_NODE_PINS_LOCATE_FAILED",
+            stage="semantic.blueprint",
+            offset=node_export.serial_offset,
+            fallback="empty_pins",
+            reason="recovered_corruption",
+            message=(
+                f"Node {node_name!r} has no recorded property-stream tail and no "
+                "script_serialization offsets; pins cannot be located"
+            ),
+        )
+        return []
+
+    def _locate_failed(reason_detail: str, offset: int, raw_value: Any = None) -> list[UEdGraphPin]:
+        archive._record_structured_diagnostic(
+            code="BLUEPRINT_NODE_PINS_LOCATE_FAILED",
+            stage="semantic.blueprint",
+            offset=offset,
+            raw_value=raw_value,
+            fallback="empty_pins",
+            reason="recovered_corruption",
+            message=f"Node {node_name!r} pins locate failed: {reason_detail}",
+        )
+        return []
+
+    if locate + 4 > export_end:
+        return _locate_failed(
+            f"count field at {locate} crosses export end {export_end}",
+            locate,
+        )
+    archive.seek(locate)
     pins_count = archive.read_i32()
 
     if pins_count < 0:
-        raise ParseError(f"Invalid pins_count {pins_count} (negative) at node {node_name}")
+        return _locate_failed(f"negative pins_count {pins_count}", locate, raw_value=pins_count)
     if pins_count > MAX_PINS_PER_NODE:
-        raise ParseError(f"pins_count {pins_count} exceeds MAX_PINS_PER_NODE {MAX_PINS_PER_NODE} at node {node_name}")
+        return _locate_failed(
+            f"pins_count {pins_count} exceeds MAX_PINS_PER_NODE {MAX_PINS_PER_NODE}",
+            locate,
+            raw_value=pins_count,
+        )
 
     pins: list[UEdGraphPin] = []
     for _ in range(pins_count):
@@ -320,19 +371,37 @@ def _read_node_script_serial(
     export_map: list[ObjectExport],
     node_name: str,
 ) -> dict[str, Any]:
-    """Read script_serial PropertyTags of a node into one dict of parsed fields."""
+    """Read script_serial PropertyTags of a node into one dict of parsed fields.
+
+    ``property_stream_end`` is the absolute offset just past the ``NAME_None``
+    terminator when the scan found it (None otherwise); A2 uses it to locate the
+    pins array on pre-1010 exports where the export map carries no
+    script_serialization offsets (plan A0 probe: the same ``[None][4B][count]``
+    layout as 1010+).
+    """
     result: dict[str, Any] = {
         "node_pos_x": 0,
         "node_pos_y": 0,
         "node_comment": "",
         "raw_properties": {},
+        "property_stream_end": None,
     }
 
     if not node_export.has_script_serialization:
-        return result
-
-    script_start = node_export.serial_offset + node_export.script_serialization_start_offset
-    script_end = node_export.serial_offset + node_export.script_serialization_end_offset
+        uses_unversioned = bool(getattr(summary, "package_flags", 0) & PKG_UnversionedProperties)
+        if uses_unversioned or summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+            # Unversioned packages have no tag stream to scan; 1010+ exports
+            # with no recorded offsets fall back to the legacy locate (A2
+            # diagnoses a missing property_stream_end when pins are requested).
+            return result
+        # Versioned pre-1010 (UE5.0-5.3 and UE4): the tag stream starts at
+        # serial_offset and runs to the export end. Scan it for NodePosX/
+        # NodePosY/NodeComment and the NAME_None tail the pins locate needs.
+        script_start = node_export.serial_offset
+        script_end = node_export.serial_offset + node_export.serial_size
+    else:
+        script_start = node_export.serial_offset + node_export.script_serialization_start_offset
+        script_end = node_export.serial_offset + node_export.script_serialization_end_offset
     archive.seek(script_start)
 
     # UE5 >= 1011: SerializationControlExtensions
@@ -396,6 +465,7 @@ def _read_node_script_serial(
             break
 
         if tag.name == UE_NONE_SENTINEL:
+            result["property_stream_end"] = archive.tell()
             break
 
         result.update(_read_node_property_tag(archive, tag, name_map, import_map, export_map, result["raw_properties"]))
@@ -428,6 +498,7 @@ def read_ue_graph_node(
         import_map,
         node_export,
         node_name,
+        property_stream_end=serial.get("property_stream_end"),
     )
 
     class_name = resolve_class_name(node_export.class_index, import_map, export_map) or ""

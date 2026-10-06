@@ -1968,6 +1968,56 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     assert ambiguous.candidate_local_ids == ["export:2", "export:5"]
     assert ambiguous.qualified_key == ambiguous_key == "unresolved::SharedName"
 
+    # A4/A-4 (plan blueprint-semantics): a pins locate failure is a structured
+    # diagnostic, never a silent empty array. Three synthetic triggers:
+    # (a) pre-1010 node whose tag scan found no NAME_None tail,
+    # (b) located count negative,
+    # (c) located count beyond MAX_PINS_PER_NODE.
+    from uasset_read.models.core import UEdGraphNode  # noqa: F401  (import anchor)
+    from uasset_read.serializers.graph_node import _read_node_pins
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+
+    def _synthetic_node_export() -> ObjectExport:
+        return ObjectExport(
+            class_index=PackageIndex(-1),
+            super_index=PackageIndex(0),
+            outer_index=PackageIndex(0),
+            object_name="K2Node_Synthetic",
+            object_flags=0,
+            serial_size=64,
+            serial_offset=0,
+        )
+
+    summary_stub = SimpleNamespace(file_version_ue5=1004)
+    for locate_kwargs, label in (
+        ({"property_stream_end": None}, "no_scan_tail"),
+        ({"property_stream_end": 0}, "negative_count"),
+        ({"property_stream_end": 4}, "oversized_count"),
+    ):
+        payload = (
+            b"\x00" * 4
+            + (-1).to_bytes(4, "little", signed=True)
+            + b"\x00" * 56
+            if label == "negative_count"
+            else b"\x00" * 8 + (1001).to_bytes(4, "little", signed=True) + b"\x00" * 52
+            if label == "oversized_count"
+            else b"\x00" * 64
+        )
+        archive = ByteArchive(payload)
+        pins = _read_node_pins(
+            archive,
+            ["None"],
+            summary_stub,
+            [],
+            [],
+            _synthetic_node_export(),
+            label,
+            **locate_kwargs,
+        )
+        assert pins == [], label
+        codes = [d.code for d in archive.get_structured_diagnostics()]
+        assert "BLUEPRINT_NODE_PINS_LOCATE_FAILED" in codes, (label, codes)
+
     import uasset_read.serializers.object_resources as object_resources
 
     from uasset_read.package import _parse_cached, parse_package_document
@@ -2149,6 +2199,56 @@ def test_blueprint_graph_decodes_and_definitions_stay_honest():
     assert all(isinstance(item["source_pin_range"], dict) for item in evidence)
     linked_total = sum(len(pin.get("links") or []) for g in graphs for n in g["nodes"] for pin in n["pins"])
     assert linked_total == 610, "pin adjacency must stay a derived view of the records"
+
+    # A1 (plan blueprint-semantics, folded for the collection budget): pre-1010
+    # nodes scan their property-tag stream instead of early-returning, so
+    # NodePosX/NodePosY land on the node and the scan tail (property_stream_end)
+    # becomes available for the A2 pins locate. BCPS (ue5=1004) currently reads
+    # position {0,0} on all 145 nodes and ABP (ue5=1004) on all 3 — both must
+    # become non-zero from the tag stream.
+    from uasset_read.serializers.graph_node import _read_node_script_serial
+    from uasset_read.serializers.object_resources import resolve_class_name
+
+    # nodes with non-zero position: the others are exports whose tag stream
+    # carries no NodePosX/NodePosY at all (6 K2Node_FunctionEntry in BCPS,
+    # K2Node_Event_0 in ABP — verified tag-by-tag 2026-10-06) — honest (0,0).
+    # Plan A1 acceptance ② is "not all zero", which the tag-driven majority proves.
+    pre1010 = {"B_ControlPointScoring.uasset": (145, 139), "ABP_RifleAnimLayers.uasset": (3, 2)}
+    for pre_name, (expected_nodes, expected_nonzero) in pre1010.items():
+        pre_doc = parse_package_document(SAMPLES / pre_name, depth="decode")
+        pre_graphs = [g for o in pre_doc.objects for g in (o.semantic or {}).get("graphs") or []]
+        pre_nodes = [n for g in pre_graphs for n in g["nodes"]]
+        assert len(pre_nodes) == expected_nodes, (pre_name, len(pre_nodes))
+        nonzero_pos = sum(1 for n in pre_nodes if n["position"]["x"] or n["position"]["y"])
+        assert nonzero_pos == expected_nonzero, (pre_name, f"{nonzero_pos}/{expected_nodes} nodes with non-zero position")
+        assert not [d for d in pre_doc.diagnostics if d.code.startswith("BLUEPRINT_")], pre_name
+        # A2: pins locate off the tag-scan tail (property_stream_end + 4)
+        # instead of the missing script_serialization offsets — pre-1010 nodes
+        # must carry their pins. Measured via plan A0 probe: BCPS 505 pins,
+        # ABP 9 pins across all K2Node exports.
+        pre_pins = sum(len(n["pins"]) for n in pre_nodes)
+        assert pre_pins > 0, (pre_name, "pre-1010 nodes still read 0 pins")
+
+    # Seam: the pre-1010 scan records the NAME_None tail on the serial dict.
+    with _open_sample_archive(SAMPLES / "B_ControlPointScoring.uasset") as (
+        archive,
+        summary,
+        name_map,
+        import_map,
+        export_map,
+    ):
+        archive.set_property_version_gates(summary.file_version_ue4, summary.file_version_ue5)
+        k2_export = next(
+            e
+            for e in export_map
+            if e.serial_size > 0
+            and (resolve_class_name(e.class_index, import_map, export_map) or "").startswith("K2Node")
+        )
+        serial = _read_node_script_serial(
+            archive, name_map, summary, k2_export, import_map, export_map, k2_export.object_name
+        )
+        assert serial["property_stream_end"] is not None, "pre-1010 tag scan must record its NAME_None tail"
+        assert serial["node_pos_x"] != 0 or serial["node_pos_y"] != 0, serial
 
     # #654 folded here (collection budget): tracked-sample honesty aggregate
     # (83 definitions across the eight NewVariables packages; verified count
@@ -2912,3 +3012,29 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
             "undecodable payload must stay an empty opaque struct, not fabricated fields",
             inner,
         )
+
+    # A3 (plan §4-A discriminant, folded here for the collection budget):
+    # the in-graph sequential reader gates the trailing
+    # bSerializeAsSinglePrecisionFloat on FUE5ReleaseStreamObjectVersion >= 36
+    # (EdGraphPin.cpp:330-333); below the gate the stream carries no field.
+    # ABP_RifleAnimLayers (UE5RELEASE=35) vs B_ControlPointScoring (=36) is the
+    # real-sample discriminant pair; the cursor assertions prove the gate moves.
+    from uasset_read.serializers.graph_pin import read_ed_graph_pin_type
+    from uasset_read.serializers.package_summary import CustomVersion, PackageFileSummary
+    from uasset_read.versioning import UE5_RELEASE_STREAM_GUID, get_custom_version
+
+    with _open_sample_archive(SAMPLES / "ABP_RifleAnimLayers.uasset") as (_a, abp_summary, *_rest):
+        assert get_custom_version(abp_summary, UE5_RELEASE_STREAM_GUID) == 35
+    with _open_sample_archive(SAMPLES / "B_ControlPointScoring.uasset") as (_a, bcps_summary, *_rest):
+        assert get_custom_version(bcps_summary, UE5_RELEASE_STREAM_GUID) == 36
+
+    def _pin_type_consumed(stream_version: int) -> int:
+        summary = PackageFileSummary(
+            custom_versions=[CustomVersion(guid=UE5_RELEASE_STREAM_GUID, version=stream_version)]
+        )
+        archive = ByteArchive(scalar)
+        read_ed_graph_pin_type(archive, name_map, summary=summary)
+        return archive.tell()
+
+    assert _pin_type_consumed(36) == len(scalar) == 69, "gate met: the trailing 4B bool is consumed"
+    assert _pin_type_consumed(35) == len(scalar) - 4, "gate missed: the field is absent from the stream"

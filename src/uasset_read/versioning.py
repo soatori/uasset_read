@@ -38,6 +38,10 @@ FRAMEWORK_GUID = "3f74fccf8044b043df14919373201d17"
 CORE_GUID = "3cc15e37fb48e406f08400b57e712a26"
 FORTNITE_GUID = "86181d60844f64acded316aad6c7ea0d"
 RELEASE_GUID = "22d5549cbe4f26a846072194d082b461"
+# FUE5ReleaseStreamObjectVersion (DevObjectVersion.cpp:338 byte-order swap of
+# FGuid(0xD89B5E42, ...) verified against the tracked custom-version tables;
+# see report §1.1). Gates e.g. SerializeFloatPinDefaultValuesAsSinglePrecision=36.
+UE5_RELEASE_STREAM_GUID = "425e9bd8464dbd24a8ac1284791764df"
 
 
 def get_custom_version(summary: PackageFileSummary, serialized_guid: str) -> int:
