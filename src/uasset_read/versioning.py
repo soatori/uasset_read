@@ -107,9 +107,15 @@ def build_version_context(
     population rules (normalized ue4/ue5, first-wins custom_versions,
     layout) follow the G1 contract.
     """
+    custom_versions: dict[str, int] = {}
+    for cv in summary.custom_versions:
+        # First occurrence wins (G1: 首项优先 — equivalent to the former
+        # linear first-match lookup); insertion order of the list is kept.
+        custom_versions.setdefault(cv.guid, cv.version)
     return VersionContext(
-        file_version_ue4=0,
-        file_version_ue5=0,
+        file_version_ue4=summary.file_version_ue4,
+        file_version_ue5=summary.file_version_ue5,
+        custom_versions=custom_versions,
         package_layout=package_layout,
     )
 
