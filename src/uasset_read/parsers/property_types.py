@@ -455,13 +455,13 @@ def parse_soft_object_property(
     tag: PropertyTag,
     archive: FArchive,
     name_map: list[str],
-    summary: Any | None = None,
+    file_version_ue5: int,
 ) -> SoftObjectPathValue:
     """Parse SoftObjectProperty (FSoftObjectPath).
 
     Inline FSoftObjectPath layout (FName-based).
     """
-    ue5 = getattr(summary, "file_version_ue5", 0) if summary is not None else 0
+    ue5 = file_version_ue5
     paths = getattr(archive, "_soft_object_paths", None)
     if tag.type in ("SoftObjectProperty", "SoftClassProperty") and tag.size == 4 and ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
         offset = archive.tell()
@@ -891,6 +891,7 @@ def parse_struct_property(
     archive: FArchive,
     name_map: list[str],
     export_map: list[Any],
+    file_version_ue5: int,
     summary: Any | None = None,
     depth: int = 0,
 ) -> StructValue:
@@ -906,8 +907,7 @@ def parse_struct_property(
     # Fast-path pre-check: validate tag.size matches expected layout.
     # Use get_struct_size for version-aware size validation (supporting LWC double precision).
     # For LWC types, accept both float and double sizes (fast-path selects precision based on tag.size).
-    _file_version_ue5 = getattr(summary, "file_version_ue5", 0) if summary else 0
-    expected_size = get_struct_size(struct_type, file_version_ue5=_file_version_ue5)
+    expected_size = get_struct_size(struct_type, file_version_ue5=file_version_ue5)
     if expected_size is not None and tag.size != expected_size:
         # Tagged fallback structs: size mismatch is expected behavior (tagged format vs compact format),
         # Silently skip fast-path, go straight to tagged parsing, no warning generated.

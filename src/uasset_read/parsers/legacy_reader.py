@@ -52,7 +52,7 @@ from ..models.object_model import (
     Relation,
 )
 from ..models.properties import PropertyBag
-from ..versioning import ftext_dev_notes_enabled
+from ..versioning import VersionContext, build_version_context, ftext_dev_notes_enabled, require_version_context
 
 
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:
@@ -782,10 +782,11 @@ class LegacyPackageReader:
                     )
                 )
 
-            # Property tag format is version-gated; set the gates the same
-            # way pipeline/stages.py does so UE5.0-5.2 tags don't fall into
-            # the UE5.3+ FPropertyTypeName path (mirrors v1 behavior).
-            archive.set_property_version_gates(summary.file_version_ue4, summary.file_version_ue5)
+            # 方案甲 (G1): mount the one per-document VersionContext after
+            # summary bootstrap; everything above this line is bootstrap on
+            # local variables (contractual exemption) — consumers below read
+            # archive.version_context.
+            archive.version_context = build_version_context(summary)
 
             # 2. Validate name table
             if summary.name_count <= 0:
@@ -803,7 +804,7 @@ class LegacyPackageReader:
             # 3. Read name table
             name_map = read_name_table(archive, summary)
             archive.set_name_map(name_map)
-            if summary.file_version_ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
+            if require_version_context(archive).file_version_ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
                 archive._soft_object_paths = _read_soft_object_paths(archive, summary, name_map, diagnostics)
 
             # 4. Read import map
@@ -1379,7 +1380,7 @@ class LegacyPackageReader:
                 elif overrun <= 0 and cn == "StringTable":
                     extras[obj.id] = {
                         "string_table": _read_string_table(
-                            archive, obj.id, diagnostics, _string_table_has_dev_notes(summary)
+                            archive, obj.id, diagnostics, _string_table_has_dev_notes(summary, require_version_context(archive))
                         )
                     }
                     consumed_end = archive.tell()
@@ -2065,11 +2066,13 @@ def _read_soft_object_paths(
     previous_position = archive.tell()
     previous_range = archive.set_read_range((start, end))
     paths = []
+    # Version for the inline soft-path read comes from the mounted context (G1).
+    file_version_ue5 = require_version_context(archive).file_version_ue5
     try:
         archive.seek(start)
         for _ in range(count):
             mark = archive._diagnostic_mark()
-            path = parse_soft_object_property(PropertyTag("", "SoftObjectProperty", 0), archive, name_map, summary)
+            path = parse_soft_object_property(PropertyTag("", "SoftObjectProperty", 0), archive, name_map, file_version_ue5)
             if archive._diagnostic_mark() != mark:
                 raise ParseError("SoftObjectPaths entry contains an invalid name")
             paths.append(path)
@@ -2145,9 +2148,8 @@ def _read_table_rows(
     rows_out: list[dict[str, Any]] = []
     row_names_valid = True
     payload = ByteArchive(blob[header:])
-    # Tag reads must use the real package layout version, not a fresh default.
-    payload._file_version_ue4 = getattr(archive, "_file_version_ue4", 0)
-    payload._file_version_ue5 = getattr(archive, "_file_version_ue5", 0)
+    # 方案甲 (G1): same mounted VersionContext instance as the source archive.
+    payload.version_context = archive.version_context
     limit = len(blob) - header
     payload.set_read_range((0, limit))
     payload._current_object_id = object_id
@@ -2290,12 +2292,12 @@ def _read_table_rows(
 # CUE4Parse FStringTable ctor.
 
 
-def _string_table_has_dev_notes(summary: PackageFileSummary) -> bool:
+def _string_table_has_dev_notes(summary: PackageFileSummary, context: "VersionContext") -> bool:
     """True when the editor-saved trailer wrote per-entry DevNotes strings.
 
     Delegates to the shared AddDevNotesToFText gate (uasset_read.versioning).
     """
-    return ftext_dev_notes_enabled(summary)
+    return ftext_dev_notes_enabled(summary, context)
 
 
 def _read_string_table(

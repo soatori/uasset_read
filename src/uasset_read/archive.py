@@ -10,7 +10,7 @@ import mmap
 import os
 import struct
 from dataclasses import dataclass
-from typing import BinaryIO, Any, Iterator, Literal
+from typing import BinaryIO, Any, Iterator, Literal, TYPE_CHECKING
 
 from uasset_read.exceptions import ParseError, ExportBoundsExceeded
 from uasset_read.constants import (
@@ -19,6 +19,9 @@ from uasset_read.constants import (
     get_max_reasonable,
 )
 from uasset_read.models.diagnostics import Diagnostic, DiagnosticReason
+
+if TYPE_CHECKING:
+    from uasset_read.versioning import VersionContext
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +40,14 @@ class FArchive:
     Little-endian only; supports boundary validation.
     """
 
-    # Version gates set by callers after summary read (not all code paths set these).
-    _file_version_ue4: int
-    _file_version_ue5: int
+    # Immutable per-document VersionContext (G1); mounted once by
+    # LegacyPackageReader.read() after summary bootstrap; windows
+    # (ByteArchive/FKismetArchive) reference the same instance.
+    version_context: "VersionContext"
     # Diagnostic marker set by the tagged property reader; declared only so the
     # enrichment assignments type-check (getattr fall-through must stay intact).
     _tag_stream_stop: str
+    _tag_stream_stop_offset: int
 
     def _init_archive_attrs(self, path: str, tolerant: bool = False):
         """Initialize common archive attributes without opening a file.

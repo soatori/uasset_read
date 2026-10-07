@@ -19,6 +19,7 @@ from uasset_read.constants import (
     UE_NONE_SENTINEL,
 )
 from uasset_read.exceptions import ParseError
+from uasset_read.versioning import require_version_context
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.models.core import UEdGraphNode, UEdGraphPin
 from uasset_read.serializers.object_resources import resolve_class_name
@@ -335,8 +336,9 @@ def _read_node_script_serial(
     script_end = node_export.serial_offset + node_export.script_serialization_end_offset
     archive.seek(script_start)
 
-    # UE5 >= 1011: SerializationControlExtensions
-    if summary.file_version_ue5 >= 1011:
+    # UE5 >= 1011: SerializationControlExtensions — version from the
+    # single mounted VersionContext (G1); summary keeps non-version uses.
+    if require_version_context(archive).file_version_ue5 >= 1011:
         ctrl = archive.read_u8()
         if ctrl & 0x02:
             archive.read_u8()

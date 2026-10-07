@@ -148,11 +148,6 @@ class PackageArchive(FArchive):
         self._uexp_archive_pos = None
         self._file_size = self._main_size
 
-    def set_property_version_gates(self, ue4: int, ue5: int) -> None:
-        """Publish the file versions that gate FProperty tag decoding downstream."""
-        self._file_version_ue4 = ue4
-        self._file_version_ue5 = ue5
-
 
 @dataclass
 class PackageBundle:

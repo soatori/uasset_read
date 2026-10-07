@@ -30,6 +30,7 @@ from uasset_read.constants import (
     UE4_64BIT_EXPORTMAP_SERIALSIZES,
 )
 from uasset_read.exceptions import RECOVERY_READ_ERRORS, ParseError, StreamPoisonedError
+from uasset_read.versioning import require_version_context
 from uasset_read.models.diagnostics import (
     DIAGNOSTIC_CODE_INVALID_SERIAL_OFFSET,
     DIAGNOSTIC_CODE_INVALID_SERIAL_SIZE,
@@ -152,8 +153,10 @@ def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: li
 
     archive.seek(summary.import_offset)
 
-    # UE4 version used for version gating (high value for UE5 assets)
-    file_version = summary.file_version_ue4
+    # UE4/UE5 versions gate field presence; read them from the single
+    # mounted VersionContext (summary keeps counting/validation uses).
+    ctx = require_version_context(archive)
+    file_version = ctx.file_version_ue4
 
     import_map: list[ObjectImport] = []
     for _ in range(summary.import_count):
@@ -170,7 +173,7 @@ def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: li
             package_name = archive.read_name(name_map)
 
         # bImportOptional: UE5 >= 1003 (OPTIONAL_RESOURCES) — write-only; advance cursor only.
-        if summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
+        if ctx.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
             archive.read_bool()
 
         import_map.append(
@@ -195,8 +198,10 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: li
 
     archive.seek(summary.export_offset)
 
-    # UE4/UE5 version used for version gating
-    file_version = summary.file_version_ue4
+    # UE4/UE5 versions gate field presence; read them from the single
+    # mounted VersionContext (summary keeps counting/validation uses).
+    ctx = require_version_context(archive)
+    file_version = ctx.file_version_ue4
 
     export_map: list[ObjectExport] = []
 
@@ -261,11 +266,11 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: li
             archive.read_bool()  # bNotForServer
 
             # PackageGuid: removed in UE5 1005 — write-only; advance cursor only.
-            if summary.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:
+            if ctx.file_version_ue5 < UE5_REMOVE_OBJECT_EXPORT_PACKAGE_GUID:
                 archive.read(16)
 
             # bIsInheritedInstance: UE5 >= 1006 — write-only; advance cursor only.
-            if summary.file_version_ue5 >= UE5_TRACK_OBJECT_EXPORT_IS_INHERITED:
+            if ctx.file_version_ue5 >= UE5_TRACK_OBJECT_EXPORT_IS_INHERITED:
                 archive.read_bool()
 
             archive.read_u32()  # PackageFlags — write-only; advance cursor only.
@@ -280,7 +285,7 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: li
                 b_is_asset = archive.read_bool()
 
             # bGeneratePublicHash: UE5 >= 1003 (OPTIONAL_RESOURCES) — write-only; advance cursor only.
-            if summary.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
+            if ctx.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
                 archive.read_bool()
 
             # Dependency arrays: VER_UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS (507)
@@ -302,7 +307,7 @@ def read_export_map(archive: FArchive, summary: PackageFileSummary, name_map: li
             script_serialization_start_offset = 0
             script_serialization_end_offset = 0
             uses_unversioned = (summary.package_flags & PKG_UnversionedProperties) != 0
-            if not uses_unversioned and summary.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
+            if not uses_unversioned and ctx.file_version_ue5 >= UE5_SCRIPT_SERIALIZATION_OFFSET:
                 script_start_offset = archive.tell()
                 script_serialization_start_offset = archive.read_i64()
                 script_end_offset = archive.tell()

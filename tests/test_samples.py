@@ -253,6 +253,11 @@ def _open_sample_archive(sample):
     archive = open_package_bundle(str(sample)).open_archive(tolerant=True)
     try:
         summary, _ = read_package_summary(archive)
+        # Mirror the production mount point (LegacyPackageReader.read): the
+        # threshold readers below consume archive.version_context (G1).
+        from uasset_read.versioning import build_version_context
+
+        archive.version_context = build_version_context(summary)
         name_map = read_name_table(archive, summary)
         archive.set_name_map(name_map)
         yield (
@@ -466,6 +471,7 @@ def _tagged_data_table_document(
     from uasset_read.models.properties import PropertyBag
     from uasset_read.parsers.asset_types.registry import run_handlers
     from uasset_read.parsers.legacy_reader import _read_table_rows
+    from uasset_read.versioning import VersionContext
 
     names = ["None", "RowA"]
     row = b""
@@ -483,6 +489,13 @@ def _tagged_data_table_document(
     archive.set_read_range((prefix_size, len(blob)))
     if soft_paths is not None:
         archive._soft_object_paths = soft_paths
+    # Synthetic caller outside the production chains (Step 0): mount the
+    # context explicitly — mirrors the old getattr-0 defaults of the
+    # payload._file_version_* copy for this bare archive.
+    archive.version_context = VersionContext(
+        file_version_ue4=getattr(summary, "file_version_ue4", 0),
+        file_version_ue5=getattr(summary, "file_version_ue5", 0),
+    )
     diagnostics = []
     rows = _read_table_rows(
         archive, len(blob), names, "export:0", diagnostics, summary=summary,
@@ -511,6 +524,7 @@ def _assert_data_table_row_values_decode_tagged_scalars():
     from uasset_read.parsers.property_types import make_enum_value
     from uasset_read.parsers.property_types import parse_enum_property, parse_object_property
     from uasset_read.parsers.property_parser import parse_property_value
+    from uasset_read.versioning import VersionContext
 
     enum = parse_enum_property(
         PropertyTag(name="Mode", type="EnumProperty", size=8, enum_type="EALSSpawnType"),
@@ -541,6 +555,7 @@ def _assert_data_table_row_values_decode_tagged_scalars():
         assert project_property_value(value) == expected
     map_archive = ByteArchive(struct.pack("<iiii", 0, 1, -11, 42))
     map_archive._object_reference_maps = maps
+    map_archive.version_context = VersionContext(file_version_ue4=0, file_version_ue5=0)
     map_value = parse_property_value(
         PropertyTag(name="Lookup", type="MapProperty", size=16, inner_type="ObjectProperty", value_type="IntProperty"),
         map_archive,
@@ -1016,11 +1031,35 @@ def test_real_sample_proves_claimed_capability():
 
 
 @pytest.mark.parametrize("sample", [entry["name"] for entry in MANIFEST_SAMPLES])
-def test_every_real_sample_forms_a_valid_package_document(sample: str):
+def test_every_real_sample_forms_a_valid_package_document(sample: str, monkeypatch):
     """Every tracked fixture must form a complete, relation-valid, blob-free document."""
+    # 方案甲 single-instance hook (A5-2): count VersionContext constructions
+    # during this parse — exactly one per document, windows reference-copy it.
+    from uasset_read.package import _parse_cached
+    import uasset_read.versioning as _versioning
+
+    _orig_vc = _versioning.VersionContext
+    vc_count = {"n": 0}
+
+    class _CountingVC(_orig_vc):
+        def __init__(self, *args, **kwargs):
+            vc_count["n"] += 1
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(_versioning, "VersionContext", _CountingVC)
+    _parse_cached.cache_clear()
     doc = _object_document(sample)
+    assert vc_count["n"] == 1, f"{sample}: VersionContext constructed {vc_count['n']} times, expected 1"
+    monkeypatch.undo()
     entry = MANIFEST_BY_NAME[sample]
     from uasset_read.serializers.package_summary import _read_version_and_tag
+    from uasset_read.versioning import (
+        CORE_GUID,
+        FORTNITE_GUID,
+        FRAMEWORK_GUID,
+        RELEASE_GUID,
+        build_version_context,
+    )
 
     ids = [o.id for o in doc.objects]
     assert ids == [f"export:{i}" for i in range(len(ids))], sample
@@ -1029,11 +1068,35 @@ def test_every_real_sample_forms_a_valid_package_document(sample: str):
     assert doc.package.export_count == entry["export_count"], sample
     assert len(doc.summary.asset_object_ids) == entry["b_is_asset_count"], sample
 
-    with _open_sample_archive(SAMPLES / sample) as (archive, _summary, _names, _imports, _exports):
+    with _open_sample_archive(SAMPLES / sample) as (archive, summary, _names, _imports, _exports):
         archive.seek(0)
-        _, _legacy_version, raw_ue4, raw_ue5, *_ = _read_version_and_tag(archive)
+        _, _legacy_version, raw_ue4, raw_ue5, raw_licensee, *_ = _read_version_and_tag(archive)
         assert raw_ue4 == entry["file_version_ue4"], sample
         assert raw_ue5 == entry["file_version_ue5"], sample
+        # raw == effective == gate (A5-3): all-zero raw normalizes to the
+        # AUTOMATIC_VERSION pair; any non-zero raw passes through untouched
+        # (a UE4 package's ue5==0 is a valid effective value, no normalization).
+        if raw_ue4 == 0 and raw_ue5 == 0 and raw_licensee == 0:
+            assert (summary.file_version_ue4, summary.file_version_ue5) == (522, 1018), sample
+        else:
+            assert (summary.file_version_ue4, summary.file_version_ue5) == (raw_ue4, raw_ue5), sample
+        if sample in ("BP_UnversionedTest.uasset", "DA_UnversionedTest.uasset"):
+            # The manifest's only all-zero samples must take the normalize branch.
+            assert (raw_ue4, raw_ue5, raw_licensee) == (0, 0, 0), sample
+            assert (summary.file_version_ue4, summary.file_version_ue5) == (522, 1018), sample
+        ctx = build_version_context(summary)
+        assert (ctx.file_version_ue4, ctx.file_version_ue5) == (
+            summary.file_version_ue4,
+            summary.file_version_ue5,
+        ), sample
+        # Mapping == first-match list scan (A5-8), self-implemented <=10-line scan.
+        for guid in (FRAMEWORK_GUID, CORE_GUID, FORTNITE_GUID, RELEASE_GUID):
+            expected = -1
+            for cv in summary.custom_versions:
+                if cv.guid == guid:
+                    expected = cv.version
+                    break
+            assert ctx.custom_versions.get(guid, -1) == expected, f"{sample}: {guid}"
 
     valid = set(ids) | {f"import:{i}" for i in range(len(doc.dependencies))}
     assert doc.relations, sample
@@ -1213,6 +1276,7 @@ def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
         archive,
         [],
         [],
+        file_version_ue5=0,
     )
     diagnostic, = archive.get_structured_diagnostics()
     assert diagnostic.code == "TRANSFORM_SIZE_INVALID"
@@ -1224,6 +1288,7 @@ def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
         archive,
         [],
         [],
+        file_version_ue5=0,
     )
     diagnostic, = archive.get_structured_diagnostics()
     assert diagnostic.code == "STRUCT_PROPERTY_NEGATIVE_SIZE"
@@ -1476,11 +1541,15 @@ def _check_float_array_bulk_decode_falls_back_at_export_boundary():
     from uasset_read.models.fallback import PropertyFallback
     from uasset_read.models.properties import PropertyTag
     from uasset_read.parsers.property_types import parse_array_property
+    from uasset_read.versioning import VersionContext
 
     class CountingArchive(ByteArchive):
         def __init__(self, data):
             super().__init__(data)
             self.read_sizes = []
+            # Synthetic bare-archive caller: mount a neutral context so value
+            # dispatch (G1: version from VersionContext) stays structural.
+            self.version_context = VersionContext(file_version_ue4=0, file_version_ue5=0)
 
         def read(self, size):
             self.read_sizes.append(size)
@@ -1507,6 +1576,7 @@ def _check_float_array_bulk_decode_recovers_after_physical_short_read():
     from uasset_read.models.properties import PropertyTag
     from uasset_read.package import PackageArchive
     from uasset_read.parsers.property_types import parse_array_property
+    from uasset_read.versioning import VersionContext
 
     raw = struct.pack("<i2f", 3, 1.0, 2.0)
     reported_size = 16
@@ -1527,6 +1597,8 @@ def _check_float_array_bulk_decode_recovers_after_physical_short_read():
             super().__init__(raw)
             self._file_size = reported_size
             self.read_sizes = []
+            # Synthetic bare-archive caller: neutral mounted context (G1).
+            self.version_context = VersionContext(file_version_ue4=0, file_version_ue5=0)
 
         def read(self, size):
             self.read_sizes.append(size)
@@ -1540,6 +1612,8 @@ def _check_float_array_bulk_decode_recovers_after_physical_short_read():
     file_archive._init_archive_attrs("<short-read>")
     file_archive._file = io.BytesIO(raw)
     file_archive._file_size = reported_size
+    # Synthetic bare-archive caller: neutral mounted context (G1).
+    file_archive.version_context = VersionContext(file_version_ue4=0, file_version_ue5=0)
     file_sizes = []
     original_file_read = file_archive.read
 
@@ -1557,6 +1631,8 @@ def _check_float_array_bulk_decode_recovers_after_physical_short_read():
     main_archive._file = io.BytesIO(raw)
     main_archive._file_size = reported_size
     package = PackageArchive(main_archive)
+    # Synthetic bare-archive caller: neutral mounted context (G1).
+    package.version_context = VersionContext(file_version_ue4=0, file_version_ue5=0)
     package_sizes = []
     original_package_read = package.read
 
@@ -2828,6 +2904,7 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
         ByteArchive(scalar),
         name_map,
         [],
+        file_version_ue5=0,
     )
     assert scalar_value.parse_status == "success"
     assert set(scalar_value.fields) == scalar_fields
@@ -2841,6 +2918,7 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
         map_archive,
         name_map,
         [],
+        file_version_ue5=0,
     )
     # Exactly the payload is consumed: no decode may spill into the next property.
     assert map_archive.tell() == len(map_pin)
@@ -2865,6 +2943,7 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
             archive,
             name_map,
             [],
+            file_version_ue5=0,
         )
         return value.parse_status != "success"
 
