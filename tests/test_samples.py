@@ -2325,6 +2325,11 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
 
     ctrl_archive = ByteArchive(bytes([0x04]) + b"\x00" * 31)
     ctrl_summary = SimpleNamespace(file_version_ue5=1011, package_flags=0)
+    # Mirror the production mount point (G1): the >=1011 control-byte gate
+    # reads require_version_context(archive), never the summary.
+    from uasset_read.versioning import VersionContext
+
+    ctrl_archive.version_context = VersionContext(file_version_ue4=0, file_version_ue5=1011)
     ctrl_export = ObjectExport(
         class_index=PackageIndex(-1),
         super_index=PackageIndex(0),
@@ -2741,7 +2746,10 @@ def test_blueprint_graph_decodes_and_definitions_stay_honest():
         import_map,
         export_map,
     ):
-        archive.set_property_version_gates(summary.file_version_ue4, summary.file_version_ue5)
+        # G1 (version-context contract): property version gates read the
+        # mounted VersionContext; the legacy set_property_version_gates
+        # scaffolding was removed with #621. _open_sample_archive mirrors
+        # the production mount point above.
         k2_export = next(
             e
             for e in export_map
