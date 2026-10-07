@@ -427,6 +427,14 @@ def test_fixture_gap_statuses_pin_the_capability_boundary():
     assert gaps["anim_layer_interface"]["status"] == "missing"
     assert gaps["material_function"]["status"] == "missing"
     assert gaps["material_parameter_collection"]["status"] == "missing"
+    # D1 (plan blueprint-semantics): UE4 graph node/pin decoding stays an
+    # explicit gap — no fixture exists and nothing is promised until the user
+    # supplies a node-bearing UE4 Blueprint and the phase-A path plus the
+    # PinsStoreFName/legacy pin-name gates are verified case by case.
+    ue4_gap = gaps["ue4_graph_nodes"]
+    assert ue4_gap["status"] == "missing"
+    assert "用户" in ue4_gap["acquisition"] or "user" in ue4_gap["acquisition"].lower()
+    assert "PinsStoreFName" in ue4_gap["verification"]
     # Hand-written counts drift ("54 samples" survived a corpus of 66): gaps may
     # only cite the manifest's own total, never a literal that ages.
     total = manifest["summary"]["total_samples"]
@@ -1073,6 +1081,13 @@ def test_real_sample_proves_claimed_capability():
                     assert len(calls) == 17
                     assert sum(1 for item in calls if item["target_ref_key"] is None) == 2
                     assert sum(1 for item in calls if item["target_ref_key"] is not None) == 15
+                    # C3 matrix (plan blueprint-semantics): the corpus exhibits
+                    # the object_id/1.0 and unresolved/0.0 rows; the 0.9/0.7/0.5
+                    # function_identity rows are pinned synthetically in
+                    # test_critical_boundary_guards.
+                    matrix = {(item["match_method"], item["confidence"]) for item in calls}
+                    assert matrix == {("object_id", 1.0), ("unresolved", 0.0)}, matrix
+                    assert all(item["unresolved"] == (item["confidence"] == 0.0) for item in calls)
                     assert all(item["source_node_reason"] == "debug_mapping_unavailable" for item in calls)
                     assert all(
                         entry["source_node_reason"] == "debug_mapping_unavailable"
@@ -1961,6 +1976,82 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     test_instructions = [entry for fn in test_owner["semantic"]["functions"] for entry in fn["instructions"]]
     assert len([entry for entry in test_instructions if entry["opcode"] == "EX_JumpIfNot"]) == 1
 
+    # C2 (plan blueprint-semantics, folded for the collection budget): pin
+    # control_flow / exec_chains / functions[].cfg — previously zero test
+    # references. Counts are measured doc totals (every object carrying the
+    # function list), style of the 610-links pin.
+    def _cfg_totals(projection):
+        blocks = edges = unresolved = 0
+        unresolved_kinds = set()
+        for obj in projection["objects"]:
+            sem = obj.get("semantic") or {}
+            for fn in sem.get("functions") or []:
+                cfg = fn.get("cfg") or {}
+                assert {"blocks", "edges", "entry"} <= set(cfg), sorted(cfg)
+                blocks += len(cfg["blocks"])
+                edges += len(cfg["edges"])
+                for edge in cfg["edges"]:
+                    assert {"kind", "targets_known"} <= set(edge), sorted(edge)
+                    if not edge["targets_known"]:
+                        unresolved += 1
+                        unresolved_kinds.add(edge["kind"])
+        return blocks, edges, unresolved, unresolved_kinds
+
+    ue58_normal = projected["MyProject_UE58_TestBlueprint.uasset"]["normal"]
+    ue58_sem = next(o["semantic"] for o in ue58_normal["objects"] if o["id"] == "export:0")
+    assert "control_flow" in ue58_sem and "exec_chains" in ue58_sem
+    assert ue58_sem["exec_chains"]["metadata"]["kind"] == "direct_exec_edge_summary"
+    nf_cfg = next(fn["cfg"] for fn in ue58_sem["functions"] if fn["function_name"] == "NewFunction")
+    # Measured 2026-10-06: NewFunction = 4 blocks / 3 edges (the plan's 2/0
+    # seed names NewEventDispatcher__DelegateSignature instead) — the plan
+    # orders measure-first over its own seed.
+    assert (len(nf_cfg["blocks"]), len(nf_cfg["edges"])) == (4, 3), nf_cfg["entry"]
+
+    combat_blocks, combat_edges, combat_unresolved, combat_kinds = _cfg_totals(
+        projected["BP_CombatCharacter.uasset"]["normal"]
+    )
+    assert (combat_blocks, combat_edges) == (324, 162), (combat_blocks, combat_edges)
+    assert combat_unresolved == 2 and combat_kinds == {"computed_jump"}, (combat_unresolved, combat_kinds)
+
+    bcps_blocks, bcps_edges, bcps_unresolved, bcps_kinds = _cfg_totals(
+        projected["B_ControlPointScoring.uasset"]["normal"]
+    )
+    assert (bcps_blocks, bcps_edges) == (160, 116), (bcps_blocks, bcps_edges)
+    assert bcps_unresolved == 2 and bcps_kinds == {"computed_jump"}, (bcps_unresolved, bcps_kinds)
+
+    stack_blocks, stack_edges, stack_unresolved, stack_kinds = _cfg_totals(stack["normal"])
+    assert (stack_blocks, stack_edges) == (18, 6), (stack_blocks, stack_edges)
+    assert stack_unresolved == 2 and stack_kinds == {"computed_jump"}, (stack_unresolved, stack_kinds)
+
+    # C4 (folded too): entrypoints were zero-referenced. BCPS Blueprint owner
+    # carries 23 (16 function + 7 event), 0 unresolved; events correlate by
+    # source_node at 0.9, functions by object_id at 1.0; StackOBot's asset
+    # owner carries the construction attachment (measured 2026-10-06).
+    bcps_normal = projected["B_ControlPointScoring.uasset"]["normal"]
+    bcps_owner_ep = next(o["semantic"]["entrypoints"] for o in bcps_normal["objects"] if o["id"] == "export:1")
+    assert len(bcps_owner_ep) == 23, len(bcps_owner_ep)
+    assert not [e for e in bcps_owner_ep if e["unresolved"]]
+    bcps_events = [e for e in bcps_owner_ep if e["kind"] == "event"]
+    assert len(bcps_events) == 7
+    assert all((e["match_method"], e["confidence"]) == ("source_node", 0.9) for e in bcps_events)
+    bcps_functions = [e for e in bcps_owner_ep if e["kind"] == "function"]
+    assert len(bcps_functions) == 16
+    assert all((e["match_method"], e["confidence"]) == ("object_id", 1.0) for e in bcps_functions)
+
+    stack_owner_ep = next(o["semantic"]["entrypoints"] for o in stack["normal"]["objects"] if o["id"] == "export:0")
+    construction = [e for e in stack_owner_ep if e["kind"] == "construction"]
+    assert construction == [
+        {
+            "kind": "construction",
+            "name": "UserConstructionScript",
+            "object_id": "export:0",
+            "source_node_id": None,
+            "match_method": "object_id",
+            "confidence": 0.9,
+            "unresolved": False,
+        }
+    ], construction
+
     # StackOBot: debug is an evidence-only superset of the link records too.
     stack_links_normal = [link for graph in normal_owner["semantic"]["graphs"] for link in graph["links"]]
     assert len(stack_links_normal) == 26
@@ -2179,6 +2270,258 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     assert ambiguous.candidate_local_ids == ["export:2", "export:5"]
     assert ambiguous.qualified_key == ambiguous_key == "unresolved::SharedName"
 
+    # C3 (plan blueprint-semantics): call-level resolution matrix — all five
+    # (match_method, confidence) rows pinned synthetically, plus the call-level
+    # ambiguous row that only the external_ref test covered before.
+    from uasset_read.parsers.blueprint.correlation import _CallResolver
+
+    ue58_owner = next(o for o in ue58_document.objects if o.id == "export:0")
+    call_resolver = _CallResolver(ue58_document, ue58_owner, [], set(), set())
+    # object_id row: a stack node resolves directly at full confidence.
+    assert call_resolver.resolve_call("Whatever", 5)[2:] == ("object_id", 1.0, False)
+    # function_identity 0.9: exactly one local function carries the name.
+    call_resolver.function_ids_by_name["SoloTarget"] = ["export:7"]
+    assert call_resolver.resolve_call("SoloTarget", None) == (
+        "export:7",
+        "SoloTarget",
+        "function_identity",
+        0.9,
+        False,
+    )
+    # function_identity 0.7: the name only matches an import.
+    call_resolver.import_ids_by_name["ImportedTarget"] = ["import:3"]
+    assert call_resolver.resolve_call("ImportedTarget", None) == (
+        "import:3",
+        "ImportedTarget",
+        "function_identity",
+        0.7,
+        False,
+    )
+    # function_identity 0.5: two+ local candidates stay ambiguous, diagnosed.
+    call_resolver.function_ids_by_name["SharedTarget"] = ["export:2", "export:5"]
+    assert call_resolver.resolve_call("SharedTarget", None) == (
+        "export:2",
+        "SharedTarget",
+        "function_identity",
+        0.5,
+        False,
+    )
+    assert [d.code for d in call_resolver.diagnostics] == ["BLUEPRINT_CALL_NAME_AMBIGUOUS"]
+    # unresolved 0.0: no local function or import carries the name.
+    assert call_resolver.resolve_call("AbsentTarget", None) == (
+        "unresolved:AbsentTarget",
+        "AbsentTarget",
+        "unresolved",
+        0.0,
+        True,
+    )
+
+    # C5 (plan blueprint-semantics): three zero-test diagnostics each get one
+    # minimal trigger. (1) BLUEPRINT_NODE_CONTROL_FLAGS_UNSUPPORTED — a
+    # >=1011 node whose SerializationControlExtensions byte carries bits
+    # beyond 0x03 stops the property loop with the diagnostic.
+    from uasset_read.serializers.graph_node import _read_node_script_serial
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+
+    ctrl_archive = ByteArchive(bytes([0x04]) + b"\x00" * 31)
+    ctrl_summary = SimpleNamespace(file_version_ue5=1011, package_flags=0)
+    ctrl_export = ObjectExport(
+        class_index=PackageIndex(-1),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="K2Node_CtrlFlags",
+        object_flags=0,
+        serial_size=32,
+        serial_offset=0,
+        script_serialization_start_offset=0,
+        script_serialization_end_offset=16,
+    )
+    ctrl_result = _read_node_script_serial(ctrl_archive, ["None"], ctrl_summary, ctrl_export, [], [], "K2Node_CtrlFlags")
+    ctrl_codes = [d.code for d in ctrl_archive.get_structured_diagnostics()]
+    assert "BLUEPRINT_NODE_CONTROL_FLAGS_UNSUPPORTED" in ctrl_codes, ctrl_codes
+    ctrl_diag = next(d for d in ctrl_archive.get_structured_diagnostics() if d.code == "BLUEPRINT_NODE_CONTROL_FLAGS_UNSUPPORTED")
+    assert ctrl_diag.fallback == "skipped_node_properties"
+    assert ctrl_result["raw_properties"] == {}, ctrl_result
+
+    # (2)/(3) BLUEPRINT_EXTERNAL_PIN_LINK / BLUEPRINT_LINK_AMBIGUOUS — feed
+    # _attach_blueprint_graph_extras synthetic graphs carrying unresolved and
+    # ambiguous link counts; both aggregate diagnostics must land.
+    import uasset_read.serializers.blueprint_graph as _blueprint_graph
+    from uasset_read.models.object_model import ObjectRecord
+    from uasset_read.parsers.legacy_reader import _attach_blueprint_graph_extras
+
+    c5_export_map = [
+        ObjectExport(
+            class_index=PackageIndex(-1),
+            super_index=PackageIndex(0),
+            outer_index=PackageIndex(0),
+            object_name="BP_C5",
+            object_flags=0,
+            serial_size=0,
+            serial_offset=0,
+        ),
+        ObjectExport(
+            class_index=PackageIndex(-2),
+            super_index=PackageIndex(0),
+            outer_index=PackageIndex(1),
+            object_name="EventGraph",
+            object_flags=0,
+            serial_size=0,
+            serial_offset=0,
+        ),
+    ]
+    c5_objects = [
+        ObjectRecord(id="export:0", table_index=0, name="BP_C5", class_name="Blueprint"),
+        ObjectRecord(id="export:1", table_index=1, name="EventGraph", class_name="EdGraph"),
+    ]
+    c5_graphs = [
+        {
+            "id": "export:1",
+            "nodes": [{"id": "export:1/export:9", "pins": []}],
+            "links": [],
+            "unresolved_links": 2,
+            "ambiguous_links": 1,
+        }
+    ]
+    monkeypatch.setattr(_blueprint_graph, "read_blueprint_graphs", lambda *a, **k: c5_graphs)
+    c5_extras: dict = {}
+    c5_diags: list = []
+    try:
+        _attach_blueprint_graph_extras(
+            archive=ByteArchive(b""),
+            summary=SimpleNamespace(package_flags=0),
+            name_map=["None"],
+            import_map=[],
+            export_map=c5_export_map,
+            objects=c5_objects,
+            extras=c5_extras,
+            diagnostics=c5_diags,
+            object_ids=None,
+        )
+    finally:
+        monkeypatch.undo()
+    c5_codes = [d.code for d in c5_diags]
+    assert "BLUEPRINT_EXTERNAL_PIN_LINK" in c5_codes, c5_codes
+    assert "BLUEPRINT_LINK_AMBIGUOUS" in c5_codes, c5_codes
+    assert "export:0" in c5_extras and c5_extras["export:0"]["graphs"][0]["id"] == "export:1"
+    # The aggregate keys are consumed (popped), never leaked downstream.
+    assert "unresolved_links" not in c5_extras["export:0"]["graphs"][0]
+
+    # A4/A-4 (plan blueprint-semantics): a pins locate failure is a structured
+    # diagnostic, never a silent empty array. Three synthetic triggers:
+    # (a) pre-1010 node whose tag scan found no NAME_None tail,
+    # (b) located count negative,
+    # (c) located count beyond MAX_PINS_PER_NODE.
+    from uasset_read.models.core import UEdGraphNode  # noqa: F401  (import anchor)
+    from uasset_read.serializers.graph_node import _read_node_pins
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+
+    def _synthetic_node_export() -> ObjectExport:
+        return ObjectExport(
+            class_index=PackageIndex(-1),
+            super_index=PackageIndex(0),
+            outer_index=PackageIndex(0),
+            object_name="K2Node_Synthetic",
+            object_flags=0,
+            serial_size=64,
+            serial_offset=0,
+        )
+
+    summary_stub = SimpleNamespace(file_version_ue5=1004)
+    for locate_kwargs, label in (
+        ({"property_stream_end": None}, "no_scan_tail"),
+        ({"property_stream_end": 0}, "negative_count"),
+        ({"property_stream_end": 4}, "oversized_count"),
+    ):
+        payload = (
+            b"\x00" * 4
+            + (-1).to_bytes(4, "little", signed=True)
+            + b"\x00" * 56
+            if label == "negative_count"
+            else b"\x00" * 8 + (1001).to_bytes(4, "little", signed=True) + b"\x00" * 52
+            if label == "oversized_count"
+            else b"\x00" * 64
+        )
+        archive = ByteArchive(payload)
+        pins = _read_node_pins(
+            archive,
+            ["None"],
+            summary_stub,
+            [],
+            [],
+            _synthetic_node_export(),
+            label,
+            **locate_kwargs,
+        )
+        assert pins == [], label
+        codes = [d.code for d in archive.get_structured_diagnostics()]
+        assert "BLUEPRINT_NODE_PINS_LOCATE_FAILED" in codes, (label, codes)
+
+    # C1 unit (plan blueprint-semantics): a jump target that misses every
+    # instruction boundary yields CFG_JUMP_TARGET_UNRESOLVED in the caller's
+    # diagnostics list AND an edge with targets_known=False (never a guess).
+    from uasset_read.models.diagnostics import Diagnostic
+    from uasset_read.parsers.blueprint.bytecode import BytecodeInstruction
+    from uasset_read.parsers.blueprint.control_flow import build_cfg
+
+    def _instr(stmt: int, opcode: str, jump_kind: str = "none", target: int | None = None):
+        return BytecodeInstruction(
+            statement_index=stmt,
+            statement_ordinal=stmt,
+            logical_end=stmt + 1,
+            serialized_start=0,
+            serialized_end=0,
+            opcode=opcode,
+            operands={},
+            expression=None,
+            reads=[],
+            writes=[],
+            call_target=None,
+            jump_target_statement_index=target,
+            jump_kind=jump_kind,  # type: ignore[arg-type]
+            source_node_id=None,
+        )
+
+    cfg_diags: list[Diagnostic] = []
+    cfg = build_cfg(
+        [_instr(0, "EX_JumpIfNot", "conditional_false", 99), _instr(1, "EX_Return")],
+        diagnostics=cfg_diags,
+    )
+    assert [d.code for d in cfg_diags] == ["CFG_JUMP_TARGET_UNRESOLVED"], cfg_diags
+    unresolved = [e for e in cfg.edges if not e.targets_known]
+    assert len(unresolved) == 1 and unresolved[0].kind == "false", cfg.edges
+
+    # C1 wiring: monkeypatched build_cfg appends a marker only when the call
+    # site forwards a diagnostics list; the marker must surface in the public
+    # semantic.functions[].diagnostics projection (was unreachable before C1).
+    import uasset_read.parsers.blueprint.control_flow as _control_flow
+
+    _real_build_cfg = _control_flow.build_cfg
+
+    def _marked_build_cfg(instructions, *, diagnostics=None):
+        graph = _real_build_cfg(instructions, diagnostics=diagnostics)
+        if diagnostics is not None:
+            diagnostics.append(
+                Diagnostic(code="CFG_WIRING_MARKER", message="marker", stage="semantic.functions.cfg")
+            )
+        return graph
+
+    monkeypatch.setattr(_control_flow, "build_cfg", _marked_build_cfg)
+    from uasset_read.package import _parse_cached as _ue58_cache
+
+    _ue58_cache.cache_clear()  # a cached document would skip build_cfg entirely
+    try:
+        wiring_doc = parse_package_document(str(SAMPLES / "MyProject_UE58_TestBlueprint.uasset"), depth="decode")
+        wiring_owner = next(o for o in wiring_doc.objects if o.id == "export:0")
+        wiring_fn_diags = [d for fn in wiring_owner.semantic["functions"] for d in fn["diagnostics"]]
+        assert any(d["code"] == "CFG_WIRING_MARKER" for d in wiring_fn_diags), (
+            "build_cfg diagnostics must reach semantic.functions[].diagnostics",
+            [d["code"] for d in wiring_fn_diags],
+        )
+    finally:
+        _ue58_cache.cache_clear()  # never leak marker-bearing documents to later tests
+    monkeypatch.undo()
+
     import uasset_read.serializers.object_resources as object_resources
 
     from uasset_read.package import _parse_cached, parse_package_document
@@ -2360,6 +2703,56 @@ def test_blueprint_graph_decodes_and_definitions_stay_honest():
     assert all(isinstance(item["source_pin_range"], dict) for item in evidence)
     linked_total = sum(len(pin.get("links") or []) for g in graphs for n in g["nodes"] for pin in n["pins"])
     assert linked_total == 610, "pin adjacency must stay a derived view of the records"
+
+    # A1 (plan blueprint-semantics, folded for the collection budget): pre-1010
+    # nodes scan their property-tag stream instead of early-returning, so
+    # NodePosX/NodePosY land on the node and the scan tail (property_stream_end)
+    # becomes available for the A2 pins locate. BCPS (ue5=1004) currently reads
+    # position {0,0} on all 145 nodes and ABP (ue5=1004) on all 3 — both must
+    # become non-zero from the tag stream.
+    from uasset_read.serializers.graph_node import _read_node_script_serial
+    from uasset_read.serializers.object_resources import resolve_class_name
+
+    # nodes with non-zero position: the others are exports whose tag stream
+    # carries no NodePosX/NodePosY at all (6 K2Node_FunctionEntry in BCPS,
+    # K2Node_Event_0 in ABP — verified tag-by-tag 2026-10-06) — honest (0,0).
+    # Plan A1 acceptance ② is "not all zero", which the tag-driven majority proves.
+    pre1010 = {"B_ControlPointScoring.uasset": (145, 139), "ABP_RifleAnimLayers.uasset": (3, 2)}
+    for pre_name, (expected_nodes, expected_nonzero) in pre1010.items():
+        pre_doc = parse_package_document(SAMPLES / pre_name, depth="decode")
+        pre_graphs = [g for o in pre_doc.objects for g in (o.semantic or {}).get("graphs") or []]
+        pre_nodes = [n for g in pre_graphs for n in g["nodes"]]
+        assert len(pre_nodes) == expected_nodes, (pre_name, len(pre_nodes))
+        nonzero_pos = sum(1 for n in pre_nodes if n["position"]["x"] or n["position"]["y"])
+        assert nonzero_pos == expected_nonzero, (pre_name, f"{nonzero_pos}/{expected_nodes} nodes with non-zero position")
+        assert not [d for d in pre_doc.diagnostics if d.code.startswith("BLUEPRINT_")], pre_name
+        # A2: pins locate off the tag-scan tail (property_stream_end + 4)
+        # instead of the missing script_serialization offsets — pre-1010 nodes
+        # must carry their pins. Measured via plan A0 probe: BCPS 505 pins,
+        # ABP 9 pins across all K2Node exports.
+        pre_pins = sum(len(n["pins"]) for n in pre_nodes)
+        assert pre_pins > 0, (pre_name, "pre-1010 nodes still read 0 pins")
+
+    # Seam: the pre-1010 scan records the NAME_None tail on the serial dict.
+    with _open_sample_archive(SAMPLES / "B_ControlPointScoring.uasset") as (
+        archive,
+        summary,
+        name_map,
+        import_map,
+        export_map,
+    ):
+        archive.set_property_version_gates(summary.file_version_ue4, summary.file_version_ue5)
+        k2_export = next(
+            e
+            for e in export_map
+            if e.serial_size > 0
+            and (resolve_class_name(e.class_index, import_map, export_map) or "").startswith("K2Node")
+        )
+        serial = _read_node_script_serial(
+            archive, name_map, summary, k2_export, import_map, export_map, k2_export.object_name
+        )
+        assert serial["property_stream_end"] is not None, "pre-1010 tag scan must record its NAME_None tail"
+        assert serial["node_pos_x"] != 0 or serial["node_pos_y"] != 0, serial
 
     # #654 folded here (collection budget): tracked-sample honesty aggregate
     # (83 definitions across the eight NewVariables packages; verified count
@@ -3129,3 +3522,32 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
             "undecodable payload must stay an empty opaque struct, not fabricated fields",
             inner,
         )
+
+    # A3 (plan §4-A discriminant, folded here for the collection budget):
+    # the in-graph sequential reader gates the trailing
+    # bSerializeAsSinglePrecisionFloat on FUE5ReleaseStreamObjectVersion >= 36
+    # (EdGraphPin.cpp:330-333); below the gate the stream carries no field.
+    # ABP_RifleAnimLayers (UE5RELEASE=35) vs B_ControlPointScoring (=36) is the
+    # real-sample discriminant pair; the cursor assertions prove the gate moves.
+    from uasset_read.serializers.graph_pin import read_ed_graph_pin_type
+    from uasset_read.serializers.package_summary import CustomVersion, PackageFileSummary
+    from uasset_read.versioning import UE5_RELEASE_STREAM_GUID, build_version_context
+
+    with _open_sample_archive(SAMPLES / "ABP_RifleAnimLayers.uasset") as (_a, abp_summary, *_rest):
+        assert build_version_context(abp_summary).custom_versions.get(UE5_RELEASE_STREAM_GUID) == 35
+    with _open_sample_archive(SAMPLES / "B_ControlPointScoring.uasset") as (_a, bcps_summary, *_rest):
+        assert build_version_context(bcps_summary).custom_versions.get(UE5_RELEASE_STREAM_GUID) == 36
+
+    def _pin_type_consumed(stream_version: int) -> int:
+        summary = PackageFileSummary(
+            custom_versions=[CustomVersion(guid=UE5_RELEASE_STREAM_GUID, version=stream_version)]
+        )
+        archive = ByteArchive(scalar)
+        # Mirror the production mount point (G1): the gate reads the mounted
+        # context, never the summary — missing mount is a structured failure.
+        archive.version_context = build_version_context(summary)
+        read_ed_graph_pin_type(archive, name_map, summary=summary)
+        return archive.tell()
+
+    assert _pin_type_consumed(36) == len(scalar) == 69, "gate met: the trailing 4B bool is consumed"
+    assert _pin_type_consumed(35) == len(scalar) - 4, "gate missed: the field is absent from the stream"

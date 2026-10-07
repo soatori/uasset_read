@@ -800,6 +800,15 @@
     "total_samples": 67
   },
   "fixture_gaps": {
+    "ue4_graph_nodes": {
+      "status": "missing",
+      "description": "UE4 graph node/pin decoding is an explicit gap, not a defect: the tracked corpus contains no UE4 fixture with graph nodes (the UE4.10 sample's EventGraph has 0 nodes), so nothing is claimed as implemented until a node-bearing fixture exists.",
+      "needed_for": "UE4 best-effort graph decode (plan blueprint-semantics phase D; does not block UE5 acceptance)",
+      "acquisition": "User supplies at least one UE4 editor-saved Blueprint with node-bearing EventGraph plus the saving engine version/changelist (external dependency; the repo cannot fabricate it).",
+      "verification": "Once supplied: first run the phase-A pre-1010 path, then verify the PinsStoreFName/FString-to-FName legacy pin-name gate and empty custom-version table per report section 5-4 before opening acceptance.",
+      "minimum_samples": 1,
+      "recommended_samples": "1 UE4 editor-saved Blueprint with EventGraph nodes"
+    },
     "zen_package": {
       "status": "not_required",
       "description": "ZenPackageReader and full IoStore package-body decoding are outside the current product target. Existing IoStore TOC metadata remains only as a classification/unavailability regression.",

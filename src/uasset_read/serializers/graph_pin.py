@@ -21,7 +21,12 @@ from uasset_read.constants import (
     MAX_FTEXT_CONSUMPTION,
 )
 from uasset_read.exceptions import ParseError
-from uasset_read.versioning import RELEASE_GUID, ftext_dev_notes_enabled, require_version_context
+from uasset_read.versioning import (
+    RELEASE_GUID,
+    UE5_RELEASE_STREAM_GUID,
+    ftext_dev_notes_enabled,
+    require_version_context,
+)
 from uasset_read.models.core import UEdGraphPin, FEdGraphPinType
 from uasset_read.models.byte_ranges import ByteRegion
 
@@ -94,7 +99,13 @@ def read_ed_graph_pin_type(
     # bIsConst / bIsUObjectWrapper / bSerializeAsSinglePrecisionFloat
     pin_type.is_const = archive.read_bool()
     archive.read_bool()  # bIsUObjectWrapper (write-only; cursor alignment)
-    archive.read_bool()  # bSerializeAsSinglePrecisionFloat (write-only; cursor alignment)
+    # bSerializeAsSinglePrecisionFloat is written only at
+    # FUE5ReleaseStreamObjectVersion >= 36 (EdGraphPin.cpp:330-333); the load
+    # side forces float categories to true below the gate, so the bool is a
+    # write-only cursor field absent from pre-36 streams. Reference for the
+    # same gate: binary_or_native_handlers.py (property-tag payload path).
+    if require_version_context(archive).custom_versions.get(UE5_RELEASE_STREAM_GUID, -1) >= 36:
+        archive.read_bool()  # bSerializeAsSinglePrecisionFloat (write-only; cursor alignment)
 
     return pin_type
 
