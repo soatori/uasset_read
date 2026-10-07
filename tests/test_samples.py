@@ -459,8 +459,16 @@ def test_v2_tables_match_independent_golden_reference(entry):
 
 
 def _tagged_data_table_document(
-    cells, *, prefix_size=0, terminated=True, terminator_index=0, summary=None, soft_paths=None,
-    import_map=None, export_map=None, row_name_index=1,
+    cells,
+    *,
+    prefix_size=0,
+    terminated=True,
+    terminator_index=0,
+    summary=None,
+    soft_paths=None,
+    import_map=None,
+    export_map=None,
+    row_name_index=1,
 ):
     """One bounded legacy row, with hand-written tag/value bytes."""
     import struct
@@ -498,8 +506,14 @@ def _tagged_data_table_document(
     )
     diagnostics = []
     rows = _read_table_rows(
-        archive, len(blob), names, "export:0", diagnostics, summary=summary,
-        import_map=import_map or [], export_map=export_map or [],
+        archive,
+        len(blob),
+        names,
+        "export:0",
+        diagnostics,
+        summary=summary,
+        import_map=import_map or [],
+        export_map=export_map or [],
     )
     obj = ObjectRecord("export:0", 0, "Table", class_name="DataTable", properties=PropertyBag())
     result = run_handlers(obj, "decode", [obj], ([], names, {obj.id: {"table_rows": rows}}, None))
@@ -532,7 +546,9 @@ def _assert_data_table_row_values_decode_tagged_scalars():
         ["Location"],
     )
     assert project_property_value(enum) == {
-        "kind": "enum", "enum_type": "EALSSpawnType", "value": "EALSSpawnType::Location",
+        "kind": "enum",
+        "enum_type": "EALSSpawnType",
+        "value": "EALSSpawnType::Location",
     }
     unknown_enum = parse_enum_property(
         PropertyTag(name="Mode", type="EnumProperty", size=8),
@@ -540,7 +556,9 @@ def _assert_data_table_row_values_decode_tagged_scalars():
         ["Location"],
     )
     assert project_property_value(unknown_enum) == {
-        "kind": "enum", "enum_type": "UnknownEnum", "value": "Location",
+        "kind": "enum",
+        "enum_type": "UnknownEnum",
+        "value": "Location",
     }
 
     maps = ([object() for _ in range(11)], [object(), object()])
@@ -566,22 +584,29 @@ def _assert_data_table_row_values_decode_tagged_scalars():
         "kind": "map",
         "key_type": "ObjectProperty",
         "value_type": "IntProperty",
-        "entries": [{
-            "key": {"kind": "object_ref", "table": "import", "index": 10, "id": "import:10"},
-            "value": 42,
-        }],
+        "entries": [
+            {
+                "key": {"kind": "object_ref", "table": "import", "index": 10, "id": "import:10"},
+                "value": 42,
+            }
+        ],
     }
     invalid_archive = ByteArchive(struct.pack("<i", -12))
     invalid_archive._object_reference_maps = maps
     invalid_archive._current_object_id = "export:0"
     with pytest.raises(ParseError):
         parse_object_property(PropertyTag(name="Target", type="ObjectProperty", size=4), invalid_archive)
-    diagnostic, = invalid_archive.get_structured_diagnostics()
+    (diagnostic,) = invalid_archive.get_structured_diagnostics()
     assert diagnostic.code == "OBJECT_PROPERTY_INDEX_INVALID"
     assert diagnostic.object_id == "export:0" and diagnostic.offset == 0
 
-    assert make_enum_value("EAttachLocation", "KeepRelativeOffset")["value_name"] == "EAttachLocation::KeepRelativeOffset"
-    assert make_enum_value("EAttachLocation", "EAttachLocation::KeepRelativeOffset")["value_name"] == "EAttachLocation::KeepRelativeOffset"
+    assert (
+        make_enum_value("EAttachLocation", "KeepRelativeOffset")["value_name"] == "EAttachLocation::KeepRelativeOffset"
+    )
+    assert (
+        make_enum_value("EAttachLocation", "EAttachLocation::KeepRelativeOffset")["value_name"]
+        == "EAttachLocation::KeepRelativeOffset"
+    )
 
     rows, document = _tagged_data_table_document([("Count", "IntProperty", struct.pack("<i", 42))])
     assert rows["complete"] is True
@@ -598,10 +623,12 @@ def _assert_data_table_row_values_decode_tagged_scalars():
     json.dumps(normal)
 
     # A one-byte IntProperty must stay opaque rather than read the next tag.
-    rows, document = _tagged_data_table_document([
-        ("ShortCount", "IntProperty", b"\x2a"),
-        ("Count", "IntProperty", struct.pack("<i", 42)),
-    ])
+    rows, document = _tagged_data_table_document(
+        [
+            ("ShortCount", "IntProperty", b"\x2a"),
+            ("Count", "IntProperty", struct.pack("<i", 42)),
+        ]
+    )
     normal = project_document(document, mode="normal")
     table = next(p for p in normal["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"] == {
@@ -613,16 +640,19 @@ def _assert_data_table_row_values_decode_tagged_scalars():
     assert table["completeness"] == "partial"
     assert document.objects[0].status.semantic == "partial"
 
-    rows, document = _tagged_data_table_document([
-        ("Enabled", "BoolProperty", True),
-        ("Count", "IntProperty", struct.pack("<i", 42)),
-    ])
+    rows, document = _tagged_data_table_document(
+        [
+            ("Enabled", "BoolProperty", True),
+            ("Count", "IntProperty", struct.pack("<i", 42)),
+        ]
+    )
     assert rows["rows"][0]["fields"]["Enabled"]["value"] is True
     assert rows["rows"][0]["fields"]["Count"]["value"] == 42
     assert rows["complete"] is True
 
     rows, document = _tagged_data_table_document(
-        [("Count", "IntProperty", struct.pack("<i", 42))], row_name_index=99,
+        [("Count", "IntProperty", struct.pack("<i", 42))],
+        row_name_index=99,
     )
     assert rows["row_names"] == ["<row:99>"]
     assert rows["complete"] is False
@@ -635,20 +665,25 @@ def _assert_data_table_row_values_decode_tagged_scalars():
         assert projection["completeness"] == "partial"
 
     rows, document = _tagged_data_table_document(
-        [("InvalidName", "NameProperty", struct.pack("<II", 99, 0))], prefix_size=16,
+        [("InvalidName", "NameProperty", struct.pack("<II", 99, 0))],
+        prefix_size=16,
     )
     diagnostic = next(d for d in document.diagnostics if d.code == "name_index_out_of_range")
     assert diagnostic.offset == 52  # prefix + row count + row FName + legacy tag
     assert diagnostic.object_id == "export:0"
     table = next(p for p in project_document(document)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"]["InvalidName"] == {
-        "kind": "opaque", "type": "NameProperty", "size": 8, "reason": "parse_error",
+        "kind": "opaque",
+        "type": "NameProperty",
+        "size": 8,
+        "reason": "parse_error",
     }
     assert table["content"]["values_decoded"] is False
     assert table["completeness"] == "partial"
 
     rows, document = _tagged_data_table_document(
-        [("Count", "IntProperty", struct.pack("<i", 42))], terminator_index=99,
+        [("Count", "IntProperty", struct.pack("<i", 42))],
+        terminator_index=99,
     )
     assert rows["complete"] is False
     assert any(d.code == "name_index_out_of_range" and d.offset == 40 for d in document.diagnostics)
@@ -670,10 +705,12 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
 
     from uasset_read.projection import project_document
 
-    rows, document = _tagged_data_table_document([
-        ("Count", "IntProperty", struct.pack("<i", 42)),
-        ("Mystery", "UnsupportedProperty", b"\x01\x02"),
-    ])
+    rows, document = _tagged_data_table_document(
+        [
+            ("Count", "IntProperty", struct.pack("<i", 42)),
+            ("Mystery", "UnsupportedProperty", b"\x01\x02"),
+        ]
+    )
     assert rows["rows"][0]["fields"]["Count"]["value"] == 42
     normal = project_document(document, mode="normal")
     table = next(p for p in normal["projections"] if p["kind"] == "data_table")
@@ -694,7 +731,8 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
             ("Exported", "ObjectProperty", struct.pack("<i", 2)),
             ("Null", "ObjectProperty", struct.pack("<i", 0)),
         ],
-        import_map=[object() for _ in range(11)], export_map=[object(), object()],
+        import_map=[object() for _ in range(11)],
+        export_map=[object(), object()],
     )
     table = next(p for p in project_document(references)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"] == {
@@ -706,11 +744,15 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
     assert references.objects[0].status.semantic == "complete"
 
     _, invalid_reference = _tagged_data_table_document(
-        [("Target", "ObjectProperty", struct.pack("<i", -2))], import_map=[object()],
+        [("Target", "ObjectProperty", struct.pack("<i", -2))],
+        import_map=[object()],
     )
     table = next(p for p in project_document(invalid_reference)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"]["Target"] == {
-        "kind": "opaque", "type": "ObjectProperty", "size": 4, "reason": "parse_error",
+        "kind": "opaque",
+        "type": "ObjectProperty",
+        "size": 4,
+        "reason": "parse_error",
     }
     assert table["content"]["values_decoded"] is False
     assert table["completeness"] == "partial"
@@ -723,24 +765,35 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
     paths = [SoftObjectPathValue("SoftObjectProperty", "/Game/Test.Asset", "")]
     summary = SimpleNamespace(file_version_ue5=1008, package_flags=0)
     _, indexed = _tagged_data_table_document(
-        [("Path", "SoftObjectProperty", struct.pack("<i", 0))], summary=summary, soft_paths=paths,
+        [("Path", "SoftObjectProperty", struct.pack("<i", 0))],
+        summary=summary,
+        soft_paths=paths,
     )
     table = next(p for p in project_document(indexed)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"]["Path"] == {
-        "kind": "soft_object_path", "raw_kind": "SoftObjectProperty", "asset_path": "/Game/Test.Asset", "sub_path": "",
+        "kind": "soft_object_path",
+        "raw_kind": "SoftObjectProperty",
+        "asset_path": "/Game/Test.Asset",
+        "sub_path": "",
     }
     _, inline = _tagged_data_table_document(
-        [("Path", "SoftObjectProperty", struct.pack("<IIIII", 1, 0, 2, 0, 0))], summary=summary, soft_paths=paths,
+        [("Path", "SoftObjectProperty", struct.pack("<IIIII", 1, 0, 2, 0, 0))],
+        summary=summary,
+        soft_paths=paths,
     )
     table = next(p for p in project_document(inline)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"]["Path"]["asset_path"] == "RowA.Path"
     _, null = _tagged_data_table_document(
-        [("Path", "SoftObjectProperty", struct.pack("<i", -1))], summary=summary, soft_paths=paths,
+        [("Path", "SoftObjectProperty", struct.pack("<i", -1))],
+        summary=summary,
+        soft_paths=paths,
     )
     table = next(p for p in project_document(null)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"]["Path"]["asset_path"] == ""
     _, invalid = _tagged_data_table_document(
-        [("Path", "SoftObjectProperty", struct.pack("<i", 9))], summary=summary, soft_paths=paths,
+        [("Path", "SoftObjectProperty", struct.pack("<i", 9))],
+        summary=summary,
+        soft_paths=paths,
     )
     table = next(p for p in project_document(invalid)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"]["Path"]["kind"] == "opaque"
@@ -755,15 +808,22 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
         (struct.pack("<i", -1), ""),
     ):
         _, soft_class = _tagged_data_table_document(
-            [("Path", "SoftClassProperty", raw)], summary=summary, soft_paths=paths,
+            [("Path", "SoftClassProperty", raw)],
+            summary=summary,
+            soft_paths=paths,
         )
         table = next(p for p in project_document(soft_class)["projections"] if p["kind"] == "data_table")
         assert table["content"]["rows"][0]["values"]["Path"] == {
-            "kind": "soft_object_path", "raw_kind": "SoftClassProperty", "asset_path": asset_path, "sub_path": "",
+            "kind": "soft_object_path",
+            "raw_kind": "SoftClassProperty",
+            "asset_path": asset_path,
+            "sub_path": "",
         }
         assert table["content"]["values_decoded"] is True
     _, invalid_class = _tagged_data_table_document(
-        [("Path", "SoftClassProperty", struct.pack("<i", 9))], summary=summary, soft_paths=paths,
+        [("Path", "SoftClassProperty", struct.pack("<i", 9))],
+        summary=summary,
+        soft_paths=paths,
     )
     table = next(p for p in project_document(invalid_class)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"]["Path"]["kind"] == "opaque"
@@ -778,8 +838,9 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
     capped_rows = {
         "row_count": 51,
         "row_names": [f"Row{i}" for i in range(51)],
-        "rows": [{"name": f"Row{i}", "fields": {"Count": {"type": "IntProperty", "size": 4, "value": 42}}}
-                 for i in range(51)],
+        "rows": [
+            {"name": f"Row{i}", "fields": {"Count": {"type": "IntProperty", "size": 4, "value": 42}}} for i in range(51)
+        ],
         "complete": True,
     }
     obj.coverage.clear()
@@ -828,14 +889,22 @@ def test_real_sample_proves_claimed_capability():
                 for row in table["content"]["rows"]:
                     assert len(row["values"]) == 2
                     mesh = f"/Game/Weapons/{row['name']}/Meshes/SM_{row['name']}.SM_{row['name']}"
-                    actor = (f"/Game/Variant_Shooter/Blueprints/Pickups/Weapons/BP_ShooterWeapon_{row['name']}"
-                             f".BP_ShooterWeapon_{row['name']}_C")
+                    actor = (
+                        f"/Game/Variant_Shooter/Blueprints/Pickups/Weapons/BP_ShooterWeapon_{row['name']}"
+                        f".BP_ShooterWeapon_{row['name']}_C"
+                    )
                     assert row["values"] == {
                         "StaticMesh_10_8456479142D90AC54009A190C6522528": {
-                            "kind": "soft_object_path", "raw_kind": "SoftObjectProperty", "asset_path": mesh, "sub_path": "",
+                            "kind": "soft_object_path",
+                            "raw_kind": "SoftObjectProperty",
+                            "asset_path": mesh,
+                            "sub_path": "",
                         },
                         "SpawnActor_13_12829FCF4BC69EE56781F8AEEB1A9DD8": {
-                            "kind": "soft_object_path", "raw_kind": "SoftObjectProperty", "asset_path": actor, "sub_path": "",
+                            "kind": "soft_object_path",
+                            "raw_kind": "SoftObjectProperty",
+                            "asset_path": actor,
+                            "sub_path": "",
                         },
                     }
                 json.dumps(projected)
@@ -847,10 +916,16 @@ def test_real_sample_proves_claimed_capability():
                     "value": "EAttachLocation::KeepRelativeOffset",
                 }
                 assert fields["Sound"]["value"] == {
-                    "kind": "object_ref", "table": "import", "index": 10, "id": "import:10",
+                    "kind": "object_ref",
+                    "table": "import",
+                    "index": 10,
+                    "id": "import:10",
                 }
                 assert fields["DecalMaterial"]["value"] == {
-                    "kind": "object_ref", "table": "import", "index": 3, "id": "import:3",
+                    "kind": "object_ref",
+                    "table": "import",
+                    "index": 3,
+                    "id": "import:3",
                 }
                 assert fields["NiagaraSystem"]["value"] is None
                 from uasset_read.package import parse_package_document
@@ -1262,12 +1337,12 @@ def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
 
     archive = ByteArchive(struct.pack("<i", -1), tolerant=True)
     assert read_validated_count_tolerant(archive, 8, "Array") == 0
-    diagnostic, = archive.get_structured_diagnostics()
+    (diagnostic,) = archive.get_structured_diagnostics()
     assert diagnostic.code == "INVALID_COLLECTION_COUNT"
     assert diagnostic.offset == 0 and "raw_value=-1" in diagnostic.message
     archive = ByteArchive(struct.pack("<i", 9), tolerant=True)
     assert read_validated_count_tolerant(archive, 8, "Array") == 0
-    diagnostic, = archive.get_structured_diagnostics()
+    (diagnostic,) = archive.get_structured_diagnostics()
     assert diagnostic.code == "INVALID_COLLECTION_COUNT" and "raw_value=9" in diagnostic.message
 
     archive = ByteArchive(b"\0" * 4, tolerant=True)
@@ -1278,7 +1353,7 @@ def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
         [],
         file_version_ue5=0,
     )
-    diagnostic, = archive.get_structured_diagnostics()
+    (diagnostic,) = archive.get_structured_diagnostics()
     assert diagnostic.code == "TRANSFORM_SIZE_INVALID"
     assert value.struct_type == "Transform"
 
@@ -1290,19 +1365,19 @@ def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
         [],
         file_version_ue5=0,
     )
-    diagnostic, = archive.get_structured_diagnostics()
+    (diagnostic,) = archive.get_structured_diagnostics()
     assert diagnostic.code == "STRUCT_PROPERTY_NEGATIVE_SIZE"
     assert value.parse_status == "opaque" and archive.tell() == 4
 
     archive = ByteArchive(struct.pack("<q", -1), tolerant=True)
     assert _read_payload_toc_offset(archive) == 0
-    diagnostic, = archive.get_structured_diagnostics()
+    (diagnostic,) = archive.get_structured_diagnostics()
     assert diagnostic.code == "PAYLOAD_TOC_OFFSET_INVALID" and "raw_value=-1" in diagnostic.message
 
     archive = ByteArchive(b"data", tolerant=True)
     tag = PropertyTag(name="Native", type="UnknownNative", size=4, serialize_type="BinaryOrNative")
     value = parse_property_value(tag, archive, [], [], tolerant=True)
-    diagnostic, = archive.get_structured_diagnostics()
+    (diagnostic,) = archive.get_structured_diagnostics()
     assert diagnostic.code == "BINARY_OR_NATIVE_PROPERTY_OPAQUE"
     assert value["raw_data"] == b"data"
 
@@ -1389,6 +1464,7 @@ def _check_farchive_uses_one_mib_mmap_threshold_and_keeps_buffered_fallback(tmp_
     path = tmp_path / "small.uasset"
     path.write_bytes(b"data")
     monkeypatch.setattr(archive_module, "MMAP_THRESHOLD", 1)
+
     def fail_mmap(*args, **kwargs):
         raise OSError("mmap unavailable")
 
@@ -1409,9 +1485,7 @@ def _check_archive_internal_diagnostic_marks_scan_only_new_entries(monkeypatch):
     archive = ByteArchive(b"")
     archive._record_structured_diagnostic(code="old", stage="test", offset=0)
     mark = archive._diagnostic_mark()
-    archive._record_structured_diagnostic(
-        code="fstring_out_of_range", stage="test", offset=0
-    )
+    archive._record_structured_diagnostic(code="fstring_out_of_range", stage="test", offset=0)
     assert [item.code for item in archive._diagnostics_since(mark)] == ["fstring_out_of_range"]
     history = archive.get_structured_diagnostics()
     returned = archive.get_structured_diagnostics()
@@ -1659,9 +1733,7 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     from uasset_read.projection import project_document
     from uasset_read.projections.bundle import write_projected_document
 
-    schema = json.loads(
-        (ROOT / "tests" / "package_document_v4.schema.json").read_text(encoding="utf-8")
-    )
+    schema = json.loads((ROOT / "tests" / "package_document_v4.schema.json").read_text(encoding="utf-8"))
     top_level = {
         "format",
         "format_version",
@@ -2569,6 +2641,7 @@ def test_trailing_diagnostics_carry_structured_size():
     assert trailing, "fixture must emit trailing diagnostics"
     for d in trailing:
         assert d.size is not None and d.size > 0, f"{d.object_id}: missing structured size"
+        assert d.offset is not None and d.offset >= 0, f"{d.object_id}: missing structured offset"
         assert d.reason is not None
         # Message and structured field must agree.
         assert f"leaves {d.size} undecoded bytes" in d.message
@@ -2629,6 +2702,11 @@ def test_byte_accounting_registers_reader_consumed_structural_bytes():
                 leaf["size"] for leaf in scopes[diag["object_id"]]["leaves"] if leaf["reason"] == "unconsumed"
             )
             assert unconsumed == details[index]["size"], f"{diag['object_id']}: {unconsumed} != diagnostic"
+            window = scopes[diag["object_id"]]["window"]
+            assert details[index]["offset"] is not None, f"{diag['object_id']}: missing structured offset"
+            assert details[index]["offset"] + details[index]["size"] == window["start"] + window["size"], (
+                f"{diag['object_id']}: offset+size must reach the export window end"
+            )
         trailing_ids = {
             d["object_id"] for d in projection["diagnostics"] if d["code"] == "EXPORT_TRAILING_BYTES_UNCONSUMED"
         }
@@ -2659,9 +2737,7 @@ def test_byte_accounting_registers_reader_consumed_structural_bytes():
     # One structured diagnostic owns each skipped window byte-for-byte.
     details = {e["index"]: e for e in proj["debug"]["diagnostic_details"]}
     skips = [
-        (index, diag)
-        for index, diag in enumerate(proj["diagnostics"])
-        if diag["code"] == "EXPORT_PAYLOAD_SKIPPED"
+        (index, diag) for index, diag in enumerate(proj["diagnostics"]) if diag["code"] == "EXPORT_PAYLOAD_SKIPPED"
     ]
     assert [diag["object_id"] for _, diag in skips] == [f"export:{i}" for i in range(5, 30)]
     for index, diag in skips:
@@ -2976,7 +3052,6 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
     assert all(d.stage == "parse_properties" and d.reason == "known_unimplemented" for d in pin_diags)
     # One diagnostic per payload, attributed to the owning export — never swallowed.
     assert len({d.object_id for d in pin_diags}) == 12
-
 
     pin_values = [
         entry.value

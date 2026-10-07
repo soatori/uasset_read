@@ -630,7 +630,8 @@ def _normalize_value(value: Any) -> Any:
             "key_type": value.key_type,
             "value_type": value.value_type,
             "entries": [
-                {"key": _normalize_value(e.get("key")), "value": _normalize_value(e.get("value"))} for e in value.entries
+                {"key": _normalize_value(e.get("key")), "value": _normalize_value(e.get("value"))}
+                for e in value.entries
             ],
         }
     if isinstance(value, SetValue):
@@ -1408,6 +1409,10 @@ class LegacyPackageReader:
                                 "objects.export",
                                 object_id=obj.id,
                                 size=remaining,
+                                # Tail-region start: ``remaining`` was captured
+                                # before the padded probe read, so the offset is
+                                # correct under either short-circuit branch.
+                                offset=serial_end - remaining,
                                 reason=classify_trailing_reason(
                                     TrailingContext(
                                         class_name=cn,
@@ -1947,9 +1952,7 @@ def _attach_kismet_extras(
                             stage="semantic.kismet",
                             object_id=getattr(kr, "object_id", "") or f"export:{exp_idx}",
                             offset=(
-                                source_range.start
-                                if source_range is not None
-                                else error_context.get("package_offset")
+                                source_range.start if source_range is not None else error_context.get("package_offset")
                             ),
                             size=source_range.size if source_range is not None else None,
                             effect="semantic_loss",
@@ -2054,14 +2057,21 @@ def _read_soft_object_paths(
         return []
     end = min(
         [archive.total_size(), summary.total_header_size]
-        + [offset for offset in (summary.name_offset, summary.import_offset, summary.export_offset, summary.depends_offset)
-           if offset > start]
+        + [
+            offset
+            for offset in (summary.name_offset, summary.import_offset, summary.export_offset, summary.depends_offset)
+            if offset > start
+        ]
     )
     if not 0 < count <= MAX_SAFE_COUNT or not 0 < start < end or count > (end - start) // 20:
-        diagnostics.append(_diag(
-            "SOFT_OBJECT_PATH_TABLE_INVALID", "SoftObjectPaths count/offset exceeds its header table bounds",
-            "package.soft_object_paths", reason="recovered_corruption",
-        ))
+        diagnostics.append(
+            _diag(
+                "SOFT_OBJECT_PATH_TABLE_INVALID",
+                "SoftObjectPaths count/offset exceeds its header table bounds",
+                "package.soft_object_paths",
+                reason="recovered_corruption",
+            )
+        )
         return []
     previous_position = archive.tell()
     previous_range = archive.set_read_range((start, end))
@@ -2077,10 +2087,14 @@ def _read_soft_object_paths(
                 raise ParseError("SoftObjectPaths entry contains an invalid name")
             paths.append(path)
     except ParseError as exc:
-        diagnostics.append(_diag(
-            "SOFT_OBJECT_PATH_TABLE_TRUNCATED", f"Decoded {len(paths)}/{count} SoftObjectPaths: {exc}",
-            "package.soft_object_paths", reason="recovered_corruption",
-        ))
+        diagnostics.append(
+            _diag(
+                "SOFT_OBJECT_PATH_TABLE_TRUNCATED",
+                f"Decoded {len(paths)}/{count} SoftObjectPaths: {exc}",
+                "package.soft_object_paths",
+                reason="recovered_corruption",
+            )
+        )
     finally:
         archive.set_read_range(previous_range)
         archive.seek(previous_position)
