@@ -30,7 +30,7 @@ from uasset_read.versioning import (
     CORE_GUID,
     FRAMEWORK_GUID,
     RELEASE_GUID,
-    get_custom_version,
+    require_version_context,
 )
 
 if TYPE_CHECKING:
@@ -150,14 +150,16 @@ def _read_native_payload_start(
     archive.seek(export.serial_offset)
     payload = archive.read(export.serial_size)
     window = ByteArchive(payload, name=f"export_{export.object_name}")
-    window._file_version_ue4 = summary.file_version_ue4
-    window._file_version_ue5 = summary.file_version_ue5
+    # 方案甲 (G1): the window references the SAME mounted VersionContext
+    # instance as the source archive (reference copy, one instance per document).
+    window.version_context = archive.version_context
 
     # Position at the start of the payload
     window.seek(0)
 
-    # UE5 version 1011+: consume serialization-control prefix
-    if summary.file_version_ue5 >= UE5_SERIALIZATION_CONTROL_VERSION:
+    # UE5 version 1011+: consume serialization-control prefix — version comes
+    # from the single mounted VersionContext (G1), summary keeps other uses.
+    if require_version_context(archive).file_version_ue5 >= UE5_SERIALIZATION_CONTROL_VERSION:
         ctrl_byte = window.read_u8()
         if ctrl_byte & ~_SER_CTRL_OVERRIDE_OPERATION:
             # Unknown bits set — reject
@@ -255,9 +257,10 @@ def _read_ustruct_prefix_and_script(
 
     Returns FunctionScriptReadResult with status "extracted", "no_script", or "failed".
     """
-    # Look up custom versions
-    framework_version = get_custom_version(summary, FRAMEWORK_GUID)
-    core_version = get_custom_version(summary, CORE_GUID)
+    # Look up custom versions from the window's mounted VersionContext (G1).
+    _ctx = require_version_context(window)
+    framework_version = _ctx.custom_versions.get(FRAMEWORK_GUID, -1)
+    core_version = _ctx.custom_versions.get(CORE_GUID, -1)
 
     # Check remaining capacity
     remaining_bytes = window.total_size() - window.tell()
@@ -325,7 +328,7 @@ def _read_ustruct_prefix_and_script(
         # 3a. Read native field declarations when count > 0
         native_fields: list[NativeFieldDeclaration] = []
         if native_property_count > 0:
-            release_version = get_custom_version(summary, RELEASE_GUID)
+            release_version = _ctx.custom_versions.get(RELEASE_GUID, -1)
             ctx = NativeFieldContext(
                 name_map=name_map or [],
                 import_map=import_map or [],

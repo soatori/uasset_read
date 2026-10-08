@@ -22,7 +22,7 @@ from uasset_read.constants import (
     format_guid_bytes,
 )
 from uasset_read.exceptions import ParseError
-from uasset_read.versioning import get_custom_version
+from uasset_read.versioning import VersionContext, require_version_context
 
 logger = logging.getLogger(__name__)
 
@@ -93,14 +93,14 @@ EDITOR_OBJECT_GUID = "ed68b0e4e94294f40bda31a241bb462e"
 EDITOR_VERSION_ADDED_ALWAYS_SIGN = 21
 
 
-def _editor_object_version(summary) -> int:
-    """FEditorObjectVersion for *summary*; modern layout (-1→skip) when absent."""
-    if summary is None:
-        # Synthetic callers without a package summary get the modern layout —
-        # every UE4.15+/UE5 package that can carry AsNumber histories includes
-        # the GUID at >= AddedAlwaysSignNumberFormattingOption.
-        return EDITOR_VERSION_ADDED_ALWAYS_SIGN
-    return get_custom_version(summary, EDITOR_OBJECT_GUID)
+def _editor_object_version(context: VersionContext) -> int:
+    """FEditorObjectVersion from the mounted VersionContext; -1 when absent.
+
+    G1: the old `summary is None -> modern layout` silent default is replaced
+    by the structural missing-context failure at the call site; a present
+    context without the GUID keeps the legacy -1 (skip) semantics.
+    """
+    return context.custom_versions.get(EDITOR_OBJECT_GUID, -1)
 
 
 def _read_ftext_value(
@@ -240,7 +240,7 @@ def read_ftext_with_history(
         # AlwaysSign bool gated on FEditorObjectVersion >= 21, then UseGrouping
         # bool, RoundingMode int8, and four int32 digit bounds.
         if archive.read_bool():
-            if _editor_object_version(summary) >= EDITOR_VERSION_ADDED_ALWAYS_SIGN:
+            if _editor_object_version(require_version_context(archive)) >= EDITOR_VERSION_ADDED_ALWAYS_SIGN:
                 archive.read_bool()  # AlwaysSign
             archive.read_bool()  # UseGrouping
             archive.read_i8()  # RoundingMode

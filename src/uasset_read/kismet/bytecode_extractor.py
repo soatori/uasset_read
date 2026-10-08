@@ -15,6 +15,7 @@ from uasset_read.exceptions import ParseError
 
 if TYPE_CHECKING:
     from uasset_read.serializers.package_summary import PackageFileSummary
+    from uasset_read.versioning import VersionContext
 
 
 # ===========================================================================
@@ -34,6 +35,7 @@ def parse_bytecode_stream(
     name_map: list[str],
     summary: "PackageFileSummary | None" = None,
     *,
+    version_context: "VersionContext",
     bytecode_buffer_size: int = 0,
     tolerant: bool = False,
 ) -> list[KismetExpression]:
@@ -49,7 +51,9 @@ def parse_bytecode_stream(
     Args:
         bytecode_bytes: Raw ScriptBytecode data
         name_map: Name table for expression resolution
-        summary: PackageFileSummary for LWC version checks (optional)
+        summary: PackageFileSummary (mounted on the archive for non-version uses)
+        version_context: the document's mounted VersionContext (required — G1;
+            supplies Fortnite/Release custom versions and the Step-5 LWC gate)
         bytecode_buffer_size: Declared logical bytecode buffer size (0 = skip logical validation)
         tolerant: If True, skip unknown tokens instead of raising ParseError
 
@@ -68,16 +72,19 @@ def parse_bytecode_stream(
         return []
 
     archive = FKismetArchive(bytecode_bytes, "ScriptBytecode", name_map, tolerant=tolerant)
+    # 方案甲 (G1): the sole production FKismetArchive construction mounts the
+    # same VersionContext instance; GUID lookups read it (first-match
+    # semantics of the old linear lookup are preserved by the mapping).
+    archive.version_context = version_context
     if summary is not None:
         archive.summary = summary
-        from uasset_read.versioning import (
-            FORTNITE_GUID,
-            RELEASE_GUID,
-            get_custom_version,
-        )
+    from uasset_read.versioning import (
+        FORTNITE_GUID,
+        RELEASE_GUID,
+    )
 
-        archive.fortnite_version = get_custom_version(summary, FORTNITE_GUID)
-        archive.release_version = get_custom_version(summary, RELEASE_GUID)
+    archive.fortnite_version = version_context.custom_versions.get(FORTNITE_GUID, -1)
+    archive.release_version = version_context.custom_versions.get(RELEASE_GUID, -1)
     expressions: list[KismetExpression] = []
     opaque_tail = False
 

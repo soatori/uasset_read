@@ -52,7 +52,7 @@ from ..models.object_model import (
     Relation,
 )
 from ..models.properties import PropertyBag
-from ..versioning import ftext_dev_notes_enabled
+from ..versioning import VersionContext, build_version_context, ftext_dev_notes_enabled, require_version_context
 
 
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:
@@ -630,7 +630,8 @@ def _normalize_value(value: Any) -> Any:
             "key_type": value.key_type,
             "value_type": value.value_type,
             "entries": [
-                {"key": _normalize_value(e.get("key")), "value": _normalize_value(e.get("value"))} for e in value.entries
+                {"key": _normalize_value(e.get("key")), "value": _normalize_value(e.get("value"))}
+                for e in value.entries
             ],
         }
     if isinstance(value, SetValue):
@@ -782,10 +783,11 @@ class LegacyPackageReader:
                     )
                 )
 
-            # Property tag format is version-gated; set the gates the same
-            # way pipeline/stages.py does so UE5.0-5.2 tags don't fall into
-            # the UE5.3+ FPropertyTypeName path (mirrors v1 behavior).
-            archive.set_property_version_gates(summary.file_version_ue4, summary.file_version_ue5)
+            # 方案甲 (G1): mount the one per-document VersionContext after
+            # summary bootstrap; everything above this line is bootstrap on
+            # local variables (contractual exemption) — consumers below read
+            # archive.version_context.
+            archive.version_context = build_version_context(summary)
 
             # 2. Validate name table
             if summary.name_count <= 0:
@@ -803,7 +805,7 @@ class LegacyPackageReader:
             # 3. Read name table
             name_map = read_name_table(archive, summary)
             archive.set_name_map(name_map)
-            if summary.file_version_ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
+            if require_version_context(archive).file_version_ue5 >= UE5_ADD_SOFTOBJECTPATH_LIST:
                 archive._soft_object_paths = _read_soft_object_paths(archive, summary, name_map, diagnostics)
 
             # 4. Read import map
@@ -1379,7 +1381,7 @@ class LegacyPackageReader:
                 elif overrun <= 0 and cn == "StringTable":
                     extras[obj.id] = {
                         "string_table": _read_string_table(
-                            archive, obj.id, diagnostics, _string_table_has_dev_notes(summary)
+                            archive, obj.id, diagnostics, _string_table_has_dev_notes(summary, require_version_context(archive))
                         )
                     }
                     consumed_end = archive.tell()
@@ -1407,6 +1409,10 @@ class LegacyPackageReader:
                                 "objects.export",
                                 object_id=obj.id,
                                 size=remaining,
+                                # Tail-region start: ``remaining`` was captured
+                                # before the padded probe read, so the offset is
+                                # correct under either short-circuit branch.
+                                offset=serial_end - remaining,
                                 reason=classify_trailing_reason(
                                     TrailingContext(
                                         class_name=cn,
@@ -1834,11 +1840,15 @@ def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
     from .blueprint.bytecode import normalize_instructions
     from .blueprint.control_flow import build_cfg
 
+    # CFG diagnostics ride on the bridge result's errors field; seed the list
+    # before build_cfg so CFG_JUMP_TARGET_UNRESOLVED reaches the public
+    # FunctionAnalysis.diagnostics projection (plan C1).
+    diagnostics = list(getattr(kr, "errors", None) or [])
     instructions = []
-    cfg = build_cfg([])
+    cfg = build_cfg([], diagnostics=diagnostics)
     if kr.expressions:
         instructions = normalize_instructions(kr.expressions)
-        cfg = build_cfg(instructions)
+        cfg = build_cfg(instructions, diagnostics=diagnostics)
     reads: set[str] = set()
     writes: set[str] = set()
     calls: list[str] = []
@@ -1850,7 +1860,6 @@ def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
     status = kr.bytecode_status
     if status not in get_args(BytecodeStatus):
         status = "unavailable"
-    diagnostics = list(getattr(kr, "errors", None) or [])
     if status == "unavailable" and not diagnostics and getattr(kr, "error_code", None):
         diagnostics.append(
             _diag(
@@ -1946,9 +1955,7 @@ def _attach_kismet_extras(
                             stage="semantic.kismet",
                             object_id=getattr(kr, "object_id", "") or f"export:{exp_idx}",
                             offset=(
-                                source_range.start
-                                if source_range is not None
-                                else error_context.get("package_offset")
+                                source_range.start if source_range is not None else error_context.get("package_offset")
                             ),
                             size=source_range.size if source_range is not None else None,
                             effect="semantic_loss",
@@ -2053,31 +2060,44 @@ def _read_soft_object_paths(
         return []
     end = min(
         [archive.total_size(), summary.total_header_size]
-        + [offset for offset in (summary.name_offset, summary.import_offset, summary.export_offset, summary.depends_offset)
-           if offset > start]
+        + [
+            offset
+            for offset in (summary.name_offset, summary.import_offset, summary.export_offset, summary.depends_offset)
+            if offset > start
+        ]
     )
     if not 0 < count <= MAX_SAFE_COUNT or not 0 < start < end or count > (end - start) // 20:
-        diagnostics.append(_diag(
-            "SOFT_OBJECT_PATH_TABLE_INVALID", "SoftObjectPaths count/offset exceeds its header table bounds",
-            "package.soft_object_paths", reason="recovered_corruption",
-        ))
+        diagnostics.append(
+            _diag(
+                "SOFT_OBJECT_PATH_TABLE_INVALID",
+                "SoftObjectPaths count/offset exceeds its header table bounds",
+                "package.soft_object_paths",
+                reason="recovered_corruption",
+            )
+        )
         return []
     previous_position = archive.tell()
     previous_range = archive.set_read_range((start, end))
     paths = []
+    # Version for the inline soft-path read comes from the mounted context (G1).
+    file_version_ue5 = require_version_context(archive).file_version_ue5
     try:
         archive.seek(start)
         for _ in range(count):
             mark = archive._diagnostic_mark()
-            path = parse_soft_object_property(PropertyTag("", "SoftObjectProperty", 0), archive, name_map, summary)
+            path = parse_soft_object_property(PropertyTag("", "SoftObjectProperty", 0), archive, name_map, file_version_ue5)
             if archive._diagnostic_mark() != mark:
                 raise ParseError("SoftObjectPaths entry contains an invalid name")
             paths.append(path)
     except ParseError as exc:
-        diagnostics.append(_diag(
-            "SOFT_OBJECT_PATH_TABLE_TRUNCATED", f"Decoded {len(paths)}/{count} SoftObjectPaths: {exc}",
-            "package.soft_object_paths", reason="recovered_corruption",
-        ))
+        diagnostics.append(
+            _diag(
+                "SOFT_OBJECT_PATH_TABLE_TRUNCATED",
+                f"Decoded {len(paths)}/{count} SoftObjectPaths: {exc}",
+                "package.soft_object_paths",
+                reason="recovered_corruption",
+            )
+        )
     finally:
         archive.set_read_range(previous_range)
         archive.seek(previous_position)
@@ -2145,9 +2165,8 @@ def _read_table_rows(
     rows_out: list[dict[str, Any]] = []
     row_names_valid = True
     payload = ByteArchive(blob[header:])
-    # Tag reads must use the real package layout version, not a fresh default.
-    payload._file_version_ue4 = getattr(archive, "_file_version_ue4", 0)
-    payload._file_version_ue5 = getattr(archive, "_file_version_ue5", 0)
+    # 方案甲 (G1): same mounted VersionContext instance as the source archive.
+    payload.version_context = archive.version_context
     limit = len(blob) - header
     payload.set_read_range((0, limit))
     payload._current_object_id = object_id
@@ -2290,12 +2309,12 @@ def _read_table_rows(
 # CUE4Parse FStringTable ctor.
 
 
-def _string_table_has_dev_notes(summary: PackageFileSummary) -> bool:
+def _string_table_has_dev_notes(summary: PackageFileSummary, context: "VersionContext") -> bool:
     """True when the editor-saved trailer wrote per-entry DevNotes strings.
 
     Delegates to the shared AddDevNotesToFText gate (uasset_read.versioning).
     """
-    return ftext_dev_notes_enabled(summary)
+    return ftext_dev_notes_enabled(summary, context)
 
 
 def _read_string_table(

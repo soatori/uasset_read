@@ -800,6 +800,15 @@
     "total_samples": 67
   },
   "fixture_gaps": {
+    "ue4_graph_nodes": {
+      "status": "missing",
+      "description": "UE4 graph node/pin decoding is an explicit gap, not a defect: the tracked corpus contains no UE4 fixture with graph nodes (the UE4.10 sample's EventGraph has 0 nodes), so nothing is claimed as implemented until a node-bearing fixture exists.",
+      "needed_for": "UE4 best-effort graph decode (plan blueprint-semantics phase D; does not block UE5 acceptance)",
+      "acquisition": "User supplies at least one UE4 editor-saved Blueprint with node-bearing EventGraph plus the saving engine version/changelist (external dependency; the repo cannot fabricate it).",
+      "verification": "Once supplied: first run the phase-A pre-1010 path, then verify the PinsStoreFName/FString-to-FName legacy pin-name gate and empty custom-version table per report section 5-4 before opening acceptance.",
+      "minimum_samples": 1,
+      "recommended_samples": "1 UE4 editor-saved Blueprint with EventGraph nodes"
+    },
     "zen_package": {
       "status": "not_required",
       "description": "ZenPackageReader and full IoStore package-body decoding are outside the current product target. Existing IoStore TOC metadata remains only as a classification/unavailability regression.",
@@ -858,10 +867,55 @@
       "status": "available",
       "description": "4 editor-saved MyProject UE 5.8 fixtures: TestSimpleCurveTable (SimpleCurve), TestRichCurveTable (RichCurve), testrCurveTable (RichCurve rows) and testCurveBase (CurveFloat, registered as the negative control: it is not a CurveTable).",
       "needed_for": "Phase 4.1 CurveTable AssetHandler (#626)",
-      "acquisition": "Generate a CurveTable in a project we own (>= 2 rows, >= 2 keys, SimpleCurve or RichCurve) or obtain a redistributable one; record UE version, creation steps, row names, mode, and deterministic expected values.",
-      "verification": "After copying, verify:\n- main export class is CurveTable\n- row/key values match the recorded expected values\n- manifest hash check passes",
+      "acquisition": "Acquired: 4 editor-saved MyProject UE 5.8 fixtures created in our own project and saved under Content/ParserFixtures/ (editor build EngineVersion 5.8.2-56702186, recorded inside each package), copied into tests/samples/ - TestSimpleCurveTable, TestRichCurveTable and testrCurveTable as the positive CurveTable fixtures, testCurveBase as the negative control (CurveFloat, not a CurveTable). Per-file source, size, SHA-256, export class and row-block expectations are recorded in tests/samples/ORIGIN-issue-626-curve-table.md.",
+      "verification": "Verified as of 2026-10-05 against the fixtures on disk:\n- main export class is CurveTable for the three positive fixtures (testCurveBase is CurveFloat), as recorded in tests/samples/ORIGIN-issue-626-curve-table.md\n- manifest hash check passes: SHA-256 for all 4 fixtures matches tests/samples/manifest.json samples[]\nNo per-key numeric values and no CSV export results are recorded here; row/mode expectations live in tests/test_samples.py assertions (source present, not re-run this round).",
       "minimum_samples": 1,
       "recommended_samples": "1 SimpleCurve table and 1 RichCurve table"
+    },
+    "skeletal_mesh": {
+      "status": "missing",
+      "description": "The Task 1.0 manifest-wide parse confirmation found zero SkeletalMesh exports across the tracked corpus: both *_SK_Mannequin fixtures are Skeleton packages whose asset export class is Skeleton, not a mesh.",
+      "needed_for": "MeshHandler SkeletalMesh branch: a real-sample CAPABILITIES assertion (mesh_type/lods) for topic 2 Phase 1 (#657)",
+      "acquisition": "Obtain a redistributable editor-saved SkeletalMesh .uasset with at least LOD0; record UE version, LOD/material-slot layout, and expected export classes, then register it in the samples manifest.",
+      "verification": "After copying, verify:\n- asset export class is SkeletalMesh\n- manifest hash check passes\n- a CAPABILITIES row pins the measured mesh_type/lod values",
+      "minimum_samples": 1,
+      "recommended_samples": "1 editor-saved SkeletalMesh with LOD0 and material slots"
+    },
+    "anim_composite": {
+      "status": "missing",
+      "description": "The Task 1.0 manifest-wide parse confirmation found no AnimComposite export in any tracked package, so segment_count assertions have no carrier.",
+      "needed_for": "AnimCompositeHandler real-sample CAPABILITIES assertion (kind/segment_count) for topic 2 Phase 1 (#657)",
+      "acquisition": "Create or obtain a redistributable AnimComposite .uasset with at least one anim segment; record UE version and expected segment names/starts/ends, then register it in the samples manifest.",
+      "verification": "After copying, verify:\n- asset export class is AnimComposite\n- manifest hash check passes\n- a CAPABILITIES row pins the measured segment_count",
+      "minimum_samples": 1,
+      "recommended_samples": "1 AnimComposite with 2 or more segments"
+    },
+    "anim_layer_interface": {
+      "status": "missing",
+      "description": "The Task 1.0 manifest-wide parse confirmation found no AnimLayerInterface export in any tracked package, so function_count assertions have no carrier.",
+      "needed_for": "AnimLayerInterfaceHandler real-sample CAPABILITIES assertion (kind/function_count) for topic 2 Phase 1 (#657)",
+      "acquisition": "Create or obtain a redistributable AnimLayerInterface asset package; record UE version, interface functions and expected export classes, then register it in the samples manifest.",
+      "verification": "After copying, verify:\n- asset export class is AnimLayerInterface\n- manifest hash check passes\n- a CAPABILITIES row pins the measured function_count or the explicit missing path",
+      "minimum_samples": 1,
+      "recommended_samples": "1 AnimLayerInterface with at least one interface function"
+    },
+    "material_function": {
+      "status": "missing",
+      "description": "The Task 1.0 manifest-wide parse confirmation found no MaterialFunction or MaterialFunctionInterface export in any tracked package; MaterialExpressionMaterialFunctionCall expressions inside material graphs are not a standalone function asset.",
+      "needed_for": "MaterialFunctionHandler real-sample CAPABILITIES assertion (input/output/expression/function-call counts) for topic 2 Phase 1 (#657)",
+      "acquisition": "Create or obtain a redistributable MaterialFunction .uasset with at least one input and one output; record UE version and expected expression layout, then register it in the samples manifest.",
+      "verification": "After copying, verify:\n- asset export class is MaterialFunction\n- manifest hash check passes\n- a CAPABILITIES row pins the measured counts",
+      "minimum_samples": 1,
+      "recommended_samples": "1 MaterialFunction with inputs, outputs and one nested function call"
+    },
+    "material_parameter_collection": {
+      "status": "missing",
+      "description": "The Task 1.0 manifest-wide parse confirmation found no MaterialParameterCollection export in any tracked package, so scalar/vector parameter-count assertions have no carrier.",
+      "needed_for": "MaterialParameterCollectionHandler real-sample CAPABILITIES assertion (scalar/vector param counts) for topic 2 Phase 1 (#657)",
+      "acquisition": "Create or obtain a redistributable MaterialParameterCollection .uasset with scalar and vector parameters; record UE version and expected parameter values, then register it in the samples manifest.",
+      "verification": "After copying, verify:\n- asset export class is MaterialParameterCollection\n- manifest hash check passes\n- a CAPABILITIES row pins the measured scalar/vector counts",
+      "minimum_samples": 1,
+      "recommended_samples": "1 collection with scalar and vector parameters"
     }
   },
   "golden_files": [

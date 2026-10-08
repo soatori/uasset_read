@@ -126,12 +126,19 @@ CAPABILITIES = (
     ),
     # Flags/editor-position only — not enough core fields for decoded tier (#629 hardening).
     ("FirstPerson_M_PrototypeGrid.uasset", "Material", {"kind": "material"}, "partial"),
-    # Real fixture carries 3 scalar + 1 vector parameters (normalized arrays);
-    # decoded tier per audit-remediation Task 5.
+    # Task 1.0 measured: 3 scalar + 1 vector parameters (normalized arrays) and
+    # a Parent whose import map resolves to M_Template_Master_Copy — every
+    # promised field of the complete contract is asserted (Appendix B row 3).
     (
         "CassiniSample_MI_Template_BaseGray_Metal.uasset",
         "MaterialInstanceConstant",
-        {"kind": "material_instance"},
+        {
+            "kind": "material_instance",
+            "name": "MI_Template_BaseGray_Metal",
+            "has_parent": True,
+            "scalar_param_count": 3,
+            "vector_param_count": 1,
+        },
         "complete",
     ),
     (
@@ -185,6 +192,21 @@ CAPABILITIES = (
         "PhysicalMaterial",
         {"kind": "physical_material", "surface_type": "EPhysicalSurface::SurfaceType2"},
         "partial",  # float defaults omitted by the editor; SurfaceType is real data
+    ),
+    # Task 1.0 carriage confirmation (temp/carriage_report.md) over the full
+    # manifest: these two are the only BlendSpace/StringTable carriers, so the
+    # zero-assertion classes each anchor on their measured values.
+    (
+        "FirstPerson_BS_Idle_Walk_Run.uasset",
+        "BlendSpace",
+        {"kind": "anim_blend_space", "blend_space_type": "BlendSpace", "sample_count": 27},
+        "partial",  # summary tier: BlendParameters absent here, so axes coverage is missing (#618/#629)
+    ),
+    (
+        "IntroToUnreal_StrT_Titles.uasset",
+        "StringTable",
+        {"kind": "string_table", "table_type": "StringTable", "namespace": "StrT_Titles", "entry_count": 16},
+        "partial",  # summary tier: trailer per-key metadata unparsed (#615/#629)
     ),
 )
 
@@ -253,6 +275,11 @@ def _open_sample_archive(sample):
     archive = open_package_bundle(str(sample)).open_archive(tolerant=True)
     try:
         summary, _ = read_package_summary(archive)
+        # Mirror the production mount point (LegacyPackageReader.read): the
+        # threshold readers below consume archive.version_context (G1).
+        from uasset_read.versioning import build_version_context
+
+        archive.version_context = build_version_context(summary)
         name_map = read_name_table(archive, summary)
         archive.set_name_map(name_map)
         yield (
@@ -392,6 +419,22 @@ def test_fixture_gap_statuses_pin_the_capability_boundary():
     assert gaps["pak_container"]["status"] == "available"
     assert gaps["unversioned_properties"]["status"] == "not_required"
     assert gaps["sidecar_files"]["status"] == "available"
+    # Topic 2 Phase 1 (#657): five registered handler classes have no carrier in
+    # any tracked package (Task 1.0 carriage confirmation), so their real-sample
+    # CAPABILITIES row is absent by evidence — this pin is the assertion.
+    assert gaps["skeletal_mesh"]["status"] == "missing"
+    assert gaps["anim_composite"]["status"] == "missing"
+    assert gaps["anim_layer_interface"]["status"] == "missing"
+    assert gaps["material_function"]["status"] == "missing"
+    assert gaps["material_parameter_collection"]["status"] == "missing"
+    # D1 (plan blueprint-semantics): UE4 graph node/pin decoding stays an
+    # explicit gap — no fixture exists and nothing is promised until the user
+    # supplies a node-bearing UE4 Blueprint and the phase-A path plus the
+    # PinsStoreFName/legacy pin-name gates are verified case by case.
+    ue4_gap = gaps["ue4_graph_nodes"]
+    assert ue4_gap["status"] == "missing"
+    assert "用户" in ue4_gap["acquisition"] or "user" in ue4_gap["acquisition"].lower()
+    assert "PinsStoreFName" in ue4_gap["verification"]
     # Hand-written counts drift ("54 samples" survived a corpus of 66): gaps may
     # only cite the manifest's own total, never a literal that ages.
     total = manifest["summary"]["total_samples"]
@@ -454,8 +497,16 @@ def test_v2_tables_match_independent_golden_reference(entry):
 
 
 def _tagged_data_table_document(
-    cells, *, prefix_size=0, terminated=True, terminator_index=0, summary=None, soft_paths=None,
-    import_map=None, export_map=None, row_name_index=1,
+    cells,
+    *,
+    prefix_size=0,
+    terminated=True,
+    terminator_index=0,
+    summary=None,
+    soft_paths=None,
+    import_map=None,
+    export_map=None,
+    row_name_index=1,
 ):
     """One bounded legacy row, with hand-written tag/value bytes."""
     import struct
@@ -466,6 +517,7 @@ def _tagged_data_table_document(
     from uasset_read.models.properties import PropertyBag
     from uasset_read.parsers.asset_types.registry import run_handlers
     from uasset_read.parsers.legacy_reader import _read_table_rows
+    from uasset_read.versioning import VersionContext
 
     names = ["None", "RowA"]
     row = b""
@@ -483,10 +535,23 @@ def _tagged_data_table_document(
     archive.set_read_range((prefix_size, len(blob)))
     if soft_paths is not None:
         archive._soft_object_paths = soft_paths
+    # Synthetic caller outside the production chains (Step 0): mount the
+    # context explicitly — mirrors the old getattr-0 defaults of the
+    # payload._file_version_* copy for this bare archive.
+    archive.version_context = VersionContext(
+        file_version_ue4=getattr(summary, "file_version_ue4", 0),
+        file_version_ue5=getattr(summary, "file_version_ue5", 0),
+    )
     diagnostics = []
     rows = _read_table_rows(
-        archive, len(blob), names, "export:0", diagnostics, summary=summary,
-        import_map=import_map or [], export_map=export_map or [],
+        archive,
+        len(blob),
+        names,
+        "export:0",
+        diagnostics,
+        summary=summary,
+        import_map=import_map or [],
+        export_map=export_map or [],
     )
     obj = ObjectRecord("export:0", 0, "Table", class_name="DataTable", properties=PropertyBag())
     result = run_handlers(obj, "decode", [obj], ([], names, {obj.id: {"table_rows": rows}}, None))
@@ -511,6 +576,7 @@ def _assert_data_table_row_values_decode_tagged_scalars():
     from uasset_read.parsers.property_types import make_enum_value
     from uasset_read.parsers.property_types import parse_enum_property, parse_object_property
     from uasset_read.parsers.property_parser import parse_property_value
+    from uasset_read.versioning import VersionContext
 
     enum = parse_enum_property(
         PropertyTag(name="Mode", type="EnumProperty", size=8, enum_type="EALSSpawnType"),
@@ -518,7 +584,9 @@ def _assert_data_table_row_values_decode_tagged_scalars():
         ["Location"],
     )
     assert project_property_value(enum) == {
-        "kind": "enum", "enum_type": "EALSSpawnType", "value": "EALSSpawnType::Location",
+        "kind": "enum",
+        "enum_type": "EALSSpawnType",
+        "value": "EALSSpawnType::Location",
     }
     unknown_enum = parse_enum_property(
         PropertyTag(name="Mode", type="EnumProperty", size=8),
@@ -526,7 +594,9 @@ def _assert_data_table_row_values_decode_tagged_scalars():
         ["Location"],
     )
     assert project_property_value(unknown_enum) == {
-        "kind": "enum", "enum_type": "UnknownEnum", "value": "Location",
+        "kind": "enum",
+        "enum_type": "UnknownEnum",
+        "value": "Location",
     }
 
     maps = ([object() for _ in range(11)], [object(), object()])
@@ -541,6 +611,7 @@ def _assert_data_table_row_values_decode_tagged_scalars():
         assert project_property_value(value) == expected
     map_archive = ByteArchive(struct.pack("<iiii", 0, 1, -11, 42))
     map_archive._object_reference_maps = maps
+    map_archive.version_context = VersionContext(file_version_ue4=0, file_version_ue5=0)
     map_value = parse_property_value(
         PropertyTag(name="Lookup", type="MapProperty", size=16, inner_type="ObjectProperty", value_type="IntProperty"),
         map_archive,
@@ -551,22 +622,29 @@ def _assert_data_table_row_values_decode_tagged_scalars():
         "kind": "map",
         "key_type": "ObjectProperty",
         "value_type": "IntProperty",
-        "entries": [{
-            "key": {"kind": "object_ref", "table": "import", "index": 10, "id": "import:10"},
-            "value": 42,
-        }],
+        "entries": [
+            {
+                "key": {"kind": "object_ref", "table": "import", "index": 10, "id": "import:10"},
+                "value": 42,
+            }
+        ],
     }
     invalid_archive = ByteArchive(struct.pack("<i", -12))
     invalid_archive._object_reference_maps = maps
     invalid_archive._current_object_id = "export:0"
     with pytest.raises(ParseError):
         parse_object_property(PropertyTag(name="Target", type="ObjectProperty", size=4), invalid_archive)
-    diagnostic, = invalid_archive.get_structured_diagnostics()
+    (diagnostic,) = invalid_archive.get_structured_diagnostics()
     assert diagnostic.code == "OBJECT_PROPERTY_INDEX_INVALID"
     assert diagnostic.object_id == "export:0" and diagnostic.offset == 0
 
-    assert make_enum_value("EAttachLocation", "KeepRelativeOffset")["value_name"] == "EAttachLocation::KeepRelativeOffset"
-    assert make_enum_value("EAttachLocation", "EAttachLocation::KeepRelativeOffset")["value_name"] == "EAttachLocation::KeepRelativeOffset"
+    assert (
+        make_enum_value("EAttachLocation", "KeepRelativeOffset")["value_name"] == "EAttachLocation::KeepRelativeOffset"
+    )
+    assert (
+        make_enum_value("EAttachLocation", "EAttachLocation::KeepRelativeOffset")["value_name"]
+        == "EAttachLocation::KeepRelativeOffset"
+    )
 
     rows, document = _tagged_data_table_document([("Count", "IntProperty", struct.pack("<i", 42))])
     assert rows["complete"] is True
@@ -583,10 +661,12 @@ def _assert_data_table_row_values_decode_tagged_scalars():
     json.dumps(normal)
 
     # A one-byte IntProperty must stay opaque rather than read the next tag.
-    rows, document = _tagged_data_table_document([
-        ("ShortCount", "IntProperty", b"\x2a"),
-        ("Count", "IntProperty", struct.pack("<i", 42)),
-    ])
+    rows, document = _tagged_data_table_document(
+        [
+            ("ShortCount", "IntProperty", b"\x2a"),
+            ("Count", "IntProperty", struct.pack("<i", 42)),
+        ]
+    )
     normal = project_document(document, mode="normal")
     table = next(p for p in normal["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"] == {
@@ -598,16 +678,19 @@ def _assert_data_table_row_values_decode_tagged_scalars():
     assert table["completeness"] == "partial"
     assert document.objects[0].status.semantic == "partial"
 
-    rows, document = _tagged_data_table_document([
-        ("Enabled", "BoolProperty", True),
-        ("Count", "IntProperty", struct.pack("<i", 42)),
-    ])
+    rows, document = _tagged_data_table_document(
+        [
+            ("Enabled", "BoolProperty", True),
+            ("Count", "IntProperty", struct.pack("<i", 42)),
+        ]
+    )
     assert rows["rows"][0]["fields"]["Enabled"]["value"] is True
     assert rows["rows"][0]["fields"]["Count"]["value"] == 42
     assert rows["complete"] is True
 
     rows, document = _tagged_data_table_document(
-        [("Count", "IntProperty", struct.pack("<i", 42))], row_name_index=99,
+        [("Count", "IntProperty", struct.pack("<i", 42))],
+        row_name_index=99,
     )
     assert rows["row_names"] == ["<row:99>"]
     assert rows["complete"] is False
@@ -620,20 +703,25 @@ def _assert_data_table_row_values_decode_tagged_scalars():
         assert projection["completeness"] == "partial"
 
     rows, document = _tagged_data_table_document(
-        [("InvalidName", "NameProperty", struct.pack("<II", 99, 0))], prefix_size=16,
+        [("InvalidName", "NameProperty", struct.pack("<II", 99, 0))],
+        prefix_size=16,
     )
     diagnostic = next(d for d in document.diagnostics if d.code == "name_index_out_of_range")
     assert diagnostic.offset == 52  # prefix + row count + row FName + legacy tag
     assert diagnostic.object_id == "export:0"
     table = next(p for p in project_document(document)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"]["InvalidName"] == {
-        "kind": "opaque", "type": "NameProperty", "size": 8, "reason": "parse_error",
+        "kind": "opaque",
+        "type": "NameProperty",
+        "size": 8,
+        "reason": "parse_error",
     }
     assert table["content"]["values_decoded"] is False
     assert table["completeness"] == "partial"
 
     rows, document = _tagged_data_table_document(
-        [("Count", "IntProperty", struct.pack("<i", 42))], terminator_index=99,
+        [("Count", "IntProperty", struct.pack("<i", 42))],
+        terminator_index=99,
     )
     assert rows["complete"] is False
     assert any(d.code == "name_index_out_of_range" and d.offset == 40 for d in document.diagnostics)
@@ -655,10 +743,12 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
 
     from uasset_read.projection import project_document
 
-    rows, document = _tagged_data_table_document([
-        ("Count", "IntProperty", struct.pack("<i", 42)),
-        ("Mystery", "UnsupportedProperty", b"\x01\x02"),
-    ])
+    rows, document = _tagged_data_table_document(
+        [
+            ("Count", "IntProperty", struct.pack("<i", 42)),
+            ("Mystery", "UnsupportedProperty", b"\x01\x02"),
+        ]
+    )
     assert rows["rows"][0]["fields"]["Count"]["value"] == 42
     normal = project_document(document, mode="normal")
     table = next(p for p in normal["projections"] if p["kind"] == "data_table")
@@ -679,7 +769,8 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
             ("Exported", "ObjectProperty", struct.pack("<i", 2)),
             ("Null", "ObjectProperty", struct.pack("<i", 0)),
         ],
-        import_map=[object() for _ in range(11)], export_map=[object(), object()],
+        import_map=[object() for _ in range(11)],
+        export_map=[object(), object()],
     )
     table = next(p for p in project_document(references)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"] == {
@@ -691,11 +782,15 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
     assert references.objects[0].status.semantic == "complete"
 
     _, invalid_reference = _tagged_data_table_document(
-        [("Target", "ObjectProperty", struct.pack("<i", -2))], import_map=[object()],
+        [("Target", "ObjectProperty", struct.pack("<i", -2))],
+        import_map=[object()],
     )
     table = next(p for p in project_document(invalid_reference)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"]["Target"] == {
-        "kind": "opaque", "type": "ObjectProperty", "size": 4, "reason": "parse_error",
+        "kind": "opaque",
+        "type": "ObjectProperty",
+        "size": 4,
+        "reason": "parse_error",
     }
     assert table["content"]["values_decoded"] is False
     assert table["completeness"] == "partial"
@@ -708,24 +803,35 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
     paths = [SoftObjectPathValue("SoftObjectProperty", "/Game/Test.Asset", "")]
     summary = SimpleNamespace(file_version_ue5=1008, package_flags=0)
     _, indexed = _tagged_data_table_document(
-        [("Path", "SoftObjectProperty", struct.pack("<i", 0))], summary=summary, soft_paths=paths,
+        [("Path", "SoftObjectProperty", struct.pack("<i", 0))],
+        summary=summary,
+        soft_paths=paths,
     )
     table = next(p for p in project_document(indexed)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"]["Path"] == {
-        "kind": "soft_object_path", "raw_kind": "SoftObjectProperty", "asset_path": "/Game/Test.Asset", "sub_path": "",
+        "kind": "soft_object_path",
+        "raw_kind": "SoftObjectProperty",
+        "asset_path": "/Game/Test.Asset",
+        "sub_path": "",
     }
     _, inline = _tagged_data_table_document(
-        [("Path", "SoftObjectProperty", struct.pack("<IIIII", 1, 0, 2, 0, 0))], summary=summary, soft_paths=paths,
+        [("Path", "SoftObjectProperty", struct.pack("<IIIII", 1, 0, 2, 0, 0))],
+        summary=summary,
+        soft_paths=paths,
     )
     table = next(p for p in project_document(inline)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"]["Path"]["asset_path"] == "RowA.Path"
     _, null = _tagged_data_table_document(
-        [("Path", "SoftObjectProperty", struct.pack("<i", -1))], summary=summary, soft_paths=paths,
+        [("Path", "SoftObjectProperty", struct.pack("<i", -1))],
+        summary=summary,
+        soft_paths=paths,
     )
     table = next(p for p in project_document(null)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"]["Path"]["asset_path"] == ""
     _, invalid = _tagged_data_table_document(
-        [("Path", "SoftObjectProperty", struct.pack("<i", 9))], summary=summary, soft_paths=paths,
+        [("Path", "SoftObjectProperty", struct.pack("<i", 9))],
+        summary=summary,
+        soft_paths=paths,
     )
     table = next(p for p in project_document(invalid)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"]["Path"]["kind"] == "opaque"
@@ -740,15 +846,22 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
         (struct.pack("<i", -1), ""),
     ):
         _, soft_class = _tagged_data_table_document(
-            [("Path", "SoftClassProperty", raw)], summary=summary, soft_paths=paths,
+            [("Path", "SoftClassProperty", raw)],
+            summary=summary,
+            soft_paths=paths,
         )
         table = next(p for p in project_document(soft_class)["projections"] if p["kind"] == "data_table")
         assert table["content"]["rows"][0]["values"]["Path"] == {
-            "kind": "soft_object_path", "raw_kind": "SoftClassProperty", "asset_path": asset_path, "sub_path": "",
+            "kind": "soft_object_path",
+            "raw_kind": "SoftClassProperty",
+            "asset_path": asset_path,
+            "sub_path": "",
         }
         assert table["content"]["values_decoded"] is True
     _, invalid_class = _tagged_data_table_document(
-        [("Path", "SoftClassProperty", struct.pack("<i", 9))], summary=summary, soft_paths=paths,
+        [("Path", "SoftClassProperty", struct.pack("<i", 9))],
+        summary=summary,
+        soft_paths=paths,
     )
     table = next(p for p in project_document(invalid_class)["projections"] if p["kind"] == "data_table")
     assert table["content"]["rows"][0]["values"]["Path"]["kind"] == "opaque"
@@ -763,8 +876,9 @@ def _assert_data_table_projection_stays_partial_when_any_cell_is_opaque():
     capped_rows = {
         "row_count": 51,
         "row_names": [f"Row{i}" for i in range(51)],
-        "rows": [{"name": f"Row{i}", "fields": {"Count": {"type": "IntProperty", "size": 4, "value": 42}}}
-                 for i in range(51)],
+        "rows": [
+            {"name": f"Row{i}", "fields": {"Count": {"type": "IntProperty", "size": 4, "value": 42}}} for i in range(51)
+        ],
         "complete": True,
     }
     obj.coverage.clear()
@@ -788,7 +902,7 @@ def test_real_sample_proves_claimed_capability():
 
     The status column pins the #629 tier contract: decoded-tier fixtures are
     ``complete``; summary-tier fixtures prove ``partial`` with coverage.
-    Loops the CAPABILITIES table so 27 claims cost one collected item; every
+    Loops the CAPABILITIES table so 29 claims cost one collected item; every
     assertion message carries ``sample:class_name``.
     """
     for sample, class_name, expected, expected_semantic in CAPABILITIES:
@@ -813,14 +927,22 @@ def test_real_sample_proves_claimed_capability():
                 for row in table["content"]["rows"]:
                     assert len(row["values"]) == 2
                     mesh = f"/Game/Weapons/{row['name']}/Meshes/SM_{row['name']}.SM_{row['name']}"
-                    actor = (f"/Game/Variant_Shooter/Blueprints/Pickups/Weapons/BP_ShooterWeapon_{row['name']}"
-                             f".BP_ShooterWeapon_{row['name']}_C")
+                    actor = (
+                        f"/Game/Variant_Shooter/Blueprints/Pickups/Weapons/BP_ShooterWeapon_{row['name']}"
+                        f".BP_ShooterWeapon_{row['name']}_C"
+                    )
                     assert row["values"] == {
                         "StaticMesh_10_8456479142D90AC54009A190C6522528": {
-                            "kind": "soft_object_path", "raw_kind": "SoftObjectProperty", "asset_path": mesh, "sub_path": "",
+                            "kind": "soft_object_path",
+                            "raw_kind": "SoftObjectProperty",
+                            "asset_path": mesh,
+                            "sub_path": "",
                         },
                         "SpawnActor_13_12829FCF4BC69EE56781F8AEEB1A9DD8": {
-                            "kind": "soft_object_path", "raw_kind": "SoftObjectProperty", "asset_path": actor, "sub_path": "",
+                            "kind": "soft_object_path",
+                            "raw_kind": "SoftObjectProperty",
+                            "asset_path": actor,
+                            "sub_path": "",
                         },
                     }
                 json.dumps(projected)
@@ -832,10 +954,16 @@ def test_real_sample_proves_claimed_capability():
                     "value": "EAttachLocation::KeepRelativeOffset",
                 }
                 assert fields["Sound"]["value"] == {
-                    "kind": "object_ref", "table": "import", "index": 10, "id": "import:10",
+                    "kind": "object_ref",
+                    "table": "import",
+                    "index": 10,
+                    "id": "import:10",
                 }
                 assert fields["DecalMaterial"]["value"] == {
-                    "kind": "object_ref", "table": "import", "index": 3, "id": "import:3",
+                    "kind": "object_ref",
+                    "table": "import",
+                    "index": 3,
+                    "id": "import:3",
                 }
                 assert fields["NiagaraSystem"]["value"] is None
                 from uasset_read.package import parse_package_document
@@ -953,6 +1081,13 @@ def test_real_sample_proves_claimed_capability():
                     assert len(calls) == 17
                     assert sum(1 for item in calls if item["target_ref_key"] is None) == 2
                     assert sum(1 for item in calls if item["target_ref_key"] is not None) == 15
+                    # C3 matrix (plan blueprint-semantics): the corpus exhibits
+                    # the object_id/1.0 and unresolved/0.0 rows; the 0.9/0.7/0.5
+                    # function_identity rows are pinned synthetically in
+                    # test_critical_boundary_guards.
+                    matrix = {(item["match_method"], item["confidence"]) for item in calls}
+                    assert matrix == {("object_id", 1.0), ("unresolved", 0.0)}, matrix
+                    assert all(item["unresolved"] == (item["confidence"] == 0.0) for item in calls)
                     assert all(item["source_node_reason"] == "debug_mapping_unavailable" for item in calls)
                     assert all(
                         entry["source_node_reason"] == "debug_mapping_unavailable"
@@ -1013,14 +1148,71 @@ def test_real_sample_proves_claimed_capability():
             assert not any(
                 d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" and d.object_id != "export:0" for d in doc.diagnostics
             ), f"{sample}:{class_name} has no raw trailer by design (export:0 MetaData excluded)"
+        elif class_name == "MaterialInstanceConstant":
+            # Envelope-layer assertions (coordinator ruling): the v4 completeness
+            # enum string is the acceptance form of the internal 0.5 ratio, and
+            # parent_resolved/parent must never contradict each other.
+            from uasset_read.package import parse_package_document
+            from uasset_read.projection import project_document
+
+            projected = project_document(parse_package_document(SAMPLES / sample, depth="decode"), mode="normal")
+            instance = next(p for p in projected["projections"] if p["kind"] == "material_instance")
+            assert instance["status"] == "represented", f"{sample}:{class_name}"
+            assert instance["completeness"] == "partial", f"{sample}:{class_name}"
+            assert instance["content"]["parent_resolved"] is True, f"{sample}:{class_name}"
+            assert instance["content"]["parent"] == "M_Template_Master_Copy", (
+                f"{sample}:{class_name} parent_resolved/parent contradict"
+            )
+            parameters = next(p for p in projected["projections"] if p["kind"] == "material_parameters")
+            assert parameters["content"]["scalar_parameters"] == obj.semantic["scalar_param_count"], (
+                f"{sample}:{class_name} scalar count drift"
+            )
+            assert parameters["content"]["vector_parameters"] == obj.semantic["vector_param_count"], (
+                f"{sample}:{class_name} vector count drift"
+            )
+            json.dumps(projected)
+        elif class_name == "StringTable":
+            # Task 1.4 option (i): the zero-projection absence is declared as a
+            # capability-matrix row (semantics stay in objects[].semantic), and
+            # the promised entries field is asserted against the measured count.
+            from uasset_read.projections.registry import CAPABILITY_MATRIX
+
+            row = next(r for r in CAPABILITY_MATRIX if r["family"] == "string_table")
+            assert row["asset_kinds"] == ["string_table"] and row["kinds"] == [], f"{sample}:{class_name}"
+            assert row["rule"].startswith("no embedded projections"), f"{sample}:{class_name}"
+            assert len(obj.semantic["entries"]) == obj.semantic["entry_count"] == 16, f"{sample}:{class_name}"
 
 
 @pytest.mark.parametrize("sample", [entry["name"] for entry in MANIFEST_SAMPLES])
-def test_every_real_sample_forms_a_valid_package_document(sample: str):
+def test_every_real_sample_forms_a_valid_package_document(sample: str, monkeypatch):
     """Every tracked fixture must form a complete, relation-valid, blob-free document."""
+    # 方案甲 single-instance hook (A5-2): count VersionContext constructions
+    # during this parse — exactly one per document, windows reference-copy it.
+    from uasset_read.package import _parse_cached
+    import uasset_read.versioning as _versioning
+
+    _orig_vc = _versioning.VersionContext
+    vc_count = {"n": 0}
+
+    class _CountingVC(_orig_vc):
+        def __init__(self, *args, **kwargs):
+            vc_count["n"] += 1
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(_versioning, "VersionContext", _CountingVC)
+    _parse_cached.cache_clear()
     doc = _object_document(sample)
+    assert vc_count["n"] == 1, f"{sample}: VersionContext constructed {vc_count['n']} times, expected 1"
+    monkeypatch.undo()
     entry = MANIFEST_BY_NAME[sample]
     from uasset_read.serializers.package_summary import _read_version_and_tag
+    from uasset_read.versioning import (
+        CORE_GUID,
+        FORTNITE_GUID,
+        FRAMEWORK_GUID,
+        RELEASE_GUID,
+        build_version_context,
+    )
 
     ids = [o.id for o in doc.objects]
     assert ids == [f"export:{i}" for i in range(len(ids))], sample
@@ -1029,11 +1221,35 @@ def test_every_real_sample_forms_a_valid_package_document(sample: str):
     assert doc.package.export_count == entry["export_count"], sample
     assert len(doc.summary.asset_object_ids) == entry["b_is_asset_count"], sample
 
-    with _open_sample_archive(SAMPLES / sample) as (archive, _summary, _names, _imports, _exports):
+    with _open_sample_archive(SAMPLES / sample) as (archive, summary, _names, _imports, _exports):
         archive.seek(0)
-        _, _legacy_version, raw_ue4, raw_ue5, *_ = _read_version_and_tag(archive)
+        _, _legacy_version, raw_ue4, raw_ue5, raw_licensee, *_ = _read_version_and_tag(archive)
         assert raw_ue4 == entry["file_version_ue4"], sample
         assert raw_ue5 == entry["file_version_ue5"], sample
+        # raw == effective == gate (A5-3): all-zero raw normalizes to the
+        # AUTOMATIC_VERSION pair; any non-zero raw passes through untouched
+        # (a UE4 package's ue5==0 is a valid effective value, no normalization).
+        if raw_ue4 == 0 and raw_ue5 == 0 and raw_licensee == 0:
+            assert (summary.file_version_ue4, summary.file_version_ue5) == (522, 1018), sample
+        else:
+            assert (summary.file_version_ue4, summary.file_version_ue5) == (raw_ue4, raw_ue5), sample
+        if sample in ("BP_UnversionedTest.uasset", "DA_UnversionedTest.uasset"):
+            # The manifest's only all-zero samples must take the normalize branch.
+            assert (raw_ue4, raw_ue5, raw_licensee) == (0, 0, 0), sample
+            assert (summary.file_version_ue4, summary.file_version_ue5) == (522, 1018), sample
+        ctx = build_version_context(summary)
+        assert (ctx.file_version_ue4, ctx.file_version_ue5) == (
+            summary.file_version_ue4,
+            summary.file_version_ue5,
+        ), sample
+        # Mapping == first-match list scan (A5-8), self-implemented <=10-line scan.
+        for guid in (FRAMEWORK_GUID, CORE_GUID, FORTNITE_GUID, RELEASE_GUID):
+            expected = -1
+            for cv in summary.custom_versions:
+                if cv.guid == guid:
+                    expected = cv.version
+                    break
+            assert ctx.custom_versions.get(guid, -1) == expected, f"{sample}: {guid}"
 
     valid = set(ids) | {f"import:{i}" for i in range(len(doc.dependencies))}
     assert doc.relations, sample
@@ -1199,12 +1415,12 @@ def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
 
     archive = ByteArchive(struct.pack("<i", -1), tolerant=True)
     assert read_validated_count_tolerant(archive, 8, "Array") == 0
-    diagnostic, = archive.get_structured_diagnostics()
+    (diagnostic,) = archive.get_structured_diagnostics()
     assert diagnostic.code == "INVALID_COLLECTION_COUNT"
     assert diagnostic.offset == 0 and "raw_value=-1" in diagnostic.message
     archive = ByteArchive(struct.pack("<i", 9), tolerant=True)
     assert read_validated_count_tolerant(archive, 8, "Array") == 0
-    diagnostic, = archive.get_structured_diagnostics()
+    (diagnostic,) = archive.get_structured_diagnostics()
     assert diagnostic.code == "INVALID_COLLECTION_COUNT" and "raw_value=9" in diagnostic.message
 
     archive = ByteArchive(b"\0" * 4, tolerant=True)
@@ -1213,8 +1429,9 @@ def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
         archive,
         [],
         [],
+        file_version_ue5=0,
     )
-    diagnostic, = archive.get_structured_diagnostics()
+    (diagnostic,) = archive.get_structured_diagnostics()
     assert diagnostic.code == "TRANSFORM_SIZE_INVALID"
     assert value.struct_type == "Transform"
 
@@ -1224,20 +1441,21 @@ def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
         archive,
         [],
         [],
+        file_version_ue5=0,
     )
-    diagnostic, = archive.get_structured_diagnostics()
+    (diagnostic,) = archive.get_structured_diagnostics()
     assert diagnostic.code == "STRUCT_PROPERTY_NEGATIVE_SIZE"
     assert value.parse_status == "opaque" and archive.tell() == 4
 
     archive = ByteArchive(struct.pack("<q", -1), tolerant=True)
     assert _read_payload_toc_offset(archive) == 0
-    diagnostic, = archive.get_structured_diagnostics()
+    (diagnostic,) = archive.get_structured_diagnostics()
     assert diagnostic.code == "PAYLOAD_TOC_OFFSET_INVALID" and "raw_value=-1" in diagnostic.message
 
     archive = ByteArchive(b"data", tolerant=True)
     tag = PropertyTag(name="Native", type="UnknownNative", size=4, serialize_type="BinaryOrNative")
     value = parse_property_value(tag, archive, [], [], tolerant=True)
-    diagnostic, = archive.get_structured_diagnostics()
+    (diagnostic,) = archive.get_structured_diagnostics()
     assert diagnostic.code == "BINARY_OR_NATIVE_PROPERTY_OPAQUE"
     assert value["raw_data"] == b"data"
 
@@ -1324,6 +1542,7 @@ def _check_farchive_uses_one_mib_mmap_threshold_and_keeps_buffered_fallback(tmp_
     path = tmp_path / "small.uasset"
     path.write_bytes(b"data")
     monkeypatch.setattr(archive_module, "MMAP_THRESHOLD", 1)
+
     def fail_mmap(*args, **kwargs):
         raise OSError("mmap unavailable")
 
@@ -1344,9 +1563,7 @@ def _check_archive_internal_diagnostic_marks_scan_only_new_entries(monkeypatch):
     archive = ByteArchive(b"")
     archive._record_structured_diagnostic(code="old", stage="test", offset=0)
     mark = archive._diagnostic_mark()
-    archive._record_structured_diagnostic(
-        code="fstring_out_of_range", stage="test", offset=0
-    )
+    archive._record_structured_diagnostic(code="fstring_out_of_range", stage="test", offset=0)
     assert [item.code for item in archive._diagnostics_since(mark)] == ["fstring_out_of_range"]
     history = archive.get_structured_diagnostics()
     returned = archive.get_structured_diagnostics()
@@ -1476,11 +1693,15 @@ def _check_float_array_bulk_decode_falls_back_at_export_boundary():
     from uasset_read.models.fallback import PropertyFallback
     from uasset_read.models.properties import PropertyTag
     from uasset_read.parsers.property_types import parse_array_property
+    from uasset_read.versioning import VersionContext
 
     class CountingArchive(ByteArchive):
         def __init__(self, data):
             super().__init__(data)
             self.read_sizes = []
+            # Synthetic bare-archive caller: mount a neutral context so value
+            # dispatch (G1: version from VersionContext) stays structural.
+            self.version_context = VersionContext(file_version_ue4=0, file_version_ue5=0)
 
         def read(self, size):
             self.read_sizes.append(size)
@@ -1507,6 +1728,7 @@ def _check_float_array_bulk_decode_recovers_after_physical_short_read():
     from uasset_read.models.properties import PropertyTag
     from uasset_read.package import PackageArchive
     from uasset_read.parsers.property_types import parse_array_property
+    from uasset_read.versioning import VersionContext
 
     raw = struct.pack("<i2f", 3, 1.0, 2.0)
     reported_size = 16
@@ -1527,6 +1749,8 @@ def _check_float_array_bulk_decode_recovers_after_physical_short_read():
             super().__init__(raw)
             self._file_size = reported_size
             self.read_sizes = []
+            # Synthetic bare-archive caller: neutral mounted context (G1).
+            self.version_context = VersionContext(file_version_ue4=0, file_version_ue5=0)
 
         def read(self, size):
             self.read_sizes.append(size)
@@ -1540,6 +1764,8 @@ def _check_float_array_bulk_decode_recovers_after_physical_short_read():
     file_archive._init_archive_attrs("<short-read>")
     file_archive._file = io.BytesIO(raw)
     file_archive._file_size = reported_size
+    # Synthetic bare-archive caller: neutral mounted context (G1).
+    file_archive.version_context = VersionContext(file_version_ue4=0, file_version_ue5=0)
     file_sizes = []
     original_file_read = file_archive.read
 
@@ -1557,6 +1783,8 @@ def _check_float_array_bulk_decode_recovers_after_physical_short_read():
     main_archive._file = io.BytesIO(raw)
     main_archive._file_size = reported_size
     package = PackageArchive(main_archive)
+    # Synthetic bare-archive caller: neutral mounted context (G1).
+    package.version_context = VersionContext(file_version_ue4=0, file_version_ue5=0)
     package_sizes = []
     original_package_read = package.read
 
@@ -1583,9 +1811,7 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     from uasset_read.projection import project_document
     from uasset_read.projections.bundle import write_projected_document
 
-    schema = json.loads(
-        (ROOT / "tests" / "package_document_v4.schema.json").read_text(encoding="utf-8")
-    )
+    schema = json.loads((ROOT / "tests" / "package_document_v4.schema.json").read_text(encoding="utf-8"))
     top_level = {
         "format",
         "format_version",
@@ -1749,6 +1975,82 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     assert new_function["unresolved"] is False
     test_instructions = [entry for fn in test_owner["semantic"]["functions"] for entry in fn["instructions"]]
     assert len([entry for entry in test_instructions if entry["opcode"] == "EX_JumpIfNot"]) == 1
+
+    # C2 (plan blueprint-semantics, folded for the collection budget): pin
+    # control_flow / exec_chains / functions[].cfg — previously zero test
+    # references. Counts are measured doc totals (every object carrying the
+    # function list), style of the 610-links pin.
+    def _cfg_totals(projection):
+        blocks = edges = unresolved = 0
+        unresolved_kinds = set()
+        for obj in projection["objects"]:
+            sem = obj.get("semantic") or {}
+            for fn in sem.get("functions") or []:
+                cfg = fn.get("cfg") or {}
+                assert {"blocks", "edges", "entry"} <= set(cfg), sorted(cfg)
+                blocks += len(cfg["blocks"])
+                edges += len(cfg["edges"])
+                for edge in cfg["edges"]:
+                    assert {"kind", "targets_known"} <= set(edge), sorted(edge)
+                    if not edge["targets_known"]:
+                        unresolved += 1
+                        unresolved_kinds.add(edge["kind"])
+        return blocks, edges, unresolved, unresolved_kinds
+
+    ue58_normal = projected["MyProject_UE58_TestBlueprint.uasset"]["normal"]
+    ue58_sem = next(o["semantic"] for o in ue58_normal["objects"] if o["id"] == "export:0")
+    assert "control_flow" in ue58_sem and "exec_chains" in ue58_sem
+    assert ue58_sem["exec_chains"]["metadata"]["kind"] == "direct_exec_edge_summary"
+    nf_cfg = next(fn["cfg"] for fn in ue58_sem["functions"] if fn["function_name"] == "NewFunction")
+    # Measured 2026-10-06: NewFunction = 4 blocks / 3 edges (the plan's 2/0
+    # seed names NewEventDispatcher__DelegateSignature instead) — the plan
+    # orders measure-first over its own seed.
+    assert (len(nf_cfg["blocks"]), len(nf_cfg["edges"])) == (4, 3), nf_cfg["entry"]
+
+    combat_blocks, combat_edges, combat_unresolved, combat_kinds = _cfg_totals(
+        projected["BP_CombatCharacter.uasset"]["normal"]
+    )
+    assert (combat_blocks, combat_edges) == (324, 162), (combat_blocks, combat_edges)
+    assert combat_unresolved == 2 and combat_kinds == {"computed_jump"}, (combat_unresolved, combat_kinds)
+
+    bcps_blocks, bcps_edges, bcps_unresolved, bcps_kinds = _cfg_totals(
+        projected["B_ControlPointScoring.uasset"]["normal"]
+    )
+    assert (bcps_blocks, bcps_edges) == (160, 116), (bcps_blocks, bcps_edges)
+    assert bcps_unresolved == 2 and bcps_kinds == {"computed_jump"}, (bcps_unresolved, bcps_kinds)
+
+    stack_blocks, stack_edges, stack_unresolved, stack_kinds = _cfg_totals(stack["normal"])
+    assert (stack_blocks, stack_edges) == (18, 6), (stack_blocks, stack_edges)
+    assert stack_unresolved == 2 and stack_kinds == {"computed_jump"}, (stack_unresolved, stack_kinds)
+
+    # C4 (folded too): entrypoints were zero-referenced. BCPS Blueprint owner
+    # carries 23 (16 function + 7 event), 0 unresolved; events correlate by
+    # source_node at 0.9, functions by object_id at 1.0; StackOBot's asset
+    # owner carries the construction attachment (measured 2026-10-06).
+    bcps_normal = projected["B_ControlPointScoring.uasset"]["normal"]
+    bcps_owner_ep = next(o["semantic"]["entrypoints"] for o in bcps_normal["objects"] if o["id"] == "export:1")
+    assert len(bcps_owner_ep) == 23, len(bcps_owner_ep)
+    assert not [e for e in bcps_owner_ep if e["unresolved"]]
+    bcps_events = [e for e in bcps_owner_ep if e["kind"] == "event"]
+    assert len(bcps_events) == 7
+    assert all((e["match_method"], e["confidence"]) == ("source_node", 0.9) for e in bcps_events)
+    bcps_functions = [e for e in bcps_owner_ep if e["kind"] == "function"]
+    assert len(bcps_functions) == 16
+    assert all((e["match_method"], e["confidence"]) == ("object_id", 1.0) for e in bcps_functions)
+
+    stack_owner_ep = next(o["semantic"]["entrypoints"] for o in stack["normal"]["objects"] if o["id"] == "export:0")
+    construction = [e for e in stack_owner_ep if e["kind"] == "construction"]
+    assert construction == [
+        {
+            "kind": "construction",
+            "name": "UserConstructionScript",
+            "object_id": "export:0",
+            "source_node_id": None,
+            "match_method": "object_id",
+            "confidence": 0.9,
+            "unresolved": False,
+        }
+    ], construction
 
     # StackOBot: debug is an evidence-only superset of the link records too.
     stack_links_normal = [link for graph in normal_owner["semantic"]["graphs"] for link in graph["links"]]
@@ -1968,6 +2270,263 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     assert ambiguous.candidate_local_ids == ["export:2", "export:5"]
     assert ambiguous.qualified_key == ambiguous_key == "unresolved::SharedName"
 
+    # C3 (plan blueprint-semantics): call-level resolution matrix — all five
+    # (match_method, confidence) rows pinned synthetically, plus the call-level
+    # ambiguous row that only the external_ref test covered before.
+    from uasset_read.parsers.blueprint.correlation import _CallResolver
+
+    ue58_owner = next(o for o in ue58_document.objects if o.id == "export:0")
+    call_resolver = _CallResolver(ue58_document, ue58_owner, [], set(), set())
+    # object_id row: a stack node resolves directly at full confidence.
+    assert call_resolver.resolve_call("Whatever", 5)[2:] == ("object_id", 1.0, False)
+    # function_identity 0.9: exactly one local function carries the name.
+    call_resolver.function_ids_by_name["SoloTarget"] = ["export:7"]
+    assert call_resolver.resolve_call("SoloTarget", None) == (
+        "export:7",
+        "SoloTarget",
+        "function_identity",
+        0.9,
+        False,
+    )
+    # function_identity 0.7: the name only matches an import.
+    call_resolver.import_ids_by_name["ImportedTarget"] = ["import:3"]
+    assert call_resolver.resolve_call("ImportedTarget", None) == (
+        "import:3",
+        "ImportedTarget",
+        "function_identity",
+        0.7,
+        False,
+    )
+    # function_identity 0.5: two+ local candidates stay ambiguous, diagnosed.
+    call_resolver.function_ids_by_name["SharedTarget"] = ["export:2", "export:5"]
+    assert call_resolver.resolve_call("SharedTarget", None) == (
+        "export:2",
+        "SharedTarget",
+        "function_identity",
+        0.5,
+        False,
+    )
+    assert [d.code for d in call_resolver.diagnostics] == ["BLUEPRINT_CALL_NAME_AMBIGUOUS"]
+    # unresolved 0.0: no local function or import carries the name.
+    assert call_resolver.resolve_call("AbsentTarget", None) == (
+        "unresolved:AbsentTarget",
+        "AbsentTarget",
+        "unresolved",
+        0.0,
+        True,
+    )
+
+    # C5 (plan blueprint-semantics): three zero-test diagnostics each get one
+    # minimal trigger. (1) BLUEPRINT_NODE_CONTROL_FLAGS_UNSUPPORTED — a
+    # >=1011 node whose SerializationControlExtensions byte carries bits
+    # beyond 0x03 stops the property loop with the diagnostic.
+    from uasset_read.serializers.graph_node import _read_node_script_serial
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+
+    ctrl_archive = ByteArchive(bytes([0x04]) + b"\x00" * 31)
+    ctrl_summary = SimpleNamespace(file_version_ue5=1011, package_flags=0)
+    # Mirror the production mount point (G1): the >=1011 control-byte gate
+    # reads require_version_context(archive), never the summary.
+    from uasset_read.versioning import VersionContext
+
+    ctrl_archive.version_context = VersionContext(file_version_ue4=0, file_version_ue5=1011)
+    ctrl_export = ObjectExport(
+        class_index=PackageIndex(-1),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="K2Node_CtrlFlags",
+        object_flags=0,
+        serial_size=32,
+        serial_offset=0,
+        script_serialization_start_offset=0,
+        script_serialization_end_offset=16,
+    )
+    ctrl_result = _read_node_script_serial(ctrl_archive, ["None"], ctrl_summary, ctrl_export, [], [], "K2Node_CtrlFlags")
+    ctrl_codes = [d.code for d in ctrl_archive.get_structured_diagnostics()]
+    assert "BLUEPRINT_NODE_CONTROL_FLAGS_UNSUPPORTED" in ctrl_codes, ctrl_codes
+    ctrl_diag = next(d for d in ctrl_archive.get_structured_diagnostics() if d.code == "BLUEPRINT_NODE_CONTROL_FLAGS_UNSUPPORTED")
+    assert ctrl_diag.fallback == "skipped_node_properties"
+    assert ctrl_result["raw_properties"] == {}, ctrl_result
+
+    # (2)/(3) BLUEPRINT_EXTERNAL_PIN_LINK / BLUEPRINT_LINK_AMBIGUOUS — feed
+    # _attach_blueprint_graph_extras synthetic graphs carrying unresolved and
+    # ambiguous link counts; both aggregate diagnostics must land.
+    import uasset_read.serializers.blueprint_graph as _blueprint_graph
+    from uasset_read.models.object_model import ObjectRecord
+    from uasset_read.parsers.legacy_reader import _attach_blueprint_graph_extras
+
+    c5_export_map = [
+        ObjectExport(
+            class_index=PackageIndex(-1),
+            super_index=PackageIndex(0),
+            outer_index=PackageIndex(0),
+            object_name="BP_C5",
+            object_flags=0,
+            serial_size=0,
+            serial_offset=0,
+        ),
+        ObjectExport(
+            class_index=PackageIndex(-2),
+            super_index=PackageIndex(0),
+            outer_index=PackageIndex(1),
+            object_name="EventGraph",
+            object_flags=0,
+            serial_size=0,
+            serial_offset=0,
+        ),
+    ]
+    c5_objects = [
+        ObjectRecord(id="export:0", table_index=0, name="BP_C5", class_name="Blueprint"),
+        ObjectRecord(id="export:1", table_index=1, name="EventGraph", class_name="EdGraph"),
+    ]
+    c5_graphs = [
+        {
+            "id": "export:1",
+            "nodes": [{"id": "export:1/export:9", "pins": []}],
+            "links": [],
+            "unresolved_links": 2,
+            "ambiguous_links": 1,
+        }
+    ]
+    monkeypatch.setattr(_blueprint_graph, "read_blueprint_graphs", lambda *a, **k: c5_graphs)
+    c5_extras: dict = {}
+    c5_diags: list = []
+    try:
+        _attach_blueprint_graph_extras(
+            archive=ByteArchive(b""),
+            summary=SimpleNamespace(package_flags=0),
+            name_map=["None"],
+            import_map=[],
+            export_map=c5_export_map,
+            objects=c5_objects,
+            extras=c5_extras,
+            diagnostics=c5_diags,
+            object_ids=None,
+        )
+    finally:
+        monkeypatch.undo()
+    c5_codes = [d.code for d in c5_diags]
+    assert "BLUEPRINT_EXTERNAL_PIN_LINK" in c5_codes, c5_codes
+    assert "BLUEPRINT_LINK_AMBIGUOUS" in c5_codes, c5_codes
+    assert "export:0" in c5_extras and c5_extras["export:0"]["graphs"][0]["id"] == "export:1"
+    # The aggregate keys are consumed (popped), never leaked downstream.
+    assert "unresolved_links" not in c5_extras["export:0"]["graphs"][0]
+
+    # A4/A-4 (plan blueprint-semantics): a pins locate failure is a structured
+    # diagnostic, never a silent empty array. Three synthetic triggers:
+    # (a) pre-1010 node whose tag scan found no NAME_None tail,
+    # (b) located count negative,
+    # (c) located count beyond MAX_PINS_PER_NODE.
+    from uasset_read.models.core import UEdGraphNode  # noqa: F401  (import anchor)
+    from uasset_read.serializers.graph_node import _read_node_pins
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+
+    def _synthetic_node_export() -> ObjectExport:
+        return ObjectExport(
+            class_index=PackageIndex(-1),
+            super_index=PackageIndex(0),
+            outer_index=PackageIndex(0),
+            object_name="K2Node_Synthetic",
+            object_flags=0,
+            serial_size=64,
+            serial_offset=0,
+        )
+
+    summary_stub = SimpleNamespace(file_version_ue5=1004)
+    for locate_kwargs, label in (
+        ({"property_stream_end": None}, "no_scan_tail"),
+        ({"property_stream_end": 0}, "negative_count"),
+        ({"property_stream_end": 4}, "oversized_count"),
+    ):
+        payload = (
+            b"\x00" * 4
+            + (-1).to_bytes(4, "little", signed=True)
+            + b"\x00" * 56
+            if label == "negative_count"
+            else b"\x00" * 8 + (1001).to_bytes(4, "little", signed=True) + b"\x00" * 52
+            if label == "oversized_count"
+            else b"\x00" * 64
+        )
+        archive = ByteArchive(payload)
+        pins = _read_node_pins(
+            archive,
+            ["None"],
+            summary_stub,
+            [],
+            [],
+            _synthetic_node_export(),
+            label,
+            **locate_kwargs,
+        )
+        assert pins == [], label
+        codes = [d.code for d in archive.get_structured_diagnostics()]
+        assert "BLUEPRINT_NODE_PINS_LOCATE_FAILED" in codes, (label, codes)
+
+    # C1 unit (plan blueprint-semantics): a jump target that misses every
+    # instruction boundary yields CFG_JUMP_TARGET_UNRESOLVED in the caller's
+    # diagnostics list AND an edge with targets_known=False (never a guess).
+    from uasset_read.models.diagnostics import Diagnostic
+    from uasset_read.parsers.blueprint.bytecode import BytecodeInstruction
+    from uasset_read.parsers.blueprint.control_flow import build_cfg
+
+    def _instr(stmt: int, opcode: str, jump_kind: str = "none", target: int | None = None):
+        return BytecodeInstruction(
+            statement_index=stmt,
+            statement_ordinal=stmt,
+            logical_end=stmt + 1,
+            serialized_start=0,
+            serialized_end=0,
+            opcode=opcode,
+            operands={},
+            expression=None,
+            reads=[],
+            writes=[],
+            call_target=None,
+            jump_target_statement_index=target,
+            jump_kind=jump_kind,  # type: ignore[arg-type]
+            source_node_id=None,
+        )
+
+    cfg_diags: list[Diagnostic] = []
+    cfg = build_cfg(
+        [_instr(0, "EX_JumpIfNot", "conditional_false", 99), _instr(1, "EX_Return")],
+        diagnostics=cfg_diags,
+    )
+    assert [d.code for d in cfg_diags] == ["CFG_JUMP_TARGET_UNRESOLVED"], cfg_diags
+    unresolved = [e for e in cfg.edges if not e.targets_known]
+    assert len(unresolved) == 1 and unresolved[0].kind == "false", cfg.edges
+
+    # C1 wiring: monkeypatched build_cfg appends a marker only when the call
+    # site forwards a diagnostics list; the marker must surface in the public
+    # semantic.functions[].diagnostics projection (was unreachable before C1).
+    import uasset_read.parsers.blueprint.control_flow as _control_flow
+
+    _real_build_cfg = _control_flow.build_cfg
+
+    def _marked_build_cfg(instructions, *, diagnostics=None):
+        graph = _real_build_cfg(instructions, diagnostics=diagnostics)
+        if diagnostics is not None:
+            diagnostics.append(
+                Diagnostic(code="CFG_WIRING_MARKER", message="marker", stage="semantic.functions.cfg")
+            )
+        return graph
+
+    monkeypatch.setattr(_control_flow, "build_cfg", _marked_build_cfg)
+    from uasset_read.package import _parse_cached as _ue58_cache
+
+    _ue58_cache.cache_clear()  # a cached document would skip build_cfg entirely
+    try:
+        wiring_doc = parse_package_document(str(SAMPLES / "MyProject_UE58_TestBlueprint.uasset"), depth="decode")
+        wiring_owner = next(o for o in wiring_doc.objects if o.id == "export:0")
+        wiring_fn_diags = [d for fn in wiring_owner.semantic["functions"] for d in fn["diagnostics"]]
+        assert any(d["code"] == "CFG_WIRING_MARKER" for d in wiring_fn_diags), (
+            "build_cfg diagnostics must reach semantic.functions[].diagnostics",
+            [d["code"] for d in wiring_fn_diags],
+        )
+    finally:
+        _ue58_cache.cache_clear()  # never leak marker-bearing documents to later tests
+    monkeypatch.undo()
+
     import uasset_read.serializers.object_resources as object_resources
 
     from uasset_read.package import _parse_cached, parse_package_document
@@ -2149,6 +2708,59 @@ def test_blueprint_graph_decodes_and_definitions_stay_honest():
     assert all(isinstance(item["source_pin_range"], dict) for item in evidence)
     linked_total = sum(len(pin.get("links") or []) for g in graphs for n in g["nodes"] for pin in n["pins"])
     assert linked_total == 610, "pin adjacency must stay a derived view of the records"
+
+    # A1 (plan blueprint-semantics, folded for the collection budget): pre-1010
+    # nodes scan their property-tag stream instead of early-returning, so
+    # NodePosX/NodePosY land on the node and the scan tail (property_stream_end)
+    # becomes available for the A2 pins locate. BCPS (ue5=1004) currently reads
+    # position {0,0} on all 145 nodes and ABP (ue5=1004) on all 3 — both must
+    # become non-zero from the tag stream.
+    from uasset_read.serializers.graph_node import _read_node_script_serial
+    from uasset_read.serializers.object_resources import resolve_class_name
+
+    # nodes with non-zero position: the others are exports whose tag stream
+    # carries no NodePosX/NodePosY at all (6 K2Node_FunctionEntry in BCPS,
+    # K2Node_Event_0 in ABP — verified tag-by-tag 2026-10-06) — honest (0,0).
+    # Plan A1 acceptance ② is "not all zero", which the tag-driven majority proves.
+    pre1010 = {"B_ControlPointScoring.uasset": (145, 139), "ABP_RifleAnimLayers.uasset": (3, 2)}
+    for pre_name, (expected_nodes, expected_nonzero) in pre1010.items():
+        pre_doc = parse_package_document(SAMPLES / pre_name, depth="decode")
+        pre_graphs = [g for o in pre_doc.objects for g in (o.semantic or {}).get("graphs") or []]
+        pre_nodes = [n for g in pre_graphs for n in g["nodes"]]
+        assert len(pre_nodes) == expected_nodes, (pre_name, len(pre_nodes))
+        nonzero_pos = sum(1 for n in pre_nodes if n["position"]["x"] or n["position"]["y"])
+        assert nonzero_pos == expected_nonzero, (pre_name, f"{nonzero_pos}/{expected_nodes} nodes with non-zero position")
+        assert not [d for d in pre_doc.diagnostics if d.code.startswith("BLUEPRINT_")], pre_name
+        # A2: pins locate off the tag-scan tail (property_stream_end + 4)
+        # instead of the missing script_serialization offsets — pre-1010 nodes
+        # must carry their pins. Measured via plan A0 probe: BCPS 505 pins,
+        # ABP 9 pins across all K2Node exports.
+        pre_pins = sum(len(n["pins"]) for n in pre_nodes)
+        assert pre_pins > 0, (pre_name, "pre-1010 nodes still read 0 pins")
+
+    # Seam: the pre-1010 scan records the NAME_None tail on the serial dict.
+    with _open_sample_archive(SAMPLES / "B_ControlPointScoring.uasset") as (
+        archive,
+        summary,
+        name_map,
+        import_map,
+        export_map,
+    ):
+        # G1 (version-context contract): property version gates read the
+        # mounted VersionContext; the legacy set_property_version_gates
+        # scaffolding was removed with #621. _open_sample_archive mirrors
+        # the production mount point above.
+        k2_export = next(
+            e
+            for e in export_map
+            if e.serial_size > 0
+            and (resolve_class_name(e.class_index, import_map, export_map) or "").startswith("K2Node")
+        )
+        serial = _read_node_script_serial(
+            archive, name_map, summary, k2_export, import_map, export_map, k2_export.object_name
+        )
+        assert serial["property_stream_end"] is not None, "pre-1010 tag scan must record its NAME_None tail"
+        assert serial["node_pos_x"] != 0 or serial["node_pos_y"] != 0, serial
 
     # #654 folded here (collection budget): tracked-sample honesty aggregate
     # (83 definitions across the eight NewVariables packages; verified count
@@ -2493,6 +3105,7 @@ def test_trailing_diagnostics_carry_structured_size():
     assert trailing, "fixture must emit trailing diagnostics"
     for d in trailing:
         assert d.size is not None and d.size > 0, f"{d.object_id}: missing structured size"
+        assert d.offset is not None and d.offset >= 0, f"{d.object_id}: missing structured offset"
         assert d.reason is not None
         # Message and structured field must agree.
         assert f"leaves {d.size} undecoded bytes" in d.message
@@ -2553,6 +3166,11 @@ def test_byte_accounting_registers_reader_consumed_structural_bytes():
                 leaf["size"] for leaf in scopes[diag["object_id"]]["leaves"] if leaf["reason"] == "unconsumed"
             )
             assert unconsumed == details[index]["size"], f"{diag['object_id']}: {unconsumed} != diagnostic"
+            window = scopes[diag["object_id"]]["window"]
+            assert details[index]["offset"] is not None, f"{diag['object_id']}: missing structured offset"
+            assert details[index]["offset"] + details[index]["size"] == window["start"] + window["size"], (
+                f"{diag['object_id']}: offset+size must reach the export window end"
+            )
         trailing_ids = {
             d["object_id"] for d in projection["diagnostics"] if d["code"] == "EXPORT_TRAILING_BYTES_UNCONSUMED"
         }
@@ -2583,9 +3201,7 @@ def test_byte_accounting_registers_reader_consumed_structural_bytes():
     # One structured diagnostic owns each skipped window byte-for-byte.
     details = {e["index"]: e for e in proj["debug"]["diagnostic_details"]}
     skips = [
-        (index, diag)
-        for index, diag in enumerate(proj["diagnostics"])
-        if diag["code"] == "EXPORT_PAYLOAD_SKIPPED"
+        (index, diag) for index, diag in enumerate(proj["diagnostics"]) if diag["code"] == "EXPORT_PAYLOAD_SKIPPED"
     ]
     assert [diag["object_id"] for _, diag in skips] == [f"export:{i}" for i in range(5, 30)]
     for index, diag in skips:
@@ -2828,6 +3444,7 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
         ByteArchive(scalar),
         name_map,
         [],
+        file_version_ue5=0,
     )
     assert scalar_value.parse_status == "success"
     assert set(scalar_value.fields) == scalar_fields
@@ -2841,6 +3458,7 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
         map_archive,
         name_map,
         [],
+        file_version_ue5=0,
     )
     # Exactly the payload is consumed: no decode may spill into the next property.
     assert map_archive.tell() == len(map_pin)
@@ -2865,6 +3483,7 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
             archive,
             name_map,
             [],
+            file_version_ue5=0,
         )
         return value.parse_status != "success"
 
@@ -2898,7 +3517,6 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
     # One diagnostic per payload, attributed to the owning export — never swallowed.
     assert len({d.object_id for d in pin_diags}) == 12
 
-
     pin_values = [
         entry.value
         for obj in doc.objects
@@ -2912,3 +3530,32 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
             "undecodable payload must stay an empty opaque struct, not fabricated fields",
             inner,
         )
+
+    # A3 (plan §4-A discriminant, folded here for the collection budget):
+    # the in-graph sequential reader gates the trailing
+    # bSerializeAsSinglePrecisionFloat on FUE5ReleaseStreamObjectVersion >= 36
+    # (EdGraphPin.cpp:330-333); below the gate the stream carries no field.
+    # ABP_RifleAnimLayers (UE5RELEASE=35) vs B_ControlPointScoring (=36) is the
+    # real-sample discriminant pair; the cursor assertions prove the gate moves.
+    from uasset_read.serializers.graph_pin import read_ed_graph_pin_type
+    from uasset_read.serializers.package_summary import CustomVersion, PackageFileSummary
+    from uasset_read.versioning import UE5_RELEASE_STREAM_GUID, build_version_context
+
+    with _open_sample_archive(SAMPLES / "ABP_RifleAnimLayers.uasset") as (_a, abp_summary, *_rest):
+        assert build_version_context(abp_summary).custom_versions.get(UE5_RELEASE_STREAM_GUID) == 35
+    with _open_sample_archive(SAMPLES / "B_ControlPointScoring.uasset") as (_a, bcps_summary, *_rest):
+        assert build_version_context(bcps_summary).custom_versions.get(UE5_RELEASE_STREAM_GUID) == 36
+
+    def _pin_type_consumed(stream_version: int) -> int:
+        summary = PackageFileSummary(
+            custom_versions=[CustomVersion(guid=UE5_RELEASE_STREAM_GUID, version=stream_version)]
+        )
+        archive = ByteArchive(scalar)
+        # Mirror the production mount point (G1): the gate reads the mounted
+        # context, never the summary — missing mount is a structured failure.
+        archive.version_context = build_version_context(summary)
+        read_ed_graph_pin_type(archive, name_map, summary=summary)
+        return archive.tell()
+
+    assert _pin_type_consumed(36) == len(scalar) == 69, "gate met: the trailing 4B bool is consumed"
+    assert _pin_type_consumed(35) == len(scalar) - 4, "gate missed: the field is absent from the stream"

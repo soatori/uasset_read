@@ -32,54 +32,141 @@ from uasset_read.projections.records import (
 )
 
 # Capability matrix published on the canonical document (R3 initial matrix).
+#
+# Phase 0 complete contract (plan-asset-semantics.md Appendix A, finalized
+# 2026-10-06): ``complete`` = the family's published promised field set is
+# fully decoded AND at least one real sample asserts every promised field;
+# anything beyond the promised set is disclosed by coverage / projection
+# completeness. ``status`` stays tier-honest (#629) while ``completeness``
+# carries semantic amount — the two are orthogonal. ``promised_fields`` is
+# that declaration, keyed by semantic kind (dotted paths mark nested keys;
+# present-only keys are promised when present). Declaration only: it changes
+# no output and no behavior.
 CAPABILITY_MATRIX: tuple[dict[str, Any], ...] = (
     {
         "family": "blueprint_family",
         "asset_kinds": ["blueprint", "anim_blueprint", "blueprint_function_library", "blueprint_interface"],
         "kinds": [],
         "rule": "no embedded projections; IR/CFG/static semantics stay in objects[].semantic",
+        # Placeholder: Topic 1's contract holds this family's promised set.
+        "promised_fields": None,
     },
     {
         "family": "material",
         "asset_kinds": ["material"],
         "kinds": [],
         "rule": "no embedded projections; material graph semantics stay in objects[].semantic",
+        "promised_fields": {
+            # Flags/Editor keys exist only when present; the decode-layer graph
+            # keys are asserted only from Phase 2 (decode assertions pending).
+            "material": (
+                "kind",
+                "name",
+                "bUsedWithStaticLighting",
+                "bUsedWithNanite",
+                "bCanMaskedBeAssumedOpaque",
+                "EditorX",
+                "EditorY",
+                "expression_count",
+                "material_graph.capability",  # in {complete, partial}
+            ),
+        },
     },
     {
         "family": "material_instance",
         "asset_kinds": ["material_instance"],
         "kinds": ["material_instance", "material_parameters"],
         "rule": "parent/overrides resolved or explicit unresolved",
+        "promised_fields": {
+            "material_instance": ("kind", "name", "has_parent", "scalar_param_count", "vector_param_count"),
+        },
     },
     {
         "family": "data_table",
         "asset_kinds": ["data_table"],
         "kinds": ["data_table", "data_table_csv", "data_table_json"],
         "rule": "row struct + values decoded, else opaque/unavailable",
+        # rows/values are pinned by the projection assertions, not re-listed.
+        "promised_fields": {"data_table": ("kind", "row_count", "row_names")},
     },
     {
         "family": "curve_table",
         "asset_kinds": ["curve_table"],
         "kinds": ["curve_table", "curve_table_csv", "curve_table_json"],
         "rule": "keys/interp explicit; compressed-only unavailable unless decoded",
+        "promised_fields": {"curve_table": ("kind", "curve_table_mode", "row_count", "row_names")},
     },
     {
         "family": "user_defined_struct_enum",
         "asset_kinds": ["user_defined_struct", "user_defined_enum"],
         "kinds": ["defaults_json"],
         "rule": "fields/enumerators + defaults when reflected data exists",
+        # Remaining fields are disclosed via coverage.
+        "promised_fields": {
+            "user_defined_enum": ("kind", "enum_name"),
+            "user_defined_struct": ("kind", "struct_name"),
+        },
     },
     {
         "family": "other_graph_assets",
         "asset_kinds": ["graph_asset"],
         "kinds": ["graph"],
         "rule": "graph summary only; never a generated source body",
+        "promised_fields": {
+            "niagara": ("kind", "niagara_type", "name"),
+            "material_function": (
+                "kind",
+                "name",
+                "input_names",
+                "output_names",
+                "input_count",
+                "output_count",
+                "expression_count",
+                "function_call_count",
+            ),
+            "material_parameter_collection": (
+                "kind",
+                "name",
+                "scalar_params",
+                "scalar_param_count",
+                "vector_params",
+                "vector_param_count",
+            ),
+            "anim_blend_space": ("kind", "blend_space_type", "name", "axes", "dimension", "sample_count", "samples"),
+            "anim_composite": ("kind", "name", "segment_count", "segments"),
+            "anim_layer_interface": ("kind", "name", "function_count", "functions"),
+        },
     },
     {
         "family": "physical_binary_assets",
         "asset_kinds": ["physical_asset"],
         "kinds": ["asset_metadata", "payload_reference"],
         "rule": "metadata/payload references unless evidenced projector exists",
+        "promised_fields": {
+            "texture": ("kind", "texture_type", "srgb", "compression_settings"),
+            "texture_mip": ("kind", "source_region", "width", "height"),
+            "sound": ("kind", "sound_type"),
+            "mesh": ("kind", "mesh_type", "name", "lods", "lod_count"),
+            "skeleton": ("kind", "name", "bone_source", "bone_count", "bones", "virtual_bone_count", "socket_count"),
+            "physics_asset": ("kind", "name", "body_count", "constraint_count", "bodies"),
+            # Float defaults omitted by the editor surface as coverage missing.
+            "physical_material": (
+                "kind",
+                "name",
+                "friction",
+                "static_friction",
+                "restitution",
+                "density",
+                "surface_type",
+            ),
+        },
+    },
+    {
+        "family": "string_table",
+        "asset_kinds": ["string_table"],
+        "kinds": [],
+        "rule": "no embedded projections; string-table semantics stay in objects[].semantic",
+        "promised_fields": {"string_table": ("kind", "table_type", "namespace", "entry_count", "entries")},
     },
 )
 
