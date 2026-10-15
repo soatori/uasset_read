@@ -811,7 +811,7 @@
     },
     "zen_package": {
       "status": "not_required",
-      "description": "ZenPackageReader and full IoStore package-body decoding are outside the current product target. Existing IoStore TOC metadata remains only as a classification/unavailability regression.",
+      "description": "Full IoStore package-body decoding is outside the current product target. Existing IoStore TOC metadata remains only as a classification/unavailability regression.",
       "needed_for": "No active product target; retain truthful format-boundary regression only",
       "acquisition": "Not planned; do not acquire or maintain Zen package-body fixtures.",
       "verification": "Run the existing IoStore metadata and truthful-unavailability tests.",

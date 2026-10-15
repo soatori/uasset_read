@@ -19,23 +19,6 @@ def _validate_range(offset: int, size: int, total: int | None) -> None:
         raise ParseError(f"range out of bounds offset={offset} size={size} total={total}")
 
 
-class MemorySource:
-    def __init__(self, data: bytes, *, name: str = "<memory>"):
-        self._data = data
-        self._name = name
-
-    def read_at(self, offset: int, size: int) -> bytes:
-        _validate_range(offset, size, len(self._data))
-        return self._data[offset : offset + size]
-
-    def size(self) -> int:
-        return len(self._data)
-
-    def map_range(self, offset: int, size: int) -> list[tuple[str, int, int]]:
-        _validate_range(offset, size, len(self._data))
-        return [(self._name, offset, size)]
-
-
 class FileSource:
     def __init__(self, path: Path):
         self._path = Path(path)

@@ -16,11 +16,6 @@ from uasset_read.models.document import PackageDocument
 from uasset_read.projection import project_document
 
 
-def _serialize_canonical(payload: dict[str, Any]) -> str:
-    """Deterministic compact UTF-8 JSON encoding used for the file write."""
-    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-
-
 def write_projected_document(
     document: PackageDocument,
     output_path: Path,
@@ -30,5 +25,8 @@ def write_projected_document(
     """Write one UTF-8 JSON document equal to ``project_document(document, mode=mode)``."""
     payload = project_document(document, mode=mode)
     output_path = Path(output_path)
-    output_path.write_text(_serialize_canonical(payload), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True),
+        encoding="utf-8",
+    )
     return output_path
