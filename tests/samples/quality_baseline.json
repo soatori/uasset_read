@@ -205,8 +205,8 @@
   "aggregate": {
     "scope": "manifest",
     "sample_count": 67,
-    "max_total_warnings": 2928,
-    "max_total_bytes": 3454472,
+    "max_total_warnings": 2953,
+    "max_total_bytes": 3478331,
     "by_reason": {
       "bulk_expected": {
         "max_count": 5,
@@ -217,8 +217,8 @@
         "max_bytes": 1541983
       },
       "known_unimplemented": {
-        "max_count": 1351,
-        "max_bytes": 1890183
+        "max_count": 1376,
+        "max_bytes": 1914042
       }
     },
     "by_reason_class": {
@@ -585,6 +585,42 @@
       "known_unimplemented/NavCollision": {
         "max_count": 1,
         "max_bytes": 32
+      },
+      "known_unimplemented/NiagaraNodeFunctionCall": {
+        "max_count": 1,
+        "max_bytes": 454
+      },
+      "known_unimplemented/NiagaraNodeInput": {
+        "max_count": 1,
+        "max_bytes": 220
+      },
+      "known_unimplemented/NiagaraNodeOp": {
+        "max_count": 5,
+        "max_bytes": 3943
+      },
+      "known_unimplemented/NiagaraNodeOutput": {
+        "max_count": 1,
+        "max_bytes": 220
+      },
+      "known_unimplemented/NiagaraNodeParameterMapGet": {
+        "max_count": 5,
+        "max_bytes": 9437
+      },
+      "known_unimplemented/NiagaraNodeParameterMapSet": {
+        "max_count": 5,
+        "max_bytes": 5123
+      },
+      "known_unimplemented/NiagaraNodeReroute": {
+        "max_count": 5,
+        "max_bytes": 2300
+      },
+      "known_unimplemented/NiagaraNodeSelect": {
+        "max_count": 1,
+        "max_bytes": 1194
+      },
+      "known_unimplemented/NiagaraNodeStaticSwitch": {
+        "max_count": 1,
+        "max_bytes": 968
       },
       "known_unimplemented/PhysicsAsset": {
         "max_count": 1,

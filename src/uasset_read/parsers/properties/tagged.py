@@ -605,9 +605,16 @@ SKIP_CLASS_PREFIXES = (
     "GeomModifier_",
     "BrushBuilder",
     # P0: Animation -- migrated to opaque whitelist (#166)
-    # P1: Niagara
+    # P1: Niagara (#664) — "NiagaraNode" removed: no NiagaraNode* subclass
+    # overrides Serialize (Engine/Plugins/FX/Niagara/Source/NiagaraEditor,
+    # audited at 5.8.1 71fe36aac; UE 5.0 fixture byte-verified in
+    # issue-521-b0-gate-decision.md), so the generic tagged loop decodes the
+    # node payload and the shared UEdGraph pin reader decodes the pin tail.
+    # NiagaraSystem/MeshRendererProperties keep custom Serialize
+    # (NiagaraEmitter.cpp:491 / NiagaraMeshRendererProperties.cpp:590) and
+    # stay skipped. No peer parser records Niagara coverage
+    # (docs/reference/external-peer-inventory.md).
     "NiagaraMeshRendererProperties",
-    "NiagaraNode",
     "NiagaraSystem",
     # P1: MovieScene -- moved to opaque whitelist (#164)
     # P2: MetaSound -- moved to opaque whitelist (#165)

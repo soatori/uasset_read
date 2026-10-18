@@ -1454,6 +1454,10 @@ class LegacyPackageReader:
                             ),
                             "properties.tagged",
                             object_id=obj.id,
+                            # Stable byte range for the remaining skipped
+                            # payloads (#664): offset + size address the
+                            # seeked window in the package source.
+                            offset=window.start,
                             size=window.size,
                             reason="known_unimplemented",
                         )
@@ -1651,6 +1655,14 @@ _BLUEPRINT_FAMILY_CLASSES = frozenset(
     {"Blueprint", "AnimBlueprint", "BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}
 )
 
+# Graph-owning Niagara classes (#664): the shared UEdGraph reader decodes
+# NiagaraGraph and its NiagaraNode* children (no NiagaraNode* Serialize
+# override exists — Engine/Plugins/FX/Niagara/Source/NiagaraEditor, audited
+# at 5.8.1 71fe36aac). A NiagaraGraph sits at the package root, so the
+# Blueprint-family outer walk cannot resolve its owner; the graph export
+# owns its own semantic instead.
+_NIAGARA_GRAPH_CLASSES = frozenset({"NiagaraGraph"})
+
 # Hard safety cap on graph-owner outer-chain traversal. The export-table size
 # bounds real chains; this named limit stops malformed data even on huge tables.
 MAX_GRAPH_OWNER_HOPS = 256
@@ -1708,14 +1720,18 @@ def _attach_blueprint_graph_extras(
     """Parse all graphs at decode depth and route them to owning exports.
 
     Runs only when the caller's object selection reaches a Blueprint-family
-    export (decode of e.g. a single Texture must not pay for the package's
-    graphs). One bad graph never aborts the pass: the conversion module emits
-    a graph dict with parse_errors instead, and this helper drops it with a
-    diagnostic (the export id stays addressable).
+    or NiagaraGraph export (decode of e.g. a single Texture must not pay for
+    the package's graphs). One bad graph never aborts the pass: the conversion
+    module emits a graph dict with parse_errors instead, and this helper drops
+    it with a diagnostic (the export id stays addressable).
     """
     from ..serializers.blueprint_graph import read_blueprint_graphs
 
-    family = {o.id for o in objects if (o.class_name or "") in _BLUEPRINT_FAMILY_CLASSES}
+    family = {
+        o.id
+        for o in objects
+        if (o.class_name or "") in _BLUEPRINT_FAMILY_CLASSES | _NIAGARA_GRAPH_CLASSES
+    }
     if not family:
         return
     if object_ids is not None and not family.intersection(object_ids):
@@ -1766,6 +1782,10 @@ def _attach_blueprint_graph_extras(
             )
             continue
         owner = _resolve_graph_owner(export_idx, export_map, objects)
+        if owner is None and graph.get("graph_class") in _NIAGARA_GRAPH_CLASSES:
+            # Package-rooted NiagaraGraph: no Blueprint-family outer chain,
+            # so the graph export carries its own decoded graph (#664).
+            owner = graph["id"]
         if owner is None:
             diagnostics.append(
                 _diag(
