@@ -209,9 +209,9 @@ Shared readers behind that document: `kismet/` (bytecode → expressions + diagn
 
 ## Testing
 
-The tracked baseline is intentionally small: two test modules
-(`tests/test_samples.py`, `tests/test_size_baseline.py`) and at most 100
-collected pytest items (enforced during collection by `tests/conftest.py`).
+The tracked baseline is intentionally small: three test modules
+(`tests/test_samples.py`, `tests/test_size_baseline.py`, `tests/test_version_context.py`)
+and at most 111 collected pytest items (enforced during collection by `tests/conftest.py`).
 The sample driver also gates the v4 normal/debug public contract, manifest raw
 version/layout metadata, and the mandatory bounded-reader/error paths; broader
 experiments remain untracked under `temp/`.

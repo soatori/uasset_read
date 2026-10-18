@@ -20,8 +20,8 @@ See `AGENTS.md` and `.claude/rules/constraints.md`. Key points: package-first ar
 
 ## Branches and Commits
 
-- `develop` for daily development; `master` for releases; `wiki/master` for Wiki maintenance.
-- `master` only allows: `src/`, CI, README, `CLAUDE.md`, `pytest.ini`, `run.py`, `tests/`, `.claude/rules/`. `docs/` and `wiki/` are separate git repositories and are never committed to this repository (CI forbids `^docs/` on `master`).
+- `dev-0.6.0` for daily development; `master` for releases; `wiki/master` for Wiki maintenance.
+- `master` only allows: `src/`, CI, README, `CLAUDE.md`, `pytest.ini`, `tests/`, `.claude/rules/`. `docs/` and `wiki/` are separate git repositories and are never committed to this repository (CI forbids `^docs/` on `master`).
 - Commit format: `<type>: <summary> (#issue)`. Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `release`. Issue number is optional.
 
 ## Documentation Structure
