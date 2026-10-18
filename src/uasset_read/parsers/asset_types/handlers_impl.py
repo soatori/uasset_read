@@ -256,20 +256,29 @@ class DataTableHandler(_SupportsClasses):
                 result["row_names"] = rows["row_names"][:100]
             if rows.get("rows"):
                 result["rows"] = rows["rows"][:50]
-                if not is_curve:
-                    # Normalize parser models at the semantic boundary once;
-                    # object semantics and all DataTable projections share them.
-                    result["rows"] = [
-                        {
-                            **row,
-                            "fields": {
-                                name: {**field, "value": project_property_value(field["value"])}
-                                if isinstance(field, dict) and "value" in field else field
-                                for name, field in row.get("fields", {}).items()
-                            },
-                        }
-                        for row in result["rows"]
-                    ]
+                # Normalize parser models at the semantic boundary once;
+                # object semantics and all DataTable/CurveTable projections
+                # share them. Curve keys arrive as a native list (CurveBase.cpp),
+                # so they are projected element-wise instead of collapsed into
+                # the struct wrapper a single value would become.
+                result["rows"] = [
+                    {
+                        **row,
+                        "fields": {
+                            name: {
+                                **field,
+                                "value": (
+                                    [project_property_value(k) for k in field["value"]]
+                                    if is_curve and isinstance(field["value"], list)
+                                    else project_property_value(field["value"])
+                                ),
+                            }
+                            if isinstance(field, dict) and "value" in field else field
+                            for name, field in row.get("fields", {}).items()
+                        },
+                    }
+                    for row in result["rows"]
+                ]
             if is_curve:
                 result["curve_table_mode"] = rows.get("curve_table_mode")
             status = "present" if rows["complete"] else "partial"

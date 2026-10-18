@@ -985,6 +985,68 @@ def test_real_sample_proves_claimed_capability():
             # would mean an anchor or row-walk drift, which the reader discloses instead.
             table_cov = next(c for c in obj.coverage if c.feature == "handler.DataTableHandler")
             assert table_cov.status == "present", f"{sample}:{class_name} table payload not fully decoded"
+            # Keys, interpolation, extrapolation and default value must be
+            # translated (not merely decoded) on all three public surfaces.
+            from uasset_read.package import parse_package_document
+            from uasset_read.projection import project_document
+
+            # Row 0's keys/time/value are pinned from the real fixture bytes so a
+            # stride or FName-endianness regression cannot silently pass as
+            # "translated".
+            expectations = {
+                "TestSimpleCurveTable.uasset": {
+                    "key_count": 2,
+                    "keys0": {"time": 0.0, "value": 10.0},
+                    "interp_mode": "ERichCurveInterpMode::RCIM_Linear",
+                },
+                "TestRichCurveTable.uasset": {
+                    "key_count": 2,
+                    "keys0": {
+                        "time": 0.0,
+                        "value": 10.0,
+                        "interp_mode": "RCIM_Cubic",
+                        "tangent_mode": "RCTM_Auto",
+                        "tangent_weight_mode": "RCTWM_WeightedNone",
+                        "arrive_tangent": 0.0,
+                        "arrive_tangent_weight": 0.0,
+                        "leave_tangent": 0.0,
+                        "leave_tangent_weight": 0.0,
+                    },
+                    "interp_mode": None,
+                },
+                "testrCurveTable.uasset": {
+                    "key_count": 4,
+                    "keys0": {"time": 1.0, "value": 0.0},
+                    "interp_mode": "ERichCurveInterpMode::RCIM_Linear",
+                },
+            }[sample]
+            projected = project_document(parse_package_document(SAMPLES / sample, depth="decode"), mode="normal")
+            curve = next(p for p in projected["projections"] if p["kind"] == "curve_table")
+            csv_proj = next(p for p in projected["projections"] if p["kind"] == "curve_table_csv")
+            json_proj = next(p for p in projected["projections"] if p["kind"] == "curve_table_json")
+            for surface in (curve, csv_proj, json_proj):
+                assert surface["status"] == "translated", f"{sample}:{surface['kind']}"
+                assert surface["completeness"] == "complete", f"{sample}:{surface['kind']}"
+            assert curve["content"]["mode"] == sem["curve_table_mode"], f"{sample}:{class_name}"
+            first = curve["content"]["curves"][0]
+            assert first["name"] == sem["row_names"][0], f"{sample}:{class_name}"
+            assert first["interp_mode"] == expectations["interp_mode"], f"{sample}:{class_name}"
+            assert first["pre_infinity_extrapolation"] == "ERichCurveExtrapolation::RCCE_Constant", f"{sample}"
+            assert first["post_infinity_extrapolation"] == "ERichCurveExtrapolation::RCCE_Constant", f"{sample}"
+            assert first["default_value"] == 3.4028234663852886e38, f"{sample}:{class_name}"
+            assert len(first["keys"]) == expectations["key_count"], f"{sample}:{class_name}"
+            assert first["keys"][0] == {
+                "kind": "struct",
+                "struct_type": "",
+                "fields": expectations["keys0"],
+            }, f"{sample}:{class_name}"
+            assert json_proj["content"] == curve["content"], f"{sample}: json/curve content diverge"
+            csv_lines = csv_proj["content"].splitlines()
+            assert len(csv_lines) == 1 + sem["row_count"], f"{sample}: csv row count"
+            assert csv_lines[0].startswith("name,key_count,interp_mode,"), f"{sample}: csv header"
+            assert csv_lines[1].startswith(
+                f"{sem['row_names'][0]},{expectations['key_count']},"
+            ), f"{sample}: csv first row key_count/name"
         elif class_name == "Skeleton":
             assert obj.semantic["bone_count"] == len(obj.semantic["bones"]) > 0, f"{sample}:{class_name}"
             # ALS_Mannequin_Skeleton's BoneTree is a UE4-era struct array: ONE inner
