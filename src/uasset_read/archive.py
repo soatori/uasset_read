@@ -48,6 +48,8 @@ class FArchive:
     # enrichment assignments type-check (getattr fall-through must stay intact).
     _tag_stream_stop: str
     _tag_stream_stop_offset: int
+    _soft_object_paths: Any | None
+    _object_reference_maps: tuple[Any, Any] | None
 
     def _init_archive_attrs(self, path: str, tolerant: bool = False):
         """Initialize common archive attributes without opening a file.
@@ -66,6 +68,8 @@ class FArchive:
         self._structured_diagnostics: list[Diagnostic] = []  # stable-code diagnostics
         self._current_object_id: str = ""  # table slot a read is attributed to (e.g. "export:3")
         self._read_range: tuple[int, int] | None = None  # optional export-scoped (start, end) read range
+        self._soft_object_paths = None
+        self._object_reference_maps = None
 
     def __init__(self, path: str, tolerant: bool = False):
         self._init_archive_attrs(path, tolerant)

@@ -1188,7 +1188,7 @@ def test_every_real_sample_forms_a_valid_package_document(sample: str, monkeypat
     """Every tracked fixture must form a complete, relation-valid, blob-free document."""
     # 方案甲 single-instance hook (A5-2): count VersionContext constructions
     # during this parse — exactly one per document, windows reference-copy it.
-    from uasset_read.package import _parse_cached
+    from uasset_read.package import _parse_cached, parse_package_document
     import uasset_read.versioning as _versioning
 
     _orig_vc = _versioning.VersionContext
@@ -1201,7 +1201,7 @@ def test_every_real_sample_forms_a_valid_package_document(sample: str, monkeypat
 
     monkeypatch.setattr(_versioning, "VersionContext", _CountingVC)
     _parse_cached.cache_clear()
-    doc = _object_document(sample)
+    doc = parse_package_document(SAMPLES / sample, depth="object")
     assert vc_count["n"] == 1, f"{sample}: VersionContext constructed {vc_count['n']} times, expected 1"
     monkeypatch.undo()
     entry = MANIFEST_BY_NAME[sample]

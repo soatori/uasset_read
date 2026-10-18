@@ -290,7 +290,8 @@ class DataTableHandler(_SupportsClasses):
         fields_by_row = [row.get("fields") for row in rows if isinstance(row, dict)]
         if len(fields_by_row) != len(rows) or any(not isinstance(fields, dict) or not fields for fields in fields_by_row):
             return "summary"
-        columns = set().union(*(set(fields) for fields in fields_by_row))
+        field_maps = [fields for fields in fields_by_row if isinstance(fields, dict)]
+        columns = set().union(*(set(fields) for fields in field_maps))
         if all(
             set(fields) == columns
             and all(
@@ -299,7 +300,7 @@ class DataTableHandler(_SupportsClasses):
                 and property_value_is_decoded(field["value"])
                 for field in fields.values()
             )
-            for fields in fields_by_row
+            for fields in field_maps
         ):
             return "decoded"
         return "summary"

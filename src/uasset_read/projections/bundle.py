@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 from uasset_read.models.document import PackageDocument
 from uasset_read.projection import project_document

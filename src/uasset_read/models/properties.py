@@ -257,13 +257,16 @@ def _project_frozen_dict(kind: str, value: dict[str, Any], seen: frozenset[int])
             "history_type": history if isinstance(history, int) and not isinstance(history, bool) else None,
         }
     if kind == "opaque":
-        out = _opaque(
-            value.get("type") if isinstance(value.get("type"), str) else "",
-            value.get("size") if isinstance(value.get("size"), int) and not isinstance(value.get("size"), bool) else 0,
-            value.get("reason") if isinstance(value.get("reason"), str) else "",
-            struct_type=value.get("struct_type") if isinstance(value.get("struct_type"), str) else None,
+        opaque_type = value.get("type")
+        opaque_size = value.get("size")
+        opaque_reason = value.get("reason")
+        struct_type = value.get("struct_type")
+        return _opaque(
+            opaque_type if isinstance(opaque_type, str) else "",
+            opaque_size if isinstance(opaque_size, int) and not isinstance(opaque_size, bool) else 0,
+            opaque_reason if isinstance(opaque_reason, str) else "",
+            struct_type=struct_type if isinstance(struct_type, str) else None,
         )
-        return out
     if kind == "soft_object_path":
         return _project_soft_path(value)
     if kind == "object_ref":

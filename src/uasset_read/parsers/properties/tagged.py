@@ -12,7 +12,6 @@ import struct as _struct
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
-from uasset_read.archive import ByteArchive
 from uasset_read.constants import (
     MAX_PROPERTY_COUNT,
     PKG_UnversionedProperties,
