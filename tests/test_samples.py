@@ -3207,6 +3207,22 @@ def test_byte_accounting_registers_reader_consumed_structural_bytes():
     for index, diag in skips:
         assert details[index]["size"] == scopes[diag["object_id"]]["window"]["size"], diag["object_id"]
 
+    # #663: K2Node_CallFunction pin tails decode byte-exactly to serial_end —
+    # every owning export on the sample keeps zero trailing diagnostics and
+    # zero unconsumed leaves, while the class count (72 exports, all trailing
+    # before the change) is pinned so the proof cannot go vacuous.
+    cc = _debug("BP_CombatCharacter.uasset")
+    callfunc_ids = {o["id"] for o in cc["objects"] if o.get("class") == "K2Node_CallFunction"}
+    assert len(callfunc_ids) == 72, f"expected 72 K2Node_CallFunction exports, got {len(callfunc_ids)}"
+    cc_trailing = {
+        d["object_id"] for d in cc["diagnostics"] if d["code"] == "EXPORT_TRAILING_BYTES_UNCONSUMED"
+    }
+    assert not (callfunc_ids & cc_trailing), sorted(callfunc_ids & cc_trailing)
+    cc_scopes = _scopes(cc)
+    for oid in sorted(callfunc_ids):
+        unconsumed = sum(leaf["size"] for leaf in cc_scopes[oid]["leaves"] if leaf["reason"] == "unconsumed")
+        assert unconsumed == 0, f"{oid}: {unconsumed} bytes stay unconsumed after pin-tail decode"
+
 
 def test_background_cue_sound_node_tails_reclassified_editor_only():
     """Starter_Background_Cue: 6 SoundNode trailers, 6 bytes each, now editor_only."""
@@ -3327,6 +3343,12 @@ def test_trailing_aggregate_report_and_gate():
     report_baseline = json.loads((SAMPLES / "quality_baseline.json").read_text(encoding="utf-8"))["aggregate"]
     _assert_trailing_aggregate(actual, report_baseline)
     assert actual["sample_count"] == 67
+    # #663 decoded conclusion: the K2Node_CallFunction pin tail consumes
+    # byte-exactly (370/370 corpus trailers), so the class leaves both the
+    # live inventory and the regenerated baseline — totals above already pin
+    # count AND bytes for the same change.
+    assert "editor_only/K2Node_CallFunction" not in actual["by_reason_class"]
+    assert "editor_only/K2Node_CallFunction" not in report_baseline["by_reason_class"]
 
     baseline = {
         "scope": "manifest",

@@ -14,10 +14,17 @@ from collections.abc import Sequence
 from typing import Any, Literal, get_args
 
 from ..archive import ByteArchive, SourceInfo
-from ..constants import PKG_Cooked, PKG_UnversionedProperties, UE5_ADD_SOFTOBJECTPATH_LIST, MAX_SAFE_COUNT
-from ..exceptions import ParseError, ExportBoundsExceeded
+from ..constants import (
+    PKG_Cooked,
+    PKG_UnversionedProperties,
+    UE5_ADD_SOFTOBJECTPATH_LIST,
+    MAX_SAFE_COUNT,
+    MAX_PINS_PER_NODE,
+)
+from ..exceptions import ParseError, ExportBoundsExceeded, RECOVERY_READ_ERRORS
 
 from ..package import PackageArchive
+from ..serializers.graph_pin import read_ue_graph_pin
 from ..serializers.property_tags import read_property_tag, read_tag_value_bounded
 from ..serializers.object_resources import (
     ObjectExport,
@@ -1394,34 +1401,41 @@ class LegacyPackageReader:
                     # short all-zero alignment pad at their end; that is not a
                     # trailer worth reporting.
                     remaining = serial_end - archive.tell()
-                    padded = remaining <= 16 and not any(archive.read(remaining))
-                    if padded:
-                        # All-zero alignment pad: consumed by the read above.
+                    if cn in _PIN_TAIL_DECODE_CLASSES and _try_consume_node_pin_tail(
+                        archive, name_map, summary, export_map, import_map, serial_end
+                    ):
+                        # Pin tail decoded to serial_end by the shared UEdGraphPin
+                        # reader: every byte consumed, so no trailing diagnostic (#663).
                         consumed_end = archive.tell()
                     else:
-                        diagnostics.append(
-                            _diag(
-                                "EXPORT_TRAILING_BYTES_UNCONSUMED",
-                                (
-                                    f"Export {i} ({obj.name}) leaves {remaining} undecoded "
-                                    f"bytes after the tagged properties (class {cn})"
-                                ),
-                                "objects.export",
-                                object_id=obj.id,
-                                size=remaining,
-                                # Tail-region start: ``remaining`` was captured
-                                # before the padded probe read, so the offset is
-                                # correct under either short-circuit branch.
-                                offset=serial_end - remaining,
-                                reason=classify_trailing_reason(
-                                    TrailingContext(
-                                        class_name=cn,
-                                        object_name=obj.name,
-                                        outer_name=_resolve_outer_name(obj, objects, import_map),
-                                    )
-                                ),
+                        padded = remaining <= 16 and not any(archive.read(remaining))
+                        if padded:
+                            # All-zero alignment pad: consumed by the read above.
+                            consumed_end = archive.tell()
+                        else:
+                            diagnostics.append(
+                                _diag(
+                                    "EXPORT_TRAILING_BYTES_UNCONSUMED",
+                                    (
+                                        f"Export {i} ({obj.name}) leaves {remaining} undecoded "
+                                        f"bytes after the tagged properties (class {cn})"
+                                    ),
+                                    "objects.export",
+                                    object_id=obj.id,
+                                    size=remaining,
+                                    # Tail-region start: ``remaining`` was captured
+                                    # before the padded probe read, so the offset is
+                                    # correct under either short-circuit branch.
+                                    offset=serial_end - remaining,
+                                    reason=classify_trailing_reason(
+                                        TrailingContext(
+                                            class_name=cn,
+                                            object_name=obj.name,
+                                            outer_name=_resolve_outer_name(obj, objects, import_map),
+                                        )
+                                    ),
+                                )
                             )
-                        )
                 if overrun > 0:
                     obj.status = ObjectStatus(parse="partial", semantic=obj.status.semantic)
                     diagnostics.append(
@@ -1614,6 +1628,72 @@ _TABLE_CLASSES = ("DataTable", "CurveTable")
 
 # ECurveTableMode (Engine/Source/Runtime/Engine/Classes/Engine/CurveTable.h).
 _CURVE_TABLE_MODES = {0: "Empty", 1: "SimpleCurves", 2: "RichCurves"}
+
+
+# Trailing native tails consumed by the shared UEdGraphPin reader (#663).
+# A class qualifies only when its whole leaf Serialize chain writes no save-time
+# bytes after UEdGraphNode's pin array. shortcut: extend one class at a time
+# with UE-source chain confirmation plus a corpus walk that consumes
+# byte-exactly, then regenerate tests/samples/quality_baseline.json.
+_PIN_TAIL_DECODE_CLASSES = frozenset(
+    {
+        # [engine] UK2Node_CallFunction::Serialize (K2Node_CallFunction.cpp:2304)
+        # and UK2Node::Serialize (K2Node.cpp:122) write only custom-version
+        # registrations and load-time fixups on save; UEdGraphNode::Serialize
+        # writes properties then UEdGraphPin::SerializeAsOwningNode
+        # (EdGraphNode.cpp:212-266; pin body EdGraphPin.cpp:1838-1933,
+        # array EdGraphPin.cpp:2063-2100). Verified #663: 370/370 corpus
+        # trailers (10 samples) consume byte-exactly.
+        "K2Node_CallFunction",
+    }
+)
+
+
+def _try_consume_node_pin_tail(
+    archive: PackageArchive,
+    name_map: list[str],
+    summary: PackageFileSummary,
+    export_map: list[ObjectExport],
+    import_map: list[ObjectImport],
+    serial_end: int,
+) -> bool:
+    """Consume a UEdGraphNode native pin tail only when it ends exactly at ``serial_end``.
+
+    Layout: pin count (i32), then per pin a null flag (archive bool = 4 bytes);
+    non-null pins carry the owning-node/pin-guid header followed by the full
+    UEdGraphPin body the shared reader already decodes (version gates included).
+    Any validation failure, read error, or shortfall restores the cursor so the
+    caller keeps its original byte-for-byte trailing diagnostic (#663) — a
+    partial walk never removes or shrinks the diagnostic.
+    """
+    start = archive.tell()
+    try:
+        count = archive.read_i32()
+        if count < 0 or count > MAX_PINS_PER_NODE:
+            archive.seek(start)
+            return False
+        for _ in range(count):
+            pin_start = archive.tell()
+            if archive.read_i32() != 0:
+                continue  # null slot: the 4-byte flag alone (EdGraphPin.cpp SerializePin)
+            owning_node = archive.read_i32()
+            pin_id = archive.read_bytes(16).hex()
+            read_ue_graph_pin(
+                archive,
+                name_map,
+                summary,
+                export_map,
+                import_map,
+                header_owning_node=owning_node,
+                header_pin_id=pin_id,
+                serial_start=pin_start,
+            )
+        if archive.tell() == serial_end:
+            return True
+    except RECOVERY_READ_ERRORS:
+        pass
+    archive.seek(start)
+    return False
 
 
 def _skip_optional_object_guid(archive: PackageArchive, serial_end: int) -> int:

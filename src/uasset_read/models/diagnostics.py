@@ -223,6 +223,11 @@ def classify_trailing_reason(context: TrailingContext | str) -> DiagnosticReason
     # (docs/designs/archive/2026-09-23-animblueprint-native-trailer-plan.md):
     if context.object_name.startswith("Default__") and context.class_name.endswith("_C"):
         # [gap] CDO identity: Default__ instance of a *_C generated class (3 fixtures / 621,736 B).
+        # #663 evidence: the tail follows the native chain after properties — candidate writer
+        # UAnimInstance::Serialize (AnimInstance.cpp:1646, `Ar << RequiredBones` -> FBoneContainer
+        # at BoneContainer.h:475) — but the observed first i32 (3394 on ALS export:0) cannot be
+        # that stream's BoneIndicesArray count (index values exceed it), so the writer-era layout
+        # is unconfirmed against UE5.8 source; stays known_unimplemented per rule 3 (evidence gap).
         return "known_unimplemented"
     if (
         context.object_name in _ANIM_GENERATED_DATA_OBJECTS
