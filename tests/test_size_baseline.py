@@ -72,6 +72,10 @@ def test_source_tree_within_baseline():
 
 
 def test_test_tree_within_baseline():
+    # CI reads json.loads(raw)["wheel_bytes"]["max_bytes"] directly, so the file
+    # must stay a pure data file: no prose, no history.
+    baseline = BASELINE
+    assert set(baseline) == {"src_python", "tests_python", "wheel_bytes"}, f"non-data keys: {set(baseline)}"
     _assert_area("tests_python", "tests/", ".py")
     modules = _test_modules()
     assert len(modules) <= 3, (
