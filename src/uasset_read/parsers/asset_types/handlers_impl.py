@@ -1278,10 +1278,19 @@ register_handler(BlueprintFamilyHandler(("Blueprint", "BlueprintGeneratedClass")
 
 
 class NiagaraHandler(_SupportsClasses):
-    """Enrich Niagara objects with light summary.
+    """Enrich Niagara objects; attach the decoded editor graph at depth=decode (#664).
 
-    Summary-tier: the name/type echo is not a decoded Niagara script, so
-    this never yields ``semantic="complete"`` (#629).
+    Summary tier retained (#629): node/graph tagged properties and the editor
+    graph structure (nodes/pins/links via the shared UEdGraph pin reader) are
+    decoded, but Niagara script execution and variable-binding semantics are
+    not, so this never yields ``semantic="complete"``. The pin path is
+    WITH_EDITOR and disappears from cooked packages (Engine/Source/Runtime/
+    Engine/Private/EdGraph/EdGraphNode.cpp Serialize guard, audited at 5.8.1
+    71fe36aac; UE 5.0 fixture byte-verified in issue-521-b0-gate-decision.md).
+    No peer parser records Niagara coverage
+    (docs/reference/external-peer-inventory.md); tagged properties are
+    self-describing, so 5.0-era node fields missing from 5.8 headers still
+    decode per tag.
     """
 
     capability = "summary"
@@ -1311,14 +1320,41 @@ class NiagaraHandler(_SupportsClasses):
     ) -> dict[str, Any] | None:
         cn = obj.class_name or ""
         result: dict[str, Any] = {"kind": "niagara", "niagara_type": cn, "name": obj.name}
+
+        # depth=decode only: the reader-side graph pass attaches decoded
+        # graph dicts to the owning NiagaraGraph export (#664).
+        graphs: list[dict[str, Any]] = []
+        if depth == "decode" and isinstance(package_data, tuple) and len(package_data) >= 3:
+            extras = package_data[2]
+            entry = extras.get(obj.id) if isinstance(extras, dict) else None
+            if isinstance(entry, dict):
+                candidate = entry.get("graphs")
+                if isinstance(candidate, list):
+                    graphs = [g for g in candidate if isinstance(g, dict)]
+
+        domain_detail = (
+            "kind/name; script and variable semantics not extracted"
+            if obj.status.parse != "complete"
+            else "export tagged properties decoded; script and variable semantics not extracted"
+        )
         coverage: list[CoverageEntry] = [
             CoverageEntry(feature="niagara.kind", status="present", detail=cn),
             CoverageEntry(
                 feature="niagara.domain",
                 status="partial",
-                detail="kind/name only; graph and variable summaries not extracted",
+                detail=domain_detail,
             ),
         ]
+        if graphs:
+            result["graphs"] = graphs
+            node_total = sum(int(g.get("node_count") or 0) for g in graphs)
+            coverage.append(
+                CoverageEntry(
+                    feature="niagara.graph",
+                    status="present",
+                    detail=f"{len(graphs)} graph(s), {node_total} nodes (nodes/pins/links decoded)",
+                )
+            )
         obj.coverage.extend(coverage)
         return result
 

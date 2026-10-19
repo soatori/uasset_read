@@ -334,6 +334,9 @@ def test_manifest_matches_every_real_sample():
             "UnversionedTest.usmap",
             "UnversionedTest.provenance.md",
             "quality_baseline.json",
+            # Issue #664 audit/boundary report (docs repo absent in worktrees;
+            # CLAUDE.md forbids docs/ in this repository).
+            "ISSUE-664-niagara-boundary.md",
         }
         | ORIGIN_DOCS
     )
@@ -2626,6 +2629,11 @@ def test_niagara_fixture_enriched_at_summary_tier():
 
     The fixture also contains EdGraphNode_Comment and MetaData exports that no
     handler covers; those are intentionally not asserted here.
+
+    Folded #664 (collection budget): depth=decode attaches the decoded editor
+    graph to the owning NiagaraGraph, projects it as a represented graph
+    record, and the high-frequency node kinds expose their tagged fields —
+    while the domain tier stays partial and no payload stays skipped.
     """
     from uasset_read.parsers.asset_types.handlers_impl import NiagaraHandler
 
@@ -2636,6 +2644,54 @@ def test_niagara_fixture_enriched_at_summary_tier():
         assert o.semantic and o.semantic["kind"] == "niagara", o.id
         assert o.coverage, o.id
         assert o.status.semantic == "partial", (o.id, o.class_name, o.status.semantic)
+
+    # #664: decode-depth structure (pins/links byte-verified by the
+    # issue-521-b0-gate-decision pin walk: 99 pins, 76 links).
+    from uasset_read.package import parse_package_document
+    from uasset_read.projection import project_document
+
+    decode_doc = parse_package_document(SAMPLES / "NM_BPSystemEvent.uasset", depth="decode")
+    graph_obj = next(o for o in decode_doc.objects if o.class_name == "NiagaraGraph")
+    graphs = (graph_obj.semantic or {}).get("graphs") or []
+    assert len(graphs) == 1, "depth=decode must attach exactly one decoded graph"
+    graph = graphs[0]
+    assert (graph["node_count"], graph["pin_count"], graph["edge_count"]) == (28, 99, 76), graph["id"]
+    assert graph["parse_errors"] == []
+    node_types = {node["type"] for node in graph["nodes"]}
+    assert {
+        "NiagaraNodeFunctionCall",
+        "NiagaraNodeParameterMapSet",
+        "NiagaraNodeReroute",
+        "NiagaraNodeSelect",
+    } <= node_types, node_types
+    coverage_features = {(c.feature, c.status) for c in graph_obj.coverage}
+    assert ("niagara.graph", "present") in coverage_features, coverage_features
+    assert ("niagara.domain", "partial") in coverage_features, coverage_features
+
+    # Per-kind tagged fields are the decodable boundary for the four
+    # high-frequency node kinds; all node payloads parse (no skips remain).
+    props_by_class: dict[str, set[str]] = {}
+    for o in decode_doc.objects:
+        if o.class_name in NiagaraHandler.classes:
+            props_by_class.setdefault(o.class_name, set()).update(e.name for e in o.properties.entries)
+    assert {"SelectorPinType", "SelectorPinGuid"} <= props_by_class["NiagaraNodeSelect"]
+    assert {"PinOutputToPinDefaultPersistentId"} <= props_by_class["NiagaraNodeParameterMapGet"]
+    assert {"FunctionScript", "FunctionDisplayName"} <= props_by_class["NiagaraNodeFunctionCall"]
+    assert {"ChangeId", "NodePosX", "NodePosY", "NodeGuid"} <= props_by_class["NiagaraNodeReroute"]
+    assert {"ChangeId", "NodePosX", "NodePosY", "NodeGuid"} <= props_by_class["NiagaraNodeParameterMapSet"]
+    assert not [d for d in decode_doc.diagnostics if d.code == "EXPORT_PAYLOAD_SKIPPED"]
+
+    # Graph projections are no longer all unavailable (#664 acceptance).
+    projection = project_document(decode_doc, mode="normal")
+    graph_records = [r for r in projection["projections"] if r["kind"] == "graph"]
+    assert len(graph_records) == 39, len(graph_records)
+    represented = [r for r in graph_records if r["status"] == "represented"]
+    assert [r["source_object_id"] for r in represented] == ["export:4"]
+    assert (
+        represented[0]["content"]["node_count"],
+        represented[0]["content"]["pin_count"],
+        represented[0]["content"]["edge_count"],
+    ) == (28, 99, 76)
 
 
 def test_blueprint_fixtures_carry_generated_and_cdo_relations():
@@ -3186,26 +3242,33 @@ def test_byte_accounting_registers_reader_consumed_structural_bytes():
                 cursor = leaf["end"]
             assert cursor == window["end"], scope["object_id"]
 
-    # Folded #653 F1 (collection budget): tolerant-skip payloads are seeked,
-    # never decoded/structural.
+    # Folded #664 (collection budget): NiagaraNode* payloads are decoded, not
+    # skipped — tagged properties become structural spans and each pin-tail
+    # residue is owned byte-for-byte by one classified trailing diagnostic.
     proj = _debug("NM_BPSystemEvent.uasset")
     scopes = {s["object_id"]: s for s in proj["debug"]["byte_accounting"]}
-    # NiagaraNode* exports match SKIP_CLASS_PREFIXES: seeked, never parsed.
-    for oid in ("export:5", "export:15", "export:29"):
-        scope = scopes[oid]
-        window = scope["window"]
-        assert window["size"] > 500, oid  # a real payload, not a trivial window
-        assert not [leaf for leaf in scope["leaves"] if leaf["status"] == "decoded"], oid
-        unconsumed = sum(leaf["size"] for leaf in scope["leaves"] if leaf["reason"] == "unconsumed")
-        assert unconsumed == window["size"], oid
-    # One structured diagnostic owns each skipped window byte-for-byte.
+    assert [d["object_id"] for d in proj["diagnostics"] if d["code"] == "EXPORT_PAYLOAD_SKIPPED"] == []
     details = {e["index"]: e for e in proj["debug"]["diagnostic_details"]}
-    skips = [
-        (index, diag) for index, diag in enumerate(proj["diagnostics"]) if diag["code"] == "EXPORT_PAYLOAD_SKIPPED"
+    trailing = [
+        (index, diag)
+        for index, diag in enumerate(proj["diagnostics"])
+        if diag["code"] == "EXPORT_TRAILING_BYTES_UNCONSUMED"
     ]
-    assert [diag["object_id"] for _, diag in skips] == [f"export:{i}" for i in range(5, 30)]
-    for index, diag in skips:
-        assert details[index]["size"] == scopes[diag["object_id"]]["window"]["size"], diag["object_id"]
+    # PackageMetaData (export:3) plus the 25 NiagaraNode* exports (export:5..29).
+    assert [diag["object_id"] for _, diag in trailing] == ["export:3"] + [f"export:{i}" for i in range(5, 30)]
+    for index, diag in trailing:
+        if diag["object_id"] == "export:3":
+            continue
+        assert details[index]["reason"] == "known_unimplemented", diag["object_id"]
+        window = scopes[diag["object_id"]]["window"]
+        scope_leaves = scopes[diag["object_id"]]["leaves"]
+        decoded = sum(leaf["size"] for leaf in scope_leaves if leaf["status"] == "decoded")
+        assert decoded > 0, diag["object_id"]  # tagged properties decoded, not a full-window seek
+        unconsumed = sum(leaf["size"] for leaf in scope_leaves if leaf["reason"] == "unconsumed")
+        assert unconsumed == details[index]["size"], diag["object_id"]
+        # Stable byte range: offset+size reaches the export window end (#664).
+        assert details[index]["offset"] + details[index]["size"] == window["start"] + window["size"], diag["object_id"]
+        assert unconsumed < window["size"], diag["object_id"]
 
     # #663: K2Node_CallFunction pin tails decode byte-exactly to serial_end —
     # every owning export on the sample keeps zero trailing diagnostics and

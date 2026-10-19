@@ -301,6 +301,14 @@ class GraphAssetProjector:
             "semantic_kind": semantic.get("kind"),
             "entry_count": len(graphs),
         }
+        # Graph summary counts only — the other_graph_assets matrix rule is
+        # "graph summary only; never a generated source body". Expression-
+        # shaped entries (material_function) carry no node counts and stay
+        # out of this block (#664).
+        if all(isinstance(g, dict) and "node_count" in g for g in graphs):
+            content["node_count"] = sum(int(g.get("node_count") or 0) for g in graphs)
+            content["pin_count"] = sum(int(g.get("pin_count") or 0) for g in graphs)
+            content["edge_count"] = sum(int(g.get("edge_count") or 0) for g in graphs)
         return [
             ProjectionRecord(
                 kind="graph",
