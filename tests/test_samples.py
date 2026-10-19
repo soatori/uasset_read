@@ -334,9 +334,6 @@ def test_manifest_matches_every_real_sample():
             "UnversionedTest.usmap",
             "UnversionedTest.provenance.md",
             "quality_baseline.json",
-            # Issue #664 audit/boundary report (docs repo absent in worktrees;
-            # CLAUDE.md forbids docs/ in this repository).
-            "ISSUE-664-niagara-boundary.md",
         }
         | ORIGIN_DOCS
     )
