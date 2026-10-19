@@ -82,7 +82,7 @@
         },
         "EXPORT_TRAILING_BYTES_UNCONSUMED": {
           "editor_only": {
-            "max": 324
+            "max": 252
           }
         }
       }
@@ -97,7 +97,7 @@
       "max_by_code_reason": {
         "EXPORT_TRAILING_BYTES_UNCONSUMED": {
           "editor_only": {
-            "max": 19
+            "max": 13
           }
         }
       }
@@ -192,7 +192,7 @@
         },
         "EXPORT_TRAILING_BYTES_UNCONSUMED": {
           "editor_only": {
-            "max": 577
+            "max": 410
           },
           "known_unimplemented": {
             "max": 1254
@@ -205,16 +205,16 @@
   "aggregate": {
     "scope": "manifest",
     "sample_count": 67,
-    "max_total_warnings": 2928,
-    "max_total_bytes": 3454472,
+    "max_total_warnings": 2558,
+    "max_total_bytes": 3047419,
     "by_reason": {
       "bulk_expected": {
         "max_count": 5,
         "max_bytes": 22306
       },
       "editor_only": {
-        "max_count": 1572,
-        "max_bytes": 1541983
+        "max_count": 1202,
+        "max_bytes": 1134930
       },
       "known_unimplemented": {
         "max_count": 1351,
@@ -277,10 +277,6 @@
       "editor_only/K2Node_CallDelegate": {
         "max_count": 4,
         "max_bytes": 2996
-      },
-      "editor_only/K2Node_CallFunction": {
-        "max_count": 370,
-        "max_bytes": 407053
       },
       "editor_only/K2Node_CallMaterialParameterCollectionFunction": {
         "max_count": 1,
