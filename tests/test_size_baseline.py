@@ -27,29 +27,18 @@ ROOT = Path(__file__).resolve().parents[1]
 BASELINE = json.loads((Path(__file__).parent / "size-baseline.json").read_text(encoding="utf-8"))
 
 
-def _tracked_files() -> list[str]:
+def _tracked_files(pathspecs: tuple[str, ...] = ()) -> list[str]:
     # -z, not plain ls-files: the default core.quotePath escapes non-ASCII
     # paths, which would silently drop files from the count depending on the
     # caller's git config.
-    out = subprocess.run(
-        ["git", "ls-files", "-z"],
-        cwd=ROOT,
-        capture_output=True,
-        check=True,
-    )
+    out = subprocess.run(["git", "ls-files", "-z", *pathspecs], cwd=ROOT, capture_output=True, check=True)
     return [entry for entry in out.stdout.decode("utf-8").split("\0") if entry]
 
 
 def _test_modules() -> list[str]:
     # Both pathspecs: the acceptance command counts top-level and nested modules,
     # and neither pattern alone matches the other's directories.
-    out = subprocess.run(
-        ["git", "ls-files", "-z", "tests/test_*.py", "tests/**/test_*.py"],
-        cwd=ROOT,
-        capture_output=True,
-        check=True,
-    )
-    return [entry for entry in out.stdout.decode("utf-8").split("\0") if entry]
+    return _tracked_files(("tests/test_*.py", "tests/**/test_*.py"))
 
 
 def _line_count(relpath: str) -> int:
