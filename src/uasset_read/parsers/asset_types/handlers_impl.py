@@ -258,9 +258,9 @@ class DataTableHandler(_SupportsClasses):
                 result["rows"] = rows["rows"][:50]
                 # Normalize parser models at the semantic boundary once;
                 # object semantics and all DataTable/CurveTable projections
-                # share them. Curve keys arrive as a native list (CurveBase.cpp),
-                # so they are projected element-wise instead of collapsed into
-                # the struct wrapper a single value would become.
+                # share them. Curve keys arrive as a native list (RichCurve.cpp:163 /
+                # SimpleCurve.cpp:10), so they are projected element-wise instead of
+                # collapsed into the struct wrapper a single value would become.
                 result["rows"] = [
                     {
                         **row,

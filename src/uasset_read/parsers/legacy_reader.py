@@ -2106,7 +2106,7 @@ def _read_soft_object_paths(
 
 
 # Canonical value names for the per-key byte enums written by FRichCurveKey's
-# manual serializer (RichCurve.cpp:175-183): three enum bytes then six floats,
+# manual serializer (RichCurve.cpp:174-182): three enum bytes then six floats,
 # 27 bytes total. Curve-level enums (InterpMode, Pre/PostInfinityExtrap) are
 # stored as an FName and resolve through the name map, not these tables.
 _CURVE_INTERP_MODES = {
@@ -2128,7 +2128,8 @@ _CURVE_TANGENT_WEIGHT_MODES = {
     2: "RCTWM_WeightedLeave",
     3: "RCTWM_WeightedBoth",
 }
-# Per-key native stride in bytes (CurveBase.cpp FRichCurveKey / FSimpleCurveKey::Serialize).
+# Per-key native stride in bytes (RichCurve.cpp:163 FRichCurveKey::Serialize /
+# SimpleCurve.cpp:10 FSimpleCurveKey::Serialize).
 _CURVE_KEY_STRIDE = {"RichCurves": 27, "SimpleCurves": 8}
 
 
@@ -2141,7 +2142,8 @@ def _read_curve_tag_value(
 ) -> Any:
     """Decode one FSimpleCurve/FRichCurve row tag value into a semantic value.
 
-    Curve rows are native structs (CurveBase.cpp), not the tagged DataTable
+    Curve rows are native structs (RichCurve.cpp:163 FRichCurveKey::Serialize,
+    SimpleCurve.cpp:10 FSimpleCurveKey::Serialize), not the tagged DataTable
     stream, so they cannot reuse ``parse_property_value``. Keys carry their own
     count header and a fixed per-key stride; the enum containers (InterpMode,
     Pre/PostInfinityExtrap) hold an FName into the name map. Anything that does
@@ -2325,8 +2327,9 @@ def _read_table_rows(
                 break
             row_fields[t.name] = {"type": t.type, "size": int(getattr(t, "size", 0) or 0)}
             if curve_table:
-                # Curve rows are native structs (CurveBase.cpp); they carry no
-                # DataTable tagged-value stream, so they use the dedicated
+                # Curve rows are native structs (RichCurve.cpp:163 FRichCurveKey::
+                # Serialize / SimpleCurve.cpp:10 FSimpleCurveKey::Serialize); they
+                # carry no DataTable tagged-value stream, so they use the dedicated
                 # decoder. An unknown variant keeps only the type/size descriptor.
                 previous_range = payload.set_read_range((payload.tell(), t.value_end_offset))
                 try:

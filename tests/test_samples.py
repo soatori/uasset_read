@@ -2645,6 +2645,46 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     skipped = read_pin_array(ByteArchive(payload), [], [])
     assert len(skipped) == 1 and "null" not in skipped[0]
 
+    # CurveTable unsupported-variant rejection: an unknown ECurveTableMode
+    # never decodes guessed key bytes, and the keyless row skeleton it leaves
+    # keeps every curve projection explicitly unavailable (#661 review).
+    from uasset_read.models.document import PackageDocument
+    from uasset_read.models.object_model import ObjectRecord
+    from uasset_read.models.properties import PropertyTag
+    from uasset_read.parsers.legacy_reader import _read_curve_tag_value
+    from uasset_read.projections.data_exports import CurveTableProjector, _curve_table_payload
+
+    # Well-formed 1x27-byte rich key payload: only the unsupported mode may block it.
+    rich_ok = struct.pack("<i", 1) + b"\x00" * 27
+    keys_tag = PropertyTag(name="Keys", type="ArrayProperty", size=len(rich_ok), value_end_offset=len(rich_ok))
+    decoded_ok = _read_curve_tag_value(keys_tag, ByteArchive(rich_ok), rich_ok, ["None"], "RichCurves")
+    assert isinstance(decoded_ok, list) and len(decoded_ok) == 1
+    for unsupported in ("CompressedCurves", "Unknown(3)"):
+        assert _read_curve_tag_value(keys_tag, ByteArchive(rich_ok), rich_ok, ["None"], unsupported) is None, (
+            unsupported
+        )
+    # count=2 claims 54 key bytes but only 27 are present: stride/count mismatch.
+    rich_bad = struct.pack("<i", 2) + b"\x00" * 27
+    bad_tag = PropertyTag(name="Keys", type="ArrayProperty", size=len(rich_bad), value_end_offset=len(rich_bad))
+    assert _read_curve_tag_value(bad_tag, ByteArchive(rich_bad), rich_bad, ["None"], "RichCurves") is None
+
+    keyless = {
+        "kind": "curve_table",
+        "curve_table_mode": "Unknown(3)",
+        "row_count": 1,
+        "row_names": ["RowA"],
+        # Exactly what a rejected row keeps: type/size descriptor, no value.
+        "rows": [{"name": "RowA", "fields": {"Keys": {"type": "ArrayProperty", "size": len(rich_ok)}}}],
+    }
+    assert _curve_table_payload(keyless) is None
+    obj = ObjectRecord("export:0", 0, "RowA", class_name="CurveTable", semantic=keyless)
+    projected = CurveTableProjector().project(PackageDocument(objects=[obj]), obj)
+    assert projected and all(
+        record.status == "unavailable"
+        and [d.code for d in record.diagnostics] == ["curve_table_keys_unavailable"]
+        for record in projected
+    )
+
     with pytest.MonkeyPatch.context() as mp:
         _check_file_source_and_composite_source_reuse_cached_sizes(tmp_path, mp)
     with pytest.MonkeyPatch.context() as mp:
