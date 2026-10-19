@@ -1398,8 +1398,8 @@ def test_logging_boundaries_and_cli_file_logs(capfd, caplog, tmp_path, monkeypat
 def _assert_issue_665_struct_fallbacks_decode():
     """#665: Vector/Guid/Transform/LinearColor/Box fallbacks decode from real samples.
 
-    Classification evidence in the commit's diagnosis report
-    (temp/issue-665-diagnosis.md): Vector/Guid/LinearColor are native inline
+    Classification evidence recorded in the #665 implementation commit
+    history (7bdeb3ed): Vector/Guid/LinearColor are native inline
     array elements sized from the legacy inner tag; Box is the native 49-byte
     double layout (Box.h uint8 IsValid); Transform payloads are legal tagged
     streams, so a clean decode must emit no TRANSFORM_SIZE_INVALID and must not
