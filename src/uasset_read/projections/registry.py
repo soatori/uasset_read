@@ -1,9 +1,10 @@
-"""Type-aware projection registry and deterministic family dispatch (R3).
+"""Type-aware projection dispatch and deterministic family list (R3).
 
-Registry ``project_document()`` means all objects of the supplied
-PackageDocument. It is not the ``uasset_read.projection.project_document``
-envelope API. Generic object identity/properties stay in PackageDocument.objects
-and are never copied into a generic ``object`` projection.
+``project_records()`` runs the whole supplied PackageDocument;
+``project_records_with()`` runs one explicit projector tuple. Neither is the
+``uasset_read.projection.project_document`` envelope API. Generic object
+identity/properties stay in PackageDocument.objects and are never copied into
+a generic ``object`` projection.
 
 Blueprint and material families emit no embedded records: their IR/CFG and
 static semantics live under ``objects[].semantic`` (v4). Families with no
@@ -324,55 +325,37 @@ class GraphAssetProjector:
         ]
 
 
-class ProjectorRegistry:
-    """Deterministic type-aware projector dispatch."""
+PROJECTORS: tuple[Any, ...] = (
+    MaterialInstanceProjector(),
+    DataTableProjector(),
+    CurveTableProjector(),
+    UserDefinedStructProjector(),
+    UserDefinedEnumProjector(),
+    PhysicalAssetProjector(),
+    GraphAssetProjector(),
+)
 
-    def __init__(self) -> None:
-        self._entries: list[Any] = []
 
-    @classmethod
-    def default(cls) -> "ProjectorRegistry":
-        registry = cls()
-        registry.register(MaterialInstanceProjector())
-        registry.register(DataTableProjector())
-        registry.register(CurveTableProjector())
-        registry.register(UserDefinedStructProjector())
-        registry.register(UserDefinedEnumProjector())
-        registry.register(PhysicalAssetProjector())
-        registry.register(GraphAssetProjector())
-        return registry
+def project_records_with(
+    projectors: tuple[Any, ...], document: PackageDocument, obj: ObjectRecord
+) -> list[ProjectionRecord]:
+    matches = [projector for projector in projectors if projector.can_project(obj)]
+    if len(matches) > 1:
+        names = sorted(type(projector).__name__ for projector in matches)
+        raise ValueError(f"ambiguous projector ownership for {obj.id}: {names}")
+    return [record for projector in matches for record in projector.project(document, obj)]
 
-    def register(self, projector: Any) -> None:
-        self._entries.append(projector)
 
-    def _owners(self, obj: ObjectRecord) -> list[Any]:
-        matches = [projector for projector in self._entries if projector.can_project(obj)]
-        if len(matches) > 1:
-            names = sorted(type(projector).__name__ for projector in matches)
-            raise ValueError(f"ambiguous projector ownership for {obj.id}: {names}")
-        return matches
-
-    def project_object(self, document: PackageDocument, object_id: str) -> list[ProjectionRecord]:
-        obj = next((item for item in document.objects if item.id == object_id), None)
-        if obj is None:
-            return []
-        records: list[ProjectionRecord] = []
-        for projector in self._owners(obj):
-            records.extend(projector.project(document, obj))
-        records.sort(key=lambda item: (item.source_object_id, item.kind, item.media_type))
-        return records
-
-    def project_document(self, document: PackageDocument) -> list[ProjectionRecord]:
-        records: list[ProjectionRecord] = []
-        for obj in document.objects:
-            records.extend(self.project_object(document, obj.id))
-        records.sort(key=lambda item: (item.source_object_id, item.kind, item.media_type))
-        return records
+def project_records(document: PackageDocument) -> list[ProjectionRecord]:
+    records = [record for obj in document.objects for record in project_records_with(PROJECTORS, document, obj)]
+    return sorted(records, key=lambda item: (item.source_object_id, item.kind, item.media_type))
 
 
 __all__ = [
     "CAPABILITY_MATRIX",
     "GraphAssetProjector",
     "PhysicalAssetProjector",
-    "ProjectorRegistry",
+    "PROJECTORS",
+    "project_records",
+    "project_records_with",
 ]

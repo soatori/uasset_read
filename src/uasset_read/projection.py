@@ -75,22 +75,6 @@ def _sanitize_semantic(
     return value
 
 
-def build_projection_records(
-    document: PackageDocument,
-    *,
-    registry: Any | None = None,
-) -> list[Any]:
-    """Create embedded type-aware projection records for a PackageDocument.
-
-    Sole API that produces type-specific embedded content. Unknown families
-    emit no records.
-    """
-    from uasset_read.projections.registry import ProjectorRegistry
-
-    active = registry if registry is not None else ProjectorRegistry.default()
-    return active.project_document(document)
-
-
 def dependency_to_dict(dep: Dependency) -> dict[str, Any]:
     """Serialize one import-dependency entry (#632).
 
@@ -341,6 +325,7 @@ def project_document(
         target_display[f"import:{dep.index}"] = f"{dep.package_name}.{dep.object_name}" if dep.package_name else dep.object_name
 
     from uasset_read.projections.records import projection_to_dict
+    from uasset_read.projections.registry import project_records
 
     semantic_evidence: list[dict[str, Any]] = []
     result: dict[str, Any] = {
@@ -369,7 +354,7 @@ def project_document(
             for rel in document.relations
         ],
         "dependencies": [dependency_to_dict(dep) for dep in document.dependencies],
-        "projections": [projection_to_dict(item) for item in build_projection_records(document)],
+        "projections": [projection_to_dict(item) for item in project_records(document)],
         "payloads": payloads,
         "sidecars": [],
         "diagnostics": [diagnostic_summary(d) for d in diagnostics],

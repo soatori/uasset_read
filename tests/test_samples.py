@@ -2710,6 +2710,25 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     shape = agent_tools._err("X", "agent.extract_payload", recoverable=True, message="nothing here")
     assert shape == {"error": "nothing here", "code": "X", "stage": "agent.extract_payload", "recoverable": True}
 
+    # Flat projector dispatch: one tuple, one loop; ambiguity still raises.
+    # Blueprint-family fixtures have no projector ownership (all seven
+    # PROJECTORS entries return False on export:0), so two claiming owners
+    # are injected for the guard to see len(matches) > 1.
+    from uasset_read.projections import registry as projector_registry
+
+    assert isinstance(projector_registry.PROJECTORS, tuple) and len(projector_registry.PROJECTORS) == 7
+    assert not hasattr(projector_registry, "ProjectorRegistry")
+
+    class TwoOwners:
+        def can_project(self, obj): return True
+        def project(self, document, obj): return []
+
+    sample_object = next(o for o in stack_document.objects if o.id == "export:0")
+    with pytest.raises(ValueError, match="ambiguous projector ownership"):
+        projector_registry.project_records_with(
+            tuple(list(projector_registry.PROJECTORS) + [TwoOwners(), TwoOwners()]), stack_document, sample_object
+        )
+
 
 def test_object_depth_parses_only_requested_export():
     from uasset_read.package import parse_package_document

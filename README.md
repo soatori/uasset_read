@@ -42,7 +42,7 @@ Whether you're auditing blueprint dependencies, building tooling for game develo
 - **Tagged / unversioned properties** — separate sole-entry readers; unversioned is schema-backed / explicit opaque
 - **v4 JSON contract** — `uasset_read.package` envelope with `format_version: "4.0"`, exactly `normal`/`debug` modes, one full document per package (no pagination or byte budget)
 - **Static Blueprint analysis** — graph IR, Kismet instruction IR + CFG, correlation (`entrypoints`/`calls`/`variable_accesses`/`control_flow`) under `objects[].semantic` (dict)
-- **Type-aware projections** — embedded material editor-builder, table/curve/struct/enum data, asset metadata/payload refs via `ProjectorRegistry`
+- **Type-aware projections** — embedded material editor-builder, table/curve/struct/enum data, asset metadata/payload refs via `project_records`
 - **Agent tools** — `inspect_package`, `extract_payload`
 - **Projection** — `project_document(document, mode=...)` is the sole envelope producer (`normal` / `debug`); `write_projected_document` writes it to disk; parse depth is a `parse_package_document(depth=...)` input, not an output surface
 - **Handlers** — DataTable, UserDefinedEnum, UserDefinedStruct, Texture2D, TextureCube, SoundWave, Skeleton, StaticMesh, Material, Niagara (editor-saved packages: node payloads + graph structure — nodes/pins/links, summary tier; script execution semantics are not decoded), Blueprint/AnimBlueprint (graph/node/pin + declaration + SCS + VarType + Kismet IR/CFG on editor-saved fixtures; native C++ bodies are never recovered)
