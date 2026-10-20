@@ -3767,3 +3767,31 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
 
     assert _pin_type_consumed(36) == len(scalar) == 69, "gate met: the trailing 4B bool is consumed"
     assert _pin_type_consumed(35) == len(scalar) - 4, "gate missed: the field is absent from the stream"
+
+
+def test_no_unreferenced_module_level_names():
+    # Every module-level def/class/constant in src/ must be referenced at least
+    # once outside its own definition.
+    import pathlib, re
+
+    roots = [pathlib.Path("src"), pathlib.Path("tests"), pathlib.Path("tools")]
+    text = {
+        p: p.read_text(encoding="utf-8", errors="ignore")
+        for r in roots for p in r.rglob("*")
+        if p.is_file() and p.suffix in (".py", ".json") and "__pycache__" not in str(p)
+    }
+    dead = []
+    for p, t in text.items():
+        if not str(p).startswith("src"):
+            continue
+        for m in re.finditer(r"^(?:def|class) (\w+)|^([A-Z][A-Z0-9_]{2,}) =", t, re.M):
+            name = m.group(1) or m.group(2)
+            if name.startswith("__"):
+                continue
+            total = sum(
+                len(re.findall(r"\b" + re.escape(name) + r"\b", s)) - (1 if q == p else 0)
+                for q, s in text.items()
+            )
+            if total == 0:
+                dead.append(f"{p}:{name}")
+    assert dead == [], f"unreferenced: {sorted(dead)}"

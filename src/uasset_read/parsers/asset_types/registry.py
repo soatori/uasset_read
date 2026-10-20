@@ -2,7 +2,7 @@
 
 Handler *classes* stay in ``handlers_impl``; they import only
 ``register_handler`` from this module. Every in-tree caller of
-``run_handlers`` / ``get_handlers`` / ``_HANDLERS`` must use this module —
+``run_handlers`` / ``_HANDLERS`` must use this module —
 ``handlers_impl`` must not re-own the registry.
 """
 
@@ -51,12 +51,6 @@ def _ensure_loaded() -> None:
 def register_handler(handler: Any) -> None:
     """Append a handler instance to the single global registry."""
     _HANDLERS.append(handler)
-
-
-def get_handlers() -> list[Any]:
-    """Return the live handler list (mutation is how tests isolate)."""
-    _ensure_loaded()
-    return _HANDLERS
 
 
 def run_handlers(

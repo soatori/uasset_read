@@ -9,24 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from uasset_read.models.byte_ranges import ByteRegion
 from uasset_read.models.diagnostics import Diagnostic, diagnostic_summary
 from uasset_read.models.document import PackageDocument
 from uasset_read.models.object_model import ObjectRecord
 
 ProjectionStatus = Literal["translated", "represented", "untranslated", "unavailable"]
-
-
-@dataclass(frozen=True)
-class SidecarRecord:
-    """Schema-ready external sidecar reference (not materialized in R3)."""
-
-    path: str
-    size: int
-    sha256: str
-    reason: Literal["size_limit", "unsafe_payload"]
-    source_range: ByteRegion | None
-    projection_kind: str | None
 
 
 @dataclass(frozen=True)
@@ -42,7 +29,6 @@ class ProjectionRecord:
     completeness: float | None
     dependencies: list[str]
     diagnostics: list[Diagnostic] = field(default_factory=list)
-    external: SidecarRecord | None = None
 
 
 def semantic_dict(obj: ObjectRecord) -> dict[str, Any]:
@@ -132,9 +118,8 @@ def projection_to_dict(record: ProjectionRecord) -> dict[str, Any]:
 
     Contract rules (package_document_v4.schema.json):
     - ``completeness`` is the capability enum string, not a float.
-    - Embedded records carry ``content`` and omit ``external``.
-    - External records carry ``external`` (path/size/sha256/reason) and omit
-      ``content``; the sidecar source range is debug evidence only.
+    - Records carry ``content`` and omit ``external``; a non-embedded record
+      raises because no sidecar producer exists yet.
     - ``diagnostics`` items are summary diagnostics (detail rides
       ``debug.diagnostic_details``).
     - Unknown keys are never emitted.
@@ -158,18 +143,10 @@ def projection_to_dict(record: ProjectionRecord) -> dict[str, Any]:
     if record.embedded:
         out["content"] = record.content
     else:
-        external = record.external
-        if external is None:
-            raise ValueError(
-                f"non-embedded projection {record.kind!r} for {record.source_object_id} "
-                "requires an external sidecar record"
-            )
-        out["external"] = {
-            "path": external.path,
-            "size": external.size,
-            "sha256": external.sha256,
-            "reason": external.reason,
-        }
+        raise ValueError(
+            f"non-embedded projection {record.kind!r} for {record.source_object_id} "
+            "requires an external sidecar record"
+        )
     return out
 
 

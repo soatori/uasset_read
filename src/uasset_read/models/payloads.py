@@ -53,12 +53,12 @@ def discover_payload_descriptor(
     BulkData header found there.  When no header is found (or the export/serial
     region is unavailable), returns a descriptor bounded by the export's serial
     region — never by the whole sidecar.  The emitted ``id`` is the
-    schema-canonical ``payload:export:N`` form; parenthesized request IDs are
-    a backward-compatible input alias handled at the Agent boundary.
+    schema-canonical ``payload:export:N`` form.
 
     Args:
-        payload_id: Payload identifier echoed for compatibility when the
-            export_index is invalid (e.g. "payload:(export:0)").
+        payload_id: Caller identifier echoed unchanged when export_index is
+            invalid; the Agent boundary accepts only the canonical
+            ``payload:export:N`` form.
         export_index: Index of the export that owns the payload.
         main_path: Path to the main .uasset/.umap file.
         sidecar_paths: Region name ("uexp"/"ubulk"/"uptnl") to sidecar path.

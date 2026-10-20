@@ -85,8 +85,6 @@ PKG_FilterEditorOnly = 0x80000000  # Package has editor-only data filtered out
 # ============================================================================
 
 MAX_PINS_PER_NODE = 1000  # Maximum pins per node
-MAX_NODES_PER_GRAPH = 5000  # Maximum nodes per graph
-MAX_SUBGRAPHS = 1000  # Maximum subgraphs per graph (corrupted asset defense)
 MAX_LINKEDTO_PER_PIN = 100  # Maximum connections per pin
 MAX_FTEXT_CONSUMPTION = 10_240  # 10 KB — FText parsing safety net maximum byte consumption
 

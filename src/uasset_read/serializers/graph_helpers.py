@@ -38,11 +38,11 @@ def seek_to_tag_end(archive: FArchive, tag) -> None:
         archive.seek(tag.value_end_offset)
 
 
-def _read_guid(archive: FArchive, uppercase: bool = True) -> str:
+def _read_guid(archive: FArchive) -> str:
     data = archive.read_bytes(16)
     if len(data) != 16:
         raise ParseError(f"FGuid requires 16 bytes, got {len(data)}")
-    return format_guid_bytes(data, uppercase=uppercase)
+    return format_guid_bytes(data)
 
 
 # ============================================================================
