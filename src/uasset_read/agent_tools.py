@@ -23,13 +23,8 @@ from .projection import project_document
 # Max response size for extract_payload (bytes)
 _MAX_BYTES_EXTRACT_PAYLOAD = 65536
 
-# Canonical schema spelling is payload:export:N / payload:import:N; the
-# parenthesized spelling payload:(export:N) is accepted only as a
-# backward-compatible request alias.
-_PAYLOAD_ID_RE = re.compile(
-    r"^payload:(?:\((?P<p_kind>export|import):(?P<p_idx>\d+)\)"
-    r"|(?P<s_kind>export|import):(?P<s_idx>\d+))$"
-)
+# Canonical schema spelling is payload:export:N / payload:import:N.
+_PAYLOAD_ID_RE = re.compile(r"^payload:(export|import):(\d+)$")
 
 
 def json_byte_size(payload: Any) -> int:
@@ -37,37 +32,12 @@ def json_byte_size(payload: Any) -> int:
     return len(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
-def fit_list_response(response: dict, max_bytes: int, *, list_key: str, total_key: str = "total") -> dict:
-    """Drop trailing items from response[list_key] until the compact encoding fits max_bytes.
-
-    Mutates ``response`` in place; it must carry {list_key (a list), "offset",
-    "returned", total_key}. Raises ValueError when max_bytes cannot hold even
-    the empty-list envelope.
-    """
-    items = response[list_key]
-    while json_byte_size(response) > max_bytes and items:
-        items.pop()
-        n = len(items)
-        response["returned"] = n
-        response["next_offset"] = response["offset"] + n
-    if not items:
-        response.pop("next_offset", None)  # a cursor that doesn't advance ends nothing
-    size = json_byte_size(response)  # one measure serves both the test and the message
-    if size > max_bytes:
-        raise ValueError(f"Response budget {max_bytes} bytes too small for minimal envelope ({size} bytes)")
-    if items and response["offset"] + len(items) >= response[total_key]:
-        response.pop("next_offset", None)  # a cursor past the real end is a lie
-    return response
-
-
 def _parse_payload_id(payload_id: str) -> tuple[Literal["export", "import"], int] | None:
-    """Parse canonical or parenthesized payload ids; None when malformed."""
+    """Parse canonical payload ids; None when malformed."""
     m = _PAYLOAD_ID_RE.match(payload_id.strip())
     if not m:
         return None
-    kind = cast(Literal["export", "import"], m.group("p_kind") or m.group("s_kind"))
-    raw = m.group("p_idx") if m.group("p_idx") is not None else m.group("s_idx")
-    return (kind, int(raw))
+    return (cast(Literal["export", "import"], m.group(1)), int(m.group(2)))
 
 
 def _parse_export_index(payload_id: str) -> int | None:
@@ -155,9 +125,7 @@ def extract_payload(
 
     Args:
         file_path: Path to the .uasset file.
-        payload_id: Payload identifier (e.g., "payload:export:0"). The
-            parenthesized spelling "payload:(export:0)" is accepted only as a
-            backward-compatible request alias.
+        payload_id: Payload identifier (e.g., "payload:export:0").
         max_bytes: Maximum response size in bytes.
         export_index: Index of the export that owns the payload. If not
             provided, derived from payload_id.
@@ -180,20 +148,12 @@ def extract_payload(
         code: str = PAYLOAD_EXTRACTION_DEFERRED,
         stage: str | None = None,
     ) -> dict[str, Any]:
-        """Bounded deferred/unavailable envelope, fitted to the list budget."""
-        response: dict[str, Any] = {
-            "id": payload_id,
-            "error": message,
-            "code": code,
-            "available_ids": [],
-            "offset": 0,
-            "returned": 0,
-            "total": 0,
-        }
+        """Deferred/unavailable envelope."""
+        response: dict[str, Any] = {"id": payload_id, "error": message, "code": code}
         if stage is not None:
             response["stage"] = stage
             response["recoverable"] = True
-        return fit_list_response(response, max_bytes, list_key="available_ids")
+        return response
 
     main_path = Path(file_path)
     if not main_path.exists():

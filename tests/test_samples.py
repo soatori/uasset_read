@@ -2707,6 +2707,15 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     _check_float_array_bulk_decode_matches_scalar_bits_with_one_payload_read()
     _check_float_array_bulk_decode_falls_back_at_export_boundary()
 
+    # R5: canonical payload ids only; pagination envelope retired.
+    import uasset_read.agent_tools as agent_tools
+
+    assert agent_tools._parse_payload_id("payload:export:3") == ("export", 3)
+    assert agent_tools._parse_payload_id("payload:(export:3)") is None
+    assert not hasattr(agent_tools, "fit_list_response")
+    shape = agent_tools._err("X", "agent.extract_payload", recoverable=True, message="nothing here")
+    assert shape == {"error": "nothing here", "code": "X", "stage": "agent.extract_payload", "recoverable": True}
+
 
 def test_object_depth_parses_only_requested_export():
     from uasset_read.package import parse_package_document
