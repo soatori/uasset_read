@@ -7,12 +7,9 @@ logic and no view/depth/selection/budget flags.
 
 import json
 import logging
-import os
 import re
 import sys
 from contextlib import contextmanager
-from datetime import datetime
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Iterator
 from uuid import uuid4
@@ -26,58 +23,25 @@ EXIT_ARGUMENT_ERROR = 3
 logger = logging.getLogger(__name__)
 
 
-class _RunLogContext(logging.Filter):
-    def __init__(self, run_id: str, asset_name: str) -> None:
-        super().__init__()
-        self.run_id = run_id
-        self.asset_name = asset_name
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        record.run_id = self.run_id
-        record.process_id = os.getpid()
-        record.asset = self.asset_name
-        record.stage = "parse"
-        return True
-
-
 @contextmanager
-def _file_log_scope(asset_name: str) -> Iterator[None]:
-    """Write this CLI invocation's DEBUG records to its own rotated file."""
+def _file_log_scope() -> Iterator[None]:
+    """Write this CLI invocation's DEBUG records to its own file under temp/."""
     try:
-        log_dir = Path(__file__).resolve().parents[2] / "log"
+        log_dir = Path(__file__).resolve().parents[2] / "temp"
         log_dir.mkdir(parents=True, exist_ok=True)
-        run_id = uuid4().hex[:12]
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-        log_path = log_dir / f"uasset_read-{timestamp}-pid{os.getpid()}-{run_id}.log"
-        handler = RotatingFileHandler(
-            log_path,
-            maxBytes=10_000_000,
-            backupCount=5,
-            encoding="utf-8",
-        )
+        handler = logging.FileHandler(log_dir / f"uasset_read-{uuid4().hex[:12]}.log", encoding="utf-8")
     except OSError as exc:
         print(f"Warning: could not write parser log file: {exc}", file=sys.stderr)
         yield
         return
 
     handler.setLevel(logging.DEBUG)
-    handler.addFilter(_RunLogContext(run_id, asset_name))
-    handler.setFormatter(
-        logging.Formatter(
-            fmt=(
-                "%(asctime)s [%(levelname)s] "
-                "[run=%(run_id)s pid=%(process_id)s asset=%(asset)s stage=%(stage)s] "
-                "%(name)s: %(message)s"
-            ),
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-    )
+    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s", "%Y-%m-%d %H:%M:%S"))
     package_logger = logging.getLogger("uasset_read")
     previous_level = package_logger.level
     package_logger.setLevel(logging.DEBUG)
     package_logger.addHandler(handler)
     try:
-        logger.info("Project logging initialized: %s", log_path)
         yield
     finally:
         package_logger.removeHandler(handler)
@@ -214,6 +178,5 @@ def main():
             sys.exit(EXIT_SUCCESS)
         sys.exit(EXIT_ARGUMENT_ERROR)
 
-    asset_name = Path(args.file).name if args.file is not None else "-"
-    with _file_log_scope(asset_name):
+    with _file_log_scope():
         _run(args)

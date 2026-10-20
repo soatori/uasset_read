@@ -1328,7 +1328,7 @@ def test_logging_boundaries_and_cli_file_logs(capfd, caplog, tmp_path, monkeypat
     assert set(tmp_path.iterdir()) == files_before
 
     monkeypatch.setattr(cli, "__file__", str(tmp_path / "repo" / "src" / "uasset_read" / "cli.py"))
-    log_dir = tmp_path / "repo" / "log"
+    log_dir = tmp_path / "repo" / "temp"
     package_logger = logging.getLogger("uasset_read")
     package_handlers = tuple(package_logger.handlers)
     package_level = package_logger.level
@@ -1345,27 +1345,18 @@ def test_logging_boundaries_and_cli_file_logs(capfd, caplog, tmp_path, monkeypat
         capfd.readouterr()
 
     monkeypatch.setattr(sys, "argv", ["uasset_read", "missing.uasset"])
-    for _ in range(2):
-        with pytest.raises(SystemExit) as missing_exit:
-            cli.main()
-        assert missing_exit.value.code == cli.EXIT_FILE_NOT_FOUND
-        assert tuple(root.handlers) == handlers_before and root.level == root_level_before
-        assert tuple(package_logger.handlers) == package_handlers and package_logger.level == package_level
-
-    files = sorted(log_dir.glob("uasset_read-*.log"))
-    assert len(files) == 2
-    for path in files:
-        assert re.fullmatch(r"uasset_read-\d{8}-\d{6}-\d{6}-pid\d+-[0-9a-f]{12}\.log", path.name)
-        log_text = path.read_text(encoding="utf-8")
-        assert "asset=missing.uasset stage=parse" in log_text
-        assert "File not found: missing.uasset" in log_text
+    with pytest.raises(SystemExit) as missing_exit:
+        cli.main()
+    assert missing_exit.value.code == cli.EXIT_FILE_NOT_FOUND
+    assert tuple(root.handlers) == handlers_before and root.level == root_level_before
+    assert tuple(package_logger.handlers) == package_handlers and package_logger.level == package_level
     capfd.readouterr()
 
     def fail_to_open(*args, **kwargs):
         raise OSError("disk unavailable")
 
     with monkeypatch.context() as patch:
-        patch.setattr(cli, "RotatingFileHandler", fail_to_open, raising=False)
+        patch.setattr(logging, "FileHandler", fail_to_open, raising=False)
         with pytest.raises(SystemExit) as setup_failure_exit:
             cli.main()
         setup_failure = capfd.readouterr()
@@ -1391,9 +1382,12 @@ def test_logging_boundaries_and_cli_file_logs(capfd, caplog, tmp_path, monkeypat
     document = json.loads(output_path.read_text(encoding="utf-8"))
     assert document["format_version"] == "4.0"
     assert "DEBUG: Parsing package: NM_BPSystemEvent.uasset" in verbose.err
-    sample_logs = sorted(log_dir.glob("uasset_read-*.log"))
-    assert len(sample_logs) == 3
-    assert "asset=NM_BPSystemEvent.uasset stage=parse" in sample_logs[-1].read_text(encoding="utf-8")
+    files = sorted(log_dir.glob("uasset_read-*.log"))
+    assert len(files) == 2  # one run id per file-producing cli.main() call; the OSError run writes none
+    for path in files:
+        assert re.fullmatch(r"uasset_read-[0-9a-f]{12}\.log", path.name)
+    missing_logs = [p for p in files if "File not found: missing.uasset" in p.read_text(encoding="utf-8")]
+    assert len(missing_logs) == 1
 
 
 def _assert_issue_665_struct_fallbacks_decode():
