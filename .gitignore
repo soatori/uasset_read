@@ -47,7 +47,6 @@ tmp/
 test/
 /output/
 /debug/
-/log/
 reports/
 /json
 

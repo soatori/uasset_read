@@ -36,8 +36,8 @@ def _tracked_files(pathspecs: tuple[str, ...] = ()) -> list[str]:
 
 
 def _test_modules() -> list[str]:
-    # Both pathspecs: the acceptance command counts top-level and nested modules,
-    # and neither pattern alone matches the other's directories.
+    # tests/test_*.py is load-bearing (the nested pattern matches zero of today's
+    # top-level modules); tests/**/test_*.py is future-proofing for a nested dir.
     return _tracked_files(("tests/test_*.py", "tests/**/test_*.py"))
 
 
