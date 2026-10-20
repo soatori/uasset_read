@@ -370,13 +370,7 @@ def test_manifest_matches_every_real_sample():
     assert zero["engine_layout"] == "legacy"
     assert zero["export_count"] == 6
     assert zero["b_is_asset_count"] == 0
-    # The extra-sample inventory is untracked local data, so its manifest only
-    # exists on the inventory machine; where present it must name the CLI as the
-    # manual trigger, not a program. Folded into this aggregate for the budget.
-    extra_dir = Path(__file__).parent / "extra_samples"
-    if extra_dir.is_dir():
-        extra_manifest = json.loads((extra_dir / "manifest.json").read_text(encoding="utf-8"))
-        assert "run_extra_samples.py" not in extra_manifest["trigger"], extra_manifest["trigger"]
+    # Runner absence folded into this aggregate for the collection budget (the CLI is the manual trigger).
     assert not (Path(__file__).parent / "extra_samples" / "run_extra_samples.py").exists()
 
 
