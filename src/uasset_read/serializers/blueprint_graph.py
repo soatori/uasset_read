@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from uasset_read.models.analysis import pin_lookup
 from uasset_read.models.byte_ranges import ByteRegion, project_region
 from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.serializers.node_data_project import project_node_data as _project_node_data
@@ -375,16 +376,7 @@ def resolve_pin_links(graphs: list[dict[str, Any]]) -> None:
     # ``subgraphs`` key. The same physical node export can still appear in
     # several emitted graphs — dedupe candidates by (node id, pin id).
     all_nodes = [n for g in graphs for n in g.get("nodes", [])]
-    owner_pins: set[tuple[str, str]] = set()
-    by_guid: dict[str, list[tuple[str, str]]] = {}
-    for node in all_nodes:
-        for pin in node.get("pins", []):
-            if pin["id"]:
-                entry = (node["id"], pin["id"])
-                owner_pins.add(entry)
-                by_guid.setdefault(pin["id"], []).append(entry)
-    # Flatten repeated (node, pin) entries from multi-graph appearances.
-    by_guid = {k: list(dict.fromkeys(v)) for k, v in by_guid.items()}
+    owner_pins, by_guid = pin_lookup(all_nodes)
 
     pin_ranges: dict[tuple[str, str], ByteRegion] = {}
     for graph in graphs:

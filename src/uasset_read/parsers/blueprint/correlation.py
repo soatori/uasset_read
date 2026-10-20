@@ -35,6 +35,7 @@ from uasset_read.models.analysis import (
     VariableAccessRecord,
     VariableDefinition,
     VariableEventRecord,
+    _int_or_none,
     project_blueprint_graph,
 )
 from uasset_read.constants import format_guid_fields
@@ -1240,10 +1241,6 @@ class _InstructionWalker:
                 source_node_reason=(None if source is not None else DEBUG_MAPPING_UNAVAILABLE),
             )
         )
-
-
-def _int_or_none(value: Any) -> int | None:
-    return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 def _str_or_none(value: Any) -> str | None:

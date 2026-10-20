@@ -3795,3 +3795,11 @@ def test_no_unreferenced_module_level_names():
             if total == 0:
                 dead.append(f"{p}:{name}")
     assert dead == [], f"unreferenced: {sorted(dead)}"
+
+    # One home per shared helper.
+    for name in ("_int_or_none", "_node_id_from_str", "_function_graph_ids"):
+        homes = [
+            p for p in pathlib.Path("src/uasset_read").rglob("*.py")
+            if re.search(rf"^def {name}\(", p.read_text(encoding="utf-8", errors="ignore"), re.M)
+        ]
+        assert len(homes) == 1, f"{name} defined in {homes}"

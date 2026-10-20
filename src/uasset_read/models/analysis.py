@@ -6,6 +6,7 @@ internal to the parser/analysis layers.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any, Literal, get_args
 
@@ -472,6 +473,26 @@ def _node_id_from_str(value: str) -> NodeId:
 def _int_or_none(value: Any) -> int | None:
     """Validated optional int; bool is not a flags/int stand-in."""
     return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def pin_lookup(nodes: Iterable[Any]) -> tuple[set[tuple[str, str]], dict[str, list[tuple[str, str]]]]:
+    """(owner_key, guid) set plus guid -> owners, one entry per serialized slot.
+
+    Accepts typed blueprint nodes or emitted node dicts.
+    """
+    owner_pins: set[tuple[str, str]] = set()
+    by_guid: dict[str, list[tuple[str, str]]] = {}
+    for node in nodes:
+        node_id = node["id"] if isinstance(node, dict) else node.id
+        pins = node.get("pins") if isinstance(node, dict) else node.pins
+        for pin in pins or []:
+            pin_id = pin["id"] if isinstance(pin, dict) else pin.id
+            if not pin_id:
+                continue
+            entry = (str(node_id), pin_id)
+            owner_pins.add(entry)
+            by_guid.setdefault(pin_id, []).append(entry)
+    return owner_pins, {k: list(dict.fromkeys(v)) for k, v in by_guid.items()}
 
 
 def native_field_from_dict(data: Any) -> NativeFieldDeclaration | None:

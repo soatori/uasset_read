@@ -23,8 +23,11 @@ from uasset_read.models.analysis import (
     PinLink,
     PinLinkRef,
     _graph_id_from_str,
+    _node_id_from_str,
+    pin_lookup,
 )
 from uasset_read.models.diagnostics import Diagnostic, make_diagnostic
+from uasset_read.parsers.asset_types.handlers_impl import _function_graph_ids
 
 if TYPE_CHECKING:
     from uasset_read.models.document import PackageDocument
@@ -52,13 +55,6 @@ _K2_CLASSES = frozenset(
 )
 
 
-def _node_id_from_str(value: str) -> NodeId:
-    if "/" in value:
-        owner, node = value.split("/", 1)
-        return NodeId(owner_object_id=owner, node_export_id=node)
-    return NodeId(owner_object_id=value, node_export_id=value)
-
-
 def resolve_pin_links(nodes: list[BlueprintNode], refs: list[PinLinkRef]) -> LinkResolution:
     """Resolve raw pin refs against owner-aware nodes.
 
@@ -67,16 +63,7 @@ def resolve_pin_links(nodes: list[BlueprintNode], refs: list[PinLinkRef]) -> Lin
     GUID. Ambiguous/unresolved refs become diagnostics — never an arbitrary
     last duplicate.
     """
-    owner_pins: set[tuple[str, str]] = set()
-    by_guid: dict[str, list[tuple[str, str]]] = {}
-    for node in nodes:
-        for pin in node.pins:
-            if not pin.id:
-                continue
-            entry = (str(node.id), pin.id)
-            owner_pins.add(entry)
-            by_guid.setdefault(pin.id, []).append(entry)
-    by_guid = {k: list(dict.fromkeys(v)) for k, v in by_guid.items()}
+    owner_pins, by_guid = pin_lookup(nodes)
 
     links: list[PinLink] = []
     diagnostics: list[Diagnostic] = []
@@ -282,32 +269,6 @@ def _graph_kind(name: str, graph_id: str, function_graph_ids: set[str]) -> Graph
     if name.endswith("Graph") and "Function" in name:
         return "function"
     return "unknown"
-
-
-def _function_graph_ids(properties: Any) -> set[str]:
-    if properties is None:
-        return set()
-    getter = getattr(properties, "get", None)
-    if not callable(getter):
-        return set()
-    entry = getter("FunctionGraphs")
-    value = entry.get("value") if isinstance(entry, dict) else None
-    if isinstance(entry, dict) and value is None:
-        # PropertyBag.get may already return the value.
-        value = entry if isinstance(entry, list) else None
-    if not isinstance(value, list):
-        # try bag.get returning PropertyEntry
-        if hasattr(entry, "value"):
-            value = getattr(entry, "value", None)
-    if not isinstance(value, list):
-        return set()
-    ids: set[str] = set()
-    for item in value:
-        if isinstance(item, int) and item > 0:
-            ids.add(f"export:{item - 1}")
-        elif isinstance(item, str) and item.startswith("export:"):
-            ids.add(item)
-    return ids
 
 
 class BlueprintGraphDecoder:
