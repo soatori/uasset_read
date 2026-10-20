@@ -464,18 +464,23 @@ def _handle_unversioned_properties(
     if mappings is not None:
         struct_name = _resolve_mapping_struct_name(export, import_map, export_map)
         mapped = getattr(mappings, "mappings", mappings)
-        if hasattr(mapped, "get_struct") and mapped.get_struct(struct_name) is not None:
-            return _parse_unversioned_properties_from_mapping(
-                export,
-                archive,
-                summary,
-                name_map,
-                export_map,
-                mapped,
-                struct_name,
-                property_end,
-                tolerant=tolerant,
-            )
+        if hasattr(mapped, "get_struct"):
+            if mapped.get_struct(struct_name) is None and mapped.get_struct(export.object_name) is not None:
+                # A class export's own unversioned stream follows the schema named by
+                # the class itself; resolve_class_name() only sees its metaclass (#665).
+                struct_name = export.object_name
+            if mapped.get_struct(struct_name) is not None:
+                return _parse_unversioned_properties_from_mapping(
+                    export,
+                    archive,
+                    summary,
+                    name_map,
+                    export_map,
+                    mapped,
+                    struct_name,
+                    property_end,
+                    tolerant=tolerant,
+                )
 
     # Unversioned package with no reliable mapping -> output opaque block, do not guess fields
     opaque_size = property_end - archive.tell()

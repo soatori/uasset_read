@@ -200,7 +200,8 @@ _LWC_TYPE_MAP: dict[str, tuple[int, int]] = {
     "Quat": (16, 32),  # FQuat4f → FQuat4d
     "Plane": (16, 32),  # FPlane4f → FPlane4d
     "Sphere": (16, 32),  # FSphere3f → FSphere3d
-    "Box": (28, 52),  # 2 * FVector + 4-byte IsValid bool (Box.h: double = 24+24+4)
+    # Box.h:45 uint8 IsValid + operator<< (Box.h:666-668) writes Min + Max + IsValid(1 byte)
+    "Box": (25, 49),  # float = 12+12+1, double = 24+24+1
     "BoxSphereBounds": (28, 56),  # 3 * FVector + float (float → double)
     "Matrix": (64, 128),  # 4 * FPlane (float → double)
     "TwoVectors": (24, 48),  # 2 * FVector (float → double)
@@ -515,6 +516,27 @@ def parse_asset_object_property(tag: PropertyTag, archive: FArchive) -> SoftObje
 # ============================================================================
 
 
+def _native_struct_elem_size(struct_type: str | None, payload_size: int, count: int) -> int:
+    """Per-element stride for native-serialized struct array elements, else 0.
+
+    PropertyArray.cpp:768-777 writes ONE inner FPropertyTag for struct arrays whose
+    Size spans the element payload; native structs (FVector/FGuid/FLinearColor/...)
+    serialize each element via operator<<, so payload_size/count is the exact stride
+    (384/16=24 for chair's VertexData, 64/4=16 for RawTeamColors). Tagged-serialized
+    structs and _TAGGED_FALLBACK_STRUCTS have no fixed stride — those elements keep
+    size=0 and the validated None-terminated tagged attempt below.
+    """
+    if not struct_type or count <= 0 or payload_size <= 0 or payload_size % count != 0:
+        return 0
+    if struct_type in _TAGGED_FALLBACK_STRUCTS:
+        return 0
+    stride = payload_size // count
+    lwc = _LWC_TYPE_MAP.get(struct_type)
+    if lwc is not None:
+        return stride if stride in lwc else 0
+    return stride if _EXPECTED_STRUCT_SIZES.get(struct_type) == stride else 0
+
+
 def parse_array_property(
     tag: PropertyTag,
     archive: FArchive,
@@ -596,16 +618,27 @@ def parse_array_property(
         # (None-terminated), NOT a per-element tag (the old per-element read
         # flattened multi-field elements).
         legacy_inner_tag = read_property_tag(archive, name_map)
+    # Derive the native element stride from the payload size (#665): the inner tag's
+    # Size covers the elements only; post-5.3 tags carry count(4) + elements inline.
+    element_size = 0
+    if inner_type == "StructProperty":
+        if legacy_inner_tag is not None:
+            element_size = _native_struct_elem_size(
+                getattr(legacy_inner_tag, "struct_type", None), int(legacy_inner_tag.size or 0), count
+            )
+        else:
+            element_size = _native_struct_elem_size(inner_type_struct, int(tag.size or 0) - 4, count)
     for i in range(count):
         if legacy_inner_tag is not None:
-            inner_tag = PropertyTag(name=f"{tag.name}[{i}]", type=legacy_inner_tag.type, size=0)
+            inner_tag = PropertyTag(name=f"{tag.name}[{i}]", type=legacy_inner_tag.type, size=element_size)
             inner_tag.struct_type = getattr(legacy_inner_tag, "struct_type", None)
         else:
-            # Create inner tag, size=0 means the parse function decides how many bytes to read
+            # size=0 means the parse function serializes by type natively, or for
+            # native struct elements the derived stride from the payload size.
             inner_tag = PropertyTag(
                 name=f"{tag.name}[{i}]",
                 type=inner_type,
-                size=0,  # Let parse function serialize by type natively
+                size=element_size,
             )
             # For StructProperty array elements, pass struct_type so parse_struct_property can hit fast-path
             if inner_type == "StructProperty":
@@ -688,12 +721,12 @@ def _try_fast_path_struct(
         )
 
     if struct_type == "Box":
-        # Box.h operator<<: Min + Max + IsValid (bool as 4-byte UBOOL, Archive.h).
-        # LWC double variant is 52 bytes; select precision by tag.size like Vector/Rotator.
-        reader = archive.read_f64 if tag.size == 52 else archive.read_f32
+        # Box.h operator<< (Box.h:666-668): Min + Max + IsValid as uint8 (Box.h:45).
+        # float = 25 bytes, double = 49 bytes; the pre-check admits exactly those sizes.
+        reader = archive.read_f64 if tag.size == 49 else archive.read_f32
         min_x, min_y, min_z = reader(), reader(), reader()
         max_x, max_y, max_z = reader(), reader(), reader()
-        b_valid = archive.read_i32() != 0
+        b_valid = archive.read_u8() != 0
         return StructValue(
             struct_type="Box",
             fields={
@@ -886,6 +919,27 @@ def _try_fast_path_struct(
     return None
 
 
+def _record_transform_size_invalid(archive: FArchive, tag, declared_struct_type: str | None, offset: int) -> None:
+    """Emit TRANSFORM_SIZE_INVALID only when a Transform value stayed opaque.
+
+    The size pre-check alone is not evidence of corruption (#665): tagged
+    FTransform payloads legitimately carry sizes such as 162/235. The diagnostic
+    fires here, after both the native fast path and the tagged attempt failed.
+    """
+    if declared_struct_type != "Transform":
+        return
+    archive._record_structured_diagnostic(
+        code="TRANSFORM_SIZE_INVALID",
+        stage="parse_properties",
+        offset=offset,
+        raw_value=tag.size,
+        size=max(getattr(tag, "size", 0) or 0, 0),
+        fallback="opaque_value",
+        reason="unexpected",
+        message=f"Transform has unexpected size {tag.size}; value kept opaque",
+    )
+
+
 def parse_struct_property(
     tag: PropertyTag,
     archive: FArchive,
@@ -914,17 +968,13 @@ def parse_struct_property(
         if declared_struct_type in _TAGGED_FALLBACK_STRUCTS:
             struct_type = None  # Skip all fast-path branches
         else:
-            if declared_struct_type == "Transform" and tag.size not in (40, 80):
-                archive._record_structured_diagnostic(
-                    code="TRANSFORM_SIZE_INVALID",
-                    stage="parse_properties",
-                    offset=archive.tell(),
-                    raw_value=tag.size,
-                    size=max(tag.size, 0),
-                    fallback="opaque_value",
-                    reason="recovered_corruption",
-                    message=f"Transform has unexpected size {tag.size}; value kept opaque",
-                )
+            # A Transform payload that is neither 40 nor 80 bytes is not corrupt by
+            # itself: UScriptStruct values of FTransform are legally written as a
+            # SerializeTaggedProperties stream (Rotation/Translation/Scale3D tags,
+            # None-terminated — byte-proven in #665 samples and read by the engine at
+            # PropertyStruct.cpp:508-511). Skip the fast path silently, exactly like
+            # _TAGGED_FALLBACK_STRUCTS; a diagnostic is recorded below only if the
+            # tagged attempt then fails and the value stays opaque.
             # For LWC types, check whether tag.size matches the other precision
             lwc_entry = _LWC_TYPE_MAP.get(struct_type)
             if lwc_entry is not None:
@@ -1106,6 +1156,7 @@ def parse_struct_property(
             archive.seek(struct_end)
         elif tag.size > 0:
             archive.seek(struct_start + tag.size)
+        _record_transform_size_invalid(archive, tag, declared_struct_type, struct_start)
         return StructValue(
             struct_type=fallback_struct_type,
             fields={},
@@ -1119,6 +1170,7 @@ def parse_struct_property(
         # diagnostics — and report opaque, byte-identical to pre-fallback.
         archive.rollback_structured_diagnostics(diag_mark)
         archive.seek(struct_start)
+        _record_transform_size_invalid(archive, tag, declared_struct_type, struct_start)
         return StructValue(
             struct_type=declared_struct_type or "UnknownStruct",
             fields={},

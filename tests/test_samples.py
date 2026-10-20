@@ -1403,9 +1403,120 @@ def test_logging_boundaries_and_cli_file_logs(capfd, caplog, tmp_path, monkeypat
     assert "asset=NM_BPSystemEvent.uasset stage=parse" in sample_logs[-1].read_text(encoding="utf-8")
 
 
+def _assert_issue_665_struct_fallbacks_decode():
+    """#665: Vector/Guid/Transform/LinearColor/Box fallbacks decode from real samples.
+
+    Classification evidence recorded in the #665 implementation commit
+    history (7bdeb3ed): Vector/Guid/LinearColor are native inline
+    array elements sized from the legacy inner tag; Box is the native 49-byte
+    double layout (Box.h uint8 IsValid); Transform payloads are legal tagged
+    streams, so a clean decode must emit no TRANSFORM_SIZE_INVALID and must not
+    downgrade parse status. Unversioned exports without schema stay honest
+    schema_required partials.
+    """
+    from uasset_read.package import parse_package_document
+
+    # Vector (16x size-0) + Box(49) + Transform(235): chair's KConvexElem was
+    # wholly opaque before; now every reflected member decodes.
+    chair = parse_package_document(str(SAMPLES / "StarterContent_SM_Chair.uasset"), depth="decode")
+    assert not [d for d in chair.diagnostics if d.code == "TRANSFORM_SIZE_INVALID"]
+    agg = chair.objects[0].properties.get("AggGeom")
+    convex = agg["fields"]["ConvexElems"][0]["fields"]
+    assert set(convex) >= {"VertexData", "IndexData", "ElemBox", "Transform"}
+    assert len(convex["VertexData"]) == 16
+    assert convex["VertexData"][0]["fields"] == {
+        "X": 40.21192169189453,
+        "Y": -40.45193099975586,
+        "Z": 8.843807220458984,
+    }
+    assert convex["ElemBox"]["fields"] == {
+        "Min": {"X": -41.94398880004883, "Y": -40.45193099975586, "Z": -0.5},
+        "Max": {"X": 40.21192169189453, "Y": 40.45073699951172, "Z": 115.34375},
+        "bIsValid": True,
+    }
+    transform = convex["Transform"]["fields"]
+    assert transform["Rotation"]["fields"] == {"X": 0.0, "Y": 0.0, "Z": 0.0, "W": 1.0}
+    assert transform["Scale3D"]["fields"] == {"X": 1.0, "Y": 1.0, "Z": 1.0}
+
+    # LinearColor (4x size-0 RawTeamColors): opaque before, real team colors now.
+    control = parse_package_document(str(SAMPLES / "B_ControlPointScoring.uasset"), depth="decode")
+    colors = control.objects[0].properties.get("RawTeamColors")["value"]
+    assert [c["fields"] for c in colors] == [
+        {"R": 0.0, "G": 0.4999780058860779, "B": 1.0, "A": 1.0},
+        {"R": 1.0, "G": 0.0, "B": 0.0, "A": 1.0},
+        {"R": 0.1784989982843399, "G": 1.0, "B": 0.0, "A": 1.0},
+        {"R": 1.0, "G": 0.0, "B": 0.9106259942054749, "A": 1.0},
+    ]
+
+    # Guid (3x size-0 + Lyra's ChildPossessables): opaque/empty-success before.
+    wood = parse_package_document(str(SAMPLES / "StarterContent_M_Wood_Walnut.uasset"), depth="decode")
+    guids = wood.objects[0].properties.get("ReferencedTextureGuids")["value"]
+    assert [g["fields"] for g in guids] == [
+        {"A": 2344919053, "B": 1291395776, "C": 844699801, "D": 500111011},
+        {"A": 201753445, "B": 1183385308, "C": 1642468248, "D": 3257498810},
+        {"A": 2742200478, "B": 1252459311, "C": 413933452, "D": 3362516772},
+    ]
+
+    # Transform (162/235): tagged payload decodes; the two CameraCut sections
+    # were parse=partial solely because of the spurious recovered_corruption
+    # diagnostic — they must now be complete with no TRANSFORM_SIZE_INVALID.
+    lyra = parse_package_document(str(SAMPLES / "Lyra_SEQ_LobbyScreen_LevelSequence.uasset"), depth="decode")
+    assert not [d for d in lyra.diagnostics if d.code == "TRANSFORM_SIZE_INVALID"]
+    for oid in ("export:46", "export:47"):
+        obj = next(o for o in lyra.objects if o.id == oid)
+        assert obj.status.parse == "complete", (oid, obj.status)
+        cut = obj.properties.get("InitialCameraCutTransform")
+        assert set(cut["fields"]) == {"Rotation", "Translation"}
+    def _find_nested(value, key):
+        if isinstance(value, dict):
+            if key in value:
+                return value[key]
+            for child in value.values():
+                found = _find_nested(child, key)
+                if found is not None:
+                    return found
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                found = _find_nested(child, key)
+                if found is not None:
+                    return found
+        elif hasattr(value, "__dataclass_fields__"):
+            for field_name in value.__dataclass_fields__:
+                found = _find_nested(getattr(value, field_name, None), key)
+                if found is not None:
+                    return found
+        return None
+
+    possessable = _find_nested(lyra.objects[9].properties, "ChildPossessables")
+    # Lyra carries two one-element ChildPossessables arrays; the first pins the decode.
+    assert [g["fields"] for g in possessable] == [
+        {"A": 1864024343, "B": 1180112327, "C": 329830544, "D": 734810239},
+    ]
+
+    # Unversioned boundary: without mappings every export stays schema_required
+    # partial; with the fixture usmap the class export decodes via its own
+    # schema while exports whose schemas the usmap lacks stay honest partials.
+    unversioned = parse_package_document(str(SAMPLES / "BP_UnversionedTest.uasset"), depth="decode")
+    assert all(o.status.parse == "partial" for o in unversioned.objects)
+    unmapped_failed = [d for d in unversioned.diagnostics if d.code == "PROPERTY_VALUE_READ_FAILED"]
+    assert len(unmapped_failed) == 5 and all(d.reason == "schema_required" for d in unmapped_failed)
+    mapped = parse_package_document(
+        str(SAMPLES / "BP_UnversionedTest.uasset"),
+        depth="decode",
+        mappings_path=str(SAMPLES / "UnversionedTest.usmap"),
+    )
+    by_id = {o.id: o for o in mapped.objects}
+    assert by_id["export:0"].status.parse == "complete" and by_id["export:0"].properties
+    assert by_id["export:1"].status.parse == "complete"
+    mapped_failed = [d for d in mapped.diagnostics if d.code == "PROPERTY_VALUE_READ_FAILED"]
+    assert len(mapped_failed) == 3 and all(d.reason == "schema_required" for d in mapped_failed)
+    assert all(by_id[i].status.parse == "partial" for i in ("export:2", "export:3", "export:4"))
+
+
 def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
     _assert_data_table_row_values_decode_tagged_scalars()
     _assert_data_table_projection_stays_partial_when_any_cell_is_opaque()
+    _assert_issue_665_struct_fallbacks_decode()
 
     import logging
     import struct
