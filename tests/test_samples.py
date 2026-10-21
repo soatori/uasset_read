@@ -986,6 +986,68 @@ def test_real_sample_proves_claimed_capability():
             # would mean an anchor or row-walk drift, which the reader discloses instead.
             table_cov = next(c for c in obj.coverage if c.feature == "handler.DataTableHandler")
             assert table_cov.status == "present", f"{sample}:{class_name} table payload not fully decoded"
+            # Keys, interpolation, extrapolation and default value must be
+            # translated (not merely decoded) on all three public surfaces.
+            from uasset_read.package import parse_package_document
+            from uasset_read.projection import project_document
+
+            # Row 0's keys/time/value are pinned from the real fixture bytes so a
+            # stride or FName-endianness regression cannot silently pass as
+            # "translated".
+            expectations = {
+                "TestSimpleCurveTable.uasset": {
+                    "key_count": 2,
+                    "keys0": {"time": 0.0, "value": 10.0},
+                    "interp_mode": "ERichCurveInterpMode::RCIM_Linear",
+                },
+                "TestRichCurveTable.uasset": {
+                    "key_count": 2,
+                    "keys0": {
+                        "time": 0.0,
+                        "value": 10.0,
+                        "interp_mode": "RCIM_Cubic",
+                        "tangent_mode": "RCTM_Auto",
+                        "tangent_weight_mode": "RCTWM_WeightedNone",
+                        "arrive_tangent": 0.0,
+                        "arrive_tangent_weight": 0.0,
+                        "leave_tangent": 0.0,
+                        "leave_tangent_weight": 0.0,
+                    },
+                    "interp_mode": None,
+                },
+                "testrCurveTable.uasset": {
+                    "key_count": 4,
+                    "keys0": {"time": 1.0, "value": 0.0},
+                    "interp_mode": "ERichCurveInterpMode::RCIM_Linear",
+                },
+            }[sample]
+            projected = project_document(parse_package_document(SAMPLES / sample, depth="decode"), mode="normal")
+            curve = next(p for p in projected["projections"] if p["kind"] == "curve_table")
+            csv_proj = next(p for p in projected["projections"] if p["kind"] == "curve_table_csv")
+            json_proj = next(p for p in projected["projections"] if p["kind"] == "curve_table_json")
+            for surface in (curve, csv_proj, json_proj):
+                assert surface["status"] == "translated", f"{sample}:{surface['kind']}"
+                assert surface["completeness"] == "complete", f"{sample}:{surface['kind']}"
+            assert curve["content"]["mode"] == sem["curve_table_mode"], f"{sample}:{class_name}"
+            first = curve["content"]["curves"][0]
+            assert first["name"] == sem["row_names"][0], f"{sample}:{class_name}"
+            assert first["interp_mode"] == expectations["interp_mode"], f"{sample}:{class_name}"
+            assert first["pre_infinity_extrapolation"] == "ERichCurveExtrapolation::RCCE_Constant", f"{sample}"
+            assert first["post_infinity_extrapolation"] == "ERichCurveExtrapolation::RCCE_Constant", f"{sample}"
+            assert first["default_value"] == 3.4028234663852886e38, f"{sample}:{class_name}"
+            assert len(first["keys"]) == expectations["key_count"], f"{sample}:{class_name}"
+            assert first["keys"][0] == {
+                "kind": "struct",
+                "struct_type": "",
+                "fields": expectations["keys0"],
+            }, f"{sample}:{class_name}"
+            assert json_proj["content"] == curve["content"], f"{sample}: json/curve content diverge"
+            csv_lines = csv_proj["content"].splitlines()
+            assert len(csv_lines) == 1 + sem["row_count"], f"{sample}: csv row count"
+            assert csv_lines[0].startswith("name,key_count,interp_mode,"), f"{sample}: csv header"
+            assert csv_lines[1].startswith(
+                f"{sem['row_names'][0]},{expectations['key_count']},"
+            ), f"{sample}: csv first row key_count/name"
         elif class_name == "Skeleton":
             assert obj.semantic["bone_count"] == len(obj.semantic["bones"]) > 0, f"{sample}:{class_name}"
             # ALS_Mannequin_Skeleton's BoneTree is a UE4-era struct array: ONE inner
@@ -2688,6 +2750,46 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     assert kept[0]["ref_range"] == (4, 8) and kept[1]["ref_range"] == (8, 32)
     skipped = read_pin_array(ByteArchive(payload), [], [])
     assert len(skipped) == 1 and "null" not in skipped[0]
+
+    # CurveTable unsupported-variant rejection: an unknown ECurveTableMode
+    # never decodes guessed key bytes, and the keyless row skeleton it leaves
+    # keeps every curve projection explicitly unavailable (#661 review).
+    from uasset_read.models.document import PackageDocument
+    from uasset_read.models.object_model import ObjectRecord
+    from uasset_read.models.properties import PropertyTag
+    from uasset_read.parsers.legacy_reader import _read_curve_tag_value
+    from uasset_read.projections.data_exports import CurveTableProjector, _curve_table_payload
+
+    # Well-formed 1x27-byte rich key payload: only the unsupported mode may block it.
+    rich_ok = struct.pack("<i", 1) + b"\x00" * 27
+    keys_tag = PropertyTag(name="Keys", type="ArrayProperty", size=len(rich_ok), value_end_offset=len(rich_ok))
+    decoded_ok = _read_curve_tag_value(keys_tag, ByteArchive(rich_ok), rich_ok, ["None"], "RichCurves")
+    assert isinstance(decoded_ok, list) and len(decoded_ok) == 1
+    for unsupported in ("CompressedCurves", "Unknown(3)"):
+        assert _read_curve_tag_value(keys_tag, ByteArchive(rich_ok), rich_ok, ["None"], unsupported) is None, (
+            unsupported
+        )
+    # count=2 claims 54 key bytes but only 27 are present: stride/count mismatch.
+    rich_bad = struct.pack("<i", 2) + b"\x00" * 27
+    bad_tag = PropertyTag(name="Keys", type="ArrayProperty", size=len(rich_bad), value_end_offset=len(rich_bad))
+    assert _read_curve_tag_value(bad_tag, ByteArchive(rich_bad), rich_bad, ["None"], "RichCurves") is None
+
+    keyless = {
+        "kind": "curve_table",
+        "curve_table_mode": "Unknown(3)",
+        "row_count": 1,
+        "row_names": ["RowA"],
+        # Exactly what a rejected row keeps: type/size descriptor, no value.
+        "rows": [{"name": "RowA", "fields": {"Keys": {"type": "ArrayProperty", "size": len(rich_ok)}}}],
+    }
+    assert _curve_table_payload(keyless) is None
+    obj = ObjectRecord("export:0", 0, "RowA", class_name="CurveTable", semantic=keyless)
+    projected = CurveTableProjector().project(PackageDocument(objects=[obj]), obj)
+    assert projected and all(
+        record.status == "unavailable"
+        and [d.code for d in record.diagnostics] == ["curve_table_keys_unavailable"]
+        for record in projected
+    )
 
     with pytest.MonkeyPatch.context() as mp:
         _check_file_source_and_composite_source_reuse_cached_sizes(tmp_path, mp)

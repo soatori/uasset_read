@@ -58,8 +58,9 @@ from ..models.object_model import (
     ObjectStatus,
     Relation,
 )
-from ..models.properties import PropertyBag
+from ..models.properties import PropertyBag, PropertyTag
 from ..versioning import VersionContext, build_version_context, ftext_dev_notes_enabled, require_version_context
+from .property_types import make_enum_value
 
 
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:
@@ -2204,6 +2205,106 @@ def _read_soft_object_paths(
     return paths
 
 
+# Canonical value names for the per-key byte enums written by FRichCurveKey's
+# manual serializer (RichCurve.cpp:174-182): three enum bytes then six floats,
+# 27 bytes total. Curve-level enums (InterpMode, Pre/PostInfinityExtrap) are
+# stored as an FName and resolve through the name map, not these tables.
+_CURVE_INTERP_MODES = {
+    0: "RCIM_Linear",
+    1: "RCIM_Constant",
+    2: "RCIM_Cubic",
+    3: "RCIM_None",
+}
+_CURVE_TANGENT_MODES = {
+    0: "RCTM_Auto",
+    1: "RCTM_User",
+    2: "RCTM_Break",
+    3: "RCTM_None",
+    4: "RCTM_SmartAuto",
+}
+_CURVE_TANGENT_WEIGHT_MODES = {
+    0: "RCTWM_WeightedNone",
+    1: "RCTWM_WeightedArrive",
+    2: "RCTWM_WeightedLeave",
+    3: "RCTWM_WeightedBoth",
+}
+# Per-key native stride in bytes (RichCurve.cpp:163 FRichCurveKey::Serialize /
+# SimpleCurve.cpp:10 FSimpleCurveKey::Serialize).
+_CURVE_KEY_STRIDE = {"RichCurves": 27, "SimpleCurves": 8}
+
+
+def _read_curve_tag_value(
+    tag: PropertyTag,
+    payload: ByteArchive,
+    blob: bytes,
+    name_map: list[str],
+    mode: str | None,
+) -> Any:
+    """Decode one FSimpleCurve/FRichCurve row tag value into a semantic value.
+
+    Curve rows are native structs (RichCurve.cpp:163 FRichCurveKey::Serialize,
+    SimpleCurve.cpp:10 FSimpleCurveKey::Serialize), not the tagged DataTable
+    stream, so they cannot reuse ``parse_property_value``. Keys carry their own
+    count header and a fixed per-key stride; the enum containers (InterpMode,
+    Pre/PostInfinityExtrap) hold an FName into the name map. Anything that does
+    not match a known variant returns ``None`` and the caller records only the
+    type/size descriptor — never a guessed layout.
+    """
+    start = payload.tell()
+    value_end = tag.value_end_offset
+    if value_end is None:
+        return None
+    if tag.name == "Keys" and mode in _CURVE_KEY_STRIDE:
+        stride = _CURVE_KEY_STRIDE[mode]
+        if start + 4 > value_end:
+            return None
+        (count,) = struct.unpack_from("<i", blob, start)
+        if count < 0 or start + 4 + count * stride != value_end:
+            return None
+        keys: list[dict[str, Any]] = []
+        pos = start + 4
+        for _ in range(count):
+            if mode == "RichCurves":
+                interp, tangent, weight = struct.unpack_from("<BBB", blob, pos)
+                time, value, arr_tan, arr_w, leave_tan, leave_w = struct.unpack_from(
+                    "<ffffff", blob, pos + 3
+                )
+                keys.append(
+                    {
+                        "time": time,
+                        "value": value,
+                        "interp_mode": _CURVE_INTERP_MODES.get(interp, f"Unknown({interp})"),
+                        "tangent_mode": _CURVE_TANGENT_MODES.get(tangent, f"Unknown({tangent})"),
+                        "tangent_weight_mode": _CURVE_TANGENT_WEIGHT_MODES.get(weight, f"Unknown({weight})"),
+                        "arrive_tangent": arr_tan,
+                        "arrive_tangent_weight": arr_w,
+                        "leave_tangent": leave_tan,
+                        "leave_tangent_weight": leave_w,
+                    }
+                )
+            else:
+                time, value = struct.unpack_from("<ff", blob, pos)
+                keys.append({"time": time, "value": value})
+            pos += stride
+        payload.seek(value_end)
+        return keys
+    if tag.type == "ByteProperty" and tag.enum_type and tag.size == 8:
+        # UE stores the enum in an 8-byte FName container; decode via the same
+        # canonical little-endian name-map rule as FArchive.read_name.
+        index = int.from_bytes(blob[start : start + 4], "little")
+        number = int.from_bytes(blob[start + 4 : start + 8], "little")
+        if not 0 <= index < len(name_map):
+            return None
+        value_name = name_map[index]
+        payload.seek(value_end)
+        return make_enum_value(tag.enum_type, f"{value_name}_{number - 1}" if number > 0 else value_name)
+    if tag.type == "FloatProperty" and value_end - start == 4:
+        (value,) = struct.unpack_from("<f", blob, start)
+        payload.seek(value_end)
+        return value
+    return None
+
+
 def _read_table_rows(
     archive: PackageArchive,
     serial_end: int,
@@ -2264,7 +2365,8 @@ def _read_table_rows(
     names: list[str] = []
     rows_out: list[dict[str, Any]] = []
     row_names_valid = True
-    payload = ByteArchive(blob[header:])
+    payload_blob = blob[header:]
+    payload = ByteArchive(payload_blob)
     # 方案甲 (G1): same mounted VersionContext instance as the source archive.
     payload.version_context = archive.version_context
     limit = len(blob) - header
@@ -2324,7 +2426,25 @@ def _read_table_rows(
                 payload.seek(header_pos)
                 break
             row_fields[t.name] = {"type": t.type, "size": int(getattr(t, "size", 0) or 0)}
-            if decode_values:
+            if curve_table:
+                # Curve rows are native structs (RichCurve.cpp:163 FRichCurveKey::
+                # Serialize / SimpleCurve.cpp:10 FSimpleCurveKey::Serialize); they
+                # carry no DataTable tagged-value stream, so they use the dedicated
+                # decoder. An unknown variant keeps only the type/size descriptor.
+                previous_range = payload.set_read_range((payload.tell(), t.value_end_offset))
+                try:
+                    value = _read_curve_tag_value(
+                        t, payload, payload_blob, name_map, result["curve_table_mode"]
+                    )
+                except (ParseError, struct.error):
+                    value = None
+                finally:
+                    payload.set_read_range(previous_range)
+                if value is not None:
+                    row_fields[t.name]["value"] = value
+                else:
+                    payload.seek(t.value_end_offset)
+            elif decode_values:
                 # Cursor restoration alone cannot stop reads into the next tag.
                 previous_range = payload.set_read_range((payload.tell(), t.value_end_offset))
                 try:

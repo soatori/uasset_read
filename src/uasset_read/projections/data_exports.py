@@ -150,6 +150,8 @@ def _explicit_curve_keys(row: Any) -> list[dict[str, Any]] | None:
     keys_raw = fields.get("Keys")
     if isinstance(keys_raw, dict):
         inner = keys_raw.get("value", keys_raw.get("keys"))
+        if isinstance(inner, dict) and inner.get("kind") == "array":
+            inner = inner.get("elements")
         if isinstance(inner, list) and inner:
             return [k for k in inner if isinstance(k, dict)]
         return None
@@ -158,6 +160,17 @@ def _explicit_curve_keys(row: Any) -> list[dict[str, Any]] | None:
     if isinstance(row.get("keys"), list) and row["keys"]:
         return [k for k in row["keys"] if isinstance(k, dict)]
     return None
+
+
+def _curve_scalar(fields: dict[str, Any], name: str) -> Any:
+    """Return a decoded scalar (enum/float) for one curve-level field, else None."""
+    field = fields.get(name)
+    if not isinstance(field, dict) or "value" not in field:
+        return None
+    value = field["value"]
+    if isinstance(value, dict) and value.get("kind") == "enum":
+        return value.get("value")
+    return value
 
 
 def _curve_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], ProjectionStatus, float | None] | None:
@@ -182,6 +195,10 @@ def _curve_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], Proj
                 "name": str(row.get("name") or ""),
                 "field_types": {str(k): (v.get("type") if isinstance(v, dict) else None) for k, v in fields.items()},
                 "keys": keys or [],
+                "interp_mode": _curve_scalar(fields, "InterpMode"),
+                "pre_infinity_extrapolation": _curve_scalar(fields, "PreInfinityExtrap"),
+                "post_infinity_extrapolation": _curve_scalar(fields, "PostInfinityExtrap"),
+                "default_value": _curve_scalar(fields, "DefaultValue"),
             }
         )
     if not curves:
@@ -201,7 +218,7 @@ def _curve_table_payload(semantic: dict[str, Any]) -> tuple[dict[str, Any], Proj
 def _csv_from_curves(payload: dict[str, Any]) -> str:
     buf = StringIO()
     writer = csv.writer(buf, lineterminator="\n")
-    writer.writerow(["name", "key_count", "field_types", "keys"])
+    writer.writerow(["name", "key_count", "interp_mode", "pre_infinity_extrapolation", "post_infinity_extrapolation", "default_value", "field_types", "keys"])
     for curve in payload.get("curves") or []:
         keys = curve.get("keys") if isinstance(curve, dict) else None
         keys = keys if isinstance(keys, list) else []
@@ -209,6 +226,10 @@ def _csv_from_curves(payload: dict[str, Any]) -> str:
             [
                 _csv_cell(curve.get("name") if isinstance(curve, dict) else None),
                 _csv_cell(len(keys)),
+                _csv_cell(curve.get("interp_mode") if isinstance(curve, dict) else None),
+                _csv_cell(curve.get("pre_infinity_extrapolation") if isinstance(curve, dict) else None),
+                _csv_cell(curve.get("post_infinity_extrapolation") if isinstance(curve, dict) else None),
+                _csv_cell(curve.get("default_value") if isinstance(curve, dict) else None),
                 _csv_cell(curve.get("field_types") if isinstance(curve, dict) else None),
                 _csv_cell(keys),
             ]
