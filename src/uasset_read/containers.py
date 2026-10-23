@@ -133,9 +133,9 @@ def _inspect_pak(path: Path) -> ContainerReport:
     if sibling_toc.is_file() and _has_toc_magic(sibling_toc):
         # Container context: a same-stem IoStore TOC is co-located, so this
         # pak belongs to an IoStore container set (ORIGIN-issue-625) and is
-        # classified as the wrapper. Traditional FPak entry extraction is
-        # refused deliberately — no PakEntrySource exists without a
-        # fixture-validated task.
+        # classified as the wrapper. Traditional FPak entry extraction lives
+        # in uasset_read.parsers.pak_reader (#651) but is deliberately not
+        # run from this classifier, so the capability stays unavailable here.
         return ContainerReport(
             kind="iostore_wrapper",
             path=str(path),
@@ -160,7 +160,7 @@ def _inspect_pak(path: Path) -> ContainerReport:
         return _unknown(path, "CONTAINER_UNREADABLE", f"{path.name}: {exc}")
     if _FPAK_MAGIC in tail:
         # Structural FPak footer without IoStore context: classified honestly,
-        # but entry extraction still has no validated implementation.
+        # but this classifier still does not run the pak_reader entry walk.
         return ContainerReport(
             kind="traditional_pak",
             path=str(path),
@@ -170,7 +170,8 @@ def _inspect_pak(path: Path) -> ContainerReport:
             diagnostics=[
                 _diag(
                     "TRADITIONAL_PAK_ENTRIES_UNAVAILABLE",
-                    "FPak footer present but PakEntrySource extraction is not implemented",
+                    "FPak footer present; entry extraction exists in parsers/pak_reader.py "
+                    "but is not wired into container inspection",
                 )
             ],
         )
