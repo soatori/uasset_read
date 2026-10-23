@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-ITEM_BUDGET = 125
+ITEM_BUDGET = 152
 
 
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:

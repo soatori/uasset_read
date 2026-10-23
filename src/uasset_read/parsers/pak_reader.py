@@ -13,25 +13,40 @@ IoStore TOC carries no per-blob hash.
 Layout authority (UE 5.8 sources, paths relative to the engine root):
 
 - ``Engine/Source/Runtime/PakFile/Public/IPlatformFilePak.h:147-366``
-  ``FPakInfo``: magic ``PakFile_Magic = 0x5A6F12E1``; version enum 1-12
-  (``PakFile_Version_FrozenIndex`` = 9 is unsupported, UE fatals on it);
+  ``FPakInfo``: magic ``PakFile_Magic = 0x5A6F12E1``; version enum 1-12;
   serialized order is EncryptionKeyGuid (v7+), bEncryptedIndex, Magic,
-  Version, IndexOffset, IndexSize, IndexHash, [bIndexIsFrozen, v9 only],
-  then for v8+ five 32-byte compression method slots.
+  Version, IndexOffset, IndexSize, IndexHash, [bIndexIsFrozen, v9 only —
+  UE fatals only when the flag is *set*; a non-frozen v9 pak parses],
+  then for v8+ five 32-byte compression method slots. Serialized sizes
+  come from ``FPakInfo::GetSerializedSize`` (:219-226).
 - same header ``FPakEntry`` (:405) / ``FPakCompressedBlock`` (:368):
-  Offset, Size, UncompressedSize, [Timestamp, v1 only], Hash[20],
-  CompressionMethodIndex, [CompressionBlocks int32 count + N x 2 int64,
-  only when method != 0 and v3+], Flags, CompressionBlockSize (v3+).
+  ``FPakEntry::Serialize`` (:521-570) writes Offset, Size,
+  UncompressedSize, CompressionMethodIndex (legacy int32 ECompressionFlags
+  below v8, uint32 index at v8+), [Timestamp, v1 only], Hash[20],
+  [CompressionBlocks int32 count + N x 2 int64 then Flags then
+  CompressionBlockSize, only at v3+ and blocks only when method != 0].
   ``Flag_Encrypted = 0x01``, ``Flag_Deleted = 0x02``.
+- ``Engine/Source/Runtime/Core/Public/Misc/CompressionFlags.h:15-22``
+  legacy compression flags: ZLIB_DEPRECATED=0x01, GZIP_DEPRECATED=0x02,
+  Custom_DEPRECATED=0x04; FPakEntry::Serialize maps them onto method
+  table slots 1/2/3 and fatals on anything else.
 - same header ``FPakEntryLocation`` (:609): int32; 0..0x7FFFFFFE is an offset
   into EncodedPakEntries, -1..-0x7FFFFFFF is a Files-list index
-  (``-(Index + 1)``), 0x7FFFFFFF and 0x80000000 are invalid.
+  (``-(Index + 1)``), 0x7FFFFFFF and 0x80000000 are invalid — ``GetPakEntry``
+  resolves an invalid location to a delete record (``FoundDeleted``,
+  PakFile.cpp:1384-1428), not an error.
 - ``Engine/Source/Runtime/PakFile/Private/PakFile.cpp:272-345``
   ``FPakFile::Initialize`` probes footer serialized sizes per version from EOF.
 - ``PakFile.cpp:404-700`` ``LoadIndexInternal``: primary index is MountPoint,
   NumEntries, PathHashSeed, path-hash span, full-directory span,
   EncodedPakEntries, then the non-encodable ``FPakEntry`` list; each secondary
-  index is hashed (and optionally decrypted) individually.
+  index is hashed (and optionally decrypted) individually. The
+  bHasPathHashIndex / bHasFullDirectoryIndex flags serialize as 4-byte UBOOLs
+  (``Ar << bool`` — ``FArchive::SerializeBool``, Core
+  ``Serialization/Archive.h:1534``; writer side FSecondaryIndexWriter,
+  PakFileUtilities.cpp:2029), and the writer sets NumEntries to the full
+  directory record count (PakFileUtilities.cpp:3185), so a mismatch is a
+  corrupt index.
 - ``PakFile.cpp:700-779`` ``LoadIndexInternal_DirectoryIndex``: directory map;
   file names serialize as FUtf8String from ``PakFile_Version_Utf8PakDirectory``
   (12), FString before it. Full paths are ``MountPoint + DirectoryName + FileName``.
@@ -42,10 +57,13 @@ Layout authority (UE 5.8 sources, paths relative to the engine root):
 - ``Engine/Source/Developer/PakFileUtilities/Private/PakFileUtilities.cpp:3180-3255``
   the on-disk write order of primary + secondary index blobs and the footer.
 
-Scope: index mechanics only. No redistributable ``.pak`` fixture exists yet
-(#625 closed without one), so the tests are synthetic bytes and make no
-real-asset support claims. This module is a standalone reader capability: it
-is not wired into the public package document output or projection.
+Scope: index mechanics only. Two redistributable traditional FPak fixtures
+are tracked in ``tests/samples/containers/`` (``ParserFixturesLegacy-
+Windows.pak`` and ``MyProject-Windows.pak``, registered in the samples
+manifest under issue #625); the real-fixture tests parse their indexes.
+Payload claims stay limited to plain uncompressed bytes. This module is a
+standalone reader capability: it is not wired into the public package
+document output or projection.
 """
 
 from __future__ import annotations
@@ -66,7 +84,7 @@ VERSION_COMPRESSION_ENCRYPTION = 3
 VERSION_INDEX_ENCRYPTION = 4
 VERSION_ENCRYPTION_KEY_GUID = 7
 VERSION_FNAME_COMPRESSION_METHOD = 8
-VERSION_FROZEN_INDEX = 9  # unsupported: UE fatals, "Regenerate Paks"
+VERSION_FROZEN_INDEX = 9  # UE fatals only when bIndexIsFrozen is set; non-frozen v9 parses
 VERSION_PATH_HASH_INDEX = 10
 VERSION_UTF8_PAK_DIRECTORY = 12
 VERSION_LATEST = VERSION_UTF8_PAK_DIRECTORY
@@ -74,11 +92,18 @@ VERSION_LATEST = VERSION_UTF8_PAK_DIRECTORY
 _FLAG_ENCRYPTED = 0x01  # FPakEntry::Flag_Encrypted
 _FLAG_DELETED = 0x02  # FPakEntry::Flag_Deleted
 
+# ECompressionFlags legacy values FPakEntry::Serialize maps below v8
+# (Core/Public/Misc/CompressionFlags.h:15-22).
+_COMPRESS_ZLIB_LEGACY = 0x01  # COMPRESS_ZLIB_DEPRECATED -> method slot 1
+_COMPRESS_GZIP_LEGACY = 0x02  # COMPRESS_GZIP_DEPRECATED -> method slot 2
+_COMPRESS_CUSTOM_LEGACY = 0x04  # COMPRESS_Custom_DEPRECATED -> method slot 3
+
 _COMPRESSION_METHOD_NAME_LEN = 32  # FPakInfo::CompressionMethodNameLen
 _MAX_COMPRESSION_METHODS = 5  # FPakInfo::MaxNumCompressionMethods
 _MAX_INDEX_BYTES = 512 * 1024 * 1024
 _MAX_ENTRIES = 10_000_000
 _MAX_STRING_CHARS = 65536
+_MAX_ENTRY_BYTES = 1 << 40  # sanity ceiling for one entry's claimed sizes (1 TiB)
 _LOCATION_INVALID = -(1 << 31)  # FPakEntryLocation::Invalid (MIN_int32)
 _LOCATION_MAX_INDEX = (1 << 31) - 2  # FPakEntryLocation::MaxIndex
 
@@ -120,16 +145,20 @@ class PakEntry:
 
 @dataclass(frozen=True)
 class PakIndex:
-    """Parsed pak footer + index. ``files`` lists non-deleted entries."""
+    """Parsed pak footer + index. ``files`` lists non-deleted entries.
+
+    ``deleted_count`` counts delete records: entries with ``Flag_Deleted``
+    and directory records whose ``FPakEntryLocation`` is invalid (both
+    resolve to FoundDeleted in UE's ``GetPakEntry``).
+    """
 
     path: str
     version: int
     mount_point: str
     num_entries: int
+    deleted_count: int
     index_offset: int
     index_size: int
-    index_encrypted: bool
-    encryption_key_guid: str
     compression_methods: tuple[str, ...]
     files: tuple[PakEntry, ...]
 
@@ -242,10 +271,11 @@ def _footer_size(version: int) -> int:
 
 def _entry_header_size(version: int, method_index: int, block_count: int) -> int:
     """FPakEntry::GetSerializedSize for one version (IPlatformFilePak.h:443-468)."""
-    size = 8 + 8 + 8 + 20  # Offset, Size, UncompressedSize, Hash
-    size += 4  # CompressionMethodIndex (int32 legacy, uint32 current)
+    size = 8 + 8 + 8  # Offset, Size, UncompressedSize
+    size += 4  # CompressionMethodIndex (int32 legacy flags, uint32 current)
     if version <= VERSION_INITIAL:
         size += 8  # Timestamp (FDateTime)
+    size += 20  # Hash
     if version >= VERSION_COMPRESSION_ENCRYPTION:
         size += 1 + 4  # Flags, CompressionBlockSize
         if method_index != 0:
@@ -274,11 +304,14 @@ def _read_footer(source: FileSource, path: Path, file_size: int) -> dict:
         parsed_version = cur.i32()
         if parsed_version != version:
             continue
-        if parsed_version == VERSION_FROZEN_INDEX:
-            raise PakError(f"{path.name}: frozen pak index (version 9) is unsupported; regenerate the pak")
         index_offset = cur.i64()
         index_size = cur.i64()
         index_hash = cur.raw(20)
+        if parsed_version == VERSION_FROZEN_INDEX:
+            # bIndexIsFrozen: one byte in the GetSerializedSize window
+            # (IPlatformFilePak.h:224); UE fatals only when it is set.
+            if cur.u8() != 0:
+                raise PakError(f"{path.name}: frozen pak index (version 9) is unsupported; regenerate the pak")
         if index_offset < 0 or index_size < 0 or index_offset + index_size > file_size:
             raise PakError(
                 f"{path.name}: index span {index_offset}+{index_size} escapes the {file_size}-byte file"
@@ -337,7 +370,22 @@ def _make_entry(
     flags: int,
     block_count: int,
     methods: tuple[str, ...],
+    file_size: int,
 ) -> PakEntry:
+    header = _entry_header_size(version, method, block_count)
+    # Delete records carry no payload (Offset may be -1), so geometry is only
+    # meaningful for live entries; read_at refuses deleted entries regardless.
+    if not flags & _FLAG_DELETED:
+        if offset < 0 or size < 0 or uncompressed < 0:
+            raise PakError(
+                f"{path}: negative entry geometry offset={offset} size={size} uncompressed_size={uncompressed}"
+            )
+        if size > _MAX_ENTRY_BYTES or uncompressed > _MAX_ENTRY_BYTES:
+            raise PakError(
+                f"{path}: entry sizes escape sane limits (size={size} uncompressed_size={uncompressed})"
+            )
+        if offset + header + size > file_size:
+            raise PakError(f"{path}: payload span {offset}+{header}+{size} escapes the {file_size}-byte file")
     return PakEntry(
         path=path,
         offset=offset,
@@ -347,32 +395,35 @@ def _make_entry(
         compression_method=methods[method] if method != 0 else None,
         compression_block_size=block_size,
         flags=flags,
-        payload_offset=offset + _entry_header_size(version, method, block_count),
+        payload_offset=offset + header,
     )
 
 
-def _parse_entry(cur: _Cursor, version: int, methods: tuple[str, ...], path: str) -> PakEntry:
-    """Parse one serialized ``FPakEntry`` (``FPakEntry::Serialize``)."""
+def _parse_entry(cur: _Cursor, version: int, methods: tuple[str, ...], path: str, file_size: int) -> PakEntry:
+    """Parse one serialized ``FPakEntry`` (``FPakEntry::Serialize``, IPlatformFilePak.h:521)."""
     offset = cur.i64()
     size = cur.i64()
     uncompressed = cur.i64()
-    if version <= VERSION_INITIAL:
-        cur.i64()  # Timestamp (FDateTime)
-    cur.raw(20)  # Hash: write-only for this read-only surface
     if version < VERSION_FNAME_COMPRESSION_METHOD:
         legacy_method = cur.i32()
         if legacy_method == 0:
             method = 0
-        elif legacy_method & 0x02:  # COMPRESS_ZLIB_DEPRECATED (FPakEntry::Serialize legacy branch)
+        elif legacy_method & _COMPRESS_ZLIB_LEGACY:
             method = 1
-        elif legacy_method & 0x04:  # COMPRESS_GZIP_DEPRECATED
+        elif legacy_method & _COMPRESS_GZIP_LEGACY:
             method = 2
-        else:
+        elif legacy_method & _COMPRESS_CUSTOM_LEGACY:
             method = 3
+        else:
+            # UE Fatals on unknown legacy compression types (FPakEntry::Serialize).
+            raise PakError(f"{cur._label}: unknown legacy compression flags {legacy_method:#010x}")
     else:
         method = cur.u32()
     if method >= len(methods):
         raise PakError(f"{cur._label}: compression method index {method} escapes the method table")
+    if version <= VERSION_INITIAL:
+        cur.i64()  # Timestamp (FDateTime)
+    cur.raw(20)  # Hash: write-only for this read-only surface
     block_count = 0
     block_size = 0
     flags = 0
@@ -384,11 +435,11 @@ def _parse_entry(cur: _Cursor, version: int, methods: tuple[str, ...], path: str
                 cur.i64()  # CompressedEnd
         flags = cur.u8()
         block_size = cur.u32()
-    return _make_entry(path, version, offset, size, uncompressed, method, block_size, flags, block_count, methods)
+    return _make_entry(path, version, offset, size, uncompressed, method, block_size, flags, block_count, methods, file_size)
 
 
 def _decode_encoded_entry(
-    cur: _Cursor, version: int, methods: tuple[str, ...], path: str
+    cur: _Cursor, version: int, methods: tuple[str, ...], path: str, file_size: int
 ) -> PakEntry:
     """Decode one bit-packed ``EncodedPakEntries`` record (``FPakFile::DecodePakEntry``)."""
     value = cur.u32()
@@ -412,7 +463,7 @@ def _decode_encoded_entry(
             cur.u32()  # per-block stored size
     if block_count == 1:
         block_size = uncompressed  # DecodePakEntry: single block uses UncompressedSize
-    return _make_entry(path, version, offset, size, uncompressed, method, block_size, flags, block_count, methods)
+    return _make_entry(path, version, offset, size, uncompressed, method, block_size, flags, block_count, methods, file_size)
 
 
 def _parse_directory(
@@ -422,10 +473,17 @@ def _parse_directory(
     encoded: bytes,
     files_list: list[PakEntry],
     methods: tuple[str, ...],
-) -> tuple[PakEntry, ...]:
-    """Walk a serialized ``FDirectoryIndex`` (``LoadIndexInternal_DirectoryIndex``)."""
+    file_size: int,
+) -> tuple[tuple[PakEntry, ...], int]:
+    """Walk a serialized ``FDirectoryIndex`` (``LoadIndexInternal_DirectoryIndex``).
+
+    Returns the live entries plus the number of directory records walked;
+    an invalid ``FPakEntryLocation`` is a delete record (``GetPakEntry``
+    resolves it to FoundDeleted), not an error.
+    """
     out: list[PakEntry] = []
     seen: set[str] = set()
+    records = 0
     for _ in range(cur.count("directory")):
         directory = cur.fstring().replace("\\", "/")
         for _ in range(cur.count("file")):
@@ -434,11 +492,17 @@ def _parse_directory(
             else:
                 name = cur.fstring()
             location = cur.i32()
-            if location == _LOCATION_INVALID or location == _LOCATION_MAX_INDEX + 1:
-                raise PakError(f"{cur._label}: invalid FPakEntryLocation {location} for {directory}{name}")
+            records += 1
             full = f"{mount}{directory}{name}"
+            if full in seen:
+                raise PakError(f"{cur._label}: duplicate index path {full!r}")
+            seen.add(full)
+            if location == _LOCATION_INVALID or location == _LOCATION_MAX_INDEX + 1:
+                continue  # delete record: listed nowhere, counted in deleted_count
             if location >= 0:
-                entry = _decode_encoded_entry(_Cursor(encoded, "EncodedPakEntries", location), version, methods, full)
+                entry = _decode_encoded_entry(
+                    _Cursor(encoded, "EncodedPakEntries", location), version, methods, full, file_size
+                )
             else:
                 list_index = -(location + 1)
                 if not 0 <= list_index < len(files_list):
@@ -446,12 +510,9 @@ def _parse_directory(
                 # Reuse the parsed entry as-is: its payload_offset already accounts
                 # for the compression-block array in the header.
                 entry = replace(files_list[list_index], path=full)
-            if entry.path in seen:
-                raise PakError(f"{cur._label}: duplicate index path {entry.path!r}")
-            seen.add(entry.path)
             if not entry.deleted:
                 out.append(entry)
-    return tuple(out)
+    return tuple(out), records
 
 
 def read_pak_index(path: str | Path) -> PakIndex:
@@ -481,17 +542,26 @@ def read_pak_index(path: str | Path) -> PakIndex:
         mount = cur.fstring().replace("\\", "/")
         num_entries = cur.count("entry")
         cur.u64()  # PathHashSeed: needed for hash lookup, not for directory listing
-        has_path_hash = cur.u8() != 0
+        # FArchive serializes bool as a 4-byte UBOOL (Archive.h:1534), both on
+        # the writer side (PakFileUtilities.cpp:2029) and the loader side.
+        has_path_hash = cur.u32() != 0
         if has_path_hash:
-            cur.i64()  # PathHashIndexOffset
+            cur.i64()  # PathHashIndexOffset; unused here (listing needs the directory index)
             cur.i64()  # PathHashIndexSize
             cur.raw(20)  # PathHashIndexHash
-        has_full_dir = cur.u8() != 0
+        has_full_dir = cur.u32() != 0
         full_dir_span: tuple[int, int, bytes] | None = None
         if has_full_dir:
-            full_dir_span = (cur.i64(), cur.i64(), cur.raw(20))
+            dir_offset = cur.i64()
+            dir_size = cur.i64()
+            dir_hash = cur.raw(20)
+            if dir_offset != -1:  # INDEX_NONE span ⇒ absent (PakFile.cpp:496)
+                full_dir_span = (dir_offset, dir_size, dir_hash)
         encoded = cur.raw(cur.count("encoded entries", limit=_MAX_INDEX_BYTES))
-        files_list = [_parse_entry(cur, version, methods, "") for _ in range(cur.count("non-encodable entry"))]
+        files_list = [
+            _parse_entry(cur, version, methods, "", file_size)
+            for _ in range(cur.count("non-encodable entry"))
+        ]
         if full_dir_span is None:
             # UE can serve lookups from the path-hash index alone, but that map is
             # keyed by FNV-64 path hashes: without a directory blob there are no
@@ -502,8 +572,16 @@ def read_pak_index(path: str | Path) -> PakIndex:
         dir_blob = _load_index_blob(
             source, path, full_dir_span[0], full_dir_span[1], full_dir_span[2], "full directory index"
         )
-        files = _parse_directory(_Cursor(dir_blob, f"{path.name}: full directory index"),
-                                 version, mount, encoded, files_list, methods)
+        files, records = _parse_directory(
+            _Cursor(dir_blob, f"{path.name}: full directory index"),
+            version, mount, encoded, files_list, methods, file_size,
+        )
+        if records != num_entries:
+            # The writer sets NumEntries to the directory record count
+            # (PakFileUtilities.cpp:3185); a mismatch means a corrupt index.
+            raise PakError(
+                f"{path.name}: NumEntries {num_entries} does not match {records} directory records"
+            )
     else:
         blob = _load_index_blob(
             source, path, footer["index_offset"], footer["index_size"], footer["index_hash"], "legacy index"
@@ -515,7 +593,7 @@ def read_pak_index(path: str | Path) -> PakIndex:
         seen: set[str] = set()
         for _ in range(num_entries):
             name = cur.fstring().replace("\\", "/")
-            entry = _parse_entry(cur, version, methods, f"{mount}{name}")
+            entry = _parse_entry(cur, version, methods, f"{mount}{name}", file_size)
             if entry.path in seen:
                 raise PakError(f"{cur._label}: duplicate index path {entry.path!r}")
             seen.add(entry.path)
@@ -528,10 +606,9 @@ def read_pak_index(path: str | Path) -> PakIndex:
         version=version,
         mount_point=mount,
         num_entries=num_entries,
+        deleted_count=num_entries - len(files),
         index_offset=footer["index_offset"],
         index_size=footer["index_size"],
-        index_encrypted=footer["index_encrypted"],
-        encryption_key_guid=footer["encryption_key_guid"],
         compression_methods=methods,
         files=files,
     )
@@ -572,9 +649,17 @@ class PakEntrySource:
             raise PakError(f"{path}: entry is encrypted; no key support")
         if entry.compressed:
             raise PakError(f"{path}: entry is compressed ({entry.compression_method}); no codec bundled")
-        if offset < 0 or size < 0 or offset + size > entry.uncompressed_size:
+        # Bound by the stored size and the file length, never by the
+        # attacker-controlled uncompressed_size alone.
+        limit = min(entry.size, entry.uncompressed_size)
+        if offset < 0 or size < 0 or offset + size > limit:
             raise PakError(
-                f"{path}: range {offset}+{size} escapes the {entry.uncompressed_size}-byte entry"
+                f"{path}: range {offset}+{size} escapes the {limit}-byte stored payload"
+            )
+        file_size = self._file.size()
+        if entry.payload_offset + offset + size > file_size:
+            raise PakError(
+                f"{path}: payload range {entry.payload_offset}+{offset}+{size} escapes the {file_size}-byte file"
             )
         try:
             return self._file.read_at(entry.payload_offset + offset, size)
