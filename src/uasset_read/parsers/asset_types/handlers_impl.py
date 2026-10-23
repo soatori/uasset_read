@@ -646,6 +646,16 @@ class MaterialInstanceHandler(_SupportsClasses):
                 result["vector_param_count"] = len(legacy["fields"])
                 coverage.append(CoverageEntry(feature="material_instance.vectors", status="present"))
 
+        # #657: the published promise is the parent link plus the parameter counts.
+        # Parameter names/values and the inherited final values stay outside it, so
+        # `unsupported` marks them as product scope-out, not as a parse failure.
+        coverage.append(
+            CoverageEntry(
+                feature="material_instance.parameter_values",
+                status="unsupported",
+                detail="promised set is count-only; names/values are outside it (#657)",
+            )
+        )
         obj.coverage.extend(coverage)
         return result if len(result) > 1 else None
 
@@ -773,6 +783,16 @@ class SkeletonHandler(_SupportsClasses):
                 result[key] = len(val["value"])
                 coverage.append(CoverageEntry(feature=feature, status="present"))
 
+        # #657: the promise is name+index only. Parent index and the reference-pose
+        # transform need the native FBoneNode tail, which is not decoded, so the
+        # hierarchy stays marked as product scope-out.
+        coverage.append(
+            CoverageEntry(
+                feature="skeleton.hierarchy",
+                status="unsupported",
+                detail="bones carry name+index only; parent index and reference-pose transforms are outside the published promise (#657)",
+            )
+        )
         obj.coverage.extend(coverage)
         return result
 
@@ -843,6 +863,24 @@ class MeshHandler(_SupportsClasses):
                 result[key] = val.get("value", False)
                 coverage.append(CoverageEntry(feature=f"mesh.{key}", status="present"))
 
+        # #657: the mesh promise is the LOD summary only. Raw geometry is not
+        # decoded - the capability matrix rule keeps it a payload reference only when
+        # an evidenced projector exists, and none exists for mesh - so both areas are
+        # marked as product scope-out, not as parse failures.
+        coverage.append(
+            CoverageEntry(
+                feature="mesh.payload",
+                status="unsupported",
+                detail="no mesh payload reference is produced: raw geometry stays out of the promise (matrix rule, #657)",
+            )
+        )
+        coverage.append(
+            CoverageEntry(
+                feature="mesh.material_slots",
+                status="unsupported",
+                detail="StaticMaterials are outside the published promise; not extracted (#657)",
+            )
+        )
         obj.coverage.extend(coverage)
         return result
 
