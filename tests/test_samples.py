@@ -371,6 +371,18 @@ def test_manifest_matches_every_real_sample():
     assert zero["b_is_asset_count"] == 0
     # Runner absence folded into this aggregate for the collection budget (the CLI is the manual trigger).
     assert not (Path(__file__).parent / "extra_samples" / "run_extra_samples.py").exists()
+    # Provenance numbers must resolve to manifest-tracked artifacts: a SHA-256 quoted
+    # in an ORIGIN doc that no sample/sidecar/container/golden owns is unverifiable.
+    tracked = {}
+    for entry in manifest["samples"]:
+        tracked[entry["sha256"]] = entry["name"]
+        for side in entry["sidecars"]:
+            tracked[side["sha256"]] = side["name"]
+    for entry in manifest["containers"] + manifest["golden_files"]:
+        tracked[entry["sha256"]] = entry["name"]
+    for path in SAMPLES.glob("ORIGIN-*.md"):
+        for sha in re.findall(r"\b[0-9a-f]{64}\b", path.read_text(encoding="utf-8")):
+            assert sha in tracked, f"{path.name}: {sha[:12]} is not tracked by manifest.json"
 
 
 def test_container_fixtures_match_manifest():
@@ -442,6 +454,29 @@ def test_fixture_gap_statuses_pin_the_capability_boundary():
     for name, gap in gaps.items():
         for count in re.findall(r"\b(\d+) samples\b", gap["description"]):
             assert int(count) == total, name
+    # #662 readiness: a status must agree with the corpus on disk, so a gap cannot stay
+    # `missing` while a carrier exists nor claim `available` without one, and a carrier
+    # must carry its CAPABILITIES row. These predicates are what a future fixture has to
+    # satisfy before a flip is allowed.
+    gap_carriers = {
+        "skeletal_mesh": lambda entry, classes: "SkeletalMesh" in classes,
+        "anim_composite": lambda entry, classes: "AnimComposite" in classes,
+        "anim_layer_interface": lambda entry, classes: any(c.startswith("AnimLayerInterface") for c in classes),
+        "material_function": lambda entry, classes: any(c.startswith("MaterialFunction") for c in classes),
+        "material_parameter_collection": lambda entry, classes: "MaterialParameterCollection" in classes,
+        # Blueprint graphs only: a UE4-era save (no UE5 container version) with K2Node exports.
+        "ue4_graph_nodes": lambda entry, classes: entry["file_version_ue5"] == 0
+        and any(c.startswith("K2Node") for c in classes),
+    }
+    for gap, predicate in gap_carriers.items():
+        found = [
+            entry["name"]
+            for entry in manifest["samples"]
+            if predicate(entry, [o.class_name or "" for o in _object_document(entry["name"]).objects])
+        ]
+        assert bool(found) == (gaps[gap]["status"] == "available"), (gap, found)
+        if found:
+            assert any(row[0] == found[0] for row in CAPABILITIES), (gap, found)
 
 
 def _golden_mapped_ids(raws, export_count: int, import_count: int) -> list[str]:
