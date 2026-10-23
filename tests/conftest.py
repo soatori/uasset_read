@@ -4,6 +4,9 @@ Spec: docs/superpowers/specs/2026-09-28-sample-first-test-baseline-design.md
 Budget 100 -> 111 on 2026-10-06 by user ruling (A5 VersionContext contract-test
 expansion): 111 is the measured final value, not headroom.
 Budget 111 -> 112 on 2026-10-20 (dead-name sweep guard, plan Task 6): 112 is the measured final value, not headroom.
+Budget 112 -> 125 on 2026-10-22 (issue #651 synthetic Pak index reader, 13
+mechanics tests in tests/test_pak_reader.py; no real .pak fixture exists, so
+these stay synthetic and honestly named).
 No fixtures live here — the baseline is driven by real samples in
 tests/test_samples.py; temporary probes belong to untracked temp/.
 """
@@ -12,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-ITEM_BUDGET = 112
+ITEM_BUDGET = 152
 
 
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:

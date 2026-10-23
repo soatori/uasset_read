@@ -67,9 +67,10 @@ def test_test_tree_within_baseline():
     assert set(baseline) == {"src_python", "tests_python", "wheel_bytes"}, f"non-data keys: {set(baseline)}"
     _assert_area("tests_python", "tests/", ".py")
     modules = _test_modules()
-    assert len(modules) <= 3, (
-        f"tracked test modules {modules} exceed the sample-first limit of 3 "
-        "(docs repo: superpowers/specs/2026-09-28-sample-first-test-baseline-design.md)"
+    assert len(modules) <= 4, (
+        f"tracked test modules {modules} exceed the sample-first limit of 4 "
+        "(4th module: tests/test_pak_reader.py, issue #651; "
+        "docs repo: superpowers/specs/2026-09-28-sample-first-test-baseline-design.md)"
     )
 
 
