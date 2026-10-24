@@ -23,3 +23,14 @@ The `Helm_BP.uasset` fixture (issue #662 UE4 graph carrier) is sourced from
 Licensed under the **Apache-2.0** license.
 See <https://github.com/MarcedForLife/UnrealBPInspect/blob/main/LICENSE>.
 Provenance and measured structural numbers: `ORIGIN-issue-662-ue4-graph.md`.
+
+### MyProject UE 5.8.2 user fixtures (issue #662)
+
+The five `Issue662_*.uasset` fixtures (SkeletalMesh, AnimComposite,
+AnimLayerInterface, MaterialFunction, MaterialParameterCollection) are
+user-provided first-party content: the user is the author of these
+self-created assets, saved with the UE 5.8.2 editor in their own project,
+copied from `MyProject Content/ParserFixtures/Issue662/` — no third-party
+license applies. Provider verification (engine build 5.8.2.56702186, SHA-256
+match to the originals) plus independent re-measurement and the measured
+structural numbers: `ORIGIN-issue-662-ue58-user-fixtures.md`.

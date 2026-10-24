@@ -200,25 +200,99 @@
         }
       },
       "opt_in": true
+    },
+    "Issue662_SkeletalMesh.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {
+        "BINARY_OR_NATIVE_PROPERTY_OPAQUE": {
+          "known_unimplemented": {
+            "max": 1
+          }
+        },
+        "EXPORT_TRAILING_BYTES_UNCONSUMED": {
+          "unexpected": {
+            "max": 4
+          }
+        }
+      }
+    },
+    "Issue662_AnimComposite.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {
+        "EXPORT_TRAILING_BYTES_UNCONSUMED": {
+          "known_unimplemented": {
+            "max": 1
+          }
+        }
+      }
+    },
+    "Issue662_AnimLayerInterface.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {
+        "EXPORT_TRAILING_BYTES_UNCONSUMED": {
+          "editor_only": {
+            "max": 3
+          }
+        }
+      }
+    },
+    "Issue662_MaterialFunction.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {},
+      "max_total_diagnostics": 0
+    },
+    "Issue662_MaterialParameterCollection.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {},
+      "max_total_diagnostics": 0
     }
   },
   "aggregate": {
     "scope": "manifest",
-    "sample_count": 68,
-    "max_total_warnings": 2596,
-    "max_total_bytes": 3079662,
+    "sample_count": 73,
+    "max_total_warnings": 2604,
+    "max_total_bytes": 15023169,
     "by_reason": {
       "bulk_expected": {
         "max_count": 5,
         "max_bytes": 22306
       },
       "editor_only": {
-        "max_count": 1215,
-        "max_bytes": 1143314
+        "max_count": 1218,
+        "max_bytes": 1143637
       },
       "known_unimplemented": {
-        "max_count": 1376,
-        "max_bytes": 1914042
+        "max_count": 1377,
+        "max_bytes": 1914058
+      },
+      "unexpected": {
+        "max_count": 4,
+        "max_bytes": 11943168
       }
     },
     "by_reason_class": {
@@ -239,8 +313,8 @@
         "max_bytes": 56
       },
       "editor_only/AnimBlueprintGeneratedClass": {
-        "max_count": 3,
-        "max_bytes": 56153
+        "max_count": 4,
+        "max_bytes": 56237
       },
       "editor_only/Blueprint": {
         "max_count": 1,
@@ -251,8 +325,8 @@
         "max_bytes": 19031
       },
       "editor_only/Function": {
-        "max_count": 232,
-        "max_bytes": 142217
+        "max_count": 233,
+        "max_bytes": 142252
       },
       "editor_only/K2Node_AddDelegate": {
         "max_count": 1,
@@ -315,8 +389,8 @@
         "max_bytes": 3536
       },
       "editor_only/K2Node_FunctionEntry": {
-        "max_count": 34,
-        "max_bytes": 13181
+        "max_count": 35,
+        "max_bytes": 13385
       },
       "editor_only/K2Node_FunctionResult": {
         "max_count": 9,
@@ -409,6 +483,10 @@
       "known_unimplemented/ALS_AnimBP_C": {
         "max_count": 1,
         "max_bytes": 605230
+      },
+      "known_unimplemented/AnimComposite": {
+        "max_count": 1,
+        "max_bytes": 16
       },
       "known_unimplemented/AnimGraphNode_ApplyAdditive": {
         "max_count": 34,
@@ -661,6 +739,14 @@
       "known_unimplemented/World": {
         "max_count": 1,
         "max_bytes": 12
+      },
+      "unexpected/SkeletalMesh": {
+        "max_count": 1,
+        "max_bytes": 11942964
+      },
+      "unexpected/SkeletalMeshDescriptionBulkData": {
+        "max_count": 3,
+        "max_bytes": 204
       }
     }
   }

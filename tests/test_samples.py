@@ -123,6 +123,16 @@ CAPABILITIES = (
         {"kind": "mesh", "mesh_type": "StaticMesh"},
         "partial",  # summary tier: geometry is not decoded
     ),
+    # #662 UE 5.8.2 user fixture (first-party editor save): the first tracked
+    # SkeletalMesh — 7 exports / 1 asset-role, 3 SourceModels LODs. Bones and
+    # sections sit in the undecoded native tail (gated on #657 P-SK), so this row
+    # pins only what the fixture proves.
+    (
+        "Issue662_SkeletalMesh.uasset",
+        "SkeletalMesh",
+        {"kind": "mesh", "mesh_type": "SkeletalMesh", "name": "Issue662_SkeletalMesh", "lod_count": 3},
+        "partial",  # summary tier: geometry is not decoded (#657 P-SK gate)
+    ),
     # Flags/editor-position only — not enough core fields for decoded tier (#629 hardening).
     ("FirstPerson_M_PrototypeGrid.uasset", "Material", {"kind": "material"}, "partial"),
     # Task 1.0 measured: 3 scalar + 1 vector parameters (normalized arrays) and
@@ -141,6 +151,17 @@ CAPABILITIES = (
         "complete",
     ),
     (
+        "Issue662_MaterialParameterCollection.uasset",
+        "MaterialParameterCollection",
+        {
+            "kind": "material_parameter_collection",
+            "name": "Issue662_MaterialParameterCollection",
+            "scalar_param_count": 1,
+            "scalar_params": [{"name": "Issue662Value", "default_value": 1.0}],
+        },
+        "partial",  # summary tier; vectors absent from the bag (missing path pinned)
+    ),
+    (
         "StackOBot_BP_Drone.uasset",
         "BlueprintGeneratedClass",
         {"kind": "blueprint"},
@@ -153,6 +174,33 @@ CAPABILITIES = (
         "Blueprint",
         {"kind": "blueprint", "blueprint_type": "Blueprint", "name": "Helm_BP"},
         "partial",  # summary tier at depth=asset (#629)
+    ),
+    # #662 UE 5.8.2 user fixtures (first-party editor saves): measured numbers
+    # pinned at summary tier.
+    (
+        "Issue662_MaterialFunction.uasset",
+        "MaterialFunction",
+        {
+            "kind": "material_function",
+            "name": "Issue662_MaterialFunction",
+            "input_names": ["TriPlanar", "TileSize"],
+            "output_names": ["Wire", "Checker"],
+            "expression_count": 76,
+            "function_call_count": 4,
+        },
+        "partial",  # summary tier at depth=asset; zero diagnostics on this fixture
+    ),
+    (
+        "Issue662_AnimComposite.uasset",
+        "AnimComposite",
+        {"kind": "anim_composite", "name": "Issue662_AnimComposite", "segment_count": 1},
+        "partial",  # segment AnimReference resolves to import:0 MM_Idle (measured)
+    ),
+    (
+        "Issue662_AnimLayerInterface.uasset",
+        "AnimBlueprint",
+        {"kind": "anim_blueprint", "blueprint_type": "AnimBlueprint", "name": "Issue662_AnimLayerInterface"},
+        "partial",  # asset-as-interface: UE 5.8 records the class as AnimBlueprint (measured)
     ),
     ("ABP_RifleAnimLayers.uasset", "AnimBlueprintGeneratedClass", {"kind": "anim_blueprint"}, "partial"),
     ("ALS_AnimBP.uasset", "AnimBlueprint", {"kind": "anim_blueprint"}, "partial"),
@@ -319,6 +367,7 @@ ORIGIN_DOCS = {
     "ORIGIN-issue-626-curve-table.md",
     "ORIGIN-issue-627-sidecar.md",
     "ORIGIN-issue-662-ue4-graph.md",
+    "ORIGIN-issue-662-ue58-user-fixtures.md",
 }
 
 
@@ -330,7 +379,7 @@ def test_manifest_matches_every_real_sample():
     for entry in manifest["samples"]:
         expected_files |= {side["name"] for side in entry["sidecars"]}
     actual_files = {path.name for path in SAMPLES.iterdir() if path.suffix in PACKAGE_SUFFIXES}
-    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 68
+    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 73
     assert actual_files == expected_files
     allowed = (
         expected_files
@@ -441,14 +490,15 @@ def test_fixture_gap_statuses_pin_the_capability_boundary():
     assert gaps["pak_container"]["status"] == "available"
     assert gaps["unversioned_properties"]["status"] == "not_required"
     assert gaps["sidecar_files"]["status"] == "available"
-    # Topic 2 Phase 1 (#657): five registered handler classes have no carrier in
-    # any tracked package (Task 1.0 carriage confirmation), so their real-sample
-    # CAPABILITIES row is absent by evidence — this pin is the assertion.
-    assert gaps["skeletal_mesh"]["status"] == "missing"
-    assert gaps["anim_composite"]["status"] == "missing"
-    assert gaps["anim_layer_interface"]["status"] == "missing"
-    assert gaps["material_function"]["status"] == "missing"
-    assert gaps["material_parameter_collection"]["status"] == "missing"
+    # Topic 2 Phase 1 (#657): the five handler classes have carriers since 2026-10-24 —
+    # the user's own first-party UE 5.8.2 editor saves registered for issue #662, each
+    # with its measured CAPABILITIES row (the AnimLayerInterface row is the
+    # asset-as-interface AnimBlueprint summary row; see the carrier predicate below).
+    assert gaps["skeletal_mesh"]["status"] == "available"
+    assert gaps["anim_composite"]["status"] == "available"
+    assert gaps["anim_layer_interface"]["status"] == "available"
+    assert gaps["material_function"]["status"] == "available"
+    assert gaps["material_parameter_collection"]["status"] == "available"
     # D1 (plan blueprint-semantics): UE4 graph node/pin decoding is an explicit gap,
     # not a defect. #662 registered its carrier (Helm_BP.uasset, UE4-era save with
     # K2Node exports), so the phase-A pre-1010 path and the FName pin-name gate are
@@ -471,7 +521,10 @@ def test_fixture_gap_statuses_pin_the_capability_boundary():
     gap_carriers = {
         "skeletal_mesh": lambda entry, classes: "SkeletalMesh" in classes,
         "anim_composite": lambda entry, classes: "AnimComposite" in classes,
-        "anim_layer_interface": lambda entry, classes: any(c.startswith("AnimLayerInterface") for c in classes),
+        # UE 5.x saves an AnimLayerInterface as an asset-as-interface: the measured
+        # asset export class is AnimBlueprint, so the package name is the carrier signal.
+        "anim_layer_interface": lambda entry, classes: any(c.startswith("AnimLayerInterface") for c in classes)
+        or "animlayerinterface" in entry["name"].lower(),
         "material_function": lambda entry, classes: any(c.startswith("MaterialFunction") for c in classes),
         "material_parameter_collection": lambda entry, classes: "MaterialParameterCollection" in classes,
         # Blueprint graphs only: a UE4-era save (no UE5 container version) with K2Node exports.
@@ -948,7 +1001,7 @@ def test_real_sample_proves_claimed_capability():
 
     The status column pins the #629 tier contract: decoded-tier fixtures are
     ``complete``; summary-tier fixtures prove ``partial`` with coverage.
-    Loops the CAPABILITIES table so 30 claims cost one collected item; every
+    Loops the CAPABILITIES table so 35 claims cost one collected item; every
     assertion message carries ``sample:class_name``.
     """
     for sample, class_name, expected, expected_semantic in CAPABILITIES:
@@ -3676,7 +3729,7 @@ def _aggregate_from_manifest():
 
 
 def test_trailing_aggregate_report_and_gate():
-    """Report gate on all 68 manifest samples, plus the aggregate's fail paths.
+    """Report gate on all 73 manifest samples, plus the aggregate's fail paths.
 
     Report half: counts AND bytes by reason and class must sit within the
     quality baseline. Fail half: a synthetic report over ceiling in bytes,
@@ -3688,7 +3741,7 @@ def test_trailing_aggregate_report_and_gate():
     actual = _aggregate_from_manifest()
     report_baseline = json.loads((SAMPLES / "quality_baseline.json").read_text(encoding="utf-8"))["aggregate"]
     _assert_trailing_aggregate(actual, report_baseline)
-    assert actual["sample_count"] == 68
+    assert actual["sample_count"] == 73
     # #663 decoded conclusion: the K2Node_CallFunction pin tail consumes
     # byte-exactly (370/370 corpus trailers), so the class leaves both the
     # live inventory and the regenerated baseline — totals above already pin
