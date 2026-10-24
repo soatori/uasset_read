@@ -116,11 +116,37 @@ CAPABILITIES = (
         "complete",
     ),
     ("ALS_Concrete_Step_01_SoundWave.uasset", "SoundWave", {"kind": "sound", "sound_type": "SoundWave"}, "complete"),
-    ("ALS_Mannequin_Skeleton.uasset", "Skeleton", {"kind": "skeleton"}, "partial"),
+    (
+        "ALS_Mannequin_Skeleton.uasset",
+        "Skeleton",
+        {
+            "kind": "skeleton",
+            "name": "ALS_Mannequin_Skeleton",
+            "bone_source": "name_guess",
+            "bone_count": 21,
+            "virtual_bone_count": 11,
+            "socket_count": 3,
+        },
+        "partial",  # summary tier: NameMap name guess, never a decoded hierarchy (#630)
+    ),
+    # The other two Skeleton carriers share the boundary: name_guess on all three,
+    # and VirtualBones is asserted only where the property exists (present-only key).
+    (
+        "CiciToon_SK_Mannequin.uasset",
+        "Skeleton",
+        {"kind": "skeleton", "name": "SK_Mannequin", "bone_source": "name_guess", "bone_count": 31, "socket_count": 3},
+        "partial",
+    ),
+    (
+        "ThirtPerson_SK_Mannequin.uasset",
+        "Skeleton",
+        {"kind": "skeleton", "name": "SK_Mannequin", "bone_source": "name_guess", "bone_count": 31, "socket_count": 5},
+        "partial",
+    ),
     (
         "StarterContent_SM_Chair.uasset",
         "StaticMesh",
-        {"kind": "mesh", "mesh_type": "StaticMesh"},
+        {"kind": "mesh", "mesh_type": "StaticMesh", "name": "SM_Chair", "lod_count": 1},
         "partial",  # summary tier: geometry is not decoded
     ),
     # Flags/editor-position only — not enough core fields for decoded tier (#629 hardening).
@@ -183,13 +209,13 @@ CAPABILITIES = (
     (
         "ALSCommunity_Mannequin_PhysicsAsset.uasset",
         "PhysicsAsset",
-        {"kind": "physics_asset", "body_count": 19, "constraint_count": 18},
+        {"kind": "physics_asset", "name": "Mannequin_PhysicsAsset", "body_count": 19, "constraint_count": 18},
         "partial",  # summary tier: collision table/shapes not decoded (#619/#638)
     ),
     (
         "Lyra_PM_Concrete.uasset",
         "PhysicalMaterial",
-        {"kind": "physical_material", "surface_type": "EPhysicalSurface::SurfaceType2"},
+        {"kind": "physical_material", "name": "PM_Concrete", "surface_type": "EPhysicalSurface::SurfaceType2"},
         "partial",  # float defaults omitted by the editor; SurfaceType is real data
     ),
     # Task 1.0 carriage confirmation (temp/carriage_report.md) over the full
@@ -1074,8 +1100,27 @@ def test_real_sample_proves_claimed_capability():
             assert obj.semantic["bone_source"] == "name_guess", f"{sample}:{class_name}"
             names = {b["name"] for b in obj.semantic["bones"]}
             assert "spine_01" in names and "clavicle_l" in names, f"{sample}:{class_name}"
+            # Boundary shape (#657 section 3.2): name+index only - no parent index
+            # and no reference-pose transform - and the guess has to be stated in
+            # words, not only through a summary status.
+            assert all(set(b) == {"name", "index"} for b in obj.semantic["bones"]), f"{sample}:{class_name}"
+            bones_cov = next(c for c in obj.coverage if c.feature == "skeleton.bones")
+            assert bones_cov.status == "partial" and "not a decoded hierarchy" in bones_cov.detail, (
+                f"{sample}:{class_name} name guess must be disclosed in words"
+            )
+            assert any(
+                c.feature == "skeleton.hierarchy" and c.status == "unsupported" for c in obj.coverage
+            ), f"{sample}:{class_name} hierarchy scope-out must be disclosed"
         elif class_name == "StaticMesh":
             assert obj.semantic["lod_count"] == len(obj.semantic["lods"]), f"{sample}:{class_name}"
+            # #657 section 3.3: the LOD summary is the whole promise; raw geometry
+            # stays a payload reference and material slots stay outside the published
+            # set, so a summary tier cannot read as semantic completeness.
+            features = {c.feature: c.status for c in obj.coverage}
+            assert features["mesh.source_models"] == "present", f"{sample}:{class_name}"
+            assert features["mesh.payload"] == "unsupported", f"{sample}:{class_name}"
+            assert features["mesh.material_slots"] == "unsupported", f"{sample}:{class_name}"
+            assert "material_slots" not in obj.semantic, f"{sample}:{class_name} must not overclaim slots"
         elif class_name in {"BlueprintGeneratedClass", "AnimBlueprintGeneratedClass"}:
             assert not {"nodes", "bytecode", "graph", "graphs"} & obj.semantic.keys(), f"{sample}:{class_name}"
             if class_name == "AnimBlueprintGeneratedClass" or sample == "StackOBot_BP_Drone.uasset":
@@ -1214,6 +1259,7 @@ def test_real_sample_proves_claimed_capability():
             features = {c.feature: c.status for c in obj.coverage}
             assert features["physics_asset.bodies"] == "present", f"{sample}:{class_name}"
             assert features["physics_asset.collision_disable_table"] == "missing", f"{sample}:{class_name}"
+            assert features["physics_asset.shapes"] == "partial", f"{sample}:{class_name}"
             assert any(d.code == "EXPORT_TRAILING_BYTES_UNCONSUMED" for d in doc.diagnostics), (
                 f"{sample}:{class_name} must disclose the undecoded raw trailer"
             )
@@ -1250,6 +1296,10 @@ def test_real_sample_proves_claimed_capability():
                 f"{sample}:{class_name} vector count drift"
             )
             json.dumps(projected)
+            # #657 section 3.1: `complete` is the promised set (parent + counts), not
+            # the parameter semantics; the out-of-scope part must stay visible.
+            features = {c.feature: c.status for c in obj.coverage}
+            assert features["material_instance.parameter_values"] == "unsupported", f"{sample}:{class_name}"
         elif class_name == "StringTable":
             # Task 1.4 option (i): the zero-projection absence is declared as a
             # capability-matrix row (semantics stay in objects[].semantic), and
