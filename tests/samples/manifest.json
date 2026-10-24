@@ -809,6 +809,15 @@
       "minimum_samples": 1,
       "recommended_samples": "1 UE4 editor-saved Blueprint with EventGraph nodes"
     },
+    "ue5_2_5_3_graph": {
+      "status": "missing",
+      "description": "No tracked fixture covers the UE5.2–5.3 graph band (file_version_ue5 = 1009): graph-bearing coverage jumps from the 1004 band to 1012, and the samples recorded in the 1009 band are non-graph assets (SoundWave, SoundAttenuation, SubsurfaceProfile). The pre-1010 pin path is UE-source-grounded and pinned by bounded-bytes gate tests, but the band itself stays unproven until a band fixture is registered.",
+      "needed_for": "UE5.2/5.3 graph structural acceptance (issue #656 plan phase B); does not block the UE5.0 pre-1010 path already proven on B_ControlPointScoring",
+      "acquisition": "User supplies at least one UE5.2 or UE5.3 editor-saved Blueprint with node-bearing EventGraph plus the saving engine version/changelist (external dependency; the repo cannot fabricate the package or its recorded file version).",
+      "verification": "Phase B: assert the fixture's own recorded file_version_ue5 == 1009, then graph decode at depth=decode with nodes>0 and pins>0, link endpoints resolving to existing node/pin ids, nonzero node-position majority, no BLUEPRINT_* diagnostics, and pin payload size consistent with that save's own custom-version table (stream 36 -> 69/101, otherwise the 65/97 path must diagnose rather than fabricate). Only then may any document state UE5.2/5.3 graph support.",
+      "minimum_samples": 1,
+      "recommended_samples": "1 UE5.2 or UE5.3 editor-saved Blueprint with EventGraph nodes"
+    },
     "zen_package": {
       "status": "not_required",
       "description": "Full IoStore package-body decoding is outside the current product target. Existing IoStore TOC metadata remains only as a classification/unavailability regression.",

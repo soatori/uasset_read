@@ -436,6 +436,22 @@ def test_fixture_gap_statuses_pin_the_capability_boundary():
     assert ue4_gap["status"] == "missing"
     assert "用户" in ue4_gap["acquisition"] or "user" in ue4_gap["acquisition"].lower()
     assert "PinsStoreFName" in ue4_gap["verification"]
+    # #656: the UE5.2–5.3 band (file_version_ue5 = 1009) is registered as a gap, and
+    # "missing" is a measured fact here, not an aspiration — the band's tracked samples
+    # carry no graph nodes, so the pre-1010 pin path is UE-source-grounded and pinned on
+    # bounded bytes but still unproven for the band. These are the assertions that flip
+    # when a band fixture is registered.
+    band_gap = gaps["ue5_2_5_3_graph"]
+    assert band_gap["status"] == "missing" and band_gap["minimum_samples"] == 1
+    assert "1009" in band_gap["description"] and "1009" in band_gap["verification"]
+    band_samples = [entry for entry in manifest["samples"] if entry.get("file_version_ue5") == 1009]
+    assert len(band_samples) == 3, [entry["name"] for entry in band_samples]
+    from uasset_read.package import parse_package_document
+
+    for entry in band_samples:
+        doc = parse_package_document(str(SAMPLES / entry["name"]), depth="decode")
+        band_nodes = sum(len(g["nodes"]) for o in doc.objects for g in (o.semantic or {}).get("graphs") or [])
+        assert band_nodes == 0, (entry["name"], band_nodes)
     # Hand-written counts drift ("54 samples" survived a corpus of 66): gaps may
     # only cite the manifest's own total, never a literal that ages.
     total = manifest["summary"]["total_samples"]
@@ -2580,55 +2596,157 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     # The aggregate keys are consumed (popped), never leaked downstream.
     assert "unresolved_links" not in c5_extras["export:0"]["graphs"][0]
 
-    # A4/A-4 (plan blueprint-semantics): a pins locate failure is a structured
-    # diagnostic, never a silent empty array. Three synthetic triggers:
-    # (a) pre-1010 node whose tag scan found no NAME_None tail,
-    # (b) located count negative,
-    # (c) located count beyond MAX_PINS_PER_NODE.
+    # A4/A-4 (plan blueprint-semantics) + #656 G2/G3: a pins locate failure is a
+    # structured diagnostic, never a silent empty array. Four synthetic triggers —
+    # no recorded tag-scan tail, negative count, count over MAX_PINS_PER_NODE, and a
+    # count field crossing the export end — asserted as diagnostic shape (code/stage/
+    # fallback/reason), not just presence. The cursor pins that both count guards
+    # return before the loop, so a garbage count allocates nothing.
     from uasset_read.models.core import UEdGraphNode  # noqa: F401  (import anchor)
     from uasset_read.serializers.graph_node import _read_node_pins
     from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+    from uasset_read.serializers.package_summary import CustomVersion, PackageFileSummary
+    from uasset_read.versioning import UE5_RELEASE_STREAM_GUID, build_version_context
 
-    def _synthetic_node_export() -> ObjectExport:
+    def _synthetic_node_export(script_end: int = 0, size: int = 64) -> ObjectExport:
         return ObjectExport(
             class_index=PackageIndex(-1),
             super_index=PackageIndex(0),
             outer_index=PackageIndex(0),
             object_name="K2Node_Synthetic",
             object_flags=0,
-            serial_size=64,
+            serial_size=size,
             serial_offset=0,
+            script_serialization_end_offset=script_end,
         )
 
-    summary_stub = SimpleNamespace(file_version_ue5=1004)
-    for locate_kwargs, label in (
-        ({"property_stream_end": None}, "no_scan_tail"),
-        ({"property_stream_end": 0}, "negative_count"),
-        ({"property_stream_end": 4}, "oversized_count"),
+    # The band under test (UE5.2–5.3): file_version_ue5 = 1009, under the export-map
+    # script-offset gate (ObjectResource.cpp:214-218), with a custom-version table
+    # under UE5ReleaseStream 36 — so the pin-type payload is the 65-byte side, not the
+    # 69/101 sizes proven only by tracked 5.4–5.8 saves.
+    band_summary = PackageFileSummary(
+        file_version_ue4=522,
+        file_version_ue5=1009,
+        custom_versions=[CustomVersion(guid=UE5_RELEASE_STREAM_GUID, version=35)],
+    )
+    band_context = build_version_context(band_summary)
+    band_name_map = ["None", "GetConeAngleVertex"]
+
+    def _i32(value: int) -> bytes:
+        return struct.pack("<i", value)
+
+    pin_guid = bytes(range(16))
+    pin_entry = (
+        _i32(0) + _i32(1) + pin_guid                     # header: bNullPtr, owning, pin guid
+        + _i32(1) + pin_guid + struct.pack("<II", 1, 0)  # internal duplicates + PinName
+        + _i32(0) + b"\xff" + _i32(0)                    # FText PinFriendlyName (history -1)
+        + _i32(0) + _i32(0) + b"\x01"                    # SourceIndex, PinToolTip, Direction
+        + b"\x00" * 65                                   # FEdGraphPinType payload (pre-36 side)
+        + _i32(0) + _i32(0) + _i32(0)                    # defaults + DefaultObject
+        + _i32(0) + b"\xff" + _i32(0)                    # DefaultTextValue
+        + _i32(0) + _i32(0)                              # LinkedTo, SubPins (empty arrays)
+        + _i32(1) + _i32(1)                              # ParentPin, ReferencePassThrough (null)
+        + b"\x00" * 16 + _i32(0)                         # PersistentGuid, BitField
+    )
+
+    # G1: which locate arithmetic the band takes. Over the same bounded bytes the 1009
+    # export (no script offsets recorded) must land on the tag-scan tail + 4, while a
+    # 1010+ export over those same bytes lands on a decoy count planted at 40. Only the
+    # tag-scan run decodes — the pair pins the two branches against each other.
+    payload = bytearray(68 + len(pin_entry))
+    payload[40:44] = _i32(1001)  # what the 1010+ arithmetic would read
+    payload[64:68] = _i32(1)     # real pins_count, four bytes past the tag-scan tail
+    payload[68:] = pin_entry
+
+    band_archive = ByteArchive(bytes(payload))
+    band_archive.version_context = band_context
+    band_pins = _read_node_pins(
+        band_archive,
+        band_name_map,
+        band_summary,
+        [],
+        [],
+        _synthetic_node_export(size=len(payload)),  # the pins array lies inside the export
+        "tag_scan",
+        property_stream_end=60,
+    )
+    assert len(band_pins) == 1, band_pins
+    assert band_pins[0].pin_name == "GetConeAngleVertex", band_pins[0]
+    assert band_pins[0].pin_id == pin_guid.hex(), band_pins[0]
+    # Byte-exact cursor: count read at 64, entry consumed in full. The tag-scan tail
+    # was used, not serial_offset + script_serialization_end_offset + 4.
+    assert band_archive.tell() == 68 + len(pin_entry), band_archive.tell()
+    assert band_archive.get_structured_diagnostics() == []
+
+    decoy_archive = ByteArchive(bytes(payload))
+    decoy_archive.version_context = band_context
+    assert _read_node_pins(
+        decoy_archive,
+        band_name_map,
+        band_summary,
+        [],
+        [],
+        _synthetic_node_export(script_end=36),
+        "1010_plus",
+        property_stream_end=None,
+    ) == []
+    decoy_diags = decoy_archive.get_structured_diagnostics()
+    assert [d.code for d in decoy_diags] == ["BLUEPRINT_NODE_PINS_LOCATE_FAILED"], decoy_diags
+    assert decoy_diags[0].offset == 40 and "1001" in decoy_diags[0].message, decoy_diags
+    assert decoy_diags[0].stage == "semantic.blueprint", decoy_diags
+
+    for label, case_payload, scan_tail, cursor_after in (
+        ("no_scan_tail", b"\x00" * 64, None, 0),
+        ("negative_count", _i32(0) + _i32(-1) + b"\x00" * 56, 0, 8),
+        ("oversized_count", _i32(0) * 2 + _i32(1001) + b"\x00" * 52, 4, 12),
+        ("count_past_export_end", _i32(0) * 2 + _i32(1001) + b"\x00" * 52, 62, 0),
     ):
-        payload = (
-            b"\x00" * 4
-            + (-1).to_bytes(4, "little", signed=True)
-            + b"\x00" * 56
-            if label == "negative_count"
-            else b"\x00" * 8 + (1001).to_bytes(4, "little", signed=True) + b"\x00" * 52
-            if label == "oversized_count"
-            else b"\x00" * 64
-        )
-        archive = ByteArchive(payload)
+        archive = ByteArchive(case_payload)
+        archive.version_context = band_context
         pins = _read_node_pins(
             archive,
-            ["None"],
-            summary_stub,
+            band_name_map,
+            band_summary,
             [],
             [],
             _synthetic_node_export(),
             label,
-            **locate_kwargs,
+            property_stream_end=scan_tail,
         )
         assert pins == [], label
-        codes = [d.code for d in archive.get_structured_diagnostics()]
-        assert "BLUEPRINT_NODE_PINS_LOCATE_FAILED" in codes, (label, codes)
+        diags = archive.get_structured_diagnostics()
+        assert len(diags) == 1, (label, diags)
+        assert diags[0].code == "BLUEPRINT_NODE_PINS_LOCATE_FAILED", (label, diags)
+        assert diags[0].stage == "semantic.blueprint" and diags[0].severity == "warning", (label, diags)
+        assert diags[0].fallback == "empty_pins" and diags[0].reason == "recovered_corruption", (label, diags)
+        assert archive.tell() == cursor_after, (label, archive.tell())
+
+    # G4: the SerializationControlExtensions byte is a >=1011 gate, so a 1009 save
+    # consumes no control byte. One eight-byte NAME_None tag read on both sides of the
+    # band boundary: at 1009 the tag starts at byte 0, at 1011 the leading u8 control
+    # is consumed first — the recorded scan tail differs by exactly one byte.
+    for band_version, tag_bytes, script_end, expected_tail, offsets in (
+        (1009, b"\x00" * 8, 0, 8, False),  # the band state: the export map carries no offsets
+        (1011, b"\x00" * 9, 9, 9, True),   # 1010+ export with offsets recorded, control byte consumed
+    ):
+        scan_archive = ByteArchive(tag_bytes)
+        scan_archive.version_context = build_version_context(
+            PackageFileSummary(file_version_ue4=522, file_version_ue5=band_version)
+        )
+        band_export = _synthetic_node_export(script_end=script_end, size=len(tag_bytes))
+        assert band_export.has_script_serialization is offsets, (band_version, band_export)
+        scan_result = _read_node_script_serial(
+            scan_archive,
+            ["None"],
+            PackageFileSummary(file_version_ue4=522, file_version_ue5=band_version),
+            band_export,
+            [],
+            [],
+            "K2Node_BandBoundary",
+        )
+        assert scan_result["property_stream_end"] == expected_tail, (band_version, scan_result)
+        assert scan_archive.tell() == expected_tail, (band_version, scan_archive.tell())
+        assert scan_archive.get_structured_diagnostics() == [], (band_version, scan_archive)
 
     # C1 unit (plan blueprint-semantics): a jump target that misses every
     # instruction boundary yields CFG_JUMP_TARGET_UNRESOLVED in the caller's
@@ -3728,6 +3846,7 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
     """
     from uasset_read.archive import ByteArchive
     from uasset_read.models.properties import PropertyTag
+    from uasset_read.models.core import FEdGraphPinType
     from uasset_read.parsers.property_types import parse_struct_property
 
     name_map = ["None"] * 400
@@ -3869,7 +3988,7 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
     with _open_sample_archive(SAMPLES / "B_ControlPointScoring.uasset") as (_a, bcps_summary, *_rest):
         assert build_version_context(bcps_summary).custom_versions.get(UE5_RELEASE_STREAM_GUID) == 36
 
-    def _pin_type_consumed(stream_version: int) -> int:
+    def _pin_type_consumed(stream_version: int) -> tuple[int, FEdGraphPinType]:
         summary = PackageFileSummary(
             custom_versions=[CustomVersion(guid=UE5_RELEASE_STREAM_GUID, version=stream_version)]
         )
@@ -3877,11 +3996,19 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
         # Mirror the production mount point (G1): the gate reads the mounted
         # context, never the summary — missing mount is a structured failure.
         archive.version_context = build_version_context(summary)
-        read_ed_graph_pin_type(archive, name_map, summary=summary)
-        return archive.tell()
+        pin_type = read_ed_graph_pin_type(archive, name_map, summary=summary)
+        return archive.tell(), pin_type
 
-    assert _pin_type_consumed(36) == len(scalar) == 69, "gate met: the trailing 4B bool is consumed"
-    assert _pin_type_consumed(35) == len(scalar) - 4, "gate missed: the field is absent from the stream"
+    consumed_36, type_36 = _pin_type_consumed(36)
+    consumed_35, type_35 = _pin_type_consumed(35)
+    assert consumed_36 == len(scalar) == 69, "gate met: the trailing 4B bool is consumed"
+    assert consumed_35 == len(scalar) - 4, "gate missed: the field is absent from the stream"
+    # G5 (#656 plan §3.1): below the gate nothing is decoded differently — the
+    # FUE5ReleaseStream <36 path is a load fixup (EdGraphPin.cpp:314-321), not a
+    # layout change, so both sides must yield the same fields and the cursor differs
+    # only by the field's width here (a 4-byte FArchive bool, not UE's single bit).
+    assert type_36 == type_35, "the pre-36 path must decode identical fields"
+    assert consumed_36 - consumed_35 == 4, (consumed_36, consumed_35)
 
 
 def test_no_unreferenced_module_level_names():
