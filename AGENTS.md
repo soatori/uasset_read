@@ -14,6 +14,13 @@ These rules apply to every human or agent working in this repository.
 
 The package-first design is not implemented merely because it is documented. Do not update README features or Wiki API examples until source and tests support the claim.
 
+## Repository Conventions
+
+- Source code, comments, and error messages use English. Documentation follows its document language; repository-wide design reports may use Chinese when requested. Agent summaries and user replies may be Chinese.
+- The current project is a Python 3.10+ read-only parser at v0.6.0-dev. The package-first v2 document API (`parse_package_document` / `python -m uasset_read`) is the default; the strongest path is classic editor-saved packages and Blueprint decoding. Source and tests remain authoritative for current behavior.
+- In Windows examples, use forward slashes or escaped backslashes. Test samples are under `tests/samples/`.
+- Claude Code-specific path rules and skills remain under `.claude/`; consult them when relevant.
+
 ## Target Invariants
 
 - The public document boundary is a package, not a selected primary asset.
@@ -36,6 +43,12 @@ The package-first design is not implemented merely because it is documented. Do 
 - Temporary scripts and generated investigation output belong under `temp/` and must not become runtime dependencies.
 - Preserve unrelated work in a dirty tree.
 
+## Branches and Commits
+
+- Use `dev-0.6.0` for daily development, `master` for releases, and `wiki/master` for Wiki maintenance.
+- `master` allows only `src/`, CI, `README.md`, `README.zh-CN.md`, `AGENTS.md`, `LICENSE`, `pytest.ini`, `tests/`, and `.claude/rules/`; `docs/` and `wiki/` are separate Git repositories and are excluded from the root repository.
+- Commit format: `<type>: <summary> (#issue)`. Issue numbers are optional. Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `release`.
+
 ## Agent Task Mode and Loop Boundaries
 
 - Classify the request before choosing a workflow. Read-only questions, diagnosis, audits, documentation/status checks, and explanations terminate with an evidence report; they are not implementation tasks.
@@ -56,3 +69,5 @@ When `.codegraph/` exists, use CodeGraph before broad text search to understand 
 - Superseded repository-wide designs move to `docs/designs/archive/`, retain a visible archive banner, and link to the canonical design.
 - Do not hardcode a developer's UE checkout path in committed documentation. Use paths relative to the Unreal Engine source root.
 - OpenWiki repository generation is enabled only when a root `.openwikiignore` exists. Until then, maintain the existing Markdown and Wiki directly.
+- `wiki/` contains developer guides in its own Git repository; keep them in sync with `src/`.
+- Track issues in GitHub Issues (`gh` CLI); see `docs/reference/issue-tracker.md` when `docs/` is present.

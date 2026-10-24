@@ -57,7 +57,7 @@ jobs:
             echo "Master 允许的文件："
             echo "  - src/uasset_read/ (核心源码)"
             echo "  - .github/workflows/ (CI)"
-            echo "  - README.md, README.zh-CN.md, CLAUDE.md, LICENSE"
+            echo "  - README.md, README.zh-CN.md, AGENTS.md, LICENSE"
             echo "  - pytest.ini, tests/ (CI 需要)"
             echo "  - .claude/rules/"
             exit 1
