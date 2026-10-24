@@ -200,25 +200,99 @@
         }
       },
       "opt_in": true
+    },
+    "Issue662_SkeletalMesh.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {
+        "BINARY_OR_NATIVE_PROPERTY_OPAQUE": {
+          "known_unimplemented": {
+            "max": 1
+          }
+        },
+        "EXPORT_TRAILING_BYTES_UNCONSUMED": {
+          "unexpected": {
+            "max": 4
+          }
+        }
+      }
+    },
+    "Issue662_AnimComposite.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {
+        "EXPORT_TRAILING_BYTES_UNCONSUMED": {
+          "known_unimplemented": {
+            "max": 1
+          }
+        }
+      }
+    },
+    "Issue662_AnimLayerInterface.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {
+        "EXPORT_TRAILING_BYTES_UNCONSUMED": {
+          "editor_only": {
+            "max": 3
+          }
+        }
+      }
+    },
+    "Issue662_MaterialFunction.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {},
+      "max_total_diagnostics": 0
+    },
+    "Issue662_MaterialParameterCollection.uasset": {
+      "depth": "asset",
+      "forbidden_codes": [
+        "EXPORT_PROPERTY_PARSE_FAILED",
+        "HANDLER_FAILURE"
+      ],
+      "forbid_unlisted": true,
+      "max_by_code_reason": {},
+      "max_total_diagnostics": 0
     }
   },
   "aggregate": {
     "scope": "manifest",
-    "sample_count": 67,
-    "max_total_warnings": 2583,
-    "max_total_bytes": 3071278,
+    "sample_count": 73,
+    "max_total_warnings": 2604,
+    "max_total_bytes": 15023169,
     "by_reason": {
       "bulk_expected": {
         "max_count": 5,
         "max_bytes": 22306
       },
       "editor_only": {
-        "max_count": 1202,
-        "max_bytes": 1134930
+        "max_count": 1218,
+        "max_bytes": 1143637
       },
       "known_unimplemented": {
-        "max_count": 1376,
-        "max_bytes": 1914042
+        "max_count": 1377,
+        "max_bytes": 1914058
+      },
+      "unexpected": {
+        "max_count": 4,
+        "max_bytes": 11943168
       }
     },
     "by_reason_class": {
@@ -239,20 +313,20 @@
         "max_bytes": 56
       },
       "editor_only/AnimBlueprintGeneratedClass": {
-        "max_count": 3,
-        "max_bytes": 56153
+        "max_count": 4,
+        "max_bytes": 56237
       },
       "editor_only/Blueprint": {
         "max_count": 1,
         "max_bytes": 4
       },
       "editor_only/BlueprintGeneratedClass": {
-        "max_count": 14,
-        "max_bytes": 17928
+        "max_count": 15,
+        "max_bytes": 19031
       },
       "editor_only/Function": {
-        "max_count": 230,
-        "max_bytes": 141400
+        "max_count": 233,
+        "max_bytes": 142252
       },
       "editor_only/K2Node_AddDelegate": {
         "max_count": 1,
@@ -287,8 +361,8 @@
         "max_bytes": 2199
       },
       "editor_only/K2Node_CommutativeAssociativeBinaryOperator": {
-        "max_count": 42,
-        "max_bytes": 40679
+        "max_count": 43,
+        "max_bytes": 41541
       },
       "editor_only/K2Node_CreateWidget": {
         "max_count": 1,
@@ -299,8 +373,8 @@
         "max_bytes": 8074
       },
       "editor_only/K2Node_DynamicCast": {
-        "max_count": 7,
-        "max_bytes": 8914
+        "max_count": 8,
+        "max_bytes": 10142
       },
       "editor_only/K2Node_EnhancedInputAction": {
         "max_count": 12,
@@ -315,12 +389,12 @@
         "max_bytes": 3536
       },
       "editor_only/K2Node_FunctionEntry": {
-        "max_count": 32,
-        "max_bytes": 12741
+        "max_count": 35,
+        "max_bytes": 13385
       },
       "editor_only/K2Node_FunctionResult": {
-        "max_count": 8,
-        "max_bytes": 5041
+        "max_count": 9,
+        "max_bytes": 5563
       },
       "editor_only/K2Node_GetArrayItem": {
         "max_count": 4,
@@ -375,16 +449,16 @@
         "max_bytes": 1550
       },
       "editor_only/K2Node_VariableGet": {
-        "max_count": 310,
-        "max_bytes": 289886
+        "max_count": 313,
+        "max_bytes": 291280
       },
       "editor_only/K2Node_VariableSet": {
-        "max_count": 53,
-        "max_bytes": 62161
+        "max_count": 54,
+        "max_bytes": 63258
       },
       "editor_only/MetaData": {
-        "max_count": 30,
-        "max_bytes": 45518
+        "max_count": 31,
+        "max_bytes": 46439
       },
       "editor_only/SoundNodeMixer": {
         "max_count": 1,
@@ -409,6 +483,10 @@
       "known_unimplemented/ALS_AnimBP_C": {
         "max_count": 1,
         "max_bytes": 605230
+      },
+      "known_unimplemented/AnimComposite": {
+        "max_count": 1,
+        "max_bytes": 16
       },
       "known_unimplemented/AnimGraphNode_ApplyAdditive": {
         "max_count": 34,
@@ -661,6 +739,14 @@
       "known_unimplemented/World": {
         "max_count": 1,
         "max_bytes": 12
+      },
+      "unexpected/SkeletalMesh": {
+        "max_count": 1,
+        "max_bytes": 11942964
+      },
+      "unexpected/SkeletalMeshDescriptionBulkData": {
+        "max_count": 3,
+        "max_bytes": 204
       }
     }
   }
