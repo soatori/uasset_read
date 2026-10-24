@@ -266,6 +266,17 @@
       "b_is_asset_count": 1
     },
     {
+      "name": "Helm_BP.uasset",
+      "sha256": "78f8f6c81e24d5ec8d252237ba443baabafe4cac0b8637bf484d3ae2d94caad1",
+      "size_bytes": 169179,
+      "engine_layout": "legacy",
+      "file_version_ue4": 522,
+      "file_version_ue5": 0,
+      "sidecars": [],
+      "export_count": 47,
+      "b_is_asset_count": 2
+    },
+    {
       "name": "IntroToUnreal_BP_Light.uasset",
       "sha256": "e7a81fed9221e7d25582996691d9b83f43bfa622618125a6d478ce28b02b6847",
       "size_bytes": 69456,
@@ -797,15 +808,15 @@
     }
   ],
   "summary": {
-    "total_samples": 67
+    "total_samples": 68
   },
   "fixture_gaps": {
     "ue4_graph_nodes": {
-      "status": "missing",
-      "description": "UE4 graph node/pin decoding is an explicit gap, not a defect: the tracked corpus has no UE4 fixture with node-bearing Blueprint graphs (the UE4.10 sample's EventGraph has 0 nodes, and the tracked UE4-era SoundCue fixture's graph nodes are not Blueprint K2Nodes), so nothing is claimed as implemented until a node-bearing Blueprint fixture exists.",
+      "status": "available",
+      "description": "UE4 graph node/pin decoding is an explicit gap, not a defect. Carrier registered 2026-10-24: Helm_BP.uasset (Apache-2.0 peer, UE 4.27 editor save, ue4=522 ue5=0) is the first tracked UE4-era package with node-bearing Blueprint graphs — 47 exports, 2 asset-role exports, 3 graphs, 11 K2Node exports over 7 classes, 26 pins, 8 nodes with a nonzero editor position. Decode on that fixture stays partial: pin 4/5 of K2Node_VariableSet_0 fails on an FText field, one EdGraphPinType payload is consumed as opaque, and 2 pin links resolve outside the package, so no complete UE4 pin coverage is claimed.",
       "needed_for": "UE4 best-effort graph decode (plan blueprint-semantics phase D; does not block UE5 acceptance)",
-      "acquisition": "User supplies at least one UE4 editor-saved Blueprint with node-bearing EventGraph plus the saving engine version/changelist (external dependency; the repo cannot fabricate it).",
-      "verification": "Once supplied: first run the phase-A pre-1010 path, then verify the PinsStoreFName/FString-to-FName legacy pin-name gate and the package's own custom-version table (the Apache-2.0 candidate measures 8 entries, so 'empty' is not a general property) per report section 5-4 before opening acceptance.",
+      "acquisition": "User ruling 2026-10-24 accepted the Apache-2.0 peer sample (UnrealBPInspect samples/ue_4.27/Helm_BP.uasset at pin 8436dca) as this gap's carrier, recorded in tests/samples/ORIGIN-issue-662-ue4-graph.md; a user-supplied UE4 editor save remains the fallback if that provenance is revoked.",
+      "verification": "Demonstrated on the registered fixture: the phase-A pre-1010 pins path ran (tag-scan tail locate), the PinsStoreFName/FString-to-FName legacy pin-name gate resolves to FName for this package (26 pins decode to names), and the package's own custom-version table holds 8 entries, so 'empty' is not a general property. Open: pin 4/5 of K2Node_VariableSet_0 fails on FText history_type=101, so UE4 pin acceptance is limited to what this fixture proves.",
       "minimum_samples": 1,
       "recommended_samples": "1 UE4 editor-saved Blueprint with EventGraph nodes"
     },

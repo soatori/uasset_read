@@ -13,3 +13,13 @@ The `uasset_rs_UE410_SimpleRefsSoftRef.uasset` fixture is sourced from
 Licensed under the **MIT** and **Apache-2.0** licenses.
 See <https://github.com/jorgenpt/uasset-rs/blob/main/LICENSE-MIT> and
 <https://github.com/jorgenpt/uasset-rs/blob/main/LICENSE-APACHE>.
+
+### UnrealBPInspect sample
+
+The `Helm_BP.uasset` fixture (issue #662 UE4 graph carrier) is sourced from
+[UnrealBPInspect](https://github.com/MarcedForLife/UnrealBPInspect) at commit
+`8436dcadbd53d0a6d64e725805066d4e3f98f29c`, path `samples/ue_4.27/Helm_BP.uasset`.
+
+Licensed under the **Apache-2.0** license.
+See <https://github.com/MarcedForLife/UnrealBPInspect/blob/main/LICENSE>.
+Provenance and measured structural numbers: `ORIGIN-issue-662-ue4-graph.md`.

@@ -146,6 +146,14 @@ CAPABILITIES = (
         {"kind": "blueprint"},
         "partial",  # summary tier at depth=asset
     ),
+    # #662 UE4-era carrier (Apache-2.0 peer, UE 4.27 save): measured 47 exports / 2
+    # asset-role / 3 graphs / 11 K2Node over 7 classes / 26 pins / 8 nonzero positions.
+    (
+        "Helm_BP.uasset",
+        "Blueprint",
+        {"kind": "blueprint", "blueprint_type": "Blueprint", "name": "Helm_BP"},
+        "partial",  # summary tier at depth=asset (#629)
+    ),
     ("ABP_RifleAnimLayers.uasset", "AnimBlueprintGeneratedClass", {"kind": "anim_blueprint"}, "partial"),
     ("ALS_AnimBP.uasset", "AnimBlueprint", {"kind": "anim_blueprint"}, "partial"),
     ("ALS_AnimBP.uasset", "AnimBlueprintGeneratedClass", {"kind": "anim_blueprint"}, "partial"),
@@ -310,6 +318,7 @@ ORIGIN_DOCS = {
     "ORIGIN-issue-625-pak.md",
     "ORIGIN-issue-626-curve-table.md",
     "ORIGIN-issue-627-sidecar.md",
+    "ORIGIN-issue-662-ue4-graph.md",
 }
 
 
@@ -321,7 +330,7 @@ def test_manifest_matches_every_real_sample():
     for entry in manifest["samples"]:
         expected_files |= {side["name"] for side in entry["sidecars"]}
     actual_files = {path.name for path in SAMPLES.iterdir() if path.suffix in PACKAGE_SUFFIXES}
-    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 67
+    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 68
     assert actual_files == expected_files
     allowed = (
         expected_files
@@ -440,12 +449,13 @@ def test_fixture_gap_statuses_pin_the_capability_boundary():
     assert gaps["anim_layer_interface"]["status"] == "missing"
     assert gaps["material_function"]["status"] == "missing"
     assert gaps["material_parameter_collection"]["status"] == "missing"
-    # D1 (plan blueprint-semantics): UE4 graph node/pin decoding stays an
-    # explicit gap — no fixture exists and nothing is promised until the user
-    # supplies a node-bearing UE4 Blueprint and the phase-A path plus the
-    # PinsStoreFName/legacy pin-name gates are verified case by case.
+    # D1 (plan blueprint-semantics): UE4 graph node/pin decoding is an explicit gap,
+    # not a defect. #662 registered its carrier (Helm_BP.uasset, UE4-era save with
+    # K2Node exports), so the phase-A pre-1010 path and the FName pin-name gate are
+    # demonstrated on a real fixture; the pin that still fails keeps UE4 pin coverage
+    # partial, and the manifest verification text records exactly that.
     ue4_gap = gaps["ue4_graph_nodes"]
-    assert ue4_gap["status"] == "missing"
+    assert ue4_gap["status"] == "available"
     assert "用户" in ue4_gap["acquisition"] or "user" in ue4_gap["acquisition"].lower()
     assert "PinsStoreFName" in ue4_gap["verification"]
     # Hand-written counts drift ("54 samples" survived a corpus of 66): gaps may
@@ -938,7 +948,7 @@ def test_real_sample_proves_claimed_capability():
 
     The status column pins the #629 tier contract: decoded-tier fixtures are
     ``complete``; summary-tier fixtures prove ``partial`` with coverage.
-    Loops the CAPABILITIES table so 29 claims cost one collected item; every
+    Loops the CAPABILITIES table so 30 claims cost one collected item; every
     assertion message carries ``sample:class_name``.
     """
     for sample, class_name, expected, expected_semantic in CAPABILITIES:
@@ -3666,7 +3676,7 @@ def _aggregate_from_manifest():
 
 
 def test_trailing_aggregate_report_and_gate():
-    """Report gate on all 67 manifest samples, plus the aggregate's fail paths.
+    """Report gate on all 68 manifest samples, plus the aggregate's fail paths.
 
     Report half: counts AND bytes by reason and class must sit within the
     quality baseline. Fail half: a synthetic report over ceiling in bytes,
@@ -3678,7 +3688,7 @@ def test_trailing_aggregate_report_and_gate():
     actual = _aggregate_from_manifest()
     report_baseline = json.loads((SAMPLES / "quality_baseline.json").read_text(encoding="utf-8"))["aggregate"]
     _assert_trailing_aggregate(actual, report_baseline)
-    assert actual["sample_count"] == 67
+    assert actual["sample_count"] == 68
     # #663 decoded conclusion: the K2Node_CallFunction pin tail consumes
     # byte-exactly (370/370 corpus trailers), so the class leaves both the
     # live inventory and the regenerated baseline — totals above already pin

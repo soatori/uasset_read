@@ -204,17 +204,17 @@
   },
   "aggregate": {
     "scope": "manifest",
-    "sample_count": 67,
-    "max_total_warnings": 2583,
-    "max_total_bytes": 3071278,
+    "sample_count": 68,
+    "max_total_warnings": 2596,
+    "max_total_bytes": 3079662,
     "by_reason": {
       "bulk_expected": {
         "max_count": 5,
         "max_bytes": 22306
       },
       "editor_only": {
-        "max_count": 1202,
-        "max_bytes": 1134930
+        "max_count": 1215,
+        "max_bytes": 1143314
       },
       "known_unimplemented": {
         "max_count": 1376,
@@ -247,12 +247,12 @@
         "max_bytes": 4
       },
       "editor_only/BlueprintGeneratedClass": {
-        "max_count": 14,
-        "max_bytes": 17928
+        "max_count": 15,
+        "max_bytes": 19031
       },
       "editor_only/Function": {
-        "max_count": 230,
-        "max_bytes": 141400
+        "max_count": 232,
+        "max_bytes": 142217
       },
       "editor_only/K2Node_AddDelegate": {
         "max_count": 1,
@@ -287,8 +287,8 @@
         "max_bytes": 2199
       },
       "editor_only/K2Node_CommutativeAssociativeBinaryOperator": {
-        "max_count": 42,
-        "max_bytes": 40679
+        "max_count": 43,
+        "max_bytes": 41541
       },
       "editor_only/K2Node_CreateWidget": {
         "max_count": 1,
@@ -299,8 +299,8 @@
         "max_bytes": 8074
       },
       "editor_only/K2Node_DynamicCast": {
-        "max_count": 7,
-        "max_bytes": 8914
+        "max_count": 8,
+        "max_bytes": 10142
       },
       "editor_only/K2Node_EnhancedInputAction": {
         "max_count": 12,
@@ -315,12 +315,12 @@
         "max_bytes": 3536
       },
       "editor_only/K2Node_FunctionEntry": {
-        "max_count": 32,
-        "max_bytes": 12741
+        "max_count": 34,
+        "max_bytes": 13181
       },
       "editor_only/K2Node_FunctionResult": {
-        "max_count": 8,
-        "max_bytes": 5041
+        "max_count": 9,
+        "max_bytes": 5563
       },
       "editor_only/K2Node_GetArrayItem": {
         "max_count": 4,
@@ -375,16 +375,16 @@
         "max_bytes": 1550
       },
       "editor_only/K2Node_VariableGet": {
-        "max_count": 310,
-        "max_bytes": 289886
+        "max_count": 313,
+        "max_bytes": 291280
       },
       "editor_only/K2Node_VariableSet": {
-        "max_count": 53,
-        "max_bytes": 62161
+        "max_count": 54,
+        "max_bytes": 63258
       },
       "editor_only/MetaData": {
-        "max_count": 30,
-        "max_bytes": 45518
+        "max_count": 31,
+        "max_bytes": 46439
       },
       "editor_only/SoundNodeMixer": {
         "max_count": 1,
