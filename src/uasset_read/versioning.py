@@ -43,6 +43,8 @@ FRAMEWORK_GUID = "3f74fccf8044b043df14919373201d17"
 CORE_GUID = "3cc15e37fb48e406f08400b57e712a26"
 FORTNITE_GUID = "86181d60844f64acded316aad6c7ea0d"
 RELEASE_GUID = "22d5549cbe4f26a846072194d082b461"
+# FUE5MainStreamObjectVersion GUID (EdGraphPinSourceIndex is enum value 50).
+UE5_MAIN_STREAM_GUID = "81d57d69ab414fe6ec514aaa28b6b7be"
 # FUE5ReleaseStreamObjectVersion (DevObjectVersion.cpp:338 byte-order swap of
 # FGuid(0xD89B5E42, ...) verified against the tracked custom-version tables;
 # see report §1.1). Gates e.g. SerializeFloatPinDefaultValuesAsSinglePrecision=36.

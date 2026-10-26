@@ -23,6 +23,7 @@ from uasset_read.constants import (
 from uasset_read.exceptions import ParseError
 from uasset_read.versioning import (
     RELEASE_GUID,
+    UE5_MAIN_STREAM_GUID,
     UE5_RELEASE_STREAM_GUID,
     ftext_dev_notes_enabled,
     require_version_context,
@@ -307,8 +308,9 @@ def read_ue_graph_pin(
     dev_notes = ftext_dev_notes_enabled(summary, require_version_context(archive))
     _read_pin_ftext_field(archive, "PinFriendlyName", dev_notes=dev_notes, summary=summary)
 
-    # 5. SourceIndex (UE5 always present, write-only)
-    archive.read_i32()
+    # 5. SourceIndex (EdGraphPin.cpp; FUE5MainStreamObjectVersion >= 50)
+    if require_version_context(archive).custom_versions.get(UE5_MAIN_STREAM_GUID, -1) >= 50:
+        archive.read_i32()
 
     # 6. PinToolTip — FString (NOT FText!); write-only
     _read_pin_fstring_field(archive, "PinToolTip", pin_name)

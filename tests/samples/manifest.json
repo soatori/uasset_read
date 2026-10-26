@@ -860,27 +860,38 @@
       "sidecars": [],
       "export_count": 1,
       "b_is_asset_count": 1
+    },
+    {
+      "name": "UE53GraphFixture_BP_GraphFixture.uasset",
+      "sha256": "4708f1e1f3d1ad71d7ce1b5d8685e97818592e7b32a3c1d608ef6e577b0c18c9",
+      "size_bytes": 22347,
+      "engine_layout": "legacy",
+      "file_version_ue4": 522,
+      "file_version_ue5": 1009,
+      "sidecars": [],
+      "export_count": 13,
+      "b_is_asset_count": 2
     }
   ],
   "summary": {
-    "total_samples": 73
+    "total_samples": 74
   },
   "fixture_gaps": {
     "ue4_graph_nodes": {
       "status": "available",
-      "description": "UE4 graph node/pin decoding is an explicit gap, not a defect. Carrier registered 2026-10-24: Helm_BP.uasset (Apache-2.0 peer, UE 4.27 editor save, ue4=522 ue5=0) is the first tracked UE4-era package with node-bearing Blueprint graphs — 47 exports, 2 asset-role exports, 3 graphs, 11 K2Node exports over 7 classes, 26 pins, 8 nodes with a nonzero editor position. Decode on that fixture stays partial: pin 4/5 of K2Node_VariableSet_0 fails on an FText field, one EdGraphPinType payload is consumed as opaque, and 2 pin links resolve outside the package, so no complete UE4 pin coverage is claimed.",
+      "description": "UE4 graph node/pin decoding is an explicit gap, not a defect. Carrier registered 2026-10-24: Helm_BP.uasset (Apache-2.0 peer, UE 4.27 editor save, ue4=522 ue5=0) is the first tracked UE4-era package with node-bearing Blueprint graphs — 47 exports, 2 asset-role exports, 3 graphs, 11 K2Node exports over 7 classes, 31 pins, 8 nodes with a nonzero editor position. Decode on that fixture stays partial: the UE5-only SourceIndex is skipped for this package and all 31 pins decode, but one EdGraphPinType payload remains opaque and 13 exports leave editor-only trailing bytes. Two package-external pin references were recorded before this fix and were not revalidated here, so no complete UE4 pin coverage is claimed.",
       "needed_for": "UE4 best-effort graph decode (plan blueprint-semantics phase D; does not block UE5 acceptance)",
       "acquisition": "User ruling 2026-10-24 accepted the Apache-2.0 peer sample (UnrealBPInspect samples/ue_4.27/Helm_BP.uasset at pin 8436dca) as this gap's carrier, recorded in tests/samples/ORIGIN-issue-662-ue4-graph.md; a user-supplied UE4 editor save remains the fallback if that provenance is revoked.",
-      "verification": "Demonstrated on the registered fixture: the phase-A pre-1010 pins path ran (tag-scan tail locate), the PinsStoreFName/FString-to-FName legacy pin-name gate resolves to FName for this package (26 pins decode to names), and the package's own custom-version table holds 8 entries, so 'empty' is not a general property. Open: pin 4/5 of K2Node_VariableSet_0 fails on FText history_type=101, so UE4 pin acceptance is limited to what this fixture proves.",
+      "verification": "Demonstrated on the registered fixture: the phase-A pre-1010 pins path ran (tag-scan tail locate), the PinsStoreFName/FString-to-FName legacy pin-name gate resolves to FName, and FUE5MainStreamObjectVersion::EdGraphPinSourceIndex is absent so its UE5-only 4-byte field is skipped (31 pins decode to names). The package's own custom-version table holds 8 entries, so 'empty' is not a general property. Remaining boundaries: one 65-byte EdGraphPinType payload is opaque, 13 exports retain editor-only trailing bytes, and the two package-external pin references recorded before this fix were not revalidated here.",
       "minimum_samples": 1,
       "recommended_samples": "1 UE4 editor-saved Blueprint with EventGraph nodes"
     },
     "ue5_2_5_3_graph": {
       "status": "missing",
-      "description": "No tracked fixture covers the UE5.2–5.3 graph band (file_version_ue5 = 1009): graph-bearing coverage jumps from the 1004 band to 1012, and the samples recorded in the 1009 band are non-graph assets (SoundWave, SoundAttenuation, SubsurfaceProfile). The pre-1010 pin path is UE-source-grounded and pinned by bounded-bytes gate tests, but the band itself stays unproven until a band fixture is registered.",
+      "description": "Partial carrier registered 2026-10-26: UE53GraphFixture_BP_GraphFixture.uasset is a first-party UE 5.3.2 editor save with FileVersionUE5=1009, 3 EventGraph nodes, 8 pins, stored positions, and 0 links. A real node-bearing carrier now exists, but the positive connected-edge requirement remains missing; this is not full UE5.2/5.3 graph acceptance.",
       "needed_for": "UE5.2/5.3 graph structural acceptance (issue #656 plan phase B); does not block the UE5.0 pre-1010 path already proven on B_ControlPointScoring",
-      "acquisition": "User supplies at least one UE5.2 or UE5.3 editor-saved Blueprint with node-bearing EventGraph plus the saving engine version/changelist (external dependency; the repo cannot fabricate the package or its recorded file version).",
-      "verification": "Phase B: assert the fixture's own recorded file_version_ue5 == 1009, then graph decode at depth=decode with nodes>0 and pins>0, link endpoints resolving to existing node/pin ids, nonzero node-position majority, no BLUEPRINT_* diagnostics, and pin payload size consistent with that save's own custom-version table (stream 36 -> 69/101, otherwise the 65/97 path must diagnose rather than fabricate). Only then may any document state UE5.2/5.3 graph support.",
+      "acquisition": "Acquired 2026-10-26: first-party Blueprint authored for this repository task at the user's direction in a new Blank Blueprint project, UE 5.3.2 changelist 29314046, Starter Content disabled; provenance and measured partial structure are recorded in tests/samples/ORIGIN-issue-656-ue53-graph.md.",
+      "verification": "The registered package records file_version_ue5=1009. Decode measures EventGraph with 3 nodes, 8 pins, positions (0,0), (0,208), (0,416), 0 links, and no graph parse errors; UserConstructionScript has 1 node and 1 pin. This partial carrier does not meet positive edge acceptance. Keep status missing until a saved UE5.2/5.3 EventGraph has at least one link whose endpoints resolve, with the required positions, clean BLUEPRINT_* diagnostics, and version-appropriate pin payload evidence.",
       "minimum_samples": 1,
       "recommended_samples": "1 UE5.2 or UE5.3 editor-saved Blueprint with EventGraph nodes"
     },

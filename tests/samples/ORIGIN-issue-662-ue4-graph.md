@@ -37,8 +37,9 @@ Asset-role exports: `export:0` (`Blueprint`, `Helm_BP`) and `export:1`
   CommutativeAssociativeBinaryOperator 1, DynamicCast 1, FunctionEntry 2, FunctionResult 1,
   VariableGet 3, VariableSet 1. Node distribution: `EventGraph` 0, `GetSteeringAngle` 6,
   `UserConstructionScript` 5.
-- 26 pins decode (15 + 11 + 0 per graph); 8 of the 11 nodes carry a nonzero editor position;
-  18 pin-link records (10 + 8), of which 2 target pins outside the package.
+- 31 pins decode (15 + 16 + 0 per graph); 8 of the 11 nodes carry a nonzero editor position;
+  20 pin-link records (10 + 10). Two package-external target references were recorded before
+  the SourceIndex fix; this change did not revalidate them.
 - Custom-version table: 8 entries — the "empty custom-version table" reading is not a
   general property, so the gate has to be evaluated per package.
 
@@ -47,15 +48,15 @@ Asset-role exports: `export:0` (`Blueprint`, `Helm_BP`) and `export:1`
 - Phase-A pre-1010 path ran: with `FileVersionUE5 == 0` the pins array is located by the
   tag-scan tail on every node export, not by a recorded 1010+ script offset.
 - PinsStoreFName / FString-to-FName gate: this package stores pin names as FName indices —
-  the 4-byte name read yields real pin names for all 26 decoded pins (`self`, `A`, `B`,
+  the 4-byte name read yields real pin names for all 31 decoded pins (`self`, `A`, `B`,
   `ReturnValue`, `then`, `execute`, `WinchConstraintInstance`, `WheelConstraint`,
   `ChildActor`, `AsWinch Constraint BP`), which only an index-based read can produce.
-- Still open on this fixture: pin 4/5 of `K2Node_VariableSet_0` fails on an FText field
-  (`Invalid FText history_type=101 at pos 164326`), three name reads inside that pin region
-  land outside the 271-entry name table and are recovered as default names, one 65-byte
-  `EdGraphPinType` payload is consumed as opaque, and 13 exports leave editor-only trailing
-  bytes. So UE4 node/pin decoding is proven for what this fixture proves; complete UE4 pin
-  coverage is not claimed.
+- `FUE5MainStreamObjectVersion::EdGraphPinSourceIndex` is absent for this UE4.27 package, so
+  the UE5-only `SourceIndex` field is skipped. The former `history_type=101` failure and the
+  misaligned name reads are gone; all 31 pins decode. Still open on this fixture: one 65-byte
+  `EdGraphPinType` payload remains opaque and 13 exports leave editor-only trailing bytes.
+  The two package-external target references recorded above were not revalidated by this fix,
+  so complete UE4 pin coverage is not claimed.
 
 ## Verification / gate
 

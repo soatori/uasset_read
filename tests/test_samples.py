@@ -194,12 +194,19 @@ CAPABILITIES = (
         "partial",  # summary tier at depth=asset
     ),
     # #662 UE4-era carrier (Apache-2.0 peer, UE 4.27 save): measured 47 exports / 2
-    # asset-role / 3 graphs / 11 K2Node over 7 classes / 26 pins / 8 nonzero positions.
+    # asset-role / 3 graphs / 11 K2Node over 7 classes / 31 pins / 8 nonzero positions.
     (
         "Helm_BP.uasset",
         "Blueprint",
         {"kind": "blueprint", "blueprint_type": "Blueprint", "name": "Helm_BP"},
         "partial",  # summary tier at depth=asset (#629)
+    ),
+    # #656 UE 5.3.2 user-directed first-party carrier; graph acceptance remains partial.
+    (
+        "UE53GraphFixture_BP_GraphFixture.uasset",
+        "Blueprint",
+        {"kind": "blueprint", "blueprint_type": "Blueprint", "name": "BP_GraphFixture"},
+        "partial",
     ),
     # #662 UE 5.8.2 user fixtures (first-party editor saves): measured numbers
     # pinned at summary tier.
@@ -394,6 +401,7 @@ ORIGIN_DOCS = {
     "ORIGIN-issue-627-sidecar.md",
     "ORIGIN-issue-662-ue4-graph.md",
     "ORIGIN-issue-662-ue58-user-fixtures.md",
+    "ORIGIN-issue-656-ue53-graph.md",
 }
 
 
@@ -405,7 +413,7 @@ def test_manifest_matches_every_real_sample():
     for entry in manifest["samples"]:
         expected_files |= {side["name"] for side in entry["sidecars"]}
     actual_files = {path.name for path in SAMPLES.iterdir() if path.suffix in PACKAGE_SUFFIXES}
-    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 73
+    assert manifest["summary"]["total_samples"] == len(manifest["samples"]) == 74
     assert actual_files == expected_files
     allowed = (
         expected_files
@@ -528,25 +536,26 @@ def test_fixture_gap_statuses_pin_the_capability_boundary():
     # D1 (plan blueprint-semantics): UE4 graph node/pin decoding is an explicit gap,
     # not a defect. #662 registered its carrier (Helm_BP.uasset, UE4-era save with
     # K2Node exports), so the phase-A pre-1010 path and the FName pin-name gate are
-    # demonstrated on a real fixture; the pin that still fails keeps UE4 pin coverage
+    # demonstrated on a real fixture; one opaque pin-type payload keeps UE4 coverage
     # partial, and the manifest verification text records exactly that.
     ue4_gap = gaps["ue4_graph_nodes"]
     assert ue4_gap["status"] == "available"
     assert "用户" in ue4_gap["acquisition"] or "user" in ue4_gap["acquisition"].lower()
     assert "PinsStoreFName" in ue4_gap["verification"]
-    # #656: the UE5.2–5.3 band (file_version_ue5 = 1009) is registered as a gap, and
-    # "missing" is a measured fact here, not an aspiration — the band's tracked samples
-    # carry no graph nodes, so the pre-1010 pin path is UE-source-grounded and pinned on
-    # bounded bytes but still unproven for the band. These are the assertions that flip
-    # when a band fixture is registered.
+    # #656: a UE5.3.2 node-bearing carrier is tracked in the 1009 band, but its
+    # EventGraph has no connected edge. The full graph acceptance gap therefore stays
+    # missing until a positive, resolved link is measured on a saved band fixture.
     band_gap = gaps["ue5_2_5_3_graph"]
     assert band_gap["status"] == "missing" and band_gap["minimum_samples"] == 1
     assert "1009" in band_gap["description"] and "1009" in band_gap["verification"]
     band_samples = [entry for entry in manifest["samples"] if entry.get("file_version_ue5") == 1009]
-    assert len(band_samples) == 3, [entry["name"] for entry in band_samples]
+    assert len(band_samples) == 4, [entry["name"] for entry in band_samples]
     from uasset_read.package import parse_package_document
 
-    for entry in band_samples:
+    partial_carrier = "UE53GraphFixture_BP_GraphFixture.uasset"
+    graphless_band_samples = [entry for entry in band_samples if entry["name"] != partial_carrier]
+    assert len(graphless_band_samples) == 3
+    for entry in graphless_band_samples:
         doc = parse_package_document(str(SAMPLES / entry["name"]), depth="decode")
         band_nodes = sum(len(g["nodes"]) for o in doc.objects for g in (o.semantic or {}).get("graphs") or [])
         assert band_nodes == 0, (entry["name"], band_nodes)
@@ -1043,7 +1052,7 @@ def test_real_sample_proves_claimed_capability():
 
     The status column pins the #629 tier contract: decoded-tier fixtures are
     ``complete``; summary-tier fixtures prove ``partial`` with coverage.
-    Loops the CAPABILITIES table so 35 claims cost one collected item; every
+    Loops the CAPABILITIES table in one collected item; every
     assertion message carries ``sample:class_name``.
     """
     for sample, class_name, expected, expected_semantic in CAPABILITIES:
@@ -2754,7 +2763,7 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     from uasset_read.serializers.graph_node import _read_node_pins
     from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
     from uasset_read.serializers.package_summary import CustomVersion, PackageFileSummary
-    from uasset_read.versioning import UE5_RELEASE_STREAM_GUID, build_version_context
+    from uasset_read.versioning import UE5_MAIN_STREAM_GUID, UE5_RELEASE_STREAM_GUID, build_version_context
 
     def _synthetic_node_export(script_end: int = 0, size: int = 64) -> ObjectExport:
         return ObjectExport(
@@ -2771,11 +2780,16 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     # The band under test (UE5.2–5.3): file_version_ue5 = 1009, under the export-map
     # script-offset gate (ObjectResource.cpp:214-218), with a custom-version table
     # under UE5ReleaseStream 36 — so the pin-type payload is the 65-byte side, not the
-    # 69/101 sizes proven only by tracked 5.4–5.8 saves.
+    # 69/101 sizes proven only by tracked 5.4–5.8 saves. Real saves in this band carry
+    # FUE5MainStreamObjectVersion >= 50 (EdGraphPinSourceIndex; measured 118 on the
+    # tracked UE5.3.2 fixture), so the synthetic pin entry includes SourceIndex.
     band_summary = PackageFileSummary(
         file_version_ue4=522,
         file_version_ue5=1009,
-        custom_versions=[CustomVersion(guid=UE5_RELEASE_STREAM_GUID, version=35)],
+        custom_versions=[
+            CustomVersion(guid=UE5_RELEASE_STREAM_GUID, version=35),
+            CustomVersion(guid=UE5_MAIN_STREAM_GUID, version=118),
+        ],
     )
     band_context = build_version_context(band_summary)
     band_name_map = ["None", "GetConeAngleVertex"]
@@ -3220,6 +3234,41 @@ def test_blueprint_fixtures_carry_generated_and_cdo_relations():
         actual = {(r.kind, r.from_id, r.to_id) for r in doc.relations}
         for edge in edges:
             assert edge in actual, f"{sample}: missing {edge}"
+
+
+def test_helm_blueprint_variable_set_pins_decode():
+    from uasset_read.package import parse_package_document
+
+    doc = parse_package_document(str(SAMPLES / "Helm_BP.uasset"), depth="decode")
+    graphs = [graph for obj in doc.objects for graph in (obj.semantic or {}).get("graphs") or []]
+    graph = next(graph for graph in graphs if graph["name"] == "UserConstructionScript")
+    node = next(node for node in graph["nodes"] if node["id"] == "export:0/export:27")
+
+    assert len(node["pins"]) == 5
+    assert not any("node export:27" in error for error in graph["parse_errors"])
+
+
+def test_ue53_version_1009_blueprint_partial_graph_carrier():
+    """A real 1009 save proves nodes, pins and positions, but not connected links."""
+    from uasset_read.package import parse_package_document
+
+    sample = "UE53GraphFixture_BP_GraphFixture.uasset"
+    with _open_sample_archive(SAMPLES / sample) as opened:
+        assert opened[1].file_version_ue4 == 522
+        assert opened[1].file_version_ue5 == 1009
+
+    doc = parse_package_document(str(SAMPLES / sample), depth="decode")
+    graphs = [graph for obj in doc.objects for graph in (obj.semantic or {}).get("graphs") or []]
+    event_graph = next(graph for graph in graphs if graph["name"] == "EventGraph")
+    assert len(event_graph["nodes"]) == 3
+    assert sum(len(node["pins"]) for node in event_graph["nodes"]) == 8
+    assert [
+        (node["position"]["x"], node["position"]["y"])
+        for node in event_graph["nodes"]
+    ] == [(0, 0), (0, 208), (0, 416)]
+    assert event_graph["links"] == []
+    assert not event_graph["parse_errors"]
+    assert not [diagnostic for diagnostic in doc.diagnostics if diagnostic.code.startswith("BLUEPRINT_")]
 
 
 def test_blueprint_graph_decodes_and_definitions_stay_honest():
@@ -3909,7 +3958,7 @@ def test_trailing_aggregate_report_and_gate():
     actual = _aggregate_from_manifest()
     report_baseline = json.loads((SAMPLES / "quality_baseline.json").read_text(encoding="utf-8"))["aggregate"]
     _assert_trailing_aggregate(actual, report_baseline)
-    assert actual["sample_count"] == 73
+    assert actual["sample_count"] == 74
     # #663 decoded conclusion: the K2Node_CallFunction pin tail consumes
     # byte-exactly (370/370 corpus trailers), so the class leaves both the
     # live inventory and the regenerated baseline — totals above already pin
