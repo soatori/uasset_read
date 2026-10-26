@@ -32,6 +32,10 @@ compression = [
     "brotli",
     "zstandard",
 ]
+test = [
+    "pytest",
+    "jsonschema",
+]
 [tool.setuptools.packages.find]
 where = ["src"]
 
