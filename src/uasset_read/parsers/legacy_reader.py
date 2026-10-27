@@ -1828,6 +1828,7 @@ def _attach_blueprint_graph_extras(
     it with a diagnostic (the export id stays addressable).
     """
     from ..serializers.blueprint_graph import read_blueprint_graphs
+    from .blueprint.graph import _link_record_from_raw
 
     family = {
         o.id
@@ -1932,12 +1933,18 @@ def _attach_blueprint_graph_extras(
             graph.pop("ambiguous_links", None)
     for owner_id, owner_graphs in owners.items():
         entry = extras.setdefault(owner_id, {})
+        obj = next((o for o in objects if o.id == owner_id), None)
+        if obj is not None and (obj.class_name or "") in _NIAGARA_GRAPH_CLASSES:
+            for graph in owner_graphs:
+                graph["links"] = [
+                    _link_record_from_raw(item, owner_id, str(graph.get("id") or "")).to_dict()
+                    for item in graph.get("links") or []
+                ]
         entry["graphs"] = owner_graphs
         # Interfaces: BPInterfaceDescription.Interface is a struct-nested
         # negative FPackageIndex (ObjectResource.h convention) that the
         # property normalizer does not resolve — resolve it here against the
         # import map. Class name for display: import.object_name.
-        obj = next((o for o in objects if o.id == owner_id), None)
         if obj is not None and obj.properties:
             ifaces = obj.properties.get("ImplementedInterfaces") or obj.properties.get("Interfaces")
             raw = ifaces.get("value") if isinstance(ifaces, dict) else None

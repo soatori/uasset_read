@@ -2220,6 +2220,7 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
         # B_ControlPointScoring pins decode-mode JSON safety: its VarType fallback
         # values used to reach the envelope as raw PropertyFallback dataclasses.
         "B_ControlPointScoring.uasset",
+        "NM_BPSystemEvent.uasset",
     )
     projected = {}
     for name in samples:
