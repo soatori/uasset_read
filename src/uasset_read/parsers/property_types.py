@@ -1190,7 +1190,12 @@ def parse_struct_property(
 
 
 def parse_map_property(
-    tag: PropertyTag, archive: FArchive, name_map: list[str], export_map: list[Any], summary: Any | None = None
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: list[str],
+    export_map: list[Any],
+    summary: Any | None = None,
+    depth: int = 0,
 ) -> MapValue:
     """Parse MapProperty (ADVP-02).
 
@@ -1211,22 +1216,27 @@ def parse_map_property(
     num_keys_to_remove = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "MapProperty keys to remove count")
     # Skip keys to remove (serialized by key_type)
     for _ in range(num_keys_to_remove):
-        _dispatch_key_parse(key_type, archive, name_map, export_map, summary, tag=tag)
+        _dispatch_key_parse(key_type, archive, name_map, export_map, summary, tag=tag, depth=depth)
 
     # Read number of actual entries
     num_entries = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "MapProperty entry count")
     entries: list[dict[str, Any]] = []
 
     for _ in range(num_entries):
-        key = _dispatch_key_parse(key_type, archive, name_map, export_map, summary, tag=tag)
-        value = _dispatch_value_parse(value_type, archive, name_map, export_map, summary, tag=tag)
+        key = _dispatch_key_parse(key_type, archive, name_map, export_map, summary, tag=tag, depth=depth)
+        value = _dispatch_value_parse(value_type, archive, name_map, export_map, summary, tag=tag, depth=depth)
         entries.append({"key": key, "value": value})
 
     return MapValue(key_type=key_type, value_type=value_type, entries=entries)
 
 
 def parse_set_property(
-    tag: PropertyTag, archive: FArchive, name_map: list[str], export_map: list[Any], summary: Any | None = None
+    tag: PropertyTag,
+    archive: FArchive,
+    name_map: list[str],
+    export_map: list[Any],
+    summary: Any | None = None,
+    depth: int = 0,
 ) -> SetValue:
     """Parse SetProperty (ADVP-03).
 
@@ -1249,7 +1259,7 @@ def parse_set_property(
             archive.read_u8()  # inline 1-byte bool (PropertyBool.cpp)
             continue
         dummy_tag = PropertyTag(name="RemovedElement", type=element_type, size=0)
-        parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
+        parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=depth + 1)
 
     # Read number of actual elements
     num_elements = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "SetProperty element count")
@@ -1261,7 +1271,7 @@ def parse_set_property(
             elements.append(archive.read_u8() != 0)
             continue
         dummy_tag = PropertyTag(name="Element", type=element_type, size=0)
-        element = parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
+        element = parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=depth + 1)
         elements.append(element)
 
     return SetValue(element_type=element_type, elements=elements)
@@ -1384,6 +1394,7 @@ def parse_optional_property(
     name_map: list[str] | None = None,
     export_map: list[Any] | None = None,
     summary: Any | None = None,
+    depth: int = 0,
 ) -> dict:
     """Parse OptionalProperty."""
     has_value = archive.read_bool()
@@ -1396,7 +1407,7 @@ def parse_optional_property(
             type=inner_type,
             size=max(0, (tag.size or 0) - 4),
         )
-        inner_value = parse_property_value(inner_tag, archive, name_map or [], export_map or [], summary)
+        inner_value = parse_property_value(inner_tag, archive, name_map or [], export_map or [], summary, depth=depth + 1)
         return {"has_value": True, "value": inner_value}
     return {"has_value": False, "value": None}
 
@@ -1527,6 +1538,7 @@ def _dispatch_key_parse(
     export_map: list[Any],
     summary: Any | None = None,
     tag: PropertyTag | None = None,
+    depth: int = 0,
 ) -> Any:
     """Key type dispatch parsing (D-02b)."""
     if key_type == "BoolProperty":
@@ -1548,7 +1560,7 @@ def _dispatch_key_parse(
         dummy_tag = PropertyTag(name="Key", type=key_type, size=0)
         from uasset_read.parsers.property_parser import parse_property_value
 
-        return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
+        return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=depth + 1)
 
     if key_type == "ObjectProperty":
         return parse_object_property(PropertyTag(name="Key", type=key_type, size=4), archive)
@@ -1567,7 +1579,7 @@ def _dispatch_key_parse(
         # multi-entry map loop instead of opaque-swallowing inside the struct.
         from uasset_read.parsers.property_parser import parse_property_value
 
-        return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
+        return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=depth + 1)
 
     return None
 
@@ -1579,6 +1591,7 @@ def _dispatch_value_parse(
     export_map: list[Any],
     summary: Any | None = None,
     tag: PropertyTag | None = None,
+    depth: int = 0,
 ) -> Any:
     """Value type dispatch parsing."""
     if value_type == "BoolProperty":
@@ -1594,9 +1607,9 @@ def _dispatch_value_parse(
         # Same as keys: poison must abort the map entry loop, not become opaque.
         from uasset_read.parsers.property_parser import parse_property_value
 
-        return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
+        return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=depth + 1)
 
     dummy_tag = PropertyTag(name="Value", type=value_type, size=0)
     from uasset_read.parsers.property_parser import parse_property_value
 
-    return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=0)
+    return parse_property_value(dummy_tag, archive, name_map, export_map, summary, depth=depth + 1)

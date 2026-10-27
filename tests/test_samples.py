@@ -4317,3 +4317,74 @@ def test_tolerant_mode_keeps_partial_function_on_opaque_tail():
     strict = FKismetArchive(raw, "t", names, tolerant=False)
     with pytest.raises(ValueError):
         strict.read_expression()
+
+
+def test_nested_map_struct_recursion_is_depth_bounded():
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.exceptions import ParseError
+    from uasset_read.models.fallback import FallbackReason, PropertyFallback
+    from uasset_read.models.properties import MapValue, PropertyTag, StructValue
+    from uasset_read.parsers.property_parser import parse_property_value
+    from uasset_read.versioning import VersionContext
+
+    names = ["None", "Member", "MapProperty", "IntProperty", "StructProperty"]
+
+    def fname(i):
+        return struct.pack("<II", i, 0)
+
+    def map_tag(size):
+        return fname(1) + fname(2) + struct.pack("<ii", size, 0) + fname(3) + fname(4) + b"\x00"
+
+    def map_body(inner):
+        struct_body = map_tag(len(inner)) + inner + fname(0)
+        return struct.pack("<ii", 0, 1) + struct.pack("<i", 0) + struct_body
+
+    def root_tag(size):
+        return PropertyTag(
+            name="Member",
+            type="MapProperty",
+            size=size,
+            inner_type="IntProperty",
+            value_type="StructProperty",
+            value_type_struct="Nested",
+        )
+
+    archive_version = VersionContext(file_version_ue4=522, file_version_ue5=0)
+    empty_map = struct.pack("<ii", 0, 0)
+    shallow_payload = empty_map
+    for _ in range(3):
+        shallow_payload = map_body(shallow_payload)
+
+    archive = ByteArchive(shallow_payload)
+    archive.version_context = archive_version
+    parse_property_value(root_tag(len(shallow_payload)), archive, names, [])
+    assert archive.tell() == len(shallow_payload)
+
+    payload = empty_map
+    for _ in range(150):
+        payload = map_body(payload)
+
+    archive = ByteArchive(payload)
+    archive.version_context = archive_version
+    try:
+        result = parse_property_value(root_tag(len(payload)), archive, names, [])
+    except RecursionError:  # the bug: uncaught crash instead of a bounded fallback
+        raise AssertionError("RecursionError escaped the property parser")
+    assert isinstance(result, MapValue)
+    assert result.entries and isinstance(result.entries[0]["value"], StructValue)
+    assert result.entries[0]["value"].parse_status == "opaque"
+
+    optional_payload = struct.pack("<I", 1) + fname(0)
+    optional_archive = ByteArchive(optional_payload)
+    optional_archive.version_context = archive_version
+    optional_tag = PropertyTag(
+        name="Optional",
+        type="OptionalProperty",
+        size=len(optional_payload),
+        inner_type="StructProperty",
+    )
+    optional = parse_property_value(optional_tag, optional_archive, names, [], depth=5)
+    assert isinstance(optional["value"], PropertyFallback)
+    assert optional["value"].reason == FallbackReason.PARSE_ERROR

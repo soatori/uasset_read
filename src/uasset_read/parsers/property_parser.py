@@ -230,9 +230,9 @@ _ARGS_OVERRIDES: dict[str, tuple[str, ...]] = {
     "EnumProperty": ("tag", "archive", "name_map", "summary"),
     "SoftObjectProperty": ("tag", "archive", "name_map", "file_version_ue5"),
     "SoftClassProperty": ("tag", "archive", "name_map", "file_version_ue5"),
-    "MapProperty": ("tag", "archive", "name_map", "export_map", "summary"),
-    "SetProperty": ("tag", "archive", "name_map", "export_map", "summary"),
-    "OptionalProperty": ("tag", "archive", "name_map", "export_map", "summary"),
+    "MapProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth"),
+    "SetProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth"),
+    "OptionalProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth"),
     "ArrayProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth"),
     "StructProperty": ("tag", "archive", "name_map", "export_map", "file_version_ue5", "summary", "depth"),
 }
