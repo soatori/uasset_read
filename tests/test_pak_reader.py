@@ -703,3 +703,27 @@ def test_real_pak_myproject_index():
     for entry in index.files:
         assert entry.offset >= 0 and entry.size >= 0 and entry.uncompressed_size >= 0
         assert entry.payload_offset + entry.size <= file_size
+
+
+def test_utoc_directory_index_rejects_bad_child_graphs():
+    import struct
+
+    import pytest
+
+    from uasset_read.iostore import IoStoreTocError, _parse_directory_index
+
+    def directory_index(first_child):
+        return (
+            struct.pack("<i", 0)  # empty mount FString
+            + struct.pack("<i", 1)
+            + struct.pack("<4I", 0, first_child, 0xFFFFFFFF, 0xFFFFFFFF)
+            + struct.pack("<i", 0)  # no files
+            + struct.pack("<i", 1)
+            + struct.pack("<i", 5) + b"Root\x00"
+        )
+
+    with pytest.raises(IoStoreTocError):
+        _parse_directory_index(directory_index(999))
+
+    with pytest.raises(IoStoreTocError):
+        _parse_directory_index(directory_index(0))
