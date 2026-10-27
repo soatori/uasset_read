@@ -4451,3 +4451,32 @@ def test_interface_ref_out_of_range_is_skipped_not_crashed(monkeypatch):
 
     assert extras["export:0"]["interfaces"] == []
     assert any(d.code == "BLUEPRINT_INTERFACE_REF_UNRESOLVED" for d in diagnostics)
+
+
+def test_matrix_and_twovectors_read_doubles_on_lwc_sizes():
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.models.properties import PropertyTag
+    from uasset_read.parsers.property_parser import parse_property_value
+    from uasset_read.versioning import VersionContext
+
+    def parse(struct_type, size, raw):
+        ar = ByteArchive(raw)
+        ar.version_context = VersionContext(file_version_ue4=522, file_version_ue5=1004)
+        return parse_property_value(
+            PropertyTag(name="V", type="StructProperty", size=size, struct_type=struct_type), ar, [], []
+        )
+
+    doubles = [float(i) for i in range(16)]
+    value = parse("Matrix", 128, struct.pack("<16d", *doubles))
+    assert value.fields["M"][0][0] == 0.0 and value.fields["M"][3][3] == 15.0
+
+    pairs = [1.5, -2.5, 3.5, -4.5, 5.5, -6.5]
+    value2 = parse("TwoVectors", 48, struct.pack("<6d", *pairs))
+    assert value2.fields["E1"]["X"] == 1.5 and value2.fields["E2"]["Z"] == -6.5
+
+    float_matrix = parse("Matrix", 64, struct.pack("<16f", *doubles))
+    assert float_matrix.fields["M"][3][3] == 15.0
+    float_vectors = parse("TwoVectors", 24, struct.pack("<6f", *pairs))
+    assert float_vectors.fields["E1"]["X"] == 1.5 and float_vectors.fields["E2"]["Z"] == -6.5

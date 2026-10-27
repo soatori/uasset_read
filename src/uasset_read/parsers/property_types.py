@@ -754,12 +754,14 @@ def _try_fast_path_struct(
         return StructValue(struct_type="PointerToUberGraphFrame", fields={"FrameIndex": archive.read_i64()})
 
     if struct_type == "Matrix":
-        matrix = [[archive.read_f32() for _ in range(4)] for _ in range(4)]
+        reader = archive.read_f64 if tag.size == 128 else archive.read_f32
+        matrix = [[reader() for _ in range(4)] for _ in range(4)]
         return StructValue(struct_type="Matrix", fields={"M": matrix})
 
     if struct_type == "TwoVectors":
-        e1 = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
-        e2 = {"X": archive.read_f32(), "Y": archive.read_f32(), "Z": archive.read_f32()}
+        reader = archive.read_f64 if tag.size == 48 else archive.read_f32
+        e1 = {"X": reader(), "Y": reader(), "Z": reader()}
+        e2 = {"X": reader(), "Y": reader(), "Z": reader()}
         return StructValue(struct_type="TwoVectors", fields={"E1": e1, "E2": e2})
 
     if struct_type == "OrientedBox":
