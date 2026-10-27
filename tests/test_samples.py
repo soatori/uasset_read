@@ -4388,3 +4388,66 @@ def test_nested_map_struct_recursion_is_depth_bounded():
     optional = parse_property_value(optional_tag, optional_archive, names, [], depth=5)
     assert isinstance(optional["value"], PropertyFallback)
     assert optional["value"].reason == FallbackReason.PARSE_ERROR
+
+
+def test_interface_ref_out_of_range_is_skipped_not_crashed(monkeypatch):
+    from types import SimpleNamespace
+
+    import uasset_read.serializers.blueprint_graph as blueprint_graph
+    from uasset_read.archive import ByteArchive
+    from uasset_read.models.object_model import ObjectRecord
+    from uasset_read.parsers.legacy_reader import _attach_blueprint_graph_extras
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+
+    export_map = [
+        ObjectExport(
+            class_index=PackageIndex(-1),
+            super_index=PackageIndex(0),
+            outer_index=PackageIndex(0),
+            object_name="BP_Interface",
+            object_flags=0,
+            serial_size=0,
+            serial_offset=0,
+        ),
+        ObjectExport(
+            class_index=PackageIndex(-2),
+            super_index=PackageIndex(0),
+            outer_index=PackageIndex(1),
+            object_name="EventGraph",
+            object_flags=0,
+            serial_size=0,
+            serial_offset=0,
+        ),
+    ]
+    objects = [
+        ObjectRecord(
+            id="export:0",
+            table_index=0,
+            name="BP_Interface",
+            class_name="Blueprint",
+            properties={"ImplementedInterfaces": {"value": [{"fields": {"Interface": -999999}}]}},
+        ),
+        ObjectRecord(id="export:1", table_index=1, name="EventGraph", class_name="EdGraph"),
+    ]
+    monkeypatch.setattr(
+        blueprint_graph,
+        "read_blueprint_graphs",
+        lambda *args, **kwargs: [{"id": "export:1", "nodes": [], "links": []}],
+    )
+    extras = {}
+    diagnostics = []
+
+    _attach_blueprint_graph_extras(
+        archive=ByteArchive(b""),
+        summary=SimpleNamespace(package_flags=0),
+        name_map=["None"],
+        import_map=[],
+        export_map=export_map,
+        objects=objects,
+        extras=extras,
+        diagnostics=diagnostics,
+        object_ids=None,
+    )
+
+    assert extras["export:0"]["interfaces"] == []
+    assert any(d.code == "BLUEPRINT_INTERFACE_REF_UNRESOLVED" for d in diagnostics)

@@ -1925,8 +1925,11 @@ def _attach_blueprint_graph_extras(
                 for desc in raw:
                     ref = desc.get("fields", {}).get("Interface") if isinstance(desc, dict) else None
                     if isinstance(ref, int) and ref < 0:
-                        imp = import_map[-ref - 1]
-                        names.append(imp.object_name)
+                        idx = -ref - 1
+                        if 0 <= idx < len(import_map):
+                            names.append(import_map[idx].object_name)
+                        else:
+                            diagnostics.append(_diag("BLUEPRINT_INTERFACE_REF_UNRESOLVED", f"{owner_id}: interface ref {ref} maps to import index {idx}, table size {len(import_map)}", "semantic.blueprint", object_id=owner_id, effect=None))
             entry["interfaces"] = names
 
 
