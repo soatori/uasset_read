@@ -4260,3 +4260,29 @@ def test_no_unreferenced_module_level_names():
             if re.search(rf"^def {name}\(", p.read_text(encoding="utf-8", errors="ignore"), re.M)
         ]
         assert len(homes) == 1, f"{name} defined in {homes}"
+
+
+def test_switch_value_case_offsets_are_not_top_level_jumps():
+    import struct
+
+    from uasset_read.kismet.bytecode_extractor import parse_bytecode_stream
+    from uasset_read.kismet.tokens import EExprToken
+    from uasset_read.versioning import VersionContext
+
+    # 0x69 EX_SwitchValue: u16 case count, u32 EndGotoOffset, index expr,
+    # per case (index expr, u32 NextOffset, case expr), default expr.
+    stream = (
+        bytes([0x69])
+        + struct.pack("<H", 1)
+        + struct.pack("<I", 19)
+        + bytes([EExprToken.EX_IntConst.value]) + struct.pack("<i", 0)   # index
+        + bytes([EExprToken.EX_IntOne.value])                            # case index
+        + struct.pack("<I", 18)                                          # case.NextOffset (inner)
+        + bytes([EExprToken.EX_Nothing.value])                           # case body
+        + bytes([EExprToken.EX_Nothing.value])                           # default
+        + bytes([EExprToken.EX_EndOfScript.value])
+    )
+    expressions = parse_bytecode_stream(
+        stream, ["None"], version_context=VersionContext(file_version_ue4=0, file_version_ue5=0)
+    )
+    assert expressions[-1].Token == EExprToken.EX_EndOfScript

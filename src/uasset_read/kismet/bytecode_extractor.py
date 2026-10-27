@@ -154,8 +154,6 @@ def _validate_jump_targets(expressions: list[KismetExpression]) -> None:
             targets.append(expr.PushingAddress)
         elif isinstance(expr, EX_SwitchValue):
             targets.append(expr.EndGotoOffset)
-            for case in expr.Cases or []:
-                targets.append(case.NextOffset)
         elif isinstance(expr, EX_AutoRtfmTransact):
             targets.append(expr.CodeOffset)
 
