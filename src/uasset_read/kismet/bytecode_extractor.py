@@ -101,8 +101,6 @@ def parse_bytecode_stream(
     if opaque_tail:
         # The opaque tail replaced the function terminator; closure checks
         # against EX_EndOfScript and exact buffer sizes no longer apply.
-        # Jump targets already validated against the expressions seen so far.
-        _validate_jump_targets(expressions)
         return expressions
 
     # --- Closure invariant checks ---

@@ -17,6 +17,7 @@ manifest sample adds one parametrized parse item, plus two sample-backed tests
 (Helm VariableSet pins, UE5.3 1009 partial carrier); 161 is the measured final
 value, not headroom.
 Budget 161 -> 162 on 2026-10-27 (audit P0 fix 1, switch-value jump regression): 162 is the measured final value, not headroom.
+Budget 162 -> 163 on 2026-10-27 (audit P0 fix 2, kismet tolerant opaque-tail recovery): 163 is the measured final value, not headroom.
 No fixtures live here — the baseline is driven by real samples in
 tests/test_samples.py; temporary probes belong to untracked temp/.
 """
@@ -25,7 +26,7 @@ from __future__ import annotations
 
 import pytest
 
-ITEM_BUDGET = 162
+ITEM_BUDGET = 163
 
 
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:

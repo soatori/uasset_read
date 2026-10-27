@@ -4286,3 +4286,34 @@ def test_switch_value_case_offsets_are_not_top_level_jumps():
         stream, ["None"], version_context=VersionContext(file_version_ue4=0, file_version_ue5=0)
     )
     assert expressions[-1].Token == EExprToken.EX_EndOfScript
+
+
+def test_tolerant_mode_keeps_partial_function_on_opaque_tail():
+    from uasset_read.kismet.archive import FKismetArchive
+    from uasset_read.kismet.bytecode_extractor import parse_bytecode_stream
+    from uasset_read.kismet.expressions import OpaqueExpression
+    from uasset_read.kismet.tokens import EExprToken
+    from uasset_read.versioning import VersionContext
+
+    ctx = VersionContext(file_version_ue4=0, file_version_ue5=0)
+    names = ["None"]
+
+    # (1) unknown token inside a parameter list must end the array, not the function
+    ar = FKismetArchive(bytes([0xFE, 0x00, 0x00, EExprToken.EX_EndOfScript.value]), "t", names, tolerant=True)
+    result = ar.read_expression_array(EExprToken.EX_EndOfScript)
+    assert result and isinstance(result[-1], OpaqueExpression)
+
+    # (2) jump over a corrupted region survives as partial [Jump, Opaque]
+    stream = bytes([EExprToken.EX_Jump.value]) + (11).to_bytes(4, "little") + bytes([0xFE])
+    expressions = parse_bytecode_stream(stream, names, version_context=ctx, tolerant=True)
+    assert len(expressions) == 2 and isinstance(expressions[1], OpaqueExpression)
+
+    # (3) unknown cast-enum byte degrades one instruction, not the function
+    raw = bytes([EExprToken.EX_Cast.value, 0x05])
+    ar = FKismetArchive(raw, "t", names, tolerant=True)
+    expr = ar.read_expression()
+    assert isinstance(expr, OpaqueExpression)
+
+    strict = FKismetArchive(raw, "t", names, tolerant=False)
+    with pytest.raises(ValueError):
+        strict.read_expression()

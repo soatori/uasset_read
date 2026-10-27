@@ -82,6 +82,20 @@ class FKismetArchive(FArchive):
                     expr = expr_class.from_archive(self)  # type: ignore[reportAttributeAccessIssue]
                 else:
                     expr = expr_class()
+            except ValueError:
+                if not self._tolerant:
+                    raise
+                self.consume_remaining_function()
+                expr = OpaqueExpression(
+                    token=token_byte,
+                    raw_region=ByteRegion(
+                        serialized_start,
+                        self.tell() - serialized_start,
+                        "opaque",
+                        reason="unknown_expression_token",
+                    ),
+                    reason="unknown_expression_token",
+                )
             finally:
                 self._expression_depth -= 1
 
@@ -123,6 +137,9 @@ class FKismetArchive(FArchive):
                     f"without finding {end_token.name} at offset {self.tell()}"
                 )
             expr = self.read_expression()
+            if isinstance(expr, OpaqueExpression):
+                result.append(expr)
+                break
             if expr.Token == end_token:
                 break
             result.append(expr)
