@@ -484,41 +484,45 @@ def read_ue_graph_node(
     node_export: ObjectExport,
 ) -> UEdGraphNode:
     """Read UEdGraphNode base class fields (including script_serial PropertyTag parsing)."""
-    archive.seek(node_export.serial_offset)
+    previous_range = archive.set_read_range((node_export.serial_offset, node_export.serial_offset + node_export.serial_size))
+    try:
+        archive.seek(node_export.serial_offset)
 
-    node_name = node_export.object_name
-    # Parse tagged properties in script_serial
-    serial = _read_node_script_serial(archive, name_map, summary, node_export, import_map, export_map, node_name)
-    raw_properties = serial["raw_properties"]
+        node_name = node_export.object_name
+        # Parse tagged properties in script_serial
+        serial = _read_node_script_serial(archive, name_map, summary, node_export, import_map, export_map, node_name)
+        raw_properties = serial["raw_properties"]
 
-    # Read Pins array
-    pins = _read_node_pins(
-        archive,
-        name_map,
-        summary,
-        export_map,
-        import_map,
-        node_export,
-        node_name,
-        property_stream_end=serial.get("property_stream_end"),
-    )
+        # Read Pins array
+        pins = _read_node_pins(
+            archive,
+            name_map,
+            summary,
+            export_map,
+            import_map,
+            node_export,
+            node_name,
+            property_stream_end=serial.get("property_stream_end"),
+        )
 
-    class_name = resolve_class_name(node_export.class_index, import_map, export_map) or ""
+        class_name = resolve_class_name(node_export.class_index, import_map, export_map) or ""
 
-    base_node = UEdGraphNode(
-        node_pos_x=serial["node_pos_x"],
-        node_pos_y=serial["node_pos_y"],
-        node_comment=serial["node_comment"],
-        pins=pins,
-        class_name=class_name,
-    )
+        base_node = UEdGraphNode(
+            node_pos_x=serial["node_pos_x"],
+            node_pos_y=serial["node_pos_y"],
+            node_comment=serial["node_comment"],
+            pins=pins,
+            class_name=class_name,
+        )
 
-    return create_node_from_archive(
-        archive,
-        name_map,
-        summary,
-        export_map,
-        import_map,
-        base_node,
-        raw_properties=raw_properties if raw_properties else None,
-    )
+        return create_node_from_archive(
+            archive,
+            name_map,
+            summary,
+            export_map,
+            import_map,
+            base_node,
+            raw_properties=raw_properties if raw_properties else None,
+        )
+    finally:
+        archive.set_read_range(previous_range)

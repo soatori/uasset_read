@@ -4637,3 +4637,70 @@ def test_truncated_table_tail_keeps_properties():
     assert obj.properties.get("Hp", {}).get("value") == 42
     assert extras["export:0"]["table_rows"]["complete"] is False
     assert any(d.code == "TABLE_ROWS_TRUNCATED" for d in diagnostics)
+
+
+def test_node_pins_do_not_read_past_export_end():
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.exceptions import ExportBoundsExceeded
+    from uasset_read.serializers.graph_node import read_ue_graph_node
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+    from uasset_read.serializers.package_summary import CustomVersion, PackageFileSummary
+    from uasset_read.versioning import UE5_MAIN_STREAM_GUID, UE5_RELEASE_STREAM_GUID, build_version_context
+
+    def i32(value):
+        return struct.pack("<i", value)
+
+    summary = PackageFileSummary(
+        file_version_ue4=522,
+        file_version_ue5=1009,
+        custom_versions=[
+            CustomVersion(guid=UE5_RELEASE_STREAM_GUID, version=35),
+            CustomVersion(guid=UE5_MAIN_STREAM_GUID, version=118),
+        ],
+    )
+    names = ["None", "GetConeAngleVertex"]
+    pin_guid = bytes(range(16))
+    pin = (
+        i32(0) + i32(1) + pin_guid
+        + i32(1) + pin_guid + struct.pack("<II", 1, 0)
+        + i32(0) + b"\xff" + i32(0)
+        + i32(0) + i32(0) + b"\x01"
+        + b"\x00" * 65
+        + i32(0) + i32(0) + i32(0)
+        + i32(0) + b"\xff" + i32(0)
+        + i32(0) + i32(0)
+        + i32(1) + i32(1)
+        + b"\x00" * 16 + i32(0)
+    )
+
+    node_prefix = struct.pack("<II", 0, 0) + i32(0) + i32(3)
+    node_a_bytes = node_prefix + pin + pin
+    node_a = ObjectExport(
+        class_index=PackageIndex(-1),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="NodeA",
+        object_flags=0,
+        serial_size=len(node_a_bytes),
+        serial_offset=0,
+    )
+    node_b = ObjectExport(
+        class_index=PackageIndex(-1),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="NodeB",
+        object_flags=0,
+        serial_size=len(pin),
+        serial_offset=len(node_a_bytes),
+    )
+    archive = ByteArchive(node_a_bytes + pin)
+    archive.version_context = build_version_context(summary)
+
+    try:
+        node = read_ue_graph_node(archive, names, summary, [node_a, node_b], [], node_a)
+    except ExportBoundsExceeded:
+        assert archive._read_range is None
+    else:
+        assert len(node.pins) <= 2, f"NodeA read {len(node.pins)} pins through NodeB's serial bytes"
