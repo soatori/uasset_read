@@ -23,6 +23,7 @@ Budget 164 -> 165 on 2026-10-27 (audit P0 fix 4, interface-ref bounds): 165 is t
 Budget 165 -> 166 on 2026-10-27 (audit P0 fix 5, LWC Matrix/TwoVectors precision): 166 is the measured final value, not headroom.
 Budget 166 -> 167 on 2026-10-27 (audit P0 fix 6, tagged FText history 0xFF): 167 is the measured final value, not headroom.
 Budget 167 -> 168 on 2026-10-27 (audit P0 fix 7, fstring padding-zone seek gating): 168 is the measured final value, not headroom.
+Budget 168 -> 169 on 2026-10-27 (audit P0 fix 8, table-tail keeps property bag): 169 is the measured final value, not headroom.
 No fixtures live here — the baseline is driven by real samples in
 tests/test_samples.py; temporary probes belong to untracked temp/.
 """
@@ -31,7 +32,7 @@ from __future__ import annotations
 
 import pytest
 
-ITEM_BUDGET = 168
+ITEM_BUDGET = 169
 
 
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:

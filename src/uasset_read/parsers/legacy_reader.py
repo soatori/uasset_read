@@ -1372,20 +1372,41 @@ class LegacyPackageReader:
                 # for a seeked payload (#653 F1).
                 consumed_end = payload_start
                 if overrun <= 0 and cn in _TABLE_CLASSES:
-                    extras[obj.id] = {
-                        "table_rows": _read_table_rows(
-                            archive,
-                            serial_end,
-                            name_map,
-                            obj.id,
-                            diagnostics,
-                            summary=summary,
-                            import_map=import_map,
-                            export_map=export_map,
-                            curve_table=cn == "CurveTable",
+                    try:
+                        extras[obj.id] = {
+                            "table_rows": _read_table_rows(
+                                archive,
+                                serial_end,
+                                name_map,
+                                obj.id,
+                                diagnostics,
+                                summary=summary,
+                                import_map=import_map,
+                                export_map=export_map,
+                                curve_table=cn == "CurveTable",
+                            )
+                        }
+                        consumed_end = archive.tell()
+                    except (ExportBoundsExceeded, ParseError, EOFError, struct.error, ValueError, UnicodeError) as e:
+                        diagnostics.append(
+                            _diag(
+                                "TABLE_ROWS_TRUNCATED",
+                                f"{obj.id}: table row payload truncated: {type(e).__name__}: {e}",
+                                "payload.table",
+                                object_id=obj.id,
+                            )
                         )
-                    }
-                    consumed_end = archive.tell()
+                        extras[obj.id] = {
+                            "table_rows": {
+                                "row_count": 0,
+                                "row_names": [],
+                                "rows": [],
+                                "curve_table_mode": None,
+                                "row_bytes_consumed": 0,
+                                "complete": False,
+                            }
+                        }
+                        consumed_end = payload_start
                 elif overrun <= 0 and cn == "StringTable":
                     extras[obj.id] = {
                         "string_table": _read_string_table(

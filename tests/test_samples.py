@@ -4513,3 +4513,126 @@ def test_fstring_padding_zone_seek_is_tolerant_only():
     lenient = ByteArchive(payload, tolerant=True)
     assert lenient.read_fstring() == ""
     assert any(d.code == "fstring_padding_zone_seek" for d in lenient.get_structured_diagnostics())
+
+
+def test_truncated_table_tail_keeps_properties():
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.models.byte_ranges import ByteRegion
+    from uasset_read.models.object_model import ObjectRecord
+    from uasset_read.models.properties import PropertyBag
+    from uasset_read.parsers.legacy_reader import LegacyPackageReader
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+    from uasset_read.serializers.package_summary import PackageFileSummary
+    from uasset_read.versioning import VersionContext
+
+    names = ["None", "Hp", "IntProperty", "RowA"]
+
+    def fname(index):
+        return struct.pack("<II", index, 0)
+
+    def int_property(value):
+        return fname(1) + fname(2) + struct.pack("<ii", 4, 0) + b"\x00" + struct.pack("<i", value)
+
+    property_stream = int_property(42) + fname(0) + struct.pack("<i", 0)
+    table_tail = struct.pack("<i", 1) + fname(3) + int_property(99) + fname(0)
+    blob = property_stream + table_tail
+    serial_size = len(blob) + 16  # header declares bytes beyond the physical tail
+
+    archive = ByteArchive(blob, tolerant=True)
+    archive.version_context = VersionContext(file_version_ue4=522, file_version_ue5=0)
+    summary = PackageFileSummary(file_version_ue4=522, file_version_ue5=0, package_flags=0)
+    export = ObjectExport(
+        class_index=PackageIndex(0),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="Table",
+        object_flags=0,
+        serial_size=serial_size,
+        serial_offset=0,
+    )
+    obj = ObjectRecord(
+        id="export:0",
+        table_index=0,
+        name="Table",
+        class_name="DataTable",
+        properties=PropertyBag(),
+        serial_region=ByteRegion(start=0, size=serial_size, status="decoded"),
+    )
+    diagnostics = []
+    extras, _ = LegacyPackageReader(tolerant=True)._parse_requested_object_properties(
+        archive=archive,
+        objects=[obj],
+        export_map=[export],
+        import_map=[],
+        name_map=names,
+        summary=summary,
+        object_ids=None,
+        diagnostics=diagnostics,
+    )
+
+    assert obj.properties.get("Hp", {}).get("value") == 42
+    assert extras["export:0"]["table_rows"]["complete"] is False
+    assert any(d.code == "TABLE_ROWS_TRUNCATED" for d in diagnostics)
+
+
+def test_truncated_table_tail_keeps_properties():
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.models.byte_ranges import ByteRegion
+    from uasset_read.models.object_model import ObjectRecord
+    from uasset_read.models.properties import PropertyBag
+    from uasset_read.parsers.legacy_reader import LegacyPackageReader
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+    from uasset_read.serializers.package_summary import PackageFileSummary
+    from uasset_read.versioning import VersionContext
+
+    names = ["None", "Hp", "IntProperty", "RowA"]
+
+    def fname(index):
+        return struct.pack("<II", index, 0)
+
+    def int_property(value):
+        return fname(1) + fname(2) + struct.pack("<ii", 4, 0) + b"\x00" + struct.pack("<i", value)
+
+    property_stream = int_property(42) + fname(0) + struct.pack("<i", 0)
+    table_tail = struct.pack("<i", 1) + fname(3) + int_property(99) + fname(0)
+    payload = property_stream + table_tail
+    serial_size = len(payload) + 16
+    archive = ByteArchive(payload, tolerant=True)
+    archive.version_context = VersionContext(file_version_ue4=522, file_version_ue5=0)
+    summary = PackageFileSummary(file_version_ue4=522, file_version_ue5=0, package_flags=0)
+    export = ObjectExport(
+        class_index=PackageIndex(0),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="Table",
+        object_flags=0,
+        serial_size=serial_size,
+        serial_offset=0,
+    )
+    obj = ObjectRecord(
+        id="export:0",
+        table_index=0,
+        name="Table",
+        class_name="DataTable",
+        properties=PropertyBag(),
+        serial_region=ByteRegion(start=0, size=serial_size, status="decoded"),
+    )
+    diagnostics = []
+    extras, _ = LegacyPackageReader(tolerant=True)._parse_requested_object_properties(
+        archive=archive,
+        objects=[obj],
+        export_map=[export],
+        import_map=[],
+        name_map=names,
+        summary=summary,
+        object_ids=None,
+        diagnostics=diagnostics,
+    )
+
+    assert obj.properties.get("Hp", {}).get("value") == 42
+    assert extras["export:0"]["table_rows"]["complete"] is False
+    assert any(d.code == "TABLE_ROWS_TRUNCATED" for d in diagnostics)
