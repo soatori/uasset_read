@@ -523,7 +523,18 @@ class FArchive:
                         scan_size,
                         scan_size,
                     )
-                    self.seek(self._file_size)
+                    if self._tolerant:
+                        self._record_structured_diagnostic(
+                            code="fstring_padding_zone_seek",
+                            stage="read_fstring",
+                            offset=current_pos,
+                            raw_value=non_zero,
+                            size=scan_size,
+                            fallback="seek_to_end",
+                            message=f"FString padding zone at pos {current_pos}: {non_zero}/{scan_size} non-zero bytes",
+                            reason="recovered_corruption",
+                        )
+                        self.seek(self._file_size)
             return ""
 
         return result

@@ -4497,3 +4497,19 @@ def test_tagged_ftext_history_none_decodes_source():
     data2 = struct.pack("<iBI", 0, 255, 0)  # bHasCultureInvariantString = false
     value2 = parse_text_property(PropertyTag(name="T", type="TextProperty", size=9), ByteArchive(data2))
     assert value2.source_string == ""
+
+
+def test_fstring_padding_zone_seek_is_tolerant_only():
+    import struct
+
+    from uasset_read.archive import ByteArchive
+
+    payload = struct.pack("<i", 2) + b"\x00A" + b"\x00" * 80 + struct.pack("<I", 0xDEADBEEF)
+
+    strict = ByteArchive(payload, tolerant=False)
+    assert strict.read_fstring() == ""
+    assert strict.tell() == 6, "strict mode must not seek to EOF on a padding heuristic"
+
+    lenient = ByteArchive(payload, tolerant=True)
+    assert lenient.read_fstring() == ""
+    assert any(d.code == "fstring_padding_zone_seek" for d in lenient.get_structured_diagnostics())
