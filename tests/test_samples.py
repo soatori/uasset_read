@@ -4480,3 +4480,20 @@ def test_matrix_and_twovectors_read_doubles_on_lwc_sizes():
     assert float_matrix.fields["M"][3][3] == 15.0
     float_vectors = parse("TwoVectors", 24, struct.pack("<6f", *pairs))
     assert float_vectors.fields["E1"]["X"] == 1.5 and float_vectors.fields["E2"]["Z"] == -6.5
+
+
+def test_tagged_ftext_history_none_decodes_source():
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.models.properties import PropertyTag
+    from uasset_read.parsers.property_types import parse_text_property
+
+    data = struct.pack("<iBI", 0, 255, 1) + struct.pack("<i", 7) + b"Health\x00"
+    value = parse_text_property(PropertyTag(name="T", type="TextProperty", size=len(data)), ByteArchive(data))
+    assert value.source_string == "Health"
+    assert value.history_type == 255
+
+    data2 = struct.pack("<iBI", 0, 255, 0)  # bHasCultureInvariantString = false
+    value2 = parse_text_property(PropertyTag(name="T", type="TextProperty", size=9), ByteArchive(data2))
+    assert value2.source_string == ""

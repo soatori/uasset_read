@@ -1327,6 +1327,10 @@ def parse_text_property(tag: PropertyTag, archive: FArchive, dev_notes: bool = F
         # Decoding them incorrectly silently produced wrong values; the value stream is
         # bounded by tag.size, so consume nothing and report the history type honestly.
         namespace = key = source_string = ""
+    elif history_type == 255:
+        has_culture = archive.read_bool()
+        source_string = archive.read_fstring() if has_culture else ""
+        namespace = key = ""
     else:
         # Unknown history type: skip remaining data
         remaining = tag.size - 5  # 5 = flags(4) + history_type(1)
