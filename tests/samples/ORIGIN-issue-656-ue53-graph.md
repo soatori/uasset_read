@@ -1,4 +1,4 @@
-# Issue #656 — UE5.2–5.3 graph carrier (partial)
+# Issue #656 — UE5.3.2 graph carrier (connected-edge acceptance)
 
 ## Source
 
@@ -13,26 +13,29 @@
 ## Package facts
 
 - File: `UE53GraphFixture_BP_GraphFixture.uasset`
-- Size: 22,347 B
-- SHA-256: `4708f1e1f3d1ad71d7ce1b5d8685e97818592e7b32a3c1d608ef6e577b0c18c9`
+- Size: 33,795 B
+- SHA-256: `82dd37cbedf0c06063b45b329338997a44c3de80b5e51dcd3a98a040eadc4f77`
 - Legacy package; `FileVersionUE4=522`, `FileVersionUE5=1009`.
-- 13 exports, 2 asset-role exports, 16 imports, 105 names.
+- 17 exports, 2 asset-role exports, 24 imports, 137 names.
 
 ## Structural verification (measured)
 
 - `BP_GraphFixture` is an Actor Blueprint and compiles successfully in UE 5.3.2.
-- EventGraph: 3 `K2Node_Event` nodes, 8 pins, and 0 links. Stored positions are
-  `(0,0)`, `(0,208)`, and `(0,416)`.
+- EventGraph: 3 `K2Node_Event` nodes and 2 `K2Node_CallFunction` nodes, 28 pins,
+  and one connected execution edge represented by 2 reciprocal serialized link
+  records. Both records resolve by owner and pin GUID. Event positions are
+  `(0,0)`, `(0,208)`, and `(0,416)`; call-node positions are `(-240,48)` and
+  `(-240,256)`.
 - `UserConstructionScript`: 1 node and 1 pin.
 - Both graphs have no parse errors; decode produced no `BLUEPRINT_*` diagnostics.
-- Asset-depth diagnostics: 6 `EXPORT_TRAILING_BYTES_UNCONSUMED` entries with
-  reason `editor_only`.
+- Asset-depth diagnostics: 8 `EXPORT_TRAILING_BYTES_UNCONSUMED` entries with
+  reason `editor_only` (4,281 bytes total).
 
 ## Acceptance boundary
 
-This is a real UE5.3.2, file-version-1009 node-bearing carrier, not a complete
-graph fixture. Its EventGraph has no connected pins, so it does not satisfy the
-positive link requirement for UE5.2/5.3 graph acceptance. Keep
-`fixture_gaps.ue5_2_5_3_graph.status` as `missing` until a saved revision has a
-connected EventGraph edge whose endpoints decode and resolve. If the asset is
-updated, remeasure this file's hash, size, positions, links, and diagnostics.
+This real UE5.3.2, file-version-1009 save satisfies the connected-edge minimum
+for the UE5.3.2 band: the Event BeginPlay node connects to a Print String call,
+and both serialized link records resolve to decoded pins. The manifest gap is
+now `available` for this band. It does not provide a direct UE5.2 save or broad
+coverage of other graph node and pin types. The Blueprint's overall semantic
+status remains partial because editor-only export tails are still opaque.

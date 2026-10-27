@@ -281,26 +281,26 @@
       "max_by_code_reason": {
         "EXPORT_TRAILING_BYTES_UNCONSUMED": {
           "editor_only": {
-            "max": 6
+            "max": 8
           }
         }
       },
-      "max_total_diagnostics": 6
+      "max_total_diagnostics": 8
     }
   },
   "aggregate": {
     "scope": "manifest",
     "sample_count": 74,
-    "max_total_warnings": 2610,
-    "max_total_bytes": 15026930,
+    "max_total_warnings": 2612,
+    "max_total_bytes": 15027450,
     "by_reason": {
       "bulk_expected": {
         "max_count": 5,
         "max_bytes": 22306
       },
       "editor_only": {
-        "max_count": 1224,
-        "max_bytes": 1147398
+        "max_count": 1226,
+        "max_bytes": 1147918
       },
       "known_unimplemented": {
         "max_count": 1377,
@@ -338,11 +338,11 @@
       },
       "editor_only/BlueprintGeneratedClass": {
         "max_count": 16,
-        "max_bytes": 19178
+        "max_bytes": 19265
       },
       "editor_only/Function": {
-        "max_count": 233,
-        "max_bytes": 142252
+        "max_count": 235,
+        "max_bytes": 142480
       },
       "editor_only/K2Node_AddDelegate": {
         "max_count": 1,
@@ -398,7 +398,7 @@
       },
       "editor_only/K2Node_Event": {
         "max_count": 72,
-        "max_bytes": 43060
+        "max_bytes": 43084
       },
       "editor_only/K2Node_ExecutionSequence": {
         "max_count": 4,
@@ -474,7 +474,7 @@
       },
       "editor_only/MetaData": {
         "max_count": 32,
-        "max_bytes": 48175
+        "max_bytes": 48356
       },
       "editor_only/SoundNodeMixer": {
         "max_count": 1,

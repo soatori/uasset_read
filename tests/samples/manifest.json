@@ -863,13 +863,13 @@
     },
     {
       "name": "UE53GraphFixture_BP_GraphFixture.uasset",
-      "sha256": "4708f1e1f3d1ad71d7ce1b5d8685e97818592e7b32a3c1d608ef6e577b0c18c9",
-      "size_bytes": 22347,
+      "sha256": "82dd37cbedf0c06063b45b329338997a44c3de80b5e51dcd3a98a040eadc4f77",
+      "size_bytes": 33795,
       "engine_layout": "legacy",
       "file_version_ue4": 522,
       "file_version_ue5": 1009,
       "sidecars": [],
-      "export_count": 13,
+      "export_count": 17,
       "b_is_asset_count": 2
     }
   ],
@@ -887,13 +887,13 @@
       "recommended_samples": "1 UE4 editor-saved Blueprint with EventGraph nodes"
     },
     "ue5_2_5_3_graph": {
-      "status": "missing",
-      "description": "Partial carrier registered 2026-10-26: UE53GraphFixture_BP_GraphFixture.uasset is a first-party UE 5.3.2 editor save with FileVersionUE5=1009, 3 EventGraph nodes, 8 pins, stored positions, and 0 links. A real node-bearing carrier now exists, but the positive connected-edge requirement remains missing; this is not full UE5.2/5.3 graph acceptance.",
+      "status": "available",
+      "description": "Carrier registered 2026-10-27: UE53GraphFixture_BP_GraphFixture.uasset is a first-party UE 5.3.2 editor save with FileVersionUE5=1009, 5 EventGraph nodes, 28 pins, stored positions, and one resolved execution edge (two reciprocal serialized link records). The UE5.3.2 band minimum is met; UE5.2 itself is not directly sampled.",
       "needed_for": "UE5.2/5.3 graph structural acceptance (issue #656 plan phase B); does not block the UE5.0 pre-1010 path already proven on B_ControlPointScoring",
-      "acquisition": "Acquired 2026-10-26: first-party Blueprint authored for this repository task at the user's direction in a new Blank Blueprint project, UE 5.3.2 changelist 29314046, Starter Content disabled; provenance and measured partial structure are recorded in tests/samples/ORIGIN-issue-656-ue53-graph.md.",
-      "verification": "The registered package records file_version_ue5=1009. Decode measures EventGraph with 3 nodes, 8 pins, positions (0,0), (0,208), (0,416), 0 links, and no graph parse errors; UserConstructionScript has 1 node and 1 pin. This partial carrier does not meet positive edge acceptance. Keep status missing until a saved UE5.2/5.3 EventGraph has at least one link whose endpoints resolve, with the required positions, clean BLUEPRINT_* diagnostics, and version-appropriate pin payload evidence.",
+      "acquisition": "Acquired 2026-10-26 and extended 2026-10-27: first-party Blueprint authored for this repository task at the user's direction in a new Blank Blueprint project, UE 5.3.2 changelist 29314046, Starter Content disabled; the saved EventGraph now connects Event BeginPlay to a Print String call. Provenance and measured structure are recorded in tests/samples/ORIGIN-issue-656-ue53-graph.md.",
+      "verification": "The registered package records file_version_ue5=1009. Decode measures EventGraph with 5 nodes, 28 pins, three event positions (0,0), (0,208), (0,416), two call-node positions (-240,48), (-240,256), and two reciprocal serialized records for one resolved exec edge between an event and a call node. Both graphs have no parse errors and the package has no BLUEPRINT_* diagnostics; UserConstructionScript has 1 node and 1 pin. This satisfies the UE5.3.2 band minimum. UE5.2 is not directly sampled.",
       "minimum_samples": 1,
-      "recommended_samples": "1 UE5.2 or UE5.3 editor-saved Blueprint with EventGraph nodes"
+      "recommended_samples": "1 UE5.2 editor-saved Blueprint for direct UE5.2 coverage; the current minimum is met by UE5.3.2"
     },
     "zen_package": {
       "status": "not_required",

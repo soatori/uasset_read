@@ -542,18 +542,17 @@ def test_fixture_gap_statuses_pin_the_capability_boundary():
     assert ue4_gap["status"] == "available"
     assert "用户" in ue4_gap["acquisition"] or "user" in ue4_gap["acquisition"].lower()
     assert "PinsStoreFName" in ue4_gap["verification"]
-    # #656: a UE5.3.2 node-bearing carrier is tracked in the 1009 band, but its
-    # EventGraph has no connected edge. The full graph acceptance gap therefore stays
-    # missing until a positive, resolved link is measured on a saved band fixture.
+    # #656: the UE5.3.2 1009-band carrier now has one resolved EventGraph edge.
+    # UE5.2 itself still has no direct editor-saved fixture.
     band_gap = gaps["ue5_2_5_3_graph"]
-    assert band_gap["status"] == "missing" and band_gap["minimum_samples"] == 1
+    assert band_gap["status"] == "available" and band_gap["minimum_samples"] == 1
     assert "1009" in band_gap["description"] and "1009" in band_gap["verification"]
     band_samples = [entry for entry in manifest["samples"] if entry.get("file_version_ue5") == 1009]
     assert len(band_samples) == 4, [entry["name"] for entry in band_samples]
     from uasset_read.package import parse_package_document
 
-    partial_carrier = "UE53GraphFixture_BP_GraphFixture.uasset"
-    graphless_band_samples = [entry for entry in band_samples if entry["name"] != partial_carrier]
+    graph_carrier = "UE53GraphFixture_BP_GraphFixture.uasset"
+    graphless_band_samples = [entry for entry in band_samples if entry["name"] != graph_carrier]
     assert len(graphless_band_samples) == 3
     for entry in graphless_band_samples:
         doc = parse_package_document(str(SAMPLES / entry["name"]), depth="decode")
@@ -580,6 +579,8 @@ def test_fixture_gap_statuses_pin_the_capability_boundary():
         "material_parameter_collection": lambda entry, classes: "MaterialParameterCollection" in classes,
         # Blueprint graphs only: a UE4-era save (no UE5 container version) with K2Node exports.
         "ue4_graph_nodes": lambda entry, classes: entry["file_version_ue5"] == 0
+        and any(c.startswith("K2Node") for c in classes),
+        "ue5_2_5_3_graph": lambda entry, classes: entry["file_version_ue5"] == 1009
         and any(c.startswith("K2Node") for c in classes),
     }
     for gap, predicate in gap_carriers.items():
@@ -3248,8 +3249,8 @@ def test_helm_blueprint_variable_set_pins_decode():
     assert not any("node export:27" in error for error in graph["parse_errors"])
 
 
-def test_ue53_version_1009_blueprint_partial_graph_carrier():
-    """A real 1009 save proves nodes, pins and positions, but not connected links."""
+def test_ue53_version_1009_blueprint_resolved_graph_edge():
+    """A real 1009 save proves a connected execution edge with resolved endpoints."""
     from uasset_read.package import parse_package_document
 
     sample = "UE53GraphFixture_BP_GraphFixture.uasset"
@@ -3260,13 +3261,30 @@ def test_ue53_version_1009_blueprint_partial_graph_carrier():
     doc = parse_package_document(str(SAMPLES / sample), depth="decode")
     graphs = [graph for obj in doc.objects for graph in (obj.semantic or {}).get("graphs") or []]
     event_graph = next(graph for graph in graphs if graph["name"] == "EventGraph")
-    assert len(event_graph["nodes"]) == 3
-    assert sum(len(node["pins"]) for node in event_graph["nodes"]) == 8
+    assert len(event_graph["nodes"]) == 5
+    assert sum(len(node["pins"]) for node in event_graph["nodes"]) == 28
+    event_nodes = [node for node in event_graph["nodes"] if node["class_name"] == "K2Node_Event"]
     assert [
         (node["position"]["x"], node["position"]["y"])
-        for node in event_graph["nodes"]
+        for node in event_nodes
     ] == [(0, 0), (0, 208), (0, 416)]
-    assert event_graph["links"] == []
+    call_nodes = [node for node in event_graph["nodes"] if node["class_name"] == "K2Node_CallFunction"]
+    assert len(call_nodes) == 2
+    assert sorted((node["position"]["x"], node["position"]["y"]) for node in call_nodes) == [
+        (-240, 48),
+        (-240, 256),
+    ]
+    links = event_graph["links"]
+    assert len(links) == 2  # reciprocal serialized LinkedTo records for one physical edge
+    assert all(link["status"] == "resolved" and link["connection_type"] == "exec" for link in links)
+    nodes_by_id = {node["id"]: node for node in event_graph["nodes"]}
+    assert all(link["source_node_id"] in nodes_by_id and link["target_node_id"] in nodes_by_id for link in links)
+    endpoint_pairs = {frozenset((link["source_node_id"], link["target_node_id"])) for link in links}
+    assert len(endpoint_pairs) == 1
+    assert {nodes_by_id[node_id]["class_name"] for node_id in next(iter(endpoint_pairs))} == {
+        "K2Node_Event",
+        "K2Node_CallFunction",
+    }
     assert not event_graph["parse_errors"]
     assert not [diagnostic for diagnostic in doc.diagnostics if diagnostic.code.startswith("BLUEPRINT_")]
 
