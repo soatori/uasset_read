@@ -14,6 +14,10 @@ from uasset_read.serializers.object_resources import PackageIndex
 MAX_EXPRESSION_RECURSION_DEPTH = 256
 
 
+class _OpaqueExpressionTail(Exception):
+    """Unwind an incomplete nested expression to its owning top-level instruction."""
+
+
 class FKismetArchive(FArchive):
     """Kismet bytecode reader. Wraps in-memory bytes as an FArchive-compatible stream."""
 
@@ -58,6 +62,8 @@ class FKismetArchive(FArchive):
                     # remaining function bytes as one opaque tail and stop
                     # parsing this function. Never skip the payload silently.
                     self.consume_remaining_function()
+                    if self._expression_depth:
+                        raise _OpaqueExpressionTail
                     serialized_end = self.tell()
                     expr: KismetExpression = OpaqueExpression(
                         token=token_byte,
@@ -76,16 +82,33 @@ class FKismetArchive(FArchive):
                 token_name = token.name if token is not None else "<unknown>"
                 raise ParseError(f"Unknown EExprToken {token_name} (0x{token_byte:02X}) at offset {stmt_index}")
 
+            parent_depth = self._expression_depth
             self._expression_depth += 1
             try:
                 if hasattr(expr_class, "from_archive"):
                     expr = expr_class.from_archive(self)  # type: ignore[reportAttributeAccessIssue]
                 else:
                     expr = expr_class()
-            except ValueError:
+            except _OpaqueExpressionTail:
+                if parent_depth:
+                    raise
+                reason = "unknown_expression_token"
+                expr = OpaqueExpression(
+                    token=token_byte,
+                    raw_region=ByteRegion(
+                        serialized_start,
+                        self.tell() - serialized_start,
+                        "opaque",
+                        reason=reason,
+                    ),
+                    reason=reason,
+                )
+            except ValueError as exc:
                 if not self._tolerant:
                     raise
                 self.consume_remaining_function()
+                if parent_depth:
+                    raise _OpaqueExpressionTail from exc
                 expr = OpaqueExpression(
                     token=token_byte,
                     raw_region=ByteRegion(

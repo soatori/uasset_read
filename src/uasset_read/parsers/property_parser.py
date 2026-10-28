@@ -230,11 +230,20 @@ _ARGS_OVERRIDES: dict[str, tuple[str, ...]] = {
     "EnumProperty": ("tag", "archive", "name_map", "summary"),
     "SoftObjectProperty": ("tag", "archive", "name_map", "file_version_ue5"),
     "SoftClassProperty": ("tag", "archive", "name_map", "file_version_ue5"),
-    "MapProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth"),
-    "SetProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth"),
-    "OptionalProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth"),
-    "ArrayProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth"),
-    "StructProperty": ("tag", "archive", "name_map", "export_map", "file_version_ue5", "summary", "depth"),
+    "MapProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth", "tolerant"),
+    "SetProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth", "tolerant"),
+    "OptionalProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth", "tolerant"),
+    "ArrayProperty": ("tag", "archive", "name_map", "export_map", "summary", "depth", "tolerant"),
+    "StructProperty": (
+        "tag",
+        "archive",
+        "name_map",
+        "export_map",
+        "file_version_ue5",
+        "summary",
+        "depth",
+        "tolerant",
+    ),
 }
 
 
@@ -426,6 +435,7 @@ def parse_property_value(
                 "file_version_ue5": ctx.file_version_ue5,
                 "summary": summary,
                 "depth": depth,
+                "tolerant": tolerant,
                 "dev_notes": dev_notes,
             }
             result = handler(*(values[n] for n in _ARGS_OVERRIDES.get(tag.type, _ARGS_DEFAULT)))

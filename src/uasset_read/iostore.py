@@ -251,34 +251,39 @@ def _parse_directory_index(blob: bytes) -> tuple[str, tuple[IoStoreFile, ...]]:
     seen_directories: set[int] = set()
 
     def walk(directory: int, prefix: str) -> None:
-        if not 0 <= directory < len(dirs):
-            raise IoStoreTocError(f"directory entry index {directory} out of range")
-        if directory in seen_directories:
-            raise IoStoreTocError("directory graph cycles in the directory index")
-        seen_directories.add(directory)
-        _, first_child, _, first_file = dirs[directory]
-        steps = 0
-        file = first_file
-        while file != _NO_ENTRY:
-            if not 0 <= file < len(files):
-                raise IoStoreTocError(f"file entry index {file} out of range")
-            entry_name, next_file, user_data = files[file]
-            out.append(IoStoreFile(f"{mount}{prefix}{name(entry_name)}", user_data))
-            file = next_file
-            steps += 1
-            if steps > len(files):  # a malformed sibling chain must not spin forever
-                raise IoStoreTocError("file sibling chain cycles in the directory index")
-        steps = 0
-        child = first_child
-        while child != _NO_ENTRY:
-            if not 0 <= child < len(dirs):
-                raise IoStoreTocError(f"directory entry index {child} out of range")
-            child_name, _, next_sibling, _ = dirs[child]
-            walk(child, f"{prefix}{name(child_name)}/")
-            child = next_sibling
-            steps += 1
-            if steps > len(dirs):
-                raise IoStoreTocError("directory sibling chain cycles in the directory index")
+        pending = [(directory, prefix)]
+        while pending:
+            directory, prefix = pending.pop()
+            if not 0 <= directory < len(dirs):
+                raise IoStoreTocError(f"directory entry index {directory} out of range")
+            if directory in seen_directories:
+                raise IoStoreTocError("directory graph cycles in the directory index")
+            seen_directories.add(directory)
+            _, first_child, _, first_file = dirs[directory]
+            steps = 0
+            file = first_file
+            while file != _NO_ENTRY:
+                if not 0 <= file < len(files):
+                    raise IoStoreTocError(f"file entry index {file} out of range")
+                entry_name, next_file, user_data = files[file]
+                out.append(IoStoreFile(f"{mount}{prefix}{name(entry_name)}", user_data))
+                file = next_file
+                steps += 1
+                if steps > len(files):  # a malformed sibling chain must not spin forever
+                    raise IoStoreTocError("file sibling chain cycles in the directory index")
+            children: list[tuple[int, str]] = []
+            steps = 0
+            child = first_child
+            while child != _NO_ENTRY:
+                if not 0 <= child < len(dirs):
+                    raise IoStoreTocError(f"directory entry index {child} out of range")
+                child_name, _, next_sibling, _ = dirs[child]
+                children.append((child, f"{prefix}{name(child_name)}/"))
+                child = next_sibling
+                steps += 1
+                if steps > len(dirs):
+                    raise IoStoreTocError("directory sibling chain cycles in the directory index")
+            pending.extend(reversed(children))
 
     if dirs:
         walk(0, "")

@@ -20,7 +20,7 @@ from uasset_read.constants import (
     UE5_SCRIPT_SERIALIZATION_OFFSET,
     UE_NONE_SENTINEL,
 )
-from uasset_read.exceptions import ParseError
+from uasset_read.exceptions import ExportBoundsExceeded, ParseError
 from uasset_read.versioning import require_version_context
 from uasset_read.serializers.property_tags import read_property_tag, read_tag_value_bounded
 from uasset_read.models.core import UEdGraphNode, UEdGraphPin
@@ -351,6 +351,8 @@ def _read_node_pins(
                 header_pin_id=header_pin_id,
                 serial_start=pin_start,
             )
+        except ExportBoundsExceeded:
+            raise
         except (ParseError, struct.error, OSError, ValueError, KeyError) as exc:
             # A mid-array pin failure leaves the cursor untrusted: fail the
             # whole node (structured partial node upstream) rather than

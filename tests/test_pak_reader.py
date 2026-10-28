@@ -727,3 +727,26 @@ def test_utoc_directory_index_rejects_bad_child_graphs():
 
     with pytest.raises(IoStoreTocError):
         _parse_directory_index(directory_index(0))
+
+    deep_count = 1100
+    deep_entries = b"".join(
+        struct.pack(
+            "<4I",
+            0,
+            index + 1 if index + 1 < deep_count else 0,
+            0xFFFFFFFF,
+            0xFFFFFFFF,
+        )
+        for index in range(deep_count)
+    )
+    deep_cycle = (
+        struct.pack("<i", 0)
+        + struct.pack("<i", deep_count)
+        + deep_entries
+        + struct.pack("<i", 0)
+        + struct.pack("<i", 1)
+        + struct.pack("<i", 5)
+        + b"Root\x00"
+    )
+    with pytest.raises(IoStoreTocError):
+        _parse_directory_index(deep_cycle)

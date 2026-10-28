@@ -3208,6 +3208,27 @@ def test_niagara_fixture_enriched_at_summary_tier():
         represented[0]["content"]["edge_count"],
     ) == (28, 99, 76)
 
+    debug_projection = project_document(decode_doc, mode="debug")
+    for projected in (projection, debug_projection):
+        owner = next(item for item in projected["objects"] if item["id"] == graph_obj.id)
+        projected_graph = owner["semantic"]["graphs"][0]
+        node_ids = {node["id"] for node in projected_graph["nodes"]}
+        assert projected_graph["id"] == f"{graph_obj.id}/{graph_obj.id}"
+        assert len(projected_graph["links"]) == 76
+        assert all(link["graph_id"] == projected_graph["id"] for link in projected_graph["links"])
+        assert all(link["source_node_id"] in node_ids for link in projected_graph["links"])
+        assert all(
+            not link["target_node_id"] or link["target_node_id"] in node_ids
+            for link in projected_graph["links"]
+        )
+        assert all(node_id.startswith(f"{graph_obj.id}/") for node_id in node_ids)
+        assert all(
+            adjacency["to_node"] in node_ids
+            for node in projected_graph["nodes"]
+            for pin in node["pins"]
+            for adjacency in pin["linked"]
+        )
+
 
 def test_blueprint_fixtures_carry_generated_and_cdo_relations():
     """Output Gate: blueprint packages expose generated-class and CDO edges."""
@@ -4309,6 +4330,31 @@ def test_tolerant_mode_keeps_partial_function_on_opaque_tail():
     expressions = parse_bytecode_stream(stream, names, version_context=ctx, tolerant=True)
     assert len(expressions) == 2 and isinstance(expressions[1], OpaqueExpression)
 
+    # A nested opaque argument must also terminate the enclosing call as a
+    # top-level opaque tail, while preserving earlier statements.
+    nested_call = (
+        bytes([EExprToken.EX_IntOne.value, EExprToken.EX_VirtualFunction.value])
+        + bytes(8)  # FName index and number
+        + bytes([0xFE])
+    )
+    expressions = parse_bytecode_stream(nested_call, names, version_context=ctx, tolerant=True)
+    assert len(expressions) == 2
+    assert expressions[0].Token == EExprToken.EX_IntOne
+    assert isinstance(expressions[1], OpaqueExpression)
+    assert expressions[1].StatementIndex == 1
+
+    # A parent with a later parameter array must stop when its delegate child
+    # becomes opaque, rather than trying to read the array from EOF.
+    nested_delegate = (
+        bytes([EExprToken.EX_IntOne.value, EExprToken.EX_CallMulticastDelegate.value])
+        + bytes(4)  # stack node pointer
+        + bytes([0xFE])
+    )
+    expressions = parse_bytecode_stream(nested_delegate, names, version_context=ctx, tolerant=True)
+    assert len(expressions) == 2
+    assert expressions[0].Token == EExprToken.EX_IntOne
+    assert isinstance(expressions[1], OpaqueExpression)
+
     # (3) unknown cast-enum byte degrades one instruction, not the function
     raw = bytes([EExprToken.EX_Cast.value, 0x05])
     ar = FKismetArchive(raw, "t", names, tolerant=True)
@@ -4360,7 +4406,18 @@ def test_nested_map_struct_recursion_is_depth_bounded():
 
     archive = ByteArchive(shallow_payload)
     archive.version_context = archive_version
-    parse_property_value(root_tag(len(shallow_payload)), archive, names, [])
+    shallow_result = parse_property_value(root_tag(len(shallow_payload)), archive, names, [])
+    assert isinstance(shallow_result, MapValue)
+    shallow_map = shallow_result
+    for _ in range(3):
+        assert len(shallow_map.entries) == 1
+        assert shallow_map.entries[0]["key"] == 0
+        nested_struct = shallow_map.entries[0]["value"]
+        assert isinstance(nested_struct, StructValue)
+        assert nested_struct.parse_status != "opaque"
+        shallow_map = nested_struct.fields["Member"]
+        assert isinstance(shallow_map, MapValue)
+    assert shallow_map.entries == []
     assert archive.tell() == len(shallow_payload)
 
     payload = empty_map
@@ -4376,6 +4433,11 @@ def test_nested_map_struct_recursion_is_depth_bounded():
     assert isinstance(result, MapValue)
     assert result.entries and isinstance(result.entries[0]["value"], StructValue)
     assert result.entries[0]["value"].parse_status == "opaque"
+
+    strict_archive = ByteArchive(payload)
+    strict_archive.version_context = archive_version
+    with pytest.raises(ParseError):
+        parse_property_value(root_tag(len(payload)), strict_archive, names, [], tolerant=False)
 
     optional_payload = struct.pack("<I", 1) + fname(0)
     optional_archive = ByteArchive(optional_payload)
@@ -4704,3 +4766,18 @@ def test_node_pins_do_not_read_past_export_end():
         assert archive._read_range is None
     else:
         assert len(node.pins) <= 2, f"NodeA read {len(node.pins)} pins through NodeB's serial bytes"
+
+    partial_node = ObjectExport(
+        class_index=PackageIndex(-1),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="NodeA",
+        object_flags=0,
+        serial_size=len(node_a_bytes) - 1,
+        serial_offset=0,
+    )
+    partial_archive = ByteArchive(node_a_bytes + pin)
+    partial_archive.version_context = build_version_context(summary)
+    with pytest.raises(ExportBoundsExceeded):
+        read_ue_graph_node(partial_archive, names, summary, [partial_node, node_b], [], partial_node)
+    assert partial_archive._read_range is None

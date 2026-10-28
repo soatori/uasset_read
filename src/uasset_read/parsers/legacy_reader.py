@@ -1936,8 +1936,17 @@ def _attach_blueprint_graph_extras(
         obj = next((o for o in objects if o.id == owner_id), None)
         if obj is not None and (obj.class_name or "") in _NIAGARA_GRAPH_CLASSES:
             for graph in owner_graphs:
+                graph_export_id = str(graph.get("id") or "")
+                graph["id"] = f"{owner_id}/{graph_export_id}"
+                for node in graph.get("nodes") or []:
+                    if node.get("id"):
+                        node["id"] = f"{owner_id}/{node['id']}"
+                    for pin in node.get("pins") or []:
+                        for link in pin.get("linked") or []:
+                            if link.get("to_node"):
+                                link["to_node"] = f"{owner_id}/{link['to_node']}"
                 graph["links"] = [
-                    _link_record_from_raw(item, owner_id, str(graph.get("id") or "")).to_dict()
+                    _link_record_from_raw(item, owner_id, graph_export_id).to_dict()
                     for item in graph.get("links") or []
                 ]
         entry["graphs"] = owner_graphs
