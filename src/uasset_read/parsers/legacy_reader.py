@@ -60,7 +60,7 @@ from ..models.object_model import (
 )
 from ..models.properties import PropertyBag, PropertyTag
 from ..versioning import VersionContext, build_version_context, ftext_dev_notes_enabled, require_version_context
-from .property_types import make_enum_value
+from .property_parser import make_enum_value
 
 
 def _package_index_to_ref(pi: PackageIndex) -> ObjectRef | None:
@@ -2193,7 +2193,7 @@ def _read_soft_object_paths(
     diagnostics: list[Diagnostic],
 ) -> list[Any]:
     """Load the package's inline FSoftObjectPath list inside its header table."""
-    from .property_types import parse_soft_object_property
+    from .property_parser import parse_soft_object_property
     from ..models.properties import PropertyTag
 
     count, start = summary.soft_object_paths_count, summary.soft_object_paths_offset

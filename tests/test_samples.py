@@ -724,8 +724,8 @@ def _assert_data_table_row_values_decode_tagged_scalars():
     from uasset_read.exceptions import ParseError
     from uasset_read.models.properties import PropertyTag, project_property_value
     from uasset_read.projection import project_document
-    from uasset_read.parsers.property_types import make_enum_value
-    from uasset_read.parsers.property_types import parse_enum_property, parse_object_property
+    from uasset_read.parsers.property_parser import make_enum_value
+    from uasset_read.parsers.property_parser import parse_enum_property, parse_object_property
     from uasset_read.parsers.property_parser import parse_property_value
     from uasset_read.versioning import VersionContext
 
@@ -1749,7 +1749,7 @@ def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
     from uasset_read.models.properties import PropertyTag
     from uasset_read.package import _parse_cached, parse_package_document
     from uasset_read.parsers.property_parser import parse_property_value
-    from uasset_read.parsers.property_types import parse_struct_property, read_validated_count_tolerant
+    from uasset_read.parsers.property_parser import parse_struct_property, read_validated_count_tolerant
     from uasset_read.serializers.blueprint_graph import _validate_graph_export_offset
     from uasset_read.serializers.package_summary import _read_payload_toc_offset
     import uasset_read.parsers.properties.tagged as tagged
@@ -2000,7 +2000,7 @@ def _check_float_array_bulk_decode_matches_scalar_bits_with_one_payload_read():
 
     from uasset_read.archive import ByteArchive
     from uasset_read.models.properties import PropertyTag
-    from uasset_read.parsers.property_types import parse_array_property, parse_float_property
+    from uasset_read.parsers.property_parser import parse_array_property, parse_float_property
 
     class CountingArchive(ByteArchive):
         def __init__(self, data):
@@ -2033,7 +2033,7 @@ def _check_float_array_bulk_decode_falls_back_at_export_boundary():
     from uasset_read.archive import ByteArchive
     from uasset_read.models.fallback import PropertyFallback
     from uasset_read.models.properties import PropertyTag
-    from uasset_read.parsers.property_types import parse_array_property
+    from uasset_read.parsers.property_parser import parse_array_property
     from uasset_read.versioning import VersionContext
 
     class CountingArchive(ByteArchive):
@@ -2068,7 +2068,7 @@ def _check_float_array_bulk_decode_recovers_after_physical_short_read():
     from uasset_read.models.fallback import PropertyFallback
     from uasset_read.models.properties import PropertyTag
     from uasset_read.package import PackageArchive
-    from uasset_read.parsers.property_types import parse_array_property
+    from uasset_read.parsers.property_parser import parse_array_property
     from uasset_read.versioning import VersionContext
 
     raw = struct.pack("<i2f", 3, 1.0, 2.0)
@@ -4083,7 +4083,7 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
     from uasset_read.archive import ByteArchive
     from uasset_read.models.properties import PropertyTag
     from uasset_read.models.core import FEdGraphPinType
-    from uasset_read.parsers.property_types import parse_struct_property
+    from uasset_read.parsers.property_parser import parse_struct_property
 
     name_map = ["None"] * 400
     name_map[188] = "int"
@@ -4549,7 +4549,7 @@ def test_tagged_ftext_history_none_decodes_source():
 
     from uasset_read.archive import ByteArchive
     from uasset_read.models.properties import PropertyTag
-    from uasset_read.parsers.property_types import parse_text_property
+    from uasset_read.parsers.property_parser import parse_text_property
 
     data = struct.pack("<iBI", 0, 255, 1) + struct.pack("<i", 7) + b"Health\x00"
     value = parse_text_property(PropertyTag(name="T", type="TextProperty", size=len(data)), ByteArchive(data))
