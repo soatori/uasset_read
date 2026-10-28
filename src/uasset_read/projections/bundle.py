@@ -2,8 +2,8 @@
 
 ``write_projected_document`` serializes exactly the dict returned by
 ``project_document()``. Capability status rides each projection record
-(status/completeness); the matrix itself stays on
-``uasset_read.projections.registry.CAPABILITY_MATRIX``.
+(status/completeness); the capability matrix itself lives in
+``tests/capability_matrix.json``.
 """
 
 from __future__ import annotations

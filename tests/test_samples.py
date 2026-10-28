@@ -1412,8 +1412,7 @@ def test_real_sample_proves_claimed_capability():
             # Task 1.4 option (i): the zero-projection absence is declared as a
             # capability-matrix row (semantics stay in objects[].semantic), and
             # the promised entries field is asserted against the measured count.
-            from uasset_read.projections.registry import CAPABILITY_MATRIX
-
+            CAPABILITY_MATRIX = json.loads((Path(__file__).parent / "capability_matrix.json").read_text("utf-8"))
             row = next(r for r in CAPABILITY_MATRIX if r["family"] == "string_table")
             assert row["asset_kinds"] == ["string_table"] and row["kinds"] == [], f"{sample}:{class_name}"
             assert row["rule"].startswith("no embedded projections"), f"{sample}:{class_name}"
