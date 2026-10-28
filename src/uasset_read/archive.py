@@ -2,7 +2,6 @@
 
 Little-endian only (BE packages are rejected at PACKAGE_FILE_TAG_SWAPPED);
 supports mmap for large files and boundary validation.
-Extracted from uasset_read.py lines 204-895.
 """
 
 import logging

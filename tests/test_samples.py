@@ -3986,7 +3986,7 @@ def _aggregate_from_manifest():
 
 
 def test_trailing_aggregate_report_and_gate():
-    """Report gate on all 73 manifest samples, plus the aggregate's fail paths.
+    """Report gate on all 74 manifest samples, plus the aggregate's fail paths.
 
     Report half: counts AND bytes by reason and class must sit within the
     quality baseline. Fail half: a synthetic report over ceiling in bytes,
