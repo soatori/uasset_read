@@ -4781,3 +4781,20 @@ def test_node_pins_do_not_read_past_export_end():
     with pytest.raises(ExportBoundsExceeded):
         read_ue_graph_node(partial_archive, names, summary, [partial_node, node_b], [], partial_node)
     assert partial_archive._read_range is None
+
+
+def test_payload_descriptor_kind_requires_bulk_data_evidence():
+    from uasset_read.models.payloads import discover_payload_descriptor
+
+    # Serial-region fallback (no BulkData header in the tail) is "other", not "bulk_data".
+    fallback = discover_payload_descriptor(
+        "payload:export:0", 0,
+        main_path=SAMPLES / "BP_CombatCharacter.uasset", sidecar_paths={},
+    )
+    assert fallback.kind == "other"
+    # An import payload id resolves to a bounded missing descriptor — kind unknown, "other".
+    missing = discover_payload_descriptor(
+        "payload:import:3", -1,
+        main_path=SAMPLES / "BP_CombatCharacter.uasset", sidecar_paths={},
+    )
+    assert missing.kind == "other" and missing.status == "missing"

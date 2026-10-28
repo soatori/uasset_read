@@ -79,7 +79,7 @@ def discover_payload_descriptor(
         return PayloadDescriptor(
             id=descriptor_id,
             owner=f"export:{export_index}",
-            kind="bulk_data",
+            kind="other",
             source_region="main",
             offset=0,
             stored_size=0,
@@ -97,7 +97,7 @@ def discover_payload_descriptor(
         return PayloadDescriptor(
             id=descriptor_id,
             owner=f"export:{export_index}",
-            kind="bulk_data",
+            kind="other",
             source_region="main",
             offset=0,
             stored_size=0,
@@ -187,7 +187,8 @@ def discover_payload_descriptor(
     return PayloadDescriptor(
         id=descriptor_id,
         owner=f"export:{export_index}",
-        kind="bulk_data",
+        # "bulk_data" requires a parsed BulkData header; unclassified bytes are "other".
+        kind="other",
         source_region=source_region,  # type: ignore[arg-type]
         offset=fallback_offset,
         stored_size=fallback_size,
