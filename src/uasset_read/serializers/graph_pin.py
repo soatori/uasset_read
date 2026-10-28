@@ -1,6 +1,6 @@
 """Blueprint Pin binary serializer — FEdGraphPinType, UEdGraphPin read functions.
 
-Split from serializers/graph.py, contains all Pin-related read logic.
+Split from serializers/ue_graph.py, contains all Pin-related read logic.
 """
 
 from __future__ import annotations

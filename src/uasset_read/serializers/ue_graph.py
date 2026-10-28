@@ -48,7 +48,7 @@ def read_ue_graph(
 
     Reference: UE C++ UEdGraph::Serialize()
     """
-    # Lazy import to avoid circular dependency (graph.py -> graph_node.py)
+    # Lazy import to avoid circular dependency (ue_graph.py -> graph_node.py)
     from uasset_read.serializers.graph_node import read_ue_graph_node
 
     if _parsed_indices is None:

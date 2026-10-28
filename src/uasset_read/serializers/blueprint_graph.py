@@ -80,13 +80,13 @@ def read_blueprint_graphs(
 ) -> list[dict[str, Any]]:
     """Parse all graph exports in the package and return plain graph dicts.
 
-    Runs the shared binary readers (serializers/graph.read_ue_graph per graph
+    Runs the shared binary readers (serializers/ue_graph.read_ue_graph per graph
     export) and converts the resulting UEdGraph trees. Never raises on a
     single bad graph: failures produce a dict-level ``parse_errors`` count and
     the caller's diagnostics cover it when supplied. The archive must be open
     on the full package (decode pass restores the full read range before calling).
     """
-    from uasset_read.serializers.graph import read_ue_graph
+    from uasset_read.serializers.ue_graph import read_ue_graph
     from uasset_read.serializers.object_resources import resolve_class_name
 
     archive_size = 0

@@ -1,6 +1,6 @@
 """Blueprint Node binary serializer — UEdGraphNode, K2Node read functions.
 
-Extracted from serializers/graph.py, contains all node-related read logic.
+Extracted from serializers/ue_graph.py, contains all node-related read logic.
 """
 
 from __future__ import annotations
@@ -81,51 +81,6 @@ def _read_anim_graph_node(
         result["subgraph_references"] = subgraph_refs
 
     return result
-
-
-# ============================================================================
-# Node factory
-# ============================================================================
-
-
-def create_node_from_archive(
-    archive: FArchive,
-    name_map: list[str],
-    summary: PackageFileSummary,
-    export_map: list[ObjectExport],
-    import_map: list[ObjectImport],
-    base_node: UEdGraphNode,
-    raw_properties: dict[str, Any] | None = None,
-) -> UEdGraphNode:
-    """Attach node_data to base_node: AnimGraphNode prefix dispatch, else leave unset.
-
-    Exact K2Node class handlers were deleted (their node_data never reached any
-    projection); AnimGraphNode_/AnimState* types keep the full-context reader.
-    """
-    class_name = base_node.class_name
-
-    # If base_node already carries _parse_error flag, skip dispatch to protect existing information
-    if isinstance(base_node.node_data, dict) and base_node.node_data.get("_parse_error"):
-        return base_node
-
-    # Single dispatch path: AnimGraphNode_/AnimState* full-context reader,
-    # else tag-derived allow-list projection.
-    if class_name.startswith("AnimGraphNode_") or class_name.startswith("AnimState"):
-        base_node.node_data = _read_anim_graph_node(
-            export_map,
-            import_map,
-            raw_properties,
-        )
-    elif raw_properties:
-        # Tag-derived allow-list projection only (Wave A removed K2Node binary
-        # readers). Surviving primitive tags land on node_data for decode.
-        from uasset_read.serializers.node_data_project import project_node_data
-
-        projected = project_node_data(raw_properties)
-        if projected is not None:
-            base_node.node_data = projected
-
-    return base_node
 
 
 # ============================================================================
@@ -517,14 +472,31 @@ def read_ue_graph_node(
             class_name=class_name,
         )
 
-        return create_node_from_archive(
-            archive,
-            name_map,
-            summary,
-            export_map,
-            import_map,
-            base_node,
-            raw_properties=raw_properties if raw_properties else None,
-        )
+        # Attach node_data to base_node: AnimGraphNode prefix dispatch, else
+        # leave unset. Exact K2Node class handlers were deleted (their node_data
+        # never reached any projection); AnimGraphNode_/AnimState* types keep
+        # the full-context reader.
+        # If base_node already carries _parse_error flag, skip dispatch to protect existing information
+        if isinstance(base_node.node_data, dict) and base_node.node_data.get("_parse_error"):
+            return base_node
+
+        # Single dispatch path: AnimGraphNode_/AnimState* full-context reader,
+        # else tag-derived allow-list projection.
+        if class_name.startswith("AnimGraphNode_") or class_name.startswith("AnimState"):
+            base_node.node_data = _read_anim_graph_node(
+                export_map,
+                import_map,
+                raw_properties if raw_properties else None,
+            )
+        elif raw_properties:
+            # Tag-derived allow-list projection only (Wave A removed K2Node binary
+            # readers). Surviving primitive tags land on node_data for decode.
+            from uasset_read.serializers.node_data_project import project_node_data
+
+            projected = project_node_data(raw_properties)
+            if projected is not None:
+                base_node.node_data = projected
+
+        return base_node
     finally:
         archive.set_read_range(previous_range)
