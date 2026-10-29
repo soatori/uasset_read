@@ -2612,16 +2612,17 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     assert ambiguous.candidate_local_ids == ["export:2", "export:5"]
     assert ambiguous.qualified_key == ambiguous_key == "unresolved::SharedName"
 
-    # C3 (plan blueprint-semantics): call-level resolution matrix — all five
-    # (match_method, confidence) rows pinned synthetically, plus the call-level
-    # ambiguous row that only the external_ref test covered before.
+    # C3 矩阵 + 调用身份歧义边界（plan blueprint-identity 2026-10-29）：
+    # 明确包索引与唯一候选保留既有身份；多候选（多 local、多 import、
+    # 本地/import 同名）一律 unresolved，不按名称选首项；重复登记同一 ID
+    # 不算多个候选。
     from uasset_read.parsers.blueprint.correlation import _CallResolver
 
     ue58_owner = next(o for o in ue58_document.objects if o.id == "export:0")
     call_resolver = _CallResolver(ue58_document, ue58_owner, [], set(), set())
-    # object_id row: a stack node resolves directly at full confidence.
+    # object_id 行：明确包索引直接解析，满置信度。
     assert call_resolver.resolve_call("Whatever", 5)[2:] == ("object_id", 1.0, False)
-    # function_identity 0.9: exactly one local function carries the name.
+    # function_identity 0.9：唯一 local 候选。
     call_resolver.function_ids_by_name["SoloTarget"] = ["export:7"]
     assert call_resolver.resolve_call("SoloTarget", None) == (
         "export:7",
@@ -2630,7 +2631,7 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
         0.9,
         False,
     )
-    # function_identity 0.7: the name only matches an import.
+    # function_identity 0.7：唯一 import 候选。
     call_resolver.import_ids_by_name["ImportedTarget"] = ["import:3"]
     assert call_resolver.resolve_call("ImportedTarget", None) == (
         "import:3",
@@ -2639,23 +2640,123 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
         0.7,
         False,
     )
-    # function_identity 0.5: two+ local candidates stay ambiguous, diagnosed.
-    call_resolver.function_ids_by_name["SharedTarget"] = ["export:2", "export:5"]
-    assert call_resolver.resolve_call("SharedTarget", None) == (
-        "export:2",
-        "SharedTarget",
+    # 重复登记同一 ID 不算多个候选：仍按唯一 local 解析。
+    call_resolver.function_ids_by_name["DupTarget"] = ["export:7", "export:7"]
+    assert call_resolver.resolve_call("DupTarget", None) == (
+        "export:7",
+        "DupTarget",
         "function_identity",
-        0.5,
+        0.9,
         False,
     )
-    assert [d.code for d in call_resolver.diagnostics] == ["BLUEPRINT_CALL_NAME_AMBIGUOUS"]
-    # unresolved 0.0: no local function or import carries the name.
+    # 多 local 候选：保守 unresolved，不选首项。
+    call_resolver.function_ids_by_name["SharedTarget"] = ["export:2", "export:5"]
+    assert call_resolver.resolve_call("SharedTarget", None) == (
+        "unresolved:SharedTarget",
+        "SharedTarget",
+        "unresolved",
+        0.0,
+        True,
+    )
+    # 多 import 候选：同上。
+    call_resolver.import_ids_by_name["SharedImport"] = ["import:3", "import:8"]
+    assert call_resolver.resolve_call("SharedImport", None) == (
+        "unresolved:SharedImport",
+        "SharedImport",
+        "unresolved",
+        0.0,
+        True,
+    )
+    # 本地与 import 同名：合并去重后多候选，同上。
+    call_resolver.function_ids_by_name["MixedTarget"] = ["export:9"]
+    call_resolver.import_ids_by_name["MixedTarget"] = ["import:4"]
+    assert call_resolver.resolve_call("MixedTarget", None) == (
+        "unresolved:MixedTarget",
+        "MixedTarget",
+        "unresolved",
+        0.0,
+        True,
+    )
+    # 每个歧义候选集恰好一条既有诊断码；去重后唯一与无匹配不产生诊断。
+    assert [d.code for d in call_resolver.diagnostics] == [
+        "BLUEPRINT_CALL_NAME_AMBIGUOUS",
+        "BLUEPRINT_CALL_NAME_AMBIGUOUS",
+        "BLUEPRINT_CALL_NAME_AMBIGUOUS",
+    ]
+    # unresolved 0.0：无匹配，保持可寻址的 unresolved 记录。
     assert call_resolver.resolve_call("AbsentTarget", None) == (
         "unresolved:AbsentTarget",
         "AbsentTarget",
         "unresolved",
         0.0,
         True,
+    )
+    # Review F1/F2: zero-candidate silence re-check after AbsentTarget,
+    # and the literal diagnostic copy stays pinned.
+    assert [d.code for d in call_resolver.diagnostics] == [
+        "BLUEPRINT_CALL_NAME_AMBIGUOUS",
+        "BLUEPRINT_CALL_NAME_AMBIGUOUS",
+        "BLUEPRINT_CALL_NAME_AMBIGUOUS",
+    ]
+    assert call_resolver.diagnostics[0].message == (
+        "call target 'SharedTarget' matches 2 name candidates; "
+        "identity kept unresolved"
+    )
+
+    # 调用记录 ↔ external_refs 一致性（plan blueprint-identity 2026-10-29）：
+    # 经既有 _emit_call 分析路径，歧义调用必须以 unresolved CallRecord 携带指向
+    # 既有 ambiguous external_refs 的 target_ref_key，全部候选保留在
+    # candidate_local_ids；同一解析器上不同包含函数的记录不被合并。
+    from uasset_read.parsers.blueprint.correlation import _InstructionWalker
+
+    fn_a = FunctionAnalysis.from_dict(
+        {**debug_function, "object_id": "export:20", "function_name": "FnA", "name": "FnA"}
+    )
+    fn_b = FunctionAnalysis.from_dict(
+        {**debug_function, "object_id": "export:21", "function_name": "FnB", "name": "FnB"}
+    )
+    walker_a = _InstructionWalker(fn_a, call_resolver)
+    walker_b = _InstructionWalker(fn_b, call_resolver)
+    walker_a._emit_call(None, None, None, dict_operands={"Name": "SharedTarget"})
+    walker_b._emit_call(None, None, None, dict_operands={"Name": "SharedTarget"})
+    walker_a._emit_call("AbsentTarget", None, None)
+    walker_a._emit_call("SoloTarget", None, None)
+    walker_a._emit_call("ImportedTarget", None, None)
+    walker_a._emit_call(None, 5, None)
+    rec_shared, rec_absent, rec_solo, rec_imported, rec_index = walker_a.calls
+    (rec_shared_b,) = walker_b.calls
+    assert (rec_shared.owner_object_id, rec_shared_b.owner_object_id) == ("export:20", "export:21")
+    assert (rec_shared.object_id, rec_shared.match_method, rec_shared.confidence, rec_shared.unresolved) == (
+        "unresolved:SharedTarget",
+        "unresolved",
+        0.0,
+        True,
+    )
+    assert rec_shared.target_ref_key == rec_shared_b.target_ref_key == "unresolved::SharedTarget"
+    refs_by_key = {r.qualified_key: r for r in call_resolver.external_refs()}
+    ambiguous_ref = refs_by_key["unresolved::SharedTarget"]
+    assert (ambiguous_ref.status, ambiguous_ref.reason) == ("ambiguous", "2_name_candidates")
+    assert ambiguous_ref.candidate_local_ids == ["export:2", "export:5"]
+    # 无候选、唯一候选与明确索引行保持一致。
+    assert (rec_absent.object_id, rec_absent.target_ref_key, rec_absent.unresolved) == (
+        "unresolved:AbsentTarget",
+        "unresolved::AbsentTarget",
+        True,
+    )
+    assert refs_by_key["unresolved::AbsentTarget"].reason == "no_name_match"
+    assert (rec_solo.object_id, rec_solo.confidence, rec_solo.target_ref_key) == (
+        "export:7",
+        0.9,
+        "export:7::SoloTarget",
+    )
+    assert refs_by_key["export:7::SoloTarget"].reason == "unique_name_match"
+    assert (rec_imported.object_id, rec_imported.confidence) == ("import:3", 0.7)
+    assert refs_by_key[rec_imported.target_ref_key].status == "resolved"
+    assert (rec_index.object_id, rec_index.match_method, rec_index.confidence, rec_index.target_ref_key) == (
+        "export:4",
+        "object_id",
+        1.0,
+        None,
     )
 
     # C5 (plan blueprint-semantics): three zero-test diagnostics each get one
@@ -3268,6 +3369,97 @@ def test_helm_blueprint_variable_set_pins_decode():
 
     assert len(node["pins"]) == 5
     assert not any("node export:27" in error for error in graph["parse_errors"])
+    # Pin 参数关系证据（plan blueprint-identity 2026-10-29）：Subtract_FloatFloat.A
+    # 的实参来源由连接证明——Multiply_FloatFloat.ReturnValue；'0.0' 只是序列化
+    # 默认值，不是实际实参。纯计算节点没有 exec Pin，关系由 Pin 与 data 槽证明。
+    steer = next(g for g in graphs if g["id"] == "export:0/export:11")
+    assert steer["name"] == "GetSteeringAngle"
+    nodes = {n["id"]: n for n in steer["nodes"]}
+    sub, mul = nodes["export:0/export:17"], nodes["export:0/export:19"]
+    assert (sub["metadata"]["function_name"], mul["metadata"]["function_name"]) == (
+        "Subtract_FloatFloat",
+        "Multiply_FloatFloat",
+    )
+    sub_pins = {p["name"]: p for p in sub["pins"]}
+    mul_pins = {p["name"]: p for p in mul["pins"]}
+    assert (sub_pins["A"]["id"], sub_pins["A"]["direction"]) == (
+        "86e902f61ca6b64c99f5019da4d50fa7",
+        "input",
+    )
+    assert (sub_pins["ReturnValue"]["id"], sub_pins["ReturnValue"]["direction"]) == (
+        "d182379699d905448849e6995eac8467",
+        "output",
+    )
+    assert (mul_pins["ReturnValue"]["id"], mul_pins["ReturnValue"]["direction"]) == (
+        "f0b41b01b5ea7546ac699d68c637ccff",
+        "output",
+    )
+    assert all(p["category"] != "exec" for p in sub["pins"] + mul["pins"])
+    assert sub_pins["A"]["default_value"] == "0.0"
+    assert sub_pins["A"]["links"] == [
+        {"to_node_id": "export:19/export:19", "to_pin_id": "f0b41b01b5ea7546ac699d68c637ccff"}
+    ]
+    assert mul_pins["ReturnValue"]["links"] == [
+        {"to_node_id": "export:17/export:17", "to_pin_id": "86e902f61ca6b64c99f5019da4d50fa7"}
+    ]
+    # 互反槽各留一条 resolved 记录：一条物理连接 ≠执行次数或错误。
+    edge_records = [
+        item
+        for item in steer["links"]
+        if {item["source_pin_guid"], item["target_pin_guid"]}
+        == {"86e902f61ca6b64c99f5019da4d50fa7", "f0b41b01b5ea7546ac699d68c637ccff"}
+    ]
+    assert len(edge_records) == 2
+    assert all(item["status"] == "resolved" and item["connection_type"] == "data" for item in edge_records)
+    edge_pairs = {
+        (item["source_node_id"], item["source_pin_guid"], item["target_node_id"], item["target_pin_guid"])
+        for item in edge_records
+    }
+    assert edge_pairs == {
+        (
+            "export:0/export:17",
+            "86e902f61ca6b64c99f5019da4d50fa7",
+            "export:0/export:19",
+            "f0b41b01b5ea7546ac699d68c637ccff",
+        ),
+        (
+            "export:0/export:19",
+            "f0b41b01b5ea7546ac699d68c637ccff",
+            "export:0/export:17",
+            "86e902f61ca6b64c99f5019da4d50fa7",
+        ),
+    }
+    # normal/debug 投影携带相同身份与关系（只读身份字段，证据键随模式增减）。
+    from uasset_read.projection import project_document
+
+    for mode in ("normal", "debug"):
+        projected = project_document(doc, mode=mode)
+        pgraph = next(
+            item
+            for obj in projected["objects"]
+            for item in (obj.get("semantic") or {}).get("graphs") or []
+            if item["id"] == "export:0/export:11"
+        )
+        pnodes = {n["id"]: n for n in pgraph["nodes"]}
+        psub = {p["name"]: p for p in pnodes["export:0/export:17"]["pins"]}
+        pmul = {p["name"]: p for p in pnodes["export:0/export:19"]["pins"]}
+        assert (
+            pnodes["export:0/export:17"]["metadata"]["function_name"],
+            pnodes["export:0/export:19"]["metadata"]["function_name"],
+        ) == ("Subtract_FloatFloat", "Multiply_FloatFloat")
+        assert psub["A"]["default_value"] == "0.0"
+        assert psub["A"]["links"] == [
+            {"to_node_id": "export:19/export:19", "to_pin_id": "f0b41b01b5ea7546ac699d68c637ccff"}
+        ]
+        assert pmul["ReturnValue"]["links"] == [
+            {"to_node_id": "export:17/export:17", "to_pin_id": "86e902f61ca6b64c99f5019da4d50fa7"}
+        ]
+        assert {
+            (item["source_node_id"], item["source_pin_guid"], item["target_node_id"], item["target_pin_guid"])
+            for item in pgraph["links"]
+            if {item["source_pin_guid"], item["target_pin_guid"]}
+            == {"86e902f61ca6b64c99f5019da4d50fa7", "f0b41b01b5ea7546ac699d68c637ccff"}
+        } == edge_pairs
 
 
 def test_ue53_version_1009_blueprint_resolved_graph_edge():
