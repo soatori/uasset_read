@@ -2692,6 +2692,62 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
         True,
     )
 
+    # 调用记录 ↔ external_refs 一致性（plan blueprint-identity 2026-10-29）：
+    # 经既有 _emit_call 分析路径，歧义调用必须以 unresolved CallRecord 携带指向
+    # 既有 ambiguous external_refs 的 target_ref_key，全部候选保留在
+    # candidate_local_ids；同一解析器上不同包含函数的记录不被合并。
+    from uasset_read.parsers.blueprint.correlation import _InstructionWalker
+
+    fn_a = FunctionAnalysis.from_dict(
+        {**debug_function, "object_id": "export:20", "function_name": "FnA", "name": "FnA"}
+    )
+    fn_b = FunctionAnalysis.from_dict(
+        {**debug_function, "object_id": "export:21", "function_name": "FnB", "name": "FnB"}
+    )
+    walker_a = _InstructionWalker(fn_a, call_resolver)
+    walker_b = _InstructionWalker(fn_b, call_resolver)
+    walker_a._emit_call(None, None, None, dict_operands={"Name": "SharedTarget"})
+    walker_b._emit_call(None, None, None, dict_operands={"Name": "SharedTarget"})
+    walker_a._emit_call("AbsentTarget", None, None)
+    walker_a._emit_call("SoloTarget", None, None)
+    walker_a._emit_call("ImportedTarget", None, None)
+    walker_a._emit_call(None, 5, None)
+    rec_shared, rec_absent, rec_solo, rec_imported, rec_index = walker_a.calls
+    (rec_shared_b,) = walker_b.calls
+    assert (rec_shared.owner_object_id, rec_shared_b.owner_object_id) == ("export:20", "export:21")
+    assert (rec_shared.object_id, rec_shared.match_method, rec_shared.confidence, rec_shared.unresolved) == (
+        "unresolved:SharedTarget",
+        "unresolved",
+        0.0,
+        True,
+    )
+    assert rec_shared.target_ref_key == rec_shared_b.target_ref_key == "unresolved::SharedTarget"
+    refs_by_key = {r.qualified_key: r for r in call_resolver.external_refs()}
+    ambiguous_ref = refs_by_key["unresolved::SharedTarget"]
+    assert (ambiguous_ref.status, ambiguous_ref.reason) == ("ambiguous", "2_name_candidates")
+    assert ambiguous_ref.candidate_local_ids == ["export:2", "export:5"]
+    # 无候选、唯一候选与明确索引行保持一致。
+    assert (rec_absent.object_id, rec_absent.target_ref_key, rec_absent.unresolved) == (
+        "unresolved:AbsentTarget",
+        "unresolved::AbsentTarget",
+        True,
+    )
+    assert refs_by_key["unresolved::AbsentTarget"].reason == "no_name_match"
+    assert (rec_solo.object_id, rec_solo.confidence, rec_solo.target_ref_key) == (
+        "export:7",
+        0.9,
+        "export:7::SoloTarget",
+    )
+    assert refs_by_key["export:7::SoloTarget"].reason == "unique_name_match"
+    assert (rec_imported.object_id, rec_imported.confidence) == ("import:3", 0.7)
+    assert refs_by_key[rec_imported.target_ref_key].status == "resolved"
+    assert (rec_index.object_id, rec_index.match_method, rec_index.confidence, rec_index.target_ref_key) == (
+        "export:4",
+        "object_id",
+        1.0,
+        None,
+    )
+
     # C5 (plan blueprint-semantics): three zero-test diagnostics each get one
     # minimal trigger. (1) BLUEPRINT_NODE_CONTROL_FLAGS_UNSUPPORTED — a
     # >=1011 node whose SerializationControlExtensions byte carries bits
