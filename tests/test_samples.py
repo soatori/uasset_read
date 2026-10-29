@@ -2691,6 +2691,17 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
         0.0,
         True,
     )
+    # Review F1/F2: zero-candidate silence re-check after AbsentTarget,
+    # and the literal diagnostic copy stays pinned.
+    assert [d.code for d in call_resolver.diagnostics] == [
+        "BLUEPRINT_CALL_NAME_AMBIGUOUS",
+        "BLUEPRINT_CALL_NAME_AMBIGUOUS",
+        "BLUEPRINT_CALL_NAME_AMBIGUOUS",
+    ]
+    assert call_resolver.diagnostics[0].message == (
+        "call target 'SharedTarget' matches 2 name candidates; "
+        "identity kept unresolved"
+    )
 
     # 调用记录 ↔ external_refs 一致性（plan blueprint-identity 2026-10-29）：
     # 经既有 _emit_call 分析路径，歧义调用必须以 unresolved CallRecord 携带指向
