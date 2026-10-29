@@ -346,29 +346,29 @@ class _CallResolver:
                 False,
             )
         if name:
-            matches = self.function_ids_by_name.get(name) or []
-            if len(matches) == 1:
-                return name and matches[0], name, "function_identity", 0.9, False
-            if len(matches) > 1:
+            candidates = sorted(
+                set(self.function_ids_by_name.get(name, []))
+                | set(self.import_ids_by_name.get(name, []))
+            )
+            if len(candidates) == 1:
+                object_id = candidates[0]
+                confidence = 0.9 if object_id.startswith("export:") else 0.7
+                return object_id, name, "function_identity", confidence, False
+            if len(candidates) > 1:
                 self.diagnostics.append(
                     Diagnostic(
                         severity="warning",
                         code="BLUEPRINT_CALL_NAME_AMBIGUOUS",
                         message=(
-                            f"call target {name!r} matches {len(matches)} function "
-                            "exports; identity-first attach kept them separate"
+                            f"call target {name!r} matches {len(candidates)} "
+                            "name candidates; identity kept unresolved"
                         ),
                         stage="semantic.blueprint.correlation",
                         object_id=self.owner.id,
                         effect="semantic_loss",
                     )
                 )
-                return matches[0], name, "function_identity", 0.5, False
-            imports = self.import_ids_by_name.get(name) or []
-            if imports:
-                return imports[0], name, "function_identity", 0.7, False
-            # No object in this package carries the target (inherited/native
-            # parent-class call). Keep an addressable unresolved record.
+            # Ambiguous or absent: keep an addressable unresolved record.
             return f"unresolved:{name}", name, "unresolved", 0.0, True
         return "", "", "unresolved", 0.0, True
 

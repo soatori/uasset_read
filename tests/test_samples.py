@@ -2612,16 +2612,17 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     assert ambiguous.candidate_local_ids == ["export:2", "export:5"]
     assert ambiguous.qualified_key == ambiguous_key == "unresolved::SharedName"
 
-    # C3 (plan blueprint-semantics): call-level resolution matrix — all five
-    # (match_method, confidence) rows pinned synthetically, plus the call-level
-    # ambiguous row that only the external_ref test covered before.
+    # C3 矩阵 + 调用身份歧义边界（plan blueprint-identity 2026-10-29）：
+    # 明确包索引与唯一候选保留既有身份；多候选（多 local、多 import、
+    # 本地/import 同名）一律 unresolved，不按名称选首项；重复登记同一 ID
+    # 不算多个候选。
     from uasset_read.parsers.blueprint.correlation import _CallResolver
 
     ue58_owner = next(o for o in ue58_document.objects if o.id == "export:0")
     call_resolver = _CallResolver(ue58_document, ue58_owner, [], set(), set())
-    # object_id row: a stack node resolves directly at full confidence.
+    # object_id 行：明确包索引直接解析，满置信度。
     assert call_resolver.resolve_call("Whatever", 5)[2:] == ("object_id", 1.0, False)
-    # function_identity 0.9: exactly one local function carries the name.
+    # function_identity 0.9：唯一 local 候选。
     call_resolver.function_ids_by_name["SoloTarget"] = ["export:7"]
     assert call_resolver.resolve_call("SoloTarget", None) == (
         "export:7",
@@ -2630,7 +2631,7 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
         0.9,
         False,
     )
-    # function_identity 0.7: the name only matches an import.
+    # function_identity 0.7：唯一 import 候选。
     call_resolver.import_ids_by_name["ImportedTarget"] = ["import:3"]
     assert call_resolver.resolve_call("ImportedTarget", None) == (
         "import:3",
@@ -2639,17 +2640,50 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
         0.7,
         False,
     )
-    # function_identity 0.5: two+ local candidates stay ambiguous, diagnosed.
-    call_resolver.function_ids_by_name["SharedTarget"] = ["export:2", "export:5"]
-    assert call_resolver.resolve_call("SharedTarget", None) == (
-        "export:2",
-        "SharedTarget",
+    # 重复登记同一 ID 不算多个候选：仍按唯一 local 解析。
+    call_resolver.function_ids_by_name["DupTarget"] = ["export:7", "export:7"]
+    assert call_resolver.resolve_call("DupTarget", None) == (
+        "export:7",
+        "DupTarget",
         "function_identity",
-        0.5,
+        0.9,
         False,
     )
-    assert [d.code for d in call_resolver.diagnostics] == ["BLUEPRINT_CALL_NAME_AMBIGUOUS"]
-    # unresolved 0.0: no local function or import carries the name.
+    # 多 local 候选：保守 unresolved，不选首项。
+    call_resolver.function_ids_by_name["SharedTarget"] = ["export:2", "export:5"]
+    assert call_resolver.resolve_call("SharedTarget", None) == (
+        "unresolved:SharedTarget",
+        "SharedTarget",
+        "unresolved",
+        0.0,
+        True,
+    )
+    # 多 import 候选：同上。
+    call_resolver.import_ids_by_name["SharedImport"] = ["import:3", "import:8"]
+    assert call_resolver.resolve_call("SharedImport", None) == (
+        "unresolved:SharedImport",
+        "SharedImport",
+        "unresolved",
+        0.0,
+        True,
+    )
+    # 本地与 import 同名：合并去重后多候选，同上。
+    call_resolver.function_ids_by_name["MixedTarget"] = ["export:9"]
+    call_resolver.import_ids_by_name["MixedTarget"] = ["import:4"]
+    assert call_resolver.resolve_call("MixedTarget", None) == (
+        "unresolved:MixedTarget",
+        "MixedTarget",
+        "unresolved",
+        0.0,
+        True,
+    )
+    # 每个歧义候选集恰好一条既有诊断码；去重后唯一与无匹配不产生诊断。
+    assert [d.code for d in call_resolver.diagnostics] == [
+        "BLUEPRINT_CALL_NAME_AMBIGUOUS",
+        "BLUEPRINT_CALL_NAME_AMBIGUOUS",
+        "BLUEPRINT_CALL_NAME_AMBIGUOUS",
+    ]
+    # unresolved 0.0：无匹配，保持可寻址的 unresolved 记录。
     assert call_resolver.resolve_call("AbsentTarget", None) == (
         "unresolved:AbsentTarget",
         "AbsentTarget",
