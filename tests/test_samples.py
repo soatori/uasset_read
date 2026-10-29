@@ -3268,6 +3268,97 @@ def test_helm_blueprint_variable_set_pins_decode():
 
     assert len(node["pins"]) == 5
     assert not any("node export:27" in error for error in graph["parse_errors"])
+    # Pin 参数关系证据（plan blueprint-identity 2026-10-29）：Subtract_FloatFloat.A
+    # 的实参来源由连接证明——Multiply_FloatFloat.ReturnValue；'0.0' 只是序列化
+    # 默认值，不是实际实参。纯计算节点没有 exec Pin，关系由 Pin 与 data 槽证明。
+    steer = next(g for g in graphs if g["id"] == "export:0/export:11")
+    assert steer["name"] == "GetSteeringAngle"
+    nodes = {n["id"]: n for n in steer["nodes"]}
+    sub, mul = nodes["export:0/export:17"], nodes["export:0/export:19"]
+    assert (sub["metadata"]["function_name"], mul["metadata"]["function_name"]) == (
+        "Subtract_FloatFloat",
+        "Multiply_FloatFloat",
+    )
+    sub_pins = {p["name"]: p for p in sub["pins"]}
+    mul_pins = {p["name"]: p for p in mul["pins"]}
+    assert (sub_pins["A"]["id"], sub_pins["A"]["direction"]) == (
+        "86e902f61ca6b64c99f5019da4d50fa7",
+        "input",
+    )
+    assert (sub_pins["ReturnValue"]["id"], sub_pins["ReturnValue"]["direction"]) == (
+        "d182379699d905448849e6995eac8467",
+        "output",
+    )
+    assert (mul_pins["ReturnValue"]["id"], mul_pins["ReturnValue"]["direction"]) == (
+        "f0b41b01b5ea7546ac699d68c637ccff",
+        "output",
+    )
+    assert all(p["category"] != "exec" for p in sub["pins"] + mul["pins"])
+    assert sub_pins["A"]["default_value"] == "0.0"
+    assert sub_pins["A"]["links"] == [
+        {"to_node_id": "export:19/export:19", "to_pin_id": "f0b41b01b5ea7546ac699d68c637ccff"}
+    ]
+    assert mul_pins["ReturnValue"]["links"] == [
+        {"to_node_id": "export:17/export:17", "to_pin_id": "86e902f61ca6b64c99f5019da4d50fa7"}
+    ]
+    # 互反槽各留一条 resolved 记录：一条物理连接 ≠执行次数或错误。
+    edge_records = [
+        item
+        for item in steer["links"]
+        if {item["source_pin_guid"], item["target_pin_guid"]}
+        == {"86e902f61ca6b64c99f5019da4d50fa7", "f0b41b01b5ea7546ac699d68c637ccff"}
+    ]
+    assert len(edge_records) == 2
+    assert all(item["status"] == "resolved" and item["connection_type"] == "data" for item in edge_records)
+    edge_pairs = {
+        (item["source_node_id"], item["source_pin_guid"], item["target_node_id"], item["target_pin_guid"])
+        for item in edge_records
+    }
+    assert edge_pairs == {
+        (
+            "export:0/export:17",
+            "86e902f61ca6b64c99f5019da4d50fa7",
+            "export:0/export:19",
+            "f0b41b01b5ea7546ac699d68c637ccff",
+        ),
+        (
+            "export:0/export:19",
+            "f0b41b01b5ea7546ac699d68c637ccff",
+            "export:0/export:17",
+            "86e902f61ca6b64c99f5019da4d50fa7",
+        ),
+    }
+    # normal/debug 投影携带相同身份与关系（只读身份字段，证据键随模式增减）。
+    from uasset_read.projection import project_document
+
+    for mode in ("normal", "debug"):
+        projected = project_document(doc, mode=mode)
+        pgraph = next(
+            item
+            for obj in projected["objects"]
+            for item in (obj.get("semantic") or {}).get("graphs") or []
+            if item["id"] == "export:0/export:11"
+        )
+        pnodes = {n["id"]: n for n in pgraph["nodes"]}
+        psub = {p["name"]: p for p in pnodes["export:0/export:17"]["pins"]}
+        pmul = {p["name"]: p for p in pnodes["export:0/export:19"]["pins"]}
+        assert (
+            pnodes["export:0/export:17"]["metadata"]["function_name"],
+            pnodes["export:0/export:19"]["metadata"]["function_name"],
+        ) == ("Subtract_FloatFloat", "Multiply_FloatFloat")
+        assert psub["A"]["default_value"] == "0.0"
+        assert psub["A"]["links"] == [
+            {"to_node_id": "export:19/export:19", "to_pin_id": "f0b41b01b5ea7546ac699d68c637ccff"}
+        ]
+        assert pmul["ReturnValue"]["links"] == [
+            {"to_node_id": "export:17/export:17", "to_pin_id": "86e902f61ca6b64c99f5019da4d50fa7"}
+        ]
+        assert {
+            (item["source_node_id"], item["source_pin_guid"], item["target_node_id"], item["target_pin_guid"])
+            for item in pgraph["links"]
+            if {item["source_pin_guid"], item["target_pin_guid"]}
+            == {"86e902f61ca6b64c99f5019da4d50fa7", "f0b41b01b5ea7546ac699d68c637ccff"}
+        } == edge_pairs
 
 
 def test_ue53_version_1009_blueprint_resolved_graph_edge():
