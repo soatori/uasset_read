@@ -3213,6 +3213,144 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
             tuple(list(projector_registry.PROJECTORS) + [TwoOwners(), TwoOwners()]), stack_document, sample_object
         )
 
+    # Pin reference closure at the raw→typed conversion (plan
+    # blueprint-pin-reference-closure 2026-10-29): a bare local export
+    # target gains the graph's Blueprint owner once, an already-qualified
+    # target keeps its identity, and one target identity feeds both the
+    # PinLink and its raw ref.
+    from uasset_read.models.analysis import NodeId, PinLinkRef
+    from uasset_read.parsers.blueprint.graph import _node_from_raw, _pin_from_raw
+    from uasset_read.parsers.blueprint.graph import resolve_pin_links as typed_resolve_pin_links
+
+    owner_src = NodeId(owner_object_id="export:0", node_export_id="export:0")
+    bare_pin = _pin_from_raw(
+        owner_src,
+        {"id": "ab" * 16, "name": "In", "direction": "input", "linked": [{"to_node": "export:9", "to_pin": "cd" * 16}]},
+    )
+    (bare_link,) = bare_pin.linked
+    assert str(bare_link.to_node_id) == "export:0/export:9"
+    assert bare_link.to_node_id is bare_link.raw_ref.to_owner_node_id
+    qualified_pin = _pin_from_raw(
+        owner_src,
+        {
+            "id": "ab" * 16,
+            "name": "In",
+            "direction": "input",
+            "linked": [{"to_node": "export:3/export:9", "to_pin": "cd" * 16}],
+        },
+    )
+    (qualified_link,) = qualified_pin.linked
+    assert str(qualified_link.to_node_id) == "export:3/export:9"
+    assert str(qualified_link.raw_ref.to_owner_node_id) == "export:3/export:9"
+
+    # Cross-owner isolation: the same pin GUID registered under two owners
+    # never cross-wires — the explicit target node owner wins and the typed
+    # resolver never falls back to the foreign owner's GUID duplicate.
+    shared_guid = "ef" * 16
+    node_owner_a = _node_from_raw(
+        NodeId(owner_object_id="export:0", node_export_id="export:0"),
+        {"id": "export:9", "pins": [{"id": shared_guid, "name": "Out", "direction": "output", "linked": []}]},
+    )
+    node_owner_b = _node_from_raw(
+        NodeId(owner_object_id="export:5", node_export_id="export:5"),
+        {"id": "export:9", "pins": [{"id": shared_guid, "name": "Out", "direction": "output", "linked": []}]},
+    )
+    cross_source = _node_from_raw(
+        NodeId(owner_object_id="export:0", node_export_id="export:0"),
+        {
+            "id": "export:2",
+            "pins": [
+                {
+                    "id": "ba" * 16,
+                    "name": "In",
+                    "direction": "input",
+                    "linked": [{"to_node": "export:9", "to_pin": shared_guid}],
+                }
+            ],
+        },
+    )
+    (cross_link,) = cross_source.pins[0].linked
+    assert str(cross_link.to_node_id) == "export:0/export:9"
+    cross_resolution = typed_resolve_pin_links([cross_source, node_owner_a, node_owner_b], [cross_link.raw_ref])
+    assert [str(link.to_node_id) for link in cross_resolution.links] == ["export:0/export:9"]
+    assert cross_resolution.diagnostics == []
+
+    # Missing/import/null/ambiguous targets keep their raw slot, status and
+    # reason — never force-resolved, never deleted, adjacency stays empty.
+    closure_graph = {
+        "id": "export:4",
+        "nodes": [
+            {
+                "id": "export:1",
+                "pins": [
+                    {"id": "aa" * 16, "name": "SrcA", "direction": "input", "linked": []},
+                    {"id": "bb" * 16, "name": "SrcB", "direction": "input", "linked": []},
+                ],
+            },
+            {"id": "export:2", "pins": [{"id": "ee" * 16, "name": "Dup1", "direction": "output", "linked": []}]},
+            {"id": "export:3", "pins": [{"id": "ee" * 16, "name": "Dup2", "direction": "output", "linked": []}]},
+        ],
+        "_pin_links": [
+            {
+                "from_node": 2,
+                "from_pin": "aa" * 16,
+                "to_owning_node": None,
+                "to_pin": None,
+                "null": True,
+                "source_category": "exec",
+            },
+            {
+                "from_node": 2,
+                "from_pin": "aa" * 16,
+                "to_owning_node": -3,
+                "to_pin": "cc" * 16,
+                "source_category": "data",
+            },
+            {
+                "from_node": 2,
+                "from_pin": "aa" * 16,
+                "to_owning_node": 3,
+                "to_pin": "dd" * 16,
+                "source_category": "data",
+            },
+            {
+                "from_node": 2,
+                "from_pin": "bb" * 16,
+                "to_owning_node": 0,
+                "to_pin": "ee" * 16,
+                "source_category": "data",
+            },
+        ],
+    }
+    resolve_pin_links([closure_graph])
+    assert closure_graph["edge_count"] == 0
+    # Ambiguous slots also count into unresolved_links (every non-resolved
+    # slot does) — the historical counter semantics stay untouched.
+    assert closure_graph["unresolved_links"] == 4
+    assert closure_graph["ambiguous_links"] == 1
+    assert [(rec["status"], rec["reason"]) for rec in closure_graph["links"]] == [
+        ("unresolved", "null_link_reference"),
+        ("unresolved", "target_owner_is_import"),
+        ("unresolved", "target_pin_not_found"),
+        ("ambiguous", "multiple_guid_candidates_without_owner"),
+    ]
+    assert [rec["target_owner_id"] for rec in closure_graph["links"]] == [None, "import:2", "export:2", None]
+    assert all(rec["debug_evidence"] is not None for rec in closure_graph["links"])
+    assert all(pin["linked"] == [] for node in closure_graph["nodes"] for pin in node["pins"])
+    typed_records = [_link_record_from_raw(rec, "export:0", "export:4") for rec in closure_graph["links"]]
+    assert [rec.status for rec in typed_records] == ["unresolved", "unresolved", "unresolved", "ambiguous"]
+    assert typed_records[0].target_node_id is None and typed_records[0].target_pin_guid is None
+    assert typed_records[3].target_node_id is None
+    missing_ref = PinLinkRef(
+        from_node_id=cross_source.id,
+        from_pin_guid="ba" * 16,
+        to_owner_node_id=NodeId(owner_object_id="export:0", node_export_id="export:404"),
+        to_pin_guid="dd" * 16,
+    )
+    missing_resolution = typed_resolve_pin_links([cross_source], [missing_ref])
+    assert missing_resolution.links == []
+    assert [d.code for d in missing_resolution.diagnostics] == ["BLUEPRINT_PIN_LINK_UNRESOLVED"]
+
 
 def test_object_depth_parses_only_requested_export():
     from uasset_read.package import parse_package_document
@@ -3396,12 +3534,25 @@ def test_helm_blueprint_variable_set_pins_decode():
     )
     assert all(p["category"] != "exec" for p in sub["pins"] + mul["pins"])
     assert sub_pins["A"]["default_value"] == "0.0"
+    # Pin adjacency keeps the Blueprint-owner identity (pin reference closure):
+    # each link must look up its target node and target pin, not a
+    # self-owner-mirrored bare export id.
     assert sub_pins["A"]["links"] == [
-        {"to_node_id": "export:19/export:19", "to_pin_id": "f0b41b01b5ea7546ac699d68c637ccff"}
+        {"to_node_id": "export:0/export:19", "to_pin_id": "f0b41b01b5ea7546ac699d68c637ccff"}
     ]
     assert mul_pins["ReturnValue"]["links"] == [
-        {"to_node_id": "export:17/export:17", "to_pin_id": "86e902f61ca6b64c99f5019da4d50fa7"}
+        {"to_node_id": "export:0/export:17", "to_pin_id": "86e902f61ca6b64c99f5019da4d50fa7"}
     ]
+    for link in sub_pins["A"]["links"] + mul_pins["ReturnValue"]["links"]:
+        assert link["to_node_id"] in nodes, link
+        target_pins = {p["id"]: p for p in nodes[link["to_node_id"]]["pins"]}
+        assert link["to_pin_id"] in target_pins, link
+    assert next(
+        p for p in nodes["export:0/export:19"]["pins"] if p["id"] == "f0b41b01b5ea7546ac699d68c637ccff"
+    )["direction"] == "output"
+    assert next(p for p in nodes["export:0/export:17"]["pins"] if p["id"] == "86e902f61ca6b64c99f5019da4d50fa7")[
+        "direction"
+    ] == "input"
     # 互反槽各留一条 resolved 记录：一条物理连接 ≠执行次数或错误。
     edge_records = [
         item
@@ -3449,11 +3600,16 @@ def test_helm_blueprint_variable_set_pins_decode():
         ) == ("Subtract_FloatFloat", "Multiply_FloatFloat")
         assert psub["A"]["default_value"] == "0.0"
         assert psub["A"]["links"] == [
-            {"to_node_id": "export:19/export:19", "to_pin_id": "f0b41b01b5ea7546ac699d68c637ccff"}
+            {"to_node_id": "export:0/export:19", "to_pin_id": "f0b41b01b5ea7546ac699d68c637ccff"}
         ]
         assert pmul["ReturnValue"]["links"] == [
-            {"to_node_id": "export:17/export:17", "to_pin_id": "86e902f61ca6b64c99f5019da4d50fa7"}
+            {"to_node_id": "export:0/export:17", "to_pin_id": "86e902f61ca6b64c99f5019da4d50fa7"}
         ]
+        # Reference closure holds in both projection modes: every projected
+        # link resolves to an existing target node and pin.
+        for link in psub["A"]["links"] + pmul["ReturnValue"]["links"]:
+            assert link["to_node_id"] in pnodes, link
+            assert link["to_pin_id"] in {p["id"] for p in pnodes[link["to_node_id"]]["pins"]}, link
         assert {
             (item["source_node_id"], item["source_pin_guid"], item["target_node_id"], item["target_pin_guid"])
             for item in pgraph["links"]

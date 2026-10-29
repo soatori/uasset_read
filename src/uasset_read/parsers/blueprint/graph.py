@@ -113,6 +113,21 @@ def resolve_pin_links(nodes: list[BlueprintNode], refs: list[PinLinkRef]) -> Lin
     return LinkResolution(links=links, diagnostics=diagnostics)
 
 
+def _qualify_target_node_id(to_node: str, owner_object_id: str) -> NodeId:
+    """Target identity for one raw pin link, owner-completed at conversion.
+
+    Raw graph dicts carry bare local ``export:N`` node ids; the Blueprint
+    owner is known only here, while the graph context is still complete.
+    Already-qualified targets keep their original identity (no second
+    prefix), and non-export forms (imports, foreign ids) are never
+    re-owned — the raw resolver confirmed every ``linked`` entry names a
+    local export target, so anything else stays as written.
+    """
+    if "/" not in to_node and to_node.startswith("export:"):
+        return NodeId(owner_object_id=owner_object_id, node_export_id=to_node)
+    return _node_id_from_str(to_node)
+
+
 def _pin_from_raw(node_id: NodeId, pin: dict[str, Any]) -> BlueprintPin:
     linked: list[PinLink] = []
     for link in pin.get("linked") or []:
@@ -120,17 +135,19 @@ def _pin_from_raw(node_id: NodeId, pin: dict[str, Any]) -> BlueprintPin:
         to_pin = link.get("to_pin") or ""
         if not to_node or not to_pin:
             continue
+        # One correct target identity feeds both the link and its raw ref.
+        target_id = _qualify_target_node_id(to_node, node_id.owner_object_id)
         raw = PinLinkRef(
             from_node_id=node_id,
             from_pin_guid=str(pin.get("id") or ""),
-            to_owner_node_id=_node_id_from_str(to_node) if to_node else None,
+            to_owner_node_id=target_id,
             to_pin_guid=str(to_pin),
         )
         linked.append(
             PinLink(
                 from_node_id=node_id,
                 from_pin_id=str(pin.get("id") or ""),
-                to_node_id=_node_id_from_str(to_node),
+                to_node_id=target_id,
                 to_pin_id=str(to_pin),
                 raw_ref=raw,
             )
