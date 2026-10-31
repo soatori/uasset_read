@@ -3213,11 +3213,84 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
             tuple(list(projector_registry.PROJECTORS) + [TwoOwners(), TwoOwners()]), stack_document, sample_object
         )
 
+    # Review boundary fix (raw→typed owner qualification needs real
+    # context): the raw resolver's package-wide pin-GUID table can carry a
+    # bare ``export:N`` target belonging to another Blueprint owner of the
+    # same package, so the typed conversion qualifies a bare target only
+    # when the source owner's decoded node set confirms it. Unconfirmed
+    # exports and import forms keep their unqualified identity and surface
+    # as honest unresolved slots — ownership is never fabricated; empty
+    # target slots are dropped exactly as before. Driven through
+    # BlueprintGraphDecoder.decode (the stable conversion entry) so the
+    # case fails on identity, not on a private-signature change.
+    from uasset_read.models.object_model import ObjectRecord
+    from uasset_read.parsers.blueprint.graph import BlueprintGraphDecoder
+
+    raw_graph = {
+        "id": "export:5",
+        "name": "EventGraph",
+        "nodes": [
+            {
+                "id": "export:1",
+                "type": "K2Node_Comment",
+                "name": "Source",
+                "pins": [
+                    {
+                        "id": "pin-a",
+                        "name": "then",
+                        "direction": "output",
+                        "category": "exec",
+                        "linked": [
+                            {"to_node": "export:2", "to_pin": "pin-b"},  # confirmed local node export
+                            {"to_node": "export:9", "to_pin": "pin-c"},  # other owner's node export
+                            {"to_node": "import:3", "to_pin": "pin-d"},  # import form
+                            {"to_node": "export:2", "to_pin": ""},  # empty target pin -> dropped
+                            {"to_node": "", "to_pin": "pin-e"},  # empty target node -> dropped
+                        ],
+                    }
+                ],
+            },
+            {
+                "id": "export:2",
+                "type": "K2Node_Comment",
+                "name": "Target",
+                "pins": [{"id": "pin-b", "name": "execute", "direction": "input", "category": "exec", "linked": []}],
+            },
+        ],
+        "parse_errors": [],
+        "truncated": {"nodes": False, "pins": False},
+        "links": [],
+    }
+    boundary_owner = ObjectRecord(id="export:0", table_index=0, name="BP_Boundary", semantic={"graphs": [raw_graph]})
+    (boundary_graph,) = BlueprintGraphDecoder().decode(
+        boundary_owner, SimpleNamespace(objects=[boundary_owner]), source=None
+    )
+
+    boundary_source = next(node for node in boundary_graph.nodes if str(node.id) == "export:0/export:1")
+    (boundary_pin,) = boundary_source.pins
+    assert [str(link.to_node_id) for link in boundary_pin.linked] == [
+        "export:0/export:2",  # confirmed local export -> owner-qualified
+        "export:9/export:9",  # unconfirmed export -> never re-owned (no fabrication)
+        "import:3/import:3",  # import form -> never re-owned
+    ]
+    # The confirmed target resolves by exact (node, pin) identity in the graph.
+    boundary_resolved = boundary_pin.linked[0]
+    assert (str(boundary_resolved.to_node_id), boundary_resolved.to_pin_id) == ("export:0/export:2", "pin-b")
+    assert (str(boundary_resolved.to_node_id), boundary_resolved.to_pin_id) in {
+        (str(node.id), pin.id) for node in boundary_graph.nodes for pin in node.pins
+    }
+    # Unconfirmed and import slots keep their original identity and report
+    # unresolved — one diagnostic per slot, none silently re-owned.
+    assert len(boundary_graph.parse_errors) == 2
+    assert boundary_graph.parse_errors[0] == "pin link target export:9/export:9/pin-c (0 candidate(s))"
+    assert boundary_graph.parse_errors[1] == "pin link target import:3/import:3/pin-d (0 candidate(s))"
+
     # Pin reference closure at the raw→typed conversion (plan
-    # blueprint-pin-reference-closure 2026-10-29): a bare local export
-    # target gains the graph's Blueprint owner once, an already-qualified
-    # target keeps its identity, and one target identity feeds both the
-    # PinLink and its raw ref.
+    # blueprint-pin-reference-closure 2026-10-29; review boundary fix:
+    # qualification is owner-context-confirmed, never source-inferred): a
+    # bare local export target confirmed by the owner's node set gains the
+    # Blueprint owner once, an already-qualified target keeps its identity,
+    # and one target identity feeds both the PinLink and its raw ref.
     from uasset_read.models.analysis import NodeId, PinLinkRef
     from uasset_read.parsers.blueprint.graph import _node_from_raw, _pin_from_raw
     from uasset_read.parsers.blueprint.graph import resolve_pin_links as typed_resolve_pin_links
@@ -3226,6 +3299,7 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     bare_pin = _pin_from_raw(
         owner_src,
         {"id": "ab" * 16, "name": "In", "direction": "input", "linked": [{"to_node": "export:9", "to_pin": "cd" * 16}]},
+        frozenset({"export:9"}),  # owner node set confirms the local target export
     )
     (bare_link,) = bare_pin.linked
     assert str(bare_link.to_node_id) == "export:0/export:9"
@@ -3238,6 +3312,7 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
             "direction": "input",
             "linked": [{"to_node": "export:3/export:9", "to_pin": "cd" * 16}],
         },
+        frozenset(),  # already-qualified targets need no context confirmation
     )
     (qualified_link,) = qualified_pin.linked
     assert str(qualified_link.to_node_id) == "export:3/export:9"
@@ -3268,6 +3343,7 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
                 }
             ],
         },
+        owner_node_exports=frozenset({"export:9"}),  # confirmed local node export
     )
     (cross_link,) = cross_source.pins[0].linked
     assert str(cross_link.to_node_id) == "export:0/export:9"

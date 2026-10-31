@@ -113,22 +113,26 @@ def resolve_pin_links(nodes: list[BlueprintNode], refs: list[PinLinkRef]) -> Lin
     return LinkResolution(links=links, diagnostics=diagnostics)
 
 
-def _qualify_target_node_id(to_node: str, owner_object_id: str) -> NodeId:
+def _qualify_target_node_id(to_node: str, owner_object_id: str, owner_node_exports: frozenset[str]) -> NodeId:
     """Target identity for one raw pin link, owner-completed at conversion.
 
     Raw graph dicts carry bare local ``export:N`` node ids; the Blueprint
     owner is known only here, while the graph context is still complete.
-    Already-qualified targets keep their original identity (no second
-    prefix), and non-export forms (imports, foreign ids) are never
-    re-owned — the raw resolver confirmed every ``linked`` entry names a
-    local export target, so anything else stays as written.
+    A bare export id gains the owner prefix only when the owner's decoded
+    node set confirms that export belongs to this Blueprint — the raw
+    resolver's package-wide pin-GUID table can carry a target node of
+    another owner, and an unconfirmed target keeps its unqualified identity
+    so the typed resolver reports it honestly instead of fabricating
+    ownership. Already-qualified targets (carrying ``/``) keep their
+    original identity (no second prefix), and non-export forms (imports,
+    nulls, foreign ids) are never re-owned.
     """
-    if "/" not in to_node and to_node.startswith("export:"):
+    if "/" not in to_node and to_node.startswith("export:") and to_node in owner_node_exports:
         return NodeId(owner_object_id=owner_object_id, node_export_id=to_node)
     return _node_id_from_str(to_node)
 
 
-def _pin_from_raw(node_id: NodeId, pin: dict[str, Any]) -> BlueprintPin:
+def _pin_from_raw(node_id: NodeId, pin: dict[str, Any], owner_node_exports: frozenset[str]) -> BlueprintPin:
     linked: list[PinLink] = []
     for link in pin.get("linked") or []:
         to_node = link.get("to_node") or ""
@@ -136,7 +140,7 @@ def _pin_from_raw(node_id: NodeId, pin: dict[str, Any]) -> BlueprintPin:
         if not to_node or not to_pin:
             continue
         # One correct target identity feeds both the link and its raw ref.
-        target_id = _qualify_target_node_id(to_node, node_id.owner_object_id)
+        target_id = _qualify_target_node_id(to_node, node_id.owner_object_id, owner_node_exports)
         raw = PinLinkRef(
             from_node_id=node_id,
             from_pin_guid=str(pin.get("id") or ""),
@@ -246,11 +250,14 @@ def _node_from_raw(
     owner_id: NodeId,
     node: dict[str, Any],
     objects_by_id: dict[str, Any] | None = None,
+    owner_node_exports: frozenset[str] = frozenset(),
 ) -> BlueprintNode:
     node_export = str(node.get("id") or "")
     node_id = NodeId(owner_object_id=owner_id.owner_object_id, node_export_id=node_export or "export:-1")
     class_name = str(node.get("type") or node.get("class_name") or "")
-    pins = [_pin_from_raw(node_id, p) for p in node.get("pins") or []]
+    # Default empty context: a caller without the owner's node set can never
+    # fabricate ownership for a bare target (safe by default).
+    pins = [_pin_from_raw(node_id, p, owner_node_exports) for p in node.get("pins") or []]
     return BlueprintNode(
         id=node_id,
         guid=node.get("node_guid") or node.get("guid"),
@@ -308,6 +315,18 @@ class BlueprintGraphDecoder:
         function_ids = _function_graph_ids(obj.properties)
         owner_num = _parse_export_id(obj.id)
         objects_by_id = {o.id: o for o in document.objects}
+        # Owner-scope node membership: a bare export:N pin-link target is
+        # qualified with this Blueprint's owner only when that export is one
+        # of the owner's decoded node exports (the raw resolver's package-wide
+        # pin-GUID table may name another owner's node export — ownership is
+        # never inferred from the source node alone).
+        owner_node_exports = frozenset(
+            str(node_raw.get("id"))
+            for raw in raw_list
+            if isinstance(raw, dict)
+            for node_raw in (raw.get("nodes") or [])
+            if isinstance(node_raw, dict) and node_raw.get("id")
+        )
         graphs: list[BlueprintGraph] = []
         for raw in raw_list:
             if not isinstance(raw, dict):
@@ -321,7 +340,7 @@ class BlueprintGraphDecoder:
             nodes = []
             refs: list[PinLinkRef] = []
             for node_raw in raw.get("nodes") or []:
-                node = _node_from_raw(owner_for_nodes, node_raw, objects_by_id)
+                node = _node_from_raw(owner_for_nodes, node_raw, objects_by_id, owner_node_exports)
                 nodes.append(node)
                 for pin in node.pins:
                     for link in pin.linked:
