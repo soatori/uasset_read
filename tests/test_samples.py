@@ -3213,6 +3213,220 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
             tuple(list(projector_registry.PROJECTORS) + [TwoOwners(), TwoOwners()]), stack_document, sample_object
         )
 
+    # Review boundary fix (raw→typed owner qualification needs real
+    # context): the raw resolver's package-wide pin-GUID table can carry a
+    # bare ``export:N`` target belonging to another Blueprint owner of the
+    # same package, so the typed conversion qualifies a bare target only
+    # when the source owner's decoded node set confirms it. Unconfirmed
+    # exports and import forms keep their unqualified identity and surface
+    # as honest unresolved slots — ownership is never fabricated; empty
+    # target slots are dropped exactly as before. Driven through
+    # BlueprintGraphDecoder.decode (the stable conversion entry) so the
+    # case fails on identity, not on a private-signature change.
+    from uasset_read.models.object_model import ObjectRecord
+    from uasset_read.parsers.blueprint.graph import BlueprintGraphDecoder
+
+    raw_graph = {
+        "id": "export:5",
+        "name": "EventGraph",
+        "nodes": [
+            {
+                "id": "export:1",
+                "type": "K2Node_Comment",
+                "name": "Source",
+                "pins": [
+                    {
+                        "id": "pin-a",
+                        "name": "then",
+                        "direction": "output",
+                        "category": "exec",
+                        "linked": [
+                            {"to_node": "export:2", "to_pin": "pin-b"},  # confirmed local node export
+                            {"to_node": "export:9", "to_pin": "pin-c"},  # other owner's node export
+                            {"to_node": "import:3", "to_pin": "pin-d"},  # import form
+                            {"to_node": "export:2", "to_pin": ""},  # empty target pin -> dropped
+                            {"to_node": "", "to_pin": "pin-e"},  # empty target node -> dropped
+                        ],
+                    }
+                ],
+            },
+            {
+                "id": "export:2",
+                "type": "K2Node_Comment",
+                "name": "Target",
+                "pins": [{"id": "pin-b", "name": "execute", "direction": "input", "category": "exec", "linked": []}],
+            },
+        ],
+        "parse_errors": [],
+        "truncated": {"nodes": False, "pins": False},
+        "links": [],
+    }
+    boundary_owner = ObjectRecord(id="export:0", table_index=0, name="BP_Boundary", semantic={"graphs": [raw_graph]})
+    (boundary_graph,) = BlueprintGraphDecoder().decode(
+        boundary_owner, SimpleNamespace(objects=[boundary_owner]), source=None
+    )
+
+    boundary_source = next(node for node in boundary_graph.nodes if str(node.id) == "export:0/export:1")
+    (boundary_pin,) = boundary_source.pins
+    assert [str(link.to_node_id) for link in boundary_pin.linked] == [
+        "export:0/export:2",  # confirmed local export -> owner-qualified
+        "export:9/export:9",  # unconfirmed export -> never re-owned (no fabrication)
+        "import:3/import:3",  # import form -> never re-owned
+    ]
+    # The confirmed target resolves by exact (node, pin) identity in the graph.
+    boundary_resolved = boundary_pin.linked[0]
+    assert (str(boundary_resolved.to_node_id), boundary_resolved.to_pin_id) == ("export:0/export:2", "pin-b")
+    assert (str(boundary_resolved.to_node_id), boundary_resolved.to_pin_id) in {
+        (str(node.id), pin.id) for node in boundary_graph.nodes for pin in node.pins
+    }
+    # Unconfirmed and import slots keep their original identity and report
+    # unresolved — one diagnostic per slot, none silently re-owned.
+    assert len(boundary_graph.parse_errors) == 2
+    assert boundary_graph.parse_errors[0] == "pin link target export:9/export:9/pin-c (0 candidate(s))"
+    assert boundary_graph.parse_errors[1] == "pin link target import:3/import:3/pin-d (0 candidate(s))"
+
+    # Pin reference closure at the raw→typed conversion (plan
+    # blueprint-pin-reference-closure 2026-10-29; review boundary fix:
+    # qualification is owner-context-confirmed, never source-inferred): a
+    # bare local export target confirmed by the owner's node set gains the
+    # Blueprint owner once, an already-qualified target keeps its identity,
+    # and one target identity feeds both the PinLink and its raw ref.
+    from uasset_read.models.analysis import NodeId, PinLinkRef
+    from uasset_read.parsers.blueprint.graph import _node_from_raw, _pin_from_raw
+    from uasset_read.parsers.blueprint.graph import resolve_pin_links as typed_resolve_pin_links
+
+    owner_src = NodeId(owner_object_id="export:0", node_export_id="export:0")
+    bare_pin = _pin_from_raw(
+        owner_src,
+        {"id": "ab" * 16, "name": "In", "direction": "input", "linked": [{"to_node": "export:9", "to_pin": "cd" * 16}]},
+        frozenset({"export:9"}),  # owner node set confirms the local target export
+    )
+    (bare_link,) = bare_pin.linked
+    assert str(bare_link.to_node_id) == "export:0/export:9"
+    assert bare_link.to_node_id is bare_link.raw_ref.to_owner_node_id
+    qualified_pin = _pin_from_raw(
+        owner_src,
+        {
+            "id": "ab" * 16,
+            "name": "In",
+            "direction": "input",
+            "linked": [{"to_node": "export:3/export:9", "to_pin": "cd" * 16}],
+        },
+        frozenset(),  # already-qualified targets need no context confirmation
+    )
+    (qualified_link,) = qualified_pin.linked
+    assert str(qualified_link.to_node_id) == "export:3/export:9"
+    assert str(qualified_link.raw_ref.to_owner_node_id) == "export:3/export:9"
+
+    # Cross-owner isolation: the same pin GUID registered under two owners
+    # never cross-wires — the explicit target node owner wins and the typed
+    # resolver never falls back to the foreign owner's GUID duplicate.
+    shared_guid = "ef" * 16
+    node_owner_a = _node_from_raw(
+        NodeId(owner_object_id="export:0", node_export_id="export:0"),
+        {"id": "export:9", "pins": [{"id": shared_guid, "name": "Out", "direction": "output", "linked": []}]},
+    )
+    node_owner_b = _node_from_raw(
+        NodeId(owner_object_id="export:5", node_export_id="export:5"),
+        {"id": "export:9", "pins": [{"id": shared_guid, "name": "Out", "direction": "output", "linked": []}]},
+    )
+    cross_source = _node_from_raw(
+        NodeId(owner_object_id="export:0", node_export_id="export:0"),
+        {
+            "id": "export:2",
+            "pins": [
+                {
+                    "id": "ba" * 16,
+                    "name": "In",
+                    "direction": "input",
+                    "linked": [{"to_node": "export:9", "to_pin": shared_guid}],
+                }
+            ],
+        },
+        owner_node_exports=frozenset({"export:9"}),  # confirmed local node export
+    )
+    (cross_link,) = cross_source.pins[0].linked
+    assert str(cross_link.to_node_id) == "export:0/export:9"
+    cross_resolution = typed_resolve_pin_links([cross_source, node_owner_a, node_owner_b], [cross_link.raw_ref])
+    assert [str(link.to_node_id) for link in cross_resolution.links] == ["export:0/export:9"]
+    assert cross_resolution.diagnostics == []
+
+    # Missing/import/null/ambiguous targets keep their raw slot, status and
+    # reason — never force-resolved, never deleted, adjacency stays empty.
+    closure_graph = {
+        "id": "export:4",
+        "nodes": [
+            {
+                "id": "export:1",
+                "pins": [
+                    {"id": "aa" * 16, "name": "SrcA", "direction": "input", "linked": []},
+                    {"id": "bb" * 16, "name": "SrcB", "direction": "input", "linked": []},
+                ],
+            },
+            {"id": "export:2", "pins": [{"id": "ee" * 16, "name": "Dup1", "direction": "output", "linked": []}]},
+            {"id": "export:3", "pins": [{"id": "ee" * 16, "name": "Dup2", "direction": "output", "linked": []}]},
+        ],
+        "_pin_links": [
+            {
+                "from_node": 2,
+                "from_pin": "aa" * 16,
+                "to_owning_node": None,
+                "to_pin": None,
+                "null": True,
+                "source_category": "exec",
+            },
+            {
+                "from_node": 2,
+                "from_pin": "aa" * 16,
+                "to_owning_node": -3,
+                "to_pin": "cc" * 16,
+                "source_category": "data",
+            },
+            {
+                "from_node": 2,
+                "from_pin": "aa" * 16,
+                "to_owning_node": 3,
+                "to_pin": "dd" * 16,
+                "source_category": "data",
+            },
+            {
+                "from_node": 2,
+                "from_pin": "bb" * 16,
+                "to_owning_node": 0,
+                "to_pin": "ee" * 16,
+                "source_category": "data",
+            },
+        ],
+    }
+    resolve_pin_links([closure_graph])
+    assert closure_graph["edge_count"] == 0
+    # Ambiguous slots also count into unresolved_links (every non-resolved
+    # slot does) — the historical counter semantics stay untouched.
+    assert closure_graph["unresolved_links"] == 4
+    assert closure_graph["ambiguous_links"] == 1
+    assert [(rec["status"], rec["reason"]) for rec in closure_graph["links"]] == [
+        ("unresolved", "null_link_reference"),
+        ("unresolved", "target_owner_is_import"),
+        ("unresolved", "target_pin_not_found"),
+        ("ambiguous", "multiple_guid_candidates_without_owner"),
+    ]
+    assert [rec["target_owner_id"] for rec in closure_graph["links"]] == [None, "import:2", "export:2", None]
+    assert all(rec["debug_evidence"] is not None for rec in closure_graph["links"])
+    assert all(pin["linked"] == [] for node in closure_graph["nodes"] for pin in node["pins"])
+    typed_records = [_link_record_from_raw(rec, "export:0", "export:4") for rec in closure_graph["links"]]
+    assert [rec.status for rec in typed_records] == ["unresolved", "unresolved", "unresolved", "ambiguous"]
+    assert typed_records[0].target_node_id is None and typed_records[0].target_pin_guid is None
+    assert typed_records[3].target_node_id is None
+    missing_ref = PinLinkRef(
+        from_node_id=cross_source.id,
+        from_pin_guid="ba" * 16,
+        to_owner_node_id=NodeId(owner_object_id="export:0", node_export_id="export:404"),
+        to_pin_guid="dd" * 16,
+    )
+    missing_resolution = typed_resolve_pin_links([cross_source], [missing_ref])
+    assert missing_resolution.links == []
+    assert [d.code for d in missing_resolution.diagnostics] == ["BLUEPRINT_PIN_LINK_UNRESOLVED"]
+
 
 def test_object_depth_parses_only_requested_export():
     from uasset_read.package import parse_package_document
@@ -3359,6 +3573,443 @@ def test_blueprint_fixtures_carry_generated_and_cdo_relations():
             assert edge in actual, f"{sample}: missing {edge}"
 
 
+_BLUEPRINT_SEMANTIC_KINDS = ("blueprint", "anim_blueprint")
+
+
+def _blueprint_closure_owners(doc) -> list[dict]:
+    """Owners whose decode-depth semantic actually carries Blueprint graphs."""
+    owners = []
+    for obj in doc.objects:
+        semantic = obj.semantic if isinstance(obj.semantic, dict) else {}
+        if semantic.get("kind") in _BLUEPRINT_SEMANTIC_KINDS and semantic.get("graphs"):
+            owners.append({"owner_id": obj.id, "graphs": semantic["graphs"]})
+    return owners
+
+
+def _assert_blueprint_link_closure(owners: list[dict], sample_name: str) -> None:
+    """Pin reference-closure gate over projected Blueprint graphs (T2 plan).
+
+    ``owners`` is ``[{"owner_id": ..., "graphs": [<projected graph dict>]}]``;
+    the Helm test and the manifest-corpus aggregate build it from a decode
+    document via ``_blueprint_closure_owners``, the controlled boundary
+    cases build it by hand.
+
+    Rules (closure design, Target section): one ``(node_id, pin_id)`` index
+    per owner across all of that owner's graphs — repeated node
+    presentations must agree on class and pin identity, conflicts report the
+    concrete graphs; every pin-adjacency target and both ends of every
+    resolved graph-level record must hit the package index — an explicitly
+    qualified cross-graph/cross-owner identity resolves by exact
+    ``(node_id, pin_id)`` only, never by GUID guessing;
+    unresolved/ambiguous records keep their original reason and are never
+    required to name an existing target; the two representations cross-check
+    both ways at owner scope (each adjacency entry matches a resolved
+    record, each resolved record's source pin carries that adjacency, and
+    each graph's ``edge_count`` equals the adjacency presented on its
+    nodes). Duplicated graph-level records (subgraph recursion lists a
+    parent graph's slots again) therefore stay legal as long as both ends
+    hit and the adjacency they claim exists somewhere in the owner.
+    """
+    index: dict[str, set[tuple[str, str]]] = {}
+    for owner in owners:
+        owner_id = owner["owner_id"]
+        pins: set[tuple[str, str]] = set()
+        pin_meta: dict[tuple[str, str], tuple] = {}
+        presentations: dict[str, list[tuple]] = {}
+        for graph in owner["graphs"]:
+            graph_id = graph["id"]
+            for node in graph["nodes"]:
+                node_id = node["id"]
+                assert node_id.startswith(f"{owner_id}/"), (
+                    f"node id outside owner scope: {sample_name} {graph_id} {node_id} (owner {owner_id})"
+                )
+                node_pins = tuple(
+                    sorted(
+                        (pin["id"], pin.get("name"), pin.get("direction"))
+                        for pin in node["pins"]
+                        if pin.get("id")
+                    )
+                )
+                for pin_id, pin_name, pin_direction in node_pins:
+                    previous = pin_meta.setdefault((node_id, pin_id), (pin_name, pin_direction))
+                    assert previous == (pin_name, pin_direction), (
+                        f"pin identity conflicts across presentations: {sample_name} {owner_id} {graph_id} "
+                        f"{node_id} {pin_id}: {previous!r} != {(pin_name, pin_direction)!r}"
+                    )
+                    pins.add((node_id, pin_id))
+                presentations.setdefault(node_id, []).append((graph_id, node.get("class_name"), node_pins))
+        for node_id, shown in presentations.items():
+            for other in shown[1:]:
+                assert shown[0][1:] == other[1:], (
+                    f"node presentation conflicts: {sample_name} {owner_id} {node_id}: "
+                    f"{shown[0]!r} != {other!r}"
+                )
+        index[owner_id] = pins
+    package_pins: set[tuple[str, str]] = set().union(*index.values()) if index else set()
+
+    for owner in owners:
+        owner_id = owner["owner_id"]
+        adjacency: set[tuple] = set()
+        for graph in owner["graphs"]:
+            graph_id = graph["id"]
+            shown_adjacency = 0
+            for node in graph["nodes"]:
+                for pin in node["pins"]:
+                    for link in pin.get("links") or []:
+                        shown_adjacency += 1
+                        to_node, to_pin = link.get("to_node_id"), link.get("to_pin_id")
+                        assert to_node and to_pin, (
+                            f"empty pin-adjacency target: {sample_name} {owner_id} {graph_id} "
+                            f"{node['id']} {pin.get('id')!r} {link!r}"
+                        )
+                        assert (to_node, to_pin) in package_pins, (
+                            f"pin-adjacency target is not a (node, pin) of any graph owner: {sample_name} "
+                            f"{owner_id} {graph_id} {node['id']} {pin.get('id')!r} -> {to_node!r}/{to_pin!r}"
+                        )
+                        adjacency.add((node["id"], pin.get("id"), to_node, to_pin))
+            assert shown_adjacency == graph["edge_count"], (
+                f"edge_count must equal the pin adjacency presented on this graph's nodes: {sample_name} "
+                f"{owner_id} {graph_id}: adjacency {shown_adjacency} != edge_count {graph['edge_count']!r}"
+            )
+        owner_records = {
+            (
+                record.get("source_node_id"),
+                record.get("source_pin_guid"),
+                record.get("target_node_id"),
+                record.get("target_pin_guid"),
+            )
+            for graph in owner["graphs"]
+            for record in graph.get("links") or []
+            if record["status"] == "resolved"
+        }
+        for entry in adjacency:
+            assert entry in owner_records, (
+                f"pin-adjacency entry has no matching resolved graph-level record in this owner: "
+                f"{sample_name} {owner_id} {entry!r}"
+            )
+        for graph in owner["graphs"]:
+            graph_id = graph["id"]
+            for record in graph.get("links") or []:
+                assert record.get("reason"), (
+                    f"record lost its original reason: {sample_name} {owner_id} {graph_id} {record!r}"
+                )
+                if record.get("source_pin_guid"):
+                    assert (record.get("source_node_id"), record.get("source_pin_guid")) in index[owner_id], (
+                        f"record source end is not a (node, pin) of this owner: {sample_name} {owner_id} "
+                        f"{graph_id} {record.get('source_node_id')!r}/{record.get('source_pin_guid')!r}"
+                    )
+                if record["status"] == "resolved":
+                    assert record.get("target_pin_guid"), (
+                        f"resolved record without target pin identity: {sample_name} {owner_id} {graph_id} {record!r}"
+                    )
+                    assert (record.get("target_node_id"), record.get("target_pin_guid")) in package_pins, (
+                        f"resolved record target is not a (node, pin) of any graph owner: {sample_name} "
+                        f"{owner_id} {graph_id} -> {record.get('target_node_id')!r}/{record.get('target_pin_guid')!r}"
+                    )
+                    assert (
+                        record.get("source_node_id"),
+                        record.get("source_pin_guid"),
+                        record.get("target_node_id"),
+                        record.get("target_pin_guid"),
+                    ) in adjacency, (
+                        f"resolved record has no matching pin-adjacency entry in this owner: {sample_name} "
+                        f"{owner_id} {graph_id} {record.get('source_node_id')!r}/{record.get('source_pin_guid')!r}"
+                        f" -> {record.get('target_node_id')!r}/{record.get('target_pin_guid')!r}"
+                    )
+
+
+def _closure_stub_graph(graph_id: str, nodes: list[dict], links: list[dict]) -> dict:
+    """Minimal projected-graph stand-in for the closure boundary cases."""
+    return {
+        "id": graph_id,
+        "nodes": nodes,
+        "links": links,
+        "edge_count": sum(len(pin.get("links") or []) for node in nodes for pin in node["pins"]),
+    }
+
+
+def _closure_stub_node(node_id: str, pins: list[dict], class_name: str = "K2Node_CallFunction") -> dict:
+    return {"id": node_id, "class_name": class_name, "pins": pins}
+
+
+def _closure_stub_pin(pin_id: str, name: str, direction: str, links: list[dict] | None = None) -> dict:
+    return {"id": pin_id, "name": name, "direction": direction, "links": links or []}
+
+
+def _closure_stub_record(
+    graph_id: str,
+    source_node: str,
+    source_pin: str,
+    target_node: str | None,
+    target_pin: str | None,
+    *,
+    status: str = "resolved",
+    reason: str = "owner_and_guid_match",
+) -> dict:
+    return {
+        "graph_id": graph_id,
+        "source_node_id": source_node,
+        "source_pin_guid": source_pin,
+        "target_owner_id": (target_node.rsplit("/", 1)[-1] if target_node else None),
+        "target_node_id": target_node,
+        "target_pin_guid": target_pin,
+        "connection_type": "exec",
+        "status": status,
+        "reason": reason,
+    }
+
+
+def _assert_blueprint_link_closure_boundaries() -> None:
+    """Controlled cases pin the closure gate's legal and failing shapes (T2).
+
+    Legal: same-owner cross-graph identity, explicitly qualified
+    cross-owner identity, reciprocal slots, duplicate node presentations
+    that agree, and unresolved/ambiguous slots whose unknown target is
+    never required to exist. Failing: dangling targets, GUID-only
+    guess-matching, conflicting duplicate presentations, and either
+    representation losing its counterpart.
+    """
+    # Legal: reciprocal slots across two graphs of one owner; the target
+    # node lives in the other graph and is referenced by exact identity.
+    legal_reciprocal = [
+        {
+            "owner_id": "export:0",
+            "graphs": [
+                _closure_stub_graph(
+                    "export:0/export:5",
+                    [
+                        _closure_stub_node(
+                            "export:0/export:1",
+                            [
+                                _closure_stub_pin(
+                                    "pin-a",
+                                    "then",
+                                    "output",
+                                    [{"to_node_id": "export:0/export:2", "to_pin_id": "pin-b"}],
+                                )
+                            ],
+                            class_name="K2Node_Event",
+                        )
+                    ],
+                    [_closure_stub_record("export:0/export:5", "export:0/export:1", "pin-a", "export:0/export:2", "pin-b")],
+                ),
+                _closure_stub_graph(
+                    "export:0/export:6",
+                    [
+                        _closure_stub_node(
+                            "export:0/export:2",
+                            [
+                                _closure_stub_pin(
+                                    "pin-b",
+                                    "execute",
+                                    "input",
+                                    [{"to_node_id": "export:0/export:1", "to_pin_id": "pin-a"}],
+                                )
+                            ],
+                        )
+                    ],
+                    [_closure_stub_record("export:0/export:6", "export:0/export:2", "pin-b", "export:0/export:1", "pin-a")],
+                ),
+                # A repeated presentation of the same physical node stays
+                # legal while class and pin identity agree (the subgraph
+                # flattening shape real corpora rely on).
+                _closure_stub_graph(
+                    "export:0/export:7",
+                    [_closure_stub_node("export:0/export:2", [_closure_stub_pin("pin-b", "execute", "input")])],
+                    [],
+                ),
+            ],
+        }
+    ]
+    _assert_blueprint_link_closure(legal_reciprocal, "controlled:cross-graph-reciprocal")
+
+    # Legal: a verbatim cross-owner identity resolves only through the
+    # named owner's index; a foreign duplicate GUID is never consulted.
+    legal_cross_owner = [
+        {
+            "owner_id": "export:0",
+            "graphs": [
+                _closure_stub_graph(
+                    "export:0/export:5",
+                    [
+                        _closure_stub_node(
+                            "export:0/export:1",
+                            [
+                                _closure_stub_pin(
+                                    "pin-a",
+                                    "then",
+                                    "output",
+                                    [{"to_node_id": "export:9/export:1", "to_pin_id": "pin-foreign"}],
+                                )
+                            ],
+                            class_name="K2Node_Event",
+                        )
+                    ],
+                    [
+                        _closure_stub_record(
+                            "export:0/export:5", "export:0/export:1", "pin-a", "export:9/export:1", "pin-foreign"
+                        )
+                    ],
+                )
+            ],
+        },
+        {
+            "owner_id": "export:9",
+            "graphs": [
+                _closure_stub_graph(
+                    "export:9/export:7",
+                    [
+                        _closure_stub_node(
+                            "export:9/export:1",
+                            [_closure_stub_pin("pin-foreign", "execute", "input")],
+                        )
+                    ],
+                    [],
+                )
+            ],
+        },
+    ]
+    _assert_blueprint_link_closure(legal_cross_owner, "controlled:explicit-cross-owner")
+
+    # Legal: unresolved/ambiguous slots keep their reason and are never
+    # required to name an existing target (null target and a known-node /
+    # unknown-pin slot both stay untouched).
+    legal_unknown = [
+        {
+            "owner_id": "export:0",
+            "graphs": [
+                _closure_stub_graph(
+                    "export:0/export:5",
+                    [
+                        _closure_stub_node(
+                            "export:0/export:1",
+                            [_closure_stub_pin("pin-a", "then", "output")],
+                            class_name="K2Node_Event",
+                        )
+                    ],
+                    [
+                        _closure_stub_record(
+                            "export:0/export:5", "export:0/export:1", "pin-a", None, None,
+                            status="unresolved", reason="null_link_reference",
+                        ),
+                        _closure_stub_record(
+                            "export:0/export:5", "export:0/export:1", "pin-a", "export:0/export:2", "pin-missing",
+                            status="unresolved", reason="target_pin_not_found",
+                        ),
+                        _closure_stub_record(
+                            "export:0/export:5", "export:0/export:1", "pin-a", None, "pin-missing",
+                            status="ambiguous", reason="multiple_guid_candidates_without_owner",
+                        ),
+                    ],
+                )
+            ],
+        }
+    ]
+    _assert_blueprint_link_closure(legal_unknown, "controlled:unknown-slots")
+
+    def _rejected(owners: list[dict]) -> str:
+        with pytest.raises(AssertionError) as excinfo:
+            _assert_blueprint_link_closure(owners, "controlled:must-fail")
+        return str(excinfo.value)
+
+    def _reciprocal(owner_graphs: list[dict]) -> list[dict]:
+        return [{"owner_id": "export:0", "graphs": owner_graphs}]
+
+    def _pin_a_node(links: list[dict]) -> dict:
+        return _closure_stub_node(
+            "export:0/export:1",
+            [_closure_stub_pin("pin-a", "then", "output", links)],
+            class_name="K2Node_Event",
+        )
+
+    def _pin_b_node(links: list[dict]) -> dict:
+        return _closure_stub_node("export:0/export:2", [_closure_stub_pin("pin-b", "execute", "input", links)])
+
+    record_a_to_b = _closure_stub_record(
+        "export:0/export:5", "export:0/export:1", "pin-a", "export:0/export:2", "pin-b"
+    )
+    record_b_to_a = _closure_stub_record(
+        "export:0/export:6", "export:0/export:2", "pin-b", "export:0/export:1", "pin-a"
+    )
+
+    # Fail: an adjacency target that no graph owner carries.
+    dangling = _reciprocal(
+        [
+            _closure_stub_graph(
+                "export:0/export:5",
+                [_pin_a_node([{"to_node_id": "export:0/export:404", "to_pin_id": "pin-b"}])],
+                [record_a_to_b],
+            ),
+            _closure_stub_graph("export:0/export:6", [_pin_b_node([])], [record_b_to_a]),
+        ]
+    )
+    assert "pin-adjacency target is not a (node, pin)" in _rejected(dangling)
+
+    # Fail: pin-a's GUID exists on another node, but the exact target
+    # (node, pin) does not — no GUID guessing substitutes for identity.
+    guid_guess = _reciprocal(
+        [
+            _closure_stub_graph(
+                "export:0/export:5",
+                [_pin_a_node([{"to_node_id": "export:0/export:2", "to_pin_id": "pin-a"}])],
+                [record_a_to_b],
+            ),
+            _closure_stub_graph("export:0/export:6", [_pin_b_node([])], [record_b_to_a]),
+        ]
+    )
+    assert "pin-adjacency target is not a (node, pin)" in _rejected(guid_guess)
+
+    # Fail: conflicting duplicate presentations of one physical node.
+    conflicting = _reciprocal(
+        [
+            _closure_stub_graph("export:0/export:5", [_pin_a_node([])], []),
+            _closure_stub_graph("export:0/export:6", [_pin_b_node([])], []),
+            _closure_stub_graph(
+                "export:0/export:7",
+                [_closure_stub_node("export:0/export:2", [_closure_stub_pin("pin-b", "execute", "output")])],
+                [],
+            ),
+        ]
+    )
+    assert "pin identity conflicts across presentations" in _rejected(conflicting)
+
+    # Fail: a resolved record whose source pin carries no adjacency anywhere
+    # in the owner (dangling resolved edge — never downgraded to pass).
+    record_only = _reciprocal(
+        [
+            _closure_stub_graph("export:0/export:5", [_pin_a_node([])], [record_a_to_b]),
+            _closure_stub_graph("export:0/export:6", [_pin_b_node([])], [record_b_to_a]),
+        ]
+    )
+    assert "resolved record has no matching pin-adjacency" in _rejected(record_only)
+
+    # Fail: an adjacency entry that no resolved record accounts for.
+    adjacency_only = _reciprocal(
+        [
+            _closure_stub_graph("export:0/export:5", [_pin_a_node([])], []),
+            _closure_stub_graph(
+                "export:0/export:6",
+                [_pin_b_node([{"to_node_id": "export:0/export:1", "to_pin_id": "pin-a"}])],
+                [],
+            ),
+        ]
+    )
+    assert "pin-adjacency entry has no matching resolved graph-level record" in _rejected(adjacency_only)
+
+    # Fail: a record whose source end is not presented by any graph of the owner.
+    source_miss = _reciprocal(
+        [
+            _closure_stub_graph(
+                "export:0/export:5",
+                [_pin_a_node([])],
+                [_closure_stub_record("export:0/export:5", "export:0/export:404", "pin-a", "export:0/export:2", "pin-b")],
+            ),
+            _closure_stub_graph("export:0/export:6", [_pin_b_node([])], []),
+        ]
+    )
+    assert "record source end is not a (node, pin)" in _rejected(source_miss)
+
+
 def test_helm_blueprint_variable_set_pins_decode():
     from uasset_read.package import parse_package_document
 
@@ -3396,12 +4047,25 @@ def test_helm_blueprint_variable_set_pins_decode():
     )
     assert all(p["category"] != "exec" for p in sub["pins"] + mul["pins"])
     assert sub_pins["A"]["default_value"] == "0.0"
+    # Pin adjacency keeps the Blueprint-owner identity (pin reference closure):
+    # each link must look up its target node and target pin, not a
+    # self-owner-mirrored bare export id.
     assert sub_pins["A"]["links"] == [
-        {"to_node_id": "export:19/export:19", "to_pin_id": "f0b41b01b5ea7546ac699d68c637ccff"}
+        {"to_node_id": "export:0/export:19", "to_pin_id": "f0b41b01b5ea7546ac699d68c637ccff"}
     ]
     assert mul_pins["ReturnValue"]["links"] == [
-        {"to_node_id": "export:17/export:17", "to_pin_id": "86e902f61ca6b64c99f5019da4d50fa7"}
+        {"to_node_id": "export:0/export:17", "to_pin_id": "86e902f61ca6b64c99f5019da4d50fa7"}
     ]
+    for link in sub_pins["A"]["links"] + mul_pins["ReturnValue"]["links"]:
+        assert link["to_node_id"] in nodes, link
+        target_pins = {p["id"]: p for p in nodes[link["to_node_id"]]["pins"]}
+        assert link["to_pin_id"] in target_pins, link
+    assert next(
+        p for p in nodes["export:0/export:19"]["pins"] if p["id"] == "f0b41b01b5ea7546ac699d68c637ccff"
+    )["direction"] == "output"
+    assert next(p for p in nodes["export:0/export:17"]["pins"] if p["id"] == "86e902f61ca6b64c99f5019da4d50fa7")[
+        "direction"
+    ] == "input"
     # 互反槽各留一条 resolved 记录：一条物理连接 ≠执行次数或错误。
     edge_records = [
         item
@@ -3429,6 +4093,9 @@ def test_helm_blueprint_variable_set_pins_decode():
             "86e902f61ca6b64c99f5019da4d50fa7",
         ),
     }
+    # T2 (plan blueprint-pin-reference-closure): Helm also runs through the
+    # shared closure gate the manifest-corpus aggregate uses.
+    _assert_blueprint_link_closure(_blueprint_closure_owners(doc), "Helm_BP.uasset")
     # normal/debug 投影携带相同身份与关系（只读身份字段，证据键随模式增减）。
     from uasset_read.projection import project_document
 
@@ -3449,11 +4116,16 @@ def test_helm_blueprint_variable_set_pins_decode():
         ) == ("Subtract_FloatFloat", "Multiply_FloatFloat")
         assert psub["A"]["default_value"] == "0.0"
         assert psub["A"]["links"] == [
-            {"to_node_id": "export:19/export:19", "to_pin_id": "f0b41b01b5ea7546ac699d68c637ccff"}
+            {"to_node_id": "export:0/export:19", "to_pin_id": "f0b41b01b5ea7546ac699d68c637ccff"}
         ]
         assert pmul["ReturnValue"]["links"] == [
-            {"to_node_id": "export:17/export:17", "to_pin_id": "86e902f61ca6b64c99f5019da4d50fa7"}
+            {"to_node_id": "export:0/export:17", "to_pin_id": "86e902f61ca6b64c99f5019da4d50fa7"}
         ]
+        # Reference closure holds in both projection modes: every projected
+        # link resolves to an existing target node and pin.
+        for link in psub["A"]["links"] + pmul["ReturnValue"]["links"]:
+            assert link["to_node_id"] in pnodes, link
+            assert link["to_pin_id"] in {p["id"] for p in pnodes[link["to_node_id"]]["pins"]}, link
         assert {
             (item["source_node_id"], item["source_pin_guid"], item["target_node_id"], item["target_pin_guid"])
             for item in pgraph["links"]
@@ -3515,6 +4187,12 @@ def test_blueprint_graph_decodes_and_definitions_stay_honest():
     spec, "small ... assertion ... mandatory trust boundary" clause): a
     kind="struct" wrapper must unwrap to its pin fields, and a
     PropertyFallback must report unresolved.
+
+    T2 (plan blueprint-pin-reference-closure): the manifest-corpus pin
+    reference-closure gate — every blueprint/anim_blueprint owner that
+    actually carries graphs must keep every pin-adjacency target and both
+    ends of every resolved graph-level record look-up-able, with the gate's
+    own legal/failing shapes fixed by controlled cases.
     """
     from uasset_read.package import parse_package_document
 
@@ -3543,6 +4221,41 @@ def test_blueprint_graph_decodes_and_definitions_stay_honest():
     assert all(isinstance(item["source_pin_range"], dict) for item in evidence)
     linked_total = sum(len(pin.get("links") or []) for g in graphs for n in g["nodes"] for pin in n["pins"])
     assert linked_total == 610, "pin adjacency must stay a derived view of the records"
+
+    # T2 (plan blueprint-pin-reference-closure): reference-closure gate over
+    # the real manifest corpus. Every manifest sample is decoded at decode
+    # depth; every blueprint/anim_blueprint semantic owner that actually
+    # carries graphs runs the shared gate (pin-adjacency targets, both ends
+    # of every resolved graph-level record, and the two representations
+    # cross-checked against each other). Coverage (samples/owners/graphs/
+    # nodes/edges) and the graph-less list are recorded in the T2 report —
+    # the contract here is completeness over the live manifest, never a
+    # frozen sample-name list from an old quality report.
+    gated_samples: list[str] = []
+    graphless_samples: list[str] = []
+    gated_owners = gated_graphs = gated_nodes = gated_edges = 0
+    for entry in MANIFEST_SAMPLES:
+        name = entry["name"]
+        corpus_doc = parse_package_document(SAMPLES / name, depth="decode")
+        owners = _blueprint_closure_owners(corpus_doc)
+        if not owners:
+            graphless_samples.append(name)
+            continue
+        _assert_blueprint_link_closure(owners, name)
+        gated_samples.append(name)
+        gated_owners += len(owners)
+        gated_graphs += sum(len(owner["graphs"]) for owner in owners)
+        gated_nodes += sum(len(graph["nodes"]) for owner in owners for graph in owner["graphs"])
+        gated_edges += sum(graph["edge_count"] for owner in owners for graph in owner["graphs"])
+    assert gated_samples and gated_graphs > 0 and gated_edges > 0, (
+        f"closure gate must engage on the manifest corpus: "
+        f"{len(gated_samples)} gated samples / {gated_graphs} graphs / {gated_edges} edges"
+    )
+    # The gate's own boundaries are fixed by controlled cases: legal
+    # cross-graph/cross-owner identity, reciprocal slots, agreeing duplicate
+    # presentations, duplicate GUIDs without guess-matching, unknown
+    # (unresolved/ambiguous) slots, and every failing counterpart shape.
+    _assert_blueprint_link_closure_boundaries()
 
     # A1 (plan blueprint-semantics, folded for the collection budget): pre-1010
     # nodes scan their property-tag stream instead of early-returning, so
