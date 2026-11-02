@@ -3427,6 +3427,78 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     assert missing_resolution.links == []
     assert [d.code for d in missing_resolution.diagnostics] == ["BLUEPRINT_PIN_LINK_UNRESOLVED"]
 
+    # Issue #668 (review finding 2 of 3a1c8e02): owner-confirmation stays
+    # fail-safe under a truncated node set. When the raw decoder reports
+    # truncated.nodes, a real same-owner node can be dropped from the raw
+    # node list, so its bare export:N pin-link target cannot be confirmed by
+    # the owner's decoded node-export set: the target keeps its unqualified
+    # identity (no fabricated owner prefix) and surfaces as
+    # BLUEPRINT_PIN_LINK_UNRESOLVED with its reason intact — a false
+    # negative, never a false ownership claim. The present-node slot in the
+    # same graph still qualifies, so node presence is the only differentiator.
+    truncated_graph = {
+        "id": "export:7",
+        "name": "EventGraph",
+        "nodes": [
+            {
+                "id": "export:1",
+                "type": "K2Node_Comment",
+                "name": "Source",
+                "pins": [
+                    {
+                        "id": "pin-a",
+                        "name": "then",
+                        "direction": "output",
+                        "category": "exec",
+                        "linked": [
+                            {"to_node": "export:2", "to_pin": "pin-b"},  # node kept -> confirmed
+                            {"to_node": "export:9", "to_pin": "pin-c"},  # node dropped -> unconfirmed
+                        ],
+                    }
+                ],
+            },
+            {
+                "id": "export:2",
+                "type": "K2Node_Comment",
+                "name": "Target",
+                "pins": [{"id": "pin-b", "name": "execute", "direction": "input", "category": "exec", "linked": []}],
+            },
+        ],
+        "node_count": 3,  # export:9 was truncated out of this raw node list
+        "parse_errors": [],
+        "truncated": {"nodes": True, "pins": False},
+        "links": [],
+    }
+    truncated_owner = ObjectRecord(
+        id="export:0", table_index=0, name="BP_TruncatedOwner", semantic={"graphs": [truncated_graph]}
+    )
+    (truncated_decoded,) = BlueprintGraphDecoder().decode(
+        truncated_owner, SimpleNamespace(objects=[truncated_owner]), source=None
+    )
+
+    # The truncation flag survives decode, so this really ran the truncated
+    # node path — and the dropped node exists nowhere in the decoded graph.
+    assert truncated_decoded.truncated is True
+    assert {str(node.id) for node in truncated_decoded.nodes} == {"export:0/export:1", "export:0/export:2"}
+    truncated_source = next(node for node in truncated_decoded.nodes if str(node.id) == "export:0/export:1")
+    (truncated_pin,) = truncated_source.pins
+    # Confirmed target gains the owner once; the unconfirmed bare target
+    # keeps the self-mirrored identity — ownership is never fabricated.
+    assert [str(link.to_node_id) for link in truncated_pin.linked] == [
+        "export:0/export:2",
+        "export:9/export:9",
+    ]
+    truncated_refs = [link.raw_ref for node in truncated_decoded.nodes for pin in node.pins for link in pin.linked]
+    truncated_resolution = typed_resolve_pin_links(truncated_decoded.nodes, truncated_refs)
+    assert [str(link.to_node_id) for link in truncated_resolution.links] == ["export:0/export:2"]
+    # The truncated-away target reports exactly one unresolved diagnostic
+    # with its reason, and the same honest reason reaches parse_errors.
+    assert [d.code for d in truncated_resolution.diagnostics] == ["BLUEPRINT_PIN_LINK_UNRESOLVED"]
+    assert [d.message for d in truncated_resolution.diagnostics] == [
+        "pin link target export:9/export:9/pin-c (0 candidate(s))"
+    ]
+    assert truncated_decoded.parse_errors == ["pin link target export:9/export:9/pin-c (0 candidate(s))"]
+
 
 def test_object_depth_parses_only_requested_export():
     from uasset_read.package import parse_package_document

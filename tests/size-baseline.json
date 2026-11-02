@@ -5,7 +5,7 @@
   },
   "tests_python": {
     "min_files": 5,
-    "max_lines": 6775
+    "max_lines": 6847
   },
   "wheel_bytes": {
     "max_bytes": 304168
