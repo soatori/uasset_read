@@ -58,7 +58,7 @@ _K2_CLASSES = frozenset(
 def resolve_pin_links(nodes: list[BlueprintNode], refs: list[PinLinkRef]) -> LinkResolution:
     """Resolve raw pin refs against owner-aware nodes.
 
-    ``nodes`` is one owner's node set — every node of that owner across all
+    ``nodes`` should be one owner's node set — every node of that owner across all
     of the owner's graphs, because pin adjacency may cross graphs while node
     identity is owner-scoped. Lookup uses ``(owner_node_id, pin_guid)`` first.
     A GUID-only fallback runs only when the owner is unavailable and exactly
@@ -66,7 +66,15 @@ def resolve_pin_links(nodes: list[BlueprintNode], refs: list[PinLinkRef]) -> Lin
     diagnostics — never an arbitrary last duplicate.
     """
     owner_pins, by_guid = pin_lookup(nodes)
+    return _resolve_refs_with_lookup(owner_pins, by_guid, refs)
 
+
+def _resolve_refs_with_lookup(
+    owner_pins: set[tuple[str, str]],
+    by_guid: dict[str, list[tuple[str, str]]],
+    refs: list[PinLinkRef],
+) -> LinkResolution:
+    """Resolve raw pin refs against an already-built owner-wide pin lookup."""
     links: list[PinLink] = []
     diagnostics: list[Diagnostic] = []
     for ref in refs:
@@ -354,6 +362,10 @@ class BlueprintGraphDecoder:
                         refs.append(link.raw_ref)
             converted.append((raw, nodes, refs))
             owner_nodes.extend(nodes)
+
+        # One owner-wide pin lookup serves every graph below: the owner's
+        # node set is fixed once conversion has run.
+        owner_pins, by_guid = pin_lookup(owner_nodes)
         graphs: list[BlueprintGraph] = []
         for raw, nodes, refs in converted:
             graph_num = _parse_export_id(str(raw.get("id") or ""))
@@ -361,7 +373,7 @@ class BlueprintGraphDecoder:
             # scoped to the owner's nodes (identity rules unchanged: exact
             # ``(owner_node_id, pin_guid)`` first, GUID-only fallback only
             # when the owner identity is absent).
-            resolution = resolve_pin_links(owner_nodes, refs)
+            resolution = _resolve_refs_with_lookup(owner_pins, by_guid, refs)
             # Re-attach resolved links (already on pins) and keep diagnostics.
             parse_errors = [str(e) for e in raw.get("parse_errors") or []]
             truncated = bool((raw.get("truncated") or {}).get("nodes") or (raw.get("truncated") or {}).get("pins"))
