@@ -58,10 +58,12 @@ _K2_CLASSES = frozenset(
 def resolve_pin_links(nodes: list[BlueprintNode], refs: list[PinLinkRef]) -> LinkResolution:
     """Resolve raw pin refs against owner-aware nodes.
 
-    Lookup uses ``(owner_node_id, pin_guid)`` first. A GUID-only fallback runs
-    only when the owner is unavailable and exactly one candidate carries the
-    GUID. Ambiguous/unresolved refs become diagnostics — never an arbitrary
-    last duplicate.
+    ``nodes`` is one owner's node set — every node of that owner across all
+    of the owner's graphs, because pin adjacency may cross graphs while node
+    identity is owner-scoped. Lookup uses ``(owner_node_id, pin_guid)`` first.
+    A GUID-only fallback runs only when the owner is unavailable and exactly
+    one candidate carries the GUID. Ambiguous/unresolved refs become
+    diagnostics — never an arbitrary last duplicate.
     """
     owner_pins, by_guid = pin_lookup(nodes)
 
@@ -327,17 +329,22 @@ class BlueprintGraphDecoder:
             for node_raw in (raw.get("nodes") or [])
             if isinstance(node_raw, dict) and node_raw.get("id")
         )
-        graphs: list[BlueprintGraph] = []
+        owner_for_nodes = NodeId(
+            owner_object_id=obj.id,
+            node_export_id=obj.id,
+        )
+        # Convert every raw graph before resolving anything: node identity
+        # and the owner-confirmation set above are owner-scoped, so typed
+        # pin-link resolution has to search the owner's nodes across all of
+        # the owner's graphs — a legal same-owner pin link may target a node
+        # in another graph of the same Blueprint.
+        converted: list[tuple[dict[str, Any], list[BlueprintNode], list[PinLinkRef]]] = []
+        owner_nodes: list[BlueprintNode] = []
         for raw in raw_list:
             if not isinstance(raw, dict):
                 continue
-            graph_num = _parse_export_id(str(raw.get("id") or ""))
-            owner_for_nodes = NodeId(
-                owner_object_id=obj.id,
-                node_export_id=obj.id,
-            )
             # Node owner is the Blueprint export that owns this graph.
-            nodes = []
+            nodes: list[BlueprintNode] = []
             refs: list[PinLinkRef] = []
             for node_raw in raw.get("nodes") or []:
                 node = _node_from_raw(owner_for_nodes, node_raw, objects_by_id, owner_node_exports)
@@ -345,8 +352,16 @@ class BlueprintGraphDecoder:
                 for pin in node.pins:
                     for link in pin.linked:
                         refs.append(link.raw_ref)
-            # Rebuild links through the typed resolver for diagnostics parity.
-            resolution = resolve_pin_links(nodes, refs)
+            converted.append((raw, nodes, refs))
+            owner_nodes.extend(nodes)
+        graphs: list[BlueprintGraph] = []
+        for raw, nodes, refs in converted:
+            graph_num = _parse_export_id(str(raw.get("id") or ""))
+            # Rebuild links through the typed resolver for diagnostics parity,
+            # scoped to the owner's nodes (identity rules unchanged: exact
+            # ``(owner_node_id, pin_guid)`` first, GUID-only fallback only
+            # when the owner identity is absent).
+            resolution = resolve_pin_links(owner_nodes, refs)
             # Re-attach resolved links (already on pins) and keep diagnostics.
             parse_errors = [str(e) for e in raw.get("parse_errors") or []]
             truncated = bool((raw.get("truncated") or {}).get("nodes") or (raw.get("truncated") or {}).get("pins"))
