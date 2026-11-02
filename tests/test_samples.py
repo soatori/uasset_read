@@ -3427,6 +3427,95 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     assert missing_resolution.links == []
     assert [d.code for d in missing_resolution.diagnostics] == ["BLUEPRINT_PIN_LINK_UNRESOLVED"]
 
+    # Issue #667 (typed pin-link resolution scope): node identity and the
+    # owner-confirmation set are owner-scoped, so a legal same-owner
+    # cross-graph pin link must resolve through the owner's nodes — not
+    # through the single graph's node list, which emitted a spurious
+    # BLUEPRINT_PIN_LINK_UNRESOLVED for a target in another graph of the
+    # same Blueprint. Driven through BlueprintGraphDecoder.decode (the path
+    # that owns the per-graph resolver call).
+    from uasset_read.models.object_model import ObjectRecord as _BoundaryObjectRecord
+    from uasset_read.parsers.blueprint.graph import BlueprintGraphDecoder as _BoundaryGraphDecoder
+
+    cross_graph_owner = _BoundaryObjectRecord(
+        id="export:0",
+        table_index=0,
+        name="BP_CrossGraphBoundary",
+        semantic={
+            "graphs": [
+                {
+                    "id": "export:5",
+                    "name": "EventGraph",
+                    "nodes": [
+                        {
+                            "id": "export:1",
+                            "type": "K2Node_Comment",
+                            "name": "Source",
+                            "pins": [
+                                {
+                                    "id": "ff" * 16,
+                                    "name": "then",
+                                    "direction": "output",
+                                    "category": "exec",
+                                    "linked": [
+                                        # Same owner, target node lives in the OTHER graph.
+                                        {"to_node": "export:7", "to_pin": "ee" * 16},
+                                        # Another owner's node export: never re-owned, never guessed.
+                                        {"to_node": "export:9", "to_pin": "dd" * 16},
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                    "parse_errors": [],
+                    "truncated": {"nodes": False, "pins": False},
+                    "links": [],
+                },
+                {
+                    "id": "export:6",
+                    "name": "FunctionGraph",
+                    "nodes": [
+                        {
+                            "id": "export:7",
+                            "type": "K2Node_Comment",
+                            "name": "CrossGraphTarget",
+                            "pins": [
+                                {
+                                    "id": "ee" * 16,
+                                    "name": "execute",
+                                    "direction": "input",
+                                    "category": "exec",
+                                    "linked": [],
+                                }
+                            ],
+                        }
+                    ],
+                    "parse_errors": [],
+                    "truncated": {"nodes": False, "pins": False},
+                    "links": [],
+                },
+            ]
+        },
+    )
+    (cross_graph_source, cross_graph_target) = _BoundaryGraphDecoder().decode(
+        cross_graph_owner, SimpleNamespace(objects=[cross_graph_owner]), source=None
+    )
+    cross_graph_links = cross_graph_source.nodes[0].pins[0].linked
+    # Identity stays exact for both slots (owner-qualification already spanned
+    # all graphs); only the diagnostics were ever wrong.
+    assert [str(link.to_node_id) for link in cross_graph_links] == [
+        "export:0/export:7",
+        "export:9/export:9",
+    ]
+    # (1) Legal same-owner cross-graph target resolves with zero diagnostics.
+    assert not [msg for msg in cross_graph_source.parse_errors if "export:7" in msg]
+    assert cross_graph_target.parse_errors == []
+    # (2) The cross-owner target stays unresolved: exact owner identity only,
+    # never GUID guessing across owners.
+    assert cross_graph_source.parse_errors == [
+        f"pin link target export:9/export:9/{'dd' * 16} (0 candidate(s))"
+    ]
+
 
 def test_object_depth_parses_only_requested_export():
     from uasset_read.package import parse_package_document
