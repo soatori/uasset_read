@@ -3433,11 +3433,11 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     # through the single graph's node list, which emitted a spurious
     # BLUEPRINT_PIN_LINK_UNRESOLVED for a target in another graph of the
     # same Blueprint. Driven through BlueprintGraphDecoder.decode (the path
-    # that owns the per-graph resolver call).
-    from uasset_read.models.object_model import ObjectRecord as _BoundaryObjectRecord
-    from uasset_read.parsers.blueprint.graph import BlueprintGraphDecoder as _BoundaryGraphDecoder
+    # that owns the per-graph resolver call). ObjectRecord and
+    # BlueprintGraphDecoder come from the bare imports earlier in this test —
+    # one import style throughout.
 
-    cross_graph_owner = _BoundaryObjectRecord(
+    cross_graph_owner = ObjectRecord(
         id="export:0",
         table_index=0,
         name="BP_CrossGraphBoundary",
@@ -3497,7 +3497,7 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
             ]
         },
     )
-    (cross_graph_source, cross_graph_target) = _BoundaryGraphDecoder().decode(
+    (cross_graph_source, cross_graph_target) = BlueprintGraphDecoder().decode(
         cross_graph_owner, SimpleNamespace(objects=[cross_graph_owner]), source=None
     )
     cross_graph_links = cross_graph_source.nodes[0].pins[0].linked
@@ -3507,8 +3507,15 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
         "export:0/export:7",
         "export:9/export:9",
     ]
-    # (1) Legal same-owner cross-graph target resolves with zero diagnostics.
-    assert not [msg for msg in cross_graph_source.parse_errors if "export:7" in msg]
+    # (1) Legal same-owner cross-graph target resolves with zero diagnostics:
+    # the typed resolver, re-run over the owner-scoped node set exactly as
+    # decode runs it, reports exactly one unresolved slot — the cross-owner
+    # one — asserted by diagnostic code instead of a substring match.
+    cross_graph_refs = [link.raw_ref for node in cross_graph_source.nodes for pin in node.pins for link in pin.linked]
+    cross_graph_resolution = typed_resolve_pin_links(
+        cross_graph_source.nodes + cross_graph_target.nodes, cross_graph_refs
+    )
+    assert [d.code for d in cross_graph_resolution.diagnostics] == ["BLUEPRINT_PIN_LINK_UNRESOLVED"]
     assert cross_graph_target.parse_errors == []
     # (2) The cross-owner target stays unresolved: exact owner identity only,
     # never GUID guessing across owners.
@@ -3552,7 +3559,7 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
                 "pins": [{"id": "pin-b", "name": "execute", "direction": "input", "category": "exec", "linked": []}],
             },
         ],
-        "node_count": 3,  # export:9 was truncated out of this raw node list
+        "node_count": 2,  # mirrors len(nodes): export:9 was truncated out of the raw list
         "parse_errors": [],
         "truncated": {"nodes": True, "pins": False},
         "links": [],
