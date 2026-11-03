@@ -186,6 +186,8 @@ Data flow is the package-first pipeline defined in the canonical refactor design
 
 Shared readers behind that document: `kismet/` (bytecode → expressions + diagnostics, reached through `parsers/legacy_reader.py` at asset/decode), `serializers/` and `models/`.
 
+Development direction and plan admission are maintained in the canonical design and `docs/reference/agent-dev-reference.md` when the independent docs checkout is present. These are target guidance; new semantic capabilities require source and real-sample verification.
+
 ### Module Structure (`src/uasset_read/`)
 
 | Module | Path | Description |

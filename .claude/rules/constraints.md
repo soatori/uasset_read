@@ -5,12 +5,18 @@ The authoritative target is `docs/designs/2026-08-26-package-first-uasset-parser
 ## Core Constraints
 
 - **Python and cross-platform** — Support Python 3.10+ on Windows, Linux, and macOS; do not depend on fixed drive letters or user directories.
-- **Read-only first milestone** — v2 initially parses and extracts only. Binary writing requires a separate approved design and corruption-safety tests.
+- **Read-only product** — The current parser reads and extracts only. Binary writing requires a separate approved design and corruption-safety tests.
 - **UE source reference required** — Binary layout decisions must trace to UE C++ source; external reports and third-party parsers are corroboration, not proof.
 - **Bounded binary reads** — Validate ranges, counts, multiplication, recursion, and allocations before consuming untrusted data.
 - **Unknown data is preserved** — Return an opaque region and diagnostic when data cannot be decoded; never silently skip and claim complete coverage.
 - **Temp files in `temp/`** — Investigation scripts, intermediate output, generated debug data, and test artifacts belong under `temp/`.
 - **Minimal implementation** — Reuse current code and the standard library before adding abstractions or dependencies.
+
+## Current Development Direction
+
+- Follow the canonical design's 2026-10-29 revision: reuse existing Blueprint analysis and package output for the smallest evidenced semantic improvement.
+- Preserve original nodes/pins/links and explicit unknown states. The rejected separate logic-report format/tool is historical.
+- Public-field changes need an explicit contract decision; do not hide a new model inside an arbitrary metadata key.
 
 ## Architecture Constraints
 
@@ -32,7 +38,7 @@ The authoritative target is `docs/designs/2026-08-26-package-first-uasset-parser
 
 ## Output and Agent Constraints
 
-- Public package output is a single full document per input package with exactly the `normal` and `debug` modes (v4 target, `format_version: "4.0"`; contract `tests/package_document_v4.schema.json`). Both modes parse at `depth="decode"` with no object selection.
+- Public package output is a single full document per input package with exactly the `normal` and `debug` modes (current v4 contract, `format_version: "4.0"`; contract `tests/package_document_v4.schema.json`). Both modes parse at `depth="decode"` with no object selection.
 - `normal` carries decoded values and static semantics only. `debug` adds evidence (top-level `debug` block plus nested `debug_evidence`); stripping that evidence and normalizing `mode` reproduces `normal` exactly. Raw blobs, full HexView data, offsets, and physical ranges are debug evidence, not normal content.
 - View/depth/selection/pagination/`max_bytes` are not public output surfaces (retired with the v3 envelope). Low-level parser depth/object selection stays internal for parser tests and non-output analysis.
 - Agent tools call the Python document API directly; they do not parse CLI output. The v4 Agent surface is `inspect_package(file_path, *, mode=...)` plus the separate `extract_payload` operation; `agent` is not an output mode.
@@ -52,14 +58,14 @@ Operational sub-rules for "UE source reference required" above. Full scheme: `do
 
 ## Test Organization
 
-- Phase 0 deletes and replaces the legacy Python test suite in one atomic change; do not maintain parallel old/new suites.
-- Keep all tracked files under `tests/samples/` and validate SHA-256, size, version, layout and sidecars through the manifest.
+- Use the existing sample-first test layout and current source-enforced budgets; completed test-suite migration phases are historical, not work to replay.
+- Keep tracked binary fixtures under `tests/samples/` and validate SHA-256, size, version, layout and sidecars through the manifest.
 - Missing fixtures are manifest gaps. Do not use `skip`, `xfail`, long-lived failing tests, or broad exception swallowing to simulate coverage.
 - Do not use `MagicMock` for UE binary structures. Use bounded bytes for reader tests and real fixtures for support claims.
 - Structured diagnostics are authoritative; text logs are tested only for lifecycle and unwanted side effects.
 - Do not add wall-clock benchmark thresholds. Test deterministic count/range/byte/resource limits instead.
 - Do not add root-level or `scripts/` verification programs. Reusable behavior belongs in package APIs, `python -m uasset_read`, or Agent tools.
-- The current blocking test environment is local Windows + Python 3.14. Linux, macOS and other Python versions are deferred and must not be claimed as verified.
+- Record the actual runtime, platform, command, and result for each verification. Python 3.10+ and cross-platform core behavior remain requirements; do not infer verified environments from a historical machine-specific run.
 - Version or asset-support claims require UE source evidence, a real fixture, structural assertions, and honest partial/unsupported states.
 
 ## Documentation Constraints

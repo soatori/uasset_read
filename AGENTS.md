@@ -14,10 +14,16 @@ These rules apply to every human or agent working in this repository.
 
 The package-first design is not implemented merely because it is documented. Do not update README features or Wiki API examples until source and tests support the claim.
 
+## Development Direction
+
+- For new architecture or development plans, read the canonical design's 2026-10-29 direction and `docs/reference/agent-dev-reference.md` first.
+- Keep the parser pure Python and read-only. Improve existing Blueprint analysis and package output with the smallest evidenced change; preserve nodes, pins, links, identity, and uncertainty.
+- The separate logic-report proposal and old mixed v3/C++ specifications are superseded planning inputs. Necessary public-field changes require the canonical design's contract decision process.
+
 ## Repository Conventions
 
 - Source code, comments, and error messages use English. Documentation follows its document language; repository-wide design reports may use Chinese when requested. Agent summaries and user replies may be Chinese.
-- The current project is a Python 3.10+ read-only parser at v0.6.0-dev. The package-first v2 document API (`parse_package_document` / `python -m uasset_read`) is the default; the strongest path is classic editor-saved packages and Blueprint decoding. Source and tests remain authoritative for current behavior.
+- The current project is a Python 3.10+ read-only parser at v0.6.0-dev. The package-first document API (`parse_package_document` / `python -m uasset_read`) is the default; the strongest path is classic editor-saved packages and Blueprint decoding. Source and tests remain authoritative for current behavior.
 - In Windows examples, use forward slashes or escaped backslashes. Test samples are under `tests/samples/`.
 - Claude Code-specific path rules and skills remain under `.claude/`; consult them when relevant.
 
@@ -31,13 +37,13 @@ The package-first design is not implemented merely because it is documented. Do 
 - JSON, CLI, Python, and Agent tools project from the same `PackageDocument`.
 - Large payloads are referenced and extracted on demand, not embedded by default.
 - Library code returns structured diagnostics and does not configure process-global logging.
-- Public package output (v4, `format_version: "4.0"`, frozen contract `tests/package_document_v4.schema.json`) is one full document per input package with exactly the `normal` and `debug` modes. Debug adds evidence only; after stripping that evidence and normalizing `mode`, it equals normal. View/depth/selection/pagination/`max_bytes` are not public output surfaces. C++ projection is retired; Blueprint instruction IR/CFG and static semantics remain targets. Public signatures: `parse_package_document(file_path, *, tolerant=True, mappings_path=None, game=None, depth="decode", object_ids=None)`, `project_document(document, *, mode="normal")` (sole envelope producer), `write_projected_document(document, output_path, *, mode="normal")`, `inspect_package(file_path, *, mode="normal")`; `extract_payload()` stays a separate binary operation. Implemented — source and tests produce this v4 envelope in both modes. Deferred gaps (Zen body extract, full `SchemaProvider`, Pak product path) remain deferred and must not be described as implemented.
+- Public package output (v4, `format_version: "4.0"`, frozen contract `tests/package_document_v4.schema.json`) is one full document per input package with exactly the `normal` and `debug` modes. Debug adds evidence only; after stripping that evidence and normalizing `mode`, it equals normal. View/depth/selection/pagination/`max_bytes` are not public output surfaces. C++ projection is retired; Blueprint instruction IR/CFG and static-analysis paths exist; their completeness and further changes must be established from source and real-sample assertions. Public signatures: `parse_package_document(file_path, *, tolerant=True, mappings_path=None, game=None, depth="decode", object_ids=None)`, `project_document(document, *, mode="normal")` (sole envelope producer), `write_projected_document(document, output_path, *, mode="normal")`, `inspect_package(file_path, *, mode="normal")`; `extract_payload()` stays a separate binary operation. Implemented — source and tests produce this v4 envelope in both modes. Deferred gaps (Zen body extract, full `SchemaProvider`, Pak product path) remain deferred and must not be described as implemented.
 
 ## Development Rules
 
 - Use Python 3.10+ and keep core behavior cross-platform.
 - Prefer the standard library and existing project code. Dependencies are allowed only at a documented capability boundary and must fail gracefully when optional.
-- The first v2 milestone is read-only. Writer support requires a separate approved design.
+- The current product is read-only. Binary writer support requires a separate approved design.
 - Use bounded reads, validated counts, explicit offsets, and structured failure states at all binary trust boundaries.
 - Add the smallest strict test that proves non-trivial behavior. Do not swallow broad exceptions in aggregate tests.
 - Temporary scripts and generated investigation output belong under `temp/` and must not become runtime dependencies.
