@@ -172,7 +172,8 @@ jobs:
   pytest-smoke:
     runs-on: ubuntu-latest
     needs: [ruff-check, pyright-check, peer-evidence-hygiene]
-    # non-blocking smoke evidence; blocking gate is local Windows + 3.14
+    # non-blocking smoke evidence; the blocking gate is the locally recorded run
+    # required by .claude/rules/constraints.md (no branch protection is configured)
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python 3.12
