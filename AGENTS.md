@@ -51,7 +51,7 @@ The package-first design is not implemented merely because it is documented. Do 
 
 ## Branches and Commits
 
-- Use `dev-0.6.0` for daily development, `master` for releases, and `wiki/master` for Wiki maintenance.
+- Use `dev-0.6.*` for daily development, `master` for releases, and `wiki/master` for Wiki maintenance.
 - `master` allows only `src/`, CI, `README.md`, `README.zh-CN.md`, `AGENTS.md`, `LICENSE`, `pytest.ini`, `tests/`, and `.claude/rules/`; `docs/` and `wiki/` are separate Git repositories and are excluded from the root repository.
 - Commit format: `<type>: <summary> (#issue)`. Issue numbers are optional. Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `release`.
 
