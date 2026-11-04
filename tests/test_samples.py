@@ -4601,7 +4601,12 @@ def test_iostore_toc_fixture_headers_match_ue_struct_fields():
     assert primary.encryption_key_guid == "0" * 32  # unencrypted: #624 requires no private key
     assert primary.directory_index_size == 35658
     assert primary.mount_point == "../../../"
-    assert primary.data_path and Path(primary.data_path).name == "MyProject-Windows.ucas"
+    # MyProject-Windows.ucas is manifest-committed:false (259 MB > GitHub's 100 MB limit),
+    # so a clean checkout has no sibling .ucas and read_toc reports data_path=None.
+    if (CONTAINERS / "MyProject-Windows.ucas").exists():
+        assert primary.data_path and Path(primary.data_path).name == "MyProject-Windows.ucas"
+    else:
+        assert primary.data_path is None
 
     # The secondary container is the committed .utoc/.ucas pair: one chunk, no index.
     secondary = read_toc(CONTAINERS / "global.utoc")
