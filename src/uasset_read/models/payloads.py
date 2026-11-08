@@ -171,18 +171,25 @@ def discover_payload_descriptor(
     if descriptor is not None:
         return descriptor
 
-    # Fallback: bound the descriptor by the export's serial region only.
-    # Never fall back to the whole sidecar — a valid export with no usable
-    # serial region yields a bounded (size-0 / missing) descriptor.
-    source_region = "uexp" if "uexp" in sidecar_paths else "ubulk" if "ubulk" in sidecar_paths else "main"
+    # Fallback: address the export's physical serial slice — the file and
+    # offset where the bytes actually are, not a TotalHeaderSize rebase.
+    # Never fall back to the whole sidecar; a region spanning two files (or
+    # an unresolved source) is not extractable, so it stays size-0 / missing.
+    source_region = "main"
     fallback_offset = 0
     fallback_size = 0
-    if export.serial_region is not None:
-        assert doc.package is not None
-        total_header_size = doc.package.total_header_size
-        if export.serial_region.start >= total_header_size and total_header_size > 0:
-            fallback_offset = export.serial_region.start - total_header_size
-        fallback_size = export.serial_region.size
+    slices = export.serial_region.source_slices if export.serial_region is not None else ()
+    if len(slices) == 1:
+        sl = slices[0]
+        region: str | None = (
+            "main"
+            if sl.source_id == main_path.name
+            else next((key for key, path in sidecar_paths.items() if path.name == sl.source_id), None)
+        )
+        if region is not None:
+            source_region = region
+            fallback_offset = sl.source_start
+            fallback_size = sl.size
 
     return PayloadDescriptor(
         id=descriptor_id,

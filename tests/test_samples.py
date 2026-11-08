@@ -5798,7 +5798,8 @@ def test_node_pins_do_not_read_past_export_end():
 
 
 def test_payload_descriptor_kind_requires_bulk_data_evidence():
-    from uasset_read.models.payloads import discover_payload_descriptor
+    from uasset_read.models.payloads import discover_payload_descriptor, extract_payload_bytes
+    from uasset_read.package import parse_package_document
 
     # Serial-region fallback (no BulkData header in the tail) is "other", not "bulk_data".
     fallback = discover_payload_descriptor(
@@ -5812,3 +5813,14 @@ def test_payload_descriptor_kind_requires_bulk_data_evidence():
         main_path=SAMPLES / "BP_CombatCharacter.uasset", sidecar_paths={},
     )
     assert missing.kind == "other" and missing.status == "missing"
+
+    # The fallback must address the export's physical serial bytes, not rebase
+    # a TotalHeaderSize virtual offset as if a .uexp splice existed.
+    main = SAMPLES / "BP_CombatCharacter.uasset"
+    decoded = parse_package_document(str(main), depth="decode")
+    physical = decoded.objects[0].serial_region.source_slices[0]
+    assert physical.source_start == 453535 and physical.size == 46
+    d = discover_payload_descriptor("payload:export:0", 0, main_path=main, sidecar_paths={})
+    assert (d.source_region, d.offset, d.stored_size) == ("main", 453535, 46)
+    data, err = extract_payload_bytes(d, main_path=main, sidecar_paths={})
+    assert err is None and data == main.read_bytes()[453535:453581]

@@ -1,7 +1,7 @@
 {
   "src_python": {
     "min_files": 71,
-    "max_lines": 27266
+    "max_lines": 27273
   },
   "tests_python": {
     "min_files": 5,
