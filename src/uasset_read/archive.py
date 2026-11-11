@@ -370,6 +370,8 @@ class FArchive:
         length = self.read_i32()
         if length == 0:
             return ""
+        # Effective bound for this call: active export window, else the file.
+        end = min(self._file_size, self._read_range[1] if self._read_range is not None else self._file_size)
         utf16 = length < 0
         byte_len = -length * 2 if utf16 else length
         enc = "UTF-16" if utf16 else "UTF-8"
@@ -388,7 +390,7 @@ class FArchive:
             raise ParseError(
                 f"{enc} string at pos {pos_before}: length {byte_len} exceeds maximum {MAX_FSTRING_LENGTH}"
             )
-        if pos_before + 4 + byte_len > self._file_size:
+        if pos_before + 4 + byte_len > end:
             self.seek(pos_before)
             if self._tolerant:
                 self._record_structured_diagnostic(
@@ -398,13 +400,13 @@ class FArchive:
                     raw_value=byte_len,
                     fallback="used_empty_string",
                     message=f"FString at pos {pos_before}: {enc} expected {byte_len} bytes "
-                    f"but only {self._file_size - pos_before - 4} remain",
+                    f"but only {end - pos_before - 4} remain",
                     reason="recovered_corruption",
                 )
                 return ""
             raise ParseError(
                 f"{enc} string at pos {pos_before}: expected {byte_len} bytes "
-                f"but only {self._file_size - pos_before - 4} remain"
+                f"but only {end - pos_before - 4} remain"
             )
         data = self.read(byte_len)
         encoding = "utf-16-le" if utf16 else "utf-8"
@@ -504,9 +506,10 @@ class FArchive:
                     pos_before,
                     data[:32].hex(),
                 )
-            # Padding zone detection: scan ahead up to 1KB for non-zero data
+            # Padding zone detection: scan ahead up to 1KB for non-zero data,
+            # never past the effective end (window or file)
             current_pos = self.tell()
-            remaining = self._file_size - current_pos
+            remaining = end - current_pos
             if remaining > 0:
                 scan_size = min(remaining, 1024)
                 scan_data = self.read(scan_size)
@@ -533,7 +536,6 @@ class FArchive:
                             message=f"FString padding zone at pos {current_pos}: {non_zero}/{scan_size} non-zero bytes",
                             reason="recovered_corruption",
                         )
-                        self.seek(self._file_size)
             return ""
 
         return result

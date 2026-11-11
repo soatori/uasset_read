@@ -783,6 +783,12 @@ def read_name_table(archive: FArchive, summary: PackageFileSummary) -> list[str]
         entry_start = archive.tell()
         try:
             name = archive.read_fstring()
+            # A failed read seeks back to the entry start; continuing would
+            # re-read the same position forever and append phantom names.
+            if archive.tell() <= entry_start:
+                raise ParseError(
+                    f"read_fstring did not advance past name entry start {entry_start} at entry {i}"
+                )
             name_map.append(name)
             # Name hash fields: only present when file_version_ue4 >= UE4_NAME_HASHES_SERIALIZED (803)
             # UE5 assets always have name hashes (4 bytes)

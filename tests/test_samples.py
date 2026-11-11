@@ -5710,6 +5710,65 @@ def test_fstring_padding_zone_seek_is_tolerant_only():
     assert any(d.code == "fstring_padding_zone_seek" for d in lenient.get_structured_diagnostics())
 
 
+def test_fstring_bounds_respect_the_export_window():
+    import struct
+    from types import SimpleNamespace
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.serializers.package_summary import read_name_table
+
+    def buf_40_with_i32_at_8(value):
+        return b"\x00" * 8 + struct.pack("<i", value) + b"\x00" * (40 - 8 - 4)
+
+    def buf_40_with_nul_ledged_string_at(offset):
+        payload = b"\x00abcdef\x00"
+        return (
+            b"\x00" * offset
+            + struct.pack("<i", len(payload))
+            + payload
+            + b"\x00" * (40 - offset - 4 - len(payload))
+        )
+
+    def all_zero_tail_buf():
+        # leading-NUL payload with content, all-zero tail: the padding lookahead runs
+        return b"\x00" * 8 + struct.pack("<i", 4) + b"\x00ab\x00" + b"\x00" * (40 - 8 - 4 - 4)
+
+    # oversized length inside the file, past the window
+    a = ByteArchive(buf_40_with_i32_at_8(25), tolerant=True)
+    a.set_name_map(["A"])
+    a.set_read_range((0, 20))
+    a.seek(8)
+    assert a.read_fstring() == "" and any(d.code == "fstring_out_of_range" for d in a.get_structured_diagnostics())
+    # leading NUL + real content near the window end: the lookahead must not raise
+    b = ByteArchive(buf_40_with_nul_ledged_string_at(8), tolerant=True)
+    b.set_name_map(["A"])
+    b.set_read_range((0, 20))
+    b.seek(8)
+    assert b.read_fstring() == "" and b.tell() <= 20
+    # padding zone must never jump the cursor to end-of-file
+    c = ByteArchive(all_zero_tail_buf(), tolerant=True)
+    c.set_name_map(["A"])
+    c.set_read_range((0, 20))
+    c.seek(8)
+    c.read_fstring()
+    assert c.tell() <= 20
+
+    # the name table stops at an entry whose failed read leaves the cursor put
+    table = (
+        b"\x00" * 4  # non-zero name_offset prefix
+        + struct.pack("<i", 2)
+        + b"A\x00"
+        + b"\x00" * 4  # name hashes
+        + struct.pack("<i", 256)  # NUL-led length (00 01 00 00) beyond the table bytes
+        + b"\x00" * 24  # NUL-led payload region
+    )
+    nt = ByteArchive(table, tolerant=True)
+    summary = SimpleNamespace(name_count=2, name_offset=4, file_version_ue4=803, file_version_ue5=0)
+    names = read_name_table(nt, summary)
+    assert len(names) == 1
+    assert any(d.code == "NAME_TABLE_TRUNCATED" for d in nt.get_structured_diagnostics())
+
+
 def test_truncated_table_tail_keeps_properties():
     import struct
 

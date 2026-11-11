@@ -31,6 +31,7 @@ Budget 172 -> 173 on 2026-11-06 (untrusted-read Task 2, BulkData tail heuristic 
 Budget 173 -> 174 on 2026-11-12 (untrusted-read Task 3, one bad header field keeps the parsed tables): 174 is the measured final value, not headroom.
 Budget 174 -> 175 on 2026-11-12 (untrusted-read Task 4, property values bounded to PropertyTag size): 175 is the measured final value, not headroom.
 Budget 175 -> 176 on 2026-11-12 (untrusted-read Task 5, oversized PropertyTag size keeps earlier properties): 176 is the measured final value, not headroom.
+Budget 176 -> 177 on 2026-11-12 (untrusted-read Task 6, FString bounds respect the export window): 177 is the measured final value, not headroom.
 No fixtures live here — the baseline is driven by real samples in
 tests/test_samples.py; temporary probes belong to untracked temp/.
 """
@@ -39,7 +40,7 @@ from __future__ import annotations
 
 import pytest
 
-ITEM_BUDGET = 176
+ITEM_BUDGET = 177
 
 
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:
