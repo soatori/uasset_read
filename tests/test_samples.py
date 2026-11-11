@@ -6021,3 +6021,63 @@ def test_property_value_cannot_read_past_its_tag_size():
     guid_value = {p.name: p for p in guid_props}["G"].value
     assert isinstance(guid_value, PropertyFallback)             # not a GUID built from the following tag
     assert guid_archive.get_structured_diagnostics()            # the degradation is reported
+
+
+def test_oversized_property_size_keeps_earlier_properties():
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.parsers.properties.tagged import TaggedPropertyReader
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+    from uasset_read.serializers.package_summary import PackageFileSummary
+    from uasset_read.versioning import build_version_context
+
+    def _tagged_int_tag(name, size):
+        # Legacy PropertyTag (UE5 < 1012): FName name, FName type, int32 size,
+        # int32 array_index, u8 has_property_guid (format authority:
+        # serializers/property_tags.py _read_property_tag_legacy).
+        name_index = {"First": 0, "Oversized": 1, "IntProperty": 2}[name]
+        return (
+            struct.pack("<II", name_index, 0)
+            + struct.pack("<II", 2, 0)
+            + struct.pack("<ii", size, 0)
+            + b"\x00"
+        )
+
+    names = ["First", "Oversized", "IntProperty", "None"]
+    # 90-byte export window inside a 254-byte file: First parses (IntProperty=42),
+    # then Oversized declares Size=150 — inside the file, past the window, so the
+    # pre-dispatch boundary check raises and recovery must not seek to 204.
+    stream = (
+        _tagged_int_tag("First", size=4)
+        + struct.pack("<i", 42)
+        + _tagged_int_tag("Oversized", size=150)
+    )
+    stream = stream + b"\xff" * (254 - len(stream))
+
+    archive = ByteArchive(stream, tolerant=True)
+    archive.set_read_range((0, 90))
+    summary = PackageFileSummary(file_version_ue4=522, file_version_ue5=0, package_flags=0)
+    archive.version_context = build_version_context(summary)
+    export = ObjectExport(
+        class_index=PackageIndex(-1),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="T",
+        object_flags=0,
+        serial_size=90,
+        serial_offset=0,
+    )
+    diagnostics: list = []
+    props = TaggedPropertyReader().read_export(
+        export=export,
+        archive=archive,
+        summary=summary,
+        name_map=names,
+        export_map=[],
+        import_map=[],
+        diagnostics=diagnostics,
+        object_id="export:0",
+    )
+    assert any(p.name == "First" and p.value == 42 for p in props)          # the parsed property survives
+    assert any(p.name == "Oversized" for p in props)                        # reported as a fallback, not dropped

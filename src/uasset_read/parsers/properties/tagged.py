@@ -318,14 +318,37 @@ def _handle_property_parse_error(
 
     Responsible for smart skip of corrupted data, preventing infinite loops.
     """
-    # D-19: Smart continue - skip damaged property using PropertyTag.Size
+    # D-19: Smart continue - skip damaged property using PropertyTag.Size,
+    # clamped to the export window and the file: an unclamped seek raised
+    # ExportBoundsExceeded from inside this handler and replaced the whole
+    # property bag (good properties included) downstream.
     if tag is not None and start_pos is not None:
-        target_pos = start_pos + tag.size
+        target_pos = min(start_pos + tag.size, property_end, archive.total_size())
         # Safety net: if target_pos goes backward or stays in place, force advance by at least 1 byte
-        if target_pos > start_pos:
-            archive.seek(target_pos)
-        else:
+        if target_pos <= start_pos:
             archive.seek(min(start_pos + 1, getattr(archive, "_file_size", start_pos + 1)))
+        elif target_pos == property_end:
+            # Clamp hit the window end: reuse the size_exceeded recovery scan,
+            # starting from the corrupted tag's own start so a tag its over-long
+            # header swallowed is not skipped. The scan may walk into the range
+            # wall (it scans past property_end by design); a range-exceeded scan
+            # must not escape this handler either, so fall back to the clamped
+            # bound on failure.
+            recovered_from = tag.tag_start_offset if tag.tag_start_offset is not None else start_pos
+            try:
+                archive.seek(recovered_from)
+                recovered = _try_recover_property_tag(
+                    archive,
+                    name_map,
+                    max_scan=_MAX_RECOVERY_SCAN,
+                    property_end=property_end,
+                )
+            except ParseError:
+                recovered = False
+            if not recovered:
+                archive.seek(target_pos)
+        else:
+            archive.seek(target_pos)
     else:
         # start_pos unknown (tag read failed early), try smart recovery
         recover_start = archive.tell()
