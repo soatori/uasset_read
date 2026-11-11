@@ -159,32 +159,52 @@ def read_import_map(archive: FArchive, summary: PackageFileSummary, name_map: li
     file_version = ctx.file_version_ue4
 
     import_map: list[ObjectImport] = []
-    for _ in range(summary.import_count):
-        class_package = archive.read_name(name_map)
-        class_name = archive.read_name(name_map)
-        outer_index = PackageIndex(archive.read_i32())
-        object_name = archive.read_name(name_map)
+    for import_idx in range(summary.import_count):
+        entry_start = archive.tell()
+        # Attribute any read recovery in this entry to its table slot.
+        archive._current_object_id = f"import:{import_idx}"
+        try:
+            class_package = archive.read_name(name_map)
+            class_name = archive.read_name(name_map)
+            outer_index = PackageIndex(archive.read_i32())
+            object_name = archive.read_name(name_map)
 
-        # PackageName: present for every import when UEVer >= VER_UE4_NON_OUTER_PACKAGE_IMPORT
-        # (ObjectResource.cpp load path). FilterEditorOnly changes the saved VALUE only,
-        # never whether the 8-byte FName exists.
-        package_name: str | None = None
-        if file_version >= UE4_NON_OUTER_PACKAGE_IMPORT:
-            package_name = archive.read_name(name_map)
+            # PackageName: present for every import when UEVer >= VER_UE4_NON_OUTER_PACKAGE_IMPORT
+            # (ObjectResource.cpp load path). FilterEditorOnly changes the saved VALUE only,
+            # never whether the 8-byte FName exists.
+            package_name: str | None = None
+            if file_version >= UE4_NON_OUTER_PACKAGE_IMPORT:
+                package_name = archive.read_name(name_map)
 
-        # bImportOptional: UE5 >= 1003 (OPTIONAL_RESOURCES) — write-only; advance cursor only.
-        if ctx.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
-            archive.read_bool()
+            # bImportOptional: UE5 >= 1003 (OPTIONAL_RESOURCES) — write-only; advance cursor only.
+            if ctx.file_version_ue5 >= UE5_OPTIONAL_RESOURCES:
+                archive.read_bool()
 
-        import_map.append(
-            ObjectImport(
-                class_package=class_package,
-                class_name=class_name,
-                outer_index=outer_index,
-                object_name=object_name,
-                package_name=package_name,
+            import_map.append(
+                ObjectImport(
+                    class_package=class_package,
+                    class_name=class_name,
+                    outer_index=outer_index,
+                    object_name=object_name,
+                    package_name=package_name,
+                )
             )
-        )
+        except RECOVERY_READ_ERRORS as e:
+            # A failed entry leaves the stream position unknown; continuing
+            # would silently renumber later imports. Stop the table instead.
+            # len(import_map) is the failed slot: entries only append on success.
+            archive._record_structured_diagnostic(
+                code="IMPORT_TABLE_TRUNCATED",
+                stage="read_import_map",
+                offset=entry_start,
+                fallback="stop_table",
+                message=(
+                    f"Import #{len(import_map)} parse failed ({type(e).__name__}: {e}); "
+                    f"stopped import table read with {len(import_map)}/{summary.import_count} entries"
+                ),
+            )
+            break
+    archive._current_object_id = ""
     return import_map
 
 

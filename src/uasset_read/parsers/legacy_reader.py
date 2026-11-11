@@ -43,6 +43,7 @@ from ..serializers.package_summary import (
     read_preload_dependencies,
 )
 from ..models.diagnostics import (
+    DIAGNOSTIC_CODE_INVALID_SERIAL_OFFSET,
     Diagnostic,
     TrailingContext,
     classify_trailing_reason,
@@ -294,6 +295,8 @@ def _build_object_record_direct(
     import_map: list[ObjectImport],
     export_map: list[ObjectExport],
     main_path: str = "",
+    *,
+    diagnostics: list[Diagnostic],
 ) -> ObjectRecord:
     """Convert an ObjectExport to an ObjectRecord using direct binary data."""
     name = export.object_name
@@ -325,14 +328,36 @@ def _build_object_record_direct(
                     feature="serial",
                 )
             except Exception:
-                source = FileSource(Path(main_path))
-                serial_region = region_from_source(
-                    source,
-                    export.serial_offset,
-                    export.serial_size,
-                    status="decoded",
-                    feature="serial",
-                )
+                try:
+                    source = FileSource(Path(main_path))
+                    serial_region = region_from_source(
+                        source,
+                        export.serial_offset,
+                        export.serial_size,
+                        status="decoded",
+                        feature="serial",
+                    )
+                except Exception:
+                    # Neither source maps this offset+size (e.g. the .uexp is
+                    # gone). Re-raising here would discard the summary, names,
+                    # imports and exports already parsed, so keep the record
+                    # with no region — the empty-properties path owns that
+                    # state — and report the export instead.
+                    diagnostics.append(
+                        Diagnostic(
+                            severity="warning",
+                            code=DIAGNOSTIC_CODE_INVALID_SERIAL_OFFSET,
+                            message=(
+                                f"Export #{index} serial region {export.serial_offset}"
+                                f"+{export.serial_size} cannot be mapped to package bytes; "
+                                "serial region left unavailable"
+                            ),
+                            stage="objects.export",
+                            object_id=f"export:{index}",
+                            effect="data_loss",
+                            fallback="set_region_unavailable",
+                        )
+                    )
         else:
             serial_region = ByteRegion(
                 start=export.serial_offset,
@@ -857,7 +882,7 @@ class LegacyPackageReader:
 
             # 8. Build ObjectRecords — ALL exports, no filtering
             objects = [
-                _build_object_record_direct(exp, i, import_map, export_map, self._main_path)
+                _build_object_record_direct(exp, i, import_map, export_map, self._main_path, diagnostics=diagnostics)
                 for i, exp in enumerate(export_map)
             ]
 

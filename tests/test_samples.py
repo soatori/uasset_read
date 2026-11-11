@@ -4709,6 +4709,62 @@ def test_missing_sidecar_diagnostic():
             )
 
 
+def test_truncated_package_tables_keep_parsed_data(tmp_path):
+    """One bad header field keeps every table that already parsed (audit finding 3)."""
+    import shutil
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.models.diagnostics import DIAGNOSTIC_CODE_INVALID_SERIAL_OFFSET
+    from uasset_read.package import parse_package_document
+    from uasset_read.serializers.object_resources import read_import_map
+    from uasset_read.serializers.package_summary import PackageFileSummary, read_preload_dependencies
+    from uasset_read.versioning import build_version_context
+
+    def _read_import_bytes_with_broken_second_entry():
+        # One valid 28-byte import record (ue4 < 520 writes no PackageName and
+        # no UE5 optional bool), then three bytes: entry 2 dies in its first FName.
+        summary = PackageFileSummary(import_count=2, import_offset=0)
+        record = struct.pack("<iiii", 0, 0, 1, 0) + struct.pack("<i", 0) + struct.pack("<ii", 2, 0)
+        archive = ByteArchive(record + b"\x00\x00\x00")
+        archive.version_context = build_version_context(summary)
+        return read_import_map(archive, summary, ["ClassPackage", "Class", "Object"]), archive
+
+    # import table: per-entry recovery, like the export table already does
+    imports, import_archive = _read_import_bytes_with_broken_second_entry()
+    assert len(imports) == 1
+    assert any(d.code == "IMPORT_TABLE_TRUNCATED" for d in import_archive.get_structured_diagnostics())
+
+    # preload count: capped, and a bad count degrades to [] instead of raising
+    preload_archive = ByteArchive(b"\x00" * 64)
+    summary = PackageFileSummary(
+        file_version_ue4=522,
+        file_version_ue5=0,
+        package_flags=0,
+        preload_dependency_count=10**9,
+        preload_dependency_offset=8,
+    )
+    assert read_preload_dependencies(preload_archive, summary) == []
+    assert any(d.code == "PRELOAD_DEPENDENCIES_UNUSABLE" for d in preload_archive.get_structured_diagnostics())
+
+    # cooked package without .uexp keeps its exports
+    shutil.copy(SAMPLES / "T_ParserBulk.uasset", tmp_path / "T_ParserBulk.uasset")  # main file only
+    doc = parse_package_document(str(tmp_path / "T_ParserBulk.uasset"), depth="decode")
+    assert len(doc.objects) > 0
+    assert any(d.code == DIAGNOSTIC_CODE_INVALID_SERIAL_OFFSET for d in doc.diagnostics)
+
+    # garbage DependsOffset degrades to an empty depends table, never to a
+    # minimal document (controller ruling B). Byte 134 is Lyra_PM_Concrete's
+    # summary DependsOffset i32 (single-file fixture, so one copy is enough).
+    depends_dst = tmp_path / "Lyra_PM_Concrete.uasset"
+    shutil.copy(SAMPLES / "Lyra_PM_Concrete.uasset", depends_dst)
+    payload = bytearray(depends_dst.read_bytes())
+    payload[134:138] = struct.pack("<i", len(payload) + 10_000)  # DependsOffset past EOF
+    depends_dst.write_bytes(payload)
+    depends_doc = parse_package_document(str(depends_dst), depth="decode")
+    assert len(depends_doc.objects) > 0 and "DEPENDS_MAP_TRUNCATED" in [d.code for d in depends_doc.diagnostics]
+
+
 def _assert_quality_baseline(doc, name: str) -> None:
     entry = QUALITY_BASELINE["samples"][name]
     codes = [d.code for d in doc.diagnostics]

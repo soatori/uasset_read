@@ -476,15 +476,47 @@ def _read_late_versioned_fields(
     archive: FArchive,
     file_version_ue4: int,
     file_version_ue5: int,
-) -> tuple[int, int, int, int, int]:
-    """Read PreloadDependencies, NamesReferenced, PayloadToc, DataResource."""
+    *,
+    total_decompressed: int = 0,
+) -> tuple[int, int, int, int, int, int]:
+    """Read PreloadDependencies, NamesReferenced, PayloadToc, DataResource.
+
+    Returns the five field values plus the updated decompressed-byte total.
+    """
     preload_dependency_count = -1
     preload_dependency_offset = 0
     if file_version_ue4 >= UE4_PRELOAD_DEPENDENCIES_IN_COOKED_EXPORTS:
-        preload_dependency_count = archive.read_i32()
+        preload_count_offset = archive.tell()
+        raw_preload_count = archive.read_i32()
         preload_dependency_offset = archive.read_i32()
         if preload_dependency_offset > 0:
             archive.validate_offset(preload_dependency_offset, "PreloadDependencyOffset")
+        if raw_preload_count >= 0:
+            try:
+                preload_dependency_count, total_decompressed = read_validated_count_strict(
+                    raw_preload_count,
+                    MAX_TOTAL_OBJECT_COUNT,
+                    "preload_dependencies",
+                    4,
+                    total_decompressed=total_decompressed,
+                )
+            except ParseError as exc:
+                # A hostile count must not sink the header; -1 is this function's
+                # own "absent" sentinel, which read_preload_dependencies treats as [].
+                archive._record_structured_diagnostic(
+                    code="PRELOAD_DEPENDENCIES_UNUSABLE",
+                    stage="read_package_summary",
+                    offset=preload_count_offset,
+                    raw_value=raw_preload_count,
+                    fallback="set_to_minus_one",
+                    reason="recovered_corruption",
+                    message=str(exc),
+                )
+                preload_dependency_count = -1
+        else:
+            # A negative PreloadDependencyCount is UE's absent state (the field
+            # defaults to -1), not corruption: keep the value, emit nothing.
+            preload_dependency_count = raw_preload_count
 
     names_referenced_from_export_data_count = 0
     if file_version_ue5 >= UE5_NAMES_REFERENCED_FROM_EXPORT_DATA:
@@ -506,6 +538,7 @@ def _read_late_versioned_fields(
         names_referenced_from_export_data_count,
         payload_toc_offset,
         data_resource_offset,
+        total_decompressed,
     )
 
 
@@ -617,6 +650,10 @@ def read_package_summary(
             archive.validate_offset(metadata_offset, "MetadataOffset")
 
     # Step 13-14: DependsOffset + SoftPackageRefs + SearchableNames + Thumbnail
+    # DependsOffset is deliberately NOT validated here: read_depends_map's own
+    # seek catch turns an out-of-range value into DEPENDS_MAP_TRUNCATED and an
+    # empty table. Raising at summary level would empty the whole document and
+    # make that catch unreachable (controller ruling B, 2026-11-12).
     depends_offset = archive.read_i32()
 
     if file_version_ue4 >= UE4_ADD_STRING_ASSET_REFERENCES_MAP:
@@ -675,7 +712,13 @@ def read_package_summary(
         _,
         _,
         _,
-    ) = _read_late_versioned_fields(archive, file_version_ue4, file_version_ue5)
+        total_decompressed,
+    ) = _read_late_versioned_fields(
+        archive,
+        file_version_ue4,
+        file_version_ue5,
+        total_decompressed=total_decompressed,
+    )
 
     return PackageFileSummary(
         file_version_ue4=file_version_ue4,
@@ -804,13 +847,12 @@ def read_depends_map(
 
     Returns:
         2D list: first dimension is export index, second dimension is dependency PackageIndex list.
-        On the stop path (invalid dependency count) the list ends at the bad entry and may be
-        shorter than ``export_count``.
+        On a stop path (invalid dependency count, unusable seek target, or a read that runs
+        off the end of the file) the list ends at the bad entry and may be shorter than
+        ``export_count``; it is never raised out of this function.
     """
     if summary.depends_offset <= 0 or summary.export_count <= 0:
         return []
-
-    archive.seek(summary.depends_offset)
 
     depends_map: list[list[int]] = []
     skipped_entries = 0
@@ -818,56 +860,78 @@ def read_depends_map(
     truncated_table = False
     stopped_at: int = -1
 
-    for i in range(summary.export_count):
-        # Read dependency list for each export
-        dep_count = archive.read_i32()
-        if dep_count < 0 or dep_count > MAX_SAFE_COUNT:
-            # Without a reliable count the entry's payload size is unknown;
-            # continuing would reinterpret payload bytes as the next count.
-            archive._record_structured_diagnostic(
-                code="DEPENDS_MAP_TRUNCATED",
-                stage="read_depends_map",
-                offset=archive.tell() - 4,
-                raw_value=dep_count,
-                fallback="stop_table",
-                message=f"DependsMap entry {i} has invalid count {dep_count}; stopped dependency table read",
-            )
-            depends_map.append([])
-            skipped_entries += 1
-            truncated_table = True
-            stopped_at = i
-            break
-        if dep_count > 0:
-            total_decompressed = reserve_memory(
-                dep_count * 4, f"DependsMap[{i}]", total_decompressed=total_decompressed
-            )
-        deps = []
-        for j in range(dep_count):
-            pkg_index = archive.read_i32()
-            # Validate PackageIndex range (UE FPackageIndex: >0 export, <0 import):
-            #   0 → null (valid)
-            #   > 0 → export reference (1-based), valid if pkg_index <= export_count
-            #   < 0 → import reference (negated 0-based), valid if |pkg_index| <= import_count
-            if pkg_index > 0 and pkg_index > summary.export_count:
-                invalid_indices += 1
-                logger.debug(
-                    "DependsMap: out-of-range export index %d at export %d dep %d (export_count=%d)",
-                    pkg_index,
-                    i,
-                    j,
-                    summary.export_count,
+    try:
+        archive.seek(summary.depends_offset)
+
+        for i in range(summary.export_count):
+            # Read dependency list for each export
+            dep_count = archive.read_i32()
+            if dep_count < 0 or dep_count > MAX_SAFE_COUNT:
+                # Without a reliable count the entry's payload size is unknown;
+                # continuing would reinterpret payload bytes as the next count.
+                archive._record_structured_diagnostic(
+                    code="DEPENDS_MAP_TRUNCATED",
+                    stage="read_depends_map",
+                    offset=archive.tell() - 4,
+                    raw_value=dep_count,
+                    fallback="stop_table",
+                    message=f"DependsMap entry {i} has invalid count {dep_count}; stopped dependency table read",
                 )
-            elif pkg_index < 0 and abs(pkg_index) > summary.import_count:
-                invalid_indices += 1
-                logger.debug(
-                    "DependsMap: out-of-range import index %d at export %d dep %d (import_count=%d)",
-                    pkg_index,
-                    i,
-                    j,
-                    summary.import_count,
+                depends_map.append([])
+                skipped_entries += 1
+                truncated_table = True
+                stopped_at = i
+                break
+            if dep_count > 0:
+                total_decompressed = reserve_memory(
+                    dep_count * 4, f"DependsMap[{i}]", total_decompressed=total_decompressed
                 )
-            deps.append(pkg_index)
-        depends_map.append(deps)
+            deps = []
+            for j in range(dep_count):
+                pkg_index = archive.read_i32()
+                # Validate PackageIndex range (UE FPackageIndex: >0 export, <0 import):
+                #   0 → null (valid)
+                #   > 0 → export reference (1-based), valid if pkg_index <= export_count
+                #   < 0 → import reference (negated 0-based), valid if |pkg_index| <= import_count
+                if pkg_index > 0 and pkg_index > summary.export_count:
+                    invalid_indices += 1
+                    logger.debug(
+                        "DependsMap: out-of-range export index %d at export %d dep %d (export_count=%d)",
+                        pkg_index,
+                        i,
+                        j,
+                        summary.export_count,
+                    )
+                elif pkg_index < 0 and abs(pkg_index) > summary.import_count:
+                    invalid_indices += 1
+                    logger.debug(
+                        "DependsMap: out-of-range import index %d at export %d dep %d (import_count=%d)",
+                        pkg_index,
+                        i,
+                        j,
+                        summary.import_count,
+                    )
+                deps.append(pkg_index)
+            depends_map.append(deps)
+    except RECOVERY_READ_ERRORS as e:
+        # An unusable seek target, or a read that runs off the end of the file
+        # because DependsOffset points at plausible-but-wrong bytes, must not
+        # sink the document: keep whatever parsed and report the rest as lost
+        # (controller ruling B, 2026-11-12).
+        archive._record_structured_diagnostic(
+            code="DEPENDS_MAP_TRUNCATED",
+            stage="read_depends_map",
+            offset=summary.depends_offset,
+            raw_value=summary.depends_offset,
+            fallback="stop_table",
+            reason="recovered_corruption",
+            message=(
+                f"DependsMap failed at entry {len(depends_map)}/{summary.export_count} "
+                f"({type(e).__name__}: {e}); kept {len(depends_map)} entries"
+            ),
+        )
+        truncated_table = True
+        stopped_at = len(depends_map)
 
     # Surface degradation as warnings
     if warnings is not None:
@@ -896,18 +960,37 @@ def read_preload_dependencies(archive: FArchive, summary: PackageFileSummary) ->
     1D array containing all preload dependency PackageIndex values.
 
     Returns:
-        List of PackageIndex
+        List of PackageIndex, or [] when the declared table cannot be read
+        (PRELOAD_DEPENDENCIES_UNUSABLE) — a hostile count must not sink the
+        document that already parsed.
     """
     if summary.preload_dependency_offset <= 0 or summary.preload_dependency_count <= 0:
         return []
 
-    archive.seek(summary.preload_dependency_offset)
+    try:
+        archive.seek(summary.preload_dependency_offset)
 
-    if not archive.check_remaining(summary.preload_dependency_count * 4):
-        raise ParseError(f"PreloadDependencies count {summary.preload_dependency_count} exceeds remaining file bytes")
+        if not archive.check_remaining(summary.preload_dependency_count * 4):
+            raise ParseError(
+                f"PreloadDependencies count {summary.preload_dependency_count} exceeds remaining file bytes"
+            )
 
-    dependencies: list[int] = []
-    for _ in range(summary.preload_dependency_count):
-        dependencies.append(archive.read_i32())
+        dependencies: list[int] = []
+        for _ in range(summary.preload_dependency_count):
+            dependencies.append(archive.read_i32())
+    except RECOVERY_READ_ERRORS as e:
+        archive._record_structured_diagnostic(
+            code="PRELOAD_DEPENDENCIES_UNUSABLE",
+            stage="read_preload_dependencies",
+            offset=summary.preload_dependency_offset,
+            raw_value=summary.preload_dependency_count,
+            fallback="set_to_empty",
+            reason="recovered_corruption",
+            message=(
+                f"PreloadDependencies unreadable ({type(e).__name__}: {e}); "
+                f"count={summary.preload_dependency_count} offset={summary.preload_dependency_offset}"
+            ),
+        )
+        return []
 
     return dependencies
