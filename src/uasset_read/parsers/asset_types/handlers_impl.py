@@ -1108,6 +1108,11 @@ class BlueprintFamilyHandler:
                 return "summary"
             if isinstance(truncated, dict) and (truncated.get("nodes") or truncated.get("pins")):
                 return "summary"
+            # A graph that failed to decode carries parse_errors (never
+            # truncated) yet decoded nothing; keying on parse_errors keeps a
+            # legitimately empty graph at decoded tier.
+            if isinstance(graph, dict) and graph.get("parse_errors"):
+                return "summary"
         return "decoded"
 
 

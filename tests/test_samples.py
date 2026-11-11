@@ -4548,6 +4548,18 @@ def test_blueprint_graph_decodes_and_definitions_stay_honest():
     assert definitions["Opaque"].unresolved is True
 
 
+def test_blueprint_capability_downgrades_on_failed_graphs():
+    from uasset_read.parsers.asset_types.handlers_impl import BlueprintFamilyHandler
+
+    handler = BlueprintFamilyHandler(("Blueprint", "BlueprintGeneratedClass"), "blueprint", "blueprint")
+    failed = {"graphs": [{"nodes": [], "node_count": 0, "truncated": {"nodes": False, "pins": False},
+                          "parse_errors": ["offset validation failed"]}], "truncated_graphs": False}
+    assert handler.capability(failed) == "summary"
+    empty_ok = {"graphs": [{"nodes": [], "node_count": 0, "truncated": {"nodes": False, "pins": False},
+                            "parse_errors": []}], "truncated_graphs": False}
+    assert handler.capability(empty_ok) == "decoded"          # a genuinely empty graph must not be downgraded
+
+
 def test_als_graph_owners_resolve_beyond_eight_hops():
     """Task 7: ALS's 74 nine-hop outer chains must attach, not go unresolved.
 
