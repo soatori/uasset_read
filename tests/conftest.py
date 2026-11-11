@@ -29,6 +29,7 @@ Budget 170 -> 171 on 2026-10-27 (audit P0 fix 10, utoc directory-graph guards): 
 Budget 171 -> 172 on 2026-10-28 (audit cleanup Task 3, payload descriptor kind evidence): 172 is the measured final value, not headroom.
 Budget 172 -> 173 on 2026-11-06 (untrusted-read Task 2, BulkData tail heuristic deleted): 173 is the measured final value, not headroom.
 Budget 173 -> 174 on 2026-11-12 (untrusted-read Task 3, one bad header field keeps the parsed tables): 174 is the measured final value, not headroom.
+Budget 174 -> 175 on 2026-11-12 (untrusted-read Task 4, property values bounded to PropertyTag size): 175 is the measured final value, not headroom.
 No fixtures live here — the baseline is driven by real samples in
 tests/test_samples.py; temporary probes belong to untracked temp/.
 """
@@ -37,7 +38,7 @@ from __future__ import annotations
 
 import pytest
 
-ITEM_BUDGET = 174
+ITEM_BUDGET = 175
 
 
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:

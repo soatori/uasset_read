@@ -540,13 +540,66 @@ def _read_property_loop(
             # Dispatch to type-specific parser
             # lambda executes immediately inside read_tag_value_bounded, tag is bound at call time
             value_start = archive.tell()
-            value = read_tag_value_bounded(
-                archive,
-                tag,
-                lambda tag=tag: parse_property_value(  # noqa: B023
-                    tag, archive, name_map, export_map, summary, tolerant=tolerant
-                ),
-            )
+            if tag.size == 0 and tag.type != "BoolProperty":
+                # Size=0 declares an empty value region: dispatch would steal the
+                # next tag's bytes. Nothing is consumed, so the stream stays aligned
+                # (BoolProperty's value lives in the tag's bool_val bit instead).
+                archive._record_structured_diagnostic(
+                    code="PROPERTY_SIZE_ZERO",
+                    stage="parse_properties",
+                    offset=value_start,
+                    raw_value=tag.size,
+                    fallback="opaque_value",
+                    reason="recovered_corruption",
+                    message=f"Property '{tag.name}' ({tag.type}) declares Size=0; value left opaque",
+                )
+                value = PropertyFallback.from_tag(tag, FallbackReason.PARSE_ERROR)
+                if tolerant:
+                    # One alignment attempt when the bytes at value_start are not
+                    # a tag: an out-of-range name index there would otherwise be
+                    # mapped to the None terminator and silently drop the rest of
+                    # the stream. Failure restores value_start (conservative stop).
+                    file_size = getattr(archive, "_file_size", None)
+                    peek_limit = min(file_size, property_end) if isinstance(file_size, int) else property_end
+                    name_index: int | None = None
+                    if value_start + 4 <= peek_limit:
+                        try:
+                            name_index = archive.read_u32()
+                        except (ParseError, _struct.error):
+                            name_index = None
+                        archive.seek(value_start)
+                    if name_index is not None and not (0 <= name_index < len(name_map)):
+                        _try_recover_property_tag(
+                            archive,
+                            name_map,
+                            max_scan=_MAX_RECOVERY_SCAN,
+                            property_end=property_end,
+                        )
+            else:
+                # DataTable pattern (legacy_reader.py:2499): bound the value read
+                # to the tag's declared region so a reader that would silently
+                # consume past Size raises instead (save/restore of prev keeps
+                # nesting inside the export/payload range safe).
+                value_range_end = (
+                    tag.value_end_offset if tag.value_end_offset is not None else value_start + tag.size
+                )
+                prev_range = archive.set_read_range((value_start, value_range_end))
+                try:
+                    value = read_tag_value_bounded(
+                        archive,
+                        tag,
+                        lambda tag=tag: parse_property_value(  # noqa: B023
+                            tag, archive, name_map, export_map, summary, tolerant=tolerant
+                        ),
+                    )
+                except (ParseError, _struct.error):
+                    if not tolerant:
+                        raise
+                    # read_tag_value_bounded's finally already rewound the cursor
+                    # to value_end_offset, so the next tag stays aligned.
+                    value = PropertyFallback.from_tag(tag, FallbackReason.PARSE_ERROR)
+                finally:
+                    archive.set_read_range(prev_range)
             value_end = archive.tell()
 
             # If parsing returns None (old path or handler explicitly returns None), convert to PropertyFallback

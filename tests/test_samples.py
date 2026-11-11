@@ -5911,3 +5911,113 @@ def test_bulk_data_tail_heuristic_is_gone(tmp_path):
     )
     assert d.kind == "other"
     assert (d.source_region, d.offset, d.stored_size) == ("uexp", 0, 22304)
+
+
+def test_property_value_cannot_read_past_its_tag_size():
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.exceptions import ParseError
+    from uasset_read.models.fallback import PropertyFallback
+    from uasset_read.parsers.properties.tagged import TaggedPropertyReader
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+    from uasset_read.serializers.package_summary import PackageFileSummary
+    from uasset_read.versioning import build_version_context
+
+    def _tagged_int_tag(name, size):
+        # Legacy PropertyTag (UE5 < 1012): FName name, FName type, int32 size,
+        # int32 array_index, u8 has_property_guid (format authority:
+        # serializers/property_tags.py _read_property_tag_legacy).
+        name_index = {"Count": 0, "Next": 1, "IntProperty": 2, "None": 3}[name]
+        return (
+            struct.pack("<II", name_index, 0)
+            + struct.pack("<II", 2, 0)
+            + struct.pack("<ii", size, 0)
+            + b"\x00"
+        )
+
+    names = ["Count", "Next", "IntProperty", "None"]
+    # Count declares Size=0 but 12345 sits in the stream after its tag; a reader
+    # that trusts the value dispatch steals it. The None tag terminates the stream.
+    stream = (
+        _tagged_int_tag("Count", size=0)
+        + struct.pack("<i", 12345)
+        + _tagged_int_tag("Next", size=4)
+        + struct.pack("<i", 7)
+        + struct.pack("<II", 3, 0)
+    )
+
+    archive = ByteArchive(stream, tolerant=True)
+    summary = PackageFileSummary(file_version_ue4=522, file_version_ue5=0, package_flags=0)
+    archive.version_context = build_version_context(summary)
+    export = ObjectExport(
+        class_index=PackageIndex(-1),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="T",
+        object_flags=0,
+        serial_size=len(stream),
+        serial_offset=0,
+    )
+    props = TaggedPropertyReader().read_export(
+        export=export,
+        archive=archive,
+        summary=summary,
+        name_map=names,
+        export_map=[],
+        import_map=[],
+    )
+    by_name = {p.name: p for p in props}
+    assert by_name["Count"].value != 12345                      # becomes PropertyFallback, not a stolen int
+    assert by_name["Next"].value == 7                           # the bytes stay with their own property
+    # The new stable code, not just any diagnostic (the stray bytes would
+    # otherwise satisfy this via name_index_out_of_range alone).
+    assert any(d.code == "PROPERTY_SIZE_ZERO" for d in archive.get_structured_diagnostics())
+
+    # Strict mode must still raise instead of silently degrading.
+    strict_archive = ByteArchive(stream, tolerant=False)
+    strict_archive.version_context = build_version_context(summary)
+    with pytest.raises(ParseError):
+        TaggedPropertyReader().read_export(
+            export=export,
+            archive=strict_archive,
+            summary=summary,
+            name_map=names,
+            export_map=[],
+            import_map=[],
+            tolerant=False,
+        )
+
+    # size=4 must not let a GuidProperty assemble a 16-byte GUID from the bytes
+    # that follow its declared value region (audit finding 4, second measurement).
+    guid_names = ["G", "GuidProperty", "None"]
+    guid_stream = (
+        struct.pack("<II", 0, 0)        # name FName "G"
+        + struct.pack("<II", 1, 0)      # type FName "GuidProperty"
+        + struct.pack("<ii", 4, 0)      # int32 size=4, int32 array_index
+        + b"\x00"                       # has_property_guid
+        + bytes(range(16))              # would form a 16-byte GUID if over-read
+        + struct.pack("<II", 2, 0)      # None terminator
+    )
+    guid_archive = ByteArchive(guid_stream, tolerant=True)
+    guid_archive.version_context = build_version_context(summary)
+    guid_export = ObjectExport(
+        class_index=PackageIndex(-1),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="T",
+        object_flags=0,
+        serial_size=len(guid_stream),
+        serial_offset=0,
+    )
+    guid_props = TaggedPropertyReader().read_export(
+        export=guid_export,
+        archive=guid_archive,
+        summary=summary,
+        name_map=guid_names,
+        export_map=[],
+        import_map=[],
+    )
+    guid_value = {p.name: p for p in guid_props}["G"].value
+    assert isinstance(guid_value, PropertyFallback)             # not a GUID built from the following tag
+    assert guid_archive.get_structured_diagnostics()            # the degradation is reported

@@ -2110,13 +2110,50 @@ def parse_struct_property(
                     f"size {inner_tag.size} exceeds struct boundary"
                 )
 
-            field_value = read_tag_value_bounded(
-                archive,
-                inner_tag,
-                lambda inner_tag=inner_tag: parse_property_value(
-                    inner_tag, archive, name_map, export_map, summary, depth + 1, tolerant=tolerant
-                ),
-            )
+            if inner_tag.size == 0 and inner_tag.type != "BoolProperty":
+                # Size=0 declares an empty value region: dispatch would steal the
+                # next field's bytes. Nothing is consumed (BoolProperty's value
+                # lives in the tag's bool_val bit instead).
+                archive._record_structured_diagnostic(
+                    code="PROPERTY_SIZE_ZERO",
+                    stage="parse_properties",
+                    offset=archive.tell(),
+                    raw_value=inner_tag.size,
+                    fallback="opaque_value",
+                    reason="recovered_corruption",
+                    message=f"Property '{inner_tag.name}' ({inner_tag.type}) declares Size=0; value left opaque",
+                )
+                field_value = PropertyFallback.from_tag(inner_tag, FallbackReason.PARSE_ERROR)
+            else:
+                # DataTable pattern (legacy_reader.py:2499): bound the field read
+                # to the tag's declared region; prev save/restore keeps nesting
+                # inside the enclosing value range safe.
+                field_start = archive.tell()
+                field_range_end = (
+                    inner_tag.value_end_offset
+                    if inner_tag.value_end_offset is not None
+                    else field_start + inner_tag.size
+                )
+                prev_range = archive.set_read_range((field_start, field_range_end))
+                try:
+                    field_value = read_tag_value_bounded(
+                        archive,
+                        inner_tag,
+                        lambda inner_tag=inner_tag: parse_property_value(
+                            inner_tag, archive, name_map, export_map, summary, depth + 1, tolerant=tolerant
+                        ),
+                    )
+                except StreamPoisonedError:
+                    # Control-flow signal: keep the outer re-raise semantics.
+                    raise
+                except (ParseError, struct.error):
+                    if not tolerant:
+                        raise
+                    # read_tag_value_bounded's finally already rewound the cursor
+                    # to value_end_offset, so the next field stays aligned.
+                    field_value = PropertyFallback.from_tag(inner_tag, FallbackReason.PARSE_ERROR)
+                finally:
+                    archive.set_read_range(prev_range)
             fields[inner_tag.name] = field_value
     except StreamPoisonedError:
         # Control-flow signal: do not swallow into an opaque StructValue.
