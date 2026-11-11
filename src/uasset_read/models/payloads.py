@@ -3,13 +3,12 @@
 PayloadDescriptor matches the v2 contract schema
 (tests/package_document_v4.schema.json $defs.PayloadDescriptor).
 kind and source_region are schema-enums.  discover_payload_descriptor is the
-payload-discovery engine (serial-region seek + BulkData header scan with a
-bounded fallback); agent_tools is a thin parse→extract→budget wrapper over it.
+payload-discovery engine (serial-region fallback); agent_tools is a thin
+parse→extract→budget wrapper over it.
 """
 
 from __future__ import annotations
 
-import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -20,8 +19,8 @@ class PayloadDescriptor:
     """Descriptor for a large payload that can be extracted on demand.
 
     Fields match $defs.PayloadDescriptor in the v2 contract schema.
-    Emitted by discover_payload_descriptor (BulkData / serial-region
-    fallback); kind and source_region use the schema's enum values.
+    Emitted by discover_payload_descriptor (serial-region fallback);
+    kind and source_region use the schema's enum values.
     """
 
     id: str  # ^payload:(export|import):[0-9]+$
@@ -46,14 +45,13 @@ def discover_payload_descriptor(
     main_path: Path,
     sidecar_paths: dict[str, Path],
 ) -> PayloadDescriptor:
-    """Locate an export's payload: BulkData header scan, then serial-region fallback.
+    """Locate an export's payload by its physical serial slice.
 
-    Parses the package at ``main_path`` (package depth), reads the export's
-    serial region tail from the main file or the .uexp sidecar, and prefers a
-    BulkData header found there.  When no header is found (or the export/serial
-    region is unavailable), returns a descriptor bounded by the export's serial
-    region — never by the whole sidecar.  The emitted ``id`` is the
-    schema-canonical ``payload:export:N`` form.
+    Parses the package at ``main_path`` (package depth) and returns a
+    descriptor bounded by the export's serial region — never by the whole
+    sidecar; a region spanning two files (or an unresolved source) stays
+    size-0 / missing.  The emitted ``id`` is the schema-canonical
+    ``payload:export:N`` form.
 
     Args:
         payload_id: Caller identifier echoed unchanged when export_index is
@@ -68,11 +66,6 @@ def discover_payload_descriptor(
         extract_payload_bytes.
     """
     from ..package import parse_package_document
-    from ..parsers.bulk_data import (
-        BULKDATA_CompressedOodle,
-        BULKDATA_CompressedZlib,
-        extract_bulk_data_descriptors,
-    )
 
     descriptor_id = f"payload:export:{export_index}" if export_index >= 0 else payload_id
     if export_index < 0:
@@ -104,72 +97,7 @@ def discover_payload_descriptor(
             status="missing",
         )
 
-    descriptor: PayloadDescriptor | None = None
     export = doc.objects[export_index]
-    if export.serial_region is not None and export.serial_region.size > 0:
-        # For cooked packages, serial data may be in the uexp sidecar.
-        # serial_region.start is absolute in the combined stream; if
-        # start >= total_header_size, data lives in the uexp sidecar.
-        assert doc.package is not None
-        total_header_size = doc.package.total_header_size
-        serial_offset = export.serial_region.start
-        serial_size = export.serial_region.size
-
-        # extract_bulk_data_descriptors only inspects the final 16 bytes, so
-        # read at most min(serial_size, 16) from the end of the serial region
-        # with the existing main/`.uexp` offset rebasing — never the whole
-        # serial region or sidecar.
-        tail_size = min(serial_size, 16)
-        tail_file_offset = serial_offset + serial_size - tail_size
-        serial_data = b""
-        try:
-            if serial_offset >= total_header_size and total_header_size > 0:
-                uexp_path = sidecar_paths.get("uexp")
-                if uexp_path is not None:
-                    with open(uexp_path, "rb") as f:
-                        f.seek(tail_file_offset - total_header_size)
-                        serial_data = f.read(tail_size)
-            else:
-                with open(main_path, "rb") as f:
-                    f.seek(tail_file_offset)
-                    serial_data = f.read(tail_size)
-
-            if len(serial_data) < tail_size:
-                serial_data = b""  # Short read, skip BulkData extraction
-        except (OSError, ValueError):
-            # Include diagnostic but don't fail — fallback will handle
-            serial_data = b""
-
-        if serial_data:
-            try:
-                header = extract_bulk_data_descriptors(serial_data)
-                if header is not None:
-                    if header.flags & (BULKDATA_CompressedZlib | BULKDATA_CompressedOodle):
-                        source_region = "ubulk"
-                    elif "uexp" in sidecar_paths:
-                        source_region = "uexp"
-                    elif "ubulk" in sidecar_paths:
-                        source_region = "ubulk"
-                    else:
-                        source_region = "main"
-
-                    descriptor = PayloadDescriptor(
-                        id=descriptor_id,
-                        owner=f"export:{export_index}",
-                        kind="bulk_data",
-                        source_region=source_region,  # type: ignore[arg-type]
-                        offset=header.offset,
-                        stored_size=header.size_on_disk,
-                        status="available",
-                        logical_size=header.element_count,
-                        compression=header.compression_type,
-                    )
-            except (ValueError, struct.error):
-                # BulkData parsing failed — fallback will handle
-                pass
-
-    if descriptor is not None:
-        return descriptor
 
     # Fallback: address the export's physical serial slice — the file and
     # offset where the bytes actually are, not a TotalHeaderSize rebase.
@@ -194,7 +122,7 @@ def discover_payload_descriptor(
     return PayloadDescriptor(
         id=descriptor_id,
         owner=f"export:{export_index}",
-        # "bulk_data" requires a parsed BulkData header; unclassified bytes are "other".
+        # Unclassified bytes are "other"; the bulk kind stays unproduced without a UE-evidenced reader.
         kind="other",
         source_region=source_region,  # type: ignore[arg-type]
         offset=fallback_offset,

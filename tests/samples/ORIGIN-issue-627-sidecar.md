@@ -4,7 +4,6 @@
 
 ✅ **IMPLEMENTED**: Basic payload extraction from sidecar files is now working.
 - Sidecar discovery in `PackageBundle` (`.uexp_path`, `.ubulk_path`, `.uptnl_path` properties)
-- `BulkDataHeader` parsing from `parsers/bulk_data.py`
 - `extract_payload` agent tool returns actual bytes from sidecar files
 - Integration test with `T_ParserBulk` fixture verified
 
@@ -66,9 +65,12 @@ on it. Do not treat it as a spec claim until it is traced.
   `TestDataTable` decode their row blocks (`EmptyWeaponA/EmptyWeaponB`, `Test.Tag/Test.Tag.2`)
   from data that exists only in `.uexp`.
 - `.ubulk` is **discovered and mapped**: `extract_payload` reads actual bytes from sidecar files
-  using BulkData header parsing. The `extract_bulk_data_descriptors` function scans export serial
-  regions for BulkData headers and creates `PayloadDescriptor` objects with correct offset/size
-  information. Integration tests verify extraction from `T_ParserBulk.uexp`.
+  addressed by the export's physical serial slice (the serial-region fallback in
+  `models/payloads.py`). BulkData header parsing was deleted as unproven (audit finding 2: its
+  16-byte `<IIII>` layout never matched UE's `FBulkMetaResource`, and it never fired correctly on
+  a real cooked fixture). BulkData descriptors are a manifest gap: no tracked fixture pins a
+  UE-evidenced descriptor layout, so `PayloadDescriptor.kind="bulk_data"` stays schema-legal but
+  unproduced until one exists.
 
 ## Verification / gate
 

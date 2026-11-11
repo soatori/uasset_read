@@ -5824,3 +5824,34 @@ def test_payload_descriptor_kind_requires_bulk_data_evidence():
     assert (d.source_region, d.offset, d.stored_size) == ("main", 453535, 46)
     data, err = extract_payload_bytes(d, main_path=main, sidecar_paths={})
     assert err is None and data == main.read_bytes()[453535:453581]
+
+
+def test_bulk_data_tail_heuristic_is_gone(tmp_path):
+    import shutil, struct
+
+    from uasset_read.models.payloads import discover_payload_descriptor
+
+    # Brief amendment (controller ruling): the plan's verbatim body forged
+    # BP_CombatCharacter's main-file tail, but with sidecar_paths={} the scan
+    # never reads it (serial start == total_header_size) — no RED possible.
+    # T_ParserBulk's real .uexp is the scan's only reachable read path.
+    src_uasset = SAMPLES / "T_ParserBulk.uasset"
+    src_uexp = SAMPLES / "T_ParserBulk.uexp"
+    dst_uasset = tmp_path / src_uasset.name
+    dst_uexp = tmp_path / src_uexp.name
+    shutil.copy(src_uasset, dst_uasset)
+    shutil.copy(src_uexp, dst_uexp)
+
+    # export 0's serial region lives in the .uexp: combined [1487, 23791) -> uexp [0, 22304);
+    # forge its last 16 bytes as a fake 16-byte BulkData tail.
+    data = bytearray(dst_uexp.read_bytes())
+    data[22288:22304] = struct.pack("<IIII", 0, 1, 4096, 0)
+    dst_uexp.write_bytes(data)
+
+    d = discover_payload_descriptor(
+        "payload:export:0", 0,
+        main_path=dst_uasset,
+        sidecar_paths={"uexp": dst_uexp},
+    )
+    assert d.kind == "other"
+    assert (d.source_region, d.offset, d.stored_size) == ("uexp", 0, 22304)
