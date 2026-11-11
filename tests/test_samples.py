@@ -5532,6 +5532,23 @@ def test_tolerant_mode_keeps_partial_function_on_opaque_tail():
         strict.read_expression()
 
 
+def test_out_of_range_script_name_is_not_reported_verified():
+    import struct
+
+    from uasset_read.exceptions import ParseError
+    from uasset_read.kismet.archive import FKismetArchive
+
+    raw = struct.pack("<I", 0xFFFFFFFF) + struct.pack("<I", 0)          # FName index/number pair
+    lenient = FKismetArchive(raw, "t", ["None"], tolerant=True)
+    ref = lenient.xfer_fname()
+    assert ref.base_name is None                                        # today: "Unknown_4278190080"
+    assert any(d.code == "name_index_out_of_range" for d in lenient.get_structured_diagnostics())
+
+    strict = FKismetArchive(raw, "t", ["None"], tolerant=False)
+    with pytest.raises(ParseError):                                     # mirrors FArchive.read_name's strict contract
+        strict.xfer_fname()
+
+
 def test_nested_map_struct_recursion_is_depth_bounded():
     import struct
 

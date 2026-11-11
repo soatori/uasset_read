@@ -262,7 +262,29 @@ class FKismetArchive(FArchive):
 
         # Resolve base name
         assert self._name_map is not None  # always set in __init__
-        base_name = self._name_map[name_index] if 0 <= name_index < len(self._name_map) else f"Unknown_{name_index}"
+        if 0 <= name_index < len(self._name_map):
+            base_name = self._name_map[name_index]
+        else:
+            # Mirror FArchive.read_name's out-of-range contract: record the
+            # stable diagnostic (deduped like #411), then None when tolerant
+            # or ParseError when strict — never a synthesized "Unknown_*"
+            # display name that would read as a verified decode.
+            if name_index not in self._name_warnings_seen and len(self._name_warnings_seen) < 10000:
+                self._name_warnings_seen.add(name_index)
+                self._record_structured_diagnostic(
+                    code="name_index_out_of_range",
+                    stage="read_name",
+                    offset=self.tell() - 8,
+                    raw_value=name_index,
+                    fallback="used_default_name",
+                    message=f"Name index {name_index} out of range [0, {len(self._name_map)}]",
+                    reason="recovered_corruption",
+                )
+            if not self._tolerant:
+                raise ParseError(
+                    f"FName index {name_index} out of range (name_map len={len(self._name_map)}) at pos {self.tell() - 8}"
+                )
+            base_name = None
 
         self.bytecode_index = start_bytecode + 12
 
