@@ -34,6 +34,7 @@ Budget 175 -> 176 on 2026-11-12 (untrusted-read Task 5, oversized PropertyTag si
 Budget 176 -> 177 on 2026-11-12 (untrusted-read Task 6, FString bounds respect the export window): 177 is the measured final value, not headroom.
 Budget 177 -> 178 on 2026-11-12 (untrusted-read Task 7, null pin slot consumes only its flag): 178 is the measured final value, not headroom.
 Budget 178 -> 179 on 2026-11-12 (untrusted-read Task 8, failed graphs never claim decoded): 179 is the measured final value, not headroom.
+Budget 179 -> 180 on 2026-11-12 (untrusted-read Task 9, nonexistent package index stays unresolved): 180 is the measured final value, not headroom.
 No fixtures live here — the baseline is driven by real samples in
 tests/test_samples.py; temporary probes belong to untracked temp/.
 """
@@ -42,7 +43,7 @@ from __future__ import annotations
 
 import pytest
 
-ITEM_BUDGET = 179
+ITEM_BUDGET = 180
 
 
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:

@@ -3595,6 +3595,28 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
     assert truncated_decoded.parse_errors == ["pin link target export:9/export:9/pin-c (0 candidate(s))"]
 
 
+def test_call_resolution_refuses_nonexistent_package_index():
+    from uasset_read.package import parse_package_document
+    from uasset_read.parsers.blueprint.correlation import _CallResolver  # resolve_call lives here, not on BlueprintCorrelation
+
+    ue58_document = parse_package_document(str(SAMPLES / "MyProject_UE58_TestBlueprint.uasset"), depth="decode")
+    ue58_owner = next(o for o in ue58_document.objects if o.id == "export:0")
+    resolver = _CallResolver(ue58_document, ue58_owner, [], set(), set())  # same construction as tests/test_samples.py:2622
+    object_id, display, method, confidence, unresolved = resolver.resolve_call("Foo", -99999)
+    assert method == "unresolved" and unresolved is True and confidence < 1.0
+    assert resolver.resolve_call("Whatever", 5)[2:] == ("object_id", 1.0, False)  # the in-range pin at :2619-2624 stays
+    # Step 3 guard: the object_id record branch may not claim a resolved
+    # external reference for an index the import/export tables do not carry.
+    record, key = resolver.external_ref(query="Foo", object_id="import:99998", match_method="object_id")
+    assert record is not None
+    assert (record.status, record.reason, record.local_id) == (
+        "unresolved",
+        "package_index_out_of_range",
+        "import:99998",
+    )
+    assert key == record.qualified_key
+
+
 def test_object_depth_parses_only_requested_export():
     from uasset_read.package import parse_package_document
 

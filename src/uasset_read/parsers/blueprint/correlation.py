@@ -224,7 +224,12 @@ def external_ref_record(
         class_name = dep.class_name if dep is not None else None
         symbol = (dep.object_name if dep is not None else None) or query or object_id
         local_id: str | None = object_id
-        status, reason = "resolved", "exact_package_index"
+        if dep is not None:
+            status, reason = "resolved", "exact_package_index"
+        else:
+            # The bytecode claimed an index no dependency carries: keep the
+            # formatted id as the pointer but refuse the certainty.
+            status, reason = "unresolved", "package_index_out_of_range"
         candidates = [object_id]
         evidence: list[dict[str, Any]] = [{"kind": "stack_node_package_index", "value": -index - 1}]
     else:
@@ -337,14 +342,18 @@ class _CallResolver:
                 object_id = f"export:{stack_node - 1}"
             else:
                 object_id = f"import:{-stack_node - 1}"
-            display = self.export_names.get(object_id) or self.import_names.get(object_id) or name
-            return (
-                object_id,
-                display or name or object_id,
-                "object_id",
-                1.0,
-                False,
-            )
+            if object_id in self.export_names or object_id in self.import_names:
+                display = self.export_names.get(object_id) or self.import_names.get(object_id) or name
+                return (
+                    object_id,
+                    display or name or object_id,
+                    "object_id",
+                    1.0,
+                    False,
+                )
+            # Out-of-range index: the tables carry no such object, so the
+            # formatted id is a claim, not a fact — fall through to the name
+            # branch instead of reporting certainty the package cannot back.
         if name:
             candidates = sorted(
                 set(self.function_ids_by_name.get(name, []))
