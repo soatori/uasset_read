@@ -287,9 +287,7 @@ def _read_node_pins(
         b_null_ptr = archive.read_i32()
 
         if b_null_ptr != 0:
-            archive.read_i32()  # owning_node (unused)
-            archive.read_bytes(16)  # pin_guid (unused)
-            continue
+            continue  # null slot: flag only, no owning_node/pin_guid (EdGraphPin.cpp:2136-2142)
 
         header_owning = archive.read_i32()
         header_guid_bytes = archive.read_bytes(16)

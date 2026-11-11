@@ -5922,6 +5922,66 @@ def test_node_pins_do_not_read_past_export_end():
     assert partial_archive._read_range is None
 
 
+def test_null_pin_slot_consumes_only_its_flag():
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.serializers.graph_node import read_ue_graph_node
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+    from uasset_read.serializers.package_summary import CustomVersion, PackageFileSummary
+    from uasset_read.versioning import UE5_MAIN_STREAM_GUID, UE5_RELEASE_STREAM_GUID, build_version_context
+
+    def i32(value):
+        return struct.pack("<i", value)
+
+    # Band under test (UE5.2-5.3): same summary/pin payload as the _read_node_pins
+    # band tests above, so the real pin entry decodes with the 65-byte pin-type side.
+    summary = PackageFileSummary(
+        file_version_ue4=522,
+        file_version_ue5=1009,
+        custom_versions=[
+            CustomVersion(guid=UE5_RELEASE_STREAM_GUID, version=35),
+            CustomVersion(guid=UE5_MAIN_STREAM_GUID, version=118),
+        ],
+    )
+    names = ["None", "RealPin"]
+    pin_guid = bytes(range(16))
+    real_pin_bytes = (
+        i32(0) + i32(1) + pin_guid
+        + i32(1) + pin_guid + struct.pack("<II", 1, 0)
+        + i32(0) + b"\xff" + i32(0)
+        + i32(0) + i32(0) + b"\x01"
+        + b"\x00" * 65
+        + i32(0) + i32(0) + i32(0)
+        + i32(0) + b"\xff" + i32(0)
+        + i32(0) + i32(0)
+        + i32(1) + i32(1)
+        + b"\x00" * 16 + i32(0)
+    )
+    # NAME_None tag + 4-byte end marker + pins_count = 2 (pre-1010 tag-scan locate).
+    node_header = struct.pack("<II", 0, 0) + i32(0) + i32(2)
+    null_slot = i32(1)                                    # bNullPtr = true, nothing after (EdGraphPin.cpp:2136)
+    tail = b"\x00" * 4
+    payload = node_header + null_slot + real_pin_bytes + tail
+    node_export = ObjectExport(
+        class_index=PackageIndex(-1),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="K2Node_Synthetic",
+        object_flags=0,
+        serial_size=len(payload),
+        serial_offset=0,
+    )
+    archive = ByteArchive(payload)
+    archive.version_context = build_version_context(summary)
+    node = read_ue_graph_node(archive, names, summary, [node_export], [], node_export)
+    assert [p.pin_name for p in node.pins] == ["RealPin"]              # today: [] with no diagnostic
+    assert archive.get_structured_diagnostics() == []
+    # Byte-exact cursor: the null slot consumed its 4-byte flag only, the real
+    # pin was read from its own start, and the tail was never touched.
+    assert archive.tell() == len(node_header) + 4 + len(real_pin_bytes), archive.tell()
+
+
 def test_payload_descriptor_kind_requires_bulk_data_evidence():
     from uasset_read.models.payloads import discover_payload_descriptor, extract_payload_bytes
     from uasset_read.package import parse_package_document
