@@ -87,7 +87,7 @@ print(project_document(doc))  # PackageDocument JSON dict
 ### File Format Support
 
 - **Dedicated asset type parsers** — 21 semantic handler instances in `handlers_impl.py` (registered by UE class name / family) plus tagged-property fallback for the rest of the export map.
-- **Payload extraction** — cooked payload extraction from sidecar files (.uexp/.ubulk) with sidecar discovery and BulkData header mapping
+- **Payload extraction** — cooked payload extraction from sidecar files (.uexp) with sidecar discovery
 - **Game version support** — Game-specific serialization constants
 - **Binary/native handlers** — binary or native property serialization support
 
@@ -262,7 +262,7 @@ When Unreal Editor 5.8 is released, use the official Experimental Unreal MCP ser
 
 - **Only unbaked/editor-saved assets**: Cooked assets have stripped graph data
 - **Limited bytecode coverage**: Kismet EExprToken → expressions for known token types; C++ pseudocode generation retired 2026-09-10
-- **Limited binary data export**: Large payloads (textures, audio) require sidecar files; `extract_payload` reads from `.uexp/.ubulk` when available
+- **Limited binary data export**: Large payloads (textures, audio) require sidecar files; `extract_payload` reads from `.uexp` when available — `.ubulk` is not yet extractable
 - **Read-only**: Parsing only, no modification
 - **UE source reference required**: No official .uasset format documentation
 
