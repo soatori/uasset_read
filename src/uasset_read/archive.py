@@ -519,7 +519,7 @@ class FArchive:
                 if scan_size > 0 and non_zero / scan_size < 0.05:
                     logger.debug(
                         "FString padding zone detected at pos %d: "
-                        "%d/%d non-zero bytes in next %d bytes, seeking to file end",
+                        "%d/%d non-zero bytes in next %d bytes",
                         current_pos,
                         non_zero,
                         scan_size,
@@ -532,7 +532,7 @@ class FArchive:
                             offset=current_pos,
                             raw_value=non_zero,
                             size=scan_size,
-                            fallback="seek_to_end",
+                            fallback="used_empty_string",
                             message=f"FString padding zone at pos {current_pos}: {non_zero}/{scan_size} non-zero bytes",
                             reason="recovered_corruption",
                         )

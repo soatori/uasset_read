@@ -5752,6 +5752,16 @@ def test_fstring_bounds_respect_the_export_window():
     c.seek(8)
     c.read_fstring()
     assert c.tell() <= 20
+    # no window: the same padding buffer must not jump the cursor to file end
+    d = ByteArchive(all_zero_tail_buf(), tolerant=True)
+    d.set_name_map(["A"])
+    d.seek(8)
+    d.read_fstring()
+    assert d.tell() < 40
+    assert any(
+        diag.code == "fstring_padding_zone_seek" and diag.fallback == "used_empty_string"
+        for diag in d.get_structured_diagnostics()
+    )
 
     # the name table stops at an entry whose failed read leaves the cursor put
     table = (
