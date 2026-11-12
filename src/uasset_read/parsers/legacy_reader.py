@@ -313,6 +313,10 @@ def _build_object_record_direct(
 
     # Serial region — package-virtual ByteRegion with physical source mapping.
     serial_region = None
+    # Data loss before parse: the set_region_unavailable branch below downgrades
+    # the record it diagnoses (the document-level diagnostic list never reaches
+    # _merge_archive_recoveries, so the record must say it itself).
+    parse_status = "complete"
     if export.serial_size > 0:
         from ..models.byte_ranges import ByteRegion, region_from_source
         from ..sources import CompositeSource, FileSource
@@ -341,8 +345,10 @@ def _build_object_record_direct(
                     # Neither source maps this offset+size (e.g. the .uexp is
                     # gone). Re-raising here would discard the summary, names,
                     # imports and exports already parsed, so keep the record
-                    # with no region — the empty-properties path owns that
-                    # state — and report the export instead.
+                    # with no region and report the export instead; the
+                    # data_loss diagnostic is on the document list (not the
+                    # archive's), so the record is marked partial here.
+                    parse_status = "partial"
                     diagnostics.append(
                         Diagnostic(
                             severity="warning",
@@ -389,7 +395,7 @@ def _build_object_record_direct(
         flags=export.object_flags,
         roles=tuple(roles),
         serial_region=serial_region,
-        status=ObjectStatus(parse="complete", semantic="not_requested"),
+        status=ObjectStatus(parse=parse_status, semantic="not_requested"),
     )
 
 

@@ -1868,7 +1868,7 @@ def test_collection_counts_are_bounded_by_payload_size():
     archive.version_context = build_version_context(PackageFileSummary(file_version_ue4=522, file_version_ue5=0))
     tag = PropertyTag(name="Arr", type="ArrayProperty", size=8, inner_type="BogusProperty")
     value = parse_array_property(tag, archive, ["Arr"], [], None)
-    assert len(value) <= 4                                                             # today: 1_000_000 fabricated elements
+    assert len(value) <= 4                                                             # pre-fix: 1_000_000 fabricated elements
     assert any(d.code == "INVALID_COLLECTION_COUNT" for d in archive.get_structured_diagnostics())
 
     # legitimate case: the clamps must not shrink a real fixture's arrays (expected values pasted in Step 2)
@@ -4831,6 +4831,9 @@ def test_truncated_package_tables_keep_parsed_data(tmp_path):
     doc = parse_package_document(str(tmp_path / "T_ParserBulk.uasset"), depth="decode")
     assert len(doc.objects) > 0
     assert any(d.code == DIAGNOSTIC_CODE_INVALID_SERIAL_OFFSET for d in doc.diagnostics)
+    # Export #0 owns that data_loss diagnostic, so its record says partial
+    # (the document-list diagnostic never reaches _merge_archive_recoveries).
+    assert doc.objects[0].status.parse == "partial"
 
     # garbage DependsOffset degrades to an empty depends table, never to a
     # minimal document (controller ruling B). Byte 134 is Lyra_PM_Concrete's
@@ -5586,7 +5589,7 @@ def test_out_of_range_script_name_is_not_reported_verified():
     raw = struct.pack("<I", 0xFFFFFFFF) + struct.pack("<I", 0)          # FName index/number pair
     lenient = FKismetArchive(raw, "t", ["None"], tolerant=True)
     ref = lenient.xfer_fname()
-    assert ref.base_name is None                                        # today: "Unknown_4278190080"
+    assert ref.base_name is None                                        # pre-fix: "Unknown_4294967295"
     assert any(d.code == "name_index_out_of_range" for d in lenient.get_structured_diagnostics())
 
     strict = FKismetArchive(raw, "t", ["None"], tolerant=False)
@@ -6071,7 +6074,7 @@ def test_null_pin_slot_consumes_only_its_flag():
     archive = ByteArchive(payload)
     archive.version_context = build_version_context(summary)
     node = read_ue_graph_node(archive, names, summary, [node_export], [], node_export)
-    assert [p.pin_name for p in node.pins] == ["RealPin"]              # today: [] with no diagnostic
+    assert [p.pin_name for p in node.pins] == ["RealPin"]              # pre-fix: [] with no diagnostic
     assert archive.get_structured_diagnostics() == []
     # Byte-exact cursor: the null slot consumed its 4-byte flag only, the real
     # pin was read from its own start, and the tail was never touched.
@@ -6339,8 +6342,9 @@ def test_failed_property_paths_stay_diagnosed():
             tag += struct.pack("<II", struct_name_index, 0) + bytes(16)
         return tag + b"\x00"
 
-    def _read(stream, names):
-        archive = ByteArchive(stream, tolerant=True)
+    def _read(stream, names, *, diagnostics=None, object_id="", tolerant=True):
+        archive = ByteArchive(stream, tolerant=tolerant)
+        archive._current_object_id = object_id
         summary = PackageFileSummary(file_version_ue4=522, file_version_ue5=0, package_flags=0)
         archive.version_context = build_version_context(summary)
         export = ObjectExport(
@@ -6359,6 +6363,9 @@ def test_failed_property_paths_stay_diagnosed():
             name_map=names,
             export_map=[],
             import_map=[],
+            tolerant=tolerant,
+            diagnostics=diagnostics,
+            object_id=object_id,
         )
         return archive, props
 
@@ -6389,13 +6396,42 @@ def test_failed_property_paths_stay_diagnosed():
 
     # ③ Hitting the property cap keeps what already parsed: with cap=N, N
     # properties are appended (the increment follows the check), then the loop
-    # stops with PROPERTY_COUNT_LIMIT_REACHED instead of raising.
+    # stops on the cap instead of raising. The stop must stay "running": no tag
+    # was read and no recovery scan ran, so the document gets no fabricated
+    # PROPERTY_TAG_READ_FAILED warning (final review C1), and the cap
+    # diagnostic's object_id still downgrades the record to partial.
+    from uasset_read.exceptions import ParseError
+    from uasset_read.models.object_model import ObjectRecord
+    from uasset_read.parsers.legacy_reader import _merge_archive_recoveries
+
     one_property = _legacy_tag(0, 1, 4) + struct.pack("<i", 7)
-    archive, props = _read(one_property * MAX_PROPERTY_COUNT, ["Count", "IntProperty"])
+    doc_diagnostics: list = []
+    archive, props = _read(
+        one_property * MAX_PROPERTY_COUNT,
+        ["Count", "IntProperty"],
+        diagnostics=doc_diagnostics,
+        object_id="export:0",
+    )
     diagnostics = archive.get_structured_diagnostics()
     assert len(props) == MAX_PROPERTY_COUNT and any(
         d.code == "PROPERTY_COUNT_LIMIT_REACHED" for d in diagnostics
     )
+    assert archive._tag_stream_stop == "running"
+    assert [d.code for d in doc_diagnostics] == []
+
+    record = ObjectRecord(id="export:0", table_index=0, name="T")
+    _merge_archive_recoveries(archive, [record], [])
+    assert record.status.parse == "partial"
+
+    # strict: recovery is a tolerant-only path — the cap raises before any
+    # record is written (final review C2), same exception, no properties kept.
+    with pytest.raises(ParseError, match="Property count exceeds maximum"):
+        _read(
+            one_property * MAX_PROPERTY_COUNT,
+            ["Count", "IntProperty"],
+            object_id="export:0",
+            tolerant=False,
+        )
 
 
 def test_agent_tool_wraps_memory_limit_as_envelope(monkeypatch):

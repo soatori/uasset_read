@@ -414,10 +414,16 @@ def _read_property_loop(
 
     while True:
         # D-08/D-09: Property loop limit check. The already-parsed properties
-        # are kept: record the cap, stop the stream as failed (the only stop
-        # value read_export branches on), and break instead of raising the bag
-        # away with the 10,001st tag (audit finding 10).
+        # are kept: record the cap and break instead of raising the bag away
+        # with the 10,001st tag (audit finding 10). Recovery is a tolerant-only
+        # path: strict raises here before anything is recorded. The stream stop
+        # stays "running" — no tag was read and no recovery scan ran, so
+        # read_export must not append its PROPERTY_TAG_READ_FAILED warning
+        # (final review C1); the object still ends partial because the cap
+        # diagnostic carries object_id into _merge_archive_recoveries.
         if property_count >= MAX_PROPERTY_COUNT:
+            if not tolerant:
+                raise ParseError(f"Property count exceeds maximum ({MAX_PROPERTY_COUNT})")
             archive._record_structured_diagnostic(
                 code="PROPERTY_COUNT_LIMIT_REACHED",
                 stage="parse_properties",
@@ -427,7 +433,6 @@ def _read_property_loop(
                 reason="recovered_corruption",
                 message=f"Property count reached the {MAX_PROPERTY_COUNT} limit; remaining tags unread",
             )
-            archive._tag_stream_stop = "tag_failed"
             archive._tag_stream_stop_offset = archive.tell()
             break
         property_count += 1

@@ -83,7 +83,7 @@ def discover_payload_descriptor(
 
     try:
         doc = parse_package_document(str(main_path), depth="package")
-    except BINARY_READ_ERRORS + (ParseError, VersionError):
+    except BINARY_READ_ERRORS + (ParseError, VersionError, MemoryError):
         doc = None
 
     if doc is None or export_index >= len(doc.objects):

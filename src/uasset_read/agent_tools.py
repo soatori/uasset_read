@@ -119,8 +119,8 @@ def extract_payload(
 ) -> dict[str, Any]:
     """Tool: extract_payload — extract payload bytes from a cooked package.
 
-    Parses the package, delegates payload discovery (sidecar map, serial
-    region, BulkData headers) to models.payloads, and enforces the response
+    Parses the package, delegates payload discovery (sidecar map, export
+    serial-slice fallback) to models.payloads, and enforces the response
     byte budget.
 
     Args:
@@ -190,8 +190,8 @@ def extract_payload(
     parsed = _parse_payload_id(payload_id)
     if parsed is not None and parsed[0] == "import":
         return _unavailable(
-            "Payload extraction is deferred: real payloads require per-export "
-            "BulkData mapping from cooked fixtures (issue #627)"
+            "Payload extraction is deferred: import payloads have no export "
+            "serial slice to address (issue #627)"
         )
 
     if export_index is None:
@@ -199,11 +199,11 @@ def extract_payload(
 
     if export_index is None:
         return _unavailable(
-            "Payload extraction is deferred: real payloads require per-export "
-            "BulkData mapping from cooked fixtures (issue #627)"
+            "Payload extraction is deferred: the payload id does not resolve "
+            "to an export serial slice (issue #627)"
         )
 
-    # Discovery: BulkData header scan with serial-region fallback.
+    # Discovery: export serial-slice fallback (no BulkData header scan).
     descriptor = discover_payload_descriptor(
         payload_id,
         export_index,
