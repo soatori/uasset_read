@@ -955,20 +955,30 @@ def _estimate_unversioned_variable_size(prop_type: Any, archive: FArchive, remai
             inner_size = _fixed_unversioned_size(inner)
             if inner_size <= 0:
                 return 0
+            if remaining < 8:
+                return 0
+            # Sets serialize NumElementsToRemove before the element count
+            # (the same [remove][count] layout parse_set_property reads).
+            archive.read_i32()
             count = archive.read_i32()
             if count < 0 or count > MAX_PROPERTY_COUNT:
                 return 0
-            return min(remaining, 4 + count * inner_size)
+            return min(remaining, 8 + count * inner_size)
         if type_name == "MapProperty":
             key = getattr(prop_type, "inner_type", None)
             value = getattr(prop_type, "value_type", None)
             entry_size = _fixed_unversioned_size(key) + _fixed_unversioned_size(value)
             if entry_size <= 0:
                 return 0
+            if remaining < 8:
+                return 0
+            # Maps serialize NumKeysToRemove before the entry count (same
+            # [remove][count] layout parse_map_property reads).
+            archive.read_i32()
             count = archive.read_i32()
             if count < 0 or count > MAX_PROPERTY_COUNT:
                 return 0
-            return min(remaining, 4 + count * entry_size)
+            return min(remaining, 8 + count * entry_size)
         if type_name == "OptionalProperty":
             inner = getattr(prop_type, "inner_type", None)
             inner_size = _fixed_unversioned_size(inner)
@@ -1540,7 +1550,26 @@ def parse_array_property(
         )
         return []
 
+    count_offset = archive.tell()
     count = read_validated_count_tolerant(archive, MAX_ARRAY_COUNT, "array count")
+    if tag.size > 0:
+        # Bound the count by the declared payload, not only by MAX_ARRAY_COUNT
+        # (the count i32 is already consumed). min_element_bytes >= 1: any
+        # element costs at least one byte, so this never shrinks a real array.
+        usable = max(0, tag.size - 4)
+        min_element_bytes = 1
+        limit = usable // min_element_bytes
+        if count > limit:
+            archive._record_structured_diagnostic(
+                code="INVALID_COLLECTION_COUNT",
+                stage="parse_properties",
+                offset=count_offset,
+                raw_value=count,
+                fallback="clamp_to_payload",
+                reason="recovered_corruption",
+                message=f"array count exceeds declared payload ({usable} bytes usable); clamped to {limit}",
+            )
+            count = limit
     elements: list[Any] = []
     from uasset_read.serializers.property_tags import read_property_tag
 
@@ -1614,10 +1643,24 @@ def parse_array_property(
             # For StructProperty array elements, pass struct_type so parse_struct_property can hit fast-path
             if inner_type == "StructProperty":
                 inner_tag.struct_type = inner_type_struct
+        element_start = archive.tell()
         inner_value = parse_property_value(
             inner_tag, archive, name_map, export_map, summary, depth + 1, tolerant=tolerant
         )
         elements.append(inner_value)
+        if archive.tell() == element_start:
+            # Zero-stride elements (e.g. hostile 0-size structs) never consume
+            # bytes; no size arithmetic can bound them, so stop after one.
+            archive._record_structured_diagnostic(
+                code="INVALID_COLLECTION_COUNT",
+                stage="parse_properties",
+                offset=element_start,
+                raw_value=count,
+                fallback="clamp_to_payload",
+                reason="recovered_corruption",
+                message=f"array element {i} did not advance the reader; remaining elements skipped",
+            )
+            break
 
     return elements
 
@@ -2231,6 +2274,7 @@ def parse_map_property(
       - int32 numEntries (number of actual entries)
       - loop reading key-value pairs
     """
+    entry_tell = archive.tell()  # value start; reconstructs value_end when the tag carries none (tagged.py:662)
     key_type = getattr(tag, "key_type", None)
     value_type = getattr(tag, "value_type", None)
     # Legacy format stores key type in inner_type, not key_type
@@ -2247,11 +2291,30 @@ def parse_map_property(
             key_type, archive, name_map, export_map, summary, tag=tag, depth=depth, tolerant=tolerant
         )
 
-    # Read number of actual entries
+    # Read number of actual entries; measure the remaining payload after the
+    # keys-to-remove loop (not a constant 8), bounding numEntries to it.
+    count_offset = archive.tell()
     num_entries = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "MapProperty entry count")
+    if tag.size > 0:
+        value_end = tag.value_end_offset if tag.value_end_offset is not None else entry_tell + tag.size
+        usable = max(0, value_end - count_offset)
+        min_element_bytes = 1
+        limit = usable // min_element_bytes
+        if num_entries > limit:
+            archive._record_structured_diagnostic(
+                code="INVALID_COLLECTION_COUNT",
+                stage="parse_properties",
+                offset=count_offset,
+                raw_value=num_entries,
+                fallback="clamp_to_payload",
+                reason="recovered_corruption",
+                message=f"MapProperty entry count exceeds declared payload ({usable} bytes usable); clamped to {limit}",
+            )
+            num_entries = limit
     entries: list[dict[str, Any]] = []
 
-    for _ in range(num_entries):
+    for entry_index in range(num_entries):
+        entry_start = archive.tell()
         key = _dispatch_key_parse(
             key_type, archive, name_map, export_map, summary, tag=tag, depth=depth, tolerant=tolerant
         )
@@ -2259,6 +2322,17 @@ def parse_map_property(
             value_type, archive, name_map, export_map, summary, tag=tag, depth=depth, tolerant=tolerant
         )
         entries.append({"key": key, "value": value})
+        if archive.tell() == entry_start:
+            archive._record_structured_diagnostic(
+                code="INVALID_COLLECTION_COUNT",
+                stage="parse_properties",
+                offset=entry_start,
+                raw_value=num_entries,
+                fallback="clamp_to_payload",
+                reason="recovered_corruption",
+                message=f"map entry {entry_index} did not advance the reader; remaining entries skipped",
+            )
+            break
 
     return MapValue(key_type=key_type, value_type=value_type, entries=entries)
 
@@ -2295,20 +2369,50 @@ def parse_set_property(
             dummy_tag, archive, name_map, export_map, summary, depth=depth + 1, tolerant=tolerant
         )
 
-    # Read number of actual elements
+    # Read number of actual elements, bounded by the declared payload as well
+    # as by MAX_PROPERTY_COUNT (count i32 already consumed).
+    count_offset = archive.tell()
     num_elements = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "SetProperty element count")
+    if tag.size > 0:
+        usable = max(0, tag.size - 4)
+        min_element_bytes = 1
+        limit = usable // min_element_bytes
+        if num_elements > limit:
+            archive._record_structured_diagnostic(
+                code="INVALID_COLLECTION_COUNT",
+                stage="parse_properties",
+                offset=count_offset,
+                raw_value=num_elements,
+                fallback="clamp_to_payload",
+                reason="recovered_corruption",
+                message=f"SetProperty element count exceeds declared payload ({usable} bytes usable); clamped to {limit}",
+            )
+            num_elements = limit
     elements: list[Any] = []
 
-    for _ in range(num_elements):
+    for element_index in range(num_elements):
         if element_type == "BoolProperty":
             # PropertyBool.cpp: set elements are inline 1-byte values, not tag BoolTrue.
             elements.append(archive.read_u8() != 0)
             continue
+        element_start = archive.tell()
         dummy_tag = PropertyTag(name="Element", type=element_type, size=0)
         element = parse_property_value(
             dummy_tag, archive, name_map, export_map, summary, depth=depth + 1, tolerant=tolerant
         )
         elements.append(element)
+        if archive.tell() == element_start:
+            # Zero-stride elements never consume bytes; stop after one.
+            archive._record_structured_diagnostic(
+                code="INVALID_COLLECTION_COUNT",
+                stage="parse_properties",
+                offset=element_start,
+                raw_value=num_elements,
+                fallback="clamp_to_payload",
+                reason="recovered_corruption",
+                message=f"set element {element_index} did not advance the reader; remaining elements skipped",
+            )
+            break
 
     return SetValue(element_type=element_type, elements=elements)
 

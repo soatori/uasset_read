@@ -1830,6 +1830,51 @@ def test_parser_fallbacks_are_structured_and_silent(caplog, monkeypatch):
     )
 
 
+# Measured 2026-11-12 (Python 3.15, Windows 11) with the helper below: top-level
+# ArrayProperty entries, {"kind": "value"} unwrapped per projection.py:137.
+# B_ControlPointScoring.uasset -> [4, 1, 7, 12, 8, 7, 10, 9, 82, 17, 11, 6, 9, 1, 3].
+# (Controller ruling: the brief's DT_ParserWeapon has zero ArrayProperty entries,
+# so its []==[] baseline pins nothing; B_ControlPointScoring actually carries arrays.)
+REAL_ARRAY_COUNTS = [4, 1, 7, 12, 8, 7, 10, 9, 82, 17, 11, 6, 9, 1, 3]
+
+
+def test_collection_counts_are_bounded_by_payload_size():
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.models.properties import PropertyTag
+    from uasset_read.package import parse_package_document
+    from uasset_read.parsers.property_parser import parse_array_property
+    from uasset_read.serializers.package_summary import PackageFileSummary
+    from uasset_read.versioning import build_version_context
+
+    def _array_element_counts(sample):
+        document = parse_package_document(str(sample), depth="decode")
+        counts = []
+        for obj in document.objects:
+            if not obj.properties:
+                continue
+            for entry in obj.properties.entries:
+                if entry.type_name == "ArrayProperty":
+                    value = entry.value
+                    # Production bag entries wrap values in {"kind": "value", ...}
+                    # dicts (projection.py: _entry_raw_bytes documents the unwrap).
+                    if isinstance(value, dict) and value.get("kind") == "value":
+                        value = value.get("value")
+                    counts.append(len(value))
+        return counts
+
+    archive = ByteArchive(struct.pack("<I", 1_000_000) + b"\x00" * 4, tolerant=True)   # count field, then only 4 bytes left
+    archive.version_context = build_version_context(PackageFileSummary(file_version_ue4=522, file_version_ue5=0))
+    tag = PropertyTag(name="Arr", type="ArrayProperty", size=8, inner_type="BogusProperty")
+    value = parse_array_property(tag, archive, ["Arr"], [], None)
+    assert len(value) <= 4                                                             # today: 1_000_000 fabricated elements
+    assert any(d.code == "INVALID_COLLECTION_COUNT" for d in archive.get_structured_diagnostics())
+
+    # legitimate case: the clamps must not shrink a real fixture's arrays (expected values pasted in Step 2)
+    assert _array_element_counts(SAMPLES / "B_ControlPointScoring.uasset") == REAL_ARRAY_COUNTS
+
+
 def _check_file_source_and_composite_source_reuse_cached_sizes(tmp_path, monkeypatch):
     from pathlib import Path
 
