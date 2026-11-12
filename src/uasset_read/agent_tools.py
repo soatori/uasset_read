@@ -71,7 +71,7 @@ def _parse_or_error(
 
     Returns ``(doc, None)`` on success, ``(None, envelope)`` on
     ``FileNotFoundError`` (PACKAGE_NOT_FOUND) or
-    ``BINARY_READ_ERRORS + (ParseError, VersionError)`` (PACKAGE_PARSE_FAILED).
+    ``BINARY_READ_ERRORS + (ParseError, VersionError, MemoryError)`` (PACKAGE_PARSE_FAILED).
     Every parse-backed Agent tool funnels through here so callers receive the
     same structured error shape instead of a leaked parser exception.
     """
@@ -84,7 +84,7 @@ def _parse_or_error(
             recoverable=False,
             message=f"Package not found: {file_path}",
         )
-    except BINARY_READ_ERRORS + (ParseError, VersionError) as exc:
+    except BINARY_READ_ERRORS + (ParseError, VersionError, MemoryError) as exc:
         return None, _err(
             "PACKAGE_PARSE_FAILED",
             stage,

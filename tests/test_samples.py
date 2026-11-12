@@ -6396,3 +6396,29 @@ def test_failed_property_paths_stay_diagnosed():
     assert len(props) == MAX_PROPERTY_COUNT and any(
         d.code == "PROPERTY_COUNT_LIMIT_REACHED" for d in diagnostics
     )
+
+
+def test_agent_tool_wraps_memory_limit_as_envelope(monkeypatch):
+    """Audit finding 17: the agent boundary wraps memory-limit failures too.
+
+    ``MemoryLimitExceeded`` subclasses ``MemoryError``, which the parse-failure
+    catch tuple did not cover, so it escaped ``inspect_package`` as a raw
+    exception instead of the structured envelope. Every other exception
+    (e.g. a bad mappings argument's ``TypeError``) must still propagate.
+    """
+    from uasset_read import agent_tools
+    from uasset_read.memory_safety import MemoryLimitExceeded
+
+    def over_limit(*args, **kwargs):
+        raise MemoryLimitExceeded("Memory limit exceeded at properties.tagged: 300.0MB > 256.0MB")
+
+    monkeypatch.setattr(agent_tools, "parse_package_document", over_limit)
+    result = agent_tools.inspect_package("whatever.uasset")
+    assert result["code"] == "PACKAGE_PARSE_FAILED" and result["recoverable"] is True
+
+    def bad_mappings(*args, **kwargs):
+        raise TypeError("mappings_path must be a path")
+
+    monkeypatch.setattr(agent_tools, "parse_package_document", bad_mappings)
+    with pytest.raises(TypeError, match="mappings_path must be a path"):
+        agent_tools.inspect_package("whatever.uasset")
