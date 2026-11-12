@@ -6261,3 +6261,93 @@ def test_oversized_property_size_keeps_earlier_properties():
     )
     assert any(p.name == "First" and p.value == 42 for p in props)          # the parsed property survives
     assert any(p.name == "Oversized" for p in props)                        # reported as a fallback, not dropped
+
+
+def test_failed_property_paths_stay_diagnosed():
+    """Audit finding 10: property-layer failures stay diagnosed, never "clean".
+
+    Block ① pins the generic opaque-struct return (STRUCT_PARSE_FAILED; the
+    Transform-only branch used to leave zero diagnostics), block ② the corrupt
+    name index that reads as the literal None terminator (stop != "none"),
+    block ③ the property-count cap (PROPERTY_COUNT_LIMIT_REACHED keeps the
+    already-parsed properties instead of raising the bag away).
+    """
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.constants import MAX_PROPERTY_COUNT
+    from uasset_read.parsers.properties.tagged import TaggedPropertyReader
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+    from uasset_read.serializers.package_summary import PackageFileSummary
+    from uasset_read.versioning import build_version_context
+
+    def _legacy_tag(name_index, type_index, size, *, struct_name_index=None):
+        # Legacy PropertyTag (UE5 < 1012), same shape as the Task 4/5 helpers:
+        # FName name, FName type, int32 size, int32 array_index, type-specific
+        # fields (StructProperty: StructName + StructGuid), u8 has_property_guid.
+        tag = (
+            struct.pack("<II", name_index, 0)
+            + struct.pack("<II", type_index, 0)
+            + struct.pack("<ii", size, 0)
+        )
+        if struct_name_index is not None:
+            tag += struct.pack("<II", struct_name_index, 0) + bytes(16)
+        return tag + b"\x00"
+
+    def _read(stream, names):
+        archive = ByteArchive(stream, tolerant=True)
+        summary = PackageFileSummary(file_version_ue4=522, file_version_ue5=0, package_flags=0)
+        archive.version_context = build_version_context(summary)
+        export = ObjectExport(
+            class_index=PackageIndex(-1),
+            super_index=PackageIndex(0),
+            outer_index=PackageIndex(0),
+            object_name="T",
+            object_flags=0,
+            serial_size=len(stream),
+            serial_offset=0,
+        )
+        props = TaggedPropertyReader().read_export(
+            export=export,
+            archive=archive,
+            summary=summary,
+            name_map=names,
+            export_map=[],
+            import_map=[],
+        )
+        return archive, props
+
+    # ① StructProperty struct_type="Foo", size=50: the inner tag's value_end
+    # (74+30) crosses the declared struct boundary, the tagged attempt fails and
+    # the opaque return must say so with STRUCT_PARSE_FAILED.
+    names = ["S", "StructProperty", "Foo", "X", "IntProperty", "None"]
+    struct_stream = (
+        _legacy_tag(0, 1, 50, struct_name_index=2)     # outer tag; value region = 50 bytes
+        + _legacy_tag(3, 4, 30)                        # inner tag: value_end 104 > struct_end 99
+        + b"\x00" * 25                                 # pad the declared value region
+        + struct.pack("<II", 5, 0)                     # None terminator
+    )
+    archive, props = _read(struct_stream, names)
+    fields = props[0].value.fields
+    assert fields == {} and any(d.code == "STRUCT_PARSE_FAILED" for d in archive.get_structured_diagnostics())
+
+    # ② A corrupt name index at terminator position reads as the literal "None"
+    # (read_name's fallback), so the list must not end with a clean stop.
+    corrupt_stream = (
+        _legacy_tag(0, 1, 4) + struct.pack("<i", 42)   # Count = 42
+        + struct.pack("<II", 99, 0)                    # out-of-range name index -> "None"
+    )
+    archive, _ = _read(corrupt_stream, ["Count", "IntProperty"])
+    stop = archive._tag_stream_stop
+    diagnostics = archive.get_structured_diagnostics()
+    assert stop != "none" and len([d for d in diagnostics if d.code == "name_index_out_of_range"]) >= 1
+
+    # ③ Hitting the property cap keeps what already parsed: with cap=N, N
+    # properties are appended (the increment follows the check), then the loop
+    # stops with PROPERTY_COUNT_LIMIT_REACHED instead of raising.
+    one_property = _legacy_tag(0, 1, 4) + struct.pack("<i", 7)
+    archive, props = _read(one_property * MAX_PROPERTY_COUNT, ["Count", "IntProperty"])
+    diagnostics = archive.get_structured_diagnostics()
+    assert len(props) == MAX_PROPERTY_COUNT and any(
+        d.code == "PROPERTY_COUNT_LIMIT_REACHED" for d in diagnostics
+    )

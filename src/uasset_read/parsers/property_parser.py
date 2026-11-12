@@ -1895,13 +1895,25 @@ def _try_fast_path_struct(
 
 
 def _record_transform_size_invalid(archive: FArchive, tag, declared_struct_type: str | None, offset: int) -> None:
-    """Emit TRANSFORM_SIZE_INVALID only when a Transform value stayed opaque.
+    """Emit the opaque-struct diagnostic once both parse attempts failed.
 
     The size pre-check alone is not evidence of corruption (#665): tagged
     FTransform payloads legitimately carry sizes such as 162/235. The diagnostic
     fires here, after both the native fast path and the tagged attempt failed.
+    Transform keeps TRANSFORM_SIZE_INVALID; any other struct type records
+    STRUCT_PARSE_FAILED so a generic opaque return is never silent.
     """
     if declared_struct_type != "Transform":
+        archive._record_structured_diagnostic(
+            code="STRUCT_PARSE_FAILED",
+            stage="parse_properties",
+            offset=offset,
+            raw_value=tag.size,
+            size=max(getattr(tag, "size", 0) or 0, 0),
+            fallback="opaque_value",
+            reason="recovered_corruption",
+            message=f"Struct {declared_struct_type or 'UnknownStruct'} failed to parse; value kept opaque",
+        )
         return
     archive._record_structured_diagnostic(
         code="TRANSFORM_SIZE_INVALID",

@@ -283,9 +283,14 @@
           "editor_only": {
             "max": 8
           }
+        },
+        "STRUCT_PARSE_FAILED": {
+          "recovered_corruption": {
+            "max": 2
+          }
         }
       },
-      "max_total_diagnostics": 8
+      "max_total_diagnostics": 10
     }
   },
   "aggregate": {

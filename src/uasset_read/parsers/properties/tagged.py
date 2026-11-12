@@ -413,9 +413,23 @@ def _read_property_loop(
     archive._tag_stream_stop = "running"
 
     while True:
-        # D-08/D-09: Property loop limit check
+        # D-08/D-09: Property loop limit check. The already-parsed properties
+        # are kept: record the cap, stop the stream as failed (the only stop
+        # value read_export branches on), and break instead of raising the bag
+        # away with the 10,001st tag (audit finding 10).
         if property_count >= MAX_PROPERTY_COUNT:
-            raise ParseError(f"Property count exceeds maximum ({MAX_PROPERTY_COUNT})")
+            archive._record_structured_diagnostic(
+                code="PROPERTY_COUNT_LIMIT_REACHED",
+                stage="parse_properties",
+                offset=archive.tell(),
+                raw_value=property_count,
+                fallback="skipped_subsequent_reads",
+                reason="recovered_corruption",
+                message=f"Property count reached the {MAX_PROPERTY_COUNT} limit; remaining tags unread",
+            )
+            archive._tag_stream_stop = "tag_failed"
+            archive._tag_stream_stop_offset = archive.tell()
+            break
         property_count += 1
 
         tag = None
@@ -497,6 +511,47 @@ def _read_property_loop(
 
             # Termination marker: Name == UE_NONE_SENTINEL
             if tag.name == UE_NONE_SENTINEL:
+                if any(d.code == "name_index_out_of_range" for d in archive._diagnostics_since(diag_mark)):
+                    # read_name maps an out-of-range index to the literal "None",
+                    # which is also the terminator: a corrupt name must not end
+                    # the list as a clean stop (audit finding 10). Recover like
+                    # any other failed tag; the stop stays "tag_failed" when the
+                    # scan finds nothing (the dedup on _name_warnings_seen is
+                    # untouched — the per-tag mark is what makes this fire).
+                    archive._tag_stream_stop = "tag_failed"
+                    archive._tag_stream_stop_offset = (
+                        tag.tag_start_offset if tag.tag_start_offset is not None else start_pos
+                    )
+                    recovered = _try_recover_property_tag(
+                        archive,
+                        name_map,
+                        max_scan=_MAX_RECOVERY_SCAN,
+                        property_end=property_end,
+                    )
+                    if recovered:
+                        logger.debug(
+                            "corrupt None terminator (name_index_out_of_range) at offset %s, recovered to %d",
+                            tag.tag_start_offset,
+                            archive.tell(),
+                        )
+                        properties.append(
+                            PropertyValue(
+                                name="Corrupted",
+                                type="Warning",
+                                value=PropertyFallback(
+                                    name="Corrupted",
+                                    type="Unknown",
+                                    size=0,
+                                    reason=FallbackReason.PARSE_ERROR,
+                                ),
+                                tag_start_offset=tag.tag_start_offset,
+                            )
+                        )
+                        if _stream_is_poisoned(archive, diag_mark):
+                            archive._tag_stream_stop = "poison"
+                            break
+                        continue
+                    break
                 archive._tag_stream_stop = "none"
                 break
 
