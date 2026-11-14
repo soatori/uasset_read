@@ -42,6 +42,7 @@ Whether you're auditing blueprint dependencies, building tooling for game develo
 - **Tagged / unversioned properties** — separate sole-entry readers; unversioned is schema-backed / explicit opaque
 - **v4 JSON contract** — `uasset_read.package` envelope with `format_version: "4.0"`, exactly `normal`/`debug` modes, one full document per package (no pagination or byte budget)
 - **Static Blueprint analysis** — graph IR, Kismet instruction IR + CFG, correlation (`entrypoints`/`calls`/`variable_accesses`/`control_flow`) under `objects[].semantic` (dict)
+- **Bytecode↔node boundary** — `instructions[].source_node_id` is always null (`source_node_reason: "debug_mapping_unavailable"`): UE's only node↔code mapping (`FBlueprintDebugData`) is editor-only and never serialized into packages; align the graph and bytecode views by (node id, pin guid)
 - **Type-aware projections** — embedded material editor-builder, table/curve/struct/enum data, asset metadata/payload refs via `project_records`
 - **Agent tools** — `inspect_package`, `extract_payload`
 - **Projection** — `project_document(document, mode=...)` is the sole envelope producer (`normal` / `debug`); `write_projected_document` writes it to disk; parse depth is a `parse_package_document(depth=...)` input, not an output surface
