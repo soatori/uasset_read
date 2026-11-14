@@ -4,7 +4,7 @@
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
-> 📦 **v0.6.0-dev** — Zero runtime dependencies · Python 3.10+ · 72 source files · 21 registered semantic asset handlers
+> 📦 **v0.6.1** — Zero runtime dependencies · Python 3.10+ · 72 source files · 21 registered semantic asset handlers
 
 > **Refactor status:** package-first architecture; current output is the v4 package document — one canonical envelope with `format_version: "4.0"` (`projection.FORMAT_VERSION`; frozen contract `tests/package_document_v4.schema.json`), exactly two modes (`normal` default, `debug` adds evidence only), one full document per package with no pagination or byte budget. Static Blueprint graph / Kismet instruction IR / CFG / correlation live under `objects[].semantic` (dict at the document boundary). Embedded type-aware `projections[]` cover Material editor-builder, DataTable/CurveTable/struct/enum data, and physical asset metadata/payload references (typed Blueprint C++ projection was retired by the 2026-09-28 v4 amendment). Payload extraction from cooked sidecars remains available via `extract_payload`. Zen/IoStore full package decoding is outside the current product target; existing TOC metadata only reports the boundary truthfully. Editor `.usmap` unversioned fixtures remain a bounded partial path, while cooked/Zen unversioned is outside the product target. Semantic 1.x JSON remains removed. The structure/size/quality baselines are gated by `tests/`.
 
@@ -24,7 +24,7 @@ Whether you're auditing blueprint dependencies, building tooling for game develo
 
 | Metric | Value |
 | -------- | ------- |
-| Version | v0.5.4.45 (last tagged) / 0.6.0-dev (v4 default) |
+| Version | v0.6.1 (current) / v4 default |
 | Source | Python parser for Unreal Engine .uasset files |
 | Modules | package-first modules incl. `kismet`, `models`, `parsers`, `projections`, `serializers` |
 | Tests | current full suite and quality gates pass; structure/size/quality baselines gated |
@@ -48,7 +48,7 @@ Whether you're auditing blueprint dependencies, building tooling for game develo
 - **Handlers** — DataTable, UserDefinedEnum, UserDefinedStruct, Texture2D, TextureCube, SoundWave, Skeleton, StaticMesh, Material, Niagara (editor-saved packages: node payloads + graph structure — nodes/pins/links, summary tier; script execution semantics are not decoded), Blueprint/AnimBlueprint (graph/node/pin + declaration + SCS + VarType + Kismet IR/CFG on editor-saved fixtures; native C++ bodies are never recovered)
 - **Unversioned properties** — editor-only mapping-driven path: `LegacyPackageReader(mappings_path=...usmap)` plus `BP_UnversionedTest` / `DA_UnversionedTest`. Unmapped or unreliable tails become explicit `UnversionedOpaque`; cooked/Zen unversioned and a general `SchemaProvider` are outside the product target.
 
-**UE source-audit fixes (v0.6.0-dev):** 35 binary-format mismatches resolved against UE 5.8-dev C++ source — FString UTF-16 byte-swap, FColor B/G/R/A order, FRotator Pitch/Yaw/Roll, FName external number, unversioned header fragment decode, ELifetimeCondition table, mcdelegate PinCategory, FGuid display, dead CppType reads, ImportedSize X/Y, material input variants, anim node table verified against Engine/Source headers. StringTable (#615) partially fixed (FString keys + trailer).
+**UE source-audit fixes (v0.6.1):** 35 binary-format mismatches resolved against UE 5.8-dev C++ source — FString UTF-16 byte-swap, FColor B/G/R/A order, FRotator Pitch/Yaw/Roll, FName external number, unversioned header fragment decode, ELifetimeCondition table, mcdelegate PinCategory, FGuid display, dead CppType reads, ImportedSize X/Y, material input variants, anim node table verified against Engine/Source headers. StringTable (#615) partially fixed (FString keys + trailer).
 
 ```python
 from uasset_read import parse_package_document
