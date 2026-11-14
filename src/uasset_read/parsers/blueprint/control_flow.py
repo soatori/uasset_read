@@ -12,10 +12,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from uasset_read.models.diagnostics import Diagnostic
-from uasset_read.parsers.blueprint.bytecode import (
-    BytecodeInstruction,
-    project_instruction,
-)
+from uasset_read.parsers.blueprint.bytecode import BytecodeInstruction
 
 
 @dataclass
@@ -64,10 +61,9 @@ def project_cfg(cfg: ControlFlowGraph) -> dict[str, Any]:
             {
                 "start_statement_index": block.start_statement_index,
                 "end_statement_index": block.end_statement_index,
-                # Same projection as functions[].instructions so block payloads
-                # cover the function instruction list in order (Task 7 invariant).
+                # Ordinals index into functions[].instructions, the sole copy of
+                # instruction payloads; blocks do not repeat them (#671).
                 "instruction_ordinals": [item.statement_ordinal for item in block.instructions],
-                "instructions": [project_instruction(item) for item in block.instructions],
             }
             for block in cfg.blocks
         ],

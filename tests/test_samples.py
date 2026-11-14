@@ -2370,11 +2370,16 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     def _cfg_totals(projection):
         blocks = edges = unresolved = 0
         unresolved_kinds = set()
+        block_keys = {"start_statement_index", "end_statement_index", "instruction_ordinals"}
         for obj in projection["objects"]:
             sem = obj.get("semantic") or {}
             for fn in sem.get("functions") or []:
                 cfg = fn.get("cfg") or {}
                 assert {"blocks", "edges", "entry"} <= set(cfg), sorted(cfg)
+                for block in cfg["blocks"]:
+                    # #671: blocks index functions[].instructions via ordinals only.
+                    assert block_keys <= set(block), sorted(block)
+                    assert "instructions" not in block, sorted(block)
                 blocks += len(cfg["blocks"])
                 edges += len(cfg["edges"])
                 for edge in cfg["edges"]:
