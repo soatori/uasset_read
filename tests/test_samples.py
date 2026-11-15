@@ -2459,8 +2459,8 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
                 assert {"blocks", "edges", "entry"} <= set(cfg), sorted(cfg)
                 for block in cfg["blocks"]:
                     # #671: blocks index functions[].instructions via ordinals only.
-                    assert block_keys <= set(block), sorted(block)
-                    assert "instructions" not in block, sorted(block)
+                    assert set(block) == block_keys, sorted(block)
+                assert [o for b in cfg["blocks"] for o in b["instruction_ordinals"]] == [e["statement_ordinal"] for e in fn["instructions"]], fn.get("function_name")
                 blocks += len(cfg["blocks"])
                 edges += len(cfg["edges"])
                 for edge in cfg["edges"]:
