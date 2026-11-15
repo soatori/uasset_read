@@ -440,6 +440,7 @@ def _read_property_loop(
         tag = None
         start_pos = None
         diag_mark = archive._diagnostic_mark()
+        archive._pending_collection_tail = None  # drop any tail a failed prior property left behind (#672)
 
         try:
             # Boundary check: current position should not exceed property data range
@@ -708,6 +709,26 @@ def _read_property_loop(
             resolved = _resolve_object_property(tag, value, import_map, export_map, name_map)
             if resolved is not None:
                 properties[-1].value = resolved
+
+            # A stalled collection captured its unread payload before the bounded
+            # seek discarded it; keep it as an opaque sibling entry (#672).
+            pending_tail = archive._pending_collection_tail
+            archive._pending_collection_tail = None
+            if pending_tail and pending_tail.get("data"):
+                tail_data = pending_tail["data"]
+                properties.append(
+                    PropertyValue(
+                        name=f"{pending_tail['name']}__skipped",
+                        type="Opaque",
+                        value={
+                            "kind": "opaque",
+                            "type": pending_tail["type"],
+                            "size": len(tail_data),
+                            "reason": "recovered_corruption",
+                            "raw_data": tail_data,
+                        },
+                    )
+                )
 
             if _stream_is_poisoned(archive, diag_mark):
                 archive._tag_stream_stop = "poison"

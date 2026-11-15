@@ -138,6 +138,8 @@ def _entry_raw_bytes(value: Any) -> bytes | None:
         value = value.get("value")
     if isinstance(value, PropertyValue) and not isinstance(value, PropertyFallback):
         value = value.value
+    if isinstance(value, dict) and isinstance(value.get("raw_data"), (bytes, bytearray)):
+        return bytes(value["raw_data"])
     if isinstance(value, (bytes, bytearray)):
         return bytes(value)
     if isinstance(value, StructFallback) and value.raw_bytes:

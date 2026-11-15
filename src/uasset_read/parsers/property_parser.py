@@ -1518,6 +1518,36 @@ def _native_struct_elem_size(struct_type: str | None, payload_size: int, count: 
     return stride if _EXPECTED_STRUCT_SIZES.get(struct_type) == stride else 0
 
 
+def _capture_collection_tail(archive: FArchive, payload_start: int, tag: PropertyTag) -> None:
+    """Preserve a stalled collection's unread payload for an opaque sibling entry (#672).
+
+    The tagged loop's bounded reader seeks to the declared value end afterwards,
+    which would otherwise drop these bytes without a trace. Best effort: any
+    read failure skips the capture; the stall diagnostic already exists.
+    """
+    end = getattr(tag, "value_end_offset", None)
+    if end is None:
+        end = payload_start + max(int(getattr(tag, "size", 0) or 0), 0)
+    start = archive.tell()
+    if end <= start:
+        return
+    read_range = archive._read_range
+    if read_range is not None:
+        end = min(end, read_range[1])
+        if end <= start:
+            return
+    try:
+        data = archive.read(end - start)
+    except ParseError:
+        return
+    if data:
+        archive._pending_collection_tail = {
+            "name": getattr(tag, "name", "") or "collection",
+            "type": getattr(tag, "type", "") or "Opaque",
+            "data": data,
+        }
+
+
 def parse_array_property(
     tag: PropertyTag,
     archive: FArchive,
@@ -1658,8 +1688,9 @@ def parse_array_property(
                 raw_value=count,
                 fallback="clamp_to_payload",
                 reason="recovered_corruption",
-                message=f"array element {i} did not advance the reader; remaining elements skipped",
+                message=f"array element {i} did not advance the reader in {tag.name!r}; remaining elements skipped",
             )
+            _capture_collection_tail(archive, count_offset, tag)
             break
 
     return elements
@@ -2330,8 +2361,9 @@ def parse_map_property(
                 raw_value=num_entries,
                 fallback="clamp_to_payload",
                 reason="recovered_corruption",
-                message=f"map entry {entry_index} did not advance the reader; remaining entries skipped",
+                message=f"map entry {entry_index} did not advance the reader in {tag.name!r}; remaining entries skipped",
             )
+            _capture_collection_tail(archive, entry_tell, tag)
             break
 
     return MapValue(key_type=key_type, value_type=value_type, entries=entries)
@@ -2354,6 +2386,7 @@ def parse_set_property(
       - loop reading elements
     """
     element_type = getattr(tag, "inner_type", None) or _extract_set_type_from_tag(tag)
+    payload_start = archive.tell()
 
     # Read number of elements to remove (used in UE source for incremental updates)
     num_elements_to_remove = read_validated_count_tolerant(
@@ -2410,8 +2443,9 @@ def parse_set_property(
                 raw_value=num_elements,
                 fallback="clamp_to_payload",
                 reason="recovered_corruption",
-                message=f"set element {element_index} did not advance the reader; remaining elements skipped",
+                message=f"set element {element_index} did not advance the reader in {tag.name!r}; remaining elements skipped",
             )
+            _capture_collection_tail(archive, payload_start, tag)
             break
 
     return SetValue(element_type=element_type, elements=elements)

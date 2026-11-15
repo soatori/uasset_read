@@ -1875,6 +1875,82 @@ def test_collection_counts_are_bounded_by_payload_size():
     assert _array_element_counts(SAMPLES / "B_ControlPointScoring.uasset") == REAL_ARRAY_COUNTS
 
 
+def test_collection_stall_captures_unread_tail_on_archive():
+    """#672: a stalled element must capture its unread payload before the bounded seek discards it."""
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.models.properties import PropertyTag
+    from uasset_read.parsers.property_parser import parse_array_property
+    from uasset_read.serializers.package_summary import PackageFileSummary
+    from uasset_read.versioning import build_version_context
+
+    # count=2 with 8 payload bytes; BogusProperty elements have zero stride, so
+    # element 0 stalls the reader at the count boundary (probed behavior).
+    archive = ByteArchive(struct.pack("<I", 2) + b"\x11" * 8, tolerant=True)
+    archive.version_context = build_version_context(PackageFileSummary(file_version_ue4=522, file_version_ue5=0))
+    tag = PropertyTag(name="Arr", type="ArrayProperty", size=12, inner_type="BogusProperty")
+    parse_array_property(tag, archive, ["Arr"], [], None)
+
+    pending = getattr(archive, "_pending_collection_tail", None)
+    assert pending is not None, "stall must capture the unread tail before bounded seek discards it"
+    assert pending["name"] == "Arr"
+    assert pending["type"] == "ArrayProperty"
+    assert pending["data"] == b"\x11" * 8
+
+    stall = [d for d in archive.get_structured_diagnostics() if d.code == "INVALID_COLLECTION_COUNT"]
+    assert stall, "stall must still record its diagnostic"
+    assert any("Arr" in d.message for d in stall), [d.message for d in stall]
+
+
+def test_als_collection_stall_returns_opaque_sibling_entry():
+    """#672 (real fixture): ALS stalls surface as __skipped opaque entries plus named diagnostics."""
+    from uasset_read.package import parse_package_document
+    from uasset_read.projection import project_document
+
+    doc = parse_package_document(str(SAMPLES / "ALS_AnimBP.uasset"), depth="decode")
+    normal = project_document(doc, mode="normal")
+    tails = [
+        (obj["id"], p)
+        for obj in normal["objects"]
+        for p in obj.get("properties") or []
+        if p["name"].endswith("__skipped")
+    ]
+    assert tails, "expected at least one preserved collection tail on ALS_AnimBP"
+
+    base_names = set()
+    for obj_id, tail in tails:
+        base = tail["name"][: -len("__skipped")]
+        base_names.add(base)
+        value = tail["value"]
+        if isinstance(value, dict) and value.get("kind") == "value":
+            value = value.get("value")
+        assert isinstance(value, dict) and value.get("kind") == "opaque", (obj_id, tail)
+        assert int(value.get("size") or 0) > 0, (obj_id, tail)
+
+    named = [
+        d
+        for d in normal["diagnostics"]
+        if d.get("code") == "INVALID_COLLECTION_COUNT"
+        and any(name in (d.get("message") or "") for name in base_names)
+    ]
+    assert named, "stall diagnostic must name the property whose elements it skipped"
+
+    debug = project_document(doc, mode="debug")
+    raw_props = {
+        (e.get("object_id"), e.get("property_index"))
+        for e in (debug.get("debug") or {}).get("property_evidence") or []
+        if "raw" in e
+    }
+    found_raw = any(
+        (obj["id"], idx) in raw_props
+        for obj in debug["objects"]
+        for idx, p in enumerate(obj.get("properties") or [])
+        if p["name"].endswith("__skipped")
+    )
+    assert found_raw, "tail bytes must surface as debug property_evidence raw hex"
+
+
 def _check_file_source_and_composite_source_reuse_cached_sizes(tmp_path, monkeypatch):
     from pathlib import Path
 
@@ -2101,8 +2177,10 @@ def _check_float_array_bulk_decode_falls_back_at_export_boundary():
     values = parse_array_property(tag, archive, [], [])
     assert values[:2] == [1.0, 2.0]
     assert isinstance(values[2], PropertyFallback)
-    assert archive.tell() == len(raw) - 4
-    assert archive.read_sizes == [4, 4, 4, 4]
+    # The stalled third element's unread tail is captured up to the range end (#672),
+    # which is why the cursor ends at len(raw)-1 with one extra bounded read.
+    assert archive.tell() == len(raw) - 1
+    assert archive.read_sizes == [4, 4, 4, 4, 3]
 
 
 def _check_float_array_bulk_decode_recovers_after_physical_short_read():
@@ -2161,7 +2239,9 @@ def _check_float_array_bulk_decode_recovers_after_physical_short_read():
 
     file_archive.read = counted_file_read
     assert_recovered(file_archive, len(raw))
-    assert file_sizes == [4, 12, 4, 4, 4]
+    # The stall's tail capture adds one bounded read; it returns empty at the
+    # physical EOF (reported_size lies past the buffer), so no tail is kept (#672).
+    assert file_sizes == [4, 12, 4, 4, 4, 4]
     file_archive.close()
 
     main_archive = FArchive.__new__(FArchive)
@@ -2181,7 +2261,8 @@ def _check_float_array_bulk_decode_recovers_after_physical_short_read():
     package.read = counted_package_read
     try:
         assert_recovered(package, len(raw))
-        assert package_sizes == [4, 12, 4, 4, 4]
+        # Same bounded tail-capture read as the bare file archive above (#672).
+        assert package_sizes == [4, 12, 4, 4, 4, 4]
     finally:
         package.close()
 
