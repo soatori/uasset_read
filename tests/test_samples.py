@@ -1939,6 +1939,27 @@ def test_collection_stall_captures_unread_tail_on_archive():
     assert [p.value["raw_data"] for p in properties] == [b"\x11" * 8, b"\x22" * 8]
     assert archive._pending_collection_tails == []
 
+    # map stall: zero-stride entries keep the unread tail (#672 map/set pin).
+    from uasset_read.parsers.property_parser import parse_map_property, parse_set_property
+
+    archive = ByteArchive(struct.pack("<ii", 0, 2) + b"\x33" * 6, tolerant=True)
+    archive.version_context = build_version_context(PackageFileSummary(file_version_ue4=522, file_version_ue5=0))
+    tag = PropertyTag(name="Map", type="MapProperty", size=14, inner_type="BogusProperty")
+    tag.value_type = "BogusProperty"
+    parse_map_property(tag, archive, ["Map"], [], None)
+    tails = getattr(archive, "_pending_collection_tails", None) or []
+    assert [(t["name"], t["data"]) for t in tails] == [("Map", b"\x33" * 6)]
+    assert any(d.code == "INVALID_COLLECTION_COUNT" and "Map" in d.message for d in archive.get_structured_diagnostics())
+
+    # set stall: zero-stride elements keep the unread tail.
+    archive = ByteArchive(struct.pack("<ii", 0, 2) + b"\x44" * 6, tolerant=True)
+    archive.version_context = build_version_context(PackageFileSummary(file_version_ue4=522, file_version_ue5=0))
+    tag = PropertyTag(name="Set", type="SetProperty", size=14, inner_type="BogusProperty")
+    parse_set_property(tag, archive, ["Set"], [], None)
+    tails = getattr(archive, "_pending_collection_tails", None) or []
+    assert [(t["name"], t["data"]) for t in tails] == [("Set", b"\x44" * 6)]
+    assert any(d.code == "INVALID_COLLECTION_COUNT" and "Set" in d.message for d in archive.get_structured_diagnostics())
+
 
 def test_als_collection_stall_returns_opaque_sibling_entry():
     """#672 (real fixture): ALS stalls surface as __skipped opaque entries plus named diagnostics."""
