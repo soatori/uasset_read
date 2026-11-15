@@ -894,10 +894,13 @@ register_handler(MeshHandler())
 class BlueprintFamilyHandler:
     """Enrich Blueprint-family objects (Blueprint or AnimBlueprint variants).
 
-    At depth="asset": light summary only (kind, name, class).
-    At depth="decode": real graphs arrive via extras (reader-side pass).
-    Only the owning asset export carries them; GeneratedClass exports
-    keep the summary and stay "partial" (#629 tier contract).
+    At depth="asset": summary tier — kind/name/class plus any function
+    list attached in extras; every family export (asset or
+    GeneratedClass) reports semantic "partial" (#629 tier contract).
+    At depth="decode": graphs arrive via extras and every context
+    owner — the asset export and its GeneratedClass — receives full
+    semantic through the analysis envelope; each keeps its own copy
+    (multi-owner contexts are design intent, never display-name merged).
     """
 
     def __init__(self, classes: tuple[str, ...], kind: str, feature: str):
@@ -946,8 +949,9 @@ class BlueprintFamilyHandler:
             return result
 
         # depth == "decode": real graphs arrive via extras (reader-side pass).
-        # Only the owning asset export carries them; GeneratedClass exports
-        # keep the summary and stay "partial" (#629 tier contract).
+        # Attach/mirror populate extras for the asset export and its
+        # GeneratedClass alike; the E1 envelope below then replaces this
+        # result with full semantic for every context owner.
         if depth == "decode":
             extras = package_data[2] if package_data else {}
             entry = extras.get(obj.id, {}) if isinstance(extras, dict) else {}
