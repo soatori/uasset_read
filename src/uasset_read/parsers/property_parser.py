@@ -1541,11 +1541,13 @@ def _capture_collection_tail(archive: FArchive, payload_start: int, tag: Propert
     except ParseError:
         return
     if data:
-        archive._pending_collection_tail = {
-            "name": getattr(tag, "name", "") or "collection",
-            "type": getattr(tag, "type", "") or "Opaque",
-            "data": data,
-        }
+        archive._pending_collection_tails.append(
+            {
+                "name": getattr(tag, "name", "") or "collection",
+                "type": getattr(tag, "type", "") or "Opaque",
+                "data": data,
+            }
+        )
 
 
 def parse_array_property(

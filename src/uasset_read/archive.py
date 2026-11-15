@@ -67,7 +67,7 @@ class FArchive:
         self._structured_diagnostics: list[Diagnostic] = []  # stable-code diagnostics
         self._current_object_id: str = ""  # table slot a read is attributed to (e.g. "export:3")
         self._read_range: tuple[int, int] | None = None  # optional export-scoped (start, end) read range
-        self._pending_collection_tail: dict | None = None  # stalled collection's unread payload (#672)
+        self._pending_collection_tails: list[dict] = []  # stalled collections' unread payloads (#672)
         self._soft_object_paths = None
         self._object_reference_maps = None
 

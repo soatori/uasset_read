@@ -1876,7 +1876,7 @@ def test_collection_counts_are_bounded_by_payload_size():
 
 
 def test_collection_stall_captures_unread_tail_on_archive():
-    """#672: a stalled element must capture its unread payload before the bounded seek discards it."""
+    """#672: stalled elements must capture their unread payload; nested multi-stalls keep every tail."""
     import struct
 
     from uasset_read.archive import ByteArchive
@@ -1892,15 +1892,52 @@ def test_collection_stall_captures_unread_tail_on_archive():
     tag = PropertyTag(name="Arr", type="ArrayProperty", size=12, inner_type="BogusProperty")
     parse_array_property(tag, archive, ["Arr"], [], None)
 
-    pending = getattr(archive, "_pending_collection_tail", None)
-    assert pending is not None, "stall must capture the unread tail before bounded seek discards it"
-    assert pending["name"] == "Arr"
-    assert pending["type"] == "ArrayProperty"
-    assert pending["data"] == b"\x11" * 8
+    pending = getattr(archive, "_pending_collection_tails", None) or []
+    assert len(pending) == 1, "stall must capture the unread tail before bounded seek discards it"
+    entry = pending[0]
+    assert entry["name"] == "Arr"
+    assert entry["type"] == "ArrayProperty"
+    assert entry["data"] == b"\x11" * 8
 
     stall = [d for d in archive.get_structured_diagnostics() if d.code == "INVALID_COLLECTION_COUNT"]
     assert stall, "stall must still record its diagnostic"
     assert any("Arr" in d.message for d in stall), [d.message for d in stall]
+
+    # Nested multi-stall follow-up: two zero-stride fields inside one top-level
+    # property must each keep their bytes (the single-slot capture dropped the first).
+    from uasset_read.parsers.properties import tagged
+    from uasset_read.parsers.property_parser import parse_struct_property
+
+    name_map = ["None", "MyStruct", "Top", "ArrayProperty", "BogusProperty", "Arr1", "Arr2"]
+
+    def fname(i):
+        return struct.pack("<II", i, 0)
+
+    def array_field(name_idx, junk):
+        value = struct.pack("<I", 2) + bytes([junk]) * 8  # count=2 + 8 tail bytes, zero stride
+        return fname(name_idx) + fname(3) + struct.pack("<i", len(value)) + struct.pack("<i", 0) + fname(4) + b"\x00" + value
+
+    payload = array_field(5, 0x11) + array_field(6, 0x22) + fname(0)
+    archive = ByteArchive(payload, tolerant=True)
+    archive.version_context = build_version_context(PackageFileSummary(file_version_ue4=522, file_version_ue5=0))
+    tag = PropertyTag(name="Top", type="StructProperty", size=len(payload), struct_type="MyStruct")
+    tag.value_start_offset = 0
+    tag.value_end_offset = len(payload)
+    parse_struct_property(tag, archive, name_map, [], 0, None, 0, True)
+
+    tails = getattr(archive, "_pending_collection_tails", None) or []
+    assert [t["name"] for t in tails] == ["Arr1", "Arr2"]
+    assert [t["data"] for t in tails] == [b"\x11" * 8, b"\x22" * 8]
+
+    nested_stall = [d for d in archive.get_structured_diagnostics() if d.code == "INVALID_COLLECTION_COUNT"]
+    assert len(nested_stall) == 2, [d.message for d in nested_stall]
+    assert any("Arr1" in d.message for d in nested_stall) and any("Arr2" in d.message for d in nested_stall)
+
+    properties = []
+    tagged._drain_collection_tails(archive, properties)
+    assert [p.name for p in properties] == ["Arr1__skipped", "Arr2__skipped"]
+    assert [p.value["raw_data"] for p in properties] == [b"\x11" * 8, b"\x22" * 8]
+    assert archive._pending_collection_tails == []
 
 
 def test_als_collection_stall_returns_opaque_sibling_entry():

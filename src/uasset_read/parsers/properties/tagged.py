@@ -396,6 +396,33 @@ def _handle_property_parse_error(
     )
 
 
+def _drain_collection_tails(archive: "FArchive", properties: list[PropertyValue]) -> None:
+    """Attach every stalled collection's captured tail as an opaque sibling entry (#672).
+
+    Nested multi-stalls accumulate one capture per stall before the tagged loop
+    drains them here; each sibling keeps its own bytes and capture-time name.
+    """
+    pending_tails = archive._pending_collection_tails
+    archive._pending_collection_tails = []
+    for pending_tail in pending_tails:
+        if not pending_tail.get("data"):
+            continue
+        tail_data = pending_tail["data"]
+        properties.append(
+            PropertyValue(
+                name=f"{pending_tail['name']}__skipped",
+                type="Opaque",
+                value={
+                    "kind": "opaque",
+                    "type": pending_tail["type"],
+                    "size": len(tail_data),
+                    "reason": "recovered_corruption",
+                    "raw_data": tail_data,
+                },
+            )
+        )
+
+
 def _read_property_loop(
     export: ObjectExport | SimpleNamespace,
     archive: "FArchive",
@@ -440,7 +467,7 @@ def _read_property_loop(
         tag = None
         start_pos = None
         diag_mark = archive._diagnostic_mark()
-        archive._pending_collection_tail = None  # drop any tail a failed prior property left behind (#672)
+        archive._pending_collection_tails = []  # drop any tails a failed prior property left behind (#672)
 
         try:
             # Boundary check: current position should not exceed property data range
@@ -711,24 +738,8 @@ def _read_property_loop(
                 properties[-1].value = resolved
 
             # A stalled collection captured its unread payload before the bounded
-            # seek discarded it; keep it as an opaque sibling entry (#672).
-            pending_tail = archive._pending_collection_tail
-            archive._pending_collection_tail = None
-            if pending_tail and pending_tail.get("data"):
-                tail_data = pending_tail["data"]
-                properties.append(
-                    PropertyValue(
-                        name=f"{pending_tail['name']}__skipped",
-                        type="Opaque",
-                        value={
-                            "kind": "opaque",
-                            "type": pending_tail["type"],
-                            "size": len(tail_data),
-                            "reason": "recovered_corruption",
-                            "raw_data": tail_data,
-                        },
-                    )
-                )
+            # seek discarded it; keep it as opaque sibling entries (#672).
+            _drain_collection_tails(archive, properties)
 
             if _stream_is_poisoned(archive, diag_mark):
                 archive._tag_stream_stop = "poison"
