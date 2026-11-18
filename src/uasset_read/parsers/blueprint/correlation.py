@@ -513,8 +513,19 @@ class BlueprintCorrelation:
         constructors, constructor_diags = self._extract_constructors(document, owner, graphs, parent_class, components)
         diagnostics.extend(constructor_diags)
 
-        control_flow = [fn.cfg for fn in functions if fn.cfg.blocks]
-        edges = [edge for fn in functions for edge in fn.cfg.edges]
+        # exec_chains flattens every function's edges into one list, so each
+        # edge and each CFG must carry its owning function name or the summary
+        # cannot be attributed back to a function body.
+        control_flow = []
+        edges: list[Any] = []
+        for fn in functions:
+            name = fn.function_name or fn.name
+            fn.cfg.function_name = name
+            for edge in fn.cfg.edges:
+                edge.function_name = name
+            if fn.cfg.blocks:
+                control_flow.append(fn.cfg)
+            edges.extend(fn.cfg.edges)
         exec_chains = ExecChainSummary(
             metadata={
                 "kind": "direct_exec_edge_summary",
@@ -824,11 +835,25 @@ class BlueprintCorrelation:
         functions: list[FunctionAnalysis],
     ) -> list[EntrypointRecord]:
         entrypoints: list[EntrypointRecord] = []
+        # A K2Node_FunctionEntry node is the graph-side identity of a UFunction.
+        # Scoped to this owner's graphs only: a same-named function in another
+        # owner's graphs must never satisfy this owner's lookup.
+        entry_nodes: dict[str, Any] = {}
+        for graph in graphs:
+            for node in graph.nodes:
+                meta = node.metadata
+                if node.class_name == "K2Node_FunctionEntry" and meta and meta.function_name:
+                    entry_nodes.setdefault(meta.function_name, node.id)
         for fn in functions:
+            name = fn.function_name or fn.name
+            # match_method stays "object_id": the record is matched to the
+            # UFunction export, which is the stronger identity. source_node_id
+            # is an added graph-side attribute, not the matching key.
             record = EntrypointRecord(
                 kind="function",
-                name=fn.function_name or fn.name,
+                name=name,
                 object_id=fn.object_id,
+                source_node_id=entry_nodes.get(name),
                 match_method="object_id",
                 confidence=1.0,
                 unresolved=False,
@@ -837,10 +862,11 @@ class BlueprintCorrelation:
             entrypoints.append(record)
         for graph in graphs:
             if graph.kind == "construction_script" or graph.name == "UserConstructionScript":
+                name = graph.name or "UserConstructionScript"
                 entrypoints.append(
                     EntrypointRecord(
                         kind="construction",
-                        name=graph.name or "UserConstructionScript",
+                        name=name,
                         object_id=owner.id,
                         match_method="object_id",
                         confidence=0.9,

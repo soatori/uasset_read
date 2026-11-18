@@ -43,6 +43,9 @@ Budget 184 -> 186 on 2026-11-15 (#672, stalled collection tails preserved as opa
 Budget 186 -> 189 on 2026-11-18 (blueprint C++ translation data gaps Task 1, pin
 container/object/reference types projected: three sample-backed tests).
 189 is the measured final value, not headroom.
+Budget 189 -> 192 on 2026-11-18 (blueprint C++ translation data gaps Task 2,
+function-entry linkage and CFG/exec-chain attribution: three sample-backed
+tests). 192 is the measured final value, not headroom.
 No fixtures live here — the baseline is driven by real samples in
 tests/test_samples.py; temporary probes belong to untracked temp/.
 """
@@ -51,7 +54,7 @@ from __future__ import annotations
 
 import pytest
 
-ITEM_BUDGET = 189
+ITEM_BUDGET = 192
 
 
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:

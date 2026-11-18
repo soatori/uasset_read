@@ -6660,3 +6660,52 @@ def test_new_pin_fields_are_identical_in_normal_and_debug():
     assert any("container_type" in p for p in normal)
     assert any("container_type" in p for p in debug)
     assert normal == debug
+
+
+# ---------------------------------------------------------------------------
+# Task 2: function-entry linkage and CFG/exec-chain attribution (A7)
+# ---------------------------------------------------------------------------
+
+
+def _bp_owner(sample: str) -> tuple[dict[str, Any], str]:
+    """(semantic dict, owner object id) for the graph-bearing owner of *sample*."""
+    out = _projected_package(sample)
+    for obj in out.get("objects", []):
+        sem = obj.get("semantic")
+        if isinstance(sem, dict) and sem.get("graphs"):
+            return sem, str(obj.get("id"))
+    raise AssertionError(f"no graph-bearing semantic owner in {sample}")
+
+
+def _bp_semantic(sample: str) -> dict[str, Any]:
+    return _bp_owner(sample)[0]
+
+
+def test_function_entry_nodes_link_to_their_functions():
+    sem = _bp_semantic("BP_CombatCharacter.uasset")
+    # kind == "function" only: the construction record keeps source_node_id
+    # None (pinned by test_v4_public_output_contract) — node linkage attaches
+    # to the function record, which is the one that names the UFunction body.
+    entries = {e["name"]: e for e in sem["entrypoints"] if e.get("kind") == "function"}
+    for fn in ("Aim", "Move", "UserConstructionScript"):
+        assert entries[fn]["source_node_id"] is not None, fn
+        # match_method stays "object_id": the record matches the UFunction
+        # export (pinned contract, test_v4_public_output_contract). The
+        # graph-side node is an added attribute, not the matching key.
+        assert entries[fn]["match_method"] == "object_id"
+
+
+def test_cfg_and_exec_chain_edges_name_their_function():
+    sem = _bp_semantic("BP_CombatCharacter.uasset")
+    assert all(c.get("function_name") for c in sem["control_flow"])
+    assert all(e.get("function_name") for e in sem["exec_chains"]["edges"])
+
+
+def test_entrypoint_linkage_never_crosses_owners():
+    for name in ("BP_CombatCharacter.uasset", "BP_CombatEnemy.uasset"):
+        sem, owner_id = _bp_owner(name)
+        prefix = owner_id + "/"
+        linked = [e for e in sem["entrypoints"] if e.get("kind") == "function" and e.get("source_node_id")]
+        assert linked, name  # linkage must exist before its scoping means anything
+        for e in linked:
+            assert e["source_node_id"].startswith(prefix), (name, e["source_node_id"])
