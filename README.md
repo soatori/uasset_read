@@ -4,7 +4,7 @@
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
-> 📦 **v0.6.2** — Zero runtime dependencies · Python 3.10+ · 71 source files · 21 registered semantic asset handlers
+> 📦 **v0.6.3** — Zero runtime dependencies · Python 3.10+ · 71 source files · 21 registered semantic asset handlers
 
 > **Refactor status:** package-first architecture; current output is the v4 package document — one canonical envelope with `format_version: "4.0"` (`projection.FORMAT_VERSION`; frozen contract `tests/package_document_v4.schema.json`), exactly two modes (`normal` default, `debug` adds evidence only), one full document per package with no pagination or byte budget. Static Blueprint graph / Kismet instruction IR / CFG / correlation live under `objects[].semantic` (dict at the document boundary). Embedded type-aware `projections[]` cover Material editor-builder, DataTable/CurveTable/struct/enum data, and physical asset metadata/payload references (typed Blueprint C++ projection was retired by the 2026-09-28 v4 amendment). Payload extraction from cooked sidecars remains available via `extract_payload`. Zen/IoStore full package decoding is outside the current product target; existing TOC metadata only reports the boundary truthfully. Editor `.usmap` unversioned fixtures remain a bounded partial path, while cooked/Zen unversioned is outside the product target. Semantic 1.x JSON remains removed. The structure/size/quality baselines are gated by `tests/`.
 
@@ -24,7 +24,7 @@ Whether you're auditing blueprint dependencies, building tooling for game develo
 
 | Metric | Value |
 | -------- | ------- |
-| Version | v0.6.2 (current) / v4 default |
+| Version | v0.6.3 (current) / v4 default |
 | Source | Python parser for Unreal Engine .uasset files |
 | Modules | package-first modules incl. `kismet`, `models`, `parsers`, `projections`, `serializers` |
 | Tests | current full suite and quality gates pass; structure/size/quality baselines gated |
