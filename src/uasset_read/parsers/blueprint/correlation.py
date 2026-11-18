@@ -106,6 +106,26 @@ def _region_or_none(value: ByteRegion | None) -> ByteRegion | None:
     return value if isinstance(value, ByteRegion) else None
 
 
+def _is_plain_name(text: Any) -> bool:
+    """True for a bare variable name, never for a str()/repr() object dump.
+
+    UE variable names may contain spaces ("Axis X", "Max HP"), so only the
+    signature of an object dump is rejected: a nested-call paren, a keyword
+    assignment, a leading "<...>" repr, or an EX_* expression name. A dump
+    reaching semantic output as a read/write name is a data leak — the same
+    no-repr rule project_operand documents.
+    """
+    return (
+        isinstance(text, str)
+        and bool(text)
+        and text != "None"
+        and not text.startswith("<")
+        and not text.startswith("EX_")
+        and "(" not in text
+        and "=" not in text
+    )
+
+
 def _extract_variable_name(value: Any) -> str | None:
     """Display name for a variable reference (typed expr or projected dict)."""
     if value is None:
@@ -137,16 +157,14 @@ def _extract_variable_name(value: Any) -> str | None:
         if isinstance(pointer, str):
             return pointer or None
         text = str(pointer)
-        if text and text != "None" and not text.startswith("<"):
+        if _is_plain_name(text):
             return text
         nested = _extract_variable_name(pointer)
         if nested:
             return nested
         return None
     text = str(value)
-    if not text or text == "None" or text.startswith("<"):
-        return None
-    return text
+    return text if _is_plain_name(text) else None
 
 
 def _opcode_of(value: Any) -> str | None:

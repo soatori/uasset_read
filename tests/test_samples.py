@@ -6821,3 +6821,22 @@ def test_component_tree_names_resolve_within_the_owner():
     for c in comps:
         for child in c.get("child_names", []):
             assert child in names, (c["name"], child)
+
+
+# ---------------------------------------------------------------------------
+# Task 7: no Python repr() in functions[].reads / writes (F)
+# ---------------------------------------------------------------------------
+
+
+def test_reads_and_writes_never_carry_python_repr():
+    leaked = [
+        v
+        for name in ("BP_CombatCharacter.uasset", "BP_CombatEnemy.uasset", "B_ControlPointScoring.uasset",
+                     "Helm_BP.uasset", "FirstPerson_BP_FirstPersonCharacter.uasset", "StackOBot_BP_Drone.uasset")
+        for s in [_bp_semantic(name)]
+        for f in s["functions"]
+        for side in ("reads", "writes")
+        for v in f.get(side) or []
+        if isinstance(v, str) and "(" in v and "EX_" in v
+    ]
+    assert leaked == [], leaked[:3]

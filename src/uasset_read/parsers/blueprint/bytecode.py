@@ -81,15 +81,40 @@ class BytecodeInstruction:
     raw_opcode: int | None = None
 
 
+def _resolved_path_name(var: Any) -> str | None:
+    """FKismetPropertyPointer -> its FFieldPath segment names, joined by '.'."""
+    path = getattr(var, "path", None)
+    segments = getattr(path, "path", None) if path is not None else None
+    if not isinstance(segments, list) or not segments:
+        return None
+    parts: list[str] = []
+    for segment in segments:
+        base = getattr(segment, "base_name", None)
+        if not isinstance(base, str) or not base or base == "None":
+            return None
+        number = getattr(segment, "number", 0) or 0
+        parts.append(f"{base}_{number}" if number else base)
+    return ".".join(parts)
+
+
 def _variable_name(expr: Any) -> str | None:
-    """Best-effort display name for a variable reference expression."""
+    """Best-effort display name for a variable reference expression.
+
+    Never emits a str()/repr() dump of an expression or pointer object: those
+    reach semantic output as read/write names and are a data leak (same
+    no-repr rule project_operand documents).
+    """
     if expr is None:
         return None
     var = getattr(expr, "Variable", None)
     if var is None:
         return None
     text = str(var)
-    return text if text and text != "None" else None
+    if not text or text == "None":
+        return None
+    if "(" in text or text.startswith("EX_") or "=" in text:
+        return _resolved_path_name(var)
+    return text
 
 
 def _extract_operands(expr: KismetExpression) -> dict[str, Any]:
