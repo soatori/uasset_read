@@ -37,6 +37,7 @@ def _unavailable(
     metrics: dict | None = None,
     fallback: str | None = None,
     native_fields: list | None = None,
+    function_flags: int | None = None,
 ):
     """One structured unavailable result for a failed Function export."""
     from uasset_read.kismet.result import KismetDecompiledResult
@@ -65,6 +66,7 @@ def _unavailable(
         script_metrics=metrics,
         fallback_reasons=[fallback] if fallback else [],
         native_fields=list(native_fields or []),
+        function_flags=function_flags,
     )
 
 
@@ -232,6 +234,7 @@ def extract_kismet_decompiled(
                     instructions=[project_instruction(i) for i in instructions],
                     cfg=project_cfg(cfg),
                     native_fields=list(script_result.native_fields),
+                    function_flags=script_result.function_flags,
                     errors=cfg_diagnostics,
                 )
             )

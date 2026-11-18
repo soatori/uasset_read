@@ -662,6 +662,9 @@ class FunctionAnalysis:
     # Signature evidence (already-decoded native FProperty declarations); the
     # correlation layer projects FunctionDeclaration from these.
     native_fields: list[NativeFieldDeclaration] = field(default_factory=list)
+    # UFunction::FunctionFlags (EFunctionFlags) read from the native UFunction
+    # tail. None when the export did not carry one or the read was out of range.
+    function_flags: int | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> FunctionAnalysis:
@@ -776,6 +779,7 @@ class FunctionAnalysis:
                 )
                 if item is not None
             ],
+            function_flags=data.get("function_flags"),
         )
 
 

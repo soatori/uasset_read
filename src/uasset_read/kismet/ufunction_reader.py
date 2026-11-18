@@ -119,6 +119,9 @@ class FunctionScriptReadResult:
     native_fields: list[NativeFieldDeclaration] = field(default_factory=list)
     script_source_range: ByteRegion | None = None
     failure: FunctionScriptFailure | None = None
+    # UFunction::FunctionFlags (EFunctionFlags), the first field of the UFunction
+    # part that follows the UStruct part. See Class.cpp UFunction::Serialize.
+    function_flags: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -397,6 +400,16 @@ def _read_ustruct_prefix_and_script(
             "decoded",
             feature="kismet.script",
         )
+        # UFunction::Serialize (Engine/Source/Runtime/CoreUObject/Private/UObject/
+        # Class.cpp:7900-7904) calls Super::Serialize(Ar) and then writes
+        # FunctionFlags immediately, so the cursor here — right after the UStruct
+        # part's script bytes — is exactly on that field. Only the flags are
+        # captured: read_ufunction_script discards this window afterwards, so
+        # leaving the cursor before the conditional RepOffset / EventGraph fields
+        # cannot desynchronise any later read.
+        function_flags = None
+        if window.total_size() - window.tell() >= 4:
+            function_flags = window.read_u32()
         return FunctionScriptReadResult(
             status="extracted",
             export_index=export_index,
@@ -407,6 +420,7 @@ def _read_ustruct_prefix_and_script(
             serialized_script_size=serialized_script_size,
             native_fields=native_fields,
             script_source_range=script_source_range,
+            function_flags=function_flags,
         )
 
     except Exception as exc:

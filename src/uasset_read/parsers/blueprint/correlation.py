@@ -393,7 +393,15 @@ class _CallResolver:
 
 
 def _function_flags(document: PackageDocument, fn: FunctionAnalysis) -> int | None:
-    """FunctionFlags from the function export's tagged property bag, if carried."""
+    """UFunction::FunctionFlags (EFunctionFlags) for one function.
+
+    The native UFunction tail read is authoritative (kismet/ufunction_reader.py,
+    Class.cpp UFunction::Serialize): function exports do not carry FunctionFlags
+    in their tagged property bag. The bag stays as a fallback for re-decoded
+    documents that never ran the native read.
+    """
+    if fn.function_flags is not None:
+        return fn.function_flags
     if not fn.object_id.startswith("export:"):
         return None
     record = next((o for o in document.objects if o.id == fn.object_id), None)
@@ -506,7 +514,11 @@ class BlueprintCorrelation:
                     flags=flags,
                     native_fields=list(fn.native_fields),
                     source_range=_region_or_none(fn.script_source_range),
-                    unresolved=not fn.native_fields and flags is None,
+                    # unresolved describes *signature* evidence: a declaration
+                    # with no decoded FProperty fields has no recoverable
+                    # parameter/return shape regardless of whether FunctionFlags
+                    # decoded (pinned by test_critical_boundary_guards).
+                    unresolved=not fn.native_fields,
                 )
             )
 
@@ -1330,6 +1342,7 @@ def project_function_analysis(fn: FunctionAnalysis) -> dict[str, Any]:
         # Same static-content emission as function_declarations[].native_fields:
         # normal-mode signature evidence, never debug evidence.
         "native_fields": [project_operand(field) for field in fn.native_fields],
+        "function_flags": fn.function_flags,
         "bytecode_status": fn.bytecode_status,
         "diagnostics": [d.to_dict() for d in fn.diagnostics],
     }

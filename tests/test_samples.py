@@ -1260,7 +1260,7 @@ def test_real_sample_proves_claimed_capability():
                         ("EntryPoint", "IntProperty", "in")
                     ]
                     assert uber["return_type"] is None and uber["cpp_return_type"] == "void"
-                    assert uber["flags"] is None and uber["unresolved"] is False
+                    assert uber["flags"] is not None and uber["unresolved"] is False
                     look = decls["InpActEvt_IA_Look_K2Node_EnhancedInputActionEvent_0"]
                     assert [(p["name"], p["type_name"], p["direction"]) for p in look["parameters"]] == [
                         ("ActionValue", "StructProperty", "in"),
@@ -6709,3 +6709,44 @@ def test_entrypoint_linkage_never_crosses_owners():
         assert linked, name  # linkage must exist before its scoping means anything
         for e in linked:
             assert e["source_node_id"].startswith(prefix), (name, e["source_node_id"])
+
+
+# ---------------------------------------------------------------------------
+# Task 3: UFunction FunctionFlags -> FunctionDeclaration.flags (B8)
+# ---------------------------------------------------------------------------
+
+
+def _declaration(sample: str, name: str) -> dict[str, Any]:
+    for d in _bp_semantic(sample)["function_declarations"]:
+        if d.get("name") == name:
+            return d
+    raise AssertionError(f"no declaration {name!r} in {sample}")
+
+
+def _function(sample: str, name: str) -> dict[str, Any]:
+    for f in _bp_semantic(sample)["functions"]:
+        if f.get("function_name") == name:
+            return f
+    raise AssertionError(f"no function {name!r} in {sample}")
+
+
+def test_function_declarations_carry_efunctionflags():
+    decls = _bp_semantic("BP_CombatCharacter.uasset")["function_declarations"]
+    assert decls
+    assert any(d.get("flags") is not None for d in decls), "flags still universally null"
+
+
+def test_function_flags_are_non_negative_ints():
+    for sample in ("BP_CombatCharacter.uasset", "Helm_BP.uasset"):
+        seen = [d for d in _bp_semantic(sample)["function_declarations"] if d.get("flags") is not None]
+        assert seen, sample  # flags must exist before their range means anything
+        for d in seen:
+            assert isinstance(d["flags"], int) and d["flags"] >= 0, (sample, d["name"], d["flags"])
+
+
+def test_property_chain_still_parses_after_the_flags_read():
+    # A wrong offset yields plausible garbage flags instead of failing; the
+    # pin is that native_fields keep decoding with the known shape afterwards.
+    f = _function("BP_CombatCharacter.uasset", "Aim")
+    assert len(f["native_fields"]) == 3
+    assert {x["property_flags"] for x in f["native_fields"]} <= {0, 148, 384}
