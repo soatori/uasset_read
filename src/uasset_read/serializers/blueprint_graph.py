@@ -206,6 +206,25 @@ def _convert_nodes(graph: Any, nodes: list[dict[str, Any]], pin_count: int, node
                 pin_dict["reference_pass_through_pin_id"] = pin.reference_pass_through_pin_id
             if getattr(pin, "is_const", False):
                 pin_dict["is_const"] = True
+            # Pin type shape (FEdGraphPinType): container kind, object class and
+            # reference-ness decide whether a C++ translator emits TArray/TMap or
+            # a scalar. Raw package indexes travel here; _pin_from_raw resolves
+            # them to stable ids and display names.
+            if pin_type is not None:
+                pin_dict["container_type"] = int(pin_type.container_type or 0)
+                if pin_type.is_reference:
+                    pin_dict["is_reference"] = True
+                if pin_type.pin_subcategory_object:
+                    pin_dict["subcategory_object_index"] = int(pin_type.pin_subcategory_object)
+                if pin_type.container_type == 3:
+                    pin_dict["pin_value_type"] = {
+                        "category": pin_type.pin_value_type_category,
+                        "subcategory": pin_type.pin_value_type_subcategory,
+                        "subcategory_object_index": pin_type.pin_value_type_subcategory_object,
+                        "is_const": pin_type.map_key_terminal_is_const,
+                        "is_weak_pointer": pin_type.map_key_terminal_is_weak_pointer,
+                        "is_uobject_wrapper": pin_type.map_key_terminal_is_uobject_wrapper,
+                    }
             pins.append(pin_dict)
         pin_count += len(pins)
         short_id = f"export:{node._export_index - 1}" if getattr(node, "_export_index", 0) else ""

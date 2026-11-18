@@ -84,6 +84,39 @@ class K2NodeMetadata:
     opaque_properties: list[OpaqueRegion] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class PinValueType:
+    """FEdGraphTerminalType (``FEdGraphPinType::PinValueType``), map value terminal.
+
+    Retained from ``FEdGraphPinType`` so a Map pin's value type reaches the
+    projection instead of being cursor-only.
+    """
+
+    category: str = ""
+    subcategory: str = ""
+    subcategory_object_id: str | None = None
+    subcategory_object_name: str | None = None
+    is_const: bool = False
+    is_weak_pointer: bool = False
+    is_uobject_wrapper: bool = False
+
+
+def _object_id_from_index(index: int | None) -> str | None:
+    """Package index -> stable object id. Mirrors ``k2_metadata.py:70``.
+
+    UE's FPackageIndex is negative for imports and 1-based positive for
+    exports; zero is the null index.
+    """
+    if not index:
+        return None
+    return f"import:{-index - 1}" if index < 0 else f"export:{index - 1}"
+
+
+def _container_name(container_type: int) -> str:
+    """EPinContainerType -> name. 0=none 1=array 2=set 3=map."""
+    return {0: "none", 1: "array", 2: "set", 3: "map"}.get(container_type, "none")
+
+
 @dataclass
 class BlueprintPin:
     id: str
@@ -101,6 +134,11 @@ class BlueprintPin:
     owner_node_id: NodeId
     raw_region: ByteRegion | None
     is_const: bool = False
+    container_type: int = 0
+    subcategory_object_id: str | None = None
+    subcategory_object_name: str | None = None
+    is_reference: bool = False
+    pin_value_type: PinValueType | None = None
 
 
 @dataclass
@@ -374,6 +412,27 @@ def _project_pin(pin: BlueprintPin) -> dict[str, Any]:
         out["reference_pass_through_pin_id"] = pin.reference_pass_through_pin_id
     if pin.is_const:
         out["is_const"] = True
+    # Type shape is always emitted: a consumer must be able to tell an
+    # array/Map/Set pin from a scalar one without guessing. Identity fields
+    # stay omitted when empty (Task 6 budget rule).
+    out["container_type"] = pin.container_type
+    out["is_reference"] = pin.is_reference
+    if pin.subcategory_object_id:
+        out["subcategory_object_id"] = pin.subcategory_object_id
+        if pin.subcategory_object_name:
+            out["subcategory_object_name"] = pin.subcategory_object_name
+    if pin.pin_value_type is not None:
+        value_type: dict[str, Any] = {"category": pin.pin_value_type.category}
+        if pin.pin_value_type.subcategory:
+            value_type["subcategory"] = pin.pin_value_type.subcategory
+        if pin.pin_value_type.subcategory_object_id:
+            value_type["subcategory_object_id"] = pin.pin_value_type.subcategory_object_id
+            if pin.pin_value_type.subcategory_object_name:
+                value_type["subcategory_object_name"] = pin.pin_value_type.subcategory_object_name
+        for flag in ("is_const", "is_weak_pointer", "is_uobject_wrapper"):
+            if getattr(pin.pin_value_type, flag):
+                value_type[flag] = True
+        out["pin_value_type"] = value_type
     return out
 
 

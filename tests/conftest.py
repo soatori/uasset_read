@@ -40,6 +40,9 @@ Budget 181 -> 182 on 2026-11-12 (untrusted-read Task 11, property-layer failures
 Budget 182 -> 183 on 2026-11-12 (untrusted-read Task 12, collection counts bounded by declared payload): 183 is the measured final value, not headroom.
 Budget 183 -> 184 on 2026-11-12 (untrusted-read Task 13, agent boundary wraps memory-limit failures): 184 is the measured final value, not headroom.
 Budget 184 -> 186 on 2026-11-15 (#672, stalled collection tails preserved as opaque sibling entries): 186 is the measured final value, not headroom.
+Budget 186 -> 189 on 2026-11-18 (blueprint C++ translation data gaps Task 1, pin
+container/object/reference types projected: three sample-backed tests).
+189 is the measured final value, not headroom.
 No fixtures live here — the baseline is driven by real samples in
 tests/test_samples.py; temporary probes belong to untracked temp/.
 """
@@ -48,7 +51,7 @@ from __future__ import annotations
 
 import pytest
 
-ITEM_BUDGET = 186
+ITEM_BUDGET = 189
 
 
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:

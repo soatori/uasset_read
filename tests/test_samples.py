@@ -6602,3 +6602,61 @@ def test_agent_tool_wraps_memory_limit_as_envelope(monkeypatch):
     monkeypatch.setattr(agent_tools, "parse_package_document", bad_mappings)
     with pytest.raises(TypeError, match="mappings_path must be a path"):
         agent_tools.inspect_package("whatever.uasset")
+
+
+# ---------------------------------------------------------------------------
+# Task 1: pin container / object / reference types (A1 + A6)
+# ---------------------------------------------------------------------------
+
+
+def _projected_package(sample: str, mode: str = "normal") -> dict[str, Any]:
+    from uasset_read import parse_package_document
+    from uasset_read.projection import project_document
+
+    return project_document(parse_package_document(str(SAMPLES / sample)), mode=mode)
+
+
+def _projected_pins(sample: str = "BP_CombatCharacter.uasset", mode: str = "normal") -> list[dict[str, Any]]:
+    out = _projected_package(sample, mode)
+    return [
+        pin
+        for obj in out.get("objects", [])
+        for graph in (obj.get("semantic") or {}).get("graphs") or []
+        for node in graph.get("nodes") or []
+        for pin in node.get("pins") or []
+    ]
+
+
+def test_projected_pins_carry_container_and_object_types():
+    # Counts are the projection's own totals on this fixture (370 nodes,
+    # 1031 pins, verified 2026-11-18). Decode-layer pin-type reads are a
+    # larger population (they include sub-pin/terminal reads) and must not be
+    # used as the expected value here.
+    pins = _projected_pins()
+    assert len(pins) == 1031
+    assert sum(1 for p in pins if p.get("container_type")) == 22
+    assert sum(1 for p in pins if p.get("subcategory_object_id")) == 374
+    assert sum(1 for p in pins if p.get("is_reference")) == 13
+
+
+def test_pin_projection_conventions():
+    from uasset_read.models.analysis import _container_name, _object_id_from_index
+
+    # EPinContainerType: 0=none 1=array 2=set 3=map. An off-by-one silently
+    # makes every container declaration wrong.
+    assert [_container_name(i) for i in range(4)] == ["none", "array", "set", "map"]
+
+    # Negative index -> import, positive -> export (mirrors k2_metadata.py:70).
+    assert _object_id_from_index(-59) == "import:58"
+    assert _object_id_from_index(3) == "export:2"
+    assert _object_id_from_index(0) is None
+    assert _object_id_from_index(None) is None
+
+
+def test_new_pin_fields_are_identical_in_normal_and_debug():
+    normal = _projected_pins(mode="normal")
+    debug = _projected_pins(mode="debug")
+    # Parity is only meaningful once the fields exist in both modes.
+    assert any("container_type" in p for p in normal)
+    assert any("container_type" in p for p in debug)
+    assert normal == debug

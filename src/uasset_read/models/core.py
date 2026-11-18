@@ -35,6 +35,11 @@ class FEdGraphPinType:
     map_key_terminal_is_const: bool = False
     map_key_terminal_is_weak_pointer: bool = False
     map_key_terminal_is_uobject_wrapper: bool = False
+    # FEdGraphPinType::PinValueType identity (EdGraphPin.cpp:218). Retained so
+    # a Map pin's value type reaches projection instead of being cursor-only.
+    pin_value_type_category: str = ""
+    pin_value_type_subcategory: str = ""
+    pin_value_type_subcategory_object: int | None = None
 
 
 @dataclass

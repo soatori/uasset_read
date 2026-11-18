@@ -22,8 +22,11 @@ from uasset_read.models.analysis import (
     NodeId,
     PinLink,
     PinLinkRef,
+    PinValueType,
+    _container_name,
     _graph_id_from_str,
     _node_id_from_str,
+    _object_id_from_index,
     pin_lookup,
 )
 from uasset_read.models.diagnostics import Diagnostic, make_diagnostic
@@ -142,7 +145,43 @@ def _qualify_target_node_id(to_node: str, owner_object_id: str, owner_node_expor
     return _node_id_from_str(to_node)
 
 
-def _pin_from_raw(node_id: NodeId, pin: dict[str, Any], owner_node_exports: frozenset[str]) -> BlueprintPin:
+def _pin_value_type_from_raw(raw: Any, object_names: dict[str, str] | None) -> PinValueType | None:
+    """Raw PinValueType dict -> typed PinValueType, or None when absent/empty."""
+    if not isinstance(raw, dict) or not raw:
+        return None
+    object_id, name = _resolve_object_identity(raw.get("subcategory_object_index"), object_names)
+    return PinValueType(
+        category=str(raw.get("category") or ""),
+        subcategory=str(raw.get("subcategory") or ""),
+        subcategory_object_id=object_id,
+        subcategory_object_name=name,
+        is_const=bool(raw.get("is_const") or False),
+        is_weak_pointer=bool(raw.get("is_weak_pointer") or False),
+        is_uobject_wrapper=bool(raw.get("is_uobject_wrapper") or False),
+    )
+
+
+def _resolve_object_identity(
+    index: int | None, object_names: dict[str, str] | None
+) -> tuple[str | None, str | None]:
+    """Package index -> (stable object id, display name).
+
+    A non-zero index never resolves to (None, None): an unresolvable one keeps
+    the id string as its name so a consumer can still see which object was meant.
+    """
+    object_id = _object_id_from_index(index)
+    if object_id is None:
+        return None, None
+    name = (object_names or {}).get(object_id)
+    return object_id, name or object_id
+
+
+def _pin_from_raw(
+    node_id: NodeId,
+    pin: dict[str, Any],
+    owner_node_exports: frozenset[str],
+    object_names: dict[str, str] | None = None,
+) -> BlueprintPin:
     linked: list[PinLink] = []
     for link in pin.get("linked") or []:
         to_node = link.get("to_node") or ""
@@ -166,6 +205,9 @@ def _pin_from_raw(node_id: NodeId, pin: dict[str, Any], owner_node_exports: froz
                 raw_ref=raw,
             )
         )
+    subcategory_object_id, subcategory_object_name = _resolve_object_identity(
+        pin.get("subcategory_object_index"), object_names
+    )
     return BlueprintPin(
         id=str(pin.get("id") or ""),
         name=str(pin.get("name") or ""),
@@ -182,6 +224,11 @@ def _pin_from_raw(node_id: NodeId, pin: dict[str, Any], owner_node_exports: froz
         owner_node_id=node_id,
         raw_region=None,
         is_const=bool(pin.get("is_const") or False),
+        container_type=int(pin.get("container_type") or 0),
+        subcategory_object_id=subcategory_object_id,
+        subcategory_object_name=subcategory_object_name,
+        is_reference=bool(pin.get("is_reference") or False),
+        pin_value_type=_pin_value_type_from_raw(pin.get("pin_value_type"), object_names),
     )
 
 
@@ -267,7 +314,8 @@ def _node_from_raw(
     class_name = str(node.get("type") or node.get("class_name") or "")
     # Default empty context: a caller without the owner's node set can never
     # fabricate ownership for a bare target (safe by default).
-    pins = [_pin_from_raw(node_id, p, owner_node_exports) for p in node.get("pins") or []]
+    object_names = _object_name_index(objects_by_id)
+    pins = [_pin_from_raw(node_id, p, owner_node_exports, object_names) for p in node.get("pins") or []]
     return BlueprintNode(
         id=node_id,
         guid=node.get("node_guid") or node.get("guid"),
