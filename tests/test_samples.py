@@ -6777,3 +6777,25 @@ def test_cpp_type_reflects_container_type():
 def test_replication_fields_are_projected_when_present():
     vds = _bp_semantic("BP_CombatCharacter.uasset")["variable_definitions"]
     assert all(("repnotify_function" in v and "replication_condition" in v) for v in vds)
+
+
+# ---------------------------------------------------------------------------
+# Task 5: dispatcher records from delegate nodes (D)
+# ---------------------------------------------------------------------------
+
+
+def test_delegate_nodes_resolve_to_dispatcher_records():
+    # BP_CombatEnemy carries 3 K2Node_CallDelegate nodes whose dispatcher
+    # identity lives in a DelegateReference FMemberReference (MemberName
+    # "On Attack Completed"), not under a DispatcherName tag.
+    sem = _bp_semantic("BP_CombatEnemy.uasset")
+    delegate_nodes = [
+        n
+        for g in sem["graphs"]
+        for n in g["nodes"]
+        if n["class_name"] in ("K2Node_AddDelegate", "K2Node_CallDelegate", "K2Node_RemoveDelegate")
+    ]
+    assert delegate_nodes, "fixture must carry delegate nodes"
+    assert sem["dispatchers"], "DelegateReference decodes but no dispatcher record is produced"
+    resolved = [e for e in sem.get("variable_events", []) if e.get("event_kind") == "dispatcher"]
+    assert resolved and not any(e.get("unresolved") for e in resolved)

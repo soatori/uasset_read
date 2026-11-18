@@ -23,7 +23,14 @@ _IDENTITY_KEYS = (
 )
 
 # Export-level property keys that carry FMemberReference-style identity.
-_REFERENCE_PROP_KEYS = ("EventReference", "FunctionReference", "VariableReference")
+_REFERENCE_PROP_KEYS = (
+    "EventReference",
+    "FunctionReference",
+    "VariableReference",
+    # K2Node_AddDelegate / CallDelegate / RemoveDelegate carry the dispatcher
+    # identity here, not under a DispatcherName tag.
+    "DelegateReference",
+)
 
 _IDENTITY_FIELD_NAMES = (
     "function_name",
@@ -137,6 +144,8 @@ def _enrich_identity(
                 meta.function_name = name
             elif ref_key == "VariableReference" and not meta.variable_name:
                 meta.variable_name = name
+            elif ref_key == "DelegateReference" and not meta.dispatcher_name:
+                meta.dispatcher_name = name
         parent = _extract_parent(fields, object_names)
         if parent and not meta.member_parent:
             meta.member_parent = parent
