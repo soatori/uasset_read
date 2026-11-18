@@ -75,6 +75,8 @@ class KismetDecompiledResult:
     # Native FProperty declarations already decoded by ufunction_reader
     # (native_property_count > 0). Empty means "no signature evidence".
     native_fields: list[NativeFieldDeclaration] = field(default_factory=list)
+    # UFunction::FunctionFlags (EFunctionFlags) from the native UFunction tail.
+    function_flags: int | None = None
     # Structured CFG/diagnostics from the decompile pass (plan C1):
     # CFG_JUMP_TARGET_UNRESOLVED reaches semantic.functions[].diagnostics
     # through legacy_reader's FunctionAnalysis seeding from this field.

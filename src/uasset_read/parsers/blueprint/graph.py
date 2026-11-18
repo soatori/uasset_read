@@ -22,8 +22,11 @@ from uasset_read.models.analysis import (
     NodeId,
     PinLink,
     PinLinkRef,
+    PinValueType,
     _graph_id_from_str,
     _node_id_from_str,
+    _object_name_map,
+    _resolve_object_label,
     pin_lookup,
 )
 from uasset_read.models.diagnostics import Diagnostic, make_diagnostic
@@ -142,7 +145,28 @@ def _qualify_target_node_id(to_node: str, owner_object_id: str, owner_node_expor
     return _node_id_from_str(to_node)
 
 
-def _pin_from_raw(node_id: NodeId, pin: dict[str, Any], owner_node_exports: frozenset[str]) -> BlueprintPin:
+def _pin_value_type_from_raw(raw: Any, object_names: dict[str, str] | None) -> PinValueType | None:
+    """Raw PinValueType dict -> typed PinValueType, or None when absent/empty."""
+    if not isinstance(raw, dict) or not raw:
+        return None
+    object_id, name = _resolve_object_label(raw.get("subcategory_object_index"), object_names)
+    return PinValueType(
+        category=str(raw.get("category") or ""),
+        subcategory=str(raw.get("subcategory") or ""),
+        subcategory_object_id=object_id,
+        subcategory_object_name=name,
+        is_const=bool(raw.get("is_const") or False),
+        is_weak_pointer=bool(raw.get("is_weak_pointer") or False),
+        is_uobject_wrapper=bool(raw.get("is_uobject_wrapper") or False),
+    )
+
+
+def _pin_from_raw(
+    node_id: NodeId,
+    pin: dict[str, Any],
+    owner_node_exports: frozenset[str],
+    object_names: dict[str, str] | None = None,
+) -> BlueprintPin:
     linked: list[PinLink] = []
     for link in pin.get("linked") or []:
         to_node = link.get("to_node") or ""
@@ -166,6 +190,9 @@ def _pin_from_raw(node_id: NodeId, pin: dict[str, Any], owner_node_exports: froz
                 raw_ref=raw,
             )
         )
+    subcategory_object_id, subcategory_object_name = _resolve_object_label(
+        pin.get("subcategory_object_index"), object_names
+    )
     return BlueprintPin(
         id=str(pin.get("id") or ""),
         name=str(pin.get("name") or ""),
@@ -182,6 +209,11 @@ def _pin_from_raw(node_id: NodeId, pin: dict[str, Any], owner_node_exports: froz
         owner_node_id=node_id,
         raw_region=None,
         is_const=bool(pin.get("is_const") or False),
+        container_type=int(pin.get("container_type") or 0),
+        subcategory_object_id=subcategory_object_id,
+        subcategory_object_name=subcategory_object_name,
+        is_reference=bool(pin.get("is_reference") or False),
+        pin_value_type=_pin_value_type_from_raw(pin.get("pin_value_type"), object_names),
     )
 
 
@@ -261,13 +293,15 @@ def _node_from_raw(
     node: dict[str, Any],
     objects_by_id: dict[str, Any] | None = None,
     owner_node_exports: frozenset[str] = frozenset(),
+    document_names: dict[str, str] | None = None,
 ) -> BlueprintNode:
     node_export = str(node.get("id") or "")
     node_id = NodeId(owner_object_id=owner_id.owner_object_id, node_export_id=node_export or "export:-1")
     class_name = str(node.get("type") or node.get("class_name") or "")
     # Default empty context: a caller without the owner's node set can never
     # fabricate ownership for a bare target (safe by default).
-    pins = [_pin_from_raw(node_id, p, owner_node_exports) for p in node.get("pins") or []]
+    object_names = document_names if document_names is not None else _object_name_index(objects_by_id)
+    pins = [_pin_from_raw(node_id, p, owner_node_exports, object_names) for p in node.get("pins") or []]
     return BlueprintNode(
         id=node_id,
         guid=node.get("node_guid") or node.get("guid"),
@@ -325,6 +359,7 @@ class BlueprintGraphDecoder:
         function_ids = _function_graph_ids(obj.properties)
         owner_num = _parse_export_id(obj.id)
         objects_by_id = {o.id: o for o in document.objects}
+        document_names = _object_name_map(document)
         # Owner-scope node membership: a bare export:N pin-link target is
         # qualified with this Blueprint's owner only when that export is one
         # of the owner's decoded node exports (the raw resolver's package-wide
@@ -355,7 +390,7 @@ class BlueprintGraphDecoder:
             nodes: list[BlueprintNode] = []
             refs: list[PinLinkRef] = []
             for node_raw in raw.get("nodes") or []:
-                node = _node_from_raw(owner_for_nodes, node_raw, objects_by_id, owner_node_exports)
+                node = _node_from_raw(owner_for_nodes, node_raw, objects_by_id, owner_node_exports, document_names)
                 nodes.append(node)
                 for pin in node.pins:
                     for link in pin.linked:

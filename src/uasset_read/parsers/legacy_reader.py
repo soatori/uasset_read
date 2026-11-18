@@ -2042,6 +2042,20 @@ def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
                 effect="semantic_loss",
             )
         )
+    # UFunction::FunctionFlags is read from the native tail after the script
+    # (Class.cpp UFunction::Serialize). A tail too short to hold it is a real
+    # anomaly, not an absent field: say so rather than leaving a bare null.
+    if getattr(kr, "function_flags", None) is None and status == "extracted":
+        diagnostics.append(
+            _diag(
+                "UFUNCTION_FLAGS_UNAVAILABLE",
+                "UFunction::FunctionFlags could not be read from the native tail "
+                "(fewer than 4 bytes after the script); FunctionDeclaration.flags stays null",
+                "semantic.functions.flags",
+                object_id=kr.object_id or None,
+                effect="semantic_loss",
+            )
+        )
     base = FunctionAnalysis(
         object_id=kr.object_id or (f"export:{kr.export_index}" if getattr(kr, "export_index", -1) >= 0 else ""),
         owner_object_id=owner_object_id,
@@ -2058,6 +2072,7 @@ def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
         bytecode_status=status,  # type: ignore[arg-type]
         diagnostics=diagnostics,
         native_fields=list(getattr(kr, "native_fields", None) or []),
+        function_flags=getattr(kr, "function_flags", None),
     )
     return base
 

@@ -69,11 +69,12 @@ def read_ed_graph_pin_type(
     # ContainerType (UE5 always uses modern uint8 format)
     pin_type.container_type = archive.read_u8()
     if pin_type.container_type == 3:  # Map
-        # Map key terminal type (FEdGraphTerminalType serialization)
-        # Reference: UE EdGraphPin.cpp:218 — Ar << PinValueType
-        archive.read_name(name_map)  # map key terminal category (write-only)
-        archive.read_name(name_map)  # map key terminal sub-category (write-only)
-        archive.read_i32()  # map key terminal sub-category object (write-only)
+        # FEdGraphPinType::PinValueType (FEdGraphTerminalType serialization).
+        # Reference: UE EdGraphPin.cpp:218 — Ar << PinValueType. Retained so the
+        # Map value terminal reaches projection (it was cursor-only before).
+        pin_type.pin_value_type_category = archive.read_name(name_map)
+        pin_type.pin_value_type_subcategory = archive.read_name(name_map)
+        pin_type.pin_value_type_subcategory_object = archive.read_i32()
 
         # FEdGraphTerminalType tail — EdGraphNode.cpp operator<<: two unconditional
         # 4-byte bools, then bTerminalIsUObjectWrapper gated on

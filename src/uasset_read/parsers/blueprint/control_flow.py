@@ -36,6 +36,10 @@ class ControlFlowEdge:
         "return",
     ]
     targets_known: bool = True
+    # Owning UFunction name. exec_chains flattens every function's edges into
+    # one list, so an edge without its owner cannot be attributed back to a
+    # function body.
+    function_name: str | None = None
 
 
 @dataclass
@@ -44,15 +48,19 @@ class ControlFlowGraph:
     edges: list[ControlFlowEdge]
     entry: int
     metadata: dict[str, Any]
+    function_name: str | None = None
 
 
 def project_cfg_edge(edge: ControlFlowEdge) -> dict[str, Any]:
-    return {
+    out: dict[str, Any] = {
         "source_block": edge.source_block,
         "target_block": edge.target_block,
         "kind": edge.kind,
         "targets_known": edge.targets_known,
     }
+    if edge.function_name:
+        out["function_name"] = edge.function_name
+    return out
 
 
 def project_cfg(cfg: ControlFlowGraph) -> dict[str, Any]:
@@ -70,6 +78,7 @@ def project_cfg(cfg: ControlFlowGraph) -> dict[str, Any]:
         "edges": [project_cfg_edge(edge) for edge in cfg.edges],
         "entry": cfg.entry,
         "metadata": dict(cfg.metadata),
+        "function_name": cfg.function_name,
     }
 
 

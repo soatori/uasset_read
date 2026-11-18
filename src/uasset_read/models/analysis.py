@@ -84,6 +84,170 @@ class K2NodeMetadata:
     opaque_properties: list[OpaqueRegion] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class PinValueType:
+    """FEdGraphTerminalType (``FEdGraphPinType::PinValueType``), map value terminal.
+
+    Retained from ``FEdGraphPinType`` so a Map pin's value type reaches the
+    projection instead of being cursor-only.
+    """
+
+    category: str = ""
+    subcategory: str = ""
+    subcategory_object_id: str | None = None
+    subcategory_object_name: str | None = None
+    is_const: bool = False
+    is_weak_pointer: bool = False
+    is_uobject_wrapper: bool = False
+
+
+def _object_id_from_index(index: int | None) -> str | None:
+    """Package index -> stable object id. Mirrors ``k2_metadata.py:70``.
+
+    UE's FPackageIndex is negative for imports and 1-based positive for
+    exports; zero is the null index.
+    """
+    if not index:
+        return None
+    return f"import:{-index - 1}" if index < 0 else f"export:{index - 1}"
+
+
+def _object_name_map(document: Any) -> dict[str, str]:
+    """object id -> display name, exports **and** imports.
+
+    Imports live in ``document.dependencies``, not ``document.objects``, so an
+    import-typed reference left as ``import:N`` dresses a package index up as a
+    display name. ``Dependency.index`` is the 0-based import-map position — the
+    same value ``_object_id_from_index`` derives from a negative FPackageIndex.
+    """
+    out: dict[str, str] = {}
+    for obj in getattr(document, "objects", None) or []:
+        name = getattr(obj, "name", None)
+        if name:
+            out[str(obj.id)] = str(name)
+    for dep in getattr(document, "dependencies", None) or []:
+        name = getattr(dep, "object_name", None)
+        index = getattr(dep, "index", None)
+        if name and isinstance(index, int):
+            out[f"import:{index}"] = str(name)
+    return out
+
+
+_VAR_TYPE_SCALARS = {
+    "bool": "bool",
+    "int": "int32",
+    "int64": "int64",
+    "float": "float",
+    "double": "double",
+    "name": "FName",
+    "str": "FString",
+    "string": "FString",
+    "text": "FText",
+}
+
+_VAR_TYPE_OBJECT_FORMS = {
+    "object": "{name}*",
+    "class": "{name}*",
+    "struct": "{name}",
+    "enum": "{name}",
+    "interface": "TScriptInterface<{name}>",
+    "softobject": "TSoftObjectPtr<{name}>",
+    "softclass": "TSoftClassPtr<{name}>",
+}
+
+
+def _var_type_element_cpp(
+    category: str,
+    subcategory: str,
+    vt: dict[str, Any],
+    object_names: dict[str, str] | None,
+) -> str | None:
+    """One element's C++ type, or None when it cannot be determined."""
+    if category == "real":
+        # UE maps FFloatProperty -> PC_Real/PC_Float and FDoubleProperty ->
+        # PC_Real/PC_Double (EdGraphSchema_K2.cpp:3512-3515), i.e. float and
+        # double, not two spellings of double.
+        return "double" if subcategory == "double" else "float"
+    if category == "byte":
+        # ByteProperty carries an enum as its subcategory object; without one it
+        # is a plain uint8 (same rule as kismet.native_fields).
+        _, name = _resolve_object_label(vt.get("pin_subcategory_object"), object_names)
+        return name or "uint8"
+    scalar = _VAR_TYPE_SCALARS.get(category)
+    if scalar is not None:
+        return scalar
+    form = _VAR_TYPE_OBJECT_FORMS.get(category)
+    if form is not None:
+        _, name = _resolve_object_label(vt.get("pin_subcategory_object"), object_names)
+        return None if name is None else form.format(name=name)
+    return None
+
+
+def _var_type_cpp_type(
+    vt: dict[str, Any] | None, object_names: dict[str, str] | None = None
+) -> str | None:
+    """FEdGraphPinType field dict -> concrete C++ type, or None when undetermined.
+
+    Mirrors kismet.native_fields.native_field_cpp_type for every shape both
+    cover (scalars, byte/enum, object/class/struct, interface, soft refs,
+    TArray/TSet/TMap) so the two never spell the same C++ type differently.
+    Two deliberate differences: delegate pins (``mcdelegate``) return None
+    rather than native_fields' ``FMulticastScriptDelegate`` placeholder — a
+    Blueprint dispatcher's real C++ type is its generated signature delegate,
+    which the flat VarType shape does not carry — and an unresolvable reference
+    returns None rather than native_fields' ``/* unknown: ... */`` fallback.
+    A None is an explicit unknown that callers must surface as one, never as
+    "this member has no type".
+    """
+    if not isinstance(vt, dict):
+        return None
+    category = str(vt.get("pin_category") or "")
+    container = int(vt.get("container_type") or 0)
+    if container == 3:
+        key = _var_type_element_cpp(
+            category, str(vt.get("pin_subcategory") or ""), vt, object_names
+        )
+        value = _var_type_element_cpp(
+            str(vt.get("map_terminal_category") or ""),
+            str(vt.get("map_terminal_subcategory") or ""),
+            {"pin_subcategory_object": vt.get("map_terminal_subcategory_object")},
+            object_names,
+        )
+        return f"TMap<{key}, {value}>" if key is not None and value is not None else None
+    element = _var_type_element_cpp(
+        category, str(vt.get("pin_subcategory") or ""), vt, object_names
+    )
+    if element is None:
+        return None
+    return {0: element, 1: f"TArray<{element}>", 2: f"TSet<{element}>"}.get(container, element)
+
+
+def _pin_value_type_from_projected(raw: Any) -> PinValueType | None:
+    """Projected pin_value_type dict -> typed PinValueType (round-trip)."""
+    if not isinstance(raw, dict) or not raw:
+        return None
+    return PinValueType(
+        category=str(raw.get("category") or ""),
+        subcategory=str(raw.get("subcategory") or ""),
+        subcategory_object_id=raw.get("subcategory_object_id"),
+        subcategory_object_name=raw.get("subcategory_object_name"),
+        is_const=bool(raw.get("is_const") or False),
+        is_weak_pointer=bool(raw.get("is_weak_pointer") or False),
+        is_uobject_wrapper=bool(raw.get("is_uobject_wrapper") or False),
+    )
+
+
+def _resolve_object_label(
+    index: int | None, object_names: dict[str, str] | None
+) -> tuple[str | None, str | None]:
+    """Package index -> (stable object id, display name)."""
+    object_id = _object_id_from_index(index)
+    if object_id is None:
+        return None, None
+    name = (object_names or {}).get(object_id)
+    return object_id, name or object_id
+
+
 @dataclass
 class BlueprintPin:
     id: str
@@ -101,6 +265,11 @@ class BlueprintPin:
     owner_node_id: NodeId
     raw_region: ByteRegion | None
     is_const: bool = False
+    container_type: int = 0
+    subcategory_object_id: str | None = None
+    subcategory_object_name: str | None = None
+    is_reference: bool = False
+    pin_value_type: PinValueType | None = None
 
 
 @dataclass
@@ -289,6 +458,11 @@ class BlueprintGraph:
                         owner_node_id=node_id,
                         raw_region=None,
                         is_const=bool(pin_raw.get("is_const") or False),
+                        container_type=int(pin_raw.get("container_type") or 0),
+                        subcategory_object_id=pin_raw.get("subcategory_object_id"),
+                        subcategory_object_name=pin_raw.get("subcategory_object_name"),
+                        is_reference=bool(pin_raw.get("is_reference") or False),
+                        pin_value_type=_pin_value_type_from_projected(pin_raw.get("pin_value_type")),
                     )
                 )
             nodes.append(
@@ -374,6 +548,27 @@ def _project_pin(pin: BlueprintPin) -> dict[str, Any]:
         out["reference_pass_through_pin_id"] = pin.reference_pass_through_pin_id
     if pin.is_const:
         out["is_const"] = True
+    # Type shape is always emitted: a consumer must be able to tell an
+    # array/Map/Set pin from a scalar one without guessing. Identity fields
+    # stay omitted when empty (Task 6 budget rule).
+    out["container_type"] = pin.container_type
+    out["is_reference"] = pin.is_reference
+    if pin.subcategory_object_id:
+        out["subcategory_object_id"] = pin.subcategory_object_id
+        if pin.subcategory_object_name:
+            out["subcategory_object_name"] = pin.subcategory_object_name
+    if pin.pin_value_type is not None:
+        value_type: dict[str, Any] = {"category": pin.pin_value_type.category}
+        if pin.pin_value_type.subcategory:
+            value_type["subcategory"] = pin.pin_value_type.subcategory
+        if pin.pin_value_type.subcategory_object_id:
+            value_type["subcategory_object_id"] = pin.pin_value_type.subcategory_object_id
+            if pin.pin_value_type.subcategory_object_name:
+                value_type["subcategory_object_name"] = pin.pin_value_type.subcategory_object_name
+        for flag in ("is_const", "is_weak_pointer", "is_uobject_wrapper"):
+            if getattr(pin.pin_value_type, flag):
+                value_type[flag] = True
+        out["pin_value_type"] = value_type
     return out
 
 
@@ -603,6 +798,9 @@ class FunctionAnalysis:
     # Signature evidence (already-decoded native FProperty declarations); the
     # correlation layer projects FunctionDeclaration from these.
     native_fields: list[NativeFieldDeclaration] = field(default_factory=list)
+    # UFunction::FunctionFlags (EFunctionFlags) read from the native UFunction
+    # tail. None when the export did not carry one or the read was out of range.
+    function_flags: int | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> FunctionAnalysis:
@@ -717,6 +915,7 @@ class FunctionAnalysis:
                 )
                 if item is not None
             ],
+            function_flags=data.get("function_flags"),
         )
 
 
@@ -857,6 +1056,16 @@ class VariableDefinition:
     object_id: str
     source_range: ByteRegion | None
     unresolved: bool = False
+    # BPVariableDescription replication members, emitted as the property bag
+    # carries them. RepNotifyFunc is the raw string — the FName "None" when the
+    # member has no RepNotify, not null. ReplicationCondition is routed through
+    # project_operand, so an enum tag projects as a wrapper dict
+    # ({"enum_type": "ELifetimeCondition", "value_name":
+    # "ELifetimeCondition::COND_None"}), not as a bare name or int. No
+    # ELifetimeCondition name table is invented: no tracked fixture carries a
+    # non-default value, so any spelling would be untested code.
+    repnotify_function: str | None = None
+    replication_condition: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -895,6 +1104,16 @@ class ComponentRecord:
     name: str
     class_name: str
     object_id: str
+    # SCS attach tree (UK2Node_... SCS_Node tagged properties). attach_to is the
+    # socket/attach target name; parent_component is the owning component name;
+    # child_names are this node's ChildNodes resolved to component names.
+    attach_to: str | None = None
+    parent_component: str | None = None
+    # child_names holds resolved display names only; child_ids holds the stable
+    # export ids for every child, resolved or not. An id never sits in a name
+    # field (stable ids use table kind and index; names are not unique).
+    child_names: list[str] = field(default_factory=list)
+    child_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

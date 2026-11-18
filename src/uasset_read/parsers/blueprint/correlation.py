@@ -36,6 +36,8 @@ from uasset_read.models.analysis import (
     VariableDefinition,
     VariableEventRecord,
     _int_or_none,
+    _object_name_map,
+    _var_type_cpp_type,
     project_blueprint_graph,
 )
 from uasset_read.constants import format_guid_fields
@@ -43,6 +45,7 @@ from uasset_read.models.byte_ranges import ByteRegion, project_region
 from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.models.document import PackageDocument
 from uasset_read.models.object_model import ObjectRecord
+from uasset_read.models.properties import PropertyBag
 from uasset_read.parsers.blueprint.bytecode import (
     _CALL_OPCODES,
     DEBUG_MAPPING_UNAVAILABLE,
@@ -105,12 +108,34 @@ def _region_or_none(value: ByteRegion | None) -> ByteRegion | None:
     return value if isinstance(value, ByteRegion) else None
 
 
+def _is_plain_name(text: Any) -> bool:
+    """True for a bare variable name, never for a str()/repr() object dump.
+
+    UE variable names may contain spaces ("Axis X", "Max HP"), so only the
+    signature of an object dump is rejected: a nested-call paren, a keyword
+    assignment, a leading "<...>" repr, or an EX_* expression name. A dump
+    reaching semantic output as a read/write name is a data leak — the same
+    no-repr rule project_operand documents.
+    """
+    return (
+        isinstance(text, str)
+        and bool(text)
+        and text != "None"
+        and not text.startswith("<")
+        and not text.startswith("EX_")
+        and "(" not in text
+        and "=" not in text
+    )
+
+
 def _extract_variable_name(value: Any) -> str | None:
     """Display name for a variable reference (typed expr or projected dict)."""
     if value is None:
         return None
     if isinstance(value, str):
-        return value or None
+        # Same filter as every other name source: a bare string can still be a
+        # str() dump, and it must not reach reads/writes unfiltered.
+        return value if _is_plain_name(value) else None
     if isinstance(value, dict):
         if "Variable" in value and not ("Assignment" in value or "Property" in value):
             # Projected EX_*VariableBase: {"Variable": <pointer dict>, ...}
@@ -136,16 +161,14 @@ def _extract_variable_name(value: Any) -> str | None:
         if isinstance(pointer, str):
             return pointer or None
         text = str(pointer)
-        if text and text != "None" and not text.startswith("<"):
+        if _is_plain_name(text):
             return text
         nested = _extract_variable_name(pointer)
         if nested:
             return nested
         return None
     text = str(value)
-    if not text or text == "None" or text.startswith("<"):
-        return None
-    return text
+    return text if _is_plain_name(text) else None
 
 
 def _opcode_of(value: Any) -> str | None:
@@ -393,7 +416,15 @@ class _CallResolver:
 
 
 def _function_flags(document: PackageDocument, fn: FunctionAnalysis) -> int | None:
-    """FunctionFlags from the function export's tagged property bag, if carried."""
+    """UFunction::FunctionFlags (EFunctionFlags) for one function.
+
+    The native UFunction tail read is authoritative (kismet/ufunction_reader.py,
+    Class.cpp UFunction::Serialize): function exports do not carry FunctionFlags
+    in their tagged property bag. The bag stays as a fallback for re-decoded
+    documents that never ran the native read.
+    """
+    if fn.function_flags is not None:
+        return fn.function_flags
     if not fn.object_id.startswith("export:"):
         return None
     record = next((o for o in document.objects if o.id == fn.object_id), None)
@@ -462,7 +493,9 @@ class BlueprintCorrelation:
         self._enrich_graphs(document, owner, graphs, diagnostics)
 
         declaration, parent_class = self._extract_declaration(document, owner, seed)
-        variable_definitions = self._extract_variable_definitions(owner)
+        variable_definitions = self._extract_variable_definitions(
+            owner, _object_name_map(document), diagnostics
+        )
         components = self._extract_components(document, owner)
 
         resolver = _CallResolver(
@@ -506,15 +539,30 @@ class BlueprintCorrelation:
                     flags=flags,
                     native_fields=list(fn.native_fields),
                     source_range=_region_or_none(fn.script_source_range),
-                    unresolved=not fn.native_fields and flags is None,
+                    # unresolved describes *signature* evidence: a declaration
+                    # with no decoded FProperty fields has no recoverable
+                    # parameter/return shape regardless of whether FunctionFlags
+                    # decoded (pinned by test_critical_boundary_guards).
+                    unresolved=not fn.native_fields,
                 )
             )
 
         constructors, constructor_diags = self._extract_constructors(document, owner, graphs, parent_class, components)
         diagnostics.extend(constructor_diags)
 
-        control_flow = [fn.cfg for fn in functions if fn.cfg.blocks]
-        edges = [edge for fn in functions for edge in fn.cfg.edges]
+        # exec_chains flattens every function's edges into one list, so each
+        # edge and each CFG must carry its owning function name or the summary
+        # cannot be attributed back to a function body.
+        control_flow = []
+        edges: list[Any] = []
+        for fn in functions:
+            name = fn.function_name or fn.name
+            fn.cfg.function_name = name
+            for edge in fn.cfg.edges:
+                edge.function_name = name
+            if fn.cfg.blocks:
+                control_flow.append(fn.cfg)
+            edges.extend(fn.cfg.edges)
         exec_chains = ExecChainSummary(
             metadata={
                 "kind": "direct_exec_edge_summary",
@@ -726,13 +774,19 @@ class BlueprintCorrelation:
             fields = item.get("fields")
             yield fields if isinstance(fields, dict) else item
 
-    def _extract_variable_definitions(self, owner: ObjectRecord) -> list[VariableDefinition]:
+    def _extract_variable_definitions(
+        self,
+        owner: ObjectRecord,
+        object_names: dict[str, str] | None = None,
+        diagnostics: list[Diagnostic] | None = None,
+    ) -> list[VariableDefinition]:
         props = owner.properties
         if props is None:
             return []
         raw = props.get("NewVariables")
         if raw is None:
             return []
+        sink = diagnostics if diagnostics is not None else []
         definitions: list[VariableDefinition] = []
         for fields in self._iter_property_structs(raw):
             name = fields.get("VarName")
@@ -764,11 +818,31 @@ class BlueprintCorrelation:
             if type_name and pin_sub:
                 type_name = f"{type_name}:{pin_sub}"
             property_flags = fields.get("PropertyFlags")
+            cpp_type = _var_type_cpp_type(vt_fields, object_names)
+            # A decoded type with no derivable C++ spelling is an explicit
+            # unknown, not a silent null beside unresolved=False: a consumer
+            # must be able to tell "no C++ type" from "never parsed"
+            # (constraints.md: never silently skip and claim coverage).
+            if type_name is not None and cpp_type is None:
+                sink.append(
+                    Diagnostic(
+                        severity="info",
+                        code="VARIABLE_CPP_TYPE_UNDETERMINED",
+                        message=(
+                            f"member {name!r} decodes as {type_name} but its VarType "
+                            "shape yields no concrete C++ type; "
+                            "VariableDefinition.cpp_type stays null"
+                        ),
+                        stage="semantic.blueprint.correlation",
+                        object_id=owner.id,
+                        effect="semantic_loss",
+                    )
+                )
             definitions.append(
                 VariableDefinition(
                     name=name,
                     type_name=type_name,
-                    cpp_type=None,
+                    cpp_type=cpp_type,
                     raw_type=raw_type,
                     array_dim=None,
                     property_flags=property_flags if isinstance(property_flags, int) else None,
@@ -777,6 +851,8 @@ class BlueprintCorrelation:
                     source_range=None,
                     # #654: unresolved must cover the type, not just name/guid —
                     # a definition whose VarType never decoded claims nothing.
+                    repnotify_function=(fields.get("RepNotifyFunc") if isinstance(fields.get("RepNotifyFunc"), str) else None),
+                    replication_condition=fields.get("ReplicationCondition"),
                     unresolved=type_name is None,
                 )
             )
@@ -788,6 +864,11 @@ class BlueprintCorrelation:
         if scope is None:
             return []
         records: list[ComponentRecord] = []
+        # Pass 1: resolve each SCS_Node's component name and remember it by
+        # table index so ChildNodes (1-based export indexes, same convention as
+        # ComponentTemplate below) can be resolved to names in pass 2.
+        name_by_table: dict[int, str] = {}
+        staged: list[tuple[ObjectRecord, PropertyBag, str, str]] = []
         for obj in document.objects:
             if obj.class_name != "SCS_Node" or not obj.properties:
                 continue
@@ -811,7 +892,45 @@ class BlueprintCorrelation:
             cclass = props.get("ComponentClass")
             cclass_value = cclass.get("value") if isinstance(cclass, dict) else None
             type_name = cclass_value.get("object_name", "") if isinstance(cclass_value, dict) else ""
-            records.append(ComponentRecord(name=str(name), class_name=str(type_name), object_id=obj.id))
+            name = str(name)
+            if isinstance(obj.table_index, int):
+                name_by_table[obj.table_index] = name
+            staged.append((obj, props, name, str(type_name)))
+
+        def _name_of_tag(props: PropertyBag, key: str) -> str | None:
+            entry = props.get(key)
+            value = entry.get("value") if isinstance(entry, dict) else entry
+            return value if isinstance(value, str) and value else None
+
+        for obj, props, name, type_name in staged:
+            child_names: list[str] = []
+            child_ids: list[str] = []
+            children = props.get("ChildNodes")
+            child_values = children.get("value") if isinstance(children, dict) else None
+            if isinstance(child_values, list):
+                for raw in child_values:
+                    index = raw.get("value") if isinstance(raw, dict) else raw
+                    # A ChildNodes slot that is not a positive index is not a
+                    # child reference at all; there is nothing to preserve.
+                    if not isinstance(index, int) or index <= 0:
+                        continue
+                    # 1-based export index, matching the ComponentTemplate rule.
+                    object_id = f"export:{index - 1}"
+                    child_ids.append(object_id)
+                    resolved = name_by_table.get(index - 1)
+                    if resolved is not None:
+                        child_names.append(resolved)
+            records.append(
+                ComponentRecord(
+                    name=name,
+                    class_name=type_name,
+                    object_id=obj.id,
+                    attach_to=_name_of_tag(props, "AttachToName"),
+                    parent_component=_name_of_tag(props, "ParentComponentOrVariableName"),
+                    child_names=child_names,
+                    child_ids=child_ids,
+                )
+            )
         records.sort(key=lambda item: item.object_id)
         return records
 
@@ -824,11 +943,34 @@ class BlueprintCorrelation:
         functions: list[FunctionAnalysis],
     ) -> list[EntrypointRecord]:
         entrypoints: list[EntrypointRecord] = []
+        # A K2Node_FunctionEntry node is the graph-side identity of a UFunction.
+        # Scoped to this owner's graphs only: a same-named function in another
+        # owner's graphs must never satisfy this owner's lookup.
+        entry_nodes: dict[str, Any] = {}
+        ambiguous: set[str] = set()
+        for graph in graphs:
+            for node in graph.nodes:
+                meta = node.metadata
+                if node.class_name == "K2Node_FunctionEntry" and meta and meta.function_name:
+                    name = meta.function_name
+                    if name in entry_nodes:
+                        ambiguous.add(name)
+                    else:
+                        entry_nodes[name] = node.id
+        # Two entry nodes claiming one name is ambiguous: linking to whichever
+        # was walked first would be a guess. No tracked fixture has collisions.
+        for name in ambiguous:
+            entry_nodes.pop(name, None)
         for fn in functions:
+            name = fn.function_name or fn.name
+            # match_method stays "object_id": the record is matched to the
+            # UFunction export, which is the stronger identity. source_node_id
+            # is an added graph-side attribute, not the matching key.
             record = EntrypointRecord(
                 kind="function",
-                name=fn.function_name or fn.name,
+                name=name,
                 object_id=fn.object_id,
+                source_node_id=entry_nodes.get(name),
                 match_method="object_id",
                 confidence=1.0,
                 unresolved=False,
@@ -837,10 +979,11 @@ class BlueprintCorrelation:
             entrypoints.append(record)
         for graph in graphs:
             if graph.kind == "construction_script" or graph.name == "UserConstructionScript":
+                name = graph.name or "UserConstructionScript"
                 entrypoints.append(
                     EntrypointRecord(
                         kind="construction",
-                        name=graph.name or "UserConstructionScript",
+                        name=name,
                         object_id=owner.id,
                         match_method="object_id",
                         confidence=0.9,
@@ -1304,6 +1447,7 @@ def project_function_analysis(fn: FunctionAnalysis) -> dict[str, Any]:
         # Same static-content emission as function_declarations[].native_fields:
         # normal-mode signature evidence, never debug evidence.
         "native_fields": [project_operand(field) for field in fn.native_fields],
+        "function_flags": fn.function_flags,
         "bytecode_status": fn.bytecode_status,
         "diagnostics": [d.to_dict() for d in fn.diagnostics],
     }
@@ -1337,6 +1481,8 @@ def project_semantic_blueprint(
                 "object_id": item.object_id,
                 "source_range": project_region(item.source_range),
                 "unresolved": item.unresolved,
+                "repnotify_function": item.repnotify_function,
+                "replication_condition": project_operand(item.replication_condition),
             }
             for item in semantic.variable_definitions
         ],
@@ -1410,7 +1556,16 @@ def project_semantic_blueprint(
             for v in semantic.variable_accesses
         ],
         "components": [
-            {"name": c.name, "class_name": c.class_name, "object_id": c.object_id} for c in semantic.components
+            {
+                "name": c.name,
+                "class_name": c.class_name,
+                "object_id": c.object_id,
+                "attach_to": c.attach_to,
+                "parent_component": c.parent_component,
+                "child_names": list(c.child_names),
+                "child_ids": list(c.child_ids),
+            }
+            for c in semantic.components
         ],
         "dispatchers": [
             {

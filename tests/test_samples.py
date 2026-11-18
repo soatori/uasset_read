@@ -1260,7 +1260,7 @@ def test_real_sample_proves_claimed_capability():
                         ("EntryPoint", "IntProperty", "in")
                     ]
                     assert uber["return_type"] is None and uber["cpp_return_type"] == "void"
-                    assert uber["flags"] is None and uber["unresolved"] is False
+                    assert uber["flags"] is not None and uber["unresolved"] is False
                     look = decls["InpActEvt_IA_Look_K2Node_EnhancedInputActionEvent_0"]
                     assert [(p["name"], p["type_name"], p["direction"]) for p in look["parameters"]] == [
                         ("ActionValue", "StructProperty", "in"),
@@ -6602,3 +6602,391 @@ def test_agent_tool_wraps_memory_limit_as_envelope(monkeypatch):
     monkeypatch.setattr(agent_tools, "parse_package_document", bad_mappings)
     with pytest.raises(TypeError, match="mappings_path must be a path"):
         agent_tools.inspect_package("whatever.uasset")
+
+
+# ---------------------------------------------------------------------------
+# Task 1: pin container / object / reference types (A1 + A6)
+# ---------------------------------------------------------------------------
+
+
+def _projected_package(sample: str, mode: str = "normal") -> dict[str, Any]:
+    from uasset_read import parse_package_document
+    from uasset_read.projection import project_document
+
+    return project_document(parse_package_document(str(SAMPLES / sample)), mode=mode)
+
+
+def _projected_pins(sample: str = "BP_CombatCharacter.uasset", mode: str = "normal") -> list[dict[str, Any]]:
+    out = _projected_package(sample, mode)
+    return [
+        pin
+        for obj in out.get("objects", [])
+        for graph in (obj.get("semantic") or {}).get("graphs") or []
+        for node in graph.get("nodes") or []
+        for pin in node.get("pins") or []
+    ]
+
+
+def test_projected_pins_carry_container_and_object_types():
+    # Counts are the projection's own totals on this fixture (370 nodes,
+    # 1031 pins, verified 2026-11-18). Decode-layer pin-type reads are a
+    # larger population (they include sub-pin/terminal reads) and must not be
+    # used as the expected value here.
+    pins = _projected_pins()
+    assert len(pins) == 1031
+    assert sum(1 for p in pins if p.get("container_type")) == 22
+    assert sum(1 for p in pins if p.get("subcategory_object_id")) == 374
+    assert sum(1 for p in pins if p.get("is_reference")) == 13
+
+
+def test_pin_projection_conventions():
+    from uasset_read.models.analysis import _object_id_from_index, _var_type_cpp_type
+
+    # EPinContainerType: 0=none 1=array 2=set 3=map (EdGraphNode.h:123-129).
+    # Pinned against the LIVE mapper — _var_type_cpp_type decides the C++
+    # spelling a translator emits — not against a display helper with no
+    # production caller. An off-by-one silently makes every container wrong.
+    vt = {"pin_category": "name", "pin_subcategory": "None", "pin_subcategory_object": 0}
+    assert _var_type_cpp_type({**vt, "container_type": 0}) == "FName"
+    assert _var_type_cpp_type({**vt, "container_type": 1}) == "TArray<FName>"
+    assert _var_type_cpp_type({**vt, "container_type": 2}) == "TSet<FName>"
+    assert _var_type_cpp_type({**vt, "container_type": 3}) is None  # map, no value terminal
+
+    # Negative index -> import, positive -> export (mirrors k2_metadata.py:70).
+    assert _object_id_from_index(-59) == "import:58"
+    assert _object_id_from_index(3) == "export:2"
+    assert _object_id_from_index(0) is None
+    assert _object_id_from_index(None) is None
+
+
+def test_new_pin_fields_are_identical_in_normal_and_debug():
+    normal = _projected_pins(mode="normal")
+    debug = _projected_pins(mode="debug")
+    # Parity is only meaningful once the fields exist in both modes.
+    assert any("container_type" in p for p in normal)
+    assert any("container_type" in p for p in debug)
+    assert normal == debug
+
+
+# ---------------------------------------------------------------------------
+# Task 2: function-entry linkage and CFG/exec-chain attribution (A7)
+# ---------------------------------------------------------------------------
+
+
+def _bp_owner(sample: str) -> tuple[dict[str, Any], str]:
+    """(semantic dict, owner object id) for the graph-bearing owner of *sample*."""
+    out = _projected_package(sample)
+    for obj in out.get("objects", []):
+        sem = obj.get("semantic")
+        if isinstance(sem, dict) and sem.get("graphs"):
+            return sem, str(obj.get("id"))
+    raise AssertionError(f"no graph-bearing semantic owner in {sample}")
+
+
+def _bp_semantic(sample: str) -> dict[str, Any]:
+    return _bp_owner(sample)[0]
+
+
+def _bp_semantic_or_none(sample: str) -> dict[str, Any] | None:
+    """Graph-bearing semantic block, or None when the sample has none.
+
+    "No graphs" is an expected shape, not a failure. Every manifest sample
+    parses cleanly, so anything raised here is a real regression and must
+    surface rather than be swallowed.
+    """
+    for obj in _projected_package(sample).get("objects", []):
+        sem = obj.get("semantic")
+        if isinstance(sem, dict) and sem.get("graphs"):
+            return sem
+    return None
+
+
+def test_function_entry_nodes_link_to_their_functions():
+    sem = _bp_semantic("BP_CombatCharacter.uasset")
+    # kind == "function" only: the construction record keeps source_node_id
+    # None (pinned by test_v4_public_output_contract) — node linkage attaches
+    # to the function record, which is the one that names the UFunction body.
+    entries = {e["name"]: e for e in sem["entrypoints"] if e.get("kind") == "function"}
+    for fn in ("Aim", "Move", "UserConstructionScript"):
+        assert entries[fn]["source_node_id"] is not None, fn
+        # match_method stays "object_id": the record matches the UFunction
+        # export (pinned contract, test_v4_public_output_contract). The
+        # graph-side node is an added attribute, not the matching key.
+        assert entries[fn]["match_method"] == "object_id"
+
+
+def test_cfg_and_exec_chain_edges_name_their_function():
+    sem = _bp_semantic("BP_CombatCharacter.uasset")
+    assert all(c.get("function_name") for c in sem["control_flow"])
+    assert all(e.get("function_name") for e in sem["exec_chains"]["edges"])
+
+
+def test_entrypoint_linkage_never_crosses_owners():
+    for name in ("BP_CombatCharacter.uasset", "BP_CombatEnemy.uasset"):
+        sem, owner_id = _bp_owner(name)
+        prefix = owner_id + "/"
+        linked = [e for e in sem["entrypoints"] if e.get("kind") == "function" and e.get("source_node_id")]
+        assert linked, name  # linkage must exist before its scoping means anything
+        for e in linked:
+            assert e["source_node_id"].startswith(prefix), (name, e["source_node_id"])
+
+
+# ---------------------------------------------------------------------------
+# Task 3: UFunction FunctionFlags -> FunctionDeclaration.flags (B8)
+# ---------------------------------------------------------------------------
+
+
+def _declaration(sample: str, name: str) -> dict[str, Any]:
+    for d in _bp_semantic(sample)["function_declarations"]:
+        if d.get("name") == name:
+            return d
+    raise AssertionError(f"no declaration {name!r} in {sample}")
+
+
+def _function(sample: str, name: str) -> dict[str, Any]:
+    for f in _bp_semantic(sample)["functions"]:
+        if f.get("function_name") == name:
+            return f
+    raise AssertionError(f"no function {name!r} in {sample}")
+
+
+def test_function_declarations_carry_efunctionflags():
+    decls = _bp_semantic("BP_CombatCharacter.uasset")["function_declarations"]
+    assert decls
+    assert any(d.get("flags") is not None for d in decls), "flags still universally null"
+
+
+def test_function_flags_decode_the_known_vocabulary():
+    # "flags >= 0" cannot fail: read_u32() never returns a negative int. Pin
+    # the words the fixtures actually decode instead — a shifted read
+    # reproduces this set with negligible probability.
+    char = {
+        d["flags"]
+        for d in _bp_semantic("BP_CombatCharacter.uasset")["function_declarations"]
+        if d.get("flags") is not None
+    }
+    helm = {
+        d["flags"] for d in _bp_semantic("Helm_BP.uasset")["function_declarations"] if d.get("flags") is not None
+    }
+    assert char == {0x808001, 0x8000000, 0x8020804, 0x8080800, 0x8420800, 0xC000000, 0xC020000, 0xC820800}
+    assert helm == {0xC020800, 0x1C420000}
+
+
+def test_property_chain_still_parses_after_the_flags_read():
+    # A wrong offset yields plausible garbage flags instead of failing; the
+    # pin is that native_fields keep decoding with the known shape afterwards.
+    f = _function("BP_CombatCharacter.uasset", "Aim")
+    assert len(f["native_fields"]) == 3
+    assert {x["property_flags"] for x in f["native_fields"]} <= {0, 148, 384}
+
+
+# ---------------------------------------------------------------------------
+# Task 4: member replication + VariableDefinition.cpp_type (A3 / C11)
+# ---------------------------------------------------------------------------
+
+
+def _variable(sample: str, name: str) -> dict[str, Any]:
+    for v in _bp_semantic(sample)["variable_definitions"]:
+        if v.get("name") == name:
+            return v
+    raise AssertionError(f"no variable {name!r} in {sample}")
+
+
+def test_member_variables_carry_cpp_type():
+    vds = _bp_semantic("BP_CombatCharacter.uasset")["variable_definitions"]
+    assert vds and all(v.get("cpp_type") for v in vds)
+
+
+def test_cpp_type_reflects_container_type():
+    # All three containers pinned on real fixtures — set and map would
+    # otherwise rest on synthetic dicts alone.
+    assert _variable("BP_CombatCharacter.uasset", "Combo Section Names")["cpp_type"] == "TArray<FName>"
+    assert _variable("MyProject_UE58_TestBlueprint.uasset", "Set")["cpp_type"] == "TSet<double>"
+    assert _variable("B_ControlPointScoring.uasset", "TeamColors")["cpp_type"] == "TMap<int32, LinearColor>"
+
+
+def test_replication_fields_are_projected_when_present():
+    # Key presence alone is a tautology: the projection emits both keys for
+    # every member, so this would pass even if the reader stopped reading them.
+    # Pin the values the bag actually carries instead. No tracked fixture has a
+    # non-default RepNotifyFunc / ReplicationCondition, so this pins the
+    # default shape and the two documented quirks: RepNotifyFunc is the FName
+    # "None", not null, and ReplicationCondition projects as project_operand's
+    # enum-wrapper dict, not a bare name or int.
+    vds = _bp_semantic("BP_CombatCharacter.uasset")["variable_definitions"]
+    assert vds
+    for v in vds:
+        assert v["repnotify_function"] == "None", v["name"]
+        assert v["replication_condition"] == {
+            "enum_type": "ELifetimeCondition",
+            "value_name": "ELifetimeCondition::COND_None",
+        }, (v["name"], v["replication_condition"])
+
+
+def test_undetermined_cpp_type_is_explicit_not_silent():
+    # A member whose type decodes but whose VarType shape yields no C++ spelling
+    # must say so. Left as cpp_type null beside unresolved=False, a consumer
+    # cannot tell "no C++ type" from "never parsed". Measured 2026-11-18: six
+    # such members across the corpus — five mcdelegate dispatchers and one Map
+    # whose value terminal is unset.
+    for sample, expected in (
+        ("BP_CombatEnemy.uasset", {"On Attack Completed", "On Enemy Died"}),
+        ("StackOBot_GI_StackOBot.uasset", {"OnCoinsUpdated", "OnObjectiveCompleted"}),
+        ("MyProject_UE58_TestBlueprint.uasset", {"Map", "NewEventDispatcher"}),
+    ):
+        sem = _bp_semantic(sample)
+        untyped = {v["name"] for v in sem["variable_definitions"] if v.get("cpp_type") is None and not v["unresolved"]}
+        assert untyped == expected, (sample, untyped)
+        flagged = sum(1 for d in sem["diagnostics"] if d["code"] == "VARIABLE_CPP_TYPE_UNDETERMINED")
+        assert flagged == len(untyped), (sample, flagged, len(untyped))
+
+
+# ---------------------------------------------------------------------------
+# Task 5: dispatcher records from delegate nodes (D)
+# ---------------------------------------------------------------------------
+
+
+def test_delegate_nodes_resolve_to_dispatcher_records():
+    # BP_CombatEnemy carries 3 K2Node_CallDelegate nodes whose dispatcher
+    # identity lives in a DelegateReference FMemberReference (MemberName
+    # "On Attack Completed"), not under a DispatcherName tag.
+    sem = _bp_semantic("BP_CombatEnemy.uasset")
+    delegate_nodes = [
+        n
+        for g in sem["graphs"]
+        for n in g["nodes"]
+        if n["class_name"] in ("K2Node_AddDelegate", "K2Node_CallDelegate", "K2Node_RemoveDelegate")
+    ]
+    assert delegate_nodes, "fixture must carry delegate nodes"
+    assert sem["dispatchers"], "DelegateReference decodes but no dispatcher record is produced"
+    resolved = [e for e in sem.get("variable_events", []) if e.get("event_kind") == "dispatcher"]
+    assert resolved and not any(e.get("unresolved") for e in resolved)
+
+
+# ---------------------------------------------------------------------------
+# Task 6: SCS attach tree on components (A4)
+# ---------------------------------------------------------------------------
+
+
+def test_components_carry_the_scs_attach_tree():
+    comps = _bp_semantic("BP_CombatCharacter.uasset")["components"]
+    assert comps
+    assert all(("attach_to" in c and "parent_component" in c and "child_names" in c) for c in comps)
+    assert any(c.get("parent_component") or c.get("attach_to") for c in comps)
+
+
+def test_component_tree_names_resolve_within_the_owner():
+    comps = _bp_semantic("BP_CombatCharacter.uasset")["components"]
+    by_id = {c["object_id"]: c for c in comps}
+    linked = [c for c in comps if c.get("child_names") or c.get("parent_component") or c.get("attach_to")]
+    assert linked, "SCS relationships must exist before their scoping means anything"
+    for c in comps:
+        ids = c.get("child_ids") or []
+        names = c.get("child_names") or []
+        # child_ids is emitted for every ChildNodes slot, child_names only for
+        # the ones that resolved to a sibling SCS node, so ids may outnumber
+        # names but never the reverse.
+        assert len(ids) >= len(names), (c["name"], ids, names)
+        # Every child id must name a component of THIS owner — a ChildNodes
+        # index resolving outside the owner's SCS nodes is a scope leak.
+        # names[i] is by construction the display name of ids[i], so agreement
+        # between the two is not asserted here: it cannot fail.
+        for object_id in ids:
+            assert object_id in by_id, (c["name"], object_id, sorted(by_id))
+
+
+# ---------------------------------------------------------------------------
+# Task 7: no Python repr() in functions[].reads / writes (F)
+# ---------------------------------------------------------------------------
+
+
+def test_reads_and_writes_never_carry_python_repr():
+    # Assert the production predicate itself (correlation._is_plain_name) so the
+    # detector cannot drift from the rule the fix enforces, and cover every
+    # manifest Blueprint rather than a hardcoded handful.
+    from uasset_read.parsers.blueprint.correlation import _is_plain_name
+
+    leaked = []
+    for entry in MANIFEST_SAMPLES:
+        name = entry["name"]
+        sem = _bp_semantic_or_none(name)
+        if sem is None:
+            continue
+        for f in sem.get("functions") or []:
+            for side in ("reads", "writes"):
+                for v in f.get(side) or []:
+                    if isinstance(v, str) and not _is_plain_name(v):
+                        leaked.append((name, side, v[:60]))
+    assert leaked == [], leaked[:3]
+
+
+# ---------------------------------------------------------------------------
+# Final-review fix pass: C1, I1, I2, I4, I5
+# ---------------------------------------------------------------------------
+
+
+def test_import_typed_names_resolve_to_object_names():
+    # C1: imports live in document.dependencies, not document.objects. An
+    # unresolved import must never be dressed up as a display name.
+    montage = _variable("BP_CombatCharacter.uasset", "Combo Attack Montage")
+    assert "AnimMontage" in montage["cpp_type"], montage["cpp_type"]
+    assert "import:" not in montage["cpp_type"], montage["cpp_type"]
+    pin_names = {p.get("subcategory_object_name") for p in _projected_pins()}
+    assert not [n for n in pin_names if isinstance(n, str) and n.startswith("import:")]
+
+
+def test_cpp_type_maps_ue_float_and_double_exactly():
+    # UE maps FFloatProperty -> PC_Real/PC_Float (EdGraphSchema_K2.cpp:3512-3515).
+    assert _variable("BP_CombatCharacter.uasset", "Default Camera Distance")["cpp_type"] == "float"
+    assert _variable("BP_CombatCharacter.uasset", "Max HP")["cpp_type"] == "double"
+
+
+def test_pin_type_shape_survives_the_from_dict_round_trip():
+    live = _projected_pins()
+    assert sum(1 for p in live if p.get("container_type")) == 22
+    from uasset_read.models.analysis import BlueprintGraph
+
+    out = _projected_package("BP_CombatCharacter.uasset")
+    owner = next(o for o in out["objects"] if o.get("semantic", {}).get("graphs"))
+    graphs = [BlueprintGraph.from_dict(g) for g in owner["semantic"]["graphs"]]
+    pins = [p for g in graphs for n in g.nodes for p in n.pins]
+    assert sum(1 for p in pins if p.container_type) == 22, "from_dict drops container_type"
+    assert sum(1 for p in pins if p.subcategory_object_id) == 374
+
+
+def test_function_flags_pin_a_known_word():
+    # Review Focus #4: without a pinned word, a shifted read decodes script or
+    # EventGraph bytes as flags and every other test stays green — a one-bit
+    # assertion passes a shifted read about half the time. Aim carries
+    # FUNC_Public (0x00020000) | FUNC_BlueprintCallable (0x04000000) |
+    # FUNC_BlueprintEvent (0x08000000), EFunctionFlags in
+    # Engine/Source/Runtime/CoreUObject/Public/UObject/Script.h:138,147,148.
+    d = _declaration("BP_CombatCharacter.uasset", "Aim")
+    assert d["flags"] == 0x0C020000, hex(d["flags"])
+
+
+def test_container_mapping_covers_set_and_map():
+    from uasset_read.models.analysis import _var_type_cpp_type
+
+    vt = {"pin_category": "name", "pin_subcategory": "None", "pin_subcategory_object": 0}
+    assert _var_type_cpp_type({**vt, "container_type": 2}) == "TSet<FName>"
+    # A Map needs its value terminal (EdGraphPin.h PinValueType) to spell
+    # TMap<K, V>; without it the type is undetermined and must stay None.
+    assert _var_type_cpp_type({**vt, "container_type": 3}) is None
+    mapped = {
+        **vt,
+        "container_type": 3,
+        "map_terminal_category": "int",
+        "map_terminal_subcategory": "",
+        "map_terminal_subcategory_object": 0,
+    }
+    assert _var_type_cpp_type(mapped) == "TMap<FName, int32>"
+
+
+def test_extract_variable_name_rejects_dump_strings():
+    # The str early-return used to bypass the name filter entirely.
+    from uasset_read.parsers.blueprint.correlation import _extract_variable_name
+
+    assert _extract_variable_name("Axis X") == "Axis X"
+    assert _extract_variable_name("FKismetPropertyPointer(path=FFieldPath())") is None
+    assert _extract_variable_name("EX_Context(ContextExpression=x)") is None

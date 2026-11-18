@@ -1,13 +1,13 @@
 {
   "src_python": {
     "min_files": 70,
-    "max_lines": 27644
+    "max_lines": 28155
   },
   "tests_python": {
     "min_files": 5,
-    "max_lines": 7688
+    "max_lines": 8099
   },
   "wheel_bytes": {
-    "max_bytes": 309775
+    "max_bytes": 316699
   }
 }
