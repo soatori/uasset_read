@@ -119,16 +119,24 @@ def _container_name(container_type: int) -> str:
 
 _VAR_TYPE_SCALARS = {
     "bool": "bool",
-    "byte": "uint8",
     "int": "int32",
     "int64": "int64",
     "float": "float",
     "double": "double",
-    "real": "double",
     "name": "FName",
     "str": "FString",
     "string": "FString",
     "text": "FText",
+}
+
+_VAR_TYPE_OBJECT_FORMS = {
+    "object": "{name}*",
+    "class": "{name}*",
+    "struct": "{name}",
+    "enum": "{name}",
+    "interface": "TScriptInterface<{name}>",
+    "softobject": "TSoftObjectPtr<{name}>",
+    "softclass": "TSoftClassPtr<{name}>",
 }
 
 
@@ -139,15 +147,23 @@ def _var_type_element_cpp(
     object_names: dict[str, str] | None,
 ) -> str | None:
     """One element's C++ type, or None when it cannot be determined."""
+    if category == "real":
+        # UE maps FFloatProperty -> PC_Real/PC_Float and FDoubleProperty ->
+        # PC_Real/PC_Double (EdGraphSchema_K2.cpp:3512-3515), i.e. float and
+        # double, not two spellings of double.
+        return "double" if subcategory == "double" else "float"
+    if category == "byte":
+        # ByteProperty carries an enum as its subcategory object; without one it
+        # is a plain uint8 (same rule as kismet.native_fields).
+        _, name = _resolve_object_label(vt.get("pin_subcategory_object"), object_names)
+        return name or "uint8"
     scalar = _VAR_TYPE_SCALARS.get(category)
     if scalar is not None:
-        # real:double is serialized as a double at LWC sizes.
-        return "double" if category == "real" and subcategory == "double" else scalar
-    if category in ("object", "class", "interface", "struct", "enum"):
+        return scalar
+    form = _VAR_TYPE_OBJECT_FORMS.get(category)
+    if form is not None:
         _, name = _resolve_object_label(vt.get("pin_subcategory_object"), object_names)
-        if name is None:
-            return None
-        return f"{name}*" if category in ("object", "class") else name
+        return None if name is None else form.format(name=name)
     return None
 
 
@@ -156,24 +172,48 @@ def _var_type_cpp_type(
 ) -> str | None:
     """FEdGraphPinType field dict -> concrete C++ type, or None when undetermined.
 
-    Mirrors kismet.native_fields.native_field_cpp_type for the flat VarType
-    shape. Never guesses: an unresolvable object/struct reference yields None
-    instead of a plausible-looking wrong class.
-    shortcut: Map terminals return None (PinValueType key/value assignment is
-    ambiguous in the flat dict), upgrade when a fixture pins the ordering.
+    Mirrors kismet.native_fields.native_field_cpp_type so a pin type and a
+    native field type never spell the same C++ type differently. Never guesses:
+    an unresolvable reference yields None instead of a plausible-looking wrong
+    class, and a Map without its value terminal (FEdGraphPinType PinValueType,
+    EdGraphPin.h:98) cannot spell TMap<K, V> at all.
     """
     if not isinstance(vt, dict):
         return None
     category = str(vt.get("pin_category") or "")
     container = int(vt.get("container_type") or 0)
     if container == 3:
-        return None
+        key = _var_type_element_cpp(
+            category, str(vt.get("pin_subcategory") or ""), vt, object_names
+        )
+        value = _var_type_element_cpp(
+            str(vt.get("map_terminal_category") or ""),
+            str(vt.get("map_terminal_subcategory") or ""),
+            {"pin_subcategory_object": vt.get("map_terminal_subcategory_object")},
+            object_names,
+        )
+        return f"TMap<{key}, {value}>" if key is not None and value is not None else None
     element = _var_type_element_cpp(
         category, str(vt.get("pin_subcategory") or ""), vt, object_names
     )
     if element is None:
         return None
     return {0: element, 1: f"TArray<{element}>", 2: f"TSet<{element}>"}.get(container, element)
+
+
+def _pin_value_type_from_projected(raw: Any) -> PinValueType | None:
+    """Projected pin_value_type dict -> typed PinValueType (round-trip)."""
+    if not isinstance(raw, dict) or not raw:
+        return None
+    return PinValueType(
+        category=str(raw.get("category") or ""),
+        subcategory=str(raw.get("subcategory") or ""),
+        subcategory_object_id=raw.get("subcategory_object_id"),
+        subcategory_object_name=raw.get("subcategory_object_name"),
+        is_const=bool(raw.get("is_const") or False),
+        is_weak_pointer=bool(raw.get("is_weak_pointer") or False),
+        is_uobject_wrapper=bool(raw.get("is_uobject_wrapper") or False),
+    )
 
 
 def _resolve_object_label(
@@ -397,6 +437,11 @@ class BlueprintGraph:
                         owner_node_id=node_id,
                         raw_region=None,
                         is_const=bool(pin_raw.get("is_const") or False),
+                        container_type=int(pin_raw.get("container_type") or 0),
+                        subcategory_object_id=pin_raw.get("subcategory_object_id"),
+                        subcategory_object_name=pin_raw.get("subcategory_object_name"),
+                        is_reference=bool(pin_raw.get("is_reference") or False),
+                        pin_value_type=_pin_value_type_from_projected(pin_raw.get("pin_value_type")),
                     )
                 )
             nodes.append(

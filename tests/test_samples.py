@@ -6840,3 +6840,63 @@ def test_reads_and_writes_never_carry_python_repr():
         if isinstance(v, str) and "(" in v and "EX_" in v
     ]
     assert leaked == [], leaked[:3]
+
+
+# ---------------------------------------------------------------------------
+# Final-review fix pass: C1, I1, I2, I4, I5
+# ---------------------------------------------------------------------------
+
+
+def test_import_typed_names_resolve_to_object_names():
+    # C1: imports live in document.dependencies, not document.objects. An
+    # unresolved import must never be dressed up as a display name.
+    montage = _variable("BP_CombatCharacter.uasset", "Combo Attack Montage")
+    assert "AnimMontage" in montage["cpp_type"], montage["cpp_type"]
+    assert "import:" not in montage["cpp_type"], montage["cpp_type"]
+    pin_names = {p.get("subcategory_object_name") for p in _projected_pins()}
+    assert not [n for n in pin_names if isinstance(n, str) and n.startswith("import:")]
+
+
+def test_cpp_type_maps_ue_float_and_double_exactly():
+    # UE maps FFloatProperty -> PC_Real/PC_Float (EdGraphSchema_K2.cpp:3512-3515).
+    assert _variable("BP_CombatCharacter.uasset", "Default Camera Distance")["cpp_type"] == "float"
+    assert _variable("BP_CombatCharacter.uasset", "Max HP")["cpp_type"] == "double"
+
+
+def test_pin_type_shape_survives_the_from_dict_round_trip():
+    live = _projected_pins()
+    assert sum(1 for p in live if p.get("container_type")) == 22
+    from uasset_read.models.analysis import BlueprintGraph
+
+    out = _projected_package("BP_CombatCharacter.uasset")
+    owner = next(o for o in out["objects"] if o.get("semantic", {}).get("graphs"))
+    graphs = [BlueprintGraph.from_dict(g) for g in owner["semantic"]["graphs"]]
+    pins = [p for g in graphs for n in g.nodes for p in n.pins]
+    assert sum(1 for p in pins if p.container_type) == 22, "from_dict drops container_type"
+    assert sum(1 for p in pins if p.subcategory_object_id) == 374
+
+
+def test_function_flags_pin_a_known_word():
+    # Review Focus #4: without a pinned value, a wrong offset reads script bytes
+    # as flags and every test stays green. FUNC_BlueprintCallable = 0x04000000
+    # (Engine/Source/Runtime/CoreUObject/Public/UObject/Script.h:147).
+    d = _declaration("BP_CombatCharacter.uasset", "Aim")
+    assert d["flags"] & 0x04000000, hex(d["flags"])
+
+
+def test_container_mapping_covers_set_and_map():
+    from uasset_read.models.analysis import _var_type_cpp_type
+
+    vt = {"pin_category": "name", "pin_subcategory": "None", "pin_subcategory_object": 0}
+    assert _var_type_cpp_type({**vt, "container_type": 2}) == "TSet<FName>"
+    # A Map needs its value terminal (EdGraphPin.h PinValueType) to spell
+    # TMap<K, V>; without it the type is undetermined and must stay None.
+    assert _var_type_cpp_type({**vt, "container_type": 3}) is None
+    mapped = {
+        **vt,
+        "container_type": 3,
+        "map_terminal_category": "int",
+        "map_terminal_subcategory": "",
+        "map_terminal_subcategory_object": 0,
+    }
+    assert _var_type_cpp_type(mapped) == "TMap<FName, int32>"

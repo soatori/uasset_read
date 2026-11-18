@@ -255,6 +255,22 @@ def _object_name_index(objects_by_id: dict[str, Any] | None) -> dict[str, str]:
     }
 
 
+def _document_name_index(document: Any) -> dict[str, str]:
+    """object id -> display name, exports **and** imports.
+
+    Imports live in ``document.dependencies``; without them an import-typed
+    reference resolves to its ``import:N`` index and is then dressed up as a
+    display name.
+    """
+    names = _object_name_index({o.id: o for o in getattr(document, "objects", None) or []})
+    for dep in getattr(document, "dependencies", None) or []:
+        name = getattr(dep, "object_name", None)
+        index = getattr(dep, "index", None)
+        if name and isinstance(index, int):
+            names[f"import:{index}"] = str(name)
+    return names
+
+
 def _metadata_for(
     class_name: str,
     node: dict[str, Any],
@@ -294,13 +310,14 @@ def _node_from_raw(
     node: dict[str, Any],
     objects_by_id: dict[str, Any] | None = None,
     owner_node_exports: frozenset[str] = frozenset(),
+    document_names: dict[str, str] | None = None,
 ) -> BlueprintNode:
     node_export = str(node.get("id") or "")
     node_id = NodeId(owner_object_id=owner_id.owner_object_id, node_export_id=node_export or "export:-1")
     class_name = str(node.get("type") or node.get("class_name") or "")
     # Default empty context: a caller without the owner's node set can never
     # fabricate ownership for a bare target (safe by default).
-    object_names = _object_name_index(objects_by_id)
+    object_names = document_names if document_names is not None else _object_name_index(objects_by_id)
     pins = [_pin_from_raw(node_id, p, owner_node_exports, object_names) for p in node.get("pins") or []]
     return BlueprintNode(
         id=node_id,
@@ -359,6 +376,7 @@ class BlueprintGraphDecoder:
         function_ids = _function_graph_ids(obj.properties)
         owner_num = _parse_export_id(obj.id)
         objects_by_id = {o.id: o for o in document.objects}
+        document_names = _document_name_index(document)
         # Owner-scope node membership: a bare export:N pin-link target is
         # qualified with this Blueprint's owner only when that export is one
         # of the owner's decoded node exports (the raw resolver's package-wide
@@ -389,7 +407,7 @@ class BlueprintGraphDecoder:
             nodes: list[BlueprintNode] = []
             refs: list[PinLinkRef] = []
             for node_raw in raw.get("nodes") or []:
-                node = _node_from_raw(owner_for_nodes, node_raw, objects_by_id, owner_node_exports)
+                node = _node_from_raw(owner_for_nodes, node_raw, objects_by_id, owner_node_exports, document_names)
                 nodes.append(node)
                 for pin in node.pins:
                     for link in pin.linked:

@@ -433,12 +433,23 @@ def _function_flags(document: PackageDocument, fn: FunctionAnalysis) -> int | No
 
 
 def _object_names_of(document: PackageDocument) -> dict[str, str]:
-    """object id -> display name, for resolving VarType class references."""
+    """object id -> display name, for resolving VarType class references.
+
+    Imports live in ``document.dependencies`` (legacy_reader builds them from
+    the import map), not in ``document.objects``, which holds exports only.
+    An import typed reference must resolve to its name — leaving it as
+    ``import:N`` dresses a package index up as a C++ class name.
+    """
     out: dict[str, str] = {}
     for obj in getattr(document, "objects", None) or []:
         name = getattr(obj, "name", None)
         if name:
             out[str(obj.id)] = str(name)
+    for dep in getattr(document, "dependencies", None) or []:
+        name = getattr(dep, "object_name", None)
+        index = getattr(dep, "index", None)
+        if name and isinstance(index, int):
+            out[f"import:{index}"] = str(name)
     return out
 
 
