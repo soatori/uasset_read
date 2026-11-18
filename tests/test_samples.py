@@ -6799,3 +6799,25 @@ def test_delegate_nodes_resolve_to_dispatcher_records():
     assert sem["dispatchers"], "DelegateReference decodes but no dispatcher record is produced"
     resolved = [e for e in sem.get("variable_events", []) if e.get("event_kind") == "dispatcher"]
     assert resolved and not any(e.get("unresolved") for e in resolved)
+
+
+# ---------------------------------------------------------------------------
+# Task 6: SCS attach tree on components (A4)
+# ---------------------------------------------------------------------------
+
+
+def test_components_carry_the_scs_attach_tree():
+    comps = _bp_semantic("BP_CombatCharacter.uasset")["components"]
+    assert comps
+    assert all(("attach_to" in c and "parent_component" in c and "child_names" in c) for c in comps)
+    assert any(c.get("parent_component") or c.get("attach_to") for c in comps)
+
+
+def test_component_tree_names_resolve_within_the_owner():
+    comps = _bp_semantic("BP_CombatCharacter.uasset")["components"]
+    names = {c["name"] for c in comps}
+    linked = [c for c in comps if c.get("child_names") or c.get("parent_component") or c.get("attach_to")]
+    assert linked, "SCS relationships must exist before their scoping means anything"
+    for c in comps:
+        for child in c.get("child_names", []):
+            assert child in names, (c["name"], child)

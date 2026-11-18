@@ -1034,6 +1034,12 @@ class ComponentRecord:
     name: str
     class_name: str
     object_id: str
+    # SCS attach tree (UK2Node_... SCS_Node tagged properties). attach_to is the
+    # socket/attach target name; parent_component is the owning component name;
+    # child_names are this node's ChildNodes resolved to component names.
+    attach_to: str | None = None
+    parent_component: str | None = None
+    child_names: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

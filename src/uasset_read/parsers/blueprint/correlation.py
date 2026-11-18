@@ -826,6 +826,11 @@ class BlueprintCorrelation:
         if scope is None:
             return []
         records: list[ComponentRecord] = []
+        # Pass 1: resolve each SCS_Node's component name and remember it by
+        # table index so ChildNodes (1-based export indexes, same convention as
+        # ComponentTemplate below) can be resolved to names in pass 2.
+        name_by_table: dict[int, str] = {}
+        staged: list[tuple[ObjectRecord, dict[str, Any], str, str]] = []
         for obj in document.objects:
             if obj.class_name != "SCS_Node" or not obj.properties:
                 continue
@@ -849,7 +854,37 @@ class BlueprintCorrelation:
             cclass = props.get("ComponentClass")
             cclass_value = cclass.get("value") if isinstance(cclass, dict) else None
             type_name = cclass_value.get("object_name", "") if isinstance(cclass_value, dict) else ""
-            records.append(ComponentRecord(name=str(name), class_name=str(type_name), object_id=obj.id))
+            name = str(name)
+            if isinstance(obj.table_index, int):
+                name_by_table[obj.table_index] = name
+            staged.append((obj, props, name, str(type_name)))
+
+        def _name_of_tag(props: dict[str, Any], key: str) -> str | None:
+            entry = props.get(key)
+            value = entry.get("value") if isinstance(entry, dict) else entry
+            return value if isinstance(value, str) and value else None
+
+        for obj, props, name, type_name in staged:
+            child_names: list[str] = []
+            children = props.get("ChildNodes")
+            child_values = children.get("value") if isinstance(children, dict) else None
+            if isinstance(child_values, list):
+                for raw in child_values:
+                    index = raw.get("value") if isinstance(raw, dict) else raw
+                    if not isinstance(index, int) or index <= 0:
+                        continue
+                    # 1-based export index, matching the ComponentTemplate rule.
+                    child_names.append(name_by_table.get(index - 1, f"export:{index - 1}"))
+            records.append(
+                ComponentRecord(
+                    name=name,
+                    class_name=type_name,
+                    object_id=obj.id,
+                    attach_to=_name_of_tag(props, "AttachToName"),
+                    parent_component=_name_of_tag(props, "ParentComponentOrVariableName"),
+                    child_names=child_names,
+                )
+            )
         records.sort(key=lambda item: item.object_id)
         return records
 
@@ -1466,7 +1501,15 @@ def project_semantic_blueprint(
             for v in semantic.variable_accesses
         ],
         "components": [
-            {"name": c.name, "class_name": c.class_name, "object_id": c.object_id} for c in semantic.components
+            {
+                "name": c.name,
+                "class_name": c.class_name,
+                "object_id": c.object_id,
+                "attach_to": c.attach_to,
+                "parent_component": c.parent_component,
+                "child_names": list(c.child_names),
+            }
+            for c in semantic.components
         ],
         "dispatchers": [
             {
