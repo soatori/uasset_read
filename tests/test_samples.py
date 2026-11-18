@@ -6750,3 +6750,30 @@ def test_property_chain_still_parses_after_the_flags_read():
     f = _function("BP_CombatCharacter.uasset", "Aim")
     assert len(f["native_fields"]) == 3
     assert {x["property_flags"] for x in f["native_fields"]} <= {0, 148, 384}
+
+
+# ---------------------------------------------------------------------------
+# Task 4: member replication + VariableDefinition.cpp_type (A3 / C11)
+# ---------------------------------------------------------------------------
+
+
+def _variable(sample: str, name: str) -> dict[str, Any]:
+    for v in _bp_semantic(sample)["variable_definitions"]:
+        if v.get("name") == name:
+            return v
+    raise AssertionError(f"no variable {name!r} in {sample}")
+
+
+def test_member_variables_carry_cpp_type():
+    vds = _bp_semantic("BP_CombatCharacter.uasset")["variable_definitions"]
+    assert vds and all(v.get("cpp_type") for v in vds)
+
+
+def test_cpp_type_reflects_container_type():
+    v = _variable("BP_CombatCharacter.uasset", "Combo Section Names")  # container_type 1
+    assert v["cpp_type"].startswith("TArray"), v["cpp_type"]
+
+
+def test_replication_fields_are_projected_when_present():
+    vds = _bp_semantic("BP_CombatCharacter.uasset")["variable_definitions"]
+    assert all(("repnotify_function" in v and "replication_condition" in v) for v in vds)

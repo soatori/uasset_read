@@ -117,6 +117,76 @@ def _container_name(container_type: int) -> str:
     return {0: "none", 1: "array", 2: "set", 3: "map"}.get(container_type, "none")
 
 
+_VAR_TYPE_SCALARS = {
+    "bool": "bool",
+    "byte": "uint8",
+    "int": "int32",
+    "int64": "int64",
+    "float": "float",
+    "double": "double",
+    "real": "double",
+    "name": "FName",
+    "str": "FString",
+    "string": "FString",
+    "text": "FText",
+}
+
+
+def _var_type_element_cpp(
+    category: str,
+    subcategory: str,
+    vt: dict[str, Any],
+    object_names: dict[str, str] | None,
+) -> str | None:
+    """One element's C++ type, or None when it cannot be determined."""
+    scalar = _VAR_TYPE_SCALARS.get(category)
+    if scalar is not None:
+        # real:double is serialized as a double at LWC sizes.
+        return "double" if category == "real" and subcategory == "double" else scalar
+    if category in ("object", "class", "interface", "struct", "enum"):
+        _, name = _resolve_object_label(vt.get("pin_subcategory_object"), object_names)
+        if name is None:
+            return None
+        return f"{name}*" if category in ("object", "class") else name
+    return None
+
+
+def _var_type_cpp_type(
+    vt: dict[str, Any] | None, object_names: dict[str, str] | None = None
+) -> str | None:
+    """FEdGraphPinType field dict -> concrete C++ type, or None when undetermined.
+
+    Mirrors kismet.native_fields.native_field_cpp_type for the flat VarType
+    shape. Never guesses: an unresolvable object/struct reference yields None
+    instead of a plausible-looking wrong class.
+    shortcut: Map terminals return None (PinValueType key/value assignment is
+    ambiguous in the flat dict), upgrade when a fixture pins the ordering.
+    """
+    if not isinstance(vt, dict):
+        return None
+    category = str(vt.get("pin_category") or "")
+    container = int(vt.get("container_type") or 0)
+    if container == 3:
+        return None
+    element = _var_type_element_cpp(
+        category, str(vt.get("pin_subcategory") or ""), vt, object_names
+    )
+    if element is None:
+        return None
+    return {0: element, 1: f"TArray<{element}>", 2: f"TSet<{element}>"}.get(container, element)
+
+
+def _resolve_object_label(
+    index: int | None, object_names: dict[str, str] | None
+) -> tuple[str | None, str | None]:
+    """Package index -> (stable object id, display name)."""
+    object_id = _object_id_from_index(index)
+    if object_id is None:
+        return None, None
+    name = (object_names or {}).get(object_id)
+    return object_id, name or object_id
+
+
 @dataclass
 class BlueprintPin:
     id: str
@@ -920,6 +990,12 @@ class VariableDefinition:
     object_id: str
     source_range: ByteRegion | None
     unresolved: bool = False
+    # BPVariableDescription replication members. ReplicationCondition is the
+    # raw tagged value (an ELifetimeCondition name when the bag carries one,
+    # otherwise the enum int); no name table is invented here because no
+    # tracked fixture carries the field.
+    repnotify_function: str | None = None
+    replication_condition: Any | None = None
 
 
 @dataclass(frozen=True)

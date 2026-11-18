@@ -48,6 +48,8 @@ function-entry linkage and CFG/exec-chain attribution: three sample-backed
 tests). 192 is the measured final value, not headroom.
 Budget 192 -> 195 on 2026-11-18 (blueprint C++ translation data gaps Task 3, UFunction FunctionFlags decoded into FunctionDeclaration.flags: three sample-backed tests).
 195 is the measured final value, not headroom.
+Budget 195 -> 198 on 2026-11-18 (blueprint C++ translation data gaps Task 4, member replication projected and VariableDefinition.cpp_type derived: three sample-backed tests).
+198 is the measured final value, not headroom.
 No fixtures live here — the baseline is driven by real samples in
 tests/test_samples.py; temporary probes belong to untracked temp/.
 """
@@ -56,7 +58,7 @@ from __future__ import annotations
 
 import pytest
 
-ITEM_BUDGET = 195
+ITEM_BUDGET = 198
 
 
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:

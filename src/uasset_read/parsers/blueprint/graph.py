@@ -27,6 +27,7 @@ from uasset_read.models.analysis import (
     _graph_id_from_str,
     _node_id_from_str,
     _object_id_from_index,
+    _resolve_object_label,
     pin_lookup,
 )
 from uasset_read.models.diagnostics import Diagnostic, make_diagnostic
@@ -149,7 +150,7 @@ def _pin_value_type_from_raw(raw: Any, object_names: dict[str, str] | None) -> P
     """Raw PinValueType dict -> typed PinValueType, or None when absent/empty."""
     if not isinstance(raw, dict) or not raw:
         return None
-    object_id, name = _resolve_object_identity(raw.get("subcategory_object_index"), object_names)
+    object_id, name = _resolve_object_label(raw.get("subcategory_object_index"), object_names)
     return PinValueType(
         category=str(raw.get("category") or ""),
         subcategory=str(raw.get("subcategory") or ""),
@@ -159,21 +160,6 @@ def _pin_value_type_from_raw(raw: Any, object_names: dict[str, str] | None) -> P
         is_weak_pointer=bool(raw.get("is_weak_pointer") or False),
         is_uobject_wrapper=bool(raw.get("is_uobject_wrapper") or False),
     )
-
-
-def _resolve_object_identity(
-    index: int | None, object_names: dict[str, str] | None
-) -> tuple[str | None, str | None]:
-    """Package index -> (stable object id, display name).
-
-    A non-zero index never resolves to (None, None): an unresolvable one keeps
-    the id string as its name so a consumer can still see which object was meant.
-    """
-    object_id = _object_id_from_index(index)
-    if object_id is None:
-        return None, None
-    name = (object_names or {}).get(object_id)
-    return object_id, name or object_id
 
 
 def _pin_from_raw(
@@ -205,7 +191,7 @@ def _pin_from_raw(
                 raw_ref=raw,
             )
         )
-    subcategory_object_id, subcategory_object_name = _resolve_object_identity(
+    subcategory_object_id, subcategory_object_name = _resolve_object_label(
         pin.get("subcategory_object_index"), object_names
     )
     return BlueprintPin(

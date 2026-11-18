@@ -37,6 +37,7 @@ from uasset_read.models.analysis import (
     VariableEventRecord,
     _int_or_none,
     project_blueprint_graph,
+    _var_type_cpp_type,
 )
 from uasset_read.constants import format_guid_fields
 from uasset_read.models.byte_ranges import ByteRegion, project_region
@@ -413,6 +414,16 @@ def _function_flags(document: PackageDocument, fn: FunctionAnalysis) -> int | No
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
+def _object_names_of(document: PackageDocument) -> dict[str, str]:
+    """object id -> display name, for resolving VarType class references."""
+    out: dict[str, str] = {}
+    for obj in getattr(document, "objects", None) or []:
+        name = getattr(obj, "name", None)
+        if name:
+            out[str(obj.id)] = str(name)
+    return out
+
+
 def _signature_from_native_fields(
     fields: list[Any],
 ) -> tuple[str | None, str | None, list[FunctionParameter]]:
@@ -470,7 +481,7 @@ class BlueprintCorrelation:
         self._enrich_graphs(document, owner, graphs, diagnostics)
 
         declaration, parent_class = self._extract_declaration(document, owner, seed)
-        variable_definitions = self._extract_variable_definitions(owner)
+        variable_definitions = self._extract_variable_definitions(owner, _object_names_of(document))
         components = self._extract_components(document, owner)
 
         resolver = _CallResolver(
@@ -749,7 +760,9 @@ class BlueprintCorrelation:
             fields = item.get("fields")
             yield fields if isinstance(fields, dict) else item
 
-    def _extract_variable_definitions(self, owner: ObjectRecord) -> list[VariableDefinition]:
+    def _extract_variable_definitions(
+        self, owner: ObjectRecord, object_names: dict[str, str] | None = None
+    ) -> list[VariableDefinition]:
         props = owner.properties
         if props is None:
             return []
@@ -791,7 +804,7 @@ class BlueprintCorrelation:
                 VariableDefinition(
                     name=name,
                     type_name=type_name,
-                    cpp_type=None,
+                    cpp_type=_var_type_cpp_type(vt_fields, object_names),
                     raw_type=raw_type,
                     array_dim=None,
                     property_flags=property_flags if isinstance(property_flags, int) else None,
@@ -800,6 +813,8 @@ class BlueprintCorrelation:
                     source_range=None,
                     # #654: unresolved must cover the type, not just name/guid —
                     # a definition whose VarType never decoded claims nothing.
+                    repnotify_function=(fields.get("RepNotifyFunc") if isinstance(fields.get("RepNotifyFunc"), str) else None),
+                    replication_condition=fields.get("ReplicationCondition"),
                     unresolved=type_name is None,
                 )
             )
@@ -1376,6 +1391,8 @@ def project_semantic_blueprint(
                 "object_id": item.object_id,
                 "source_range": project_region(item.source_range),
                 "unresolved": item.unresolved,
+                "repnotify_function": item.repnotify_function,
+                "replication_condition": project_operand(item.replication_condition),
             }
             for item in semantic.variable_definitions
         ],
