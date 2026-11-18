@@ -131,7 +131,9 @@ def _extract_variable_name(value: Any) -> str | None:
     if value is None:
         return None
     if isinstance(value, str):
-        return value or None
+        # Same filter as every other name source: a bare string can still be a
+        # str() dump, and it must not reach reads/writes unfiltered.
+        return value if _is_plain_name(value) else None
     if isinstance(value, dict):
         if "Variable" in value and not ("Assignment" in value or "Property" in value):
             # Projected EX_*VariableBase: {"Variable": <pointer dict>, ...}
@@ -895,15 +897,22 @@ class BlueprintCorrelation:
 
         for obj, props, name, type_name in staged:
             child_names: list[str] = []
+            child_ids: list[str] = []
             children = props.get("ChildNodes")
             child_values = children.get("value") if isinstance(children, dict) else None
             if isinstance(child_values, list):
                 for raw in child_values:
                     index = raw.get("value") if isinstance(raw, dict) else raw
+                    # A ChildNodes slot that is not a positive index is not a
+                    # child reference at all; there is nothing to preserve.
                     if not isinstance(index, int) or index <= 0:
                         continue
                     # 1-based export index, matching the ComponentTemplate rule.
-                    child_names.append(name_by_table.get(index - 1, f"export:{index - 1}"))
+                    object_id = f"export:{index - 1}"
+                    child_ids.append(object_id)
+                    resolved = name_by_table.get(index - 1)
+                    if resolved is not None:
+                        child_names.append(resolved)
             records.append(
                 ComponentRecord(
                     name=name,
@@ -912,6 +921,7 @@ class BlueprintCorrelation:
                     attach_to=_name_of_tag(props, "AttachToName"),
                     parent_component=_name_of_tag(props, "ParentComponentOrVariableName"),
                     child_names=child_names,
+                    child_ids=child_ids,
                 )
             )
         records.sort(key=lambda item: item.object_id)
@@ -930,11 +940,20 @@ class BlueprintCorrelation:
         # Scoped to this owner's graphs only: a same-named function in another
         # owner's graphs must never satisfy this owner's lookup.
         entry_nodes: dict[str, Any] = {}
+        ambiguous: set[str] = set()
         for graph in graphs:
             for node in graph.nodes:
                 meta = node.metadata
                 if node.class_name == "K2Node_FunctionEntry" and meta and meta.function_name:
-                    entry_nodes.setdefault(meta.function_name, node.id)
+                    name = meta.function_name
+                    if name in entry_nodes:
+                        ambiguous.add(name)
+                    else:
+                        entry_nodes[name] = node.id
+        # Two entry nodes claiming one name is ambiguous: linking to whichever
+        # was walked first would be a guess. No tracked fixture has collisions.
+        for name in ambiguous:
+            entry_nodes.pop(name, None)
         for fn in functions:
             name = fn.function_name or fn.name
             # match_method stays "object_id": the record is matched to the
@@ -1537,6 +1556,7 @@ def project_semantic_blueprint(
                 "attach_to": c.attach_to,
                 "parent_component": c.parent_component,
                 "child_names": list(c.child_names),
+                "child_ids": list(c.child_ids),
             }
             for c in semantic.components
         ],

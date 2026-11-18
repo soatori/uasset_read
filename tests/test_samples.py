@@ -6829,16 +6829,23 @@ def test_component_tree_names_resolve_within_the_owner():
 
 
 def test_reads_and_writes_never_carry_python_repr():
-    leaked = [
-        v
-        for name in ("BP_CombatCharacter.uasset", "BP_CombatEnemy.uasset", "B_ControlPointScoring.uasset",
-                     "Helm_BP.uasset", "FirstPerson_BP_FirstPersonCharacter.uasset", "StackOBot_BP_Drone.uasset")
-        for s in [_bp_semantic(name)]
-        for f in s["functions"]
-        for side in ("reads", "writes")
-        for v in f.get(side) or []
-        if isinstance(v, str) and "(" in v and "EX_" in v
-    ]
+    # Assert the production predicate itself (correlation._is_plain_name) so the
+    # detector cannot drift from the rule the fix enforces, and cover every
+    # manifest Blueprint rather than a hardcoded handful.
+    from uasset_read.parsers.blueprint.correlation import _is_plain_name
+
+    leaked = []
+    for entry in MANIFEST_SAMPLES:
+        name = entry["name"]
+        try:
+            sem = _bp_semantic(name)
+        except Exception:
+            continue
+        for f in sem.get("functions") or []:
+            for side in ("reads", "writes"):
+                for v in f.get(side) or []:
+                    if isinstance(v, str) and not _is_plain_name(v):
+                        leaked.append((name, side, v[:60]))
     assert leaked == [], leaked[:3]
 
 
@@ -6900,3 +6907,12 @@ def test_container_mapping_covers_set_and_map():
         "map_terminal_subcategory_object": 0,
     }
     assert _var_type_cpp_type(mapped) == "TMap<FName, int32>"
+
+
+def test_extract_variable_name_rejects_dump_strings():
+    # The str early-return used to bypass the name filter entirely.
+    from uasset_read.parsers.blueprint.correlation import _extract_variable_name
+
+    assert _extract_variable_name("Axis X") == "Axis X"
+    assert _extract_variable_name("FKismetPropertyPointer(path=FFieldPath())") is None
+    assert _extract_variable_name("EX_Context(ContextExpression=x)") is None

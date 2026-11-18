@@ -1084,7 +1084,11 @@ class ComponentRecord:
     # child_names are this node's ChildNodes resolved to component names.
     attach_to: str | None = None
     parent_component: str | None = None
+    # child_names holds resolved display names only; child_ids holds the stable
+    # export ids for every child, resolved or not. An id never sits in a name
+    # field (stable ids use table kind and index; names are not unique).
     child_names: list[str] = field(default_factory=list)
+    child_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

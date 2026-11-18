@@ -58,6 +58,8 @@ Budget 201 -> 202 on 2026-11-18 (blueprint C++ translation data gaps Task 7, no 
 202 is the measured final value, not headroom.
 Budget 202 -> 207 on 2026-11-18 (blueprint C++ translation data gaps final-review fix pass (C1/I1/I2/I4/I5): five sample-backed tests).
 207 is the measured final value, not headroom.
+Budget 207 -> 208 on 2026-11-18 (blueprint C++ translation data gaps deferred-minor pass: one sample-backed test).
+208 is the measured final value, not headroom.
 No fixtures live here — the baseline is driven by real samples in
 tests/test_samples.py; temporary probes belong to untracked temp/.
 """
@@ -66,7 +68,7 @@ from __future__ import annotations
 
 import pytest
 
-ITEM_BUDGET = 207
+ITEM_BUDGET = 208
 
 
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:
