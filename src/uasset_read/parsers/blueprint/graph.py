@@ -25,6 +25,7 @@ from uasset_read.models.analysis import (
     PinValueType,
     _graph_id_from_str,
     _node_id_from_str,
+    _object_name_map,
     _resolve_object_label,
     pin_lookup,
 )
@@ -253,22 +254,6 @@ def _object_name_index(objects_by_id: dict[str, Any] | None) -> dict[str, str]:
     }
 
 
-def _document_name_index(document: Any) -> dict[str, str]:
-    """object id -> display name, exports **and** imports.
-
-    Imports live in ``document.dependencies``; without them an import-typed
-    reference resolves to its ``import:N`` index and is then dressed up as a
-    display name.
-    """
-    names = _object_name_index({o.id: o for o in getattr(document, "objects", None) or []})
-    for dep in getattr(document, "dependencies", None) or []:
-        name = getattr(dep, "object_name", None)
-        index = getattr(dep, "index", None)
-        if name and isinstance(index, int):
-            names[f"import:{index}"] = str(name)
-    return names
-
-
 def _metadata_for(
     class_name: str,
     node: dict[str, Any],
@@ -374,7 +359,7 @@ class BlueprintGraphDecoder:
         function_ids = _function_graph_ids(obj.properties)
         owner_num = _parse_export_id(obj.id)
         objects_by_id = {o.id: o for o in document.objects}
-        document_names = _document_name_index(document)
+        document_names = _object_name_map(document)
         # Owner-scope node membership: a bare export:N pin-link target is
         # qualified with this Blueprint's owner only when that export is one
         # of the owner's decoded node exports (the raw resolver's package-wide

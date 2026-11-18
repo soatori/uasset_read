@@ -112,9 +112,25 @@ def _object_id_from_index(index: int | None) -> str | None:
     return f"import:{-index - 1}" if index < 0 else f"export:{index - 1}"
 
 
-def _container_name(container_type: int) -> str:
-    """EPinContainerType -> name. 0=none 1=array 2=set 3=map."""
-    return {0: "none", 1: "array", 2: "set", 3: "map"}.get(container_type, "none")
+def _object_name_map(document: Any) -> dict[str, str]:
+    """object id -> display name, exports **and** imports.
+
+    Imports live in ``document.dependencies``, not ``document.objects``, so an
+    import-typed reference left as ``import:N`` dresses a package index up as a
+    display name. ``Dependency.index`` is the 0-based import-map position — the
+    same value ``_object_id_from_index`` derives from a negative FPackageIndex.
+    """
+    out: dict[str, str] = {}
+    for obj in getattr(document, "objects", None) or []:
+        name = getattr(obj, "name", None)
+        if name:
+            out[str(obj.id)] = str(name)
+    for dep in getattr(document, "dependencies", None) or []:
+        name = getattr(dep, "object_name", None)
+        index = getattr(dep, "index", None)
+        if name and isinstance(index, int):
+            out[f"import:{index}"] = str(name)
+    return out
 
 
 _VAR_TYPE_SCALARS = {
@@ -172,11 +188,16 @@ def _var_type_cpp_type(
 ) -> str | None:
     """FEdGraphPinType field dict -> concrete C++ type, or None when undetermined.
 
-    Mirrors kismet.native_fields.native_field_cpp_type so a pin type and a
-    native field type never spell the same C++ type differently. Never guesses:
-    an unresolvable reference yields None instead of a plausible-looking wrong
-    class, and a Map without its value terminal (FEdGraphPinType PinValueType,
-    EdGraphPin.h:98) cannot spell TMap<K, V> at all.
+    Mirrors kismet.native_fields.native_field_cpp_type for every shape both
+    cover (scalars, byte/enum, object/class/struct, interface, soft refs,
+    TArray/TSet/TMap) so the two never spell the same C++ type differently.
+    Two deliberate differences: delegate pins (``mcdelegate``) return None
+    rather than native_fields' ``FMulticastScriptDelegate`` placeholder — a
+    Blueprint dispatcher's real C++ type is its generated signature delegate,
+    which the flat VarType shape does not carry — and an unresolvable reference
+    returns None rather than native_fields' ``/* unknown: ... */`` fallback.
+    A None is an explicit unknown that callers must surface as one, never as
+    "this member has no type".
     """
     if not isinstance(vt, dict):
         return None
@@ -1035,10 +1056,14 @@ class VariableDefinition:
     object_id: str
     source_range: ByteRegion | None
     unresolved: bool = False
-    # BPVariableDescription replication members. ReplicationCondition is the
-    # raw tagged value (an ELifetimeCondition name when the bag carries one,
-    # otherwise the enum int); no name table is invented here because no
-    # tracked fixture carries the field.
+    # BPVariableDescription replication members, emitted as the property bag
+    # carries them. RepNotifyFunc is the raw string — the FName "None" when the
+    # member has no RepNotify, not null. ReplicationCondition is routed through
+    # project_operand, so an enum tag projects as a wrapper dict
+    # ({"enum_type": "ELifetimeCondition", "value_name":
+    # "ELifetimeCondition::COND_None"}), not as a bare name or int. No
+    # ELifetimeCondition name table is invented: no tracked fixture carries a
+    # non-default value, so any spelling would be untested code.
     repnotify_function: str | None = None
     replication_condition: Any | None = None
 

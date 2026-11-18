@@ -36,8 +36,9 @@ from uasset_read.models.analysis import (
     VariableDefinition,
     VariableEventRecord,
     _int_or_none,
-    project_blueprint_graph,
+    _object_name_map,
     _var_type_cpp_type,
+    project_blueprint_graph,
 )
 from uasset_read.constants import format_guid_fields
 from uasset_read.models.byte_ranges import ByteRegion, project_region
@@ -435,27 +436,6 @@ def _function_flags(document: PackageDocument, fn: FunctionAnalysis) -> int | No
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
-def _object_names_of(document: PackageDocument) -> dict[str, str]:
-    """object id -> display name, for resolving VarType class references.
-
-    Imports live in ``document.dependencies`` (legacy_reader builds them from
-    the import map), not in ``document.objects``, which holds exports only.
-    An import typed reference must resolve to its name — leaving it as
-    ``import:N`` dresses a package index up as a C++ class name.
-    """
-    out: dict[str, str] = {}
-    for obj in getattr(document, "objects", None) or []:
-        name = getattr(obj, "name", None)
-        if name:
-            out[str(obj.id)] = str(name)
-    for dep in getattr(document, "dependencies", None) or []:
-        name = getattr(dep, "object_name", None)
-        index = getattr(dep, "index", None)
-        if name and isinstance(index, int):
-            out[f"import:{index}"] = str(name)
-    return out
-
-
 def _signature_from_native_fields(
     fields: list[Any],
 ) -> tuple[str | None, str | None, list[FunctionParameter]]:
@@ -513,7 +493,9 @@ class BlueprintCorrelation:
         self._enrich_graphs(document, owner, graphs, diagnostics)
 
         declaration, parent_class = self._extract_declaration(document, owner, seed)
-        variable_definitions = self._extract_variable_definitions(owner, _object_names_of(document))
+        variable_definitions = self._extract_variable_definitions(
+            owner, _object_name_map(document), diagnostics
+        )
         components = self._extract_components(document, owner)
 
         resolver = _CallResolver(
@@ -793,7 +775,10 @@ class BlueprintCorrelation:
             yield fields if isinstance(fields, dict) else item
 
     def _extract_variable_definitions(
-        self, owner: ObjectRecord, object_names: dict[str, str] | None = None
+        self,
+        owner: ObjectRecord,
+        object_names: dict[str, str] | None = None,
+        diagnostics: list[Diagnostic] | None = None,
     ) -> list[VariableDefinition]:
         props = owner.properties
         if props is None:
@@ -801,6 +786,7 @@ class BlueprintCorrelation:
         raw = props.get("NewVariables")
         if raw is None:
             return []
+        sink = diagnostics if diagnostics is not None else []
         definitions: list[VariableDefinition] = []
         for fields in self._iter_property_structs(raw):
             name = fields.get("VarName")
@@ -832,11 +818,31 @@ class BlueprintCorrelation:
             if type_name and pin_sub:
                 type_name = f"{type_name}:{pin_sub}"
             property_flags = fields.get("PropertyFlags")
+            cpp_type = _var_type_cpp_type(vt_fields, object_names)
+            # A decoded type with no derivable C++ spelling is an explicit
+            # unknown, not a silent null beside unresolved=False: a consumer
+            # must be able to tell "no C++ type" from "never parsed"
+            # (constraints.md: never silently skip and claim coverage).
+            if type_name is not None and cpp_type is None:
+                sink.append(
+                    Diagnostic(
+                        severity="info",
+                        code="VARIABLE_CPP_TYPE_UNDETERMINED",
+                        message=(
+                            f"member {name!r} decodes as {type_name} but its VarType "
+                            "shape yields no concrete C++ type; "
+                            "VariableDefinition.cpp_type stays null"
+                        ),
+                        stage="semantic.blueprint.correlation",
+                        object_id=owner.id,
+                        effect="semantic_loss",
+                    )
+                )
             definitions.append(
                 VariableDefinition(
                     name=name,
                     type_name=type_name,
-                    cpp_type=_var_type_cpp_type(vt_fields, object_names),
+                    cpp_type=cpp_type,
                     raw_type=raw_type,
                     array_dim=None,
                     property_flags=property_flags if isinstance(property_flags, int) else None,
