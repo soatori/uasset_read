@@ -44,6 +44,7 @@ from uasset_read.models.byte_ranges import ByteRegion, project_region
 from uasset_read.models.diagnostics import Diagnostic
 from uasset_read.models.document import PackageDocument
 from uasset_read.models.object_model import ObjectRecord
+from uasset_read.models.properties import PropertyBag
 from uasset_read.parsers.blueprint.bytecode import (
     _CALL_OPCODES,
     DEBUG_MAPPING_UNAVAILABLE,
@@ -861,7 +862,7 @@ class BlueprintCorrelation:
         # table index so ChildNodes (1-based export indexes, same convention as
         # ComponentTemplate below) can be resolved to names in pass 2.
         name_by_table: dict[int, str] = {}
-        staged: list[tuple[ObjectRecord, dict[str, Any], str, str]] = []
+        staged: list[tuple[ObjectRecord, PropertyBag, str, str]] = []
         for obj in document.objects:
             if obj.class_name != "SCS_Node" or not obj.properties:
                 continue
@@ -890,7 +891,7 @@ class BlueprintCorrelation:
                 name_by_table[obj.table_index] = name
             staged.append((obj, props, name, str(type_name)))
 
-        def _name_of_tag(props: dict[str, Any], key: str) -> str | None:
+        def _name_of_tag(props: PropertyBag, key: str) -> str | None:
             entry = props.get(key)
             value = entry.get("value") if isinstance(entry, dict) else entry
             return value if isinstance(value, str) and value else None

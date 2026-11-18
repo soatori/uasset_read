@@ -23,10 +23,8 @@ from uasset_read.models.analysis import (
     PinLink,
     PinLinkRef,
     PinValueType,
-    _container_name,
     _graph_id_from_str,
     _node_id_from_str,
-    _object_id_from_index,
     _resolve_object_label,
     pin_lookup,
 )
