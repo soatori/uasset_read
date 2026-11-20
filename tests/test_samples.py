@@ -1562,8 +1562,12 @@ def test_logging_boundaries_and_cli_file_logs(capfd, caplog, tmp_path, monkeypat
     assert tuple(root.handlers) == handlers_before
     assert set(tmp_path.iterdir()) == files_before
 
-    monkeypatch.setattr(cli, "__file__", str(tmp_path / "repo" / "src" / "uasset_read" / "cli.py"))
-    log_dir = tmp_path / "repo" / "temp"
+    # The log directory is resolved from the working directory, never from cli.__file__,
+    # so an installed wheel cannot drop logs inside the interpreter's own tree.
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.chdir(repo)
+    log_dir = repo / "temp"
     package_logger = logging.getLogger("uasset_read")
     package_handlers = tuple(package_logger.handlers)
     package_level = package_logger.level
@@ -1603,7 +1607,6 @@ def test_logging_boundaries_and_cli_file_logs(capfd, caplog, tmp_path, monkeypat
     sample = SAMPLES / "NM_BPSystemEvent.uasset"
     root.handlers.clear()
     try:
-        monkeypatch.setattr(cli, "__file__", str(tmp_path / "repo" / "src" / "uasset_read" / "cli.py"))
         monkeypatch.setattr(sys, "argv", ["uasset_read", str(sample), "--verbose", "-o", str(output_path)])
         with pytest.raises(SystemExit) as parse_exit:
             cli.main()

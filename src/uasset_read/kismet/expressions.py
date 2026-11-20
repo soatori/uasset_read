@@ -10,6 +10,7 @@ from abc import ABC
 from dataclasses import fields, is_dataclass, dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from uasset_read.archive import format_fname
 from uasset_read.constants import UE5_LARGE_WORLD_COORDINATES
 from uasset_read.exceptions import ParseError
 from uasset_read.versioning import require_version_context
@@ -673,11 +674,8 @@ class EX_VirtualFunction(KismetExpression):
     def from_archive(cls, archive: FKismetArchive) -> EX_VirtualFunction:
         fname_ref = archive.xfer_fname()
         params = archive.read_expression_array(EExprToken.EX_EndFunctionParms)
-        # Build full name with number suffix (e.g., "TestFunc_3")
-        if fname_ref.base_name and fname_ref.number > 0:
-            full_name = f"{fname_ref.base_name}_{fname_ref.number}"
-        else:
-            full_name = fname_ref.base_name or ""
+        # Display form (including the Number-1 instance suffix) is format_fname's rule.
+        full_name = format_fname(fname_ref.base_name, fname_ref.number) if fname_ref.base_name else ""
         return cls(
             VirtualFunctionName=full_name,
             Parameters=params,
