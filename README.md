@@ -4,7 +4,7 @@
 
 A zero-dependency Python parser for Unreal Engine `.uasset` files that transforms binary blueprint data into structured JSON and code.
 
-> 📦 **v0.6.2** — Zero runtime dependencies · Python 3.10+ · 71 source files · 21 registered semantic asset handlers
+> 📦 **v0.6.2** — Zero runtime dependencies · Python 3.10+ · 70 source files · 21 registered semantic asset handlers
 
 > **Refactor status:** package-first architecture; current output is the v4 package document — one canonical envelope with `format_version: "4.0"` (`projection.FORMAT_VERSION`; frozen contract `tests/package_document_v4.schema.json`), exactly two modes (`normal` default, `debug` adds evidence only), one full document per package with no pagination or byte budget. Static Blueprint graph / Kismet instruction IR / CFG / correlation live under `objects[].semantic` (dict at the document boundary). Embedded type-aware `projections[]` cover Material editor-builder, DataTable/CurveTable/struct/enum data, and physical asset metadata/payload references (typed Blueprint C++ projection was retired by the 2026-09-28 v4 amendment). Payload extraction from cooked sidecars remains available via `extract_payload`. Zen/IoStore full package decoding is outside the current product target; existing TOC metadata only reports the boundary truthfully. Editor `.usmap` unversioned fixtures remain a bounded partial path, while cooked/Zen unversioned is outside the product target. Semantic 1.x JSON remains removed. The structure/size/quality baselines are gated by `tests/`.
 
@@ -126,7 +126,7 @@ python -m uasset_read path/to/file.uasset --game NAME               # Enable gam
 
 ### Logging Parameters
 
-After argument parsing succeeds, the CLI writes a DEBUG text log for each invocation to the project-root `log/` directory. Files use the `uasset_read-{timestamp}-pid{pid}-{run_id}.log` convention and rotate at 10 MB with five backups per run. `--verbose` also mirrors log records to stderr. Logs are not cleaned up across runs; manage their retention as needed. Python API calls still return structured diagnostics without configuring process-global logging.
+After argument parsing succeeds, the CLI writes a DEBUG text log for each invocation to a `temp/` directory under the **current working directory** — never a path derived from the installed package, which on a wheel would land inside the interpreter's own tree. Each run gets its own file named `uasset_read-{12 hex run id}.log`; there is no rotation and no size cap. `--verbose` also mirrors log records to stderr. Logs are not cleaned up across runs; manage their retention as needed. Python API calls still return structured diagnostics without configuring process-global logging.
 
 ## Core API
 
@@ -204,17 +204,18 @@ Development direction and plan admission are maintained in the canonical design 
 | Memory Safety | `memory_safety.py` | `ResourceBudget` read/decompress checkpoints, `MemoryLimitExceeded` |
 | **Serialization** | `serializers/` | PackageSummary, Import/ExportMap, PropertyTag, Graph |
 | **Data Models** | `models/` | UEdGraph/Node/Pin, FEdGraphPinType, PropertyTag/PropertyValue, Anim IR, structured diagnostics, property fallback |
-| **Parsers** | `parsers/` | 28 tagged-property parse functions + dispatcher, custom property registry, class handler registry, BinaryOrNative handlers |
+| **Parsers** | `parsers/` | 26 tagged-property parse functions + dispatcher, custom property registry, class handler registry, BinaryOrNative handlers |
 | ├ Asset Types | `parsers/asset_types/` | `handlers_impl.py` — 21 registered semantic handler instances |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → expressions, decompile bridge, BPGC fallback, UFunction script reader (C++ translator retired 2026-09-10) |
-| ├ Expressions | `kismet/expressions/` | 15 expression types (assignments, control flow, function calls, literals, casts, delegates, etc.) |
+| ├ Expressions | `kismet/expressions.py` | 52 token-bearing expression classes (assignments, control flow, function calls, literals, casts, delegates, etc.) |
 | **Package Document** | `package.py`, `models/`, `projection.py`, `agent_tools.py` | `parse_package_document` entry, `PackageDocument` / `ObjectRecord`, `normal`/`debug` mode projection, agent tools (no `v2/` subpackage — flattened) |
 
 ## Testing
 
-The tracked baseline is intentionally small: three test modules
-(`tests/test_samples.py`, `tests/test_size_baseline.py`, `tests/test_version_context.py`)
-and at most 111 collected pytest items (enforced during collection by `tests/conftest.py`).
+The tracked baseline is intentionally small: four test modules
+(`tests/test_samples.py`, `tests/test_pak_reader.py`, `tests/test_size_baseline.py`,
+`tests/test_version_context.py`) and at most 186 collected pytest items
+(enforced during collection by `tests/conftest.py`).
 The sample driver also gates the v4 normal/debug public contract, manifest raw
 version/layout metadata, and the mandatory bounded-reader/error paths; broader
 experiments remain untracked under `temp/`.
