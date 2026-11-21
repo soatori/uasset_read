@@ -7403,6 +7403,14 @@ def test_bp_scriptless_function_flags_round_trip(monkeypatch):
         assert result.function_flags == declaration["flags"] == expected_flags
         assert fn["instructions"] == []
         assert ("UFUNCTION_FLAGS_UNAVAILABLE" in codes) == (expected_flags is None)
+        # The empty body keeps its reason without claiming lost information:
+        # a legal scriptless function that read its flags carries no
+        # semantic_loss effect; only a missing tail word is a real loss.
+        loss_codes = {d["code"] for d in fn["diagnostics"] if d.get("effect") == "semantic_loss"}
+        if expected_flags is None:
+            assert "UFUNCTION_FLAGS_UNAVAILABLE" in loss_codes
+        else:
+            assert not loss_codes, f"legal scriptless function mislabeled: {sorted(loss_codes)}"
 
 
 def test_container_mapping_covers_set_and_map():

@@ -2037,13 +2037,18 @@ def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
     if status not in get_args(BytecodeStatus):
         status = "unavailable"
     if status == "unavailable" and not diagnostics and getattr(kr, "error_code", None):
+        # A legal empty script (confirmed_no_script) is a fact about the
+        # function, not lost information: it explains the empty body and
+        # keeps effect=None whether or not FunctionFlags were read from the
+        # tail. Real decode failures stay semantic_loss.
+        error_code = kr.error_code
         diagnostics.append(
             _diag(
-                kr.error_code,
+                error_code,
                 kr.error_message or "kismet function unavailable",
                 "semantic.kismet",
                 object_id=kr.object_id or None,
-                effect="semantic_loss",
+                effect=None if error_code == "confirmed_no_script" else "semantic_loss",
             )
         )
     # UFunction::FunctionFlags is read from the native tail after the script
