@@ -6857,6 +6857,70 @@ def test_property_chain_still_parses_after_the_flags_read():
 
 
 # ---------------------------------------------------------------------------
+# Task: native parameter qualifiers — const-ref projection and direction
+# ---------------------------------------------------------------------------
+
+
+def test_bp_on_landed_const_reference_signature():
+    # ACharacter::OnLanded(const FHitResult& Hit) — Engine/Classes/GameFramework/
+    # Character.h. The engine /Script/Engine HitResult ScriptStruct import must
+    # surface as the native C++ struct with const/reference qualifiers, and a
+    # const reference is an input even though UHT also sets CPF_OutParm.
+    for name in ("BP_CombatCharacter.uasset", "BP_CombatEnemy.uasset"):
+        decl = _declaration(name, "OnLanded")
+        hit = next(p for p in decl["parameters"] if p["name"] == "Hit")
+        assert (hit["type_name"], hit["cpp_type"], hit["direction"]) == (
+            "StructProperty",
+            "const FHitResult&",
+            "in",
+        )
+        field = next(f for f in decl["native_fields"] if f["name"] == "Hit")
+        flags = field["property_flags"]
+        assert flags & 0x2 and flags & 0x08000000 and flags & 0x100
+
+
+def test_bp_native_signature_keeps_direction_and_import_identity():
+    from uasset_read.kismet.native_fields import NativeFieldDeclaration
+    from uasset_read.parsers.blueprint.correlation import _signature_from_native_fields
+
+    def hit_struct(reference: int) -> NativeFieldDeclaration:
+        return NativeFieldDeclaration(
+            type_name="StructProperty",
+            name="Hit",
+            property_flags=0x2 | 0x80 | 0x100 | 0x08000000,
+            references=[reference],
+            reference_names=["HitResult"],
+        )
+
+    engine_hit = frozenset({-189})
+    _, _, parameters = _signature_from_native_fields(
+        [hit_struct(-189), hit_struct(-200)], engine_hit_result_indices=engine_hit
+    )
+    # Only the reference that actually resolves into the engine import set maps
+    # to FHitResult; a same-named struct from another package keeps the
+    # serialized object name. Both stay inputs: ConstParm suppresses out.
+    assert [p.cpp_type for p in parameters] == ["const FHitResult&", "const HitResult&"]
+    assert all(p.direction == "in" for p in parameters)
+
+    plain = NativeFieldDeclaration(type_name="IntProperty", name="Amount", property_flags=0x80)
+    _, _, parameters = _signature_from_native_fields([plain], engine_hit_result_indices=engine_hit)
+    assert [(p.cpp_type, p.direction) for p in parameters] == [("int32", "in")]
+
+    out_parm = NativeFieldDeclaration(
+        type_name="IntProperty", name="Result", property_flags=0x80 | 0x100
+    )
+    _, _, parameters = _signature_from_native_fields([out_parm], engine_hit_result_indices=engine_hit)
+    assert [(p.cpp_type, p.direction) for p in parameters] == [("int32", "out")]
+
+    return_value = NativeFieldDeclaration(
+        type_name="FloatProperty", name="ReturnValue", property_flags=0x80 | 0x400
+    )
+    assert _signature_from_native_fields([return_value]) == ("FloatProperty", "float", [])
+
+    assert _signature_from_native_fields([]) == (None, None, [])
+
+
+# ---------------------------------------------------------------------------
 # Task 4: member replication + VariableDefinition.cpp_type (A3 / C11)
 # ---------------------------------------------------------------------------
 

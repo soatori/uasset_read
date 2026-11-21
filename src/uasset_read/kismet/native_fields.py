@@ -470,6 +470,23 @@ _CPF_ReferenceParm = 0x0000000008000000
 _CPF_ConstParm = 0x0000000000000002
 
 
+def _qualify_native_cpp_type(cpp_type: str, flags: int) -> str:
+    """Apply CPF_ReferenceParm/CPF_ConstParm qualifiers to a mapped C++ type.
+
+    Shared by the text signature builder and the structured parameter
+    projection so both decorate identically.
+    """
+    # Append reference suffix
+    if flags & _CPF_ReferenceParm:
+        cpp_type += "&"
+
+    # Prepend const
+    if flags & _CPF_ConstParm:
+        cpp_type = f"const {cpp_type}"
+
+    return cpp_type
+
+
 def build_native_function_signature(
     function_name: str,
     fields: list[NativeFieldDeclaration],
@@ -487,18 +504,9 @@ def build_native_function_signature(
         if not (flags & _CPF_Parm):
             continue
 
-        is_return = bool(flags & _CPF_ReturnParm)
-        cpp_type = native_field_cpp_type(field)
+        cpp_type = _qualify_native_cpp_type(native_field_cpp_type(field), flags)
 
-        # Append reference suffix
-        if flags & _CPF_ReferenceParm:
-            cpp_type += "&"
-
-        # Prepend const
-        if flags & _CPF_ConstParm:
-            cpp_type = f"const {cpp_type}"
-
-        if is_return:
+        if flags & _CPF_ReturnParm:
             return_cpp = cpp_type
         else:
             param_strs.append(f"{cpp_type} {field.name}")
