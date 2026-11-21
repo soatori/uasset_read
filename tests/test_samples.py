@@ -1562,8 +1562,12 @@ def test_logging_boundaries_and_cli_file_logs(capfd, caplog, tmp_path, monkeypat
     assert tuple(root.handlers) == handlers_before
     assert set(tmp_path.iterdir()) == files_before
 
-    monkeypatch.setattr(cli, "__file__", str(tmp_path / "repo" / "src" / "uasset_read" / "cli.py"))
-    log_dir = tmp_path / "repo" / "temp"
+    # The log directory is resolved from the working directory, never from cli.__file__,
+    # so an installed wheel cannot drop logs inside the interpreter's own tree.
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.chdir(repo)
+    log_dir = repo / "temp"
     package_logger = logging.getLogger("uasset_read")
     package_handlers = tuple(package_logger.handlers)
     package_level = package_logger.level
@@ -1603,7 +1607,6 @@ def test_logging_boundaries_and_cli_file_logs(capfd, caplog, tmp_path, monkeypat
     sample = SAMPLES / "NM_BPSystemEvent.uasset"
     root.handlers.clear()
     try:
-        monkeypatch.setattr(cli, "__file__", str(tmp_path / "repo" / "src" / "uasset_read" / "cli.py"))
         monkeypatch.setattr(sys, "argv", ["uasset_read", str(sample), "--verbose", "-o", str(output_path)])
         with pytest.raises(SystemExit) as parse_exit:
             cli.main()
@@ -1844,7 +1847,7 @@ def test_collection_counts_are_bounded_by_payload_size():
     from uasset_read.archive import ByteArchive
     from uasset_read.models.properties import PropertyTag
     from uasset_read.package import parse_package_document
-    from uasset_read.parsers.property_parser import parse_array_property
+    from uasset_read.parsers.property_parser import parse_array_property, parse_map_property, parse_set_property
     from uasset_read.serializers.package_summary import PackageFileSummary
     from uasset_read.versioning import build_version_context
 
@@ -1870,6 +1873,24 @@ def test_collection_counts_are_bounded_by_payload_size():
     value = parse_array_property(tag, archive, ["Arr"], [], None)
     assert len(value) <= 4                                                             # pre-fix: 1_000_000 fabricated elements
     assert any(d.code == "INVALID_COLLECTION_COUNT" for d in archive.get_structured_diagnostics())
+
+    # Map and set serialise TWO count fields, so the array's flat "-4" left four
+    # bytes of headroom: a header-only payload (tag.size 8) admitted elements from
+    # outside the declared payload. Pre-fix the set loop fabricated a BogusProperty
+    # fallback and the map loop ran; post-fix both clamp to zero and stay inside.
+    set_archive = ByteArchive(struct.pack("<II", 0, 3), tolerant=True)      # 0 removals, 3 elements, no element bytes
+    set_archive.version_context = build_version_context(PackageFileSummary(file_version_ue4=522, file_version_ue5=0))
+    set_tag = PropertyTag(name="S", type="SetProperty", size=8, inner_type="BogusProperty")
+    set_value = parse_set_property(set_tag, set_archive, ["S"], [], None)
+    assert set_value.elements == []
+    assert any(d.code == "INVALID_COLLECTION_COUNT" for d in set_archive.get_structured_diagnostics())
+
+    map_archive = ByteArchive(struct.pack("<II", 0, 2), tolerant=True)      # 0 removals, 2 entries, no entry bytes
+    map_archive.version_context = build_version_context(PackageFileSummary(file_version_ue4=522, file_version_ue5=0))
+    map_tag = PropertyTag(name="M", type="MapProperty", size=8, inner_type="BogusProperty")
+    map_value = parse_map_property(map_tag, map_archive, ["M"], [], None)
+    assert map_value.entries == []
+    assert any(d.code == "INVALID_COLLECTION_COUNT" for d in map_archive.get_structured_diagnostics())
 
     # legitimate case: the clamps must not shrink a real fixture's arrays (expected values pasted in Step 2)
     assert _array_element_counts(SAMPLES / "B_ControlPointScoring.uasset") == REAL_ARRAY_COUNTS
@@ -2172,6 +2193,27 @@ def _check_package_archive_reuses_known_segment_positions(tmp_path, monkeypatch)
         assert main_seeks == [1, 2]
     finally:
         archive.close()
+
+
+def _check_read_name_recovers_the_shifted_fname():
+    # #339 shifted-FName recovery was unpinned even though it repositions the
+    # reader and renders the display name itself. The recovered name must follow
+    # the same Number-1 rule as the normal path (format_fname), and the cursor
+    # must land on the shifted pair rather than the garbage one.
+    import struct
+
+    from uasset_read.archive import ByteArchive
+
+    name_map = ["None", "RealName"]
+    # A real FName (index 1, number 1) at 0..7. A caller resynced one byte late
+    # reads index 0x01000000 — >= 2**24 and out of range, the misalignment sign.
+    archive = ByteArchive(struct.pack("<II", 1, 1) + b"\x00" * 8, tolerant=True)
+    archive.seek(1)
+    recovered = archive.read_name(name_map)
+    assert recovered == "RealName_0", recovered
+    assert archive.tell() == 8, archive.tell()
+    codes = [d.code for d in archive.get_structured_diagnostics()]
+    assert "fname_index_shift_recovered" in codes, codes
 
 
 def _check_float_array_bulk_decode_matches_scalar_bits_with_one_payload_read():
@@ -3373,6 +3415,7 @@ def test_critical_boundary_guards(monkeypatch, caplog, tmp_path):
         _check_package_archive_reuses_known_segment_positions(tmp_path, mp)
     _check_float_array_bulk_decode_matches_scalar_bits_with_one_payload_read()
     _check_float_array_bulk_decode_falls_back_at_export_boundary()
+    _check_read_name_recovers_the_shifted_fname()
 
     # R5: canonical payload ids only; pagination envelope retired.
     import uasset_read.agent_tools as agent_tools

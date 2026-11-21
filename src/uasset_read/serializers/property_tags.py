@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 if TYPE_CHECKING:
     from uasset_read.archive import FArchive
 
+from uasset_read.archive import format_fname
 from uasset_read.constants import (
     PROPERTY_TAG_COMPLETE_TYPE_NAME,
     UE5_PROPERTY_TAG_EXTENSION,
@@ -285,8 +286,7 @@ def _read_property_tag_legacy(
     type_index = archive.read_u32()
     type_number = archive.read_u32()
     if 0 <= type_index < len(name_map):
-        base_type = name_map[type_index]
-        tag.type = f"{base_type}_{type_number}" if type_number > 0 else base_type
+        tag.type = format_fname(name_map[type_index], type_number)
     else:
         tag.type = "None"
 

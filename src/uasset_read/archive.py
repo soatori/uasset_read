@@ -33,6 +33,16 @@ _ALIGNMENT_SIZES = frozenset({4, 8, 16, 32, 64})
 _FNAME_GARBAGE_MIN = 1 << 24
 
 
+def format_fname(base_name: str, number: int) -> str:
+    """Render one stored FName (name-table index resolved, on-disk number) as display text.
+
+    NAME_INTERNAL_TO_EXTERNAL: the serialized Number is internal, so the display
+    instance is Number-1 (LinkerLoad.h). Number 0 is NAME_NO_NUMBER_INTERNAL and
+    carries no suffix. Sole home for the rule — every FName display goes through here.
+    """
+    return f"{base_name}_{number - 1}" if number > 0 else base_name
+
+
 class FArchive:
     """
     Binary reader class mirroring UE's FArchive mode.
@@ -596,8 +606,8 @@ class FArchive:
 
         if 0 <= index < len(name_map):
             base_name = name_map[index]
-            # NAME_INTERNAL_TO_EXTERNAL: on-disk Number is internal; display is Number-1 (LinkerLoad.h).
-            result = f"{base_name}_{number - 1}" if number > 0 else base_name
+            # NAME_INTERNAL_TO_EXTERNAL lives in format_fname (LinkerLoad.h).
+            result = format_fname(base_name, number)
         else:
             # Keep "None" return value (PropertyTag terminator depends on it)
             # Deduplication: same out-of-bounds index only logged once (#411)
@@ -654,10 +664,7 @@ class FArchive:
                     logger.debug(
                         "read_name: recovered at offset %d (adjust %+d), index=%d", try_pos, offset_adjust, test_index
                     )
-                    base_name = name_map[test_index]
-                    if test_number > 0:
-                        return f"{base_name}_{test_number}"
-                    return base_name
+                    return format_fname(name_map[test_index], test_number)
             except (ParseError, OSError, struct.error, ValueError):
                 continue
 

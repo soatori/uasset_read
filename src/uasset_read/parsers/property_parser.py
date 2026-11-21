@@ -2330,7 +2330,9 @@ def parse_map_property(
     num_entries = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "MapProperty entry count")
     if tag.size > 0:
         value_end = tag.value_end_offset if tag.value_end_offset is not None else entry_tell + tag.size
-        usable = max(0, value_end - count_offset)
+        # -4 for the numEntries field itself (removal count + removed keys already
+        # sit before count_offset). Same consumed-header rule as array/set.
+        usable = max(0, value_end - count_offset - 4)
         min_element_bytes = 1
         limit = usable // min_element_bytes
         if num_entries > limit:
@@ -2409,7 +2411,10 @@ def parse_set_property(
     count_offset = archive.tell()
     num_elements = read_validated_count_tolerant(archive, MAX_PROPERTY_COUNT, "SetProperty element count")
     if tag.size > 0:
-        usable = max(0, tag.size - 4)
+        # A set carries TWO count fields, so the array's flat "-4" over-admits.
+        # Consumed header = removal-count field + removed elements + the
+        # numElements field = count_offset + 4 - payload_start.
+        usable = max(0, tag.size - (count_offset + 4 - payload_start))
         min_element_bytes = 1
         limit = usable // min_element_bytes
         if num_elements > limit:

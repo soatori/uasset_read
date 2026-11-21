@@ -13,7 +13,7 @@ from pathlib import Path
 from collections.abc import Sequence
 from typing import Any, Literal, get_args
 
-from ..archive import ByteArchive, SourceInfo
+from ..archive import ByteArchive, SourceInfo, format_fname
 from ..constants import (
     PKG_Cooked,
     PKG_UnversionedProperties,
@@ -2383,7 +2383,7 @@ def _read_curve_tag_value(
             return None
         value_name = name_map[index]
         payload.seek(value_end)
-        return make_enum_value(tag.enum_type, f"{value_name}_{number - 1}" if number > 0 else value_name)
+        return make_enum_value(tag.enum_type, format_fname(value_name, number))
     if tag.type == "FloatProperty" and value_end - start == 4:
         (value,) = struct.unpack_from("<f", blob, start)
         payload.seek(value_end)
@@ -2484,12 +2484,9 @@ def _read_table_rows(
                 message=f"{object_id}: row name index {idx} outside name map",
                 size=8,
             )
-        elif number > 0:
-            # NAME_INTERNAL_TO_EXTERNAL: the on-disk Number is internal, so the
-            # display instance is Number-1 (LinkerLoad.h, same rule as FArchive.read_name).
-            display_name = f"{name_map[idx]}_{number - 1}"
         else:
-            display_name = name_map[idx]
+            # Display rule (Number-1, LinkerLoad.h) lives in format_fname.
+            display_name = format_fname(name_map[idx], number)
         names.append(display_name)
         # Each row is a tagged property stream terminated by the None tag (DataTable.cpp
         # LoadStructData -> SerializeItem; versioned path = SerializeTaggedProperties,

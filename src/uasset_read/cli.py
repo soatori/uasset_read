@@ -25,9 +25,14 @@ logger = logging.getLogger(__name__)
 
 @contextmanager
 def _file_log_scope() -> Iterator[None]:
-    """Write this CLI invocation's DEBUG records to its own file under temp/."""
+    """Write this CLI invocation's DEBUG records to its own file under the run's ``temp/``.
+
+    The directory is relative to the *current working directory*, never to
+    ``__file__``: an installed wheel lives under ``site-packages``, and a path
+    derived from there would drop logs inside the interpreter's own tree.
+    """
     try:
-        log_dir = Path(__file__).resolve().parents[2] / "temp"
+        log_dir = Path.cwd() / "temp"
         log_dir.mkdir(parents=True, exist_ok=True)
         handler = logging.FileHandler(log_dir / f"uasset_read-{uuid4().hex[:12]}.log", encoding="utf-8")
     except OSError as exc:
