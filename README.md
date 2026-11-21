@@ -78,7 +78,7 @@ print(project_document(doc))  # PackageDocument JSON dict
 - **Variable extraction** — variables, functions, events, metadata with type inference
 - **Component properties** — Transform / Rotation / Scale + scalar attributes
 - **Execution / data flow** — `exec_chains` from pin `category=exec` + `linked` (experimental; unique undirected edges, pin-id endpoints); not full Event→CallFunction chain tracking
-- **Function graph analysis** — FunctionEntry identification; pin keys frozen to `id`/`name`/`direction`/`category`/`linked` (Wave A contract)
+- **Function graph analysis** — FunctionEntry identification; every pin always carries `id`/`name`/`direction`/`category`/`linked` (resolved adjacency entries are `{"to_node", "to_pin"}`) and conditionally retains `subcategory`, `default_value`/`default_object_ref`/`default_text`, `sub_pin_ids`/`parent_pin_id`/`reference_pass_through_pin_id`, `is_const`, `container_type`/`is_reference`/`subcategory_object_index`, and the map-only `pin_value_type` block; every serialized `LinkedTo` slot also lands in `graph.links[]` with `status`/`reason`/`connection_type`
 
 ### Advanced Features
 
