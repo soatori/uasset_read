@@ -220,6 +220,7 @@ def _call_parts(value: Any, opcode: str) -> tuple[str | None, int | None]:
 _CPF_PARM = 0x0000000000000080  # ufunction_reader/native_fields mirror of UE CPF_Parm
 _CPF_RETURN_PARM = 0x0000000000000400  # same table: CPF_ReturnParm
 _CPF_OUT_PARM = 0x0000000000000100  # docs/formats/uasset/serialization/uproperty-specifiers.md
+_CPF_CONST_PARM = 0x0000000000000002  # same table: CPF_ConstParm
 
 
 def external_ref_record(
@@ -438,21 +439,46 @@ def _function_flags(document: PackageDocument, fn: FunctionAnalysis) -> int | No
 
 def _signature_from_native_fields(
     fields: list[Any],
+    *,
+    engine_hit_result_indices: frozenset[int] = frozenset(),
 ) -> tuple[str | None, str | None, list[FunctionParameter]]:
-    """Return type + parameters from already-decoded native FProperty declarations."""
-    from uasset_read.kismet.native_fields import native_field_cpp_type
+    """Return type + parameters from already-decoded native FProperty declarations.
+
+    ``engine_hit_result_indices`` carries the serialized package indices
+    (import entries, -1-based) of every ``/Script/Engine`` HitResult
+    ScriptStruct import. Only a struct parameter whose serialized reference
+    actually resolves into that set projects onto the verified engine C++
+    struct name FHitResult; a same-named struct from a project package keeps
+    its serialized object name.
+    """
+    from uasset_read.kismet.native_fields import _qualify_native_cpp_type, native_field_cpp_type
+
+    def cpp_type_for(field: Any) -> str:
+        cpp_type = native_field_cpp_type(field)
+        if (
+            field.type_name == "StructProperty"
+            and field.references
+            and field.references[0] in engine_hit_result_indices
+        ):
+            cpp_type = "FHitResult"
+        return _qualify_native_cpp_type(cpp_type, field.property_flags or 0)
 
     if not fields:
         return None, None, []
     return_field = next((f for f in fields if (f.property_flags or 0) & _CPF_RETURN_PARM), None)
     return_type = return_field.type_name if return_field is not None else None
-    cpp_return_type = native_field_cpp_type(return_field) if return_field is not None else "void"
+    cpp_return_type = cpp_type_for(return_field) if return_field is not None else "void"
     parameters = [
         FunctionParameter(
             name=f.name,
             type_name=f.type_name,
-            cpp_type=native_field_cpp_type(f),
-            direction=("out" if (f.property_flags or 0) & _CPF_OUT_PARM else "in"),
+            cpp_type=cpp_type_for(f),
+            direction=(
+                "out"
+                if (f.property_flags or 0) & _CPF_OUT_PARM
+                and not (f.property_flags or 0) & _CPF_CONST_PARM
+                else "in"
+            ),
             default_value=None,
             source_range=None,
         )
@@ -524,12 +550,23 @@ class BlueprintCorrelation:
 
         dispatchers, variable_events = self._extract_dispatchers(graphs)
 
+        # Serialized package indices (import entries are negative, -1-based)
+        # of every /Script/Engine HitResult ScriptStruct import.
+        engine_hit_result_indices = frozenset(
+            -(dep.index + 1)
+            for dep in document.dependencies
+            if dep.class_name == "ScriptStruct"
+            and dep.package_name == "/Script/Engine"
+            and dep.object_name == "HitResult"
+        )
         function_declarations = []
         for fn in functions:
             if not fn.function_name:
                 continue
             flags = _function_flags(document, fn)
-            return_type, cpp_return_type, parameters = _signature_from_native_fields(fn.native_fields)
+            return_type, cpp_return_type, parameters = _signature_from_native_fields(
+                fn.native_fields, engine_hit_result_indices=engine_hit_result_indices
+            )
             function_declarations.append(
                 FunctionDeclaration(
                     name=fn.function_name,
