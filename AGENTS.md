@@ -23,7 +23,7 @@ The package-first design is not implemented merely because it is documented. Do 
 ## Repository Conventions
 
 - Source code, comments, and error messages use English. Documentation follows its document language; repository-wide design reports may use Chinese when requested. Agent summaries and user replies may be Chinese.
-- The current project is a Python 3.10+ read-only parser at v0.6.2. The package-first document API (`parse_package_document` / `python -m uasset_read`) is the default; the strongest path is classic editor-saved packages and Blueprint decoding. Source and tests remain authoritative for current behavior.
+- The current project is a Python 3.10+ read-only parser at v0.6.3. The package-first document API (`parse_package_document` / `python -m uasset_read`) is the default; the strongest path is classic editor-saved packages and Blueprint decoding. Source and tests remain authoritative for current behavior.
 - In Windows examples, use forward slashes or escaped backslashes. Test samples are under `tests/samples/`.
 - Claude Code-specific path rules and skills remain under `.claude/`; consult them when relevant.
 
