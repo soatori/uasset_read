@@ -207,7 +207,7 @@ Development direction and plan admission are maintained in the canonical design 
 | **Parsers** | `parsers/` | 26 tagged-property parse functions + dispatcher, custom property registry, class handler registry, BinaryOrNative handlers |
 | ├ Asset Types | `parsers/asset_types/` | `handlers_impl.py` — 21 registered semantic handler instances |
 | **Kismet** | `kismet/` | Bytecode extractor, EExprToken → expressions, decompile bridge, BPGC fallback, UFunction script reader (C++ translator retired 2026-09-10) |
-| ├ Expressions | `kismet/expressions.py` | 52 token-bearing expression classes (assignments, control flow, function calls, literals, casts, delegates, etc.) |
+| ├ Expressions | `kismet/expressions.py` | 100-entry `EXPR_CLASS_MAP` expression dispatch (assignments, control flow, function calls, literals, casts, delegates, etc.) |
 | **Package Document** | `package.py`, `models/`, `projection.py`, `agent_tools.py` | `parse_package_document` entry, `PackageDocument` / `ObjectRecord`, `normal`/`debug` mode projection, agent tools (no `v2/` subpackage — flattened) |
 
 ## Testing
