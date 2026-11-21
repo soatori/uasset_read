@@ -63,11 +63,13 @@ Budget 207 -> 208 on 2026-11-18 (blueprint C++ translation data gaps deferred-mi
 Budget 208 -> 209 on 2026-11-19 (review follow-up on #674: undetermined cpp_type is
 explicit through a structured diagnostic, one sample-backed test).
 209 is the measured final value, not headroom.
-Budget 209 -> 212 on 2026-11-21 (blueprint C++ parameter signatures: OnLanded
+Budget 209 -> 214 on 2026-11-21 (blueprint C++ parameter signatures: OnLanded
 const-reference projection plus direction/import-identity guard, two
 sample-backed tests; scriptless UFunction flags: one controlled round-trip
-test over the bridge, analysis, and projection). 212 is the measured final
-value, not headroom.
+test over the bridge, analysis, and projection; blueprint flow stack Task 1,
+unresolved flow-stack pop branches kept as unknown CFG edges and the
+Blueprint owner downgraded to partial: two sample-backed tests).
+214 is the measured final value, not headroom.
 No fixtures live here — the baseline is driven by real samples in
 tests/test_samples.py; temporary probes belong to untracked temp/.
 """
@@ -76,7 +78,7 @@ from __future__ import annotations
 
 import pytest
 
-ITEM_BUDGET = 212
+ITEM_BUDGET = 214
 
 
 def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:

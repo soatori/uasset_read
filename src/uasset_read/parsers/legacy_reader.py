@@ -2012,15 +2012,19 @@ def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
     from .blueprint.bytecode import normalize_instructions
     from .blueprint.control_flow import build_cfg
 
-    # CFG diagnostics ride on the bridge result's errors field; seed the list
-    # before build_cfg so CFG_JUMP_TARGET_UNRESOLVED reaches the public
-    # FunctionAnalysis.diagnostics projection (plan C1).
+    # CFG diagnostics ride on the bridge result's errors field (plan C1). The
+    # typed rebuild below is deterministic and would emit the same diagnostics
+    # again, so it writes to its own sink and only genuinely new entries are
+    # merged — one diagnostic per site, never a bridge+rebuild duplicate.
     diagnostics = list(getattr(kr, "errors", None) or [])
     instructions = []
     cfg = build_cfg([], diagnostics=diagnostics)
     if kr.expressions:
         instructions = normalize_instructions(kr.expressions)
-        cfg = build_cfg(instructions, diagnostics=diagnostics)
+        rebuilt_diagnostics: list = []
+        cfg = build_cfg(instructions, diagnostics=rebuilt_diagnostics)
+        seeded = {(d.code, d.message) for d in diagnostics}
+        diagnostics.extend(d for d in rebuilt_diagnostics if (d.code, d.message) not in seeded)
     reads: set[str] = set()
     writes: set[str] = set()
     calls: list[str] = []

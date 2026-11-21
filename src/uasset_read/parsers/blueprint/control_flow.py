@@ -84,6 +84,14 @@ def project_cfg(cfg: ControlFlowGraph) -> dict[str, Any]:
 
 _TERMINATOR_KINDS = frozenset({"unconditional", "conditional_false", "computed"})
 
+# ScriptCore.cpp execPopExecutionFlow / execPopExecutionFlowIfNot: both pop the
+# continuation address from FFrame::FlowStack at runtime, so the static CFG has
+# no resolvable target. execPopExecutionFlowIfNot only pops when its condition
+# is false; the true branch executes sequentially. EX_PushExecutionFlow keeps
+# its PushingAddress operand untouched — static stack-target recovery is
+# deliberately out of scope.
+_FLOW_STACK_POP_OPCODES = frozenset({"EX_PopExecutionFlow", "EX_PopExecutionFlowIfNot"})
+
 
 def _is_return_like(instruction: BytecodeInstruction) -> bool:
     return instruction.opcode in {"EX_Return", "EX_EndOfScript"} or instruction.parse_status == "unavailable"
@@ -127,6 +135,10 @@ def build_cfg(
     # --- Leader collection (logical statement indexes) ---
     leaders: set[int] = {instructions[0].statement_index}
     for pos, instr in enumerate(instructions):
+        # A flow-stack pop always ends its block: the next instruction starts a
+        # new one because the pop itself never continues sequentially into it.
+        if instr.opcode in _FLOW_STACK_POP_OPCODES and pos + 1 < len(instructions):
+            leaders.add(instructions[pos + 1].statement_index)
         if instr.jump_kind in {"unconditional", "conditional_false"} and instr.jump_target_statement_index is not None:
             target = instr.jump_target_statement_index
             if target in index_to_pos:
@@ -174,6 +186,35 @@ def build_cfg(
     edges: list[ControlFlowEdge] = []
     for bidx, block in enumerate(blocks):
         last = block.instructions[-1]
+        # Flow-stack pops (ScriptCore.cpp execPopExecutionFlow*): the successor
+        # is a runtime FlowStack value — never a guessed block. Each pop site
+        # carries its own CFG_JUMP_TARGET_UNRESOLVED diagnostic naming the
+        # opcode and the logical address.
+        if last.opcode in _FLOW_STACK_POP_OPCODES:
+            diags.append(
+                Diagnostic(
+                    code="CFG_JUMP_TARGET_UNRESOLVED",
+                    message=(
+                        f"{last.opcode} at statement {last.statement_index} pops the execution "
+                        "flow stack; its continuation address is a runtime FlowStack value"
+                    ),
+                    stage="semantic.functions.cfg",
+                )
+            )
+            if last.opcode == "EX_PopExecutionFlowIfNot":
+                # Condition false -> pop and continue at the popped address.
+                edges.append(
+                    ControlFlowEdge(source_block=bidx, target_block=-1, kind="false", targets_known=False)
+                )
+                # Condition true -> no pop, sequential execution.
+                if bidx + 1 < len(blocks):
+                    edges.append(ControlFlowEdge(source_block=bidx, target_block=bidx + 1, kind="true"))
+            else:
+                edges.append(
+                    ControlFlowEdge(source_block=bidx, target_block=-1, kind="jump", targets_known=False)
+                )
+            continue
+
         # Conditional: false -> target, true -> fallthrough.
         if last.jump_kind == "conditional_false" and last.jump_target_statement_index is not None:
             target_stmt = last.jump_target_statement_index

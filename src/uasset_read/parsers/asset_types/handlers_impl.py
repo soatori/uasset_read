@@ -1117,6 +1117,21 @@ class BlueprintFamilyHandler:
             # legitimately empty graph at decoded tier.
             if isinstance(graph, dict) and graph.get("parse_errors"):
                 return "summary"
+        # Final-semantics losses downgrade too: unresolved flow-stack targets
+        # (CFG_JUMP_TARGET_UNRESOLVED on functions[].diagnostics) mean unknown
+        # branches exist, and VARIABLE_CPP_TYPE_UNDETERMINED means a decoded
+        # variable has no concrete C++ type. The semantic-level list holds this
+        # Blueprint's own diagnostics; the K0 fallback result carries neither
+        # key, so the checks skip there.
+        for fn in result.get("functions") or []:
+            if not isinstance(fn, dict):
+                continue
+            for diag in fn.get("diagnostics") or []:
+                if isinstance(diag, dict) and diag.get("code") == "CFG_JUMP_TARGET_UNRESOLVED":
+                    return "summary"
+        for diag in result.get("diagnostics") or []:
+            if isinstance(diag, dict) and diag.get("code") == "VARIABLE_CPP_TYPE_UNDETERMINED":
+                return "summary"
         return "decoded"
 
 
