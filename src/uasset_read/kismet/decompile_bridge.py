@@ -123,6 +123,7 @@ def extract_kismet_decompiled(
                             "bytecode_bytes_consumed": 0,
                         },
                         native_fields=script_result.native_fields,
+                        function_flags=script_result.function_flags,
                     )
                 )
                 continue

@@ -2045,12 +2045,18 @@ def _function_analysis_from_result(kr: Any, owner_object_id: str) -> Any:
     # UFunction::FunctionFlags is read from the native tail after the script
     # (Class.cpp UFunction::Serialize). A tail too short to hold it is a real
     # anomaly, not an absent field: say so rather than leaving a bare null.
-    if getattr(kr, "function_flags", None) is None and status == "extracted":
+    # Scriptless functions (confirmed_no_script) reach the same tail position:
+    # the legal empty body stays confirmed_no_script, and only a missing tail
+    # word adds this diagnostic.
+    read_reached_flags = status in ("parsed", "partial") or (
+        status == "unavailable" and getattr(kr, "error_code", None) == "confirmed_no_script"
+    )
+    if getattr(kr, "function_flags", None) is None and read_reached_flags:
         diagnostics.append(
             _diag(
                 "UFUNCTION_FLAGS_UNAVAILABLE",
                 "UFunction::FunctionFlags could not be read from the native tail "
-                "(fewer than 4 bytes after the script); FunctionDeclaration.flags stays null",
+                "(fewer than 4 bytes after the script header); FunctionDeclaration.flags stays null",
                 "semantic.functions.flags",
                 object_id=kr.object_id or None,
                 effect="semantic_loss",

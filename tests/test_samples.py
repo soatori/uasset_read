@@ -7105,6 +7105,79 @@ def test_function_flags_pin_a_known_word():
     assert d["flags"] == 0x0C020000, hex(d["flags"])
 
 
+def test_bp_scriptless_function_flags_round_trip(monkeypatch):
+    # A legal 0/0 script header still sits immediately before the FunctionFlags
+    # word UFunction::Serialize writes (Engine/Source/Runtime/CoreUObject/
+    # Private/UObject/Class.cpp: Super::Serialize then flags, scripted or not).
+    # Round trip: crafted tail -> _read_ustruct_prefix_and_script -> bridge with
+    # the low-level reader replaced by the controlled result -> existing
+    # analysis and projection. Zero flags must return int 0; a 1-3 byte tail
+    # keeps the no_script fact and reports the missing word instead.
+    import struct
+
+    from uasset_read.archive import ByteArchive
+    from uasset_read.kismet import ufunction_reader as ufunction_reader_module
+    from uasset_read.kismet.ufunction_reader import (
+        CORE_FPROPERTIES_VERSION,
+        FRAMEWORK_REMOVE_UFIELD_NEXT_VERSION,
+        _read_ustruct_prefix_and_script,
+    )
+    from uasset_read.serializers.object_resources import ObjectExport, PackageIndex
+    from uasset_read.serializers.package_summary import PackageFileSummary
+    from uasset_read.versioning import CORE_GUID, FRAMEWORK_GUID, VersionContext
+
+    export = ObjectExport(
+        class_index=PackageIndex(0),
+        super_index=PackageIndex(0),
+        outer_index=PackageIndex(0),
+        object_name="ScriptlessFn",
+        object_flags=0,
+        serial_size=20,
+        serial_offset=0,
+    )
+    cases = [
+        (struct.pack("<I", 0), 0),
+        (struct.pack("<I", 0x0C020000), 0x0C020000),
+        (bytes(3), None),
+    ]
+    for tail, expected_flags in cases:
+        # The G2 process-local parse cache (package._parse_cached) keys on
+        # path+mtime: without a clear, case 2/3 would reuse case 1's document.
+        from uasset_read.package import _parse_cached
+
+        _parse_cached.cache_clear()
+        window = ByteArchive(struct.pack("<4i", 0, 0, 0, 0) + tail)
+        # pre-Framework-29 -> legacy single children pointer, pre-Core-4 -> no
+        # NativePropertyCount, so the prefix is exactly the four int32s.
+        window.version_context = VersionContext(
+            file_version_ue4=0,
+            file_version_ue5=0,
+            custom_versions={
+                FRAMEWORK_GUID: FRAMEWORK_REMOVE_UFIELD_NEXT_VERSION - 1,
+                CORE_GUID: CORE_FPROPERTIES_VERSION - 1,
+            },
+        )
+        result = _read_ustruct_prefix_and_script(
+            window, export, PackageFileSummary(), export_index=0
+        )
+        assert result.status == "no_script"
+        assert result.function_flags == expected_flags
+        # Bridge entry: the low-level reader is replaced by the controlled
+        # result; the existing analysis and projection run unmodified.
+        monkeypatch.setattr(
+            ufunction_reader_module,
+            "read_ufunction_script",
+            lambda *args, _result=result, **kwargs: _result,
+        )
+        sem = _bp_semantic("BP_CombatCharacter.uasset")
+        declaration = next(d for d in sem["function_declarations"] if d.get("name") == "Aim")
+        fn = next(f for f in sem["functions"] if f.get("function_name") == "Aim")
+        codes = {d["code"] for d in fn["diagnostics"]}
+        assert result.function_flags == declaration["flags"] == expected_flags
+        assert fn["instructions"] == []
+        assert ("UFUNCTION_FLAGS_UNAVAILABLE" in codes) == (expected_flags is None)
+
+
 def test_container_mapping_covers_set_and_map():
     from uasset_read.models.analysis import _var_type_cpp_type
 
