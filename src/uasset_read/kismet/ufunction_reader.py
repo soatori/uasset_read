@@ -361,11 +361,19 @@ def _read_ustruct_prefix_and_script(
 
         # 0/0 = no_script
         if bytecode_buffer_size == 0 and serialized_script_size == 0:
+            # UFunction::Serialize (Class.cpp) writes FunctionFlags right after
+            # Super::Serialize, scripted or not — a legal 0/0 header is followed
+            # by the same tail word. Reuse the scripted branch's remaining-bytes
+            # check; a shorter tail leaves the flags unset rather than guessing.
+            function_flags = None
+            if window.total_size() - window.tell() >= 4:
+                function_flags = window.read_u32()
             return FunctionScriptReadResult(
                 status="no_script",
                 bytecode_buffer_size=0,
                 serialized_script_size=0,
                 native_fields=native_fields,
+                function_flags=function_flags,
             )
 
         # Check remaining bytes vs declared size
