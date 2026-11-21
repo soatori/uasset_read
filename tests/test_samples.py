@@ -2549,8 +2549,8 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     # references. Counts are measured doc totals (every object carrying the
     # function list), style of the 610-links pin.
     def _cfg_totals(projection):
-        blocks = edges = unresolved = 0
-        unresolved_kinds = set()
+        blocks = edges = 0
+        unresolved_by_kind: dict[str, int] = {}
         block_keys = {"start_statement_index", "end_statement_index", "instruction_ordinals"}
         for obj in projection["objects"]:
             sem = obj.get("semantic") or {}
@@ -2566,9 +2566,8 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
                 for edge in cfg["edges"]:
                     assert {"kind", "targets_known"} <= set(edge), sorted(edge)
                     if not edge["targets_known"]:
-                        unresolved += 1
-                        unresolved_kinds.add(edge["kind"])
-        return blocks, edges, unresolved, unresolved_kinds
+                        unresolved_by_kind[edge["kind"]] = unresolved_by_kind.get(edge["kind"], 0) + 1
+        return blocks, edges, unresolved_by_kind
 
     ue58_normal = projected["MyProject_UE58_TestBlueprint.uasset"]["normal"]
     ue58_sem = next(o["semantic"] for o in ue58_normal["objects"] if o["id"] == "export:0")
@@ -2580,21 +2579,28 @@ def test_v4_public_output_contract(capsys, monkeypatch, tmp_path):
     # orders measure-first over its own seed.
     assert (len(nf_cfg["blocks"]), len(nf_cfg["edges"])) == (4, 3), nf_cfg["entry"]
 
-    combat_blocks, combat_edges, combat_unresolved, combat_kinds = _cfg_totals(
+    combat_blocks, combat_edges, combat_unresolved = _cfg_totals(
         projected["BP_CombatCharacter.uasset"]["normal"]
     )
-    assert (combat_blocks, combat_edges) == (324, 162), (combat_blocks, combat_edges)
-    assert combat_unresolved == 2 and combat_kinds == {"computed_jump"}, (combat_unresolved, combat_kinds)
+    # Measured 2026-11-21: 59 flow-stack pop sites per function-carrying owner
+    # (44 EX_PopExecutionFlow + 15 EX_PopExecutionFlowIfNot), 2 owners; 20 of
+    # the 59 were already block-terminal, so the split adds 39 blocks/owner.
+    assert (combat_blocks, combat_edges) == (402, 270), (combat_blocks, combat_edges)
+    # computed_jump stays the original 2 (EX_ComputedJump, unchanged count);
+    # the new unresolved edges equal the pop-site count: 59 x 2 owners.
+    assert combat_unresolved == {"computed_jump": 2, "jump": 88, "false": 30}, combat_unresolved
 
-    bcps_blocks, bcps_edges, bcps_unresolved, bcps_kinds = _cfg_totals(
+    bcps_blocks, bcps_edges, bcps_unresolved = _cfg_totals(
         projected["B_ControlPointScoring.uasset"]["normal"]
     )
-    assert (bcps_blocks, bcps_edges) == (160, 116), (bcps_blocks, bcps_edges)
-    assert bcps_unresolved == 2 and bcps_kinds == {"computed_jump"}, (bcps_unresolved, bcps_kinds)
+    # Measured 2026-11-21: 22 pop sites per owner (16 pop + 6 pop-if-not
+    # across ExecuteUbergraph and GetPointStatus), 2 owners.
+    assert (bcps_blocks, bcps_edges) == (178, 146), (bcps_blocks, bcps_edges)
+    assert bcps_unresolved == {"computed_jump": 2, "jump": 32, "false": 12}, bcps_unresolved
 
-    stack_blocks, stack_edges, stack_unresolved, stack_kinds = _cfg_totals(stack["normal"])
+    stack_blocks, stack_edges, stack_unresolved = _cfg_totals(stack["normal"])
     assert (stack_blocks, stack_edges) == (18, 6), (stack_blocks, stack_edges)
-    assert stack_unresolved == 2 and stack_kinds == {"computed_jump"}, (stack_unresolved, stack_kinds)
+    assert stack_unresolved == {"computed_jump": 2}, stack_unresolved  # no flow-stack pops here
 
     # C4 (folded too): entrypoints were zero-referenced. BCPS Blueprint owner
     # carries 23 (16 function + 7 event), 0 unresolved; events correlate by
@@ -4812,6 +4818,36 @@ def test_blueprint_capability_downgrades_on_failed_graphs():
     empty_ok = {"graphs": [{"nodes": [], "node_count": 0, "truncated": {"nodes": False, "pins": False},
                             "parse_errors": []}], "truncated_graphs": False}
     assert handler.capability(empty_ok) == "decoded"          # a genuinely empty graph must not be downgraded
+    # Flow-stack pop sites leave CFG_JUMP_TARGET_UNRESOLVED on the final
+    # semantics' function diagnostics; such a Blueprint is not fully decoded.
+    unresolved_cfg = {
+        "graphs": [{"nodes": [{"id": "n"}], "node_count": 1, "truncated": {"nodes": False, "pins": False},
+                    "parse_errors": []}],
+        "truncated_graphs": False,
+        "functions": [
+            {
+                "function_name": "ExecuteUbergraph_X",
+                "diagnostics": [
+                    {"code": "CFG_JUMP_TARGET_UNRESOLVED", "message": "EX_PopExecutionFlow at 773",
+                     "stage": "semantic.functions.cfg"}
+                ],
+            }
+        ],
+    }
+    assert handler.capability(unresolved_cfg) == "summary"
+    # A variable C++-type semantic loss downgrades too. Controlled input with a
+    # healthy graph and no functions/cfg at all, so only that diagnostic can
+    # trigger the downgrade.
+    var_loss = {
+        "graphs": [{"nodes": [{"id": "n"}], "node_count": 1, "truncated": {"nodes": False, "pins": False},
+                    "parse_errors": []}],
+        "truncated_graphs": False,
+        "diagnostics": [
+            {"code": "VARIABLE_CPP_TYPE_UNDETERMINED", "message": "member 'Map' has no concrete C++ type",
+             "stage": "semantic.blueprint.correlation"}
+        ],
+    }
+    assert handler.capability(var_loss) == "summary"
 
 
 def test_als_graph_owners_resolve_beyond_eight_hops():
@@ -6795,6 +6831,96 @@ def test_cfg_and_exec_chain_edges_name_their_function():
     sem = _bp_semantic("BP_CombatCharacter.uasset")
     assert all(c.get("function_name") for c in sem["control_flow"])
     assert all(e.get("function_name") for e in sem["exec_chains"]["edges"])
+
+
+# ---------------------------------------------------------------------------
+# Flow-stack pops: EX_PopExecutionFlow / EX_PopExecutionFlowIfNot (Task 1 of
+# the blueprint-flow-stack plan). UE basis: Engine/Source/Runtime/CoreUObject/
+# Private/UObject/ScriptCore.cpp execPopExecutionFlow / execPopExecutionFlowIfNot —
+# the continuation address lives in FFrame::FlowStack and is popped at runtime,
+# so there is no static successor; only PopExecutionFlowIfNot's true branch
+# (condition true -> no pop) executes sequentially.
+# ---------------------------------------------------------------------------
+
+_POP_OPCODES = frozenset({"EX_PopExecutionFlow", "EX_PopExecutionFlowIfNot"})
+
+
+def test_bp_flow_stack_cfg_reports_unknown_target():
+    for sample in ("BP_CombatCharacter.uasset", "BP_CombatEnemy.uasset"):
+        sem = _bp_semantic(sample)
+        uber_fns = [f for f in sem["functions"] if f["function_name"].startswith("ExecuteUbergraph_")]
+        assert len(uber_fns) == 1, sample
+        fn = uber_fns[0]
+        instrs = fn["instructions"]
+        cfg = fn["cfg"]
+        pop_ordinals = {i["statement_ordinal"] for i in instrs if i["opcode"] in _POP_OPCODES}
+        assert pop_ordinals, sample
+        # Every pop occurrence terminates its block (found via instruction_ordinals).
+        terminal_ordinals = {b["instruction_ordinals"][-1] for b in cfg["blocks"]}
+        assert pop_ordinals <= terminal_ordinals, sorted(pop_ordinals - terminal_ordinals)
+        # One CFG_JUMP_TARGET_UNRESOLVED per pop site, naming opcode + logical address.
+        pop_diags = [d for d in fn["diagnostics"] if d["code"] == "CFG_JUMP_TARGET_UNRESOLVED"]
+        assert len(pop_diags) == len(pop_ordinals), (sample, len(pop_diags), len(pop_ordinals))
+        for instr in instrs:
+            if instr["opcode"] not in _POP_OPCODES:
+                continue
+            site = [
+                d
+                for d in fn["diagnostics"]
+                if d["code"] == "CFG_JUMP_TARGET_UNRESOLVED"
+                and instr["opcode"] in d["message"]
+                and str(instr["statement_index"]) in d["message"]
+            ]
+            assert site, (sample, instr["opcode"], instr["statement_index"])
+        # Per-occurrence outgoing edges (plan's Review Focus contract).
+        seen_ops = set()
+        for block_index, block in enumerate(cfg["blocks"]):
+            last = instrs[block["instruction_ordinals"][-1]]
+            if last["opcode"] not in _POP_OPCODES:
+                continue
+            seen_ops.add(last["opcode"])
+            outgoing = {
+                (e["kind"], e["target_block"], e["targets_known"])
+                for e in cfg["edges"]
+                if e["source_block"] == block_index
+            }
+            if last["opcode"] == "EX_PopExecutionFlow":
+                assert outgoing == {("jump", -1, False)}
+            else:
+                expected = {("false", -1, False)}
+                if block_index + 1 < len(cfg["blocks"]):
+                    expected.add(("true", block_index + 1, True))
+                assert outgoing == expected
+        assert seen_ops == {"EX_PopExecutionFlow", "EX_PopExecutionFlowIfNot"}, (sample, seen_ops)
+
+    # Measured pop point: CombatCharacter's ubergraph ordinal 75 is a flow-stack pop.
+    sem = _bp_semantic("BP_CombatCharacter.uasset")
+    uber = next(f for f in sem["functions"] if f["function_name"] == "ExecuteUbergraph_BP_CombatCharacter")
+    assert uber["instructions"][75]["opcode"] == "EX_PopExecutionFlow"
+
+
+def test_bp_flow_stack_marks_semantic_partial():
+    # Unresolved flow-stack targets are a semantic loss: the Blueprint owner
+    # must downgrade to the summary tier (status "partial"), never read as
+    # complete while unknown branches exist. CombatEnemy additionally carries
+    # VARIABLE_CPP_TYPE_UNDETERMINED; Helm has neither gap and stays complete.
+    combat = _projected_package("BP_CombatCharacter.uasset")
+    combat_owner = next(o for o in combat["objects"] if o["id"] == "export:1")
+    assert combat_owner["status"]["semantic"] == "partial"
+    assert any(
+        d["code"] == "CFG_JUMP_TARGET_UNRESOLVED"
+        for fn in combat_owner["semantic"]["functions"]
+        for d in fn["diagnostics"]
+    )
+
+    enemy_owner = next(
+        o for o in _projected_package("BP_CombatEnemy.uasset")["objects"] if o["id"] == "export:1"
+    )
+    assert enemy_owner["status"]["semantic"] == "partial"
+    assert any(d["code"] == "VARIABLE_CPP_TYPE_UNDETERMINED" for d in enemy_owner["semantic"]["diagnostics"])
+
+    helm_owner = next(o for o in _projected_package("Helm_BP.uasset")["objects"] if o["id"] == "export:0")
+    assert helm_owner["status"]["semantic"] == "complete"
 
 
 def test_entrypoint_linkage_never_crosses_owners():
