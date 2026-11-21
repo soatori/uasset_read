@@ -295,8 +295,10 @@ def _decode_ed_graph_pin_type(raw: bytes, size: int, name_map: list[str]) -> dic
     FUE5ReleaseStreamObjectVersion >= SerializeFloatPinDefaultValuesAsSinglePrecision
     (= 36; UE5ReleaseStreamObjectVersions.inl, EdGraphPin.cpp:330-333) and the map
     terminal's bTerminalIsUObjectWrapper only at FReleaseObjectVersion >=
-    PinTypeIncludesUObjectWrapperFlag (= 31; EdGraphNode.cpp:99-101,
-    ReleaseObjectVersion.h:110). Below those gates the payload is shorter —
+    PinTypeIncludesUObjectWrapperFlag (= 32; EdGraphNode.cpp:99-101,
+    ReleaseObjectVersion.h:110 — the enum's BeforeCustomVersionWasAdded = 0
+    starts the count, so 31 is MeshDescriptionNewFormat, not this gate).
+    Below those gates the payload is shorter —
     65/97 bytes (69−4 / 101−4) at UE5ReleaseStream 33. The gate booleans'
     presence is byte-walked on a stream-33 fixture in
     docs/designs/archive/issue-521-b0-gate-decision.md; that document does
@@ -335,7 +337,7 @@ def _decode_ed_graph_pin_type(raw: bytes, size: int, name_map: list[str]) -> dic
         off += 1
         # Map (3) carries an FEdGraphTerminalType: 2 FNames + int32 + 3 bools = 32
         # bytes (operator<<(FArchive&, FEdGraphTerminalType&), EdGraphNode.cpp).
-        # The third bool is gated on FRelease >= 31 (EdGraphNode.cpp:99-101); the
+        # The third bool is gated on FRelease >= 32 (EdGraphNode.cpp:99-101); the
         # size==101 gate above only admits payloads where that gate already held.
         term_cat_idx = term_sub_idx = term_pco = None
         if ct == 3 and len(raw) >= off + 32:

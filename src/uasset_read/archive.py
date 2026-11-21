@@ -37,7 +37,8 @@ def format_fname(base_name: str, number: int) -> str:
     """Render one stored FName (name-table index resolved, on-disk number) as display text.
 
     NAME_INTERNAL_TO_EXTERNAL: the serialized Number is internal, so the display
-    instance is Number-1 (LinkerLoad.h). Number 0 is NAME_NO_NUMBER_INTERNAL and
+    instance is Number-1 (Core/Public/UObject/NameTypes.h:177; older UE source
+    carried the macro in LinkerLoad.h). Number 0 is NAME_NO_NUMBER_INTERNAL and
     carries no suffix. Sole home for the rule — every FName display goes through here.
     """
     return f"{base_name}_{number - 1}" if number > 0 else base_name

@@ -5466,15 +5466,17 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
     LevelDesign_ABP_Manny (5.7, 6 x 69), MyProject_UE58_TestBlueprint (5.8,
     9 x 69 + 1 x 101). Every tracked sample that carries a PinType tag is either
     UE 4.11 (legacy 66/71-byte layouts, rejected) or UE 5.4-5.8 — no tracked
-    PinType evidence covers UE 5.0-5.3 or a pre-31 terminal, so those layouts are
+    PinType evidence covers UE 5.0-5.3 or a pre-32 terminal, so those layouts are
     deliberately unproven here.
 
     The two sizes are UE-source gated, not universal: the trailing
     ``bSerializeAsSinglePrecisionFloat`` is written only at
     ``FUE5ReleaseStreamObjectVersion >= 36`` (EdGraphPin.cpp:330-333) and the
     map terminal's ``bTerminalIsUObjectWrapper`` only at
-    ``FReleaseObjectVersion >= 31`` (EdGraphNode.cpp:99-101,
-    ReleaseObjectVersion.h:110). Below those gates the payload is 65/97 bytes
+    ``FReleaseObjectVersion >= PinTypeIncludesUObjectWrapperFlag = 32``
+    (EdGraphNode.cpp:99-101, ReleaseObjectVersion.h:110 — the enum starts at
+    BeforeCustomVersionWasAdded = 0, so 31 is MeshDescriptionNewFormat). Below
+    those gates the payload is 65/97 bytes
     (docs/designs/archive/issue-521-b0-gate-decision.md byte-walks a
     UE5ReleaseStream 33 fixture) and the decoder rejects it to opaque.
 
@@ -5647,6 +5649,37 @@ def test_edgraphpin_type_payload_is_native_not_a_tagged_loop():
     # only by the field's width here (a 4-byte FArchive bool, not UE's single bit).
     assert type_36 == type_35, "the pre-36 path must decode identical fields"
     assert consumed_36 - consumed_35 == 4, (consumed_36, consumed_35)
+
+    # Release-candidate review fix: the map terminal's bTerminalIsUObjectWrapper
+    # gate is FReleaseObjectVersion >= PinTypeIncludesUObjectWrapperFlag = 32,
+    # not 31 (ReleaseObjectVersion.h; BeforeCustomVersionWasAdded = 0 starts the
+    # enum, so a member count that skips it lands on MeshDescriptionNewFormat).
+    # 31 vs 32 is the exact discrimination: below the gate the stream is 4 bytes
+    # shorter and the terminal flag keeps its False default — gating at >= 31
+    # would read a phantom bool at version 31 and shift every later field.
+    from uasset_read.versioning import RELEASE_GUID
+
+    wrapper_set = map_pin[:49] + b"\x01\x00\x00\x00" + map_pin[53:]
+
+    def _map_terminal_consumed(release_version: int) -> tuple[int, FEdGraphPinType]:
+        summary = PackageFileSummary(
+            custom_versions=[
+                CustomVersion(guid=RELEASE_GUID, version=release_version),
+                CustomVersion(guid=UE5_RELEASE_STREAM_GUID, version=36),
+            ]
+        )
+        archive = ByteArchive(wrapper_set)
+        archive.version_context = build_version_context(summary)
+        pin_type = read_ed_graph_pin_type(archive, name_map, summary=summary)
+        return archive.tell(), pin_type
+
+    consumed_release_32, type_release_32 = _map_terminal_consumed(32)
+    consumed_release_31, type_release_31 = _map_terminal_consumed(31)
+    assert consumed_release_32 == len(wrapper_set) == 101, "gate met: the wrapper bool is consumed"
+    assert consumed_release_31 == len(wrapper_set) - 4 == 97, "below the gate the field is absent"
+    assert type_release_32.map_key_terminal_is_uobject_wrapper is True
+    assert type_release_31.map_key_terminal_is_uobject_wrapper is False
+    assert consumed_release_32 - consumed_release_31 == 4, (consumed_release_32, consumed_release_31)
 
 
 def test_no_unreferenced_module_level_names():

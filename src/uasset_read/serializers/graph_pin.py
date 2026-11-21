@@ -39,6 +39,12 @@ from uasset_read.serializers.graph_helpers import (
 
 logger = logging.getLogger(__name__)
 
+# FReleaseObjectVersion::PinTypeIncludesUObjectWrapperFlag = 32
+# (Core/Public/UObject/ReleaseObjectVersion.h). The enum starts at
+# BeforeCustomVersionWasAdded = 0, so a member count that skips it lands one
+# low — 31 is MeshDescriptionNewFormat, not this gate.
+_RELEASE_PIN_TYPE_INCLUDES_UOBJECT_WRAPPER_FLAG = 32
+
 
 # ============================================================================
 # FEdGraphPinType read functions
@@ -70,7 +76,7 @@ def read_ed_graph_pin_type(
     pin_type.container_type = archive.read_u8()
     if pin_type.container_type == 3:  # Map
         # FEdGraphPinType::PinValueType (FEdGraphTerminalType serialization).
-        # Reference: UE EdGraphPin.cpp:218 — Ar << PinValueType. Retained so the
+        # Reference: UE EdGraphPin.cpp:216 — Ar << PinValueType. Retained so the
         # Map value terminal reaches projection (it was cursor-only before).
         pin_type.pin_value_type_category = archive.read_name(name_map)
         pin_type.pin_value_type_subcategory = archive.read_name(name_map)
@@ -78,12 +84,15 @@ def read_ed_graph_pin_type(
 
         # FEdGraphTerminalType tail — EdGraphNode.cpp operator<<: two unconditional
         # 4-byte bools, then bTerminalIsUObjectWrapper gated on
-        # FReleaseObjectVersion >= PinTypeIncludesUObjectWrapperFlag (=31).
+        # FReleaseObjectVersion >= PinTypeIncludesUObjectWrapperFlag (=32).
         pin_type.map_key_terminal_is_const = archive.read_bool()
         pin_type.map_key_terminal_is_weak_pointer = archive.read_bool()
         # G1: the old `summary is not None` silent default is replaced by the
         # structural missing-context failure; the GUID query reads the context.
-        if require_version_context(archive).custom_versions.get(RELEASE_GUID, -1) >= 31:
+        if (
+            require_version_context(archive).custom_versions.get(RELEASE_GUID, -1)
+            >= _RELEASE_PIN_TYPE_INCLUDES_UOBJECT_WRAPPER_FLAG
+        ):
             pin_type.map_key_terminal_is_uobject_wrapper = archive.read_bool()
         else:
             pin_type.map_key_terminal_is_uobject_wrapper = False

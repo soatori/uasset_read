@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal
 
+from uasset_read.archive import format_fname
 from uasset_read.kismet.expressions import (
     EX_ComputedJump,
     EX_FinalFunction,
@@ -93,7 +94,7 @@ def _resolved_path_name(var: Any) -> str | None:
         if not isinstance(base, str) or not base or base == "None":
             return None
         number = getattr(segment, "number", 0) or 0
-        parts.append(f"{base}_{number}" if number else base)
+        parts.append(format_fname(base, number))
     return ".".join(parts)
 
 
